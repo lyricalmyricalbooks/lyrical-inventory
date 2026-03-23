@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lyricalmyrical Books · Inventory App</title>
+
+<!-- Firebase -->
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0e0c0a">
+
+
+</head>
+<body>
+
+<!-- PASSWORD GATE (publisher only — hidden in author mode) -->
+<div id="pw-gate">
+  <div class="box">
+    <div class="wm">Lyricalmyrical Books</div>
+    <div class="sub">Inventory App</div>
+    <input type="password" id="pw-input" placeholder="Password" onkeydown="if(event.key==='Enter')tryUnlock()">
+    <button onclick="tryUnlock()">Unlock</button>
+    <div class="err" id="pw-err"></div>
+  </div>
+</div>
+
+<div id="pw-app" style="display:none;">
+<div class="app" id="main-app">
+
+<header class="app-header">
+  <div class="header-brand">
+    <div class="header-wordmark">Lyricalmyrical Books</div>
+    <div class="header-tag" id="hdr-sub">Inventory App · connecting…</div>
+  </div>
+  <div class="header-right">
+    <div class="header-stat"><div class="hs-val" id="h-stock">—</div><div class="hs-label">On hand</div></div>
+    <div class="header-stat"><div class="hs-val" id="h-revenue">—</div><div class="hs-label">Revenue</div></div>
+    <div class="header-stat"><div class="hs-val" id="h-consigned">—</div><div class="hs-label">Consigned</div></div>
+  </div>
+</header>
+
+<div class="sync-bar">
+  <div class="sync-dot syncing" id="sync-dot"></div>
+  <div class="sync-label" id="sync-label"><b>Firebase</b> · connecting…</div>
+  <div class="sync-time" id="sync-time"></div>
+  <span class="sheets-badge off" id="sheets-badge">📊 Sheets: not set up</span>
+  <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:'DM Mono',monospace;font-size:10px;color:var(--gold2);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
+  <span class="author-watermark" id="author-watermark" style="display:none;"></span>
+  <button class="btn sm" style="font-size:10px;padding:3px 9px;background:transparent;color:rgba(255,255,255,.35);border-color:rgba(255,255,255,.1);" onclick="forceSync()">↺ Refresh</button>
+</div>
+
+<!-- BOOK SWITCHER (publisher only) -->
+<div class="book-switcher" id="book-switcher" style="padding:.55rem 2rem;align-items:center;gap:12px;position:relative;">
+  <span style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.3);">Viewing</span>
+  <div id="book-dropdown" style="position:relative;display:inline-block;">
+    <button id="book-dropdown-btn" onclick="toggleBookDropdown()" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);color:var(--cream);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;outline:none;min-width:240px;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div id="book-dropdown-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);flex-shrink:0;"></div>
+        <span id="book-dropdown-label">All books</span>
+      </div>
+      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style="flex-shrink:0;opacity:.4;"><path d="M0 0l5 6 5-6z" fill="white"/></svg>
+    </button>
+    <div id="book-dropdown-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,.1);border-radius:var(--r2);box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:999;overflow:hidden;">
+      <!-- Options injected by JS -->
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- TABS (per-book) -->
+<nav class="tab-bar" id="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+  <button class="tab-btn" onclick="switchTab('website')">Website orders</button>
+  <button class="tab-btn" onclick="switchTab('manual')">Manual entry</button>
+  <button class="tab-btn" onclick="switchTab('consignment')">Consignment</button>
+  <button class="tab-btn" onclick="switchTab('history')">History</button>
+  <button class="tab-btn" onclick="switchTab('expenses')">Expenses</button>
+  <button class="tab-btn" onclick="switchTab('sheets')" id="sheets-tab-btn">📊 Sheets</button>
+</nav>
+
+<!-- COMBINED OVERVIEW (shown when book = 'all') -->
+<div class="tab-panel active" id="tab-all-overview">
+  <div class="sect">All books — inventory overview</div>
+  <div id="all-books-list"><!-- rendered by JS --></div>
+
+  <div class="sect">Combined sales by channel</div>
+  <div class="tbl-wrap">
+    <table class="tbl"><thead><tr><th>Book</th><th>Channel</th><th class="r">Transactions</th><th class="r">Units</th><th class="r">Revenue</th></tr></thead>
+    <tbody id="all-ch-body"></tbody></table>
+  </div>
+
+  <div class="sect">Combined consignment summary</div>
+  <div class="tbl-wrap">
+    <table class="tbl"><thead><tr><th>Book</th><th>Store</th><th class="r">Sent</th><th class="r">Sold</th><th class="r">Outstanding</th><th>Status</th></tr></thead>
+    <tbody id="all-con-body"></tbody></table>
+  </div>
+</div>
+
+<!-- DASHBOARD (per book) -->
+<div class="tab-panel" id="tab-dashboard" style="display:none;">
+
+  <!-- EXPENSES SUMMARY (publisher only) — always at the top when visible -->
+  <div id="d-expenses-sect" style="display:none;margin-bottom:1.5rem;">
+    <div style="background:var(--ink);border-radius:var(--r3);border:1px solid rgba(255,255,255,.08);padding:1.5rem 1.75rem;box-shadow:var(--shadow2);position:relative;overflow:hidden;">
+      <div style="position:absolute;inset:0;background:radial-gradient(ellipse at top right,rgba(149,32,32,.08),transparent 60%);pointer-events:none;"></div>
+      <div style="position:relative;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1.25rem;margin-bottom:1.25rem;">
+        <div>
+          <div style="font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:8px;">Expenses owed to artist</div>
+          <div style="font-family:'DM Mono',monospace;font-size:36px;font-weight:500;color:#f87171;line-height:1;" id="d-exp-total">—</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.35);margin-top:8px;" id="d-exp-count">— expenses logged</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-end;">
+          <a id="d-exp-pay-btn" href="#" target="_blank" style="display:none;text-decoration:none;">
+            <button style="display:inline-flex;align-items:center;gap:8px;padding:13px 24px;background:var(--gold);color:var(--ink);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--r2);border:none;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--gold2)'" onmouseout="this.style.background='var(--gold)'">Send payment →</button>
+          </a>
+          <div style="font-size:10px;color:rgba(255,255,255,.2);text-align:right;" id="d-exp-pay-hint"></div>
+        </div>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,.07);padding-top:1rem;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:'DM Mono',monospace;">
+          <tbody id="d-exp-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="book-context" id="book-context-dash">
+    <div class="book-context-dot"></div>
+    <div><div class="book-context-title" id="bc-title-dash">—</div><div class="book-context-meta" id="bc-meta-dash">—</div></div>
+  </div>
+
+  <!-- AUTHOR PAYMENT BANNER — shown in author mode when transfers are pending -->
+  <div id="author-payment-banner" style="display:none;margin-bottom:1.5rem;background:var(--ink);border-radius:var(--r3);border:1px solid rgba(200,145,58,.3);padding:1.5rem 1.75rem;box-shadow:var(--shadow2);position:relative;overflow:hidden;">
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at top right,rgba(200,145,58,.1),transparent 60%);pointer-events:none;"></div>
+    <div style="position:relative;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1.25rem;">
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:8px;">Amount owed to publisher</div>
+        <div style="font-family:'DM Mono',monospace;font-size:36px;font-weight:500;color:var(--gold3);line-height:1;" id="apb-amount">—</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.35);margin-top:8px;" id="apb-detail">— pending transfer(s) from sales collected on your end</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-end;">
+        <a id="apb-pay-btn" href="#" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:13px 24px;background:var(--gold);color:var(--ink);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--r2);text-decoration:none;transition:background .15s;cursor:pointer;" onmouseover="this.style.background='var(--gold2)'" onmouseout="this.style.background='var(--gold)'">
+          Send payment →
+        </a>
+        <div style="font-size:10px;color:rgba(255,255,255,.2);text-align:right;" id="apb-link-hint">Opens payment link in a new tab</div>
+      </div>
+    </div>
+    <div id="apb-transfers" style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
+
+  <!-- REIMBURSEMENT OWED BANNER — shown in author mode when approved expenses exist -->
+  <div id="artist-reimburse-banner" style="display:none;margin-bottom:1.5rem;background:var(--ink);border-radius:var(--r3);border:1px solid rgba(42,122,92,.3);padding:1.5rem 1.75rem;box-shadow:var(--shadow2);position:relative;overflow:hidden;">
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at top right,rgba(42,122,92,.12),transparent 60%);pointer-events:none;"></div>
+    <div style="position:relative;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1.25rem;">
+      <div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:8px;">Amount owed to you</div>
+        <div style="font-family:'DM Mono',monospace;font-size:36px;font-weight:500;color:#6ee7a8;line-height:1;" id="arb-amount">—</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.35);margin-top:8px;" id="arb-detail">— approved reimbursement(s)</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+        <div style="font-size:11px;color:rgba(255,255,255,.25);text-align:right;" id="arb-hint">Publisher will send payment to your saved link</div>
+      </div>
+    </div>
+    <div id="arb-items" style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-label">Stock on hand</div><div class="kpi-value gold" id="d-stock">—</div><div class="kpi-sub" id="d-stock-sub">of — printed</div></div>
+    <div class="kpi"><div class="kpi-label">Revenue</div><div class="kpi-value gold" id="d-revenue">—</div><div class="kpi-sub">publisher net</div></div>
+    <div class="kpi"><div class="kpi-label">Units sold</div><div class="kpi-value" id="d-sold">—</div><div class="kpi-sub" id="d-avg-sub">avg —</div></div>
+    <div class="kpi"><div class="kpi-label">On consignment</div><div class="kpi-value" id="d-consigned">—</div><div class="kpi-sub">across <span id="d-stores">0</span> stores</div></div>
+    <div class="kpi"><div class="kpi-label">Owed to you</div><div class="kpi-value warn" id="d-owed">—</div><div class="kpi-sub">consignment pending</div></div>
+    <div class="kpi"><div class="kpi-label">Artist transfers due</div><div class="kpi-value warn" id="d-artist-pending">—</div><div class="kpi-sub" id="d-artist-pending-sub">awaiting forwarding</div></div>
+    <div class="kpi"><div class="kpi-label">Stock status</div><div class="kpi-value" id="d-low">—</div><div class="kpi-sub" id="d-thresh-sub">threshold: — units</div></div>
+    <div class="kpi" id="d-breakeven-kpi" style="display:none;"><div class="kpi-label">Break-even</div><div class="kpi-value" id="d-breakeven-val">—</div><div class="kpi-sub" id="d-breakeven-sub">of — production cost</div></div>
+    <div class="kpi" id="d-expenses-kpi" style="display:none;"><div class="kpi-label">Expenses owed</div><div class="kpi-value warn" id="d-expenses-owed">—</div><div class="kpi-sub" id="d-expenses-owed-sub">artist project costs</div></div>
+    <div class="kpi" id="d-reimburse-kpi" style="display:none;"><div class="kpi-label">Reimbursements due</div><div class="kpi-value warn" id="d-reimburse-val">—</div><div class="kpi-sub" id="d-reimburse-sub">awaiting approval</div></div>
+  </div>
+  <div id="artist-transfers-sect" style="display:none;">
+    <div class="sect">Pending artist transfers</div>
+    <div id="artist-transfers-list"></div>
+  </div>
+  <div id="d-pending-expenses-sect" style="display:none;">
+    <div class="sect">Pending expense reimbursements</div>
+    <div id="d-pending-expenses-list"></div>
+  </div>
+  <div class="sect">Sales by channel</div>
+  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Channel</th><th class="r">Transactions</th><th class="r">Units</th><th class="r">Revenue</th></tr></thead><tbody id="ch-body"></tbody></table></div>
+  <div class="sect">Consignment overview</div>
+  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Store</th><th class="r">Sent</th><th class="r">Sold</th><th class="r">Returned</th><th class="r">Outstanding</th><th>Status</th></tr></thead><tbody id="dash-con-body"></tbody></table></div>
+  <div class="sect">Inventory</div>
+  <div class="stock-block">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;">
+      <div><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
+      <span class="pill gold" id="d-book-isbn">—</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);"></div></div>
+    <div class="bar-meta"><span id="d-bar-label">— / — on hand</span><span id="d-thresh-label">Alert at — units</span></div>
+    <div class="stock-alert ok" id="d-alert">Loading…</div>
+  </div>
+  <div id="d-breakeven-block" style="display:none;">
+    <div class="sect">Break-even tracker</div>
+    <div class="stock-block">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;">
+        <div>
+          <div class="stock-title" id="d-be-title">—</div>
+          <div class="stock-author" id="d-be-sub">—</div>
+        </div>
+        <span class="pill" id="d-be-pill" style="background:rgba(200,145,58,.15);color:var(--gold2);">—</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" id="d-be-bar" style="width:0%;background:var(--gold2);"></div></div>
+      <div class="bar-meta"><span id="d-be-bar-label">—</span><span id="d-be-bar-right">—</span></div>
+      <div class="stock-alert" id="d-be-alert" style="margin-top:1.1rem;">—</div>
+    </div>
+  </div>
+  <!-- REIMBURSEMENT REQUESTS (publisher only) -->
+  <div id="d-reimburse-sect" style="display:none;">
+    <div class="sect">Reimbursement requests</div>
+    <div id="d-reimburse-list"></div>
+  </div>
+
+  <div class="sect" id="danger-zone-sect" style="display:none;">Danger zone</div>
+  <div id="danger-zone-block" style="display:none;background:white;border-radius:var(--r3);border:1px solid var(--border);padding:1.25rem;box-shadow:var(--shadow);display:none;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
+    <div><div style="font-weight:700;font-size:13px;margin-bottom:3px;">Reset all sales data for this book</div><div style="font-size:12px;color:var(--text3);">Clears orders, history and consignment for this book only. Your Google Sheet is untouched.</div></div>
+    <button class="btn danger-btn" onclick="resetBookData()">⚠ Reset book data</button>
+  </div>
+</div>
+
+<!-- WEBSITE -->
+<div class="tab-panel" id="tab-website" style="display:none;">
+  <div class="book-context" id="book-context-web">
+    <div class="book-context-dot"></div>
+    <div><div class="book-context-title" id="bc-title-web">—</div><div class="book-context-meta">Website orders via Gmail scan</div></div>
+  </div>
+  <div class="row-between">
+    <div class="section-hed">Big Cartel orders</div>
+    <button class="btn ink" id="scan-btn" onclick="fetchOrders()">Scan Gmail</button>
+  </div>
+  <div id="orders-list"><div class="empty-state"><div class="e-icon">📬</div>Press "Scan Gmail" to pull in new orders.</div></div>
+  <button class="btn gold" id="apply-all-btn" onclick="applyAll()" disabled style="width:100%;margin-top:4px;">Apply all new orders</button>
+  <div class="log-console" id="log-web"></div>
+</div>
+
+<!-- MANUAL -->
+<div class="tab-panel" id="tab-manual" style="display:none;">
+  <div class="book-context" id="book-context-man">
+    <div class="book-context-dot"></div>
+    <div><div class="book-context-title" id="bc-title-man">—</div><div class="book-context-meta">Manual order entry</div></div>
+  </div>
+  <div class="section-hed" style="margin-bottom:1.25rem;">Log an order</div>
+  <div class="card">
+    <div class="g4" style="margin-bottom:12px;">
+      <div class="form-group"><label>Order #</label><input type="text" id="m-num" placeholder="optional"></div>
+      <div class="form-group"><label>Qty</label><input type="number" id="m-qty" value="1" min="1" oninput="phint()"></div>
+      <div class="form-group"><label>Price paid</label><div class="price-wrap"><span class="sym" id="m-sym">€</span><input type="number" id="m-price" value="40.00" step="0.01" oninput="phint()"></div></div>
+      <div class="form-group"><label>&nbsp;</label><button class="btn gold" style="width:100%;height:38px;" onclick="submitManual()">Add order</button></div>
+    </div>
+    <div class="g2">
+      <div class="form-group"><label>Channel</label><select id="m-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Other</option></select></div>
+      <div class="form-group"><label>Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
+    </div>
+    <div class="g2" style="margin-top:12px;">
+      <div class="form-group">
+        <label>Payment Type <span style="color:var(--red);font-size:11px;">required</span></label>
+        <select id="m-payment-type" required>
+          <option value="">— Select payment type —</option>
+          <option value="Payment directly to artist">Payment directly to artist</option>
+          <option value="Payment directly to publisher">Payment directly to publisher</option>
+        </select>
+      </div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:12px;font-weight:600;color:var(--text2);">
+          <input type="checkbox" id="m-fx-toggle" onchange="toggleFx()" style="width:auto;accent-color:var(--gold);cursor:pointer;">
+          Paid in a different currency
+        </label>
+      </div>
+    </div>
+    <!-- FOREIGN CURRENCY PANEL (hidden by default) -->
+    <div id="m-fx-panel" style="display:none;margin-top:12px;padding:14px 16px;background:var(--cream2);border-radius:var(--r2);border:1px solid var(--border);">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Foreign currency conversion</div>
+      <div class="g4" style="align-items:end;">
+        <div class="form-group" style="margin:0;">
+          <label>Currency paid in</label>
+          <select id="m-fx-cur" onchange="calcFx()">
+            <option value="USD">USD $</option>
+            <option value="EUR">EUR €</option>
+            <option value="GBP">GBP £</option>
+            <option value="CAD">CAD $</option>
+            <option value="AUD">AUD $</option>
+            <option value="CHF">CHF</option>
+            <option value="JPY">JPY ¥</option>
+            <option value="NOK">NOK kr</option>
+            <option value="SEK">SEK kr</option>
+            <option value="DKK">DKK kr</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Amount paid (foreign)</label>
+          <input type="number" id="m-fx-amount" step="0.01" placeholder="0.00" oninput="calcFx()">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Exchange rate <span style="font-size:9px;color:var(--text4);">1 foreign = ? <span id="m-fx-native-sym">—</span></span></label>
+          <input type="number" id="m-fx-rate" step="0.0001" placeholder="e.g. 0.92" oninput="calcFx()">
+        </div>
+        <div style="padding-bottom:2px;">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:5px;">Converted</div>
+          <div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--gold);" id="m-fx-result">—</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6;">The converted amount will be used for revenue. The original foreign amount is saved in notes for reference.</div>
+    </div>
+    <div class="hint-text" id="m-hint"></div>
+  </div>
+  <div class="log-console" id="log-manual"></div>
+
+  <div class="divider" style="margin-top:1.5rem;"></div>
+  <div class="section-hed" style="margin-bottom:.4rem;margin-top:1.5rem;">Log a gratuity <span style="font-size:12px;font-weight:400;font-family:'DM Mono',monospace;color:var(--text3);">(gifted / complimentary)</span></div>
+  <p style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">Gratuity books reduce stock but are <strong>not</strong> counted as revenue or sold units.</p>
+  <div class="card" style="border-left:3px solid var(--gold-line);">
+    <div class="g4" style="margin-bottom:12px;">
+      <div class="form-group"><label>Recipient / Ref</label><input type="text" id="g-ref" placeholder="e.g. reviewer, press"></div>
+      <div class="form-group"><label>Qty</label><input type="number" id="g-qty" value="1" min="1"></div>
+      <div class="form-group"><label>Date</label><input type="date" id="g-date"></div>
+      <div class="form-group"><label>&nbsp;</label><button class="btn ink" style="width:100%;height:38px;" onclick="submitGratuity()">Log gratuity</button></div>
+    </div>
+    <div class="form-group"><label>Notes</label><input type="text" id="g-notes" placeholder="e.g. press copy, author gift, launch event"></div>
+  </div>
+  <div class="log-console" id="log-gratuity"></div>
+</div>
+
+<!-- CONSIGNMENT -->
+<div class="tab-panel" id="tab-consignment" style="display:none;">
+  <div class="book-context" id="book-context-con">
+    <div class="book-context-dot"></div>
+    <div><div class="book-context-title" id="bc-title-con">—</div><div class="book-context-meta">Consignment accounts & ledger</div></div>
+  </div>
+  <div class="row-between">
+    <div class="section-hed">Consignment accounts</div>
+    <button class="btn gold" onclick="openM('add-store')">+ Add store</button>
+  </div>
+  <div id="stores-list"><div class="empty-state"><div class="e-icon">🏪</div>No stores yet.</div></div>
+  <div class="divider"></div>
+  <div class="sect">Consignment ledger</div>
+  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Store</th><th>Type</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Due to you</th><th>Notes</th><th>Status</th></tr></thead><tbody id="ledger-body"></tbody></table></div>
+</div>
+
+<!-- HISTORY -->
+<div class="tab-panel" id="tab-history" style="display:none;">
+  <div class="book-context" id="book-context-hist">
+    <div class="book-context-dot"></div>
+    <div><div class="book-context-title" id="bc-title-hist">—</div><div class="book-context-meta">Full order history</div></div>
+  </div>
+  <div class="row-between">
+    <div class="section-hed">Order history</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span class="save-indicator" id="save-ind">✓ Saved</span>
+      <button class="btn ink" id="import-btn" onclick="$('import-file-input').click()" style="display:none;">⬆ Import from spreadsheet</button>
+      <input type="file" id="import-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleImportFile(event)">
+    </div>
+  </div>
+  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Order #</th><th>Channel</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Total</th><th class="r">Stock after</th><th>Notes</th><th>Date</th><th></th></tr></thead><tbody id="hist-body"></tbody></table></div>
+</div>
+
+<!-- EXPENSES -->
+<div class="tab-panel" id="tab-expenses" style="display:none;">
+  <div class="book-context" id="book-context-exp">
+    <div class="book-context-dot"></div>
+    <div><div class="book-context-title" id="bc-title-exp">—</div><div class="book-context-meta">Project expenses</div></div>
+  </div>
+
+  <!-- ARTIST PAYMENT LINK (author mode only) -->
+  <div id="artist-payment-link-card" style="display:none;margin-bottom:1.5rem;background:var(--ink);border-radius:var(--r3);border:1px solid rgba(255,255,255,.08);padding:1.25rem 1.5rem;">
+    <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:8px;">Your payment link</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="artist-pay-link-input" placeholder="https://paypal.me/yourname or your Interac email" style="flex:1;min-width:220px;padding:9px 13px;font-size:13px;font-family:'Syne',sans-serif;border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);background:rgba(255,255,255,.07);color:var(--cream);outline:none;">
+      <button class="btn gold" onclick="saveArtistPaymentLink()">Save</button>
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,.25);margin-top:8px;">When the publisher approves a reimbursement, they'll use this link to pay you.</div>
+  </div>
+
+  <div class="section-hed" style="margin-bottom:1.25rem;">Log an expense</div>
+  <div class="card">
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label>Description</label><input type="text" id="exp-desc" placeholder="e.g. Padded envelopes x20"></div>
+      <div class="form-group"><label>Category</label>
+        <select id="exp-cat">
+          <option>Shipping supplies</option>
+          <option>Postage</option>
+          <option>Printing</option>
+          <option>Photography</option>
+          <option>Design</option>
+          <option>Marketing</option>
+          <option>Travel</option>
+          <option>Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="g4">
+      <div class="form-group"><label>Amount</label><div class="price-wrap"><span class="sym" id="exp-sym">€</span><input type="number" id="exp-amount" step="0.01" min="0" placeholder="0.00"></div></div>
+      <div class="form-group"><label>Date</label><input type="date" id="exp-date"></div>
+      <div class="form-group"><label>Receipt / ref</label><input type="text" id="exp-ref" placeholder="optional"></div>
+      <div class="form-group"><label>&nbsp;</label><button class="btn gold" style="width:100%;height:38px;" onclick="submitExpense()">Log expense</button></div>
+    </div>
+  </div>
+  <div class="log-console" id="log-expenses"></div>
+  <div class="sect" style="margin-top:1.5rem;">Expense history</div>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th class="r">Amount</th><th>Reimbursement</th><th></th></tr></thead>
+    <tbody id="exp-body"></tbody>
+  </table></div>
+</div>
+
+<!-- GOOGLE SHEETS -->
+<div class="tab-panel" id="tab-sheets" style="display:none;">
+  <div class="row-between">
+    <div class="section-hed">Google Sheets sync</div>
+    <span class="sheets-badge off" id="sheets-badge2">Not connected</span>
+  </div>
+
+  <!-- BOOK SETTINGS: production costs (publisher only) -->
+  <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Break-even targets</div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.6;">Set the total production cost for each book. The break-even tracker will appear on each book's dashboard (publisher view only).</div>
+      </div>
+    </div>
+    <div id="production-cost-fields" style="display:flex;flex-direction:column;gap:12px;"></div>
+    <button class="btn gold" style="margin-top:14px;" onclick="saveProductionCosts()">Save targets</button>
+  </div>
+
+  <!-- PAYMENT LINK SETTINGS -->
+  <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Artist payment links</div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.6;">When an artist owes the publisher money, this link appears in their dashboard so they can pay directly. Use a PayPal.me, Interac e-transfer email, Stripe, or any payment URL.</div>
+      </div>
+    </div>
+    <div id="payment-link-fields" style="display:flex;flex-direction:column;gap:12px;"></div>
+    <button class="btn gold" style="margin-top:14px;" onclick="savePaymentLinks()">Save payment links</button>
+  </div>
+
+  <!-- BOOK CATALOG SETTINGS -->
+  <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Book Catalog</div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage the books available in your library. Changes here update the switcher and dashboards.</div>
+      </div>
+      <button class="btn gold" onclick="openM('add-book')">+ Add new book</button>
+    </div>
+    <div id="catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+  </div>
+
+  <!-- PASSWORD ACCESS SETTINGS -->
+  <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">App Passwords</div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage the master Publisher password and individual Author access passwords.</div>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label>Publisher (Master) Password</label><input type="text" id="pw-pub" placeholder="e.g. 12345"></div>
+    </div>
+    <div id="author-password-fields" style="display:flex;flex-direction:column;gap:12px;"></div>
+    <button class="btn gold" style="margin-top:14px;" onclick="savePasswords()">Save passwords</button>
+  </div>
+
+  <div class="sheets-setup" id="sheets-setup-card">
+    <div style="margin-bottom:1.5rem;">
+      <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:8px;">Connect your Google Sheet</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;">Uses a Google Apps Script webhook — paste your Web App URL once and every order syncs automatically. One connection covers all books.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:1.75rem;">
+      <div style="display:flex;gap:14px;align-items:flex-start;">
+        <div style="width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+        <div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Create a Google Sheet → Extensions → Apps Script</div>
+          <div style="font-size:12px;color:var(--text3);">Go to <a href="https://sheets.new" target="_blank" style="color:var(--gold);">sheets.new</a>, then Extensions → Apps Script.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:flex-start;">
+        <div style="width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
+          <div style="font-size:12px;color:var(--red-bg);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
+          <div style="position:relative;">
+            <pre id="gas-code" style="background:var(--ink);color:#a8d8a8;font-family:'DM Mono',monospace;font-size:11px;padding:16px;border-radius:var(--r2);overflow-x:auto;line-height:1.75;white-space:pre-wrap;">// Lyricalmyrical Books — Google Sheets sync
+// Handles both fetch() no-cors (raw body) and form POST (e.parameter)
+function doPost(e) {
+  try {
+    var raw = '';
+
+    // Try raw body first (from fetch no-cors)
+    if (e.postData && e.postData.contents) {
+      raw = e.postData.contents;
+    }
+
+    // Fall back to form parameter
+    if (!raw && e.parameter && e.parameter.payload) {
+      raw = e.parameter.payload;
+    }
+
+    if (!raw) throw new Error('No data received');
+
+    var data = JSON.parse(raw);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var bookName = (data.book || 'Unknown').replace(/[^a-zA-Z0-9 \-]/g, '');
+    var timestamp = new Date().toLocaleString('en-GB');
+
+    var bookShort = {'Un Fantastico Altrove':'Altrove','The Hound':'Hound','Archaeology of Presence':'Archaeology','Sistema_non_autorizzato':'Sistema','As if Nobody is Watching':'Nobody','Collective Photobook':'Collective'};
+    var shortName = bookShort[data.book] || bookName;
+    var sheet = ss.getSheetByName(shortName) || ss.insertSheet(shortName);
+
+    if (data.type === 'order') {
+      // Find or create the ORDERS section header
+      var ordersHeaderRow = -1;
+      var lastRow = sheet.getLastRow();
+      for (var r = 1; r &lt;= lastRow; r++) {
+        var val = sheet.getRange(r, 1).getValue();
+        if (val === 'ORDERS') { ordersHeaderRow = r; break; }
+      }
+      if (ordersHeaderRow === -1) {
+        // Build the full structure if sheet is new
+        sheet.getRange(1,1).setValue(data.book);
+        sheet.getRange(1,1).setFontWeight('bold').setFontSize(13)
+          .setBackground('#'+({'Altrove':'C8913A','Hound':'3A7CC8','Archaeology':'7A5C3A','Sistema':'2A7A5C','Nobody':'8A3A7A','Collective':'C8913A'}[shortName]||'C8913A'))
+          .setFontColor('#F7F2E9');
+        sheet.getRange(2,1).setValue('ORDERS');
+        sheet.getRange(2,1).setFontWeight('bold').setBackground('#F0EBE0').setFontColor('#888888');
+        var oh = sheet.getRange(3,1,1,9);
+        oh.setValues([['Logged at','Date','Order #','Channel','Qty','Unit Price','Total','Stock After','Notes']]);
+        oh.setFontWeight('bold').setBackground('#0E0C0A').setFontColor('#F0C060');
+        sheet.getRange(5,1).setValue('');  // spacer
+        sheet.getRange(6,1).setValue('');  // spacer
+        sheet.getRange(7,1).setValue('CONSIGNMENT');
+        sheet.getRange(7,1).setFontWeight('bold').setBackground('#F0EBE0').setFontColor('#888888');
+        var ch = sheet.getRange(8,1,1,9);
+        ch.setValues([['Logged at','Date','Store','Event','Qty','Rate %','Amount Due','Notes','Status']]);
+        ch.setFontWeight('bold').setBackground('#0E0C0A').setFontColor('#F0C060');
+        sheet.setFrozenRows(3);
+        ordersHeaderRow = 2;
+      }
+      // Find the orders header row (row after ORDERS label) and append below it
+      // Orders data starts at row ordersHeaderRow+2 (header) and we insert before CONSIGNMENT
+      var consRow = -1;
+      for (var r2 = 1; r2 &lt;= sheet.getLastRow(); r2++) {
+        if (sheet.getRange(r2,1).getValue() === 'CONSIGNMENT') { consRow = r2; break; }
+      }
+      var insertRow = consRow > 0 ? consRow - 1 : sheet.getLastRow() + 1;
+      // Find last data row in orders section
+      var orderDataEnd = ordersHeaderRow + 2;
+      for (var r3 = ordersHeaderRow + 2; r3 &lt; (consRow > 0 ? consRow : sheet.getLastRow() + 1); r3++) {
+        if (sheet.getRange(r3, 3).getValue() !== '') orderDataEnd = r3 + 1;
+      }
+      sheet.insertRowBefore(Math.max(orderDataEnd, ordersHeaderRow + 2));
+      sheet.getRange(Math.max(orderDataEnd, ordersHeaderRow + 2), 1, 1, 9)
+        .setValues([[timestamp, data.date, data.num, data.chan, data.qty, data.price, data.total, data.stockAfter, data.notes||'']]);
+    }
+
+    if (data.type === 'consignment') {
+      var sheet2 = ss.getSheetByName(shortName);
+      if (!sheet2) return; // should exist from order creation
+      var consHeaderRow = -1;
+      for (var r4 = 1; r4 &lt;= sheet2.getLastRow(); r4++) {
+        if (sheet2.getRange(r4,1).getValue() === 'CONSIGNMENT') { consHeaderRow = r4; break; }
+      }
+      if (consHeaderRow === -1) return;
+      sheet2.appendRow([timestamp, data.date, data.store||'', data.event||'', data.qty, data.rate||'', data.amountDue||0, data.notes||'', data.status||'']);
+    }
+
+    var output = ContentService.createTextOutput(JSON.stringify({ok:true,ts:timestamp}));
+    output.setMimeType(ContentService.MimeType.JSON);
+    return output;
+
+  } catch(err) {
+    var errOut = ContentService.createTextOutput(JSON.stringify({ok:false,error:err.message}));
+    errOut.setMimeType(ContentService.MimeType.JSON);
+    return errOut;
+  }
+}
+
+// Test with GET so you can verify deployment in browser
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({ok:true,msg:'Lyricalmyrical Sheets webhook is live'})).setMimeType(ContentService.MimeType.JSON);
+}</pre>
+            <button class="btn sm" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.15);" onclick="copyGasCode()">Copy</button>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">The script creates a separate sheet tab per book automatically (e.g. "Un Fantastico Altrove — Orders" and "The Hound — Orders").</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:flex-start;">
+        <div style="width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:10px;">Paste your URLs and connect</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div class="form-group" style="margin:0;"><label>Web App URL</label><input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec"></div>
+            <div class="form-group" style="margin:0;"><label>Google Sheet URL (for the Open link)</label><input type="url" id="sheets-spreadsheet-input" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
+            <div><button class="btn gold" onclick="connectSheets()">Connect</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="sheets-connected-card" style="display:none;">
+    <div class="sheets-setup connected" style="margin-bottom:1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--green);margin-bottom:4px;">✓ Google Sheets connected — all books sync here</div>
+          <div style="font-size:12px;color:var(--text3);word-break:break-all;" id="sheets-url-display"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a id="open-sheet-link" href="#" target="_blank" class="btn gold" style="text-decoration:none;display:none;">↗ Open sheet</a>
+          <button class="btn sm" onclick="testSheets()">Test connection</button>
+          <button class="btn sm" id="verify-url-btn" onclick="verifyUrl()" style="font-size:10px;">↗ Verify URL</button>
+          <button class="btn sm danger-btn" onclick="disconnectSheets()">Disconnect</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sect">Sync log</div>
+  <div class="tbl-wrap">
+    <table class="sheets-log-tbl">
+      <thead><tr><th>Time</th><th>Book</th><th>Type</th><th>Summary</th><th>Status</th></tr></thead>
+      <tbody id="sheets-log-body"><tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;">No sync events yet.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- /.app -->
+</div><!-- /#pw-app -->
+
+<!-- MODALS -->
+<div class="overlay" id="m-add-store" style="display:none;"><div class="modal">
+  <div class="modal-title">Add consignment store</div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Store name *</label><input id="ns-name" placeholder="e.g. Libreria Feltrinelli"></div><div class="form-group"><label>Contact person</label><input id="ns-contact" placeholder="e.g. Maria Rossi"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Email</label><input id="ns-email" type="email" placeholder="store@email.com"></div><div class="form-group"><label>City</label><input id="ns-city" placeholder="e.g. Milan"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Commission rate (%)</label><input id="ns-rate" type="number" value="40" min="0" max="100"></div><div class="form-group"><label>Payment terms</label><select id="ns-terms"><option>Net 30</option><option>Net 60</option><option>Net 90</option><option>On sale</option><option>Quarterly</option></select></div></div>
+  <div class="form-group"><label>Notes</label><textarea id="ns-notes" placeholder="Special terms, delivery info…"></textarea></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('add-store')">Cancel</button><button class="btn gold" onclick="addStore()">Add store</button></div>
+</div></div>
+
+<div class="overlay" id="m-send-books" style="display:none;"><div class="modal">
+  <div class="modal-title">Send books to <span id="send-sname"></span></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty to send</label><input id="send-qty" type="number" value="10" min="1"></div><div class="form-group"><label>Date sent</label><input id="send-date" type="date"></div></div>
+  <div class="form-group" style="margin-bottom:12px;"><label>Commission rate (%)</label><input id="send-rate" type="number" value="40" min="0" max="100"></div>
+  <div class="form-group"><label>Notes</label><input id="send-notes" placeholder="e.g. delivery ref, batch #"></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
+</div></div>
+
+<div class="overlay" id="m-record-sale" style="display:none;"><div class="modal">
+  <div class="modal-title">Record sale — <span id="sale-sname"></span></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty sold by store</label><input id="sale-qty" type="number" value="1" min="1"></div><div class="form-group"><label>Date</label><input id="sale-date" type="date"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Sale price per unit</label><div class="price-wrap"><span class="sym" id="sale-sym">€</span><input id="sale-price" type="number" value="40.00" step="0.01"></div></div><div class="form-group"><label>Payment status</label><select id="sale-paid"><option value="pending">Pending</option><option value="paid">Paid</option></select></div></div>
+  <div class="form-group"><label>Notes</label><input id="sale-notes" placeholder="e.g. invoice ref, reporting period"></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('record-sale')">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
+</div></div>
+
+<div class="overlay" id="m-return" style="display:none;"><div class="modal">
+  <div class="modal-title">Record return — <span id="ret-sname"></span></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty returned</label><input id="ret-qty" type="number" value="1" min="1"></div><div class="form-group"><label>Date</label><input id="ret-date" type="date"></div></div>
+  <div class="form-group"><label>Condition</label><select id="ret-cond"><option>Good — return to stock</option><option>Damaged — write off</option></select></div>
+  <div class="form-group" style="margin-top:12px;"><label>Notes</label><input id="ret-notes" placeholder="e.g. reason for return"></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('return')">Cancel</button><button class="btn gold" onclick="confirmReturn()">Record return</button></div>
+</div></div>
+
+
+<!-- EDIT ENTRY MODAL -->
+<div class="overlay" id="m-edit-entry" style="display:none;"><div class="modal edit-modal">
+  <div class="modal-title" id="edit-modal-title">Edit entry</div>
+  <div class="edit-modal-type" id="edit-modal-type-badge">Order</div>
+
+  <!-- ORDER EDIT FIELDS -->
+  <div id="edit-order-fields">
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label>Order #</label><input id="edit-num" type="text"></div>
+      <div class="form-group"><label>Date</label><input id="edit-date" type="date"></div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label>Qty</label><input id="edit-qty" type="number" min="1"></div>
+      <div class="form-group"><label>Unit price</label><div class="price-wrap"><span class="sym" id="edit-sym">€</span><input id="edit-price" type="number" step="0.01"></div></div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label>Channel</label><select id="edit-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Other</option></select></div>
+      <div class="form-group"><label>Notes</label><input id="edit-notes" type="text"></div>
+    </div>
+    <div class="edit-diff" id="edit-diff-preview" style="display:none;">Changes will recalculate stock and revenue.</div>
+  </div>
+
+  <!-- CONSIGNMENT LEDGER EDIT FIELDS -->
+  <div id="edit-ledger-fields" style="display:none;">
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label>Date</label><input id="edit-l-date" type="date"></div>
+      <div class="form-group"><label>Qty</label><input id="edit-l-qty" type="number" min="1"></div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label>Rate (%)</label><input id="edit-l-rate" type="number" min="0" max="100" step="0.1"></div>
+      <div class="form-group"><label>Notes</label><input id="edit-l-notes" type="text"></div>
+    </div>
+  </div>
+
+  <!-- VOID ZONE -->
+  <div class="void-zone" id="edit-void-zone">
+    <div class="void-zone-title">Void this entry</div>
+    <div class="void-zone-body" id="edit-void-body">Voiding will reverse all stock and revenue effects of this entry. The entry stays visible in history as struck-through for your records.</div>
+    <button class="btn danger-btn" id="edit-void-btn" onclick="voidEntry()">Void this entry</button>
+  </div>
+
+  <div class="modal-footer">
+    <button class="btn" onclick="closeM('edit-entry')">Cancel</button>
+    <button class="btn gold" onclick="saveEntryEdit()">Save changes</button>
+  </div>
+</div></div>
+<!-- SHIPPING LABEL MODAL -->
+<div class="overlay" id="m-shipping-label" style="display:none;">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-title">📦 Shipping label</div>
+    <div id="shipping-label-order-info" style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;font-family:'DM Mono',monospace;"></div>
+
+    <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Ship to</div>
+    <div class="g2" style="margin-bottom:10px;">
+      <div class="form-group" style="margin:0;"><label>Customer name</label><input type="text" id="sl-name" placeholder="Full name"></div>
+      <div class="form-group" style="margin:0;"><label>Email (optional)</label><input type="text" id="sl-email" placeholder="customer@email.com"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;"><label>Address line 1</label><input type="text" id="sl-addr1" placeholder="Street address"></div>
+    <div class="form-group" style="margin-bottom:10px;"><label>Address line 2 (optional)</label><input type="text" id="sl-addr2" placeholder="Apt, suite, unit…"></div>
+    <div class="g2" style="margin-bottom:10px;">
+      <div class="form-group" style="margin:0;"><label>City</label><input type="text" id="sl-city" placeholder="City"></div>
+      <div class="form-group" style="margin:0;"><label>Province / State <span style="font-weight:400;color:var(--text4);">(optional)</span></label><input type="text" id="sl-province" placeholder="e.g. ON"></div>
+    </div>
+    <div class="g2" style="margin-bottom:1.25rem;">
+      <div class="form-group" style="margin:0;"><label>Postal / ZIP</label><input type="text" id="sl-postal" placeholder="e.g. M5V 2T6"></div>
+      <div class="form-group" style="margin:0;"><label>Country</label><input type="text" id="sl-country" placeholder="e.g. Canada" value="Canada"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeM('shipping-label')">Cancel</button>
+      <button class="btn gold" onclick="printShippingLabel()">🖨 Print label</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT MODAL -->
+<div class="overlay" id="m-import" style="display:none;">
+  <div class="modal" style="max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
+    <div class="modal-title">Import order history</div>
+    <div id="import-summary" style="font-size:13px;color:var(--text2);margin-bottom:1rem;"></div>
+    <div style="flex:1;overflow-y:auto;min-height:0;">
+      <div class="tbl-wrap" style="margin-bottom:0;">
+        <table class="tbl">
+          <thead><tr><th>Order #</th><th>Date</th><th>Channel</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Total</th><th>Notes</th><th>Status</th></tr></thead>
+          <tbody id="import-preview-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-top:1rem;padding:10px 14px;background:var(--amber-bg);border-radius:var(--r2);border-left:3px solid var(--amber);font-size:12px;color:var(--amber);">
+      ⚠ This will <strong>add</strong> these rows to the current book's history. It will not overwrite existing data. Stock and revenue will be recalculated.
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeM('import')">Cancel</button>
+      <button class="btn gold" onclick="confirmImport()">Import <span id="import-count">0</span> orders</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD BOOK MODAL -->
+<div class="overlay" id="m-add-book" style="display:none;"><div class="modal">
+  <div class="modal-title" id="add-book-modal-title">Add new book</div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Book ID (URL safe) *</label><input id="nb-id" placeholder="e.g. photobook-2026"></div><div class="form-group"><label>Title *</label><input id="nb-title" placeholder="e.g. My Awesome Book"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Author</label><input id="nb-author" placeholder="Author name"></div><div class="form-group"><label>ISBN</label><input id="nb-isbn" placeholder="—"></div></div>
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>Print Run</label><input id="nb-max" type="number" value="100"></div>
+    <div class="form-group"><label>List Price</label><input id="nb-price" type="number" value="40"></div>
+  </div>
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>Currency</label><input id="nb-cur" value="€"></div>
+    <div class="form-group"><label>Low Stock Threshold</label><input id="nb-thresh" type="number" value="10"></div>
+  </div>
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>Accent Color</label><input id="nb-accent" type="color" value="#c8913a"></div>
+    <div class="form-group"><label>Author Password</label><input id="nb-pw" placeholder="Used for author view"></div>
+  </div>
+  <div class="form-group"><label>Initial Production Cost</label><input id="nb-prod" type="number" value="0"></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('add-book')">Cancel</button><button class="btn gold" onclick="saveNewBook()">Save Book</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
