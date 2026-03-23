@@ -733,80 +733,126 @@ function applyAll() {
 }
 
 async function fetchOrders() {
-  const btn = $('scan-btn');
-  const log = 'log-web';
+  const book = getBook();
+  const btn  = $('scan-btn');
+  const log  = 'log-web';
+  let attempt = 0;
+  const MAX_RETRIES = 3;
+
   const setStatus = (msg) => { btn.innerHTML = `<span class="spinner"></span>${msg}`; btn.disabled = true; };
 
-  // Require Google Sheets to be connected
-  if (!sheetsUrl) {
-    showToast('Connect Google Sheets first (Sheets tab) to enable Gmail scanning.', 'warn');
-    addLog(log, '❌ No Google Sheets URL. Visit the Sheets tab to connect.', 'err');
-    return;
-  }
-
+  // Read scan memory for smarter queries
   const mem = getScanMemory();
   const lastScanDate = mem.lastScan ? new Date(mem.lastScan) : null;
   const appliedNums  = new Set(mem.appliedNums || []);
   const daysBack     = parseInt(localStorage.getItem('lm-scan-days') || '30');
+  const sinceDate    = new Date(Date.now() - daysBack * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  setStatus('Scanning Gmail (Script)…');
-  addLog(log, `🔍 Requesting Gmail scan for last ${daysBack} days via your Google Apps Script…`, 'ok');
+  // Book catalog context
+  const bookList = Object.values(BOOKS)
+    .map(b => `"${b.title}" (id:${b.id}, price:${b.currency}${b.listPrice})`)
+    .join(', ');
 
-  try {
-    // Scan all books in your catalog
-    const scanResults = await Promise.allSettled(
-      Object.values(BOOKS).map(async (b) => {
-        // We use the book ID as the search key in the script
-        const url = `${sheetsUrl}?action=scan&bookTitle=${encodeURIComponent(b.title)}&days=${daysBack}`;
-        const r = await fetch(url);
-        if (!r.ok) throw new Error(`HTTP ${r.status} for ${b.title}`);
-        const d = await r.json();
-        if (!d.ok) throw new Error(d.error || `Script error for ${b.title}`);
-        return (d.orders || []).map(o => ({ ...o, bookId: b.id, hasBook: true, price: o.price || b.listPrice }));
+  // Known order nums to skip (already applied at any point)
+  const allApplied = [...getAllAppliedIds(), ...appliedNums];
+  const skipHint   = allApplied.length ? `Skip any orders with these order numbers, they are already recorded: ${allApplied.join(', ')}.` : '';
+
+  const systemPrompt = `You are a Gmail assistant for Lyricalmyrical Books.
+Search Gmail for Big Cartel order confirmation emails dated on or after ${sinceDate}.
+Catalog: ${bookList}.
+${skipHint}
+Rules:
+- Respond ONLY with raw JSON: {"orders":[{"id":"gmail_msg_id","bookId":"catalog_id","orderNum":"#1234","date":"Mar 14 2026","customer":"Name","email":"email","qty":1,"price":40.00,"hasBook":true,"shipName":"Name","shipAddr1":"Addr","shipAddr2":"","shipCity":"City","shipProvince":"ON","shipPostal":"M5V","shipCountry":"Canada"}]}
+- Only include confirmed orders.
+- Default to qty 1 if not explicit.`;
+
+  async function attemptScan() {
+    attempt++;
+    setStatus(`Searching Gmail… (attempt ${attempt}/${MAX_RETRIES})`);
+    const r = await fetch('/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: `Search Gmail for all Big Cartel order confirmation emails from Lyricalmyrical Books since ${sinceDate}. Return every order for every book.` }],
+        mcp_servers: [{ type: 'url', url: 'https://gmail.mcp.claude.com/mcp', name: 'gmail' }]
       })
-    );
-
-    // Merge all results
-    orders = [];
-    scanResults.forEach((result, i) => {
-      const bookTitle = Object.values(BOOKS)[i]?.title;
-      if (result.status === 'fulfilled') {
-        orders.push(...result.value);
-      } else {
-        addLog(log, `⚠ ${bookTitle}: ${result.reason?.message || 'scan failed'}`, 'warn');
-      }
     });
-
-    // Deduplicate against already-applied orders
-    const allApplied = getAllAppliedIds();
-    [...appliedNums].forEach(n => allApplied.add(n));
-    const fresh = orders.filter(o => !allApplied.has(o.id) && !allApplied.has(o.orderNum));
-    const already = orders.length - fresh.length;
-
-    mem.lastScan = new Date().toISOString();
-    saveScanMemory(mem);
-
-    if (orders.length === 0) {
-      addLog(log, `📭 No orders found in Gmail session for the last ${daysBack} days.`, 'warn');
-    } else {
-      const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId] || 0) + 1; return acc; }, {});
-      const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
-      addLog(log, `✓ Found ${orders.length} order(s): ${summary}`, 'ok');
-      if (already > 0) addLog(log, `↩ ${already} already recorded (system skipped)`, 'warn');
-      if (fresh.length > 0) addLog(log, `→ ${fresh.length} new order(s) ready to review`, 'ok');
-    }
-    if (lastScanDate) addLog(log, `🕐 Previous scan was: ${lastScanDate.toLocaleString()}`, 'ok');
-
-    renderOrders();
-  } catch (e) {
-    console.error('GAS Scan error:', e);
-    addLog(log, `❌ Connection error: ${e.message}. Ensure your Script URL is correct and deployed as "Anyone".`, 'err');
-    orders = [];
-    renderOrders();
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    if (!d || !d.content) throw new Error('Empty AI response');
+    return d;
   }
 
-  btn.textContent = 'Scan Gmail';
-  btn.disabled = false;
+  function parseResponse(d) {
+    const text = d.content.filter(c => c.type === 'text').map(c => c.text).join('');
+    let parsed;
+    const attempts = [
+      () => JSON.parse(text.trim()),
+      () => JSON.parse(text.replace(/^```json|```$/gm, '').trim()),
+      () => { const m = text.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); throw new Error('no match'); }
+    ];
+    for (const fn of attempts) {
+      try { parsed = fn(); break; } catch (_) {}
+    }
+    return parsed || { orders: [] };
+  }
+
+  setStatus('Connecting to Gmail Agent…');
+  let lastError;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const d = await attemptScan();
+      setStatus('Parsing results…');
+      const parsed = parseResponse(d);
+
+      // Normalise and enrich
+      orders = (parsed.orders || []).map(o => ({
+        ...o,
+        hasBook: true,
+        bookId: o.bookId && BOOKS[o.bookId] ? o.bookId : Object.keys(BOOKS)[0],
+        price:  o.price || BOOKS[o.bookId]?.listPrice || book.listPrice
+      }));
+
+      // Cross-session deduplication
+      const allDone = getAllAppliedIds();
+      [...appliedNums].forEach(n => allDone.add(n));
+      const fresh = orders.filter(o => !allDone.has(o.id) && !allDone.has(o.orderNum));
+      const already = orders.length - fresh.length;
+
+      mem.lastScan = new Date().toISOString();
+      saveScanMemory(mem);
+
+      if (orders.length === 0) {
+        addLog(log, `📭 No orders found in Gmail since ${sinceDate}.`, 'warn');
+      } else {
+        const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId] || 0) + 1; return acc; }, {});
+        const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
+        addLog(log, `✓ Found ${orders.length} order(s): ${summary}`, 'ok');
+        if (already > 0) addLog(log, `↩ ${already} already recorded (skipped)`, 'warn');
+        if (fresh.length > 0) addLog(log, `→ ${fresh.length} new order(s) ready`, 'ok');
+      }
+      if (lastScanDate) addLog(log, `🕐 Previous scan: ${lastScanDate.toLocaleString()}`, 'ok');
+
+      renderOrders();
+      btn.textContent = 'Scan Gmail'; btn.disabled = false;
+      return;
+    } catch(e) {
+      lastError = e;
+      console.warn(`Scan attempt ${attempt} failed:`, e);
+      if (attempt < MAX_RETRIES) {
+        setStatus(`Retrying… (${attempt}/${MAX_RETRIES})`);
+        await new Promise(res => setTimeout(res, 1200 * attempt));
+      }
+    }
+  }
+
+  addLog(log, `❌ AI Scan failed: ${lastError?.message || 'Unknown error'}. Try again in a moment.`, 'err');
+  orders = [];
+  renderOrders();
+  btn.textContent = 'Scan Gmail'; btn.disabled = false;
 }
 
 // ── MANUAL
