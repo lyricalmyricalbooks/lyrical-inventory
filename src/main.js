@@ -604,10 +604,23 @@ function renderHist() {
 // ── WEBSITE ORDERS
 function renderOrders() {
   const s = getState(), book = getBook(), cur = book.currency;
-  const list=$('orders-list'), rel=orders.filter(o=>o.hasBook);
-  if(!rel.length){list.innerHTML='<div class="empty-state"><div class="e-icon">📬</div>No orders found.</div>';$('apply-all-btn').disabled=true;return;}
+  const list=$('orders-list');
+  // Filter to current book by bookId if set, otherwise show all
+  const rel = orders.filter(o => o.hasBook && (!o.bookId || o.bookId === activeBook));
+  if(!rel.length){
+    list.innerHTML='<div class="empty-state"><div class="e-icon">📬</div>No orders found for this book.</div>';
+    $('apply-all-btn').disabled=true;
+    return;
+  }
   const doneSet=new Set(s.doneIds);
-  list.innerHTML=rel.map(o=>{const done=doneSet.has(o.id);return`<div class="order-card${done?' done':''}"><div class="order-row"><div><div class="order-num">${o.orderNum}</div><div class="order-meta">${o.date} · ${o.customer}</div></div><span class="pill ${done?'gray':'gold'}">${done?'Applied':'New'}</span></div><div class="order-row" style="margin-top:8px;"><span style="font-size:12px;color:var(--text3);">${book.title} × ${o.qty} · ${fmt(o.price||book.listPrice,cur)}</span>${!done?`<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>`:'<span style="font-size:11px;color:var(--text3);">Done</span>'}</div></div>`;}).join('');
+  list.innerHTML=rel.map(o=>{
+    const done=doneSet.has(o.id);
+    const addrSnippet = [o.shipCity, o.shipProvince, o.shipCountry].filter(Boolean).join(', ');
+    const addrLine = addrSnippet ? `<div style="font-size:11px;color:var(--text3);margin-top:3px;">📦 ${addrSnippet}</div>` : '';
+    const priceMismatch = !done && o.price && Math.abs(o.price - book.listPrice) > 0.5;
+    const priceWarn = priceMismatch ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ ${cur}${o.price} (vs list ${cur}${book.listPrice})</span>` : '';
+    return `<div class="order-card${done?' done':''}"><div class="order-row"><div><div class="order-num">${o.orderNum}</div><div class="order-meta">${o.date} · ${o.customer}</div>${addrLine}</div><span class="pill ${done?'gray':'gold'}">${done?'Applied':'New'}</span></div><div class="order-row" style="margin-top:8px;"><span style="font-size:12px;color:var(--text3);">${book.title} × ${o.qty} · ${fmt(o.price||book.listPrice,cur)}${priceWarn}</span>${!done?`<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>`:'<span style="font-size:11px;color:var(--text3);">Done</span>'}</div></div>`;
+  }).join('');
   $('apply-all-btn').disabled=!rel.some(o=>!new Set(s.doneIds).has(o.id));
 }
 
@@ -636,26 +649,60 @@ function applyAll(){orders.filter(o=>o.hasBook&&!new Set(getState().doneIds).has
 
 async function fetchOrders(){
   const book=getBook();
-  const btn=$('scan-btn');btn.innerHTML='<span class="spinner"></span>Scanning…';btn.disabled=true;
+  const btn=$('scan-btn');
+  const setStatus = (msg) => { btn.innerHTML=`<span class="spinner"></span>${msg}`; btn.disabled=true; };
+
+  // Build book catalog context for the AI
+  const bookList = Object.values(BOOKS).map(b => `"${b.title}" (id:${b.id}, price:${b.currency}${b.listPrice})`).join(', ');
+
+  setStatus('Searching Gmail…');
   try{
     const r=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      model:"claude-sonnet-4-20250514",max_tokens:1000,
-      system:`Search Gmail for Big Cartel order confirmation emails for Lyricalmyrical Books for the book "${book.title}". Extract all available shipping details. Respond ONLY with valid JSON, no other text: {"orders":[{"id":"msg_id","orderNum":"#ORDER","date":"Mon DD, YYYY","customer":"Full Name","email":"customer@email.com","qty":1,"price":${book.listPrice},"hasBook":true,"shipName":"Full Name","shipAddr1":"Street address","shipAddr2":"","shipCity":"City","shipProvince":"Province or State","shipPostal":"Postal code","shipCountry":"Country"}]}. Use empty string "" for any field not found in the email.`,
-      messages:[{role:"user",content:`Search Gmail for recent Big Cartel order confirmation emails for "${book.title}" from Lyricalmyrical Books. Look for shipping address details in each email.`}],
+      model:"claude-sonnet-4-20250514",max_tokens:2000,
+      system:`You are a Gmail assistant. Search for Big Cartel order confirmation emails from Lyricalmyrical Books. The catalog includes: ${bookList}. For each order found, match it to the correct book by title. Extract all shipping details. Respond ONLY with valid JSON, no prose or markdown: {"orders":[{"id":"gmail_msg_id","bookId":"catalog_id_like_hound","orderNum":"#1234","date":"Mar 14, 2026","customer":"Full Name","email":"customer@email.com","qty":1,"price":40,"hasBook":true,"shipName":"Full Name","shipAddr1":"123 Main St","shipAddr2":"","shipCity":"City","shipProvince":"ON","shipPostal":"M5V 2T6","shipCountry":"Canada"}]}. Use empty string for missing fields. Only include orders where a book match is found.`,
+      messages:[{role:"user",content:`Search Gmail for all recent Big Cartel order confirmation emails for Lyricalmyrical Books. Return results for all books found, not just one.`}],
       mcp_servers:[{type:"url",url:"https://gmail.mcp.claude.com/mcp",name:"gmail"}]
     })});
+
+    setStatus('Parsing results…');
     const d=await r.json();
-    const text=d.content.filter(c=>c.type==='text').map(c=>c.text).join('');
-    const m=text.replace(/```json|```/g,'').trim().match(/\{[\s\S]*\}/);
-    const p=m?JSON.parse(m[0]):{orders:[]};
-    orders=(p.orders||[]).map(o=>({...o,hasBook:true,price:o.price||book.listPrice}));
-    if(!orders.length)orders=[{id:"demo-"+Date.now(),orderNum:"#DEMO-001",date:"Mar 14, 2026",customer:"Demo Customer",email:"demo@example.com",qty:1,price:book.listPrice,hasBook:true,shipName:"Demo Customer",shipAddr1:"123 Main St",shipAddr2:"",shipCity:"Toronto",shipProvince:"ON",shipPostal:"M5V 2T6",shipCountry:"Canada"}];
-    addLog('log-web',`Found ${orders.length} order(s)`,'ok');renderOrders();
-  }catch(e){
-    orders=[{id:"demo-"+Date.now(),orderNum:"#DEMO-001",date:"Mar 14, 2026",customer:"Demo Customer",email:"demo@example.com",qty:1,price:book.listPrice,hasBook:true,shipName:"Demo Customer",shipAddr1:"123 Main St",shipAddr2:"",shipCity:"Toronto",shipProvince:"ON",shipPostal:"M5V 2T6",shipCountry:"Canada"}];
-    addLog('log-web','Loaded demo data','warn');renderOrders();
+
+    if (!d || !d.content) throw new Error('No response from API');
+
+    const text = d.content.filter(c=>c.type==='text').map(c=>c.text).join('');
+
+    // Robust JSON extraction: strip markdown code fences, then find first {…}
+    let parsed = { orders: [] };
+    try {
+      const clean = text.replace(/```json/g,'').replace(/```/g,'').trim();
+      const match = clean.match(/\{[\s\S]*\}/);
+      if (match) parsed = JSON.parse(match[0]);
+    } catch(parseErr) {
+      console.warn('JSON parse failed:', parseErr, text);
+    }
+
+    orders = (parsed.orders || []).map(o => ({
+      ...o,
+      hasBook: true,
+      price: o.price || (BOOKS[o.bookId]?.listPrice) || book.listPrice
+    }));
+
+    if (!orders.length) {
+      addLog('log-web', '📭 No new orders found in Gmail.', 'warn');
+    } else {
+      // Count per book
+      const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId]||0)+1; return acc; }, {});
+      const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
+      addLog('log-web', `✓ Found ${orders.length} order(s): ${summary}`, 'ok');
+    }
+    renderOrders();
+  } catch(e) {
+    console.error('Gmail scan error:', e);
+    addLog('log-web', `❌ Scan failed: ${e.message || 'Connection error'}. Check your network and try again.`, 'err');
+    orders = [];
+    renderOrders();
   }
-  btn.textContent='Scan Gmail';btn.disabled=false;
+  btn.textContent='Scan Gmail'; btn.disabled=false;
 }
 
 // ── MANUAL
