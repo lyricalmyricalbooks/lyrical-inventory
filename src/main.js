@@ -737,10 +737,10 @@ async function fetchOrders() {
   const log = 'log-web';
   const setStatus = (msg) => { btn.innerHTML = `<span class="spinner"></span>${msg}`; btn.disabled = true; };
 
-  // Require Google Sheets to be connected (that's where our GAS lives)
+  // Require Google Sheets to be connected
   if (!sheetsUrl) {
     showToast('Connect Google Sheets first (Sheets tab) to enable Gmail scanning.', 'warn');
-    addLog(log, '❌ No Google Sheets URL. Go to the Sheets tab and connect first.', 'err');
+    addLog(log, '❌ No Google Sheets URL. Visit the Sheets tab to connect.', 'err');
     return;
   }
 
@@ -749,24 +749,24 @@ async function fetchOrders() {
   const appliedNums  = new Set(mem.appliedNums || []);
   const daysBack     = parseInt(localStorage.getItem('lm-scan-days') || '30');
 
-  setStatus('Scanning Gmail via Apps Script…');
-  addLog(log, `🔍 Scanning Gmail for last ${daysBack} days via Google Apps Script…`, 'ok');
+  setStatus('Scanning Gmail (Script)…');
+  addLog(log, `🔍 Requesting Gmail scan for last ${daysBack} days via your Google Apps Script…`, 'ok');
 
   try {
-    // Scan all books in parallel — one GAS call per book
+    // Scan all books in your catalog
     const scanResults = await Promise.allSettled(
       Object.values(BOOKS).map(async (b) => {
+        // We use the book ID as the search key in the script
         const url = `${sheetsUrl}?action=scan&bookTitle=${encodeURIComponent(b.title)}&days=${daysBack}`;
         const r = await fetch(url);
         if (!r.ok) throw new Error(`HTTP ${r.status} for ${b.title}`);
         const d = await r.json();
-        if (!d.ok) throw new Error(d.error || `GAS error for ${b.title}`);
-        // Tag each order with the matching book ID
+        if (!d.ok) throw new Error(d.error || `Script error for ${b.title}`);
         return (d.orders || []).map(o => ({ ...o, bookId: b.id, hasBook: true, price: o.price || b.listPrice }));
       })
     );
 
-    // Merge all results, log any per-book failures
+    // Merge all results
     orders = [];
     scanResults.forEach((result, i) => {
       const bookTitle = Object.values(BOOKS)[i]?.title;
@@ -777,32 +777,30 @@ async function fetchOrders() {
       }
     });
 
-    // Cross-session deduplication — hide orders already applied
+    // Deduplicate against already-applied orders
     const allApplied = getAllAppliedIds();
     [...appliedNums].forEach(n => allApplied.add(n));
     const fresh = orders.filter(o => !allApplied.has(o.id) && !allApplied.has(o.orderNum));
     const already = orders.length - fresh.length;
 
-    // Update scan memory
     mem.lastScan = new Date().toISOString();
     saveScanMemory(mem);
 
-    // Summary
     if (orders.length === 0) {
-      addLog(log, `📭 No Big Cartel orders found in Gmail for the last ${daysBack} days.`, 'warn');
+      addLog(log, `📭 No orders found in Gmail session for the last ${daysBack} days.`, 'warn');
     } else {
       const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId] || 0) + 1; return acc; }, {});
       const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
       addLog(log, `✓ Found ${orders.length} order(s): ${summary}`, 'ok');
-      if (already > 0) addLog(log, `↩ ${already} already applied (hidden automatically)`, 'warn');
-      if (fresh.length > 0) addLog(log, `→ ${fresh.length} new order(s) ready to apply`, 'ok');
+      if (already > 0) addLog(log, `↩ ${already} already recorded (system skipped)`, 'warn');
+      if (fresh.length > 0) addLog(log, `→ ${fresh.length} new order(s) ready to review`, 'ok');
     }
-    if (lastScanDate) addLog(log, `🕐 Previous scan: ${lastScanDate.toLocaleString()}`, 'ok');
+    if (lastScanDate) addLog(log, `🕐 Previous scan was: ${lastScanDate.toLocaleString()}`, 'ok');
 
     renderOrders();
   } catch (e) {
-    console.error('Scan error:', e);
-    addLog(log, `❌ Scan failed: ${e.message}. Is your Apps Script URL correct and deployed as "Anyone"?`, 'err');
+    console.error('GAS Scan error:', e);
+    addLog(log, `❌ Connection error: ${e.message}. Ensure your Script URL is correct and deployed as "Anyone".`, 'err');
     orders = [];
     renderOrders();
   }
