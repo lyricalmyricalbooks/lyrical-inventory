@@ -601,108 +601,233 @@ function renderHist() {
     : '<tr><td colspan="8"><div class="empty-state" style="padding:1.5rem;">No orders yet.</div></td></tr>';
 }
 
-// ── WEBSITE ORDERS
+// ── WEBSITE ORDERS — persistent scan memory
+const SCAN_MEMORY_KEY = 'lm-scan-memory';
+function getScanMemory() {
+  try { return JSON.parse(localStorage.getItem(SCAN_MEMORY_KEY) || '{}'); } catch(e) { return {}; }
+}
+function saveScanMemory(mem) {
+  localStorage.setItem(SCAN_MEMORY_KEY, JSON.stringify(mem));
+}
+
+// Build a cross-book set of all order IDs already applied across any session
+function getAllAppliedIds() {
+  const ids = new Set();
+  Object.values(states).forEach(s => (s.doneIds || []).forEach(id => ids.add(id)));
+  // Also include any order nums already in any book's history
+  Object.values(states).forEach(s => (s.hist || []).forEach(h => { if (h.num) ids.add(h.num); }));
+  return ids;
+}
+
 function renderOrders() {
   const s = getState(), book = getBook(), cur = book.currency;
-  const list=$('orders-list');
-  // Filter to current book by bookId if set, otherwise show all
+  const list = $('orders-list');
+  // Filter to current book; show all if bookId not set
   const rel = orders.filter(o => o.hasBook && (!o.bookId || o.bookId === activeBook));
-  if(!rel.length){
-    list.innerHTML='<div class="empty-state"><div class="e-icon">📬</div>No orders found for this book.</div>';
-    $('apply-all-btn').disabled=true;
+  if (!rel.length) {
+    list.innerHTML = '<div class="empty-state"><div class="e-icon">📬</div>No orders found for this book.<br><span style="font-size:11px;color:var(--text3);">Try increasing the scan window or check Gmail directly.</span></div>';
+    $('apply-all-btn').disabled = true;
     return;
   }
-  const doneSet=new Set(s.doneIds);
-  list.innerHTML=rel.map(o=>{
-    const done=doneSet.has(o.id);
-    const addrSnippet = [o.shipCity, o.shipProvince, o.shipCountry].filter(Boolean).join(', ');
-    const addrLine = addrSnippet ? `<div style="font-size:11px;color:var(--text3);margin-top:3px;">📦 ${addrSnippet}</div>` : '';
-    const priceMismatch = !done && o.price && Math.abs(o.price - book.listPrice) > 0.5;
-    const priceWarn = priceMismatch ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ ${cur}${o.price} (vs list ${cur}${book.listPrice})</span>` : '';
-    return `<div class="order-card${done?' done':''}"><div class="order-row"><div><div class="order-num">${o.orderNum}</div><div class="order-meta">${o.date} · ${o.customer}</div>${addrLine}</div><span class="pill ${done?'gray':'gold'}">${done?'Applied':'New'}</span></div><div class="order-row" style="margin-top:8px;"><span style="font-size:12px;color:var(--text3);">${book.title} × ${o.qty} · ${fmt(o.price||book.listPrice,cur)}${priceWarn}</span>${!done?`<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>`:'<span style="font-size:11px;color:var(--text3);">Done</span>'}</div></div>`;
+  const doneSet = getAllAppliedIds();
+  list.innerHTML = rel.map(o => {
+    const done = doneSet.has(o.id) || doneSet.has(o.orderNum);
+    const addrParts = [o.shipAddr1, o.shipCity, o.shipProvince, o.shipCountry].filter(Boolean);
+    const addrLine = addrParts.length ? `<div style="font-size:11px;color:var(--text3);margin-top:4px;">📦 ${addrParts.join(', ')}</div>` : '';
+    const listPrice = BOOKS[o.bookId]?.listPrice || book.listPrice;
+    const listCur   = BOOKS[o.bookId]?.currency   || cur;
+    const priceMismatch = !done && o.price && Math.abs(o.price - listPrice) > 0.5;
+    const priceWarn = priceMismatch ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>` : '';
+    const bookLabel = o.bookId && BOOKS[o.bookId] ? `<span style="font-size:10px;background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:100px;padding:2px 8px;margin-right:6px;">${BOOKS[o.bookId].title}</span>` : '';
+    return `<div class="order-card${done ? ' done' : ''}">
+      <div class="order-row">
+        <div><div class="order-num">${o.orderNum}</div><div class="order-meta">${o.date} · ${o.customer || '—'} · ${o.email || ''}</div>${addrLine}</div>
+        <span class="pill ${done ? 'gray' : 'gold'}">${done ? 'Applied' : 'New'}</span>
+      </div>
+      <div class="order-row" style="margin-top:8px;">
+        <span style="font-size:12px;color:var(--text3);">${bookLabel}qty ${o.qty} · ${fmt(o.price || listPrice, listCur)}${priceWarn}</span>
+        ${!done ? `<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>` : '<span style="font-size:11px;color:var(--text3);">Done</span>'}
+      </div>
+    </div>`;
   }).join('');
-  $('apply-all-btn').disabled=!rel.some(o=>!new Set(s.doneIds).has(o.id));
+  $('apply-all-btn').disabled = !rel.some(o => !getAllAppliedIds().has(o.id) && !getAllAppliedIds().has(o.orderNum));
 }
 
 function applyOne(id) {
-  const s=getState(), book=getBook(), o=orders.find(x=>x.id===id);
-  if(!o||new Set(s.doneIds).has(id))return;
-  recordOrder(o.orderNum,'Website',o.qty,o.price||book.listPrice,'Big Cartel');
-  // Attach shipping info from the scanned email to the history entry
-  const h=s.hist[0];
-  if(h&&h.num===o.orderNum){
-    h.shipName     = o.shipName     || o.customer || '';
-    h.shipEmail    = o.email        || '';
-    h.shipAddr1    = o.shipAddr1    || '';
-    h.shipAddr2    = o.shipAddr2    || '';
-    h.shipCity     = o.shipCity     || '';
-    h.shipProvince = o.shipProvince || '';
-    h.shipPostal   = o.shipPostal   || '';
-    h.shipCountry  = o.shipCountry  || 'Canada';
-  }
-  s.doneIds.push(id);
-  addLog('log-web',`${o.orderNum}: -${o.qty} → ${s.stock} remaining`,'ok');
-  if(s.stock<=book.threshold)addLog('log-web','⚠ Below threshold!','warn');
-  renderOrders(); saveState(activeBook);
+  const s = getState(), book = getBook();
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  const alreadyDone = getAllAppliedIds().has(id) || getAllAppliedIds().has(o.orderNum);
+  if (alreadyDone) { showToast('Order already applied', 'warn'); return; }
+  // Use the matched book if it differs from active
+  const targetBook = o.bookId && BOOKS[o.bookId] ? o.bookId : activeBook;
+  const targetState = states[targetBook];
+  const targetBk    = BOOKS[targetBook];
+  if (!targetState || !targetBk) { showToast('Cannot find book for this order', 'err'); return; }
+  // Use target book's price if not on order
+  const price = o.price || targetBk.listPrice;
+  targetState.stock = Math.max(0, targetState.stock - o.qty);
+  targetState.sold  += o.qty;
+  targetState.revenue += o.qty * price;
+  if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
+  targetState.chStats['Website'].txns++;
+  targetState.chStats['Website'].units += o.qty;
+  targetState.chStats['Website'].revenue += o.qty * price;
+  const entry = { num: o.orderNum, chan: 'Website', qty: o.qty, price, after: targetState.stock,
+    notes: 'Big Cartel', date: o.date || today(),
+    shipName: o.shipName || o.customer || '', shipEmail: o.email || '',
+    shipAddr1: o.shipAddr1 || '', shipAddr2: o.shipAddr2 || '',
+    shipCity: o.shipCity || '', shipProvince: o.shipProvince || '',
+    shipPostal: o.shipPostal || '', shipCountry: o.shipCountry || 'Canada'
+  };
+  targetState.hist.unshift(entry);
+  if (!targetState.doneIds) targetState.doneIds = [];
+  targetState.doneIds.push(id);
+  // Save scan memory — record this order num as seen
+  const mem = getScanMemory();
+  if (!mem.appliedNums) mem.appliedNums = [];
+  if (!mem.appliedNums.includes(o.orderNum)) mem.appliedNums.push(o.orderNum);
+  mem.lastScan = new Date().toISOString();
+  saveScanMemory(mem);
+  syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel' });
+  addLog('log-web', `✓ ${o.orderNum} (${targetBk.title}): -${o.qty} → ${targetState.stock} remaining`, 'ok');
+  if (targetState.stock <= targetBk.threshold) addLog('log-web', `⚠ ${targetBk.title} below threshold!`, 'warn');
+  saveState(targetBook);
+  renderOrders();
+  if (targetBook === activeBook) updateDash();
 }
-function applyAll(){orders.filter(o=>o.hasBook&&!new Set(getState().doneIds).has(o.id)).forEach(o=>applyOne(o.id));}
 
-async function fetchOrders(){
-  const book=getBook();
-  const btn=$('scan-btn');
-  const setStatus = (msg) => { btn.innerHTML=`<span class="spinner"></span>${msg}`; btn.disabled=true; };
+function applyAll() {
+  const applied = getAllAppliedIds();
+  orders.filter(o => o.hasBook && !applied.has(o.id) && !applied.has(o.orderNum)).forEach(o => applyOne(o.id));
+}
 
-  // Build book catalog context for the AI
-  const bookList = Object.values(BOOKS).map(b => `"${b.title}" (id:${b.id}, price:${b.currency}${b.listPrice})`).join(', ');
+async function fetchOrders() {
+  const book = getBook();
+  const btn  = $('scan-btn');
+  const log  = 'log-web';
+  let attempt = 0;
+  const MAX_RETRIES = 3;
 
-  setStatus('Searching Gmail…');
-  try{
-    const r=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      model:"claude-sonnet-4-20250514",max_tokens:2000,
-      system:`You are a Gmail assistant. Search for Big Cartel order confirmation emails from Lyricalmyrical Books. The catalog includes: ${bookList}. For each order found, match it to the correct book by title. Extract all shipping details. Respond ONLY with valid JSON, no prose or markdown: {"orders":[{"id":"gmail_msg_id","bookId":"catalog_id_like_hound","orderNum":"#1234","date":"Mar 14, 2026","customer":"Full Name","email":"customer@email.com","qty":1,"price":40,"hasBook":true,"shipName":"Full Name","shipAddr1":"123 Main St","shipAddr2":"","shipCity":"City","shipProvince":"ON","shipPostal":"M5V 2T6","shipCountry":"Canada"}]}. Use empty string for missing fields. Only include orders where a book match is found.`,
-      messages:[{role:"user",content:`Search Gmail for all recent Big Cartel order confirmation emails for Lyricalmyrical Books. Return results for all books found, not just one.`}],
-      mcp_servers:[{type:"url",url:"https://gmail.mcp.claude.com/mcp",name:"gmail"}]
-    })});
+  const setStatus = (msg) => { btn.innerHTML = `<span class="spinner"></span>${msg}`; btn.disabled = true; };
 
-    setStatus('Parsing results…');
-    const d=await r.json();
+  // Read scan memory for smarter queries
+  const mem = getScanMemory();
+  const lastScanDate = mem.lastScan ? new Date(mem.lastScan) : null;
+  const appliedNums  = new Set(mem.appliedNums || []);
+  const daysBack     = parseInt(localStorage.getItem('lm-scan-days') || '30');
+  const sinceDate    = new Date(Date.now() - daysBack * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-    if (!d || !d.content) throw new Error('No response from API');
+  // Book catalog context
+  const bookList = Object.values(BOOKS)
+    .map(b => `"${b.title}" (id:${b.id}, price:${b.currency}${b.listPrice})`)
+    .join(', ');
 
-    const text = d.content.filter(c=>c.type==='text').map(c=>c.text).join('');
+  // Known order nums to skip (already applied at any point)
+  const allApplied = [...getAllAppliedIds(), ...appliedNums];
+  const skipHint   = allApplied.length ? `Skip any orders with these order numbers, they are already recorded: ${allApplied.join(', ')}.` : '';
 
-    // Robust JSON extraction: strip markdown code fences, then find first {…}
-    let parsed = { orders: [] };
-    try {
-      const clean = text.replace(/```json/g,'').replace(/```/g,'').trim();
-      const match = clean.match(/\{[\s\S]*\}/);
-      if (match) parsed = JSON.parse(match[0]);
-    } catch(parseErr) {
-      console.warn('JSON parse failed:', parseErr, text);
-    }
+  const systemPrompt = `You are a Gmail assistant for Lyricalmyrical Books, a small art book publisher.
+Search Gmail for Big Cartel order confirmation emails dated on or after ${sinceDate}.
+The full book catalog is: ${bookList}.
+For each email, extract every available detail and match the order to a book by its title.
+${skipHint}
+IMPORTANT rules:
+- Respond ONLY with a single raw JSON object. No prose, no markdown, no explanation.
+- Schema: {"orders":[{"id":"gmail_msg_id","bookId":"catalog_id","orderNum":"#1234","date":"Mar 14 2026","customer":"Full Name","email":"customer@email","qty":1,"price":40.00,"hasBook":true,"shipName":"Full Name","shipAddr1":"123 Main St","shipAddr2":"","shipCity":"City","shipProvince":"ON","shipPostal":"M5V 2T6","shipCountry":"Canada"}]}
+- Use "" for any field you cannot find.
+- Only include confirmed order emails (ignore shipping notifications, refunds, etc.).
+- If the qty is not explicit, default to 1.`;
 
-    orders = (parsed.orders || []).map(o => ({
-      ...o,
-      hasBook: true,
-      price: o.price || (BOOKS[o.bookId]?.listPrice) || book.listPrice
-    }));
-
-    if (!orders.length) {
-      addLog('log-web', '📭 No new orders found in Gmail.', 'warn');
-    } else {
-      // Count per book
-      const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId]||0)+1; return acc; }, {});
-      const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
-      addLog('log-web', `✓ Found ${orders.length} order(s): ${summary}`, 'ok');
-    }
-    renderOrders();
-  } catch(e) {
-    console.error('Gmail scan error:', e);
-    addLog('log-web', `❌ Scan failed: ${e.message || 'Connection error'}. Check your network and try again.`, 'err');
-    orders = [];
-    renderOrders();
+  async function attemptScan() {
+    attempt++;
+    setStatus(`Searching Gmail… (attempt ${attempt}/${MAX_RETRIES})`);
+    const r = await fetch('/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: `Search Gmail for all Big Cartel order confirmation emails from Lyricalmyrical Books since ${sinceDate}. Return every order for every book.` }],
+        mcp_servers: [{ type: 'url', url: 'https://gmail.mcp.claude.com/mcp', name: 'gmail' }]
+      })
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    if (!d || !d.content) throw new Error('Empty API response');
+    return d;
   }
-  btn.textContent='Scan Gmail'; btn.disabled=false;
+
+  function parseResponse(d) {
+    const text = d.content.filter(c => c.type === 'text').map(c => c.text).join('');
+    // Multi-pass extraction: try parse directly, then strip fences, then regex
+    let parsed;
+    const attempts = [
+      () => JSON.parse(text.trim()),
+      () => JSON.parse(text.replace(/^```json|```$/gm, '').trim()),
+      () => { const m = text.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); throw new Error('no match'); }
+    ];
+    for (const fn of attempts) {
+      try { parsed = fn(); break; } catch (_) {}
+    }
+    return parsed || { orders: [] };
+  }
+
+  setStatus('Connecting to Gmail…');
+  let lastError;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const d = await attemptScan();
+      setStatus('Parsing results…');
+      const parsed = parseResponse(d);
+
+      // Normalise and enrich each order
+      const newOrders = (parsed.orders || []).map(o => ({
+        ...o,
+        hasBook: true,
+        bookId: o.bookId && BOOKS[o.bookId] ? o.bookId : Object.keys(BOOKS)[0],
+        price:  o.price || BOOKS[o.bookId]?.listPrice || book.listPrice
+      }));
+
+      // Separate new vs already-seen
+      const alreadySeen = newOrders.filter(o => appliedNums.has(o.orderNum));
+      orders = newOrders;
+
+      // Update last scan time
+      mem.lastScan = new Date().toISOString();
+      saveScanMemory(mem);
+
+      // Summary log
+      const fresh = orders.filter(o => !getAllAppliedIds().has(o.id) && !getAllAppliedIds().has(o.orderNum));
+      if (orders.length === 0) {
+        addLog(log, `📭 No orders found in Gmail since ${sinceDate}.`, 'warn');
+      } else {
+        const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId] || 0) + 1; return acc; }, {});
+        const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
+        addLog(log, `✓ ${orders.length} order(s) found: ${summary}`, 'ok');
+        if (alreadySeen.length) addLog(log, `↩ ${alreadySeen.length} already applied (skipped)`, 'warn');
+        if (fresh.length !== orders.length) addLog(log, `→ ${fresh.length} new, ready to apply`, 'ok');
+      }
+      if (lastScanDate) addLog(log, `🕐 Last scan: ${lastScanDate.toLocaleString()}`, 'ok');
+      renderOrders();
+      btn.textContent = 'Scan Gmail'; btn.disabled = false;
+      return;
+    } catch(e) {
+      lastError = e;
+      console.warn(`Scan attempt ${attempt} failed:`, e);
+      if (attempt < MAX_RETRIES) {
+        setStatus(`Scan failed, retrying… (${attempt}/${MAX_RETRIES})`);
+        await new Promise(res => setTimeout(res, 1200 * attempt)); // backoff
+      }
+    }
+  }
+
+  // All retries exhausted
+  addLog(log, `❌ Scan failed after ${MAX_RETRIES} attempts: ${lastError?.message || 'Unknown error'}. Check your network and try again.`, 'err');
+  orders = [];
+  renderOrders();
+  btn.textContent = 'Scan Gmail'; btn.disabled = false;
 }
 
 // ── MANUAL
