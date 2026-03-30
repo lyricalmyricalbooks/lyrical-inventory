@@ -114,8 +114,8 @@ window.deleteBook = deleteBook;
 // ═══════════════════════════════════════════════════════
 const urlParams = new URLSearchParams(location.search);
 const URL_BOOK = urlParams.get('book');    // e.g. 'hound'
-const IS_AUTHOR_MODE = !!URL_BOOK && !!BOOKS[URL_BOOK];
-const ACTIVE_BOOK_FORCED = IS_AUTHOR_MODE ? URL_BOOK : null;
+let IS_AUTHOR_MODE = false;
+let ACTIVE_BOOK_FORCED = null;
 
 // Runtime role check — works for both URL-based AND password-based author login
 function isAuthor() {
@@ -2031,27 +2031,42 @@ Object.assign(window, {
 });
 
 // ── STARTUP ROUTING
-// Author mode via URL param: ?book=hound — skips password if dev=1, else author password gate
-if (IS_AUTHOR_MODE && urlParams.get('dev')==='1') {
-  showApp('author', ACTIVE_BOOK_FORCED);
-} else if (sessionStorage.getItem('lm-unlocked')==='publisher') {
-  showApp('publisher');
-} else {
-  const stored = sessionStorage.getItem('lm-unlocked');
-  if (stored && stored.startsWith('author:')) {
-    const storedBook = stored.split(':')[1];
-    if (!IS_AUTHOR_MODE || storedBook === ACTIVE_BOOK_FORCED) {
-      showApp('author', IS_AUTHOR_MODE ? ACTIVE_BOOK_FORCED : storedBook);
+async function initStartup() {
+  await loadCatalog(); // Ensure books map is populated
+  IS_AUTHOR_MODE = !!URL_BOOK && !!BOOKS[URL_BOOK];
+  ACTIVE_BOOK_FORCED = IS_AUTHOR_MODE ? URL_BOOK : null;
+
+  // Author mode via URL param: ?book=hound — skips password if dev=1, else author password gate
+  if (IS_AUTHOR_MODE && urlParams.get('dev')==='1') {
+    showApp('author', ACTIVE_BOOK_FORCED);
+  } else if (sessionStorage.getItem('lm-unlocked')==='publisher') {
+    showApp('publisher');
+  } else {
+    const stored = sessionStorage.getItem('lm-unlocked');
+    if (stored && stored.startsWith('author:')) {
+      const storedBook = stored.split(':')[1];
+      if (!IS_AUTHOR_MODE || storedBook === ACTIVE_BOOK_FORCED) {
+        showApp('author', IS_AUTHOR_MODE ? ACTIVE_BOOK_FORCED : storedBook);
+      } else {
+        $('pw-input').focus();
+        setupGate();
+      }
     } else {
       $('pw-input').focus();
+      setupGate();
     }
-  } else {
-    $('pw-input').focus();
-    // Customise prompt for author URL
-    if (IS_AUTHOR_MODE) {
-      const book = BOOKS[ACTIVE_BOOK_FORCED];
+  }
+}
+
+function setupGate() {
+  if (IS_AUTHOR_MODE) {
+    const book = BOOKS[ACTIVE_BOOK_FORCED];
+    if (book) {
       document.querySelector('#pw-gate .sub').textContent = book.title + ' · Author Portal';
       document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
     }
   }
 }
+
+if (window._fbReady) { initStartup(); }
+else { document.addEventListener('firebase-ready', initStartup); }
