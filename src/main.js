@@ -2067,8 +2067,21 @@ function setupGate() {
   if (IS_AUTHOR_MODE) {
     const book = BOOKS[ACTIVE_BOOK_FORCED];
     if (book) {
-      document.querySelector('#pw-gate .sub').textContent = book.title + ' · Author Portal';
+      document.querySelector('#gate-sub').textContent = book.title + ' · Author Portal';
       document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
+      const desc = document.getElementById('gate-desc');
+      if (desc) {
+        desc.style.display = 'block';
+        desc.innerHTML = `Enter the author password to view inventory and sales data for <strong>${book.title}</strong>.`;
+      }
+    }
+  } else {
+    document.querySelector('#gate-sub').textContent = 'Inventory App · Publisher Portal';
+    document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
+    const desc = document.getElementById('gate-desc');
+    if (desc) {
+      desc.style.display = 'block';
+      desc.innerHTML = `Enter the <strong>Publisher Password</strong> to manage all books, <br>or an <strong>Author Password</strong> to view a specific book.`;
     }
   }
 }
