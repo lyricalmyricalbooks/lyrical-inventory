@@ -23,8 +23,11 @@
   <div class="box">
     <div class="wm">Lyricalmyrical Books</div>
     <div class="sub">Inventory App</div>
-    <input type="password" id="pw-input" placeholder="Password" onkeydown="if(event.key==='Enter')tryUnlock()">
-    <button onclick="tryUnlock()">Unlock</button>
+    <div style="position:relative; width:100%;">
+      <input type="password" id="pw-input" placeholder="Password" onkeydown="if(event.key==='Enter')tryUnlock()" style="width:100%; box-sizing:border-box; padding-right:40px;">
+      <button type="button" tabindex="-1" onclick="const p=document.getElementById('pw-input'); if(p.type==='password'){p.type='text';this.textContent='🙈';}else{p.type='password';this.textContent='👁';}" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; padding:0; font-size:16px; cursor:pointer; opacity:0.6; min-width:auto; height:auto; color:inherit;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">👁</button>
+    </div>
+    <button onclick="tryUnlock()" style="margin-top:10px; width:100%;">Unlock</button>
     <div class="err" id="pw-err"></div>
   </div>
 </div>
