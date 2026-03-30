@@ -2080,8 +2080,8 @@ function setupGate() {
     document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
     const desc = document.getElementById('gate-desc');
     if (desc) {
-      desc.style.display = 'block';
-      desc.innerHTML = `Enter the <strong>Publisher Password</strong> to manage all books, <br>or an <strong>Author Password</strong> to view a specific book.`;
+      desc.style.display = 'none';
+      desc.innerHTML = '';
     }
   }
 }
