@@ -1840,8 +1840,13 @@ async function loadPasswords() {
   } catch(_) {}
   if (!_loadedPasswords) {
     _loadedPasswords = { publisher: '12345', authors: {} };
-    Object.values(BOOKS).forEach(b => _loadedPasswords.authors[b.id] = b.authorPassword || '');
   }
+  if (!_loadedPasswords.authors) _loadedPasswords.authors = {};
+  Object.values(BOOKS).forEach(b => {
+    if (_loadedPasswords.authors[b.id] === undefined) {
+      _loadedPasswords.authors[b.id] = b.authorPassword || '';
+    }
+  });
   if ($('pw-pub')) $('pw-pub').value = _loadedPasswords.publisher || '';
   renderAuthorPasswords();
 }
@@ -1902,25 +1907,38 @@ async function tryUnlock() {
   // Fallback defaults if never saved before
   if (!pwData) {
     pwData = { publisher: '12345', authors: {} };
-    Object.values(BOOKS).forEach(b => pwData.authors[b.id] = b.authorPassword || '');
   }
+  if (!pwData.authors) pwData.authors = {};
+  Object.values(BOOKS).forEach(b => {
+    if (pwData.authors[b.id] === undefined) {
+      pwData.authors[b.id] = b.authorPassword || '';
+    }
+  });
 
   inp.disabled = false;
   err.textContent = '';
 
   // Publisher password — full access
-  if (val === pwData.publisher) {
+  if (val === pwData.publisher && val !== '') {
     sessionStorage.setItem('lm-unlocked','publisher');
     showApp('publisher');
     return;
   }
 
   // Author passwords — per-book access
-  const matchedBookId = Object.keys(pwData.authors || {}).find(id => pwData.authors[id] === val);
-  if (matchedBookId && BOOKS[matchedBookId]) {
-    sessionStorage.setItem('lm-unlocked', 'author:'+matchedBookId);
-    showApp('author', matchedBookId);
-    return;
+  if (IS_AUTHOR_MODE) {
+    if (pwData.authors[ACTIVE_BOOK_FORCED] === val && val !== '') {
+      sessionStorage.setItem('lm-unlocked', 'author:'+ACTIVE_BOOK_FORCED);
+      showApp('author', ACTIVE_BOOK_FORCED);
+      return;
+    }
+  } else {
+    const matchedBookId = Object.keys(pwData.authors || {}).find(id => pwData.authors[id] === val && val !== '');
+    if (matchedBookId && BOOKS[matchedBookId]) {
+      sessionStorage.setItem('lm-unlocked', 'author:'+matchedBookId);
+      showApp('author', matchedBookId);
+      return;
+    }
   }
 
   // Wrong
