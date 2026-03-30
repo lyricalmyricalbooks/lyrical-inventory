@@ -23,11 +23,11 @@
   <div class="box">
     <div class="wm">Lyricalmyrical Books</div>
     <div class="sub">Inventory App</div>
-    <div style="position:relative; width:100%;">
-      <input type="password" id="pw-input" placeholder="Password" onkeydown="if(event.key==='Enter')tryUnlock()" style="width:100%; box-sizing:border-box; padding-right:40px;">
-      <button type="button" tabindex="-1" onclick="const p=document.getElementById('pw-input'); if(p.type==='password'){p.type='text';this.textContent='🙈';}else{p.type='password';this.textContent='👁';}" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; padding:0; font-size:16px; cursor:pointer; opacity:0.6; min-width:auto; height:auto; color:inherit;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">👁</button>
+    <div style="display:flex; gap:10px; margin-bottom:10px;">
+      <input type="password" id="pw-input" placeholder="Password" onkeydown="if(event.key==='Enter')tryUnlock()" style="margin-bottom:0; flex:1;">
+      <button type="button" tabindex="-1" onclick="const p=document.getElementById('pw-input'); if(p.type==='password'){p.type='text';this.textContent='🙈';}else{p.type='password';this.textContent='👁';}" style="width:auto; padding:0 18px; margin:0; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.15); color:var(--cream); filter:grayscale(100%); font-size:16px;" onmouseover="this.style.background='rgba(255,255,255,.15)'" onmouseout="this.style.background='rgba(255,255,255,.07)'">👁</button>
     </div>
-    <button onclick="tryUnlock()" style="margin-top:10px; width:100%;">Unlock</button>
+    <button onclick="tryUnlock()">Unlock</button>
     <div class="err" id="pw-err"></div>
   </div>
 </div>
