@@ -1948,6 +1948,11 @@ async function tryUnlock() {
   inp.focus();
 }
 
+function logout() {
+  sessionStorage.removeItem('lm-unlocked');
+  window.location.reload();
+}
+
 function showApp(role, bookId) {
   $('pw-gate').style.display='none';
   $('pw-app').style.display='';
@@ -2019,7 +2024,7 @@ async function boot(forcedBook) {
 
 // Global exposure for HTML handlers
 Object.assign(window, {
-  tryUnlock, switchTab, toggleBookDropdown, switchBook, forceSync,
+  tryUnlock, logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   fetchOrders, applyOne, applyAll, toggleFx, calcFx, submitManual,
   submitGratuity, openM, closeM, addStore, confirmSend, confirmSale,
   confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
