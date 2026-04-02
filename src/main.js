@@ -69,6 +69,7 @@ async function saveNewBook() {
   closeM('add-book');
   buildBookSwitcher();
   renderCatalogList();
+  renderProfitSettings();
 }
 
 function hexToRgba(hex, alpha) {
@@ -98,6 +99,8 @@ async function deleteBook(id) {
   await window._fbSaveCatalog(BOOKS);
   buildBookSwitcher();
   renderCatalogList();
+  if (psActiveBookId === id) psActiveBookId = null;
+  renderProfitSettings();
   showToast('Book removed');
 }
 
@@ -351,7 +354,7 @@ function switchTab(name) {
   if(name==='consignment'){ renderStores(); renderLedger(); }
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
   if(name==='financials') renderFinancials();
-  if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); }
+  if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
 }
 
 function updateHeader() {
@@ -1951,11 +1954,12 @@ function renderProfitSettings() {
   card.style.display = '';
 
   const selectorCont = $('ps-book-selector-container');
-  if (selectorCont && !selectorCont.innerHTML) {
+  if (selectorCont) {
+    const currentVal = psActiveBookId || '';
     selectorCont.innerHTML = `
       <select id="ps-book-selector" onchange="psActiveBookId=this.value; renderProfitTierList()">
         <option value="">Select a book...</option>
-        ${Object.values(BOOKS).map(b => `<option value="${b.id}">${b.title}</option>`).join('')}
+        ${Object.values(BOOKS).map(b => `<option value="${b.id}" ${b.id===currentVal?'selected':''}>${b.title}</option>`).join('')}
       </select>
     `;
   }
