@@ -1906,6 +1906,141 @@ async function loadPaymentLinks(){
 // ── PROFIT SHARING LOGIC
 let psActiveBookId = null;
 
+function renderProfitSettings() {
+  if (isAuthor()) return;
+  const card = $('profit-sharing-settings-card');
+  if (!card) return;
+  card.style.display = '';
+
+  // Re-render the selector every time, but preserve the current selection
+  const selectorCont = $('ps-book-selector-container');
+  if (selectorCont) {
+    const currentVal = psActiveBookId || '';
+    selectorCont.innerHTML = `
+      <select id="ps-book-selector">
+        <option value="">Select a book...</option>
+        ${Object.values(BOOKS).map(b => `<option value="${b.id}" ${b.id===currentVal?'selected':''}>${b.title}</option>`).join('')}
+      </select>
+    `;
+    const sel = $('ps-book-selector');
+    if (sel) {
+      sel.addEventListener('change', () => {
+        psActiveBookId = sel.value || null;
+        renderProfitTierList();
+      });
+    }
+  }
+
+  renderProfitTierList();
+}
+
+function renderProfitTierList() {
+  const list = $('profit-tier-list');
+  if (!list) return;
+
+  list.innerHTML = '';
+
+  if (!psActiveBookId || !BOOKS[psActiveBookId]) {
+    list.innerHTML = '<div class="empty-state">Select a book to manage profit tiers.</div>';
+    return;
+  }
+
+  const book = BOOKS[psActiveBookId];
+  if (!book.profitTiers) book.profitTiers = [];
+  const tiers = book.profitTiers;
+
+  if (tiers.length === 0) {
+    list.innerHTML = '<div class="empty-state">No tiers defined yet. Click "+ Add Tier" to get started.</div>';
+    return;
+  }
+
+  tiers.forEach((t, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid; grid-template-columns: 2fr 1fr 1fr auto; gap:10px; align-items:end; background:var(--cream2); padding:12px; border-radius:var(--r2); border:1px solid var(--border);';
+
+    // Helper: build a labeled input cell
+    function makeField(labelText, type, val, onChange) {
+      const wrap = document.createElement('div');
+      wrap.className = 'form-group';
+      wrap.style.margin = '0';
+      const lbl = document.createElement('label');
+      lbl.textContent = labelText;
+      const inp = document.createElement('input');
+      inp.type = type;
+      inp.value = val;
+      inp.style.width = '100%';
+      inp.addEventListener('input', () => onChange(inp.value));
+      inp.addEventListener('change', () => onChange(inp.value));
+      wrap.appendChild(lbl);
+      wrap.appendChild(inp);
+      return wrap;
+    }
+
+    const labelField = makeField('Label', 'text', t.label, v => { t.label = v; });
+    const upToField  = makeField('Up to (units)', 'number', t.upTo, v => { t.upTo = parseFloat(v) || 0; });
+    const pctField   = makeField('Artist %', 'number', t.artistPct, v => { t.artistPct = parseFloat(v) || 0; });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn sm danger-btn';
+    removeBtn.textContent = 'Remove';
+    removeBtn.style.marginBottom = '2px';
+    removeBtn.addEventListener('click', () => {
+      book.profitTiers.splice(i, 1);
+      renderProfitTierList();
+    });
+
+    row.appendChild(labelField);
+    row.appendChild(upToField);
+    row.appendChild(pctField);
+    row.appendChild(removeBtn);
+    list.appendChild(row);
+  });
+}
+
+function addProfitTier() {
+  if (!psActiveBookId || !BOOKS[psActiveBookId]) {
+    showToast('Select a book first', 'warn');
+    return;
+  }
+  const book = BOOKS[psActiveBookId];
+  if (!book.profitTiers) book.profitTiers = [];
+  // Smart default: next upTo is 2× the last tier, or 100 if first
+  const last = book.profitTiers[book.profitTiers.length - 1];
+  const nextUpTo = last ? last.upTo * 2 : 100;
+  const nextPct  = last ? Math.max(last.artistPct - 5, 5) : 30;
+  book.profitTiers.push({ label: `Tier ${book.profitTiers.length + 1}`, upTo: nextUpTo, artistPct: nextPct });
+  renderProfitTierList();
+}
+
+function removeProfitTier(idx) {
+  if (!psActiveBookId || !BOOKS[psActiveBookId]) return;
+  BOOKS[psActiveBookId].profitTiers.splice(idx, 1);
+  renderProfitTierList();
+}
+
+function updateProfitTierField(idx, field, val) {
+  if (!psActiveBookId || !BOOKS[psActiveBookId]) return;
+  const tier = BOOKS[psActiveBookId].profitTiers[idx];
+  if (!tier) return;
+  if (field === 'upTo' || field === 'artistPct') tier[field] = parseFloat(val) || 0;
+  else tier[field] = val;
+}
+
+async function saveProfitTiers() {
+  if (!psActiveBookId) { showToast('No book selected', 'warn'); return; }
+  const ind = $('ps-save-indicator');
+  if (ind) ind.classList.add('show');
+  try {
+    await window._fbSaveCatalog(BOOKS);
+    showToast('✓ Profit tiers saved');
+    if (activeBook === psActiveBookId) updateDash();
+  } catch(e) {
+    showToast('⚠ Error saving tiers', 'err');
+  } finally {
+    if (ind) setTimeout(() => ind.classList.remove('show'), 1500);
+  }
+}
+
 function calculateArtistEarnings(bookId) {
   const book = BOOKS[bookId];
   if (!book) return null;
@@ -1919,22 +2054,16 @@ function calculateArtistEarnings(bookId) {
   let totalArtistEarned = 0;
   let cumulativeUnits = 0;
   
-  // Sort history chronologically to apply tiers correctly
-  // Filter for sales/orders only
   const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
   
   sortedHist.forEach(h => {
     let unitsRemaining = h.qty;
     while (unitsRemaining > 0) {
-      // Find current tier
       const tier = tiers.find(t => cumulativeUnits < t.upTo) || tiers[tiers.length - 1];
       const tierRemaining = tier.upTo - cumulativeUnits;
       const unitsInThisTier = tier === tiers[tiers.length - 1] ? unitsRemaining : Math.min(unitsRemaining, tierRemaining);
-      
-      // Proportion of this order's revenue for these units
       const revForTheseUnits = (unitsInThisTier / h.qty) * (h.qty * h.price);
       totalArtistEarned += revForTheseUnits * (tier.artistPct / 100);
-      
       cumulativeUnits += unitsInThisTier;
       unitsRemaining -= unitsInThisTier;
     }
@@ -1945,87 +2074,6 @@ function calculateArtistEarnings(bookId) {
     cumulativeUnits,
     netPublisher: s.revenue - totalArtistEarned
   };
-}
-
-function renderProfitSettings() {
-  if (isAuthor()) return;
-  const card = $('profit-sharing-settings-card');
-  if (!card) return;
-  card.style.display = '';
-
-  const selectorCont = $('ps-book-selector-container');
-  if (selectorCont) {
-    const currentVal = psActiveBookId || '';
-    selectorCont.innerHTML = `
-      <select id="ps-book-selector" onchange="psActiveBookId=this.value; renderProfitTierList()">
-        <option value="">Select a book...</option>
-        ${Object.values(BOOKS).map(b => `<option value="${b.id}" ${b.id===currentVal?'selected':''}>${b.title}</option>`).join('')}
-      </select>
-    `;
-  }
-
-  renderProfitTierList();
-}
-
-function renderProfitTierList() {
-  const list = $('profit-tier-list');
-  if (!list) return;
-  if (!psActiveBookId) {
-    list.innerHTML = '<div class="empty-state">Select a book to manage profit tiers.</div>';
-    return;
-  }
-
-  const book = BOOKS[psActiveBookId];
-  const tiers = book.profitTiers || [];
-  
-  if (tiers.length === 0) {
-    list.innerHTML = '<div class="empty-state">No tiers defined for this book.</div>';
-  } else {
-    list.innerHTML = tiers.map((t, i) => `
-      <div style="display:grid; grid-template-columns: 2fr 1fr 1fr auto; gap:10px; align-items: center; background:var(--cream2); padding:10px; border-radius:var(--r2);">
-        <div class="form-group" style="margin:0;"><label>Label</label><input type="text" value="${t.label}" onchange="updateProfitTierField(${i}, 'label', this.value)"></div>
-        <div class="form-group" style="margin:0;"><label>Up to (units)</label><input type="number" value="${t.upTo}" onchange="updateProfitTierField(${i}, 'upTo', this.value)"></div>
-        <div class="form-group" style="margin:0;"><label>Artist %</label><input type="number" value="${t.artistPct}" onchange="updateProfitTierField(${i}, 'artistPct', this.value)"></div>
-        <button class="edit-btn" onclick="removeProfitTier(${i})" style="opacity:1; margin-top:15px;">✕</button>
-      </div>
-    `).join('');
-  }
-}
-
-function addProfitTier() {
-  if (!psActiveBookId) return;
-  const book = BOOKS[psActiveBookId];
-  if (!book.profitTiers) book.profitTiers = [];
-  book.profitTiers.push({ label: 'New Tier', upTo: 500, artistPct: 50 });
-  renderProfitTierList();
-}
-
-function removeProfitTier(idx) {
-  if (!psActiveBookId) return;
-  BOOKS[psActiveBookId].profitTiers.splice(idx, 1);
-  renderProfitTierList();
-}
-
-function updateProfitTierField(idx, field, val) {
-  if (!psActiveBookId) return;
-  const tier = BOOKS[psActiveBookId].profitTiers[idx];
-  if (field === 'upTo' || field === 'artistPct') tier[field] = parseFloat(val) || 0;
-  else tier[field] = val;
-}
-
-async function saveProfitTiers() {
-  const ind = $('ps-save-indicator');
-  if (ind) ind.classList.add('show');
-  
-  // Update catalog in Firebase
-  try {
-    await window._fbSaveCatalog(BOOKS);
-    showToast('✓ Profit tiers saved to catalog');
-  } catch(e) {
-    showToast('⚠ Error saving tiers', 'err');
-  } finally {
-    if (ind) ind.classList.remove('show');
-  }
 }
 
 // ── FINANCIAL CENTER LOGIC
