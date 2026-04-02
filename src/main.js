@@ -557,6 +557,78 @@ function updateDash() {
     $('d-breakeven-kpi').style.display='none';
     $('d-breakeven-block').style.display='none';
   }
+
+  // ── PROFIT SHARING BREAKDOWN
+  renderProfitSharingBreakdown(activeBook);
+}
+
+function renderProfitSharingBreakdown(bookId) {
+  const block = $('d-profit-sharing-block');
+  const content = $('ps-dash-content');
+  if (!block || !content) return;
+
+  const book = BOOKS[bookId];
+  if (!book || !book.profitTiers || book.profitTiers.length === 0) {
+    block.style.display = 'none';
+    return;
+  }
+
+  block.style.display = '';
+  const stats = calculateArtistEarnings(bookId);
+  if (!stats) {
+    content.innerHTML = '<div class="empty-state">No earnings data yet.</div>';
+    return;
+  }
+
+  const cur = book.currency;
+  const tiers = [...book.profitTiers].sort((a,b) => a.upTo - b.upTo);
+  const currentTier = tiers.find(t => stats.cumulativeUnits < t.upTo) || tiers[tiers.length - 1];
+  const nextTier = tiers.find(t => t.upTo > stats.cumulativeUnits);
+
+  let tierHtml = tiers.map(t => {
+    const isActive = t === currentTier;
+    const isCompleted = stats.cumulativeUnits >= t.upTo && t !== tiers[tiers.length-1];
+    return `
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; opacity: ${isCompleted ? '.5' : '1'}; font-weight: ${isActive ? '700' : '400'};">
+        <span>${t.label} (Up to ${t.upTo})</span>
+        <span style="color: ${isActive ? 'var(--gold2)' : 'var(--text3)'}">${t.artistPct}% Artist Share</span>
+      </div>
+    `;
+  }).join('');
+
+  let progressHtml = '';
+  if (nextTier) {
+    const unitsLeft = nextTier.upTo - stats.cumulativeUnits;
+    progressHtml = `
+      <div style="margin-top:1rem; padding:12px; background:var(--ink); border-radius:var(--r2); border:1px solid rgba(255,255,255,.05);">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:10px; text-transform:uppercase; color:rgba(255,255,255,.3); letter-spacing:.1em;">Current Progress</span>
+          <span style="font-size:10px; color:var(--gold2);">${unitsLeft} units until ${nextTier.label}</span>
+        </div>
+        <div class="bar-track" style="height:4px; margin-bottom:0;">
+          <div class="bar-fill" style="width:${Math.min(100, (stats.cumulativeUnits / nextTier.upTo) * 100)}%; background:var(--gold2); height:4px;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  content.innerHTML = `
+    <div class="g2" style="margin-bottom:1.5rem;">
+      <div class="card" style="margin:0; background:var(--cream2); border:none;">
+        <div class="hs-label" style="color:var(--text3);">Artist Payout</div>
+        <div class="hs-val" style="color:var(--green); font-size:24px;">${fmt(stats.totalArtistEarned, cur)}</div>
+      </div>
+      <div class="card" style="margin:0; background:var(--cream2); border:none;">
+        <div class="hs-label" style="color:var(--text3);">Net to Publisher</div>
+        <div class="hs-val" style="color:var(--text); font-size:24px;">${fmt(stats.netPublisher, cur)}</div>
+      </div>
+    </div>
+    <div style="margin-bottom:1rem;">
+       <div class="sect" style="font-size:8px; margin-bottom:0.75rem;">Payout Tiers</div>
+       ${tierHtml}
+    </div>
+    ${progressHtml}
+  `;
 }
 
 function renderAll() {
@@ -1825,11 +1897,131 @@ async function loadPaymentLinks(){
     const stored = await window._fbLoadSettings('paymentLinks');
     if(stored){ Object.values(BOOKS).forEach(b=>{ if(stored[b.id]) b.paymentLink=stored[b.id]; }); return; }
   }catch(_){}
-  // Fallback to localStorage
-  try{
-    const stored=JSON.parse(localStorage.getItem('lm-payment-links')||'{}');
-    Object.values(BOOKS).forEach(b=>{ if(stored[b.id]) b.paymentLink=stored[b.id]; });
-  }catch(_){}
+}
+
+// ── PROFIT SHARING LOGIC
+let psActiveBookId = null;
+
+function calculateArtistEarnings(bookId) {
+  const book = BOOKS[bookId];
+  if (!book) return null;
+  const s = states[bookId] || defaultState(book);
+  const tiers = book.profitTiers && book.profitTiers.length > 0
+    ? [...book.profitTiers].sort((a,b) => a.upTo - b.upTo)
+    : [];
+  
+  if (tiers.length === 0) return null;
+
+  let totalArtistEarned = 0;
+  let cumulativeUnits = 0;
+  
+  // Sort history chronologically to apply tiers correctly
+  // Filter for sales/orders only
+  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
+  
+  sortedHist.forEach(h => {
+    let unitsRemaining = h.qty;
+    while (unitsRemaining > 0) {
+      // Find current tier
+      const tier = tiers.find(t => cumulativeUnits < t.upTo) || tiers[tiers.length - 1];
+      const tierRemaining = tier.upTo - cumulativeUnits;
+      const unitsInThisTier = tier === tiers[tiers.length - 1] ? unitsRemaining : Math.min(unitsRemaining, tierRemaining);
+      
+      // Proportion of this order's revenue for these units
+      const revForTheseUnits = (unitsInThisTier / h.qty) * (h.qty * h.price);
+      totalArtistEarned += revForTheseUnits * (tier.artistPct / 100);
+      
+      cumulativeUnits += unitsInThisTier;
+      unitsRemaining -= unitsInThisTier;
+    }
+  });
+
+  return {
+    totalArtistEarned,
+    cumulativeUnits,
+    netPublisher: s.revenue - totalArtistEarned
+  };
+}
+
+function renderProfitSettings() {
+  if (isAuthor()) return;
+  const card = $('profit-sharing-settings-card');
+  if (!card) return;
+  card.style.display = '';
+
+  const selectorCont = $('ps-book-selector-container');
+  if (selectorCont && !selectorCont.innerHTML) {
+    selectorCont.innerHTML = `
+      <select id="ps-book-selector" onchange="psActiveBookId=this.value; renderProfitTierList()">
+        <option value="">Select a book...</option>
+        ${Object.values(BOOKS).map(b => `<option value="${b.id}">${b.title}</option>`).join('')}
+      </select>
+    `;
+  }
+
+  renderProfitTierList();
+}
+
+function renderProfitTierList() {
+  const list = $('profit-tier-list');
+  if (!list) return;
+  if (!psActiveBookId) {
+    list.innerHTML = '<div class="empty-state">Select a book to manage profit tiers.</div>';
+    return;
+  }
+
+  const book = BOOKS[psActiveBookId];
+  const tiers = book.profitTiers || [];
+  
+  if (tiers.length === 0) {
+    list.innerHTML = '<div class="empty-state">No tiers defined for this book.</div>';
+  } else {
+    list.innerHTML = tiers.map((t, i) => `
+      <div style="display:grid; grid-template-columns: 2fr 1fr 1fr auto; gap:10px; align-items: center; background:var(--cream2); padding:10px; border-radius:var(--r2);">
+        <div class="form-group" style="margin:0;"><label>Label</label><input type="text" value="${t.label}" onchange="updateProfitTierField(${i}, 'label', this.value)"></div>
+        <div class="form-group" style="margin:0;"><label>Up to (units)</label><input type="number" value="${t.upTo}" onchange="updateProfitTierField(${i}, 'upTo', this.value)"></div>
+        <div class="form-group" style="margin:0;"><label>Artist %</label><input type="number" value="${t.artistPct}" onchange="updateProfitTierField(${i}, 'artistPct', this.value)"></div>
+        <button class="edit-btn" onclick="removeProfitTier(${i})" style="opacity:1; margin-top:15px;">✕</button>
+      </div>
+    `).join('');
+  }
+}
+
+function addProfitTier() {
+  if (!psActiveBookId) return;
+  const book = BOOKS[psActiveBookId];
+  if (!book.profitTiers) book.profitTiers = [];
+  book.profitTiers.push({ label: 'New Tier', upTo: 500, artistPct: 50 });
+  renderProfitTierList();
+}
+
+function removeProfitTier(idx) {
+  if (!psActiveBookId) return;
+  BOOKS[psActiveBookId].profitTiers.splice(idx, 1);
+  renderProfitTierList();
+}
+
+function updateProfitTierField(idx, field, val) {
+  if (!psActiveBookId) return;
+  const tier = BOOKS[psActiveBookId].profitTiers[idx];
+  if (field === 'upTo' || field === 'artistPct') tier[field] = parseFloat(val) || 0;
+  else tier[field] = val;
+}
+
+async function saveProfitTiers() {
+  const ind = $('ps-save-indicator');
+  if (ind) ind.classList.add('show');
+  
+  // Update catalog in Firebase
+  try {
+    await window._fbSaveCatalog(BOOKS);
+    showToast('✓ Profit tiers saved to catalog');
+  } catch(e) {
+    showToast('⚠ Error saving tiers', 'err');
+  } finally {
+    if (ind) ind.classList.remove('show');
+    if (activeBook === psActiveBookId) updateDash();
+  }
 }
 
 // ── PASSWORDS
@@ -1984,6 +2176,7 @@ async function boot(forcedBook) {
   await loadProductionCosts();
   await loadPasswords();
   renderCatalogList();
+  renderProfitSettings();
   if(sheetsUrl) showSheetsConnected();
   updateSheetsBadge();
   processSyncQueue();
@@ -2032,7 +2225,8 @@ Object.assign(window, {
   copyGasCode, saveProductionCosts, savePaymentLinks, savePasswords,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel,
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
-  voidExpense, markPaid, removeStore
+  voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
+  saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList
 });
 
 // ── STARTUP ROUTING
