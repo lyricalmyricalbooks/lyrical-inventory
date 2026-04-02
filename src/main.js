@@ -585,33 +585,50 @@ function renderProfitSharingBreakdown(bookId) {
   }
 
   const cur = book.currency;
-  const tiers = [...book.profitTiers].sort((a,b) => a.upTo - b.upTo);
-  const currentTier = tiers.find(t => stats.cumulativeUnits < t.upTo) || tiers[tiers.length - 1];
-  const nextTier = tiers.find(t => t.upTo > stats.cumulativeUnits);
+  const tiers = [...book.profitTiers].sort((a,b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
 
-  let tierHtml = tiers.map(t => {
-    const isActive = t === currentTier;
-    const isCompleted = stats.cumulativeUnits >= t.upTo && t !== tiers[tiers.length-1];
+  // Find which tier is currently active based on cumulative revenue
+  const currentTier = tiers.find(t => t.revenueUpTo !== null && stats.cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
+  const nextTier    = tiers.find(t => t.revenueUpTo !== null && stats.cumulativeRevenue < t.revenueUpTo);
+
+  const tierHtml = tiers.map(t => {
+    const isActive    = t === currentTier;
+    const isCompleted = t.revenueUpTo !== null && stats.cumulativeRevenue >= t.revenueUpTo;
+    const threshold   = t.revenueUpTo !== null ? `Up to ${fmt(t.revenueUpTo, cur)}` : '∞ Unlimited';
     return `
-      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; opacity: ${isCompleted ? '.5' : '1'}; font-weight: ${isActive ? '700' : '400'};">
-        <span>${t.label} (Up to ${t.upTo})</span>
-        <span style="color: ${isActive ? 'var(--gold2)' : 'var(--text3)'}">${t.artistPct}% Artist Share</span>
+      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;
+        opacity:${isCompleted ? '.45' : '1'}; font-weight:${isActive ? '700' : '400'};
+        padding:6px 10px; border-radius:var(--r2);
+        background:${isActive ? 'rgba(255,255,255,.05)' : 'transparent'};
+        border-left:2px solid ${isCompleted ? 'rgba(255,255,255,.1)' : isActive ? 'var(--gold2)' : 'transparent'};">
+        <span>${t.label} &nbsp;<span style="font-size:10px;opacity:.5;">${threshold}</span></span>
+        <span style="color:${isActive ? 'var(--gold2)' : 'var(--text3)'}">${t.artistPct}% Artist</span>
       </div>
     `;
   }).join('');
 
   let progressHtml = '';
-  if (nextTier) {
-    const unitsLeft = nextTier.upTo - stats.cumulativeUnits;
+  if (nextTier && nextTier.revenueUpTo !== null) {
+    const revenueLeft = nextTier.revenueUpTo - stats.cumulativeRevenue;
+    const pct = Math.min(100, (stats.cumulativeRevenue / nextTier.revenueUpTo) * 100);
+    const label = nextTier.label.toLowerCase().includes('break') ? 'to break-even' : `until ${nextTier.label}`;
     progressHtml = `
       <div style="margin-top:1rem; padding:12px; background:var(--ink); border-radius:var(--r2); border:1px solid rgba(255,255,255,.05);">
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-          <span style="font-size:10px; text-transform:uppercase; color:rgba(255,255,255,.3); letter-spacing:.1em;">Current Progress</span>
-          <span style="font-size:10px; color:var(--gold2);">${unitsLeft} units until ${nextTier.label}</span>
+          <span style="font-size:10px; text-transform:uppercase; color:rgba(255,255,255,.3); letter-spacing:.1em;">Revenue Progress</span>
+          <span style="font-size:11px; color:var(--gold2); font-family:'DM Mono',monospace;">${fmt(revenueLeft, cur)} ${label}</span>
         </div>
-        <div class="bar-track" style="height:4px; margin-bottom:0;">
-          <div class="bar-fill" style="width:${Math.min(100, (stats.cumulativeUnits / nextTier.upTo) * 100)}%; background:var(--gold2); height:4px;"></div>
+        <div class="bar-track" style="height:5px; margin-bottom:0;">
+          <div class="bar-fill" style="width:${pct}%; background:var(--gold2); height:5px; border-radius:100px;"></div>
         </div>
+        <div style="font-size:10px;color:rgba(255,255,255,.2);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} collected of ${fmt(nextTier.revenueUpTo, cur)} threshold</div>
+      </div>
+    `;
+  } else {
+    // Already in the final (unlimited) tier
+    progressHtml = `
+      <div style="margin-top:1rem; padding:10px 14px; background:rgba(74,222,128,.08); border-radius:var(--r2); border:1px solid rgba(74,222,128,.2); font-size:12px; color:var(--green);">
+        ✓ Production costs recovered — now in post break-even tier
       </div>
     `;
   }
@@ -619,7 +636,7 @@ function renderProfitSharingBreakdown(bookId) {
   content.innerHTML = `
     <div class="g2" style="margin-bottom:1.5rem;">
       <div class="card" style="margin:0; background:var(--cream2); border:none;">
-        <div class="hs-label" style="color:var(--text3);">Artist Payout</div>
+        <div class="hs-label" style="color:var(--text3);">Artist Payout (lifetime)</div>
         <div class="hs-val" style="color:var(--green); font-size:24px;">${fmt(stats.totalArtistEarned, cur)}</div>
       </div>
       <div class="card" style="margin:0; background:var(--cream2); border:none;">
@@ -1948,17 +1965,18 @@ function renderProfitTierList() {
   const book = BOOKS[psActiveBookId];
   if (!book.profitTiers) book.profitTiers = [];
   const tiers = book.profitTiers;
+  const cur = book.currency || '€';
 
   if (tiers.length === 0) {
-    list.innerHTML = '<div class="empty-state">No tiers defined yet. Click "+ Add Tier" to get started.</div>';
+    list.innerHTML = '<div class="empty-state">No tiers defined yet. Click "+ Add Tier" to start. The first tier typically covers the period before production costs are recovered.</div>';
     return;
   }
 
   tiers.forEach((t, i) => {
+    const isLast = i === tiers.length - 1;
     const row = document.createElement('div');
-    row.style.cssText = 'display:grid; grid-template-columns: 2fr 1fr 1fr auto; gap:10px; align-items:end; background:var(--cream2); padding:12px; border-radius:var(--r2); border:1px solid var(--border);';
+    row.style.cssText = 'display:grid; grid-template-columns: 2fr 1.5fr 1fr auto; gap:10px; align-items:end; background:var(--cream2); padding:12px; border-radius:var(--r2); border:1px solid var(--border);';
 
-    // Helper: build a labeled input cell
     function makeField(labelText, type, val, onChange) {
       const wrap = document.createElement('div');
       wrap.className = 'form-group';
@@ -1977,8 +1995,31 @@ function renderProfitTierList() {
     }
 
     const labelField = makeField('Label', 'text', t.label, v => { t.label = v; });
-    const upToField  = makeField('Up to (units)', 'number', t.upTo, v => { t.upTo = parseFloat(v) || 0; });
     const pctField   = makeField('Artist %', 'number', t.artistPct, v => { t.artistPct = parseFloat(v) || 0; });
+
+    // Revenue threshold field: editable for all but last, which is always ∞
+    const threshWrap = document.createElement('div');
+    threshWrap.className = 'form-group';
+    threshWrap.style.margin = '0';
+    const threshLbl = document.createElement('label');
+    threshLbl.textContent = `Revenue threshold (${cur})`;
+    threshWrap.appendChild(threshLbl);
+
+    if (isLast) {
+      const pill = document.createElement('div');
+      pill.style.cssText = 'height:38px; display:flex; align-items:center; font-family:\'DM Mono\',monospace; font-size:13px; font-weight:600; color:var(--gold); padding:0 4px;';
+      pill.textContent = '∞ Unlimited (final tier)';
+      threshWrap.appendChild(pill);
+    } else {
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.value = t.revenueUpTo || '';
+      inp.placeholder = 'e.g. production cost';
+      inp.style.width = '100%';
+      inp.addEventListener('input', () => { t.revenueUpTo = parseFloat(inp.value) || 0; });
+      inp.addEventListener('change', () => { t.revenueUpTo = parseFloat(inp.value) || 0; });
+      threshWrap.appendChild(inp);
+    }
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn sm danger-btn';
@@ -1990,11 +2031,17 @@ function renderProfitTierList() {
     });
 
     row.appendChild(labelField);
-    row.appendChild(upToField);
+    row.appendChild(threshWrap);
     row.appendChild(pctField);
     row.appendChild(removeBtn);
     list.appendChild(row);
   });
+
+  // Legend hint
+  const hint = document.createElement('div');
+  hint.style.cssText = 'font-size:11px; color:var(--text3); margin-top:6px; line-height:1.6;';
+  hint.textContent = 'Revenue threshold: cumulative gross revenue at which the NEXT tier begins. The final tier has no ceiling.';
+  list.appendChild(hint);
 }
 
 function addProfitTier() {
@@ -2004,11 +2051,23 @@ function addProfitTier() {
   }
   const book = BOOKS[psActiveBookId];
   if (!book.profitTiers) book.profitTiers = [];
-  // Smart default: next upTo is 2× the last tier, or 100 if first
-  const last = book.profitTiers[book.profitTiers.length - 1];
-  const nextUpTo = last ? last.upTo * 2 : 100;
-  const nextPct  = last ? Math.max(last.artistPct - 5, 5) : 30;
-  book.profitTiers.push({ label: `Tier ${book.profitTiers.length + 1}`, upTo: nextUpTo, artistPct: nextPct });
+  const tiers = book.profitTiers;
+  const productionCost = book.productionCost || 0;
+
+  if (tiers.length === 0) {
+    // First tier: pre break-even. Revenue threshold = production cost.
+    tiers.push({ label: 'Pre Break-even', revenueUpTo: productionCost || 1000, artistPct: 15 });
+  } else if (tiers.length === 1) {
+    // Second tier: post break-even. No ceiling — this is the final tier.
+    tiers.push({ label: 'Post Break-even', revenueUpTo: null, artistPct: 35 });
+  } else {
+    // Additional tiers: insert before the last (unlimited) tier
+    const prev = tiers[tiers.length - 2];
+    const newThreshold = prev.revenueUpTo ? prev.revenueUpTo * 2 : productionCost * 2;
+    const lastTier = tiers.pop(); // pull off the unlimited final tier
+    tiers.push({ label: `Tier ${tiers.length + 1}`, revenueUpTo: newThreshold, artistPct: Math.max(lastTier.artistPct + 5, 10) });
+    tiers.push(lastTier);  // put unlimited tier back at the end
+  }
   renderProfitTierList();
 }
 
@@ -2046,32 +2105,31 @@ function calculateArtistEarnings(bookId) {
   if (!book) return null;
   const s = states[bookId] || defaultState(book);
   const tiers = book.profitTiers && book.profitTiers.length > 0
-    ? [...book.profitTiers].sort((a,b) => a.upTo - b.upTo)
+    ? [...book.profitTiers].sort((a,b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity))
     : [];
-  
+
   if (tiers.length === 0) return null;
 
   let totalArtistEarned = 0;
-  let cumulativeUnits = 0;
-  
+  let cumulativeRevenue = 0;
+
   const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
-  
+
   sortedHist.forEach(h => {
-    let unitsRemaining = h.qty;
-    while (unitsRemaining > 0) {
-      const tier = tiers.find(t => cumulativeUnits < t.upTo) || tiers[tiers.length - 1];
-      const tierRemaining = tier.upTo - cumulativeUnits;
-      const unitsInThisTier = tier === tiers[tiers.length - 1] ? unitsRemaining : Math.min(unitsRemaining, tierRemaining);
-      const revForTheseUnits = (unitsInThisTier / h.qty) * (h.qty * h.price);
-      totalArtistEarned += revForTheseUnits * (tier.artistPct / 100);
-      cumulativeUnits += unitsInThisTier;
-      unitsRemaining -= unitsInThisTier;
+    let revRemaining = h.qty * h.price;
+    while (revRemaining > 0.001) {
+      const tier = tiers.find(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
+      const isLastTier = tier === tiers[tiers.length - 1] || tier.revenueUpTo === null;
+      const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tier.revenueUpTo - cumulativeRevenue);
+      totalArtistEarned += capacity * (tier.artistPct / 100);
+      cumulativeRevenue += capacity;
+      revRemaining -= capacity;
     }
   });
 
   return {
     totalArtistEarned,
-    cumulativeUnits,
+    cumulativeRevenue,
     netPublisher: s.revenue - totalArtistEarned
   };
 }
@@ -2142,34 +2200,28 @@ function calculateFinancials(year) {
 function filterArtistEarningsByYear(bookId, year) {
   const book = BOOKS[bookId];
   const s = states[bookId] || defaultState(book);
-  const tiers = (book.profitTiers || []).sort((a,b) => a.upTo - b.upTo);
+  const tiers = [...(book.profitTiers || [])].sort((a,b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
   if (tiers.length === 0) return 0;
 
   const start = new Date(year, 0, 1);
-  const end = new Date(year, 11, 31, 23, 59, 59);
+  const end   = new Date(year, 11, 31, 23, 59, 59);
 
   let yearArtistEarned = 0;
-  let cumulativeUnits = 0;
-  
+  let cumulativeRevenue = 0;
+
+  // Walk history chronologically so cumulative revenue tracks correctly across all time
   const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
-  
+
   sortedHist.forEach(h => {
-    const d = new Date(h.date);
-    const inYear = d >= start && d <= end;
-    
-    let unitsRemaining = h.qty;
-    while (unitsRemaining > 0) {
-      const tier = tiers.find(t => cumulativeUnits < t.upTo) || tiers[tiers.length - 1];
-      const tierRemaining = tier.upTo - cumulativeUnits;
-      const unitsInThisTier = tier === tiers[tiers.length - 1] ? unitsRemaining : Math.min(unitsRemaining, tierRemaining);
-      
-      if (inYear) {
-        const revForTheseUnits = (unitsInThisTier / h.qty) * (h.qty * h.price);
-        yearArtistEarned += revForTheseUnits * (tier.artistPct / 100);
-      }
-      
-      cumulativeUnits += unitsInThisTier;
-      unitsRemaining -= unitsInThisTier;
+    const inYear = new Date(h.date) >= start && new Date(h.date) <= end;
+    let revRemaining = h.qty * h.price;
+    while (revRemaining > 0.001) {
+      const tier = tiers.find(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
+      const isLastTier = tier === tiers[tiers.length - 1] || tier.revenueUpTo === null;
+      const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tier.revenueUpTo - cumulativeRevenue);
+      if (inYear) yearArtistEarned += capacity * (tier.artistPct / 100);
+      cumulativeRevenue += capacity;
+      revRemaining -= capacity;
     }
   });
 
