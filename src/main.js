@@ -336,7 +336,7 @@ function switchBook(bookId) {
 
 // ── TABS
 function switchTab(name) {
-  const names = ['dashboard','website','manual','consignment','history','expenses','sheets'];
+  const names = ['dashboard','website','manual','consignment','history','expenses','financials','sheets'];
   document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', names[i]===name));
   names.forEach(n => {
     const p = $('tab-'+n);
@@ -350,6 +350,7 @@ function switchTab(name) {
   if(name==='history') renderHist();
   if(name==='consignment'){ renderStores(); renderLedger(); }
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
+  if(name==='financials') renderFinancials();
   if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); }
 }
 
@@ -2020,8 +2021,190 @@ async function saveProfitTiers() {
     showToast('⚠ Error saving tiers', 'err');
   } finally {
     if (ind) ind.classList.remove('show');
-    if (activeBook === psActiveBookId) updateDash();
   }
+}
+
+// ── FINANCIAL CENTER LOGIC
+function calculateFinancials(year) {
+  const result = {
+    revenue: 0,
+    cogs: 0,
+    opex: 0,
+    shares: 0,
+    profit: 0,
+    bookStats: [], 
+    expCats: {} 
+  };
+
+  const start = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31, 23, 59, 59);
+
+  Object.values(BOOKS).forEach(book => {
+    const s = states[book.id] || defaultState(book);
+    const unitCost = (book.productionCost || 0) / (book.maxPrint || 1);
+    
+    let bookRev = 0;
+    let bookUnits = 0;
+    
+    (s.hist || []).forEach(h => {
+      const d = new Date(h.date);
+      if (!h.voided && !h.gratuity && d >= start && d <= end) {
+        bookRev += (parseFloat(h.qty) || 0) * (parseFloat(h.price) || 0);
+        bookUnits += (parseInt(h.qty) || 0);
+      }
+    });
+    
+    const bookCogs = bookUnits * unitCost;
+    const bookShares = filterArtistEarningsByYear(book.id, year);
+    
+    result.revenue += bookRev;
+    result.cogs += bookCogs;
+    result.shares += bookShares;
+    
+    result.bookStats.push({
+      title: book.title,
+      units: bookUnits,
+      revenue: bookRev,
+      unitCost: unitCost,
+      cogs: bookCogs,
+      shares: bookShares,
+      net: bookRev - bookCogs - bookShares
+    });
+    
+    (s.expenses || []).forEach(e => {
+      const d = new Date(e.date);
+      if (d >= start && d <= end) {
+        result.opex += e.amount || 0;
+        const cat = e.cat || 'Uncategorized';
+        if (!result.expCats[cat]) result.expCats[cat] = { count: 0, total: 0 };
+        result.expCats[cat].count++;
+        result.expCats[cat].total += e.amount || 0;
+      }
+    });
+  });
+
+  result.profit = result.revenue - result.cogs - result.opex - result.shares;
+  return result;
+}
+
+function filterArtistEarningsByYear(bookId, year) {
+  const book = BOOKS[bookId];
+  const s = states[bookId] || defaultState(book);
+  const tiers = (book.profitTiers || []).sort((a,b) => a.upTo - b.upTo);
+  if (tiers.length === 0) return 0;
+
+  const start = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31, 23, 59, 59);
+
+  let yearArtistEarned = 0;
+  let cumulativeUnits = 0;
+  
+  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
+  
+  sortedHist.forEach(h => {
+    const d = new Date(h.date);
+    const inYear = d >= start && d <= end;
+    
+    let unitsRemaining = h.qty;
+    while (unitsRemaining > 0) {
+      const tier = tiers.find(t => cumulativeUnits < t.upTo) || tiers[tiers.length - 1];
+      const tierRemaining = tier.upTo - cumulativeUnits;
+      const unitsInThisTier = tier === tiers[tiers.length - 1] ? unitsRemaining : Math.min(unitsRemaining, tierRemaining);
+      
+      if (inYear) {
+        const revForTheseUnits = (unitsInThisTier / h.qty) * (h.qty * h.price);
+        yearArtistEarned += revForTheseUnits * (tier.artistPct / 100);
+      }
+      
+      cumulativeUnits += unitsInThisTier;
+      unitsRemaining -= unitsInThisTier;
+    }
+  });
+
+  return yearArtistEarned;
+}
+
+function renderFinancials() {
+  if (isAuthor()) return;
+  const yearStr = $('fin-year-selector').value;
+  const year = parseInt(yearStr);
+  const fin = calculateFinancials(year);
+  const cur = '€'; // Target display currency
+
+  $('fin-rev').textContent = fmt(fin.revenue, cur);
+  $('fin-cogs').textContent = fmt(fin.cogs, cur);
+  $('fin-exp').textContent = fmt(fin.opex + fin.shares, cur);
+  
+  const totalExpCount = Object.values(fin.expCats).reduce((a,c)=>a+c.count,0);
+  $('fin-exp-sub').textContent = `${totalExpCount} expense${totalExpCount!==1?'s':''} logged`;
+  $('fin-profit').textContent = fmt(fin.profit, cur);
+  
+  const expBody = $('fin-exp-body');
+  if (expBody) {
+    const sortedCats = Object.entries(fin.expCats).sort((a,b) => b[1].total - a[1].total);
+    expBody.innerHTML = sortedCats.map(([cat, val]) => `
+      <tr>
+        <td style="font-weight:600;">${cat}</td>
+        <td class="r">${val.count} txn</td>
+        <td class="r" style="font-weight:700; color:var(--red);">${fmt(val.total, cur)}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="3"><div class="empty-state">No expenses for this period.</div></td></tr>';
+  }
+
+  const booksBody = $('fin-books-body');
+  if (booksBody) {
+    booksBody.innerHTML = fin.bookStats.map(bs => `
+      <tr>
+        <td style="font-weight:600;">${bs.title}</td>
+        <td class="r">${bs.units}</td>
+        <td class="r">${fmt(bs.revenue, cur)}</td>
+        <td class="r">${fmt(bs.unitCost, cur)}</td>
+        <td class="r">${fmt(bs.cogs, cur)}</td>
+        <td class="r" style="font-weight:700; color:${bs.net > 0 ? 'var(--green)' : 'var(--text)'};">${fmt(bs.net, cur)}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="6"><div class="empty-state">No data available.</div></td></tr>';
+  }
+}
+
+function downloadTaxReport() {
+  const year = $('fin-year-selector').value;
+  const fin = calculateFinancials(parseInt(year));
+  
+  let csv = 'Date,Type,Book/Source,Category,Description,Revenue,COGS,Expense,Artist Payout,Net\n';
+  
+  const start = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31, 23, 59, 59);
+
+  Object.values(BOOKS).forEach(book => {
+    const s = states[book.id] || defaultState(book);
+    s.hist.filter(h => !h.voided && !h.gratuity).forEach(h => {
+      const d = new Date(h.date);
+      if (d >= start && d <= end) {
+        csv += `${h.date},Order,${book.title},Sale,"${h.chan} Order #${h.num}",${(h.qty*h.price).toFixed(2)},0,0,0,${(h.qty*h.price).toFixed(2)}\n`;
+      }
+    });
+
+    (s.expenses || []).forEach(e => {
+        const d = new Date(e.date);
+        if (d >= start && d <= end) {
+          csv += `${e.date},Expense,${book.title},${e.cat},"${e.desc}",0,0,${e.amount.toFixed(2)},0,-${e.amount.toFixed(2)}\n`;
+        }
+    });
+  });
+
+  // Summary lines for COGS and Shares
+  csv += `\nSUMMARY FOR ${year},,,,,,,\n`;
+  fin.bookStats.forEach(bs => {
+    csv += `${year}-12-31,COGS Summary,${bs.title},COGS,Inventory Recovery,0,${bs.cogs.toFixed(2)},0,0,-${bs.cogs.toFixed(2)}\n`;
+    csv += `${year}-12-31,Artist Share,${bs.title},Royalty,Tiered Payout,0,0,0,${bs.shares.toFixed(2)},-${bs.shares.toFixed(2)}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.setAttribute('href', url);
+  a.setAttribute('download', `Lyrical_Tax_Report_${year}.csv`);
+  a.click();
 }
 
 // ── PASSWORDS
@@ -2163,8 +2346,9 @@ function showApp(role, bookId) {
     document.head.appendChild(style);
     document.head.appendChild(style);
   } else {
-    // Publisher — show import button
+    // Publisher — show import button and financials tab
     const importBtn=$('import-btn'); if(importBtn)importBtn.style.display='';
+    const finBtn=$('financials-tab-btn'); if(finBtn)finBtn.style.display='';
   }
   boot(bookId || ACTIVE_BOOK_FORCED);
 }
@@ -2226,7 +2410,8 @@ Object.assign(window, {
   handleImportFile, confirmImport, openLabelModal, printShippingLabel,
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
   voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
-  saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList
+  saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
+  renderFinancials, downloadTaxReport
 });
 
 // ── STARTUP ROUTING
