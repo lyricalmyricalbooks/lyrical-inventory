@@ -483,8 +483,8 @@ function switchBook(bookId) {
 
 // ── TABS
 function switchTab(name) {
-  if (isAuthor() && name === 'website') name = 'dashboard';
-  const names = ['dashboard','website','manual','consignment','history','expenses','financials','sheets'];
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'sheets')) name = 'dashboard';
+  const names = ['dashboard','website','manual','consignment','history','expenses','financials','sheets','backups'];
   document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', names[i]===name));
   names.forEach(n => {
     const p = $('tab-'+n);
