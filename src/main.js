@@ -178,12 +178,30 @@ const urlParams = new URLSearchParams(location.search);
 const URL_BOOK = urlParams.get('book');    // e.g. 'hound'
 let IS_AUTHOR_MODE = false;
 let ACTIVE_BOOK_FORCED = null;
+let AUTHOR_VIEW_BY_BOOK = {};
+
+function loadAuthorViewOverrides() {
+  try {
+    AUTHOR_VIEW_BY_BOOK = JSON.parse(sessionStorage.getItem('lm-author-view-overrides') || '{}') || {};
+  } catch (e) {
+    AUTHOR_VIEW_BY_BOOK = {};
+  }
+}
+
+function saveAuthorViewOverrides() {
+  sessionStorage.setItem('lm-author-view-overrides', JSON.stringify(AUTHOR_VIEW_BY_BOOK));
+}
+
+function isPublisherSession() {
+  return sessionStorage.getItem('lm-unlocked') === 'publisher';
+}
 
 // Runtime role check — works for both URL-based AND password-based author login
 function isAuthor() {
   if (IS_AUTHOR_MODE) return true;
   const s = sessionStorage.getItem('lm-unlocked') || '';
-  return s.startsWith('author:');
+  if (s.startsWith('author:')) return true;
+  return !!(isPublisherSession() && activeBook && activeBook !== 'all' && AUTHOR_VIEW_BY_BOOK[activeBook]);
 }
 
 // ── UTILITIES
@@ -358,6 +376,55 @@ function closeBookDropdown() {
   if (menu) menu.style.display = 'none';
 }
 
+function updateRoleToggleButton() {
+  const btn = $('role-toggle-btn');
+  if (!btn) return;
+  const canToggle = isPublisherSession() && !!activeBook && activeBook !== 'all';
+  if (!canToggle) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = '';
+  const inAuthorPreview = !!AUTHOR_VIEW_BY_BOOK[activeBook];
+  btn.textContent = inAuthorPreview ? 'Publisher view' : 'Author view';
+}
+
+function syncRoleUI() {
+  const authorNow = isAuthor();
+  const websiteTabBtn = $('website-tab-btn');
+  const financialsTabBtn = $('financials-tab-btn');
+  const sheetsTabBtn = $('sheets-tab-btn');
+  if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
+  if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
+  if (sheetsTabBtn) sheetsTabBtn.style.display = authorNow ? 'none' : '';
+
+  const wm = $('author-watermark');
+  if (wm && isPublisherSession() && activeBook && activeBook !== 'all' && AUTHOR_VIEW_BY_BOOK[activeBook]) {
+    wm.textContent = `${BOOKS[activeBook].title} · Author view preview`;
+    wm.style.display = '';
+  } else if (wm && !IS_AUTHOR_MODE && !(sessionStorage.getItem('lm-unlocked') || '').startsWith('author:')) {
+    wm.style.display = 'none';
+  }
+
+  if (authorNow && ($('tab-website')?.classList.contains('active') || $('tab-financials')?.classList.contains('active') || $('tab-sheets')?.classList.contains('active'))) {
+    switchTab('dashboard');
+  }
+}
+
+function toggleCurrentBookView() {
+  if (!isPublisherSession() || !activeBook || activeBook === 'all') return;
+  AUTHOR_VIEW_BY_BOOK[activeBook] = !AUTHOR_VIEW_BY_BOOK[activeBook];
+  saveAuthorViewOverrides();
+  updateRoleToggleButton();
+  syncRoleUI();
+  renderAll();
+  showToast(
+    AUTHOR_VIEW_BY_BOOK[activeBook]
+      ? `Author view enabled for ${BOOKS[activeBook].title}`
+      : `Publisher view restored for ${BOOKS[activeBook].title}`
+  );
+}
+
 function switchBook(bookId) {
   activeBook = bookId;
   // Update custom dropdown label + dot
@@ -394,6 +461,8 @@ function switchBook(bookId) {
     switchTab('dashboard');
     updateHeader();
   }
+  updateRoleToggleButton();
+  syncRoleUI();
 }
 
 // ── TABS
@@ -2489,6 +2558,7 @@ async function tryUnlock() {
 
 function logout() {
   sessionStorage.removeItem('lm-unlocked');
+  sessionStorage.removeItem('lm-author-view-overrides');
   window.location.reload();
 }
 
@@ -2521,6 +2591,8 @@ function showApp(role, bookId) {
     const finBtn=$('financials-tab-btn'); if(finBtn)finBtn.style.display='';
     const websiteTabBtn=$('website-tab-btn'); if(websiteTabBtn) websiteTabBtn.style.display='';
   }
+  updateRoleToggleButton();
+  syncRoleUI();
   boot(bookId || ACTIVE_BOOK_FORCED);
 }
 
@@ -2554,12 +2626,14 @@ async function boot(forcedBook) {
       loadBook(forcedBook).then(()=>{
         setSyncState('ok','<b>Firebase</b> · connected');
         $('hdr-sub').textContent=book.title+' · Author View · Synced '+new Date().toLocaleTimeString();
-        renderAll();updateHeader();
+        renderAll();updateHeader();updateRoleToggleButton();syncRoleUI();
       });
     } else {
       // Publisher — load all books, start on combined view
       activeBook = 'all';
       loadAllBooks();
+      updateRoleToggleButton();
+      syncRoleUI();
     }
   };
 
@@ -2573,6 +2647,7 @@ async function boot(forcedBook) {
 // Global exposure for HTML handlers
 Object.assign(window, {
   tryUnlock, logout, switchTab, toggleBookDropdown, switchBook, forceSync,
+  toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, toggleFx, calcFx, submitManual,
   submitGratuity, openM, closeM, addStore, confirmSend, confirmSale,
   confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
@@ -2588,6 +2663,7 @@ Object.assign(window, {
 // ── STARTUP ROUTING
 async function initStartup() {
   await loadCatalog(); // Ensure books map is populated
+  loadAuthorViewOverrides();
   IS_AUTHOR_MODE = !!URL_BOOK && !!BOOKS[URL_BOOK];
   ACTIVE_BOOK_FORCED = IS_AUTHOR_MODE ? URL_BOOK : null;
 
