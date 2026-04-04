@@ -747,13 +747,13 @@ function renderProfitSharingBreakdown(bookId) {
     progressHtml = `
       <div style="margin-top:1rem; padding:12px; background:var(--ink); border-radius:var(--r2); border:1px solid rgba(255,255,255,.05);">
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-          <span style="font-size:10px; text-transform:uppercase; color:rgba(255,255,255,.3); letter-spacing:.1em;">Revenue Progress</span>
+          <span style="font-size:10px; text-transform:uppercase; color:rgba(255,255,255,.58); letter-spacing:.1em;">Revenue Progress</span>
           <span style="font-size:11px; color:var(--gold2); font-family:'DM Mono',monospace;">${fmt(revenueLeft, cur)} ${label}</span>
         </div>
         <div class="bar-track" style="height:5px; margin-bottom:0;">
           <div class="bar-fill" style="width:${pct}%; background:var(--gold2); height:5px; border-radius:100px;"></div>
         </div>
-        <div style="font-size:10px;color:rgba(255,255,255,.2);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} collected of ${fmt(nextTier.revenueUpTo, cur)} threshold</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} collected of ${fmt(nextTier.revenueUpTo, cur)} threshold</div>
       </div>
     `;
   } else {
