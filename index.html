@@ -489,7 +489,7 @@
         <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Book Catalog</div>
         <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage the books available in your library. Changes here update the switcher and dashboards.</div>
       </div>
-      <button class="btn gold" onclick="openM('add-book')">+ Add new book</button>
+      <button class="btn gold" onclick="openAddBookModal()">+ Add new book</button>
     </div>
     <div id="catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
   </div>
@@ -906,7 +906,7 @@ function doGet(e) {
     <div class="form-group"><label>Author Password</label><input id="nb-pw" placeholder="Used for author view"></div>
   </div>
   <div class="form-group"><label>Initial Production Cost</label><input id="nb-prod" type="number" value="0"></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('add-book')">Cancel</button><button class="btn gold" onclick="saveNewBook()">Save Book</button></div>
+  <div class="modal-footer"><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
 </div></div>
 
 <div class="toast" id="toast"></div>
