@@ -186,8 +186,18 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(200,145,58,.12);}
 .form-group textarea{resize:vertical;min-height:60px;}
 .price-wrap{position:relative;}
-.price-wrap .sym{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text3);pointer-events:none;font-family:'DM Mono',monospace;}
-.price-wrap input{padding-left:26px;}
+.price-wrap .sym{
+  position:absolute;
+  left:12px;
+  top:50%;
+  transform:translateY(-50%);
+  min-width:32px;
+  font-size:13px;
+  color:var(--text3);
+  pointer-events:none;
+  font-family:'DM Mono',monospace;
+}
+.price-wrap input{padding-left:44px;}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .g4{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;}
 
