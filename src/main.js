@@ -2573,7 +2573,22 @@ async function handleBackupImportFile(e) {
 }
 
 function exportAllToCSV() {
-  const rows = [['Date', 'Book', 'Type', 'Reference', 'Channel/Store', 'Qty', 'Price/Rate', 'Total', 'Status', 'Notes']];
+  const rows = [[
+    'Logged At',
+    'Event ID',
+    'Book',
+    'Type',
+    'Date',
+    'Reference',
+    'Channel/Store',
+    'Qty',
+    'Price/Rate',
+    'Total/Amount Due',
+    'Stock After',
+    'Status',
+    'Notes'
+  ]];
+  const loggedAt = new Date().toISOString();
   
   Object.keys(BOOKS).forEach(bid => {
     const s = states[bid] || defaultState(BOOKS[bid]);
@@ -2582,16 +2597,57 @@ function exportAllToCSV() {
     // History
     (s.hist || []).forEach(h => {
       rows.push([
-        h.date, bookTitle, 'Order', h.num, h.chan, h.qty, h.price, h.qty * h.price, 
-        h.voided ? 'VOID' : 'OK', h.notes || ''
+        loggedAt,
+        h.id || '',
+        bookTitle,
+        'Order',
+        h.date || '',
+        h.num || '',
+        h.chan || '',
+        h.qty ?? '',
+        h.price ?? '',
+        (h.qty || 0) * (h.price || 0),
+        h.after ?? '',
+        h.voided ? 'VOID' : 'OK',
+        h.notes || ''
       ]);
     });
     
     // Ledger
     (s.ledger || []).forEach(l => {
       rows.push([
-        l.date, bookTitle, 'Consignment', l.event || l.type, l.storeName, l.qty, l.rate, l.amountDue,
-        l.status || 'OK', l.notes || ''
+        loggedAt,
+        l.id || '',
+        bookTitle,
+        'Consignment',
+        l.date || '',
+        l.event || l.type || '',
+        l.storeName || '',
+        l.qty ?? '',
+        l.rate ?? '',
+        l.amountDue ?? '',
+        '',
+        l.status || (l.voided ? 'VOID' : 'OK'),
+        l.notes || ''
+      ]);
+    });
+
+    // Expenses
+    (s.expenses || []).forEach(e => {
+      rows.push([
+        loggedAt,
+        e.id || '',
+        bookTitle,
+        'Expense',
+        e.date || '',
+        e.cat || 'Expense',
+        e.ref || '',
+        '',
+        '',
+        e.amount ?? '',
+        '',
+        e.received ? 'RECEIVED' : 'PENDING',
+        e.desc || ''
       ]);
     });
   });
@@ -2604,8 +2660,10 @@ function exportAllToCSV() {
   const a = document.createElement('a');
   a.href = url;
   a.download = `lyrical-records-export-${today()}.csv`;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
   showToast('✓ CSV Export downloaded');
 }
 
@@ -3306,7 +3364,7 @@ Object.assign(window, {
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
-  chooseBackupFolder
+  chooseBackupFolder, exportToJSON, exportAllToCSV
 });
 
 // ── STARTUP ROUTING
