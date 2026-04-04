@@ -227,6 +227,9 @@ let activeBook = null;   // currently viewed bookId, or 'all'
 let orders = [], activeId = null;
 let fbReady = false, lastSavedHashes = {};
 let syncQueue = JSON.parse(localStorage.getItem('lm-sync-queue') || '[]');
+let systemBackups = [];
+const SYSTEM_BACKUP_KEY = 'systemBackups';
+const SYSTEM_BACKUP_LIMIT = 30;
 
 function queueSync(bookId, state) {
   syncQueue.push({ bookId, state, ts: Date.now() });
@@ -2263,14 +2266,7 @@ setTimeout(()=>_processQueue(),300);
 
 // ── DATA BACKUPS & PORTABILITY
 function exportToJSON() {
-  const data = {
-    version: '2.5',
-    timestamp: new Date().toISOString(),
-    BOOKS: BOOKS,
-    states: states,
-    productionCosts: JSON.parse(localStorage.getItem('lm-production-costs') || '{}'),
-    paymentLinks: JSON.parse(localStorage.getItem('lm-payment-links') || '{}')
-  };
+  const data = buildBackupPayload();
   
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2307,7 +2303,125 @@ function checkDailyBackup() {
   }
 }
 
-async function handleImportFile(e) {
+function buildBackupPayload() {
+  return {
+    version: '2.5',
+    timestamp: new Date().toISOString(),
+    BOOKS: BOOKS,
+    states: states,
+    productionCosts: JSON.parse(localStorage.getItem('lm-production-costs') || '{}'),
+    paymentLinks: JSON.parse(localStorage.getItem('lm-payment-links') || '{}')
+  };
+}
+
+async function saveSystemBackups() {
+  await window._fbSaveSettings(SYSTEM_BACKUP_KEY, systemBackups);
+}
+
+async function loadSystemBackups() {
+  try {
+    const stored = await window._fbLoadSettings(SYSTEM_BACKUP_KEY);
+    systemBackups = Array.isArray(stored) ? stored : [];
+  } catch (e) {
+    systemBackups = [];
+  }
+  renderSystemBackups();
+}
+
+function renderSystemBackups() {
+  const body = $('system-backup-list');
+  const status = $('system-backup-status');
+  if (!body) return;
+
+  if (!systemBackups.length) {
+    body.innerHTML = '<tr><td colspan="4"><div class="empty-state">No system backups yet.</div></td></tr>';
+    if (status) status.textContent = 'No automatic backups yet.';
+    return;
+  }
+
+  const sorted = [...systemBackups].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  body.innerHTML = sorted.map(b => `
+    <tr>
+      <td>${new Date(b.createdAt).toLocaleString()}</td>
+      <td>${b.type === 'manual' ? 'Manual' : 'Auto daily'}</td>
+      <td class="r">${Object.keys(b.snapshot?.BOOKS || {}).length}</td>
+      <td class="r"><button class="btn sm" onclick="restoreSystemBackup('${b.id}')">Restore</button></td>
+    </tr>
+  `).join('');
+
+  const latest = sorted[0];
+  if (status) status.textContent = `Latest system backup: ${new Date(latest.createdAt).toLocaleString()}`;
+}
+
+async function createSystemBackup(type = 'auto') {
+  const dayKey = today();
+  if (type === 'auto' && systemBackups.some(b => b.dayKey === dayKey)) return false;
+
+  const entry = {
+    id: `sb-${Date.now()}`,
+    dayKey,
+    type,
+    createdAt: Date.now(),
+    snapshot: buildBackupPayload()
+  };
+  systemBackups.unshift(entry);
+  if (systemBackups.length > SYSTEM_BACKUP_LIMIT) {
+    systemBackups = systemBackups.slice(0, SYSTEM_BACKUP_LIMIT);
+  }
+  await saveSystemBackups();
+  renderSystemBackups();
+  return true;
+}
+
+async function ensureDailySystemBackup() {
+  if (!isPublisherSession() || isAuthor()) return;
+  await loadSystemBackups();
+  const created = await createSystemBackup('auto');
+  if (created) showToast('✓ Daily system backup created');
+}
+
+async function createSystemBackupNow() {
+  await loadSystemBackups();
+  await createSystemBackup('manual');
+  showToast('✓ System backup created');
+}
+
+async function applyBackupData(data) {
+  // 1. Restore Catalog
+  BOOKS = data.BOOKS;
+  await window._fbSaveCatalog(BOOKS);
+
+  // 2. Restore individual book states
+  for (const bid in data.states) {
+    await window._fbSave(bid, JSON.stringify(data.states[bid]));
+  }
+
+  // 3. Metadata
+  if (data.productionCosts) {
+    await window._fbSaveSettings('productionCosts', data.productionCosts);
+    localStorage.setItem('lm-production-costs', JSON.stringify(data.productionCosts));
+  }
+  if (data.paymentLinks) {
+    await window._fbSaveSettings('paymentLinks', data.paymentLinks);
+    localStorage.setItem('lm-payment-links', JSON.stringify(data.paymentLinks));
+  }
+}
+
+async function restoreSystemBackup(id) {
+  const backup = systemBackups.find(b => b.id === id);
+  if (!backup || !backup.snapshot) return;
+  if (!confirm('Restore this system backup? This will OVERWRITE your current database and reload the app.')) return;
+  try {
+    await applyBackupData(backup.snapshot);
+    showToast('✓ System backup restored! Reloading...');
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    console.error('System restore failed', e);
+    showToast('Error restoring system backup', 'err');
+  }
+}
+
+async function handleBackupImportFile(e) {
   const file = e.target.files[0];
   if (!file) return;
   
@@ -2325,24 +2439,7 @@ async function handleImportFile(e) {
         return;
       }
       
-      // 1. Restore Catalog
-      BOOKS = data.BOOKS;
-      await window._fbSaveCatalog(BOOKS);
-      
-      // 2. Restore individual book states
-      for (const bid in data.states) {
-        await window._fbSave(bid, JSON.stringify(data.states[bid]));
-      }
-      
-      // 3. Metadata
-      if (data.productionCosts) {
-         await window._fbSaveSettings('productionCosts', data.productionCosts);
-         localStorage.setItem('lm-production-costs', JSON.stringify(data.productionCosts));
-      }
-      if (data.paymentLinks) {
-         await window._fbSaveSettings('paymentLinks', data.paymentLinks);
-         localStorage.setItem('lm-payment-links', JSON.stringify(data.paymentLinks));
-      }
+      await applyBackupData(data);
       
       showToast('✓ Restore successful! Reloading...');
       setTimeout(() => location.reload(), 1500);
@@ -3058,10 +3155,10 @@ async function boot(forcedBook) {
         $('hdr-sub').textContent=book.title+' · Author View · Synced '+new Date().toLocaleTimeString();
         renderAll();updateHeader();updateRoleToggleButton();syncRoleUI();
       });
-    } else {
+  } else {
       // Publisher — load all books, start on combined view
       activeBook = 'all';
-      loadAllBooks();
+      loadAllBooks().then(() => ensureDailySystemBackup());
       updateRoleToggleButton();
       syncRoleUI();
     }
@@ -3087,7 +3184,7 @@ Object.assign(window, {
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
-  renderFinancials, downloadTaxReport
+  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile
 });
 
 // ── STARTUP ROUTING
