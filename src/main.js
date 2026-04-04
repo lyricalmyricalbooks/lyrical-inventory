@@ -3002,6 +3002,7 @@ function showApp(role, bookId) {
     const wm=$('author-watermark'); if(wm){wm.textContent=BOOKS[bookId||ACTIVE_BOOK_FORCED].title+' · Author view';wm.style.display='';}
     const sheetsBtn=$('sheets-tab-btn'); if(sheetsBtn)sheetsBtn.style.display='none';
     const websiteTabBtn=$('website-tab-btn'); if(websiteTabBtn) websiteTabBtn.style.display='none';
+    const backupsBtn=$('backups-tab-btn'); if(backupsBtn) backupsBtn.style.display='none';
     const websitePanel=$('tab-website');
     if (websitePanel) {
       websitePanel.style.display='none';
@@ -3009,15 +3010,14 @@ function showApp(role, bookId) {
     }
     const openLink=$('sheets-open-link'); if(openLink)openLink.style.display='none !important';
     const style=document.createElement('style');
-    style.textContent='#sheets-open-link{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}';
-    document.head.appendChild(style);
-    document.head.appendChild(style);
+    style.textContent='#sheets-open-link{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}';
     document.head.appendChild(style);
   } else {
     // Publisher — show import button and financials tab
     const importBtn=$('import-btn'); if(importBtn)importBtn.style.display='';
     const finBtn=$('financials-tab-btn'); if(finBtn)finBtn.style.display='';
     const websiteTabBtn=$('website-tab-btn'); if(websiteTabBtn) websiteTabBtn.style.display='';
+    const backupsBtn=$('backups-tab-btn'); if(backupsBtn) backupsBtn.style.display='';
   }
   updateRoleToggleButton();
   syncRoleUI();
