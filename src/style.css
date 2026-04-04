@@ -237,6 +237,11 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .log-status{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;}
 .log-status.ok{background:#4ade80;}
 .log-status.err{background:#f87171;}
+.log-status.syncing{background:var(--gold2);animation:blink .8s ease-in-out infinite;}
+
+.sync-progress-bar{height:4px;background:var(--border);border-radius:100px;margin:10px 0;overflow:hidden;display:none;}
+.sync-progress-fill{height:100%;background:var(--gold);width:0%;transition:width .3s ease;}
+.sync-stats{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:4px;display:none;}
 
 /* MODALS */
 .overlay{position:fixed;inset:0;background:rgba(14,12,10,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;}

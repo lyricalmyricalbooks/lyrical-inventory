@@ -1985,6 +1985,7 @@ async function _processQueue(){
       body:JSON.stringify(payload)
     });
     addSheetsLog(book,type,summary,'ok');
+    updateBulkProgress();
   }catch(e){
     // Fallback 1: no-cors (cannot inspect response, but useful for simple web-app deployments)
     try{
@@ -1995,6 +1996,7 @@ async function _processQueue(){
         body:JSON.stringify(payload)
       });
       addSheetsLog(book,type,summary,'ok');
+      updateBulkProgress();
     }catch(e1){
       try{
         // Fallback 2: hidden iframe form POST (body goes to e.parameter.payload)
@@ -2006,9 +2008,11 @@ async function _processQueue(){
         form.appendChild(input);document.body.appendChild(form);form.submit();
         setTimeout(()=>{try{document.body.removeChild(form);}catch(_){}},2000);
         addSheetsLog(book,type,summary,'ok');
+        updateBulkProgress();
       }catch(e2){
-        addSheetsLog(book,type,summary+' [failed]','err');
-        console.error('Sheets write failed:',e2, e1, e);
+      addSheetsLog(book,type,summary+' [failed]','err');
+      updateBulkProgress();
+      console.error('Sheets write failed:',e2, e1, e);
       }
     }
   }
@@ -2024,6 +2028,100 @@ function syncToSheets(payload){
     :`${payload.store} · ${payload.event} · ${payload.qty}×`;
   _sheetsQueue.push({payload,summary,book:payload.book,type:payload.type==='order'?'Order':'Consignment'});
   _processQueue();
+}
+
+let _isBulkSync = false;
+let _bulkTotal = 0;
+let _bulkDone = 0;
+
+async function pushAllToSheets() {
+  if(!sheetsUrl) { showToast('Connect Google Sheets first','warn'); return; }
+  if(!confirm('This will sync all historical records for all books. Detailed logs will appear below. Continue?')) return;
+  
+  const btn = $('push-all-btn');
+  const bar = $('sync-progress-bar');
+  const fill = $('sync-progress-fill');
+  const stats = $('sync-stats');
+  
+  _isBulkSync = true;
+  btn.disabled = true;
+  btn.textContent = 'Syncing...';
+  bar.style.display = 'block';
+  stats.style.display = 'block';
+  fill.style.width = '0%';
+  
+  const toSync = [];
+  
+  // Collect all data from all books
+  Object.keys(BOOKS).forEach(bid => {
+    const s = states[bid] || defaultState(BOOKS[bid]);
+    const book = BOOKS[bid];
+    
+    // 1. Orders
+    (s.hist || []).forEach(h => {
+      toSync.push({
+        type: 'order', book: book.title, date: h.date, num: h.num, chan: h.chan, 
+        qty: h.qty, price: h.price, total: h.qty * h.price, stockAfter: h.after, 
+        notes: (h.voided ? '[VOID] ' : '') + (h.notes || '')
+      });
+    });
+    
+    // 2. Ledger (Consignment)
+    (s.ledger || []).forEach(e => {
+      toSync.push({
+        type: 'consignment', book: book.title, date: e.date, store: e.storeName, 
+        event: e.type, qty: e.qty, rate: e.rate, amountDue: e.amountDue, 
+        notes: (e.voided ? '[VOID] ' : '') + (e.notes || ''), status: e.status
+      });
+    });
+  });
+  
+  _bulkTotal = toSync.length;
+  _bulkDone = 0;
+  
+  if(_bulkTotal === 0) {
+    showToast('No records found to sync','warn');
+    _isBulkSync = false;
+    btn.disabled = false;
+    btn.textContent = 'Sync all data';
+    bar.style.display = 'none';
+    stats.style.display = 'none';
+    return;
+  }
+  
+  stats.textContent = `Preparing ${_bulkTotal} records...`;
+  
+  // Push to queue in batches with small delays to avoid overwhelming the browser/GAS
+  for(let i=0; i < toSync.length; i++) {
+    syncToSheets(toSync[i]);
+    if(i % 10 === 0) await new Promise(r => setTimeout(r, 50));
+  }
+}
+
+function updateBulkProgress() {
+  if(!_isBulkSync) return;
+  _bulkDone++;
+  const pct = Math.min(100, (_bulkDone / _bulkTotal) * 100);
+  const fill = $('sync-progress-fill');
+  const stats = $('sync-stats');
+  const btn = $('push-all-btn');
+  
+  if(fill) fill.style.width = pct + '%';
+  if(stats) stats.textContent = `Syncing: ${_bulkDone} / ${_bulkTotal} (${Math.round(pct)}%)`;
+  
+  if(_bulkDone >= _bulkTotal) {
+    _isBulkSync = false;
+    if(btn) { btn.disabled = false; btn.textContent = 'Sync all data'; }
+    if(stats) stats.textContent = `✓ Successfully synced ${_bulkTotal} records.`;
+    showToast(`✓ Full sync complete: ${_bulkTotal} records pushed.`);
+    // Keep progress bar visible for a moment then hide
+    setTimeout(() => {
+      if(!_isBulkSync) {
+         if($('sync-progress-bar')) $('sync-progress-bar').style.display = 'none';
+         if($('sync-stats')) $('sync-stats').style.display = 'none';
+      }
+    }, 4000);
+  }
 }
 function addSheetsLog(book,type,summary,status){sheetsLog.unshift({time:new Date().toLocaleTimeString(),book,type,summary,status});if(sheetsLog.length>50)sheetsLog.pop();renderSheetsLog();}
 function renderSheetsLog(){

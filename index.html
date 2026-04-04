@@ -642,9 +642,11 @@ function writeOrderRow(sheet, rowVals) {
 }
 
 function writeConsignmentRow(sheet, rowVals) {
-  var start = 9;
-  var insertRow = Math.max(start, sheet.getLastRow() + 1);
-  for (var r = start; r &lt;= sheet.getLastRow(); r++) {
+  var consRow = findRowByLabel(sheet, 'CONSIGNMENT');
+  if (consRow === -1) consRow = 7;
+  var start = consRow + 2; // Below CONSIGNMENT and Headers
+  var insertRow = start;
+  for (var r = start; r <= sheet.getLastRow(); r++) {
     if (sheet.getRange(r,1).getValue() !== '') insertRow = r + 1;
   }
   sheet.getRange(insertRow, 1, 1, 9).setValues([rowVals]);
@@ -728,6 +730,19 @@ function doGet(e) {
           <button class="btn sm" id="verify-url-btn" onclick="verifyUrl()" style="font-size:10px;">↗ Verify URL</button>
           <button class="btn sm danger-btn" onclick="disconnectSheets()">Disconnect</button>
         </div>
+      </div>
+      
+      <!-- FULL SYNC SECTION -->
+      <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid rgba(42,99,72,.1);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div>
+            <div style="font-weight:700;font-size:13px;color:var(--text2);">Sync all existing records</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px;">Populate your sheet with all historical data from every book.</div>
+          </div>
+          <button class="btn ink sm" id="push-all-btn" onclick="pushAllToSheets()">Sync all data</button>
+        </div>
+        <div class="sync-progress-bar" id="sync-progress-bar"><div class="sync-progress-fill" id="sync-progress-fill"></div></div>
+        <div class="sync-stats" id="sync-stats">Ready to sync</div>
       </div>
     </div>
   </div>
