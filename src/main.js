@@ -569,6 +569,8 @@ function updateContextBanners() {
     const t = $('bc-title-'+sfx);
     if(t) t.textContent = book.title;
   });
+  const dashMeta = $('bc-meta-dash');
+  if (dashMeta) dashMeta.textContent = book.author || '—';
 }
 
 // ── DASHBOARD (per book)
