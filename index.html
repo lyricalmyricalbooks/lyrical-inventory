@@ -574,7 +574,14 @@ function doPost(e) {
 }
 
 function doGet() {
-  return json_({ ok: true, service: 'lyrical-sheets-webhook-v2' });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetName = ss ? ss.getName() : 'No sheet bound';
+  return json_({ 
+    ok: true, 
+    service: 'lyrical-sheets-webhook-v2',
+    sheetName: sheetName,
+    online: true 
+  });
 }
 
 function unauthorized_() {
