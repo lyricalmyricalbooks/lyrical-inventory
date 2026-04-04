@@ -206,6 +206,13 @@ function isAuthor() {
 
 // ── UTILITIES
 const $ = id => document.getElementById(id);
+function setPriceSymbol(id, symbol) {
+  const sym = $(id);
+  if (!sym) return;
+  sym.textContent = symbol;
+  const wrap = sym.closest('.price-wrap');
+  if (wrap) wrap.classList.toggle('has-wide-symbol', String(symbol || '').trim().length > 1);
+}
 const fmt = (n, cur='€') => cur + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const fmtD = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—';
 const today = () => new Date().toISOString().split('T')[0];
@@ -1227,7 +1234,7 @@ function renderArtistReimburseBanner(){
 
 function updateExpenseForm(){
   const book=getBook();
-  $('exp-sym').textContent=book.currency;
+  setPriceSymbol('exp-sym', book.currency);
   $('exp-date').value=today();
 }
 
@@ -1405,7 +1412,7 @@ function confirmImport() {
 
 function phint(){
   const book=getBook(),p=parseFloat($('m-price').value)||0,q=parseInt($('m-qty').value)||1,h=$('m-hint'),t=p*q;
-  $('m-sym').textContent=book.currency;
+  setPriceSymbol('m-sym', book.currency);
   if($('m-fx-toggle').checked){
     h.className='hint-text';h.textContent=t>0?`Converted total ${fmt(t,book.currency)}`:'';
   } else if(p<book.listPrice){h.className='hint-text amber';h.textContent=`Discounted from ${book.currency}${book.listPrice} — total ${fmt(t,book.currency)}`;}
@@ -1627,7 +1634,7 @@ function confirmSend(){
   syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Shipment',qty,rate,amountDue:0,notes,status:'sent'});
   showToast(`✓ ${qty} books sent to ${st.name}`);
 }
-function openSale(id){activeId=id;const book=getBook();$('sale-sym').textContent=book.currency;$('sale-price').value=book.listPrice.toFixed(2);$('sale-sname').textContent=storeById(id).name;openM('record-sale');}
+function openSale(id){activeId=id;const book=getBook();setPriceSymbol('sale-sym', book.currency);$('sale-price').value=book.listPrice.toFixed(2);$('sale-sname').textContent=storeById(id).name;openM('record-sale');}
 function confirmSale(){
   const s=getState(),book=getBook(),cur=book.currency,st=storeById(activeId),qty=parseInt($('sale-qty').value)||0,date=$('sale-date').value,price=parseFloat($('sale-price').value)||book.listPrice,paid=$('sale-paid').value,notes=$('sale-notes').value.trim();
   if(qty>st.outstanding){alert('Qty exceeds outstanding books.');return;}
@@ -1691,7 +1698,7 @@ function openEditHist(idx) {
   $('edit-modal-type-badge').textContent = h.chan + ' order';
   $('edit-order-fields').style.display = '';
   $('edit-ledger-fields').style.display = 'none';
-  $('edit-sym').textContent = book.currency;
+  setPriceSymbol('edit-sym', book.currency);
   $('edit-num').value = h.num;
   $('edit-date').value = h.date;
   $('edit-qty').value = h.qty;
@@ -1978,7 +1985,7 @@ function renderProductionCostFields(){
         <span style="font-size:11px;color:var(--text3);">${book.currency}</span>
       </div>
       <div class="form-group" style="flex:1;margin:0;">
-        <div class="price-wrap">
+        <div class="price-wrap ${String(book.currency || '').trim().length > 1 ? 'has-wide-symbol' : ''}">
           <span class="sym">${book.currency}</span>
           <input type="number" id="pc-${book.id}" value="${book.productionCost||''}" placeholder="0.00" step="0.01" min="0">
         </div>
@@ -2496,7 +2503,7 @@ async function savePasswords() {
 // ── MANUAL PRICE FIELD: update default to current book on tab switch
 function updateManualForm(){
   const book=getBook();
-  $('m-sym').textContent=book.currency;
+  setPriceSymbol('m-sym', book.currency);
   $('m-price').value=book.listPrice.toFixed(2);
   $('g-date').value=today();
 }
