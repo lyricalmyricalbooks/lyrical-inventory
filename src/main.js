@@ -1931,6 +1931,20 @@ function normalizeAppsScriptUrl(rawUrl){
   }
 }
 async function probeSheetsConnection(url){
+  // 1. Try a GET handshake first (Most reliable for initial verification)
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const json = await res.json().catch(() => null);
+      if (json && json.service === 'lyrical-sheets-webhook-v2') {
+        return { ok: true, method: 'GET', sheetName: json.sheetName };
+      }
+    }
+  } catch (e) {
+    console.warn('GET probe failed', e);
+  }
+
+  // 2. Try a POST probe if GET failed or we want to verify write-access
   const probePayload = {
     version: 2,
     eventId: `probe-${Date.now().toString(36)}`,
@@ -1948,17 +1962,19 @@ async function probeSheetsConnection(url){
       notes: 'Connection probe'
     }
   };
+  
   const res = await fetch(url, {
     method: 'POST',
     mode: 'cors',
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8'
-    },
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(probePayload)
   });
+  
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json().catch(() => null);
   if (!json || json.ok !== true) throw new Error('Probe response was not { ok: true }');
+  
+  return { ok: true, method: 'POST' };
 }
 
 async function connectSheets(){
@@ -1967,10 +1983,18 @@ async function connectSheets(){
   if(!normalizedUrl){showToast('Paste a deployed Web App URL (…/macros/s/<id>/exec)','warn');return;}
   if(rawUrl.includes('/dev')) showToast('Using /exec endpoint for public sync (recommended).','warn',3000);
   try{
-    await probeSheetsConnection(normalizedUrl);
+    const info = await probeSheetsConnection(normalizedUrl);
+    showToast(`✓ Connection verified: ${info.sheetName || 'Active'}`);
   }catch(e){
-    showToast(`Connection probe failed: ${(e&&e.message)||'Unknown error'}`,'err',4000);
-    return;
+    // If the error is 'Failed to fetch', it's likely a CORS issue.
+    // Since we have a no-cors fallback for actual data delivery,
+    // let's show a helpful warning but still allow the connection.
+    if ((e && e.message && e.message.includes('fetch')) || !navigator.onLine) {
+      showToast('⚠ Connection unverified (CORS). Link saved anyway — try a test row.', 'warn', 5000);
+    } else {
+      showToast(`Connection error: ${e.message || 'Unknown'}`,'err', 4000);
+      return;
+    }
   }
   sheetsUrl=normalizedUrl;localStorage.setItem('lm-sheets-url',normalizedUrl);
   if(spreadUrl){
