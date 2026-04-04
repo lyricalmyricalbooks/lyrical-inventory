@@ -230,6 +230,9 @@ let syncQueue = JSON.parse(localStorage.getItem('lm-sync-queue') || '[]');
 let systemBackups = [];
 const SYSTEM_BACKUP_KEY = 'systemBackups';
 const SYSTEM_BACKUP_LIMIT = 30;
+const BACKUP_FOLDER_DB = 'lm-backup-folder-db';
+const BACKUP_FOLDER_STORE = 'handles';
+const BACKUP_FOLDER_KEY = 'preferred-folder';
 
 function queueSync(bookId, state) {
   syncQueue.push({ bookId, state, ts: Date.now() });
@@ -2267,21 +2270,115 @@ window.addEventListener('online',()=>_processQueue());
 setTimeout(()=>_processQueue(),300);
 
 // ── DATA BACKUPS & PORTABILITY
-function exportToJSON() {
+function backupFileName() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return `lyrical-backup-${stamp}.json`;
+}
+
+async function openBackupHandleDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(BACKUP_FOLDER_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(BACKUP_FOLDER_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveBackupFolderHandle(handle) {
+  const db = await openBackupHandleDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(BACKUP_FOLDER_STORE, 'readwrite');
+    tx.objectStore(BACKUP_FOLDER_STORE).put(handle, BACKUP_FOLDER_KEY);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadBackupFolderHandle() {
+  const db = await openBackupHandleDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(BACKUP_FOLDER_STORE, 'readonly');
+    const req = tx.objectStore(BACKUP_FOLDER_STORE).get(BACKUP_FOLDER_KEY);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function updateBackupFolderDisplay(text) {
+  const el = $('backup-folder-display');
+  if (el) el.textContent = text;
+}
+
+async function writeBackupToChosenFolder(data, filename) {
+  if (!('showDirectoryPicker' in window)) return false;
+  try {
+    const dirHandle = await loadBackupFolderHandle();
+    if (!dirHandle) return false;
+    const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
+    const result = permission === 'granted' ? permission : await dirHandle.requestPermission({ mode: 'readwrite' });
+    if (result !== 'granted') return false;
+
+    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(data, null, 2));
+    await writable.close();
+    updateBackupFolderDisplay(`Backup folder: ${dirHandle.name}`);
+    return true;
+  } catch (e) {
+    console.warn('Direct backup write failed', e);
+    return false;
+  }
+}
+
+async function chooseBackupFolder() {
+  if (!('showDirectoryPicker' in window)) {
+    showToast('Folder selection is not supported in this browser', 'warn');
+    return;
+  }
+  try {
+    const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    await saveBackupFolderHandle(dirHandle);
+    updateBackupFolderDisplay(`Backup folder: ${dirHandle.name}`);
+    showToast('✓ Backup folder saved');
+  } catch (e) {
+    if (e?.name !== 'AbortError') showToast('Could not save backup folder', 'err');
+  }
+}
+
+async function initializeBackupFolderDisplay() {
+  if (!('showDirectoryPicker' in window)) {
+    updateBackupFolderDisplay('Backup folder: Browser Downloads (folder picker not supported)');
+    return;
+  }
+  try {
+    const dirHandle = await loadBackupFolderHandle();
+    updateBackupFolderDisplay(dirHandle ? `Backup folder: ${dirHandle.name}` : 'Backup folder: Browser Downloads (default)');
+  } catch (e) {
+    updateBackupFolderDisplay('Backup folder: Browser Downloads (default)');
+  }
+}
+
+async function exportToJSON() {
   const data = buildBackupPayload();
-  
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `lyrical-backup-${today()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const filename = backupFileName();
+  const savedToFolder = await writeBackupToChosenFolder(data, filename);
+
+  if (!savedToFolder) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+  }
   
   localStorage.setItem('lm-last-backup-ts', Date.now().toString());
   updateLastBackupDisplay();
   if($('backup-reminder')) $('backup-reminder').style.display = 'none';
-  showToast('✓ JSON Backup downloaded');
+  showToast(savedToFolder ? '✓ JSON backup saved to your selected folder' : '✓ JSON backup downloaded');
 }
 
 function maybeAutoDownloadDailyBackup() {
@@ -3154,6 +3251,7 @@ async function boot(forcedBook) {
   if(sheetsUrl) showSheetsConnected();
   updateSheetsBadge();
   updateLastBackupDisplay();
+  initializeBackupFolderDisplay();
   checkDailyBackup();
   maybeAutoDownloadDailyBackup();
   processSyncQueue();
@@ -3207,7 +3305,8 @@ Object.assign(window, {
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
-  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile
+  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
+  chooseBackupFolder
 });
 
 // ── STARTUP ROUTING
