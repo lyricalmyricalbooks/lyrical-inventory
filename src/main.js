@@ -2658,7 +2658,7 @@ Object.assign(window, {
   copyGasCode, saveProductionCosts, savePaymentLinks, savePasswords,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel,
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
-  voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
+  submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport
 });
