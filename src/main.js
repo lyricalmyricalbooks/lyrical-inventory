@@ -480,6 +480,7 @@ function switchTab(name) {
   if(panel){ panel.style.display='block'; panel.classList.add('active'); }
   if(name==='dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
   if(name==='history') renderHist();
+  if(name==='manual') updateManualForm();
   if(name==='consignment'){ renderStores(); renderLedger(); }
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
   if(name==='financials') renderFinancials();
@@ -2362,7 +2363,7 @@ function renderFinancials() {
   const yearStr = $('fin-year-selector').value;
   const year = parseInt(yearStr);
   const fin = calculateFinancials(year);
-  const cur = '€'; // Target display currency
+  const cur = getBook().currency || '€';
 
   $('fin-rev').textContent = fmt(fin.revenue, cur);
   $('fin-cogs').textContent = fmt(fin.cogs, cur);
