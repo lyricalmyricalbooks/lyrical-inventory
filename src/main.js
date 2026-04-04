@@ -1917,8 +1917,15 @@ function normalizeAppsScriptUrl(rawUrl){
   try{
     const u=new URL(cleaned);
     if(!/script\.google\.com$/i.test(u.hostname)) return '';
-    // Force deployed web-app endpoint. /dev often fails for unauthenticated users.
-    if(u.pathname.endsWith('/dev')) u.pathname=u.pathname.slice(0,-4)+'/exec';
+    // Accept only deployed web-app links like /macros/s/{DEPLOYMENT_ID}/exec or /dev.
+    const m=u.pathname.match(/^\/macros\/s\/([^/]+)\/(exec|dev)\/?$/i);
+    if(!m) return '';
+    const deploymentId=m[1];
+    // Always normalize to /exec for public deployments.
+    u.pathname=`/macros/s/${deploymentId}/exec`;
+    // Keep URL stable across environments and avoid sharing noisy query/hash fragments.
+    u.search='';
+    u.hash='';
     return u.toString();
   }catch(_){
     return '';
@@ -1927,7 +1934,7 @@ function normalizeAppsScriptUrl(rawUrl){
 function connectSheets(){
   const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim();
   const normalizedUrl=normalizeAppsScriptUrl(rawUrl);
-  if(!normalizedUrl){showToast('Paste a valid Google Apps Script web-app URL','warn');return;}
+  if(!normalizedUrl){showToast('Paste a deployed Web App URL (…/macros/s/<id>/exec)','warn');return;}
   if(rawUrl.includes('/dev')) showToast('Using /exec endpoint for public sync (recommended).','warn',3000);
   sheetsUrl=normalizedUrl;localStorage.setItem('lm-sheets-url',normalizedUrl);
   if(spreadUrl){
