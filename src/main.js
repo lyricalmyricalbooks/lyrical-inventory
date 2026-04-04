@@ -115,14 +115,22 @@ async function saveBookFromModal() {
     profitTiers: currentBook.profitTiers || []
   };
   
-  if (editingBookId && editingBookId !== id) delete BOOKS[editingBookId];
+  if (editingBookId && editingBookId !== id) {
+    delete BOOKS[editingBookId];
+    if (states[editingBookId]) {
+      states[id] = states[editingBookId];
+      delete states[editingBookId];
+    }
+  }
   BOOKS[id] = book;
+  if (!states[id]) states[id] = defaultState(book);
   await window._fbSaveCatalog(BOOKS);
   showToast(editingBookId ? '✓ Book updated' : '✓ Book added to catalog');
   closeAddBookModal();
   buildBookSwitcher();
   renderCatalogList();
   renderProfitSettings();
+  renderCurrent();
 }
 
 function hexToRgba(hex, alpha) {
@@ -152,11 +160,13 @@ function renderCatalogList() {
 async function deleteBook(id) {
   if (!confirm(`Permanently remove "${BOOKS[id].title}" and all its inventory records?`)) return;
   delete BOOKS[id];
+  delete states[id];
   await window._fbSaveCatalog(BOOKS);
   buildBookSwitcher();
   renderCatalogList();
   if (psActiveBookId === id) psActiveBookId = null;
   renderProfitSettings();
+  renderCurrent();
   showToast('Book removed');
 }
 
