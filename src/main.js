@@ -2282,6 +2282,26 @@ function exportToJSON() {
   showToast('✓ JSON Backup downloaded');
 }
 
+function maybeAutoDownloadDailyBackup() {
+  // Auto-download once per calendar day (local time) when app is opened.
+  // This still requires the app to be open on that day.
+  const todayKey = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
+  const lastAutoDay = localStorage.getItem('lm-last-auto-backup-day');
+  if (lastAutoDay === todayKey) return;
+
+  const lastManualOrAutoTs = parseInt(localStorage.getItem('lm-last-backup-ts') || '0', 10);
+  if (Number.isFinite(lastManualOrAutoTs) && lastManualOrAutoTs > 0) {
+    const lastDate = new Date(lastManualOrAutoTs).toLocaleDateString('sv-SE');
+    if (lastDate === todayKey) {
+      localStorage.setItem('lm-last-auto-backup-day', todayKey);
+      return;
+    }
+  }
+
+  exportToJSON();
+  localStorage.setItem('lm-last-auto-backup-day', todayKey);
+}
+
 function updateLastBackupDisplay() {
   const ts = localStorage.getItem('lm-last-backup-ts');
   const el = $('last-backup-display');
@@ -3133,6 +3153,7 @@ async function boot(forcedBook) {
   updateSheetsBadge();
   updateLastBackupDisplay();
   checkDailyBackup();
+  maybeAutoDownloadDailyBackup();
   processSyncQueue();
 
   const initFn = () => {
