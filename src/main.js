@@ -398,6 +398,7 @@ function switchBook(bookId) {
 
 // ── TABS
 function switchTab(name) {
+  if (isAuthor() && name === 'website') name = 'dashboard';
   const names = ['dashboard','website','manual','consignment','history','expenses','financials','sheets'];
   document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', names[i]===name));
   names.forEach(n => {
@@ -2502,6 +2503,12 @@ function showApp(role, bookId) {
     $('tab-bar').style.display = '';
     const wm=$('author-watermark'); if(wm){wm.textContent=BOOKS[bookId||ACTIVE_BOOK_FORCED].title+' · Author view';wm.style.display='';}
     const sheetsBtn=$('sheets-tab-btn'); if(sheetsBtn)sheetsBtn.style.display='none';
+    const websiteTabBtn=$('website-tab-btn'); if(websiteTabBtn) websiteTabBtn.style.display='none';
+    const websitePanel=$('tab-website');
+    if (websitePanel) {
+      websitePanel.style.display='none';
+      websitePanel.classList.remove('active');
+    }
     const openLink=$('sheets-open-link'); if(openLink)openLink.style.display='none !important';
     const style=document.createElement('style');
     style.textContent='#sheets-open-link{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}';
@@ -2512,6 +2519,7 @@ function showApp(role, bookId) {
     // Publisher — show import button and financials tab
     const importBtn=$('import-btn'); if(importBtn)importBtn.style.display='';
     const finBtn=$('financials-tab-btn'); if(finBtn)finBtn.style.display='';
+    const websiteTabBtn=$('website-tab-btn'); if(websiteTabBtn) websiteTabBtn.style.display='';
   }
   boot(bookId || ACTIVE_BOOK_FORCED);
 }
