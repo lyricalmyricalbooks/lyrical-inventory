@@ -13,6 +13,7 @@ const updateSW = registerSW({ onNeedRefresh() {} });
 //  BOOK CATALOGUE (Dynamicly loaded from Firebase)
 // ═══════════════════════════════════════════════════════
 let BOOKS = {};
+let editingBookId = null;
 const DEFAULT_BOOKS = {
   altrove: { id: 'altrove', title: 'Un Fantastico Altrove', author: 'Silvia Clo Di Gregorio', isbn: '978-88-XXXXXX', maxPrint: 120, listPrice: 40, currency: '€', threshold: 15, productionCost: 0, paymentLink: 'https://paypal.me/lyricalmyricalbooks', accent: '#c8913a', accentBg: 'rgba(200,145,58,.1)', urlParam: 'altrove', authorPassword: 'silvia2025' },
   hound: { id: 'hound', title: 'The Hound', author: '', isbn: '—', maxPrint: 300, listPrice: 65, currency: 'CA$', threshold: 30, productionCost: 15000, paymentLink: 'https://paypal.me/lyricalmyricalbooks', accent: '#3a7cc8', accentBg: 'rgba(58,124,200,.1)', urlParam: 'hound', authorPassword: 'hound2025' },
@@ -41,11 +42,61 @@ async function loadCatalog() {
   }
 }
 
-async function saveNewBook() {
+function resetBookForm() {
+  editingBookId = null;
+  $('add-book-modal-title').textContent = 'Add new book';
+  $('add-book-save-btn').textContent = 'Save Book';
+  $('nb-id').disabled = false;
+  $('nb-id').value = '';
+  $('nb-title').value = '';
+  $('nb-author').value = '';
+  $('nb-isbn').value = '';
+  $('nb-max').value = '100';
+  $('nb-price').value = '40';
+  $('nb-cur').value = '€';
+  $('nb-thresh').value = '10';
+  $('nb-accent').value = '#c8913a';
+  $('nb-pw').value = '';
+  $('nb-prod').value = '0';
+}
+
+function openAddBookModal() {
+  resetBookForm();
+  openM('add-book');
+}
+
+function openEditBookModal(id) {
+  const book = BOOKS[id];
+  if (!book) return;
+  editingBookId = id;
+  $('add-book-modal-title').textContent = `Edit book · ${book.title}`;
+  $('add-book-save-btn').textContent = 'Save Changes';
+  $('nb-id').disabled = true;
+  $('nb-id').value = book.id || '';
+  $('nb-title').value = book.title || '';
+  $('nb-author').value = book.author || '';
+  $('nb-isbn').value = book.isbn || '—';
+  $('nb-max').value = book.maxPrint ?? 100;
+  $('nb-price').value = book.listPrice ?? 40;
+  $('nb-cur').value = book.currency || '€';
+  $('nb-thresh').value = book.threshold ?? 10;
+  $('nb-accent').value = book.accent || '#c8913a';
+  $('nb-pw').value = book.authorPassword || '';
+  $('nb-prod').value = book.productionCost ?? 0;
+  openM('add-book');
+}
+
+function closeAddBookModal() {
+  closeM('add-book');
+  resetBookForm();
+}
+
+async function saveBookFromModal() {
   const id = $('nb-id').value.trim();
   const title = $('nb-title').value.trim();
   if (!id || !title) { showToast('ID and Title are required', 'warn'); return; }
   
+  const currentBook = BOOKS[editingBookId] || BOOKS[id] || {};
   const book = {
     id,
     title,
@@ -56,17 +107,19 @@ async function saveNewBook() {
     currency: $('nb-cur').value || '€',
     threshold: parseInt($('nb-thresh').value) || 10,
     productionCost: parseFloat($('nb-prod').value) || 0,
-    paymentLink: 'https://paypal.me/lyricalmyricalbooks',
+    paymentLink: currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
     accent: $('nb-accent').value,
     accentBg: hexToRgba($('nb-accent').value, 0.1),
-    urlParam: id,
-    authorPassword: $('nb-pw').value.trim() || (id + '2025')
+    urlParam: currentBook.urlParam || id,
+    authorPassword: $('nb-pw').value.trim() || currentBook.authorPassword || (id + '2025'),
+    profitTiers: currentBook.profitTiers || []
   };
   
+  if (editingBookId && editingBookId !== id) delete BOOKS[editingBookId];
   BOOKS[id] = book;
   await window._fbSaveCatalog(BOOKS);
-  showToast('✓ Book added to catalog');
-  closeM('add-book');
+  showToast(editingBookId ? '✓ Book updated' : '✓ Book added to catalog');
+  closeAddBookModal();
   buildBookSwitcher();
   renderCatalogList();
   renderProfitSettings();
@@ -85,11 +138,14 @@ function renderCatalogList() {
        <div style="display:flex;align-items:center;gap:10px;">
          <div style="width:12px;height:12px;border-radius:50%;background:${b.accent}"></div>
          <div>
-           <div style="font-size:13px;font-weight:600;">${b.title}</div>
-           <div style="font-size:11px;color:var(--text3);">${b.id} · ${b.currency}${b.listPrice}</div>
+           <div style="font-size:13px;font-weight:600;color:var(--cream);">${b.title}</div>
+           <div style="font-size:11px;color:rgba(255,255,255,.55);">${b.id} · ${b.currency}${b.listPrice}</div>
          </div>
        </div>
-       <button class="btn sm danger-btn" onclick="deleteBook('${b.id}')">Remove</button>
+       <div style="display:flex;gap:8px;">
+         <button class="btn sm" onclick="openEditBookModal('${b.id}')">Edit</button>
+         <button class="btn sm danger-btn" onclick="deleteBook('${b.id}')">Remove</button>
+       </div>
     </div>`).join('');
 }
 
@@ -104,7 +160,10 @@ async function deleteBook(id) {
   showToast('Book removed');
 }
 
-window.saveNewBook = saveNewBook;
+window.saveBookFromModal = saveBookFromModal;
+window.openAddBookModal = openAddBookModal;
+window.openEditBookModal = openEditBookModal;
+window.closeAddBookModal = closeAddBookModal;
 window.deleteBook = deleteBook;
 
 
