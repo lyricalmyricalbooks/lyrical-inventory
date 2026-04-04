@@ -2261,6 +2261,138 @@ async function verifyUrl(){
 window.addEventListener('online',()=>_processQueue());
 setTimeout(()=>_processQueue(),300);
 
+// ── DATA BACKUPS & PORTABILITY
+function exportToJSON() {
+  const data = {
+    version: '2.5',
+    timestamp: new Date().toISOString(),
+    BOOKS: BOOKS,
+    states: states,
+    productionCosts: JSON.parse(localStorage.getItem('lm-production-costs') || '{}'),
+    paymentLinks: JSON.parse(localStorage.getItem('lm-payment-links') || '{}')
+  };
+  
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lyrical-backup-${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  localStorage.setItem('lm-last-backup-ts', Date.now().toString());
+  updateLastBackupDisplay();
+  if($('backup-reminder')) $('backup-reminder').style.display = 'none';
+  showToast('✓ JSON Backup downloaded');
+}
+
+function updateLastBackupDisplay() {
+  const ts = localStorage.getItem('lm-last-backup-ts');
+  const el = $('last-backup-display');
+  if (!el) return;
+  if (!ts) { el.textContent = 'Last backup: Never'; return; }
+  const date = new Date(parseInt(ts));
+  el.textContent = `Last backup: ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+}
+
+function checkDailyBackup() {
+  const ts = localStorage.getItem('lm-last-backup-ts');
+  const now = Date.now();
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  
+  if (!ts || (now - parseInt(ts)) > ONE_DAY) {
+    if($('backup-reminder')) $('backup-reminder').style.display = 'flex';
+  } else {
+    if($('backup-reminder')) $('backup-reminder').style.display = 'none';
+  }
+}
+
+async function handleImportFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const info = $('import-info');
+  if (info) info.textContent = `Reading ${file.name}...`;
+  
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    try {
+      const data = JSON.parse(event.target.result);
+      if (!data.BOOKS || !data.states) throw new Error('Invalid backup format: Missing core data');
+      
+      if (!confirm('Are you sure? This will OVERWRITE your entire existing database and reload the app.')) {
+        if (info) info.textContent = 'Import cancelled';
+        return;
+      }
+      
+      // 1. Restore Catalog
+      BOOKS = data.BOOKS;
+      await window._fbSaveCatalog(BOOKS);
+      
+      // 2. Restore individual book states
+      for (const bid in data.states) {
+        await window._fbSave(bid, JSON.stringify(data.states[bid]));
+      }
+      
+      // 3. Metadata
+      if (data.productionCosts) {
+         await window._fbSaveSettings('productionCosts', data.productionCosts);
+         localStorage.setItem('lm-production-costs', JSON.stringify(data.productionCosts));
+      }
+      if (data.paymentLinks) {
+         await window._fbSaveSettings('paymentLinks', data.paymentLinks);
+         localStorage.setItem('lm-payment-links', JSON.stringify(data.paymentLinks));
+      }
+      
+      showToast('✓ Restore successful! Reloading...');
+      setTimeout(() => location.reload(), 1500);
+      
+    } catch (err) {
+      console.error('Import failed', err);
+      showToast('Error: Invalid backup file', 'err');
+      if (info) info.textContent = 'Import failed (invalid file)';
+    }
+  };
+  reader.readAsText(file);
+}
+
+function exportAllToCSV() {
+  const rows = [['Date', 'Book', 'Type', 'Reference', 'Channel/Store', 'Qty', 'Price/Rate', 'Total', 'Status', 'Notes']];
+  
+  Object.keys(BOOKS).forEach(bid => {
+    const s = states[bid] || defaultState(BOOKS[bid]);
+    const bookTitle = BOOKS[bid].title;
+    
+    // History
+    (s.hist || []).forEach(h => {
+      rows.push([
+        h.date, bookTitle, 'Order', h.num, h.chan, h.qty, h.price, h.qty * h.price, 
+        h.voided ? 'VOID' : 'OK', h.notes || ''
+      ]);
+    });
+    
+    // Ledger
+    (s.ledger || []).forEach(l => {
+      rows.push([
+        l.date, bookTitle, 'Consignment', l.event || l.type, l.storeName, l.qty, l.rate, l.amountDue,
+        l.status || 'OK', l.notes || ''
+      ]);
+    });
+  });
+  
+  if (rows.length === 1) { showToast('No records to export', 'warn'); return; }
+  
+  const csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lyrical-records-export-${today()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ CSV Export downloaded');
+}
+
 // ── PAYMENT LINKS
 function renderProductionCostFields(){
   const container=$('production-cost-fields');
@@ -2902,6 +3034,8 @@ async function boot(forcedBook) {
   renderProfitSettings();
   if(sheetsUrl) showSheetsConnected();
   updateSheetsBadge();
+  updateLastBackupDisplay();
+  checkDailyBackup();
   processSyncQueue();
 
   const initFn = () => {
