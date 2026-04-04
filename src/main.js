@@ -251,22 +251,12 @@ async function processSyncQueue() {
 window.addEventListener('online', processSyncQueue);
 let sheetsUrl = localStorage.getItem('lm-sheets-url') || '';
 let sheetsSpreadsheetUrl = localStorage.getItem('lm-sheets-spreadsheet-url') || '';
-let sheetsSecret = localStorage.getItem('lm-sheets-secret') || '';
-let shouldWarnLegacySheetsReconnect = false;
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
     sheetsUrl = normalizedSavedUrl;
     localStorage.setItem('lm-sheets-url', normalizedSavedUrl);
   }
-}
-if (sheetsUrl && !sheetsSecret) {
-  console.warn('Legacy Google Sheets config detected without secret. Reconnect is required.');
-  sheetsUrl = '';
-  sheetsSpreadsheetUrl = '';
-  shouldWarnLegacySheetsReconnect = true;
-  localStorage.removeItem('lm-sheets-url');
-  localStorage.removeItem('lm-sheets-spreadsheet-url');
 }
 
 function defaultState(book) {
@@ -1940,12 +1930,7 @@ function normalizeAppsScriptUrl(rawUrl){
     return '';
   }
 }
-function withWebhookSecret(url, secret){
-  const u = new URL(url);
-  u.searchParams.set('secret', secret);
-  return u.toString();
-}
-async function probeSheetsConnection(url, secret){
+async function probeSheetsConnection(url){
   const probePayload = {
     version: 2,
     eventId: `probe-${Date.now().toString(36)}`,
@@ -1963,12 +1948,11 @@ async function probeSheetsConnection(url, secret){
       notes: 'Connection probe'
     }
   };
-  const res = await fetch(withWebhookSecret(url, secret), {
+  const res = await fetch(url, {
     method: 'POST',
     mode: 'cors',
     headers: {
-      'Content-Type': 'text/plain;charset=utf-8',
-      'X-Webhook-Secret': secret
+      'Content-Type': 'text/plain;charset=utf-8'
     },
     body: JSON.stringify(probePayload)
   });
@@ -1978,19 +1962,17 @@ async function probeSheetsConnection(url, secret){
 }
 
 async function connectSheets(){
-  const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim(),secret=($('sheets-secret-input').value||'').trim();
+  const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim();
   const normalizedUrl=normalizeAppsScriptUrl(rawUrl);
   if(!normalizedUrl){showToast('Paste a deployed Web App URL (…/macros/s/<id>/exec)','warn');return;}
-  if(!secret){showToast('Webhook Secret is required','warn');return;}
   if(rawUrl.includes('/dev')) showToast('Using /exec endpoint for public sync (recommended).','warn',3000);
   try{
-    await probeSheetsConnection(normalizedUrl, secret);
+    await probeSheetsConnection(normalizedUrl);
   }catch(e){
     showToast(`Connection probe failed: ${(e&&e.message)||'Unknown error'}`,'err',4000);
     return;
   }
   sheetsUrl=normalizedUrl;localStorage.setItem('lm-sheets-url',normalizedUrl);
-  sheetsSecret=secret;localStorage.setItem('lm-sheets-secret',secret);
   if(spreadUrl){
     sheetsSpreadsheetUrl=spreadUrl;
     localStorage.setItem('lm-sheets-spreadsheet-url',spreadUrl);
@@ -2001,7 +1983,7 @@ async function connectSheets(){
   showSheetsConnected();
   showToast('✓ Google Sheets connected and verified!');
 }
-function disconnectSheets(){if(!confirm('Disconnect?'))return;sheetsUrl='';sheetsSpreadsheetUrl='';sheetsSecret='';localStorage.removeItem('lm-sheets-url');localStorage.removeItem('lm-sheets-spreadsheet-url');localStorage.removeItem('lm-sheets-secret');$('sheets-setup-card').style.display='';$('sheets-connected-card').style.display='none';updateSheetsBadge();showToast('Sheets disconnected','warn');}
+function disconnectSheets(){if(!confirm('Disconnect?'))return;sheetsUrl='';sheetsSpreadsheetUrl='';localStorage.removeItem('lm-sheets-url');localStorage.removeItem('lm-sheets-spreadsheet-url');localStorage.removeItem('lm-sheets-secret');$('sheets-setup-card').style.display='';$('sheets-connected-card').style.display='none';updateSheetsBadge();showToast('Sheets disconnected','warn');}
 function showSheetsConnected(){$('sheets-setup-card').style.display='none';$('sheets-connected-card').style.display='';$('sheets-url-display').textContent=sheetsUrl;updateSheetsBadge();}
 function testSheets(){
   if(!sheetsUrl)return;
@@ -2039,15 +2021,13 @@ function retryDelayMs(attempt){ return Math.min(60000, RETRY_BASE_MS * Math.pow(
 
 async function postToSheets(body){
   const payload = JSON.stringify(body);
-  const urlWithSecret = withWebhookSecret(sheetsUrl, sheetsSecret);
   
   try{
-    const res=await fetch(urlWithSecret,{
+    const res=await fetch(sheetsUrl,{
       method:'POST',
       mode:'cors',
       headers:{
-        'Content-Type':'text/plain;charset=utf-8',
-        'X-Webhook-Secret': sheetsSecret
+        'Content-Type':'text/plain;charset=utf-8'
       },
       body:payload
     });
@@ -2058,12 +2038,11 @@ async function postToSheets(body){
     return 'ok';
   }catch(e){
     // Fallback to no-cors for strict environments.
-    await fetch(urlWithSecret, {
+    await fetch(sheetsUrl, {
       method:'POST',
       mode:'no-cors',
       headers:{
-        'Content-Type':'text/plain;charset=utf-8',
-        'X-Webhook-Secret': sheetsSecret
+        'Content-Type':'text/plain;charset=utf-8'
       },
       body:payload
     });
@@ -2897,11 +2876,7 @@ async function boot(forcedBook) {
   await loadPasswords();
   renderCatalogList();
   renderProfitSettings();
-  if(sheetsUrl && sheetsSecret) showSheetsConnected();
-  if(shouldWarnLegacySheetsReconnect){
-    showToast('Existing Sheets connection was reset. Reconnect with a Webhook Secret.','warn',4500);
-    shouldWarnLegacySheetsReconnect = false;
-  }
+  if(sheetsUrl) showSheetsConnected();
   updateSheetsBadge();
   processSyncQueue();
 

@@ -537,18 +537,9 @@
             <pre id="gas-code" style="background:var(--ink);color:#a8d8a8;font-family:'DM Mono',monospace;font-size:11px;padding:16px;border-radius:var(--r2);overflow-x:auto;line-height:1.75;white-space:pre-wrap;">// Lyricalmyrical Books — Google Sheets webhook (v2)
 // Reliable contract: receives { version, eventId, sentAt, payload }
 // Idempotent writes: duplicate eventId values are ignored.
-var WEBHOOK_SECRET = 'REPLACE_WITH_LONG_RANDOM_SECRET';
 
 function doPost(e) {
   try {
-    var secret = (e && e.parameter && e.parameter.secret) ? String(e.parameter.secret) : '';
-    if (!WEBHOOK_SECRET || WEBHOOK_SECRET === 'REPLACE_WITH_LONG_RANDOM_SECRET') {
-      throw new Error('WEBHOOK_SECRET not configured');
-    }
-    if (secret !== WEBHOOK_SECRET) {
-      return unauthorized_();
-    }
-
     var body = readBody_(e);
     var req = JSON.parse(body);
     if (!req || !req.payload) throw new Error('Missing payload');
@@ -556,7 +547,7 @@ function doPost(e) {
     var eventId = String(req.eventId || Utilities.getUuid());
     var data = req.payload;
     var lock = LockService.getScriptLock();
-    lock.waitLock(5000);
+    lock.waitLock(10000);
 
     try {
       if (alreadyProcessed_(eventId)) {
@@ -584,9 +575,57 @@ function doGet() {
   });
 }
 
-function unauthorized_() {
+function appendEvent_(eventId, data) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Events') || ss.insertSheet('Events');
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Logged At', 'Event ID', 'Book', 'Type', 'Date', 'Reference', 'Channel/Store', 'Qty', 'Price/Rate', 'Total/Amount Due', 'Stock After', 'Status', 'Notes']);
+    sheet.setFrozenRows(1);
+  }
+
+  var loggedAt = new Date();
+  var type = data.type || '';
+  var ref = type === 'order' ? (data.num || '') : (data.event || '');
+  var channel = type === 'order' ? (data.chan || '') : (data.store || '');
+  var unit = type === 'order' ? Number(data.price || 0) : Number(data.rate || 0);
+  var total = type === 'order' ? Number(data.total || 0) : Number(data.amountDue || 0);
+  var status = data.status || '';
+
+  sheet.appendRow([
+    loggedAt,
+    eventId,
+    data.book || '',
+    type,
+    data.date || '',
+    ref,
+    channel,
+    Number(data.qty || 0),
+    unit,
+    total,
+    Number(data.stockAfter || 0),
+    status,
+    data.notes || ''
+  ]);
+}
+
+function alreadyProcessed_(eventId) {
+  var p = PropertiesService.getScriptProperties();
+  return p.getProperty('evt_' + eventId) === '1';
+}
+
+function markProcessed_(eventId) {
+  PropertiesService.getScriptProperties().setProperty('evt_' + eventId, '1');
+}
+
+function readBody_(e) {
+  if (e && e.postData && e.postData.contents) return e.postData.contents;
+  if (e && e.parameter && e.parameter.payload) return e.parameter.payload;
+  throw new Error('No request body');
+}
+
+function json_(obj) {
   return ContentService
-    .createTextOutput(JSON.stringify({ ok: false, error: 'Unauthorized' }))
+    .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -654,7 +693,6 @@ function json_(obj) {
           <div style="font-weight:700;font-size:13px;margin-bottom:10px;">Paste your URLs and connect</div>
           <div style="display:flex;flex-direction:column;gap:10px;">
             <div class="form-group" style="margin:0;"><label>Web App URL</label><input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec"></div>
-            <div class="form-group" style="margin:0;"><label>Webhook Secret</label><input type="password" id="sheets-secret-input" placeholder="Use same secret as Apps Script WEBHOOK_SECRET" autocomplete="off"></div>
             <div class="form-group" style="margin:0;"><label>Google Sheet URL (for the Open link)</label><input type="url" id="sheets-spreadsheet-input" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
             <div><button class="btn gold" onclick="connectSheets()">Connect</button></div>
           </div>
