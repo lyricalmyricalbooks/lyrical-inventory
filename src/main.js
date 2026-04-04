@@ -2618,7 +2618,7 @@ function setupGate() {
       }
     }
   } else {
-    document.querySelector('#gate-sub').textContent = 'Inventory App · Publisher Portal';
+    document.querySelector('#gate-sub').textContent = 'Inventory App';
     document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
     const desc = document.getElementById('gate-desc');
     if (desc) {
