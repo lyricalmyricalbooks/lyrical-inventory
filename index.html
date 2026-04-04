@@ -114,33 +114,32 @@
 <div class="tab-panel" id="tab-dashboard" style="display:none;">
 
   <!-- EXPENSES SUMMARY (publisher only) — always at the top when visible -->
-  <div id="d-expenses-sect" style="display:none;margin-bottom:1.5rem;">
-    <div style="background:var(--ink);border-radius:var(--r3);border:1px solid rgba(255,255,255,.08);padding:1.5rem 1.75rem;box-shadow:var(--shadow2);position:relative;overflow:hidden;">
-      <div style="position:absolute;inset:0;background:radial-gradient(ellipse at top right,rgba(149,32,32,.08),transparent 60%);pointer-events:none;"></div>
-      <div style="position:relative;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1.25rem;margin-bottom:1.25rem;">
-        <div>
-          <div style="font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:8px;">Expenses owed to artist</div>
-          <div style="font-family:'DM Mono',monospace;font-size:36px;font-weight:500;color:#f87171;line-height:1;" id="d-exp-total">—</div>
-          <div style="font-size:12px;color:rgba(255,255,255,.35);margin-top:8px;" id="d-exp-count">— expenses logged</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-end;">
-          <a id="d-exp-pay-btn" href="#" target="_blank" style="display:none;text-decoration:none;">
-            <button style="display:inline-flex;align-items:center;gap:8px;padding:13px 24px;background:var(--gold);color:var(--ink);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--r2);border:none;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--gold2)'" onmouseout="this.style.background='var(--gold)'">Send payment →</button>
-          </a>
-          <div style="font-size:10px;color:rgba(255,255,255,.2);text-align:right;" id="d-exp-pay-hint"></div>
-        </div>
+  <div id="d-expenses-sect" class="metric-banner metric-banner-danger" style="display:none;">
+    <div class="metric-banner-overlay"></div>
+    <div class="metric-banner-head">
+      <div>
+        <div class="metric-banner-label">Expenses owed to artist</div>
+        <div class="metric-banner-value danger" id="d-exp-total">—</div>
+        <div class="metric-banner-sub" id="d-exp-count">— expenses logged</div>
       </div>
-      <div style="border-top:1px solid rgba(255,255,255,.07);padding-top:1rem;">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:'DM Mono',monospace;">
-          <tbody id="d-exp-body"></tbody>
-        </table>
+      <div class="metric-banner-actions">
+        <a id="d-exp-pay-btn" href="#" target="_blank" style="display:none;text-decoration:none;">
+          <button class="metric-banner-cta">Send payment →</button>
+        </a>
+        <div class="metric-banner-hint" id="d-exp-pay-hint"></div>
       </div>
+    </div>
+    <div class="metric-banner-table-wrap">
+      <table class="metric-banner-table">
+        <tbody id="d-exp-body"></tbody>
+      </table>
     </div>
   </div>
 
-  <div class="book-context" id="book-context-dash">
+  <div class="book-context dashboard-context" id="book-context-dash">
     <div class="book-context-dot"></div>
     <div><div class="book-context-title" id="bc-title-dash">—</div><div class="book-context-meta" id="bc-meta-dash">—</div></div>
+    <div class="dash-context-meta">Dashboard overview</div>
   </div>
 
   <!-- PROFIT SHARING BREAKDOWN -->
@@ -152,52 +151,57 @@
   </div>
 
   <!-- AUTHOR PAYMENT BANNER — shown in author mode when transfers are pending -->
-  <div id="author-payment-banner" style="display:none;margin-bottom:1.5rem;background:var(--ink);border-radius:var(--r3);border:1px solid rgba(200,145,58,.3);padding:1.5rem 1.75rem;box-shadow:var(--shadow2);position:relative;overflow:hidden;">
-    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at top right,rgba(200,145,58,.1),transparent 60%);pointer-events:none;"></div>
-    <div style="position:relative;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1.25rem;">
+  <div id="author-payment-banner" class="metric-banner metric-banner-gold" style="display:none;">
+    <div class="metric-banner-overlay"></div>
+    <div class="metric-banner-head">
       <div>
-        <div style="font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:8px;">Amount owed to publisher</div>
-        <div style="font-family:'DM Mono',monospace;font-size:36px;font-weight:500;color:var(--gold3);line-height:1;" id="apb-amount">—</div>
-        <div style="font-size:12px;color:rgba(255,255,255,.35);margin-top:8px;" id="apb-detail">— pending transfer(s) from sales collected on your end</div>
+        <div class="metric-banner-label">Amount owed to publisher</div>
+        <div class="metric-banner-value gold" id="apb-amount">—</div>
+        <div class="metric-banner-sub" id="apb-detail">— pending transfer(s) from sales collected on your end</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-end;">
-        <a id="apb-pay-btn" href="#" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:13px 24px;background:var(--gold);color:var(--ink);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:var(--r2);text-decoration:none;transition:background .15s;cursor:pointer;" onmouseover="this.style.background='var(--gold2)'" onmouseout="this.style.background='var(--gold)'">
+      <div class="metric-banner-actions">
+        <a id="apb-pay-btn" href="#" target="_blank" class="metric-banner-link">
           Send payment →
         </a>
-        <div style="font-size:10px;color:rgba(255,255,255,.2);text-align:right;" id="apb-link-hint">Opens payment link in a new tab</div>
+        <div class="metric-banner-hint" id="apb-link-hint">Opens payment link in a new tab</div>
       </div>
     </div>
-    <div id="apb-transfers" style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;"></div>
+    <div id="apb-transfers" class="metric-banner-items"></div>
   </div>
 
   <!-- REIMBURSEMENT OWED BANNER — shown in author mode when approved expenses exist -->
-  <div id="artist-reimburse-banner" style="display:none;margin-bottom:1.5rem;background:var(--ink);border-radius:var(--r3);border:1px solid rgba(42,122,92,.3);padding:1.5rem 1.75rem;box-shadow:var(--shadow2);position:relative;overflow:hidden;">
-    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at top right,rgba(42,122,92,.12),transparent 60%);pointer-events:none;"></div>
-    <div style="position:relative;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1.25rem;">
+  <div id="artist-reimburse-banner" class="metric-banner metric-banner-green" style="display:none;">
+    <div class="metric-banner-overlay"></div>
+    <div class="metric-banner-head">
       <div>
-        <div style="font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:8px;">Amount owed to you</div>
-        <div style="font-family:'DM Mono',monospace;font-size:36px;font-weight:500;color:#6ee7a8;line-height:1;" id="arb-amount">—</div>
-        <div style="font-size:12px;color:rgba(255,255,255,.35);margin-top:8px;" id="arb-detail">— approved reimbursement(s)</div>
+        <div class="metric-banner-label">Amount owed to you</div>
+        <div class="metric-banner-value green" id="arb-amount">—</div>
+        <div class="metric-banner-sub" id="arb-detail">— approved reimbursement(s)</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-        <div style="font-size:11px;color:rgba(255,255,255,.25);text-align:right;" id="arb-hint">Publisher will send payment to your saved link</div>
+      <div class="metric-banner-actions">
+        <div class="metric-banner-hint" id="arb-hint">Publisher will send payment to your saved link</div>
       </div>
     </div>
-    <div id="arb-items" style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:8px;"></div>
+    <div id="arb-items" class="metric-banner-items"></div>
   </div>
 
-  <div class="kpi-grid">
+  <div class="kpi-grid kpi-grid-primary">
     <div class="kpi"><div class="kpi-label">Stock on hand</div><div class="kpi-value gold" id="d-stock">—</div><div class="kpi-sub" id="d-stock-sub">of — printed</div></div>
     <div class="kpi"><div class="kpi-label">Revenue</div><div class="kpi-value gold" id="d-revenue">—</div><div class="kpi-sub">publisher net</div></div>
     <div class="kpi"><div class="kpi-label">Units sold</div><div class="kpi-value" id="d-sold">—</div><div class="kpi-sub" id="d-avg-sub">avg —</div></div>
     <div class="kpi"><div class="kpi-label">On consignment</div><div class="kpi-value" id="d-consigned">—</div><div class="kpi-sub">across <span id="d-stores">0</span> stores</div></div>
-    <div class="kpi"><div class="kpi-label">Owed to you</div><div class="kpi-value warn" id="d-owed">—</div><div class="kpi-sub">consignment pending</div></div>
-    <div class="kpi"><div class="kpi-label">Artist transfers due</div><div class="kpi-value warn" id="d-artist-pending">—</div><div class="kpi-sub" id="d-artist-pending-sub">awaiting forwarding</div></div>
-    <div class="kpi"><div class="kpi-label">Stock status</div><div class="kpi-value" id="d-low">—</div><div class="kpi-sub" id="d-thresh-sub">threshold: — units</div></div>
-    <div class="kpi" id="d-breakeven-kpi" style="display:none;"><div class="kpi-label">Break-even</div><div class="kpi-value" id="d-breakeven-val">—</div><div class="kpi-sub" id="d-breakeven-sub">of — production cost</div></div>
-    <div class="kpi" id="d-expenses-kpi" style="display:none;"><div class="kpi-label">Expenses owed</div><div class="kpi-value warn" id="d-expenses-owed">—</div><div class="kpi-sub" id="d-expenses-owed-sub">artist project costs</div></div>
-    <div class="kpi" id="d-reimburse-kpi" style="display:none;"><div class="kpi-label">Reimbursements due</div><div class="kpi-value warn" id="d-reimburse-val">—</div><div class="kpi-sub" id="d-reimburse-sub">awaiting approval</div></div>
   </div>
+  <details class="kpi-more">
+    <summary>More metrics</summary>
+    <div class="kpi-grid kpi-grid-secondary">
+      <div class="kpi"><div class="kpi-label">Owed to you</div><div class="kpi-value warn" id="d-owed">—</div><div class="kpi-sub">consignment pending</div></div>
+      <div class="kpi"><div class="kpi-label">Artist transfers due</div><div class="kpi-value warn" id="d-artist-pending">—</div><div class="kpi-sub" id="d-artist-pending-sub">awaiting forwarding</div></div>
+      <div class="kpi"><div class="kpi-label">Stock status</div><div class="kpi-value" id="d-low">—</div><div class="kpi-sub" id="d-thresh-sub">threshold: — units</div></div>
+      <div class="kpi" id="d-breakeven-kpi" style="display:none;"><div class="kpi-label">Break-even</div><div class="kpi-value" id="d-breakeven-val">—</div><div class="kpi-sub" id="d-breakeven-sub">of — production cost</div></div>
+      <div class="kpi" id="d-expenses-kpi" style="display:none;"><div class="kpi-label">Expenses owed</div><div class="kpi-value warn" id="d-expenses-owed">—</div><div class="kpi-sub" id="d-expenses-owed-sub">artist project costs</div></div>
+      <div class="kpi" id="d-reimburse-kpi" style="display:none;"><div class="kpi-label">Reimbursements due</div><div class="kpi-value warn" id="d-reimburse-val">—</div><div class="kpi-sub" id="d-reimburse-sub">awaiting approval</div></div>
+    </div>
+  </details>
   <div id="artist-transfers-sect" style="display:none;">
     <div class="sect">Pending artist transfers</div>
     <div id="artist-transfers-list"></div>
