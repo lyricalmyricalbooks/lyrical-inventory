@@ -1915,20 +1915,23 @@ function disconnectSheets(){if(!confirm('Disconnect?'))return;sheetsUrl='';sheet
 function showSheetsConnected(){$('sheets-setup-card').style.display='none';$('sheets-connected-card').style.display='';$('sheets-url-display').textContent=sheetsUrl;updateSheetsBadge();}
 function testSheets(){
   if(!sheetsUrl)return;
-  // First verify the URL is reachable via GET
   const btn=document.querySelector('[onclick="testSheets()"]');
   if(btn){btn.textContent='Testing…';btn.disabled=true;}
-  fetch(sheetsUrl+'?test=1',{mode:'no-cors'})
-    .then(()=>{
-      // no-cors always resolves — now send a real test row
-      syncToSheets({type:'order',book:'Test',date:today(),num:'TEST-'+Date.now().toString().slice(-4),chan:'Test',qty:0,price:0,total:0,stockAfter:0,notes:'Connection test — check your sheet for this row'});
-      showToast('✓ Test row sent — check your Google Sheet');
-    })
-    .catch(()=>{
-      addSheetsLog('System','Test','URL unreachable — check your Apps Script URL','err');
-      showToast('⚠ Could not reach Sheets URL','warn');
-    })
-    .finally(()=>{if(btn){btn.textContent='Test';btn.disabled=false;}});
+  // Use POST so verification works even when Apps Script has no doGet().
+  syncToSheets({
+    type:'order',
+    book:'Test',
+    date:today(),
+    num:'TEST-'+Date.now().toString().slice(-4),
+    chan:'Test',
+    qty:0,
+    price:0,
+    total:0,
+    stockAfter:0,
+    notes:'Connection test — check your sheet for this row'
+  });
+  showToast('✓ Test row sent — check your Google Sheet');
+  setTimeout(()=>{if(btn){btn.textContent='Test connection';btn.disabled=false;}},500);
 }
 // Write queue — prevents race conditions when multiple rows fire at once
 const _sheetsQueue=[];let _sheetsWriting=false;
@@ -1976,7 +1979,22 @@ function renderSheetsLog(){
   b.innerHTML=sheetsLog.map(l=>`<tr><td style="white-space:nowrap;">${l.time}</td><td style="font-size:11px;color:var(--text3);">${l.book}</td><td>${l.type}</td><td style="color:var(--text2);font-size:12px;">${l.summary}</td><td><span class="log-status ${l.status}"></span>${l.status==='ok'?'<span style="color:var(--green);">Written</span>':'<span style="color:var(--red);">Failed</span>'}</td></tr>`).join('');
 }
 function copyGasCode(){navigator.clipboard.writeText($('gas-code').textContent).then(()=>showToast('✓ Code copied!'));}
-function verifyUrl(){if(!sheetsUrl)return;window.open(sheetsUrl,'_blank');}
+function verifyUrl(){
+  if(!sheetsUrl)return;
+  syncToSheets({
+    type:'order',
+    book:'Test',
+    date:today(),
+    num:'VERIFY-'+Date.now().toString().slice(-4),
+    chan:'Verify URL',
+    qty:0,
+    price:0,
+    total:0,
+    stockAfter:0,
+    notes:'Verify URL button test'
+  });
+  showToast('✓ Verification row sent. If it appears in Sheets, your URL is working.');
+}
 
 // ── PAYMENT LINKS
 function renderProductionCostFields(){
