@@ -252,6 +252,13 @@ window.addEventListener('online', processSyncQueue);
 let sheetsUrl = localStorage.getItem('lm-sheets-url') || '';
 let sheetsSpreadsheetUrl = localStorage.getItem('lm-sheets-spreadsheet-url') || '';
 let sheetsLog = [];
+if (sheetsUrl) {
+  const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
+  if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
+    sheetsUrl = normalizedSavedUrl;
+    localStorage.setItem('lm-sheets-url', normalizedSavedUrl);
+  }
+}
 
 function defaultState(book) {
   return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], expenses: [], artistPaymentLink: '' };
@@ -1904,12 +1911,35 @@ function updateSheetsBadge(){
   const openLink=$('sheets-open-link');if(openLink){if(sheetsSpreadsheetUrl){openLink.href=sheetsSpreadsheetUrl;openLink.style.display='';}else openLink.style.display='none';}
   const cardLink=$('open-sheet-link');if(cardLink){if(sheetsSpreadsheetUrl){cardLink.href=sheetsSpreadsheetUrl;cardLink.style.display='';}else cardLink.style.display='none';}
 }
+function normalizeAppsScriptUrl(rawUrl){
+  const cleaned=(rawUrl||'').trim();
+  if(!cleaned) return '';
+  try{
+    const u=new URL(cleaned);
+    if(!/script\.google\.com$/i.test(u.hostname)) return '';
+    // Force deployed web-app endpoint. /dev often fails for unauthenticated users.
+    if(u.pathname.endsWith('/dev')) u.pathname=u.pathname.slice(0,-4)+'/exec';
+    return u.toString();
+  }catch(_){
+    return '';
+  }
+}
 function connectSheets(){
-  const url=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim();
-  if(!url||!url.includes('script.google.com')){showToast('Paste a valid Apps Script URL','warn');return;}
-  sheetsUrl=url;localStorage.setItem('lm-sheets-url',url);
-  if(spreadUrl){sheetsSpreadsheetUrl=spreadUrl;localStorage.setItem('lm-sheets-spreadsheet-url',spreadUrl);}
-  showSheetsConnected();testSheets();showToast('✓ Google Sheets connected!');
+  const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim();
+  const normalizedUrl=normalizeAppsScriptUrl(rawUrl);
+  if(!normalizedUrl){showToast('Paste a valid Google Apps Script web-app URL','warn');return;}
+  if(rawUrl.includes('/dev')) showToast('Using /exec endpoint for public sync (recommended).','warn',3000);
+  sheetsUrl=normalizedUrl;localStorage.setItem('lm-sheets-url',normalizedUrl);
+  if(spreadUrl){
+    sheetsSpreadsheetUrl=spreadUrl;
+    localStorage.setItem('lm-sheets-spreadsheet-url',spreadUrl);
+  }else{
+    sheetsSpreadsheetUrl='';
+    localStorage.removeItem('lm-sheets-spreadsheet-url');
+  }
+  showSheetsConnected();
+  testSheets();
+  showToast('✓ Google Sheets connected!');
 }
 function disconnectSheets(){if(!confirm('Disconnect?'))return;sheetsUrl='';sheetsSpreadsheetUrl='';localStorage.removeItem('lm-sheets-url');localStorage.removeItem('lm-sheets-spreadsheet-url');$('sheets-setup-card').style.display='';$('sheets-connected-card').style.display='none';updateSheetsBadge();showToast('Sheets disconnected','warn');}
 function showSheetsConnected(){$('sheets-setup-card').style.display='none';$('sheets-connected-card').style.display='';$('sheets-url-display').textContent=sheetsUrl;updateSheetsBadge();}
@@ -1940,23 +1970,39 @@ async function _processQueue(){
   _sheetsWriting=true;
   const {payload,summary,book,type}=_sheetsQueue.shift();
   try{
-    // Primary: fetch with no-cors (body goes to e.postData.contents in Apps Script)
-    await fetch(sheetsUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
+    // Primary: CORS request when Apps Script is configured to allow it.
+    await fetch(sheetsUrl,{
+      method:'POST',
+      mode:'cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(payload)
+    });
     addSheetsLog(book,type,summary,'ok');
   }catch(e){
-    // Fallback: hidden iframe form POST (body goes to e.parameter.payload)
+    // Fallback 1: no-cors (cannot inspect response, but useful for simple web-app deployments)
     try{
-      const iframeId='sheets-iframe-'+Date.now();
-      const iframe=document.createElement('iframe');iframe.name=iframeId;iframe.style.display='none';document.body.appendChild(iframe);
-      setTimeout(()=>{try{document.body.removeChild(iframe);}catch(_){}},8000);
-      const form=document.createElement('form');form.method='POST';form.action=sheetsUrl;form.target=iframeId;form.style.display='none';
-      const input=document.createElement('input');input.type='hidden';input.name='payload';input.value=JSON.stringify(payload);
-      form.appendChild(input);document.body.appendChild(form);form.submit();
-      setTimeout(()=>{try{document.body.removeChild(form);}catch(_){}},2000);
+      await fetch(sheetsUrl,{
+        method:'POST',
+        mode:'no-cors',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify(payload)
+      });
       addSheetsLog(book,type,summary,'ok');
-    }catch(e2){
-      addSheetsLog(book,type,summary+' [failed]','err');
-      console.error('Sheets write failed:',e2);
+    }catch(e1){
+      try{
+        // Fallback 2: hidden iframe form POST (body goes to e.parameter.payload)
+        const iframeId='sheets-iframe-'+Date.now();
+        const iframe=document.createElement('iframe');iframe.name=iframeId;iframe.style.display='none';document.body.appendChild(iframe);
+        setTimeout(()=>{try{document.body.removeChild(iframe);}catch(_){}},8000);
+        const form=document.createElement('form');form.method='POST';form.action=sheetsUrl;form.target=iframeId;form.style.display='none';
+        const input=document.createElement('input');input.type='hidden';input.name='payload';input.value=JSON.stringify(payload);
+        form.appendChild(input);document.body.appendChild(form);form.submit();
+        setTimeout(()=>{try{document.body.removeChild(form);}catch(_){}},2000);
+        addSheetsLog(book,type,summary,'ok');
+      }catch(e2){
+        addSheetsLog(book,type,summary+' [failed]','err');
+        console.error('Sheets write failed:',e2, e1, e);
+      }
     }
   }
   _sheetsWriting=false;
