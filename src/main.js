@@ -1914,17 +1914,22 @@ function updateSheetsBadge(){
 function normalizeAppsScriptUrl(rawUrl){
   const cleaned=(rawUrl||'').trim();
   if(!cleaned) return '';
-  // Match any script.google.com URL and extract the deployment ID from the /s/[ID]/ portion
-  const m = cleaned.match(/\/macros\/s\/([^/]+)\/(exec|dev)/i);
-  if(m) {
-    const deploymentId = m[1];
-    return `https://script.google.com/macros/s/${deploymentId}/exec`;
+  try{
+    const u=new URL(cleaned);
+    if(!/script\.google\.com$/i.test(u.hostname)) return '';
+    // Accept only deployed web-app links like /macros/s/{DEPLOYMENT_ID}/exec or /dev.
+    const m=u.pathname.match(/^\/macros\/s\/([^/]+)\/(exec|dev)\/?$/i);
+    if(!m) return '';
+    const deploymentId=m[1];
+    // Always normalize to /exec for public deployments.
+    u.pathname=`/macros/s/${deploymentId}/exec`;
+    // Keep URL stable across environments and avoid sharing noisy query/hash fragments.
+    u.search='';
+    u.hash='';
+    return u.toString();
+  }catch(_){
+    return '';
   }
-  // Try fallback for just the ID if they pasted that
-  if(/^[a-zA-Z0-9\-_]{20,}$/.test(cleaned)) {
-    return `https://script.google.com/macros/s/${cleaned}/exec`;
-  }
-  return '';
 }
 function connectSheets(){
   const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim();
@@ -1972,21 +1977,21 @@ async function _processQueue(){
   _sheetsWriting=true;
   const {payload,summary,book,type}=_sheetsQueue.shift();
   try{
-    // Primary: no-cors (swapped to first as it avoids OPTIONS preflight which GAS often fails)
+    // Primary: CORS request when Apps Script is configured to allow it.
     await fetch(sheetsUrl,{
       method:'POST',
-      mode:'no-cors',
+      mode:'cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify(payload)
     });
     addSheetsLog(book,type,summary,'ok');
     updateBulkProgress();
   }catch(e){
-    // Fallback 1: CORS request (if configured specifically for it)
+    // Fallback 1: no-cors (cannot inspect response, but useful for simple web-app deployments)
     try{
       await fetch(sheetsUrl,{
         method:'POST',
-        mode:'cors',
+        mode:'no-cors',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
         body:JSON.stringify(payload)
       });
