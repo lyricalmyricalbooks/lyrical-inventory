@@ -413,9 +413,11 @@ function syncRoleUI() {
   const websiteTabBtn = $('website-tab-btn');
   const financialsTabBtn = $('financials-tab-btn');
   const sheetsTabBtn = $('sheets-tab-btn');
+  const backupsTabBtn = $('backups-tab-btn');
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
   if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
   if (sheetsTabBtn) sheetsTabBtn.style.display = authorNow ? 'none' : '';
+  if (backupsTabBtn) backupsTabBtn.style.display = authorNow ? 'none' : '';
 
   const wm = $('author-watermark');
   if (wm && isPublisherSession() && activeBook && activeBook !== 'all' && AUTHOR_VIEW_BY_BOOK[activeBook]) {
@@ -425,7 +427,7 @@ function syncRoleUI() {
     wm.style.display = 'none';
   }
 
-  if (authorNow && ($('tab-website')?.classList.contains('active') || $('tab-financials')?.classList.contains('active') || $('tab-sheets')?.classList.contains('active'))) {
+  if (authorNow && ($('tab-website')?.classList.contains('active') || $('tab-financials')?.classList.contains('active') || $('tab-sheets')?.classList.contains('active') || $('tab-backups')?.classList.contains('active'))) {
     switchTab('dashboard');
   }
 }
