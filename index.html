@@ -544,17 +544,15 @@ function doPost(e) {
     if (!raw) throw new Error('No data received');
 
     var data = JSON.parse(raw);
+    Logger.log('Received data: ' + JSON.stringify(data));
+    
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var safeBook = (data.book || 'Unknown').replace(/[^a-zA-Z0-9 \-]/g, '').trim();
     var timestamp = new Date().toLocaleString('en-GB');
 
     var bookShort = {
-      'Un Fantastico Altrove':'Altrove',
-      'The Hound':'Hound',
-      'Archaeology of Presence':'Archaeology',
-      'Sistema_non_autorizzato':'Sistema',
-      'As if Nobody is Watching':'Nobody',
-      'Collective Photobook':'Collective'
+      'Un Fantastico Altrove':'Altrove','The Hound':'Hound','Archaeology of Presence':'Archaeology',
+      'Sistema_non_autorizzato':'Sistema','As if Nobody is Watching':'Nobody','Collective Photobook':'Collective'
     };
     var shortName = bookShort[data.book] || safeBook || 'Unknown';
     var sheet = ss.getSheetByName(shortName) || ss.insertSheet(shortName);
@@ -565,12 +563,12 @@ function doPost(e) {
       writeOrderRow(sheet, [timestamp, data.date, data.num, data.chan, data.qty, data.price, data.total, data.stockAfter, data.notes || '']);
       styleDataRows(sheet, 'order');
       updateOrderSummary(sheet);
-    }
-
-    if (data.type === 'consignment') {
+    } else if (data.type === 'consignment') {
       writeConsignmentRow(sheet, [timestamp, data.date, data.store || '', data.event || '', data.qty, data.rate || '', data.amountDue || 0, data.notes || '', data.status || '']);
       styleDataRows(sheet, 'consignment');
       updateConsignmentSummary(sheet);
+    } else {
+      Logger.log('Unknown data type: ' + data.type);
     }
 
     return ContentService
@@ -578,6 +576,7 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
+    Logger.log('Error in doPost: ' + err.message);
     return ContentService
       .createTextOutput(JSON.stringify({ok:false,error:err.message}))
       .setMimeType(ContentService.MimeType.JSON);
