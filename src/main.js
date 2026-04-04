@@ -251,12 +251,22 @@ async function processSyncQueue() {
 window.addEventListener('online', processSyncQueue);
 let sheetsUrl = localStorage.getItem('lm-sheets-url') || '';
 let sheetsSpreadsheetUrl = localStorage.getItem('lm-sheets-spreadsheet-url') || '';
+let sheetsSecret = localStorage.getItem('lm-sheets-secret') || '';
+let shouldWarnLegacySheetsReconnect = false;
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
     sheetsUrl = normalizedSavedUrl;
     localStorage.setItem('lm-sheets-url', normalizedSavedUrl);
   }
+}
+if (sheetsUrl && !sheetsSecret) {
+  console.warn('Legacy Google Sheets config detected without secret. Reconnect is required.');
+  sheetsUrl = '';
+  sheetsSpreadsheetUrl = '';
+  shouldWarnLegacySheetsReconnect = true;
+  localStorage.removeItem('lm-sheets-url');
+  localStorage.removeItem('lm-sheets-spreadsheet-url');
 }
 
 function defaultState(book) {
@@ -1930,12 +1940,57 @@ function normalizeAppsScriptUrl(rawUrl){
     return '';
   }
 }
-function connectSheets(){
-  const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim();
+function withWebhookSecret(url, secret){
+  const u = new URL(url);
+  u.searchParams.set('secret', secret);
+  return u.toString();
+}
+async function probeSheetsConnection(url, secret){
+  const probePayload = {
+    version: 2,
+    eventId: `probe-${Date.now().toString(36)}`,
+    sentAt: new Date().toISOString(),
+    payload: {
+      type: 'order',
+      book: 'Connection Probe',
+      date: today(),
+      num: 'PROBE',
+      chan: 'Probe',
+      qty: 0,
+      price: 0,
+      total: 0,
+      stockAfter: 0,
+      notes: 'Connection probe'
+    }
+  };
+  const res = await fetch(withWebhookSecret(url, secret), {
+    method: 'POST',
+    mode: 'cors',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+      'X-Webhook-Secret': secret
+    },
+    body: JSON.stringify(probePayload)
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json().catch(() => null);
+  if (!json || json.ok !== true) throw new Error('Probe response was not { ok: true }');
+}
+
+async function connectSheets(){
+  const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim(),secret=($('sheets-secret-input').value||'').trim();
   const normalizedUrl=normalizeAppsScriptUrl(rawUrl);
   if(!normalizedUrl){showToast('Paste a deployed Web App URL (…/macros/s/<id>/exec)','warn');return;}
+  if(!secret){showToast('Webhook Secret is required','warn');return;}
   if(rawUrl.includes('/dev')) showToast('Using /exec endpoint for public sync (recommended).','warn',3000);
+  try{
+    await probeSheetsConnection(normalizedUrl, secret);
+  }catch(e){
+    showToast(`Connection probe failed: ${(e&&e.message)||'Unknown error'}`,'err',4000);
+    return;
+  }
   sheetsUrl=normalizedUrl;localStorage.setItem('lm-sheets-url',normalizedUrl);
+  sheetsSecret=secret;localStorage.setItem('lm-sheets-secret',secret);
   if(spreadUrl){
     sheetsSpreadsheetUrl=spreadUrl;
     localStorage.setItem('lm-sheets-spreadsheet-url',spreadUrl);
@@ -1944,10 +1999,9 @@ function connectSheets(){
     localStorage.removeItem('lm-sheets-spreadsheet-url');
   }
   showSheetsConnected();
-  testSheets();
-  showToast('✓ Google Sheets connected!');
+  showToast('✓ Google Sheets connected and verified!');
 }
-function disconnectSheets(){if(!confirm('Disconnect?'))return;sheetsUrl='';sheetsSpreadsheetUrl='';localStorage.removeItem('lm-sheets-url');localStorage.removeItem('lm-sheets-spreadsheet-url');$('sheets-setup-card').style.display='';$('sheets-connected-card').style.display='none';updateSheetsBadge();showToast('Sheets disconnected','warn');}
+function disconnectSheets(){if(!confirm('Disconnect?'))return;sheetsUrl='';sheetsSpreadsheetUrl='';sheetsSecret='';localStorage.removeItem('lm-sheets-url');localStorage.removeItem('lm-sheets-spreadsheet-url');localStorage.removeItem('lm-sheets-secret');$('sheets-setup-card').style.display='';$('sheets-connected-card').style.display='none';updateSheetsBadge();showToast('Sheets disconnected','warn');}
 function showSheetsConnected(){$('sheets-setup-card').style.display='none';$('sheets-connected-card').style.display='';$('sheets-url-display').textContent=sheetsUrl;updateSheetsBadge();}
 function testSheets(){
   if(!sheetsUrl)return;
@@ -1984,14 +2038,19 @@ function makeEventId(){ return `evt-${Date.now().toString(36)}-${Math.random().t
 function retryDelayMs(attempt){ return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0,attempt-1))); }
 
 async function postToSheets(body){
-  try{
-    const res=await fetch(sheetsUrl,{method:'POST',mode:'cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    return 'ok';
-  }catch(_){
-    await fetch(sheetsUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
-    return 'unknown';
-  }
+  const res=await fetch(withWebhookSecret(sheetsUrl, sheetsSecret),{
+    method:'POST',
+    mode:'cors',
+    headers:{
+      'Content-Type':'text/plain;charset=utf-8',
+      'X-Webhook-Secret': sheetsSecret
+    },
+    body:JSON.stringify(body)
+  });
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json=await res.json().catch(()=>null);
+  if(!json || json.ok!==true) throw new Error('Unverified response from Apps Script');
+  return 'ok';
 }
 
 async function _processQueue(){
@@ -1999,13 +2058,13 @@ async function _processQueue(){
   _sheetsWriting=true;
   const item=_sheetsQueue[0];
   try{
-    const mode=await postToSheets({
+    await postToSheets({
       version:2,
       eventId:item.id,
       sentAt:new Date().toISOString(),
       payload:item.payload
     });
-    addSheetsLog(item.book,item.type,item.summary,mode==='ok'?'ok':'unknown');
+    addSheetsLog(item.book,item.type,item.summary,'ok');
     _sheetsQueue.shift();
     persistSheetsQueue();
     updateBulkProgress();
@@ -2142,8 +2201,8 @@ function renderSheetsLog(){
     b.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;">No sync events yet.</td></tr>';
     return;
   }
-  const labelFor=(st)=> st==='ok'?'Written':st==='unknown'?'Sent (unverified)':st==='queued'?'Queued':st==='retry'?'Retrying':'Failed';
-  const classFor=(st)=> st==='ok'||st==='unknown'?'ok':st==='queued'||st==='retry'?'syncing':'err';
+  const labelFor=(st)=> st==='ok'?'Written':st==='queued'?'Queued':st==='retry'?'Retrying':'Failed';
+  const classFor=(st)=> st==='ok'?'ok':st==='queued'||st==='retry'?'syncing':'err';
   b.innerHTML=sheetsLog.map(l=>`<tr><td style="white-space:nowrap;">${l.time}</td><td style="font-size:11px;color:var(--text3);">${l.book}</td><td>${l.type}</td><td style="color:var(--text2);font-size:12px;">${l.summary}</td><td><span class="log-status ${classFor(l.status)}"></span><span style="color:${classFor(l.status)==='err'?'var(--red)':'var(--green)'};">${labelFor(l.status)}</span></td></tr>`).join('');
 }
 function copyGasCode(){navigator.clipboard.writeText($('gas-code').textContent).then(()=>showToast('✓ Code copied!'));}
@@ -2797,7 +2856,11 @@ async function boot(forcedBook) {
   await loadPasswords();
   renderCatalogList();
   renderProfitSettings();
-  if(sheetsUrl) showSheetsConnected();
+  if(sheetsUrl && sheetsSecret) showSheetsConnected();
+  if(shouldWarnLegacySheetsReconnect){
+    showToast('Existing Sheets connection was reset. Reconnect with a Webhook Secret.','warn',4500);
+    shouldWarnLegacySheetsReconnect = false;
+  }
   updateSheetsBadge();
   processSyncQueue();
 
