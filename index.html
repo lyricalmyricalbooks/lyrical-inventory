@@ -531,177 +531,102 @@
       <div style="display:flex;gap:14px;align-items:flex-start;">
         <div style="width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
         <div style="flex:1;">
-          <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
           <div style="font-size:12px;color:var(--red-bg);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
           <div style="position:relative;">
-            <pre id="gas-code" style="background:var(--ink);color:#a8d8a8;font-family:'DM Mono',monospace;font-size:11px;padding:16px;border-radius:var(--r2);overflow-x:auto;line-height:1.75;white-space:pre-wrap;">// Lyricalmyrical Books — Google Sheets sync
-// Cleaner layout: consistent spacing, readable typography, zebra rows, and auto summaries.
+            <pre id="gas-code" style="background:var(--ink);color:#a8d8a8;font-family:'DM Mono',monospace;font-size:11px;padding:16px;border-radius:var(--r2);overflow-x:auto;line-height:1.75;white-space:pre-wrap;">// Lyricalmyrical Books — Google Sheets webhook (v2)
+// Reliable contract: receives { version, eventId, sentAt, payload }
+// Idempotent writes: duplicate eventId values are ignored.
+const WEBHOOK_SECRET = 'replace-with-a-long-random-secret';
+
 function doPost(e) {
   try {
-    var raw = '';
-    if (e.postData && e.postData.contents) raw = e.postData.contents;
-    if (!raw && e.parameter && e.parameter.payload) raw = e.parameter.payload;
-    if (!raw) throw new Error('No data received');
+    var body = readBody_(e);
+    var req = JSON.parse(body);
+    if (!req || !req.payload) throw new Error('Missing payload');
 
-    var data = JSON.parse(raw);
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var safeBook = (data.book || 'Unknown').replace(/[^a-zA-Z0-9 \-]/g, '').trim();
-    var timestamp = new Date().toLocaleString('en-GB');
+    if (String(req.token || '') !== WEBHOOK_SECRET) throw new Error('Unauthorized');
 
-    var bookShort = {
-      'Un Fantastico Altrove':'Altrove',
-      'The Hound':'Hound',
-      'Archaeology of Presence':'Archaeology',
-      'Sistema_non_autorizzato':'Sistema',
-      'As if Nobody is Watching':'Nobody',
-      'Collective Photobook':'Collective'
-    };
-    var shortName = bookShort[data.book] || safeBook || 'Unknown';
-    var sheet = ss.getSheetByName(shortName) || ss.insertSheet(shortName);
+    var eventId = String(req.eventId || Utilities.getUuid());
+    var data = req.payload;
+    var lock = LockService.getScriptLock();
+    lock.waitLock(5000);
 
-    ensureLayout(sheet, data.book || shortName, shortName);
-
-    if (data.type === 'order') {
-      writeOrderRow(sheet, [timestamp, data.date, data.num, data.chan, data.qty, data.price, data.total, data.stockAfter, data.notes || '']);
-      styleDataRows(sheet, 'order');
-      updateOrderSummary(sheet);
+    try {
+      if (alreadyProcessed_(eventId)) {
+        return json_({ ok: true, duplicate: true, eventId: eventId });
+      }
+      appendEvent_(eventId, data);
+      markProcessed_(eventId);
+      return json_({ ok: true, eventId: eventId });
+    } finally {
+      lock.releaseLock();
     }
-
-    if (data.type === 'consignment') {
-      writeConsignmentRow(sheet, [timestamp, data.date, data.store || '', data.event || '', data.qty, data.rate || '', data.amountDue || 0, data.notes || '', data.status || '']);
-      styleDataRows(sheet, 'consignment');
-      updateConsignmentSummary(sheet);
-    }
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ok:true,ts:timestamp}))
-      .setMimeType(ContentService.MimeType.JSON);
-
   } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ok:false,error:err.message}))
-      .setMimeType(ContentService.MimeType.JSON);
+    return json_({ ok: false, error: err.message });
   }
 }
 
-function ensureLayout(sheet, title, shortName) {
-  var accents = {
-    'Altrove':'#C8913A','Hound':'#3A7CC8','Archaeology':'#7A5C3A',
-    'Sistema':'#2A7A5C','Nobody':'#8A3A7A','Collective':'#C8913A'
-  };
-  var accent = accents[shortName] || '#C8913A';
-
-  if (sheet.getRange(1,1).getValue() !== title) sheet.getRange(1,1).setValue(title);
-  sheet.getRange(1,1,1,13).merge().setFontWeight('bold').setFontSize(18).setBackground(accent).setFontColor('#F8F5EF').setVerticalAlignment('middle');
-  sheet.setRowHeight(1, 42);
-
-  sheet.getRange(2,1).setValue('ORDERS').setFontWeight('bold').setBackground('#ECE7DC').setFontColor('#737373');
-  sheet.getRange(3,1,1,9).setValues([['Logged at','Date','Order #','Channel','Qty','Unit Price','Total','Stock After','Notes']])
-    .setFontWeight('bold').setBackground('#151515').setFontColor('#F3C569').setHorizontalAlignment('center');
-
-  sheet.getRange(7,1).setValue('CONSIGNMENT').setFontWeight('bold').setBackground('#ECE7DC').setFontColor('#737373');
-  sheet.getRange(8,1,1,9).setValues([['Logged at','Date','Store','Event','Qty','Rate %','Amount Due','Notes','Status']])
-    .setFontWeight('bold').setBackground('#151515').setFontColor('#F3C569').setHorizontalAlignment('center');
-
-  sheet.getRange(2,11,1,3).merge().setValue('ORDERS SUMMARY').setFontWeight('bold').setBackground('#ECE7DC').setFontColor('#737373').setHorizontalAlignment('center');
-  sheet.getRange(11,11,1,3).merge().setValue('CONSIGNMENT SUMMARY').setFontWeight('bold').setBackground('#ECE7DC').setFontColor('#737373').setHorizontalAlignment('center');
-
-  sheet.setFrozenRows(3);
-  sheet.setFrozenColumns(2);
-  sheet.setColumnWidths(1, 9, 128);
-  sheet.setColumnWidth(3, 230);
-  sheet.setColumnWidth(9, 360);
-  sheet.setColumnWidth(11, 170);
-  sheet.setColumnWidth(12, 150);
-  sheet.setColumnWidth(13, 150);
-
-  sheet.getRange('A:I').setVerticalAlignment('middle');
-  sheet.getRange('A:I').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
-  sheet.getRange('E:E').setHorizontalAlignment('center');
-  sheet.getRange('F:H').setHorizontalAlignment('right');
+function doGet() {
+  return json_({ ok: true, service: 'lyrical-sheets-webhook-v2' });
 }
 
-function findRowByLabel(sheet, label) {
-  var max = Math.max(20, sheet.getLastRow());
-  for (var r = 1; r &lt;= max; r++) {
-    if (sheet.getRange(r,1).getValue() === label) return r;
+function appendEvent_(eventId, data) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Events') || ss.insertSheet('Events');
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Logged At', 'Event ID', 'Book', 'Type', 'Date', 'Reference', 'Channel/Store', 'Qty', 'Price/Rate', 'Total/Amount Due', 'Stock After', 'Status', 'Notes']);
+    sheet.setFrozenRows(1);
   }
-  return -1;
+
+  var loggedAt = new Date();
+  var type = data.type || '';
+  var ref = type === 'order' ? (data.num || '') : (data.event || '');
+  var channel = type === 'order' ? (data.chan || '') : (data.store || '');
+  var unit = type === 'order' ? Number(data.price || 0) : Number(data.rate || 0);
+  var total = type === 'order' ? Number(data.total || 0) : Number(data.amountDue || 0);
+  var status = data.status || '';
+
+  sheet.appendRow([
+    loggedAt,
+    eventId,
+    data.book || '',
+    type,
+    data.date || '',
+    ref,
+    channel,
+    Number(data.qty || 0),
+    unit,
+    total,
+    Number(data.stockAfter || 0),
+    status,
+    data.notes || ''
+  ]);
 }
 
-function writeOrderRow(sheet, rowVals) {
-  var consRow = findRowByLabel(sheet, 'CONSIGNMENT');
-  if (consRow === -1) consRow = 7;
-  var firstDataRow = 4;
-  var insertRow = firstDataRow;
-  for (var r = firstDataRow; r &lt; consRow; r++) {
-    if (sheet.getRange(r,3).getValue() !== '') insertRow = r + 1;
-  }
-  sheet.insertRowBefore(insertRow);
-  sheet.getRange(insertRow, 1, 1, 9).setValues([rowVals]);
+function alreadyProcessed_(eventId) {
+  var p = PropertiesService.getScriptProperties();
+  return p.getProperty('evt_' + eventId) === '1';
 }
 
-function writeConsignmentRow(sheet, rowVals) {
-  var consRow = findRowByLabel(sheet, 'CONSIGNMENT');
-  if (consRow === -1) consRow = 7;
-  var start = consRow + 2; // Below CONSIGNMENT and Headers
-  var insertRow = start;
-  for (var r = start; r <= sheet.getLastRow(); r++) {
-    if (sheet.getRange(r,1).getValue() !== '') insertRow = r + 1;
-  }
-  sheet.getRange(insertRow, 1, 1, 9).setValues([rowVals]);
+function markProcessed_(eventId) {
+  PropertiesService.getScriptProperties().setProperty('evt_' + eventId, '1');
 }
 
-function styleDataRows(sheet, section) {
-  var start = section === 'order' ? 4 : 9;
-  var end = sheet.getLastRow();
-  if (section === 'order') {
-    var consRow = findRowByLabel(sheet, 'CONSIGNMENT');
-    end = consRow > 0 ? consRow - 1 : end;
-  }
-  if (end &lt; start) return;
-
-  var rng = sheet.getRange(start, 1, end - start + 1, 9);
-  rng.setFontSize(14).setFontColor('#181818').setBackground('#FFFFFF');
-  rng.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY);
-  sheet.getRange(start, 6, end - start + 1, 1).setNumberFormat('#,##0.00');
-  sheet.getRange(start, 7, end - start + 1, 1).setNumberFormat('#,##0.00');
+function readBody_(e) {
+  if (e && e.postData && e.postData.contents) return e.postData.contents;
+  if (e && e.parameter && e.parameter.payload) return e.parameter.payload;
+  throw new Error('No request body');
 }
 
-function updateOrderSummary(sheet) {
-  sheet.getRange('K3').setValue('Total Orders');
-  sheet.getRange('L3').setFormula('=COUNTIF(C4:C,"&lt;>")');
-  sheet.getRange('K4').setValue('Units Sold');
-  sheet.getRange('L4').setFormula('=SUM(E4:E)');
-  sheet.getRange('K5').setValue('Total Revenue');
-  sheet.getRange('L5').setFormula('=SUM(G4:G)');
-  sheet.getRange('K6').setValue('Avg Unit Price');
-  sheet.getRange('L6').setFormula('=IFERROR(AVERAGE(F4:F),0)');
-  sheet.getRange('L3:L6').setFontWeight('bold').setHorizontalAlignment('right');
-  sheet.getRange('L5:L6').setNumberFormat('#,##0.00');
-}
-
-function updateConsignmentSummary(sheet) {
-  sheet.getRange('K12').setValue('Total Sent');
-  sheet.getRange('L12').setFormula('=SUMIF(D9:D,"Shipment",E9:E)');
-  sheet.getRange('K13').setValue('Total Sold');
-  sheet.getRange('L13').setFormula('=SUMIF(D9:D,"Sale",E9:E)');
-  sheet.getRange('K14').setValue('Revenue Due');
-  sheet.getRange('L14').setFormula('=SUM(G9:G)');
-  sheet.getRange('K15').setValue('Returned');
-  sheet.getRange('L15').setFormula('=SUMIF(D9:D,"Return",E9:E)');
-  sheet.getRange('K16').setValue('Outstanding');
-  sheet.getRange('L16').setFormula('=L12-L13-L15');
-  sheet.getRange('L12:L16').setFontWeight('bold').setHorizontalAlignment('right');
-  sheet.getRange('L14').setNumberFormat('#,##0.00');
-}
-
-function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ok:true,msg:'Lyricalmyrical Sheets webhook is live'})).setMimeType(ContentService.MimeType.JSON);
+function json_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }</pre>
             <button class="btn sm" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.15);" onclick="copyGasCode()">Copy</button>
           </div>
-          <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">The script creates a separate sheet tab per book automatically (e.g. "Un Fantastico Altrove — Orders" and "The Hound — Orders").</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This v2 script writes every event to one normalized "Events" tab, de-duplicates retries using event IDs, and rejects unsigned requests via a shared webhook secret.</div>
         </div>
       </div>
       <div style="display:flex;gap:14px;align-items:flex-start;">
@@ -711,6 +636,7 @@ function doGet(e) {
           <div style="display:flex;flex-direction:column;gap:10px;">
             <div class="form-group" style="margin:0;"><label>Web App URL</label><input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec"></div>
             <div class="form-group" style="margin:0;"><label>Google Sheet URL (for the Open link)</label><input type="url" id="sheets-spreadsheet-input" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
+            <div class="form-group" style="margin:0;"><label>Webhook Secret (required)</label><input type="password" id="sheets-secret-input" placeholder="Set this same value in Apps Script"></div>
             <div><button class="btn gold" onclick="connectSheets()">Connect</button></div>
           </div>
         </div>

@@ -251,7 +251,7 @@ async function processSyncQueue() {
 window.addEventListener('online', processSyncQueue);
 let sheetsUrl = localStorage.getItem('lm-sheets-url') || '';
 let sheetsSpreadsheetUrl = localStorage.getItem('lm-sheets-spreadsheet-url') || '';
-let sheetsLog = [];
+let sheetsSecret = localStorage.getItem('lm-sheets-secret') || '';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -1931,12 +1931,21 @@ function normalizeAppsScriptUrl(rawUrl){
     return '';
   }
 }
-function connectSheets(){
-  const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim();
+async function connectSheets(){
+  const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim(),secret=($('sheets-secret-input').value||'').trim();
   const normalizedUrl=normalizeAppsScriptUrl(rawUrl);
   if(!normalizedUrl){showToast('Paste a deployed Web App URL (…/macros/s/<id>/exec)','warn');return;}
+  if(!secret){showToast('Webhook secret is required (security + anti-abuse).','warn');return;}
   if(rawUrl.includes('/dev')) showToast('Using /exec endpoint for public sync (recommended).','warn',3000);
+
+  const probeOk = await verifySheetsEndpoint(normalizedUrl, secret);
+  if(!probeOk){
+    showToast('Endpoint rejected the test. Check deployment access is set to "Anyone" and secret matches Apps Script.','warn',5000);
+    return;
+  }
+
   sheetsUrl=normalizedUrl;localStorage.setItem('lm-sheets-url',normalizedUrl);
+  sheetsSecret=secret;localStorage.setItem('lm-sheets-secret',secret);
   if(spreadUrl){
     sheetsSpreadsheetUrl=spreadUrl;
     localStorage.setItem('lm-sheets-spreadsheet-url',spreadUrl);
@@ -1948,7 +1957,18 @@ function connectSheets(){
   testSheets();
   showToast('✓ Google Sheets connected!');
 }
-function disconnectSheets(){if(!confirm('Disconnect?'))return;sheetsUrl='';sheetsSpreadsheetUrl='';localStorage.removeItem('lm-sheets-url');localStorage.removeItem('lm-sheets-spreadsheet-url');$('sheets-setup-card').style.display='';$('sheets-connected-card').style.display='none';updateSheetsBadge();showToast('Sheets disconnected','warn');}
+async function verifySheetsEndpoint(url, secret){
+  try{
+    const probe={version:2,eventId:`probe-${Date.now()}`,sentAt:new Date().toISOString(),token:secret,payload:{type:'order',book:'Probe',date:today(),num:'PROBE',chan:'Probe',qty:0,price:0,total:0,stockAfter:0,notes:'Connection probe'}};
+    const res=await fetch(url,{method:'POST',mode:'cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(probe)});
+    if(!res.ok) return false;
+    const data=await res.json().catch(()=>null);
+    return !!(data && data.ok);
+  }catch(_){
+    return false;
+  }
+}
+function disconnectSheets(){if(!confirm('Disconnect?'))return;sheetsUrl='';sheetsSpreadsheetUrl='';sheetsSecret='';localStorage.removeItem('lm-sheets-url');localStorage.removeItem('lm-sheets-spreadsheet-url');localStorage.removeItem('lm-sheets-secret');$('sheets-setup-card').style.display='';$('sheets-connected-card').style.display='none';updateSheetsBadge();showToast('Sheets disconnected','warn');}
 function showSheetsConnected(){$('sheets-setup-card').style.display='none';$('sheets-connected-card').style.display='';$('sheets-url-display').textContent=sheetsUrl;updateSheetsBadge();}
 function testSheets(){
   if(!sheetsUrl)return;
@@ -1970,55 +1990,63 @@ function testSheets(){
   showToast('✓ Test row sent — check your Google Sheet');
   setTimeout(()=>{if(btn){btn.textContent='Test connection';btn.disabled=false;}},500);
 }
-// Write queue — prevents race conditions when multiple rows fire at once
-const _sheetsQueue=[];let _sheetsWriting=false;
+// Sheets delivery engine (rebuilt): durable queue + retry + deterministic event IDs
+const SHEETS_QUEUE_KEY='lm-sheets-write-queue-v2';
+const SHEETS_LOG_KEY='lm-sheets-log-v2';
+const MAX_SHEETS_RETRIES=6;
+const RETRY_BASE_MS=1200;
+let _sheetsQueue=JSON.parse(localStorage.getItem(SHEETS_QUEUE_KEY)||'[]');
+let _sheetsWriting=false;
+let sheetsLog=JSON.parse(localStorage.getItem(SHEETS_LOG_KEY)||'[]');
+
+function persistSheetsQueue(){ localStorage.setItem(SHEETS_QUEUE_KEY, JSON.stringify(_sheetsQueue)); }
+function persistSheetsLog(){ localStorage.setItem(SHEETS_LOG_KEY, JSON.stringify(sheetsLog)); }
+function makeEventId(){ return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,9)}`; }
+function retryDelayMs(attempt){ return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0,attempt-1))); }
+
+async function postToSheets(body){
+  const res=await fetch(sheetsUrl,{method:'POST',mode:'cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...body,token:sheetsSecret})});
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data=await res.json().catch(()=>null);
+  if(!data || !data.ok) throw new Error((data&&data.error)||'Invalid webhook response');
+  return 'ok';
+}
+
 async function _processQueue(){
-  if(_sheetsWriting||!_sheetsQueue.length)return;
+  if(_sheetsWriting||!_sheetsQueue.length||!sheetsUrl||!navigator.onLine)return;
   _sheetsWriting=true;
-  const {payload,summary,book,type}=_sheetsQueue.shift();
+  const item=_sheetsQueue[0];
   try{
-    // Primary: CORS request when Apps Script is configured to allow it.
-    await fetch(sheetsUrl,{
-      method:'POST',
-      mode:'cors',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify(payload)
+    await postToSheets({
+      version:2,
+      eventId:item.id,
+      sentAt:new Date().toISOString(),
+      payload:item.payload
     });
-    addSheetsLog(book,type,summary,'ok');
+    addSheetsLog(item.book,item.type,item.summary,'ok');
+    _sheetsQueue.shift();
+    persistSheetsQueue();
     updateBulkProgress();
   }catch(e){
-    // Fallback 1: no-cors (cannot inspect response, but useful for simple web-app deployments)
-    try{
-      await fetch(sheetsUrl,{
-        method:'POST',
-        mode:'no-cors',
-        headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body:JSON.stringify(payload)
-      });
-      addSheetsLog(book,type,summary,'ok');
+    item.attempts=(item.attempts||0)+1;
+    item.lastError=(e&&e.message)||'network error';
+    item.nextTryAt=Date.now()+retryDelayMs(item.attempts);
+    persistSheetsQueue();
+    if(item.attempts>=MAX_SHEETS_RETRIES){
+      addSheetsLog(item.book,item.type,item.summary+' [max retries reached]','err');
+      _sheetsQueue.shift();
+      persistSheetsQueue();
       updateBulkProgress();
-    }catch(e1){
-      try{
-        // Fallback 2: hidden iframe form POST (body goes to e.parameter.payload)
-        const iframeId='sheets-iframe-'+Date.now();
-        const iframe=document.createElement('iframe');iframe.name=iframeId;iframe.style.display='none';document.body.appendChild(iframe);
-        setTimeout(()=>{try{document.body.removeChild(iframe);}catch(_){}},8000);
-        const form=document.createElement('form');form.method='POST';form.action=sheetsUrl;form.target=iframeId;form.style.display='none';
-        const input=document.createElement('input');input.type='hidden';input.name='payload';input.value=JSON.stringify(payload);
-        form.appendChild(input);document.body.appendChild(form);form.submit();
-        setTimeout(()=>{try{document.body.removeChild(form);}catch(_){}},2000);
-        addSheetsLog(book,type,summary,'ok');
-        updateBulkProgress();
-      }catch(e2){
-      addSheetsLog(book,type,summary+' [failed]','err');
-      updateBulkProgress();
-      console.error('Sheets write failed:',e2, e1, e);
-      }
+    }else{
+      addSheetsLog(item.book,item.type,item.summary+` [retry ${item.attempts}/${MAX_SHEETS_RETRIES}]`,'retry');
     }
   }
   _sheetsWriting=false;
-  // Process next item in queue after a short gap
-  if(_sheetsQueue.length) setTimeout(_processQueue,400);
+  const next=_sheetsQueue[0];
+  if(next){
+    const wait=Math.max(250, (next.nextTryAt||0)-Date.now());
+    setTimeout(_processQueue, wait);
+  }
 }
 
 function syncToSheets(payload){
@@ -2026,7 +2054,17 @@ function syncToSheets(payload){
   const summary=payload.type==='order'
     ?`${payload.num} · ${payload.chan} · ${payload.qty}×`
     :`${payload.store} · ${payload.event} · ${payload.qty}×`;
-  _sheetsQueue.push({payload,summary,book:payload.book,type:payload.type==='order'?'Order':'Consignment'});
+  _sheetsQueue.push({
+    id:makeEventId(),
+    payload,
+    summary,
+    book:payload.book,
+    type:payload.type==='order'?'Order':'Consignment',
+    attempts:0,
+    nextTryAt:Date.now()
+  });
+  persistSheetsQueue();
+  addSheetsLog(payload.book,payload.type==='order'?'Order':'Consignment',summary,'queued');
   _processQueue();
 }
 
@@ -2036,49 +2074,39 @@ let _bulkDone = 0;
 
 async function pushAllToSheets() {
   if(!sheetsUrl) { showToast('Connect Google Sheets first','warn'); return; }
-  if(!confirm('This will sync all historical records for all books. Detailed logs will appear below. Continue?')) return;
-  
+  if(!confirm('This will enqueue all historical records for all books, then deliver them with retry. Continue?')) return;
+
   const btn = $('push-all-btn');
   const bar = $('sync-progress-bar');
   const fill = $('sync-progress-fill');
   const stats = $('sync-stats');
-  
+
   _isBulkSync = true;
   btn.disabled = true;
-  btn.textContent = 'Syncing...';
+  btn.textContent = 'Queueing...';
   bar.style.display = 'block';
   stats.style.display = 'block';
   fill.style.width = '0%';
-  
+
   const toSync = [];
-  
-  // Collect all data from all books
   Object.keys(BOOKS).forEach(bid => {
     const s = states[bid] || defaultState(BOOKS[bid]);
     const book = BOOKS[bid];
-    
-    // 1. Orders
-    (s.hist || []).forEach(h => {
-      toSync.push({
-        type: 'order', book: book.title, date: h.date, num: h.num, chan: h.chan, 
-        qty: h.qty, price: h.price, total: h.qty * h.price, stockAfter: h.after, 
-        notes: (h.voided ? '[VOID] ' : '') + (h.notes || '')
-      });
-    });
-    
-    // 2. Ledger (Consignment)
-    (s.ledger || []).forEach(e => {
-      toSync.push({
-        type: 'consignment', book: book.title, date: e.date, store: e.storeName, 
-        event: e.type, qty: e.qty, rate: e.rate, amountDue: e.amountDue, 
-        notes: (e.voided ? '[VOID] ' : '') + (e.notes || ''), status: e.status
-      });
-    });
+    (s.hist || []).forEach(h => toSync.push({
+      type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
+      qty:h.qty, price:h.price, total:h.qty*h.price, stockAfter:h.after,
+      notes:(h.voided?'[VOID] ':'')+(h.notes||'')
+    }));
+    (s.ledger || []).forEach(e => toSync.push({
+      type:'consignment', book:book.title, date:e.date, store:e.storeName,
+      event:e.type, qty:e.qty, rate:e.rate, amountDue:e.amountDue,
+      notes:(e.voided?'[VOID] ':'')+(e.notes||''), status:e.status
+    }));
   });
-  
+
   _bulkTotal = toSync.length;
   _bulkDone = 0;
-  
+
   if(_bulkTotal === 0) {
     showToast('No records found to sync','warn');
     _isBulkSync = false;
@@ -2088,14 +2116,10 @@ async function pushAllToSheets() {
     stats.style.display = 'none';
     return;
   }
-  
-  stats.textContent = `Preparing ${_bulkTotal} records...`;
-  
-  // Push to queue in batches with small delays to avoid overwhelming the browser/GAS
-  for(let i=0; i < toSync.length; i++) {
-    syncToSheets(toSync[i]);
-    if(i % 10 === 0) await new Promise(r => setTimeout(r, 50));
-  }
+
+  stats.textContent = `Queueing ${_bulkTotal} records...`;
+  for(const row of toSync) syncToSheets(row);
+  btn.textContent = 'Syncing...';
 }
 
 function updateBulkProgress() {
@@ -2105,47 +2129,52 @@ function updateBulkProgress() {
   const fill = $('sync-progress-fill');
   const stats = $('sync-stats');
   const btn = $('push-all-btn');
-  
+
   if(fill) fill.style.width = pct + '%';
   if(stats) stats.textContent = `Syncing: ${_bulkDone} / ${_bulkTotal} (${Math.round(pct)}%)`;
-  
+
   if(_bulkDone >= _bulkTotal) {
     _isBulkSync = false;
     if(btn) { btn.disabled = false; btn.textContent = 'Sync all data'; }
-    if(stats) stats.textContent = `✓ Successfully synced ${_bulkTotal} records.`;
-    showToast(`✓ Full sync complete: ${_bulkTotal} records pushed.`);
-    // Keep progress bar visible for a moment then hide
+    if(stats) stats.textContent = `✓ Queue processed: ${_bulkTotal} records.`;
+    showToast(`✓ Sheets queue processed: ${_bulkTotal} records.`);
     setTimeout(() => {
       if(!_isBulkSync) {
-         if($('sync-progress-bar')) $('sync-progress-bar').style.display = 'none';
-         if($('sync-stats')) $('sync-stats').style.display = 'none';
+        if($('sync-progress-bar')) $('sync-progress-bar').style.display = 'none';
+        if($('sync-stats')) $('sync-stats').style.display = 'none';
       }
     }, 4000);
   }
 }
-function addSheetsLog(book,type,summary,status){sheetsLog.unshift({time:new Date().toLocaleTimeString(),book,type,summary,status});if(sheetsLog.length>50)sheetsLog.pop();renderSheetsLog();}
+
+function addSheetsLog(book,type,summary,status){
+  sheetsLog.unshift({time:new Date().toLocaleTimeString(),book,type,summary,status});
+  if(sheetsLog.length>120)sheetsLog.pop();
+  persistSheetsLog();
+  renderSheetsLog();
+}
 function renderSheetsLog(){
   const b=$('sheets-log-body');
-  if(!sheetsLog.length){b.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;">No sync events yet.</td></tr>';return;}
-  b.innerHTML=sheetsLog.map(l=>`<tr><td style="white-space:nowrap;">${l.time}</td><td style="font-size:11px;color:var(--text3);">${l.book}</td><td>${l.type}</td><td style="color:var(--text2);font-size:12px;">${l.summary}</td><td><span class="log-status ${l.status}"></span>${l.status==='ok'?'<span style="color:var(--green);">Written</span>':'<span style="color:var(--red);">Failed</span>'}</td></tr>`).join('');
+  if(!b) return;
+  if(!sheetsLog.length){
+    b.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;">No sync events yet.</td></tr>';
+    return;
+  }
+  const labelFor=(st)=> st==='ok'?'Written':st==='queued'?'Queued':st==='retry'?'Retrying':'Failed';
+  const classFor=(st)=> st==='ok'?'ok':st==='queued'||st==='retry'?'syncing':'err';
+  b.innerHTML=sheetsLog.map(l=>`<tr><td style="white-space:nowrap;">${l.time}</td><td style="font-size:11px;color:var(--text3);">${l.book}</td><td>${l.type}</td><td style="color:var(--text2);font-size:12px;">${l.summary}</td><td><span class="log-status ${classFor(l.status)}"></span><span style="color:${classFor(l.status)==='err'?'var(--red)':'var(--green)'};">${labelFor(l.status)}</span></td></tr>`).join('');
 }
 function copyGasCode(){navigator.clipboard.writeText($('gas-code').textContent).then(()=>showToast('✓ Code copied!'));}
 function verifyUrl(){
   if(!sheetsUrl)return;
   syncToSheets({
-    type:'order',
-    book:'Test',
-    date:today(),
-    num:'VERIFY-'+Date.now().toString().slice(-4),
-    chan:'Verify URL',
-    qty:0,
-    price:0,
-    total:0,
-    stockAfter:0,
-    notes:'Verify URL button test'
+    type:'order',book:'Test',date:today(),num:'VERIFY-'+Date.now().toString().slice(-4),
+    chan:'Verify URL',qty:0,price:0,total:0,stockAfter:0,notes:'Verify URL button test'
   });
-  showToast('✓ Verification row sent. If it appears in Sheets, your URL is working.');
+  showToast('✓ Verification row queued.');
 }
+window.addEventListener('online',()=>_processQueue());
+setTimeout(()=>_processQueue(),300);
 
 // ── PAYMENT LINKS
 function renderProductionCostFields(){
@@ -2786,7 +2815,15 @@ async function boot(forcedBook) {
   await loadPasswords();
   renderCatalogList();
   renderProfitSettings();
-  if(sheetsUrl) showSheetsConnected();
+  if($('sheets-url-input')) $('sheets-url-input').value=sheetsUrl||'';
+  if($('sheets-spreadsheet-input')) $('sheets-spreadsheet-input').value=sheetsSpreadsheetUrl||'';
+  if($('sheets-secret-input')) $('sheets-secret-input').value=sheetsSecret||'';
+  if(sheetsUrl && sheetsSecret) showSheetsConnected();
+  else if(sheetsUrl && !sheetsSecret){
+    sheetsUrl='';
+    localStorage.removeItem('lm-sheets-url');
+    showToast('Sheets connection reset: missing webhook secret. Reconnect with secret.','warn',4500);
+  }
   updateSheetsBadge();
   processSyncQueue();
 
