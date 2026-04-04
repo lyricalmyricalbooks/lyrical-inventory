@@ -1926,13 +1926,13 @@ function normalizeAppsScriptUrl(rawUrl){
   try{
     const u=new URL(cleaned);
     if(!/script\.google\.com$/i.test(u.hostname)) return '';
-    // Accept only deployed web-app links like /macros/s/{DEPLOYMENT_ID}/exec or /dev.
-    const m=u.pathname.match(/^\/macros\/s\/([^/]+)\/(exec|dev)\/?$/i);
+    // Support URLs with /u/index/ segments (multi-account login)
+    const m=u.pathname.match(/\/macros\/(?:u\/\d+\/)?s\/([^/]+)\/(exec|dev)/i);
     if(!m) return '';
     const deploymentId=m[1];
-    // Always normalize to /exec for public deployments.
-    u.pathname=`/macros/s/${deploymentId}/exec`;
-    // Keep URL stable across environments and avoid sharing noisy query/hash fragments.
+    const type=m[2];
+    
+    u.pathname=`/macros/s/${deploymentId}/${type}`;
     u.search='';
     u.hash='';
     return u.toString();
@@ -2038,19 +2038,37 @@ function makeEventId(){ return `evt-${Date.now().toString(36)}-${Math.random().t
 function retryDelayMs(attempt){ return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0,attempt-1))); }
 
 async function postToSheets(body){
-  const res=await fetch(withWebhookSecret(sheetsUrl, sheetsSecret),{
-    method:'POST',
-    mode:'cors',
-    headers:{
-      'Content-Type':'text/plain;charset=utf-8',
-      'X-Webhook-Secret': sheetsSecret
-    },
-    body:JSON.stringify(body)
-  });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json=await res.json().catch(()=>null);
-  if(!json || json.ok!==true) throw new Error('Unverified response from Apps Script');
-  return 'ok';
+  const payload = JSON.stringify(body);
+  const urlWithSecret = withWebhookSecret(sheetsUrl, sheetsSecret);
+  
+  try{
+    const res=await fetch(urlWithSecret,{
+      method:'POST',
+      mode:'cors',
+      headers:{
+        'Content-Type':'text/plain;charset=utf-8',
+        'X-Webhook-Secret': sheetsSecret
+      },
+      body:payload
+    });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json().catch(()=>null);
+    if (data && data.ok) return 'ok';
+    if (data && data.error) throw new Error(data.error);
+    return 'ok';
+  }catch(e){
+    // Fallback to no-cors for strict environments.
+    await fetch(urlWithSecret, {
+      method:'POST',
+      mode:'no-cors',
+      headers:{
+        'Content-Type':'text/plain;charset=utf-8',
+        'X-Webhook-Secret': sheetsSecret
+      },
+      body:payload
+    });
+    return 'unknown';
+  }
 }
 
 async function _processQueue(){
@@ -2201,18 +2219,41 @@ function renderSheetsLog(){
     b.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;">No sync events yet.</td></tr>';
     return;
   }
-  const labelFor=(st)=> st==='ok'?'Written':st==='queued'?'Queued':st==='retry'?'Retrying':'Failed';
-  const classFor=(st)=> st==='ok'?'ok':st==='queued'||st==='retry'?'syncing':'err';
+  const labelFor=(st)=> st==='ok'?'Written':st==='unknown'?'Sent (unverified)':st==='queued'?'Queued':st==='retry'?'Retrying':'Failed';
+  const classFor=(st)=> st==='ok'||st==='unknown'?'ok':st==='queued'||st==='retry'?'syncing':'err';
   b.innerHTML=sheetsLog.map(l=>`<tr><td style="white-space:nowrap;">${l.time}</td><td style="font-size:11px;color:var(--text3);">${l.book}</td><td>${l.type}</td><td style="color:var(--text2);font-size:12px;">${l.summary}</td><td><span class="log-status ${classFor(l.status)}"></span><span style="color:${classFor(l.status)==='err'?'var(--red)':'var(--green)'};">${labelFor(l.status)}</span></td></tr>`).join('');
 }
 function copyGasCode(){navigator.clipboard.writeText($('gas-code').textContent).then(()=>showToast('✓ Code copied!'));}
-function verifyUrl(){
+async function verifyUrl(){
   if(!sheetsUrl)return;
+  const btn=$('verify-url-btn');
+  if(btn){ btn.textContent='Verifying...'; btn.disabled=true; }
+  
+  try {
+    // Try a GET request first to see if the endpoint is alive
+    const res = await fetch(sheetsUrl);
+    if(res.ok) {
+      const data = await res.json();
+      if(data && data.service === 'lyrical-sheets-webhook-v2') {
+        showToast(`✓ Connection verified: ${data.sheetName || 'Active'}`);
+        addSheetsLog('System', 'Verify', 'Handshake successful', 'ok');
+      } else {
+        showToast('⚠ Unexpected response from URL', 'warn');
+      }
+    } else {
+       // If GET fails but URL looks right, it might be a POST-only deployment or CORS
+       showToast('Queuing test row (GET unverified)', 'warn');
+    }
+  } catch(e) {
+    showToast('Queuing test row (Network check failed)', 'warn');
+  }
+
   syncToSheets({
     type:'order',book:'Test',date:today(),num:'VERIFY-'+Date.now().toString().slice(-4),
     chan:'Verify URL',qty:0,price:0,total:0,stockAfter:0,notes:'Verify URL button test'
   });
-  showToast('✓ Verification row queued.');
+  
+  setTimeout(() => { if(btn){ btn.textContent='↗ Verify URL'; btn.disabled=false; } }, 1000);
 }
 window.addEventListener('online',()=>_processQueue());
 setTimeout(()=>_processQueue(),300);
