@@ -1006,14 +1006,31 @@ async function fetchOrders() {
   const allApplied = [...getAllAppliedIds(), ...appliedNums];
   const skipHint   = allApplied.length ? `Skip any orders with these order numbers, they are already recorded: ${allApplied.join(', ')}.` : '';
 
+  const inferBookIdFromText = (value) => {
+    const txt = String(value || '').toLowerCase().trim();
+    if (!txt) return null;
+    for (const b of Object.values(BOOKS)) {
+      const tokens = [b.id, b.title, b.urlParam, b.author]
+        .filter(Boolean)
+        .map(v => String(v).toLowerCase().trim());
+      if (tokens.some(t => t && txt.includes(t))) return b.id;
+    }
+    return null;
+  };
+
   const systemPrompt = `You are a Gmail assistant for Lyricalmyrical Books.
 Search Gmail for Big Cartel order confirmation emails dated on or after ${sinceDate}.
 Catalog: ${bookList}.
 ${skipHint}
 Rules:
-- Respond ONLY with raw JSON: {"orders":[{"id":"gmail_msg_id","bookId":"catalog_id","orderNum":"#1234","date":"Mar 14 2026","customer":"Name","email":"email","qty":1,"price":40.00,"hasBook":true,"shipName":"Name","shipAddr1":"Addr","shipAddr2":"","shipCity":"City","shipProvince":"ON","shipPostal":"M5V","shipCountry":"Canada"}]}
+- Prioritize emails from support@bigcartel.com with subject like "[Lyricalmyrical Books] You've received a new order!".
+- Read the email body content (including HTML-rendered text), and extract fields from sections like "Order number", "Order date", "Shipping address", "Contact and payment info", and line items.
+- "orderNum" can include letters/dashes (example: "#ZGJK-670285"), so preserve it exactly.
+- Use the product/line-item text to pick the right "bookId" when possible.
+- Respond ONLY with raw JSON: {"orders":[{"id":"gmail_msg_id","bookId":"catalog_id","orderNum":"#1234","date":"Mar 14 2026","customer":"Name","email":"email","qty":1,"price":40.00,"hasBook":true,"itemTitle":"Book title from line item","shipName":"Name","shipAddr1":"Addr","shipAddr2":"","shipCity":"City","shipProvince":"ON","shipPostal":"M5V","shipCountry":"Canada"}]}
 - Only include confirmed orders.
-- Default to qty 1 if not explicit.`;
+- Default to qty 1 if not explicit.
+- If the body includes ordinal dates (e.g. "Apr 5th, 2026"), normalize to "Apr 5 2026".`;
 
   async function attemptScan() {
     attempt++;
@@ -1025,7 +1042,7 @@ Rules:
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
         system: systemPrompt,
-        messages: [{ role: 'user', content: `Search Gmail for all Big Cartel order confirmation emails from Lyricalmyrical Books since ${sinceDate}. Return every order for every book.` }],
+        messages: [{ role: 'user', content: `Search Gmail for all Big Cartel order confirmation emails from Lyricalmyrical Books since ${sinceDate}. Specifically capture the standard Big Cartel template that says "You've received a new order!" and includes "Order number", "Order date", and shipping/payment sections. Return every order for every book.` }],
         mcp_servers: [{ type: 'url', url: 'https://gmail.mcp.claude.com/mcp', name: 'gmail' }]
       })
     });
@@ -1058,12 +1075,21 @@ Rules:
       const parsed = parseResponse(d);
 
       // Normalise and enrich
-      orders = (parsed.orders || []).map(o => ({
-        ...o,
-        hasBook: true,
-        bookId: o.bookId && BOOKS[o.bookId] ? o.bookId : Object.keys(BOOKS)[0],
-        price:  o.price || BOOKS[o.bookId]?.listPrice || book.listPrice
-      }));
+      orders = (parsed.orders || []).map(o => {
+        const resolvedBookId =
+          (o.bookId && BOOKS[o.bookId] && o.bookId) ||
+          inferBookIdFromText(o.itemTitle) ||
+          inferBookIdFromText(o.orderNum) ||
+          inferBookIdFromText(o.notes) ||
+          Object.keys(BOOKS)[0];
+        return {
+          ...o,
+          hasBook: true,
+          bookId: resolvedBookId,
+          orderNum: String(o.orderNum || '').trim(),
+          price: o.price || BOOKS[resolvedBookId]?.listPrice || book.listPrice
+        };
+      });
 
       // Cross-session deduplication
       const allDone = getAllAppliedIds();
