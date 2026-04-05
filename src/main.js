@@ -1006,13 +1006,32 @@ async function fetchOrders() {
   const allApplied = [...getAllAppliedIds(), ...appliedNums];
   const skipHint   = allApplied.length ? `Skip any orders with these order numbers, they are already recorded: ${allApplied.join(', ')}.` : '';
 
+  const normalizeText = (value) => String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+  const normalizeOrderNum = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const hit = raw.match(/#?[a-z0-9]+-[a-z0-9-]+/i);
+    if (hit) {
+      const v = hit[0].toUpperCase();
+      return v.startsWith('#') ? v : `#${v}`;
+    }
+    return raw;
+  };
+
   const inferBookIdFromText = (value) => {
-    const txt = String(value || '').toLowerCase().trim();
+    const txt = normalizeText(value);
     if (!txt) return null;
     for (const b of Object.values(BOOKS)) {
-      const tokens = [b.id, b.title, b.urlParam, b.author]
+      const tokens = [b.id, b.title, b.urlParam, b.author, ...(b.title || '').split(/\s+/)]
         .filter(Boolean)
-        .map(v => String(v).toLowerCase().trim());
+        .map(v => normalizeText(v))
+        .filter(v => v.length >= 4);
       if (tokens.some(t => t && txt.includes(t))) return b.id;
     }
     return null;
@@ -1076,20 +1095,36 @@ Rules:
 
       // Normalise and enrich
       orders = (parsed.orders || []).map(o => {
+        const orderNum = normalizeOrderNum(o.orderNum || o.number || o.order || o.orderNumber);
+        const stableId = String(
+          o.id ||
+          o.gmail_id ||
+          o.gmailMessageId ||
+          o.messageId ||
+          orderNum
+        ).trim();
+        const textBlob = [
+          o.itemTitle, o.product, o.lineItem, o.title, o.notes, o.subject, o.body,
+          o.customer, o.shipName
+        ].filter(Boolean).join(' ');
         const resolvedBookId =
           (o.bookId && BOOKS[o.bookId] && o.bookId) ||
-          inferBookIdFromText(o.itemTitle) ||
+          inferBookIdFromText(textBlob) ||
           inferBookIdFromText(o.orderNum) ||
           inferBookIdFromText(o.notes) ||
-          Object.keys(BOOKS)[0];
+          (BOOKS[activeBook] ? activeBook : Object.keys(BOOKS)[0]);
+        const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
+        const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
         return {
           ...o,
-          hasBook: true,
+          id: stableId || `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          hasBook: !!resolvedBookId,
           bookId: resolvedBookId,
-          orderNum: String(o.orderNum || '').trim(),
-          price: o.price || BOOKS[resolvedBookId]?.listPrice || book.listPrice
+          orderNum,
+          qty,
+          price
         };
-      });
+      }).filter(o => o.orderNum);
 
       // Cross-session deduplication
       const allDone = getAllAppliedIds();
