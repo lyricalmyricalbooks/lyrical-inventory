@@ -1051,28 +1051,90 @@ Rules:
 - Default to qty 1 if not explicit.
 - If the body includes ordinal dates (e.g. "Apr 5th, 2026"), normalize to "Apr 5 2026".`;
 
-  async function attemptScan() {
-    attempt++;
-    setStatus(`Searching Gmail… (attempt ${attempt}/${MAX_RETRIES})`);
-    const r = await fetch('/api/claude', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+  const userPrompt = `Search Gmail for all Big Cartel order confirmation emails from Lyricalmyrical Books since ${sinceDate}. Specifically capture the standard Big Cartel template that says "You've received a new order!" and includes "Order number", "Order date", and shipping/payment sections. Return every order for every book.`;
+  const scanProviders = [
+    {
+      name: 'Claude',
+      endpoint: '/api/claude',
+      buildBody: () => ({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
         system: systemPrompt,
-        messages: [{ role: 'user', content: `Search Gmail for all Big Cartel order confirmation emails from Lyricalmyrical Books since ${sinceDate}. Specifically capture the standard Big Cartel template that says "You've received a new order!" and includes "Order number", "Order date", and shipping/payment sections. Return every order for every book.` }],
+        messages: [{ role: 'user', content: userPrompt }],
         mcp_servers: [{ type: 'url', url: 'https://gmail.mcp.claude.com/mcp', name: 'gmail' }]
       })
-    });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d = await r.json();
-    if (!d || !d.content) throw new Error('Empty AI response');
-    return d;
+    },
+    {
+      name: 'OpenAI',
+      endpoint: '/api/openai',
+      buildBody: () => ({
+        model: 'gpt-4.1-mini',
+        temperature: 0,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
+      })
+    },
+    {
+      name: 'ChatGPT',
+      endpoint: '/api/chatgpt',
+      buildBody: () => ({
+        model: 'gpt-4.1-mini',
+        temperature: 0,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
+      })
+    }
+  ];
+
+  function extractTextContent(d) {
+    if (!d) return '';
+    if (Array.isArray(d.content)) {
+      return d.content.filter(c => c.type === 'text').map(c => c.text).join('');
+    }
+    const chatMessage = d.choices?.[0]?.message?.content;
+    if (typeof chatMessage === 'string') return chatMessage;
+    if (Array.isArray(chatMessage)) {
+      return chatMessage.map(x => x?.text || x?.content || '').join('');
+    }
+    if (typeof d.output_text === 'string') return d.output_text;
+    if (Array.isArray(d.output)) {
+      return d.output
+        .flatMap(item => item?.content || [])
+        .map(chunk => chunk?.text || '')
+        .join('');
+    }
+    return '';
+  }
+
+  async function attemptScan() {
+    attempt++;
+    const providerErrors = [];
+    for (const provider of scanProviders) {
+      setStatus(`Searching Gmail via ${provider.name}… (${attempt}/${MAX_RETRIES})`);
+      try {
+        const r = await fetch(provider.endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(provider.buildBody())
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        const text = extractTextContent(d);
+        if (!text.trim()) throw new Error('Empty AI response');
+        return { provider: provider.name, data: d };
+      } catch (e) {
+        providerErrors.push(`${provider.name}: ${e.message}`);
+      }
+    }
+    throw new Error(providerErrors.join(' | '));
   }
 
   function parseResponse(d) {
-    const text = d.content.filter(c => c.type === 'text').map(c => c.text).join('');
+    const text = extractTextContent(d);
     let parsed;
     const attempts = [
       () => JSON.parse(text.trim()),
@@ -1089,9 +1151,9 @@ Rules:
   let lastError;
   while (attempt < MAX_RETRIES) {
     try {
-      const d = await attemptScan();
+      const { provider, data } = await attemptScan();
       setStatus('Parsing results…');
-      const parsed = parseResponse(d);
+      const parsed = parseResponse(data);
 
       // Normalise and enrich
       orders = (parsed.orders || []).map(o => {
@@ -1136,11 +1198,11 @@ Rules:
       saveScanMemory(mem);
 
       if (orders.length === 0) {
-        addLog(log, `📭 No orders found in Gmail since ${sinceDate}.`, 'warn');
+        addLog(log, `📭 No orders found in Gmail since ${sinceDate} (${provider}).`, 'warn');
       } else {
         const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId] || 0) + 1; return acc; }, {});
         const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
-        addLog(log, `✓ Found ${orders.length} order(s): ${summary}`, 'ok');
+        addLog(log, `✓ Found ${orders.length} order(s) via ${provider}: ${summary}`, 'ok');
         if (already > 0) addLog(log, `↩ ${already} already recorded (skipped)`, 'warn');
         if (fresh.length > 0) addLog(log, `→ ${fresh.length} new order(s) ready`, 'ok');
       }
