@@ -292,18 +292,18 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 #pw-gate .gate-topbar{position:fixed;top:0;left:0;right:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:1.7rem 2.7rem;}
 #pw-gate .wm{font-family:'Syne',sans-serif;font-size:.92rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:#cf973a;white-space:nowrap;}
 #pw-gate .gate-lock{display:flex;align-items:center;justify-content:center;color:#cf973a;opacity:.95;}
-#pw-gate .gate-main{position:relative;z-index:2;width:100%;max-width:500px;}
-#pw-gate .box{width:100%;background:linear-gradient(145deg,rgba(39,30,28,.52),rgba(15,11,11,.84) 58%,rgba(10,8,8,.95));border:1px solid rgba(80,69,55,.4);border-radius:32px;padding:2.1rem 2.3rem 1.9rem;box-shadow:0 24px 48px rgba(0,0,0,.5),0 35px 40px -20px rgba(198,145,58,.2);text-align:center;position:relative;backdrop-filter:blur(7px);}
-#pw-gate .gate-brand-icon{display:inline-flex;align-items:center;justify-content:center;width:68px;height:68px;border-radius:999px;background:rgba(55,52,50,.9);border:1px solid rgba(200,145,58,.35);color:#efbc58;margin-bottom:1.2rem;}
-#pw-gate .gate-brand-icon svg{width:34px;height:34px;display:block;fill:currentColor;}
-#pw-gate .gate-title{font-family:'Playfair Display',serif;font-size:2.45rem;line-height:1.06;color:#f4ece1;margin-bottom:.35rem;font-weight:500;white-space:nowrap;}
-#pw-gate .sub{font-size:.72rem;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:#cabaa7;margin-bottom:1.55rem;}
+#pw-gate .gate-main{position:relative;z-index:2;width:min(100%,640px);}
+#pw-gate .box{width:100%;background:linear-gradient(145deg,rgba(39,30,28,.52),rgba(15,11,11,.84) 58%,rgba(10,8,8,.95));border:1px solid rgba(80,69,55,.4);border-radius:32px;padding:2.6rem 2.8rem 2.3rem;box-shadow:0 24px 48px rgba(0,0,0,.5),0 35px 40px -20px rgba(198,145,58,.2);text-align:center;position:relative;backdrop-filter:blur(7px);}
+#pw-gate .gate-brand-icon{display:inline-flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:999px;background:rgba(55,52,50,.9);border:1px solid rgba(200,145,58,.35);color:#efbc58;margin-bottom:1.2rem;}
+#pw-gate .gate-brand-icon svg{width:38px;height:38px;display:block;fill:currentColor;}
+#pw-gate .gate-title{font-family:'Playfair Display',serif;font-size:clamp(2.45rem,4vw,3rem);line-height:1.06;color:#f4ece1;margin-bottom:.45rem;font-weight:500;white-space:nowrap;}
+#pw-gate .sub{font-size:.82rem;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:#cabaa7;margin-bottom:1.75rem;}
 #pw-gate #gate-desc{font-size:12px;color:var(--cream3);line-height:1.6;display:none;margin-bottom:1.25rem;}
 #pw-gate .gate-field{text-align:left;margin-bottom:1.25rem;}
-#pw-gate .gate-field label{display:block;font-size:12px;font-weight:700;letter-spacing:.31em;text-transform:uppercase;color:rgba(157,142,126,.8);margin-bottom:.75rem;}
+#pw-gate .gate-field label{display:block;font-size:13px;font-weight:700;letter-spacing:.31em;text-transform:uppercase;color:rgba(157,142,126,.8);margin-bottom:.8rem;}
 #pw-gate .gate-input-row{display:flex;align-items:center;gap:.65rem;border-bottom:1px solid #504537;padding-bottom:.6rem;transition:border-color .2s;}
 #pw-gate .gate-input-row:focus-within{border-bottom-color:var(--gold);}
-#pw-gate input{display:block;width:100%;padding:8px 0;font-size:19px;font-family:'Syne',sans-serif;font-weight:500;letter-spacing:.32em;background:transparent;border:none;color:#b4a289;outline:none;}
+#pw-gate input{display:block;width:100%;padding:10px 0;font-size:21px;font-family:'Syne',sans-serif;font-weight:500;letter-spacing:.32em;background:transparent;border:none;color:#b4a289;outline:none;}
 #pw-gate input::placeholder{color:#41362c;letter-spacing:.36em;}
 #pw-gate #pw-toggle{width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;color:#a39380;cursor:pointer;transition:color .15s;}
 #pw-gate #pw-toggle svg{width:22px;height:22px;fill:currentColor;}
@@ -313,7 +313,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 #pw-gate #pw-toggle:hover{color:var(--gold2);}
 #pw-gate input.bad{border-color:#f87171 !important;animation:pwshake .35s ease;}
 @keyframes pwshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-9px)}75%{transform:translateX(9px)}}
-#pw-gate .gate-submit{width:100%;margin-top:.9rem;padding:12px 16px;font-family:'Syne',sans-serif;font-size:.88rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;background:#c58f3a;color:#100e0c;border:none;border-radius:999px;cursor:pointer;transition:transform .15s;display:flex;justify-content:center;align-items:center;box-shadow:0 14px 24px rgba(197,143,58,.28);}
+#pw-gate .gate-submit{width:100%;margin-top:1rem;padding:14px 18px;font-family:'Syne',sans-serif;font-size:.95rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;background:#c58f3a;color:#100e0c;border:none;border-radius:999px;cursor:pointer;transition:transform .15s;display:flex;justify-content:center;align-items:center;box-shadow:0 14px 24px rgba(197,143,58,.28);}
 #pw-gate .gate-lock svg{width:22px;height:22px;display:block;fill:currentColor;}
 #pw-gate .gate-submit:hover{transform:translateY(-1px);}
 #pw-gate .err{min-height:20px;margin-top:10px;font-family:'DM Mono',monospace;font-size:12px;color:#f87171;}
