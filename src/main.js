@@ -1056,6 +1056,8 @@ Rules:
     {
       name: 'Claude',
       endpoint: '/api/claude',
+      endpointFallbacks: ['/api/claude/scan', '/.netlify/functions/claude'],
+      supportsGmailMcp: true,
       buildBody: () => ({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
@@ -1067,6 +1069,8 @@ Rules:
     {
       name: 'OpenAI',
       endpoint: '/api/openai',
+      endpointFallbacks: ['/api/openai/scan', '/.netlify/functions/openai'],
+      supportsGmailMcp: false,
       buildBody: () => ({
         model: 'gpt-4.1-mini',
         temperature: 0,
@@ -1079,6 +1083,8 @@ Rules:
     {
       name: 'ChatGPT',
       endpoint: '/api/chatgpt',
+      endpointFallbacks: ['/api/chatgpt/scan', '/.netlify/functions/chatgpt'],
+      supportsGmailMcp: false,
       buildBody: () => ({
         model: 'gpt-4.1-mini',
         temperature: 0,
@@ -1110,24 +1116,63 @@ Rules:
     return '';
   }
 
+  function extractProviderError(providerName, error) {
+    const msg = String(error?.message || error || 'Unknown error');
+    if (/401|403/.test(msg)) return `${providerName}: unauthorized (auth/config issue)`;
+    if (/404/.test(msg)) return `${providerName}: endpoint not found`;
+    if (/405/.test(msg)) return `${providerName}: method not allowed (route exists but does not accept POST)`;
+    if (/429/.test(msg)) return `${providerName}: rate limited`;
+    if (/500|502|503|504/.test(msg)) return `${providerName}: provider server error`;
+    if (/empty ai response/i.test(msg)) return `${providerName}: empty model response`;
+    return `${providerName}: ${msg}`;
+  }
+
+  async function callProvider(provider, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const endpoints = [provider.endpoint, ...(provider.endpointFallbacks || [])].filter(Boolean);
+      let lastErr = null;
+      for (const endpoint of endpoints) {
+        try {
+          const r = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(provider.buildBody()),
+            signal: controller.signal
+          });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const d = await r.json();
+          const text = extractTextContent(d);
+          if (!text.trim()) throw new Error('Empty AI response');
+          return d;
+        } catch (e) {
+          lastErr = new Error(`${e.message} @ ${endpoint}`);
+          // Only continue probing fallback routes for route-shape errors.
+          if (!/HTTP 404|HTTP 405/.test(String(e?.message || ''))) break;
+        }
+      }
+      throw lastErr || new Error('Provider request failed');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async function attemptScan() {
     attempt++;
     const providerErrors = [];
-    for (const provider of scanProviders) {
+    const ranked = [...scanProviders].sort((a, b) => Number(b.supportsGmailMcp) - Number(a.supportsGmailMcp));
+    for (const provider of ranked) {
       setStatus(`Searching Gmail via ${provider.name}… (${attempt}/${MAX_RETRIES})`);
       try {
-        const r = await fetch(provider.endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(provider.buildBody())
-        });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const d = await r.json();
-        const text = extractTextContent(d);
-        if (!text.trim()) throw new Error('Empty AI response');
-        return { provider: provider.name, data: d };
+        if (!provider.supportsGmailMcp) {
+          providerErrors.push(`${provider.name}: skipped (no Gmail MCP access)`);
+          continue;
+        }
+        const d = await callProvider(provider);
+        return { provider: provider.name, data: d, supportsGmailMcp: !!provider.supportsGmailMcp };
       } catch (e) {
-        providerErrors.push(`${provider.name}: ${e.message}`);
+        providerErrors.push(extractProviderError(provider.name, e));
       }
     }
     throw new Error(providerErrors.join(' | '));
@@ -1199,6 +1244,7 @@ Rules:
 
       if (orders.length === 0) {
         addLog(log, `📭 No orders found in Gmail since ${sinceDate} (${provider}).`, 'warn');
+        addLog(log, 'Tip: if you expected orders, this is usually an API/auth scope issue between your app endpoint and Gmail MCP.', 'warn');
       } else {
         const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId] || 0) + 1; return acc; }, {});
         const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
@@ -1214,6 +1260,10 @@ Rules:
     } catch(e) {
       lastError = e;
       console.warn(`Scan attempt ${attempt} failed:`, e);
+      if (/405/.test(String(lastError?.message || ''))) {
+        // 405 is a routing/config issue, retries will not help.
+        break;
+      }
       if (attempt < MAX_RETRIES) {
         setStatus(`Retrying… (${attempt}/${MAX_RETRIES})`);
         await new Promise(res => setTimeout(res, 1200 * attempt));
@@ -1221,7 +1271,13 @@ Rules:
     }
   }
 
-  addLog(log, `❌ AI Scan failed: ${lastError?.message || 'Unknown error'}. Try again in a moment.`, 'err');
+  addLog(log, `❌ Gmail scan failed: ${lastError?.message || 'Unknown error'}.`, 'err');
+  if (/405/.test(String(lastError?.message || ''))) {
+    addLog(log, 'HTTP 405 means your backend route exists but does not accept POST for this path.', 'err');
+    addLog(log, 'Try wiring the scan proxy to one of these POST routes: /api/claude, /api/claude/scan, or /.netlify/functions/claude.', 'warn');
+  }
+  addLog(log, 'Likely API issue: your current scan requires a backend endpoint that can call a Gmail-enabled MCP provider (Claude path).', 'err');
+  addLog(log, 'OpenAI/ChatGPT endpoints in this app are text-only fallbacks and cannot query your mailbox without a Gmail connector.', 'warn');
   orders = [];
   renderOrders();
   btn.textContent = 'Scan Gmail'; btn.disabled = false;
