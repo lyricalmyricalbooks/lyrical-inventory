@@ -3373,6 +3373,7 @@ Object.assign(window, {
   submitGratuity, openM, closeM, addStore, confirmSend, confirmSale,
   confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
+  pushAllToSheets,
   copyGasCode, saveProductionCosts, savePaymentLinks, savePasswords,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel,
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
