@@ -1040,11 +1040,10 @@ async function fetchOrders() {
   while (attempt < MAX_RETRIES) {
     attempt++;
     try {
-      const res = await fetch(sheetsUrl, {
-        method: 'POST',
-        mode: 'cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'scanGmail', daysBack })
+      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=scanGmail&daysBack=' + daysBack;
+      const res = await fetch(destUrl, {
+        method: 'GET',
+        mode: 'cors'
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
