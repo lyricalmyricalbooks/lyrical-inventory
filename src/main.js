@@ -985,8 +985,12 @@ async function fetchOrders() {
   const book = getBook();
   const btn  = $('scan-btn');
   const log  = 'log-web';
-  let attempt = 0;
   const MAX_RETRIES = 3;
+
+  if (!sheetsUrl) {
+    showToast('Connect Google Sheets first to scan Gmail', 'warn');
+    return;
+  }
 
   const setStatus = (msg) => { btn.innerHTML = `<span class="spinner"></span>${msg}`; btn.disabled = true; };
 
@@ -996,15 +1000,6 @@ async function fetchOrders() {
   const appliedNums  = new Set(mem.appliedNums || []);
   const daysBack     = parseInt(localStorage.getItem('lm-scan-days') || '30');
   const sinceDate    = new Date(Date.now() - daysBack * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-
-  // Book catalog context
-  const bookList = Object.values(BOOKS)
-    .map(b => `"${b.title}" (id:${b.id}, price:${b.currency}${b.listPrice})`)
-    .join(', ');
-
-  // Known order nums to skip (already applied at any point)
-  const allApplied = [...getAllAppliedIds(), ...appliedNums];
-  const skipHint   = allApplied.length ? `Skip any orders with these order numbers, they are already recorded: ${allApplied.join(', ')}.` : '';
 
   const normalizeText = (value) => String(value || '')
     .toLowerCase()
@@ -1037,233 +1032,28 @@ async function fetchOrders() {
     return null;
   };
 
-  const systemPrompt = `You are a Gmail assistant for Lyricalmyrical Books.
-Search Gmail for Big Cartel order confirmation emails dated on or after ${sinceDate}.
-Catalog: ${bookList}.
-${skipHint}
-Rules:
-- Prioritize emails from support@bigcartel.com with subject like "[Lyricalmyrical Books] You've received a new order!".
-- Read the email body content (including HTML-rendered text), and extract fields from sections like "Order number", "Order date", "Shipping address", "Contact and payment info", and line items.
-- "orderNum" can include letters/dashes (example: "#ZGJK-670285"), so preserve it exactly.
-- Use the product/line-item text to pick the right "bookId" when possible.
-- Respond ONLY with raw JSON: {"orders":[{"id":"gmail_msg_id","bookId":"catalog_id","orderNum":"#1234","date":"Mar 14 2026","customer":"Name","email":"email","qty":1,"price":40.00,"hasBook":true,"itemTitle":"Book title from line item","shipName":"Name","shipAddr1":"Addr","shipAddr2":"","shipCity":"City","shipProvince":"ON","shipPostal":"M5V","shipCountry":"Canada"}]}
-- Only include confirmed orders.
-- Default to qty 1 if not explicit.
-- If the body includes ordinal dates (e.g. "Apr 5th, 2026"), normalize to "Apr 5 2026".`;
-
-  const userPrompt = `Search Gmail for all Big Cartel order confirmation emails from Lyricalmyrical Books since ${sinceDate}. Specifically capture the standard Big Cartel template that says "You've received a new order!" and includes "Order number", "Order date", and shipping/payment sections. Return every order for every book.`;
-  const scanProviders = [
-    {
-      name: 'Claude',
-      endpoint: '/api/claude',
-      endpointFallbacks: ['/api/claude/scan', '/.netlify/functions/claude'],
-      supportsGmailMcp: true,
-      buildBody: () => ({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-        mcp_servers: [{ type: 'url', url: 'https://gmail.mcp.claude.com/mcp', name: 'gmail' }]
-      })
-    },
-    {
-      name: 'OpenAI',
-      endpoint: '/api/openai',
-      endpointFallbacks: ['/api/openai/scan', '/.netlify/functions/openai'],
-      supportsGmailMcp: false,
-      buildBody: () => ({
-        model: 'gpt-4.1-mini',
-        temperature: 0,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ]
-      })
-    },
-    {
-      name: 'ChatGPT',
-      endpoint: '/api/chatgpt',
-      endpointFallbacks: ['/api/chatgpt/scan', '/.netlify/functions/chatgpt'],
-      supportsGmailMcp: false,
-      buildBody: () => ({
-        model: 'gpt-4.1-mini',
-        temperature: 0,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ]
-      })
-    }
-  ];
-
-  function extractTextContent(d) {
-    if (!d) return '';
-    if (Array.isArray(d.content)) {
-      return d.content.filter(c => c.type === 'text').map(c => c.text).join('');
-    }
-    const chatMessage = d.choices?.[0]?.message?.content;
-    if (typeof chatMessage === 'string') return chatMessage;
-    if (Array.isArray(chatMessage)) {
-      return chatMessage.map(x => x?.text || x?.content || '').join('');
-    }
-    if (typeof d.output_text === 'string') return d.output_text;
-    if (Array.isArray(d.output)) {
-      return d.output
-        .flatMap(item => item?.content || [])
-        .map(chunk => chunk?.text || '')
-        .join('');
-    }
-    return '';
-  }
-
-  function extractProviderError(providerName, error) {
-    const msg = String(error?.message || error || 'Unknown error');
-    if (/401|403/.test(msg)) return `${providerName}: unauthorized (auth/config issue)`;
-    if (/404/.test(msg)) return `${providerName}: endpoint not found`;
-    if (/405/.test(msg)) return `${providerName}: method not allowed (route exists but does not accept POST)`;
-    if (/429/.test(msg)) return `${providerName}: rate limited`;
-    if (/500|502|503|504/.test(msg)) return `${providerName}: provider server error`;
-    if (/empty ai response/i.test(msg)) return `${providerName}: empty model response`;
-    return `${providerName}: ${msg}`;
-  }
-
-  async function callProvider(provider, timeoutMs = 30000) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const endpoints = [provider.endpoint, ...(provider.endpointFallbacks || [])].filter(Boolean);
-      let lastErr = null;
-      for (const endpoint of endpoints) {
-        try {
-          const r = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(provider.buildBody()),
-            signal: controller.signal
-          });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const d = await r.json();
-          const text = extractTextContent(d);
-          if (!text.trim()) throw new Error('Empty AI response');
-          return d;
-        } catch (e) {
-          lastErr = new Error(`${e.message} @ ${endpoint}`);
-          // Only continue probing fallback routes for route-shape errors.
-          if (!/HTTP 404|HTTP 405/.test(String(e?.message || ''))) break;
-        }
-      }
-      throw lastErr || new Error('Provider request failed');
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  async function attemptScan() {
-    attempt++;
-    const providerErrors = [];
-    const ranked = [...scanProviders].sort((a, b) => Number(b.supportsGmailMcp) - Number(a.supportsGmailMcp));
-    for (const provider of ranked) {
-      setStatus(`Searching Gmail via ${provider.name}… (${attempt}/${MAX_RETRIES})`);
-      try {
-        if (!provider.supportsGmailMcp) {
-          providerErrors.push(`${provider.name}: skipped (no Gmail MCP access)`);
-          continue;
-        }
-        const d = await callProvider(provider);
-        return { provider: provider.name, data: d, supportsGmailMcp: !!provider.supportsGmailMcp };
-      } catch (e) {
-        providerErrors.push(extractProviderError(provider.name, e));
-      }
-    }
-    throw new Error(providerErrors.join(' | '));
-  }
-
-  function parseResponse(d) {
-    const text = extractTextContent(d);
-    let parsed;
-    const attempts = [
-      () => JSON.parse(text.trim()),
-      () => JSON.parse(text.replace(/^```json|```$/gm, '').trim()),
-      () => { const m = text.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); throw new Error('no match'); }
-    ];
-    for (const fn of attempts) {
-      try { parsed = fn(); break; } catch (_) {}
-    }
-    return parsed || { orders: [] };
-  }
-
-  setStatus('Connecting to Gmail Agent…');
+  setStatus('Connecting to Google Apps Script…');
+  let attempt = 0;
+  let parsed = null;
   let lastError;
+
   while (attempt < MAX_RETRIES) {
+    attempt++;
     try {
-      const { provider, data } = await attemptScan();
-      setStatus('Parsing results…');
-      const parsed = parseResponse(data);
-
-      // Normalise and enrich
-      orders = (parsed.orders || []).map(o => {
-        const orderNum = normalizeOrderNum(o.orderNum || o.number || o.order || o.orderNumber);
-        const stableId = String(
-          o.id ||
-          o.gmail_id ||
-          o.gmailMessageId ||
-          o.messageId ||
-          orderNum
-        ).trim();
-        const textBlob = [
-          o.itemTitle, o.product, o.lineItem, o.title, o.notes, o.subject, o.body,
-          o.customer, o.shipName
-        ].filter(Boolean).join(' ');
-        const resolvedBookId =
-          (o.bookId && BOOKS[o.bookId] && o.bookId) ||
-          inferBookIdFromText(textBlob) ||
-          inferBookIdFromText(o.orderNum) ||
-          inferBookIdFromText(o.notes) ||
-          (BOOKS[activeBook] ? activeBook : Object.keys(BOOKS)[0]);
-        const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
-        const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
-        return {
-          ...o,
-          id: stableId || `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          hasBook: !!resolvedBookId,
-          bookId: resolvedBookId,
-          orderNum,
-          qty,
-          price
-        };
-      }).filter(o => o.orderNum);
-
-      // Cross-session deduplication
-      const allDone = getAllAppliedIds();
-      [...appliedNums].forEach(n => allDone.add(n));
-      const fresh = orders.filter(o => !allDone.has(o.id) && !allDone.has(o.orderNum));
-      const already = orders.length - fresh.length;
-
-      mem.lastScan = new Date().toISOString();
-      saveScanMemory(mem);
-
-      if (orders.length === 0) {
-        addLog(log, `📭 No orders found in Gmail since ${sinceDate} (${provider}).`, 'warn');
-        addLog(log, 'Tip: if you expected orders, this is usually an API/auth scope issue between your app endpoint and Gmail MCP.', 'warn');
-      } else {
-        const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId] || 0) + 1; return acc; }, {});
-        const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
-        addLog(log, `✓ Found ${orders.length} order(s) via ${provider}: ${summary}`, 'ok');
-        if (already > 0) addLog(log, `↩ ${already} already recorded (skipped)`, 'warn');
-        if (fresh.length > 0) addLog(log, `→ ${fresh.length} new order(s) ready`, 'ok');
-      }
-      if (lastScanDate) addLog(log, `🕐 Previous scan: ${lastScanDate.toLocaleString()}`, 'ok');
-
-      renderOrders();
-      btn.textContent = 'Scan Gmail'; btn.disabled = false;
-      return;
-    } catch(e) {
+      const res = await fetch(sheetsUrl, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'scanGmail', daysBack })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || !data.ok) throw new Error(data.error || 'Server returned failure');
+      parsed = data;
+      break;
+    } catch (e) {
       lastError = e;
       console.warn(`Scan attempt ${attempt} failed:`, e);
-      if (/405/.test(String(lastError?.message || ''))) {
-        // 405 is a routing/config issue, retries will not help.
-        break;
-      }
       if (attempt < MAX_RETRIES) {
         setStatus(`Retrying… (${attempt}/${MAX_RETRIES})`);
         await new Promise(res => setTimeout(res, 1200 * attempt));
@@ -1271,14 +1061,61 @@ Rules:
     }
   }
 
-  addLog(log, `❌ Gmail scan failed: ${lastError?.message || 'Unknown error'}.`, 'err');
-  if (/405/.test(String(lastError?.message || ''))) {
-    addLog(log, 'HTTP 405 means your backend route exists but does not accept POST for this path.', 'err');
-    addLog(log, 'Try wiring the scan proxy to one of these POST routes: /api/claude, /api/claude/scan, or /.netlify/functions/claude.', 'warn');
+  if (!parsed) {
+    addLog(log, `❌ Apps Script Scan failed: ${lastError?.message || 'Unknown error'}. Check URL or re-authorize Apps Script.`, 'err');
+    orders = [];
+    btn.textContent = 'Scan Gmail'; btn.disabled = false;
+    return;
   }
-  addLog(log, 'Likely API issue: your current scan requires a backend endpoint that can call a Gmail-enabled MCP provider (Claude path).', 'err');
-  addLog(log, 'OpenAI/ChatGPT endpoints in this app are text-only fallbacks and cannot query your mailbox without a Gmail connector.', 'warn');
-  orders = [];
+
+  setStatus('Parsing results…');
+
+  // Normalise and enrich
+  orders = (parsed.orders || []).map(o => {
+    const orderNum = normalizeOrderNum(o.orderNum || o.number || o.order || o.orderNumber);
+    const stableId = String(o.id || orderNum).trim();
+    // Use the fetched email body to identify the correct book
+    const textBlob = [o.body, o.notes, o.itemTitle, o.title].filter(Boolean).join(' ');
+    
+    let resolvedBookId = inferBookIdFromText(textBlob) || inferBookIdFromText(o.orderNum);
+    if (!resolvedBookId) {
+      resolvedBookId = BOOKS[activeBook] ? activeBook : Object.keys(BOOKS)[0];
+    }
+    
+    const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
+    const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
+    
+    return {
+      ...o,
+      id: stableId || `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      hasBook: !!resolvedBookId,
+      bookId: resolvedBookId,
+      orderNum,
+      qty,
+      price
+    };
+  }).filter(o => o.orderNum);
+
+  // Cross-session deduplication
+  const allDone = getAllAppliedIds();
+  [...appliedNums].forEach(n => allDone.add(n));
+  const fresh = orders.filter(o => !allDone.has(o.id) && !allDone.has(o.orderNum));
+  const already = orders.length - fresh.length;
+
+  mem.lastScan = new Date().toISOString();
+  saveScanMemory(mem);
+
+  if (orders.length === 0) {
+    addLog(log, `📭 No orders found in Gmail since ${sinceDate}.`, 'warn');
+  } else {
+    const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId] || 0) + 1; return acc; }, {});
+    const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
+    addLog(log, `✓ Found ${orders.length} order(s): ${summary}`, 'ok');
+    if (already > 0) addLog(log, `↩ ${already} already recorded (skipped)`, 'warn');
+    if (fresh.length > 0) addLog(log, `→ ${fresh.length} new order(s) ready`, 'ok');
+  }
+  if (lastScanDate) addLog(log, `🕐 Previous scan: ${lastScanDate.toLocaleString()}`, 'ok');
+
   renderOrders();
   btn.textContent = 'Scan Gmail'; btn.disabled = false;
 }
