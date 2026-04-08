@@ -217,8 +217,42 @@ function isAuthor() {
 // ── UTILITIES
 const $ = id => document.getElementById(id);
 const fmt = (n, cur='€') => cur + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+const fmtNum = n => Number(n).toFixed(2);
 const fmtD = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—';
 const today = () => new Date().toISOString().split('T')[0];
+const CURRENCY_SYMBOL_TO_CODE = { '€':'EUR', 'CA$':'CAD', '$':'USD', '£':'GBP', '¥':'JPY', 'CHF':'CHF' };
+
+function getBookCurrencyCode(book) {
+  return CURRENCY_SYMBOL_TO_CODE[book.currency] || String(book.currency || 'EUR').replace(/[^A-Z]/g, '').slice(0, 3) || 'EUR';
+}
+
+function paymentSummary(payment, book) {
+  if (!payment || !payment.currency) return '';
+  const native = getBookCurrencyCode(book);
+  const amount = Number(payment.amount || 0);
+  const converted = Number(payment.convertedTotal || 0);
+  if (payment.currency === native) return `Paid ${payment.currency} ${fmtNum(amount)}`;
+  const ratePart = payment.rate ? ` @ ${payment.rate}` : '';
+  return `Paid ${payment.currency} ${fmtNum(amount)}${ratePart} → ${fmt(converted, book.currency)}`;
+}
+
+function buildPaymentMeta({ book, qty, unitPrice, fxEnabled, fxCur, fxAmt, fxRate }) {
+  const total = (Number(qty) || 0) * (Number(unitPrice) || 0);
+  if (fxEnabled) {
+    return {
+      currency: fxCur || 'EUR',
+      amount: Number(fxAmt) || 0,
+      rate: (Number(fxRate) || 0) > 0 ? Number(fxRate) : null,
+      convertedTotal: total
+    };
+  }
+  return {
+    currency: getBookCurrencyCode(book),
+    amount: total,
+    rate: null,
+    convertedTotal: total
+  };
+}
 
 // ── PER-BOOK STATE
 // states[bookId] = { stock, sold, revenue, chStats, hist, stores, ledger, doneIds }
@@ -819,15 +853,21 @@ function renderCurrent() {
 }
 
 // ── ORDER RECORDING
-function recordOrder(num, chan, qty, price, notes) {
+function recordOrder(num, chan, qty, price, notes, payment = null) {
   const s = getState(), book = getBook();
   s.stock = Math.max(0, s.stock - qty);
   s.sold += qty; s.revenue += qty * price;
   if (!s.chStats[chan]) s.chStats[chan]={txns:0,units:0,revenue:0};
   s.chStats[chan].txns++; s.chStats[chan].units+=qty; s.chStats[chan].revenue+=qty*price;
-  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today()});
+  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment});
   renderHist(); updateDash(); saveState(activeBook);
-  syncToSheets({type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:notes||''});
+  syncToSheets({
+    type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:notes||'',
+    paymentCurrency: payment?.currency || getBookCurrencyCode(book),
+    paymentAmount: payment?.amount ?? qty*price,
+    paymentRate: payment?.rate ?? '',
+    convertedTotal: payment?.convertedTotal ?? qty*price
+  });
 }
 
 function renderHist() {
@@ -845,7 +885,11 @@ function renderHist() {
         const rowStyle = isGrat ? ' style="background:var(--cream2);font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
         const isWebsite = (h.chan === 'Website') && !isGrat && !h.voided;
         const labelBtn = isWebsite ? `<button class="edit-btn" onclick="openLabelModal(${i})" title="Print shipping label" style="opacity:1;color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg);">📦</button>` : '';
-        return `<tr class="${voided}"${rowStyle}><td class="mono">${h.num}${editBtn}</td><td>${chanCell}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${h.notes||'—'}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+        const paymentInfo = paymentSummary(h.payment, book);
+        const notesCell = paymentInfo
+          ? `${h.notes || '—'}<br><span style="font-size:11px;color:var(--text4);">${paymentInfo}</span>`
+          : (h.notes || '—');
+        return `<tr class="${voided}"${rowStyle}><td class="mono">${h.num}${editBtn}</td><td>${chanCell}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
       }).join('')
     : '<tr><td colspan="8"><div class="empty-state" style="padding:1.5rem;">No orders yet.</div></td></tr>';
 }
@@ -1123,16 +1167,34 @@ async function fetchOrders() {
 function toggleFx(){
   const on=$('m-fx-toggle').checked;
   $('m-fx-panel').style.display=on?'':'none';
+  $('m-fx-quick-cur').disabled=!on;
   if(on){
     $('m-fx-native-sym').textContent=getBook().currency;
+    const quickCur = $('m-fx-quick-cur').value;
+    const quickOption = [...$('m-fx-cur').options].find(o => o.value === quickCur);
+    if (quickOption) $('m-fx-cur').value = quickCur;
     // Pre-select a sensible foreign currency (not the same as book's)
     const bookCur=getBook().currency.replace(/[^A-Z]/g,'').slice(0,3);
     const sel=$('m-fx-cur');
-    if([...sel.options].some(o=>o.value===bookCur)){
+    if(sel.value===bookCur){
       // pick first option that isn't the book currency
       const alt=[...sel.options].find(o=>o.value!==bookCur);
       if(alt)sel.value=alt.value;
     }
+    if(sel.value==='EUR' || sel.value==='CAD') $('m-fx-quick-cur').value = sel.value;
+    calcFx();
+  }
+}
+function onFxCurrencyChange(){
+  const cur = $('m-fx-cur').value;
+  if (cur === 'EUR' || cur === 'CAD') $('m-fx-quick-cur').value = cur;
+  calcFx();
+}
+function setFxQuickCurrency(){
+  const quickCur = $('m-fx-quick-cur').value;
+  const sel = $('m-fx-cur');
+  if ([...sel.options].some(o => o.value === quickCur)) {
+    sel.value = quickCur;
     calcFx();
   }
 }
@@ -1464,31 +1526,36 @@ function submitManual(){
   }
   $('m-payment-type').style.borderColor='';
   // Build FX note if applicable
+  const fxEnabled = $('m-fx-toggle').checked;
   let fxNote='';
-  if($('m-fx-toggle').checked){
-    const fxAmt=parseFloat($('m-fx-amount').value)||0;
-    const fxCur=$('m-fx-cur').value;
-    const fxRate=parseFloat($('m-fx-rate').value)||0;
+  let fxAmt = 0, fxCur = '', fxRate = 0;
+  if(fxEnabled){
+    fxAmt=parseFloat($('m-fx-amount').value)||0;
+    fxCur=$('m-fx-cur').value;
+    fxRate=parseFloat($('m-fx-rate').value)||0;
     if(fxAmt>0&&fxRate>0) fxNote=`Paid ${fxCur} ${fxAmt.toFixed(2)} @ ${fxRate} rate`;
   }
+  const payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled, fxCur, fxAmt, fxRate });
   const fullNotes=[notes,fxNote,paymentType].filter(Boolean).join(' · ');
 
   if(paymentType==='Payment directly to artist'){
     // Stock & sold count update, but revenue is HELD until artist forwards to publisher
-    recordOrderPendingTransfer(num,chan,qty,price,fullNotes);
+    recordOrderPendingTransfer(num,chan,qty,price,fullNotes,payment);
     addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — ⏳ awaiting artist transfer`,'warn');
     showToast('⏳ Order logged — awaiting artist transfer to publisher');
   } else {
-    recordOrder(num,chan,qty,price,fullNotes);
+    recordOrder(num,chan,qty,price,fullNotes,payment);
     addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)}${fxNote?' ('+fxNote+')':''} → ${getState().stock} remaining`,'ok');
     if(getState().stock<=book.threshold)addLog('log-manual','⚠ Below threshold!','warn');
     showToast('✓ Order saved · syncing to Sheets…');
   }
   $('m-num').value='';$('m-qty').value='1';$('m-price').value=book.listPrice.toFixed(2);$('m-notes').value='';$('m-payment-type').value='';$('m-hint').textContent='';
   $('m-fx-toggle').checked=false;$('m-fx-panel').style.display='none';$('m-fx-amount').value='';$('m-fx-rate').value='';$('m-fx-result').textContent='—';
+  $('m-fx-quick-cur').disabled=true;
+  $('m-fx-quick-cur').value='EUR';
 }
 
-function recordOrderPendingTransfer(num,chan,qty,price,notes){
+function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
   const s=getState(),book=getBook();
   // Reduce stock and count as sold, but do NOT add to revenue yet
   s.stock=Math.max(0,s.stock-qty);
@@ -1496,11 +1563,17 @@ function recordOrderPendingTransfer(num,chan,qty,price,notes){
   if(!s.chStats[chan])s.chStats[chan]={txns:0,units:0,revenue:0};
   s.chStats[chan].txns++;s.chStats[chan].units+=qty;
   // Add to history with pending flag
-  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),artistPending:true});
+  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),artistPending:true,payment});
   // Add to artistTransfers queue
-  s.artistTransfers.push({id:Date.now(),num,chan,qty,price,total:qty*price,notes:notes||'',date:today()});
+  s.artistTransfers.push({id:Date.now(),num,chan,qty,price,total:qty*price,notes:notes||'',date:today(),payment});
   renderHist();updateDash();saveState(activeBook);
-  syncToSheets({type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:(notes||'')+' [PENDING ARTIST TRANSFER]'});
+  syncToSheets({
+    type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:(notes||'')+' [PENDING ARTIST TRANSFER]',
+    paymentCurrency: payment?.currency || getBookCurrencyCode(book),
+    paymentAmount: payment?.amount ?? qty*price,
+    paymentRate: payment?.rate ?? '',
+    convertedTotal: payment?.convertedTotal ?? qty*price
+  });
 }
 
 function markArtistTransferReceived(transferId){
@@ -1517,7 +1590,13 @@ function markArtistTransferReceived(transferId){
   // Remove from pending queue
   s.artistTransfers=s.artistTransfers.filter(x=>x.id!==transferId);
   renderHist();updateDash();renderArtistTransfers();saveState(activeBook);
-  syncToSheets({type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST TRANSFER RECEIVED]'});
+  syncToSheets({
+    type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST TRANSFER RECEIVED]',
+    paymentCurrency: t.payment?.currency || getBookCurrencyCode(book),
+    paymentAmount: t.payment?.amount ?? t.total,
+    paymentRate: t.payment?.rate ?? '',
+    convertedTotal: t.payment?.convertedTotal ?? t.total
+  });
   showToast(`✓ Transfer received — ${fmt(t.total,book.currency)} added to revenue`);
 }
 
@@ -2599,6 +2678,10 @@ function exportAllToCSV() {
     'Qty',
     'Price/Rate',
     'Total/Amount Due',
+    'Payment Currency',
+    'Payment Amount',
+    'FX Rate',
+    'Converted Total',
     'Stock After',
     'Status',
     'Notes'
@@ -2622,6 +2705,10 @@ function exportAllToCSV() {
         h.qty ?? '',
         h.price ?? '',
         (h.qty || 0) * (h.price || 0),
+        h.payment?.currency || '',
+        h.payment?.amount ?? '',
+        h.payment?.rate ?? '',
+        h.payment?.convertedTotal ?? '',
         h.after ?? '',
         h.voided ? 'VOID' : 'OK',
         h.notes || ''
@@ -2642,6 +2729,10 @@ function exportAllToCSV() {
         l.rate ?? '',
         l.amountDue ?? '',
         '',
+        '',
+        '',
+        '',
+        '',
         l.status || (l.voided ? 'VOID' : 'OK'),
         l.notes || ''
       ]);
@@ -2660,6 +2751,10 @@ function exportAllToCSV() {
         '',
         '',
         e.amount ?? '',
+        '',
+        '',
+        '',
+        '',
         '',
         e.received ? 'RECEIVED' : 'PENDING',
         e.desc || ''
@@ -3369,7 +3464,7 @@ async function boot(forcedBook) {
 Object.assign(window, {
   tryUnlock, logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
-  fetchOrders, applyOne, applyAll, toggleFx, calcFx, submitManual,
+  fetchOrders, applyOne, applyAll, toggleFx, onFxCurrencyChange, setFxQuickCurrency, calcFx, submitManual,
   submitGratuity, openM, closeM, addStore, confirmSend, confirmSale,
   confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,

@@ -325,6 +325,10 @@
           <input type="checkbox" id="m-fx-toggle" onchange="toggleFx()" style="width:auto;accent-color:var(--gold);cursor:pointer;">
           Paid in a different currency
         </label>
+        <select id="m-fx-quick-cur" onchange="setFxQuickCurrency()" style="margin-top:8px;" disabled>
+          <option value="EUR">EUR €</option>
+          <option value="CAD">CAD $</option>
+        </select>
       </div>
     </div>
     <!-- FOREIGN CURRENCY PANEL (hidden by default) -->
@@ -333,7 +337,7 @@
       <div class="g4" style="align-items:end;">
         <div class="form-group" style="margin:0;">
           <label>Currency paid in</label>
-          <select id="m-fx-cur" onchange="calcFx()">
+          <select id="m-fx-cur" onchange="onFxCurrencyChange()">
             <option value="USD">USD $</option>
             <option value="EUR">EUR €</option>
             <option value="GBP">GBP £</option>
