@@ -1497,7 +1497,6 @@ function confirmImport() {
 
 function phint(){
   const book=getBook(),p=parseFloat($('m-price').value)||0,q=parseInt($('m-qty').value)||1,h=$('m-hint'),t=p*q;
-  $('m-sym').textContent=book.currency;
   const fxOn=$('m-fx-panel').style.display!=='none';
   if(fxOn){
     h.className='hint-text';h.textContent=t>0?`Converted total ${fmt(t,book.currency)}`:'';
@@ -3295,8 +3294,10 @@ async function savePasswords() {
 // ── MANUAL PRICE FIELD: update default to current book on tab switch
 function updateManualForm(){
   const book=getBook();
-  $('m-sym').textContent=book.currency;
   $('m-price').value=book.listPrice.toFixed(2);
+  $('m-price-cur').value='BOOK';
+  $('m-fx-cur').value=getBookCurrencyCode(book);
+  toggleFxPanel(false);
   $('g-date').value=today();
 }
 
