@@ -198,6 +198,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   font-family:'DM Mono',monospace;
 }
 .price-wrap input{padding-left:44px;}
+.price-inline{display:grid;grid-template-columns:minmax(120px,42%) 1fr;gap:8px;align-items:center;}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .g4{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;}
 
