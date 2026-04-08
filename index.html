@@ -304,7 +304,7 @@
     <div class="g4" style="margin-bottom:12px;">
       <div class="form-group"><label>Order #</label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label>Qty</label><input type="number" id="m-qty" value="1" min="1" oninput="phint()"></div>
-      <div class="form-group"><label>Price paid</label><div class="price-wrap"><span class="sym" id="m-sym">€</span><input type="number" id="m-price" value="40.00" step="0.01" oninput="phint()"></div></div>
+      <div class="form-group"><label>Price paid</label><div class="price-wrap"><span class="sym" id="m-sym">€</span><input type="number" id="m-price" value="40.00" step="0.01" oninput="phint()"></div><select id="m-price-cur" style="margin-top:8px;" onchange="onManualCurrencyChange()"><option value="BOOK">Book currency</option><option value="USD">USD $</option><option value="EUR">EUR €</option><option value="GBP">GBP £</option><option value="CAD">CAD $</option><option value="AUD">AUD $</option><option value="CHF">CHF</option><option value="JPY">JPY ¥</option><option value="NOK">NOK kr</option><option value="SEK">SEK kr</option><option value="DKK">DKK kr</option><option value="OTHER">Other</option></select></div>
       <div class="form-group"><label>&nbsp;</label><button class="btn gold" style="width:100%;height:38px;" onclick="submitManual()">Add order</button></div>
     </div>
     <div class="g2">
@@ -321,14 +321,7 @@
         </select>
       </div>
       <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:12px;font-weight:600;color:var(--text2);">
-          <input type="checkbox" id="m-fx-toggle" onchange="toggleFx()" style="width:auto;accent-color:var(--gold);cursor:pointer;">
-          Paid in a different currency
-        </label>
-        <select id="m-fx-quick-cur" onchange="setFxQuickCurrency()" style="margin-top:8px;" disabled>
-          <option value="EUR">EUR €</option>
-          <option value="CAD">CAD $</option>
-        </select>
+        <div style="font-size:11px;color:var(--text3);line-height:1.45;">Choose the paid currency from the <strong>Price paid</strong> dropdown. If it is different from the book currency, enter FX details below.</div>
       </div>
     </div>
     <!-- FOREIGN CURRENCY PANEL (hidden by default) -->

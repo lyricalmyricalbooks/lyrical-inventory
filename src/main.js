@@ -1164,39 +1164,28 @@ async function fetchOrders() {
 }
 
 // ── MANUAL
-function toggleFx(){
-  const on=$('m-fx-toggle').checked;
-  $('m-fx-panel').style.display=on?'':'none';
-  $('m-fx-quick-cur').disabled=!on;
-  if(on){
+function toggleFxPanel(show){
+  $('m-fx-panel').style.display = show ? '' : 'none';
+  if(show){
     $('m-fx-native-sym').textContent=getBook().currency;
-    const quickCur = $('m-fx-quick-cur').value;
-    const quickOption = [...$('m-fx-cur').options].find(o => o.value === quickCur);
-    if (quickOption) $('m-fx-cur').value = quickCur;
-    // Pre-select a sensible foreign currency (not the same as book's)
-    const bookCur=getBook().currency.replace(/[^A-Z]/g,'').slice(0,3);
-    const sel=$('m-fx-cur');
-    if(sel.value===bookCur){
-      // pick first option that isn't the book currency
-      const alt=[...sel.options].find(o=>o.value!==bookCur);
-      if(alt)sel.value=alt.value;
-    }
-    if(sel.value==='EUR' || sel.value==='CAD') $('m-fx-quick-cur').value = sel.value;
     calcFx();
   }
 }
+
+function onManualCurrencyChange(){
+  const book = getBook();
+  const native = getBookCurrencyCode(book);
+  const selected = $('m-price-cur').value;
+  const actualCur = selected === 'BOOK' ? native : selected;
+
+  const fxEnabled = actualCur !== native;
+  toggleFxPanel(fxEnabled);
+  $('m-fx-cur').value = actualCur;
+  phint();
+}
+
 function onFxCurrencyChange(){
-  const cur = $('m-fx-cur').value;
-  if (cur === 'EUR' || cur === 'CAD') $('m-fx-quick-cur').value = cur;
   calcFx();
-}
-function setFxQuickCurrency(){
-  const quickCur = $('m-fx-quick-cur').value;
-  const sel = $('m-fx-cur');
-  if ([...sel.options].some(o => o.value === quickCur)) {
-    sel.value = quickCur;
-    calcFx();
-  }
 }
 function calcFx(){
   const amt=parseFloat($('m-fx-amount').value)||0;
@@ -1509,7 +1498,8 @@ function confirmImport() {
 function phint(){
   const book=getBook(),p=parseFloat($('m-price').value)||0,q=parseInt($('m-qty').value)||1,h=$('m-hint'),t=p*q;
   $('m-sym').textContent=book.currency;
-  if($('m-fx-toggle').checked){
+  const fxOn=$('m-fx-panel').style.display!=='none';
+  if(fxOn){
     h.className='hint-text';h.textContent=t>0?`Converted total ${fmt(t,book.currency)}`:'';
   } else if(p<book.listPrice){h.className='hint-text amber';h.textContent=`Discounted from ${book.currency}${book.listPrice} — total ${fmt(t,book.currency)}`;}
   else{h.className='hint-text';h.textContent=q>1?`Total ${fmt(t,book.currency)}`:'';};
@@ -1526,12 +1516,12 @@ function submitManual(){
   }
   $('m-payment-type').style.borderColor='';
   // Build FX note if applicable
-  const fxEnabled = $('m-fx-toggle').checked;
+  const fxEnabled = $('m-fx-panel').style.display !== 'none';
   let fxNote='';
   let fxAmt = 0, fxCur = '', fxRate = 0;
   if(fxEnabled){
     fxAmt=parseFloat($('m-fx-amount').value)||0;
-    fxCur=$('m-fx-cur').value;
+    fxCur=$('m-price-cur').value==='BOOK' ? getBookCurrencyCode(book) : $('m-price-cur').value;
     fxRate=parseFloat($('m-fx-rate').value)||0;
     if(fxAmt>0&&fxRate>0) fxNote=`Paid ${fxCur} ${fxAmt.toFixed(2)} @ ${fxRate} rate`;
   }
@@ -1550,9 +1540,7 @@ function submitManual(){
     showToast('✓ Order saved · syncing to Sheets…');
   }
   $('m-num').value='';$('m-qty').value='1';$('m-price').value=book.listPrice.toFixed(2);$('m-notes').value='';$('m-payment-type').value='';$('m-hint').textContent='';
-  $('m-fx-toggle').checked=false;$('m-fx-panel').style.display='none';$('m-fx-amount').value='';$('m-fx-rate').value='';$('m-fx-result').textContent='—';
-  $('m-fx-quick-cur').disabled=true;
-  $('m-fx-quick-cur').value='EUR';
+  $('m-price-cur').value='BOOK';$('m-fx-cur').value=getBookCurrencyCode(book);toggleFxPanel(false);$('m-fx-amount').value='';$('m-fx-rate').value='';$('m-fx-result').textContent='—';
 }
 
 function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
@@ -3464,7 +3452,7 @@ async function boot(forcedBook) {
 Object.assign(window, {
   tryUnlock, logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
-  fetchOrders, applyOne, applyAll, toggleFx, onFxCurrencyChange, setFxQuickCurrency, calcFx, submitManual,
+  fetchOrders, applyOne, applyAll, onManualCurrencyChange, onFxCurrencyChange, calcFx, submitManual,
   submitGratuity, openM, closeM, addStore, confirmSend, confirmSale,
   confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
