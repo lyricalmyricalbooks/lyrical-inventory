@@ -1058,6 +1058,13 @@ function json_(obj) {
     <div class="form-group"><label>Author Google Email</label><input type="email" id="nb-pw" placeholder="Used for author sign-in access"></div>
   </div>
   <div class="form-group"><label>Initial Production Cost</label><input id="nb-prod" type="number" value="0"></div>
+  <div class="form-group" style="margin-top:4px;">
+    <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for QR codes)</span></label>
+    <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…">
+    <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
+      Create a Payment Link in your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a> → copy and paste the URL here. The QR code will point directly to this link.
+    </div>
+  </div>
   <div class="modal-footer"><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
 </div></div>
 

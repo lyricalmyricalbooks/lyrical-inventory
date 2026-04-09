@@ -58,6 +58,7 @@ function resetBookForm() {
   $('nb-accent').value = '#c8913a';
   $('nb-pw').value = '';
   $('nb-prod').value = '0';
+  $('nb-paylink').value = '';
 }
 
 function openAddBookModal() {
@@ -83,6 +84,7 @@ function openEditBookModal(id) {
   $('nb-accent').value = book.accent || '#c8913a';
   $('nb-pw').value = book.authorEmail || '';
   $('nb-prod').value = book.productionCost ?? 0;
+  $('nb-paylink').value = book.paymentLink || '';
   openM('add-book');
 }
 
@@ -107,7 +109,7 @@ async function saveBookFromModal() {
     currency: $('nb-cur').value || '€',
     threshold: parseInt($('nb-thresh').value) || 10,
     productionCost: parseFloat($('nb-prod').value) || 0,
-    paymentLink: currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
+    paymentLink: $('nb-paylink').value.trim() || currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
     accent: $('nb-accent').value,
     accentBg: hexToRgba($('nb-accent').value, 0.1),
     urlParam: currentBook.urlParam || id,
