@@ -2304,6 +2304,7 @@ function addSheetsLog(book,type,summary,status){
   persistSheetsLog();
   renderSheetsLog();
 }
+let _syncLogPage = 0;
 function renderSheetsLog(){
   const b=$('sheets-log-body');
   if(!b) return;
@@ -2311,9 +2312,23 @@ function renderSheetsLog(){
     b.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;">No sync events yet.</td></tr>';
     return;
   }
+  const PAGE_SIZE=15;
+  const totalPages=Math.ceil(sheetsLog.length/PAGE_SIZE);
+  if(_syncLogPage>=totalPages) _syncLogPage=Math.max(0,totalPages-1);
+  const pageItems=sheetsLog.slice(_syncLogPage*PAGE_SIZE, (_syncLogPage+1)*PAGE_SIZE);
+  
   const labelFor=(st)=> st==='ok'?'Written':st==='unknown'?'Sent (unverified)':st==='queued'?'Queued':st==='retry'?'Retrying':'Failed';
   const classFor=(st)=> st==='ok'||st==='unknown'?'ok':st==='queued'||st==='retry'?'syncing':'err';
-  b.innerHTML=sheetsLog.map(l=>`<tr><td style="white-space:nowrap;">${l.time}</td><td style="font-size:11px;color:var(--text3);">${l.book}</td><td>${l.type}</td><td style="color:var(--text2);font-size:12px;">${l.summary}</td><td><span class="log-status ${classFor(l.status)}"></span><span style="color:${classFor(l.status)==='err'?'var(--red)':'var(--green)'};">${labelFor(l.status)}</span></td></tr>`).join('');
+  let html=pageItems.map(l=>`<tr><td style="white-space:nowrap;">${l.time}</td><td style="font-size:11px;color:var(--text3);">${l.book}</td><td>${l.type}</td><td style="color:var(--text2);font-size:12px;">${l.summary}</td><td><span class="log-status ${classFor(l.status)}"></span><span style="color:${classFor(l.status)==='err'?'var(--red)':'var(--green)'};">${labelFor(l.status)}</span></td></tr>`).join('');
+  
+  if(totalPages>1){
+    html+=`<tr><td colspan="5" style="text-align:center;padding:1rem;background:rgba(0,0,0,.15);">
+      <button class="btn sm" onclick="_syncLogPage=Math.max(0,_syncLogPage-1);renderSheetsLog()" ${_syncLogPage===0?'disabled':''}>← Prev</button>
+      <span style="margin:0 15px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">Page ${_syncLogPage+1} of ${totalPages}</span>
+      <button class="btn sm" onclick="_syncLogPage=Math.min(${totalPages-1},_syncLogPage+1);renderSheetsLog()" ${_syncLogPage===totalPages-1?'disabled':''}>Next →</button>
+    </td></tr>`;
+  }
+  b.innerHTML=html;
 }
 function copyGasCode(){navigator.clipboard.writeText($('gas-code').textContent).then(()=>showToast('✓ Code copied!'));}
 async function verifyUrl(){
@@ -2528,6 +2543,7 @@ async function loadSystemBackups() {
   renderSystemBackups();
 }
 
+let _sysBackupPage = 0;
 function renderSystemBackups() {
   const body = $('system-backup-list');
   const status = $('system-backup-status');
@@ -2540,7 +2556,12 @@ function renderSystemBackups() {
   }
 
   const sorted = [...systemBackups].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  body.innerHTML = sorted.map(b => `
+  const PAGE_SIZE = 10;
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  if(_sysBackupPage >= totalPages) _sysBackupPage = Math.max(0, totalPages - 1);
+  const pageItems = sorted.slice(_sysBackupPage * PAGE_SIZE, (_sysBackupPage + 1) * PAGE_SIZE);
+
+  let html = pageItems.map(b => `
     <tr>
       <td>${new Date(b.createdAt).toLocaleString()}</td>
       <td>${b.type === 'manual' ? 'Manual' : 'Auto daily'}</td>
@@ -2548,6 +2569,15 @@ function renderSystemBackups() {
       <td class="r"><button class="btn sm" onclick="restoreSystemBackup('${b.id}')">Restore</button></td>
     </tr>
   `).join('');
+
+  if(totalPages > 1){
+    html+=`<tr><td colspan="4" style="text-align:center;padding:1rem;background:rgba(0,0,0,.15);">
+      <button class="btn sm" onclick="_sysBackupPage=Math.max(0,_sysBackupPage-1);renderSystemBackups()" ${_sysBackupPage===0?'disabled':''}>← Prev</button>
+      <span style="margin:0 15px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">Page ${_sysBackupPage+1} of ${totalPages}</span>
+      <button class="btn sm" onclick="_sysBackupPage=Math.min(${totalPages-1},_sysBackupPage+1);renderSystemBackups()" ${_sysBackupPage===totalPages-1?'disabled':''}>Next →</button>
+    </td></tr>`;
+  }
+  body.innerHTML = html;
 
   const latest = sorted[0];
   if (status) status.textContent = `Latest system backup: ${new Date(latest.createdAt).toLocaleString()}`;
