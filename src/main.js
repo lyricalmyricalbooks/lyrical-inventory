@@ -671,9 +671,16 @@ function syncRoleUI() {
     wm.style.display = 'none';
   }
 
-  if (authorNow && ($('tab-website')?.classList.contains('active') || $('tab-financials')?.classList.contains('active') || $('tab-sheets')?.classList.contains('active') || $('tab-backups')?.classList.contains('active'))) {
-    switchTab('dashboard');
-  }
+  // When switching TO author view — redirect away from publisher-only tabs
+  const publisherOnlyActive = $('tab-website')?.classList.contains('active')
+    || $('tab-financials')?.classList.contains('active')
+    || $('tab-sheets')?.classList.contains('active')
+    || $('tab-backups')?.classList.contains('active')
+    || $('tab-qrcodes')?.classList.contains('active');
+  if (authorNow && publisherOnlyActive) switchTab('dashboard');
+
+  // When switching BACK to publisher view — redirect away from author-only myqr tab
+  if (!authorNow && $('tab-myqr')?.classList.contains('active')) switchTab('dashboard');
 }
 
 function toggleCurrentBookView() {
