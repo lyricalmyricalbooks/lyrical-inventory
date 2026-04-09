@@ -84,7 +84,7 @@ function openEditBookModal(id) {
   $('nb-accent').value = book.accent || '#c8913a';
   $('nb-pw').value = book.authorEmail || '';
   $('nb-prod').value = book.productionCost ?? 0;
-  $('nb-paylink').value = book.paymentLink || '';
+  $('nb-paylink').value = book.stripeLink || '';
   openM('add-book');
 }
 
@@ -109,7 +109,8 @@ async function saveBookFromModal() {
     currency: $('nb-cur').value || '€',
     threshold: parseInt($('nb-thresh').value) || 10,
     productionCost: parseFloat($('nb-prod').value) || 0,
-    paymentLink: $('nb-paylink').value.trim() || currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
+    paymentLink: currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
+    stripeLink: $('nb-paylink').value.trim() || currentBook.stripeLink || '',
     accent: $('nb-accent').value,
     accentBg: hexToRgba($('nb-accent').value, 0.1),
     urlParam: currentBook.urlParam || id,
@@ -184,7 +185,7 @@ let currentQR = null;
 function openPaymentQRModal() {
   if (!activeBook || activeBook === 'all' || isAuthor()) return;
   const book = BOOKS[activeBook];
-  const url = book.paymentLink || 'https://paypal.me/lyricalmyricalbooks';
+  const url = book.stripeLink || book.paymentLink || 'https://paypal.me/lyricalmyricalbooks';
   
   $('qr-book-title').textContent = book.title;
   $('qr-payment-link').value = url;
