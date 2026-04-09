@@ -34,24 +34,12 @@
       <h1 class="gate-title">Lyricalmyrical Books</h1>
       <div class="sub" id="gate-sub">Inventory App</div>
       <div id="gate-desc"></div>
-      <div class="gate-field">
-        <label for="pw-input">Passphrase</label>
-        <div class="gate-input-row">
-          <input type="password" id="pw-input" placeholder="••••••••••••" onkeydown="if(event.key==='Enter')tryUnlock()">
-          <button
-            type="button"
-            id="pw-toggle"
-            tabindex="-1"
-            aria-label="Show password"
-            onclick="const p=document.getElementById('pw-input'); const show=p.type==='password'; p.type=show?'text':'password'; this.classList.toggle('showing', show); this.setAttribute('aria-label', show?'Hide password':'Show password');">
-            <svg class="eye-open" viewBox="0 0 24 24" role="img"><path d="M12 5c-5.1 0-9.3 3.2-11 7 1.7 3.8 5.9 7 11 7s9.3-3.2 11-7c-1.7-3.8-5.9-7-11-7zm0 11a4 4 0 110-8 4 4 0 010 8z"/></svg>
-            <svg class="eye-closed" viewBox="0 0 24 24" role="img"><path d="M2.1 3.5l18.4 18.4-1.4 1.4-3.1-3.1A12.5 12.5 0 0112 19c-5.1 0-9.3-3.2-11-7a12.4 12.4 0 013.8-4.9L.7 4.9l1.4-1.4zM7.6 9l1.6 1.6a3.3 3.3 0 004.2 4.2l1.6 1.6A5.3 5.3 0 017.6 9zm4.4-4c5.1 0 9.3 3.2 11 7a12.3 12.3 0 01-3.9 4.9l-1.4-1.4A10 10 0 0020.8 12c-1.4-2.9-4.7-5-8.8-5-.9 0-1.7.1-2.5.3L7.8 5.6A11.9 11.9 0 0112 5z"/></svg>
-          </button>
-        </div>
+      <div style="margin-top: 1.5rem; text-align: center;">
+        <button class="gate-submit" onclick="tryGoogleLogin()" style="background: white; color: black; display: flex; align-items: center; justify-content: center; gap: 10px;">
+          <svg viewBox="0 0 48 48" width="20px" height="20px"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.7 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          <span style="font-family: 'Syne', sans-serif; font-weight: 600;">Sign in with Google</span>
+        </button>
       </div>
-      <button class="gate-submit" onclick="tryUnlock()">
-        <span>Unlock</span>
-      </button>
       <div class="err" id="pw-err"></div>
     </div>
   </main>
@@ -524,19 +512,14 @@
     <div id="catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
   </div>
 
-  <!-- PASSWORD ACCESS SETTINGS -->
+  <!-- MANAGEMENT ACCESS -->
   <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
       <div>
-        <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">App Passwords</div>
-        <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage the master Publisher password and individual Author access passwords.</div>
+        <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">App Access Control</div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.6;">Access is managed exclusively via Google Sign-In verified email addresses. The Publisher (Master) account is set to your master Gmail. To grant an artist access, add their Gmail to their book via the <b>Book Catalog</b> above.</div>
       </div>
     </div>
-    <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label>Publisher (Master) Password</label><input type="text" id="pw-pub" placeholder="e.g. 12345"></div>
-    </div>
-    <div id="author-password-fields" style="display:flex;flex-direction:column;gap:12px;"></div>
-    <button class="btn gold" style="margin-top:14px;" onclick="savePasswords()">Save passwords</button>
   </div>
 
   <div class="sheets-setup" id="sheets-setup-card">
@@ -1066,7 +1049,7 @@ function json_(obj) {
   </div>
   <div class="g2" style="margin-bottom:12px;">
     <div class="form-group"><label>Accent Color</label><input id="nb-accent" type="color" value="#c8913a"></div>
-    <div class="form-group"><label>Author Password</label><input id="nb-pw" placeholder="Used for author view"></div>
+    <div class="form-group"><label>Author Google Email</label><input type="email" id="nb-pw" placeholder="Used for author sign-in access"></div>
   </div>
   <div class="form-group"><label>Initial Production Cost</label><input id="nb-prod" type="number" value="0"></div>
   <div class="modal-footer"><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>

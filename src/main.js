@@ -81,7 +81,7 @@ function openEditBookModal(id) {
   $('nb-cur').value = book.currency || '€';
   $('nb-thresh').value = book.threshold ?? 10;
   $('nb-accent').value = book.accent || '#c8913a';
-  $('nb-pw').value = book.authorPassword || '';
+  $('nb-pw').value = book.authorEmail || '';
   $('nb-prod').value = book.productionCost ?? 0;
   openM('add-book');
 }
@@ -3239,128 +3239,25 @@ function downloadTaxReport() {
   a.click();
 }
 
-// ── PASSWORDS
-let _loadedPasswords = null;
-async function loadPasswords() {
+// ── GOOGLE AUTHENTICATION
+window.tryGoogleLogin = async function() {
+  const err = $('pw-err');
+  err.textContent = 'Contacting Google...';
   try {
-    _loadedPasswords = await window._fbLoadSettings('passwords');
-  } catch(_) {}
-  if (!_loadedPasswords) {
-    _loadedPasswords = { publisher: '12345', authors: {} };
+    await window._fbSignInWithGoogle();
+    err.textContent = 'Authenticating...';
+  } catch (e) {
+    console.error(e);
+    err.textContent = 'Sign-in failed or was cancelled.';
+    setTimeout(() => { err.textContent = ''; }, 3000);
   }
-  if (!_loadedPasswords.authors) _loadedPasswords.authors = {};
-  Object.values(BOOKS).forEach(b => {
-    if (_loadedPasswords.authors[b.id] === undefined) {
-      _loadedPasswords.authors[b.id] = b.authorPassword || '';
-    }
-  });
-  if ($('pw-pub')) $('pw-pub').value = _loadedPasswords.publisher || '';
-  renderAuthorPasswords();
-}
-
-function renderAuthorPasswords() {
-  const container = $('author-password-fields');
-  if (!container) return;
-  container.innerHTML = Object.values(BOOKS).map(book => `
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-      <div style="display:flex;align-items:center;gap:8px;min-width:200px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
-        <span style="font-size:13px;font-weight:600;color:var(--text);">${book.title}</span>
-      </div>
-      <div class="form-group" style="flex:1;margin:0;">
-        <input type="text" id="pw-auth-${book.id}" value="${(_loadedPasswords.authors && _loadedPasswords.authors[book.id]) || ''}" placeholder="Author password">
-      </div>
-    </div>`).join('');
-}
-
-async function savePasswords() {
-  const pub = $('pw-pub').value.trim();
-  const authors = {};
-  Object.values(BOOKS).forEach(b => {
-    const inp = $('pw-auth-'+b.id);
-    if(inp) authors[b.id] = inp.value.trim();
-  });
-  
-  const data = { publisher: pub, authors: authors };
-  try {
-    await window._fbSaveSettings('passwords', data);
-    _loadedPasswords = data;
-    showToast('✓ Passwords saved securely to Firebase');
-  } catch(e) {
-    showToast('⚠ Error saving passwords', 'err');
-  }
-}
-
-// ── MANUAL PRICE FIELD: update default to current book on tab switch
-function updateManualForm(){
-  const book=getBook();
-  $('m-price').value=book.listPrice.toFixed(2);
-  $('m-price-cur').value='BOOK';
-  $('m-fx-cur').value=getBookCurrencyCode(book);
-  toggleFxPanel(false);
-  $('g-date').value=today();
-}
-
-// ── PASSWORD
-async function tryUnlock() {
-  const inp=$('pw-input'), err=$('pw-err'), val=inp.value;
-
-  inp.disabled = true;
-  err.textContent = 'Verifying...';
-
-  let pwData = null;
-  try {
-    pwData = await window._fbLoadSettings('passwords');
-  } catch(e) {}
-  
-  // Fallback defaults if never saved before
-  if (!pwData) {
-    pwData = { publisher: '12345', authors: {} };
-  }
-  if (!pwData.authors) pwData.authors = {};
-  Object.values(BOOKS).forEach(b => {
-    if (pwData.authors[b.id] === undefined) {
-      pwData.authors[b.id] = b.authorPassword || '';
-    }
-  });
-
-  inp.disabled = false;
-  err.textContent = '';
-
-  // Publisher password — full access
-  if (val === pwData.publisher && val !== '') {
-    sessionStorage.setItem('lm-unlocked','publisher');
-    showApp('publisher');
-    return;
-  }
-
-  // Author passwords — per-book access
-  if (IS_AUTHOR_MODE) {
-    if (pwData.authors[ACTIVE_BOOK_FORCED] === val && val !== '') {
-      sessionStorage.setItem('lm-unlocked', 'author:'+ACTIVE_BOOK_FORCED);
-      showApp('author', ACTIVE_BOOK_FORCED);
-      return;
-    }
-  } else {
-    const matchedBookId = Object.keys(pwData.authors || {}).find(id => pwData.authors[id] === val && val !== '');
-    if (matchedBookId && BOOKS[matchedBookId]) {
-      sessionStorage.setItem('lm-unlocked', 'author:'+matchedBookId);
-      showApp('author', matchedBookId);
-      return;
-    }
-  }
-
-  // Wrong
-  inp.value=''; err.textContent='Wrong password, try again.';
-  inp.classList.remove('bad'); void inp.offsetWidth; inp.classList.add('bad');
-  setTimeout(()=>{inp.classList.remove('bad');err.textContent='';},2000);
-  inp.focus();
-}
+};
 
 function logout() {
-  sessionStorage.removeItem('lm-unlocked');
-  sessionStorage.removeItem('lm-author-view-overrides');
-  window.location.reload();
+  window._fbSignOut().then(() => {
+    sessionStorage.removeItem('lm-author-view-overrides');
+    window.location.reload();
+  });
 }
 
 function showApp(role, bookId) {
@@ -3368,11 +3265,10 @@ function showApp(role, bookId) {
   $('pw-app').style.display='';
   if (role === 'author' || IS_AUTHOR_MODE) {
     document.getElementById('main-app').classList.add('author-mode');
-    // Immediately hide the all-books overview so it never flashes
     const allOv = $('tab-all-overview');
     if(allOv){ allOv.style.display='none'; allOv.classList.remove('active'); }
     $('tab-bar').style.display = '';
-    const wm=$('author-watermark'); if(wm){wm.textContent=BOOKS[bookId||ACTIVE_BOOK_FORCED].title+' · Author view';wm.style.display='';}
+    const wm=$('author-watermark'); if(wm){wm.textContent=BOOKS[bookId||ACTIVE_BOOK_FORCED]?.title+' · Author view';wm.style.display='';}
     const sheetsBtn=$('sheets-tab-btn'); if(sheetsBtn)sheetsBtn.style.display='none';
     const websiteTabBtn=$('website-tab-btn'); if(websiteTabBtn) websiteTabBtn.style.display='none';
     const backupsBtn=$('backups-tab-btn'); if(backupsBtn) backupsBtn.style.display='none';
@@ -3398,11 +3294,9 @@ function showApp(role, bookId) {
 }
 
 async function boot(forcedBook) {
-  await loadCatalog();
   buildBookSwitcher();
   await loadPaymentLinks();
   await loadProductionCosts();
-  await loadPasswords();
   renderCatalogList();
   renderProfitSettings();
   if(sheetsUrl) showSheetsConnected();
@@ -3422,7 +3316,6 @@ async function boot(forcedBook) {
       if (!book) { showToast('Book not found', 'err'); return; }
       document.documentElement.style.setProperty('--book-accent', book.accent);
       document.documentElement.style.setProperty('--book-accent-bg', book.accentBg);
-      // Hide the all-overview, show the per-book tab bar and dashboard
       $('tab-all-overview').style.display='none';
       $('tab-all-overview').classList.remove('active');
       $('tab-bar').style.display = '';
@@ -3433,8 +3326,8 @@ async function boot(forcedBook) {
         $('hdr-sub').textContent=book.title+' · Author View · Synced '+new Date().toLocaleTimeString();
         renderAll();updateHeader();updateRoleToggleButton();syncRoleUI();
       });
-  } else {
-      // Publisher — load all books, start on combined view
+    } else {
+      // Publisher
       activeBook = 'all';
       loadAllBooks().then(() => ensureDailySystemBackup());
       updateRoleToggleButton();
@@ -3442,23 +3335,18 @@ async function boot(forcedBook) {
     }
   };
 
-  if (window._fbReady) { initFn(); }
-  else {
-    document.addEventListener('firebase-ready', initFn);
-    setTimeout(()=>{if(!fbReady){setSyncState('error','<b>Firebase</b> · not connected');renderAll();}},4000);
-  }
+  initFn();
 }
 
-// Global exposure for HTML handlers
+// Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
-  tryUnlock, logout, switchTab, toggleBookDropdown, switchBook, forceSync,
+  logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, onFxCurrencyChange, calcFx, submitManual,
   submitGratuity, openM, closeM, addStore, openSend, confirmSend, openSale, confirmSale,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
-  pushAllToSheets,
-  copyGasCode, saveProductionCosts, savePaymentLinks, savePasswords,
+  pushAllToSheets, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel,
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
@@ -3468,56 +3356,66 @@ Object.assign(window, {
 });
 
 // ── STARTUP ROUTING
+let authStateHandled = false;
 async function initStartup() {
   await loadCatalog(); // Ensure books map is populated
   loadAuthorViewOverrides();
-  IS_AUTHOR_MODE = !!URL_BOOK && !!BOOKS[URL_BOOK];
-  ACTIVE_BOOK_FORCED = IS_AUTHOR_MODE ? URL_BOOK : null;
 
-  // Author mode via URL param: ?book=hound — skips password if dev=1, else author password gate
-  if (IS_AUTHOR_MODE && urlParams.get('dev')==='1') {
-    showApp('author', ACTIVE_BOOK_FORCED);
-  } else if (sessionStorage.getItem('lm-unlocked')==='publisher') {
-    showApp('publisher');
-  } else {
-    const stored = sessionStorage.getItem('lm-unlocked');
-    if (stored && stored.startsWith('author:')) {
-      const storedBook = stored.split(':')[1];
-      if (!IS_AUTHOR_MODE || storedBook === ACTIVE_BOOK_FORCED) {
-        showApp('author', IS_AUTHOR_MODE ? ACTIVE_BOOK_FORCED : storedBook);
-      } else {
-        $('pw-input').focus();
-        setupGate();
-      }
-    } else {
-      $('pw-input').focus();
-      setupGate();
+  // Master Publisher Email
+  const publisherEmail = 'lyricalmyrical@gmail.com'; // Adjust this or pull from settings if dynamic
+
+  window._fbOnAuthStateChanged(user => {
+    if (!user) {
+      // Not logged in
+      setupGate(null);
+      return;
     }
+    
+    // Check access
+    const uEmail = user.email.toLowerCase().trim();
+    if (uEmail === publisherEmail) {
+      window.IS_PUBLISHER = true;
+      IS_AUTHOR_MODE = false;
+      showApp('publisher', null);
+      return;
+    }
+
+    // Artist Check
+    const matchedBookId = Object.keys(BOOKS).find(id => {
+      const dbEmail = (BOOKS[id].authorEmail || '').toLowerCase().trim();
+      return dbEmail === uEmail;
+    });
+
+    if (matchedBookId) {
+      window.IS_PUBLISHER = false;
+      IS_AUTHOR_MODE = true;
+      ACTIVE_BOOK_FORCED = matchedBookId;
+      showApp('author', matchedBookId);
+      return;
+    }
+    
+    // No match
+    window._fbSignOut();
+    setupGate('Your Google account is not authorized for any books.');
+  });
+}
+
+function setupGate(errMsg) {
+  $('pw-gate').style.display='';
+  $('pw-app').style.display='none';
+  document.querySelector('#gate-sub').textContent = 'Inventory App';
+  document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
+  const desc = document.getElementById('gate-desc');
+  if (desc) {
+    desc.style.display = errMsg ? 'block' : 'none';
+    desc.innerHTML = errMsg ? `<span style="color:var(--red);font-weight:600;">${errMsg}</span>` : '';
   }
 }
 
-function setupGate() {
-  if (IS_AUTHOR_MODE) {
-    const book = BOOKS[ACTIVE_BOOK_FORCED];
-    if (book) {
-      document.querySelector('#gate-sub').textContent = book.title + ' · Author Portal';
-      document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
-      const desc = document.getElementById('gate-desc');
-      if (desc) {
-        desc.style.display = 'block';
-        desc.innerHTML = `Enter the author password to view inventory and sales data for <strong>${book.title}</strong>.`;
-      }
-    }
-  } else {
-    document.querySelector('#gate-sub').textContent = 'Inventory App';
-    document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
-    const desc = document.getElementById('gate-desc');
-    if (desc) {
-      desc.style.display = 'none';
-      desc.innerHTML = '';
-    }
-  }
-}
+// Global IS_PUBLISHER override for UI hooks
+window.IS_PUBLISHER = false;
+window.isPublisherSession = () => window.IS_PUBLISHER;
+window.isAuthor = () => IS_AUTHOR_MODE || (window.IS_PUBLISHER && activeBook && activeBook !== 'all' && AUTHOR_VIEW_BY_BOOK[activeBook]);
 
 if (window._fbReady) { initStartup(); }
 else { document.addEventListener('firebase-ready', initStartup); }
