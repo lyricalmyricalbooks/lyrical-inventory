@@ -107,7 +107,42 @@
   <button class="tab-btn" onclick="switchTab('sheets')" id="sheets-tab-btn">📊 Sheets</button>
   <button class="tab-btn" onclick="switchTab('backups')" id="backups-tab-btn" style="display:none;">💾 Backups</button>
   <button class="tab-btn" onclick="switchTab('qrcodes')" id="qrcodes-tab-btn" style="display:none;">📱 QR Codes</button>
+  <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;">📲 My QR Code</button>
 </nav>
+
+<!-- AUTHOR QR CODE PAGE (author view only) -->
+<div class="tab-panel" id="tab-myqr" style="display:none;">
+  <div style="max-width:480px;margin:0 auto;padding:2rem 1rem;text-align:center;">
+    <div id="myqr-book-title" style="font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--cream);margin-bottom:6px;"></div>
+    <div id="myqr-book-meta" style="font-size:12px;color:rgba(255,255,255,.4);margin-bottom:2rem;"></div>
+
+    <!-- QR Code -->
+    <div style="display:flex;justify-content:center;margin-bottom:1.5rem;">
+      <div style="background:white;padding:20px;border-radius:var(--r2);display:inline-block;">
+        <div id="author-qr-canvas"></div>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div id="myqr-status" style="font-size:12px;color:rgba(255,255,255,.35);font-family:'DM Mono',monospace;word-break:break-all;margin-bottom:1.5rem;line-height:1.6;"></div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn ink" id="myqr-copy-btn" onclick="window.copyAuthorQR()" style="min-width:140px;">Copy link</button>
+      <button class="btn gold" id="myqr-dl-btn" onclick="window.downloadAuthorQR()" style="min-width:140px;">Download QR</button>
+    </div>
+
+    <div style="margin-top:2rem;padding:1.25rem;background:rgba(255,255,255,.04);border-radius:var(--r2);border:1px solid rgba(255,255,255,.07);text-align:left;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.25);margin-bottom:8px;">How to use</div>
+      <ul style="font-size:12px;color:rgba(255,255,255,.5);line-height:1.9;margin:0;padding-left:1.2rem;">
+        <li>Show this QR code to a customer at an event or book fair.</li>
+        <li>They scan it with their phone camera and pay directly through Stripe.</li>
+        <li>Funds go straight to the publisher — no cash handling needed.</li>
+        <li>Download the image to print or save it to your phone's camera roll.</li>
+      </ul>
+    </div>
+  </div>
+</div>
 
 <!-- QR CODES (publisher only, all books) -->
 <div class="tab-panel" id="tab-qrcodes" style="display:none;">

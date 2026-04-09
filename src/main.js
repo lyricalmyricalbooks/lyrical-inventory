@@ -305,6 +305,77 @@ window.downloadBookQR = function(bookId) {
   showToast(`Downloading QR for ${BOOKS[bookId]?.title || bookId}`);
 };
 
+// ── AUTHOR QR CODE PAGE (author view — single book)
+let _authorQRInstance = null;
+
+function renderAuthorQRPage() {
+  const book = BOOKS[activeBook];
+  if (!book) return;
+  const url = book.stripeLink || book.paymentLink || '';
+
+  // Populate header
+  const titleEl = $('myqr-book-title');
+  const metaEl  = $('myqr-book-meta');
+  const statusEl = $('myqr-status');
+  if (titleEl) titleEl.textContent = book.title;
+  if (metaEl)  metaEl.textContent  = (book.author || '') + (book.author ? ' · ' : '') + book.currency + book.listPrice;
+
+  // Set accent colour
+  document.documentElement.style.setProperty('--book-accent', book.accent);
+
+  // Clear previous QR and re-render
+  const canvas = $('author-qr-canvas');
+  if (!canvas) return;
+  canvas.innerHTML = '';
+  _authorQRInstance = null;
+
+  if (url && typeof QRCode !== 'undefined') {
+    _authorQRInstance = new QRCode(canvas, {
+      text: url,
+      width: 240,
+      height: 240,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+    if (statusEl) statusEl.textContent = url;
+    const dlBtn = $('myqr-dl-btn');
+    const cpBtn = $('myqr-copy-btn');
+    if (dlBtn) dlBtn.disabled = false;
+    if (cpBtn) cpBtn.disabled = false;
+  } else {
+    if (statusEl) statusEl.innerHTML = url
+      ? 'QR library not loaded. Please refresh the page.'
+      : 'No payment link has been set for this book yet.<br>Ask your publisher to add the Stripe link.';
+    const dlBtn = $('myqr-dl-btn');
+    const cpBtn = $('myqr-copy-btn');
+    if (dlBtn) dlBtn.disabled = true;
+    if (cpBtn) cpBtn.disabled = true;
+  }
+}
+
+window.copyAuthorQR = function() {
+  const book = BOOKS[activeBook];
+  if (!book) return;
+  const url = book.stripeLink || book.paymentLink || '';
+  if (!url) { showToast('No link configured for this book', 'warn'); return; }
+  navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); showToast('Link copied');
+  });
+};
+
+window.downloadAuthorQR = function() {
+  const canvas = document.querySelector('#author-qr-canvas canvas');
+  if (!canvas) { showToast('QR not ready', 'warn'); return; }
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `${activeBook}-payment-qr.png`;
+  a.click();
+  showToast('Downloading QR Code');
+};
+
 
 // ═══════════════════════════════════════════════════════
 //  ACCESS CONTROL
@@ -582,12 +653,15 @@ function syncRoleUI() {
   const backupsTabBtn = $('backups-tab-btn');
   const qrBtn = $('d-qr-btn');
   const qrcodesTabBtn = $('qrcodes-tab-btn');
+  const myqrTabBtn = $('myqr-tab-btn');
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
   if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
   if (sheetsTabBtn) sheetsTabBtn.style.display = authorNow ? 'none' : '';
   if (backupsTabBtn) backupsTabBtn.style.display = authorNow ? 'none' : '';
   if (qrBtn) qrBtn.style.display = authorNow ? 'none' : '';
   if (qrcodesTabBtn) qrcodesTabBtn.style.display = authorNow ? 'none' : '';
+  // myqr tab is AUTHOR-only
+  if (myqrTabBtn) myqrTabBtn.style.display = authorNow ? '' : 'none';
 
   const wm = $('author-watermark');
   if (wm && isPublisherSession() && activeBook && activeBook !== 'all' && AUTHOR_VIEW_BY_BOOK[activeBook]) {
@@ -658,8 +732,11 @@ function switchBook(bookId) {
 
 // ── TABS
 function switchTab(name) {
+  // publisher-only tabs redirect authors to dashboard
   if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'sheets' || name === 'qrcodes')) name = 'dashboard';
-  const names = ['dashboard','website','manual','consignment','history','expenses','financials','sheets','backups','qrcodes'];
+  // publisher redirected away from author-only myqr tab
+  if (!isAuthor() && name === 'myqr') name = 'dashboard';
+  const names = ['dashboard','website','manual','consignment','history','expenses','financials','sheets','backups','qrcodes','myqr'];
   document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', names[i]===name));
   names.forEach(n => {
     const p = $('tab-'+n);
@@ -677,6 +754,7 @@ function switchTab(name) {
   if(name==='financials') renderFinancials();
   if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
   if(name==='qrcodes') renderAllQRCodes();
+  if(name==='myqr') renderAuthorQRPage();
 }
 
 function updateHeader() {
