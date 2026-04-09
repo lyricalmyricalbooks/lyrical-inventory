@@ -336,6 +336,9 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .author-mode #d-breakeven-kpi{display:none!important;}
 .author-mode #d-breakeven-block{display:none!important;}
 .author-mode .book-switcher{display:none;}
+/* Toggle button lives OUTSIDE .book-switcher so it survives author-mode hiding */
+#book-switcher-wrap{background:var(--ink3);border-bottom:1px solid rgba(255,255,255,.06);position:relative;}
+#book-switcher-wrap .book-switcher{border-bottom:none;background:transparent;}
 .author-watermark{font-size:10px;color:rgba(255,255,255,.2);font-family:'DM Mono',monospace;letter-spacing:.05em;}
 
 @media(max-width:640px){
