@@ -234,6 +234,77 @@ window.openPaymentQRModal = openPaymentQRModal;
 window.copyPaymentLink = copyPaymentLink;
 window.downloadPaymentQR = downloadPaymentQR;
 
+// ── ALL-BOOKS QR PAGE (publisher only)
+function renderAllQRCodes() {
+  const grid = $('qr-all-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  Object.values(BOOKS).forEach(book => {
+    const url = book.stripeLink || book.paymentLink || '';
+    const card = document.createElement('div');
+    card.style.cssText = `background:var(--ink2);border:1px solid rgba(255,255,255,.08);border-radius:var(--r3);padding:1.5rem;display:flex;flex-direction:column;align-items:center;gap:1rem;`;
+
+    // Book title header
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;';
+    header.innerHTML = `
+      <div style="width:10px;height:10px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
+      <div style="flex:1;">
+        <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--cream);">${book.title}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px;">${book.author || '—'} · ${book.currency}${book.listPrice}</div>
+      </div>`;
+    card.appendChild(header);
+
+    // QR code container
+    const qrWrap = document.createElement('div');
+    qrWrap.style.cssText = 'background:white;padding:14px;border-radius:var(--r2);width:196px;height:196px;display:flex;align-items:center;justify-content:center;';
+    const qrEl = document.createElement('div');
+    qrEl.id = `qr-all-${book.id}`;
+    qrWrap.appendChild(qrEl);
+    card.appendChild(qrWrap);
+
+    if (url && typeof QRCode !== 'undefined') {
+      new QRCode(qrEl, { text: url, width: 168, height: 168, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
+    } else {
+      qrEl.innerHTML = `<div style="color:#aaa;font-size:11px;text-align:center;padding:1rem;">${url ? 'QR library not ready' : 'No Stripe link set.<br>Edit this book to add one.'}</div>`;
+    }
+
+    // Link display + actions
+    const linkRow = document.createElement('div');
+    linkRow.style.cssText = 'width:100%;display:flex;flex-direction:column;gap:8px;';
+    linkRow.innerHTML = `
+      <div style="font-size:10px;color:rgba(255,255,255,.3);font-family:'DM Mono',monospace;word-break:break-all;text-align:center;min-height:14px;">${url || 'No link configured'}</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn ink" style="flex:1;font-size:11px;" onclick="window.copyBookQR('${book.id}','${url.replace(/'/g,"\\'")}')">Copy link</button>
+        <button class="btn gold" style="flex:1;font-size:11px;" ${url ? '' : 'disabled'} onclick="window.downloadBookQR('${book.id}')">Download</button>
+      </div>`;
+    card.appendChild(linkRow);
+    grid.appendChild(card);
+  });
+}
+
+window.renderAllQRCodes = renderAllQRCodes;
+
+window.copyBookQR = function(bookId, url) {
+  if (!url) { showToast('No link set for this book', 'warn'); return; }
+  navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); showToast('Link copied');
+  });
+};
+
+window.downloadBookQR = function(bookId) {
+  const canvas = document.querySelector(`#qr-all-${bookId} canvas`);
+  if (!canvas) { showToast('QR not ready', 'warn'); return; }
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `${bookId}-payment-qr.png`;
+  a.click();
+  showToast(`Downloading QR for ${BOOKS[bookId]?.title || bookId}`);
+};
+
 
 // ═══════════════════════════════════════════════════════
 //  ACCESS CONTROL
@@ -510,11 +581,13 @@ function syncRoleUI() {
   const sheetsTabBtn = $('sheets-tab-btn');
   const backupsTabBtn = $('backups-tab-btn');
   const qrBtn = $('d-qr-btn');
+  const qrcodesTabBtn = $('qrcodes-tab-btn');
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
   if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
   if (sheetsTabBtn) sheetsTabBtn.style.display = authorNow ? 'none' : '';
   if (backupsTabBtn) backupsTabBtn.style.display = authorNow ? 'none' : '';
   if (qrBtn) qrBtn.style.display = authorNow ? 'none' : '';
+  if (qrcodesTabBtn) qrcodesTabBtn.style.display = authorNow ? 'none' : '';
 
   const wm = $('author-watermark');
   if (wm && isPublisherSession() && activeBook && activeBook !== 'all' && AUTHOR_VIEW_BY_BOOK[activeBook]) {
@@ -585,8 +658,8 @@ function switchBook(bookId) {
 
 // ── TABS
 function switchTab(name) {
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'sheets')) name = 'dashboard';
-  const names = ['dashboard','website','manual','consignment','history','expenses','financials','sheets','backups'];
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'sheets' || name === 'qrcodes')) name = 'dashboard';
+  const names = ['dashboard','website','manual','consignment','history','expenses','financials','sheets','backups','qrcodes'];
   document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', names[i]===name));
   names.forEach(n => {
     const p = $('tab-'+n);
@@ -603,6 +676,7 @@ function switchTab(name) {
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
   if(name==='financials') renderFinancials();
   if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
+  if(name==='qrcodes') renderAllQRCodes();
 }
 
 function updateHeader() {
