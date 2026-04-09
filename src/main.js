@@ -111,7 +111,7 @@ async function saveBookFromModal() {
     accent: $('nb-accent').value,
     accentBg: hexToRgba($('nb-accent').value, 0.1),
     urlParam: currentBook.urlParam || id,
-    authorPassword: $('nb-pw').value.trim() || currentBook.authorPassword || (id + '2025'),
+    authorEmail: ($('nb-pw').value || '').toLowerCase().trim() || currentBook.authorEmail || '',
     profitTiers: currentBook.profitTiers || []
   };
   
