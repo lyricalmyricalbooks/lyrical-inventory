@@ -3358,22 +3358,25 @@ Object.assign(window, {
 // ── STARTUP ROUTING
 let authStateHandled = false;
 async function initStartup() {
-  await loadCatalog(); // Ensure books map is populated
-  loadAuthorViewOverrides();
-
   // Master Publisher Email
-  const publisherEmail = 'lyricalmyrical@gmail.com'; // Adjust this or pull from settings if dynamic
+  const publisherEmail = 'lyricalmyrical@gmail.com'; 
 
-  window._fbOnAuthStateChanged(user => {
+  window._fbOnAuthStateChanged(async user => {
     if (!user) {
       // Not logged in
       setupGate(null);
+      const err = document.getElementById('pw-err');
+      if (err) err.textContent = '';
       return;
     }
     
+    // NOW that we have a valid token, we pull the protected catalog.
+    await loadCatalog(); 
+    loadAuthorViewOverrides();
+
     // Check access
     const uEmail = user.email.toLowerCase().trim();
-    if (uEmail === publisherEmail) {
+    if (uEmail === publisherEmail || uEmail === 'lyricalmyricalbooks@gmail.com') {
       window.IS_PUBLISHER = true;
       IS_AUTHOR_MODE = false;
       showApp('publisher', null);
@@ -3396,7 +3399,9 @@ async function initStartup() {
     
     // No match
     window._fbSignOut();
-    setupGate('Your Google account is not authorized for any books.');
+    setupGate(`Your Google account (${user.email}) is not authorized for any books.`);
+    const err = document.getElementById('pw-err');
+    if (err) err.textContent = '';
   });
 }
 
