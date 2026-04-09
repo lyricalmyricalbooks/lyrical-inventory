@@ -353,10 +353,13 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .metric-banner-value{font-size:30px;}
   .metric-banner-actions{align-items:stretch;width:100%;}
   .metric-banner-link,.metric-banner-cta{justify-content:center;width:100%;padding:14px;}
-  .btn.sm{padding:8px 14px;font-size:11px;}
+  .btn{font-size:12px;padding:12px 20px;min-height:44px;justify-content:center;}
+  .btn.sm{font-size:12px;padding:10px 16px;min-height:44px;}
   .tab-bar{padding:10px 1rem;gap:8px;background:var(--ink2);-webkit-overflow-scrolling:touch;border-bottom:1px solid rgba(255,255,255,.04);}
   .tab-btn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:100px;padding:8px 16px;font-size:10px;height:min-content;margin:auto 0;}
   .tab-btn.active{background:var(--gold);color:var(--ink);border-color:var(--gold);}
   .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-right:-1rem;margin-left:-1rem;border-radius:0;border-left:none;border-right:none;}
   .kpi-value{font-size:24px;}
+  .form-group input, .form-group select, .form-group textarea{font-size:16px;padding:12px 14px;}
+  .card, .store-card, .stock-block, .sheets-setup{padding:1rem;}
 }
