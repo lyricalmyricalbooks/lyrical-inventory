@@ -2245,13 +2245,16 @@ async function pushAllToSheets() {
     const book = BOOKS[bid];
     (s.hist || []).forEach(h => toSync.push({
       type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
-      qty:h.qty, price:h.price, total:h.qty*h.price, stockAfter:h.after,
-      notes:(h.voided?'[VOID] ':'')+(h.notes||'')
+      qty: h.voided ? 0 : h.qty, price:h.price, total: h.voided ? 0 : (h.qty*h.price), stockAfter:h.after,
+      notes:(h.voided?'[VOID] ':'')+(h.notes||''),
+      currency: h.payment?.currency || book.currency,
+      status: h.voided ? 'VOID' : 'OK'
     }));
     (s.ledger || []).forEach(e => toSync.push({
       type:'consignment', book:book.title, date:e.date, store:e.storeName,
-      event:e.type, qty:e.qty, rate:e.rate, amountDue:e.amountDue,
-      notes:(e.voided?'[VOID] ':'')+(e.notes||''), status:e.status
+      event:e.type, qty: e.voided ? 0 : e.qty, rate:e.rate, amountDue: e.voided ? 0 : e.amountDue,
+      notes:(e.voided?'[VOID] ':'')+(e.notes||''), status: e.voided ? 'VOID' : e.status,
+      currency: book.currency
     }));
   });
 
