@@ -176,6 +176,61 @@ window.openEditBookModal = openEditBookModal;
 window.closeAddBookModal = closeAddBookModal;
 window.deleteBook = deleteBook;
 
+// ── PAYMENT QR GENERATOR (publisher only)
+let currentQR = null;
+
+function openPaymentQRModal() {
+  if (!activeBook || activeBook === 'all' || isAuthor()) return;
+  const book = BOOKS[activeBook];
+  const url = book.paymentLink || 'https://paypal.me/lyricalmyricalbooks';
+  
+  $('qr-book-title').textContent = book.title;
+  $('qr-payment-link').value = url;
+  
+  const canvasContainer = $('payment-qr-canvas');
+  canvasContainer.innerHTML = '';
+  
+  if (typeof QRCode !== 'undefined') {
+    currentQR = new QRCode(canvasContainer, {
+      text: url,
+      width: 256,
+      height: 256,
+      colorDark : "#000000",
+      colorLight : "#ffffff",
+      correctLevel : QRCode.CorrectLevel.H
+    });
+  } else {
+    canvasContainer.innerHTML = '<div style="color:var(--text3);font-size:12px;">QR Library failed to load.</div>';
+  }
+  
+  openM('payment-qr');
+}
+
+function copyPaymentLink() {
+  const link = $('qr-payment-link');
+  link.select();
+  document.execCommand('copy');
+  showToast('Payment link copied');
+}
+
+function downloadPaymentQR() {
+  const canvas = document.querySelector('#payment-qr-canvas canvas');
+  if (!canvas) {
+    showToast('QR code not ready', 'warn');
+    return;
+  }
+  const url = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${BOOKS[activeBook].id}-payment-qr.png`;
+  a.click();
+  showToast('Downloading QR Code image');
+}
+
+window.openPaymentQRModal = openPaymentQRModal;
+window.copyPaymentLink = copyPaymentLink;
+window.downloadPaymentQR = downloadPaymentQR;
+
 
 // ═══════════════════════════════════════════════════════
 //  ACCESS CONTROL
@@ -451,10 +506,12 @@ function syncRoleUI() {
   const financialsTabBtn = $('financials-tab-btn');
   const sheetsTabBtn = $('sheets-tab-btn');
   const backupsTabBtn = $('backups-tab-btn');
+  const qrBtn = $('d-qr-btn');
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
   if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
   if (sheetsTabBtn) sheetsTabBtn.style.display = authorNow ? 'none' : '';
   if (backupsTabBtn) backupsTabBtn.style.display = authorNow ? 'none' : '';
+  if (qrBtn) qrBtn.style.display = authorNow ? 'none' : '';
 
   const wm = $('author-watermark');
   if (wm && isPublisherSession() && activeBook && activeBook !== 'all' && AUTHOR_VIEW_BY_BOOK[activeBook]) {

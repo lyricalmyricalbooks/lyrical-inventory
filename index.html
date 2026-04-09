@@ -9,6 +9,7 @@
 
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -151,10 +152,15 @@
     </div>
   </div>
 
-  <div class="book-context dashboard-context" id="book-context-dash">
-    <div class="book-context-dot"></div>
-    <div><div class="book-context-title" id="bc-title-dash">—</div><div class="book-context-meta" id="bc-meta-dash">—</div></div>
-    <div class="dash-context-meta">Dashboard overview</div>
+  <div class="book-context dashboard-context" id="book-context-dash" style="justify-content:space-between;align-items:center;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="book-context-dot"></div>
+      <div><div class="book-context-title" id="bc-title-dash">—</div><div class="book-context-meta" id="bc-meta-dash">—</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="btn gold sm" id="d-qr-btn" onclick="openPaymentQRModal()" style="font-size:11px;">Payment QR Code</button>
+      <div class="dash-context-meta">Dashboard overview</div>
+    </div>
   </div>
 
   <!-- AUTHOR PAYMENT BANNER — shown in author mode when transfers are pending -->
@@ -1053,6 +1059,28 @@ function json_(obj) {
   </div>
   <div class="form-group"><label>Initial Production Cost</label><input id="nb-prod" type="number" value="0"></div>
   <div class="modal-footer"><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
+</div></div>
+
+<!-- PAYMENT QR MODAL -->
+<div class="overlay" id="m-payment-qr" style="display:none;"><div class="modal">
+  <div class="modal-title">Payment QR Code</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.6;">
+    Scan this code to pay for <strong id="qr-book-title" style="color:var(--cream);"></strong>.
+  </div>
+  <div style="display:flex;justify-content:center;margin-bottom:1.5rem;background:white;padding:1.5rem;border-radius:var(--r2);width:max-content;margin-left:auto;margin-right:auto;">
+    <div id="payment-qr-canvas"></div>
+  </div>
+  <div class="form-group" style="margin-bottom:1.25rem;">
+    <label>Payment Link</label>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="qr-payment-link" readonly style="flex:1;background:rgba(255,255,255,.05);color:var(--cream);font-family:'DM Mono',monospace;font-size:11px;">
+      <button class="btn ink" onclick="copyPaymentLink()" style="flex-shrink:0;">Copy</button>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeM('payment-qr')">Close</button>
+    <button class="btn gold" onclick="downloadPaymentQR()">Download Image</button>
+  </div>
 </div></div>
 
 <div class="toast" id="toast"></div>
