@@ -344,10 +344,10 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 @media(max-width:640px){
   .kpi-grid{grid-template-columns:1fr 1fr;}
   .kpi-grid-primary{grid-template-columns:1fr 1fr;}
-  .g4{grid-template-columns:1fr 1fr;}
+  .g4, .g2{grid-template-columns:1fr;}
   .app-header{padding:0 1rem;padding-top:max(env(safe-area-inset-top), .5rem);}
   .tab-panel{padding:1rem;padding-bottom:calc(1rem + env(safe-area-inset-bottom));}
-  .header-stat:nth-child(3){display:none;}
+  .header-right{display:none;}
   .book-strip-kpis{gap:.75rem;}
   .metric-banner{padding:1.15rem;}
   .metric-banner-value{font-size:30px;}
