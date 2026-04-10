@@ -1714,6 +1714,45 @@ function confirmImport() {
   showToast(msg);
 }
 
+function updateManualForm() {
+  const book = getBook();
+  if (!book) return;
+
+  // Pre-fill price with the book's actual list price
+  const priceEl = $('m-price');
+  if (priceEl) priceEl.value = book.listPrice.toFixed(2);
+
+  // Update book context bar
+  const ctxTitle = $('bc-title-man');
+  if (ctxTitle) ctxTitle.textContent = book.title;
+
+  // Render quick-tap price preset buttons
+  const presets = $('m-price-presets');
+  if (!presets) return;
+
+  const cur = book.currency;
+  const full = book.listPrice;
+  const options = [
+    { label: `${cur}${full.toFixed(0)} Full price`, val: full, primary: true },
+    { label: `${cur}${(full * 0.9).toFixed(0)} −10%`, val: +(full * 0.9).toFixed(2) },
+    { label: `${cur}${(full * 0.8).toFixed(0)} −20%`, val: +(full * 0.8).toFixed(2) },
+    { label: `${cur}${(full * 0.5).toFixed(0)} Half`, val: +(full * 0.5).toFixed(2) },
+  ];
+
+  presets.innerHTML = `
+    <div style="font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);width:100%;margin-bottom:2px;">Quick price</div>
+    ${options.map(o => `
+      <button type="button"
+        onclick="$('m-price').value='${o.val}';phint();this.closest('#m-price-presets').querySelectorAll('.price-preset-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active');"
+        class="btn sm price-preset-btn${o.primary ? ' gold' : ''}"
+        style="flex:1;min-width:80px;justify-content:center;${o.primary ? '' : ''}"
+      >${o.label}</button>`).join('')}
+  `;
+  // Mark the first button (full price) as active by default
+  presets.querySelector('.price-preset-btn')?.classList.add('active');
+  phint();
+}
+
 function phint(){
   const book=getBook(),p=parseFloat($('m-price').value)||0,q=parseInt($('m-qty').value)||1,h=$('m-hint'),t=p*q;
   const fxOn=$('m-fx-panel').style.display!=='none';

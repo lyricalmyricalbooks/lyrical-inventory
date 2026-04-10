@@ -348,8 +348,10 @@
       <div class="form-group"><label>Order #</label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label>Qty</label><input type="number" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group"><label>Price paid</label><div class="price-inline"><select id="m-price-cur" onchange="onManualCurrencyChange()"><option value="BOOK">Book currency</option><option value="USD">USD $</option><option value="EUR">EUR €</option><option value="GBP">GBP £</option><option value="CAD">CAD $</option><option value="AUD">AUD $</option><option value="CHF">CHF</option><option value="JPY">JPY ¥</option><option value="NOK">NOK kr</option><option value="SEK">SEK kr</option><option value="DKK">DKK kr</option><option value="OTHER">Other</option></select><input type="number" id="m-price" value="40.00" step="0.01" oninput="phint()"></div></div>
-      <div class="form-group"><label>&nbsp;</label><button class="btn gold" style="width:100%;height:38px;" onclick="submitManual()">Add order</button></div>
+      <div class="form-group"><label>&nbsp;</label><button class="btn gold" style="width:100%;height:44px;font-size:14px;" onclick="submitManual()">＋ Add order</button></div>
     </div>
+    <!-- Quick-price preset buttons (populated by updateManualForm) -->
+    <div id="m-price-presets" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
     <div class="g2">
       <div class="form-group"><label>Channel</label><select id="m-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Other</option></select></div>
       <div class="form-group"><label>Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
