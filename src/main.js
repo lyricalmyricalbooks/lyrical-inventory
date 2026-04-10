@@ -1388,25 +1388,41 @@ const _fxRateCache = {};
 
 async function fetchLiveRate(from, to) {
   if (from === to) return { rate: 1 };
-  if (from === 'OTHER' || to === 'OTHER') return { error: 'manual' };
+  if (from === 'OTHER' || to === 'OTHER' || !from || !to) return { error: 'manual' };
   
   const key = `${from}_${to}`;
   if (_fxRateCache[key]) return { rate: _fxRateCache[key] };
   
+  // Primary API: open.er-api.com (v6) — very reliable
+  try {
+    const res = await fetch(`https://open.er-api.com/v6/latest/${from}`);
+    if (res.ok) {
+      const json = await res.json();
+      const rate = json?.rates?.[to];
+      if (rate) {
+        _fxRateCache[key] = rate;
+        return { rate };
+      }
+    }
+  } catch(e) {
+    console.warn('Primary FX API failed, trying fallback...', e);
+  }
+
+  // Fallback API: Frankfurter
   try {
     const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
-    if (!res.ok) return { error: `API ${res.status}` };
-    const json = await res.json();
-    const rate = json?.rates?.[to];
-    if (rate) { 
-      _fxRateCache[key] = rate; 
-      return { rate }; 
+    if (res.ok) {
+      const json = await res.json();
+      const rate = json?.rates?.[to];
+      if (rate) {
+        _fxRateCache[key] = rate;
+        return { rate };
+      }
     }
+    return { error: `API ${res.status}`, context: `${from}->${to}` };
   } catch(e) { 
-    console.error('FX Fetch error:', e);
-    return { error: 'network', details: e.message || String(e) };
+    return { error: 'network', details: e.message || String(e), context: `${from}->${to}` };
   }
-  return { error: 'unknown' };
 }
 
 function toggleFxPanel(show){
@@ -1453,7 +1469,8 @@ function onManualCurrencyChange(){
             rateStatus.style.color = 'var(--text3)';
           } else {
             const diag = res.details ? ` (${res.details})` : '';
-            rateStatus.textContent = `⚠ ${res.error === 'network' ? 'Network offline' : 'Lookup failed (' + res.error + ')'}${diag} — enter manually`;
+            const ctx = res.context ? ` [${res.context}]` : '';
+            rateStatus.textContent = `⚠ ${res.error === 'network' ? 'Network offline' : 'Lookup failed (' + res.error + ')'}${diag}${ctx} — enter manually`;
             rateStatus.style.color = 'var(--amber)';
           }
         }
