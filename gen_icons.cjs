@@ -23,18 +23,25 @@ async function makeIcon(size, outputPath, padFraction = 0.05) {
 async function makeAppleIcon(size, outputPath, padFraction = 0.08) {
   const pad = Math.round(size * padFraction);
   const inner = size - pad * 2;
-  // App dark background color: #0e0c0a
-  const bg = { r: 14, g: 12, b: 10, alpha: 1 };
   
+  // The lyre layer (white on transparent)
   const lyreLayer = await sharp(SOURCE)
     .resize(inner, inner, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .ensureAlpha()
     .toBuffer();
 
-  await sharp({ create: { width: size, height: size, channels: 4, background: bg } })
+  // Composite lyre onto a solid dark background, then FLATTEN to RGB (no alpha)
+  // This is critical for iOS — alpha channel = blank circle on home screen
+  await sharp({ create: { width: size, height: size, channels: 3, background: { r: 14, g: 12, b: 10 } } })
     .composite([{ input: lyreLayer, gravity: 'centre' }])
+    .flatten({ background: { r: 14, g: 12, b: 10 } })
+    .removeAlpha()
     .png({ compressionLevel: 9 })
     .toFile(outputPath);
-  console.log(`✓ Apple icon ${size}x${size} (dark bg): ${outputPath}`);
+  
+  // Verify no alpha channel
+  const meta = await sharp(outputPath).metadata();
+  console.log(`✓ Apple icon ${size}x${size}: ${outputPath} | hasAlpha=${meta.hasAlpha} (must be false!)`);
 }
 
 async function run() {
