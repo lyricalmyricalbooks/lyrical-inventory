@@ -1426,10 +1426,15 @@ async function fetchLiveRate(from, to) {
 }
 
 function toggleFxPanel(show){
+  const book = getBook();
   $('m-fx-panel').style.display = show ? '' : 'none';
+  const label = $('m-price-label');
   if(show){
-    $('m-fx-native-sym').textContent=getBook().currency;
+    $('m-fx-native-sym').textContent=book.currency;
+    if (label) label.textContent = `Revenue (${book.currency})`;
     calcFx();
+  } else {
+    if (label) label.textContent = 'Price paid';
   }
 }
 
