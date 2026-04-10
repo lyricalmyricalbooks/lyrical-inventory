@@ -343,38 +343,24 @@
     <div><div class="book-context-title" id="bc-title-man">—</div><div class="book-context-meta">Manual order entry</div></div>
   </div>
   <div class="section-hed" style="margin-bottom:1.25rem;">Log an order</div>
-  <div class="card">
-    <div class="g4" style="margin-bottom:12px;">
+  <div class="section-hed" style="margin-bottom:1.25rem;">Log an order</div>
+  <div class="card" id="manual-order-card">
+    <!-- Meta: Order #, Qty, Channel -->
+    <div class="g3" style="margin-bottom:14px; gap:12px;">
       <div class="form-group"><label>Order #</label><input type="text" id="m-num" placeholder="optional"></div>
-      <div class="form-group"><label>Qty</label><input type="number" id="m-qty" value="1" min="1" oninput="phint()"></div>
-      <div class="form-group"><label id="m-price-label">Price paid</label><div class="price-inline"><select id="m-price-cur" onchange="onManualCurrencyChange()"><option value="BOOK">Book currency</option><option value="USD">USD $</option><option value="EUR">EUR €</option><option value="GBP">GBP £</option><option value="CAD">CAD $</option><option value="AUD">AUD $</option><option value="CHF">CHF</option><option value="JPY">JPY ¥</option><option value="NOK">NOK kr</option><option value="SEK">SEK kr</option><option value="DKK">DKK kr</option><option value="OTHER">Other</option></select><input type="number" id="m-price" value="40.00" step="0.01" oninput="phint()"></div></div>
-      <div class="form-group"><label>&nbsp;</label><button class="btn gold" style="width:100%;height:44px;font-size:14px;" onclick="submitManual()">＋ Add order</button></div>
-    </div>
-    <!-- Channel and Notes -->
-    <div class="g2">
+      <div class="form-group"><label>Qty</label><input type="number" id="m-qty" value="1" min="1" oninput="calcFx()"></div>
       <div class="form-group"><label>Channel</label><select id="m-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Other</option></select></div>
-      <div class="form-group"><label>Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
     </div>
-    <div class="g2" style="margin-top:12px;">
-      <div class="form-group">
-        <label>Payment Type <span style="color:var(--red);font-size:11px;">required</span></label>
-        <select id="m-payment-type" required>
-          <option value="">— Select payment type —</option>
-          <option value="Payment directly to artist">Payment directly to artist</option>
-          <option value="Payment directly to publisher">Payment directly to publisher</option>
-        </select>
-      </div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;">
-        <div style="font-size:11px;color:var(--text3);line-height:1.45;">Choose the paid currency from the <strong>Price paid</strong> dropdown. If it is different from the book currency, enter FX details below.</div>
-      </div>
-    </div>
-    <!-- FOREIGN CURRENCY PANEL (hidden by default) -->
-    <div id="m-fx-panel" style="display:none;margin-top:12px;padding:14px 16px;background:var(--cream2);border-radius:var(--r2);border:1px solid var(--border);">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Foreign currency conversion</div>
-      <div class="g4" style="align-items:end;">
+
+    <!-- Financials: Single Amount Input + Integrated FX -->
+    <div style="background:var(--cream2); padding:16px; border-radius:var(--r2); border:1px solid var(--border); margin-bottom:14px;">
+      <div style="font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--text3); margin-bottom:10px;">Payment details</div>
+      
+      <div class="g2" style="align-items:end; gap:12px;">
         <div class="form-group" style="margin:0;">
-          <label>Currency paid in</label>
-          <select id="m-fx-cur" onchange="onFxCurrencyChange()">
+          <label>Paid in</label>
+          <select id="m-price-cur" onchange="onManualCurrencyChange()">
+            <option value="BOOK">Book currency</option>
             <option value="USD">USD $</option>
             <option value="EUR">EUR €</option>
             <option value="GBP">GBP £</option>
@@ -389,22 +375,43 @@
           </select>
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Amount paid (foreign)</label>
-          <input type="number" id="m-fx-amount" step="0.01" placeholder="0.00" oninput="calcFx()">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Exchange rate <span style="font-size:9px;color:var(--text4);">1 foreign = ? <span id="m-fx-native-sym">—</span></span></label>
-          <input type="number" id="m-fx-rate" step="0.0001" placeholder="e.g. 0.92" oninput="calcFx()">
-          <div id="m-fx-rate-status" style="font-size:10px;margin-top:4px;height:12px;"></div>
-        </div>
-        <div style="padding-bottom:2px;">
-          <div style="font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:5px;">Converted</div>
-          <div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--gold);" id="m-fx-result">—</div>
+          <label id="m-amount-label">Amount paid</label>
+          <div style="position:relative;">
+            <input type="number" id="m-price" value="40.00" step="0.01" oninput="calcFx()" style="padding-right: 80px;">
+            <div id="m-revenue-badge" style="display:none; position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:12px; font-weight:700; color:var(--gold); font-family:'DM Mono',monospace; background:rgba(0,0,0,.04); padding:4px 8px; border-radius:4px;"></div>
+          </div>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6;">The converted amount will be used for revenue. The original foreign amount is saved in notes for reference.</div>
+
+      <!-- Integrated FX row (visible only if Currency != Native) -->
+      <div id="m-fx-row" style="display:none; margin-top:14px; pt:12px; border-top:1px dashed var(--border);">
+        <div class="g2" style="align-items:end; gap:12px; margin-top:12px;">
+          <div class="form-group" style="margin:0;">
+            <label>Exchange rate <span style="font-size:9px; color:var(--text4);">1 foreign = ? <span id="m-fx-native-sym">—</span></span></label>
+            <input type="number" id="m-fx-rate" step="0.0001" placeholder="e.g. 0.92" oninput="calcFx()">
+            <div id="m-fx-rate-status" style="font-size:10px; margin-top:4px; height:12px;"></div>
+          </div>
+          <div style="padding-bottom:12px;">
+             <div class="hint-text" id="m-hint" style="margin:0; font-size:11px;"></div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="hint-text" id="m-hint"></div>
+
+    <!-- Final Details: Payment Type, Notes -->
+    <div class="g2" style="gap:12px; margin-bottom:14px;">
+      <div class="form-group">
+        <label>Payment Type <span style="color:var(--red); font-size:11px;">required</span></label>
+        <select id="m-payment-type" required>
+          <option value="">— Select payment type —</option>
+          <option value="Payment directly to artist">Payment directly to artist</option>
+          <option value="Payment directly to publisher">Payment directly to publisher</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
+    </div>
+
+    <button class="btn gold" style="width:100%; height:52px; font-size:15px; font-weight:700;" onclick="submitManual()">＋ LOG ORDER</button>
   </div>
   <div class="log-console" id="log-manual"></div>
 
