@@ -1383,6 +1383,22 @@ async function fetchOrders() {
 }
 
 // ── MANUAL
+// Session-level cache so we don't re-fetch the same currency pair twice
+const _fxRateCache = {};
+
+async function fetchLiveRate(from, to) {
+  if (from === to) return 1;
+  const key = `${from}_${to}`;
+  if (_fxRateCache[key]) return _fxRateCache[key];
+  try {
+    const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
+    const json = await res.json();
+    const rate = json?.rates?.[to];
+    if (rate) { _fxRateCache[key] = rate; return rate; }
+  } catch(e) { /* offline or API down — user can type rate manually */ }
+  return null;
+}
+
 function toggleFxPanel(show){
   $('m-fx-panel').style.display = show ? '' : 'none';
   if(show){
@@ -1400,6 +1416,27 @@ function onManualCurrencyChange(){
   const fxEnabled = actualCur !== native;
   toggleFxPanel(fxEnabled);
   $('m-fx-cur').value = actualCur;
+
+  if (fxEnabled) {
+    // Show loading state in the rate field
+    const rateEl = $('m-fx-rate');
+    const rateStatus = $('m-fx-rate-status');
+    rateEl.placeholder = 'Fetching rate…';
+    rateEl.value = '';
+    if (rateStatus) { rateStatus.textContent = '⟳ Loading live rate…'; rateStatus.style.color = 'var(--text3)'; }
+    // Fetch live rate: actualCur → native (e.g. USD → EUR)
+    fetchLiveRate(actualCur, native).then(rate => {
+      if (rate) {
+        rateEl.value = rate.toFixed(4);
+        rateEl.placeholder = 'e.g. 0.92';
+        if (rateStatus) { rateStatus.textContent = `✓ Live rate: 1 ${actualCur} = ${rate.toFixed(4)} ${native}`; rateStatus.style.color = 'var(--green)'; }
+        calcFx();
+      } else {
+        rateEl.placeholder = 'Enter rate manually';
+        if (rateStatus) { rateStatus.textContent = '⚠ Offline — enter rate manually'; rateStatus.style.color = 'var(--amber)'; }
+      }
+    });
+  }
   phint();
 }
 
@@ -1410,6 +1447,14 @@ function calcFx(){
   const amt=parseFloat($('m-fx-amount').value)||0;
   const rate=parseFloat($('m-fx-rate').value)||0;
   const book=getBook();
+  
+  // Update session cache if we have a valid rate and currency pair
+  const native = getBookCurrencyCode(book);
+  const selected = $('m-fx-cur').value;
+  if (rate > 0 && selected !== native) {
+    _fxRateCache[`${selected}_${native}`] = rate;
+  }
+
   const converted=amt*rate;
   $('m-fx-result').textContent=converted>0?fmt(converted,book.currency):'—';
   // Push converted value into the main price field
