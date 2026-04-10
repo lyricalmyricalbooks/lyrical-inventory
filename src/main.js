@@ -1404,7 +1404,7 @@ async function fetchLiveRate(from, to) {
     }
   } catch(e) { 
     console.error('FX Fetch error:', e);
-    return { error: 'network' };
+    return { error: 'network', details: e.message || String(e) };
   }
   return { error: 'unknown' };
 }
@@ -1452,7 +1452,8 @@ function onManualCurrencyChange(){
             rateStatus.textContent = 'Please enter rate manually';
             rateStatus.style.color = 'var(--text3)';
           } else {
-            rateStatus.textContent = `⚠ ${res.error === 'network' ? 'Network offline' : 'Lookup failed (' + res.error + ')'} — enter manually`;
+            const diag = res.details ? ` (${res.details})` : '';
+            rateStatus.textContent = `⚠ ${res.error === 'network' ? 'Network offline' : 'Lookup failed (' + res.error + ')'}${diag} — enter manually`;
             rateStatus.style.color = 'var(--amber)';
           }
         }
