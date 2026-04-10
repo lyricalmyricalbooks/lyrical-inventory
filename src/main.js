@@ -1387,16 +1387,26 @@ async function fetchOrders() {
 const _fxRateCache = {};
 
 async function fetchLiveRate(from, to) {
-  if (from === to) return 1;
+  if (from === to) return { rate: 1 };
+  if (from === 'OTHER' || to === 'OTHER') return { error: 'manual' };
+  
   const key = `${from}_${to}`;
-  if (_fxRateCache[key]) return _fxRateCache[key];
+  if (_fxRateCache[key]) return { rate: _fxRateCache[key] };
+  
   try {
     const res = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`);
+    if (!res.ok) return { error: `API ${res.status}` };
     const json = await res.json();
     const rate = json?.rates?.[to];
-    if (rate) { _fxRateCache[key] = rate; return rate; }
-  } catch(e) { /* offline or API down — user can type rate manually */ }
-  return null;
+    if (rate) { 
+      _fxRateCache[key] = rate; 
+      return { rate }; 
+    }
+  } catch(e) { 
+    console.error('FX Fetch error:', e);
+    return { error: 'network' };
+  }
+  return { error: 'unknown' };
 }
 
 function toggleFxPanel(show){
@@ -1425,15 +1435,27 @@ function onManualCurrencyChange(){
     rateEl.value = '';
     if (rateStatus) { rateStatus.textContent = '⟳ Loading live rate…'; rateStatus.style.color = 'var(--text3)'; }
     // Fetch live rate: actualCur → native (e.g. USD → EUR)
-    fetchLiveRate(actualCur, native).then(rate => {
+    fetchLiveRate(actualCur, native).then(res => {
+      const rate = res.rate;
       if (rate) {
         rateEl.value = rate.toFixed(4);
         rateEl.placeholder = 'e.g. 0.92';
-        if (rateStatus) { rateStatus.textContent = `✓ Live rate: 1 ${actualCur} = ${rate.toFixed(4)} ${native}`; rateStatus.style.color = 'var(--green)'; }
+        if (rateStatus) { 
+          rateStatus.textContent = `✓ Live rate: 1 ${actualCur} = ${rate.toFixed(4)} ${native}`; 
+          rateStatus.style.color = 'var(--green)'; 
+        }
         calcFx();
       } else {
         rateEl.placeholder = 'Enter rate manually';
-        if (rateStatus) { rateStatus.textContent = '⚠ Offline — enter rate manually'; rateStatus.style.color = 'var(--amber)'; }
+        if (rateStatus) { 
+          if (res.error === 'manual') {
+            rateStatus.textContent = 'Please enter rate manually';
+            rateStatus.style.color = 'var(--text3)';
+          } else {
+            rateStatus.textContent = `⚠ ${res.error === 'network' ? 'Network offline' : 'Lookup failed (' + res.error + ')'} — enter manually`;
+            rateStatus.style.color = 'var(--amber)';
+          }
+        }
       }
     });
   }
