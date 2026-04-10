@@ -46,10 +46,11 @@ async function makeAppleIcon(size, outputPath, padFraction = 0.08) {
 
 async function run() {
   await makeIcon(512, 'public/pwa-512x512.png', 0.04);
-  await makeIcon(512, 'public/maskable-icon-512x512.png', 0.10);
   await makeIcon(192, 'public/pwa-192x192.png', 0.04);
   await makeIcon(64,  'public/pwa-64x64.png', 0.03);
-  // Apple touch icon MUST have opaque bg or it shows blank on iOS
+  // Maskable icon: Android clips to a circle/squircle — MUST have opaque bg or it shows white
+  await makeAppleIcon(512, 'public/maskable-icon-512x512.png', 0.10);
+  // Apple touch icon: iOS also requires opaque bg
   await makeAppleIcon(180, 'public/apple-touch-icon-180x180.png', 0.08);
   console.log('\nAll icons generated!');
 }
