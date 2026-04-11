@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:backend": "node backend/server.js",
+    "dev:all": "sh -c \"npm run dev:backend & npm run dev\""
   },
   "devDependencies": {
     "@vite-pwa/assets-generator": "^1.0.2",
