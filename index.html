@@ -529,8 +529,17 @@
   </div>
 
   <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
-    <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;">
-        <span>Cash Flow Summary</span>
+    <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span>Cash Flow Summary</span>
+            <select id="tc-year" onchange="renderTaxCenter()" style="font-size:14px;padding:4px 8px;border-radius:var(--r1);border:1px solid rgba(255,255,255,.1);background:var(--ink2);color:var(--cream);min-width:80px;height:auto;">
+                <option value="all">All Time</option>
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+                <option value="2024">2024</option>
+                <option value="2023">2023</option>
+            </select>
+        </div>
         <span style="font-size:12px;color:var(--text3);background:var(--bg3);padding:2px 8px;border-radius:12px;">Values in CAD</span>
     </div>
     <div class="g3">

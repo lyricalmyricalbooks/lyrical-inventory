@@ -3955,7 +3955,11 @@ function renderTaxCenter() {
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
 
   const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  const yearSelect = $('tc-year');
+  const selectedYear = yearSelect ? yearSelect.value : 'all';
+
   let totalGrossSales = 0;
+  let totalOperatingExpenses = 0;
   let allLedger = [];
   
   Object.keys(BOOKS).forEach(bid => {
@@ -3965,12 +3969,16 @@ function renderTaxCenter() {
     
     // Determine conversion to CAD for sales
     const hRate = _fxRateCache[`${cur}_CAD`] || 1;
-    totalGrossSales += (s.revenue || 0) * hRate;
     
     // Add sales to ledger
     (s.hist || []).filter(h => !h.artistPending || h.voided).forEach(h => {
+        const hYear = h.date ? h.date.substring(0, 4) : '';
+        if (selectedYear !== 'all' && hYear !== selectedYear) return;
+
         const amt = h.voided ? 0 : (h.price * h.qty || 0);
         const baseAmt = amt * hRate;
+        totalGrossSales += baseAmt;
+        
         allLedger.push({
             date: h.date,
             type: 'Sale',
@@ -3984,12 +3992,18 @@ function renderTaxCenter() {
             isIncome: true
         });
     });
+    
     // Add book specific expenses
     (s.expenses || []).forEach(e => {
-        // Assume CAD if no currency historically
+        const eYear = e.date ? e.date.substring(0, 4) : '';
+        if (selectedYear !== 'all' && eYear !== selectedYear) return;
+
         const eCur = e.currency || 'CAD';
         const eRate = e.fxRate || _fxRateCache[`${eCur}_CAD`] || 1;
         const eBase = (e.amount || 0) * eRate;
+        
+        totalOperatingExpenses += eBase;
+        
         allLedger.push({
             date: e.date,
             type: 'Expense',
@@ -4003,12 +4017,16 @@ function renderTaxCenter() {
             isIncome: false
         });
     });
+    
     // Add artist payments
     (s.artistTransfers || []).filter(t => t.paid).forEach(t => {
-        // Artist payments are historically in Book Currency
+        const tDate = t.paidDate || t.date || '';
+        const tYear = tDate ? tDate.substring(0, 4) : '';
+        if (selectedYear !== 'all' && tYear !== selectedYear) return;
+
         const tBase = (t.total || 0) * hRate;
         allLedger.push({
-            date: t.paidDate || t.date,
+            date: tDate,
             type: 'Expense',
             desc: `Artist Payout (${b.title})`,
             cat: 'Artist Royalties',
@@ -4022,12 +4040,16 @@ function renderTaxCenter() {
     });
   });
 
-  let totalOperatingExpenses = 0;
   (TAX_CENTER.businessExpenses || []).forEach(e => {
+      const eYear = e.date ? e.date.substring(0, 4) : '';
+      if (selectedYear !== 'all' && eYear !== selectedYear) return;
+
       const eCur = e.currency || 'CAD';
       const eRate = e.fxRate || _fxRateCache[`${eCur}_CAD`] || 1;
       const eBase = e.baseAmount || (e.amount || 0) * eRate;
+      
       totalOperatingExpenses += eBase;
+      
       allLedger.push({
             date: e.date,
             type: 'Business Exp.',
@@ -4040,17 +4062,6 @@ function renderTaxCenter() {
             hasRateError: !e.fxRate && eCur !== 'CAD',
             isIncome: false
         });
-  });
-  
-  Object.keys(BOOKS).forEach(bid => {
-      const s = states[bid] || defaultState(BOOKS[bid]);
-      const cur = getBookCurrencyCode(BOOKS[bid]);
-      const hRate = _fxRateCache[`${cur}_CAD`] || 1;
-      (s.expenses || []).forEach(e => { 
-        const eCur = e.currency || 'CAD';
-        const eRate = e.fxRate || _fxRateCache[`${eCur}_CAD`] || 1;
-        totalOperatingExpenses += (e.amount || 0) * eRate;
-      });
   });
 
   const netCashFlow = totalGrossSales - totalOperatingExpenses;
