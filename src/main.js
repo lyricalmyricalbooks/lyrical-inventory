@@ -510,7 +510,12 @@ function defaultState(book) {
   return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], expenses: [], artistPaymentLink: '' };
 }
 
-function getState() { return states[activeBook] || defaultState(BOOKS[activeBook] || Object.values(BOOKS)[0]); }
+function getState() { 
+  if (!states[activeBook]) {
+    states[activeBook] = defaultState(BOOKS[activeBook] || Object.values(BOOKS)[0]);
+  }
+  return states[activeBook];
+}
 function getBook()  { return BOOKS[activeBook] || Object.values(BOOKS)[0]; }
 
 // ── TOAST
@@ -529,7 +534,13 @@ function setSyncState(status, msg) {
 
 // ── FIREBASE (per-book)
 async function saveState(bookId) {
-  const json = JSON.stringify(states[bookId]);
+  const state = states[bookId];
+  if (!state) {
+    console.warn(`saveState: No local state found for bookId: ${bookId}`);
+    setSyncState('error', '<b>Firebase</b> · missing state object');
+    return;
+  }
+  const json = JSON.stringify(state);
   if (json === lastSavedHashes[bookId]) return;
   setSyncState('syncing', '<b>Firebase</b> · saving…');
   try {
@@ -1775,6 +1786,7 @@ function updateExpenseForm(){
 }
 
 async function submitExpense(){
+  if (!activeBook) { showToast('⚠ Error: No active book selected', 'err'); return; }
   const desc=($('exp-desc').value||'').trim();
   const cat=$('exp-cat').value;
   const amount=parseFloat($('exp-amount').value)||0;
@@ -1782,7 +1794,8 @@ async function submitExpense(){
   const ref=($('exp-ref').value||'').trim();
   const book=getBook();
   
-  const currency = ($('exp-cur') && $('exp-cur').offsetParent !== null) ? ($('exp-cur').value || book.currency) : book.currency;
+  let rawCurrency = ($('exp-cur') && $('exp-cur').offsetParent !== null) ? ($('exp-cur').value || book.currency) : book.currency;
+  const currency = getBookCurrencyCode({ currency: rawCurrency }); 
   
   if(!desc){ showToast('⚠ Please enter a description','warn'); $('exp-desc').focus(); return; }
   if(!amount){ showToast('⚠ Please enter an amount','warn'); $('exp-amount').focus(); return; }
