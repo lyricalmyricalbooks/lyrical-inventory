@@ -573,9 +573,67 @@ async function loadBook(bookId) {
   }
 }
 
+// ── TAX CENTER STATE (Publisher Only)
+let TAX_CENTER = { businessExpenses: [], recurring: [] };
+
+async function loadTaxCenter() {
+  if (isAuthor()) return;
+  try {
+    const json = await window._fbLoadSettings('taxCenter');
+    if (json) {
+      TAX_CENTER = { businessExpenses: [], recurring: [], ...json };
+    }
+    processRecurringExpenses();
+  } catch (e) {
+    console.warn("Failed to load tax center", e);
+  }
+}
+
+async function saveTaxCenter() {
+  if (isAuthor()) return;
+  try {
+    await window._fbSaveSettings('taxCenter', TAX_CENTER);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function processRecurringExpenses() {
+  if (isAuthor() || !TAX_CENTER.recurring || TAX_CENTER.recurring.length === 0) return;
+  const now = new Date();
+  const currentMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  
+  let modified = false;
+  TAX_CENTER.recurring.forEach(sub => {
+    if (!sub.lastInjected) sub.lastInjected = '';
+    
+    // Simple logic: inject once per calendar month
+    if (sub.lastInjected !== currentMonth) {
+      if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+      TAX_CENTER.businessExpenses.unshift({
+        id: Date.now() + Math.random(),
+        desc: sub.desc + ' (Recurring)',
+        cat: sub.cat,
+        amount: parseFloat(sub.amount) || 0,
+        date: today(),
+        ref: 'Auto-Injected',
+        receipt: ''
+      });
+      sub.lastInjected = currentMonth;
+      modified = true;
+    }
+  });
+  
+  if (modified) {
+    saveTaxCenter();
+    renderTaxCenter();
+  }
+}
+
 async function loadAllBooks() {
   setSyncState('syncing','<b>Firebase</b> · loading all books…');
   await Promise.all(Object.keys(BOOKS).map(id => loadBook(id)));
+  await loadTaxCenter();
   setSyncState('ok','<b>Firebase</b> · connected · live sync on');
   $('hdr-sub').textContent = 'Inventory App · Synced '+new Date().toLocaleTimeString();
   renderCurrent();
@@ -583,7 +641,10 @@ async function loadAllBooks() {
 
 async function forceSync() {
   if (isAuthor() && activeBook) { await loadBook(activeBook); renderCurrent(); }
-  else await loadAllBooks();
+  else {
+    await loadAllBooks();
+    await loadTaxCenter();
+  }
 }
 
 // ── BOOK SWITCHER (build custom dropdown)
@@ -649,6 +710,7 @@ function syncRoleUI() {
   const authorNow = isAuthor();
   const websiteTabBtn = $('website-tab-btn');
   const financialsTabBtn = $('financials-tab-btn');
+  const taxcenterTabBtn = $('taxcenter-tab-btn');
   const sheetsTabBtn = $('sheets-tab-btn');
   const backupsTabBtn = $('backups-tab-btn');
   const qrBtn = $('d-qr-btn');
@@ -656,6 +718,7 @@ function syncRoleUI() {
   const myqrTabBtn = $('myqr-tab-btn');
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
   if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
+  if (taxcenterTabBtn) taxcenterTabBtn.style.display = authorNow ? 'none' : '';
   if (sheetsTabBtn) sheetsTabBtn.style.display = authorNow ? 'none' : '';
   if (backupsTabBtn) backupsTabBtn.style.display = authorNow ? 'none' : '';
   if (qrBtn) qrBtn.style.display = authorNow ? 'none' : '';
@@ -674,6 +737,7 @@ function syncRoleUI() {
   // When switching TO author view — redirect away from publisher-only tabs
   const publisherOnlyActive = $('tab-website')?.classList.contains('active')
     || $('tab-financials')?.classList.contains('active')
+    || $('tab-taxcenter')?.classList.contains('active')
     || $('tab-sheets')?.classList.contains('active')
     || $('tab-backups')?.classList.contains('active')
     || $('tab-qrcodes')?.classList.contains('active');
@@ -740,25 +804,44 @@ function switchBook(bookId) {
 // ── TABS
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'sheets' || name === 'qrcodes')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
-  const names = ['dashboard','website','manual','consignment','history','expenses','financials','sheets','backups','qrcodes','myqr'];
-  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', names[i]===name));
+  
+  // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
+  // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr
+  const names = ['dashboard','website','manual','consignment','history','expenses','financials','taxcenter','sheets','backups','qrcodes','myqr'];
+  
+  document.querySelectorAll('.tab-btn').forEach((b) => {
+    // We match by checking onclick text to be safe if order ever changes
+    if (b.getAttribute('onclick')?.includes(`'${name}'`)) {
+      b.classList.add('active');
+    } else {
+      b.classList.remove('active');
+    }
+  });
+
   names.forEach(n => {
     const p = $('tab-'+n);
     if(p) { p.classList.remove('active'); p.style.display='none'; }
   });
-  $('tab-all-overview').classList.remove('active');
-  $('tab-all-overview').style.display='none';
+  
+  const overview = $('tab-all-overview');
+  if (overview) {
+    overview.classList.remove('active');
+    overview.style.display='none';
+  }
+
   const panel = $('tab-'+name);
   if(panel){ panel.style.display='block'; panel.classList.add('active'); }
+  
   if(name==='dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
   if(name==='history') renderHist();
   if(name==='manual') updateManualForm();
   if(name==='consignment'){ renderStores(); renderLedger(); }
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
   if(name==='financials') renderFinancials();
+  if(name==='taxcenter') renderTaxCenter();
   if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
   if(name==='qrcodes') renderAllQRCodes();
   if(name==='myqr') renderAuthorQRPage();
@@ -3723,6 +3806,247 @@ async function boot(forcedBook) {
   initFn();
 }
 
+// ── TAX CENTER LOGIC
+
+function renderTaxCenter() {
+  if (isAuthor()) return;
+  
+  let totalGrossSales = 0;
+  let allLedger = [];
+  
+  Object.keys(BOOKS).forEach(bid => {
+    const s = states[bid] || defaultState(BOOKS[bid]);
+    const b = BOOKS[bid];
+    const cur = getBookCurrencyCode(b);
+    totalGrossSales += s.revenue || 0;
+    
+    // Add sales to ledger
+    (s.hist || []).filter(h => !h.artistPending || h.voided).forEach(h => {
+        allLedger.push({
+            date: h.date,
+            type: 'Sale',
+            desc: `${b.title} (Qty: ${h.qty})`,
+            cat: 'Income',
+            ref: h.num,
+            amount: h.voided ? 0 : (h.price * h.qty || 0),
+            isIncome: true
+        });
+    });
+    // Add book specific expenses
+    (s.expenses || []).forEach(e => {
+        allLedger.push({
+            date: e.date,
+            type: 'Expense',
+            desc: e.desc + ` (${b.title})`,
+            cat: e.cat || 'Project Expense',
+            ref: e.ref || (e.receipt ? `<a href="${e.receipt}" target="_blank" style="color:var(--gold3);">Receipt</a>` : ''),
+            amount: e.amount || 0,
+            isIncome: false
+        });
+    });
+    // Add artist payments
+    (s.artistTransfers || []).filter(t => t.paid).forEach(t => {
+        allLedger.push({
+            date: t.paidDate || t.date,
+            type: 'Expense',
+            desc: `Artist Payout (${b.title})`,
+            cat: 'Artist Royalties',
+            ref: t.num,
+            amount: t.total || 0,
+            isIncome: false
+        });
+    });
+  });
+
+  let totalOperatingExpenses = 0;
+  (TAX_CENTER.businessExpenses || []).forEach(e => {
+      totalOperatingExpenses += e.amount || 0;
+      allLedger.push({
+            date: e.date,
+            type: 'Business Exp.',
+            desc: e.desc,
+            cat: e.cat || 'Other',
+            ref: e.ref || (e.receipt ? `<a href="${e.receipt}" target="_blank" style="color:var(--gold3);">Receipt</a>` : ''),
+            amount: e.amount || 0,
+            isIncome: false
+        });
+  });
+  
+  Object.keys(BOOKS).forEach(bid => {
+      const s = states[bid] || defaultState(BOOKS[bid]);
+      (s.expenses || []).forEach(e => { totalOperatingExpenses += e.amount || 0; });
+  });
+
+  const netCashFlow = totalGrossSales - totalOperatingExpenses;
+  
+  if ($('tc-sales')) $('tc-sales').textContent = '€' + totalGrossSales.toFixed(2);
+  if ($('tc-expenses')) $('tc-expenses').textContent = '€' + totalOperatingExpenses.toFixed(2);
+  if ($('tc-net')) $('tc-net').textContent = '€' + netCashFlow.toFixed(2);
+  
+  allLedger.sort((a,b) => new Date(b.date) - new Date(a.date));
+  
+  const ledTbody = $('tc-ledger-body');
+  if(ledTbody) {
+      ledTbody.innerHTML = allLedger.map(item => `
+        <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'}">
+            <td>${item.date}</td>
+            <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
+            <td>${item.desc}</td>
+            <td>${item.cat}</td>
+            <td>${item.ref}</td>
+            <td class="r">${item.isIncome ? '+' : '-'}€${item.amount.toFixed(2)}</td>
+        </tr>
+      `).join('') || `<tr><td colspan="6" class="r" style="text-align:center;">No data</td></tr>`;
+  }
+  
+  const recBody = $('tc-recurring-body');
+  if(recBody) {
+      recBody.innerHTML = (TAX_CENTER.recurring || []).map((sub, i) => `
+        <tr>
+            <td>${sub.desc}</td>
+            <td>${sub.cat}</td>
+            <td>€${sub.amount}</td>
+            <td>${sub.lastInjected || 'Never'}</td>
+            <td><button class="btn tx" onclick="removeRecurring(${i})">Remove</button></td>
+        </tr>
+      `).join('') || `<tr><td colspan="5" class="r" style="text-align:center;">No active subscriptions</td></tr>`;
+  }
+}
+
+async function submitTaxExpense() {
+  const desc = ($('tc-exp-desc').value || '').trim();
+  const cat = $('tc-exp-cat').value;
+  const amount = parseFloat($('tc-exp-amount').value) || 0;
+  const date = $('tc-exp-date').value || today();
+  
+  if(!desc){ showToast('⚠ Please enter a description','warn'); $('tc-exp-desc').focus(); return; }
+  if(!amount){ showToast('⚠ Please enter an amount','warn'); $('tc-exp-amount').focus(); return; }
+
+  const fileInput = $('tc-exp-file');
+  let receiptUrl = '';
+  if(fileInput && fileInput.files.length > 0) {
+    const file = fileInput.files[0];
+    const submitBtn = $('tc-submit-exp-btn');
+    const oldText = submitBtn.textContent;
+    submitBtn.textContent = 'Uploading...'; submitBtn.disabled = true;
+    try {
+      receiptUrl = await window._fbUploadReceipt(file, `TAX_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g,'')}`);
+    } catch(e) {
+      console.error(e);
+      showToast('⚠ Error uploading receipt', 'err');
+      submitBtn.textContent = oldText; submitBtn.disabled = false;
+      return;
+    }
+    submitBtn.textContent = oldText; submitBtn.disabled = false;
+  }
+
+  if(!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  TAX_CENTER.businessExpenses.unshift({id: Date.now(), desc, cat, amount, date, ref: '', receipt: receiptUrl});
+  
+  saveTaxCenter();
+  renderTaxCenter();
+  showToast('✓ Business Expense logged');
+  $('tc-exp-desc').value='';$('tc-exp-amount').value='';$('tc-exp-date').value=today();
+  if(fileInput) fileInput.value = '';
+}
+
+function addRecurring() {
+  const desc = ($('tc-rec-desc').value || '').trim();
+  const cat = $('tc-rec-cat').value;
+  const amount = parseFloat($('tc-rec-amount').value) || 0;
+  if(!desc || !amount) { showToast('⚠ Details required','warn'); return; }
+  if(!TAX_CENTER.recurring) TAX_CENTER.recurring = [];
+  TAX_CENTER.recurring.push({ desc, cat, amount, lastInjected: '' });
+  saveTaxCenter();
+  renderTaxCenter();
+  showToast('✓ Subscription added');
+  $('tc-rec-desc').value=''; $('tc-rec-amount').value='';
+}
+
+function removeRecurring(idx) {
+    TAX_CENTER.recurring.splice(idx, 1);
+    saveTaxCenter();
+    renderTaxCenter();
+    showToast('✓ Subscription removed');
+}
+
+function downloadTaxLedgerCSV() {
+    const rows = [];
+    rows.push(['Date','Type','Description','Category','Amount']);
+    const ledTbody = $('tc-ledger-body');
+    if (!ledTbody) return;
+    ledTbody.querySelectorAll('tr').forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        if(tds.length === 6) {
+           rows.push([
+               `"${tds[0].innerText}"`,
+               `"${tds[1].innerText}"`,
+               `"${tds[2].innerText}"`,
+               `"${tds[3].innerText}"`,
+               `"${tds[5].innerText}"`
+           ]);
+        }
+    });
+    const csvStr = rows.map(r=>r.join(',')).join('\n');
+    const blob = new Blob([csvStr],{type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Tax_Ledger_${today()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Smart categorization listener
+const TAX_CATEGORIES = {
+    'squarespace': 'Software & Subscriptions',
+    'shopify': 'Software & Subscriptions',
+    'google': 'Software & Subscriptions',
+    'hosting': 'Software & Subscriptions',
+    'domain': 'Software & Subscriptions',
+    'adobe': 'Software & Subscriptions',
+    'meta': 'Marketing & Advertising',
+    'facebook': 'Marketing & Advertising',
+    'instagram': 'Marketing & Advertising',
+    'ads': 'Marketing & Advertising',
+    'mailchimp': 'Marketing & Advertising',
+    'usps': 'Shipping & Postage',
+    'fedex': 'Shipping & Postage',
+    'ups': 'Shipping & Postage',
+    'royal mail': 'Shipping & Postage',
+    'post office': 'Shipping & Postage',
+    'stamps': 'Shipping & Postage',
+    'paper': 'Office Supplies',
+    'ink': 'Office Supplies',
+    'boxes': 'Office Supplies',
+    'mailers': 'Office Supplies',
+    'flight': 'Travel & Meals',
+    'uber': 'Travel & Meals',
+    'hotel': 'Travel & Meals',
+    'dinner': 'Travel & Meals',
+    'lunch': 'Travel & Meals',
+    'accountant': 'Professional Services',
+    'legal': 'Professional Services',
+    'lawyer': 'Professional Services',
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const descInput = document.getElementById('tc-exp-desc');
+    if(descInput) {
+        descInput.addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            const catSelect = document.getElementById('tc-exp-cat');
+            if(!catSelect) return;
+            for(const keyword in TAX_CATEGORIES) {
+                if(val.includes(keyword)) {
+                    catSelect.value = TAX_CATEGORIES[keyword];
+                    break;
+                }
+            }
+        });
+    }
+});
+
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
@@ -3737,7 +4061,8 @@ Object.assign(window, {
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
-  chooseBackupFolder, exportToJSON, exportAllToCSV
+  chooseBackupFolder, exportToJSON, exportAllToCSV,
+  submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter
 });
 
 // ── STARTUP ROUTING
