@@ -161,6 +161,8 @@
 
 <!-- COMBINED OVERVIEW (shown when book = 'all') -->
 <div class="tab-panel active" id="tab-all-overview">
+  <div id="all-pending-approvals-alert" style="display:none; margin-bottom: 1.5rem;"></div>
+
   <div class="sect">All books — inventory overview</div>
   <div id="all-books-list"><!-- rendered by JS --></div>
 
@@ -179,8 +181,11 @@
 
 <!-- DASHBOARD (per book) -->
 <div class="tab-panel" id="tab-dashboard" style="display:none;">
+  
+  <div id="dash-pending-approvals-alert" style="display:none; margin-bottom: 1.5rem;"></div>
 
   <!-- EXPENSES SUMMARY (publisher only) — always at the top when visible -->
+
   <div id="d-expenses-sect" class="metric-banner metric-banner-danger" style="display:none;">
     <div class="metric-banner-overlay"></div>
     <div class="metric-banner-head">

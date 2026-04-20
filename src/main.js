@@ -1012,6 +1012,52 @@ function updateAllOverview() {
     });
   });
   $('all-con-body').innerHTML = conRows.length ? conRows.join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
+
+  renderGlobalPendingAlert();
+}
+
+// ── BOOK CONTEXT BANNERS
+function renderGlobalPendingAlert() {
+  if (isAuthor()) return;
+  const alertDiv = $('all-pending-approvals-alert');
+  if (!alertDiv) return;
+
+  const pendingBooks = [];
+  Object.keys(window.authorSubmissions || {}).forEach(bookId => {
+    const subs = window.authorSubmissions[bookId];
+    const sCount = Object.keys(subs.sales || {}).length;
+    const eCount = Object.keys(subs.expenses || {}).length;
+    if (sCount > 0 || eCount > 0) {
+      pendingBooks.push({ bookId, sCount, eCount, title: BOOKS[bookId]?.title || bookId });
+    }
+  });
+
+  if (pendingBooks.length) {
+    alertDiv.style.display = 'block';
+    alertDiv.innerHTML = `
+      <div style="background:var(--cream3); border:1px solid var(--amber); border-left:4px solid var(--amber); border-radius:var(--r2); padding:1rem;">
+        <div style="font-weight:600; color:var(--text2); margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+          <span class="pill amber">Action Required</span> Pending Author Submissions
+        </div>
+        <div style="font-size:13px; color:var(--text3); margin-bottom:12px;">The following books have new sales or expenses awaiting your approval:</div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          ${pendingBooks.map(b => `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:white; padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
+              <div>
+                <strong style="color:var(--text2);">${b.title}</strong>
+                <span style="font-size:12px; color:var(--text3); margin-left:8px;">
+                  ${b.sCount ? `${b.sCount} sale(s)` : ''} ${b.sCount && b.eCount ? '·' : ''} ${b.eCount ? `${b.eCount} expense(s)` : ''}
+                </span>
+              </div>
+              <button class="btn sm gold" onclick="switchBook('${b.bookId}'); setTimeout(()=>switchTab('history'), 50);">Review →</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } else {
+    alertDiv.style.display = 'none';
+  }
 }
 
 // ── BOOK CONTEXT BANNERS
@@ -1027,9 +1073,48 @@ function updateContextBanners() {
 }
 
 // ── DASHBOARD (per book)
+function renderBookPendingAlert() {
+  if (isAuthor() || activeBook === 'all') return;
+  const alertDiv = $('dash-pending-approvals-alert');
+  if (!alertDiv) return;
+
+  const subs = window.authorSubmissions[activeBook] || {};
+  const sCount = Object.keys(subs.sales || {}).length;
+  const eCount = Object.keys(subs.expenses || {}).length;
+
+  if (sCount > 0 || eCount > 0) {
+    alertDiv.style.display = 'block';
+    let contentHtml = '';
+    if (sCount > 0) {
+      contentHtml += `<button class="btn gold outline sm" onclick="switchTab('history')">Review ${sCount} pending sale(s) →</button>`;
+    }
+    if (eCount > 0) {
+      contentHtml += `<button class="btn gold outline sm" style="margin-left:8px;" onclick="switchTab('expenses')">Review ${eCount} pending expense(s) →</button>`;
+    }
+
+    alertDiv.innerHTML = `
+      <div style="background:white; border:1px solid var(--border); border-left:4px solid var(--amber); border-radius:var(--r2); padding:1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+        <div>
+          <div style="font-weight:600; color:var(--text2); margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+            <span class="pill amber">Pending</span> Author Submissions
+          </div>
+          <div style="font-size:12px; color:var(--text3);">There are entries from the author waiting for your approval.</div>
+        </div>
+        <div>
+          ${contentHtml}
+        </div>
+      </div>
+    `;
+  } else {
+    alertDiv.style.display = 'none';
+  }
+}
+
+// ── DASHBOARD (per book)
 function updateDash() {
   if (!activeBook || activeBook === 'all') return;
   const s = getState(), book = getBook();
+  renderBookPendingAlert();
   const cur = book.currency;
   updateContextBanners();
   $('d-book-title').textContent = book.title;
@@ -2255,14 +2340,32 @@ window.approveSubmission = async function(type, subKey) {
     saveState(activeBook);
     await window._fbDeleteSubmission(activeBook, type, subKey);
     showToast('✓ Expense approved and added to ledger');
+    updateDash();
+    switchTab('dashboard');
+    setTimeout(() => {
+      const expBanner = $('d-expenses-sect');
+      if (expBanner) expBanner.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   } else if (type === 'sales') {
+    let pendingTransfer = false;
     if(raw.payment?.type==='Payment directly to artist'){
       recordOrderPendingTransfer(raw.num,raw.chan,raw.qty,raw.price,raw.notes,raw.payment);
+      pendingTransfer = true;
     } else {
       recordOrder(raw.num,raw.chan,raw.qty,raw.price,raw.notes,raw.payment);
     }
     await window._fbDeleteSubmission(activeBook, type, subKey);
     showToast('✓ Sale approved and added to ledger');
+    updateDash();
+    if (pendingTransfer) {
+      switchTab('dashboard');
+      setTimeout(() => {
+        const transSect = $('artist-transfers-sect');
+        if (transSect) transSect.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } else {
+      renderHist();
+    }
   }
 }
 
@@ -2270,6 +2373,8 @@ window.rejectSubmission = async function(type, subKey) {
   if (!confirm('Reject this submission from the author?')) return;
   await window._fbDeleteSubmission(activeBook, type, subKey);
   showToast('Submission removed', 'warn');
+  if (activeBook === 'all') updateAllOverview();
+  else { updateDash(); renderHist(); renderExpenses(); }
 }
 
 function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
