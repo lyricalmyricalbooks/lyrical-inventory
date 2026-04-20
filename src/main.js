@@ -4070,6 +4070,27 @@ function renderTaxCenter() {
   if ($('tc-expenses')) $('tc-expenses').textContent = fmt(totalOperatingExpenses, baseCurrency);
   if ($('tc-net')) $('tc-net').textContent = fmt(netCashFlow, baseCurrency);
   
+  const catBody = $('tc-category-body');
+  if (catBody) {
+      const expenses = allLedger.filter(item => !item.isIncome);
+      const catSummary = {};
+      expenses.forEach(ex => {
+          const c = ex.cat || 'Uncategorized';
+          if (!catSummary[c]) catSummary[c] = { total: 0, count: 0 };
+          catSummary[c].total += ex.baseAmount;
+          catSummary[c].count++;
+      });
+      const catList = Object.keys(catSummary).map(c => ({ name: c, ...catSummary[c] })).sort((a,b) => b.total - a.total);
+      
+      catBody.innerHTML = catList.map(c => `
+          <tr>
+            <td>${c.name}</td>
+            <td class="r">${c.count}</td>
+            <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}</td>
+          </tr>
+      `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;">No deductible expenses recorded</td></tr>`;
+  }
+
   allLedger.sort((a,b) => new Date(b.date) - new Date(a.date));
   
   const ledTbody = $('tc-ledger-body');

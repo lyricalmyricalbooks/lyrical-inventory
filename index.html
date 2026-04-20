@@ -109,7 +109,6 @@
   <button class="tab-btn" onclick="switchTab('consignment')">Consignment</button>
   <button class="tab-btn" onclick="switchTab('history')">History</button>
   <button class="tab-btn" onclick="switchTab('expenses')">Expenses</button>
-  <button class="tab-btn" onclick="switchTab('financials')" id="financials-tab-btn" style="display:none;">🏦 Financials</button>
   <button class="tab-btn" onclick="switchTab('taxcenter')" id="taxcenter-tab-btn" style="display:none;">⚖️ Tax Center</button>
   <button class="tab-btn" onclick="switchTab('sheets')" id="sheets-tab-btn">📊 Sheets</button>
   <button class="tab-btn" onclick="switchTab('backups')" id="backups-tab-btn" style="display:none;">💾 Backups</button>
@@ -628,6 +627,14 @@
     </div>
   </div>
 
+  <div class="row-between" style="margin-top:2.5rem;margin-bottom:12px;">
+    <div class="section-hed">Expense Categorization (Tax Return Ready)</div>
+  </div>
+  <div class="tbl-wrap" style="margin-bottom:1.5rem;"><table class="tbl">
+    <thead><tr><th>Tax Category</th><th class="r">Transactions</th><th class="r">Total Deductible (CAD)</th></tr></thead>
+    <tbody id="tc-category-body"></tbody>
+  </table></div>
+
   <div class="row-between" style="margin-top:1.5rem;margin-bottom:12px;">
     <div class="section-hed">Master Ledger (Sales + Expenses)</div>
     <button class="btn tag" onclick="downloadTaxLedgerCSV()">Export CSV</button>
@@ -1001,88 +1008,7 @@ function json_(obj) {
   </div>
 </div>
 
-<!-- FINANCIALS (publisher only) -->
-<div class="tab-panel" id="tab-financials" style="display:none;">
-  <div class="row-between">
-    <div class="section-hed">Publisher Financial Center</div>
-    <div style="display:flex; gap:12px; align-items:center;">
-      <span style="font-size:11px; font-weight:600; color:var(--text3);">Fiscal Year:</span>
-      <select id="fin-year-selector" onchange="renderFinancials()" style="padding:6px 12px; border-radius:var(--r); border:1px solid var(--border); background:var(--cream2); font-family:'Syne',sans-serif; font-size:12px; font-weight:600;">
-        <option value="2024">2024</option>
-        <option value="2025" selected>2025</option>
-        <option value="2026">2026</option>
-      </select>
-      <button class="btn gold sm" onclick="downloadTaxReport()">Download Tax CSV</button>
-    </div>
-  </div>
 
-  <!-- KPI SUMMARY -->
-  <div class="kpi-grid" style="margin-top:1.5rem;">
-    <div class="kpi">
-      <div class="kpi-label">Gross Revenue</div>
-      <div class="kpi-value gold" id="fin-rev">—</div>
-      <div class="kpi-sub" id="fin-rev-sub">Total sales collected</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">COGS (Est.)</div>
-      <div class="kpi-value" id="fin-cogs" style="color:#fb923c;">—</div>
-      <div class="kpi-sub" id="fin-cogs-sub">Cost of Goods Sold</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">OpEx + Shares</div>
-      <div class="kpi-value" id="fin-exp" style="color:#f87171;">—</div>
-      <div class="kpi-sub" id="fin-exp-sub">Expenses & artist payouts</div>
-    </div>
-  </div>
-
-  <div class="card" style="background:var(--ink2); border-left:4px solid var(--gold2); color:var(--cream); padding:1.75rem;">
-     <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-        <div>
-          <div style="font-size:10px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:rgba(255,255,255,.3); margin-bottom:10px;">Net Profit Before Tax</div>
-          <div style="font-family:'DM Mono',monospace; font-size:42px; font-weight:500; color:var(--gold3); line-height:1;" id="fin-profit">—</div>
-          <div style="font-size:12px; color:rgba(255,255,255,.2); margin-top:12px;" id="fin-profit-sub">Calculated for the current fiscal period</div>
-        </div>
-        <div style="text-align:right;">
-           <div class="sheets-badge" style="background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.1); color:rgba(255,255,255,.4);">Tax Ready Mode</div>
-        </div>
-     </div>
-  </div>
-
-  <div class="sect" style="margin-top:2rem;">Expense Categorization (Tax Return Ready)</div>
-  <div class="tbl-wrap">
-    <table class="tbl">
-      <thead>
-        <tr>
-          <th>Category</th>
-          <th class="r">Transactions</th>
-          <th class="r">Total Deductible Amount</th>
-        </tr>
-      </thead>
-      <tbody id="fin-exp-body">
-        <!-- Populated by JS -->
-      </tbody>
-    </table>
-  </div>
-
-  <div class="sect" style="margin-top:2rem;">Book Performance & COGS Breakdown</div>
-  <div class="tbl-wrap">
-    <table class="tbl">
-      <thead>
-        <tr>
-          <th>Book / Project</th>
-          <th class="r">Units Sold</th>
-          <th class="r">Revenue</th>
-          <th class="r">Unit Cost</th>
-          <th class="r">COGS Total</th>
-          <th class="r">Net Gross Profit</th>
-        </tr>
-      </thead>
-      <tbody id="fin-books-body">
-        <!-- Populated by JS -->
-      </tbody>
-    </table>
-  </div>
-</div>
 </div><!-- /#pw-app -->
 
 <!-- MODALS -->
