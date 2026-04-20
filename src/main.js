@@ -1955,16 +1955,17 @@ function renderExpenses(){
   const expenses=s.expenses||[];
   const body=$('exp-body');
   if(!body)return;
-  if(!expenses.length){
-    body.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>';
-    return;
-  }
   const pbExp = window.authorSubmissions[activeBook]?.expenses || {};
   const pendingAuthExpenses = Object.keys(pbExp).map(k => {
     const raw = JSON.parse(pbExp[k].data);
     return { ...raw, _subKey: k, pendingAuth: true };
   });
   const combined = [...pendingAuthExpenses, ...expenses];
+
+  if(!combined.length){
+    body.innerHTML=`<tr><td colspan="${window.IS_PUBLISHER ? 9 : 8}"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>`;
+    return;
+  }
 
   const unreceived=combined.filter(e=>!e.received && !e.pendingAuth);
   const total=unreceived.reduce((a,e)=>a+(e.amount||0),0);
