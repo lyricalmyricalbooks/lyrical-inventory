@@ -574,15 +574,18 @@ async function loadBook(bookId) {
 }
 
 // ── TAX CENTER STATE (Publisher Only)
-let TAX_CENTER = { businessExpenses: [], recurring: [] };
+let TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' } };
+let _fxRateCache = { 'CAD_CAD': 1 };
 
 async function loadTaxCenter() {
   if (isAuthor()) return;
   try {
     const json = await window._fbLoadSettings('taxCenter');
     if (json) {
-      TAX_CENTER = { businessExpenses: [], recurring: [], ...json };
+      TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...json };
     }
+    if(TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
+    await refreshDailyRates();
     processRecurringExpenses();
   } catch (e) {
     console.warn("Failed to load tax center", e);
@@ -610,11 +613,17 @@ function processRecurringExpenses() {
     // Simple logic: inject once per calendar month
     if (sub.lastInjected !== currentMonth) {
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+      const origCur = sub.currency || 'CAD';
+      const fxRate = _fxRateCache[`${origCur}_CAD`] || 1;
+      const baseAmount = (parseFloat(sub.amount) || 0) * fxRate;
       TAX_CENTER.businessExpenses.unshift({
         id: Date.now() + Math.random(),
         desc: sub.desc + ' (Recurring)',
         cat: sub.cat,
+        currency: origCur,
         amount: parseFloat(sub.amount) || 0,
+        fxRate: fxRate,
+        baseAmount: baseAmount,
         date: today(),
         ref: 'Auto-Injected',
         receipt: ''
@@ -629,6 +638,38 @@ function processRecurringExpenses() {
     renderTaxCenter();
   }
 }
+
+async function refreshDailyRates() {
+  if (isAuthor()) return;
+  const todayStr = today();
+  if (TAX_CENTER.settings && TAX_CENTER.settings.lastRateSync === todayStr && TAX_CENTER.settings.rates) {
+      Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
+      return;
+  }
+  
+  try {
+      const res = await fetch(`https://open.er-api.com/v6/latest/CAD`);
+      if (res.ok) {
+          const json = await res.json();
+          const rates = {};
+          if (json.rates) {
+             Object.keys(json.rates).forEach(cur => {
+                 // Convert TO CAD rate (e.g. USD is 1.35 CAD)
+                 rates[`${cur}_CAD`] = 1 / json.rates[cur]; 
+             });
+             rates['CAD_CAD'] = 1;
+             Object.assign(_fxRateCache, rates);
+             if(!TAX_CENTER.settings) TAX_CENTER.settings = { baseCurrency: 'CAD', geminiKey: '' };
+             TAX_CENTER.settings.rates = rates;
+             TAX_CENTER.settings.lastRateSync = todayStr;
+             saveTaxCenter();
+          }
+      }
+  } catch(e) {
+      console.warn("Failed to fetch daily rates", e);
+  }
+}
+
 
 async function loadAllBooks() {
   setSyncState('syncing','<b>Firebase</b> · loading all books…');
@@ -3810,7 +3851,10 @@ async function boot(forcedBook) {
 
 function renderTaxCenter() {
   if (isAuthor()) return;
-  
+  // Initialize AI key input UI
+  if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
+
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
   let totalGrossSales = 0;
   let allLedger = [];
   
@@ -3818,41 +3862,61 @@ function renderTaxCenter() {
     const s = states[bid] || defaultState(BOOKS[bid]);
     const b = BOOKS[bid];
     const cur = getBookCurrencyCode(b);
-    totalGrossSales += s.revenue || 0;
+    
+    // Determine conversion to CAD for sales
+    const hRate = _fxRateCache[`${cur}_CAD`] || 1;
+    totalGrossSales += (s.revenue || 0) * hRate;
     
     // Add sales to ledger
     (s.hist || []).filter(h => !h.artistPending || h.voided).forEach(h => {
+        const amt = h.voided ? 0 : (h.price * h.qty || 0);
+        const baseAmt = amt * hRate;
         allLedger.push({
             date: h.date,
             type: 'Sale',
             desc: `${b.title} (Qty: ${h.qty})`,
             cat: 'Income',
             ref: h.num,
-            amount: h.voided ? 0 : (h.price * h.qty || 0),
+            currency: cur,
+            origAmount: amt,
+            baseAmount: baseAmt,
+            hasRateError: !hRate,
             isIncome: true
         });
     });
     // Add book specific expenses
     (s.expenses || []).forEach(e => {
+        // Assume CAD if no currency historically
+        const eCur = e.currency || 'CAD';
+        const eRate = e.fxRate || _fxRateCache[`${eCur}_CAD`] || 1;
+        const eBase = (e.amount || 0) * eRate;
         allLedger.push({
             date: e.date,
             type: 'Expense',
             desc: e.desc + ` (${b.title})`,
             cat: e.cat || 'Project Expense',
             ref: e.ref || (e.receipt ? `<a href="${e.receipt}" target="_blank" style="color:var(--gold3);">Receipt</a>` : ''),
-            amount: e.amount || 0,
+            currency: eCur,
+            origAmount: e.amount || 0,
+            baseAmount: eBase,
+            hasRateError: !e.fxRate && eCur !== 'CAD',
             isIncome: false
         });
     });
     // Add artist payments
     (s.artistTransfers || []).filter(t => t.paid).forEach(t => {
+        // Artist payments are historically in Book Currency
+        const tBase = (t.total || 0) * hRate;
         allLedger.push({
             date: t.paidDate || t.date,
             type: 'Expense',
             desc: `Artist Payout (${b.title})`,
             cat: 'Artist Royalties',
             ref: t.num,
-            amount: t.total || 0,
+            currency: cur,
+            origAmount: t.total || 0,
+            baseAmount: tBase,
+            hasRateError: !hRate,
             isIncome: false
         });
     });
@@ -3860,28 +3924,40 @@ function renderTaxCenter() {
 
   let totalOperatingExpenses = 0;
   (TAX_CENTER.businessExpenses || []).forEach(e => {
-      totalOperatingExpenses += e.amount || 0;
+      const eCur = e.currency || 'CAD';
+      const eRate = e.fxRate || _fxRateCache[`${eCur}_CAD`] || 1;
+      const eBase = e.baseAmount || (e.amount || 0) * eRate;
+      totalOperatingExpenses += eBase;
       allLedger.push({
             date: e.date,
             type: 'Business Exp.',
             desc: e.desc,
             cat: e.cat || 'Other',
             ref: e.ref || (e.receipt ? `<a href="${e.receipt}" target="_blank" style="color:var(--gold3);">Receipt</a>` : ''),
-            amount: e.amount || 0,
+            currency: eCur,
+            origAmount: e.amount || 0,
+            baseAmount: eBase,
+            hasRateError: !e.fxRate && eCur !== 'CAD',
             isIncome: false
         });
   });
   
   Object.keys(BOOKS).forEach(bid => {
       const s = states[bid] || defaultState(BOOKS[bid]);
-      (s.expenses || []).forEach(e => { totalOperatingExpenses += e.amount || 0; });
+      const cur = getBookCurrencyCode(BOOKS[bid]);
+      const hRate = _fxRateCache[`${cur}_CAD`] || 1;
+      (s.expenses || []).forEach(e => { 
+        const eCur = e.currency || 'CAD';
+        const eRate = e.fxRate || _fxRateCache[`${eCur}_CAD`] || 1;
+        totalOperatingExpenses += (e.amount || 0) * eRate;
+      });
   });
 
   const netCashFlow = totalGrossSales - totalOperatingExpenses;
   
-  if ($('tc-sales')) $('tc-sales').textContent = '€' + totalGrossSales.toFixed(2);
-  if ($('tc-expenses')) $('tc-expenses').textContent = '€' + totalOperatingExpenses.toFixed(2);
-  if ($('tc-net')) $('tc-net').textContent = '€' + netCashFlow.toFixed(2);
+  if ($('tc-sales')) $('tc-sales').textContent = fmt(totalGrossSales, baseCurrency);
+  if ($('tc-expenses')) $('tc-expenses').textContent = fmt(totalOperatingExpenses, baseCurrency);
+  if ($('tc-net')) $('tc-net').textContent = fmt(netCashFlow, baseCurrency);
   
   allLedger.sort((a,b) => new Date(b.date) - new Date(a.date));
   
@@ -3894,9 +3970,10 @@ function renderTaxCenter() {
             <td>${item.desc}</td>
             <td>${item.cat}</td>
             <td>${item.ref}</td>
-            <td class="r">${item.isIncome ? '+' : '-'}€${item.amount.toFixed(2)}</td>
+            <td class="r">${item.isIncome ? '+' : '-'}${fmt(item.origAmount, item.currency)} ${item.hasRateError ? '<span title="Missing FX Rate">⚠️</span>': ''}</td>
+            <td class="r" style="font-weight:bold;">${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}</td>
         </tr>
-      `).join('') || `<tr><td colspan="6" class="r" style="text-align:center;">No data</td></tr>`;
+      `).join('') || `<tr><td colspan="7" class="r" style="text-align:center;">No data</td></tr>`;
   }
   
   const recBody = $('tc-recurring-body');
@@ -3905,7 +3982,7 @@ function renderTaxCenter() {
         <tr>
             <td>${sub.desc}</td>
             <td>${sub.cat}</td>
-            <td>€${sub.amount}</td>
+            <td>${fmt(sub.amount, sub.currency||'CAD')}</td>
             <td>${sub.lastInjected || 'Never'}</td>
             <td><button class="btn tx" onclick="removeRecurring(${i})">Remove</button></td>
         </tr>
@@ -3913,9 +3990,80 @@ function renderTaxCenter() {
   }
 }
 
+function saveTaxCenterSettings() {
+    if(!TAX_CENTER.settings) TAX_CENTER.settings = {};
+    TAX_CENTER.settings.geminiKey = document.getElementById('tc-api-key').value.trim();
+    saveTaxCenter();
+    showToast('✓ Settings updated');
+}
+
+async function scanReceiptWithAI() {
+    const fileInput = $('tc-exp-file');
+    if(!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
+    
+    const apiKey = TAX_CENTER.settings?.geminiKey;
+    if(!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+
+    const file = fileInput.files[0];
+    const btn = $('tc-ai-scan-btn');
+    const oldText = btn.textContent;
+    btn.textContent = 'Scanning...'; btn.disabled = true;
+
+    try {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        await new Promise(r => reader.onload = r);
+        const base64Data = reader.result.split(',')[1];
+        const mimeType = file.type;
+
+        // Calling Gemini 1.5 Flash Vision
+        const payload = {
+            contents: [{
+                parts: [
+                    { "text": "Extract these exact 3 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase). No markdown, just raw JSON." },
+                    {
+                        "inline_data": {
+                            "mime_type": mimeType,
+                            "data": base64Data
+                        }
+                    }
+                ]
+            }],
+            generationConfig: { response_mime_type: "application/json" }
+        };
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if(!res.ok) throw new Error("API call failed");
+        const data = await res.json();
+        
+        const extractedJsonStr = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const extracted = JSON.parse(extractedJsonStr);
+
+        if(extracted.vendor) $('tc-exp-desc').value = extracted.vendor;
+        if(extracted.date) $('tc-exp-date').value = extracted.date;
+        if(extracted.amount) $('tc-exp-amount').value = extracted.amount;
+        
+        // Auto categorize via input event trigger so TAX_CATEGORIES hook fires
+        const ev = new Event('input');
+        $('tc-exp-desc').dispatchEvent(ev);
+
+        showToast('✓ Receipt data extracted');
+    } catch(e) {
+        console.error("AI Scan Error:", e);
+        showToast('⚠ AI extraction failed', 'err');
+    }
+    btn.textContent = oldText; btn.disabled = false;
+}
+
 async function submitTaxExpense() {
   const desc = ($('tc-exp-desc').value || '').trim();
   const cat = $('tc-exp-cat').value;
+  const currency = $('tc-exp-cur').value || 'CAD';
   const amount = parseFloat($('tc-exp-amount').value) || 0;
   const date = $('tc-exp-date').value || today();
   
@@ -3940,8 +4088,12 @@ async function submitTaxExpense() {
     submitBtn.textContent = oldText; submitBtn.disabled = false;
   }
 
+  // Multi-currency calculation
+  const fxRate = _fxRateCache[`${currency}_CAD`] || 1;
+  const baseAmount = amount * fxRate;
+
   if(!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-  TAX_CENTER.businessExpenses.unshift({id: Date.now(), desc, cat, amount, date, ref: '', receipt: receiptUrl});
+  TAX_CENTER.businessExpenses.unshift({id: Date.now(), desc, cat, currency, amount, fxRate, baseAmount, date, ref: '', receipt: receiptUrl});
   
   saveTaxCenter();
   renderTaxCenter();
@@ -3953,10 +4105,11 @@ async function submitTaxExpense() {
 function addRecurring() {
   const desc = ($('tc-rec-desc').value || '').trim();
   const cat = $('tc-rec-cat').value;
+  const currency = $('tc-rec-cur').value || 'CAD';
   const amount = parseFloat($('tc-rec-amount').value) || 0;
   if(!desc || !amount) { showToast('⚠ Details required','warn'); return; }
   if(!TAX_CENTER.recurring) TAX_CENTER.recurring = [];
-  TAX_CENTER.recurring.push({ desc, cat, amount, lastInjected: '' });
+  TAX_CENTER.recurring.push({ desc, cat, currency, amount, lastInjected: '' });
   saveTaxCenter();
   renderTaxCenter();
   showToast('✓ Subscription added');
@@ -3972,18 +4125,19 @@ function removeRecurring(idx) {
 
 function downloadTaxLedgerCSV() {
     const rows = [];
-    rows.push(['Date','Type','Description','Category','Amount']);
+    rows.push(['Date','Type','Description','Category','Orig Amount','Base Amount']);
     const ledTbody = $('tc-ledger-body');
     if (!ledTbody) return;
     ledTbody.querySelectorAll('tr').forEach(tr => {
         const tds = tr.querySelectorAll('td');
-        if(tds.length === 6) {
+        if(tds.length === 7) {
            rows.push([
                `"${tds[0].innerText}"`,
                `"${tds[1].innerText}"`,
                `"${tds[2].innerText}"`,
                `"${tds[3].innerText}"`,
-               `"${tds[5].innerText}"`
+               `"${tds[5].innerText.replace('⚠️', '').trim()}"`,
+               `"${tds[6].innerText}"`
            ]);
         }
     });

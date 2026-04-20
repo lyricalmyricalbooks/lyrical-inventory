@@ -515,7 +515,10 @@
   </div>
 
   <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
-    <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:1rem;">Cash Flow Summary</div>
+    <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;">
+        <span>Cash Flow Summary</span>
+        <span style="font-size:12px;color:var(--text3);background:var(--bg3);padding:2px 8px;border-radius:12px;">Values in CAD</span>
+    </div>
     <div class="g3">
       <div class="dash-stat"><div class="label">Gross Sales (Money In)</div><div class="val" id="tc-sales">—</div></div>
       <div class="dash-stat"><div class="label">Operating Expenses (Money Out)</div><div class="val" id="tc-expenses" style="color:var(--red);">—</div><div class="subtext" style="color:var(--red);">Excludes artist payouts</div></div>
@@ -540,9 +543,24 @@
       </div>
     </div>
     <div class="g3">
-      <div class="form-group"><label>Amount</label><div class="price-wrap"><span class="sym" id="tc-exp-sym">€</span><input type="number" id="tc-exp-amount" step="0.01" min="0" placeholder="0.00"></div></div>
+      <div class="form-group"><label>Amount</label>
+        <div class="price-wrap">
+          <select id="tc-exp-cur" style="flex:0 0 60px;margin-right:4px;">
+            <option value="CAD">CAD</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+          </select>
+          <input type="number" id="tc-exp-amount" step="0.01" min="0" placeholder="0.00" style="flex:1;">
+        </div>
+      </div>
       <div class="form-group"><label>Date</label><input type="date" id="tc-exp-date"></div>
-      <div class="form-group"><label>Receipt</label><input type="file" id="tc-exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px;"></div>
+      <div class="form-group"><label>Receipt</label>
+        <div style="display:flex;gap:4px;">
+          <input type="file" id="tc-exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px;flex:1;">
+          <button class="btn gold" style="padding: 0 8px; font-size:12px; margin-top: 6px;" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn">✨ AI Scan</button>
+        </div>
+      </div>
     </div>
     <div style="margin-top:12px;"><button class="btn gold" style="width:100%;height:38px;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button></div>
   </div>
@@ -562,10 +580,28 @@
           <option>Other</option>
         </select>
       </div>
-      <div class="form-group" style="display:flex;gap:10px;">
+      <div class="form-group" style="display:flex;gap:4px;">
+        <select id="tc-rec-cur" style="flex:0 0 60px;">
+          <option value="CAD">CAD</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+        </select>
         <input type="number" id="tc-rec-amount" placeholder="Amount" style="flex:1;">
         <button class="btn gold" onclick="addRecurring()">Add</button>
       </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1.5rem;background:var(--bg2);">
+    <div class="section-hed" style="margin-bottom:0.5rem;font-size:14px;">Tax Center Config</div>
+    <div class="g2">
+        <div class="form-group"><label>Gemini API Key (For AI Scan)</label><input type="password" id="tc-api-key" placeholder="AI-..." onchange="saveTaxCenterSettings()"></div>
+        <div class="form-group"><label>Base Currency</label>
+        <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled>
+            <option value="CAD">CAD (Default)</option>
+        </select>
+        </div>
     </div>
   </div>
 
@@ -574,7 +610,7 @@
     <button class="btn tag" onclick="downloadTaxLedgerCSV()">Export CSV</button>
   </div>
   <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Tax Category</th><th>Receipt/Ref</th><th class="r">Amount</th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Tax Category</th><th>Receipt/Ref</th><th class="r">Amount (Orig)</th><th class="r">Amount (CAD)</th></tr></thead>
     <tbody id="tc-ledger-body"></tbody>
   </table></div>
 </div>
