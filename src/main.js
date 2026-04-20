@@ -4333,7 +4333,7 @@ document.addEventListener('DOMContentLoaded', () => {
 Object.assign(window, {
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
-  fetchOrders, applyOne, applyAll, onManualCurrencyChange, onFxCurrencyChange, calcFx, submitManual,
+  fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, submitManual,
   submitGratuity, openM, closeM, addStore, openSend, confirmSend, openSale, confirmSale,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
