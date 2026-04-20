@@ -1761,15 +1761,16 @@ function updateExpenseForm(){
   const book=getBook();
   $('exp-date').value=today();
   
+  // Show currency dropdown for everyone now that symbols are gone
+  if ($('pub-exp-cur-group')) $('pub-exp-cur-group').style.display = '';
+  if ($('exp-cur')) $('exp-cur').value = book.currency || 'EUR';
+
   if (window.IS_PUBLISHER) {
-    if ($('pub-exp-cur-group')) $('pub-exp-cur-group').style.display = '';
     if ($('exp-ai-btn')) $('exp-ai-btn').style.display = '';
-    if ($('exp-cur')) $('exp-cur').value = book.currency;
-    $('exp-amount').parentElement.parentElement.parentElement.className = 'g5'; // Adjust grid to fit 5 items
+    $('exp-amount').parentElement.parentElement.parentElement.className = 'g5'; // Adjust grid
   } else {
-    if ($('pub-exp-cur-group')) $('pub-exp-cur-group').style.display = 'none';
     if ($('exp-ai-btn')) $('exp-ai-btn').style.display = 'none';
-    $('exp-amount').parentElement.parentElement.parentElement.className = 'g4'; // Revert grid
+    $('exp-amount').parentElement.parentElement.parentElement.className = 'g5'; // Also use g5 for authors to fit currency
   }
 }
 
@@ -1781,7 +1782,7 @@ async function submitExpense(){
   const ref=($('exp-ref').value||'').trim();
   const book=getBook();
   
-  const currency = window.IS_PUBLISHER ? ($('exp-cur').value || book.currency) : book.currency;
+  const currency = ($('exp-cur') && $('exp-cur').offsetParent !== null) ? ($('exp-cur').value || book.currency) : book.currency;
   
   if(!desc){ showToast('⚠ Please enter a description','warn'); $('exp-desc').focus(); return; }
   if(!amount){ showToast('⚠ Please enter an amount','warn'); $('exp-amount').focus(); return; }
