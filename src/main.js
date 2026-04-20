@@ -1723,7 +1723,7 @@ async function onManualCurrencyChange() {
   const book = getBook();
   const native = getBookCurrencyCode(book);
 
-  if (cur === 'BOOK' || cur === native || isAuthor()) {
+  if (cur === 'BOOK' || cur === native) {
     if (resultSpan) resultSpan.style.display = 'none';
     _manualFxRate = null;
     phint();
@@ -2262,7 +2262,7 @@ function phint(){
   const book=getBook(),p=parseFloat($('m-price').value)||0,q=parseInt($('m-qty').value)||1,h=$('m-hint');
   let t = p * q;
   
-  if (!isAuthor() && _manualFxRate) {
+  if (_manualFxRate) {
      calcFx(); // Update the inline converted value
      const convertedP = p * _manualFxRate;
      t = convertedP * q;
@@ -2295,7 +2295,7 @@ async function submitManual(){
   
   const cur = $('m-price-cur').value;
   const native = getBookCurrencyCode(book);
-  if (!isAuthor() && cur !== 'BOOK' && cur !== native && _manualFxRate) {
+  if (cur !== 'BOOK' && cur !== native && _manualFxRate) {
     price = rawPrice * _manualFxRate;
     fxNote = `Paid ${cur} ${rawPrice.toFixed(2)}`;
     payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled: true, fxCur: cur, fxAmt: rawPrice, fxRate: _manualFxRate });
