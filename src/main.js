@@ -3216,6 +3216,7 @@ function buildBackupPayload() {
     timestamp: new Date().toISOString(),
     BOOKS: BOOKS,
     states: states,
+    TAX_CENTER: TAX_CENTER,
     productionCosts: JSON.parse(localStorage.getItem('lm-production-costs') || '{}'),
     paymentLinks: JSON.parse(localStorage.getItem('lm-payment-links') || '{}')
   };
@@ -3318,7 +3319,13 @@ async function applyBackupData(data) {
     await window._fbSave(bid, JSON.stringify(data.states[bid]));
   }
 
-  // 3. Metadata
+  // 3. Tax Center
+  if (data.TAX_CENTER) {
+    TAX_CENTER = data.TAX_CENTER;
+    await saveTaxCenter();
+  }
+
+  // 4. Metadata
   if (data.productionCosts) {
     await window._fbSaveSettings('productionCosts', data.productionCosts);
     localStorage.setItem('lm-production-costs', JSON.stringify(data.productionCosts));
