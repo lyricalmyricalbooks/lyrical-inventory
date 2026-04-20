@@ -1135,13 +1135,15 @@ function updateDash() {
   const pendingTransfers=[...(s.artistTransfers||[])];
   
   // Merge pending sales where they collected payment
-  const pbSales = window.authorSubmissions[activeBook]?.sales || {};
-  Object.keys(pbSales).forEach(k => {
-    const raw = JSON.parse(pbSales[k].data);
-    if (raw.payment?.type === 'Payment directly to artist') {
+  const pbSales2 = window.authorSubmissions[activeBook]?.sales || {};
+  Object.keys(pbSales2).forEach(k => {
+    const raw = (typeof pbSales2[k].data === 'string') ? JSON.parse(pbSales2[k].data) : pbSales2[k].data;
+    const isDirectToArtist = raw.paymentType === 'Payment directly to artist'
+      || (raw.notes || '').includes('Payment directly to artist');
+    if (isDirectToArtist) {
       pendingTransfers.push({
         ...raw,
-        total: raw.qty * raw.price
+        total: (raw.qty || 0) * (raw.price || 0)
       });
     }
   });
@@ -2304,7 +2306,8 @@ async function submitManual(){
   const fullNotes=[notes,fxNote,paymentType].filter(Boolean).join(' · ');
 
   // Create standard entry payload
-  const entryPayload = { num, chan, qty, price, notes: fullNotes, payment, date: today(), id: Date.now() };
+  // paymentType stored on the payload so it can be detected in renderArtistTransfers / updateDash
+  const entryPayload = { num, chan, qty, price, notes: fullNotes, payment, paymentType, date: today(), id: Date.now() };
 
   if (isAuthor()) {
     // Author queue route
@@ -2452,11 +2455,14 @@ function renderArtistTransfers(){
   // Merge in pending author submissions for BOTH author and publisher views
   const pbSales = window.authorSubmissions[activeBook]?.sales || {};
   Object.keys(pbSales).forEach(k => {
-    const raw = JSON.parse(pbSales[k].data);
-    if (raw.payment?.type === 'Payment directly to artist') {
+    const raw = (typeof pbSales[k].data === 'string') ? JSON.parse(pbSales[k].data) : pbSales[k].data;
+    // Check paymentType field (set on payload) OR fallback to notes containing the text
+    const isDirectToArtist = raw.paymentType === 'Payment directly to artist'
+      || (raw.notes || '').includes('Payment directly to artist');
+    if (isDirectToArtist) {
       transfers.push({
         ...raw,
-        total: raw.qty * raw.price,
+        total: (raw.qty || 0) * (raw.price || 0),
         status: 'pending' // Flagged as pending approval
       });
     }
