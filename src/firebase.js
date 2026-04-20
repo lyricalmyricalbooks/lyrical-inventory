@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
@@ -68,6 +68,22 @@ window._fbLoad = async (bookId) => {
 
 window._fbWatch = (bookId, cb) => {
   onValue(ref(db, `lyrical/books/${bookId}`), s => { if (s.exists()) cb(s.val().data); });
+};
+
+// Author Submissions
+window._fbSubmitActivity = async (bookId, type, data) => {
+  const newRef = push(ref(db, `lyrical/submissions/${bookId}/${type}`));
+  await set(newRef, { data: JSON.stringify(data), ts: Date.now() });
+};
+
+window._fbWatchSubmissions = (bookId, cb) => {
+  onValue(ref(db, `lyrical/submissions/${bookId}`), s => {
+    cb(s.exists() ? s.val() : null);
+  });
+};
+
+window._fbDeleteSubmission = async (bookId, type, subId) => {
+  await remove(ref(db, `lyrical/submissions/${bookId}/${type}/${subId}`));
 };
 
 // Publisher settings (payment links, production costs)

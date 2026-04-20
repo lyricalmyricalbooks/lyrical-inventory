@@ -461,6 +461,7 @@ function buildPaymentMeta({ book, qty, unitPrice, fxEnabled, fxCur, fxAmt, fxRat
 // ── PER-BOOK STATE
 // states[bookId] = { stock, sold, revenue, chStats, hist, stores, ledger, doneIds }
 let states = {};
+window.authorSubmissions = {}; // Tracks pending expenses/sales by Authors
 let activeBook = null;   // currently viewed bookId, or 'all'
 let orders = [], activeId = null;
 let fbReady = false, lastSavedHashes = {};
@@ -580,6 +581,11 @@ async function loadBook(bookId) {
     if (states[bookId].artistPaymentLink) BOOKS[bookId].artistPaymentLink = states[bookId].artistPaymentLink;
     lastSavedHashes[bookId] = JSON.stringify(states[bookId]);
     // Watch for live updates
+    window._fbWatchSubmissions(bookId, data => {
+      window.authorSubmissions[bookId] = data || {};
+      if (activeBook === bookId || activeBook === 'all') renderCurrent();
+    });
+    
     window._fbWatch(bookId, json2 => {
       if (json2 === lastSavedHashes[bookId]) return;
       const loaded = JSON.parse(json2);
@@ -1261,8 +1267,23 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
 
 function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
-  $('hist-body').innerHTML = s.hist.length
-    ? s.hist.map((h,i)=>{
+
+  const pbSales = window.authorSubmissions[activeBook]?.sales || {};
+  const pendingSales = Object.keys(pbSales).map(k => {
+    const raw = JSON.parse(pbSales[k].data);
+    return { ...raw, _subKey: k, pendingAuth: true, after: '?' };
+  });
+  
+  const combined = [...pendingSales, ...s.hist];
+
+  $('hist-body').innerHTML = combined.length
+    ? combined.map((h,i)=>{
+        if (h.pendingAuth) {
+           const actionCell = window.IS_PUBLISHER
+             ? `<button class="edit-btn" onclick="approveSubmission('sales', '${h._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('sales', '${h._subKey}')" style="color:var(--red);">✕</button>`
+             : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
+           return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${h.num}</td><td>${h.chan} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price,cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty*h.price,cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${h.notes||'—'}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+        }
         const voided = h.voided ? ' voided' : '';
         const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
         const editBtn = isAuthor() ? '' : `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry">✎</button>`;
@@ -1830,13 +1851,28 @@ async function submitExpense(){
   // Calculate CAD equivalence for publisher reporting
   const fxRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
   const baseAmount = fxRate ? (amount * fxRate) : null;
+  const newExpense = {id:Date.now(),desc,cat,amount,currency,date,ref,receipt: receiptUrl,fxRate,baseAmount};
   
-  s.expenses.unshift({id:Date.now(),desc,cat,amount,currency,date,ref,receipt: receiptUrl,fxRate,baseAmount});
+  if (isAuthor()) {
+    try {
+      await window._fbSubmitActivity(activeBook, 'expenses', newExpense);
+      addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,currency)} (Submitted)`,'ok');
+      showToast('✓ Expense submitted for approval');
+    } catch(e) {
+      console.error(e);
+      showToast('⚠ Failed to submit expense', 'err');
+    }
+  } else {
+    const s=getState();
+    if(!s.expenses) s.expenses=[];
+    s.expenses.unshift(newExpense);
+    saveState(activeBook);
+    addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,currency)}`,'ok');
+    showToast('✓ Expense logged');
+  }
+  
   renderExpenses();
   updateDash();
-  saveState(activeBook);
-  addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,currency)}`,'ok');
-  showToast('✓ Expense logged');
   $('exp-desc').value='';$('exp-amount').value='';$('exp-ref').value='';$('exp-date').value=today();
   if(fileInput) fileInput.value = '';
 }
@@ -1919,12 +1955,36 @@ function renderExpenses(){
     body.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>';
     return;
   }
-  const unreceived=expenses.filter(e=>!e.received);
+  const pbExp = window.authorSubmissions[activeBook]?.expenses || {};
+  const pendingAuthExpenses = Object.keys(pbExp).map(k => {
+    const raw = JSON.parse(pbExp[k].data);
+    return { ...raw, _subKey: k, pendingAuth: true };
+  });
+  const combined = [...pendingAuthExpenses, ...expenses];
+
+  const unreceived=combined.filter(e=>!e.received && !e.pendingAuth);
   const total=unreceived.reduce((a,e)=>a+(e.amount||0),0);
   
   $('exp-head-row').innerHTML = `<tr><th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
   
-  body.innerHTML=expenses.map(e=>{
+  body.innerHTML=combined.map(e=>{
+    if (e.pendingAuth) {
+      const actionCell = window.IS_PUBLISHER
+        ? `<button class="edit-btn" onclick="approveSubmission('expenses', '${e._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('expenses', '${e._subKey}')" style="color:var(--red);">✕</button>`
+        : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
+      return `<tr style="opacity:0.8;background:#fffcede3;">
+        <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
+        <td style="font-weight:600;">${e.desc}</td>
+        <td><span class="pill gray" style="font-size:10px;">${e.cat}</span></td>
+        <td class="mono" style="font-size:11px;color:var(--text3);">${e.ref||'—'}</td>
+        <td>—</td>
+        <td class="r" style="font-weight:600;">${fmt(e.amount, e.currency)}</td>
+        ${window.IS_PUBLISHER ? '<td class="r">—</td>' : ''}
+        <td></td>
+        <td class="r">${actionCell}</td>
+      </tr>`;
+    }
+
     const statusCell=e.received
       ?'<span class="pill green" style="font-size:10px;">✓ Received</span>'
       :'<span style="font-size:11px;color:var(--text4);">Pending</span>';
@@ -2140,22 +2200,67 @@ function submitManual(){
 
   const fullNotes=[notes,fxNote,paymentType].filter(Boolean).join(' · ');
 
-  if(paymentType==='Payment directly to artist'){
-    recordOrderPendingTransfer(num,chan,qty,price,fullNotes,payment);
-    addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — ⏳ awaiting artist transfer`,'warn');
-    showToast('⏳ Order logged — awaiting artist transfer to publisher');
+  // Create standard entry payload
+  const entryPayload = { num, chan, qty, price, notes: fullNotes, payment, date: today(), id: Date.now() };
+
+  if (isAuthor()) {
+    // Author queue route
+    try {
+      await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
+      addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — (Submitted)`,'warn');
+      showToast('✓ Order submitted for approval');
+    } catch (e) {
+      console.error(e);
+      showToast('⚠ Failed to submit order', 'err');
+    }
   } else {
-    recordOrder(num,chan,qty,price,fullNotes,payment);
-    addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)}${fxNote?' ('+fxNote+')':''} → ${getState().stock} remaining`,'ok');
-    if(getState().stock<=book.threshold)addLog('log-manual','⚠ Below threshold!','warn');
-    showToast('✓ Order saved · syncing to Sheets…');
+    // Publisher direct route
+    if(paymentType==='Payment directly to artist'){
+      recordOrderPendingTransfer(num,chan,qty,price,fullNotes,payment);
+      addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — ⏳ awaiting artist transfer`,'warn');
+      showToast('⏳ Order logged — awaiting artist transfer to publisher');
+    } else {
+      recordOrder(num,chan,qty,price,fullNotes,payment);
+      addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)}${fxNote?' ('+fxNote+')':''} → ${getState().stock} remaining`,'ok');
+      if(getState().stock<=book.threshold)addLog('log-manual','⚠ Below threshold!','warn');
+      showToast('✓ Order saved · syncing to Sheets…');
+    }
   }
-  
+
   $('m-num').value='';$('m-qty').value='1';
   $('m-price').value=book.listPrice.toFixed(2);
   $('m-notes').value='';$('m-payment-type').value='';$('m-hint').textContent='';
   $('m-price-cur').value='BOOK';
   onManualCurrencyChange(); // reset fx logic
+}
+
+window.approveSubmission = async function(type, subKey) {
+  const queue = window.authorSubmissions[activeBook]?.[type] || {};
+  if (!queue[subKey]) return;
+  const raw = JSON.parse(queue[subKey].data);
+  const s = getState();
+  
+  if (type === 'expenses') {
+    if (!s.expenses) s.expenses = [];
+    s.expenses.unshift(raw);
+    saveState(activeBook);
+    await window._fbDeleteSubmission(activeBook, type, subKey);
+    showToast('✓ Expense approved and added to ledger');
+  } else if (type === 'sales') {
+    if(raw.payment?.type==='Payment directly to artist'){
+      recordOrderPendingTransfer(raw.num,raw.chan,raw.qty,raw.price,raw.notes,raw.payment);
+    } else {
+      recordOrder(raw.num,raw.chan,raw.qty,raw.price,raw.notes,raw.payment);
+    }
+    await window._fbDeleteSubmission(activeBook, type, subKey);
+    showToast('✓ Sale approved and added to ledger');
+  }
+}
+
+window.rejectSubmission = async function(type, subKey) {
+  if (!confirm('Reject this submission from the author?')) return;
+  await window._fbDeleteSubmission(activeBook, type, subKey);
+  showToast('Submission removed', 'warn');
 }
 
 function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
