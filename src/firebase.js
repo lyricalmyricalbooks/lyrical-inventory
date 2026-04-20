@@ -32,6 +32,18 @@ window._fbUploadReceipt = async (file, path) => {
   });
 };
 
+window._fbDeleteReceipt = async (url) => {
+  if (!url || !url.includes('firebasestorage')) return;
+  try {
+    const { getStorage, ref: sRef, deleteObject } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js");
+    const storage = getStorage();
+    const fileRef = sRef(storage, url);
+    await deleteObject(fileRef);
+  } catch (e) {
+    console.error("Firebase deletion failed", e);
+  }
+};
+
 window._fbSignInWithGoogle = async () => {
   return signInWithPopup(auth, googleProvider);
 };

@@ -3095,35 +3095,54 @@ async function authorizeReceiptFolder() {
   }
 }
 
-async function saveReceiptToLocalFile(file) {
+async function saveReceiptToLocalFile(file, subfolderName = '') {
   const dirHandle = await loadReceiptFolderHandle();
   if (!dirHandle) return null;
   try {
     const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
     if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return null;
+    
     const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: true });
+    
+    let targetDir = receiptsDir;
+    if (subfolderName) {
+      targetDir = await receiptsDir.getDirectoryHandle(subfolderName, { create: true });
+    }
+
     const stamp = new Date().toISOString().split('T')[0];
     const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
     const filename = `${stamp}_${cleanName}`;
-    const fileHandle = await receiptsDir.getFileHandle(filename, { create: true });
+    
+    const fileHandle = await targetDir.getFileHandle(filename, { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(file);
     await writable.close();
-    return `local://${filename}`;
+    
+    return subfolderName ? `local://${subfolderName}/${filename}` : `local://${filename}`;
   } catch (e) {
     console.error('Local receipt save failed', e);
     return null;
   }
 }
 
-async function viewLocalReceipt(filename) {
+async function viewLocalReceipt(path) {
   const dirHandle = await loadReceiptFolderHandle();
   if (!dirHandle) { showToast('⚠ Receipt folder not connected', 'warn'); return; }
   try {
     const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
     if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return;
+    
     const receiptsDir = await dirHandle.getDirectoryHandle('receipts');
-    const fileHandle = await receiptsDir.getFileHandle(filename);
+    let fileHandle;
+    
+    if (path.includes('/')) {
+      const [subfolder, filename] = path.split('/');
+      const subDir = await receiptsDir.getDirectoryHandle(subfolder);
+      fileHandle = await subDir.getFileHandle(filename);
+    } else {
+      fileHandle = await receiptsDir.getFileHandle(path);
+    }
+
     const file = await fileHandle.getFile();
     const url = URL.createObjectURL(file);
     window.open(url, '_blank');
@@ -3141,9 +3160,86 @@ async function initializeBackupFolderDisplay() {
   try {
     const dirHandle = await loadBackupFolderHandle();
     updateBackupFolderDisplay(dirHandle ? `Backup folder: ${dirHandle.name}` : 'Backup folder: Browser Downloads (default)');
+    
+    // Auto-sync receipts if publisher and folder connected
+    if (window.IS_PUBLISHER && dirHandle) {
+      setTimeout(() => syncAllReceipts(), 2000); // Wait for initial app load
+    }
   } catch (e) {
     updateBackupFolderDisplay('Backup folder: Browser Downloads (default)');
   }
+}
+
+async function syncAllReceipts() {
+  if (!window.IS_PUBLISHER) return;
+  const dirHandle = await loadReceiptFolderHandle();
+  if (!dirHandle) return;
+
+  let totalSynced = 0;
+
+  // 1. Sync Tax Center Business Expenses
+  if (TAX_CENTER.businessExpenses) {
+    for (let exp of TAX_CENTER.businessExpenses) {
+      if (exp.receipt && exp.receipt.startsWith('http')) {
+        const localPath = await downloadAndLocalizeReceipt(exp.receipt, 'Business');
+        if (localPath) {
+          exp.receipt = localPath;
+          totalSynced++;
+        }
+      }
+    }
+    if (totalSynced > 0) saveTaxCenter();
+  }
+
+  // 2. Sync Per-Book Expenses
+  for (const bid in BOOKS) {
+    const book = BOOKS[bid];
+    const state = await window._fbLoad(bid);
+    if (!state || !state.expenses) continue;
+
+    let bookSynced = 0;
+    for (let exp of state.expenses) {
+      if (exp.receipt && exp.receipt.startsWith('http')) {
+        const localPath = await downloadAndLocalizeReceipt(exp.receipt, book.title || bid);
+        if (localPath) {
+          exp.receipt = localPath;
+          bookSynced++;
+          totalSynced++;
+        }
+      }
+    }
+    if (bookSynced > 0) {
+      await window._fbSave(bid, JSON.stringify(state));
+    }
+  }
+
+  if (totalSynced > 0) {
+    showToast(`✓ Synced ${totalSynced} receipts to local folder`);
+    renderTaxCenter();
+  }
+}
+
+async function downloadAndLocalizeReceipt(url, projectName) {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    
+    // Create a pseudo-file object for our saver
+    const filename = url.split('%2F').pop().split('?')[0]; 
+    const file = new File([blob], filename, { type: blob.type });
+
+    // Save locally
+    const localRef = await saveReceiptToLocalFile(file, projectName.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
+    
+    if (localRef) {
+      // DELETE from cloud now that it's safe locally
+      await window._fbDeleteReceipt(url);
+      return localRef.replace('local://', '');
+    }
+  } catch (e) {
+    console.error("Sync failed for", url, e);
+  }
+  return null;
 }
 
 async function exportToJSON() {
