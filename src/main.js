@@ -4410,7 +4410,8 @@ Object.assign(window, {
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
-  submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter
+  submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
+  removeLedgerEntry
 });
 
 // ── STARTUP ROUTING
