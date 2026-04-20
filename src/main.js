@@ -467,6 +467,9 @@ const SYSTEM_BACKUP_LIMIT = 30;
 const BACKUP_FOLDER_DB = 'lm-backup-folder-db';
 const BACKUP_FOLDER_STORE = 'handles';
 const BACKUP_FOLDER_KEY = 'preferred-folder';
+const RECEIPT_FOLDER_DB = 'lm-receipt-folder-db';
+const RECEIPT_FOLDER_STORE = 'handles';
+const RECEIPT_FOLDER_KEY = 'preferred-receipt-folder';
 
 function queueSync(bookId, state) {
   syncQueue.push({ bookId, state, ts: Date.now() });
@@ -1152,7 +1155,7 @@ function renderProfitSharingBreakdown(bookId) {
     return `
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;
         opacity:${isCompleted ? '.45' : '1'}; font-weight:${isActive ? '700' : '400'};
-        padding:6px 10px; border-radius:var(--r2);
+        border-radius:var(--r2);
         background:${isActive ? 'rgba(255,255,255,.05)' : 'transparent'};
         border-left:2px solid ${isCompleted ? 'rgba(255,255,255,.1)' : isActive ? 'var(--gold2)' : 'transparent'};">
         <span>${t.label} &nbsp;<span style="font-size:10px;opacity:.5;">${threshold}</span></span>
@@ -1902,7 +1905,11 @@ function renderExpenses(){
       :'<span style="font-size:11px;color:var(--text4);">Pending</span>';
     const actionCell=(!e.received && !isAuthor())
       ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
-    const receiptCell = e.receipt ? `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>` : `<span style="font-size:11px;color:var(--text4); font-weight: 500;">Missing</span>`;
+    const receiptCell = e.receipt ? (
+      e.receipt.startsWith('local://') 
+      ? `<a href="#" onclick="viewLocalReceipt('${e.receipt.replace('local://','')}')" style="font-size:11px;color:var(--gold);">View Local</a>`
+      : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
+    ) : `<span style="font-size:11px;color:var(--text4); font-weight: 500;">Missing</span>`;
     
     // Calculate multi-currency stuff
     const eCur = e.currency || cur;
@@ -3028,6 +3035,89 @@ async function chooseBackupFolder() {
   }
 }
 
+// ── LOCAL RECEIPT FILING
+async function openReceiptHandleDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(RECEIPT_FOLDER_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(RECEIPT_FOLDER_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveReceiptFolderHandle(handle) {
+  const db = await openReceiptHandleDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(RECEIPT_FOLDER_STORE, 'readwrite');
+    tx.objectStore(RECEIPT_FOLDER_STORE).put(handle, RECEIPT_FOLDER_KEY);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadReceiptFolderHandle() {
+  const db = await openReceiptHandleDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(RECEIPT_FOLDER_STORE, 'readonly');
+    const req = tx.objectStore(RECEIPT_FOLDER_STORE).get(RECEIPT_FOLDER_KEY);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function setupReceiptFolder() {
+  if (!('showDirectoryPicker' in window)) {
+    showToast('Folder selection is not supported in this browser', 'warn');
+    return;
+  }
+  try {
+    const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    await saveReceiptFolderHandle(dirHandle);
+    renderTaxCenter();
+    showToast('✓ Receipt folder connected');
+  } catch (e) {
+    if (e?.name !== 'AbortError') showToast('Could not save folder', 'err');
+  }
+}
+
+async function saveReceiptToLocalFile(file) {
+  const dirHandle = await loadReceiptFolderHandle();
+  if (!dirHandle) return null;
+  try {
+    const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
+    if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return null;
+    const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: true });
+    const stamp = new Date().toISOString().split('T')[0];
+    const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+    const filename = `${stamp}_${cleanName}`;
+    const fileHandle = await receiptsDir.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(file);
+    await writable.close();
+    return `local://${filename}`;
+  } catch (e) {
+    console.error('Local receipt save failed', e);
+    return null;
+  }
+}
+
+async function viewLocalReceipt(filename) {
+  const dirHandle = await loadReceiptFolderHandle();
+  if (!dirHandle) { showToast('⚠ Receipt folder not connected', 'warn'); return; }
+  try {
+    const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
+    if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return;
+    const receiptsDir = await dirHandle.getDirectoryHandle('receipts');
+    const fileHandle = await receiptsDir.getFileHandle(filename);
+    const file = await fileHandle.getFile();
+    const url = URL.createObjectURL(file);
+    window.open(url, '_blank');
+  } catch (e) {
+    console.error('Failed to open local receipt', e);
+    showToast('⚠ Could not find or open local file', 'err');
+  }
+}
+
 async function initializeBackupFolderDisplay() {
   if (!('showDirectoryPicker' in window)) {
     updateBackupFolderDisplay('Backup folder: Browser Downloads (folder picker not supported)');
@@ -3971,6 +4061,15 @@ function renderTaxCenter() {
   // Initialize AI key input UI
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
 
+  // Update receipt folder display
+  loadReceiptFolderHandle().then(handle => {
+    const el = $('receipt-folder-display');
+    if (el) {
+      if (handle) el.innerHTML = `Status: <span style="color:var(--gold3);">Connected to folder: <strong>${handle.name}</strong></span>`;
+      else el.innerHTML = `Status: <span style="color:var(--text3);">Saving to Cloud (Firebase)</span>`;
+    }
+  });
+
   const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
   const yearSelect = $('tc-year');
   const selectedYear = yearSelect ? yearSelect.value : 'all';
@@ -4129,8 +4228,10 @@ function renderTaxCenter() {
             <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
             <td>${item.desc}</td>
             <td>${item.cat}</td>
-            <td>${item.ref}</td>
-            <td class="r">${item.isIncome ? '+' : '-'}${fmt(item.origAmount, item.currency)} ${item.hasRateError ? '<span title="Missing FX Rate">⚠️</span>': ''}</td>
+            <td>${item.ref || (item.receipt ? (item.receipt.startsWith('local://') 
+              ? `<a href="#" onclick="viewLocalReceipt('${item.receipt.replace('local://','')}')" style="color:var(--gold3);">View Local</a>`
+              : `<a href="${item.receipt}" target="_blank" style="color:var(--gold3);">Receipt</a>`
+            ) : '')}</td>
             <td class="r" style="font-weight:bold;">${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}</td>
             <td class="r">${item.itemId ? `<button class="btn-icon" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}</td>
         </tr>
@@ -4270,10 +4371,17 @@ async function submitTaxExpense() {
     const oldText = submitBtn.textContent;
     submitBtn.textContent = 'Uploading...'; submitBtn.disabled = true;
     try {
-      receiptUrl = await window._fbUploadReceipt(file, `TAX_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g,'')}`);
+      // Check for local folder first
+      const localUrl = await saveReceiptToLocalFile(file);
+      if (localUrl) {
+        receiptUrl = localUrl;
+      } else {
+        // Fallback to Firebase
+        receiptUrl = await window._fbUploadReceipt(file, `TAX_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g,'')}`);
+      }
     } catch(e) {
       console.error(e);
-      showToast('⚠ Error uploading receipt', 'err');
+      showToast('⚠ Error saving receipt', 'err');
       submitBtn.textContent = oldText; submitBtn.disabled = false;
       return;
     }
@@ -4411,7 +4519,7 @@ Object.assign(window, {
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
   submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
-  removeLedgerEntry
+  removeLedgerEntry, setupReceiptFolder, viewLocalReceipt
 });
 
 // ── STARTUP ROUTING

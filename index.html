@@ -570,6 +570,17 @@
     <div style="margin-top:12px;"><button class="btn gold" style="width:100%;height:38px;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button></div>
   </div>
 
+  <!-- RECEIPT STORAGE CONFIG -->
+  <div class="card" style="margin-bottom:1.5rem; border: 1px solid rgba(212, 175, 55, 0.2);">
+    <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:space-between;">
+        <span>📁 Local Receipt Storage</span>
+        <button class="btn gold" style="padding:4px 10px;font-size:11px;" onclick="setupReceiptFolder()">Connect Folder</button>
+    </div>
+    <div id="receipt-folder-display" style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;">
+        Status: Saving to Cloud (Firebase)
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:1.5rem;">
     <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:1rem;">Recurring Subscriptions</div>
     <div class="tbl-wrap" style="margin-bottom:1rem;"><table class="tbl">
