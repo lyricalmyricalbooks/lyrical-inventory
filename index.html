@@ -573,27 +573,32 @@
   <div class="card" style="margin-bottom:1.5rem;">
     <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:1rem;">Recurring Subscriptions</div>
     <div class="tbl-wrap" style="margin-bottom:1rem;"><table class="tbl">
-      <thead><tr><th>Description</th><th>Category</th><th>Amount (Monthly)</th><th>Last Injected</th><th></th></tr></thead>
+      <thead><tr><th>Description</th><th>Category</th><th>Amount (Monthly)</th><th>Start Date</th><th>Last Injected</th><th></th></tr></thead>
       <tbody id="tc-recurring-body"></tbody>
     </table></div>
-    <div class="g3">
-      <div class="form-group"><input type="text" id="tc-rec-desc" placeholder="Description (e.g. Hosting)"></div>
+    <div class="g4">
+      <div class="form-group"><label>Description</label><input type="text" id="tc-rec-desc" placeholder="e.g. Hosting"></div>
       <div class="form-group">
+        <label>Category</label>
         <select id="tc-rec-cat">
           <option>Software & Subscriptions</option>
           <option>Marketing & Advertising</option>
           <option>Other</option>
         </select>
       </div>
-      <div class="form-group" style="display:flex;gap:4px;">
-        <select id="tc-rec-cur" style="flex:0 0 60px;">
-          <option value="CAD">CAD</option>
-          <option value="USD">USD</option>
-          <option value="EUR">EUR</option>
-          <option value="GBP">GBP</option>
-        </select>
-        <input type="number" id="tc-rec-amount" placeholder="Amount" style="flex:1;">
-        <button class="btn gold" onclick="addRecurring()">Add</button>
+      <div class="form-group"><label>Date Started</label><input type="date" id="tc-rec-start"></div>
+      <div class="form-group">
+        <label>Monthly Amount</label>
+        <div style="display:flex;gap:4px;">
+          <select id="tc-rec-cur" style="flex:0 0 60px;">
+            <option value="CAD">CAD</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+          </select>
+          <input type="number" id="tc-rec-amount" placeholder="0.00" style="flex:1;">
+          <button class="btn gold" onclick="addRecurring()">Add</button>
+        </div>
       </div>
     </div>
   </div>

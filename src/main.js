@@ -604,32 +604,53 @@ async function saveTaxCenter() {
 function processRecurringExpenses() {
   if (isAuthor() || !TAX_CENTER.recurring || TAX_CENTER.recurring.length === 0) return;
   const now = new Date();
-  const currentMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   
   let modified = false;
   TAX_CENTER.recurring.forEach(sub => {
-    if (!sub.lastInjected) sub.lastInjected = '';
+    const startDate = sub.startDate || today();
+    const start = new Date(startDate);
+    const startDay = start.getDate();
     
-    // Simple logic: inject once per calendar month
-    if (sub.lastInjected !== currentMonth) {
-      if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-      const origCur = sub.currency || 'CAD';
-      const fxRate = _fxRateCache[`${origCur}_CAD`] || 1;
-      const baseAmount = (parseFloat(sub.amount) || 0) * fxRate;
-      TAX_CENTER.businessExpenses.unshift({
-        id: Date.now() + Math.random(),
-        desc: sub.desc + ' (Recurring)',
-        cat: sub.cat,
-        currency: origCur,
-        amount: parseFloat(sub.amount) || 0,
-        fxRate: fxRate,
-        baseAmount: baseAmount,
-        date: today(),
-        ref: 'Auto-Injected',
-        receipt: ''
-      });
-      sub.lastInjected = currentMonth;
-      modified = true;
+    // Start checking from the month of startDate
+    let checkDate = new Date(start.getFullYear(), start.getMonth(), 1);
+    const todayMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    while (checkDate <= todayMonth) {
+      const mStr = checkDate.getFullYear() + '-' + String(checkDate.getMonth() + 1).padStart(2, '0');
+      
+      // Inject if this month is after lastInjected (YYYY-MM comparison)
+      if (mStr > (sub.lastInjected || '')) {
+        const lastDayInMonth = new Date(checkDate.getFullYear(), checkDate.getMonth() + 1, 0).getDate();
+        const injectionDay = Math.min(startDay, lastDayInMonth);
+        const injectionDateStr = checkDate.getFullYear() + '-' + 
+                                 String(checkDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                                 String(injectionDay).padStart(2, '0');
+
+        if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+        const origCur = sub.currency || 'CAD';
+        const fxRate = _fxRateCache[`${origCur}_CAD`] || 1;
+        const baseAmount = (parseFloat(sub.amount) || 0) * fxRate;
+        
+        TAX_CENTER.businessExpenses.unshift({
+          id: Date.now() + Math.random(),
+          desc: sub.desc + ' (Recurring)',
+          cat: sub.cat,
+          currency: origCur,
+          amount: parseFloat(sub.amount) || 0,
+          fxRate: fxRate,
+          baseAmount: baseAmount,
+          date: injectionDateStr,
+          ref: 'Auto-Injected',
+          receipt: ''
+        });
+        
+        sub.lastInjected = mStr;
+        modified = true;
+      }
+      
+      // Advance by one month
+      checkDate.setMonth(checkDate.getMonth() + 1);
     }
   });
   
@@ -4111,6 +4132,7 @@ function renderTaxCenter() {
             <td>${sub.desc}</td>
             <td>${sub.cat}</td>
             <td>${fmt(sub.amount, sub.currency||'CAD')}</td>
+            <td>${sub.startDate || '-'}</td>
             <td>${sub.lastInjected || 'Never'}</td>
             <td><button class="btn tx" onclick="removeRecurring(${i})">Remove</button></td>
         </tr>
@@ -4235,13 +4257,15 @@ function addRecurring() {
   const cat = $('tc-rec-cat').value;
   const currency = $('tc-rec-cur').value || 'CAD';
   const amount = parseFloat($('tc-rec-amount').value) || 0;
+  const startDate = $('tc-rec-start').value || today();
+
   if(!desc || !amount) { showToast('⚠ Details required','warn'); return; }
   if(!TAX_CENTER.recurring) TAX_CENTER.recurring = [];
-  TAX_CENTER.recurring.push({ desc, cat, currency, amount, lastInjected: '' });
+  TAX_CENTER.recurring.push({ desc, cat, currency, amount, startDate, lastInjected: '' });
   saveTaxCenter();
   renderTaxCenter();
   showToast('✓ Subscription added');
-  $('tc-rec-desc').value=''; $('tc-rec-amount').value='';
+  $('tc-rec-desc').value=''; $('tc-rec-amount').value=''; $('tc-rec-start').value='';
 }
 
 function removeRecurring(idx) {
