@@ -1859,8 +1859,12 @@ async function submitExpense(){
       addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,currency)} (Submitted)`,'ok');
       showToast('✓ Expense submitted for approval');
     } catch(e) {
-      console.error(e);
-      showToast('⚠ Failed to submit expense', 'err');
+      console.error("Submission error:", e);
+      if (e.message && e.message.includes('PERMISSION_DENIED')) {
+        showToast('⚠ Permission denied by Firebase Rules', 'err');
+      } else {
+        showToast('⚠ Failed to submit expense', 'err');
+      }
     }
   } else {
     const s=getState();
@@ -2210,8 +2214,12 @@ async function submitManual(){
       addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — (Submitted)`,'warn');
       showToast('✓ Order submitted for approval');
     } catch (e) {
-      console.error(e);
-      showToast('⚠ Failed to submit order', 'err');
+      console.error("Submission error:", e);
+      if (e.message && e.message.includes('PERMISSION_DENIED')) {
+        showToast('⚠ Permission denied by Firebase Rules', 'err');
+      } else {
+        showToast('⚠ Failed to submit order', 'err');
+      }
     }
   } else {
     // Publisher direct route
