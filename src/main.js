@@ -2017,10 +2017,14 @@ async function submitExpense(){
   const s=getState();
   if(!s.expenses) s.expenses=[];
   
-  // Calculate CAD equivalence for publisher reporting
+  // Store original payment info for ledger display
+  const origAmount = rawAmount;
+  const origCurrency = cur;
+  
+  // Calculate CAD equivalence for publisher reporting (only once, at submission time)
   const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
-  const baseAmount = cadRate ? (amount * cadRate) : null;
-  const newExpense = {id:Date.now(),desc:finalDesc,cat,amount,currency,date,ref,receipt: receiptUrl,fxRate:_expenseFxRate,baseAmount};
+  const baseAmount = cadRate ? (amount * cadRate) : amount;
+  const newExpense = {id:Date.now(),desc:finalDesc,cat,amount,currency,origAmount,origCurrency,date,ref,receipt: receiptUrl,fxRate:_expenseFxRate,baseAmount};
   
   if (isAuthor()) {
     try {
@@ -4573,17 +4577,18 @@ function renderTaxCenter() {
         const hYear = h.date ? h.date.substring(0, 4) : '';
         if (selectedYear !== 'all' && hYear !== selectedYear) return;
 
-        const amt = h.voided ? 0 : (h.price * h.qty || 0);
+        const unitPrice = h.price ?? h.unitPrice ?? 0;
+        const amt = h.voided ? 0 : (unitPrice * (h.qty || 1));
         const baseAmt = amt * hRate;
         totalGrossSales += baseAmt;
         
         allLedger.push({
             date: h.date,
             type: 'Sale',
-            desc: `${b.title} (Qty: ${h.qty})`,
+            desc: `${b.title} (Qty: ${h.qty || 1})`,
             cat: 'Income',
             ref: h.num,
-            currency: cur,
+            origCurrency: cur,
             origAmount: amt,
             baseAmount: baseAmt,
             hasRateError: !hRate,
@@ -4599,9 +4604,21 @@ function renderTaxCenter() {
         const eYear = e.date ? e.date.substring(0, 4) : '';
         if (selectedYear !== 'all' && eYear !== selectedYear) return;
 
-        const eCur = e.currency || 'CAD';
-        const eRate = e.fxRate || _fxRateCache[`${eCur}_CAD`] || 1;
-        const eBase = (e.amount || 0) * eRate;
+        // Use stored origCurrency/origAmount for display, and stored baseAmount to avoid double-conversion.
+        // Fallback for legacy entries that don't have baseAmount stored.
+        const displayOrigCur = e.origCurrency || e.currency || 'CAD';
+        const displayOrigAmt = e.origAmount != null ? e.origAmount : (e.amount || 0);
+        const bookCur = e.currency || 'CAD';
+        
+        let eBase;
+        if (e.baseAmount != null) {
+          // Pre-calculated at submission time — no double conversion
+          eBase = e.baseAmount;
+        } else {
+          // Legacy entry: calculate once now
+          const eRate = _fxRateCache[`${bookCur}_CAD`] || 1;
+          eBase = (e.amount || 0) * eRate;
+        }
         
         totalOperatingExpenses += eBase;
         
@@ -4612,10 +4629,10 @@ function renderTaxCenter() {
             cat: e.cat || 'Project Expense',
             ref: e.ref || '',
             receipt: e.receipt || '',
-            currency: eCur,
-            origAmount: e.amount || 0,
+            origCurrency: displayOrigCur,
+            origAmount: displayOrigAmt,
             baseAmount: eBase,
-            hasRateError: !e.fxRate && eCur !== 'CAD',
+            hasRateError: false,
             isIncome: false,
             sourceType: 'bookExpense',
             sourceId: bid,
@@ -4636,7 +4653,7 @@ function renderTaxCenter() {
             desc: `Artist Payout (${b.title})`,
             cat: 'Artist Royalties',
             ref: t.num,
-            currency: cur,
+            origCurrency: cur,
             origAmount: t.total || 0,
             baseAmount: tBase,
             hasRateError: !hRate,
@@ -4653,8 +4670,8 @@ function renderTaxCenter() {
       if (selectedYear !== 'all' && eYear !== selectedYear) return;
 
       const eCur = e.currency || 'CAD';
-      const eRate = e.fxRate || _fxRateCache[`${eCur}_CAD`] || 1;
-      const eBase = e.baseAmount || (e.amount || 0) * eRate;
+      // Use stored baseAmount when available to avoid re-conversion
+      const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
       
       totalOperatingExpenses += eBase;
       
@@ -4665,10 +4682,10 @@ function renderTaxCenter() {
             cat: e.cat || 'Other',
             ref: e.ref || '',
             receipt: e.receipt || '',
-            currency: eCur,
+            origCurrency: eCur,
             origAmount: e.amount || 0,
             baseAmount: eBase,
-            hasRateError: !e.fxRate && eCur !== 'CAD',
+            hasRateError: false,
             isIncome: false,
             sourceType: 'businessExpense',
             itemId: e.id
@@ -4706,33 +4723,43 @@ function renderTaxCenter() {
   
   const ledTbody = $('tc-ledger-body');
   if(ledTbody) {
-      ledTbody.innerHTML = allLedger.map(item => `
+      ledTbody.innerHTML = allLedger.map(item => {
+        // Build receipt/ref cell
+        let refCell = '';
+        let r = item.receipt || '';
+        let displayRef = item.ref || '';
+        // Legacy cleanup: if ref contains a local link, extract it
+        if (displayRef && displayRef.includes('local://')) {
+          const match = displayRef.match(/href="([^"]+)"/);
+          if (match) r = match[1];
+          displayRef = '';
+        }
+        if (displayRef) refCell = displayRef;
+        else if (!r) refCell = '';
+        else if (r.startsWith('local://')) {
+          const fn = r.replace('local://', '');
+          refCell = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn}')" style="color:var(--gold3);text-decoration:underline;">View Local</a>`;
+        } else {
+          refCell = `<a href="${r}" target="_blank" style="color:var(--gold3);">Receipt</a>`;
+        }
+
+        // Show original amount in its native currency; show CAD equivalent separately
+        const origSym = getSym(item.origCurrency || 'CAD');
+        const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
+        const cadDisplay = `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}`;
+
+        return `
         <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'}">
-            <td>${item.date}</td>
+            <td style="font-size:12px;">${item.date || '—'}</td>
             <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
-            <td>${item.desc}</td>
-            <td>${item.cat}</td>
-            <td>${(() => {
-              let r = item.receipt;
-              let displayRef = item.ref;
-              // Legacy cleanup: if ref contains a local link, extract it
-              if (displayRef && displayRef.includes('local://')) {
-                const match = displayRef.match(/href="([^"]+)"/);
-                if (match) r = match[1];
-                displayRef = '';
-              }
-              if (displayRef) return displayRef;
-              if (!r) return '';
-              if (r.startsWith('local://')) {
-                const fn = r.replace('local://', '');
-                return `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn}')" style="color:var(--gold3);text-decoration:underline;">View Local</a>`;
-              }
-              return `<a href="${r}" target="_blank" style="color:var(--gold3);">Receipt</a>`;
-            })()}</td>
-            <td class="r" style="font-weight:bold;">${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}</td>
+            <td style="font-size:12px;">${item.desc}</td>
+            <td style="font-size:12px;">${item.cat}</td>
+            <td style="font-size:12px;">${refCell}</td>
+            <td class="r" style="font-size:12px;">${origDisplay}</td>
+            <td class="r" style="font-weight:600;">${cadDisplay}</td>
             <td class="r">${item.itemId ? `<button class="btn-icon" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}</td>
-        </tr>
-      `).join('') || `<tr><td colspan="7" class="r" style="text-align:center;">No data</td></tr>`;
+        </tr>`;
+      }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">No data for selected period</td></tr>`;
   }
   
   const recBody = $('tc-recurring-body');
