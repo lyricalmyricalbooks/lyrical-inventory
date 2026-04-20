@@ -1753,6 +1753,17 @@ function updateExpenseForm(){
   const book=getBook();
   $('exp-sym').textContent=book.currency;
   $('exp-date').value=today();
+  
+  if (window.IS_PUBLISHER) {
+    if ($('pub-exp-cur-group')) $('pub-exp-cur-group').style.display = '';
+    if ($('exp-ai-btn')) $('exp-ai-btn').style.display = '';
+    if ($('exp-cur')) $('exp-cur').value = book.currency;
+    $('exp-amount').parentElement.parentElement.parentElement.className = 'g5'; // Adjust grid to fit 5 items
+  } else {
+    if ($('pub-exp-cur-group')) $('pub-exp-cur-group').style.display = 'none';
+    if ($('exp-ai-btn')) $('exp-ai-btn').style.display = 'none';
+    $('exp-amount').parentElement.parentElement.parentElement.className = 'g4'; // Revert grid
+  }
 }
 
 async function submitExpense(){
@@ -1762,6 +1773,9 @@ async function submitExpense(){
   const date=$('exp-date').value||today();
   const ref=($('exp-ref').value||'').trim();
   const book=getBook();
+  
+  const currency = window.IS_PUBLISHER ? ($('exp-cur').value || book.currency) : book.currency;
+  
   if(!desc){ showToast('⚠ Please enter a description','warn'); $('exp-desc').focus(); return; }
   if(!amount){ showToast('⚠ Please enter an amount','warn'); $('exp-amount').focus(); return; }
   
@@ -1771,7 +1785,7 @@ async function submitExpense(){
     const file = fileInput.files[0];
     const submitBtn = $('submit-exp-btn') || {textContent:'', disabled:false}; // Fallback if btn ID not found
     const oldText = submitBtn.textContent;
-    if(submitBtn.tagName) { submitBtn.textContent = 'Uploading receipt...'; submitBtn.disabled = true; }
+    if(submitBtn.tagName) { submitBtn.textContent = 'Uploading...'; submitBtn.disabled = true; }
     try {
       receiptUrl = await window._fbUploadReceipt(file, `${book.id}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g,'')}`);
     } catch(e) {
@@ -1785,11 +1799,16 @@ async function submitExpense(){
 
   const s=getState();
   if(!s.expenses) s.expenses=[];
-  s.expenses.unshift({id:Date.now(),desc,cat,amount,date,ref,receipt: receiptUrl});
+  
+  // Calculate CAD equivalence for publisher reporting
+  const fxRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
+  const baseAmount = fxRate ? (amount * fxRate) : null;
+  
+  s.expenses.unshift({id:Date.now(),desc,cat,amount,currency,date,ref,receipt: receiptUrl,fxRate,baseAmount});
   renderExpenses();
   updateDash();
   saveState(activeBook);
-  addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,book.currency)}`,'ok');
+  addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,currency)}`,'ok');
   showToast('✓ Expense logged');
   $('exp-desc').value='';$('exp-amount').value='';$('exp-ref').value='';$('exp-date').value=today();
   if(fileInput) fileInput.value = '';
@@ -1804,17 +1823,80 @@ function voidExpense(id){
   showToast('Expense removed','warn');
 }
 
+async function scanProjectReceiptWithAI() {
+    const fileInput = $('exp-file');
+    if(!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
+    
+    const apiKey = TAX_CENTER.settings?.geminiKey;
+    if(!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+
+    const file = fileInput.files[0];
+    const btn = $('exp-ai-btn');
+    const oldText = btn.textContent;
+    btn.textContent = 'Scanning...'; btn.disabled = true;
+
+    try {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        await new Promise(r => reader.onload = r);
+        const base64Data = reader.result.split(',')[1];
+        const mimeType = file.type;
+
+        // Calling Gemini 1.5 Flash Vision
+        const payload = {
+            contents: [{
+                parts: [
+                    { "text": "Extract these exact 3 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase). No markdown, just raw JSON." },
+                    {
+                        "inline_data": {
+                            "mime_type": mimeType,
+                            "data": base64Data
+                        }
+                    }
+                ]
+            }],
+            generationConfig: { response_mime_type: "application/json" }
+        };
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if(!res.ok) throw new Error("API call failed");
+        const data = await res.json();
+        
+        const extractedJsonStr = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const extracted = JSON.parse(extractedJsonStr);
+
+        if(extracted.vendor) $('exp-desc').value = extracted.vendor;
+        if(extracted.date) $('exp-date').value = extracted.date;
+        if(extracted.amount) $('exp-amount').value = extracted.amount;
+        if(extracted.currency && $('exp-cur')) $('exp-cur').value = extracted.currency;
+        
+        showToast('✓ Receipt data extracted');
+    } catch(e) {
+        console.error("AI Scan Error:", e);
+        showToast('⚠ AI extraction failed', 'err');
+    }
+    btn.textContent = oldText; btn.disabled = false;
+}
+
 function renderExpenses(){
   const s=getState(),book=getBook(),cur=book.currency;
   const expenses=s.expenses||[];
   const body=$('exp-body');
   if(!body)return;
   if(!expenses.length){
-    body.innerHTML='<tr><td colspan="6"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>';
+    body.innerHTML='<tr><td colspan="7"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>';
     return;
   }
   const unreceived=expenses.filter(e=>!e.received);
   const total=unreceived.reduce((a,e)=>a+(e.amount||0),0);
+  
+  $('exp-head-row').innerHTML = `<tr><th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
+  
   body.innerHTML=expenses.map(e=>{
     const statusCell=e.received
       ?'<span class="pill green" style="font-size:10px;">✓ Received</span>'
@@ -1822,13 +1904,32 @@ function renderExpenses(){
     const actionCell=(!e.received && !isAuthor())
       ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
     const receiptCell = e.receipt ? `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>` : `<span style="font-size:11px;color:var(--text4); font-weight: 500;">Missing</span>`;
+    
+    // Calculate multi-currency stuff
+    const eCur = e.currency || cur;
+    const isBase = eCur === 'CAD';
+    let baseAmountText = '';
+    
+    if (window.IS_PUBLISHER) {
+       if (isBase) {
+           baseAmountText = '-';
+       } else if (e.baseAmount) {
+           baseAmountText = fmt(e.baseAmount, 'CAD');
+       } else if (_fxRateCache[`${eCur}_CAD`]) {
+           baseAmountText = fmt(e.amount * _fxRateCache[`${eCur}_CAD`], 'CAD');
+       } else {
+           baseAmountText = '<span style="color:var(--amber);" title="Missing exchange rate">⚠️</span>';
+       }
+    }
+
     return `<tr style="${e.received?'opacity:.5;':''}">
       <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
       <td style="font-weight:600;">${e.desc}</td>
       <td><span class="pill gray" style="font-size:10px;">${e.cat}</span></td>
       <td style="font-size:11px;color:var(--text3);">${e.ref||'—'}</td>
       <td>${receiptCell}</td>
-      <td class="r" style="color:${e.received?'var(--text4)':'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount,cur)}</td>
+      <td class="r" style="color:${e.received?'var(--text4)':'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount,eCur)}</td>
+      ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);">${baseAmountText}</td>` : ''}
       <td>${statusCell}</td>
       <td>${actionCell}</td>
     </tr>`;
@@ -1836,7 +1937,7 @@ function renderExpenses(){
   +`<tr style="background:var(--cream2);">
       <td colspan="5" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding</td>
       <td class="r" style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${fmt(total,cur)}</td>
-      <td colspan="2"></td>
+      <td colspan="${window.IS_PUBLISHER ? 3 : 2}"></td>
     </tr>`;
 }
 
