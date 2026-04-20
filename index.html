@@ -347,7 +347,26 @@
     <div class="g4" style="margin-bottom:12px;">
       <div class="form-group"><label>Order #</label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label>Qty</label><input type="number" id="m-qty" value="1" min="1" oninput="phint()"></div>
-      <div class="form-group"><label id="m-price-label">Price paid</label><div class="price-inline"><select id="m-price-cur" onchange="onManualCurrencyChange()"><option value="BOOK">Book currency</option><option value="USD">USD $</option><option value="EUR">EUR €</option><option value="GBP">GBP £</option><option value="CAD">CAD $</option><option value="AUD">AUD $</option><option value="CHF">CHF</option><option value="JPY">JPY ¥</option><option value="NOK">NOK kr</option><option value="SEK">SEK kr</option><option value="DKK">DKK kr</option><option value="OTHER">Other</option></select><input type="number" id="m-price" value="40.00" step="0.01" oninput="phint()"></div></div>
+      <div class="form-group">
+        <label id="m-price-label">Price paid <span id="m-fx-inline-result" style="display:none;color:var(--gold);font-weight:600;margin-left:8px;"></span></label>
+        <div class="price-inline">
+          <select id="m-price-cur" onchange="onManualCurrencyChange()">
+            <option value="BOOK">Book currency</option>
+            <option value="USD">USD $</option>
+            <option value="EUR">EUR €</option>
+            <option value="GBP">GBP £</option>
+            <option value="CAD">CAD $</option>
+            <option value="AUD">AUD $</option>
+            <option value="CHF">CHF</option>
+            <option value="JPY">JPY ¥</option>
+            <option value="NOK">NOK kr</option>
+            <option value="SEK">SEK kr</option>
+            <option value="DKK">DKK kr</option>
+            <option value="OTHER">Other</option>
+          </select>
+          <input type="number" id="m-price" value="40.00" step="0.01" oninput="phint()">
+        </div>
+      </div>
       <div class="form-group"><label>&nbsp;</label><button class="btn gold" style="width:100%;height:44px;font-size:14px;" onclick="submitManual()">＋ Add order</button></div>
     </div>
     <!-- Channel and Notes -->
@@ -365,44 +384,8 @@
         </select>
       </div>
       <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;">
-        <div style="font-size:11px;color:var(--text3);line-height:1.45;">Choose the paid currency from the <strong>Price paid</strong> dropdown. If it is different from the book currency, enter FX details below.</div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.45;" class="pub-only">If the paid currency is different from the book currency, we will automatically apply today's exchange rate.</div>
       </div>
-    </div>
-    <!-- FOREIGN CURRENCY PANEL (hidden by default) -->
-    <div id="m-fx-panel" style="display:none;margin-top:12px;padding:14px 16px;background:var(--cream2);border-radius:var(--r2);border:1px solid var(--border);">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Foreign currency conversion</div>
-      <div class="g4" style="align-items:end;">
-        <div class="form-group" style="margin:0;">
-          <label>Currency paid in</label>
-          <select id="m-fx-cur" onchange="onFxCurrencyChange()">
-            <option value="USD">USD $</option>
-            <option value="EUR">EUR €</option>
-            <option value="GBP">GBP £</option>
-            <option value="CAD">CAD $</option>
-            <option value="AUD">AUD $</option>
-            <option value="CHF">CHF</option>
-            <option value="JPY">JPY ¥</option>
-            <option value="NOK">NOK kr</option>
-            <option value="SEK">SEK kr</option>
-            <option value="DKK">DKK kr</option>
-            <option value="OTHER">Other</option>
-          </select>
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Amount paid (foreign)</label>
-          <input type="number" id="m-fx-amount" step="0.01" placeholder="0.00" oninput="calcFx()">
-        </div>
-        <div class="form-group" style="margin:0;">
-          <label>Exchange rate <span style="font-size:9px;color:var(--text4);">1 foreign = ? <span id="m-fx-native-sym">—</span></span></label>
-          <input type="number" id="m-fx-rate" step="0.0001" placeholder="e.g. 0.92" oninput="calcFx()">
-          <div id="m-fx-rate-status" style="font-size:10px;margin-top:4px;height:12px;"></div>
-        </div>
-        <div style="padding-bottom:2px;">
-          <div style="font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:5px;">Converted</div>
-          <div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--gold);" id="m-fx-result">—</div>
-        </div>
-      </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6;">The converted amount will be used for revenue. The original foreign amount is saved in notes for reference.</div>
     </div>
     <div class="hint-text" id="m-hint"></div>
   </div>

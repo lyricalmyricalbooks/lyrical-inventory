@@ -1548,85 +1548,63 @@ async function fetchLiveRate(from, to) {
   }
 }
 
-function toggleFxPanel(show){
-  const book = getBook();
-  $('m-fx-panel').style.display = show ? '' : 'none';
-  const label = $('m-price-label');
-  if(show){
-    $('m-fx-native-sym').textContent=book.currency;
-    if (label) label.textContent = `Revenue (${book.currency})`;
-    calcFx();
-  } else {
-    if (label) label.textContent = 'Price paid';
-  }
-}
+let _manualFxRate = null;
 
-function onManualCurrencyChange(){
+async function onManualCurrencyChange() {
+  const resultSpan = $('m-fx-inline-result');
+  const cur = $('m-price-cur').value;
   const book = getBook();
   const native = getBookCurrencyCode(book);
-  const selected = $('m-price-cur').value;
-  const actualCur = selected === 'BOOK' ? native : selected;
 
-  const fxEnabled = actualCur !== native;
-  toggleFxPanel(fxEnabled);
-  $('m-fx-cur').value = actualCur;
+  if (cur === 'BOOK' || cur === native || isAuthor()) {
+    if (resultSpan) resultSpan.style.display = 'none';
+    _manualFxRate = null;
+    phint();
+    return;
+  }
 
-  if (fxEnabled) {
-    // Show loading state in the rate field
-    const rateEl = $('m-fx-rate');
-    const rateStatus = $('m-fx-rate-status');
-    rateEl.placeholder = 'Fetching rate…';
-    rateEl.value = '';
-    if (rateStatus) { rateStatus.textContent = '⟳ Loading live rate…'; rateStatus.style.color = 'var(--text3)'; }
-    // Fetch live rate: actualCur → native (e.g. USD → EUR)
-    fetchLiveRate(actualCur, native).then(res => {
-      const rate = res.rate;
-      if (rate) {
-        rateEl.value = rate.toFixed(4);
-        rateEl.placeholder = 'e.g. 0.92';
-        if (rateStatus) { 
-          rateStatus.textContent = `✓ Live rate: 1 ${actualCur} = ${rate.toFixed(4)} ${native}`; 
-          rateStatus.style.color = 'var(--green)'; 
-        }
-        calcFx();
-      } else {
-        rateEl.placeholder = 'Enter rate manually';
-        if (rateStatus) { 
-          if (res.error === 'manual') {
-            rateStatus.textContent = 'Please enter rate manually';
-            rateStatus.style.color = 'var(--text3)';
-          } else {
-            const diag = res.details ? ` (${res.details})` : '';
-            const ctx = res.context ? ` [${res.context}]` : '';
-            rateStatus.textContent = `⚠ ${res.error === 'network' ? 'Network offline' : 'Lookup failed (' + res.error + ')'}${diag}${ctx} — enter manually`;
-            rateStatus.style.color = 'var(--amber)';
-          }
-        }
+  // Publisher only live conversion
+  if (resultSpan) {
+    resultSpan.style.display = 'inline';
+    resultSpan.textContent = '(fetching rate...)';
+    resultSpan.style.color = 'var(--text3)';
+  }
+  
+  const key = `${cur}_${native}`;
+  let rate = _fxRateCache[key];
+  
+  if (!rate) {
+    try {
+      const res = await fetchLiveRate(cur, native);
+      if (res.rate) {
+        rate = res.rate;
       }
-    });
+    } catch(e) {}
+  }
+  
+  if (rate) {
+    _manualFxRate = rate;
+    calcFx();
+  } else {
+    if (resultSpan) {
+      resultSpan.textContent = '(rate unavailable)';
+      resultSpan.style.color = 'var(--red)';
+    }
+    _manualFxRate = null;
   }
   phint();
 }
 
-function onFxCurrencyChange(){
-  calcFx();
-}
-function calcFx(){
-  const amt=parseFloat($('m-fx-amount').value)||0;
-  const rate=parseFloat($('m-fx-rate').value)||0;
-  const book=getBook();
+function calcFx() {
+  const resultSpan = $('m-fx-inline-result');
+  if (!resultSpan || !_manualFxRate) return;
   
-  // Update session cache if we have a valid rate and currency pair
-  const native = getBookCurrencyCode(book);
-  const selected = $('m-fx-cur').value;
-  if (rate > 0 && selected !== native) {
-    _fxRateCache[`${selected}_${native}`] = rate;
-  }
-
-  const converted=amt*rate;
-  $('m-fx-result').textContent=converted>0?fmt(converted,book.currency):'—';
-  // Push converted value into the main price field
-  if(converted>0){$('m-price').value=converted.toFixed(2);phint();}
+  const amt = parseFloat($('m-price').value) || 0;
+  const book = getBook();
+  const converted = amt * _manualFxRate;
+  
+  resultSpan.textContent = `≈ ${fmt(converted, book.currency)}`;
+  resultSpan.style.color = 'var(--gold)';
 }
 function toggleShippingPanel(){}  // no-op, kept for safety
 
@@ -2063,15 +2041,26 @@ function updateManualForm() {
 }
 
 function phint(){
-  const book=getBook(),p=parseFloat($('m-price').value)||0,q=parseInt($('m-qty').value)||1,h=$('m-hint'),t=p*q;
-  const fxOn=$('m-fx-panel').style.display!=='none';
-  if(fxOn){
-    h.className='hint-text';h.textContent=t>0?`Converted total ${fmt(t,book.currency)}`:'';
-  } else if(p<book.listPrice){h.className='hint-text amber';h.textContent=`Discounted from ${book.currency}${book.listPrice} — total ${fmt(t,book.currency)}`;}
-  else{h.className='hint-text';h.textContent=q>1?`Total ${fmt(t,book.currency)}`:'';};
+  const book=getBook(),p=parseFloat($('m-price').value)||0,q=parseInt($('m-qty').value)||1,h=$('m-hint');
+  let t = p * q;
+  
+  if (!isAuthor() && _manualFxRate) {
+     calcFx(); // Update the inline converted value
+     const convertedP = p * _manualFxRate;
+     t = convertedP * q;
+     h.className='hint-text';
+     h.textContent=t>0 ? `Total revenue: ${fmt(t, book.currency)}` : '';
+  } else if(p<book.listPrice){
+     h.className='hint-text amber';
+     h.textContent=`Discounted from ${book.currency}${book.listPrice} — total ${fmt(t,book.currency)}`;
+  } else {
+     h.className='hint-text';
+     h.textContent=q>1?`Total ${fmt(t,book.currency)}`:'';
+  }
 }
 function submitManual(){
-  const book=getBook(),qty=parseInt($('m-qty').value)||1,price=parseFloat($('m-price').value)||book.listPrice;
+  const book=getBook(),qty=parseInt($('m-qty').value)||1;
+  const rawPrice=parseFloat($('m-price').value)||book.listPrice;
   const num=$('m-num').value.trim()||'MAN-'+Date.now(),chan=$('m-chan').value,notes=$('m-notes').value.trim();
   const paymentType=$('m-payment-type').value;
   if(!paymentType){
@@ -2081,21 +2070,24 @@ function submitManual(){
     return;
   }
   $('m-payment-type').style.borderColor='';
-  // Build FX note if applicable
-  const fxEnabled = $('m-fx-panel').style.display !== 'none';
-  let fxNote='';
-  let fxAmt = 0, fxCur = '', fxRate = 0;
-  if(fxEnabled){
-    fxAmt=parseFloat($('m-fx-amount').value)||0;
-    fxCur=$('m-price-cur').value==='BOOK' ? getBookCurrencyCode(book) : $('m-price-cur').value;
-    fxRate=parseFloat($('m-fx-rate').value)||0;
-    if(fxAmt>0&&fxRate>0) fxNote=`Paid ${fxCur} ${fxAmt.toFixed(2)} @ ${fxRate} rate`;
+  
+  let price = rawPrice;
+  let fxNote = '';
+  let payment = null;
+  
+  const cur = $('m-price-cur').value;
+  const native = getBookCurrencyCode(book);
+  if (!isAuthor() && cur !== 'BOOK' && cur !== native && _manualFxRate) {
+    price = rawPrice * _manualFxRate;
+    fxNote = `Paid ${cur} ${rawPrice.toFixed(2)}`;
+    payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled: true, fxCur: cur, fxAmt: rawPrice, fxRate: _manualFxRate });
+  } else {
+    payment = buildPaymentMeta({ book, qty, unitPrice: price });
   }
-  const payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled, fxCur, fxAmt, fxRate });
+
   const fullNotes=[notes,fxNote,paymentType].filter(Boolean).join(' · ');
 
   if(paymentType==='Payment directly to artist'){
-    // Stock & sold count update, but revenue is HELD until artist forwards to publisher
     recordOrderPendingTransfer(num,chan,qty,price,fullNotes,payment);
     addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — ⏳ awaiting artist transfer`,'warn');
     showToast('⏳ Order logged — awaiting artist transfer to publisher');
@@ -2105,8 +2097,12 @@ function submitManual(){
     if(getState().stock<=book.threshold)addLog('log-manual','⚠ Below threshold!','warn');
     showToast('✓ Order saved · syncing to Sheets…');
   }
-  $('m-num').value='';$('m-qty').value='1';$('m-price').value=book.listPrice.toFixed(2);$('m-notes').value='';$('m-payment-type').value='';$('m-hint').textContent='';
-  $('m-price-cur').value='BOOK';$('m-fx-cur').value=getBookCurrencyCode(book);toggleFxPanel(false);$('m-fx-amount').value='';$('m-fx-rate').value='';$('m-fx-result').textContent='—';
+  
+  $('m-num').value='';$('m-qty').value='1';
+  $('m-price').value=book.listPrice.toFixed(2);
+  $('m-notes').value='';$('m-payment-type').value='';$('m-hint').textContent='';
+  $('m-price-cur').value='BOOK';
+  onManualCurrencyChange(); // reset fx logic
 }
 
 function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
