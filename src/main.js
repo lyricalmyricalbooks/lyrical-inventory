@@ -1507,8 +1507,7 @@ async function fetchOrders() {
 }
 
 // ── MANUAL
-// Session-level cache so we don't re-fetch the same currency pair twice
-const _fxRateCache = {};
+// Session-level cache so we don't re-fetch the same currency pair twice (Uses global _fxRateCache)
 
 async function fetchLiveRate(from, to) {
   if (from === to) return { rate: 1 };
