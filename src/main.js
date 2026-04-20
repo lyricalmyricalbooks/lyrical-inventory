@@ -2298,7 +2298,16 @@ async function submitManual(){
     try {
       await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
       addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — (Submitted)`,'warn');
-      showToast('✓ Order submitted for approval');
+      
+      if (paymentType === 'Payment directly to artist') {
+        showToast('⏳ Order submitted — you will owe a transfer to the publisher upon approval', 'warn');
+      } else {
+        showToast('✓ Order submitted for approval');
+      }
+      
+      // Update UI so the "Amount Owed" banner updates immediately
+      updateDash();
+
     } catch (e) {
       console.error("Submission error:", e);
       if (e.message && e.message.includes('PERMISSION_DENIED')) {
@@ -2424,8 +2433,23 @@ function markArtistTransferReceived(transferId){
 
 function renderArtistTransfers(){
   const s=getState(),book=getBook(),cur=book.currency;
-  const transfers=s.artistTransfers||[];
+  let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
   const payLink=book.paymentLink||'';
+
+  // Merge in pending author submissions if we are in author mode
+  if (isAuthor()) {
+    const pbSales = window.authorSubmissions[activeBook]?.sales || {};
+    Object.keys(pbSales).forEach(k => {
+      const raw = JSON.parse(pbSales[k].data);
+      if (raw.payment?.type === 'Payment directly to artist') {
+        transfers.push({
+          ...raw,
+          total: raw.qty * raw.price,
+          status: 'pending'
+        });
+      }
+    });
+  }
 
   // ── AUTHOR BANNER
   const banner=$('author-payment-banner');
@@ -2434,7 +2458,7 @@ function renderArtistTransfers(){
       const totalOwed=transfers.reduce((a,t)=>a+t.total,0);
       banner.style.display='';
       $('apb-amount').textContent=fmt(totalOwed,cur);
-      $('apb-detail').textContent=`${transfers.length} pending transfer${transfers.length>1?'s':''} from sales collected on your end`;
+      $('apb-detail').textContent=`${transfers.length} transfer${transfers.length>1?'s':''} from sales collected on your end (incl. pending)`;
       const btn=$('apb-pay-btn');
       if(payLink){
         const fullLink = payLink.startsWith('http') ? payLink : 'https://'+payLink;
@@ -2448,9 +2472,9 @@ function renderArtistTransfers(){
         $('apb-link-hint').textContent='Payment link not set — contact your publisher';
       }
       $('apb-transfers').innerHTML=transfers.map(t=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; opacity: ${t.status==='pending'?'.6': '1'}">
           <div style="font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.35);">
-            ${t.num} · ${fmtD(t.date)} · ${t.qty}×
+            ${t.num} · ${fmtD(t.date)} · ${t.qty}× ${t.status==='pending'?' (Pending Approval)':''}
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--gold2);font-weight:500;">${fmt(t.total,cur)}</div>
         </div>`).join('');
