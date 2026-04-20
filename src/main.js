@@ -1132,11 +1132,24 @@ function updateDash() {
   $('d-stores').textContent=s.stores.length;
   const owed=s.stores.reduce((a,st)=>a+st.amountOwed,0);
   $('d-owed').textContent=fmt(owed,cur); $('d-owed').className='kpi-value'+(owed>0?' warn':'');
-  const pendingTransfers=s.artistTransfers||[];
+  const pendingTransfers=[...(s.artistTransfers||[])];
+  
+  // Merge pending sales where they collected payment
+  const pbSales = window.authorSubmissions[activeBook]?.sales || {};
+  Object.keys(pbSales).forEach(k => {
+    const raw = JSON.parse(pbSales[k].data);
+    if (raw.payment?.type === 'Payment directly to artist') {
+      pendingTransfers.push({
+        ...raw,
+        total: raw.qty * raw.price
+      });
+    }
+  });
+
   const pendingTotal=pendingTransfers.reduce((a,t)=>a+t.total,0);
   $('d-artist-pending').textContent=pendingTransfers.length>0?fmt(pendingTotal,cur):'—';
   $('d-artist-pending').className='kpi-value'+(pendingTransfers.length>0?' warn':'');
-  $('d-artist-pending-sub').textContent=pendingTransfers.length>0?`${pendingTransfers.length} order${pendingTransfers.length>1?'s':''} awaiting forwarding`:'no pending transfers';
+  $('d-artist-pending-sub').textContent=pendingTransfers.length>0?`${pendingTransfers.length} order${pendingTransfers.length>1?'s':''} (incl. pending) awaiting forwarding`:'no pending transfers';
   renderArtistTransfers();
   $('d-low').textContent=s.stock<=book.threshold?'⚠ Low':'OK';
   $('d-low').className='kpi-value'+(s.stock<=book.threshold?' danger':'');
@@ -2436,20 +2449,18 @@ function renderArtistTransfers(){
   let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
   const payLink=book.paymentLink||'';
 
-  // Merge in pending author submissions if we are in author mode
-  if (isAuthor()) {
-    const pbSales = window.authorSubmissions[activeBook]?.sales || {};
-    Object.keys(pbSales).forEach(k => {
-      const raw = JSON.parse(pbSales[k].data);
-      if (raw.payment?.type === 'Payment directly to artist') {
-        transfers.push({
-          ...raw,
-          total: raw.qty * raw.price,
-          status: 'pending'
-        });
-      }
-    });
-  }
+  // Merge in pending author submissions for BOTH author and publisher views
+  const pbSales = window.authorSubmissions[activeBook]?.sales || {};
+  Object.keys(pbSales).forEach(k => {
+    const raw = JSON.parse(pbSales[k].data);
+    if (raw.payment?.type === 'Payment directly to artist') {
+      transfers.push({
+        ...raw,
+        total: raw.qty * raw.price,
+        status: 'pending' // Flagged as pending approval
+      });
+    }
+  });
 
   // ── AUTHOR BANNER
   const banner=$('author-payment-banner');
@@ -2492,19 +2503,23 @@ function renderArtistTransfers(){
   const payHtml = fullPayLink
     ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : `<span style="font-size:10px;color:var(--text4);font-family:'DM Mono',monospace;">No payment link set</span>`;
+  
   list.innerHTML=transfers.map(t=>`
-    <div style="background:white;border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div style="background:white;border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;opacity: ${t.status==='pending'?'.6':'1'};">
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
           <span class="pill amber">⏳ Awaiting transfer</span>
           <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${t.num}</span>
+          ${t.status === 'pending' ? `<span class="pill gray" style="font-size:10px;">Pending Approval</span>` : ''}
         </div>
         <div style="font-size:12px;color:var(--text3);">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong style="color:var(--amber);">${fmt(t.total,cur)} held</strong></div>
         <div style="font-size:11px;color:var(--text4);margin-top:3px;">${t.notes||'—'}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${payHtml}
-        <button class="btn gold" onclick="markArtistTransferReceived(${t.id})">✓ Mark transfer received</button>
+        ${t.status === 'pending' 
+          ? `<button class="btn sm outline" disabled>Approve sale first</button>`
+          : `<button class="btn gold" onclick="markArtistTransferReceived(${t.id})">✓ Mark transfer received</button>`}
       </div>
     </div>`).join('');
 }
