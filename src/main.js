@@ -4132,7 +4132,7 @@ function renderTaxCenter() {
             <td>${item.ref}</td>
             <td class="r">${item.isIncome ? '+' : '-'}${fmt(item.origAmount, item.currency)} ${item.hasRateError ? '<span title="Missing FX Rate">⚠️</span>': ''}</td>
             <td class="r" style="font-weight:bold;">${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}</td>
-            <td class="r">${item.itemId ? `<button class="btn-icon" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', ${item.itemId})" title="Delete entry">🗑️</button>` : ''}</td>
+            <td class="r">${item.itemId ? `<button class="btn-icon" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}</td>
         </tr>
       `).join('') || `<tr><td colspan="7" class="r" style="text-align:center;">No data</td></tr>`;
   }
@@ -4156,24 +4156,24 @@ async function removeLedgerEntry(type, bid, id) {
   if (!confirm('Are you sure you want to permanently delete this entry from the ledger?')) return;
   
   if (type === 'businessExpense') {
-    TAX_CENTER.businessExpenses = (TAX_CENTER.businessExpenses || []).filter(e => e.id !== id);
+    TAX_CENTER.businessExpenses = (TAX_CENTER.businessExpenses || []).filter(e => e.id != id);
     saveTaxCenter(); 
   } else if (type === 'bookExpense') {
     const s = states[bid];
     if (s && s.expenses) {
-      s.expenses = s.expenses.filter(e => e.id !== id);
+      s.expenses = s.expenses.filter(e => e.id != id);
       saveState(bid);
     }
   } else if (type === 'artistPayout') {
     const s = states[bid];
     if (s && s.artistTransfers) {
-      s.artistTransfers = s.artistTransfers.filter(t => t.id !== id);
+      s.artistTransfers = s.artistTransfers.filter(t => t.id != id);
       saveState(bid);
     }
   } else if (type === 'sale') {
       const s = states[bid];
       if (s && s.hist) {
-          s.hist = s.hist.filter(h => h.id !== id);
+          s.hist = s.hist.filter(h => h.id != id);
           saveState(bid);
       }
   }
