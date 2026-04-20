@@ -1907,7 +1907,7 @@ function renderExpenses(){
       ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
     const receiptCell = e.receipt ? (
       e.receipt.startsWith('local://') 
-      ? `<a href="#" onclick="viewLocalReceipt('${e.receipt.replace('local://','')}')" style="font-size:11px;color:var(--gold);">View Local</a>`
+      ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${e.receipt.replace('local://','')}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
       : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
     ) : `<span style="font-size:11px;color:var(--text4); font-weight: 500;">Missing</span>`;
     
@@ -3080,6 +3080,19 @@ async function setupReceiptFolder() {
   }
 }
 
+async function authorizeReceiptFolder() {
+  const handle = await loadReceiptFolderHandle();
+  if (!handle) return;
+  try {
+    if (await handle.requestPermission({ mode: 'readwrite' }) === 'granted') {
+      renderTaxCenter();
+      showToast('✓ Folder access authorized');
+    }
+  } catch (e) {
+    showToast('⚠ Authorization failed', 'err');
+  }
+}
+
 async function saveReceiptToLocalFile(file) {
   const dirHandle = await loadReceiptFolderHandle();
   if (!dirHandle) return null;
@@ -4062,11 +4075,19 @@ function renderTaxCenter() {
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
 
   // Update receipt folder display
-  loadReceiptFolderHandle().then(handle => {
+  loadReceiptFolderHandle().then(async handle => {
     const el = $('receipt-folder-display');
-    if (el) {
-      if (handle) el.innerHTML = `Status: <span style="color:var(--gold3);">Connected to folder: <strong>${handle.name}</strong></span>`;
-      else el.innerHTML = `Status: <span style="color:var(--text3);">Saving to Cloud (Firebase)</span>`;
+    if (!el) return;
+    if (!handle) {
+      el.innerHTML = `Status: <span style="color:var(--text3);">Saving to Cloud (Firebase)</span>`;
+      return;
+    }
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      el.innerHTML = `Status: <span style="color:var(--green);">✓ Connected to folder: <strong>${handle.name}</strong></span>`;
+    } else {
+      el.innerHTML = `Status: <span style="color:var(--amber);">⚠ Access Required: <strong>${handle.name}</strong></span> 
+        <button class="btn tx" onclick="authorizeReceiptFolder()" style="margin-left:10px;padding:2px 8px;font-size:11px;background:var(--gold3);color:black;">Authorize Access</button>`;
     }
   });
 
@@ -4128,7 +4149,8 @@ function renderTaxCenter() {
             type: 'Expense',
             desc: e.desc + ` (${b.title})`,
             cat: e.cat || 'Project Expense',
-            ref: e.ref || (e.receipt ? `<a href="${e.receipt}" target="_blank" style="color:var(--gold3);">Receipt</a>` : ''),
+            ref: e.ref || '',
+            receipt: e.receipt || '',
             currency: eCur,
             origAmount: e.amount || 0,
             baseAmount: eBase,
@@ -4180,7 +4202,8 @@ function renderTaxCenter() {
             type: 'Business Exp.',
             desc: e.desc,
             cat: e.cat || 'Other',
-            ref: e.ref || (e.receipt ? `<a href="${e.receipt}" target="_blank" style="color:var(--gold3);">Receipt</a>` : ''),
+            ref: e.ref || '',
+            receipt: e.receipt || '',
             currency: eCur,
             origAmount: e.amount || 0,
             baseAmount: eBase,
@@ -4228,10 +4251,23 @@ function renderTaxCenter() {
             <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
             <td>${item.desc}</td>
             <td>${item.cat}</td>
-            <td>${item.ref || (item.receipt ? (item.receipt.startsWith('local://') 
-              ? `<a href="#" onclick="viewLocalReceipt('${item.receipt.replace('local://','')}')" style="color:var(--gold3);">View Local</a>`
-              : `<a href="${item.receipt}" target="_blank" style="color:var(--gold3);">Receipt</a>`
-            ) : '')}</td>
+            <td>${(() => {
+              let r = item.receipt;
+              let displayRef = item.ref;
+              // Legacy cleanup: if ref contains a local link, extract it
+              if (displayRef && displayRef.includes('local://')) {
+                const match = displayRef.match(/href="([^"]+)"/);
+                if (match) r = match[1];
+                displayRef = '';
+              }
+              if (displayRef) return displayRef;
+              if (!r) return '';
+              if (r.startsWith('local://')) {
+                const fn = r.replace('local://', '');
+                return `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn}')" style="color:var(--gold3);text-decoration:underline;">View Local</a>`;
+              }
+              return `<a href="${r}" target="_blank" style="color:var(--gold3);">Receipt</a>`;
+            })()}</td>
             <td class="r" style="font-weight:bold;">${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}</td>
             <td class="r">${item.itemId ? `<button class="btn-icon" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}</td>
         </tr>
