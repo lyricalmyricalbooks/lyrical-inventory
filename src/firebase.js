@@ -1,3 +1,28 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+const firebaseConfig = {
+  apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
+  authDomain:"lyricalmyrical-37c46.firebaseapp.com",
+  projectId:"lyricalmyrical-37c46",
+  storageBucket:"lyricalmyrical-37c46.firebasestorage.app",
+  messagingSenderId:"448719824639",
+  appId:"1:448719824639:web:2aa79291b13bf6716ececa"
+};
+const app = initializeApp(firebaseConfig);
+const storage = getStorage(app);
+window._fbStorage = storage;
+window._fbUploadReceipt = async (file, path) => {
+  const storageRef = sRef(storage, `receipts/${path}`);
+  const uploadTask = uploadBytesResumable(storageRef, file);
+  return new Promise((resolve, reject) => {
+    uploadTask.on('state_changed', null, reject, async () => {
+      const url = await getDownloadURL(uploadTask.snapshot.ref);
+      resolve(url);
+    });
+  });
+};
+
 const API_BASE = (window.__LM_BACKEND_URL__ || localStorage.getItem('lm-backend-url') || 'http://localhost:8787').replace(/\/$/, '');
 const TOKEN_KEY = 'lm-backend-token';
 const USER_KEY = 'lm-backend-user';
@@ -33,7 +58,6 @@ async function api(path, { method = 'GET', body } = {}) {
 }
 
 window._fbAuth = { provider: 'custom-backend' };
-
 window._fbSignInWithGoogle = async () => {
   const password = window.prompt('Enter admin password');
   if (!password) throw new Error('Login cancelled');

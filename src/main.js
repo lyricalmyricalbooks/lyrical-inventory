@@ -1632,7 +1632,7 @@ function updateExpenseForm(){
   $('exp-date').value=today();
 }
 
-function submitExpense(){
+async function submitExpense(){
   const desc=($('exp-desc').value||'').trim();
   const cat=$('exp-cat').value;
   const amount=parseFloat($('exp-amount').value)||0;
@@ -1641,15 +1641,35 @@ function submitExpense(){
   const book=getBook();
   if(!desc){ showToast('⚠ Please enter a description','warn'); $('exp-desc').focus(); return; }
   if(!amount){ showToast('⚠ Please enter an amount','warn'); $('exp-amount').focus(); return; }
+  
+  const fileInput = $('exp-file');
+  let receiptUrl = '';
+  if(fileInput && fileInput.files.length > 0) {
+    const file = fileInput.files[0];
+    const submitBtn = $('submit-exp-btn') || {textContent:'', disabled:false}; // Fallback if btn ID not found
+    const oldText = submitBtn.textContent;
+    if(submitBtn.tagName) { submitBtn.textContent = 'Uploading receipt...'; submitBtn.disabled = true; }
+    try {
+      receiptUrl = await window._fbUploadReceipt(file, `${book.id}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g,'')}`);
+    } catch(e) {
+      console.error(e);
+      showToast('⚠ Error uploading receipt', 'err');
+      if(submitBtn.tagName) { submitBtn.textContent = oldText; submitBtn.disabled = false; }
+      return;
+    }
+    if(submitBtn.tagName) { submitBtn.textContent = oldText; submitBtn.disabled = false; }
+  }
+
   const s=getState();
   if(!s.expenses) s.expenses=[];
-  s.expenses.unshift({id:Date.now(),desc,cat,amount,date,ref});
+  s.expenses.unshift({id:Date.now(),desc,cat,amount,date,ref,receipt: receiptUrl});
   renderExpenses();
   updateDash();
   saveState(activeBook);
   addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,book.currency)}`,'ok');
   showToast('✓ Expense logged');
   $('exp-desc').value='';$('exp-amount').value='';$('exp-ref').value='';$('exp-date').value=today();
+  if(fileInput) fileInput.value = '';
 }
 
 function voidExpense(id){
@@ -1678,18 +1698,20 @@ function renderExpenses(){
       :'<span style="font-size:11px;color:var(--text4);">Pending</span>';
     const actionCell=(!e.received && !isAuthor())
       ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
+    const receiptCell = e.receipt ? `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>` : `<span style="font-size:11px;color:var(--text4); font-weight: 500;">Missing</span>`;
     return `<tr style="${e.received?'opacity:.5;':''}">
       <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
       <td style="font-weight:600;">${e.desc}</td>
       <td><span class="pill gray" style="font-size:10px;">${e.cat}</span></td>
       <td style="font-size:11px;color:var(--text3);">${e.ref||'—'}</td>
+      <td>${receiptCell}</td>
       <td class="r" style="color:${e.received?'var(--text4)':'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount,cur)}</td>
       <td>${statusCell}</td>
       <td>${actionCell}</td>
     </tr>`;
   }).join('')
   +`<tr style="background:var(--cream2);">
-      <td colspan="4" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding</td>
+      <td colspan="5" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding</td>
       <td class="r" style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${fmt(total,cur)}</td>
       <td colspan="2"></td>
     </tr>`;
@@ -3425,7 +3447,8 @@ function calculateFinancials(year) {
     shares: 0,
     profit: 0,
     bookStats: [], 
-    expCats: {} 
+    expCats: {},
+    missingReceiptsCount: 0
   };
 
   const start = new Date(year, 0, 1);
@@ -3468,9 +3491,13 @@ function calculateFinancials(year) {
       if (d >= start && d <= end) {
         result.opex += e.amount || 0;
         const cat = e.cat || 'Uncategorized';
-        if (!result.expCats[cat]) result.expCats[cat] = { count: 0, total: 0 };
+        if (!result.expCats[cat]) result.expCats[cat] = { count: 0, total: 0, missingReceipts: 0 };
         result.expCats[cat].count++;
         result.expCats[cat].total += e.amount || 0;
+        if (!e.receipt) {
+          result.expCats[cat].missingReceipts++;
+          result.missingReceiptsCount++;
+        }
       }
     });
   });
@@ -3522,7 +3549,11 @@ function renderFinancials() {
   $('fin-exp').textContent = fmt(fin.opex + fin.shares, cur);
   
   const totalExpCount = Object.values(fin.expCats).reduce((a,c)=>a+c.count,0);
-  $('fin-exp-sub').textContent = `${totalExpCount} expense${totalExpCount!==1?'s':''} logged`;
+  let subText = `${totalExpCount} expense${totalExpCount!==1?'s':''} logged`;
+  if(fin.missingReceiptsCount > 0) {
+    subText += ` · <span style="color:var(--red);font-weight:600;">${fin.missingReceiptsCount} missing receipt${fin.missingReceiptsCount!==1?'s':''}</span>`;
+  }
+  $('fin-exp-sub').innerHTML = subText;
   $('fin-profit').textContent = fmt(fin.profit, cur);
   
   const expBody = $('fin-exp-body');
@@ -3530,7 +3561,7 @@ function renderFinancials() {
     const sortedCats = Object.entries(fin.expCats).sort((a,b) => b[1].total - a[1].total);
     expBody.innerHTML = sortedCats.map(([cat, val]) => `
       <tr>
-        <td style="font-weight:600;">${cat}</td>
+        <td style="font-weight:600; display:flex; align-items:center;">${cat} ${val.missingReceipts ? `<span class="pill" style="margin-left:8px; font-size:9px; background:var(--red); color:var(--dark); font-weight:600;">${val.missingReceipts} missing</span>` : ''}</td>
         <td class="r">${val.count} txn</td>
         <td class="r" style="font-weight:700; color:var(--red);">${fmt(val.total, cur)}</td>
       </tr>
@@ -3556,7 +3587,7 @@ function downloadTaxReport() {
   const year = $('fin-year-selector').value;
   const fin = calculateFinancials(parseInt(year));
   
-  let csv = 'Date,Type,Book/Source,Category,Description,Revenue,COGS,Expense,Artist Payout,Net\n';
+  let csv = 'Date,Type,Book/Source,Category,Description,Receipt URL,Revenue,COGS,Expense,Artist Payout,Net\n';
   
   const start = new Date(year, 0, 1);
   const end = new Date(year, 11, 31, 23, 59, 59);
@@ -3566,23 +3597,23 @@ function downloadTaxReport() {
     s.hist.filter(h => !h.voided && !h.gratuity).forEach(h => {
       const d = new Date(h.date);
       if (d >= start && d <= end) {
-        csv += `${h.date},Order,${book.title},Sale,"${h.chan} Order #${h.num}",${(h.qty*h.price).toFixed(2)},0,0,0,${(h.qty*h.price).toFixed(2)}\n`;
+        csv += `${h.date},Order,${book.title},Sale,"${h.chan} Order #${h.num}",,${(h.qty*h.price).toFixed(2)},0,0,0,${(h.qty*h.price).toFixed(2)}\n`;
       }
     });
 
     (s.expenses || []).forEach(e => {
         const d = new Date(e.date);
         if (d >= start && d <= end) {
-          csv += `${e.date},Expense,${book.title},${e.cat},"${e.desc}",0,0,${e.amount.toFixed(2)},0,-${e.amount.toFixed(2)}\n`;
+          csv += `${e.date},Expense,${book.title},${e.cat},"${e.desc}","${e.receipt || ''}",0,0,${e.amount.toFixed(2)},0,-${e.amount.toFixed(2)}\n`;
         }
     });
   });
 
   // Summary lines for COGS and Shares
-  csv += `\nSUMMARY FOR ${year},,,,,,,\n`;
+  csv += `\nSUMMARY FOR ${year},,,,,,,,,\n`;
   fin.bookStats.forEach(bs => {
-    csv += `${year}-12-31,COGS Summary,${bs.title},COGS,Inventory Recovery,0,${bs.cogs.toFixed(2)},0,0,-${bs.cogs.toFixed(2)}\n`;
-    csv += `${year}-12-31,Artist Share,${bs.title},Royalty,Tiered Payout,0,0,0,${bs.shares.toFixed(2)},-${bs.shares.toFixed(2)}\n`;
+    csv += `${year}-12-31,COGS Summary,${bs.title},COGS,Inventory Recovery,,0,${bs.cogs.toFixed(2)},0,0,-${bs.cogs.toFixed(2)}\n`;
+    csv += `${year}-12-31,Artist Share,${bs.title},Royalty,Tiered Payout,,0,0,0,${bs.shares.toFixed(2)},-${bs.shares.toFixed(2)}\n`;
   });
 
   const blob = new Blob([csv], { type: 'text/csv' });
