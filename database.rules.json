@@ -1,0 +1,22 @@
+{
+  "rules": {
+    "lyrical": {
+      "books": {
+        "$bookId": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'"
+        }
+      },
+      "submissions": {
+        "$bookId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      },
+      "settings": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'"
+      }
+    }
+  }
+}
