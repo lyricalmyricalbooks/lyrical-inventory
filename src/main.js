@@ -2171,7 +2171,7 @@ function phint(){
      h.textContent=q>1?`Total ${fmt(t,book.currency)}`:'';
   }
 }
-function submitManual(){
+async function submitManual(){
   const book=getBook(),qty=parseInt($('m-qty').value)||1;
   const rawPrice=parseFloat($('m-price').value)||book.listPrice;
   const num=$('m-num').value.trim()||'MAN-'+Date.now(),chan=$('m-chan').value,notes=$('m-notes').value.trim();
