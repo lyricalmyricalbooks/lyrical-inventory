@@ -481,16 +481,19 @@
       </div>
     </div>
     <div class="g4">
-      <div class="form-group" id="pub-exp-cur-group" style="display:none;"><label>Currency</label>
-        <select id="exp-cur">
-          <option value="CAD">CAD</option>
-          <option value="USD">USD</option>
-          <option value="EUR">EUR</option>
-          <option value="GBP">GBP</option>
-          <option value="AUD">AUD</option>
-        </select>
+      <div class="form-group">
+        <label>Amount <span id="exp-fx-inline-result" style="display:none;color:var(--gold);font-weight:600;margin-left:8px;"></span></label>
+        <div class="price-inline">
+          <select id="exp-cur" onchange="onExpenseCurrencyChange()">
+            <option value="CAD">CAD</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="AUD">AUD</option>
+          </select>
+          <input type="number" id="exp-amount" step="0.01" min="0" placeholder="0.00" oninput="calcExpenseFx()">
+        </div>
       </div>
-      <div class="form-group"><label>Amount</label><div class="price-wrap"><input type="number" id="exp-amount" step="0.01" min="0" placeholder="0.00"></div></div>
       <div class="form-group"><label>Date</label><input type="date" id="exp-date"></div>
       <div class="form-group" id="pub-exp-ref-group"><label>Receipt / ref</label><input type="text" id="exp-ref" placeholder="optional"></div>
       <div class="form-group" id="exp-file-group"><label>Upload file (optional)</label>

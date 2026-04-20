@@ -1716,6 +1716,7 @@ async function fetchLiveRate(from, to) {
 }
 
 let _manualFxRate = null;
+let _expenseFxRate = null;
 
 async function onManualCurrencyChange() {
   const resultSpan = $('m-fx-inline-result');
@@ -1769,6 +1770,60 @@ function calcFx() {
   const amt = parseFloat($('m-price').value) || 0;
   const book = getBook();
   const converted = amt * _manualFxRate;
+  
+  resultSpan.textContent = `≈ ${fmt(converted, book.currency)}`;
+  resultSpan.style.color = 'var(--gold)';
+}
+
+async function onExpenseCurrencyChange() {
+  const resultSpan = $('exp-fx-inline-result');
+  const cur = $('exp-cur').value;
+  const book = getBook();
+  const native = getBookCurrencyCode(book);
+
+  if (cur === native) {
+    if (resultSpan) resultSpan.style.display = 'none';
+    _expenseFxRate = null;
+    return;
+  }
+
+  if (resultSpan) {
+    resultSpan.style.display = 'inline';
+    resultSpan.textContent = '(fetching rate...)';
+    resultSpan.style.color = 'var(--text3)';
+  }
+  
+  const key = `${cur}_${native}`;
+  let rate = _fxRateCache[key];
+  
+  if (!rate) {
+    try {
+      const res = await fetchLiveRate(cur, native);
+      if (res.rate) {
+        rate = res.rate;
+      }
+    } catch(e) {}
+  }
+  
+  if (rate) {
+    _expenseFxRate = rate;
+    calcExpenseFx();
+  } else {
+    if (resultSpan) {
+      resultSpan.textContent = '(rate unavailable)';
+      resultSpan.style.color = 'var(--red)';
+    }
+    _expenseFxRate = null;
+  }
+}
+
+function calcExpenseFx() {
+  const resultSpan = $('exp-fx-inline-result');
+  if (!resultSpan || !_expenseFxRate) return;
+  
+  const amt = parseFloat($('exp-amount').value) || 0;
+  const book = getBook();
+  const converted = amt * _expenseFxRate;
   
   resultSpan.textContent = `≈ ${fmt(converted, book.currency)}`;
   resultSpan.style.color = 'var(--gold)';
@@ -1898,16 +1953,15 @@ function updateExpenseForm(){
   const book=getBook();
   $('exp-date').value=today();
   
-  // Show currency dropdown for everyone now that symbols are gone
-  if ($('pub-exp-cur-group')) $('pub-exp-cur-group').style.display = '';
-  if ($('exp-cur')) $('exp-cur').value = book.currency || 'EUR';
+  const native = getBookCurrencyCode(book);
+  if ($('exp-cur')) $('exp-cur').value = native;
+  if ($('exp-fx-inline-result')) $('exp-fx-inline-result').style.display = 'none';
+  _expenseFxRate = null;
 
   if (window.IS_PUBLISHER) {
     if ($('exp-ai-btn')) $('exp-ai-btn').style.display = '';
-    $('exp-amount').parentElement.parentElement.parentElement.className = 'g5'; // Adjust grid
   } else {
     if ($('exp-ai-btn')) $('exp-ai-btn').style.display = 'none';
-    $('exp-amount').parentElement.parentElement.parentElement.className = 'g5'; // Also use g5 for authors to fit currency
   }
 }
 
@@ -1915,16 +1969,31 @@ async function submitExpense(){
   if (!activeBook) { showToast('⚠ Error: No active book selected', 'err'); return; }
   const desc=($('exp-desc').value||'').trim();
   const cat=$('exp-cat').value;
-  const amount=parseFloat($('exp-amount').value)||0;
   const date=$('exp-date').value||today();
   const ref=($('exp-ref').value||'').trim();
   const book=getBook();
+
   
-  let rawCurrency = ($('exp-cur') && $('exp-cur').offsetParent !== null) ? ($('exp-cur').value || book.currency) : book.currency;
-  const currency = getBookCurrencyCode({ currency: rawCurrency }); 
+  const curField = $('exp-cur');
+  const rawAmount = parseFloat($('exp-amount').value) || 0;
+  const cur = curField ? curField.value : book.currency;
+  const native = getBookCurrencyCode(book);
+
+  let amount = rawAmount;
+  let currency = native;
+  let fxNote = "";
+
+  if (cur !== native && _expenseFxRate) {
+    amount = rawAmount * _expenseFxRate;
+    fxNote = ` (Paid ${cur} ${rawAmount.toFixed(2)})`;
+  } else {
+    currency = cur; // If no FX used, use the selected currency (should match native anyway)
+  }
+  
+  const finalDesc = desc + fxNote;
   
   if(!desc){ showToast('⚠ Please enter a description','warn'); $('exp-desc').focus(); return; }
-  if(!amount){ showToast('⚠ Please enter an amount','warn'); $('exp-amount').focus(); return; }
+  if(!rawAmount){ showToast('⚠ Please enter an amount','warn'); $('exp-amount').focus(); return; }
   
   const fileInput = $('exp-file');
   let receiptUrl = '';
@@ -1949,9 +2018,9 @@ async function submitExpense(){
   if(!s.expenses) s.expenses=[];
   
   // Calculate CAD equivalence for publisher reporting
-  const fxRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
-  const baseAmount = fxRate ? (amount * fxRate) : null;
-  const newExpense = {id:Date.now(),desc,cat,amount,currency,date,ref,receipt: receiptUrl,fxRate,baseAmount};
+  const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
+  const baseAmount = cadRate ? (amount * cadRate) : null;
+  const newExpense = {id:Date.now(),desc:finalDesc,cat,amount,currency,date,ref,receipt: receiptUrl,fxRate:_expenseFxRate,baseAmount};
   
   if (isAuthor()) {
     try {
@@ -4931,6 +5000,8 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, submitManual,
+  onExpenseCurrencyChange, calcExpenseFx,
+
   submitGratuity, openM, closeM, addStore, openSend, confirmSend, openSale, confirmSale,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
