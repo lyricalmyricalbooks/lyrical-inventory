@@ -4006,7 +4006,10 @@ function renderTaxCenter() {
             origAmount: amt,
             baseAmount: baseAmt,
             hasRateError: !hRate,
-            isIncome: true
+            isIncome: true,
+            sourceType: 'sale',
+            sourceId: bid,
+            itemId: h.id
         });
     });
     
@@ -4031,7 +4034,10 @@ function renderTaxCenter() {
             origAmount: e.amount || 0,
             baseAmount: eBase,
             hasRateError: !e.fxRate && eCur !== 'CAD',
-            isIncome: false
+            isIncome: false,
+            sourceType: 'bookExpense',
+            sourceId: bid,
+            itemId: e.id
         });
     });
     
@@ -4052,7 +4058,10 @@ function renderTaxCenter() {
             origAmount: t.total || 0,
             baseAmount: tBase,
             hasRateError: !hRate,
-            isIncome: false
+            isIncome: false,
+            sourceType: 'artistPayout',
+            sourceId: bid,
+            itemId: t.id
         });
     });
   });
@@ -4077,7 +4086,9 @@ function renderTaxCenter() {
             origAmount: e.amount || 0,
             baseAmount: eBase,
             hasRateError: !e.fxRate && eCur !== 'CAD',
-            isIncome: false
+            isIncome: false,
+            sourceType: 'businessExpense',
+            itemId: e.id
         });
   });
 
@@ -4121,6 +4132,7 @@ function renderTaxCenter() {
             <td>${item.ref}</td>
             <td class="r">${item.isIncome ? '+' : '-'}${fmt(item.origAmount, item.currency)} ${item.hasRateError ? '<span title="Missing FX Rate">⚠️</span>': ''}</td>
             <td class="r" style="font-weight:bold;">${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}</td>
+            <td class="r">${item.itemId ? `<button class="btn-icon" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', ${item.itemId})" title="Delete entry">🗑️</button>` : ''}</td>
         </tr>
       `).join('') || `<tr><td colspan="7" class="r" style="text-align:center;">No data</td></tr>`;
   }
@@ -4138,6 +4150,36 @@ function renderTaxCenter() {
         </tr>
       `).join('') || `<tr><td colspan="5" class="r" style="text-align:center;">No active subscriptions</td></tr>`;
   }
+}
+
+async function removeLedgerEntry(type, bid, id) {
+  if (!confirm('Are you sure you want to permanently delete this entry from the ledger?')) return;
+  
+  if (type === 'businessExpense') {
+    TAX_CENTER.businessExpenses = (TAX_CENTER.businessExpenses || []).filter(e => e.id !== id);
+    saveTaxCenter(); 
+  } else if (type === 'bookExpense') {
+    const s = states[bid];
+    if (s && s.expenses) {
+      s.expenses = s.expenses.filter(e => e.id !== id);
+      saveState(bid);
+    }
+  } else if (type === 'artistPayout') {
+    const s = states[bid];
+    if (s && s.artistTransfers) {
+      s.artistTransfers = s.artistTransfers.filter(t => t.id !== id);
+      saveState(bid);
+    }
+  } else if (type === 'sale') {
+      const s = states[bid];
+      if (s && s.hist) {
+          s.hist = s.hist.filter(h => h.id !== id);
+          saveState(bid);
+      }
+  }
+  
+  renderTaxCenter();
+  showToast('✓ Entry removed from ledger');
 }
 
 function saveTaxCenterSettings() {
