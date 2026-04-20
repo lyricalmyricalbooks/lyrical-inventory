@@ -545,7 +545,7 @@ async function saveState(bookId) {
   setSyncState('syncing', '<b>Firebase</b> · saving…');
   try {
     if (!fbReady || !navigator.onLine) {
-      queueSync(bookId, states[bookId]);
+      queueSync(bookId, state);
       setSyncState('ok', '<b>Firebase</b> · changes queued (offline)');
       return;
     }
@@ -553,7 +553,12 @@ async function saveState(bookId) {
     lastSavedHashes[bookId] = json;
     setSyncState('ok', '<b>Firebase</b> · saved · live sync on');
     const ind=$('save-ind'); if(ind){ind.classList.add('show');setTimeout(()=>ind.classList.remove('show'),2000);}
-  } catch(e) { setSyncState('error','<b>Firebase</b> · save failed'); console.error(e); }
+  } catch(e) { 
+    console.error(`Firebase Save Error [${bookId}]:`, e);
+    const err = e.message || e.code || 'save failed';
+    setSyncState('error', `<b>Firebase</b> · ${err}`); 
+    showToast(`⚠ Sync Error: ${err}`, 'err');
+  }
 }
 
 async function loadBook(bookId) {
