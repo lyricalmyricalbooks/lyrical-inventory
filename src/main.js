@@ -775,14 +775,16 @@ function syncRoleUI() {
   const authorNow = isAuthor();
   const websiteTabBtn = $('website-tab-btn');
   const financialsTabBtn = $('financials-tab-btn');
-  const taxcenterTabBtn = $('taxcenter-tab-btn');
-  const sheetsTabBtn = $('sheets-tab-btn');
-  const backupsTabBtn = $('backups-tab-btn');
+  const taxcenterTabBtn = $('global-taxcenter-btn');
+  const globalActions = $('global-actions');
+  const sheetsTabBtn = $('global-sheets-btn');
+  const backupsTabBtn = $('global-backups-btn');
   const qrBtn = $('d-qr-btn');
   const qrcodesTabBtn = $('qrcodes-tab-btn');
   const myqrTabBtn = $('myqr-tab-btn');
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
   if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
+  if (globalActions) globalActions.style.display = authorNow ? 'none' : 'flex';
   if (taxcenterTabBtn) taxcenterTabBtn.style.display = authorNow ? 'none' : '';
   if (sheetsTabBtn) sheetsTabBtn.style.display = authorNow ? 'none' : '';
   if (backupsTabBtn) backupsTabBtn.style.display = authorNow ? 'none' : '';
@@ -877,7 +879,7 @@ function switchTab(name) {
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr
   const names = ['dashboard','website','manual','consignment','history','expenses','financials','taxcenter','sheets','backups','qrcodes','myqr'];
   
-  document.querySelectorAll('.tab-btn').forEach((b) => {
+  document.querySelectorAll('.tab-btn, .header-action-btn').forEach((b) => {
     // We match by checking onclick text to be safe if order ever changes
     if (b.getAttribute('onclick')?.includes(`'${name}'`)) {
       b.classList.add('active');

@@ -60,6 +60,11 @@
     <div class="header-wordmark">Lyricalmyrical Books</div>
     <div class="header-tag" id="hdr-sub">Inventory App · connecting…</div>
   </div>
+  <div class="header-actions" id="global-actions" style="display:none; align-items:center;">
+    <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn">⚖️ Tax Centre</button>
+    <button class="header-action-btn" onclick="switchTab('sheets')" id="global-sheets-btn">📊 Sheets</button>
+    <button class="header-action-btn" onclick="switchTab('backups')" id="global-backups-btn" style="display:none;">💾 Backups</button>
+  </div>
   <div class="header-right">
     <div class="header-stat"><div class="hs-val" id="h-stock">—</div><div class="hs-label">On hand</div></div>
     <div class="header-stat"><div class="hs-val" id="h-revenue">—</div><div class="hs-label">Revenue</div></div>
@@ -109,9 +114,6 @@
   <button class="tab-btn" onclick="switchTab('consignment')">Consignment</button>
   <button class="tab-btn" onclick="switchTab('history')">History</button>
   <button class="tab-btn" onclick="switchTab('expenses')">Expenses</button>
-  <button class="tab-btn" onclick="switchTab('taxcenter')" id="taxcenter-tab-btn" style="display:none;">⚖️ Tax Center</button>
-  <button class="tab-btn" onclick="switchTab('sheets')" id="sheets-tab-btn">📊 Sheets</button>
-  <button class="tab-btn" onclick="switchTab('backups')" id="backups-tab-btn" style="display:none;">💾 Backups</button>
   <button class="tab-btn" onclick="switchTab('qrcodes')" id="qrcodes-tab-btn" style="display:none;">📱 QR Codes</button>
   <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;">📲 My QR Code</button>
 </nav>

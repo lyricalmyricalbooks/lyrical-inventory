@@ -31,6 +31,38 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .hs-val{font-family:'DM Mono',monospace;font-size:19px;font-weight:500;color:var(--gold3);line-height:1;}
 .hs-label{font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.14em;text-transform:uppercase;margin-top:4px;}
 
+/* GLOBAL ACTIONS */
+.header-actions{display:flex;align-items:center;padding:0 1rem;}
+.header-action-btn{
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:var(--r2);
+  color:var(--cream);
+  font-family:'Syne',sans-serif;
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  padding:8px 14px;
+  cursor:pointer;
+  transition:all .18s;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  white-space:nowrap;
+}
+.header-action-btn:hover{
+  background:rgba(255,255,255,.12);
+  border-color:var(--gold);
+  color:var(--gold3);
+  transform:translateY(-1px);
+}
+.header-action-btn.active{
+  background:var(--gold-bg);
+  border-color:var(--gold);
+  color:var(--gold3);
+}
+
 /* SYNC BAR */
 .sync-bar{background:var(--ink2);border-bottom:1px solid rgba(255,255,255,.04);padding:5px 2rem;display:flex;align-items:center;gap:10px;font-size:11px;font-family:'DM Mono',monospace;flex-wrap:wrap;}
 .sync-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0;transition:background .3s;}
