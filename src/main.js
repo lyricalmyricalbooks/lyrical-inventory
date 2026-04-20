@@ -416,14 +416,18 @@ function isAuthor() {
 
 // ── UTILITIES
 const $ = id => document.getElementById(id);
-const fmt = (n, cur='€') => cur + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+const CURRENCY_SYMBOL_TO_CODE = { '€':'EUR', '$':'CAD', 'US$':'USD', '£':'GBP', '¥':'JPY', 'CHF':'CHF' };
+const CODE_TO_SYMBOL = { 'EUR':'€', 'CAD':'$', 'USD':'US$', 'GBP':'£', 'JPY':'¥', 'CHF':'CHF', 'AUD':'A$' };
+const getSym = c => CODE_TO_SYMBOL[c] || c;
+
+const fmt = (n, cur='€') => getSym(cur) + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const fmtNum = n => Number(n).toFixed(2);
 const fmtD = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—';
 const today = () => new Date().toISOString().split('T')[0];
-const CURRENCY_SYMBOL_TO_CODE = { '€':'EUR', 'CA$':'CAD', '$':'USD', '£':'GBP', '¥':'JPY', 'CHF':'CHF' };
 
 function getBookCurrencyCode(book) {
-  return CURRENCY_SYMBOL_TO_CODE[book.currency] || String(book.currency || 'EUR').replace(/[^A-Z]/g, '').slice(0, 3) || 'EUR';
+  const c = book.currency || 'EUR';
+  return CURRENCY_SYMBOL_TO_CODE[c] || (String(c).length === 3 ? c : 'EUR');
 }
 
 function paymentSummary(payment, book) {
@@ -1755,7 +1759,6 @@ function renderArtistReimburseBanner(){
 
 function updateExpenseForm(){
   const book=getBook();
-  $('exp-sym').textContent=book.currency;
   $('exp-date').value=today();
   
   if (window.IS_PUBLISHER) {
@@ -1785,20 +1788,21 @@ async function submitExpense(){
   
   const fileInput = $('exp-file');
   let receiptUrl = '';
-  if(fileInput && fileInput.files.length > 0) {
+  if (window.IS_PUBLISHER && fileInput && fileInput.files.length > 0) {
     const file = fileInput.files[0];
-    const submitBtn = $('submit-exp-btn') || {textContent:'', disabled:false}; // Fallback if btn ID not found
+    const submitBtn = $('submit-exp-btn');
     const oldText = submitBtn.textContent;
-    if(submitBtn.tagName) { submitBtn.textContent = 'Uploading...'; submitBtn.disabled = true; }
+    submitBtn.textContent = 'Saving locally...'; submitBtn.disabled = true;
     try {
-      receiptUrl = await window._fbUploadReceipt(file, `${book.id}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g,'')}`);
+      const localUrl = await saveReceiptToLocalFile(file, book.title);
+      if (localUrl) receiptUrl = localUrl;
     } catch(e) {
       console.error(e);
-      showToast('⚠ Error uploading receipt', 'err');
-      if(submitBtn.tagName) { submitBtn.textContent = oldText; submitBtn.disabled = false; }
+      showToast('⚠ Error saving receipt locally', 'err');
+      submitBtn.textContent = oldText; submitBtn.disabled = false;
       return;
     }
-    if(submitBtn.tagName) { submitBtn.textContent = oldText; submitBtn.disabled = false; }
+    submitBtn.textContent = oldText; submitBtn.disabled = false;
   }
 
   const s=getState();
@@ -4113,7 +4117,7 @@ function showApp(role, bookId) {
     }
     const openLink=$('sheets-open-link'); if(openLink)openLink.style.display='none !important';
     const style=document.createElement('style');
-    style.textContent='#sheets-open-link{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}';
+    style.textContent='#sheets-open-link{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-file-group{display:none!important;}#exp-ai-btn{display:none!important;}';
     document.head.appendChild(style);
   } else {
     // Publisher — show import button and financials tab
@@ -4510,16 +4514,11 @@ async function submitTaxExpense() {
     const file = fileInput.files[0];
     const submitBtn = $('tc-submit-exp-btn');
     const oldText = submitBtn.textContent;
-    submitBtn.textContent = 'Uploading...'; submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving locally...'; submitBtn.disabled = true;
     try {
-      // Check for local folder first
-      const localUrl = await saveReceiptToLocalFile(file);
-      if (localUrl) {
-        receiptUrl = localUrl;
-      } else {
-        // Fallback to Firebase
-        receiptUrl = await window._fbUploadReceipt(file, `TAX_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g,'')}`);
-      }
+      // For Tax Centre, use a "General" subfolder or the project name if applicable
+      const localUrl = await saveReceiptToLocalFile(file, 'General');
+      if (localUrl) receiptUrl = localUrl;
     } catch(e) {
       console.error(e);
       showToast('⚠ Error saving receipt', 'err');

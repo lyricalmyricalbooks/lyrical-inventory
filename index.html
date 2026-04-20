@@ -485,10 +485,10 @@
           <option value="AUD">AUD</option>
         </select>
       </div>
-      <div class="form-group"><label>Amount</label><div class="price-wrap"><span class="sym" id="exp-sym">€</span><input type="number" id="exp-amount" step="0.01" min="0" placeholder="0.00"></div></div>
+      <div class="form-group"><label>Amount</label><div class="price-wrap"><input type="number" id="exp-amount" step="0.01" min="0" placeholder="0.00"></div></div>
       <div class="form-group"><label>Date</label><input type="date" id="exp-date"></div>
       <div class="form-group" id="pub-exp-ref-group"><label>Receipt / ref</label><input type="text" id="exp-ref" placeholder="optional"></div>
-      <div class="form-group"><label>Upload file (optional)</label>
+      <div class="form-group" id="exp-file-group"><label>Upload file (optional)</label>
         <div style="display:flex;gap:4px;">
           <input type="file" id="exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px; flex: 1;">
           <button class="btn gold" style="padding: 0 8px; font-size:12px; margin-top: 6px; display:none;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn">✨ AI Scan</button>
@@ -562,7 +562,7 @@
         </div>
       </div>
       <div class="form-group"><label>Date</label><input type="date" id="tc-exp-date"></div>
-      <div class="form-group"><label>Receipt</label>
+      <div class="form-group" id="tc-exp-file-group"><label>Receipt</label>
         <div style="display:flex;gap:4px;">
           <input type="file" id="tc-exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px;flex:1;">
           <button class="btn gold" style="padding: 0 8px; font-size:12px; margin-top: 6px;" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn">✨ AI Scan</button>
