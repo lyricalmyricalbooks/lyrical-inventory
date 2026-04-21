@@ -25,15 +25,7 @@ const DEFAULT_BOOKS = {
 
 async function loadCatalog() {
   try {
-    let stored = await window._fbLoadCatalog();
-    
-    // Fallback: If global Firestore is enabled but empty, try RTDB once to prevent broken state
-    if (!stored && window._useFirestoreGlobal()) {
-      console.warn("Global Firestore catalog empty, falling back to RTDB...");
-      const s = await get(ref(db, `lyrical/settings/catalog`));
-      if (s.exists()) stored = JSON.parse(s.val().data);
-    }
-
+    const stored = await window._fbLoadCatalog(); // handles FS → RTDB fallback internally
     if (stored) {
       BOOKS = { ...DEFAULT_BOOKS, ...stored };
       if (Object.keys(BOOKS).length > Object.keys(stored).length) {
@@ -44,7 +36,7 @@ async function loadCatalog() {
       await window._fbSaveCatalog(BOOKS);
     }
   } catch (e) {
-    console.error("Critical error loading catalog", e);
+    console.error('Critical error loading catalog', e);
     BOOKS = DEFAULT_BOOKS;
   }
 }
@@ -699,23 +691,15 @@ let _fxRateCache = { 'CAD_CAD': 1 };
 async function loadTaxCenter() {
   if (isAuthor()) return;
   try {
-    let json = await window._fbLoadSettings('taxCenter');
-    
-    // Fallback: If global Firestore is enabled but empty, try RTDB once to prevent broken calculator
-    if (!json && window._useFirestoreGlobal()) {
-       console.warn("Global Firestore TaxCenter empty, falling back to RTDB...");
-       const s = await get(ref(db, `lyrical/settings/taxCenter`));
-       if (s.exists()) json = JSON.parse(s.val().data);
-    }
-
+    const json = await window._fbLoadSettings('taxCenter'); // handles FS → RTDB fallback internally
     if (json) {
       TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...json };
     }
-    if(TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
+    if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
     await refreshDailyRates();
     processRecurringExpenses();
   } catch (e) {
-    console.warn("Failed to load tax center", e);
+    console.warn('Failed to load tax center', e);
   }
 }
 

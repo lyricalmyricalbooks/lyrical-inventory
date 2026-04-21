@@ -186,7 +186,11 @@ window._fbLoadSettings = async (key) => {
   try {
     if (window._useFirestoreGlobal()) {
       const s = await getDoc(doc(fs, 'settings', key));
-      return s.exists() ? safeParse(s.data().data) : null;
+      if (s.exists()) return safeParse(s.data().data);
+      // Transparent fallback: Firestore doc missing — read from RTDB
+      console.warn(`[FB] settings/${key} not in Firestore, reading from RTDB`);
+      const rtSnap = await get(ref(db, `lyrical/settings/${key}`));
+      return rtSnap.exists() ? safeParse(rtSnap.val().data) : null;
     }
     const s = await get(ref(db, `lyrical/settings/${key}`));
     return s.exists() ? safeParse(s.val().data) : null;
@@ -207,7 +211,11 @@ window._fbLoadCatalog = async () => {
   try {
     if (window._useFirestoreGlobal()) {
       const s = await getDoc(doc(fs, 'settings', 'catalog'));
-      return s.exists() ? safeParse(s.data().data) : null;
+      if (s.exists()) return safeParse(s.data().data);
+      // Transparent fallback: Firestore doc missing — read from RTDB
+      console.warn('[FB] catalog not in Firestore, reading from RTDB');
+      const rtSnap = await get(ref(db, `lyrical/settings/catalog`));
+      return rtSnap.exists() ? safeParse(rtSnap.val().data) : null;
     }
     const s = await get(ref(db, `lyrical/settings/catalog`));
     return s.exists() ? safeParse(s.val().data) : null;
