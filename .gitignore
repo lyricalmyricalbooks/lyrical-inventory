@@ -3,3 +3,4 @@ dist/
 backend/data/*.json
 backend/uploads/*
 backend/.env
+rtdb_backup.json

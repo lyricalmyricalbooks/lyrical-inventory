@@ -1,0 +1,21 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /books/{bookId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.email == 'lyricalmyricalbooks@gmail.com';
+    }
+    
+    match /submissions/{bookId}/{type}/{subId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // We haven't migrated settings to Firestore yet, but preparing it
+    match /settings/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.email == 'lyricalmyricalbooks@gmail.com';
+    }
+  }
+}

@@ -602,6 +602,33 @@ async function loadBook(bookId) {
   }
 }
 
+async function toggleFirestoreMode() {
+  if (!activeBook || activeBook === 'all') return;
+  const isCurrentlyFS = window._useFirestoreForBook(activeBook);
+  
+  if (!isCurrentlyFS) {
+    if (!confirm('This will copy the current data for this book into Cloud Firestore and switch to using it.\nOther books will remain on Realtime Database.\n\nProceed with migration test?')) return;
+    
+    // Switch to FS
+    localStorage.setItem('fs_mode_' + activeBook, 'true');
+    // Save current state to new DB
+    await saveState(activeBook);
+    // Reload to bind new listeners
+    await loadBook(activeBook);
+    showToast('✓ Book migrated to Cloud Firestore', 'ok', 4000);
+  } else {
+    if (!confirm('Revert to Realtime Database? Any changes made during the Firestore test will be saved back to the old database now.')) return;
+    
+    // Keep current memory state, switch DB paths back
+    localStorage.setItem('fs_mode_' + activeBook, 'false');
+    await saveState(activeBook);
+    await loadBook(activeBook);
+    showToast('Reverted to Realtime Database', 'ok', 4000);
+  }
+  renderCurrent();
+}
+window.toggleFirestoreMode = toggleFirestoreMode;
+
 // ── TAX CENTER STATE (Publisher Only)
 let TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' } };
 let _fxRateCache = { 'CAD_CAD': 1 };
@@ -1345,6 +1372,23 @@ function renderAll() {
 function renderCurrent() {
   if (activeBook === 'all') { updateAllOverview(); updateHeader(); }
   else renderAll();
+
+  // Firestore DB status indicator update
+  const fsBtn = document.getElementById('fs-toggle-btn');
+  if (fsBtn && activeBook && activeBook !== 'all') {
+    const isFS = window._useFirestoreForBook(activeBook);
+    if (isFS) {
+      fsBtn.innerHTML = '✓ Using Firestore<br><span style="font-size:10px;font-weight:normal">Click to fallback to old Database</span>';
+      fsBtn.className = 'btn';
+      fsBtn.style.background = '#e8f5e9';
+      fsBtn.style.color = '#2e7d32';
+      fsBtn.style.borderColor = '#c8e6c9';
+    } else {
+      fsBtn.innerHTML = 'Enable Firestore Mode';
+      fsBtn.className = 'btn gold';
+      fsBtn.style = '';
+    }
+  }
 }
 
 // ── ORDER RECORDING
