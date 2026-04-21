@@ -2607,33 +2607,6 @@ window.approveSubmission = async function(type, subKey) {
   if (type === 'expenses') {
     if (!s.expenses) s.expenses = [];
 
-    // Cloud-to-Local archiving for author receipts
-    if (raw.receipt && raw.receipt.includes('firebasestorage.googleapis.com')) {
-      try {
-        showToast('📎 Archiving cloud receipt to local disk...', 'info');
-        const response = await fetch(raw.receipt);
-        const blob = await response.blob();
-        const cloudUrl = raw.receipt;
-        
-        // Use author's name as prefix as requested
-        const authorPrefix = (BOOKS[activeBook]?.author || 'Author').replace(/[^a-zA-Z0-9]/g, '_');
-        const origName = (cloudUrl.split('%2F').pop() || 'receipt').split('?')[0];
-        const filename = `${authorPrefix}_${origName}`;
-        
-        const file = new File([blob], filename, { type: blob.type });
-        const localUrl = await saveReceiptToLocalFile(file, BOOKS[activeBook]?.title || activeBook);
-        
-        if (localUrl) {
-          raw.receipt = localUrl;
-          // Delete from cloud once saved locally
-          try { await window._fbDeleteReceipt(cloudUrl); } catch(e) { console.warn("Cloud cleanup failed", e); }
-        }
-      } catch (e) {
-        console.warn("Auto-archiving failed (CORS likely), keeping cloud URL", e);
-        showToast('⚠ Archiving failed (check CORS); keeping cloud link', 'warn');
-      }
-    }
-
     s.expenses.unshift(raw);
     saveState(activeBook);
     await window._fbDeleteSubmission(activeBook, type, subKey);
