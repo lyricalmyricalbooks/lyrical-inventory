@@ -489,7 +489,7 @@ async function processSyncQueue() {
     syncQueue.shift();
     localStorage.setItem('lm-sync-queue', JSON.stringify(syncQueue));
     if (syncQueue.length) processSyncQueue();
-    else showToast('✓ All offline changes synced to Firebase');
+    else showToast('✅ All offline changes synced to Firestore');
   } catch (e) {
     console.error('Queue sync failed', e);
   }
@@ -537,32 +537,32 @@ async function saveState(bookId) {
   const state = states[bookId];
   if (!state) {
     console.warn(`saveState: No local state found for bookId: ${bookId}`);
-    setSyncState('error', '<b>Firebase</b> · missing state object');
+    setSyncState('error', '<b>Firestore</b> · missing state object');
     return;
   }
   const json = JSON.stringify(state);
   if (json === lastSavedHashes[bookId]) return;
-  setSyncState('syncing', '<b>Firebase</b> · saving…');
+  setSyncState('syncing', '<b>Firestore</b> · saving…');
   try {
     if (!fbReady || !navigator.onLine) {
       queueSync(bookId, state);
-      setSyncState('ok', '<b>Firebase</b> · changes queued (offline)');
+      setSyncState('ok', '<b>Firestore</b> · changes queued (offline)');
       return;
     }
     await window._fbSave(bookId, json);
     lastSavedHashes[bookId] = json;
-    setSyncState('ok', '<b>Firebase</b> · saved · live sync on');
+    setSyncState('ok', '<b>Firestore</b> · saved · live sync on');
     const ind=$('save-ind'); if(ind){ind.classList.add('show');setTimeout(()=>ind.classList.remove('show'),2000);}
   } catch(e) { 
     console.error(`Firebase Save Error [${bookId}]:`, e);
     const err = e.message || e.code || 'save failed';
-    setSyncState('error', `<b>Firebase</b> · ${err}`); 
+    setSyncState('error', `<b>Firestore</b> · ${err}`); 
     showToast(`⚠ Sync Error: ${err}`, 'err');
   }
 }
 
 async function loadBook(bookId) {
-  setSyncState('syncing', '<b>Firebase</b> · loading…');
+  setSyncState('syncing', '<b>Firestore</b> · loading…');
   try {
     if (!fbReady) throw new Error('not ready');
     const json = await window._fbLoad(bookId);
@@ -593,11 +593,11 @@ async function loadBook(bookId) {
       if (!states[bookId].artistTransfers) states[bookId].artistTransfers = [];
       lastSavedHashes[bookId] = json2;
       if (activeBook === bookId || activeBook === 'all') renderCurrent();
-      showToast('↺ '+book.title+' updated from Firebase');
+      showToast('↺ '+book.title+' updated from Firestore');
     });
   } catch(e) {
     states[bookId] = defaultState(BOOKS[bookId]);
-    setSyncState('error','<b>Firebase</b> · connection failed');
+    setSyncState('error','<b>Firestore</b> · connection failed');
   }
 }
 
@@ -842,10 +842,10 @@ async function refreshDailyRates() {
 
 
 async function loadAllBooks() {
-  setSyncState('syncing','<b>Firebase</b> · loading all books…');
+  setSyncState('syncing','<b>Firestore</b> · loading all books.');
   await Promise.all(Object.keys(BOOKS).map(id => loadBook(id)));
   await loadTaxCenter();
-  setSyncState('ok','<b>Firebase</b> · connected · live sync on');
+  setSyncState('ok','<b>Firestore</b> · connected · live sync on');
   $('hdr-sub').textContent = 'Inventory App · Synced '+new Date().toLocaleTimeString();
   renderCurrent();
 }
@@ -2171,7 +2171,7 @@ async function submitExpense(){
     } catch(e) {
       console.error("Submission error:", e);
       if (e.message && e.message.includes('PERMISSION_DENIED')) {
-        showToast('⚠ Permission denied by Firebase Rules', 'err');
+        showToast('⚠ Permission denied by Firestore Rules', 'err');
       } else {
         showToast('⚠ Failed to submit expense', 'err');
       }
@@ -2537,7 +2537,7 @@ async function submitManual(){
     } catch (e) {
       console.error("Submission error:", e);
       if (e.message && e.message.includes('PERMISSION_DENIED')) {
-        showToast('⚠ Permission denied by Firebase Rules', 'err');
+        showToast('⚠ Permission denied by Firestore Rules', 'err');
       } else {
         showToast('⚠ Failed to submit order', 'err');
       }
@@ -4653,7 +4653,7 @@ async function boot(forcedBook) {
       $('tab-dashboard').style.display='block';
       $('tab-dashboard').classList.add('active');
       loadBook(forcedBook).then(()=>{
-        setSyncState('ok','<b>Firebase</b> · connected');
+        setSyncState('ok','<b>Firestore</b> · connected');
         $('hdr-sub').textContent=book.title+' · Author View · Synced '+new Date().toLocaleTimeString();
         renderAll();updateHeader();updateRoleToggleButton();syncRoleUI();
       });
@@ -4681,7 +4681,7 @@ function renderTaxCenter() {
     const el = $('receipt-folder-display');
     if (!el) return;
     if (!handle) {
-      el.innerHTML = `Status: <span style="color:var(--text3);">Saving to Cloud (Firebase)</span>`;
+      el.innerHTML = `Status: <span style="color:var(--text3);">Saving to Cloud (Firestore)</span>`;
       return;
     }
     const perm = await handle.queryPermission({ mode: 'readwrite' });

@@ -74,7 +74,7 @@
 
 <div class="sync-bar">
   <div class="sync-dot syncing" id="sync-dot"></div>
-  <div class="sync-label" id="sync-label"><b>Firebase</b> · connecting…</div>
+  <div class="sync-label" id="sync-label"><b>Firestore</b> · connecting…</div>
   <div class="sync-time" id="sync-time"></div>
   <span class="sheets-badge off" id="sheets-badge">📊 Sheets: not set up</span>
   <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:'DM Mono',monospace;font-size:10px;color:var(--gold2);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
@@ -321,17 +321,7 @@
     <div id="d-reimburse-list"></div>
   </div>
 
-  <div class="sect" id="danger-zone-sect" style="display:none;">Danger zone</div>
-  <div id="danger-zone-block" style="display:none;background:white;border-radius:var(--r3);border:1px solid var(--border);padding:1.25rem;box-shadow:var(--shadow);justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
-    <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;">Reset all sales data for this book</div><div style="font-size:12px;color:var(--text3);">Clears orders, history and consignment for this book only. Your Google Sheet is untouched.</div></div>
-    <button class="btn danger-btn" onclick="resetBookData()">⚠ Reset book data</button>
-    <div style="width:100%;height:1px;background:var(--border);margin:8px 0;"></div>
-    <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;color:var(--gold);">Firestore Safe Test (Beta)</div><div style="font-size:12px;color:var(--text3);">Migrates this book to Cloud Firestore. If you see errors, you can toggle this back to fallback to the existing Realtime Database.</div></div>
-    <button class="btn gold" id="fs-toggle-btn" onclick="toggleFirestoreMode()">Enable Firestore Mode</button>
-    <div style="width:100%;height:1px;background:var(--border);margin:8px 0;"></div>
-    <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;color:red;">MIGRATE ENTIRE DATABASE</div><div style="font-size:12px;color:var(--text3);">Reads everything from Realtime Database and chunks it cleanly into Firestore. This process cannot be undone.</div></div>
-    <button class="btn danger-btn" onclick="performFullMigration()">RUN MASS MIGRATION</button>
-  </div>
+
 </div>
 
 <!-- WEBSITE -->
@@ -593,7 +583,7 @@
         <button class="btn gold" style="padding:4px 10px;font-size:11px;" onclick="setupReceiptFolder()">Connect Folder</button>
     </div>
     <div id="receipt-folder-display" style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;">
-        Status: Saving to Cloud (Firebase)
+        Status: Saving to Cloud (Firestore)
     </div>
   </div>
 
@@ -962,7 +952,7 @@ function json_(obj) {
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
         <div style="font-weight:700;font-size:14px;color:var(--gold3);margin-bottom:4px;">System backups (daily, automatic)</div>
-        <div style="font-size:12px;color:rgba(255,255,255,.78);line-height:1.5;">Publisher mode now keeps a daily snapshot in Firebase so you can restore to a previous system state without needing a local file.</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.78);line-height:1.5;">Publisher mode now keeps a daily snapshot in Firestore so you can restore to a previous system state without needing a local file.</div>
         <div id="system-backup-status" style="font-size:11px;color:rgba(255,255,255,.62);margin-top:8px;">Loading system backups…</div>
       </div>
       <button class="btn sm" onclick="createSystemBackupNow()">Create backup now</button>
