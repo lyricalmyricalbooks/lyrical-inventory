@@ -2156,19 +2156,32 @@ async function submitExpense(){
   
   const fileInput = $('exp-file');
   let receiptUrl = '';
-  if (window.IS_PUBLISHER && fileInput && fileInput.files.length > 0) {
+  if (fileInput && fileInput.files.length > 0) {
     const file = fileInput.files[0];
     const submitBtn = $('submit-exp-btn');
     const oldText = submitBtn.textContent;
-    submitBtn.textContent = 'Saving locally...'; submitBtn.disabled = true;
-    try {
-      const localUrl = await saveReceiptToLocalFile(file, book.title);
-      if (localUrl) receiptUrl = localUrl;
-    } catch(e) {
-      console.error(e);
-      showToast('⚠ Error saving receipt locally', 'err');
-      submitBtn.textContent = oldText; submitBtn.disabled = false;
-      return;
+    
+    if (window.IS_PUBLISHER) {
+      submitBtn.textContent = 'Saving locally...'; submitBtn.disabled = true;
+      try {
+        const localUrl = await saveReceiptToLocalFile(file, book.title);
+        if (localUrl) receiptUrl = localUrl;
+      } catch(e) {
+        console.error(e);
+        showToast('⚠ Error saving receipt locally', 'err');
+      }
+    } else {
+      submitBtn.textContent = 'Uploading to cloud...'; submitBtn.disabled = true;
+      try {
+        // Use unique path to avoid collisions
+        const stamp = new Date().getTime();
+        const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+        const path = `${activeBook}/${stamp}_${cleanName}`;
+        receiptUrl = await window._fbUploadReceipt(file, path);
+      } catch(e) {
+        console.error(e);
+        showToast('⚠ Cloud upload failed', 'err');
+      }
     }
     submitBtn.textContent = oldText; submitBtn.disabled = false;
   }
@@ -2593,6 +2606,34 @@ window.approveSubmission = async function(type, subKey) {
   
   if (type === 'expenses') {
     if (!s.expenses) s.expenses = [];
+
+    // Cloud-to-Local archiving for author receipts
+    if (raw.receipt && raw.receipt.includes('firebasestorage.googleapis.com')) {
+      try {
+        showToast('📎 Archiving cloud receipt to local disk...', 'info');
+        const response = await fetch(raw.receipt);
+        const blob = await response.blob();
+        const cloudUrl = raw.receipt;
+        
+        // Use author's name as prefix as requested
+        const authorPrefix = (BOOKS[activeBook]?.author || 'Author').replace(/[^a-zA-Z0-9]/g, '_');
+        const origName = (cloudUrl.split('%2F').pop() || 'receipt').split('?')[0];
+        const filename = `${authorPrefix}_${origName}`;
+        
+        const file = new File([blob], filename, { type: blob.type });
+        const localUrl = await saveReceiptToLocalFile(file, BOOKS[activeBook]?.title || activeBook);
+        
+        if (localUrl) {
+          raw.receipt = localUrl;
+          // Delete from cloud once saved locally
+          try { await window._fbDeleteReceipt(cloudUrl); } catch(e) { console.warn("Cloud cleanup failed", e); }
+        }
+      } catch (e) {
+        console.warn("Auto-archiving failed (CORS likely), keeping cloud URL", e);
+        showToast('⚠ Archiving failed (check CORS); keeping cloud link', 'warn');
+      }
+    }
+
     s.expenses.unshift(raw);
     saveState(activeBook);
     await window._fbDeleteSubmission(activeBook, type, subKey);
@@ -4632,7 +4673,7 @@ function showApp(role, bookId) {
     }
     const openLink=$('sheets-open-link'); if(openLink)openLink.style.display='none !important';
     const style=document.createElement('style');
-    style.textContent='#sheets-open-link{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-file-group{display:none!important;}#exp-ai-btn{display:none!important;}';
+    style.textContent='#sheets-open-link{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-ai-btn{display:none!important;}';
     document.head.appendChild(style);
   } else {
     // Publisher — show import button and financials tab
