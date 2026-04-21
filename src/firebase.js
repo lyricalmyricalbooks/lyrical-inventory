@@ -26,8 +26,6 @@ window._firestore = fs;
 
 // ─────────────────────────────────────────────
 // MODE FLAGS
-// Per-book flag: localStorage 'fs_mode_{bookId}' = 'true'
-// Global flag:   localStorage 'fs_mode_global' = 'true'  (covers settings + catalog)
 // ─────────────────────────────────────────────
 window._useFirestoreForBook = (bookId) => {
   return localStorage.getItem('fs_mode_' + bookId) === 'true';
@@ -37,17 +35,19 @@ window._useFirestoreGlobal = () => {
   return localStorage.getItem('fs_mode_global') === 'true';
 };
 
-// Call this when migrating to enable global settings in Firestore too
-window._enableFirestoreGlobal = () => {
-  localStorage.setItem('fs_mode_global', 'true');
-};
+window._enableFirestoreGlobal = () => localStorage.setItem('fs_mode_global', 'true');
+window._disableFirestoreGlobal = () => localStorage.setItem('fs_mode_global', 'false');
 
-window._disableFirestoreGlobal = () => {
-  localStorage.setItem('fs_mode_global', 'false');
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+const safeParse = (str) => {
+  if (!str || typeof str !== 'string') return null;
+  try { return JSON.parse(str); } catch (e) { return null; }
 };
 
 // ─────────────────────────────────────────────
-// FILE STORAGE (Receipts) — unchanged, Storage is not being migrated
+// FILE STORAGE (Receipts)
 // ─────────────────────────────────────────────
 window._fbUploadReceipt = async (file, path) => {
   const storageRef = sRef(storage, `receipts/${path}`);
@@ -63,9 +63,9 @@ window._fbUploadReceipt = async (file, path) => {
 window._fbDeleteReceipt = async (url) => {
   if (!url || !url.includes('firebasestorage')) return;
   try {
-    const { getStorage, ref: sRef, deleteObject } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js");
-    const storage = getStorage();
-    const fileRef = sRef(storage, url);
+    const { getStorage: gStorage, ref: gRef, deleteObject } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js");
+    const st = gStorage();
+    const fileRef = gRef(st, url);
     await deleteObject(fileRef);
   } catch (e) {
     console.error("Firebase deletion failed", e);
@@ -73,150 +73,145 @@ window._fbDeleteReceipt = async (url) => {
 };
 
 // ─────────────────────────────────────────────
-// AUTH — unchanged
+// AUTH
 // ─────────────────────────────────────────────
-window._fbSignInWithGoogle = async () => {
-  return signInWithPopup(auth, googleProvider);
-};
-
-window._fbSignOut = async () => {
-  return signOut(auth);
-};
-
-window._fbOnAuthStateChanged = (cb) => {
-  onAuthStateChanged(auth, cb);
-};
+window._fbSignInWithGoogle = () => signInWithPopup(auth, googleProvider);
+window._fbSignOut = () => signOut(auth);
+window._fbOnAuthStateChanged = (cb) => onAuthStateChanged(auth, cb);
 
 // ─────────────────────────────────────────────
 // PER-BOOK DATA
 // ─────────────────────────────────────────────
 window._fbSave = async (bookId, json) => {
-  if (window._useFirestoreForBook(bookId)) {
-    await setDoc(doc(fs, 'books', bookId), { data: json, ts: Date.now() });
-    return;
-  }
-  await set(ref(db, `lyrical/books/${bookId}`), { data: json, ts: Date.now() });
+  try {
+    if (window._useFirestoreForBook(bookId)) {
+      await setDoc(doc(fs, 'books', bookId), { data: json, ts: Date.now() });
+      return;
+    }
+    await set(ref(db, `lyrical/books/${bookId}`), { data: json, ts: Date.now() });
+  } catch (e) { console.error("fbSave failed", e); }
 };
 
 window._fbLoad = async (bookId) => {
-  if (window._useFirestoreForBook(bookId)) {
-    const s = await getDoc(doc(fs, 'books', bookId));
-    return s.exists() ? s.data().data : null;
-  }
-  const s = await get(ref(db, `lyrical/books/${bookId}`));
-  return s.exists() ? s.val().data : null;
+  try {
+    if (window._useFirestoreForBook(bookId)) {
+      const s = await getDoc(doc(fs, 'books', bookId));
+      return s.exists() ? s.data().data : null;
+    }
+    const s = await get(ref(db, `lyrical/books/${bookId}`));
+    return s.exists() ? s.val().data : null;
+  } catch (e) { console.error("fbLoad failed", e); return null; }
 };
 
 let _fsWatchUnsubs = {};
 window._fbWatch = (bookId, cb) => {
-  if (window._useFirestoreForBook(bookId)) {
-    if (_fsWatchUnsubs[bookId]) _fsWatchUnsubs[bookId]();
-    _fsWatchUnsubs[bookId] = onSnapshot(doc(fs, 'books', bookId), (s) => {
-      if (s.exists()) cb(s.data().data);
-    });
-    return;
-  }
-  onValue(ref(db, `lyrical/books/${bookId}`), s => { if (s.exists()) cb(s.val().data); });
+  try {
+    if (window._useFirestoreForBook(bookId)) {
+      if (_fsWatchUnsubs[bookId]) _fsWatchUnsubs[bookId]();
+      _fsWatchUnsubs[bookId] = onSnapshot(doc(fs, 'books', bookId), (s) => {
+        if (s.exists()) cb(s.data().data);
+      }, (err) => console.error("Watch failed", err));
+      return;
+    }
+    onValue(ref(db, `lyrical/books/${bookId}`), s => { if (s.exists()) cb(s.val().data); });
+  } catch (e) { console.error("fbWatch setup failed", e); }
 };
 
 // ─────────────────────────────────────────────
-// AUTHOR SUBMISSIONS (per-book)
+// AUTHOR SUBMISSIONS
 // ─────────────────────────────────────────────
 window._fbSubmitActivity = async (bookId, type, data) => {
-  if (window._useFirestoreForBook(bookId)) {
-    const collRef = collection(fs, 'submissions', bookId, type);
-    const newDocRef = doc(collRef);
-    await setDoc(newDocRef, { data: JSON.stringify(data), ts: Date.now() });
-    return;
-  }
-  const newRef = push(ref(db, `lyrical/submissions/${bookId}/${type}`));
-  await set(newRef, { data: JSON.stringify(data), ts: Date.now() });
+  try {
+    if (window._useFirestoreForBook(bookId)) {
+      const collRef = collection(fs, 'submissions', bookId, type);
+      await setDoc(doc(collRef), { data: JSON.stringify(data), ts: Date.now() });
+      return;
+    }
+    const newRef = push(ref(db, `lyrical/submissions/${bookId}/${type}`));
+    await set(newRef, { data: JSON.stringify(data), ts: Date.now() });
+  } catch (e) { console.error("fbSubmit failed", e); }
 };
 
 let _fsSubUnsubs = {};
 window._fbWatchSubmissions = (bookId, cb) => {
-  if (window._useFirestoreForBook(bookId)) {
-    if (_fsSubUnsubs[bookId]) {
-      _fsSubUnsubs[bookId].forEach(unsub => unsub());
-    }
-    _fsSubUnsubs[bookId] = [];
-
-    let combinedData = {};
-    // Always deliver a stable structure, even when empty
-    const notify = () => cb(
-      (combinedData.expenses || combinedData.sales) ? combinedData : null
-    );
-
-    ['expenses', 'sales'].forEach(type => {
-      const collRef = collection(fs, 'submissions', bookId, type);
-      const unsub = onSnapshot(collRef, (snapshot) => {
-        if (!combinedData[type]) combinedData[type] = {};
-        snapshot.docChanges().forEach(change => {
-          if (change.type === 'removed') {
-            delete combinedData[type][change.doc.id];
-          } else {
-            combinedData[type][change.doc.id] = change.doc.data();
-          }
-        });
-        if (Object.keys(combinedData[type]).length === 0) delete combinedData[type];
-        notify();
+  try {
+    if (window._useFirestoreForBook(bookId)) {
+      if (_fsSubUnsubs[bookId]) _fsSubUnsubs[bookId].forEach(unsub => unsub());
+      _fsSubUnsubs[bookId] = [];
+      let combinedData = {};
+      const notify = () => cb((combinedData.expenses || combinedData.sales) ? combinedData : null);
+      ['expenses', 'sales'].forEach(type => {
+        const collRef = collection(fs, 'submissions', bookId, type);
+        const unsub = onSnapshot(collRef, (snapshot) => {
+          if (!combinedData[type]) combinedData[type] = {};
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'removed') delete combinedData[type][change.doc.id];
+            else combinedData[type][change.doc.id] = change.doc.data();
+          });
+          if (Object.keys(combinedData[type]).length === 0) delete combinedData[type];
+          notify();
+        }, (err) => console.error("Sub watch failed", err));
+        _fsSubUnsubs[bookId].push(unsub);
       });
-      _fsSubUnsubs[bookId].push(unsub);
-    });
-    return;
-  }
-  onValue(ref(db, `lyrical/submissions/${bookId}`), s => {
-    cb(s.exists() ? s.val() : null);
-  });
+      return;
+    }
+    onValue(ref(db, `lyrical/submissions/${bookId}`), s => cb(s.exists() ? s.val() : null));
+  } catch (e) { console.error("fbWatchSub failed", e); }
 };
 
 window._fbDeleteSubmission = async (bookId, type, subId) => {
-  if (window._useFirestoreForBook(bookId)) {
-    await deleteDoc(doc(fs, 'submissions', bookId, type, subId));
-    return;
-  }
-  await remove(ref(db, `lyrical/submissions/${bookId}/${type}/${subId}`));
+  try {
+    if (window._useFirestoreForBook(bookId)) {
+      await deleteDoc(doc(fs, 'submissions', bookId, type, subId));
+      return;
+    }
+    await remove(ref(db, `lyrical/submissions/${bookId}/${type}/${subId}`));
+  } catch (e) { console.error("fbDeleteSub failed", e); }
 };
 
 // ─────────────────────────────────────────────
-// GLOBAL SETTINGS (taxCenter, productionCosts, paymentLinks, systemBackups)
-// Uses the global Firestore flag — not per-book
+// GLOBAL SETTINGS
 // ─────────────────────────────────────────────
 window._fbSaveSettings = async (key, data) => {
-  if (window._useFirestoreGlobal()) {
-    await setDoc(doc(fs, 'settings', key), { data: JSON.stringify(data), ts: Date.now() });
-    return;
-  }
-  await set(ref(db, `lyrical/settings/${key}`), { data: JSON.stringify(data), ts: Date.now() });
+  try {
+    if (window._useFirestoreGlobal()) {
+      await setDoc(doc(fs, 'settings', key), { data: JSON.stringify(data), ts: Date.now() });
+      return;
+    }
+    await set(ref(db, `lyrical/settings/${key}`), { data: JSON.stringify(data), ts: Date.now() });
+  } catch (e) { console.error("fbSaveSettings failed", e); }
 };
 
 window._fbLoadSettings = async (key) => {
-  if (window._useFirestoreGlobal()) {
-    const s = await getDoc(doc(fs, 'settings', key));
-    return s.exists() ? JSON.parse(s.data().data) : null;
-  }
-  const s = await get(ref(db, `lyrical/settings/${key}`));
-  return s.exists() ? JSON.parse(s.val().data) : null;
+  try {
+    if (window._useFirestoreGlobal()) {
+      const s = await getDoc(doc(fs, 'settings', key));
+      return s.exists() ? safeParse(s.data().data) : null;
+    }
+    const s = await get(ref(db, `lyrical/settings/${key}`));
+    return s.exists() ? safeParse(s.val().data) : null;
+  } catch (e) { console.error("fbLoadSettings failed", e); return null; }
 };
 
-// ─────────────────────────────────────────────
-// CATALOG (the BOOKS registry — which books exist, their config)
-// ─────────────────────────────────────────────
 window._fbSaveCatalog = async (catalog) => {
-  if (window._useFirestoreGlobal()) {
-    await setDoc(doc(fs, 'settings', 'catalog'), { data: JSON.stringify(catalog), ts: Date.now() });
-    return;
-  }
-  await set(ref(db, `lyrical/settings/catalog`), { data: JSON.stringify(catalog), ts: Date.now() });
+  try {
+    if (window._useFirestoreGlobal()) {
+      await setDoc(doc(fs, 'settings', 'catalog'), { data: JSON.stringify(catalog), ts: Date.now() });
+      return;
+    }
+    await set(ref(db, `lyrical/settings/catalog`), { data: JSON.stringify(catalog), ts: Date.now() });
+  } catch (e) { console.error("fbSaveCatalog failed", e); }
 };
 
 window._fbLoadCatalog = async () => {
-  if (window._useFirestoreGlobal()) {
-    const s = await getDoc(doc(fs, 'settings', 'catalog'));
-    return s.exists() ? JSON.parse(s.data().data) : null;
-  }
-  const s = await get(ref(db, `lyrical/settings/catalog`));
-  return s.exists() ? JSON.parse(s.val().data) : null;
+  try {
+    if (window._useFirestoreGlobal()) {
+      const s = await getDoc(doc(fs, 'settings', 'catalog'));
+      return s.exists() ? safeParse(s.data().data) : null;
+    }
+    const s = await get(ref(db, `lyrical/settings/catalog`));
+    return s.exists() ? safeParse(s.val().data) : null;
+  } catch (e) { console.error("fbLoadCatalog failed", e); return null; }
 };
 
 window._fbReady = true;

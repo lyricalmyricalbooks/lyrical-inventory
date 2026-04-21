@@ -25,11 +25,17 @@ const DEFAULT_BOOKS = {
 
 async function loadCatalog() {
   try {
-    const stored = await window._fbLoadCatalog();
+    let stored = await window._fbLoadCatalog();
+    
+    // Fallback: If global Firestore is enabled but empty, try RTDB once to prevent broken state
+    if (!stored && window._useFirestoreGlobal()) {
+      console.warn("Global Firestore catalog empty, falling back to RTDB...");
+      const s = await get(ref(db, `lyrical/settings/catalog`));
+      if (s.exists()) stored = JSON.parse(s.val().data);
+    }
+
     if (stored) {
-      // Merge: Keep everything from Firebase, but ensure defaults are present
       BOOKS = { ...DEFAULT_BOOKS, ...stored };
-      // If we added missing defaults, save back to Firebase
       if (Object.keys(BOOKS).length > Object.keys(stored).length) {
         await window._fbSaveCatalog(BOOKS);
       }
@@ -38,6 +44,7 @@ async function loadCatalog() {
       await window._fbSaveCatalog(BOOKS);
     }
   } catch (e) {
+    console.error("Critical error loading catalog", e);
     BOOKS = DEFAULT_BOOKS;
   }
 }
@@ -620,13 +627,14 @@ async function toggleFirestoreMode() {
     if (isFirstMigration) {
       try {
         showToast('Migrating global settings to Firestore…', 'ok');
-        // Enable global flag BEFORE saving so the save goes to Firestore
+        
+        // TEMPORARILY enable global flag to perform the save to Firestore
         window._enableFirestoreGlobal();
-        // Mirror catalog
+        
+        // Mirror current memory state to Firestore
         await window._fbSaveCatalog(BOOKS);
-        // Mirror taxCenter
         await saveTaxCenter();
-        // Mirror productionCosts & paymentLinks
+        
         const prodCosts = {};
         const payLinks = {};
         Object.keys(BOOKS).forEach(bid => {
@@ -635,38 +643,45 @@ async function toggleFirestoreMode() {
         });
         await window._fbSaveSettings('productionCosts', prodCosts);
         await window._fbSaveSettings('paymentLinks', payLinks);
+
+        showToast('✓ Global settings migrated', 'ok', 3000);
       } catch (e) {
         console.error('Global settings migration failed:', e);
         window._disableFirestoreGlobal();
-        showToast('⚠ Failed to migrate global settings — reverting', 'err', 4000);
+        showToast('⚠ Failed to migrate global settings — check console', 'err', 5000);
         return;
       }
     }
 
     // --- Migrate this book's data ---
-    localStorage.setItem('fs_mode_' + activeBook, 'true');
-    await saveState(activeBook);
-    await loadBook(activeBook);
-    showToast(`✓ ${BOOKS[activeBook]?.title || activeBook} migrated to Cloud Firestore`, 'ok', 4000);
+    try {
+      localStorage.setItem('fs_mode_' + activeBook, 'true');
+      await saveState(activeBook);
+      await loadBook(activeBook);
+      showToast(`✓ ${BOOKS[activeBook]?.title || activeBook} migrated to Cloud Firestore`, 'ok', 4000);
+    } catch (e) {
+      console.error('Book migration failed:', e);
+      localStorage.setItem('fs_mode_' + activeBook, 'false');
+      showToast('⚠ Failed to migrate book data', 'err');
+    }
 
   } else {
-    const anyOtherFSBook = Object.keys(BOOKS).some(id => id !== activeBook && window._useFirestoreForBook(id));
+    const anyOtherFSBook = Object.keys(BOOKS).filter(id => id !== activeBook).some(id => window._useFirestoreForBook(id));
 
     if (!confirm(
       `Revert "${BOOKS[activeBook]?.title || activeBook}" back to Realtime Database?\n\n` +
-      `${!anyOtherFSBook ? '• No other books are on Firestore — global settings will also revert.\n' : ''}` +
-      `• Current data will be written back to the old database.`
+      `${!anyOtherFSBook ? '• No other books are on Firestore — global settings will also revert to RTDB.\n' : ''}` +
+      `• Current state will be written back to the old database.`
     )) return;
 
     // --- Revert this book ---
     localStorage.setItem('fs_mode_' + activeBook, 'false');
-    await saveState(activeBook); // writes current in-memory state back to RTDB
+    await saveState(activeBook);
     await loadBook(activeBook);
 
     // --- Revert global settings if no more books are on Firestore ---
     if (!anyOtherFSBook) {
       window._disableFirestoreGlobal();
-      // Mirror settings back to RTDB (settings are already in memory)
       await saveTaxCenter();
       await window._fbSaveCatalog(BOOKS);
     }
@@ -684,7 +699,15 @@ let _fxRateCache = { 'CAD_CAD': 1 };
 async function loadTaxCenter() {
   if (isAuthor()) return;
   try {
-    const json = await window._fbLoadSettings('taxCenter');
+    let json = await window._fbLoadSettings('taxCenter');
+    
+    // Fallback: If global Firestore is enabled but empty, try RTDB once to prevent broken calculator
+    if (!json && window._useFirestoreGlobal()) {
+       console.warn("Global Firestore TaxCenter empty, falling back to RTDB...");
+       const s = await get(ref(db, `lyrical/settings/taxCenter`));
+       if (s.exists()) json = JSON.parse(s.val().data);
+    }
+
     if (json) {
       TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...json };
     }
