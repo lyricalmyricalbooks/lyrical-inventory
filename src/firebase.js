@@ -309,5 +309,63 @@ window._fbLoadCatalog = async () => {
   } catch (e) { console.error("fbLoadCatalog failed", e); return null; }
 };
 
+// ─────────────────────────────────────────────
+// MASS MIGRATION UTILITY
+// ─────────────────────────────────────────────
+window._fbMassMigrate = async () => {
+  const snap = await get(ref(db, 'lyrical'));
+  if (!snap.exists()) throw new Error("No old RTDB data found to migrate.");
+  const root = snap.val();
+  const promises = [];
+
+  if (root.books) {
+    Object.keys(root.books).forEach(bookId => {
+      const bookObj = root.books[bookId];
+      if (!bookObj.data) return;
+      const stateJson = safeParse(bookObj.data);
+      if(!stateJson) return;
+
+      const s = { ...stateJson };
+      const parts = {};
+      ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'].forEach(k => {
+        parts[k] = s[k] || [];
+        delete s[k];
+      });
+      parts.metadata = s;
+
+      Object.keys(parts).forEach(partName => {
+         const dRef = doc(fs, 'books', bookId, 'data', partName);
+         promises.push(setDoc(dRef, { data: JSON.stringify(parts[partName]), ts: Date.now() }));
+      });
+    });
+  }
+
+  if (root.submissions) {
+    Object.keys(root.submissions).forEach(bookId => {
+      const types = root.submissions[bookId];
+      ['expenses', 'sales'].forEach(type => {
+        if (types[type]) {
+          Object.keys(types[type]).forEach(subId => {
+             const subObj = types[type][subId];
+             const dRef = doc(fs, 'submissions', bookId, type, subId);
+             promises.push(setDoc(dRef, { data: subObj.data, ts: subObj.ts || Date.now() }));
+          });
+        }
+      });
+    });
+  }
+
+  if (root.settings) {
+    Object.keys(root.settings).forEach(key => {
+       const settingObj = root.settings[key];
+       const dRef = doc(fs, 'settings', key);
+       promises.push(setDoc(dRef, { data: settingObj.data, ts: settingObj.ts || Date.now() }));
+    });
+  }
+
+  await Promise.all(promises);
+  return true;
+};
+
 window._fbReady = true;
 document.dispatchEvent(new Event('firebase-ready'));
