@@ -421,7 +421,19 @@ const getSym = c => CODE_TO_SYMBOL[c] || c;
 
 const fmt = (n, cur='€') => getSym(cur) + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const fmtNum = n => Number(n).toFixed(2);
-const fmtD = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '—';
+const fmtD = d => {
+  if (!d || d === '—' || d === 'Invalid Date') return '—';
+  // Try parsing as-is (works for ISO and most human strings)
+  let dt = new Date(d);
+  // Fallback for YYYY-MM-DD to avoid timezone shifting
+  if (isNaN(dt.getTime()) || (typeof d === 'string' && d.length === 10 && d.includes('-'))) {
+    const noon = new Date(d + 'T12:00:00');
+    if (!isNaN(noon.getTime())) dt = noon;
+  }
+  if (isNaN(dt.getTime())) return '—';
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
 const today = () => new Date().toISOString().split('T')[0];
 
 function getBookCurrencyCode(book) {
@@ -1644,7 +1656,7 @@ function applyOne(id) {
   targetState.chStats['Website'].units += o.qty;
   targetState.chStats['Website'].revenue += o.qty * price;
   const entry = { num: o.orderNum, chan: 'Website', qty: o.qty, price, after: targetState.stock,
-    notes: 'Big Cartel', date: o.date || today(),
+    notes: 'Big Cartel', date: (o.date && o.date !== '—') ? o.date : today(),
     shipName: o.shipName || o.customer || '', shipEmail: o.email || '',
     shipAddr1: o.shipAddr1 || '', shipAddr2: o.shipAddr2 || '',
     shipCity: o.shipCity || '', shipProvince: o.shipProvince || '',
@@ -1775,6 +1787,15 @@ async function fetchOrders() {
     const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
     const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
     
+    const rawDate = o.date || o.timestamp || o.time || o.orderDate || '';
+    let normalizedDate = '';
+    if (rawDate) {
+      const parsedDt = new Date(rawDate);
+      if (!isNaN(parsedDt.getTime())) {
+        normalizedDate = parsedDt.toISOString().split('T')[0];
+      }
+    }
+
     return {
       ...o,
       id: stableId || `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -1782,7 +1803,8 @@ async function fetchOrders() {
       bookId: resolvedBookId,
       orderNum,
       qty,
-      price
+      price,
+      date: normalizedDate || today()
     };
   }).filter(o => o.orderNum);
 
