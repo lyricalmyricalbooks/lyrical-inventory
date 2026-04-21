@@ -85,7 +85,28 @@ window._fbOnAuthStateChanged = (cb) => onAuthStateChanged(auth, cb);
 window._fbSave = async (bookId, json) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
-      await setDoc(doc(fs, 'books', bookId), { data: json, ts: Date.now() });
+      const state = JSON.parse(json);
+      const s = { ...state };
+      const parts = {};
+      ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'].forEach(k => {
+        parts[k] = s[k] || [];
+        delete s[k];
+      });
+      parts.metadata = s;
+
+      if (!window._fsHashes) window._fsHashes = {};
+      if (!window._fsHashes[bookId]) window._fsHashes[bookId] = {};
+        
+      const promises = [];
+      Object.keys(parts).forEach(partName => {
+        const partJson = JSON.stringify(parts[partName]);
+        if (window._fsHashes[bookId][partName] !== partJson) {
+          const dRef = doc(fs, 'books', bookId, 'data', partName);
+          promises.push(setDoc(dRef, { data: partJson, ts: Date.now() }));
+          window._fsHashes[bookId][partName] = partJson;
+        }
+      });
+      await Promise.all(promises);
       return;
     }
     await set(ref(db, `lyrical/books/${bookId}`), { data: json, ts: Date.now() });
@@ -95,8 +116,40 @@ window._fbSave = async (bookId, json) => {
 window._fbLoad = async (bookId) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
-      const s = await getDoc(doc(fs, 'books', bookId));
-      return s.exists() ? s.data().data : null;
+      const docNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'];
+      const promises = docNames.map(name => getDoc(doc(fs, 'books', bookId, 'data', name)));
+      const snaps = await Promise.all(promises);
+      
+      const parts = {};
+      let hasData = false;
+      
+      if (!window._fsHashes) window._fsHashes = {};
+      if (!window._fsHashes[bookId]) window._fsHashes[bookId] = {};
+      
+      snaps.forEach((snap, i) => {
+         const name = docNames[i];
+         if (snap.exists()) {
+           hasData = true;
+           parts[name] = JSON.parse(snap.data().data);
+           window._fsHashes[bookId][name] = snap.data().data;
+         } else {
+           parts[name] = (name === 'metadata') ? {} : [];
+           window._fsHashes[bookId][name] = JSON.stringify(parts[name]);
+         }
+      });
+      
+      if (!hasData) return null;
+      
+      const stitched = {
+        ...parts.metadata,
+        ledger: parts.ledger,
+        expenses: parts.expenses,
+        hist: parts.hist,
+        stores: parts.stores,
+        artistTransfers: parts.artistTransfers,
+        doneIds: parts.doneIds
+      };
+      return JSON.stringify(stitched);
     }
     const s = await get(ref(db, `lyrical/books/${bookId}`));
     return s.exists() ? s.val().data : null;
@@ -107,10 +160,44 @@ let _fsWatchUnsubs = {};
 window._fbWatch = (bookId, cb) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
-      if (_fsWatchUnsubs[bookId]) _fsWatchUnsubs[bookId]();
-      _fsWatchUnsubs[bookId] = onSnapshot(doc(fs, 'books', bookId), (s) => {
-        if (s.exists()) cb(s.data().data);
-      }, (err) => console.error("Watch failed", err));
+      if (_fsWatchUnsubs[bookId]) {
+        _fsWatchUnsubs[bookId].forEach(u => u());
+      }
+      _fsWatchUnsubs[bookId] = [];
+      
+      const docNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'];
+      let localState = {};
+      const loadedDocs = new Set();
+      
+      if (!window._fsHashes) window._fsHashes = {};
+      if (!window._fsHashes[bookId]) window._fsHashes[bookId] = {};
+
+      docNames.forEach(name => {
+        const dRef = doc(fs, 'books', bookId, 'data', name);
+        const unsub = onSnapshot(dRef, (snap) => {
+          if (snap.exists()) {
+            localState[name] = JSON.parse(snap.data().data);
+            window._fsHashes[bookId][name] = snap.data().data;
+          } else {
+            localState[name] = (name === 'metadata') ? {} : [];
+          }
+          loadedDocs.add(name);
+          
+          if (loadedDocs.size === docNames.length) {
+            const stitched = {
+              ...localState.metadata,
+              ledger: localState.ledger,
+              expenses: localState.expenses,
+              hist: localState.hist,
+              stores: localState.stores,
+              artistTransfers: localState.artistTransfers,
+              doneIds: localState.doneIds
+            };
+            cb(JSON.stringify(stitched));
+          }
+        }, err => console.error("Watch failed", name, err));
+        _fsWatchUnsubs[bookId].push(unsub);
+      });
       return;
     }
     onValue(ref(db, `lyrical/books/${bookId}`), s => { if (s.exists()) cb(s.val().data); });
