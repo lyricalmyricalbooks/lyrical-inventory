@@ -312,55 +312,58 @@ window._fbLoadCatalog = async () => {
 // ─────────────────────────────────────────────
 // MASS MIGRATION UTILITY
 // ─────────────────────────────────────────────
-window._fbMassMigrate = async () => {
-  const snap = await get(ref(db, 'lyrical'));
-  if (!snap.exists()) throw new Error("No old RTDB data found to migrate.");
-  const root = snap.val();
+window._fbMassMigrate = async (BOOKS) => {
   const promises = [];
 
-  if (root.books) {
-    Object.keys(root.books).forEach(bookId => {
-      const bookObj = root.books[bookId];
-      if (!bookObj.data) return;
-      const stateJson = safeParse(bookObj.data);
-      if(!stateJson) return;
+  // 1. Migrate Books
+  for (const bookId of Object.keys(BOOKS)) {
+    const snap = await get(ref(db, `lyrical/books/${bookId}`));
+    if (snap.exists()) {
+      const bookObj = snap.val();
+      if (bookObj && bookObj.data) {
+        const stateJson = safeParse(bookObj.data);
+        if (stateJson) {
+          const s = { ...stateJson };
+          const parts = {};
+          ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'].forEach(k => {
+            parts[k] = s[k] || [];
+            delete s[k];
+          });
+          parts.metadata = s;
 
-      const s = { ...stateJson };
-      const parts = {};
-      ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'].forEach(k => {
-        parts[k] = s[k] || [];
-        delete s[k];
-      });
-      parts.metadata = s;
-
-      Object.keys(parts).forEach(partName => {
-         const dRef = doc(fs, 'books', bookId, 'data', partName);
-         promises.push(setDoc(dRef, { data: JSON.stringify(parts[partName]), ts: Date.now() }));
-      });
-    });
-  }
-
-  if (root.submissions) {
-    Object.keys(root.submissions).forEach(bookId => {
-      const types = root.submissions[bookId];
-      ['expenses', 'sales'].forEach(type => {
-        if (types[type]) {
-          Object.keys(types[type]).forEach(subId => {
-             const subObj = types[type][subId];
-             const dRef = doc(fs, 'submissions', bookId, type, subId);
-             promises.push(setDoc(dRef, { data: subObj.data, ts: subObj.ts || Date.now() }));
+          Object.keys(parts).forEach(partName => {
+            const dRef = doc(fs, 'books', bookId, 'data', partName);
+            promises.push(setDoc(dRef, { data: JSON.stringify(parts[partName]), ts: Date.now() }));
           });
         }
-      });
-    });
+      }
+    }
   }
 
-  if (root.settings) {
-    Object.keys(root.settings).forEach(key => {
-       const settingObj = root.settings[key];
+  // 2. Migrate Submissions
+  for (const bookId of Object.keys(BOOKS)) {
+    for (const type of ['expenses', 'sales']) {
+      const typeSnap = await get(ref(db, `lyrical/submissions/${bookId}/${type}`));
+      if (typeSnap.exists()) {
+        const subData = typeSnap.val();
+        Object.keys(subData).forEach(subId => {
+           const subObj = subData[subId];
+           const dRef = doc(fs, 'submissions', bookId, type, subId);
+           promises.push(setDoc(dRef, { data: subObj.data, ts: subObj.ts || Date.now() }));
+        });
+      }
+    }
+  }
+
+  // 3. Migrate Settings
+  const settingsKeys = ['catalog', 'taxCenter', 'productionCosts', 'paymentLinks', 'systemBackups'];
+  for (const key of settingsKeys) {
+    const setSnap = await get(ref(db, `lyrical/settings/${key}`));
+    if (setSnap.exists()) {
+       const settingObj = setSnap.val();
        const dRef = doc(fs, 'settings', key);
        promises.push(setDoc(dRef, { data: settingObj.data, ts: settingObj.ts || Date.now() }));
-    });
+    }
   }
 
   await Promise.all(promises);

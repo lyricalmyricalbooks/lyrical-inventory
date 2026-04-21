@@ -701,7 +701,7 @@ window.performFullMigration = async () => {
   document.body.style.opacity = '0.7';
 
   try {
-    const success = await window._fbMassMigrate();
+    const success = await window._fbMassMigrate(BOOKS);
     if (!success) throw new Error("Migration utility returned false.");
     
     // Globally enable Firestore
