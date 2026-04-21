@@ -684,6 +684,44 @@ async function toggleFirestoreMode() {
 }
 window.toggleFirestoreMode = toggleFirestoreMode;
 
+window.performFullMigration = async () => {
+  if (!confirm(
+    "🚨 MASS MIGRATION TO CLOUD FIRESTORE 🚨\n\n" +
+    "This will read EVERY book, EVERY expense, EVERY sale, and ALL settings from the Realtime Database and bulk-slice them into Cloud Firestore.\n\n" +
+    "This cannot be easily undone. Once this process reaches 100%, your application will be permanently cut over to Firestore globally.\n\n" +
+    "Are you absolutely sure you want to proceed?"
+  )) return;
+  
+  if (prompt('Type "CONFIRM" to start massive data migration:') !== "CONFIRM") {
+    return showToast('Migration aborted.', 'warn');
+  }
+
+  showToast('🚀 MIGRATING MASSIVE DATA... PLEASE WAIT...', 'warn', 100000);
+  document.body.style.pointerEvents = 'none';
+  document.body.style.opacity = '0.7';
+
+  try {
+    const success = await window._fbMassMigrate();
+    if (!success) throw new Error("Migration utility returned false.");
+    
+    // Globally enable Firestore
+    window._enableFirestoreGlobal();
+    // Enable for all books known in the BOOKS config
+    Object.keys(BOOKS).forEach(id => {
+      localStorage.setItem('fs_mode_' + id, 'true');
+    });
+    
+    showToast('✓ FULL MIGRATION SUCCESSFUL! RELOADING...', 'ok', 100000);
+    setTimeout(() => location.reload(), 3000);
+  } catch (e) {
+    document.body.style.pointerEvents = 'auto';
+    document.body.style.opacity = '1';
+    console.error("Migration error:", e);
+    alert("Migration failed! Error: " + (e.message || "Unknown error"));
+    showToast('⚠ Migration failed — check console', 'err', 5000);
+  }
+};
+
 // ── TAX CENTER STATE (Publisher Only)
 let TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' } };
 let _fxRateCache = { 'CAD_CAD': 1 };
