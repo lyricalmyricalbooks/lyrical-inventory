@@ -2173,14 +2173,18 @@ async function submitExpense(){
     } else {
       submitBtn.textContent = 'Uploading to cloud...'; submitBtn.disabled = true;
       try {
-        // Use unique path to avoid collisions
         const stamp = new Date().getTime();
         const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
         const path = `${activeBook}/${stamp}_${cleanName}`;
-        receiptUrl = await window._fbUploadReceipt(file, path);
+        // Add a 30s timeout so the button never hangs forever
+        const uploadPromise = window._fbUploadReceipt(file, path);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Upload timed out')), 30000)
+        );
+        receiptUrl = await Promise.race([uploadPromise, timeoutPromise]);
       } catch(e) {
         console.error(e);
-        showToast('⚠ Cloud upload failed', 'err');
+        showToast('⚠ Cloud upload failed — submitting without receipt', 'err');
       }
     }
     submitBtn.textContent = oldText; submitBtn.disabled = false;

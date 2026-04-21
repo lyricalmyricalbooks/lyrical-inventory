@@ -51,12 +51,16 @@ const safeParse = (str) => {
 // ─────────────────────────────────────────────
 window._fbUploadReceipt = async (file, path) => {
   const storageRef = sRef(storage, `receipts/${path}`);
-  const uploadTask = uploadBytesResumable(storageRef, file);
   return new Promise((resolve, reject) => {
-    uploadTask.on('state_changed', null, reject, async () => {
-      const url = await getDownloadURL(uploadTask.snapshot.ref);
-      resolve(url);
-    });
+    const uploadTask = uploadBytesResumable(storageRef, file);
+    uploadTask.on('state_changed',
+      null,
+      (err) => reject(err),
+      async () => {
+        const url = await getDownloadURL(uploadTask.snapshot.ref);
+        resolve(url);
+      }
+    );
   });
 };
 
