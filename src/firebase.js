@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, writeBatch, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -24,6 +24,31 @@ window._fbAuth = auth;
 window._fbStorage = storage;
 window._firestore = fs;
 
+// ─────────────────────────────────────────────
+// MODE FLAGS
+// Per-book flag: localStorage 'fs_mode_{bookId}' = 'true'
+// Global flag:   localStorage 'fs_mode_global' = 'true'  (covers settings + catalog)
+// ─────────────────────────────────────────────
+window._useFirestoreForBook = (bookId) => {
+  return localStorage.getItem('fs_mode_' + bookId) === 'true';
+};
+
+window._useFirestoreGlobal = () => {
+  return localStorage.getItem('fs_mode_global') === 'true';
+};
+
+// Call this when migrating to enable global settings in Firestore too
+window._enableFirestoreGlobal = () => {
+  localStorage.setItem('fs_mode_global', 'true');
+};
+
+window._disableFirestoreGlobal = () => {
+  localStorage.setItem('fs_mode_global', 'false');
+};
+
+// ─────────────────────────────────────────────
+// FILE STORAGE (Receipts) — unchanged, Storage is not being migrated
+// ─────────────────────────────────────────────
 window._fbUploadReceipt = async (file, path) => {
   const storageRef = sRef(storage, `receipts/${path}`);
   const uploadTask = uploadBytesResumable(storageRef, file);
@@ -47,6 +72,9 @@ window._fbDeleteReceipt = async (url) => {
   }
 };
 
+// ─────────────────────────────────────────────
+// AUTH — unchanged
+// ─────────────────────────────────────────────
 window._fbSignInWithGoogle = async () => {
   return signInWithPopup(auth, googleProvider);
 };
@@ -59,11 +87,9 @@ window._fbOnAuthStateChanged = (cb) => {
   onAuthStateChanged(auth, cb);
 };
 
-window._useFirestoreForBook = (bookId) => {
-  return localStorage.getItem('fs_mode_' + bookId) === 'true';
-};
-
-// Per-book save/load
+// ─────────────────────────────────────────────
+// PER-BOOK DATA
+// ─────────────────────────────────────────────
 window._fbSave = async (bookId, json) => {
   if (window._useFirestoreForBook(bookId)) {
     await setDoc(doc(fs, 'books', bookId), { data: json, ts: Date.now() });
@@ -93,11 +119,14 @@ window._fbWatch = (bookId, cb) => {
   onValue(ref(db, `lyrical/books/${bookId}`), s => { if (s.exists()) cb(s.val().data); });
 };
 
-// Author Submissions
+// ─────────────────────────────────────────────
+// AUTHOR SUBMISSIONS (per-book)
+// ─────────────────────────────────────────────
 window._fbSubmitActivity = async (bookId, type, data) => {
   if (window._useFirestoreForBook(bookId)) {
     const collRef = collection(fs, 'submissions', bookId, type);
-    await setDoc(doc(collRef), { data: JSON.stringify(data), ts: Date.now() });
+    const newDocRef = doc(collRef);
+    await setDoc(newDocRef, { data: JSON.stringify(data), ts: Date.now() });
     return;
   }
   const newRef = push(ref(db, `lyrical/submissions/${bookId}/${type}`));
@@ -109,24 +138,25 @@ window._fbWatchSubmissions = (bookId, cb) => {
   if (window._useFirestoreForBook(bookId)) {
     if (_fsSubUnsubs[bookId]) {
       _fsSubUnsubs[bookId].forEach(unsub => unsub());
-      _fsSubUnsubs[bookId] = [];
-    } else {
-      _fsSubUnsubs[bookId] = [];
     }
-    
+    _fsSubUnsubs[bookId] = [];
+
     let combinedData = {};
-    const notify = () => cb(Object.keys(combinedData).length ? combinedData : null);
+    // Always deliver a stable structure, even when empty
+    const notify = () => cb(
+      (combinedData.expenses || combinedData.sales) ? combinedData : null
+    );
 
     ['expenses', 'sales'].forEach(type => {
       const collRef = collection(fs, 'submissions', bookId, type);
       const unsub = onSnapshot(collRef, (snapshot) => {
         if (!combinedData[type]) combinedData[type] = {};
         snapshot.docChanges().forEach(change => {
-           if (change.type === 'removed') {
-              delete combinedData[type][change.doc.id];
-           } else {
-              combinedData[type][change.doc.id] = change.doc.data();
-           }
+          if (change.type === 'removed') {
+            delete combinedData[type][change.doc.id];
+          } else {
+            combinedData[type][change.doc.id] = change.doc.data();
+          }
         });
         if (Object.keys(combinedData[type]).length === 0) delete combinedData[type];
         notify();
@@ -148,22 +178,43 @@ window._fbDeleteSubmission = async (bookId, type, subId) => {
   await remove(ref(db, `lyrical/submissions/${bookId}/${type}/${subId}`));
 };
 
-// Publisher settings (payment links, production costs)
+// ─────────────────────────────────────────────
+// GLOBAL SETTINGS (taxCenter, productionCosts, paymentLinks, systemBackups)
+// Uses the global Firestore flag — not per-book
+// ─────────────────────────────────────────────
 window._fbSaveSettings = async (key, data) => {
+  if (window._useFirestoreGlobal()) {
+    await setDoc(doc(fs, 'settings', key), { data: JSON.stringify(data), ts: Date.now() });
+    return;
+  }
   await set(ref(db, `lyrical/settings/${key}`), { data: JSON.stringify(data), ts: Date.now() });
 };
 
 window._fbLoadSettings = async (key) => {
+  if (window._useFirestoreGlobal()) {
+    const s = await getDoc(doc(fs, 'settings', key));
+    return s.exists() ? JSON.parse(s.data().data) : null;
+  }
   const s = await get(ref(db, `lyrical/settings/${key}`));
   return s.exists() ? JSON.parse(s.val().data) : null;
 };
 
-// Catalog management
+// ─────────────────────────────────────────────
+// CATALOG (the BOOKS registry — which books exist, their config)
+// ─────────────────────────────────────────────
 window._fbSaveCatalog = async (catalog) => {
+  if (window._useFirestoreGlobal()) {
+    await setDoc(doc(fs, 'settings', 'catalog'), { data: JSON.stringify(catalog), ts: Date.now() });
+    return;
+  }
   await set(ref(db, `lyrical/settings/catalog`), { data: JSON.stringify(catalog), ts: Date.now() });
 };
 
 window._fbLoadCatalog = async () => {
+  if (window._useFirestoreGlobal()) {
+    const s = await getDoc(doc(fs, 'settings', 'catalog'));
+    return s.exists() ? JSON.parse(s.data().data) : null;
+  }
   const s = await get(ref(db, `lyrical/settings/catalog`));
   return s.exists() ? JSON.parse(s.val().data) : null;
 };

@@ -605,25 +605,73 @@ async function loadBook(bookId) {
 async function toggleFirestoreMode() {
   if (!activeBook || activeBook === 'all') return;
   const isCurrentlyFS = window._useFirestoreForBook(activeBook);
-  
+
   if (!isCurrentlyFS) {
-    if (!confirm('This will copy the current data for this book into Cloud Firestore and switch to using it.\nOther books will remain on Realtime Database.\n\nProceed with migration test?')) return;
-    
-    // Switch to FS
+    if (!confirm(
+      `Migrate "${BOOKS[activeBook]?.title || activeBook}" to Cloud Firestore?\n\n` +
+      `• This book's data will be copied to Firestore now.\n` +
+      `• If this is the FIRST book being migrated, global settings (catalog, tax center, rates) will also be copied.\n` +
+      `• All other books stay on Realtime Database until you migrate them individually.\n\n` +
+      `You can revert at any time using this same button.`
+    )) return;
+
+    // --- Migrate global settings on first book ---
+    const isFirstMigration = !window._useFirestoreGlobal();
+    if (isFirstMigration) {
+      try {
+        showToast('Migrating global settings to Firestore…', 'ok');
+        // Enable global flag BEFORE saving so the save goes to Firestore
+        window._enableFirestoreGlobal();
+        // Mirror catalog
+        await window._fbSaveCatalog(BOOKS);
+        // Mirror taxCenter
+        await saveTaxCenter();
+        // Mirror productionCosts & paymentLinks
+        const prodCosts = {};
+        const payLinks = {};
+        Object.keys(BOOKS).forEach(bid => {
+          if (BOOKS[bid].productionCost != null) prodCosts[bid] = BOOKS[bid].productionCost;
+          if (BOOKS[bid].artistPaymentLink) payLinks[bid] = BOOKS[bid].artistPaymentLink;
+        });
+        await window._fbSaveSettings('productionCosts', prodCosts);
+        await window._fbSaveSettings('paymentLinks', payLinks);
+      } catch (e) {
+        console.error('Global settings migration failed:', e);
+        window._disableFirestoreGlobal();
+        showToast('⚠ Failed to migrate global settings — reverting', 'err', 4000);
+        return;
+      }
+    }
+
+    // --- Migrate this book's data ---
     localStorage.setItem('fs_mode_' + activeBook, 'true');
-    // Save current state to new DB
     await saveState(activeBook);
-    // Reload to bind new listeners
     await loadBook(activeBook);
-    showToast('✓ Book migrated to Cloud Firestore', 'ok', 4000);
+    showToast(`✓ ${BOOKS[activeBook]?.title || activeBook} migrated to Cloud Firestore`, 'ok', 4000);
+
   } else {
-    if (!confirm('Revert to Realtime Database? Any changes made during the Firestore test will be saved back to the old database now.')) return;
-    
-    // Keep current memory state, switch DB paths back
+    const anyOtherFSBook = Object.keys(BOOKS).some(id => id !== activeBook && window._useFirestoreForBook(id));
+
+    if (!confirm(
+      `Revert "${BOOKS[activeBook]?.title || activeBook}" back to Realtime Database?\n\n` +
+      `${!anyOtherFSBook ? '• No other books are on Firestore — global settings will also revert.\n' : ''}` +
+      `• Current data will be written back to the old database.`
+    )) return;
+
+    // --- Revert this book ---
     localStorage.setItem('fs_mode_' + activeBook, 'false');
-    await saveState(activeBook);
+    await saveState(activeBook); // writes current in-memory state back to RTDB
     await loadBook(activeBook);
-    showToast('Reverted to Realtime Database', 'ok', 4000);
+
+    // --- Revert global settings if no more books are on Firestore ---
+    if (!anyOtherFSBook) {
+      window._disableFirestoreGlobal();
+      // Mirror settings back to RTDB (settings are already in memory)
+      await saveTaxCenter();
+      await window._fbSaveCatalog(BOOKS);
+    }
+
+    showToast(`Reverted to Realtime Database`, 'ok', 4000);
   }
   renderCurrent();
 }

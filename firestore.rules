@@ -2,18 +2,23 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Per-book data — only authenticated users can read; only publisher can write
     match /books/{bookId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.token.email == 'lyricalmyricalbooks@gmail.com';
     }
     
+    // Author submissions — any authenticated user can read and write
+    // (authors write their own; publisher reads all)
     match /submissions/{bookId}/{type}/{subId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null;
     }
     
-    // We haven't migrated settings to Firestore yet, but preparing it
-    match /settings/{document=**} {
+    // Global settings — catalog, taxCenter, productionCosts, paymentLinks, systemBackups
+    // Only the publisher account can write these
+    match /settings/{document} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.token.email == 'lyricalmyricalbooks@gmail.com';
     }
