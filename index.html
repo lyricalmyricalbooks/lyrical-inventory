@@ -628,7 +628,13 @@
   <div class="card" style="margin-bottom:1.5rem;background:var(--bg2);">
     <div class="section-hed" style="margin-bottom:0.5rem;font-size:14px;">Tax Center Config</div>
     <div class="g2">
-        <div class="form-group"><label>Gemini API Key (For AI Scan)</label><input type="password" id="tc-api-key" placeholder="AI-..." onchange="saveTaxCenterSettings()"></div>
+        <div class="form-group">
+          <label>Gemini API Key (For AI Scan)</label>
+          <div class="row-g1">
+            <input type="password" id="tc-api-key" placeholder="AI-..." style="flex:1;">
+            <button id="tc-save-config-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save API Config</button>
+          </div>
+        </div>
         <div class="form-group"><label>Base Currency</label>
         <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled>
             <option value="CAD">CAD (Default)</option>

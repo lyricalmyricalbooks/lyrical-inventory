@@ -4985,18 +4985,30 @@ async function removeLedgerEntry(type, bid, id) {
   showToast('✓ Entry removed from ledger');
 }
 
-function saveTaxCenterSettings() {
+async function saveTaxCenterSettings() {
+    const btn = $('tc-save-config-btn');
+    const oldText = btn.textContent;
+    btn.textContent = 'Saving...'; btn.disabled = true;
+
     if(!TAX_CENTER.settings) TAX_CENTER.settings = {};
     TAX_CENTER.settings.geminiKey = document.getElementById('tc-api-key').value.trim();
-    saveTaxCenter();
-    showToast('✓ Settings updated');
+    
+    try {
+        await saveTaxCenter();
+        showToast('✓ Settings saved to Firebase');
+    } catch(e) {
+        console.error(e);
+        showToast('⚠ Failed to save settings', 'err');
+    }
+    
+    btn.textContent = oldText; btn.disabled = false;
 }
 
 async function scanReceiptWithAI() {
     const fileInput = $('tc-exp-file');
     if(!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
     
-    const apiKey = TAX_CENTER.settings?.geminiKey;
+    const apiKey = TAX_CENTER.settings?.geminiKey || document.getElementById('tc-api-key').value.trim();
     if(!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
 
     const file = fileInput.files[0];
@@ -5015,7 +5027,7 @@ async function scanReceiptWithAI() {
         const payload = {
             contents: [{
                 parts: [
-                    { "text": "Extract these exact 3 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase). No markdown, just raw JSON." },
+                    { "text": "Extract these exact 4 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase, e.g., CAD, USD). No markdown, just raw JSON. If currency is not found, assume CAD." },
                     {
                         "inline_data": {
                             "mime_type": mimeType,
@@ -5042,6 +5054,7 @@ async function scanReceiptWithAI() {
         if(extracted.vendor) $('tc-exp-desc').value = extracted.vendor;
         if(extracted.date) $('tc-exp-date').value = extracted.date;
         if(extracted.amount) $('tc-exp-amount').value = extracted.amount;
+        if(extracted.currency) $('tc-exp-cur').value = extracted.currency;
         
         // Auto categorize via input event trigger so TAX_CATEGORIES hook fires
         const ev = new Event('input');
