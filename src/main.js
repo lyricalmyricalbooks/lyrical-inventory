@@ -5061,16 +5061,17 @@ async function scanReceiptWithAI() {
             generationConfig: { response_mime_type: "application/json" }
         };
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
         if(!res.ok) {
-            const errData = await res.text();
-            console.error("API Error details:", errData);
-            throw new Error(`API call failed: ${res.status}`);
+            const errData = await res.json().catch(() => ({ error: { message: "Unknown error" } }));
+            const errMsg = errData.error?.message || "API call failed";
+            console.error("Gemini API Error:", errData);
+            throw new Error(errMsg);
         }
         const data = await res.json();
         
