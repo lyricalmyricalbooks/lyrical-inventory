@@ -5067,10 +5067,19 @@ async function scanReceiptWithAI() {
             body: JSON.stringify(payload)
         });
 
-        if(!res.ok) throw new Error("API call failed");
+        if(!res.ok) {
+            const errData = await res.text();
+            console.error("API Error details:", errData);
+            throw new Error(`API call failed: ${res.status}`);
+        }
         const data = await res.json();
         
-        const extractedJsonStr = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        let extractedJsonStr = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!extractedJsonStr) throw new Error("No text returned from AI");
+        
+        // Sometimes the AI still includes markdown code blocks despite instructions
+        extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+        
         const extracted = JSON.parse(extractedJsonStr);
 
         if(extracted.vendor) $('tc-exp-desc').value = extracted.vendor;
@@ -5085,7 +5094,7 @@ async function scanReceiptWithAI() {
         showToast('✓ Receipt data extracted');
     } catch(e) {
         console.error("AI Scan Error:", e);
-        showToast('⚠ AI extraction failed', 'err');
+        showToast(`⚠ AI extraction failed: ${e.message}`, 'err');
     }
     btn.textContent = oldText; btn.disabled = false;
 }
