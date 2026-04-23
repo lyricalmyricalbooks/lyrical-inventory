@@ -5290,18 +5290,50 @@ window.posCheckout = async function() {
 
 // ── TAX SEASON EXPORT ──
 window.downloadFullTaxSeasonExport = function() {
-  let csv = 'Lyricalmyrical Tax Season Export\nGenerated on: ' + today() + '\n\n';
+  const yearSelect = document.getElementById('tc-year');
+  const year = yearSelect ? yearSelect.value : 'all';
+  const isAllTime = (year === 'all');
+  
+  let csv = 'Lyricalmyrical Tax Season Export\n';
+  csv += 'Generated on: ' + today() + '\n';
+  csv += 'Tax Year: ' + (isAllTime ? 'All Time' : year) + '\n\n';
   
   // Section 1: Revenue by Book
   csv += '--- REVENUE BY BOOK ---\n';
   csv += 'Book Title,Gross Revenue,Net Revenue (after COGS & Royalty),Total Units Sold\n';
+  
   Object.values(BOOKS).forEach(book => {
       const s = states[book.id] || defaultState(book);
-      const sold = s.hist.filter(h => !h.voided && !h.gratuity).reduce((acc, h) => acc + (h.qty||0), 0);
-      const expTotal = (s.expenses || []).filter(e => !e.voided).reduce((acc, e) => acc + (e.amount||0), 0);
-      const shares = calculateArtistEarnings ? calculateArtistEarnings(book.id) : 0;
-      const net = s.revenue - expTotal - shares;
-      csv += `"${book.title}",${(s.revenue||0).toFixed(2)},${net.toFixed(2)},${sold}\n`;
+      
+      // Filter history
+      const filteredHist = s.hist.filter(h => {
+          if (h.voided || h.gratuity) return false;
+          if (isAllTime) return true;
+          return h.date && h.date.startsWith(year);
+      });
+      
+      const sold = filteredHist.reduce((acc, h) => acc + (h.qty||0), 0);
+      const revenue = filteredHist.reduce((acc, h) => acc + ((h.qty||0) * (h.price||0)), 0);
+      
+      // Filter expenses
+      const filteredExpenses = (s.expenses || []).filter(e => {
+          if (e.voided) return false;
+          if (isAllTime) return true;
+          return e.date && e.date.startsWith(year);
+      });
+      const expTotal = filteredExpenses.reduce((acc, e) => acc + (e.amount||0), 0);
+      
+      // Royalty
+      let shares = 0;
+      if (isAllTime) {
+          const earn = (typeof calculateArtistEarnings === 'function') ? calculateArtistEarnings(book.id) : null;
+          shares = (earn && typeof earn === 'object') ? (earn.totalArtistEarned || 0) : (earn || 0);
+      } else {
+          shares = (typeof filterArtistEarningsByYear === 'function') ? filterArtistEarningsByYear(book.id, parseInt(year)) : 0;
+      }
+      
+      const net = revenue - expTotal - shares;
+      csv += `"${book.title}",${revenue.toFixed(2)},${net.toFixed(2)},${sold}\n`;
   });
   
   // Section 2: All Expenses
@@ -5309,14 +5341,22 @@ window.downloadFullTaxSeasonExport = function() {
   csv += 'Date,Book/Entity,Category,Description,Amount,Receipt Link\n';
   Object.values(BOOKS).forEach(book => {
       const s = states[book.id] || defaultState(book);
-      (s.expenses || []).filter(e => !e.voided).forEach(e => {
+      (s.expenses || []).filter(e => {
+          if (e.voided) return false;
+          if (isAllTime) return true;
+          return e.date && e.date.startsWith(year);
+      }).forEach(e => {
           csv += `${e.date},"${book.title}",${e.cat},"${e.desc}",${(e.amount||0).toFixed(2)},"${e.receipt||''}"\n`;
       });
   });
   
   // Include Tax Center ledger items
   const ledger = TAX_CENTER.ledger || [];
-  ledger.filter(l => !l.voided).forEach(l => {
+  ledger.filter(l => {
+      if (l.voided) return false;
+      if (isAllTime) return true;
+      return l.date && l.date.startsWith(year);
+  }).forEach(l => {
       csv += `${l.date},"Publisher (General)",${l.cat},"${l.desc}",${(l.amountCAD||0).toFixed(2)},"${l.receipt||''}"\n`;
   });
 
@@ -5324,7 +5364,7 @@ window.downloadFullTaxSeasonExport = function() {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.setAttribute('href', url);
-  a.setAttribute('download', `Lyrical_Tax_Season_Export_${today()}.csv`);
+  a.setAttribute('download', `Lyrical_Tax_Season_${isAllTime ? 'AllTime' : year}_Export.csv`);
   a.click();
 };
 
