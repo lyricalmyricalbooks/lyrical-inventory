@@ -653,7 +653,12 @@
 
   <div class="row-between" style="margin-top:1.5rem;margin-bottom:12px;">
     <div class="section-hed">Master Ledger (Sales + Expenses)</div>
-    <div style="display:flex;gap:10px;">
+    <div style="display:flex;gap:10px;align-items:center;">
+      <select id="tc-year" class="btn tag" style="background:rgba(255,255,255,0.05); border:1px solid var(--gold-line); color:var(--cream); cursor:pointer;">
+        <option value="all">All Time</option>
+        <option value="2025" selected>2025</option>
+        <option value="2024">2024</option>
+      </select>
       <button class="btn tag" onclick="downloadTaxLedgerCSV()">Export Ledger CSV</button>
       <button class="btn gold" onclick="downloadFullTaxSeasonExport()">📦 Tax Season Export</button>
     </div>

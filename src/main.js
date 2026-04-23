@@ -4441,6 +4441,10 @@ function calculateFinancials(year) {
   const start = new Date(year, 0, 1);
   const end = new Date(year, 11, 31, 23, 59, 59);
 
+  // Helper for consistent amount extraction
+  const getAmt = (e) => e.baseAmount || e.amountCAD || e.amount || 0;
+
+  // 1. Process Book-specific data
   Object.values(BOOKS).forEach(book => {
     const s = states[book.id] || defaultState(book);
     const unitCost = (book.productionCost || 0) / (book.maxPrint || 1);
@@ -4475,18 +4479,36 @@ function calculateFinancials(year) {
     
     (s.expenses || []).forEach(e => {
       const d = new Date(e.date);
-      if (d >= start && d <= end) {
-        result.opex += e.amount || 0;
+      if (!e.voided && d >= start && d <= end) {
+        const amt = getAmt(e);
+        result.opex += amt;
         const cat = e.cat || 'Uncategorized';
         if (!result.expCats[cat]) result.expCats[cat] = { count: 0, total: 0, missingReceipts: 0 };
         result.expCats[cat].count++;
-        result.expCats[cat].total += e.amount || 0;
+        result.expCats[cat].total += amt;
         if (!e.receipt) {
           result.expCats[cat].missingReceipts++;
           result.missingReceiptsCount++;
         }
       }
     });
+  });
+
+  // 2. Process Global Publisher Expenses (Tax Center)
+  (TAX_CENTER.businessExpenses || []).forEach(e => {
+    const d = new Date(e.date);
+    if (!e.voided && d >= start && d <= end) {
+      const amt = getAmt(e);
+      result.opex += amt;
+      const cat = e.cat || 'Uncategorized (Publisher)';
+      if (!result.expCats[cat]) result.expCats[cat] = { count: 0, total: 0, missingReceipts: 0 };
+      result.expCats[cat].count++;
+      result.expCats[cat].total += amt;
+      if (!e.receipt) {
+        result.expCats[cat].missingReceipts++;
+        result.missingReceiptsCount++;
+      }
+    }
   });
 
   result.profit = result.revenue - result.cogs - result.opex - result.shares;
@@ -5311,6 +5333,9 @@ window.downloadFullTaxSeasonExport = function() {
   csv += 'Generated on: ' + today() + '\n';
   csv += 'Tax Year: ' + (isAllTime ? 'All Time' : year) + '\n\n';
   
+  const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+  const getAmt = (e) => (parseFloat(e.baseAmount || e.amountCAD || e.amount || 0));
+
   // Section 1: Revenue by Book
   csv += '--- REVENUE BY BOOK ---\n';
   csv += 'Book Title,Gross Revenue,Net Revenue (after COGS & Royalty),Total Units Sold\n';
@@ -5334,7 +5359,7 @@ window.downloadFullTaxSeasonExport = function() {
           if (isAllTime) return true;
           return e.date && e.date.startsWith(year);
       });
-      const expTotal = filteredExpenses.reduce((acc, e) => acc + (e.amount||0), 0);
+      const expTotal = filteredExpenses.reduce((acc, e) => acc + getAmt(e), 0);
       
       // Royalty
       let shares = 0;
@@ -5346,34 +5371,47 @@ window.downloadFullTaxSeasonExport = function() {
       }
       
       const net = revenue - expTotal - shares;
-      csv += `"${book.title}",${revenue.toFixed(2)},${net.toFixed(2)},${sold}\n`;
+      csv += `${esc(book.title)},${revenue.toFixed(2)},${net.toFixed(2)},${sold}\n`;
   });
   
-  // Section 2: All Expenses
+  // Section 2: All Expenses & Payouts
   csv += '\n--- ALL EXPENSES & PAYOUTS ---\n';
-  csv += 'Date,Book/Entity,Category,Description,Amount,Receipt Link\n';
+  csv += 'Date,Book/Entity,Category,Description,Amount (CAD),Receipt Link\n';
+  
+  // 2a. Book-level expenses & payouts
   Object.values(BOOKS).forEach(book => {
       const s = states[book.id] || defaultState(book);
+      
+      // Book Expenses
       (s.expenses || []).filter(e => {
           if (e.voided) return false;
           if (isAllTime) return true;
           return e.date && e.date.startsWith(year);
       }).forEach(e => {
-          csv += `${e.date},"${book.title}",${e.cat},"${e.desc}",${(e.amount||0).toFixed(2)},"${e.receipt||''}"\n`;
+          csv += `${e.date},${esc(book.title)},${esc(e.cat)},${esc(e.desc)},${getAmt(e).toFixed(2)},${esc(e.receipt)}\n`;
+      });
+
+      // Artist Payouts (Transfers)
+      (s.artistTransfers || []).filter(t => {
+          if (isAllTime) return true;
+          return t.date && t.date.startsWith(year);
+      }).forEach(t => {
+          // Use .total for payouts as per state structure
+          csv += `${t.date},${esc(book.title)},"Artist Payout","Transfer to Artist",${(parseFloat(t.total || t.amount || 0)).toFixed(2)},""\n`;
       });
   });
   
-  // Include Tax Center ledger items
-  const ledger = TAX_CENTER.ledger || [];
+  // 2b. Include Tax Center business expenses (General Publisher Expenses)
+  const ledger = TAX_CENTER.businessExpenses || [];
   ledger.filter(l => {
       if (l.voided) return false;
       if (isAllTime) return true;
       return l.date && l.date.startsWith(year);
   }).forEach(l => {
-      csv += `${l.date},"Publisher (General)",${l.cat},"${l.desc}",${(l.amountCAD||0).toFixed(2)},"${l.receipt||''}"\n`;
+      csv += `${l.date},"Publisher (General)",${esc(l.cat)},${esc(l.desc)},${getAmt(l).toFixed(2)},${esc(l.receipt)}\n`;
   });
 
-  const blob = new Blob([csv], { type: 'text/csv' });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.setAttribute('href', url);
