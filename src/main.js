@@ -1034,8 +1034,8 @@ function switchTab(name) {
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
   
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
-  // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr
-  const names = ['dashboard','website','manual','consignment','history','expenses','financials','taxcenter','sheets','backups','qrcodes','myqr'];
+  // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
+  const names = ['dashboard','website','manual','consignment','history','expenses','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
   
   document.querySelectorAll('.tab-btn, .header-action-btn').forEach((b) => {
     // We match by checking onclick text to be safe if order ever changes
@@ -1070,6 +1070,7 @@ function switchTab(name) {
   if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
   if(name==='qrcodes') renderAllQRCodes();
   if(name==='myqr') renderAuthorQRPage();
+  if(name==='pos') renderPOS();
 }
 
 function updateHeader() {
@@ -5198,6 +5199,134 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// ── EVENT POS ──
+let posCart = {};
+
+function renderPOS() {
+  const grid = $('pos-grid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  
+  let total = 0;
+  
+  const booksToRender = isAuthor() && activeBook !== 'all' ? { [activeBook]: BOOKS[activeBook] } : BOOKS;
+  
+  Object.values(booksToRender).forEach(book => {
+      const qty = posCart[book.id] || 0;
+      const price = book.listPrice || 0;
+      total += qty * price;
+      
+      grid.innerHTML += `
+        <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.25rem;">
+          <div>
+            <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:600; margin-bottom:4px; color:var(--cream);">${book.title}</div>
+            <div style="font-size:12px; color:var(--text3);">${book.currency || '€'}${price.toFixed(2)}</div>
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; background:rgba(255,255,255,.05); border-radius:var(--r2); padding:6px;">
+            <button class="btn sm" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', -1)">-</button>
+            <span style="font-size:18px; font-weight:700; font-family:'DM Mono',monospace; width:40px; text-align:center;">${qty}</span>
+            <button class="btn sm" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', 1)">+</button>
+          </div>
+        </div>
+      `;
+  });
+  
+  $('pos-total').textContent = `€${total.toFixed(2)}`; // Or match primary currency
+}
+
+window.posUpdateQty = function(bookId, delta) {
+  posCart[bookId] = Math.max(0, (posCart[bookId] || 0) + delta);
+  renderPOS();
+};
+
+window.posCheckout = async function() {
+  const method = $('pos-payment-method').value;
+  const items = Object.entries(posCart).filter(([id, qty]) => qty > 0);
+  
+  if(items.length === 0) {
+      showToast('Cart is empty', 'warn');
+      return;
+  }
+  
+  if(!confirm(`Process sale for ${items.length} items via ${method}?`)) return;
+  
+  const dateStr = today();
+  const txNum = `POS-${Date.now().toString().slice(-6)}`;
+  
+  // Process each book in cart
+  for(const [bookId, qty] of items) {
+      const book = BOOKS[bookId];
+      if(!book) continue;
+      
+      const s = states[bookId] || defaultState(book);
+      const rev = qty * (book.listPrice || 0);
+      
+      s.hist.push({
+          id: Date.now().toString(36) + Math.random().toString(36).substring(2),
+          date: dateStr,
+          num: txNum,
+          qty: qty,
+          chan: `Event POS (${method})`,
+          price: book.listPrice || 0,
+          cur: book.currency || '€',
+          fx: 1, // Simplified for POS, usually physical sales are in native currency
+          notes: ''
+      });
+      
+      s.stock -= qty;
+      s.revenue += rev;
+      
+      await window._fbSaveState(bookId, s);
+  }
+  
+  posCart = {};
+  renderPOS();
+  if (typeof renderAllOverview === 'function') renderAllOverview();
+  updateHeader();
+  forceSync();
+  showToast('✓ Sale complete and stock deducted', 'ok');
+};
+
+// ── TAX SEASON EXPORT ──
+window.downloadFullTaxSeasonExport = function() {
+  let csv = 'Lyricalmyrical Tax Season Export\nGenerated on: ' + today() + '\n\n';
+  
+  // Section 1: Revenue by Book
+  csv += '--- REVENUE BY BOOK ---\n';
+  csv += 'Book Title,Gross Revenue,Net Revenue (after COGS & Royalty),Total Units Sold\n';
+  Object.values(BOOKS).forEach(book => {
+      const s = states[book.id] || defaultState(book);
+      const sold = s.hist.filter(h => !h.voided && !h.gratuity).reduce((acc, h) => acc + (h.qty||0), 0);
+      const expTotal = (s.expenses || []).filter(e => !e.voided).reduce((acc, e) => acc + (e.amount||0), 0);
+      const shares = calculateArtistEarnings ? calculateArtistEarnings(book.id) : 0;
+      const net = s.revenue - expTotal - shares;
+      csv += `"${book.title}",${(s.revenue||0).toFixed(2)},${net.toFixed(2)},${sold}\n`;
+  });
+  
+  // Section 2: All Expenses
+  csv += '\n--- ALL EXPENSES & PAYOUTS ---\n';
+  csv += 'Date,Book/Entity,Category,Description,Amount,Receipt Link\n';
+  Object.values(BOOKS).forEach(book => {
+      const s = states[book.id] || defaultState(book);
+      (s.expenses || []).filter(e => !e.voided).forEach(e => {
+          csv += `${e.date},"${book.title}",${e.cat},"${e.desc}",${(e.amount||0).toFixed(2)},"${e.receipt||''}"\n`;
+      });
+  });
+  
+  // Include Tax Center ledger items
+  const ledger = TAX_CENTER.ledger || [];
+  ledger.filter(l => !l.voided).forEach(l => {
+      csv += `${l.date},"Publisher (General)",${l.cat},"${l.desc}",${(l.amountCAD||0).toFixed(2)},"${l.receipt||''}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.setAttribute('href', url);
+  a.setAttribute('download', `Lyrical_Tax_Season_Export_${today()}.csv`);
+  a.click();
+};
 
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {

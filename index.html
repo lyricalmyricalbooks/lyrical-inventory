@@ -61,6 +61,7 @@
     <div class="header-tag" id="hdr-sub">Inventory App · connecting…</div>
   </div>
   <div class="header-actions" id="global-actions" style="display:none; align-items:center;">
+    <button class="header-action-btn" onclick="switchTab('pos')" id="global-pos-btn">🛒 Event POS</button>
     <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn">⚖️ Tax Centre</button>
     <button class="header-action-btn" onclick="switchTab('sheets')" id="global-sheets-btn">📊 Sheets</button>
     <button class="header-action-btn" onclick="switchTab('backups')" id="global-backups-btn" style="display:none;">💾 Backups</button>
@@ -646,12 +647,46 @@
 
   <div class="row-between" style="margin-top:1.5rem;margin-bottom:12px;">
     <div class="section-hed">Master Ledger (Sales + Expenses)</div>
-    <button class="btn tag" onclick="downloadTaxLedgerCSV()">Export CSV</button>
+    <div style="display:flex;gap:10px;">
+      <button class="btn tag" onclick="downloadTaxLedgerCSV()">Export Ledger CSV</button>
+      <button class="btn gold" onclick="downloadFullTaxSeasonExport()">📦 Tax Season Export</button>
+    </div>
   </div>
   <div class="tbl-wrap"><table class="tbl">
     <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Tax Category</th><th>Receipt/Ref</th><th class="r">Amount (Orig)</th><th class="r">Amount (CAD)</th><th class="r">Actions</th></tr></thead>
     <tbody id="tc-ledger-body"></tbody>
   </table></div>
+</div>
+
+<!-- EVENT POS -->
+<div class="tab-panel" id="tab-pos" style="display:none;">
+  <div class="row-between" style="margin-bottom:1.5rem;align-items:flex-start;">
+    <div>
+      <div class="section-hed" style="font-size:24px;">Point of Sale</div>
+      <div style="font-size:12px;color:var(--text3);">Fast checkout for book fairs and live events. All sales are logged directly to the ledger and deduct stock immediately.</div>
+    </div>
+    <div style="text-align:right;background:rgba(255,255,255,.05);padding:1rem;border-radius:var(--r2);border:1px solid rgba(255,255,255,.1);min-width:250px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">Cart Total</div>
+      <div id="pos-total" style="font-family:'Syne',sans-serif;font-size:32px;font-weight:700;color:var(--green);margin-bottom:1rem;">€0.00</div>
+      <div class="form-group" style="margin-bottom:10px;text-align:left;">
+        <label>Payment Method</label>
+        <select id="pos-payment-method">
+          <option value="Cash">Cash</option>
+          <option value="Card/Stripe">Card / Stripe</option>
+          <option value="PayPal">PayPal</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <button class="btn gold" style="width:100%;font-size:14px;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="posCheckout()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        Complete Sale
+      </button>
+    </div>
+  </div>
+
+  <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;">
+    <!-- Populated by JS -->
+  </div>
 </div>
 
 <!-- GOOGLE SHEETS -->
