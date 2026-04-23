@@ -5435,9 +5435,10 @@ Object.assign(window, {
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
-  chooseBackupFolder, exportToJSON, exportAllToCSV,
+  chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
-  removeLedgerEntry, setupReceiptFolder, viewLocalReceipt
+  removeLedgerEntry, setupReceiptFolder, viewLocalReceipt,
+  saveTaxCenterSettings, scanReceiptWithAI
 });
 
 // ── STARTUP ROUTING
