@@ -5057,8 +5057,7 @@ async function scanReceiptWithAI() {
                         }
                     }
                 ]
-            }],
-            generationConfig: { responseMimeType: "application/json" }
+            }]
         };
 
         const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
