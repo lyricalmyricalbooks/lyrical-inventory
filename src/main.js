@@ -5475,6 +5475,7 @@ window.posConfirmSale = async function() {
       const book = row.book;
       const qty = row.qty;
       const s = states[book.id] || defaultState(book);
+      if (!states[book.id]) states[book.id] = s;
       const rev = qty * (book.listPrice || 0);
       const effectivePrice = row.convertedUnit === null ? row.sourceUnit : row.convertedUnit;
       const effectiveCurCode = row.convertedUnit === null ? row.sourceCode : posPendingSale.currency;
@@ -5494,7 +5495,7 @@ window.posConfirmSale = async function() {
       });
       s.stock -= qty;
       s.revenue += rev;
-      await window._fbSaveState(book.id, s);
+      await saveState(book.id);
   }
 
   closeM('pos-sale-confirm');
