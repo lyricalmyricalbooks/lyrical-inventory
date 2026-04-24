@@ -671,21 +671,47 @@
 
 <!-- EVENT POS -->
 <div class="tab-panel" id="tab-pos" style="display:none;">
-  <div class="row-between" style="margin-bottom:1.5rem;align-items:flex-start;">
+  <div class="row-between" style="margin-bottom:1.25rem;align-items:flex-start;">
     <div>
       <div class="section-hed" style="font-size:24px;">Point of Sale</div>
-      <div style="font-size:12px;color:var(--text3);">Fast checkout for book fairs and live events. All sales are logged directly to the ledger and deduct stock immediately.</div>
+      <div style="font-size:12px;color:var(--text3);">Fast checkout for book fairs and live events with controlled currency handling and itemized checkout review.</div>
     </div>
-    <div style="text-align:right;background:rgba(255,255,255,.05);padding:1rem;border-radius:var(--r2);border:1px solid rgba(255,255,255,.1);min-width:250px;">
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px;">Cart Total</div>
-      <div id="pos-total" style="font-family:'Syne',sans-serif;font-size:32px;font-weight:700;color:var(--green);margin-bottom:1rem;">€0.00</div>
-      <div class="form-group" style="margin-bottom:10px;text-align:left;">
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:1rem;align-items:flex-start;">
+    <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;">
+      <!-- Populated by JS -->
+    </div>
+
+    <div class="card" style="position:sticky;top:88px;padding:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);">Cart Total</div>
+        <button class="btn sm" onclick="posConfigureRates()">FX Rates</button>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <label style="font-size:11px;color:var(--text3);">Txn Currency</label>
+        <select id="pos-currency" onchange="posSetCurrency(this.value)" style="max-width:120px;">
+          <option value="EUR">EUR</option>
+        </select>
+      </div>
+      <div id="pos-total" style="font-family:'Syne',sans-serif;font-size:30px;font-weight:700;color:var(--green);line-height:1.15;">€0.00</div>
+      <div id="pos-total-note" style="font-size:11px;color:var(--text3);margin-top:4px;margin-bottom:10px;">Transaction currency: EUR</div>
+
+      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:0 10px;background:rgba(255,255,255,.02);margin-bottom:10px;">
+        <div id="pos-cart-items"></div>
+      </div>
+
+      <div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Itemized subtotal</div>
+      <div id="pos-subtotal-lines" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--cream);margin-bottom:12px;">—</div>
+
+      <div class="form-group" style="margin-bottom:10px;">
         <label>Payment Method</label>
         <select id="pos-payment-method">
           <option value="Cash">Cash</option>
-          <option value="Card/Stripe">Card / Stripe</option>
-          <option value="PayPal">PayPal</option>
-          <option value="Other">Other</option>
+          <option value="Card">Card</option>
+          <option value="Bank Transfer">Bank Transfer</option>
+          <option value="Comp/Gift">Comp/Gift</option>
         </select>
       </div>
       <button class="btn gold" style="width:100%;font-size:14px;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="posCheckout()">
@@ -693,10 +719,6 @@
         Complete Sale
       </button>
     </div>
-  </div>
-
-  <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;">
-    <!-- Populated by JS -->
   </div>
 </div>
 
@@ -1252,6 +1274,30 @@ function json_(obj) {
   <div class="modal-footer">
     <button class="btn" onclick="closeM('payment-qr')">Close</button>
     <button class="btn gold" onclick="downloadPaymentQR()">Download Image</button>
+  </div>
+</div></div>
+
+<div class="overlay" id="m-pos-sale-confirm" style="display:none;"><div class="modal" style="max-width:640px;">
+  <div class="modal-title">Confirm Event Sale</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;">Review the sale details before finalizing. This transaction will deduct inventory immediately.</div>
+  <div class="tbl-wrap" style="margin-bottom:1rem;">
+    <table class="tbl">
+      <thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Line</th></tr></thead>
+      <tbody id="pos-confirm-items"></tbody>
+    </table>
+  </div>
+  <div class="g2">
+    <div style="font-size:12px;color:var(--text3);">Payment method<br><strong id="pos-confirm-payment" style="color:var(--cream);font-size:13px;"></strong></div>
+    <div style="font-size:12px;color:var(--text3);">Timestamp<br><strong id="pos-confirm-timestamp" style="color:var(--cream);font-size:13px;"></strong></div>
+  </div>
+  <div style="margin-top:1rem;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-size:12px;color:var(--text3);">Total charged</span>
+    <strong id="pos-confirm-total" style="font-size:18px;color:var(--green);"></strong>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeM('pos-sale-confirm')">Cancel</button>
+    <button class="btn" onclick="posPrintReceipt()">Print receipt</button>
+    <button class="btn gold" onclick="posConfirmSale()">Confirm sale</button>
   </div>
 </div></div>
 
