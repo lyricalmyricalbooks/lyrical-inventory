@@ -5431,6 +5431,28 @@ window.posConfigureRates = function() {
   showToast('FX rates updated');
 };
 
+// ── POS cart-to-manual-entry adapter
+// Maps a POS cart item into the exact payload shape that recordOrder expects,
+// so that POS sales and manual entry sales are written to the ledger identically.
+function _posItemToManualPayload(book, qty, paymentMethod, price, curCode, fxRate) {
+  // Use buildPaymentMeta to handle FX if needed, matching manual entry logic
+  const isFx = curCode !== getBookCurrencyCode(book);
+  const payment = buildPaymentMeta({ 
+    book, 
+    qty, 
+    unitPrice: price, 
+    fxEnabled: isFx, 
+    fxCur: curCode, 
+    fxAmt: price / (fxRate || 1), // Approximate original amount if fxRate was used
+    fxRate: fxRate || 1
+  });
+  
+  const num = `POS-${Date.now().toString().slice(-6)}`;
+  const chan = 'Book Fair';
+  const notes = paymentMethod; // stored in notes exactly as manual entry stores paymentType
+  return { num, chan, qty, price, notes, payment };
+}
+
 window.posCheckout = function() {
   const method = $('pos-payment-method').value;
   const rows = buildPOSCartRows();
@@ -5469,34 +5491,32 @@ window.posCheckout = function() {
 
 window.posConfirmSale = async function() {
   if (!posPendingSale) return;
-  const dateStr = today();
-  const txNum = `POS-${Date.now().toString().slice(-6)}`;
+  
+  // Save the currently active book so we can restore it after processing each book
+  const previousBook = activeBook;
+
   for (const row of posPendingSale.rows) {
       const book = row.book;
       const qty = row.qty;
-      const s = states[book.id] || defaultState(book);
-      if (!states[book.id]) states[book.id] = s;
-      const rev = qty * (book.listPrice || 0);
-      const effectivePrice = row.convertedUnit === null ? row.sourceUnit : row.convertedUnit;
-      const effectiveCurCode = row.convertedUnit === null ? row.sourceCode : posPendingSale.currency;
+      
+      // Determine values matching the upstream logic but for recordOrder
+      const price = row.convertedUnit === null ? row.sourceUnit : row.convertedUnit;
+      const curCode = row.convertedUnit === null ? row.sourceCode : posPendingSale.currency;
       const fx = row.convertedUnit === null ? 1 : (row.convertedUnit / (row.sourceUnit || 1));
-      s.hist.push({
-          id: Date.now().toString(36) + Math.random().toString(36).substring(2),
-          date: dateStr,
-          num: txNum,
-          qty,
-          chan: `Event POS (${posPendingSale.method})`,
-          price: effectivePrice,
-          cur: codeToSymbol(effectiveCurCode),
-          fx,
-          paymentMethod: posPendingSale.method,
-          timestamp: posPendingSale.timestampIso,
-          notes: `POS txn ${posPendingSale.timestampLabel}`
-      });
-      s.stock -= qty;
-      s.revenue += rev;
-      await saveState(book.id);
+
+      // Temporarily set activeBook so that recordOrder's getState()/getBook() resolve correctly
+      activeBook = book.id;
+
+      const { num, chan, notes, payment } = _posItemToManualPayload(book, qty, posPendingSale.method, price, curCode, fx);
+
+      // recordOrder is the single shared sale-writing function used by manual entry.
+      // It handles: stock deduction, s.sold, s.revenue, s.chStats, s.hist (with stock-after),
+      // renderHist, updateDash, saveState, and syncToSheets — all in one call.
+      recordOrder(num, chan, qty, price, notes, payment);
   }
+
+  // Restore previous book context
+  activeBook = previousBook;
 
   closeM('pos-sale-confirm');
   posPendingSale = null;
@@ -5504,8 +5524,7 @@ window.posConfirmSale = async function() {
   renderPOS();
   if (typeof renderAllOverview === 'function') renderAllOverview();
   updateHeader();
-  forceSync();
-  showToast('✓ Sale complete and stock deducted', 'ok');
+  showToast('✓ Sale complete — recorded to ledger', 'ok');
 };
 
 window.posPrintReceipt = function() {
