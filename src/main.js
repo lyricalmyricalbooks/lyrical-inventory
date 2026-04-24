@@ -5434,23 +5434,27 @@ window.posConfigureRates = function() {
 // ── POS cart-to-manual-entry adapter
 // Maps a POS cart item into the exact payload shape that recordOrder expects,
 // so that POS sales and manual entry sales are written to the ledger identically.
-function _posItemToManualPayload(book, qty, paymentMethod, price, curCode, fxRate) {
+function _posItemToManualPayload(book, qty, paymentMethod, basePrice, curCode, convertedPrice, fxRate) {
   // Use buildPaymentMeta to handle FX if needed, matching manual entry logic
   const isFx = curCode !== getBookCurrencyCode(book);
+  
+  // Total in the currency actually paid (e.g. CAD total)
+  const foreignTotal = qty * convertedPrice;
+
   const payment = buildPaymentMeta({ 
     book, 
     qty, 
-    unitPrice: price, 
+    unitPrice: basePrice, // The native price (e.g. EUR)
     fxEnabled: isFx, 
     fxCur: curCode, 
-    fxAmt: price / (fxRate || 1), // Approximate original amount if fxRate was used
+    fxAmt: foreignTotal, // The actual foreign amount paid (e.g. CAD total)
     fxRate: fxRate || 1
   });
   
   const num = `POS-${Date.now().toString().slice(-6)}`;
   const chan = 'Book Fair';
   const notes = paymentMethod; // stored in notes exactly as manual entry stores paymentType
-  return { num, chan, qty, price, notes, payment };
+  return { num, chan, qty, price: basePrice, notes, payment };
 }
 
 window.posCheckout = function() {
@@ -5499,20 +5503,21 @@ window.posConfirmSale = async function() {
       const book = row.book;
       const qty = row.qty;
       
-      // Determine values matching the upstream logic but for recordOrder
-      const price = row.convertedUnit === null ? row.sourceUnit : row.convertedUnit;
+      // Determine prices correctly: sourceUnit is the book's native price (e.g. EUR)
+      // convertedUnit is the price in the chosen POS currency (e.g. CAD)
+      const basePrice = row.sourceUnit; 
+      const convertedPrice = row.convertedUnit === null ? row.sourceUnit : row.convertedUnit;
       const curCode = row.convertedUnit === null ? row.sourceCode : posPendingSale.currency;
       const fx = row.convertedUnit === null ? 1 : (row.convertedUnit / (row.sourceUnit || 1));
 
       // Temporarily set activeBook so that recordOrder's getState()/getBook() resolve correctly
       activeBook = book.id;
 
-      const { num, chan, notes, payment } = _posItemToManualPayload(book, qty, posPendingSale.method, price, curCode, fx);
+      const { num, chan, notes, payment } = _posItemToManualPayload(book, qty, posPendingSale.method, basePrice, curCode, convertedPrice, fx);
 
       // recordOrder is the single shared sale-writing function used by manual entry.
-      // It handles: stock deduction, s.sold, s.revenue, s.chStats, s.hist (with stock-after),
-      // renderHist, updateDash, saveState, and syncToSheets — all in one call.
-      recordOrder(num, chan, qty, price, notes, payment);
+      // We pass the basePrice (native currency) so revenue and ledger entries are correct.
+      recordOrder(num, chan, qty, basePrice, notes, payment);
   }
 
   // Restore previous book context
