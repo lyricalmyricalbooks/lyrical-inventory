@@ -5246,90 +5246,288 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── EVENT POS ──
 let posCart = {};
+let posTransactionCurrency = 'EUR';
+let posPendingSale = null;
+const POS_FX_STORAGE_KEY = 'lm_pos_exchange_rates_v1';
+const POS_DEFAULT_CAD_RATES = { CAD: 1, EUR: 1.47, USD: 1.36, GBP: 1.73 };
+let posExchangeRates = loadPosExchangeRates();
+
+function loadPosExchangeRates() {
+  try {
+    const raw = localStorage.getItem(POS_FX_STORAGE_KEY);
+    if (!raw) return { ...POS_DEFAULT_CAD_RATES };
+    const parsed = JSON.parse(raw);
+    return { ...POS_DEFAULT_CAD_RATES, ...parsed, CAD: 1 };
+  } catch {
+    return { ...POS_DEFAULT_CAD_RATES };
+  }
+}
+
+function savePosExchangeRates() {
+  localStorage.setItem(POS_FX_STORAGE_KEY, JSON.stringify(posExchangeRates));
+}
+
+function currencyToCode(cur) {
+  const map = { '€': 'EUR', 'CA$': 'CAD', '$': 'USD', '£': 'GBP' };
+  return map[cur] || cur || 'EUR';
+}
+
+function codeToSymbol(code) {
+  const map = { EUR: '€', CAD: 'CA$', USD: '$', GBP: '£' };
+  return map[code] || code;
+}
+
+function posFormat(amount, currencyCode) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(amount || 0);
+}
+
+function convertCurrency(amount, fromCode, toCode) {
+  if (fromCode === toCode) return amount;
+  const fromRate = posExchangeRates[fromCode];
+  const toRate = posExchangeRates[toCode];
+  if (!fromRate || !toRate) return null;
+  const cadValue = amount * fromRate;
+  return cadValue / toRate;
+}
+
+function getPOSCurrencies() {
+  const fromBooks = Object.values(BOOKS).map((b) => currencyToCode(b.currency));
+  const unique = Array.from(new Set([...fromBooks, 'EUR', 'CAD', 'USD']));
+  return unique.filter(Boolean);
+}
+
+function buildPOSCartRows() {
+  const items = [];
+  for (const [bookId, qty] of Object.entries(posCart)) {
+    if (!qty) continue;
+    const book = BOOKS[bookId];
+    if (!book) continue;
+    const sourceCode = currencyToCode(book.currency);
+    const convertedUnit = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
+    items.push({
+      book,
+      qty,
+      sourceCode,
+      sourceUnit: book.listPrice || 0,
+      sourceLine: (book.listPrice || 0) * qty,
+      convertedUnit,
+      convertedLine: convertedUnit === null ? null : convertedUnit * qty
+    });
+  }
+  return items;
+}
 
 function renderPOS() {
   const grid = $('pos-grid');
   if(!grid) return;
-  grid.innerHTML = '';
-  
-  let total = 0;
-  
-  const booksToRender = isAuthor() && activeBook !== 'all' ? { [activeBook]: BOOKS[activeBook] } : BOOKS;
-  
-  Object.values(booksToRender).forEach(book => {
-      const qty = posCart[book.id] || 0;
-      const price = book.listPrice || 0;
-      total += qty * price;
-      
-      grid.innerHTML += `
-        <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.25rem;">
-          <div>
-            <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:600; margin-bottom:4px; color:var(--cream);">${book.title}</div>
-            <div style="font-size:12px; color:var(--text3);">${book.currency || '€'}${price.toFixed(2)}</div>
-          </div>
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; background:rgba(255,255,255,.05); border-radius:var(--r2); padding:6px;">
-            <button class="btn sm" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', -1)">-</button>
-            <span style="font-size:18px; font-weight:700; font-family:'DM Mono',monospace; width:40px; text-align:center;">${qty}</span>
-            <button class="btn sm" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', 1)">+</button>
-          </div>
-        </div>
-      `;
+
+  const cartRows = buildPOSCartRows();
+  const cartItemsEl = $('pos-cart-items');
+  const subtotalEl = $('pos-subtotal-lines');
+  const totalEl = $('pos-total');
+  const totalNoteEl = $('pos-total-note');
+  const selectorEl = $('pos-currency');
+  const currencyOptions = getPOSCurrencies();
+  if (!currencyOptions.includes(posTransactionCurrency)) posTransactionCurrency = currencyOptions[0] || 'EUR';
+
+  if (selectorEl) {
+    selectorEl.innerHTML = currencyOptions.map((code) => `<option value="${code}">${code}</option>`).join('');
+    selectorEl.value = posTransactionCurrency;
+  }
+
+  let convertedTotal = 0;
+  let hasMissingFx = false;
+  const mixedTotals = {};
+  cartRows.forEach((row) => {
+    mixedTotals[row.sourceCode] = (mixedTotals[row.sourceCode] || 0) + row.sourceLine;
+    if (row.convertedLine === null) hasMissingFx = true;
+    else convertedTotal += row.convertedLine;
   });
-  
-  $('pos-total').textContent = `€${total.toFixed(2)}`; // Or match primary currency
+
+  const booksToRender = isAuthor() && activeBook !== 'all' ? { [activeBook]: BOOKS[activeBook] } : BOOKS;
+  grid.innerHTML = Object.values(booksToRender).map((book) => {
+    const qty = posCart[book.id] || 0;
+    const sourceCode = currencyToCode(book.currency);
+    const converted = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
+    const convertedLabel = converted === null
+      ? `No FX rate → ${posFormat(book.listPrice || 0, sourceCode)}`
+      : `${posFormat(converted, posTransactionCurrency)} (${sourceCode})`;
+    return `
+      <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.1rem;">
+        <div>
+          <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:600; margin-bottom:4px; color:var(--cream);">${book.title}</div>
+          <div style="font-size:12px; color:var(--text3);">${posFormat(book.listPrice || 0, sourceCode)} · ${convertedLabel}</div>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; background:rgba(255,255,255,.05); border-radius:var(--r2); padding:6px;">
+          <button class="btn sm" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', -1)">-</button>
+          <span style="font-size:18px; font-weight:700; font-family:'DM Mono',monospace; width:40px; text-align:center;">${qty}</span>
+          <button class="btn sm" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', 1)">+</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (cartItemsEl) {
+    cartItemsEl.innerHTML = cartRows.length ? cartRows.map((row) => `
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.08);">
+        <div>
+          <div style="font-size:13px;color:var(--cream);font-weight:600;">${row.book.title}</div>
+          <div style="font-size:11px;color:var(--text3);">${row.qty} × ${posFormat(row.sourceUnit, row.sourceCode)}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:13px;color:var(--cream);">${row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency)}</div>
+          <button class="btn sm" style="padding:2px 6px;font-size:11px;margin-top:3px;" onclick="posRemoveItem('${row.book.id}')">Remove</button>
+        </div>
+      </div>
+    `).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 0;">Cart is empty.</div>';
+  }
+
+  if (subtotalEl) {
+    const subtotalRows = Object.entries(mixedTotals).map(([code, amount]) => `<div>${code}: ${posFormat(amount, code)}</div>`).join('');
+    subtotalEl.innerHTML = subtotalRows || '<div>—</div>';
+  }
+
+  if (totalEl) {
+    totalEl.textContent = hasMissingFx
+      ? Object.entries(mixedTotals).map(([code, amount]) => `${codeToSymbol(code)}${amount.toFixed(2)}`).join(' + ')
+      : posFormat(convertedTotal, posTransactionCurrency);
+  }
+  if (totalNoteEl) {
+    totalNoteEl.textContent = hasMissingFx
+      ? 'Mixed currency total: configure FX rates or finish in native currencies.'
+      : `Transaction currency: ${posTransactionCurrency}`;
+  }
 }
 
 window.posUpdateQty = function(bookId, delta) {
   posCart[bookId] = Math.max(0, (posCart[bookId] || 0) + delta);
+  if (posCart[bookId] === 0) delete posCart[bookId];
   renderPOS();
 };
 
-window.posCheckout = async function() {
+window.posRemoveItem = function(bookId) {
+  delete posCart[bookId];
+  renderPOS();
+};
+
+window.posSetCurrency = function(code) {
+  posTransactionCurrency = code || posTransactionCurrency;
+  renderPOS();
+};
+
+window.posConfigureRates = function() {
+  const currencies = getPOSCurrencies();
+  currencies.forEach((code) => {
+    if (code === 'CAD') return;
+    const current = posExchangeRates[code] ?? '';
+    const raw = prompt(`FX config: 1 ${code} equals how many CAD?`, current.toString());
+    if (raw === null) return;
+    const next = parseFloat(raw);
+    if (!Number.isNaN(next) && next > 0) posExchangeRates[code] = next;
+  });
+  posExchangeRates.CAD = 1;
+  savePosExchangeRates();
+  renderPOS();
+  showToast('FX rates updated');
+};
+
+window.posCheckout = function() {
   const method = $('pos-payment-method').value;
-  const items = Object.entries(posCart).filter(([id, qty]) => qty > 0);
+  const rows = buildPOSCartRows();
   
-  if(items.length === 0) {
+  if(rows.length === 0) {
       showToast('Cart is empty', 'warn');
       return;
   }
-  
-  if(!confirm(`Process sale for ${items.length} items via ${method}?`)) return;
-  
+
+  const hasMissingFx = rows.some((row) => row.convertedLine === null);
+  const totalCharged = hasMissingFx
+    ? rows.map((row) => `${row.sourceCode} ${row.sourceLine.toFixed(2)}`).join(' + ')
+    : posFormat(rows.reduce((sum, row) => sum + (row.convertedLine || 0), 0), posTransactionCurrency);
+
+  const timestamp = new Date();
+  const localeTs = timestamp.toLocaleString('en-CA');
+  posPendingSale = {
+    method,
+    rows,
+    hasMissingFx,
+    totalCharged,
+    currency: posTransactionCurrency,
+    timestampIso: timestamp.toISOString(),
+    timestampLabel: localeTs
+  };
+
+  $('pos-confirm-items').innerHTML = rows.map((row) => {
+    const lineDisplay = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency);
+    return `<tr><td>${row.book.title}</td><td class="r">${row.qty}</td><td class="r">${lineDisplay}</td></tr>`;
+  }).join('');
+  $('pos-confirm-payment').textContent = method;
+  $('pos-confirm-timestamp').textContent = localeTs;
+  $('pos-confirm-total').textContent = totalCharged;
+  openM('pos-sale-confirm');
+};
+
+window.posConfirmSale = async function() {
+  if (!posPendingSale) return;
   const dateStr = today();
   const txNum = `POS-${Date.now().toString().slice(-6)}`;
-  
-  // Process each book in cart
-  for(const [bookId, qty] of items) {
-      const book = BOOKS[bookId];
-      if(!book) continue;
-      
-      const s = states[bookId] || defaultState(book);
+  for (const row of posPendingSale.rows) {
+      const book = row.book;
+      const qty = row.qty;
+      const s = states[book.id] || defaultState(book);
       const rev = qty * (book.listPrice || 0);
-      
+      const effectivePrice = row.convertedUnit === null ? row.sourceUnit : row.convertedUnit;
+      const effectiveCurCode = row.convertedUnit === null ? row.sourceCode : posPendingSale.currency;
+      const fx = row.convertedUnit === null ? 1 : (row.convertedUnit / (row.sourceUnit || 1));
       s.hist.push({
           id: Date.now().toString(36) + Math.random().toString(36).substring(2),
           date: dateStr,
           num: txNum,
-          qty: qty,
-          chan: `Event POS (${method})`,
-          price: book.listPrice || 0,
-          cur: book.currency || '€',
-          fx: 1, // Simplified for POS, usually physical sales are in native currency
-          notes: ''
+          qty,
+          chan: `Event POS (${posPendingSale.method})`,
+          price: effectivePrice,
+          cur: codeToSymbol(effectiveCurCode),
+          fx,
+          paymentMethod: posPendingSale.method,
+          timestamp: posPendingSale.timestampIso,
+          notes: `POS txn ${posPendingSale.timestampLabel}`
       });
-      
       s.stock -= qty;
       s.revenue += rev;
-      
-      await window._fbSaveState(bookId, s);
+      await window._fbSaveState(book.id, s);
   }
-  
+
+  closeM('pos-sale-confirm');
+  posPendingSale = null;
   posCart = {};
   renderPOS();
   if (typeof renderAllOverview === 'function') renderAllOverview();
   updateHeader();
   forceSync();
   showToast('✓ Sale complete and stock deducted', 'ok');
+};
+
+window.posPrintReceipt = function() {
+  if (!posPendingSale) return;
+  const rowsHtml = posPendingSale.rows.map((row) => {
+    const line = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posPendingSale.currency);
+    return `<tr><td>${row.book.title}</td><td>${row.qty}</td><td style="text-align:right;">${line}</td></tr>`;
+  }).join('');
+  const win = window.open('', '_blank', 'width=420,height=600');
+  if (!win) return;
+  win.document.write(`
+    <html><head><title>POS Receipt</title><style>body{font-family:Arial,sans-serif;padding:16px;} table{width:100%;border-collapse:collapse;} td,th{padding:6px 0;border-bottom:1px solid #ddd;} .r{text-align:right;} .mt{margin-top:12px;}</style></head>
+    <body>
+      <h2>Lyricalmyrical Books</h2>
+      <div>Timestamp: ${posPendingSale.timestampLabel}</div>
+      <div>Payment: ${posPendingSale.method}</div>
+      <table class="mt"><thead><tr><th>Item</th><th>Qty</th><th class="r">Line</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+      <h3 class="r">Total: ${posPendingSale.totalCharged}</h3>
+    </body></html>
+  `);
+  win.document.close();
+  win.focus();
+  win.print();
 };
 
 // ── TAX SEASON EXPORT ──
