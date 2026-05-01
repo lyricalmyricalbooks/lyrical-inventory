@@ -118,7 +118,6 @@
   <button class="tab-btn" onclick="switchTab('qrcodes')" id="qrcodes-tab-btn" style="display:none;">📱 QR Codes</button>
   <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;">📲 My QR Code</button>
 </nav>
-
 <!-- AUTHOR QR CODE PAGE (author view only) -->
 <div class="tab-panel" id="tab-myqr" style="display:none;">
   <div style="max-width:480px;margin:0 auto;padding:2rem 1rem;text-align:center;">
@@ -678,12 +677,12 @@
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:1rem;align-items:flex-start;">
+  <div class="pos-layout" style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:1rem;align-items:flex-start;">
     <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;">
       <!-- Populated by JS -->
     </div>
 
-    <div class="card" style="position:sticky;top:88px;padding:1rem;">
+    <div class="card pos-cart-panel" style="position:sticky;top:88px;padding:1rem;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);">Cart Total</div>
         <button class="btn sm" onclick="posConfigureRates()">FX Rates</button>
