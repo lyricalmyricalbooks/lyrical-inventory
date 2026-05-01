@@ -5244,6 +5244,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+
+document.addEventListener('DOMContentLoaded', () => {
+  const numericIds = ['nb-max','nb-price','nb-thresh','nb-prod','m-qty','m-price','sale-qty','sale-price','sent-qty','exp-amt','tc-exp-amt'];
+  numericIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('inputmode', 'decimal');
+  });
+});
+
 // ── EVENT POS ──
 let posCart = {};
 let posTransactionCurrency = 'EUR';
@@ -5353,15 +5363,15 @@ function renderPOS() {
       ? `No FX rate → ${posFormat(book.listPrice || 0, sourceCode)}`
       : `${posFormat(converted, posTransactionCurrency)} (${sourceCode})`;
     return `
-      <div class="card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.1rem;">
+      <div class="card pos-card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.1rem;">
         <div>
           <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:600; margin-bottom:4px; color:var(--cream);">${book.title}</div>
           <div style="font-size:12px; color:var(--text3);">${posFormat(book.listPrice || 0, sourceCode)} · ${convertedLabel}</div>
         </div>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; background:rgba(255,255,255,.05); border-radius:var(--r2); padding:6px;">
-          <button class="btn sm" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', -1)">-</button>
+          <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', -1)">-</button>
           <span style="font-size:18px; font-weight:700; font-family:'DM Mono',monospace; width:40px; text-align:center;">${qty}</span>
-          <button class="btn sm" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', 1)">+</button>
+          <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', 1)">+</button>
         </div>
       </div>
     `;
