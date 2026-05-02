@@ -396,6 +396,38 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .card, .store-card, .stock-block, .sheets-setup{padding:1rem;}
 }
 
+
+@media (max-width: 768px){
+  .app-header{gap:.75rem;align-items:center;flex-wrap:wrap;padding-bottom:.6rem;}
+  .header-brand{padding:.9rem 0 .2rem;}
+  .header-actions{padding:0;width:100%;order:3;}
+  .header-action-btn{width:100%;justify-content:center;min-height:44px;}
+  .sync-label{flex:1 0 100%;}
+  .book-switcher{overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;}
+  .book-tab{scroll-snap-align:start;}
+  .book-strip{padding:1rem;gap:1rem;align-items:flex-start;}
+  .book-strip-accent{height:36px;}
+  .book-strip-actions{width:100%;}
+  .book-strip-actions .btn{flex:1;}
+  .book-context{padding:10px 12px;}
+  .metric-banner-head{gap:.75rem;margin-bottom:1rem;}
+  .metric-banner-value{font-size:28px;}
+  .metric-banner-sub{font-size:11px;}
+  .modal{width:calc(100% - 16px);padding:1.25rem;border-radius:12px;}
+  .modal-title{font-size:20px;margin-bottom:1rem;}
+  .modal-footer{position:sticky;bottom:0;background:var(--cream);padding-top:.75rem;}
+  .toast{left:.75rem;right:.75rem;bottom:calc(74px + env(safe-area-inset-bottom));max-width:none;}
+}
+
+@media (max-width: 420px){
+  .kpi-grid{grid-template-columns:1fr;}
+  .kpi-grid-primary{grid-template-columns:1fr;}
+  .store-kpis{grid-template-columns:1fr !important;}
+  .price-inline{grid-template-columns:1fr;}
+  .book-context-title{font-size:14px;}
+  .header-wordmark{font-size:16px;}
+}
+
 .pos-card{min-height:180px;}
 .pos-qty-btn{width:48px!important;height:48px!important;min-height:48px;font-size:24px!important;}
 
@@ -406,7 +438,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .tab-bar{position:fixed;left:0;right:0;bottom:0;z-index:160;display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--ink2);border-top:1px solid rgba(255,255,255,.08);overflow-x:auto;}
   
   
-  .kpi-grid,.kpi-grid-primary,.store-kpis,.g2,.g4{grid-template-columns:1fr !important;}
+  .kpi-grid,.kpi-grid-primary,.g2,.g4{grid-template-columns:1fr !important;}
+  .store-kpis{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
   .row-between,.store-head,.order-row{flex-direction:column;align-items:flex-start;gap:10px;}
   .tbl-wrap{overflow-x:auto;}
   .pos-layout{grid-template-columns:1fr !important;gap:.75rem !important;}
