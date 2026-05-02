@@ -1070,7 +1070,7 @@ function switchTab(name) {
   if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
   if(name==='qrcodes') renderAllQRCodes();
   if(name==='myqr') renderAuthorQRPage();
-  if(name==='pos') renderPOS();
+  if(name==='pos') { renderPOS(); renderPOSFxStatus(); }
 }
 
 function updateHeader() {
@@ -5256,11 +5256,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── EVENT POS ──
 let posCart = {};
-let posTransactionCurrency = 'EUR';
 let posPendingSale = null;
 const POS_FX_STORAGE_KEY = 'lm_pos_exchange_rates_v1';
+const POS_FX_FETCHED_AT_KEY = 'lm_pos_fx_fetched_at';
 const POS_DEFAULT_CAD_RATES = { CAD: 1, EUR: 1.47, USD: 1.36, GBP: 1.73 };
 let posExchangeRates = loadPosExchangeRates();
+
+// Default to the native currency of the first book in the catalog, falling back to EUR
+function _getPosDefaultCurrency() {
+  const firstBook = Object.values(BOOKS)[0];
+  return firstBook ? currencyToCode(firstBook.currency) : 'EUR';
+}
+let posTransactionCurrency = _getPosDefaultCurrency();
 
 function loadPosExchangeRates() {
   try {
@@ -5425,45 +5432,93 @@ window.posSetCurrency = function(code) {
   renderPOS();
 };
 
-window.posConfigureRates = function() {
-  const currencies = getPOSCurrencies();
-  currencies.forEach((code) => {
-    if (code === 'CAD') return;
-    const current = posExchangeRates[code] ?? '';
-    const raw = prompt(`FX config: 1 ${code} equals how many CAD?`, current.toString());
-    if (raw === null) return;
-    const next = parseFloat(raw);
-    if (!Number.isNaN(next) && next > 0) posExchangeRates[code] = next;
-  });
+// Fetch live rates for all POS currencies (CAD-pivot) and populate both
+// posExchangeRates and _fxRateCache so Tax Center conversions stay correct.
+window.posConfigureRates = async function() {
+  const currencies = getPOSCurrencies().filter(c => c !== 'CAD');
+  const btn = document.querySelector('[onclick="posConfigureRates()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Fetching…'; }
+
+  let fetched = 0, failed = [];
+  for (const code of currencies) {
+    // Rate: how many CAD per 1 unit of `code` (e.g. 1 EUR → 1.47 CAD)
+    const result = await fetchLiveRate(code, 'CAD');
+    if (result.rate) {
+      posExchangeRates[code] = result.rate;
+      _fxRateCache[`${code}_CAD`] = result.rate;
+      fetched++;
+    } else {
+      failed.push(code);
+    }
+    // Also cache the inverse (CAD→code) for book-currency→txn-currency conversion
+    if (result.rate) {
+      _fxRateCache[`CAD_${code}`] = 1 / result.rate;
+    }
+    // For non-CAD book currencies vs non-CAD txn currencies, cache cross-pairs too
+    for (const other of currencies) {
+      if (other === code) continue;
+      const crossResult = await fetchLiveRate(code, other);
+      if (crossResult.rate) _fxRateCache[`${code}_${other}`] = crossResult.rate;
+    }
+  }
   posExchangeRates.CAD = 1;
+  _fxRateCache['CAD_CAD'] = 1;
   savePosExchangeRates();
+  localStorage.setItem(POS_FX_FETCHED_AT_KEY, new Date().toISOString());
+
   renderPOS();
-  showToast('FX rates updated');
+  renderPOSFxStatus();
+
+  if (btn) { btn.disabled = false; btn.textContent = 'FX Rates'; }
+  if (failed.length) {
+    showToast(`Rates updated (${fetched} live · ${failed.join(', ')} unavailable — using cached)`, 'warn');
+  } else {
+    showToast(`✓ Live FX rates updated for ${fetched} currencies`, 'ok');
+  }
+};
+
+// Render a small status line below the FX button showing rate freshness
+function renderPOSFxStatus() {
+  const el = document.getElementById('pos-fx-status');
+  if (!el) return;
+  const ts = localStorage.getItem(POS_FX_FETCHED_AT_KEY);
+  if (!ts) {
+    el.textContent = 'Using saved rates — click FX Rates to refresh';
+    el.style.color = 'var(--amber)';
+  } else {
+    const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+    const label = mins < 2 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins/60)}h ago`;
+    el.textContent = `Live rates fetched ${label}`;
+    el.style.color = 'var(--green)';
+  }
 };
 
 // ── POS cart-to-manual-entry adapter
 // Maps a POS cart item into the exact payload shape that recordOrder expects,
 // so that POS sales and manual entry sales are written to the ledger identically.
-function _posItemToManualPayload(book, qty, paymentMethod, basePrice, curCode, convertedPrice, fxRate) {
-  // Use buildPaymentMeta to handle FX if needed, matching manual entry logic
-  const isFx = curCode !== getBookCurrencyCode(book);
-  
-  // Total in the currency actually paid (e.g. CAD total)
-  const foreignTotal = qty * convertedPrice;
+//
+// fxRate must be the live rate from paymentCurrency → bookNativeCurrency
+// (i.e. the same direction fetchLiveRate uses), matching how manual entry works.
+function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate) {
+  const nativeCurCode = getBookCurrencyCode(book);
+  const isFx = txnCurCode !== nativeCurCode;
 
-  const payment = buildPaymentMeta({ 
-    book, 
-    qty, 
-    unitPrice: basePrice, // The native price (e.g. EUR)
-    fxEnabled: isFx, 
-    fxCur: curCode, 
-    fxAmt: foreignTotal, // The actual foreign amount paid (e.g. CAD total)
-    fxRate: fxRate || 1
+  // Amount actually paid in the transaction currency (what the customer handed over)
+  const foreignTotal = qty * convertedUnitInTxnCur;
+
+  const payment = buildPaymentMeta({
+    book,
+    qty,
+    unitPrice: basePrice,          // native-currency unit price (for revenue/ledger)
+    fxEnabled: isFx,
+    fxCur: txnCurCode,             // what currency was actually paid
+    fxAmt: foreignTotal,           // total amount paid in that currency
+    fxRate: nativePerTxnRate || 1  // rate: 1 txnCur = N nativeCur  (e.g. 1 CAD = 0.68 EUR)
   });
-  
+
   const num = `POS-${Date.now().toString().slice(-6)}`;
   const chan = 'Book Fair';
-  const notes = paymentMethod; // stored in notes exactly as manual entry stores paymentType
+  const notes = paymentMethod;
   return { num, chan, qty, price: basePrice, notes, payment };
 }
 
@@ -5505,32 +5560,57 @@ window.posCheckout = function() {
 
 window.posConfirmSale = async function() {
   if (!posPendingSale) return;
-  
-  // Save the currently active book so we can restore it after processing each book
+
   const previousBook = activeBook;
 
   for (const row of posPendingSale.rows) {
-      const book = row.book;
-      const qty = row.qty;
-      
-      // Determine prices correctly: sourceUnit is the book's native price (e.g. EUR)
-      // convertedUnit is the price in the chosen POS currency (e.g. CAD)
-      const basePrice = row.sourceUnit; 
-      const convertedPrice = row.convertedUnit === null ? row.sourceUnit : row.convertedUnit;
-      const curCode = row.convertedUnit === null ? row.sourceCode : posPendingSale.currency;
-      const fx = row.convertedUnit === null ? 1 : (row.convertedUnit / (row.sourceUnit || 1));
+    const book = row.book;
+    const qty = row.qty;
 
-      // Temporarily set activeBook so that recordOrder's getState()/getBook() resolve correctly
-      activeBook = book.id;
+    // basePrice = native-currency unit price (what flows into revenue, ledger, and Sheets)
+    const basePrice = row.sourceUnit;
+    const nativeCurCode = getBookCurrencyCode(book);
 
-      const { num, chan, notes, payment } = _posItemToManualPayload(book, qty, posPendingSale.method, basePrice, curCode, convertedPrice, fx);
+    // txnCurCode = the currency the customer actually paid in
+    const txnCurCode = (row.convertedUnit === null) ? row.sourceCode : posPendingSale.currency;
+    const isFx = txnCurCode !== nativeCurCode;
 
-      // recordOrder is the single shared sale-writing function used by manual entry.
-      // We pass the basePrice (native currency) so revenue and ledger entries are correct.
-      recordOrder(num, chan, qty, basePrice, notes, payment);
+    // convertedUnitInTxnCur = unit price expressed in the txn currency
+    const convertedUnitInTxnCur = (row.convertedUnit === null) ? row.sourceUnit : row.convertedUnit;
+
+    // nativePerTxnRate: how many native units = 1 txn-currency unit
+    // e.g. for a EUR-priced book paid in CAD: rate = how many EUR per 1 CAD
+    // This must match the direction fetchLiveRate(txnCur, nativeCur) returns,
+    // which is exactly what _fxRateCache[`${txnCurCode}_${nativeCurCode}`] holds.
+    let nativePerTxnRate = 1;
+    if (isFx) {
+      const cacheKey = `${txnCurCode}_${nativeCurCode}`;
+      if (_fxRateCache[cacheKey]) {
+        nativePerTxnRate = _fxRateCache[cacheKey];
+      } else {
+        // Derive from CAD-pivot posExchangeRates as fallback:
+        // (txnCur → CAD) / (nativeCur → CAD)  = txnCur → nativeCur
+        const txnToCAD    = posExchangeRates[txnCurCode]    || 1;
+        const nativeToCAD = posExchangeRates[nativeCurCode] || 1;
+        nativePerTxnRate = txnToCAD / nativeToCAD;
+        // Cache it for paymentSummary to use
+        _fxRateCache[cacheKey] = nativePerTxnRate;
+      }
+    }
+
+    // Temporarily set activeBook so recordOrder's getState()/getBook() resolve correctly
+    activeBook = book.id;
+
+    const { num, chan, notes, payment } = _posItemToManualPayload(
+      book, qty, posPendingSale.method,
+      basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate
+    );
+
+    // recordOrder is the single shared sale-writing function used by manual entry.
+    // basePrice (native currency) drives revenue so it's always in the book's own currency.
+    recordOrder(num, chan, qty, basePrice, notes, payment);
   }
 
-  // Restore previous book context
   activeBook = previousBook;
 
   closeM('pos-sale-confirm');

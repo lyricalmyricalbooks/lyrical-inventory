@@ -683,10 +683,11 @@
     </div>
 
     <div class="card pos-cart-panel" style="position:sticky;top:88px;padding:1rem;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);">Cart Total</div>
-        <button class="btn sm" onclick="posConfigureRates()">FX Rates</button>
+        <button class="btn sm" onclick="posConfigureRates()">↻ FX Rates</button>
       </div>
+      <div id="pos-fx-status" style="font-size:10px;color:var(--amber);margin-bottom:8px;">Using saved rates — click ↻ FX Rates to refresh</div>
 
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
         <label style="font-size:11px;color:var(--text3);">Txn Currency</label>
