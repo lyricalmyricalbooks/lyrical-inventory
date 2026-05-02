@@ -475,7 +475,7 @@ let states = {};
 window.authorSubmissions = {}; // Tracks pending expenses/sales by Authors
 let activeBook = null;   // currently viewed bookId, or 'all'
 let orders = [], activeId = null;
-let fbReady = false, lastSavedHashes = {};
+let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
 let syncQueue = JSON.parse(localStorage.getItem('lm-sync-queue') || '[]');
 let systemBackups = [];
 const SYSTEM_BACKUP_KEY = 'systemBackups';
@@ -563,6 +563,7 @@ async function saveState(bookId) {
     }
     await window._fbSave(bookId, json);
     lastSavedHashes[bookId] = json;
+    lastSaveTimes[bookId] = Date.now();
     setSyncState('ok', '<b>Firestore</b> · saved · live sync on');
     const ind=$('save-ind'); if(ind){ind.classList.add('show');setTimeout(()=>ind.classList.remove('show'),2000);}
   } catch(e) { 
@@ -605,7 +606,11 @@ async function loadBook(bookId) {
       if (!states[bookId].artistTransfers) states[bookId].artistTransfers = [];
       lastSavedHashes[bookId] = json2;
       if (activeBook === bookId || activeBook === 'all') renderCurrent();
-      showToast('↺ '+book.title+' updated from Firestore');
+      // Suppress the echo-toast that fires right after a local save is written to Firestore
+      const timeSinceLastSave = Date.now() - (lastSaveTimes[bookId] || 0);
+      if (timeSinceLastSave > 3000) {
+        showToast('↺ '+book.title+' updated from Firestore');
+      }
     });
   } catch(e) {
     states[bookId] = defaultState(BOOKS[bookId]);

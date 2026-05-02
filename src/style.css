@@ -433,7 +433,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 
 @media (max-width: 768px){
   body{overflow-x:hidden;}
-  .app{padding-bottom:90px;}
+  .app{padding-bottom:calc(90px + env(safe-area-inset-bottom));}
   .sync-bar,.book-switcher,.header-actions{padding-left:1rem;padding-right:1rem;}
   .tab-bar{position:fixed;left:0;right:0;bottom:0;z-index:160;display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--ink2);border-top:1px solid rgba(255,255,255,.08);overflow-x:auto;}
   

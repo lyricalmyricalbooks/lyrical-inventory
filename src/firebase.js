@@ -146,9 +146,9 @@ window._fbLoad = async (bookId) => {
       
       const stitched = {
         ...parts.metadata,
+        hist: parts.hist,
         ledger: parts.ledger,
         expenses: parts.expenses,
-        hist: parts.hist,
         stores: parts.stores,
         artistTransfers: parts.artistTransfers,
         doneIds: parts.doneIds
@@ -188,11 +188,13 @@ window._fbWatch = (bookId, cb) => {
           loadedDocs.add(name);
           
           if (loadedDocs.size === docNames.length) {
+            // Build stitched state with a fixed key order so JSON.stringify is
+            // stable — prevents false-positive hash mismatches vs _fbLoad output.
             const stitched = {
               ...localState.metadata,
+              hist: localState.hist,
               ledger: localState.ledger,
               expenses: localState.expenses,
-              hist: localState.hist,
               stores: localState.stores,
               artistTransfers: localState.artistTransfers,
               doneIds: localState.doneIds
@@ -230,8 +232,12 @@ window._fbWatchSubmissions = (bookId, cb) => {
       if (_fsSubUnsubs[bookId]) _fsSubUnsubs[bookId].forEach(unsub => unsub());
       _fsSubUnsubs[bookId] = [];
       let combinedData = {};
+      // Track which sub-collections have delivered at least one snapshot so we
+      // don't call notify() with half-populated data on slow mobile connections.
+      const initializedTypes = new Set();
+      const TYPES = ['expenses', 'sales'];
       const notify = () => cb((combinedData.expenses || combinedData.sales) ? combinedData : null);
-      ['expenses', 'sales'].forEach(type => {
+      TYPES.forEach(type => {
         const collRef = collection(fs, 'submissions', bookId, type);
         const unsub = onSnapshot(collRef, (snapshot) => {
           if (!combinedData[type]) combinedData[type] = {};
@@ -240,7 +246,9 @@ window._fbWatchSubmissions = (bookId, cb) => {
             else combinedData[type][change.doc.id] = change.doc.data();
           });
           if (Object.keys(combinedData[type]).length === 0) delete combinedData[type];
-          notify();
+          initializedTypes.add(type);
+          // Only notify once both sub-collections have had their first snapshot
+          if (initializedTypes.size === TYPES.length) notify();
         }, (err) => console.error("Sub watch failed", err));
         _fsSubUnsubs[bookId].push(unsub);
       });
