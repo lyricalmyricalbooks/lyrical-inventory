@@ -27,16 +27,67 @@ window._firestore = fs;
 // ─────────────────────────────────────────────
 // MODE FLAGS
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// MODE FLAGS — stored in Firestore so ALL devices stay in sync.
+// localStorage is used as a fast local cache only.
+// ─────────────────────────────────────────────
+let _modeFlags = {}; // in-memory cache after _fbLoadModeFlags() resolves
+
+window._fbLoadModeFlags = async () => {
+  try {
+    const snap = await getDoc(doc(fs, 'settings', 'modeFlags'));
+    if (snap.exists()) {
+      _modeFlags = snap.data() || {};
+      // Write back to localStorage so the cache is warm for next startup
+      Object.keys(_modeFlags).forEach(k => localStorage.setItem(k, String(_modeFlags[k])));
+    } else {
+      // First ever load — seed from whatever localStorage has (migration path)
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('fs_mode_'));
+      keys.forEach(k => { _modeFlags[k] = localStorage.getItem(k) === 'true'; });
+      if (keys.length > 0) {
+        // Persist the local state to Firestore so other devices pick it up
+        await setDoc(doc(fs, 'settings', 'modeFlags'), _modeFlags);
+      }
+    }
+  } catch (e) {
+    console.warn('[FB] Could not load mode flags from Firestore, using localStorage cache', e);
+    // Fall back gracefully to localStorage
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('fs_mode_'));
+    keys.forEach(k => { _modeFlags[k] = localStorage.getItem(k) === 'true'; });
+  }
+};
+
+window._fbSaveModeFlags = async () => {
+  try {
+    await setDoc(doc(fs, 'settings', 'modeFlags'), _modeFlags);
+  } catch (e) { console.error('[FB] Failed to save mode flags', e); }
+};
+
 window._useFirestoreForBook = (bookId) => {
-  return localStorage.getItem('fs_mode_' + bookId) === 'true';
+  return _modeFlags['fs_mode_' + bookId] === true;
 };
 
 window._useFirestoreGlobal = () => {
-  return localStorage.getItem('fs_mode_global') === 'true';
+  return _modeFlags['fs_mode_global'] === true;
 };
 
-window._enableFirestoreGlobal = () => localStorage.setItem('fs_mode_global', 'true');
-window._disableFirestoreGlobal = () => localStorage.setItem('fs_mode_global', 'false');
+window._enableFirestoreGlobal = () => {
+  _modeFlags['fs_mode_global'] = true;
+  localStorage.setItem('fs_mode_global', 'true');
+  window._fbSaveModeFlags();
+};
+
+window._disableFirestoreGlobal = () => {
+  _modeFlags['fs_mode_global'] = false;
+  localStorage.setItem('fs_mode_global', 'false');
+  window._fbSaveModeFlags();
+};
+
+window._setBookFirestoreMode = (bookId, enabled) => {
+  _modeFlags['fs_mode_' + bookId] = enabled;
+  localStorage.setItem('fs_mode_' + bookId, String(enabled));
+  window._fbSaveModeFlags();
+};
 
 // ─────────────────────────────────────────────
 // HELPERS

@@ -664,13 +664,13 @@ async function toggleFirestoreMode() {
 
     // --- Migrate this book's data ---
     try {
-      localStorage.setItem('fs_mode_' + activeBook, 'true');
+      window._setBookFirestoreMode(activeBook, true);
       await saveState(activeBook);
       await loadBook(activeBook);
       showToast(`✓ ${BOOKS[activeBook]?.title || activeBook} migrated to Cloud Firestore`, 'ok', 4000);
     } catch (e) {
       console.error('Book migration failed:', e);
-      localStorage.setItem('fs_mode_' + activeBook, 'false');
+      window._setBookFirestoreMode(activeBook, false);
       showToast('⚠ Failed to migrate book data', 'err');
     }
 
@@ -684,7 +684,7 @@ async function toggleFirestoreMode() {
     )) return;
 
     // --- Revert this book ---
-    localStorage.setItem('fs_mode_' + activeBook, 'false');
+    window._setBookFirestoreMode(activeBook, false);
     await saveState(activeBook);
     await loadBook(activeBook);
 
@@ -723,9 +723,9 @@ window.performFullMigration = async () => {
     
     // Globally enable Firestore
     window._enableFirestoreGlobal();
-    // Enable for all books known in the BOOKS config
+    // Enable for all books — persisted to Firestore so ALL devices pick this up
     Object.keys(BOOKS).forEach(id => {
-      localStorage.setItem('fs_mode_' + id, 'true');
+      window._setBookFirestoreMode(id, true);
     });
     
     showToast('✓ FULL MIGRATION SUCCESSFUL! RELOADING...', 'ok', 100000);
@@ -5783,6 +5783,10 @@ async function initStartup() {
       return;
     }
     
+    // Load shared Firestore mode flags FIRST — before any data reads.
+    // This ensures all devices agree on which database to use.
+    await window._fbLoadModeFlags();
+
     // NOW that we have a valid token, we pull the protected catalog.
     await loadCatalog(); 
     loadAuthorViewOverrides();
