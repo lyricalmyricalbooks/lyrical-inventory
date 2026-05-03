@@ -1542,7 +1542,7 @@ function renderHist() {
         }
         const voided = h.voided ? ' voided' : '';
         const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
-        const editBtn = isAuthor() ? '' : `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry">✎</button>`;
+        const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry">✎</button>`;
         const isGrat = h.gratuity || h.chan === 'Gratuity';
         const isPending = h.artistPending;
         const chanCell = isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${h.chan} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : h.chan;
