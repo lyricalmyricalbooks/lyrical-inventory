@@ -1505,11 +1505,12 @@ function renderCurrent() {
 // ── ORDER RECORDING
 function recordOrder(num, chan, qty, price, notes, payment = null) {
   const s = getState(), book = getBook();
+  const enteredBy = isAuthor() ? 'Artist' : 'Publisher';
   s.stock = Math.max(0, s.stock - qty);
   s.sold += qty; s.revenue += qty * price;
   if (!s.chStats[chan]) s.chStats[chan]={txns:0,units:0,revenue:0};
   s.chStats[chan].txns++; s.chStats[chan].units+=qty; s.chStats[chan].revenue+=qty*price;
-  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment});
+  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment,enteredBy});
   renderHist(); updateDash(); saveState(activeBook);
   syncToSheets({
     type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:notes||'',
@@ -1537,7 +1538,7 @@ function renderHist() {
            const actionCell = window.IS_PUBLISHER
              ? `<button class="edit-btn" onclick="approveSubmission('sales', '${h._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('sales', '${h._subKey}')" style="color:var(--red);">✕</button>`
              : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
-           return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${h.num}</td><td>${h.chan} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price,cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty*h.price,cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${h.notes||'—'}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+           return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${h.num}</td><td>${h.chan} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price,cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty*h.price,cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${h.notes||'—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill amber" style="font-size:10px;">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
         }
         const voided = h.voided ? ' voided' : '';
         const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
@@ -1554,9 +1555,13 @@ function renderHist() {
         const notesCell = paymentInfo
           ? `${h.notes || '—'}<br><span style="font-size:11px;color:var(--text4);">${paymentInfo}</span>`
           : (h.notes || '—');
-        return `<tr class="${voided}"${rowStyle}><td class="mono">${h.num}${editBtn}</td><td>${chanCell}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+        const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
+        const enteredByPill = enteredBy === 'Artist'
+          ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
+          : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
+        return `<tr class="${voided}"${rowStyle}><td class="mono">${h.num}${editBtn}</td><td>${chanCell}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
       }).join('')
-    : '<tr><td colspan="8"><div class="empty-state" style="padding:1.5rem;">No orders yet.</div></td></tr>';
+    : '<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">No orders yet.</div></td></tr>';
 }
 
 // ── WEBSITE ORDERS — persistent scan memory
