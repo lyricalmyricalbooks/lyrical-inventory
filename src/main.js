@@ -3059,6 +3059,32 @@ function saveEntryEdit() {
   showToast('✓ Entry updated');
 }
 
+
+function syncHistoryVoidDeletion(h, isVoided) {
+  if (!h || !sheetsUrl) return;
+  const base = {
+    type: 'order',
+    book: getBook().title,
+    date: h.date,
+    num: h.num,
+    chan: h.chan,
+    qty: h.qty,
+    price: h.price,
+    total: h.qty * h.price,
+    stockAfter: h.after,
+    notes: h.notes || '',
+    currency: h.payment?.currency || getBook().currency,
+    enteredBy: h.enteredBy || '',
+    source: 'history-void-toggle'
+  };
+  syncToSheets({
+    ...base,
+    action: isVoided ? 'delete' : 'upsert',
+    status: isVoided ? 'VOID_DELETE' : 'OK',
+    notes: isVoided ? `[VOID DELETE] ${base.notes}`.trim() : base.notes
+  });
+}
+
 function voidEntry() {
   if (!editCtx) return;
   const s = getState(), book = getBook();
@@ -3078,7 +3104,8 @@ function voidEntry() {
         if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
       }
       h.voided = true;
-      showToast('Entry voided — stock & revenue reversed', 'warn');
+      syncHistoryVoidDeletion(h, true);
+      showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
     } else {
       // UNVOID: re-apply effects
       s.stock = Math.max(0, s.stock - h.qty);
@@ -3089,7 +3116,8 @@ function voidEntry() {
       s.chStats[h.chan].units += h.qty;
       s.chStats[h.chan].revenue += h.qty * h.price;
       h.voided = false;
-      showToast('Entry unvoided — effects restored');
+      syncHistoryVoidDeletion(h, false);
+      showToast('Entry unvoided — effects restored (Sheets row restore queued)');
     }
   } else {
     const e = s.ledger[editCtx.idx];
@@ -3453,22 +3481,33 @@ function renderSheetsLog(){
   const b=$('sheets-log-body');
   if(!b) return;
   if(!sheetsLog.length){
-    b.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;">No sync events yet.</td></tr>';
+    b.innerHTML='<tr><td colspan="5" class="sheets-empty">No sync events yet.</td></tr>';
     return;
   }
   const PAGE_SIZE=15;
   const totalPages=Math.ceil(sheetsLog.length/PAGE_SIZE);
   if(_syncLogPage>=totalPages) _syncLogPage=Math.max(0,totalPages-1);
   const pageItems=sheetsLog.slice(_syncLogPage*PAGE_SIZE, (_syncLogPage+1)*PAGE_SIZE);
-  
+
   const labelFor=(st)=> st==='ok'?'Written':st==='unknown'?'Sent (unverified)':st==='queued'?'Queued':st==='retry'?'Retrying':'Failed';
   const classFor=(st)=> st==='ok'||st==='unknown'?'ok':st==='queued'||st==='retry'?'syncing':'err';
-  let html=pageItems.map(l=>`<tr><td style="white-space:nowrap;">${l.time}</td><td style="font-size:11px;color:var(--text3);">${l.book}</td><td>${l.type}</td><td style="color:var(--text2);font-size:12px;">${l.summary}</td><td><span class="log-status ${classFor(l.status)}"></span><span style="color:${classFor(l.status)==='err'?'var(--red)':'var(--green)'};">${labelFor(l.status)}</span></td></tr>`).join('');
-  
+  const iconFor=(st)=> st==='ok'?'✓':st==='unknown'?'~':st==='queued'?'…':st==='retry'?'↻':'⚠';
+
+  let html=pageItems.map(l=>`<tr>
+      <td class="sheets-time">${l.time}</td>
+      <td class="sheets-book">${l.book}</td>
+      <td><span class="sheets-type">${l.type}</span></td>
+      <td class="sheets-summary">${l.summary}</td>
+      <td>
+        <span class="log-status ${classFor(l.status)}"></span>
+        <span class="sheets-status ${classFor(l.status)}">${iconFor(l.status)} ${labelFor(l.status)}</span>
+      </td>
+    </tr>`).join('');
+
   if(totalPages>1){
-    html+=`<tr><td colspan="5" style="text-align:center;padding:1rem;background:rgba(0,0,0,.15);">
+    html+=`<tr><td colspan="5" class="sheets-pager">
       <button class="btn sm" onclick="_syncLogPage=Math.max(0,_syncLogPage-1);renderSheetsLog()" ${_syncLogPage===0?'disabled':''}>← Prev</button>
-      <span style="margin:0 15px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">Page ${_syncLogPage+1} of ${totalPages}</span>
+      <span class="sheets-page-label">Page ${_syncLogPage+1} of ${totalPages}</span>
       <button class="btn sm" onclick="_syncLogPage=Math.min(${totalPages-1},_syncLogPage+1);renderSheetsLog()" ${_syncLogPage===totalPages-1?'disabled':''}>Next →</button>
     </td></tr>`;
   }

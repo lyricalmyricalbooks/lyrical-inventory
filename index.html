@@ -837,9 +837,10 @@
           <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
           <div style="font-size:12px;color:var(--red-bg);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
           <div style="position:relative;">
-            <pre id="gas-code" style="background:var(--ink);color:#a8d8a8;font-family:'DM Mono',monospace;font-size:11px;padding:16px;border-radius:var(--r2);overflow-x:auto;line-height:1.75;white-space:pre-wrap;">// Lyricalmyrical Books — Google Sheets webhook (v2)
-// Reliable contract: receives { version, eventId, sentAt, payload }
-// Idempotent writes: duplicate eventId values are ignored.
+            <pre id="gas-code" style="background:var(--ink);color:#a8d8a8;font-family:'DM Mono',monospace;font-size:11px;padding:16px;border-radius:var(--r2);overflow-x:auto;line-height:1.75;white-space:pre-wrap;">// Lyricalmyrical Books — Google Sheets webhook (v3)
+// Contract: receives { version, eventId, sentAt, payload }
+// Supports payload.action = 'append' | 'upsert' | 'delete'
+// Idempotent by eventId.
 
 function doPost(e) {
   try {
@@ -849,16 +850,26 @@ function doPost(e) {
 
     var eventId = String(req.eventId || Utilities.getUuid());
     var data = req.payload;
+    var action = String(data.action || 'append').toLowerCase();
+
     var lock = LockService.getScriptLock();
     lock.waitLock(10000);
-
     try {
       if (alreadyProcessed_(eventId)) {
         return json_({ ok: true, duplicate: true, eventId: eventId });
       }
-      appendEvent_(eventId, data);
+
+      var result;
+      if (action === 'delete') {
+        result = deleteEventRow_(data);
+      } else if (action === 'upsert') {
+        result = upsertEvent_(eventId, data);
+      } else {
+        result = appendEvent_(eventId, data);
+      }
+
       markProcessed_(eventId);
-      return json_({ ok: true, eventId: eventId });
+      return json_({ ok: true, eventId: eventId, action: action, result: result });
     } finally {
       lock.releaseLock();
     }
@@ -870,23 +881,77 @@ function doPost(e) {
 function doGet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheetName = ss ? ss.getName() : 'No sheet bound';
-  return json_({ 
-    ok: true, 
+  return json_({
+    ok: true,
     service: 'lyrical-sheets-webhook-v2',
+    scriptVersion: 'v3',
     sheetName: sheetName,
-    online: true 
+    online: true
   });
 }
 
+function upsertEvent_(eventId, data) {
+  var sheet = getEventsSheet_();
+  var row = findEventRow_(sheet, data);
+  var values = toRowValues_(eventId, data);
+  if (row > 0) {
+    sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    return { op: 'updated', row: row };
+  }
+  sheet.appendRow(values);
+  return { op: 'inserted', row: sheet.getLastRow() };
+}
+
 function appendEvent_(eventId, data) {
+  var sheet = getEventsSheet_();
+  var values = toRowValues_(eventId, data);
+  sheet.appendRow(values);
+  return { op: 'appended', row: sheet.getLastRow() };
+}
+
+function deleteEventRow_(data) {
+  var sheet = getEventsSheet_();
+  var row = findEventRow_(sheet, data);
+  if (row > 0) {
+    sheet.deleteRow(row);
+    return { op: 'deleted', row: row };
+  }
+  return { op: 'not_found' };
+}
+
+function findEventRow_(sheet, data) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow &lt; 2) return -1;
+
+  // Match by natural key: Book + Type + Date + Reference + Channel/Store.
+  var type = String(data.type || '');
+  var reference = type === 'order' ? String(data.num || '') : String(data.event || '');
+  var channelOrStore = type === 'order' ? String(data.chan || '') : String(data.store || '');
+
+  var rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+  for (var i = rows.length - 1; i >= 0; i--) {
+    var r = rows[i];
+    var same = String(r[2] || '') === String(data.book || '') &&
+               String(r[3] || '') === type &&
+               String(r[4] || '') === String(data.date || '') &&
+               String(r[5] || '') === reference &&
+               String(r[6] || '') === channelOrStore;
+    if (same) return i + 2;
+  }
+  return -1;
+}
+
+function getEventsSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Events') || ss.insertSheet('Events');
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(['Logged At', 'Event ID', 'Book', 'Type', 'Date', 'Reference', 'Channel/Store', 'Qty', 'Price/Rate', 'Total/Amount Due', 'Stock After', 'Status', 'Notes']);
     sheet.setFrozenRows(1);
   }
+  return sheet;
+}
 
-  var loggedAt = new Date();
+function toRowValues_(eventId, data) {
   var type = data.type || '';
   var ref = type === 'order' ? (data.num || '') : (data.event || '');
   var channel = type === 'order' ? (data.chan || '') : (data.store || '');
@@ -894,8 +959,8 @@ function appendEvent_(eventId, data) {
   var total = type === 'order' ? Number(data.total || 0) : Number(data.amountDue || 0);
   var status = data.status || '';
 
-  sheet.appendRow([
-    loggedAt,
+  return [
+    new Date(),
     eventId,
     data.book || '',
     type,
@@ -908,61 +973,7 @@ function appendEvent_(eventId, data) {
     Number(data.stockAfter || 0),
     status,
     data.notes || ''
-  ]);
-}
-
-function alreadyProcessed_(eventId) {
-  var p = PropertiesService.getScriptProperties();
-  return p.getProperty('evt_' + eventId) === '1';
-}
-
-function markProcessed_(eventId) {
-  PropertiesService.getScriptProperties().setProperty('evt_' + eventId, '1');
-}
-
-function readBody_(e) {
-  if (e && e.postData && e.postData.contents) return e.postData.contents;
-  if (e && e.parameter && e.parameter.payload) return e.parameter.payload;
-  throw new Error('No request body');
-}
-
-function json_(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function appendEvent_(eventId, data) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Events') || ss.insertSheet('Events');
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['Logged At', 'Event ID', 'Book', 'Type', 'Date', 'Reference', 'Channel/Store', 'Qty', 'Price/Rate', 'Total/Amount Due', 'Stock After', 'Status', 'Notes']);
-    sheet.setFrozenRows(1);
-  }
-
-  var loggedAt = new Date();
-  var type = data.type || '';
-  var ref = type === 'order' ? (data.num || '') : (data.event || '');
-  var channel = type === 'order' ? (data.chan || '') : (data.store || '');
-  var unit = type === 'order' ? Number(data.price || 0) : Number(data.rate || 0);
-  var total = type === 'order' ? Number(data.total || 0) : Number(data.amountDue || 0);
-  var status = data.status || '';
-
-  sheet.appendRow([
-    loggedAt,
-    eventId,
-    data.book || '',
-    type,
-    data.date || '',
-    ref,
-    channel,
-    Number(data.qty || 0),
-    unit,
-    total,
-    Number(data.stockAfter || 0),
-    status,
-    data.notes || ''
-  ]);
+  ];
 }
 
 function alreadyProcessed_(eventId) {
