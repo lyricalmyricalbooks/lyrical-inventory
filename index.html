@@ -928,7 +928,7 @@ function findEventRow_(sheet, data) {
   var reference = type === 'order' ? String(data.num || '') : String(data.event || '');
   var channelOrStore = type === 'order' ? String(data.chan || '') : String(data.store || '');
 
-  var rows = sheet.getRange(2, 1, lastRow - 1, 13).getValues();
+  var rows = sheet.getRange(2, 1, lastRow - 1, 18).getValues();
   for (var i = rows.length - 1; i >= 0; i--) {
     var r = rows[i];
     var same = String(r[2] || '') === String(data.book || '') &&
@@ -945,7 +945,7 @@ function getEventsSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Events') || ss.insertSheet('Events');
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['Logged At', 'Event ID', 'Book', 'Type', 'Date', 'Reference', 'Channel/Store', 'Qty', 'Price/Rate', 'Total/Amount Due', 'Stock After', 'Status', 'Notes']);
+    sheet.appendRow(['Logged At', 'Event ID', 'Book', 'Type', 'Date', 'Reference', 'Channel/Store', 'Qty', 'Price/Rate', 'Total/Amount Due', 'Currency', 'Payment Currency', 'Payment Amount', 'Payment Rate', 'Converted Total (Native)', 'Amount CAD', 'Status', 'Notes']);
     sheet.setFrozenRows(1);
   }
   return sheet;
@@ -958,6 +958,11 @@ function toRowValues_(eventId, data) {
   var unit = type === 'order' ? Number(data.price || 0) : Number(data.rate || 0);
   var total = type === 'order' ? Number(data.total || 0) : Number(data.amountDue || 0);
   var status = data.status || '';
+  var currency = data.currency || '';
+  var paymentCurrency = data.paymentCurrency || currency || '';
+  var paymentAmount = Number(data.paymentAmount || 0);
+  var paymentRate = Number(data.paymentRate || 0);
+  var convertedTotal = Number(data.convertedTotal || total || 0);
 
   return [
     new Date(),
@@ -970,7 +975,12 @@ function toRowValues_(eventId, data) {
     Number(data.qty || 0),
     unit,
     total,
-    Number(data.stockAfter || 0),
+    currency,
+    paymentCurrency,
+    paymentAmount,
+    paymentRate || '',
+    convertedTotal,
+    '', // Amount CAD (optional formula / enrichment step)
     status,
     data.notes || ''
   ];
@@ -998,7 +1008,7 @@ function json_(obj) {
 }</pre>
             <button class="btn sm" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.15);" onclick="copyGasCode()">Copy</button>
           </div>
-          <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This v2 script writes every event to one normalized "Events" tab and de-duplicates retries using event IDs.</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This v3 script writes normalized event + payment currency fields to one "Events" tab and de-duplicates retries using event IDs.</div>
         </div>
       </div>
       <div style="display:flex;gap:14px;align-items:flex-start;">

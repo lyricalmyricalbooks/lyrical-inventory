@@ -419,6 +419,18 @@ const CURRENCY_SYMBOL_TO_CODE = { '€':'EUR', '$':'CAD', 'US$':'USD', '£':'GBP
 const CODE_TO_SYMBOL = { 'EUR':'€', 'CAD':'$', 'USD':'US$', 'GBP':'£', 'JPY':'¥', 'CHF':'CHF', 'AUD':'A$' };
 const getSym = c => CODE_TO_SYMBOL[c] || c;
 
+function normalizeCurrencyCode(cur, fallback = 'CAD') {
+  const raw = String(cur || '').trim();
+  if (!raw) return fallback;
+  const upper = raw.toUpperCase();
+  if (CODE_TO_SYMBOL[upper]) return upper;
+  if (CURRENCY_SYMBOL_TO_CODE[raw]) return CURRENCY_SYMBOL_TO_CODE[raw];
+  if (upper === 'CA$' || upper === 'C$') return 'CAD';
+  if (upper === 'US$') return 'USD';
+  if (upper === '€' || upper === 'EUR') return 'EUR';
+  return /^[A-Z]{3}$/.test(upper) ? upper : fallback;
+}
+
 const fmt = (n, cur='€') => getSym(cur) + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const fmtNum = n => Number(n).toFixed(2);
 const fmtD = d => {
@@ -1514,7 +1526,8 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   renderHist(); updateDash(); saveState(activeBook);
   syncToSheets({
     type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:notes||'',
-    paymentCurrency: payment?.currency || getBookCurrencyCode(book),
+    currency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
+    paymentCurrency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentAmount: payment?.amount ?? qty*price,
     paymentRate: payment?.rate ?? '',
     convertedTotal: payment?.convertedTotal ?? qty*price
@@ -2677,7 +2690,8 @@ function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
   renderHist();updateDash();saveState(activeBook);
   syncToSheets({
     type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:(notes||'')+' [PENDING ARTIST TRANSFER]',
-    paymentCurrency: payment?.currency || getBookCurrencyCode(book),
+    currency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
+    paymentCurrency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentAmount: payment?.amount ?? qty*price,
     paymentRate: payment?.rate ?? '',
     convertedTotal: payment?.convertedTotal ?? qty*price
@@ -2700,7 +2714,7 @@ function markArtistTransferReceived(transferId){
   renderHist();updateDash();renderArtistTransfers();saveState(activeBook);
   syncToSheets({
     type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST TRANSFER RECEIVED]',
-    paymentCurrency: t.payment?.currency || getBookCurrencyCode(book),
+    paymentCurrency: normalizeCurrencyCode(t.payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentAmount: t.payment?.amount ?? t.total,
     paymentRate: t.payment?.rate ?? '',
     convertedTotal: t.payment?.convertedTotal ?? t.total
@@ -3416,7 +3430,7 @@ async function pushAllToSheets() {
       type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
       qty: h.voided ? 0 : h.qty, price:h.price, total: h.voided ? 0 : (h.qty*h.price), stockAfter:h.after,
       notes:(h.voided?'[VOID] ':'')+(h.notes||''),
-      currency: h.payment?.currency || book.currency,
+      currency: normalizeCurrencyCode(h.payment?.currency || getBookCurrencyCode(book), 'CAD'),
       status: h.voided ? 'VOID' : 'OK'
     }));
     (s.ledger || []).forEach(e => toSync.push({
