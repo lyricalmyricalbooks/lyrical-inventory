@@ -2067,15 +2067,6 @@ function printShippingLabel() {
 
   const labelHTML = `
   <div class="label">
-    <section class="from">
-      <div class="kicker">From</div>
-      <div class="from-lines">
-        ${fromLines.map(l=>`<div>${esc(l)}</div>`).join('')}
-      </div>
-    </section>
-
-    <div class="rule"></div>
-
     <section class="to">
       <div class="kicker kicker-lg">Ship To</div>
       <div class="to-name">${esc(ship.name||'')}</div>
@@ -2083,6 +2074,15 @@ function printShippingLabel() {
         ${toLines.map(l=>`<div>${esc(l)}</div>`).join('')}
       </div>
       ${ship.email?`<div class="to-email">${esc(ship.email)}</div>`:''}
+    </section>
+
+    <div class="rule"></div>
+
+    <section class="from">
+      <div class="kicker">From</div>
+      <div class="from-lines">
+        ${fromLines.map(l=>`<div>${esc(l)}</div>`).join('')}
+      </div>
     </section>
 
     <footer class="label-foot">
@@ -2114,15 +2114,15 @@ function printShippingLabel() {
     }
     .kicker-lg { font-size: 7.5pt; color: #111; margin-bottom: 6px; }
 
-    .from { margin-top: 0; }
-    .from-lines { font-size: 9pt; line-height: 1.45; color: #333; }
+    .to { flex: 1; }
 
     .rule {
       height: 0; border-top: 2px solid #111;
       margin: 14px 0 14px;
     }
 
-    .to { flex: 1; }
+    .from { margin-top: 0; }
+    .from-lines { font-size: 9pt; line-height: 1.45; color: #333; }
     .to-name {
       font-size: 18pt; font-weight: 700;
       letter-spacing: -.005em; line-height: 1.15;
