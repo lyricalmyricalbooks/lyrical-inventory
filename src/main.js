@@ -4212,13 +4212,41 @@ function renderProductionCostFields(){
 
 async function saveProductionCosts(){
   const stored={};
+  let tiersUpdated = false;
   Object.values(BOOKS).forEach(book=>{
     const inp=$('pc-'+book.id);
-    if(inp){ const val=parseFloat(inp.value)||0; book.productionCost=val; stored[book.id]=val; }
+    if(inp){
+      const previousCost = book.productionCost || 0;
+      const val=parseFloat(inp.value)||0;
+      book.productionCost=val;
+      stored[book.id]=val;
+
+      // Keep the first break-even tier aligned when it still represents production-cost recovery.
+      if (Array.isArray(book.profitTiers) && book.profitTiers.length > 0) {
+        const firstTier = book.profitTiers[0];
+        const tierLabel = (firstTier?.label || '').toLowerCase();
+        const normalizedLabel = tierLabel.replace(/\s+/g, ' ').trim();
+        const isBreakEvenLabel = normalizedLabel.includes('break-even') || normalizedLabel.includes('break even');
+        const shouldSyncThreshold =
+          firstTier?.revenueUpTo !== null &&
+          (Math.abs((firstTier.revenueUpTo || 0) - previousCost) < 0.0001 || isBreakEvenLabel);
+
+        if (shouldSyncThreshold && Math.abs((firstTier.revenueUpTo || 0) - val) >= 0.0001) {
+          firstTier.revenueUpTo = val;
+          tiersUpdated = true;
+        }
+      }
+    }
   });
   // Save to Firebase + localStorage fallback
   try{ await window._fbSaveSettings('productionCosts', stored); }catch(_){}
   localStorage.setItem('lm-production-costs',JSON.stringify(stored));
+
+  // Persist tier threshold sync so break-even UI survives reload/devices.
+  if (tiersUpdated) {
+    try { await window._fbSaveCatalog(BOOKS); } catch (_) {}
+  }
+
   showToast('✓ Break-even targets saved');
   if(activeBook&&activeBook!=='all') updateDash();
   else updateAllOverview();
