@@ -2323,6 +2323,106 @@ async function scanProjectReceiptWithAI() {
     btn.textContent = oldText; btn.disabled = false;
 }
 
+function openEmailReceiptImportModal() {
+  openM('email-receipt-import-modal');
+  if ($('email-receipt-results')) $('email-receipt-results').innerHTML = '';
+}
+
+function closeEmailReceiptImportModal() {
+  closeM('email-receipt-import-modal');
+}
+
+async function extractReceiptsFromEmailText() {
+  const source = ($('email-receipt-source')?.value || '').trim();
+  if (!source) { showToast('Paste receipt emails first', 'warn'); return; }
+  const apiKey = TAX_CENTER.settings?.geminiKey;
+  if (!apiKey) { showToast('Gemini API Key required in Config', 'err'); return; }
+  const btn = $('email-receipt-scan-btn');
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Extracting...';
+  try {
+    const prompt = `You are extracting expense receipts from pasted email text.
+Return ONLY valid JSON matching this schema:
+{"receipts":[{"vendor":"string","date":"YYYY-MM-DD","amount":12.34,"currency":"CAD","description":"short text","reference":"order/invoice ref if any"}]}
+Rules:
+- Include only actual purchase receipts/invoices.
+- Skip shipping notifications and non-receipts.
+- Use ISO currency uppercase.
+- If date/currency/amount missing, omit that receipt.
+- No markdown.`;
+    const payload = {
+      contents: [{ parts: [{ text: prompt }, { text: source.slice(0, 70000) }] }],
+      generationConfig: { response_mime_type: 'application/json' }
+    };
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('AI extraction failed');
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    const parsed = JSON.parse(text);
+    renderEmailReceiptDrafts(parsed.receipts || []);
+  } catch (e) {
+    console.error(e);
+    showToast('Could not extract receipts from email text', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+function renderEmailReceiptDrafts(receipts) {
+  const wrap = $('email-receipt-results');
+  if (!wrap) return;
+  if (!Array.isArray(receipts) || !receipts.length) {
+    wrap.innerHTML = '<div class="empty-state">No valid receipts found.</div>';
+    return;
+  }
+  wrap.innerHTML = `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">Review drafts and import selected:</div>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th></th><th>Date</th><th>Description</th><th>Ref</th><th class="r">Amount</th></tr></thead>
+      <tbody>
+        ${receipts.map((r, i) => `<tr>
+          <td><input type="checkbox" id="erd-${i}" checked></td>
+          <td>${r.date || '—'}</td>
+          <td>${(r.description || r.vendor || 'Receipt').replace(/</g,'&lt;')}</td>
+          <td>${(r.reference || '—').replace(/</g,'&lt;')}</td>
+          <td class="r">${fmt(Number(r.amount || 0), r.currency || getBook().currency)}</td>
+        </tr>`).join('')}
+      </tbody></table></div>
+    <div style="margin-top:10px;"><button class="btn gold" onclick='importEmailReceiptDrafts(${JSON.stringify(receipts).replace(/'/g, '&#39;')})'>Import selected drafts</button></div>
+  `;
+}
+
+async function importEmailReceiptDrafts(receipts) {
+  const selected = (receipts || []).filter((_, i) => $(`erd-${i}`)?.checked);
+  if (!selected.length) { showToast('No drafts selected', 'warn'); return; }
+  const s = getState();
+  if (!s.expenses) s.expenses = [];
+  for (const item of selected) {
+    const currency = (item.currency || getBook().currency || 'CAD').toUpperCase();
+    s.expenses.unshift({
+      id: Date.now() + Math.floor(Math.random() * 10000),
+      desc: item.description || item.vendor || 'Email receipt',
+      cat: 'Other',
+      amount: Number(item.amount || 0),
+      currency,
+      date: item.date || today(),
+      ref: item.reference || 'email-import',
+      receipt: '',
+      importedFromEmail: true
+    });
+  }
+  saveState(activeBook);
+  renderExpenses();
+  updateDash();
+  showToast(`✓ Imported ${selected.length} expense draft(s)`);
+  closeEmailReceiptImportModal();
+}
+
 function renderExpenses(){
   const s=getState(),book=getBook(),cur=book.currency;
   const expenses=s.expenses||[];
@@ -5865,7 +5965,8 @@ Object.assign(window, {
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, viewLocalReceipt,
-  saveTaxCenterSettings, scanReceiptWithAI
+  saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
+  openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts
 });
 
 // ── STARTUP ROUTING
