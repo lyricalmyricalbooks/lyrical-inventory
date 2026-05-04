@@ -2844,7 +2844,21 @@ async function importEmailReceiptDrafts() {
   const btn = document.querySelector('#email-receipt-results .btn.gold');
   if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
 
+  // Save attached files to local receipt storage
+  const fileInput = $('email-receipt-files');
+  const attachedFiles = Array.from(fileInput?.files || []);
+  const savedReceiptPaths = [];
+  if (attachedFiles.length) {
+    for (const file of attachedFiles) {
+      try {
+        const path = await saveReceiptToLocalFile(file, 'email-imports');
+        if (path) savedReceiptPaths.push(path);
+      } catch (_) { /* local folder may not be set up */ }
+    }
+  }
+
   let imported = 0, skippedDup = 0;
+  let draftIdx = 0;
   for (const item of drafts) {
     const currency = (item.currency || baseCur).toUpperCase();
     const amount = Number(item.amount || 0);
@@ -2864,6 +2878,8 @@ async function importEmailReceiptDrafts() {
     }
     if (!fxRate) fxRate = 1; // last resort
 
+    // Associate a saved receipt file: use per-draft index if available, else first saved file
+    const receiptPath = savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
     TAX_CENTER.businessExpenses.unshift({
       id: Date.now() + Math.floor(Math.random() * 100000),
       desc: item.description || item.vendor || 'Email receipt',
@@ -2877,12 +2893,13 @@ async function importEmailReceiptDrafts() {
       baseAmount: amount * fxRate,
       date: item.date || today(),
       ref: item.reference || 'email-import',
-      receipt: '',
+      receipt: receiptPath,
       sourceSnippet: item.sourceSnippet || '',
       importedFromEmail: true,
       importedAt: new Date().toISOString()
     });
     imported++;
+    draftIdx++;
   }
 
   await saveTaxCenter();
@@ -5400,6 +5417,13 @@ async function boot(forcedBook) {
 }
 
 // ── TAX CENTER LOGIC
+const TC_LEDGER_PAGE_SIZE = 25;
+let _tcLedgerPage = 0;
+
+function setTcLedgerPage(n) {
+  _tcLedgerPage = n;
+  renderTaxCenter();
+}
 
 function renderTaxCenter() {
   if (isAuthor()) return;
@@ -5587,10 +5611,17 @@ function renderTaxCenter() {
   }
 
   allLedger.sort((a,b) => new Date(b.date) - new Date(a.date));
-  
+
+  // Clamp page to valid range
+  const totalPages = Math.max(1, Math.ceil(allLedger.length / TC_LEDGER_PAGE_SIZE));
+  if (_tcLedgerPage >= totalPages) _tcLedgerPage = totalPages - 1;
+  if (_tcLedgerPage < 0) _tcLedgerPage = 0;
+  const pageStart = _tcLedgerPage * TC_LEDGER_PAGE_SIZE;
+  const pageLedger = allLedger.slice(pageStart, pageStart + TC_LEDGER_PAGE_SIZE);
+
   const ledTbody = $('tc-ledger-body');
   if(ledTbody) {
-      ledTbody.innerHTML = allLedger.map(item => {
+      ledTbody.innerHTML = pageLedger.map(item => {
         // Build receipt/ref cell
         let refCell = '';
         let r = item.receipt || '';
@@ -5628,7 +5659,40 @@ function renderTaxCenter() {
         </tr>`;
       }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">No data for selected period</td></tr>`;
   }
-  
+
+  // Pagination controls
+  const pgWrap = $('tc-ledger-pagination');
+  if (pgWrap) {
+    if (totalPages <= 1) {
+      pgWrap.innerHTML = '';
+    } else {
+      const from = allLedger.length ? pageStart + 1 : 0;
+      const to = Math.min(pageStart + TC_LEDGER_PAGE_SIZE, allLedger.length);
+      const btnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--cream);';
+      const activeBtnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gold3);background:var(--gold3);color:black;font-weight:600;';
+      // Show at most 7 page buttons around current page
+      const maxBtns = 7;
+      let startBtn = Math.max(0, _tcLedgerPage - Math.floor(maxBtns / 2));
+      let endBtn = Math.min(totalPages - 1, startBtn + maxBtns - 1);
+      if (endBtn - startBtn < maxBtns - 1) startBtn = Math.max(0, endBtn - maxBtns + 1);
+      let btns = '';
+      if (startBtn > 0) btns += `<button style="${btnStyle}" onclick="setTcLedgerPage(0)">1</button><span style="color:var(--text3);padding:0 4px;">…</span>`;
+      for (let p = startBtn; p <= endBtn; p++) {
+        btns += `<button style="${p === _tcLedgerPage ? activeBtnStyle : btnStyle}" onclick="setTcLedgerPage(${p})">${p + 1}</button>`;
+      }
+      if (endBtn < totalPages - 1) btns += `<span style="color:var(--text3);padding:0 4px;">…</span><button style="${btnStyle}" onclick="setTcLedgerPage(${totalPages - 1})">${totalPages}</button>`;
+      pgWrap.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
+          <span style="font-size:12px;color:var(--text3);">Showing ${from}–${to} of ${allLedger.length} entries</span>
+          <div style="display:flex;gap:4px;align-items:center;">
+            <button style="${btnStyle}" onclick="setTcLedgerPage(${_tcLedgerPage - 1})" ${_tcLedgerPage === 0 ? 'disabled' : ''}>‹ Prev</button>
+            ${btns}
+            <button style="${btnStyle}" onclick="setTcLedgerPage(${_tcLedgerPage + 1})" ${_tcLedgerPage === totalPages - 1 ? 'disabled' : ''}>Next ›</button>
+          </div>
+        </div>`;
+    }
+  }
+
   const recBody = $('tc-recurring-body');
   if(recBody) {
       recBody.innerHTML = (TAX_CENTER.recurring || []).map((sub, i) => `
@@ -6450,7 +6514,7 @@ Object.assign(window, {
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
-  removeLedgerEntry, setupReceiptFolder, viewLocalReceipt,
+  removeLedgerEntry, setupReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts
 });
