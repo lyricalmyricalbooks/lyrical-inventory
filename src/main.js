@@ -2067,17 +2067,6 @@ function printShippingLabel() {
 
   const labelHTML = `
   <div class="label">
-    <header class="label-head">
-      <div class="brand">
-        <div class="brand-mark">LM</div>
-        <div class="brand-name">Lyricalmyrical Books</div>
-      </div>
-      <div class="meta">
-        <div class="meta-num">${esc(h.num)}</div>
-        <div class="meta-date">${esc(fmtD(h.date))}</div>
-      </div>
-    </header>
-
     <section class="from">
       <div class="kicker">From</div>
       <div class="from-lines">
@@ -2117,23 +2106,6 @@ function printShippingLabel() {
       display: flex; flex-direction: column;
       color: #111;
     }
-    .label-head {
-      display: flex; align-items: center; justify-content: space-between;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #111;
-    }
-    .brand { display: flex; align-items: center; gap: 8px; }
-    .brand-mark {
-      width: 26px; height: 26px;
-      background: #111; color: #fff;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 10pt; letter-spacing: .02em;
-      border-radius: 3px;
-    }
-    .brand-name { font-weight: 600; font-size: 10pt; letter-spacing: .01em; }
-    .meta { text-align: right; font-size: 8pt; color: #555; }
-    .meta-num { font-weight: 700; color: #111; font-size: 9pt; letter-spacing: .04em; }
-    .meta-date { margin-top: 2px; }
 
     .kicker {
       font-size: 6.5pt; font-weight: 700;
@@ -2142,7 +2114,7 @@ function printShippingLabel() {
     }
     .kicker-lg { font-size: 7.5pt; color: #111; margin-bottom: 6px; }
 
-    .from { margin-top: 12px; }
+    .from { margin-top: 0; }
     .from-lines { font-size: 9pt; line-height: 1.45; color: #333; }
 
     .rule {
