@@ -2400,26 +2400,28 @@ function renderEmailReceiptDrafts(receipts) {
 async function importEmailReceiptDrafts(receipts) {
   const selected = (receipts || []).filter((_, i) => $(`erd-${i}`)?.checked);
   if (!selected.length) { showToast('No drafts selected', 'warn'); return; }
-  const s = getState();
-  if (!s.expenses) s.expenses = [];
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
   for (const item of selected) {
-    const currency = (item.currency || getBook().currency || 'CAD').toUpperCase();
-    s.expenses.unshift({
+    const currency = (item.currency || 'CAD').toUpperCase();
+    const amount = Number(item.amount || 0);
+    const fxRate = _fxRateCache[`${currency}_CAD`] || 1;
+    TAX_CENTER.businessExpenses.unshift({
       id: Date.now() + Math.floor(Math.random() * 10000),
       desc: item.description || item.vendor || 'Email receipt',
       cat: 'Other',
-      amount: Number(item.amount || 0),
       currency,
+      amount,
+      fxRate,
+      baseAmount: amount * fxRate,
       date: item.date || today(),
       ref: item.reference || 'email-import',
       receipt: '',
       importedFromEmail: true
     });
   }
-  saveState(activeBook);
-  renderExpenses();
-  updateDash();
-  showToast(`✓ Imported ${selected.length} expense draft(s)`);
+  saveTaxCenter();
+  renderTaxCenter();
+  showToast(`✓ Imported ${selected.length} expense draft(s) into Tax Centre`);
   closeEmailReceiptImportModal();
 }
 
