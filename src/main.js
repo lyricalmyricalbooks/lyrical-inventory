@@ -4214,7 +4214,23 @@ async function saveProductionCosts(){
   const stored={};
   Object.values(BOOKS).forEach(book=>{
     const inp=$('pc-'+book.id);
-    if(inp){ const val=parseFloat(inp.value)||0; book.productionCost=val; stored[book.id]=val; }
+    if(inp){
+      const previousCost = book.productionCost || 0;
+      const val=parseFloat(inp.value)||0;
+      book.productionCost=val;
+      stored[book.id]=val;
+
+      // Keep the first break-even tier aligned when it still represents production-cost recovery.
+      if (Array.isArray(book.profitTiers) && book.profitTiers.length > 0) {
+        const firstTier = book.profitTiers[0];
+        const tierLabel = (firstTier?.label || '').toLowerCase();
+        const shouldSyncThreshold =
+          firstTier?.revenueUpTo !== null &&
+          (Math.abs((firstTier.revenueUpTo || 0) - previousCost) < 0.0001 || tierLabel.includes('break-even'));
+
+        if (shouldSyncThreshold) firstTier.revenueUpTo = val;
+      }
+    }
   });
   // Save to Firebase + localStorage fallback
   try{ await window._fbSaveSettings('productionCosts', stored); }catch(_){}
