@@ -603,6 +603,7 @@ async function loadBook(bookId) {
     if (!states[bookId].expenses) states[bookId].expenses = [];
     // Sync artist payment link to book object so publisher can read it in reimbursements
     if (states[bookId].artistPaymentLink) BOOKS[bookId].artistPaymentLink = states[bookId].artistPaymentLink;
+    recomputeAfters(states[bookId]);
     lastSavedHashes[bookId] = JSON.stringify(states[bookId]);
     // Watch for live updates
     window._fbWatchSubmissions(bookId, data => {
@@ -616,6 +617,7 @@ async function loadBook(bookId) {
       states[bookId] = { ...defaultState(book), ...loaded };
       if (!states[bookId].doneIds) states[bookId].doneIds = [];
       if (!states[bookId].artistTransfers) states[bookId].artistTransfers = [];
+      recomputeAfters(states[bookId]);
       lastSavedHashes[bookId] = json2;
       if (activeBook === bookId || activeBook === 'all') renderCurrent();
       // Suppress the echo-toast that fires right after a local save is written to Firestore
