@@ -2059,31 +2059,112 @@ function printShippingLabel() {
 
   const fromLines = ['Lyricalmyrical Books', '456 Montrose Ave', 'Toronto, ON  M6G 3H1', 'Canada'];
 
-  const toLines = [ship.name, ship.addr1, ship.addr2,
-    [ship.city, ship.province].filter(Boolean).join(ship.province ? ', ' : ''),
-    ship.postal, ship.country].filter(Boolean);
+  const cityLine = [ship.city, ship.province].filter(Boolean).join(', ');
+  const cityPostal = [cityLine, ship.postal].filter(Boolean).join('  ');
+  const toLines = [ship.addr1, ship.addr2, cityPostal, (ship.country||'').toUpperCase()].filter(Boolean);
 
-  const labelHTML = `<div style="font-family:'Courier New',monospace;padding:28px;background:white;color:#000;">
-    <div style="display:flex;gap:20px;margin-bottom:20px;align-items:flex-start;">
-      <div style="flex:1;">
-        <div style="font-size:8px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#666;margin-bottom:5px;">From</div>
-        ${fromLines.map(l=>`<div style="font-size:12px;line-height:1.7;">${l}</div>`).join('')}
+  const esc = (s) => String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+  const labelHTML = `
+  <div class="label">
+    <section class="to">
+      <div class="kicker kicker-lg">Ship To</div>
+      <div class="to-name">${esc(ship.name||'')}</div>
+      <div class="to-lines">
+        ${toLines.map(l=>`<div>${esc(l)}</div>`).join('')}
       </div>
-      <div style="text-align:right;font-size:10px;color:#888;">
-        <div>${book.title}</div>
-        <div>Qty: ${h.qty}</div>
-        <div>${fmtD(h.date)}</div>
+      ${ship.email?`<div class="to-email">${esc(ship.email)}</div>`:''}
+    </section>
+
+    <div class="rule"></div>
+
+    <section class="from">
+      <div class="kicker">From</div>
+      <div class="from-lines">
+        ${fromLines.map(l=>`<div>${esc(l)}</div>`).join('')}
       </div>
-    </div>
-    <div style="border-top:2px solid #000;margin-bottom:18px;"></div>
-    <div style="font-size:8px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#666;margin-bottom:8px;">Ship to</div>
-    ${toLines.map((l,i)=>`<div style="font-size:${i===0?'20px':'15px'};font-weight:${i===0?'700':'400'};line-height:1.6;">${l}</div>`).join('')}
-    ${ship.email?`<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #ccc;font-size:11px;color:#666;">✉ ${ship.email}</div>`:''}
+    </section>
+
+    <footer class="label-foot">
+      <div class="foot-item"><span class="foot-k">Item</span><span class="foot-v">${esc(book.title)}</span></div>
+      <div class="foot-item"><span class="foot-k">Qty</span><span class="foot-v">${esc(h.qty)}</span></div>
+    </footer>
   </div>`;
 
-  const win = window.open('','_blank','width=620,height=500');
-  win.document.write(`<!DOCTYPE html><html><head><title>Label — ${h.num}</title>
-    <style>@page{margin:0;size:4in 6in;}*{box-sizing:border-box;margin:0;padding:0;}body{background:white;}@media print{body{padding:0;}}</style>
+  const styles = `
+    @page { margin: 0; size: 4in 6in; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background: #fff; color: #111; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-size: 11pt;
+    }
+    .label {
+      width: 4in; height: 6in;
+      padding: 0.28in 0.3in;
+      display: flex; flex-direction: column;
+      color: #111;
+    }
+
+    .kicker {
+      font-size: 6.5pt; font-weight: 700;
+      letter-spacing: .18em; text-transform: uppercase;
+      color: #888; margin-bottom: 4px;
+    }
+    .kicker-lg { font-size: 7.5pt; color: #111; margin-bottom: 6px; }
+
+    .to { flex: 1; }
+
+    .rule {
+      height: 0; border-top: 2px solid #111;
+      margin: 14px 0 14px;
+    }
+
+    .from { margin-top: 0; }
+    .from-lines { font-size: 9pt; line-height: 1.45; color: #333; }
+    .to-name {
+      font-size: 18pt; font-weight: 700;
+      letter-spacing: -.005em; line-height: 1.15;
+      margin-bottom: 6px;
+    }
+    .to-lines { font-size: 12pt; line-height: 1.4; color: #111; }
+    .to-lines div:last-child {
+      margin-top: 4px; font-weight: 700; letter-spacing: .04em; font-size: 11pt;
+    }
+    .to-email {
+      margin-top: 10px; padding-top: 8px;
+      border-top: 1px dashed #bbb;
+      font-size: 8.5pt; color: #666;
+    }
+
+    .label-foot {
+      margin-top: 12px; padding-top: 10px;
+      border-top: 1px solid #ddd;
+      display: flex; justify-content: space-between; gap: 16px;
+      font-size: 8pt;
+    }
+    .foot-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .foot-k {
+      font-size: 6.5pt; font-weight: 700;
+      letter-spacing: .18em; text-transform: uppercase; color: #888;
+    }
+    .foot-v {
+      font-size: 9pt; color: #111; font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 2.6in;
+    }
+    .label-foot .foot-item:last-child { text-align: right; }
+
+    @media print {
+      body { padding: 0; }
+      .label { box-shadow: none; }
+    }
+  `;
+
+  const win = window.open('','_blank','width=620,height=720');
+  win.document.write(`<!DOCTYPE html><html><head><title>Label — ${esc(h.num)}</title>
+    <meta charset="utf-8">
+    <style>${styles}</style>
     </head><body>${labelHTML}</body></html>`);
   win.document.close();
   win.focus();
