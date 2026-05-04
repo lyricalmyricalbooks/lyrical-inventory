@@ -4235,6 +4235,8 @@ async function saveProductionCosts(){
   // Save to Firebase + localStorage fallback
   try{ await window._fbSaveSettings('productionCosts', stored); }catch(_){}
   localStorage.setItem('lm-production-costs',JSON.stringify(stored));
+  // Persist synced profitTiers so the threshold survives a page reload
+  try{ await window._fbSaveCatalog(BOOKS); }catch(_){}
   showToast('✓ Break-even targets saved');
   if(activeBook&&activeBook!=='all') updateDash();
   else updateAllOverview();
