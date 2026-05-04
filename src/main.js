@@ -2325,106 +2325,432 @@ async function scanProjectReceiptWithAI() {
     btn.textContent = oldText; btn.disabled = false;
 }
 
+// ── EMAIL RECEIPT IMPORT
+// Module-level draft store so we don't smuggle JSON through onclick attributes.
+let _emailReceiptDrafts = [];
+
+const EXPENSE_CATEGORIES = [
+  'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
+  'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
+  'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
+  'Packaging Materials', 'Office Supplies', 'Travel & Meals', 'Professional Services',
+  'Books, Research & Reference', 'Events & Exhibitions', 'Other'
+];
+
+function inferReceiptCategory(vendor, description) {
+  const hay = `${vendor || ''} ${description || ''}`.toLowerCase();
+  if (typeof TAX_CATEGORIES === 'object' && TAX_CATEGORIES) {
+    for (const kw in TAX_CATEGORIES) {
+      if (hay.includes(kw)) return TAX_CATEGORIES[kw];
+    }
+  }
+  // Extra heuristics for common online vendors
+  const map = [
+    ['stripe', 'Software & Subscriptions'],
+    ['paypal', 'Professional Services'],
+    ['amazon', 'Office Supplies'],
+    ['etsy', 'Marketing & Advertising'],
+    ['canva', 'Software & Subscriptions'],
+    ['notion', 'Software & Subscriptions'],
+    ['github', 'Software & Subscriptions'],
+    ['openai', 'Software & Subscriptions'],
+    ['anthropic', 'Software & Subscriptions'],
+    ['gemini', 'Software & Subscriptions'],
+    ['canada post', 'Shipping & Postage'],
+    ['stallion', 'Shipping & Postage'],
+    ['chit chats', 'Shipping & Postage'],
+    ['ingram', 'Printing & Production'],
+    ['lulu', 'Printing & Production'],
+    ['blurb', 'Printing & Production'],
+    ['vistaprint', 'Printing & Production'],
+    ['costco', 'Office Supplies'],
+    ['staples', 'Office Supplies'],
+    ['uline', 'Packaging Materials'],
+    ['airbnb', 'Travel & Meals']
+  ];
+  for (const [kw, cat] of map) if (hay.includes(kw)) return cat;
+  return 'Other';
+}
+
+// Best-effort date normalization to YYYY-MM-DD
+function normalizeReceiptDate(s) {
+  if (!s) return '';
+  const t = String(s).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const d = new Date(t);
+  if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  return '';
+}
+
+// Decode quoted-printable + strip MIME headers + collapse HTML to text
+function parseEmlOrText(raw) {
+  if (!raw) return '';
+  let body = String(raw);
+  // If it looks like a raw .eml (RFC 5322), drop headers up to first blank line
+  if (/^[A-Za-z-]+:\s.+\r?\n/.test(body) && /\n\r?\n/.test(body)) {
+    const idx = body.search(/\r?\n\r?\n/);
+    if (idx > 0 && idx < body.length / 2) body = body.slice(idx).trim();
+  }
+  // Naive quoted-printable decode for =XX hex pairs and soft line breaks
+  if (/=[0-9A-F]{2}/.test(body)) {
+    try {
+      body = body.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (_, h) =>
+        String.fromCharCode(parseInt(h, 16))
+      );
+    } catch (_) { /* ignore */ }
+  }
+  // Collapse HTML to text if present
+  if (/<\w+[^>]*>/.test(body)) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = body;
+    body = tmp.textContent || tmp.innerText || body;
+  }
+  return body.replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').trim();
+}
+
+async function readReceiptFiles(files) {
+  const out = []; // [{kind:'text'|'inline', text?, mime?, base64?, name}]
+  for (const file of files) {
+    const name = file.name || 'attachment';
+    const isText = /^(text\/|message\/)/.test(file.type) ||
+                   /\.(eml|txt|html?|md)$/i.test(name);
+    if (isText) {
+      const txt = await file.text();
+      out.push({ kind: 'text', text: parseEmlOrText(txt), name });
+    } else {
+      const buf = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const base64 = String(buf).split(',')[1] || '';
+      out.push({
+        kind: 'inline',
+        mime: file.type || 'application/octet-stream',
+        base64,
+        name
+      });
+    }
+  }
+  return out;
+}
+
 function openEmailReceiptImportModal() {
   openM('email-receipt-import-modal');
   if ($('email-receipt-results')) $('email-receipt-results').innerHTML = '';
+  _emailReceiptDrafts = [];
+  const fileInput = $('email-receipt-files');
+  const list = $('email-receipt-files-list');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.onchange = () => {
+      if (!list) return;
+      const fs = Array.from(fileInput.files || []);
+      list.innerHTML = fs.length
+        ? fs.map(f => `• ${f.name} <span style="opacity:.6;">(${Math.round(f.size/1024)} KB)</span>`).join('<br>')
+        : '';
+    };
+  }
 }
 
 function closeEmailReceiptImportModal() {
   closeM('email-receipt-import-modal');
 }
 
+async function _callGeminiForReceipts(apiKey, parts) {
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastErr;
+  for (const model of models) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { response_mime_type: 'application/json', temperature: 0.1 }
+          })
+        }
+      );
+      if (!res.ok) {
+        lastErr = new Error(`HTTP ${res.status} from ${model}`);
+        // Try next model on 404/400 (model unsupported), retry-once on 429/5xx
+        if (res.status === 429 || res.status >= 500) {
+          await new Promise(r => setTimeout(r, 800));
+          const retry = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts }],
+                generationConfig: { response_mime_type: 'application/json', temperature: 0.1 }
+              })
+            }
+          );
+          if (retry.ok) return retry.json();
+        }
+        continue;
+      }
+      return await res.json();
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('All Gemini models failed');
+}
+
 async function extractReceiptsFromEmailText() {
-  const source = ($('email-receipt-source')?.value || '').trim();
-  if (!source) { showToast('Paste receipt emails first', 'warn'); return; }
   const apiKey = TAX_CENTER.settings?.geminiKey;
   if (!apiKey) { showToast('Gemini API Key required in Config', 'err'); return; }
+
+  const pasted = ($('email-receipt-source')?.value || '').trim();
+  const fileInput = $('email-receipt-files');
+  const files = Array.from(fileInput?.files || []);
+  if (!pasted && !files.length) { showToast('Paste emails or attach files first', 'warn'); return; }
+
   const btn = $('email-receipt-scan-btn');
   const prev = btn.textContent;
   btn.disabled = true;
-  btn.textContent = 'Extracting...';
+  btn.textContent = 'Extracting…';
+
+  const wrap = $('email-receipt-results');
+  if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Reading attachments and querying Gemini…</div>`;
+
   try {
-    const prompt = `You are extracting expense receipts from pasted email text.
-Return ONLY valid JSON matching this schema:
-{"receipts":[{"vendor":"string","date":"YYYY-MM-DD","amount":12.34,"currency":"CAD","description":"short text","reference":"order/invoice ref if any"}]}
+    const fileParts = await readReceiptFiles(files);
+    const allowedCats = EXPENSE_CATEGORIES.join(' | ');
+    const prompt = `You extract purchase receipts/invoices from emails for bookkeeping.
+Return ONLY valid JSON: {"receipts":[{"vendor":"string","date":"YYYY-MM-DD","amount":number,"currency":"ISO 4217 uppercase","description":"short human label","reference":"order/invoice number if any","category":"one of: ${allowedCats}","sourceSnippet":"<= 240 chars of the original line(s) that justify this row","confidence":0.0}]}
 Rules:
-- Include only actual purchase receipts/invoices.
-- Skip shipping notifications and non-receipts.
-- Use ISO currency uppercase.
-- If date/currency/amount missing, omit that receipt.
-- No markdown.`;
-    const payload = {
-      contents: [{ parts: [{ text: prompt }, { text: source.slice(0, 70000) }] }],
-      generationConfig: { response_mime_type: 'application/json' }
-    };
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error('AI extraction failed');
-    const data = await res.json();
+1. Include EVERY distinct purchase, payment, invoice, charge, or receipt — including subscriptions, ad spend, shipping labels, software, postage, services, and book printing. One row per receipt.
+2. Skip pure shipping-tracking updates, marketing emails, password resets, statements/balances with no charge, payment requests, refunds (note refunds as negative amount).
+3. Currency is the ISO 4217 code (e.g. USD, CAD, EUR, GBP, JPY). Default to CAD only if truly unknown.
+4. Amount is the TOTAL paid including tax/shipping (number, no symbol). Use a dot decimal.
+5. Date is when the charge was made (YYYY-MM-DD). If only month/day given, infer year from email context. If unsure, use today.
+6. Pick the BEST category from the list above. Use "Other" only if nothing fits.
+7. confidence is 0.0–1.0 reflecting how sure you are this is a real receipt.
+8. If an attachment is a PDF/image of a receipt, extract from it directly.
+9. Do not invent data. If amount/currency/date cannot be determined, omit the row entirely.
+10. Output JSON only — no markdown, no commentary.`;
+
+    const parts = [{ text: prompt }];
+    const cleanedText = parseEmlOrText(pasted);
+    if (cleanedText) parts.push({ text: '--- PASTED EMAIL TEXT ---\n' + cleanedText.slice(0, 120000) });
+    for (const fp of fileParts) {
+      if (fp.kind === 'text' && fp.text) {
+        parts.push({ text: `--- FILE: ${fp.name} ---\n` + fp.text.slice(0, 60000) });
+      } else if (fp.kind === 'inline' && fp.base64) {
+        parts.push({ inline_data: { mime_type: fp.mime, data: fp.base64 } });
+      }
+    }
+
+    const data = await _callGeminiForReceipts(apiKey, parts);
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    const parsed = JSON.parse(text);
-    renderEmailReceiptDrafts(parsed.receipts || []);
+    let parsed;
+    try { parsed = JSON.parse(text); }
+    catch (_) {
+      // Try to recover JSON from a possibly-fenced response
+      const m = text.match(/\{[\s\S]*\}/);
+      parsed = m ? JSON.parse(m[0]) : { receipts: [] };
+    }
+
+    const drafts = (parsed.receipts || []).map(r => ({
+      vendor: String(r.vendor || '').trim(),
+      description: String(r.description || r.vendor || 'Receipt').trim(),
+      date: normalizeReceiptDate(r.date) || today(),
+      amount: Number(r.amount || 0),
+      currency: String(r.currency || 'CAD').toUpperCase().slice(0, 3),
+      reference: String(r.reference || '').trim(),
+      category: EXPENSE_CATEGORIES.includes(r.category)
+        ? r.category
+        : inferReceiptCategory(r.vendor, r.description),
+      sourceSnippet: String(r.sourceSnippet || '').slice(0, 240),
+      confidence: Number(r.confidence || 0.7),
+      include: true
+    })).filter(r => r.amount && r.currency);
+
+    _emailReceiptDrafts = drafts;
+    renderEmailReceiptDrafts(drafts);
+    if (!drafts.length) {
+      showToast('No receipts detected — try pasting more context or attaching the original email file.', 'warn');
+    } else {
+      showToast(`✓ Found ${drafts.length} receipt${drafts.length > 1 ? 's' : ''}`);
+    }
   } catch (e) {
-    console.error(e);
-    showToast('Could not extract receipts from email text', 'err');
+    console.error('[email-receipt-import]', e);
+    const wrap2 = $('email-receipt-results');
+    if (wrap2) {
+      wrap2.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Extraction failed: ${(e.message || e).toString().replace(/</g,'&lt;')}<br><span style="color:var(--text3);">Verify your Gemini API key in Config and try again.</span></div>`;
+    }
+    showToast('Could not extract receipts', 'err');
   } finally {
     btn.disabled = false;
     btn.textContent = prev;
   }
 }
 
+function _isLikelyDuplicateExpense(draft) {
+  const list = TAX_CENTER.businessExpenses || [];
+  const a = Number(draft.amount).toFixed(2);
+  return list.some(e =>
+    e.date === draft.date &&
+    Number(e.amount).toFixed(2) === a &&
+    (e.currency || 'CAD').toUpperCase() === draft.currency.toUpperCase()
+  );
+}
+
 function renderEmailReceiptDrafts(receipts) {
   const wrap = $('email-receipt-results');
   if (!wrap) return;
   if (!Array.isArray(receipts) || !receipts.length) {
-    wrap.innerHTML = '<div class="empty-state">No valid receipts found.</div>';
+    wrap.innerHTML = '<div class="empty-state" style="padding:14px;font-size:12px;color:var(--text3);">No valid receipts found.</div>';
     return;
   }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const catOptions = (sel) => EXPENSE_CATEGORIES
+    .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const curOptions = (sel) => ['CAD','USD','EUR','GBP','AUD','JPY','MXN','CHF','SEK','NOK','DKK']
+    .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
+
+  const dupCount = receipts.filter(r => _isLikelyDuplicateExpense(r)).length;
+
   wrap.innerHTML = `
-    <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">Review drafts and import selected:</div>
-    <div class="tbl-wrap"><table class="tbl"><thead><tr><th></th><th>Date</th><th>Description</th><th>Ref</th><th class="r">Amount</th></tr></thead>
-      <tbody>
-        ${receipts.map((r, i) => `<tr>
-          <td><input type="checkbox" id="erd-${i}" checked></td>
-          <td>${r.date || '—'}</td>
-          <td>${(r.description || r.vendor || 'Receipt').replace(/</g,'&lt;')}</td>
-          <td>${(r.reference || '—').replace(/</g,'&lt;')}</td>
-          <td class="r">${fmt(Number(r.amount || 0), r.currency || getBook().currency)}</td>
-        </tr>`).join('')}
-      </tbody></table></div>
-    <div style="margin-top:10px;"><button class="btn gold" onclick='importEmailReceiptDrafts(${JSON.stringify(receipts).replace(/'/g, '&#39;')})'>Import selected drafts</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:12px;color:var(--text3);">${receipts.length} draft${receipts.length>1?'s':''} extracted${dupCount?` · <span style="color:var(--amber);">${dupCount} possible duplicate${dupCount>1?'s':''}</span>`:''}. Edit any field, deselect rows you don't want.</div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn sm" type="button" onclick="toggleAllEmailDrafts(true)">Select all</button>
+        <button class="btn sm" type="button" onclick="toggleAllEmailDrafts(false)">Select none</button>
+      </div>
+    </div>
+    <div class="tbl-wrap" style="max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:var(--r2);">
+      <table class="tbl" style="font-size:12px;">
+        <thead><tr>
+          <th></th><th>Date</th><th>Vendor / Description</th><th>Category</th><th>Ref</th>
+          <th class="r" style="min-width:130px;">Amount</th><th></th>
+        </tr></thead>
+        <tbody>
+        ${receipts.map((r, i) => {
+          const dup = _isLikelyDuplicateExpense(r);
+          const lowConf = (r.confidence ?? 1) < 0.5;
+          return `<tr data-erd-row="${i}" style="${dup?'background:rgba(220,170,40,.06);':''}">
+            <td><input type="checkbox" data-erd-include="${i}" ${r.include!==false?'checked':''}></td>
+            <td><input type="date" data-erd-field="date" data-erd-i="${i}" value="${esc(r.date)}" style="font-size:12px;width:130px;"></td>
+            <td>
+              <input type="text" data-erd-field="vendor" data-erd-i="${i}" value="${esc(r.vendor)}" placeholder="Vendor" style="font-size:12px;width:100%;margin-bottom:2px;">
+              <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:11px;width:100%;color:var(--text2);">
+              ${dup?`<div style="font-size:10px;color:var(--amber);margin-top:2px;">⚠ matches an existing expense</div>`:''}
+              ${lowConf?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">low confidence (${(r.confidence*100|0)}%)</div>`:''}
+            </td>
+            <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:12px;">${catOptions(r.category)}</select></td>
+            <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:12px;width:120px;"></td>
+            <td class="r">
+              <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
+                <select data-erd-field="currency" data-erd-i="${i}" style="font-size:12px;width:64px;">${curOptions(r.currency)}</select>
+                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:12px;width:90px;text-align:right;">
+              </div>
+            </td>
+            <td>${r.sourceSnippet?`<button class="btn sm" type="button" title="View source snippet" onclick="alert(${JSON.stringify(r.sourceSnippet)})">👁</button>`:''}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:flex-end;">
+      <span style="font-size:11px;color:var(--text3);">FX rates auto-fetched at import</span>
+      <button class="btn gold" type="button" onclick="importEmailReceiptDrafts()">Import selected drafts</button>
+    </div>
   `;
+
+  // Wire up edits → in-memory store
+  wrap.querySelectorAll('[data-erd-field]').forEach(el => {
+    el.addEventListener('change', () => {
+      const i = Number(el.getAttribute('data-erd-i'));
+      const f = el.getAttribute('data-erd-field');
+      if (!_emailReceiptDrafts[i]) return;
+      let v = el.value;
+      if (f === 'amount') v = Number(v) || 0;
+      if (f === 'currency') v = String(v).toUpperCase();
+      if (f === 'date') v = normalizeReceiptDate(v) || v;
+      _emailReceiptDrafts[i][f] = v;
+    });
+  });
+  wrap.querySelectorAll('[data-erd-include]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const i = Number(cb.getAttribute('data-erd-include'));
+      if (_emailReceiptDrafts[i]) _emailReceiptDrafts[i].include = !!cb.checked;
+    });
+  });
 }
 
-async function importEmailReceiptDrafts(receipts) {
-  const selected = (receipts || []).filter((_, i) => $(`erd-${i}`)?.checked);
-  if (!selected.length) { showToast('No drafts selected', 'warn'); return; }
+function toggleAllEmailDrafts(on) {
+  _emailReceiptDrafts.forEach(d => { d.include = !!on; });
+  document.querySelectorAll('[data-erd-include]').forEach(cb => { cb.checked = !!on; });
+}
+
+async function importEmailReceiptDrafts() {
+  const drafts = (_emailReceiptDrafts || []).filter(r => r.include !== false);
+  if (!drafts.length) { showToast('No drafts selected', 'warn'); return; }
+
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-  for (const item of selected) {
-    const currency = (item.currency || 'CAD').toUpperCase();
+  const fallbackCat = $('email-receipt-default-cat')?.value || 'Other';
+  const baseCur = TAX_CENTER.settings?.baseCurrency || 'CAD';
+
+  const btn = document.querySelector('#email-receipt-results .btn.gold');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+
+  let imported = 0, skippedDup = 0;
+  for (const item of drafts) {
+    const currency = (item.currency || baseCur).toUpperCase();
     const amount = Number(item.amount || 0);
-    const fxRate = _fxRateCache[`${currency}_CAD`] || 1;
+    if (!amount) continue;
+
+    if (_isLikelyDuplicateExpense(item)) {
+      skippedDup++;
+      continue;
+    }
+
+    let fxRate = currency === baseCur ? 1 : (_fxRateCache[`${currency}_${baseCur}`] || 0);
+    if (!fxRate) {
+      try {
+        const r = await fetchLiveRate(currency, baseCur);
+        fxRate = r?.rate || 0;
+      } catch (_) { /* fall through */ }
+    }
+    if (!fxRate) fxRate = 1; // last resort
+
     TAX_CENTER.businessExpenses.unshift({
-      id: Date.now() + Math.floor(Math.random() * 10000),
+      id: Date.now() + Math.floor(Math.random() * 100000),
       desc: item.description || item.vendor || 'Email receipt',
-      cat: 'Other',
+      vendor: item.vendor || '',
+      cat: EXPENSE_CATEGORIES.includes(item.category) ? item.category : fallbackCat,
       currency,
       amount,
+      origCurrency: currency,
+      origAmount: amount,
       fxRate,
       baseAmount: amount * fxRate,
       date: item.date || today(),
       ref: item.reference || 'email-import',
       receipt: '',
-      importedFromEmail: true
+      sourceSnippet: item.sourceSnippet || '',
+      importedFromEmail: true,
+      importedAt: new Date().toISOString()
     });
+    imported++;
   }
-  saveTaxCenter();
-  renderTaxCenter();
-  showToast(`✓ Imported ${selected.length} expense draft(s) into Tax Centre`);
-  closeEmailReceiptImportModal();
+
+  await saveTaxCenter();
+  if (typeof renderTaxCenter === 'function') renderTaxCenter();
+
+  const msgParts = [];
+  if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
+  if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
+  showToast(msgParts.join(' · ') || 'Nothing imported', imported ? 'ok' : 'warn');
+
+  if (imported) closeEmailReceiptImportModal();
+  else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
 }
 
 function renderExpenses(){
@@ -5970,7 +6296,7 @@ Object.assign(window, {
   submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, viewLocalReceipt,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
-  openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts
+  openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts
 });
 
 // ── STARTUP ROUTING
