@@ -1145,15 +1145,76 @@ function updateAllOverview() {
     </div>`;
   }).join('');
 
-  // Combined channel table
+  // Combined channel table + analytics
   const rows = [];
+  const channelTotals = {}; // chan -> currency -> {txns,units,revenue, books:Set}
   Object.values(BOOKS).forEach(book => {
     const s = states[book.id] || defaultState(book);
-    Object.entries(s.chStats||{}).forEach(([chan,cs]) => {
-      rows.push(`<tr><td style="font-weight:600;">${book.title}</td><td>${chan}</td><td class="r">${cs.txns}</td><td class="r">${cs.units}</td><td class="r">${fmt(cs.revenue,book.currency)}</td></tr>`);
+    const entries = Object.entries(s.chStats||{});
+    if (!entries.length) return;
+    const bookRev = entries.reduce((a,[,cs])=>a+(cs.revenue||0),0);
+    let bestChan = null, bestRev = -1;
+    entries.forEach(([chan,cs]) => { if ((cs.revenue||0) > bestRev) { bestRev = cs.revenue||0; bestChan = chan; } });
+    entries.forEach(([chan,cs]) => {
+      const txns = cs.txns||0, units = cs.units||0, rev = cs.revenue||0;
+      const avgTxn = txns ? rev/txns : 0;
+      const revUnit = units ? rev/units : 0;
+      const sharePct = bookRev > 0 ? (rev/bookRev*100) : 0;
+      const isBest = chan === bestChan && rev > 0 && entries.length > 1;
+      const shareStr = bookRev > 0 ? sharePct.toFixed(0)+'%' : '—';
+      const bestTag = isBest ? ' <span class="pill gold" style="font-size:9px;padding:1px 6px;margin-left:4px;vertical-align:middle;">TOP</span>' : '';
+      rows.push(`<tr><td style="font-weight:600;">${book.title}${bestTag}</td><td>${chan}</td><td class="r">${txns}</td><td class="r">${units}</td><td class="r">${fmt(rev,book.currency)}</td><td class="r">${txns?fmt(avgTxn,book.currency):'—'}</td><td class="r">${units?fmt(revUnit,book.currency):'—'}</td><td class="r">${shareStr}</td></tr>`);
+
+      const t = channelTotals[chan] = channelTotals[chan] || {};
+      const c = t[book.currency] = t[book.currency] || {txns:0,units:0,revenue:0,books:new Set()};
+      c.txns += txns; c.units += units; c.revenue += rev; c.books.add(book.title);
     });
   });
-  $('all-ch-body').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="5"><div class="empty-state" style="padding:1rem;">No sales yet.</div></td></tr>';
+  $('all-ch-body').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="8"><div class="empty-state" style="padding:1rem;">No sales yet.</div></td></tr>';
+
+  // Channel performance summary (grouped by currency to avoid mixing)
+  const insights = $('all-ch-insights');
+  if (insights) {
+    const chanNames = Object.keys(channelTotals);
+    if (!chanNames.length) {
+      insights.innerHTML = '';
+    } else {
+      // Build per-currency leaderboards
+      const byCur = {}; // currency -> [{chan, txns, units, revenue, books}]
+      chanNames.forEach(chan => {
+        Object.entries(channelTotals[chan]).forEach(([cur, c]) => {
+          (byCur[cur] = byCur[cur] || []).push({chan, ...c});
+        });
+      });
+      const blocks = Object.entries(byCur).map(([cur, list]) => {
+        list.sort((a,b)=>b.revenue-a.revenue);
+        const totalRev = list.reduce((a,x)=>a+x.revenue,0);
+        const totalUnits = list.reduce((a,x)=>a+x.units,0);
+        const totalTxns = list.reduce((a,x)=>a+x.txns,0);
+        const top = list[0];
+        const topShare = totalRev>0 ? (top.revenue/totalRev*100) : 0;
+        const cards = list.map(x => {
+          const share = totalRev>0 ? (x.revenue/totalRev*100) : 0;
+          const avgTxn = x.txns ? x.revenue/x.txns : 0;
+          const revUnit = x.units ? x.revenue/x.units : 0;
+          return `<div style="background:white;border:1px solid var(--border);border-radius:var(--r1);padding:10px 12px;min-width:180px;flex:1;">
+            <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">${x.chan}</div>
+            <div style="font-weight:700;font-size:15px;color:var(--text2);">${fmt(x.revenue,cur)} <span style="font-size:11px;color:var(--text3);font-weight:500;">(${share.toFixed(0)}%)</span></div>
+            <div class="bar-track" style="background:rgba(0,0,0,.06);margin:6px 0;height:4px;"><div class="bar-fill" style="width:${share}%;background:var(--gold2);height:4px;"></div></div>
+            <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${x.txns} txn · ${x.units} u · ${x.txns?fmt(avgTxn,cur):'—'}/txn · ${x.units?fmt(revUnit,cur):'—'}/u</div>
+          </div>`;
+        }).join('');
+        return `<div style="margin-bottom:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+            <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);font-weight:600;">Channel performance · ${cur}</div>
+            <div style="font-size:11px;color:var(--text3);">Total ${fmt(totalRev,cur)} · ${totalTxns} txn · ${totalUnits} u${top?` · Top: <strong style="color:var(--text2);">${top.chan}</strong> (${topShare.toFixed(0)}%)`:''}</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">${cards}</div>
+        </div>`;
+      }).join('');
+      insights.innerHTML = blocks;
+    }
+  }
 
   // Combined consignment table
   const conRows = [];
