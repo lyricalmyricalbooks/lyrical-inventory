@@ -3504,6 +3504,16 @@ function saveEntryEdit() {
 }
 
 
+function recomputeAfters(s) {
+  // Walk history newest→oldest and recompute each entry's `after` value
+  // so the Stock After column stays accurate after voids/unvoids.
+  let running = s.stock;
+  for (const h of s.hist) {
+    h.after = running;
+    if (!h.voided) running += h.qty;
+  }
+}
+
 function syncHistoryVoidDeletion(h, isVoided) {
   if (!h || !sheetsUrl) return;
   const base = {
@@ -3548,6 +3558,7 @@ function voidEntry() {
         if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
       }
       h.voided = true;
+      recomputeAfters(s);
       syncHistoryVoidDeletion(h, true);
       showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
     } else {
@@ -3560,6 +3571,7 @@ function voidEntry() {
       s.chStats[h.chan].units += h.qty;
       s.chStats[h.chan].revenue += h.qty * h.price;
       h.voided = false;
+      recomputeAfters(s);
       syncHistoryVoidDeletion(h, false);
       showToast('Entry unvoided — effects restored (Sheets row restore queued)');
     }
