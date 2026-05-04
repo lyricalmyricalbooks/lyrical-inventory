@@ -4587,7 +4587,7 @@ function calculateArtistEarnings(bookId) {
   let totalArtistEarned = 0;
   let cumulativeRevenue = 0;
 
-  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
+  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && !h.artistPending && h.qty > 0 && h.price > 0);
 
   sortedHist.forEach(h => {
     let revRemaining = h.qty * h.price;
@@ -4711,7 +4711,7 @@ function filterArtistEarningsByYear(bookId, year) {
   let cumulativeRevenue = 0;
 
   // Walk history chronologically so cumulative revenue tracks correctly across all time
-  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
+  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && !h.artistPending && h.qty > 0 && h.price > 0);
 
   sortedHist.forEach(h => {
     const inYear = new Date(h.date) >= start && new Date(h.date) <= end;
