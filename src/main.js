@@ -1444,9 +1444,11 @@ function renderProfitSharingBreakdown(bookId) {
 
   let progressHtml = '';
   if (nextTier && nextTier.revenueUpTo !== null) {
-    const revenueLeft = nextTier.revenueUpTo - stats.cumulativeRevenue;
-    const pct = Math.min(100, (stats.cumulativeRevenue / nextTier.revenueUpTo) * 100);
-    const label = nextTier.label.toLowerCase().includes('break') ? 'to break-even' : `until ${nextTier.label}`;
+    const isBreakEvenTier = nextTier.label.toLowerCase().includes('break');
+    const target = isBreakEvenTier && book.productionCost > 0 ? book.productionCost : nextTier.revenueUpTo;
+    const revenueLeft = Math.max(0, target - stats.cumulativeRevenue);
+    const pct = Math.min(100, (stats.cumulativeRevenue / target) * 100);
+    const label = isBreakEvenTier ? 'to break-even' : `until ${nextTier.label}`;
     progressHtml = `
       <div style="margin-top:1rem; padding:12px; background:var(--ink); border-radius:var(--r2); border:1px solid rgba(255,255,255,.05);">
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
@@ -1456,7 +1458,7 @@ function renderProfitSharingBreakdown(bookId) {
         <div class="bar-track" style="height:5px; margin-bottom:0;">
           <div class="bar-fill" style="width:${pct}%; background:var(--gold2); height:5px; border-radius:100px;"></div>
         </div>
-        <div style="font-size:10px;color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} collected of ${fmt(nextTier.revenueUpTo, cur)} threshold</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} collected of ${fmt(target, cur)} threshold</div>
       </div>
     `;
   } else {
@@ -4587,7 +4589,7 @@ function calculateArtistEarnings(bookId) {
   let totalArtistEarned = 0;
   let cumulativeRevenue = 0;
 
-  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
+  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && !h.artistPending && h.qty > 0 && h.price > 0);
 
   sortedHist.forEach(h => {
     let revRemaining = h.qty * h.price;
@@ -4711,7 +4713,7 @@ function filterArtistEarningsByYear(bookId, year) {
   let cumulativeRevenue = 0;
 
   // Walk history chronologically so cumulative revenue tracks correctly across all time
-  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
+  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && !h.artistPending && h.qty > 0 && h.price > 0);
 
   sortedHist.forEach(h => {
     const inYear = new Date(h.date) >= start && new Date(h.date) <= end;
