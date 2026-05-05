@@ -114,13 +114,18 @@ function doPost(e) {
     }
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const action = (payload.action || 'add').toLowerCase();
+    const action = (
+      payload.action ||
+      (payload.payload && payload.payload.action) ||
+      'add'
+    ).toString().toLowerCase();
 
     // ── Void / delete: remove rows matching sheetsId (preferred) or eventId ──
     if (action === 'void' || action === 'delete') {
       const deleteId = (payload.payload && payload.payload.sheetsId) || eventId;
       if (!deleteId) return jsonOut_({ error: 'sheetsId or eventId required for void' });
       const removed = removeByEventId_(ss, deleteId);
+      refreshOverviewSummary_(ss);
       return jsonOut_({ ok: true, removed });
     }
 
@@ -143,6 +148,7 @@ function doPost(e) {
     if (sheetName !== 'Overview') {
       processSheetEntry_(ss, 'Overview', data);
     }
+    refreshOverviewSummary_(ss);
     return jsonOut_({ ok: true, replaced });
   } catch (err) {
     return jsonOut_({ error: String(err) });
@@ -355,6 +361,69 @@ function removeByEventId_(ss, eventId) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Overview summary block — currency totals + CAD grand total
+// Lives in a separate sheet ("__Summary") so it doesn't clutter rows.
+// ─────────────────────────────────────────────────────────────
+function refreshOverviewSummary_(ss) {
+  const overview = ss.getSheetByName('Overview');
+  if (!overview) return;
+  let summary = ss.getSheetByName('__Summary');
+  if (!summary) {
+    summary = ss.insertSheet('__Summary');
+  } else {
+    summary.clear();
+    summary.clearConditionalFormatRules();
+  }
+
+  const ovName = "'Overview'!";
+  const ccyCol = columnLetter_(COL.Currency);
+  const totCol = columnLetter_(COL['Total/Amount']);
+  const cadCol = columnLetter_(COL['CAD Equivalent']);
+  const statCol = columnLetter_(COL.Status);
+
+  // Header
+  summary.getRange(1, 1, 1, 4).setValues([['Currency', 'Entries', 'Total (native)', 'Total (CAD)']]);
+  summary.getRange(1, 1, 1, 4)
+    .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
+    .setBackground('#0f172a').setFontColor('#ffffff')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  summary.setRowHeight(1, 36);
+  summary.setFrozenRows(1);
+
+  summary.setColumnWidth(1, 110);
+  summary.setColumnWidth(2, 90);
+  summary.setColumnWidth(3, 150);
+  summary.setColumnWidth(4, 160);
+
+  // One row per currency, generated as formulas so the sheet auto-updates
+  // when you edit data in Overview directly.
+  const ccyList = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY'];
+  const rows = ccyList.map(c => [
+    c,
+    `=COUNTIFS(${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"<>VOID")`,
+    `=SUMIFS(${ovName}${totCol}:${totCol},${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"<>VOID")`,
+    `=SUMIFS(${ovName}${cadCol}:${cadCol},${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"<>VOID")`
+  ]);
+  summary.getRange(2, 1, rows.length, 4).setValues(rows);
+
+  // Grand total in CAD
+  const totalRow = rows.length + 2;
+  summary.getRange(totalRow, 1).setValue('TOTAL (CAD)').setFontWeight('bold');
+  summary.getRange(totalRow, 4).setFormula(`=SUM(D2:D${rows.length + 1})`).setFontWeight('bold');
+
+  // Formatting
+  summary.getRange(2, 1, rows.length, 1).setHorizontalAlignment('center').setFontWeight('bold');
+  summary.getRange(2, 2, rows.length, 1).setHorizontalAlignment('center');
+  summary.getRange(2, 3, rows.length, 1).setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  summary.getRange(2, 4, rows.length + 1, 1)
+    .setNumberFormat('"CA$"#,##0.00').setHorizontalAlignment('right')
+    .setFontColor('#064e3b').setBackground('#ecfdf5').setFontWeight('bold');
+  summary.getRange(1, 1, totalRow, 4)
+    .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+  summary.getRange(totalRow, 1, 1, 4).setBackground('#fef3c7');
+}
+
+// ─────────────────────────────────────────────────────────────
 // FX: cache 6h, fall back to last known or 1.0
 // ─────────────────────────────────────────────────────────────
 function convertToCAD_(amount, fromCcy) {
@@ -371,7 +440,8 @@ function getFxRate_(from, to) {
   if (hit) return parseFloat(hit);
 
   try {
-    const url = `https://api.exchangerate.host/latest?base=${encodeURIComponent(from)}&symbols=${encodeURIComponent(to)}`;
+    // open.er-api.com — free, no API key required
+    const url = `https://open.er-api.com/v6/latest/${encodeURIComponent(from)}`;
     const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
     if (resp.getResponseCode() === 200) {
       const j = JSON.parse(resp.getContentText());
