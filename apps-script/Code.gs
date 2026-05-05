@@ -163,7 +163,20 @@ function processSheetEntry_(ss, sheetName, data) {
 
   const currency = (data.currency || data.paymentCurrency || '').toUpperCase();
   const total = numOrBlank_(data.amountDue ?? data.total);
-  const cad = (currency && total !== '') ? convertToCAD_(total, currency) : '';
+
+  // Prefer the CAD value captured at the time of sale (frozen rate) over a
+  // live re-conversion. This keeps historical revenue from drifting as
+  // rates change. Fall back to live FX only if nothing was captured.
+  let cad = '';
+  if (currency === 'CAD' && total !== '') {
+    cad = total;
+  } else if (data.convertedTotal !== undefined && data.convertedTotal !== '' && data.convertedTotal !== null) {
+    cad = numOrBlank_(data.convertedTotal);
+  } else if (data.paymentRate && total !== '') {
+    cad = Math.round(total * parseFloat(data.paymentRate) * 100) / 100;
+  } else if (currency && total !== '') {
+    cad = convertToCAD_(total, currency);
+  }
 
   const row = new Array(HEADERS.length).fill('');
   row[COL._eventId - 1]        = data._eventId || '';

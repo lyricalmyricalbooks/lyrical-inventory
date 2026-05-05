@@ -1753,7 +1753,9 @@ function applyOne(id) {
     shipCity: o.shipCity || '', shipProvince: o.shipProvince || '',
     shipPostal: o.shipPostal || '', shipCountry: o.shipCountry || 'Canada'
   };
-  entry.sheetsId = makeEventId();
+  // Deterministic id derived from the Big Cartel order number so the same
+  // import on a different device produces the same id (no duplicate rows).
+  entry.sheetsId = 'bc-' + String(o.orderNum).replace(/^#/, '').replace(/[^A-Za-z0-9-]/g, '');
   targetState.hist.unshift(entry);
   if (!targetState.doneIds) targetState.doneIds = [];
   targetState.doneIds.push(id);
@@ -1763,7 +1765,7 @@ function applyOne(id) {
   if (!mem.appliedNums.includes(o.orderNum)) mem.appliedNums.push(o.orderNum);
   mem.lastScan = new Date().toISOString();
   saveScanMemory(mem);
-  syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel', sheetsId: entry.sheetsId });
+  syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel', sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBk) });
   addLog('log-web', `✓ ${o.orderNum} (${targetBk.title}): -${o.qty} → ${targetState.stock} remaining`, 'ok');
   if (targetState.stock <= targetBk.threshold) addLog('log-web', `⚠ ${targetBk.title} below threshold!`, 'warn');
   saveState(targetBook);
@@ -3455,7 +3457,7 @@ function submitGratuity(){
   const sheetsId = makeEventId();
   s.hist.unshift({num,chan:'Gratuity',qty,price:0,after:s.stock,notes:(ref?(ref+(notes?' · '+notes:'')):notes)||'',date,gratuity:true,sheetsId});
   renderHist();updateDash();saveState(activeBook);
-  syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes,sheetsId});
+  syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes,sheetsId,currency:getBookCurrencyCode(book)});
   addLog('log-gratuity',`${num}: ${qty} gifted → ${s.stock} remaining`,'ok');
   if(s.stock<=book.threshold)addLog('log-gratuity','⚠ Below threshold!','warn');
   $('g-ref').value='';$('g-qty').value='1';$('g-notes').value='';$('g-date').value=today();
@@ -3485,7 +3487,7 @@ function confirmSend(){
   const sheetsId = makeEventId();
   s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Shipment',date,qty,rate,amountDue:0,paid:'n/a',notes,status:'sent',sheetsId});
   closeM('send-books');renderStores();renderLedger();updateDash();saveState(activeBook);
-  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Shipment',qty,rate,amountDue:0,notes,status:'sent',sheetsId});
+  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Shipment',qty,rate,amountDue:0,notes,status:'sent',sheetsId,currency:getBookCurrencyCode(book)});
   showToast(`✓ ${qty} books sent to ${st.name}`);
 }
 function openSale(id){activeId=id;const book=getBook();$('sale-sym').textContent=book.currency;$('sale-price').value=book.listPrice.toFixed(2);$('sale-sname').textContent=storeById(id).name;openM('record-sale');}
@@ -3498,11 +3500,14 @@ function confirmSale(){
   if(!s.chStats['Consignment'])s.chStats['Consignment']={txns:0,units:0,revenue:0};
   s.chStats['Consignment'].txns++;s.chStats['Consignment'].units+=qty;s.chStats['Consignment'].revenue+=pub;
   const num='CON-'+st.name.replace(/\s+/g,'').slice(0,5).toUpperCase()+'-'+Date.now().toString().slice(-4);
+  // Share one sheetsId between the hist mirror and the ledger entry so they
+  // map to the SAME row in Sheets — editing or voiding either updates the
+  // single underlying row instead of producing duplicates.
   const sheetsId = makeEventId();
-  s.hist.unshift({num,chan:'Consignment',qty,price:pub/qty,after:s.stock,notes:st.name,date,sheetsId});
+  s.hist.unshift({num,chan:'Consignment',qty,price:pub/qty,after:s.stock,notes:st.name,date,sheetsId,consignmentLink:true});
   s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Sale',date,qty,rate:st.rate,amountDue:pub,paid,notes,status:paid,sheetsId});
   closeM('record-sale');renderStores();renderLedger();renderHist();updateDash();saveState(activeBook);
-  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Sale',qty,rate:st.rate,amountDue:pub,notes,status:paid,sheetsId});
+  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Sale',qty,rate:st.rate,amountDue:pub,notes,status:paid,sheetsId,currency:getBookCurrencyCode(book)});
   showToast(`✓ Sale recorded — ${fmt(pub,cur)} due to you`);
 }
 function openRet(id){activeId=id;$('ret-sname').textContent=storeById(id).name;openM('return');}
@@ -3513,7 +3518,7 @@ function confirmReturn(){
   const sheetsId = makeEventId();
   s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Return',date,qty,rate:st.rate,amountDue:0,paid:'n/a',notes:(notes?notes+' · ':'')+cond,status:good?'restocked':'written off',sheetsId});
   closeM('return');renderStores();renderLedger();updateDash();saveState(activeBook);
-  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Return',qty,rate:st.rate,amountDue:0,notes:cond,status:good?'restocked':'written off',sheetsId});
+  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Return',qty,rate:st.rate,amountDue:0,notes:cond,status:good?'restocked':'written off',sheetsId,currency:getBookCurrencyCode(book)});
   showToast(good?`✓ ${qty} books returned to stock`:`✓ ${qty} books written off`);
 }
 function markPaid(lid){
@@ -3634,8 +3639,10 @@ function saveEntryEdit() {
     h.date = newDate; h.notes = newNotes;
     h.edited = true;
 
-    // Sync edit to sheets — upsert replaces the old row via sheetsId
-    if (sheetsUrl) {
+    // Sync edit to sheets — upsert replaces the old row via sheetsId.
+    // Skip for consignment-mirrored hist entries: the matching ledger row is
+    // the canonical record and would just overwrite this write.
+    if (sheetsUrl && !h.consignmentLink) {
       syncToSheets({
         type: 'order', book: book.title,
         date: h.date, num: h.num, chan: h.chan,
@@ -3688,7 +3695,8 @@ function saveEntryEdit() {
         date: e.date, store: e.storeName, event: e.type,
         qty: e.qty, rate: e.rate, amountDue: e.amountDue || 0,
         notes: e.notes || '', status: e.voided ? 'VOID' : (e.status || ''),
-        sheetsId: e.sheetsId
+        sheetsId: e.sheetsId,
+        currency: getBookCurrencyCode(book)
       });
     }
   }
@@ -3713,7 +3721,8 @@ function syncLedgerVoid(e, isVoided) {
       date: e.date, store: e.storeName, event: e.type,
       qty: e.qty, rate: e.rate, amountDue: e.amountDue || 0,
       notes: e.notes || '', status: e.status || 'OK',
-      sheetsId: e.sheetsId
+      sheetsId: e.sheetsId,
+      currency: getBookCurrencyCode(getBook())
     });
   }
 }
@@ -3731,6 +3740,8 @@ function recomputeAfters(s) {
 
 function syncHistoryVoidDeletion(h, isVoided) {
   if (!h || !sheetsUrl) return;
+  // Consignment-mirrored hist entries are handled via the ledger row.
+  if (h.consignmentLink) return;
   if (isVoided) {
     // Hard delete: send void action with the stable sheetsId so the backend
     // can find and remove the exact row regardless of when it was written.
