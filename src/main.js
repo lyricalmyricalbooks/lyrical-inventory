@@ -1587,10 +1587,12 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   s.sold += qty; s.revenue += qty * price;
   if (!s.chStats[chan]) s.chStats[chan]={txns:0,units:0,revenue:0};
   s.chStats[chan].txns++; s.chStats[chan].units+=qty; s.chStats[chan].revenue+=qty*price;
-  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment,enteredBy});
+  const sheetsId = makeEventId();
+  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment,enteredBy,sheetsId});
   renderHist(); updateDash(); saveState(activeBook);
   syncToSheets({
     type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:notes||'',
+    sheetsId,
     currency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentCurrency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentAmount: payment?.amount ?? qty*price,
@@ -3622,8 +3624,21 @@ function saveEntryEdit() {
     // Update the record
     h.num = newNum; h.chan = newChan; h.qty = newQty; h.price = newPrice;
     h.date = newDate; h.notes = newNotes;
-    // Recalculate "after" for this entry; for simplicity mark it as edited
     h.edited = true;
+
+    // Sync edit to sheets — upsert replaces the old row via sheetsId
+    if (sheetsUrl) {
+      syncToSheets({
+        type: 'order', book: book.title,
+        date: h.date, num: h.num, chan: h.chan,
+        qty: h.qty, price: h.price, total: h.qty * h.price,
+        stockAfter: h.after, notes: h.notes,
+        sheetsId: h.sheetsId || '',
+        currency: h.payment?.currency || getBookCurrencyCode(book),
+        enteredBy: h.enteredBy || '',
+        status: h.voided ? 'VOID' : 'OK'
+      });
+    }
 
   } else {
     // Ledger entry edit (date, qty, rate, notes — non-destructive for stock, 
@@ -3677,7 +3692,19 @@ function recomputeAfters(s) {
 
 function syncHistoryVoidDeletion(h, isVoided) {
   if (!h || !sheetsUrl) return;
-  const base = {
+  if (isVoided) {
+    // Hard delete: send void action with the stable sheetsId so the backend
+    // can find and remove the exact row regardless of when it was written.
+    syncToSheets({
+      action: 'delete',
+      type: 'order',
+      book: getBook().title,
+      sheetsId: h.sheetsId || ''
+    });
+    return;
+  }
+  // Unvoid: re-sync the full entry (upsert will replace the row)
+  syncToSheets({
     type: 'order',
     book: getBook().title,
     date: h.date,
@@ -3688,15 +3715,10 @@ function syncHistoryVoidDeletion(h, isVoided) {
     total: h.qty * h.price,
     stockAfter: h.after,
     notes: h.notes || '',
+    sheetsId: h.sheetsId || '',
     currency: h.payment?.currency || getBook().currency,
     enteredBy: h.enteredBy || '',
-    source: 'history-void-toggle'
-  };
-  syncToSheets({
-    ...base,
-    action: isVoided ? 'delete' : 'upsert',
-    status: isVoided ? 'VOID_DELETE' : 'OK',
-    notes: isVoided ? `[VOID DELETE] ${base.notes}`.trim() : base.notes
+    status: 'OK'
   });
 }
 
@@ -3991,8 +4013,11 @@ function syncToSheets(payload){
   const summary=payload.type==='order'
     ?`${payload.num} · ${payload.chan} · ${payload.qty}×`
     :`${payload.store} · ${payload.event} · ${payload.qty}×`;
+  // Use the record's own sheetsId as the queue id so the backend can match
+  // and replace the row; fall back to a fresh id for first-time writes.
+  const queueId = payload.sheetsId || makeEventId();
   _sheetsQueue.push({
-    id:makeEventId(),
+    id: queueId,
     payload,
     summary,
     book:payload.book,

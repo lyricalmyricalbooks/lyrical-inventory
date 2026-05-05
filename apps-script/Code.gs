@@ -116,21 +116,24 @@ function doPost(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const action = (payload.action || 'add').toLowerCase();
 
-    // ── Void / delete: remove rows matching eventId from all tabs ──
+    // ── Void / delete: remove rows matching sheetsId (preferred) or eventId ──
     if (action === 'void' || action === 'delete') {
-      if (!eventId) return jsonOut_({ error: 'eventId required for void' });
-      const removed = removeByEventId_(ss, eventId);
+      const deleteId = (payload.payload && payload.payload.sheetsId) || eventId;
+      if (!deleteId) return jsonOut_({ error: 'sheetsId or eventId required for void' });
+      const removed = removeByEventId_(ss, deleteId);
       return jsonOut_({ ok: true, removed });
     }
 
     // ── Add / Edit (upsert) ──
-    // If this eventId already exists in any tab, remove it first so an edit
-    // replaces the prior row instead of creating a duplicate.
+    // The client sends a stable sheetsId on the payload (set when the record
+    // was first created). We prefer that over the queue-level eventId so that
+    // edits and voids can match the original row.
     const data = payload.payload || {};
-    data._eventId = eventId || '';
+    const stableId = data.sheetsId || eventId || '';
+    data._eventId = stableId;
 
     let replaced = 0;
-    if (eventId) replaced = removeByEventId_(ss, eventId);
+    if (stableId) replaced = removeByEventId_(ss, stableId);
 
     const rawName = data.book ? String(data.book).trim() : 'Overview';
     let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
