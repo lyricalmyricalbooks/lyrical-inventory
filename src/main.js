@@ -1587,10 +1587,12 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   s.sold += qty; s.revenue += qty * price;
   if (!s.chStats[chan]) s.chStats[chan]={txns:0,units:0,revenue:0};
   s.chStats[chan].txns++; s.chStats[chan].units+=qty; s.chStats[chan].revenue+=qty*price;
-  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment,enteredBy});
+  const sheetsId = makeEventId();
+  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment,enteredBy,sheetsId});
   renderHist(); updateDash(); saveState(activeBook);
   syncToSheets({
     type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:notes||'',
+    sheetsId,
     currency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentCurrency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentAmount: payment?.amount ?? qty*price,
@@ -1751,6 +1753,9 @@ function applyOne(id) {
     shipCity: o.shipCity || '', shipProvince: o.shipProvince || '',
     shipPostal: o.shipPostal || '', shipCountry: o.shipCountry || 'Canada'
   };
+  // Deterministic id derived from the Big Cartel order number so the same
+  // import on a different device produces the same id (no duplicate rows).
+  entry.sheetsId = 'bc-' + String(o.orderNum).replace(/^#/, '').replace(/[^A-Za-z0-9-]/g, '');
   targetState.hist.unshift(entry);
   if (!targetState.doneIds) targetState.doneIds = [];
   targetState.doneIds.push(id);
@@ -1760,7 +1765,7 @@ function applyOne(id) {
   if (!mem.appliedNums.includes(o.orderNum)) mem.appliedNums.push(o.orderNum);
   mem.lastScan = new Date().toISOString();
   saveScanMemory(mem);
-  syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel' });
+  syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel', sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBk) });
   addLog('log-web', `✓ ${o.orderNum} (${targetBk.title}): -${o.qty} → ${targetState.stock} remaining`, 'ok');
   if (targetState.stock <= targetBk.threshold) addLog('log-web', `⚠ ${targetBk.title} below threshold!`, 'warn');
   saveState(targetBook);
@@ -3275,12 +3280,14 @@ function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
   if(!s.chStats[chan])s.chStats[chan]={txns:0,units:0,revenue:0};
   s.chStats[chan].txns++;s.chStats[chan].units+=qty;
   // Add to history with pending flag
-  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),artistPending:true,payment});
-  // Add to artistTransfers queue
-  s.artistTransfers.push({id:Date.now(),num,chan,qty,price,total:qty*price,notes:notes||'',date:today(),payment});
+  const sheetsId = makeEventId();
+  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),artistPending:true,payment,sheetsId});
+  // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
+  s.artistTransfers.push({id:Date.now(),num,chan,qty,price,total:qty*price,notes:notes||'',date:today(),payment,sheetsId});
   renderHist();updateDash();saveState(activeBook);
   syncToSheets({
     type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:(notes||'')+' [PENDING ARTIST TRANSFER]',
+    sheetsId,
     currency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentCurrency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentAmount: payment?.amount ?? qty*price,
@@ -3305,6 +3312,7 @@ function markArtistTransferReceived(transferId){
   renderHist();updateDash();renderArtistTransfers();saveState(activeBook);
   syncToSheets({
     type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST TRANSFER RECEIVED]',
+    sheetsId: t.sheetsId || (h && h.sheetsId) || '',
     paymentCurrency: normalizeCurrencyCode(t.payment?.currency || getBookCurrencyCode(book), 'CAD'),
     paymentAmount: t.payment?.amount ?? t.total,
     paymentRate: t.payment?.rate ?? '',
@@ -3446,9 +3454,10 @@ function submitGratuity(){
   s.stock=Math.max(0,s.stock-qty);
   if(!s.chStats['Gratuity'])s.chStats['Gratuity']={txns:0,units:0,revenue:0};
   s.chStats['Gratuity'].txns++;s.chStats['Gratuity'].units+=qty;
-  s.hist.unshift({num,chan:'Gratuity',qty,price:0,after:s.stock,notes:(ref?(ref+(notes?' · '+notes:'')):notes)||'',date,gratuity:true});
+  const sheetsId = makeEventId();
+  s.hist.unshift({num,chan:'Gratuity',qty,price:0,after:s.stock,notes:(ref?(ref+(notes?' · '+notes:'')):notes)||'',date,gratuity:true,sheetsId});
   renderHist();updateDash();saveState(activeBook);
-  syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes});
+  syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes,sheetsId,currency:getBookCurrencyCode(book)});
   addLog('log-gratuity',`${num}: ${qty} gifted → ${s.stock} remaining`,'ok');
   if(s.stock<=book.threshold)addLog('log-gratuity','⚠ Below threshold!','warn');
   $('g-ref').value='';$('g-qty').value='1';$('g-notes').value='';$('g-date').value=today();
@@ -3475,9 +3484,10 @@ function confirmSend(){
   const s=getState(),book=getBook(),st=storeById(activeId),qty=parseInt($('send-qty').value)||0,date=$('send-date').value,rate=parseFloat($('send-rate').value)||st.rate,notes=$('send-notes').value.trim();
   if(qty>s.stock){alert('Not enough stock on hand!');return;}
   s.stock-=qty;st.sent+=qty;st.outstanding+=qty;
-  s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Shipment',date,qty,rate,amountDue:0,paid:'n/a',notes,status:'sent'});
+  const sheetsId = makeEventId();
+  s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Shipment',date,qty,rate,amountDue:0,paid:'n/a',notes,status:'sent',sheetsId});
   closeM('send-books');renderStores();renderLedger();updateDash();saveState(activeBook);
-  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Shipment',qty,rate,amountDue:0,notes,status:'sent'});
+  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Shipment',qty,rate,amountDue:0,notes,status:'sent',sheetsId,currency:getBookCurrencyCode(book)});
   showToast(`✓ ${qty} books sent to ${st.name}`);
 }
 function openSale(id){activeId=id;const book=getBook();$('sale-sym').textContent=book.currency;$('sale-price').value=book.listPrice.toFixed(2);$('sale-sname').textContent=storeById(id).name;openM('record-sale');}
@@ -3490,10 +3500,14 @@ function confirmSale(){
   if(!s.chStats['Consignment'])s.chStats['Consignment']={txns:0,units:0,revenue:0};
   s.chStats['Consignment'].txns++;s.chStats['Consignment'].units+=qty;s.chStats['Consignment'].revenue+=pub;
   const num='CON-'+st.name.replace(/\s+/g,'').slice(0,5).toUpperCase()+'-'+Date.now().toString().slice(-4);
-  s.hist.unshift({num,chan:'Consignment',qty,price:pub/qty,after:s.stock,notes:st.name,date});
-  s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Sale',date,qty,rate:st.rate,amountDue:pub,paid,notes,status:paid});
+  // Share one sheetsId between the hist mirror and the ledger entry so they
+  // map to the SAME row in Sheets — editing or voiding either updates the
+  // single underlying row instead of producing duplicates.
+  const sheetsId = makeEventId();
+  s.hist.unshift({num,chan:'Consignment',qty,price:pub/qty,after:s.stock,notes:st.name,date,sheetsId,consignmentLink:true});
+  s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Sale',date,qty,rate:st.rate,amountDue:pub,paid,notes,status:paid,sheetsId});
   closeM('record-sale');renderStores();renderLedger();renderHist();updateDash();saveState(activeBook);
-  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Sale',qty,rate:st.rate,amountDue:pub,notes,status:paid});
+  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Sale',qty,rate:st.rate,amountDue:pub,notes,status:paid,sheetsId,currency:getBookCurrencyCode(book)});
   showToast(`✓ Sale recorded — ${fmt(pub,cur)} due to you`);
 }
 function openRet(id){activeId=id;$('ret-sname').textContent=storeById(id).name;openM('return');}
@@ -3501,9 +3515,10 @@ function confirmReturn(){
   const s=getState(),book=getBook(),st=storeById(activeId),qty=parseInt($('ret-qty').value)||0,date=$('ret-date').value,cond=$('ret-cond').value,notes=$('ret-notes').value.trim();
   if(qty>st.outstanding){alert('Qty exceeds outstanding.');return;}
   st.returned+=qty;st.outstanding-=qty;const good=cond.startsWith('Good');if(good)s.stock+=qty;
-  s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Return',date,qty,rate:st.rate,amountDue:0,paid:'n/a',notes:(notes?notes+' · ':'')+cond,status:good?'restocked':'written off'});
+  const sheetsId = makeEventId();
+  s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Return',date,qty,rate:st.rate,amountDue:0,paid:'n/a',notes:(notes?notes+' · ':'')+cond,status:good?'restocked':'written off',sheetsId});
   closeM('return');renderStores();renderLedger();updateDash();saveState(activeBook);
-  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Return',qty,rate:st.rate,amountDue:0,notes:cond,status:good?'restocked':'written off'});
+  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Return',qty,rate:st.rate,amountDue:0,notes:cond,status:good?'restocked':'written off',sheetsId,currency:getBookCurrencyCode(book)});
   showToast(good?`✓ ${qty} books returned to stock`:`✓ ${qty} books written off`);
 }
 function markPaid(lid){
@@ -3622,8 +3637,23 @@ function saveEntryEdit() {
     // Update the record
     h.num = newNum; h.chan = newChan; h.qty = newQty; h.price = newPrice;
     h.date = newDate; h.notes = newNotes;
-    // Recalculate "after" for this entry; for simplicity mark it as edited
     h.edited = true;
+
+    // Sync edit to sheets — upsert replaces the old row via sheetsId.
+    // Skip for consignment-mirrored hist entries: the matching ledger row is
+    // the canonical record and would just overwrite this write.
+    if (sheetsUrl && !h.consignmentLink) {
+      syncToSheets({
+        type: 'order', book: book.title,
+        date: h.date, num: h.num, chan: h.chan,
+        qty: h.qty, price: h.price, total: h.qty * h.price,
+        stockAfter: h.after, notes: h.notes,
+        sheetsId: h.sheetsId || '',
+        currency: h.payment?.currency || getBookCurrencyCode(book),
+        enteredBy: h.enteredBy || '',
+        status: h.voided ? 'VOID' : 'OK'
+      });
+    }
 
   } else {
     // Ledger entry edit (date, qty, rate, notes — non-destructive for stock, 
@@ -3657,11 +3687,44 @@ function saveEntryEdit() {
     e.qty = newQty;
     e.rate = newRate;
     e.edited = true;
+
+    // Sync ledger edit to sheets — upsert replaces the old row via sheetsId
+    if (sheetsUrl && e.sheetsId) {
+      syncToSheets({
+        type: 'consignment', book: book.title,
+        date: e.date, store: e.storeName, event: e.type,
+        qty: e.qty, rate: e.rate, amountDue: e.amountDue || 0,
+        notes: e.notes || '', status: e.voided ? 'VOID' : (e.status || ''),
+        sheetsId: e.sheetsId,
+        currency: getBookCurrencyCode(book)
+      });
+    }
   }
 
   closeM('edit-entry');
   renderAll(); updateDash(); saveState(activeBook);
   showToast('✓ Entry updated');
+}
+
+function syncLedgerVoid(e, isVoided) {
+  if (!e || !sheetsUrl || !e.sheetsId) return;
+  if (isVoided) {
+    syncToSheets({
+      action: 'delete',
+      type: 'consignment',
+      book: getBook().title,
+      sheetsId: e.sheetsId
+    });
+  } else {
+    syncToSheets({
+      type: 'consignment', book: getBook().title,
+      date: e.date, store: e.storeName, event: e.type,
+      qty: e.qty, rate: e.rate, amountDue: e.amountDue || 0,
+      notes: e.notes || '', status: e.status || 'OK',
+      sheetsId: e.sheetsId,
+      currency: getBookCurrencyCode(getBook())
+    });
+  }
 }
 
 
@@ -3677,7 +3740,21 @@ function recomputeAfters(s) {
 
 function syncHistoryVoidDeletion(h, isVoided) {
   if (!h || !sheetsUrl) return;
-  const base = {
+  // Consignment-mirrored hist entries are handled via the ledger row.
+  if (h.consignmentLink) return;
+  if (isVoided) {
+    // Hard delete: send void action with the stable sheetsId so the backend
+    // can find and remove the exact row regardless of when it was written.
+    syncToSheets({
+      action: 'delete',
+      type: 'order',
+      book: getBook().title,
+      sheetsId: h.sheetsId || ''
+    });
+    return;
+  }
+  // Unvoid: re-sync the full entry (upsert will replace the row)
+  syncToSheets({
     type: 'order',
     book: getBook().title,
     date: h.date,
@@ -3688,15 +3765,10 @@ function syncHistoryVoidDeletion(h, isVoided) {
     total: h.qty * h.price,
     stockAfter: h.after,
     notes: h.notes || '',
+    sheetsId: h.sheetsId || '',
     currency: h.payment?.currency || getBook().currency,
     enteredBy: h.enteredBy || '',
-    source: 'history-void-toggle'
-  };
-  syncToSheets({
-    ...base,
-    action: isVoided ? 'delete' : 'upsert',
-    status: isVoided ? 'VOID_DELETE' : 'OK',
-    notes: isVoided ? `[VOID DELETE] ${base.notes}`.trim() : base.notes
+    status: 'OK'
   });
 }
 
@@ -3746,14 +3818,16 @@ function voidEntry() {
       if (e.type === 'Sale' && st) { st.sold = Math.max(0,st.sold-e.qty); st.outstanding += e.qty; s.sold = Math.max(0,s.sold-e.qty); s.revenue = Math.max(0,s.revenue-e.amountDue); if(e.paid==='pending')st.amountOwed = Math.max(0,st.amountOwed-e.amountDue); if(s.chStats['Consignment']){s.chStats['Consignment'].txns=Math.max(0,s.chStats['Consignment'].txns-1);s.chStats['Consignment'].units=Math.max(0,s.chStats['Consignment'].units-e.qty);s.chStats['Consignment'].revenue=Math.max(0,s.chStats['Consignment'].revenue-e.amountDue);} }
       if (e.type === 'Return' && st) { st.returned = Math.max(0,st.returned-e.qty); st.outstanding += e.qty; if(e.status==='restocked') s.stock = Math.max(0,s.stock-e.qty); }
       e.voided = true;
-      showToast('Consignment entry voided — effects reversed', 'warn');
+      syncLedgerVoid(e, true);
+      showToast('Consignment entry voided — effects reversed (Sheets row delete queued)', 'warn');
     } else {
       // UNVOID consignment entry
       if (e.type === 'Shipment' && st) { st.sent += e.qty; st.outstanding += e.qty; s.stock = Math.max(0,s.stock-e.qty); }
       if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0,st.outstanding-e.qty); s.sold += e.qty; s.revenue += e.amountDue; if(e.paid==='pending')st.amountOwed += e.amountDue; if(!s.chStats['Consignment'])s.chStats['Consignment']={txns:0,units:0,revenue:0}; s.chStats['Consignment'].txns++;s.chStats['Consignment'].units+=e.qty;s.chStats['Consignment'].revenue+=e.amountDue; }
       if (e.type === 'Return' && st) { st.returned += e.qty; st.outstanding = Math.max(0,st.outstanding-e.qty); if(e.status==='restocked')s.stock += e.qty; }
       e.voided = false;
-      showToast('Consignment entry unvoided — effects restored');
+      syncLedgerVoid(e, false);
+      showToast('Consignment entry unvoided — effects restored (Sheets row restore queued)');
     }
   }
 
@@ -3916,6 +3990,47 @@ let sheetsLog=JSON.parse(localStorage.getItem(SHEETS_LOG_KEY)||'[]');
 function persistSheetsQueue(){ localStorage.setItem(SHEETS_QUEUE_KEY, JSON.stringify(_sheetsQueue)); }
 function persistSheetsLog(){ localStorage.setItem(SHEETS_LOG_KEY, JSON.stringify(sheetsLog)); }
 function makeEventId(){ return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,9)}`; }
+
+// Stamp a stable sheetsId on every existing record that lacks one so future
+// edits/voids can be matched against the corresponding sheet row.
+// Operates on the in-memory `states` object and persists each touched book.
+async function backfillSheetsIds() {
+  let hist = 0, ledger = 0, transfers = 0;
+  const touched = new Set();
+  for (const bookId of Object.keys(states || {})) {
+    const s = states[bookId];
+    if (!s) continue;
+    let dirty = false;
+    if (Array.isArray(s.hist)) {
+      for (const h of s.hist) if (!h.sheetsId) { h.sheetsId = makeEventId(); hist++; dirty = true; }
+    }
+    if (Array.isArray(s.ledger)) {
+      for (const e of s.ledger) if (!e.sheetsId) { e.sheetsId = makeEventId(); ledger++; dirty = true; }
+    }
+    if (Array.isArray(s.artistTransfers)) {
+      for (const t of s.artistTransfers) if (!t.sheetsId) { t.sheetsId = makeEventId(); transfers++; dirty = true; }
+    }
+    if (dirty) touched.add(bookId);
+  }
+  for (const bookId of touched) await saveState(bookId);
+  return { hist, ledger, transfers, books: touched.size };
+}
+window.backfillSheetsIds = backfillSheetsIds;
+
+async function backfillAndResync() {
+  if (!sheetsUrl) { showToast('Connect Google Sheets first', 'warn'); return; }
+  if (!confirm(
+    'This will:\n' +
+    '1. Stamp a stable ID on every record missing one\n' +
+    '2. Re-send every record to Sheets so existing rows get the new ID\n' +
+    '   (the backend will replace duplicates rather than create them)\n\n' +
+    'Continue?'
+  )) return;
+  const counts = await backfillSheetsIds();
+  showToast(`Stamped IDs on ${counts.hist + counts.ledger + counts.transfers} record(s) across ${counts.books} book(s)`);
+  if (typeof pushAllToSheets === 'function') pushAllToSheets();
+}
+window.backfillAndResync = backfillAndResync;
 function retryDelayMs(attempt){ return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0,attempt-1))); }
 
 async function postToSheets(body){
@@ -3932,9 +4047,9 @@ async function postToSheets(body){
     });
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json().catch(()=>null);
-    if (data && data.ok) return 'ok';
+    if (data && data.ok) return data;
     if (data && data.error) throw new Error(data.error);
-    return 'ok';
+    return { ok: true };
   }catch(e){
     // Fallback to no-cors for strict environments.
     await fetch(sheetsUrl, {
@@ -3954,13 +4069,22 @@ async function _processQueue(){
   _sheetsWriting=true;
   const item=_sheetsQueue[0];
   try{
-    await postToSheets({
+    const resp = await postToSheets({
       version:2,
       eventId:item.id,
+      action:item.payload && item.payload.action,
       sentAt:new Date().toISOString(),
       payload:item.payload
     });
-    addSheetsLog(item.book,item.type,item.summary,'ok');
+    const replaced = resp && typeof resp.replaced === 'number' ? resp.replaced : 0;
+    const removed  = resp && typeof resp.removed  === 'number' ? resp.removed  : 0;
+    let suffix = '';
+    if (item.payload && (item.payload.action === 'delete' || item.payload.action === 'void')) {
+      suffix = removed ? ` · removed ${removed}` : ' · row not found';
+    } else if (replaced > 0) {
+      suffix = ` · replaced ${replaced}`;
+    }
+    addSheetsLog(item.book,item.type,item.summary+suffix,'ok');
     _sheetsQueue.shift();
     persistSheetsQueue();
     updateBulkProgress();
@@ -3991,8 +4115,11 @@ function syncToSheets(payload){
   const summary=payload.type==='order'
     ?`${payload.num} · ${payload.chan} · ${payload.qty}×`
     :`${payload.store} · ${payload.event} · ${payload.qty}×`;
+  // Use the record's own sheetsId as the queue id so the backend can match
+  // and replace the row; fall back to a fresh id for first-time writes.
+  const queueId = payload.sheetsId || makeEventId();
   _sheetsQueue.push({
-    id:makeEventId(),
+    id: queueId,
     payload,
     summary,
     book:payload.book,
@@ -6506,7 +6633,7 @@ Object.assign(window, {
   submitGratuity, openM, closeM, addStore, openSend, confirmSend, openSale, confirmSale,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
-  pushAllToSheets, copyGasCode, saveProductionCosts, savePaymentLinks,
+  pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel,
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
