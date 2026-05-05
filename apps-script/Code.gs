@@ -123,9 +123,14 @@ function doPost(e) {
       return jsonOut_({ ok: true, removed });
     }
 
-    // ── Add ──
+    // ── Add / Edit (upsert) ──
+    // If this eventId already exists in any tab, remove it first so an edit
+    // replaces the prior row instead of creating a duplicate.
     const data = payload.payload || {};
     data._eventId = eventId || '';
+
+    let replaced = 0;
+    if (eventId) replaced = removeByEventId_(ss, eventId);
 
     const rawName = data.book ? String(data.book).trim() : 'Overview';
     let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
@@ -135,7 +140,7 @@ function doPost(e) {
     if (sheetName !== 'Overview') {
       processSheetEntry_(ss, 'Overview', data);
     }
-    return jsonOut_({ ok: true });
+    return jsonOut_({ ok: true, replaced });
   } catch (err) {
     return jsonOut_({ error: String(err) });
   }
