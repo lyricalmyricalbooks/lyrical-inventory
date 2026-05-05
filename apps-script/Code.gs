@@ -172,15 +172,13 @@ function processSheetEntry_(ss, sheetName, data) {
 function ensureSheet_(ss, name) {
   let sheet = ss.getSheetByName(name);
   if (sheet) {
-    // Migrate older sheets missing the new columns
     const firstRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
     const looksOld = !firstRow || firstRow[0] !== '_eventId';
     if (looksOld) {
-      // Insert a fresh header row at top; keep existing data below as-is
       sheet.insertRowBefore(1);
       sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-      formatSheet_(sheet);
     }
+    formatSheet_(sheet);
     return sheet;
   }
   sheet = ss.insertSheet(name);
@@ -190,61 +188,143 @@ function ensureSheet_(ss, name) {
 }
 
 function formatSheet_(sheet) {
-  const headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
+  const lastCol = HEADERS.length;
+  const maxRow  = Math.max(sheet.getMaxRows(), 1000);
+
+  // ── HEADER ──────────────────────────────────────────────
+  sheet.setRowHeight(1, 38);
+  const headerRange = sheet.getRange(1, 1, 1, lastCol);
   headerRange
     .setFontWeight('bold')
-    .setBackground('#1f2937')
+    .setFontSize(11)
+    .setFontFamily('Inter')
     .setFontColor('#ffffff')
-    .setHorizontalAlignment('left');
+    .setBackground('#0f172a')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle')
+    .setBorder(true, true, true, true, true, true, '#0f172a', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   sheet.setFrozenRows(1);
-
-  // Hide internal ID column
   sheet.hideColumns(COL._eventId);
 
-  // Column widths
-  sheet.setColumnWidth(COL.Date, 100);
-  sheet.setColumnWidth(COL.Book, 220);
-  sheet.setColumnWidth(COL.Type, 80);
-  sheet.setColumnWidth(COL['Event/Num'], 120);
-  sheet.setColumnWidth(COL['Store/Chan'], 120);
-  sheet.setColumnWidth(COL.Qty, 60);
-  sheet.setColumnWidth(COL.Currency, 80);
-  sheet.setColumnWidth(COL['Price/Rate'], 100);
-  sheet.setColumnWidth(COL['Total/Amount'], 110);
-  sheet.setColumnWidth(COL['CAD Equivalent'], 120);
-  sheet.setColumnWidth(COL.Status, 80);
-  sheet.setColumnWidth(COL.Notes, 300);
+  // ── COLUMN WIDTHS ───────────────────────────────────────
+  sheet.setColumnWidth(COL.Date, 105);
+  sheet.setColumnWidth(COL.Book, 240);
+  sheet.setColumnWidth(COL.Type, 95);
+  sheet.setColumnWidth(COL['Event/Num'], 130);
+  sheet.setColumnWidth(COL['Store/Chan'], 130);
+  sheet.setColumnWidth(COL.Qty, 65);
+  sheet.setColumnWidth(COL.Currency, 90);
+  sheet.setColumnWidth(COL['Price/Rate'], 110);
+  sheet.setColumnWidth(COL['Total/Amount'], 120);
+  sheet.setColumnWidth(COL['CAD Equivalent'], 135);
+  sheet.setColumnWidth(COL.Status, 95);
+  sheet.setColumnWidth(COL.Notes, 320);
 
-  // Number formats on money columns (whole sheet downward)
-  const lastRow = Math.max(sheet.getMaxRows(), 1000);
-  sheet.getRange(2, COL['Price/Rate'], lastRow - 1, 1).setNumberFormat('#,##0.00');
-  sheet.getRange(2, COL['Total/Amount'], lastRow - 1, 1).setNumberFormat('#,##0.00');
-  sheet.getRange(2, COL['CAD Equivalent'], lastRow - 1, 1).setNumberFormat('"CA$"#,##0.00');
-  sheet.getRange(2, COL.Qty, lastRow - 1, 1).setNumberFormat('0');
+  // ── BODY DEFAULTS ───────────────────────────────────────
+  const body = sheet.getRange(2, 1, maxRow - 1, lastCol);
+  body
+    .setFontFamily('Inter')
+    .setFontSize(10)
+    .setVerticalAlignment('middle');
+  sheet.setRowHeights(2, maxRow - 1, 26);
 
-  // Alternating row banding
+  // Per-column number formats + alignment
+  sheet.getRange(2, COL.Date, maxRow - 1, 1).setNumberFormat('yyyy-mm-dd').setHorizontalAlignment('center');
+  sheet.getRange(2, COL.Type, maxRow - 1, 1).setHorizontalAlignment('center').setFontWeight('bold');
+  sheet.getRange(2, COL['Event/Num'], maxRow - 1, 1).setHorizontalAlignment('center').setFontFamily('Roboto Mono');
+  sheet.getRange(2, COL.Qty, maxRow - 1, 1).setNumberFormat('0').setHorizontalAlignment('center');
+  sheet.getRange(2, COL.Currency, maxRow - 1, 1).setHorizontalAlignment('center').setFontWeight('bold');
+  sheet.getRange(2, COL['Price/Rate'], maxRow - 1, 1).setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange(2, COL['Total/Amount'], maxRow - 1, 1).setNumberFormat('#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange(2, COL['CAD Equivalent'], maxRow - 1, 1)
+    .setNumberFormat('"CA$"#,##0.00')
+    .setHorizontalAlignment('right')
+    .setFontWeight('bold')
+    .setFontColor('#064e3b')
+    .setBackground('#ecfdf5');
+  sheet.getRange(2, COL.Status, maxRow - 1, 1).setHorizontalAlignment('center').setFontWeight('bold');
+
+  // ── BANDING ─────────────────────────────────────────────
   try {
-    const bandRange = sheet.getRange(1, 2, lastRow, HEADERS.length - 1); // skip hidden col
-    const bandings = bandRange.getBandings();
-    bandings.forEach(b => b.remove());
-    bandRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY)
-      .setHeaderRowColor('#1f2937')
+    const bandRange = sheet.getRange(1, 2, maxRow, lastCol - 1);
+    bandRange.getBandings().forEach(b => b.remove());
+    bandRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false)
+      .setHeaderRowColor('#0f172a')
       .setFirstRowColor('#ffffff')
-      .setSecondRowColor('#f6f8fa');
+      .setSecondRowColor('#f1f5f9');
   } catch (_) {}
 
-  // Conditional format: red text for VOID/CANCELLED status
-  const rules = sheet.getConditionalFormatRules();
-  const statusRange = sheet.getRange(2, COL.Status, lastRow - 1, 1);
-  rules.push(
-    SpreadsheetApp.newConditionalFormatRule()
-      .whenTextContains('VOID')
-      .setFontColor('#b91c1c')
-      .setBold(true)
-      .setRanges([statusRange])
-      .build()
-  );
+  // ── BORDERS (full grid) ─────────────────────────────────
+  sheet.getRange(1, 2, maxRow, lastCol - 1)
+    .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+  // Heavy left border on CAD column to set it apart
+  sheet.getRange(1, COL['CAD Equivalent'], maxRow, 1)
+    .setBorder(null, true, null, null, null, null, '#10b981', SpreadsheetApp.BorderStyle.SOLID_THICK);
+
+  // ── CONDITIONAL FORMATTING ──────────────────────────────
+  const rules = [];
+  const dataRange = sheet.getRange(2, 2, maxRow - 1, lastCol - 1);
+  const statusRange = sheet.getRange(2, COL.Status, maxRow - 1, 1);
+  const typeRange = sheet.getRange(2, COL.Type, maxRow - 1, 1);
+  const ccyRange = sheet.getRange(2, COL.Currency, maxRow - 1, 1);
+
+  // Status pills
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenTextContains('VOID').setBackground('#fee2e2').setFontColor('#991b1b').setBold(true)
+    .setRanges([statusRange]).build());
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenTextContains('CANCEL').setBackground('#fee2e2').setFontColor('#991b1b').setBold(true)
+    .setRanges([statusRange]).build());
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo('OK').setBackground('#dcfce7').setFontColor('#166534').setBold(true)
+    .setRanges([statusRange]).build());
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenTextContains('PEND').setBackground('#fef9c3').setFontColor('#854d0e').setBold(true)
+    .setRanges([statusRange]).build());
+
+  // Strike-through entire row when status = VOID
+  rules.push(SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied(`=REGEXMATCH(UPPER($${columnLetter_(COL.Status)}2),"VOID|CANCEL")`)
+    .setFontColor('#9ca3af').setStrikethrough(true)
+    .setRanges([dataRange]).build());
+
+  // Type color tags (sale, expense, transfer, etc.)
+  const typeColors = [
+    ['SALE',     '#dbeafe', '#1e40af'],
+    ['EXPENSE',  '#fee2e2', '#991b1b'],
+    ['TRANSFER', '#ede9fe', '#5b21b6'],
+    ['REFUND',   '#fed7aa', '#9a3412'],
+    ['STOCK',    '#cffafe', '#155e75'],
+    ['PRINT',    '#fce7f3', '#9d174d']
+  ];
+  typeColors.forEach(([word, bg, fg]) => {
+    rules.push(SpreadsheetApp.newConditionalFormatRule()
+      .whenTextContains(word).setBackground(bg).setFontColor(fg).setBold(true)
+      .setRanges([typeRange]).build());
+  });
+
+  // Currency tags
+  const ccyColors = [
+    ['CAD', '#fef2f2', '#b91c1c'],
+    ['USD', '#ecfdf5', '#065f46'],
+    ['EUR', '#eff6ff', '#1e3a8a'],
+    ['GBP', '#fdf4ff', '#86198f'],
+    ['AUD', '#fff7ed', '#9a3412'],
+    ['JPY', '#f5f3ff', '#5b21b6']
+  ];
+  ccyColors.forEach(([word, bg, fg]) => {
+    rules.push(SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo(word).setBackground(bg).setFontColor(fg).setBold(true)
+      .setRanges([ccyRange]).build());
+  });
+
   sheet.setConditionalFormatRules(rules);
+}
+
+function columnLetter_(col) {
+  let s = '', n = col;
+  while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
 }
 
 function removeByEventId_(ss, eventId) {
