@@ -2420,11 +2420,6 @@ function printShippingLabel() {
 
   const labelHTML = `
   <div class="label">
-    <header class="brand-band">
-      <div class="brand">LYRICALMYRICAL BOOKS</div>
-      <div class="brand-meta">${esc(fmtD(h.shippedDate || h.date) || '')}</div>
-    </header>
-
     <section class="to">
       <div class="kicker">Ship To</div>
       <div class="to-name">${esc(ship.name||'')}</div>
@@ -2432,11 +2427,6 @@ function printShippingLabel() {
         ${toLines.map(l=>`<div>${esc(l)}</div>`).join('')}
       </div>
       ${country ? `<div class="to-country">${esc(country)}</div>` : ''}
-    </section>
-
-    <section class="ref">
-      <div class="ref-bars" aria-hidden="true"></div>
-      <div class="ref-num">${esc(h.num||'')}</div>
     </section>
 
     <section class="from">
@@ -2462,19 +2452,6 @@ function printShippingLabel() {
       color: #111;
     }
 
-    .brand-band {
-      display: flex; justify-content: space-between; align-items: center;
-      background: #111; color: #fff;
-      padding: 10px 0.3in;
-      font-size: 8pt;
-    }
-    .brand {
-      font-weight: 800; letter-spacing: .14em;
-    }
-    .brand-meta {
-      font-size: 7.5pt; letter-spacing: .08em; color: #ddd;
-    }
-
     .kicker {
       font-size: 7pt; font-weight: 800;
       letter-spacing: .22em; text-transform: uppercase;
@@ -2485,7 +2462,7 @@ function printShippingLabel() {
 
     .to {
       flex: 1;
-      padding: 0.24in 0.3in 0.18in;
+      padding: 0.28in 0.3in 0.18in;
     }
     .to-name {
       font-size: 19pt; font-weight: 800;
@@ -2499,34 +2476,9 @@ function printShippingLabel() {
       letter-spacing: .06em;
     }
 
-    .ref {
-      border-top: 1px solid #111;
-      border-bottom: 1px solid #111;
-      padding: 10px 0.3in;
-      display: flex; flex-direction: column; align-items: center;
-      gap: 6px;
-    }
-    .ref-bars {
-      width: 100%; height: 28px;
-      background-image: repeating-linear-gradient(
-        to right,
-        #111 0, #111 1.5px,
-        #fff 1.5px, #fff 3.5px,
-        #111 3.5px, #111 6px,
-        #fff 6px, #fff 7.5px,
-        #111 7.5px, #111 8.5px,
-        #fff 8.5px, #fff 11px,
-        #111 11px, #111 13.5px,
-        #fff 13.5px, #fff 15px
-      );
-    }
-    .ref-num {
-      font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
-      font-size: 11pt; font-weight: 700; letter-spacing: .12em;
-    }
-
     .from {
-      padding: 0.16in 0.3in 0.22in;
+      padding: 0.18in 0.3in 0.28in;
+      border-top: 1px solid #111;
     }
     .from .kicker { border-bottom: none; padding-bottom: 0; margin-bottom: 4px; color: #666; }
     .from-lines { font-size: 8.5pt; line-height: 1.45; color: #444; }
