@@ -6177,6 +6177,7 @@ let posCart = {};
 let posPendingSale = null;
 const POS_FX_STORAGE_KEY = 'lm_pos_exchange_rates_v1';
 const POS_FX_FETCHED_AT_KEY = 'lm_pos_fx_fetched_at';
+const POS_SESSION_CONFIG_KEY = 'lm_pos_session_config';
 const POS_DEFAULT_CAD_RATES = { CAD: 1, EUR: 1.47, USD: 1.36, GBP: 1.73 };
 let posExchangeRates = loadPosExchangeRates();
 
@@ -6252,6 +6253,33 @@ function buildPOSCartRows() {
   return items;
 }
 
+function _posLoadSessionConfig() {
+  try {
+    const raw = localStorage.getItem(POS_SESSION_CONFIG_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+window.posSaveSessionConfig = function() {
+  const ptEl = $('pos-payment-type');
+  if (!ptEl) return;
+  const cfg = _posLoadSessionConfig();
+  cfg.paymentType = ptEl.value;
+  localStorage.setItem(POS_SESSION_CONFIG_KEY, JSON.stringify(cfg));
+};
+
+function _posInitSessionConfig() {
+  const ptEl = $('pos-payment-type');
+  if (!ptEl) return;
+  const cfg = _posLoadSessionConfig();
+  if (cfg.paymentType) {
+    ptEl.value = cfg.paymentType;
+  } else {
+    // Auto-default by role
+    ptEl.value = isAuthor() ? 'Payment directly to artist' : 'Payment directly to publisher';
+  }
+}
+
 function renderPOS() {
   const grid = $('pos-grid');
   if(!grid) return;
@@ -6269,6 +6297,7 @@ function renderPOS() {
     selectorEl.innerHTML = currencyOptions.map((code) => `<option value="${code}">${code}</option>`).join('');
     selectorEl.value = posTransactionCurrency;
   }
+  _posInitSessionConfig();
 
   let convertedTotal = 0;
   let hasMissingFx = false;
@@ -6452,12 +6481,9 @@ window.posCheckout = function() {
       return;
   }
   if(!paymentType){
-    $('pos-payment-type').style.borderColor='var(--red)';
-    $('pos-payment-type').focus();
-    showToast('⚠ Please select a payment type','warn');
+    showToast('⚠ Please select a payment type above','warn');
     return;
   }
-  $('pos-payment-type').style.borderColor='';
 
   const hasMissingFx = rows.some((row) => row.convertedLine === null);
   const totalCharged = hasMissingFx
@@ -6564,7 +6590,6 @@ window.posConfirmSale = async function() {
   closeM('pos-sale-confirm');
   posPendingSale = null;
   posCart = {};
-  $('pos-payment-type').value = '';
   renderPOS();
   if (typeof renderAllOverview === 'function') renderAllOverview();
   updateDash();

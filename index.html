@@ -762,10 +762,15 @@
       </div>
       <div id="pos-fx-status" style="font-size:10px;color:var(--amber);margin-bottom:8px;">Using saved rates — click ↻ FX Rates to refresh</div>
 
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
         <label style="font-size:11px;color:var(--text3);">Txn Currency</label>
         <select id="pos-currency" onchange="posSetCurrency(this.value)" style="max-width:120px;">
           <option value="EUR">EUR</option>
+        </select>
+        <label style="font-size:11px;color:var(--text3);margin-left:8px;">Payment To</label>
+        <select id="pos-payment-type" onchange="posSaveSessionConfig()" style="flex:1;min-width:140px;font-size:12px;">
+          <option value="Payment directly to publisher">Publisher</option>
+          <option value="Payment directly to artist">Artist</option>
         </select>
       </div>
       <div id="pos-total" style="font-family:'Syne',sans-serif;font-size:30px;font-weight:700;color:var(--green);line-height:1.15;">€0.00</div>
@@ -787,14 +792,7 @@
           <option value="Comp/Gift">Comp/Gift</option>
         </select>
       </div>
-      <div class="form-group" style="margin-bottom:10px;">
-        <label>Payment Type <span style="color:var(--red);font-size:11px;">required</span></label>
-        <select id="pos-payment-type" required>
-          <option value="">— Select payment type —</option>
-          <option value="Payment directly to artist">Payment directly to artist</option>
-          <option value="Payment directly to publisher">Payment directly to publisher</option>
-        </select>
-      </div>
+
       <button class="btn gold" style="width:100%;font-size:14px;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="posCheckout()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
         Complete Sale
