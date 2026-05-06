@@ -1483,35 +1483,58 @@ function renderProfitSharingBreakdown(bookId) {
   }
 
   const cur = book.currency;
-  const tiers = [...book.profitTiers].sort((a,b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
+  const hasCap = (t) => Number.isFinite(t.revenueUpTo) && t.revenueUpTo > 0;
+  const tiers = [...book.profitTiers].sort((a,b) => (hasCap(a) ? a.revenueUpTo : Infinity) - (hasCap(b) ? b.revenueUpTo : Infinity));
 
   // Find which tier is currently active based on cumulative revenue
-  const currentTier = tiers.find(t => t.revenueUpTo !== null && stats.cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
-  const nextTier    = tiers.find(t => t.revenueUpTo !== null && stats.cumulativeRevenue < t.revenueUpTo);
+  const currentTier = tiers.find(t => hasCap(t) && stats.cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
+  const nextTier    = tiers.find(t => hasCap(t) && stats.cumulativeRevenue < t.revenueUpTo);
 
-  const tierHtml = tiers.map(t => {
+  const tierHeader = `
+    <div style="display:grid; grid-template-columns: 1fr auto 70px 70px; gap:12px; align-items:center;
+      font-size:9px; text-transform:uppercase; letter-spacing:.08em; color:var(--text3);
+      padding:0 8px 6px; border-bottom:1px solid rgba(0,0,0,.06); margin-bottom:6px;">
+      <span>Tier</span>
+      <span style="text-align:right;">Revenue in tier</span>
+      <span style="text-align:right;">Earned</span>
+      <span style="text-align:right;">Share</span>
+    </div>`;
+
+  const tierHtml = tiers.map((t, i) => {
     const isActive    = t === currentTier;
-    const isCompleted = t.revenueUpTo !== null && stats.cumulativeRevenue >= t.revenueUpTo;
-    const threshold   = t.revenueUpTo !== null ? `Up to ${fmt(t.revenueUpTo, cur)}` : '∞ Unlimited';
+    const isCompleted = hasCap(t) && stats.cumulativeRevenue >= t.revenueUpTo;
+    const threshold   = hasCap(t) ? `Up to ${fmt(t.revenueUpTo, cur)}` : 'No cap';
     const tierStat    = (stats.perTier || []).find(p => p.tier === t);
     const earned      = tierStat ? tierStat.artistEarned : 0;
+    const tierRev     = tierStat ? tierStat.revenue : 0;
+    const prevCap     = i > 0 && hasCap(tiers[i - 1]) ? tiers[i - 1].revenueUpTo : 0;
+    const tierCap     = hasCap(t) ? t.revenueUpTo - prevCap : null;
+    const tierCapText = tierCap !== null
+      ? `${fmt(tierRev, cur)} / ${fmt(tierCap, cur)}`
+      : fmt(tierRev, cur);
+    const icon = isCompleted ? '✓' : isActive ? '●' : '○';
+    const iconColor = isCompleted ? 'var(--green)' : isActive ? 'var(--gold2)' : 'rgba(0,0,0,.25)';
+
     return `
-      <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; margin-bottom:6px;
-        opacity:${isCompleted ? '.55' : '1'}; font-weight:${isActive ? '700' : '400'};
+      <div style="display:grid; grid-template-columns: 1fr auto 70px 70px; gap:12px; align-items:center;
+        font-size:12px; padding:8px; margin-bottom:4px;
+        opacity:${isCompleted ? '.6' : '1'}; font-weight:${isActive ? '600' : '400'};
         border-radius:var(--r2);
-        background:${isActive ? 'rgba(255,255,255,.05)' : 'transparent'};
-        border-left:2px solid ${isCompleted ? 'rgba(255,255,255,.1)' : isActive ? 'var(--gold2)' : 'transparent'};">
-        <span>${t.label} &nbsp;<span style="font-size:10px;opacity:.5;">${threshold}</span></span>
-        <span style="display:flex; gap:10px; align-items:baseline;">
-          <span style="font-size:11px; color:var(--green); font-family:'DM Mono',monospace;" title="Artist payout earned in this tier">${fmt(earned, cur)}</span>
-          <span style="color:${isActive ? 'var(--gold2)' : 'var(--text3)'}; min-width:64px; text-align:right;">${t.artistPct}% Artist</span>
+        background:${isActive ? 'rgba(212,175,55,.08)' : 'transparent'};
+        border-left:3px solid ${isCompleted ? 'var(--green)' : isActive ? 'var(--gold2)' : 'transparent'};">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span style="color:${iconColor}; font-size:11px; width:12px; display:inline-block; text-align:center;">${icon}</span>
+          <span>${t.label}<br><span style="font-size:10px;opacity:.55;font-weight:400;">${threshold}</span></span>
         </span>
+        <span style="text-align:right; font-family:'DM Mono',monospace; font-size:11px; opacity:.75;" title="Revenue captured in this tier">${tierCapText}</span>
+        <span style="text-align:right; font-family:'DM Mono',monospace; color:${earned > 0 ? 'var(--green)' : 'var(--text3)'};" title="Artist payout earned in this tier">${fmt(earned, cur)}</span>
+        <span style="text-align:right; color:${isActive ? 'var(--gold2)' : 'var(--text3)'};">${t.artistPct}%</span>
       </div>
     `;
   }).join('');
 
   let progressHtml = '';
-  if (nextTier && nextTier.revenueUpTo !== null) {
+  if (nextTier && hasCap(nextTier)) {
     const isBreakEvenTier = nextTier.label.toLowerCase().includes('break');
     const target = isBreakEvenTier && book.productionCost > 0 ? book.productionCost : nextTier.revenueUpTo;
     const revenueLeft = Math.max(0, target - stats.cumulativeRevenue);
@@ -1551,6 +1574,7 @@ function renderProfitSharingBreakdown(bookId) {
     </div>
     <div style="margin-bottom:1rem;">
        <div class="sect" style="font-size:8px; margin-bottom:0.75rem;">Payout Tiers</div>
+       ${tierHeader}
        ${tierHtml}
     </div>
     ${progressHtml}
