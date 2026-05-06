@@ -1785,7 +1785,14 @@ function renderHist() {
         const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty*h.price,cur)}</span>` : fmt(h.qty*h.price,cur);
         const rowStyle = isGrat ? ' style="background:var(--cream2);font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
         const isWebsite = (h.chan === 'Website') && !isGrat && !h.voided;
-        const labelBtn = isWebsite ? `<button class="edit-btn" onclick="openLabelModal(${i})" title="Print shipping label" style="opacity:1;color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg);">📦</button>` : '';
+        const labelBtn = isWebsite
+          ? (h.shipped
+              ? `<button class="edit-btn" onclick="openLabelModal(${i})" title="Shipped${h.shippedDate ? ' on ' + fmtD(h.shippedDate) : ''} — click to update or reprint" style="opacity:1;color:#2e7d32;border-color:#c8e6c9;background:#e8f5e9;font-weight:600;">✓ Shipped</button>`
+              : `<button class="edit-btn" onclick="openLabelModal(${i})" title="Print shipping label" style="opacity:1;color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg);">📦 Ship</button>`)
+          : '';
+        const shippedPill = isWebsite && h.shipped
+          ? ` <span class="pill" style="font-size:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;">✓ Shipped${h.shippedDate ? ' ' + fmtD(h.shippedDate) : ''}</span>`
+          : '';
         const paymentInfo = paymentSummary(h.payment, book);
         const notesCell = paymentInfo
           ? `${h.notes || '—'}<br><span style="font-size:11px;color:var(--text4);">${paymentInfo}</span>`
@@ -1794,7 +1801,7 @@ function renderHist() {
         const enteredByPill = enteredBy === 'Artist'
           ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
           : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
-        return `<tr class="${voided}"${rowStyle}><td class="mono">${h.num}${editBtn}</td><td>${chanCell}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+        return `<tr class="${voided}"${rowStyle}><td class="mono">${h.num}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
       }).join('')
     : '<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">No orders yet.</div></td></tr>';
 }
@@ -2253,7 +2260,39 @@ function openLabelModal(histIndex) {
   $('sl-province').value = h.shipProvince || '';
   $('sl-postal').value   = h.shipPostal   || '';
   $('sl-country').value  = h.shipCountry  || 'Canada';
+  updateShippedStatusUI(h);
   openM('shipping-label');
+}
+
+function updateShippedStatusUI(h) {
+  const status = $('sl-shipped-status');
+  const toggleBtn = $('sl-toggle-shipped-btn');
+  if (!status || !toggleBtn) return;
+  if (h.shipped) {
+    status.style.display = '';
+    status.innerHTML = `✓ Shipped${h.shippedDate ? ' on ' + fmtD(h.shippedDate) : ''}`;
+    toggleBtn.style.display = '';
+    toggleBtn.textContent = 'Mark as not shipped';
+  } else {
+    status.style.display = 'none';
+    toggleBtn.style.display = '';
+    toggleBtn.textContent = 'Mark as shipped';
+  }
+}
+
+function toggleShipped() {
+  if (_labelOrderIndex == null) return;
+  const h = getState().hist[_labelOrderIndex];
+  if (h.shipped) {
+    delete h.shipped;
+    delete h.shippedDate;
+  } else {
+    h.shipped = true;
+    h.shippedDate = today();
+  }
+  saveState(activeBook);
+  updateShippedStatusUI(h);
+  renderHist();
 }
 
 function getShippingData(){}   // no-op
@@ -2273,7 +2312,12 @@ function printShippingLabel() {
   h.shipProvince = $('sl-province').value.trim();
   h.shipPostal   = $('sl-postal').value.trim();
   h.shipCountry  = $('sl-country').value.trim();
+  if (!h.shipped) {
+    h.shipped = true;
+    h.shippedDate = today();
+  }
   saveState(activeBook);
+  renderHist();
 
   const ship = { name:h.shipName, email:h.shipEmail, addr1:h.shipAddr1, addr2:h.shipAddr2,
                  city:h.shipCity, province:h.shipProvince, postal:h.shipPostal, country:h.shipCountry };
@@ -6841,7 +6885,7 @@ Object.assign(window, {
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
-  handleImportFile, confirmImport, openLabelModal, printShippingLabel,
+  handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped,
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
