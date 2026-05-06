@@ -1462,6 +1462,17 @@ function updateDash() {
     $('d-breakeven-block').style.display='none';
   }
 
+  // ── NET TO PUBLISHER KPI (only shown when profit sharing is configured)
+  if (book.profitTiers && book.profitTiers.length > 0) {
+    const earningsStats = calculateArtistEarnings(activeBook);
+    if (earningsStats && $('d-net-publisher-kpi')) {
+      $('d-net-publisher-kpi').style.display = '';
+      $('d-net-publisher').textContent = fmt(earningsStats.netPublisher, cur);
+    }
+  } else if ($('d-net-publisher-kpi')) {
+    $('d-net-publisher-kpi').style.display = 'none';
+  }
+
   // ── PROFIT SHARING BREAKDOWN
   renderProfitSharingBreakdown(activeBook);
 }
@@ -1541,7 +1552,9 @@ function renderProfitSharingBreakdown(bookId) {
     const target = isBreakEvenTier && book.productionCost > 0 ? book.productionCost : nextTier.revenueUpTo;
     const revenueLeft = Math.max(0, target - stats.cumulativeRevenue);
     const pct = Math.min(100, (stats.cumulativeRevenue / target) * 100);
-    const label = isBreakEvenTier ? 'to break-even' : `until ${nextTier.label}`;
+    const nextTierIdx = tiers.indexOf(nextTier);
+    const enterTier = tiers[nextTierIdx + 1];
+    const label = isBreakEvenTier ? 'to break-even' : enterTier ? `until ${enterTier.label}` : `completing ${nextTier.label}`;
     progressHtml = `
       <div style="margin-top:1rem; padding:12px; background:var(--ink); border-radius:var(--r2); border:1px solid rgba(255,255,255,.05);">
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
@@ -1551,7 +1564,7 @@ function renderProfitSharingBreakdown(bookId) {
         <div class="bar-track" style="height:5px; margin-bottom:0;">
           <div class="bar-fill" style="width:${pct}%; background:var(--gold2); height:5px; border-radius:100px;"></div>
         </div>
-        <div style="font-size:10px;color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} collected of ${fmt(target, cur)} threshold</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} collected · ${fmt(target, cur)} needed to reach ${enterTier ? enterTier.label : 'next tier'}</div>
       </div>
     `;
   } else {
@@ -1583,22 +1596,25 @@ function renderProfitSharingBreakdown(bookId) {
   content.innerHTML = `
     <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:1.5rem;">
       <div class="card" style="margin:0; background:var(--cream2); border:none;">
-        <div class="hs-label" style="color:var(--text3);">Earned (lifetime)</div>
+        <div class="hs-label" style="color:var(--text3);">Artist earnings</div>
         <div class="hs-val" style="color:var(--green); font-size:22px;">${fmt(stats.totalArtistEarned, cur)}</div>
+        <div style="font-size:10px; color:var(--text3); margin-top:2px;">lifetime total</div>
       </div>
       <div class="card" style="margin:0; background:var(--cream2); border:none;">
-        <div class="hs-label" style="color:var(--text3);">Paid out</div>
+        <div class="hs-label" style="color:var(--text3);">Paid to artist</div>
         <div class="hs-val" style="color:var(--text); font-size:22px; opacity:.85;">${fmt(stats.totalPaidToArtist, cur)}</div>
+        <div style="font-size:10px; color:var(--text3); margin-top:2px;">${stats.payouts?.length || 0} payout${(stats.payouts?.length || 0) !== 1 ? 's' : ''} recorded</div>
       </div>
       <div class="card" style="margin:0; background:${owed > 0.01 ? 'rgba(212,175,55,.12)' : 'rgba(74,222,128,.1)'}; border:1px solid ${owed > 0.01 ? 'rgba(212,175,55,.35)' : 'rgba(74,222,128,.3)'};">
-        <div class="hs-label" style="color:var(--text3);">${owed > 0.01 ? 'Owed to artist' : 'Owed to artist'}</div>
+        <div class="hs-label" style="color:var(--text3);">${owed > 0.01 ? '⚠ Owed to artist' : 'Owed to artist'}</div>
         <div class="hs-val" style="color:${owedColor}; font-size:22px; font-weight:700;">${fmt(Math.max(0, owed), cur)}</div>
+        <div style="font-size:10px; color:${owedColor}; margin-top:2px; opacity:.8;">${owed > 0.01 ? 'action needed' : 'all paid up ✓'}</div>
       </div>
     </div>
     <div style="margin-bottom:1rem;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
          <span class="sect" style="font-size:8px; margin:0;">Payout Tiers</span>
-         <span style="font-size:10px; color:var(--text3);">Net to publisher: <strong style="color:var(--text);">${fmt(stats.netPublisher, cur)}</strong></span>
+         <span style="font-size:11px; color:var(--text3);">Publisher keeps: <strong style="color:var(--text); font-size:13px;">${fmt(stats.netPublisher, cur)}</strong></span>
        </div>
        ${tierHeader}
        ${tierHtml}
