@@ -1493,14 +1493,19 @@ function renderProfitSharingBreakdown(bookId) {
     const isActive    = t === currentTier;
     const isCompleted = t.revenueUpTo !== null && stats.cumulativeRevenue >= t.revenueUpTo;
     const threshold   = t.revenueUpTo !== null ? `Up to ${fmt(t.revenueUpTo, cur)}` : '∞ Unlimited';
+    const tierStat    = (stats.perTier || []).find(p => p.tier === t);
+    const earned      = tierStat ? tierStat.artistEarned : 0;
     return `
-      <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;
-        opacity:${isCompleted ? '.45' : '1'}; font-weight:${isActive ? '700' : '400'};
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; margin-bottom:6px;
+        opacity:${isCompleted ? '.55' : '1'}; font-weight:${isActive ? '700' : '400'};
         border-radius:var(--r2);
         background:${isActive ? 'rgba(255,255,255,.05)' : 'transparent'};
         border-left:2px solid ${isCompleted ? 'rgba(255,255,255,.1)' : isActive ? 'var(--gold2)' : 'transparent'};">
         <span>${t.label} &nbsp;<span style="font-size:10px;opacity:.5;">${threshold}</span></span>
-        <span style="color:${isActive ? 'var(--gold2)' : 'var(--text3)'}">${t.artistPct}% Artist</span>
+        <span style="display:flex; gap:10px; align-items:baseline;">
+          <span style="font-size:11px; color:var(--green); font-family:'DM Mono',monospace;" title="Artist payout earned in this tier">${fmt(earned, cur)}</span>
+          <span style="color:${isActive ? 'var(--gold2)' : 'var(--text3)'}; min-width:64px; text-align:right;">${t.artistPct}% Artist</span>
+        </span>
       </div>
     `;
   }).join('');
@@ -5250,16 +5255,22 @@ function calculateArtistEarnings(bookId) {
 
   let totalArtistEarned = 0;
   let cumulativeRevenue = 0;
+  const perTier = tiers.map(t => ({ tier: t, revenue: 0, artistEarned: 0 }));
 
   const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && !h.artistPending && h.qty > 0 && h.price > 0);
 
   sortedHist.forEach(h => {
     let revRemaining = h.qty * h.price;
     while (revRemaining > 0.001) {
-      const tier = tiers.find(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
-      const isLastTier = tier === tiers[tiers.length - 1] || tier.revenueUpTo === null;
+      const tierIdx = tiers.findIndex(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo);
+      const idx = tierIdx === -1 ? tiers.length - 1 : tierIdx;
+      const tier = tiers[idx];
+      const isLastTier = idx === tiers.length - 1 || tier.revenueUpTo === null;
       const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tier.revenueUpTo - cumulativeRevenue);
-      totalArtistEarned += capacity * (tier.artistPct / 100);
+      const earned = capacity * (tier.artistPct / 100);
+      totalArtistEarned += earned;
+      perTier[idx].revenue += capacity;
+      perTier[idx].artistEarned += earned;
       cumulativeRevenue += capacity;
       revRemaining -= capacity;
     }
@@ -5268,7 +5279,8 @@ function calculateArtistEarnings(bookId) {
   return {
     totalArtistEarned,
     cumulativeRevenue,
-    netPublisher: s.revenue - totalArtistEarned
+    netPublisher: s.revenue - totalArtistEarned,
+    perTier
   };
 }
 
