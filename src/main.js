@@ -1786,6 +1786,11 @@ function renderHist() {
         const rowStyle = isGrat ? ' style="background:var(--cream2);font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
         const isWebsite = (h.chan === 'Website') && !isGrat && !h.voided;
         const labelBtn = isWebsite ? `<button class="edit-btn" onclick="openLabelModal(${i})" title="Print shipping label" style="opacity:1;color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg);">📦</button>` : '';
+        const shipBtn = isWebsite
+          ? (h.shipped
+              ? `<button class="edit-btn" onclick="markShipped(${i})" title="Shipped on ${h.shippedDate||''} — click to undo" style="opacity:1;color:var(--green);border-color:var(--green);background:#e8f5ec;margin-left:4px;">✓ Shipped</button>`
+              : `<button class="edit-btn" onclick="markShipped(${i})" title="Mark as shipped" style="margin-left:4px;">Ship</button>`)
+          : '';
         const paymentInfo = paymentSummary(h.payment, book);
         const notesCell = paymentInfo
           ? `${h.notes || '—'}<br><span style="font-size:11px;color:var(--text4);">${paymentInfo}</span>`
@@ -1794,7 +1799,7 @@ function renderHist() {
         const enteredByPill = enteredBy === 'Artist'
           ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
           : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
-        return `<tr class="${voided}"${rowStyle}><td class="mono">${h.num}${editBtn}</td><td>${chanCell}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+        return `<tr class="${voided}"${rowStyle}><td class="mono">${h.num}${editBtn}</td><td>${chanCell}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}${shipBtn}</td></tr>`;
       }).join('')
     : '<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">No orders yet.</div></td></tr>';
 }
@@ -2254,6 +2259,22 @@ function openLabelModal(histIndex) {
   $('sl-postal').value   = h.shipPostal   || '';
   $('sl-country').value  = h.shipCountry  || 'Canada';
   openM('shipping-label');
+}
+
+function markShipped(histIndex) {
+  const s = getState();
+  const h = s.hist[histIndex];
+  if (!h) return;
+  if (h.shipped) {
+    if (!confirm('Mark this order as NOT shipped?')) return;
+    h.shipped = false;
+    h.shippedDate = null;
+  } else {
+    h.shipped = true;
+    h.shippedDate = today();
+  }
+  renderHist();
+  saveState(activeBook);
 }
 
 function getShippingData(){}   // no-op
@@ -6841,7 +6862,7 @@ Object.assign(window, {
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
-  handleImportFile, confirmImport, openLabelModal, printShippingLabel,
+  handleImportFile, confirmImport, openLabelModal, printShippingLabel, markShipped,
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
