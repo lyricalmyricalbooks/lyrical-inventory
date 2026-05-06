@@ -531,7 +531,7 @@ if (sheetsUrl) {
 }
 
 function defaultState(book) {
-  return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], expenses: [], artistPaymentLink: '' };
+  return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], expenses: [], artistPaymentLink: '' };
 }
 
 function getState() { 
@@ -600,6 +600,7 @@ async function loadBook(bookId) {
     }
     if (!states[bookId].doneIds) states[bookId].doneIds = [];
     if (!states[bookId].artistTransfers) states[bookId].artistTransfers = [];
+    if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
     if (!states[bookId].expenses) states[bookId].expenses = [];
     // Sync artist payment link to book object so publisher can read it in reimbursements
     if (states[bookId].artistPaymentLink) BOOKS[bookId].artistPaymentLink = states[bookId].artistPaymentLink;
@@ -617,6 +618,7 @@ async function loadBook(bookId) {
       states[bookId] = { ...defaultState(book), ...loaded };
       if (!states[bookId].doneIds) states[bookId].doneIds = [];
       if (!states[bookId].artistTransfers) states[bookId].artistTransfers = [];
+    if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
       recomputeAfters(states[bookId]);
       lastSavedHashes[bookId] = json2;
       if (activeBook === bookId || activeBook === 'all') renderCurrent();
@@ -1561,25 +1563,122 @@ function renderProfitSharingBreakdown(bookId) {
     `;
   }
 
+  const owed = stats.owedToArtist;
+  const owedClass = owed > 0.01 ? 'owed-due' : 'owed-clear';
+  const owedColor = owed > 0.01 ? 'var(--gold2)' : 'var(--green)';
+
+  const payoutHistoryHtml = (stats.payouts || []).length > 0
+    ? stats.payouts.slice().sort((a,b) => (b.date || '').localeCompare(a.date || '')).map(p => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; font-size:12px;
+          border-bottom:1px solid rgba(0,0,0,.05);">
+          <span style="display:flex; flex-direction:column;">
+            <span style="font-family:'DM Mono',monospace; color:var(--green); font-weight:600;">${fmt(parseFloat(p.amount) || 0, cur)}</span>
+            <span style="font-size:10px; color:var(--text3);">${p.date || '—'}${p.method ? ' · ' + String(p.method).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) : ''}${p.notes ? ' · ' + String(p.notes).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) : ''}</span>
+          </span>
+          <button class="btn" style="padding:4px 8px; font-size:10px; background:transparent; color:var(--text3); border:1px solid rgba(0,0,0,.1);"
+            onclick="deleteArtistPayout('${bookId}', ${p.id})" title="Delete this payout">✕</button>
+        </div>`).join('')
+    : '<div style="padding:12px; font-size:11px; color:var(--text3); text-align:center;">No payouts recorded yet.</div>';
+
   content.innerHTML = `
-    <div class="g2" style="margin-bottom:1.5rem;">
+    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:1.5rem;">
       <div class="card" style="margin:0; background:var(--cream2); border:none;">
-        <div class="hs-label" style="color:var(--text3);">Artist Payout (lifetime)</div>
-        <div class="hs-val" style="color:var(--green); font-size:24px;">${fmt(stats.totalArtistEarned, cur)}</div>
+        <div class="hs-label" style="color:var(--text3);">Earned (lifetime)</div>
+        <div class="hs-val" style="color:var(--green); font-size:22px;">${fmt(stats.totalArtistEarned, cur)}</div>
       </div>
       <div class="card" style="margin:0; background:var(--cream2); border:none;">
-        <div class="hs-label" style="color:var(--text3);">Net to Publisher</div>
-        <div class="hs-val" style="color:var(--text); font-size:24px;">${fmt(stats.netPublisher, cur)}</div>
+        <div class="hs-label" style="color:var(--text3);">Paid out</div>
+        <div class="hs-val" style="color:var(--text); font-size:22px; opacity:.85;">${fmt(stats.totalPaidToArtist, cur)}</div>
+      </div>
+      <div class="card" style="margin:0; background:${owed > 0.01 ? 'rgba(212,175,55,.12)' : 'rgba(74,222,128,.1)'}; border:1px solid ${owed > 0.01 ? 'rgba(212,175,55,.35)' : 'rgba(74,222,128,.3)'};">
+        <div class="hs-label" style="color:var(--text3);">${owed > 0.01 ? 'Owed to artist' : 'Owed to artist'}</div>
+        <div class="hs-val" style="color:${owedColor}; font-size:22px; font-weight:700;">${fmt(Math.max(0, owed), cur)}</div>
       </div>
     </div>
     <div style="margin-bottom:1rem;">
-       <div class="sect" style="font-size:8px; margin-bottom:0.75rem;">Payout Tiers</div>
+       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+         <span class="sect" style="font-size:8px; margin:0;">Payout Tiers</span>
+         <span style="font-size:10px; color:var(--text3);">Net to publisher: <strong style="color:var(--text);">${fmt(stats.netPublisher, cur)}</strong></span>
+       </div>
        ${tierHeader}
        ${tierHtml}
     </div>
     ${progressHtml}
+    <div style="margin-top:1.5rem; padding-top:1rem; border-top:1px solid rgba(0,0,0,.08);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+        <span class="sect" style="font-size:8px; margin:0;">Artist Payouts</span>
+        <button class="btn gold" style="padding:6px 12px; font-size:11px;" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>
+      </div>
+      <div id="artist-payout-form-${bookId}" style="display:none; padding:12px; background:var(--cream2); border-radius:var(--r2); margin-bottom:12px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:8px;">
+          <label style="font-size:11px; color:var(--text3);">Amount (${cur})
+            <input type="number" id="ap-amount-${bookId}" step="0.01" min="0" placeholder="${owed > 0.01 ? owed.toFixed(2) : '0.00'}" style="width:100%; padding:6px; margin-top:2px;">
+          </label>
+          <label style="font-size:11px; color:var(--text3);">Date
+            <input type="date" id="ap-date-${bookId}" value="${today()}" style="width:100%; padding:6px; margin-top:2px;">
+          </label>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:8px;">
+          <label style="font-size:11px; color:var(--text3);">Method (optional)
+            <input type="text" id="ap-method-${bookId}" placeholder="e-Transfer, PayPal..." style="width:100%; padding:6px; margin-top:2px;">
+          </label>
+          <label style="font-size:11px; color:var(--text3);">Notes (optional)
+            <input type="text" id="ap-notes-${bookId}" placeholder="..." style="width:100%; padding:6px; margin-top:2px;">
+          </label>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn gold" style="padding:6px 14px; font-size:11px;" onclick="recordArtistPayout('${bookId}')">Save payout</button>
+          ${owed > 0.01 ? `<button class="btn" style="padding:6px 12px; font-size:11px;" onclick="document.getElementById('ap-amount-${bookId}').value='${owed.toFixed(2)}'">Pay full balance (${fmt(owed, cur)})</button>` : ''}
+          <button class="btn" style="padding:6px 12px; font-size:11px; background:transparent;" onclick="toggleArtistPayoutForm('${bookId}')">Cancel</button>
+        </div>
+      </div>
+      <div style="background:var(--cream2); border-radius:var(--r2); overflow:hidden;">
+        ${payoutHistoryHtml}
+      </div>
+    </div>
   `;
 }
+
+function toggleArtistPayoutForm(bookId) {
+  const form = document.getElementById(`artist-payout-form-${bookId}`);
+  if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
+}
+
+async function recordArtistPayout(bookId) {
+  const amountEl = document.getElementById(`ap-amount-${bookId}`);
+  const dateEl   = document.getElementById(`ap-date-${bookId}`);
+  const methodEl = document.getElementById(`ap-method-${bookId}`);
+  const notesEl  = document.getElementById(`ap-notes-${bookId}`);
+  const amount = parseFloat(amountEl.value);
+  if (!amount || amount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
+  const s = states[bookId];
+  if (!s) return;
+  if (!s.artistPayouts) s.artistPayouts = [];
+  s.artistPayouts.push({
+    id: Date.now(),
+    date: dateEl.value || today(),
+    amount,
+    method: (methodEl.value || '').trim(),
+    notes: (notesEl.value || '').trim()
+  });
+  await saveState(bookId);
+  showToast(`✓ Recorded payout of ${fmt(amount, BOOKS[bookId].currency)}`);
+  renderProfitSharingBreakdown(bookId);
+}
+
+function deleteArtistPayout(bookId, payoutId) {
+  if (!confirm('Delete this payout record?')) return;
+  const s = states[bookId];
+  if (!s || !s.artistPayouts) return;
+  s.artistPayouts = s.artistPayouts.filter(p => p.id !== payoutId);
+  saveState(bookId);
+  showToast('✓ Payout deleted');
+  renderProfitSharingBreakdown(bookId);
+}
+
+window.toggleArtistPayoutForm = toggleArtistPayoutForm;
+window.recordArtistPayout = recordArtistPayout;
+window.deleteArtistPayout = deleteArtistPayout;
 
 function renderAll() {
   if (activeBook === 'all') { updateAllOverview(); updateHeader(); return; }
@@ -5300,11 +5399,18 @@ function calculateArtistEarnings(bookId) {
     }
   });
 
+  const payouts = (s.artistPayouts || []).filter(p => !p.voided);
+  const totalPaidToArtist = payouts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+  const owedToArtist = totalArtistEarned - totalPaidToArtist;
+
   return {
     totalArtistEarned,
     cumulativeRevenue,
     netPublisher: s.revenue - totalArtistEarned,
-    perTier
+    perTier,
+    totalPaidToArtist,
+    owedToArtist,
+    payouts
   };
 }
 

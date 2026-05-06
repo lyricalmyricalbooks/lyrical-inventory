@@ -143,7 +143,7 @@ window._fbSave = async (bookId, json) => {
       const state = JSON.parse(json);
       const s = { ...state };
       const parts = {};
-      ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'].forEach(k => {
+      ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'].forEach(k => {
         parts[k] = s[k] || [];
         delete s[k];
       });
@@ -171,7 +171,7 @@ window._fbSave = async (bookId, json) => {
 window._fbLoad = async (bookId) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
-      const docNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'];
+      const docNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'];
       const promises = docNames.map(name => getDoc(doc(fs, 'books', bookId, 'data', name)));
       const snaps = await Promise.all(promises);
       
@@ -202,6 +202,7 @@ window._fbLoad = async (bookId) => {
         expenses: parts.expenses,
         stores: parts.stores,
         artistTransfers: parts.artistTransfers,
+        artistPayouts: parts.artistPayouts,
         doneIds: parts.doneIds
       };
       return JSON.stringify(stitched);
@@ -220,7 +221,7 @@ window._fbWatch = (bookId, cb) => {
       }
       _fsWatchUnsubs[bookId] = [];
       
-      const docNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'];
+      const docNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'];
       let localState = {};
       const loadedDocs = new Set();
       
@@ -248,6 +249,7 @@ window._fbWatch = (bookId, cb) => {
               expenses: localState.expenses,
               stores: localState.stores,
               artistTransfers: localState.artistTransfers,
+              artistPayouts: localState.artistPayouts,
               doneIds: localState.doneIds
             };
             cb(JSON.stringify(stitched));
@@ -388,7 +390,7 @@ window._fbMassMigrate = async (BOOKS) => {
         if (stateJson) {
           const s = { ...stateJson };
           const parts = {};
-          ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'doneIds'].forEach(k => {
+          ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'].forEach(k => {
             parts[k] = s[k] || [];
             delete s[k];
           });
