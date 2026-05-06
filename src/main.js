@@ -1497,11 +1497,16 @@ function renderProfitSharingBreakdown(bookId) {
 
   const cur = book.currency;
   const hasCap = (t) => Number.isFinite(t.revenueUpTo) && t.revenueUpTo > 0;
+  const effectiveCap = (t) => {
+    const isBreakEvenTier = (t.label || '').toLowerCase().includes('break');
+    if (isBreakEvenTier && book.productionCost > 0) return book.productionCost;
+    return hasCap(t) ? t.revenueUpTo : null;
+  };
   const tiers = [...book.profitTiers].sort((a,b) => (hasCap(a) ? a.revenueUpTo : Infinity) - (hasCap(b) ? b.revenueUpTo : Infinity));
 
   // Find which tier is currently active based on cumulative revenue
-  const currentTier = tiers.find(t => hasCap(t) && stats.cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
-  const nextTier    = tiers.find(t => hasCap(t) && stats.cumulativeRevenue < t.revenueUpTo);
+  const currentTier = tiers.find(t => effectiveCap(t) !== null && stats.cumulativeRevenue < effectiveCap(t)) || tiers[tiers.length - 1];
+  const nextTier    = tiers.find(t => effectiveCap(t) !== null && stats.cumulativeRevenue < effectiveCap(t));
 
   const tierHeader = `
     <div style="display:grid; grid-template-columns: 1fr auto 70px 70px; gap:12px; align-items:center;
@@ -1514,14 +1519,15 @@ function renderProfitSharingBreakdown(bookId) {
     </div>`;
 
   const tierHtml = tiers.map((t, i) => {
+    const tCap        = effectiveCap(t);
     const isActive    = t === currentTier;
-    const isCompleted = hasCap(t) && stats.cumulativeRevenue >= t.revenueUpTo;
-    const threshold   = hasCap(t) ? `Up to ${fmt(t.revenueUpTo, cur)}` : 'No cap';
+    const isCompleted = tCap !== null && stats.cumulativeRevenue >= tCap;
+    const threshold   = tCap !== null ? `Up to ${fmt(tCap, cur)}` : 'No cap';
     const tierStat    = (stats.perTier || []).find(p => p.tier === t);
     const earned      = tierStat ? tierStat.artistEarned : 0;
     const tierRev     = tierStat ? tierStat.revenue : 0;
-    const prevCap     = i > 0 && hasCap(tiers[i - 1]) ? tiers[i - 1].revenueUpTo : 0;
-    const tierCap     = hasCap(t) ? t.revenueUpTo - prevCap : null;
+    const prevCap     = i > 0 && effectiveCap(tiers[i - 1]) !== null ? effectiveCap(tiers[i - 1]) : 0;
+    const tierCap     = tCap !== null ? tCap - prevCap : null;
     const tierCapText = tierCap !== null
       ? `${fmt(tierRev, cur)} / ${fmt(tierCap, cur)}`
       : fmt(tierRev, cur);
@@ -1547,9 +1553,9 @@ function renderProfitSharingBreakdown(bookId) {
   }).join('');
 
   let progressHtml = '';
-  if (nextTier && hasCap(nextTier)) {
+  if (nextTier && effectiveCap(nextTier) !== null) {
     const isBreakEvenTier = nextTier.label.toLowerCase().includes('break');
-    const target = isBreakEvenTier && book.productionCost > 0 ? book.productionCost : nextTier.revenueUpTo;
+    const target = effectiveCap(nextTier);
     const revenueLeft = Math.max(0, target - stats.cumulativeRevenue);
     const pct = Math.min(100, (stats.cumulativeRevenue / target) * 100);
     const nextTierIdx = tiers.indexOf(nextTier);
@@ -5398,14 +5404,21 @@ function calculateArtistEarnings(bookId) {
 
   const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && !h.artistPending && h.qty > 0 && h.price > 0);
 
+  const tierEffectiveCap = (t) => {
+    const isBreakEvenTier = (t.label || '').toLowerCase().includes('break');
+    if (isBreakEvenTier && book.productionCost > 0) return book.productionCost;
+    return Number.isFinite(t.revenueUpTo) && t.revenueUpTo > 0 ? t.revenueUpTo : null;
+  };
+
   sortedHist.forEach(h => {
     let revRemaining = h.qty * h.price;
     while (revRemaining > 0.001) {
-      const tierIdx = tiers.findIndex(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo);
+      const tierIdx = tiers.findIndex(t => tierEffectiveCap(t) !== null && cumulativeRevenue < tierEffectiveCap(t));
       const idx = tierIdx === -1 ? tiers.length - 1 : tierIdx;
       const tier = tiers[idx];
-      const isLastTier = idx === tiers.length - 1 || tier.revenueUpTo === null;
-      const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tier.revenueUpTo - cumulativeRevenue);
+      const tCap = tierEffectiveCap(tier);
+      const isLastTier = idx === tiers.length - 1 || tCap === null;
+      const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tCap - cumulativeRevenue);
       const earned = capacity * (tier.artistPct / 100);
       totalArtistEarned += earned;
       perTier[idx].revenue += capacity;
