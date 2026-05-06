@@ -1590,14 +1590,19 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   const sheetsId = makeEventId();
   s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment,enteredBy,sheetsId});
   renderHist(); updateDash(); saveState(activeBook);
+  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  const totalNative = qty * price;
+  let cadEquiv = '';
+  if (nativeCur === 'CAD') cadEquiv = totalNative;
+  else if (payment && payment.currency === 'CAD' && payment.amount) cadEquiv = payment.amount;
   syncToSheets({
-    type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:notes||'',
+    type:'order',book:book.title,date:today(),num,chan,qty,price,total:totalNative,stockAfter:s.stock,notes:notes||'',
     sheetsId,
-    currency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
-    paymentCurrency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
-    paymentAmount: payment?.amount ?? qty*price,
+    currency: nativeCur,
+    paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
+    paymentAmount: payment?.amount ?? totalNative,
     paymentRate: payment?.rate ?? '',
-    convertedTotal: payment?.convertedTotal ?? qty*price
+    convertedTotal: cadEquiv
   });
 }
 
@@ -3285,14 +3290,19 @@ function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
   s.artistTransfers.push({id:Date.now(),num,chan,qty,price,total:qty*price,notes:notes||'',date:today(),payment,sheetsId});
   renderHist();updateDash();saveState(activeBook);
+  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  const totalNative = qty * price;
+  let cadEquiv = '';
+  if (nativeCur === 'CAD') cadEquiv = totalNative;
+  else if (payment && payment.currency === 'CAD' && payment.amount) cadEquiv = payment.amount;
   syncToSheets({
-    type:'order',book:book.title,date:today(),num,chan,qty,price,total:qty*price,stockAfter:s.stock,notes:(notes||'')+' [PENDING ARTIST TRANSFER]',
+    type:'order',book:book.title,date:today(),num,chan,qty,price,total:totalNative,stockAfter:s.stock,notes:(notes||'')+' [PENDING ARTIST TRANSFER]',
     sheetsId,
-    currency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
-    paymentCurrency: normalizeCurrencyCode(payment?.currency || getBookCurrencyCode(book), 'CAD'),
-    paymentAmount: payment?.amount ?? qty*price,
+    currency: nativeCur,
+    paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
+    paymentAmount: payment?.amount ?? totalNative,
     paymentRate: payment?.rate ?? '',
-    convertedTotal: payment?.convertedTotal ?? qty*price
+    convertedTotal: cadEquiv
   });
 }
 
@@ -3310,13 +3320,18 @@ function markArtistTransferReceived(transferId){
   // Remove from pending queue
   s.artistTransfers=s.artistTransfers.filter(x=>x.id!==transferId);
   renderHist();updateDash();renderArtistTransfers();saveState(activeBook);
+  const nativeCurT = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  let cadEquivT = '';
+  if (nativeCurT === 'CAD') cadEquivT = t.total;
+  else if (t.payment && t.payment.currency === 'CAD' && t.payment.amount) cadEquivT = t.payment.amount;
   syncToSheets({
     type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST TRANSFER RECEIVED]',
     sheetsId: t.sheetsId || (h && h.sheetsId) || '',
-    paymentCurrency: normalizeCurrencyCode(t.payment?.currency || getBookCurrencyCode(book), 'CAD'),
+    currency: nativeCurT,
+    paymentCurrency: normalizeCurrencyCode(t.payment?.currency || nativeCurT, 'CAD'),
     paymentAmount: t.payment?.amount ?? t.total,
     paymentRate: t.payment?.rate ?? '',
-    convertedTotal: t.payment?.convertedTotal ?? t.total
+    convertedTotal: cadEquivT
   });
   showToast(`✓ Transfer received — ${fmt(t.total,book.currency)} added to revenue`);
 }
@@ -4156,19 +4171,40 @@ async function pushAllToSheets() {
   Object.keys(BOOKS).forEach(bid => {
     const s = states[bid] || defaultState(BOOKS[bid]);
     const book = BOOKS[bid];
-    (s.hist || []).forEach(h => toSync.push({
-      type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
-      qty: h.voided ? 0 : h.qty, price:h.price, total: h.voided ? 0 : (h.qty*h.price), stockAfter:h.after,
-      notes:(h.voided?'[VOID] ':'')+(h.notes||''),
-      currency: normalizeCurrencyCode(h.payment?.currency || getBookCurrencyCode(book), 'CAD'),
-      status: h.voided ? 'VOID' : 'OK'
-    }));
-    (s.ledger || []).forEach(e => toSync.push({
-      type:'consignment', book:book.title, date:e.date, store:e.storeName,
-      event:e.type, qty: e.voided ? 0 : e.qty, rate:e.rate, amountDue: e.voided ? 0 : e.amountDue,
-      notes:(e.voided?'[VOID] ':'')+(e.notes||''), status: e.voided ? 'VOID' : e.status,
-      currency: book.currency
-    }));
+    const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+    (s.hist || []).forEach(h => {
+      if (h.consignmentLink) return; // ledger is the canonical row
+      const totalNative = h.qty * h.price;
+      let cadEquiv = '';
+      if (nativeCur === 'CAD') cadEquiv = totalNative;
+      else if (h.payment && h.payment.currency === 'CAD' && h.payment.amount) cadEquiv = h.payment.amount;
+      toSync.push({
+        type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
+        qty: h.voided ? 0 : h.qty, price:h.price, total: h.voided ? 0 : totalNative, stockAfter:h.after,
+        notes:(h.voided?'[VOID] ':'')+(h.notes||''),
+        sheetsId: h.sheetsId || '',
+        currency: nativeCur,
+        paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+        paymentAmount: h.payment?.amount ?? totalNative,
+        paymentRate: h.payment?.rate ?? '',
+        convertedTotal: h.voided ? '' : cadEquiv,
+        status: h.voided ? 'VOID' : 'OK'
+      });
+    });
+    (s.ledger || []).forEach(e => {
+      const ledgerCur = normalizeCurrencyCode(book.currency, 'CAD');
+      const totalNative = e.amountDue || 0;
+      let cadEquiv = '';
+      if (ledgerCur === 'CAD') cadEquiv = totalNative;
+      toSync.push({
+        type:'consignment', book:book.title, date:e.date, store:e.storeName,
+        event:e.type, qty: e.voided ? 0 : e.qty, rate:e.rate, amountDue: e.voided ? 0 : totalNative,
+        notes:(e.voided?'[VOID] ':'')+(e.notes||''), status: e.voided ? 'VOID' : e.status,
+        sheetsId: e.sheetsId || '',
+        currency: ledgerCur,
+        convertedTotal: e.voided ? '' : cadEquiv
+      });
+    });
   });
 
   _bulkTotal = toSync.length;
