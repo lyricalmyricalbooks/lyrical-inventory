@@ -338,7 +338,10 @@
   </div>
   <div class="row-between">
     <div class="section-hed">Big Cartel orders</div>
-    <button class="btn ink" id="scan-btn" onclick="fetchOrders()">Scan Gmail</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" id="backfill-shipping-btn" onclick="backfillShipping()" title="Re-scan Gmail and fill in missing shipping addresses on already-applied orders">Backfill shipping info</button>
+      <button class="btn ink" id="scan-btn" onclick="fetchOrders()">Scan Gmail</button>
+    </div>
   </div>
   <div id="orders-list"><div class="empty-state"><div class="e-icon">📬</div>Press "Scan Gmail" to pull in new orders.</div></div>
   <button class="btn gold" id="apply-all-btn" onclick="applyAll()" disabled style="width:100%;margin-top:4px;">Apply all new orders</button>

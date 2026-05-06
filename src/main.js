@@ -2088,6 +2088,93 @@ async function fetchOrders() {
   btn.textContent = 'Scan Gmail'; btn.disabled = false;
 }
 
+// Re-scan Gmail and fill in missing shipping fields on already-applied
+// orders (across all books). Useful when an earlier email parse failed
+// or when the address arrived in a follow-up email.
+async function backfillShipping() {
+  const log = 'log-web';
+  const btn = $('backfill-shipping-btn');
+  if (!sheetsUrl) {
+    showToast('Connect Google Sheets first to scan Gmail', 'warn');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Scanning…'; }
+  addLog(log, '🔁 Re-scanning Gmail for missing shipping info…', 'ok');
+
+  const daysBack = parseInt(localStorage.getItem('lm-scan-days') || '30');
+  let parsed = null;
+  try {
+    const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=scanGmail&daysBack=' + daysBack;
+    const res = await fetch(destUrl, { method: 'GET', mode: 'cors' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    parsed = await res.json();
+    if (!parsed || !parsed.ok) throw new Error(parsed?.error || 'Server returned failure');
+  } catch (e) {
+    addLog(log, `❌ Backfill scan failed: ${e.message}`, 'err');
+    if (btn) { btn.disabled = false; btn.textContent = 'Backfill shipping info'; }
+    return;
+  }
+
+  const norm = (v) => {
+    const raw = String(v || '').trim();
+    if (!raw) return '';
+    const hit = raw.match(/#?[a-z0-9]+-[a-z0-9-]+/i);
+    if (hit) {
+      const upper = hit[0].toUpperCase();
+      return upper.startsWith('#') ? upper : `#${upper}`;
+    }
+    return raw.toUpperCase();
+  };
+
+  const lookup = new Map();
+  for (const o of (parsed.orders || [])) {
+    const key = norm(o.orderNum);
+    if (key && !lookup.has(key)) lookup.set(key, o);
+  }
+
+  const fields = ['shipName', 'shipEmail', 'shipAddr1', 'shipAddr2',
+                  'shipCity', 'shipProvince', 'shipPostal', 'shipCountry'];
+  let updated = 0;
+  let stillMissing = 0;
+  const touchedBooks = new Set();
+
+  for (const bookId of Object.keys(states)) {
+    const st = states[bookId];
+    if (!st || !Array.isArray(st.hist)) continue;
+    for (const h of st.hist) {
+      if (h.chan !== 'Website' || h.voided) continue;
+      const incomplete = !h.shipName || !h.shipAddr1 || !h.shipCity || !h.shipPostal;
+      if (!incomplete) continue;
+      const match = lookup.get(norm(h.num));
+      if (!match) { stillMissing++; continue; }
+      let changed = false;
+      for (const f of fields) {
+        const incoming = (match[f] || (f === 'shipName' ? match.customer : '') || (f === 'shipEmail' ? match.email : '') || '').trim();
+        if (incoming && !h[f]) { h[f] = incoming; changed = true; }
+      }
+      if (changed) {
+        updated++;
+        touchedBooks.add(bookId);
+      } else {
+        stillMissing++;
+      }
+    }
+  }
+
+  for (const bookId of touchedBooks) saveState(bookId);
+  renderHist();
+
+  if (updated > 0) {
+    addLog(log, `✓ Backfilled shipping info on ${updated} order(s).`, 'ok');
+    showToast(`✓ Updated ${updated} order${updated === 1 ? '' : 's'}`);
+  } else {
+    addLog(log, `📭 No orders updated. ${stillMissing} order(s) still missing info — Gmail email may be older than the ${daysBack}-day scan window or has no parseable address.`, 'warn');
+    showToast('No orders updated', 'warn');
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Backfill shipping info'; }
+}
+
 // ── MANUAL
 // Session-level cache so we don't re-fetch the same currency pair twice (Uses global _fxRateCache)
 
@@ -6885,7 +6972,7 @@ Object.assign(window, {
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
-  handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped,
+  handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
   saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
