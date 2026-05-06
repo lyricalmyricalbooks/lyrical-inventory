@@ -6417,7 +6417,7 @@ function renderPOSFxStatus() {
 //
 // fxRate must be the live rate from paymentCurrency → bookNativeCurrency
 // (i.e. the same direction fetchLiveRate uses), matching how manual entry works.
-function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate) {
+function _posItemToManualPayload(book, qty, paymentMethod, paymentType, basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate) {
   const nativeCurCode = getBookCurrencyCode(book);
   const isFx = txnCurCode !== nativeCurCode;
 
@@ -6427,27 +6427,37 @@ function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode
   const payment = buildPaymentMeta({
     book,
     qty,
-    unitPrice: basePrice,          // native-currency unit price (for revenue/ledger)
+    unitPrice: basePrice,
     fxEnabled: isFx,
-    fxCur: txnCurCode,             // what currency was actually paid
-    fxAmt: foreignTotal,           // total amount paid in that currency
-    fxRate: nativePerTxnRate || 1  // rate: 1 txnCur = N nativeCur  (e.g. 1 CAD = 0.68 EUR)
+    fxCur: txnCurCode,
+    fxAmt: foreignTotal,
+    fxRate: nativePerTxnRate || 1
   });
+  if (payment) payment.type = paymentType;
 
   const num = `POS-${Date.now().toString().slice(-6)}`;
   const chan = 'Book Fair';
-  const notes = paymentMethod;
+  const fxNote = isFx ? `Paid ${txnCurCode} ${foreignTotal.toFixed(2)}` : '';
+  const notes = [paymentMethod, fxNote, paymentType].filter(Boolean).join(' · ');
   return { num, chan, qty, price: basePrice, notes, payment };
 }
 
 window.posCheckout = function() {
   const method = $('pos-payment-method').value;
+  const paymentType = $('pos-payment-type').value;
   const rows = buildPOSCartRows();
-  
+
   if(rows.length === 0) {
       showToast('Cart is empty', 'warn');
       return;
   }
+  if(!paymentType){
+    $('pos-payment-type').style.borderColor='var(--red)';
+    $('pos-payment-type').focus();
+    showToast('⚠ Please select a payment type','warn');
+    return;
+  }
+  $('pos-payment-type').style.borderColor='';
 
   const hasMissingFx = rows.some((row) => row.convertedLine === null);
   const totalCharged = hasMissingFx
@@ -6458,6 +6468,7 @@ window.posCheckout = function() {
   const localeTs = timestamp.toLocaleString('en-CA');
   posPendingSale = {
     method,
+    paymentType,
     rows,
     hasMissingFx,
     totalCharged,
@@ -6471,6 +6482,8 @@ window.posCheckout = function() {
     return `<tr><td>${row.book.title}</td><td class="r">${row.qty}</td><td class="r">${lineDisplay}</td></tr>`;
   }).join('');
   $('pos-confirm-payment').textContent = method;
+  const ptEl = $('pos-confirm-payment-type');
+  if (ptEl) ptEl.textContent = paymentType;
   $('pos-confirm-timestamp').textContent = localeTs;
   $('pos-confirm-total').textContent = totalCharged;
   openM('pos-sale-confirm');
@@ -6480,6 +6493,10 @@ window.posConfirmSale = async function() {
   if (!posPendingSale) return;
 
   const previousBook = activeBook;
+  const paymentType = posPendingSale.paymentType;
+  const author = isAuthor();
+  let submittedCount = 0;
+  let pendingTransferCount = 0;
 
   for (const row of posPendingSale.rows) {
     const book = row.book;
@@ -6520,13 +6537,26 @@ window.posConfirmSale = async function() {
     activeBook = book.id;
 
     const { num, chan, notes, payment } = _posItemToManualPayload(
-      book, qty, posPendingSale.method,
+      book, qty, posPendingSale.method, paymentType,
       basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate
     );
 
-    // recordOrder is the single shared sale-writing function used by manual entry.
-    // basePrice (native currency) drives revenue so it's always in the book's own currency.
-    recordOrder(num, chan, qty, basePrice, notes, payment);
+    if (author) {
+      // Author queue route — mirrors manual entry's author flow
+      const entryPayload = { num, chan, qty, price: basePrice, notes, payment, paymentType, date: today(), id: Date.now() };
+      try {
+        await window._fbSubmitActivity(book.id, 'sales', entryPayload);
+        submittedCount++;
+      } catch (e) {
+        console.error('POS submission error:', e);
+        showToast('⚠ Failed to submit POS sale for approval', 'err');
+      }
+    } else if (paymentType === 'Payment directly to artist') {
+      recordOrderPendingTransfer(num, chan, qty, basePrice, notes, payment);
+      pendingTransferCount++;
+    } else {
+      recordOrder(num, chan, qty, basePrice, notes, payment);
+    }
   }
 
   activeBook = previousBook;
@@ -6534,10 +6564,23 @@ window.posConfirmSale = async function() {
   closeM('pos-sale-confirm');
   posPendingSale = null;
   posCart = {};
+  $('pos-payment-type').value = '';
   renderPOS();
   if (typeof renderAllOverview === 'function') renderAllOverview();
+  updateDash();
   updateHeader();
-  showToast('✓ Sale complete — recorded to ledger', 'ok');
+
+  if (author && submittedCount) {
+    if (paymentType === 'Payment directly to artist') {
+      showToast('⏳ POS sale submitted — you will owe a transfer to the publisher upon approval', 'warn');
+    } else {
+      showToast('✓ POS sale submitted for approval', 'ok');
+    }
+  } else if (pendingTransferCount) {
+    showToast('⏳ Sale logged — awaiting artist transfer to publisher', 'warn');
+  } else {
+    showToast('✓ Sale complete — recorded to ledger', 'ok');
+  }
 };
 
 window.posPrintReceipt = function() {
