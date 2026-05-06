@@ -2406,29 +2406,38 @@ function printShippingLabel() {
   saveState(activeBook);
   renderHist();
 
-  const ship = { name:h.shipName, email:h.shipEmail, addr1:h.shipAddr1, addr2:h.shipAddr2,
+  const ship = { name:h.shipName, addr1:h.shipAddr1, addr2:h.shipAddr2,
                  city:h.shipCity, province:h.shipProvince, postal:h.shipPostal, country:h.shipCountry };
 
   const fromLines = ['Lyricalmyrical Books', '456 Montrose Ave', 'Toronto, ON  M6G 3H1', 'Canada'];
 
   const cityLine = [ship.city, ship.province].filter(Boolean).join(', ');
   const cityPostal = [cityLine, ship.postal].filter(Boolean).join('  ');
-  const toLines = [ship.addr1, ship.addr2, cityPostal, (ship.country||'').toUpperCase()].filter(Boolean);
+  const toLines = [ship.addr1, ship.addr2, cityPostal].filter(Boolean);
+  const country = (ship.country||'').toUpperCase();
 
   const esc = (s) => String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
   const labelHTML = `
   <div class="label">
+    <header class="brand-band">
+      <div class="brand">LYRICALMYRICAL BOOKS</div>
+      <div class="brand-meta">${esc(fmtD(h.shippedDate || h.date) || '')}</div>
+    </header>
+
     <section class="to">
-      <div class="kicker kicker-lg">Ship To</div>
+      <div class="kicker">Ship To</div>
       <div class="to-name">${esc(ship.name||'')}</div>
       <div class="to-lines">
         ${toLines.map(l=>`<div>${esc(l)}</div>`).join('')}
       </div>
-      ${ship.email?`<div class="to-email">${esc(ship.email)}</div>`:''}
+      ${country ? `<div class="to-country">${esc(country)}</div>` : ''}
     </section>
 
-    <div class="rule"></div>
+    <section class="ref">
+      <div class="ref-bars" aria-hidden="true"></div>
+      <div class="ref-num">${esc(h.num||'')}</div>
+    </section>
 
     <section class="from">
       <div class="kicker">From</div>
@@ -2436,11 +2445,6 @@ function printShippingLabel() {
         ${fromLines.map(l=>`<div>${esc(l)}</div>`).join('')}
       </div>
     </section>
-
-    <footer class="label-foot">
-      <div class="foot-item"><span class="foot-k">Item</span><span class="foot-v">${esc(book.title)}</span></div>
-      <div class="foot-item"><span class="foot-k">Qty</span><span class="foot-v">${esc(h.qty)}</span></div>
-    </footer>
   </div>`;
 
   const styles = `
@@ -2454,58 +2458,78 @@ function printShippingLabel() {
     }
     .label {
       width: 4in; height: 6in;
-      padding: 0.28in 0.3in;
       display: flex; flex-direction: column;
       color: #111;
     }
 
-    .kicker {
-      font-size: 6.5pt; font-weight: 700;
-      letter-spacing: .18em; text-transform: uppercase;
-      color: #888; margin-bottom: 4px;
-    }
-    .kicker-lg { font-size: 7.5pt; color: #111; margin-bottom: 6px; }
-
-    .to { flex: 1; }
-
-    .rule {
-      height: 0; border-top: 2px solid #111;
-      margin: 14px 0 14px;
-    }
-
-    .from { margin-top: 0; }
-    .from-lines { font-size: 9pt; line-height: 1.45; color: #333; }
-    .to-name {
-      font-size: 18pt; font-weight: 700;
-      letter-spacing: -.005em; line-height: 1.15;
-      margin-bottom: 6px;
-    }
-    .to-lines { font-size: 12pt; line-height: 1.4; color: #111; }
-    .to-lines div:last-child {
-      margin-top: 4px; font-weight: 700; letter-spacing: .04em; font-size: 11pt;
-    }
-    .to-email {
-      margin-top: 10px; padding-top: 8px;
-      border-top: 1px dashed #bbb;
-      font-size: 8.5pt; color: #666;
-    }
-
-    .label-foot {
-      margin-top: 12px; padding-top: 10px;
-      border-top: 1px solid #ddd;
-      display: flex; justify-content: space-between; gap: 16px;
+    .brand-band {
+      display: flex; justify-content: space-between; align-items: center;
+      background: #111; color: #fff;
+      padding: 10px 0.3in;
       font-size: 8pt;
     }
-    .foot-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-    .foot-k {
-      font-size: 6.5pt; font-weight: 700;
-      letter-spacing: .18em; text-transform: uppercase; color: #888;
+    .brand {
+      font-weight: 800; letter-spacing: .14em;
     }
-    .foot-v {
-      font-size: 9pt; color: #111; font-weight: 500;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 2.6in;
+    .brand-meta {
+      font-size: 7.5pt; letter-spacing: .08em; color: #ddd;
     }
-    .label-foot .foot-item:last-child { text-align: right; }
+
+    .kicker {
+      font-size: 7pt; font-weight: 800;
+      letter-spacing: .22em; text-transform: uppercase;
+      color: #111; margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1.5px solid #111;
+    }
+
+    .to {
+      flex: 1;
+      padding: 0.24in 0.3in 0.18in;
+    }
+    .to-name {
+      font-size: 19pt; font-weight: 800;
+      letter-spacing: -.01em; line-height: 1.1;
+      margin-bottom: 8px;
+    }
+    .to-lines { font-size: 12pt; line-height: 1.38; color: #111; }
+    .to-country {
+      margin-top: 8px;
+      font-size: 13pt; font-weight: 800;
+      letter-spacing: .06em;
+    }
+
+    .ref {
+      border-top: 1px solid #111;
+      border-bottom: 1px solid #111;
+      padding: 10px 0.3in;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 6px;
+    }
+    .ref-bars {
+      width: 100%; height: 28px;
+      background-image: repeating-linear-gradient(
+        to right,
+        #111 0, #111 1.5px,
+        #fff 1.5px, #fff 3.5px,
+        #111 3.5px, #111 6px,
+        #fff 6px, #fff 7.5px,
+        #111 7.5px, #111 8.5px,
+        #fff 8.5px, #fff 11px,
+        #111 11px, #111 13.5px,
+        #fff 13.5px, #fff 15px
+      );
+    }
+    .ref-num {
+      font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+      font-size: 11pt; font-weight: 700; letter-spacing: .12em;
+    }
+
+    .from {
+      padding: 0.16in 0.3in 0.22in;
+    }
+    .from .kicker { border-bottom: none; padding-bottom: 0; margin-bottom: 4px; color: #666; }
+    .from-lines { font-size: 8.5pt; line-height: 1.45; color: #444; }
 
     @media print {
       body { padding: 0; }
