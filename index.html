@@ -1289,9 +1289,12 @@ function json_(obj) {
       <div class="form-group" style="margin:0;"><label>Country</label><input type="text" id="sl-country" placeholder="e.g. Canada" value="Canada"></div>
     </div>
 
+    <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:6px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;"></div>
+
     <div class="modal-footer">
       <button class="btn" onclick="closeM('shipping-label')">Cancel</button>
-      <button class="btn gold" onclick="printShippingLabel()">🖨 Print label</button>
+      <button class="btn" id="sl-toggle-shipped-btn" onclick="toggleShipped()" style="display:none;">Mark as shipped</button>
+      <button class="btn gold" onclick="printShippingLabel()">🖨 Print &amp; mark shipped</button>
     </div>
   </div>
 </div>
