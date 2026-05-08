@@ -747,11 +747,15 @@
 
 <!-- EVENT POS -->
 <div class="tab-panel" id="tab-pos" style="display:none;">
-  <div class="row-between" style="margin-bottom:1.25rem;align-items:flex-start;">
+  <div class="row-between" style="margin-bottom:1.25rem;align-items:flex-start;gap:12px;">
     <div>
       <div class="section-hed" style="font-size:24px;">Point of Sale</div>
       <div style="font-size:12px;color:var(--text3);">Fast checkout for book fairs and live events with controlled currency handling and itemized checkout review.</div>
     </div>
+    <button class="btn" onclick="openSalesTrackerModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+      Print sales tracker
+    </button>
   </div>
 
   <div class="pos-layout" style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:1rem;align-items:flex-start;">
@@ -795,6 +799,39 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
         Complete Sale
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- SALES TRACKER MODAL -->
+<div class="overlay" id="m-sales-tracker" style="display:none;">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-title">🖨 Printable book sales tracker</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.5;">
+      Generates a printable tally sheet for in-person events. Pick the books you'll be selling, set the number of tally columns, and print.
+    </div>
+
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group" style="margin:0;"><label>Event name</label><input type="text" id="st-event" placeholder="e.g. Toronto Art Book Fair"></div>
+      <div class="form-group" style="margin:0;"><label>Date</label><input type="date" id="st-date"></div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Tally columns per book</label>
+      <input type="number" id="st-cols" value="10" min="1" max="30" style="max-width:120px;">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">Each column is one sale. Default 10.</div>
+    </div>
+
+    <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Books to include</div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:8px;">
+      <button type="button" class="btn sm" onclick="salesTrackerSelectAll(true)">Select all</button>
+      <button type="button" class="btn sm" onclick="salesTrackerSelectAll(false)">Clear</button>
+    </div>
+    <div id="st-books-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;border:1px solid rgba(255,255,255,.08);border-radius:var(--r2);padding:10px;background:rgba(255,255,255,.02);"></div>
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeM('sales-tracker')">Cancel</button>
+      <button class="btn gold" onclick="printSalesTracker()">🖨 Print tracker</button>
     </div>
   </div>
 </div>
