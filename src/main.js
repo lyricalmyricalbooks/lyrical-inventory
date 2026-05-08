@@ -6842,37 +6842,71 @@ window.posPrintReceipt = function() {
 };
 
 // ── PRINTABLE SALES TRACKER ──
+let salesTrackerCustomBooks = [];
+
+function renderSalesTrackerBookList() {
+  const list = document.getElementById('st-books-list');
+  if (!list) return;
+  const booksToShow = isAuthor() && activeBook !== 'all'
+    ? { [activeBook]: BOOKS[activeBook] }
+    : BOOKS;
+  const inventoryEntries = Object.values(booksToShow);
+
+  const inventoryHtml = inventoryEntries.map((book) => `
+    <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);">
+      <input type="checkbox" class="st-book-check" data-kind="inv" value="${book.id}" checked style="width:16px;height:16px;cursor:pointer;">
+      <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
+      <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
+    </label>
+  `).join('');
+
+  const customHtml = salesTrackerCustomBooks.map((book, idx) => `
+    <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(212,175,55,.12);border:1px dashed rgba(212,175,55,.5);">
+      <input type="checkbox" class="st-book-check" data-kind="custom" value="${idx}" checked style="width:16px;height:16px;cursor:pointer;">
+      <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
+      <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
+      <button type="button" onclick="salesTrackerRemoveCustom(${idx})" style="background:none;border:none;color:#a00;cursor:pointer;font-size:14px;padding:0 4px;" title="Remove">✕</button>
+    </label>
+  `).join('');
+
+  if (!inventoryEntries.length && !salesTrackerCustomBooks.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available. Add a custom book below.</div>';
+  } else {
+    list.innerHTML = inventoryHtml + customHtml;
+  }
+}
+
 window.openSalesTrackerModal = function() {
   const dateInput = document.getElementById('st-date');
   if (dateInput && !dateInput.value) dateInput.value = today();
-
-  const list = document.getElementById('st-books-list');
-  if (list) {
-    const booksToShow = isAuthor() && activeBook !== 'all'
-      ? { [activeBook]: BOOKS[activeBook] }
-      : BOOKS;
-    const entries = Object.values(booksToShow);
-    if (!entries.length) {
-      list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available.</div>';
-    } else {
-      list.innerHTML = entries.map((book) => {
-        const sourceCode = currencyToCode(book.currency);
-        const priceLabel = posFormat(book.listPrice || 0, sourceCode);
-        return `
-          <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);">
-            <input type="checkbox" class="st-book-check" value="${book.id}" checked style="width:16px;height:16px;cursor:pointer;">
-            <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
-            <span style="font-size:11px;color:#555;font-family:'DM Mono',monospace;">${priceLabel}</span>
-          </label>
-        `;
-      }).join('');
-    }
-  }
+  renderSalesTrackerBookList();
   openM('sales-tracker');
 };
 
 window.salesTrackerSelectAll = function(checked) {
   document.querySelectorAll('.st-book-check').forEach((el) => { el.checked = !!checked; });
+};
+
+window.salesTrackerAddCustom = function() {
+  const titleEl = document.getElementById('st-custom-title');
+  const authorEl = document.getElementById('st-custom-author');
+  const title = (titleEl.value || '').trim();
+  const author = (authorEl.value || '').trim();
+  if (!title) {
+    showToast('Enter a book title', 'warn');
+    titleEl.focus();
+    return;
+  }
+  salesTrackerCustomBooks.push({ title, author });
+  titleEl.value = '';
+  authorEl.value = '';
+  renderSalesTrackerBookList();
+  titleEl.focus();
+};
+
+window.salesTrackerRemoveCustom = function(idx) {
+  salesTrackerCustomBooks.splice(idx, 1);
+  renderSalesTrackerBookList();
 };
 
 function escapeHtml(s) {
@@ -6891,11 +6925,14 @@ window.printSalesTracker = function() {
   if (!cols || cols < 1) cols = 10;
   if (cols > 30) cols = 30;
 
-  const selectedIds = Array.from(document.querySelectorAll('.st-book-check'))
-    .filter((el) => el.checked)
-    .map((el) => el.value);
+  const currencyCode = document.getElementById('st-currency').value || 'EUR';
+  const currencySymbol = codeToSymbol(currencyCode);
 
-  if (!selectedIds.length) {
+  const selected = Array.from(document.querySelectorAll('.st-book-check'))
+    .filter((el) => el.checked)
+    .map((el) => ({ kind: el.dataset.kind, value: el.value }));
+
+  if (!selected.length) {
     showToast('Select at least one book to include', 'warn');
     return;
   }
@@ -6908,19 +6945,28 @@ window.printSalesTracker = function() {
 
   const colHeaders = Array.from({ length: cols }, (_, i) => `<th class="num">${i + 1}</th>`).join('');
 
-  const bookRows = selectedIds.map((id) => {
-    const book = BOOKS[id];
-    if (!book) return '';
-    const sourceCode = currencyToCode(book.currency);
-    const priceLabel = posFormat(book.listPrice || 0, sourceCode);
+  const bookRows = selected.map((sel) => {
+    let title = '';
+    let author = '';
+    if (sel.kind === 'custom') {
+      const cb = salesTrackerCustomBooks[parseInt(sel.value, 10)];
+      if (!cb) return '';
+      title = cb.title;
+      author = cb.author || '';
+    } else {
+      const book = BOOKS[sel.value];
+      if (!book) return '';
+      title = book.title;
+      author = book.author || '';
+    }
     const tallyCells = Array.from({ length: cols }, () => '<td class="tally"></td>').join('');
     if (includeNotes) {
       const priceCells = Array.from({ length: cols }, () => '<td class="price-paid"></td>').join('');
       return `
         <tr>
           <td class="title" rowspan="2">
-            <div class="title-name">${escapeHtml(book.title)}</div>
-            <div class="title-meta">${book.author ? escapeHtml(book.author) + ' · ' : ''}${priceLabel}</div>
+            <div class="title-name">${escapeHtml(title)}</div>
+            ${author ? `<div class="title-meta">${escapeHtml(author)}</div>` : ''}
           </td>
           ${tallyCells}
           <td class="total" rowspan="2"></td>
@@ -6933,8 +6979,8 @@ window.printSalesTracker = function() {
     return `
       <tr>
         <td class="title">
-          <div class="title-name">${escapeHtml(book.title)}</div>
-          <div class="title-meta">${book.author ? escapeHtml(book.author) + ' · ' : ''}${priceLabel}</div>
+          <div class="title-name">${escapeHtml(title)}</div>
+          ${author ? `<div class="title-meta">${escapeHtml(author)}</div>` : ''}
         </td>
         ${tallyCells}
         <td class="total"></td>
@@ -6966,7 +7012,7 @@ window.printSalesTracker = function() {
       td.tally { background: #fff; }
       td.total { background: #fdf0c8; }
       td.price-paid { background: #fafafa; height: 28px; font-size: 9pt; color: #666; text-align: center; vertical-align: middle; }
-      tr.price-row td.price-paid::before { content: "€ ___"; color: #bbb; font-size: 8pt; }
+      tr.price-row td.price-paid::before { content: "${currencySymbol} ___"; color: #bbb; font-size: 8pt; }
       tfoot td { border: none; padding-top: 14px; }
       .grand-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 18px; }
       .grand-label { font-size: 14pt; font-weight: 800; }
