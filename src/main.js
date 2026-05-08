@@ -6859,10 +6859,10 @@ window.openSalesTrackerModal = function() {
         const sourceCode = currencyToCode(book.currency);
         const priceLabel = posFormat(book.listPrice || 0, sourceCode);
         return `
-          <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(255,255,255,.02);">
+          <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);">
             <input type="checkbox" class="st-book-check" value="${book.id}" checked style="width:16px;height:16px;cursor:pointer;">
-            <span style="flex:1;font-size:13px;color:var(--cream);">${escapeHtml(book.title)}</span>
-            <span style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${priceLabel}</span>
+            <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
+            <span style="font-size:11px;color:#555;font-family:'DM Mono',monospace;">${priceLabel}</span>
           </label>
         `;
       }).join('');
