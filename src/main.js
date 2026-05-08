@@ -6841,6 +6841,154 @@ window.posPrintReceipt = function() {
   win.print();
 };
 
+// ── PRINTABLE SALES TRACKER ──
+window.openSalesTrackerModal = function() {
+  const dateInput = document.getElementById('st-date');
+  if (dateInput && !dateInput.value) dateInput.value = today();
+
+  const list = document.getElementById('st-books-list');
+  if (list) {
+    const booksToShow = isAuthor() && activeBook !== 'all'
+      ? { [activeBook]: BOOKS[activeBook] }
+      : BOOKS;
+    const entries = Object.values(booksToShow);
+    if (!entries.length) {
+      list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available.</div>';
+    } else {
+      list.innerHTML = entries.map((book) => {
+        const sourceCode = currencyToCode(book.currency);
+        const priceLabel = posFormat(book.listPrice || 0, sourceCode);
+        return `
+          <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(255,255,255,.02);">
+            <input type="checkbox" class="st-book-check" value="${book.id}" checked style="width:16px;height:16px;cursor:pointer;">
+            <span style="flex:1;font-size:13px;color:var(--cream);">${escapeHtml(book.title)}</span>
+            <span style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${priceLabel}</span>
+          </label>
+        `;
+      }).join('');
+    }
+  }
+  openM('sales-tracker');
+};
+
+window.salesTrackerSelectAll = function(checked) {
+  document.querySelectorAll('.st-book-check').forEach((el) => { el.checked = !!checked; });
+};
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+window.printSalesTracker = function() {
+  const eventName = (document.getElementById('st-event').value || '').trim();
+  const dateValue = (document.getElementById('st-date').value || '').trim();
+  let cols = parseInt(document.getElementById('st-cols').value, 10);
+  if (!cols || cols < 1) cols = 10;
+  if (cols > 30) cols = 30;
+
+  const selectedIds = Array.from(document.querySelectorAll('.st-book-check'))
+    .filter((el) => el.checked)
+    .map((el) => el.value);
+
+  if (!selectedIds.length) {
+    showToast('Select at least one book to include', 'warn');
+    return;
+  }
+
+  const dateLabel = dateValue
+    ? new Date(dateValue + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    : '';
+
+  const colHeaders = Array.from({ length: cols }, (_, i) => `<th class="num">${i + 1}</th>`).join('');
+
+  const bookRows = selectedIds.map((id) => {
+    const book = BOOKS[id];
+    if (!book) return '';
+    const sourceCode = currencyToCode(book.currency);
+    const priceLabel = posFormat(book.listPrice || 0, sourceCode);
+    const tallyCells = Array.from({ length: cols }, () => '<td class="tally"></td>').join('');
+    return `
+      <tr>
+        <td class="title">
+          <div class="title-name">${escapeHtml(book.title)}</div>
+          <div class="title-meta">${book.author ? escapeHtml(book.author) + ' · ' : ''}${priceLabel}</div>
+        </td>
+        ${tallyCells}
+        <td class="total"></td>
+      </tr>
+    `;
+  }).join('');
+
+  const totalCols = cols + 2;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Book Sales Tracker${eventName ? ' — ' + escapeHtml(eventName) : ''}</title>
+    <style>
+      @page { size: letter landscape; margin: 0.4in; }
+      * { box-sizing: border-box; }
+      html, body { background: #fff; color: #111; margin: 0; padding: 0; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; padding: 0.2in; }
+      .header { text-align: center; margin-bottom: 14px; }
+      .header h1 { margin: 0; font-size: 26pt; font-weight: 800; letter-spacing: -.01em; }
+      .meta { display: flex; gap: 36px; margin-bottom: 12px; font-size: 12pt; }
+      .meta-row { flex: 1; display: flex; align-items: baseline; gap: 8px; border-bottom: 1.5px solid #111; padding-bottom: 4px; }
+      .meta-row .label { font-weight: 800; }
+      .meta-row .value { flex: 1; font-weight: 500; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1.2px solid #111; padding: 0; height: 56px; }
+      thead th { background: #e8e8e8; font-size: 11pt; font-weight: 800; text-align: center; height: 32px; padding: 4px; }
+      thead th.title-col { text-align: left; padding-left: 10px; width: 22%; }
+      thead th.total-col { background: #f4e4b8; width: 80px; }
+      td.title { padding: 8px 10px; vertical-align: middle; }
+      td.title .title-name { font-weight: 700; font-size: 11.5pt; line-height: 1.2; }
+      td.title .title-meta { font-size: 9pt; color: #555; margin-top: 2px; }
+      td.tally { background: #fff; }
+      td.total { background: #fdf0c8; }
+      tfoot td { border: none; padding-top: 14px; }
+      .grand-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 18px; }
+      .grand-label { font-size: 14pt; font-weight: 800; }
+      .grand-box { width: 110px; height: 44px; border: 1.5px solid #111; background: #fdf0c8; }
+      @media print { body { padding: 0; } }
+    </style>
+    </head><body>
+      <div class="header"><h1>Book Sales Tracker</h1></div>
+      <div class="meta">
+        <div class="meta-row"><span class="label">Event:</span><span class="value">${escapeHtml(eventName)}</span></div>
+        <div class="meta-row"><span class="label">Date:</span><span class="value">${escapeHtml(dateLabel)}</span></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th class="title-col">Book Title</th>
+            ${colHeaders}
+            <th class="total-col">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>${bookRows}</tbody>
+      </table>
+      <div class="grand-row">
+        <div class="grand-label">GRAND TOTAL</div>
+        <div class="grand-box"></div>
+      </div>
+    </body></html>`;
+
+  const win = window.open('', '_blank', 'width=1100,height=800');
+  if (!win) {
+    showToast('Pop-up blocked — allow pop-ups to print', 'warn');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 350);
+  closeM('sales-tracker');
+};
+
 // ── TAX SEASON EXPORT ──
 window.downloadFullTaxSeasonExport = function() {
   const yearSelect = document.getElementById('tc-year');
