@@ -6900,6 +6900,8 @@ window.printSalesTracker = function() {
     return;
   }
 
+  const includeNotes = !!document.getElementById('st-notes').checked;
+
   const dateLabel = dateValue
     ? new Date(dateValue + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
     : '';
@@ -6912,6 +6914,22 @@ window.printSalesTracker = function() {
     const sourceCode = currencyToCode(book.currency);
     const priceLabel = posFormat(book.listPrice || 0, sourceCode);
     const tallyCells = Array.from({ length: cols }, () => '<td class="tally"></td>').join('');
+    if (includeNotes) {
+      const priceCells = Array.from({ length: cols }, () => '<td class="price-paid"></td>').join('');
+      return `
+        <tr>
+          <td class="title" rowspan="2">
+            <div class="title-name">${escapeHtml(book.title)}</div>
+            <div class="title-meta">${book.author ? escapeHtml(book.author) + ' · ' : ''}${priceLabel}</div>
+          </td>
+          ${tallyCells}
+          <td class="total" rowspan="2"></td>
+        </tr>
+        <tr class="price-row">
+          ${priceCells}
+        </tr>
+      `;
+    }
     return `
       <tr>
         <td class="title">
@@ -6923,8 +6941,6 @@ window.printSalesTracker = function() {
       </tr>
     `;
   }).join('');
-
-  const totalCols = cols + 2;
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Book Sales Tracker${eventName ? ' — ' + escapeHtml(eventName) : ''}</title>
@@ -6949,6 +6965,8 @@ window.printSalesTracker = function() {
       td.title .title-meta { font-size: 9pt; color: #555; margin-top: 2px; }
       td.tally { background: #fff; }
       td.total { background: #fdf0c8; }
+      td.price-paid { background: #fafafa; height: 28px; font-size: 9pt; color: #666; text-align: center; vertical-align: middle; }
+      tr.price-row td.price-paid::before { content: "€ ___"; color: #bbb; font-size: 8pt; }
       tfoot td { border: none; padding-top: 14px; }
       .grand-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 18px; }
       .grand-label { font-size: 14pt; font-weight: 800; }
