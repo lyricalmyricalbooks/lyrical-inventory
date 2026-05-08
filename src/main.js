@@ -6900,6 +6900,8 @@ window.printSalesTracker = function() {
     return;
   }
 
+  const includeNotes = !!document.getElementById('st-notes').checked;
+
   const dateLabel = dateValue
     ? new Date(dateValue + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
     : '';
@@ -6920,11 +6922,10 @@ window.printSalesTracker = function() {
         </td>
         ${tallyCells}
         <td class="total"></td>
+        ${includeNotes ? '<td class="notes"></td>' : ''}
       </tr>
     `;
   }).join('');
-
-  const totalCols = cols + 2;
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Book Sales Tracker${eventName ? ' — ' + escapeHtml(eventName) : ''}</title>
@@ -6949,6 +6950,8 @@ window.printSalesTracker = function() {
       td.title .title-meta { font-size: 9pt; color: #555; margin-top: 2px; }
       td.tally { background: #fff; }
       td.total { background: #fdf0c8; }
+      thead th.notes-col { width: 18%; background: #e8e8e8; }
+      td.notes { background: #fff; }
       tfoot td { border: none; padding-top: 14px; }
       .grand-row { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 18px; }
       .grand-label { font-size: 14pt; font-weight: 800; }
@@ -6967,6 +6970,7 @@ window.printSalesTracker = function() {
             <th class="title-col">Book Title</th>
             ${colHeaders}
             <th class="total-col">TOTAL</th>
+            ${includeNotes ? '<th class="notes-col">NOTES / PRICE PAID</th>' : ''}
           </tr>
         </thead>
         <tbody>${bookRows}</tbody>
