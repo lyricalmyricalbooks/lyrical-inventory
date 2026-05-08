@@ -7053,6 +7053,240 @@ window.printSalesTracker = function() {
   closeM('sales-tracker');
 };
 
+// ── PRINTABLE PAYMENT QR CODES ──
+function renderQRPrintBookList() {
+  const list = document.getElementById('qrp-books-list');
+  if (!list) return;
+  const booksToShow = isAuthor() && activeBook !== 'all'
+    ? { [activeBook]: BOOKS[activeBook] }
+    : BOOKS;
+  const entries = Object.values(booksToShow);
+  if (!entries.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available.</div>';
+    return;
+  }
+  list.innerHTML = entries.map((book) => {
+    const url = book.stripeLink || book.paymentLink || '';
+    const hasUrl = !!url;
+    return `
+      <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);${hasUrl ? '' : 'opacity:.55;'}">
+        <input type="checkbox" class="qrp-book-check" value="${book.id}" ${hasUrl ? 'checked' : ''} ${hasUrl ? '' : 'disabled'} style="width:16px;height:16px;cursor:pointer;">
+        <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
+        <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
+        ${hasUrl ? '' : '<span style="font-size:10px;color:#a00;text-transform:uppercase;letter-spacing:.1em;">no link</span>'}
+      </label>
+    `;
+  }).join('');
+}
+
+window.openQRPrintModal = function() {
+  renderQRPrintBookList();
+  openM('qr-print');
+};
+
+window.qrPrintSelectAll = function(checked) {
+  document.querySelectorAll('.qrp-book-check').forEach((el) => {
+    if (!el.disabled) el.checked = !!checked;
+  });
+};
+
+window.printPaymentQRCodes = function() {
+  const cols = Math.max(1, Math.min(6, parseInt(document.getElementById('qrp-cols').value, 10) || 3));
+  const baseCur = document.getElementById('qrp-base-cur').value || 'auto';
+  const showEUR = !!document.getElementById('qrp-show-eur').checked;
+  const showCAD = !!document.getElementById('qrp-show-cad').checked;
+  const showUSD = !!document.getElementById('qrp-show-usd').checked;
+
+  const selectedIds = Array.from(document.querySelectorAll('.qrp-book-check'))
+    .filter((el) => el.checked && !el.disabled)
+    .map((el) => el.value);
+
+  if (!selectedIds.length) {
+    showToast('Select at least one book with a payment link', 'warn');
+    return;
+  }
+
+  const currenciesShown = [];
+  if (showCAD) currenciesShown.push('CAD');
+  if (showEUR) currenciesShown.push('EUR');
+  if (showUSD) currenciesShown.push('USD');
+
+  const booksData = selectedIds.map((id) => {
+    const book = BOOKS[id];
+    const url = book.stripeLink || book.paymentLink || '';
+    const nativeCode = currencyToCode(book.currency);
+    const listedCode = baseCur === 'auto' ? nativeCode : baseCur;
+    const listedAmount = baseCur === 'auto'
+      ? (book.listPrice || 0)
+      : convertCurrency(book.listPrice || 0, nativeCode, listedCode);
+
+    const prices = currenciesShown.map((code) => {
+      let amount;
+      let approx = false;
+      if (code === listedCode) {
+        amount = listedAmount;
+      } else if (listedAmount != null) {
+        amount = convertCurrency(listedAmount, listedCode, code);
+        approx = true;
+      } else {
+        amount = null;
+      }
+      const symbol = codeToSymbol(code);
+      let display;
+      if (amount == null) {
+        display = '—';
+      } else {
+        const rounded = approx ? amount.toFixed(2) : amount.toFixed(2);
+        display = `${approx ? '~' : ''}${symbol}${rounded}`;
+      }
+      return { currency: code, amount: display, base: code === listedCode };
+    });
+
+    return { id: book.id, title: book.title, author: book.author || '', url, prices };
+  });
+
+  const cardsHtml = booksData.map((book, i) => {
+    const priceRows = book.prices.map((p) => `
+      <tr${p.base ? ' class="base-price"' : ''}>
+        <td>${escapeHtml(p.currency)}</td>
+        <td>${escapeHtml(p.amount)}</td>
+      </tr>
+    `).join('');
+    const pricesTable = book.prices.length ? `
+      <table class="prices">
+        <thead><tr><th>Currency</th><th>Price</th></tr></thead>
+        <tbody>${priceRows}</tbody>
+      </table>
+    ` : '';
+    return `
+      <div class="card">
+        <div class="card-num">${String(i + 1).padStart(2, '0')}</div>
+        <div class="qr-frame"><div id="qr-${i}" data-url="${escapeHtml(book.url)}"></div></div>
+        <div class="card-title">${escapeHtml(book.title)}</div>
+        ${pricesTable}
+        <div class="card-url">${escapeHtml(book.url)}</div>
+      </div>
+    `;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lyricalmyrical Books — Payment QR Codes</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Jost:wght@200;300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c1814;
+    --paper: #faf8f4;
+    --rule: #d6cfc4;
+    --accent: #8b6f47;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); font-family: 'Jost', sans-serif; font-weight: 300; color: var(--ink); }
+
+  .header { text-align: center; padding: 48px 40px 32px; border-bottom: 1px solid var(--rule); }
+  .header::before { content: ''; display: block; width: 40px; height: 1px; background: var(--accent); margin: 0 auto 18px; }
+  .brand { font-family: 'Cormorant Garamond', serif; font-size: 2.4rem; font-weight: 300; letter-spacing: 0.12em; line-height: 1; }
+  .brand em { font-style: italic; }
+  .tagline { margin-top: 9px; font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent); }
+  .date-line { margin-top: 5px; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; color: #aaa; }
+
+  .grid { display: grid; grid-template-columns: repeat(${cols}, 1fr); }
+
+  .card {
+    padding: 32px 24px 28px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+    display: flex; flex-direction: column; align-items: center; position: relative;
+  }
+  .card:nth-child(${cols}n) { border-right: none; }
+  .card::before, .card::after { content: ''; position: absolute; width: 7px; height: 7px; border-color: var(--accent); border-style: solid; opacity: 0.35; }
+  .card::before { top: 9px; left: 9px; border-width: 1px 0 0 1px; }
+  .card::after  { bottom: 9px; right: 9px; border-width: 0 1px 1px 0; }
+
+  .card-num { font-size: 0.52rem; letter-spacing: 0.22em; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; font-weight: 400; }
+
+  .qr-frame { width: 156px; height: 156px; padding: 9px; background: #fff; border: 1px solid var(--rule); display: flex; align-items: center; justify-content: center; margin-bottom: 18px; flex-shrink: 0; }
+
+  .card-title { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; font-style: italic; font-weight: 400; text-align: center; line-height: 1.3; margin-bottom: 14px; }
+
+  .prices { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .prices thead tr { border-bottom: 1px solid var(--rule); }
+  .prices thead th { font-size: 0.52rem; font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: #aaa; padding: 0 0 5px; text-align: left; }
+  .prices thead th:last-child { text-align: right; }
+  .prices tbody tr { border-bottom: 1px solid #f0ebe3; }
+  .prices tbody tr:last-child { border-bottom: none; }
+  .prices tbody td { font-size: 0.68rem; padding: 5px 0; color: var(--ink); letter-spacing: 0.04em; }
+  .prices tbody td:first-child { color: var(--accent); font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 400; }
+  .prices tbody td:last-child { text-align: right; font-family: 'Cormorant Garamond', serif; font-size: 0.85rem; }
+  .prices .base-price td:first-child { color: var(--ink); }
+
+  .card-url { font-size: 0.5rem; color: #c0b8ae; word-break: break-all; text-align: center; margin-top: 8px; line-height: 1.5; }
+
+  .footer { border-top: 1px solid var(--rule); padding: 18px 40px; display: flex; align-items: center; justify-content: space-between; }
+  .footer-brand { font-family: 'Cormorant Garamond', serif; font-size: 0.82rem; font-style: italic; color: #aaa; letter-spacing: 0.08em; }
+  .footer-note { font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: #bbb; }
+
+  .print-bar { position: fixed; bottom: 22px; right: 22px; z-index: 100; }
+  .print-btn { background: var(--ink); color: var(--paper); border: none; font-family: 'Jost', sans-serif; font-size: 0.68rem; font-weight: 300; letter-spacing: 0.16em; text-transform: uppercase; padding: 12px 26px; cursor: pointer; transition: background 0.2s; }
+  .print-btn:hover { background: var(--accent); }
+
+  @media print {
+    @page { size: A4; margin: 0; }
+    body { background: white; }
+    .print-bar { display: none; }
+    .header { padding: 32px 28px 24px; }
+    .brand { font-size: 2rem; }
+    .card { padding: 24px 18px 20px; }
+    .qr-frame { width: 140px; height: 140px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="brand"><em>Lyricalmyrical</em> Books</div>
+  <div class="tagline">Scan to purchase · Secured by Stripe</div>
+  <div class="date-line" id="date-line"></div>
+</header>
+
+<div class="grid">${cardsHtml}</div>
+
+<footer class="footer">
+  <span class="footer-brand">Lyricalmyrical Books</span>
+  <span class="footer-note">All transactions secured by Stripe · Adaptive Pricing enabled</span>
+</footer>
+
+<div class="print-bar">
+  <button class="print-btn" onclick="window.print()">↓ Print / Save PDF</button>
+</div>
+
+<script>
+document.getElementById('date-line').textContent = new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+function renderQRs() {
+  if (typeof QRCode === 'undefined') { setTimeout(renderQRs, 120); return; }
+  document.querySelectorAll('[id^="qr-"]').forEach(function(el) {
+    var url = el.getAttribute('data-url');
+    if (!url) return;
+    new QRCode(el, { text: url, width: 138, height: 138, colorDark: "#1c1814", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+  });
+}
+renderQRs();
+<\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=1100,height=800');
+  if (!win) {
+    showToast('Pop-up blocked — allow pop-ups to print', 'warn');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  closeM('qr-print');
+};
+
 // ── TAX SEASON EXPORT ──
 window.downloadFullTaxSeasonExport = function() {
   const yearSelect = document.getElementById('tc-year');
