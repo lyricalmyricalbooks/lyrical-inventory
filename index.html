@@ -564,6 +564,39 @@
   </div>
 </div></div>
 
+<!-- SHIPPO IMPORT MODAL -->
+<div class="overlay" id="m-shippo-import-modal" style="display:none;"><div class="modal" style="max-width:900px;">
+  <div class="modal-title">📦 Import Shipping Label Costs from Shippo</div>
+  <div style="background:rgba(180,140,20,.08);border:1px solid rgba(180,140,20,.2);border-radius:var(--r2);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.6;">
+    Pulls your recent purchased shipping labels from Shippo (goshippo.com) and logs each label cost as a deductible business expense under <strong>Shipping &amp; Postage</strong>. Already-imported labels are skipped automatically (matched by Shippo transaction ID).
+  </div>
+  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+    <div class="form-group" style="margin:0;flex:1;min-width:220px;">
+      <label style="font-size:11px;">Shippo API Token</label>
+      <input type="password" id="shippo-modal-key" placeholder="shippo_live_... or shippo_test_..." style="width:100%;font-size:12px;">
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">Stored in Tax Centre Config. Get it from goshippo.com → Settings → API.</div>
+    </div>
+    <div class="form-group" style="margin:0;width:120px;">
+      <label style="font-size:11px;">Page size</label>
+      <select id="shippo-page-size" style="width:100%;font-size:12px;">
+        <option value="25">25</option>
+        <option value="50">50</option>
+        <option value="100" selected>100</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;width:130px;">
+      <label style="font-size:11px;">Since</label>
+      <input type="date" id="shippo-since-date" style="width:100%;font-size:12px;">
+    </div>
+    <button class="btn gold" id="shippo-fetch-btn" onclick="fetchShippoTransactions()" style="height:36px;">Fetch labels</button>
+  </div>
+  <div id="shippo-results" style="margin-top:6px;"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeShippoImportModal()">Cancel</button>
+    <button class="btn gold" id="shippo-import-btn" onclick="importShippoTransactions()" style="display:none;">Import selected</button>
+  </div>
+</div></div>
+
 <!-- TAX CENTER (publisher only) -->
 <div class="tab-panel" id="tab-taxcenter" style="display:none;">
   <div class="book-context" style="margin-bottom: 2rem;">
@@ -640,6 +673,7 @@
     <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
       <button class="btn gold" style="width:100%;height:38px;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button>
       <button class="btn gold outline" style="height:38px;white-space:nowrap;padding:0 16px;" onclick="openEmailReceiptImportModal()" title="Import expenses from forwarded receipt emails">📧 Import from Email</button>
+      <button class="btn gold outline" style="height:38px;white-space:nowrap;padding:0 16px;" onclick="openShippoImportModal()" title="Import shipping label costs from Shippo">📦 Import from Shippo</button>
     </div>
   </div>
 
@@ -714,6 +748,13 @@
         <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled>
             <option value="CAD">CAD (Default)</option>
         </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Shippo API Token (For shipping label import)</label>
+          <div class="row-g1">
+            <input type="password" id="tc-shippo-key" placeholder="shippo_live_... or shippo_test_..." style="flex:1;">
+            <span style="font-size:11px;color:var(--text3);align-self:center;">Auto-categorized as Shipping &amp; Postage</span>
+          </div>
         </div>
     </div>
   </div>

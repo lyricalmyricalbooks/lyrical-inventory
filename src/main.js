@@ -3181,6 +3181,225 @@ async function importEmailReceiptDrafts() {
   else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
 }
 
+// ── SHIPPO IMPORT ──────────────────────────────────────────────────────────
+let _shippoFetched = []; // last fetched & enriched transactions
+
+function openShippoImportModal() {
+  openM('shippo-import-modal');
+  _shippoFetched = [];
+  const keyEl = $('shippo-modal-key');
+  if (keyEl) keyEl.value = TAX_CENTER.settings?.shippoKey || '';
+  const resEl = $('shippo-results');
+  if (resEl) resEl.innerHTML = '';
+  const btn = $('shippo-import-btn');
+  if (btn) btn.style.display = 'none';
+  // default "Since" to 90 days ago
+  const since = $('shippo-since-date');
+  if (since && !since.value) {
+    const d = new Date(); d.setDate(d.getDate() - 90);
+    since.value = d.toISOString().slice(0, 10);
+  }
+}
+
+function closeShippoImportModal() {
+  closeM('shippo-import-modal');
+}
+
+function _shippoAlreadyImported(txnId) {
+  if (!txnId) return false;
+  const list = TAX_CENTER.businessExpenses || [];
+  return list.some(e => e.shippoTxnId && e.shippoTxnId === txnId);
+}
+
+async function fetchShippoTransactions() {
+  const keyEl = $('shippo-modal-key');
+  const key = (keyEl?.value || '').trim();
+  if (!key) { showToast('⚠ Shippo API token required', 'err'); return; }
+
+  // Persist the key for next time
+  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+  if (TAX_CENTER.settings.shippoKey !== key) {
+    TAX_CENTER.settings.shippoKey = key;
+    saveTaxCenter().catch(() => {});
+    if ($('tc-shippo-key')) $('tc-shippo-key').value = key;
+  }
+
+  const pageSize = Number($('shippo-page-size')?.value || 100);
+  const sinceStr = $('shippo-since-date')?.value || '';
+  const sinceTs = sinceStr ? new Date(sinceStr).getTime() : 0;
+
+  const btn = $('shippo-fetch-btn');
+  const resEl = $('shippo-results');
+  const importBtn = $('shippo-import-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Fetching…'; }
+  if (importBtn) importBtn.style.display = 'none';
+  if (resEl) resEl.innerHTML = `<div style="font-size:12px;color:var(--text3);padding:10px;">Contacting Shippo…</div>`;
+
+  try {
+    const url = `https://api.goshippo.com/transactions/?results=${encodeURIComponent(pageSize)}`;
+    const r = await fetch(url, {
+      headers: { 'Authorization': `ShippoToken ${key}`, 'Accept': 'application/json' }
+    });
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      throw new Error(`Shippo API ${r.status}: ${txt.slice(0, 200) || r.statusText}`);
+    }
+    const data = await r.json();
+    const items = Array.isArray(data.results) ? data.results : [];
+
+    // Filter: only successfully purchased labels, on/after sinceTs
+    const usable = items.filter(t => {
+      if (String(t.status || '').toUpperCase() !== 'SUCCESS') return false;
+      if (sinceTs && new Date(t.object_created).getTime() < sinceTs) return false;
+      return true;
+    });
+
+    // Enrich each with rate (amount/currency/provider) by fetching /rates/{id}
+    // when the rate is just an ID string.
+    const enriched = [];
+    for (const t of usable) {
+      let rateObj = (t.rate && typeof t.rate === 'object') ? t.rate : null;
+      if (!rateObj && typeof t.rate === 'string') {
+        try {
+          const rr = await fetch(`https://api.goshippo.com/rates/${t.rate}`, {
+            headers: { 'Authorization': `ShippoToken ${key}`, 'Accept': 'application/json' }
+          });
+          if (rr.ok) rateObj = await rr.json();
+        } catch (_) { /* ignore individual rate errors */ }
+      }
+      const amount = Number(rateObj?.amount || 0);
+      if (!amount) continue;
+      enriched.push({
+        txnId: t.object_id,
+        date: (t.object_created || '').slice(0, 10),
+        tracking: t.tracking_number || '',
+        provider: rateObj?.provider || t.tracking_url_provider || 'Shippo',
+        service: rateObj?.servicelevel?.name || rateObj?.servicelevel_token || '',
+        amount,
+        currency: String(rateObj?.currency || 'USD').toUpperCase(),
+        alreadyImported: _shippoAlreadyImported(t.object_id),
+      });
+    }
+
+    _shippoFetched = enriched;
+    _renderShippoResults();
+  } catch (e) {
+    console.error(e);
+    if (resEl) resEl.innerHTML = `<div style="color:var(--red);font-size:12px;padding:10px;">⚠ ${String(e.message || e)}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Fetch labels'; }
+  }
+}
+
+function _renderShippoResults() {
+  const resEl = $('shippo-results');
+  const importBtn = $('shippo-import-btn');
+  if (!resEl) return;
+  if (!_shippoFetched.length) {
+    resEl.innerHTML = `<div class="empty-state" style="padding:14px;font-size:12px;color:var(--text3);">No purchased labels found in that range.</div>`;
+    if (importBtn) importBtn.style.display = 'none';
+    return;
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  const newCount = _shippoFetched.filter(t => !t.alreadyImported).length;
+  const dupCount = _shippoFetched.length - newCount;
+
+  resEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:12px;color:var(--text3);">
+        ${_shippoFetched.length} label${_shippoFetched.length>1?'s':''} found · ${newCount} new${dupCount?` · <span style="color:var(--amber);">${dupCount} already imported</span>`:''}
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn sm" type="button" onclick="toggleAllShippoRows(true)">Select new</button>
+        <button class="btn sm" type="button" onclick="toggleAllShippoRows(false)">Select none</button>
+      </div>
+    </div>
+    <div class="tbl-wrap" style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:var(--r2);">
+      <table class="tbl" style="font-size:12px;">
+        <thead><tr>
+          <th></th><th>Date</th><th>Carrier / Service</th><th>Tracking</th><th class="r">Amount</th>
+        </tr></thead>
+        <tbody>
+        ${_shippoFetched.map((t, i) => `
+          <tr style="${t.alreadyImported?'opacity:.55;':''}">
+            <td><input type="checkbox" data-shippo-i="${i}" ${t.alreadyImported?'':'checked'}></td>
+            <td>${esc(t.date)}</td>
+            <td>${esc(t.provider)}${t.service?` · <span style="color:var(--text3);">${esc(t.service)}</span>`:''}${t.alreadyImported?` <span style="font-size:10px;color:var(--amber);">· imported</span>`:''}</td>
+            <td class="mono" style="font-size:11px;">${esc(t.tracking) || '—'}</td>
+            <td class="r">${t.amount.toFixed(2)} ${esc(t.currency)}</td>
+          </tr>
+        `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  if (importBtn) importBtn.style.display = newCount ? '' : 'none';
+}
+
+function toggleAllShippoRows(on) {
+  document.querySelectorAll('[data-shippo-i]').forEach(cb => {
+    const i = Number(cb.getAttribute('data-shippo-i'));
+    const t = _shippoFetched[i];
+    if (!t) return;
+    if (on && t.alreadyImported) { cb.checked = false; return; }
+    cb.checked = !!on;
+  });
+}
+
+async function importShippoTransactions() {
+  const checks = Array.from(document.querySelectorAll('[data-shippo-i]'));
+  const selected = checks
+    .filter(cb => cb.checked)
+    .map(cb => _shippoFetched[Number(cb.getAttribute('data-shippo-i'))])
+    .filter(t => t && !t.alreadyImported);
+
+  if (!selected.length) { showToast('No labels selected', 'warn'); return; }
+
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  const baseCur = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  const btn = $('shippo-import-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+
+  let imported = 0;
+  for (const t of selected) {
+    if (_shippoAlreadyImported(t.txnId)) continue;
+    let fxRate = t.currency === baseCur ? 1 : (_fxRateCache[`${t.currency}_${baseCur}`] || 0);
+    if (!fxRate) {
+      try { fxRate = (await fetchLiveRate(t.currency, baseCur))?.rate || 0; } catch (_) {}
+    }
+    if (!fxRate) fxRate = 1;
+
+    TAX_CENTER.businessExpenses.unshift({
+      id: Date.now() + Math.floor(Math.random() * 100000),
+      desc: `Shipping label · ${t.provider}${t.service ? ' ' + t.service : ''}`,
+      vendor: t.provider || 'Shippo',
+      cat: 'Shipping & Postage',
+      currency: t.currency,
+      amount: t.amount,
+      origCurrency: t.currency,
+      origAmount: t.amount,
+      fxRate,
+      baseAmount: t.amount * fxRate,
+      date: t.date || today(),
+      ref: t.tracking || t.txnId,
+      receipt: '',
+      shippoTxnId: t.txnId,
+      importedFromShippo: true,
+      importedAt: new Date().toISOString(),
+    });
+    imported++;
+  }
+
+  await saveTaxCenter();
+  if (typeof renderTaxCenter === 'function') renderTaxCenter();
+
+  showToast(imported ? `✓ Imported ${imported} shipping label${imported>1?'s':''}` : 'Nothing imported', imported ? 'ok' : 'warn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Import selected'; }
+  if (imported) closeShippoImportModal();
+}
+
 function renderExpenses(){
   const s=getState(),book=getBook(),cur=book.currency;
   const expenses=s.expenses||[];
@@ -5870,6 +6089,7 @@ function renderTaxCenter() {
   if (isAuthor()) return;
   // Initialize AI key input UI
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
+  if($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
 
   // Update receipt folder display
   loadReceiptFolderHandle().then(async handle => {
@@ -6186,7 +6406,9 @@ async function saveTaxCenterSettings() {
 
     if(!TAX_CENTER.settings) TAX_CENTER.settings = {};
     TAX_CENTER.settings.geminiKey = document.getElementById('tc-api-key').value.trim();
-    
+    const shippoEl = document.getElementById('tc-shippo-key');
+    if (shippoEl) TAX_CENTER.settings.shippoKey = shippoEl.value.trim();
+
     try {
         await saveTaxCenter();
         showToast('✓ Settings saved to Firebase');
@@ -7403,7 +7625,8 @@ Object.assign(window, {
   submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
-  openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts
+  openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
+  openShippoImportModal, closeShippoImportModal, fetchShippoTransactions, importShippoTransactions, toggleAllShippoRows
 });
 
 // ── STARTUP ROUTING
