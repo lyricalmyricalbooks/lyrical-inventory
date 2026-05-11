@@ -5906,6 +5906,7 @@ function renderTaxCenter() {
   if (isAuthor()) return;
   // Initialize AI key input UI
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
+  if($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
 
   // Update receipt folder display
   loadReceiptFolderHandle().then(async handle => {
@@ -7629,6 +7630,15 @@ async function fetchStripeFeesByYear() {
   if (!key) { statusEl.textContent = 'Please paste a Stripe restricted key.'; return; }
   if (!/^(rk|sk)_/.test(key)) { statusEl.innerHTML = '<span style="color:var(--red);">That doesn\'t look like a Stripe secret/restricted key (expected rk_… or sk_…).</span>'; return; }
 
+  // Persist the key so the user doesn't have to re-paste it next time.
+  try {
+    if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+    if (TAX_CENTER.settings.stripeKey !== key) {
+      TAX_CENTER.settings.stripeKey = key;
+      if (typeof saveTaxCenter === 'function') saveTaxCenter().catch(e => console.warn('Stripe key save failed:', e));
+    }
+  } catch (e) { console.warn('Stripe key persist failed:', e); }
+
   btn.disabled = true;
   statusEl.textContent = 'Fetching balance transactions…';
   tbody.innerHTML = '';
@@ -7756,10 +7766,10 @@ async function fetchStripeFeesByYear() {
     }
     tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text3);">No transactions found.</td></tr>';
     wrap.style.display = '';
-    statusEl.innerHTML = `<span style="color:var(--green);">✓ Done — ${count} balance transactions across ${years.length} year(s). Key cleared.</span>
+    statusEl.innerHTML = `<span style="color:var(--green);">✓ Done — ${count} balance transactions across ${years.length} year(s). Key saved for next time.</span>
       <br><span style="font-size:11px;color:var(--text3);">Verify against your Stripe Dashboard: <a href="https://dashboard.stripe.com/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance</a> · <a href="https://dashboard.stripe.com/reports/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance reports</a> (set the date range to a calendar year). Click "Download audit CSV" below for the raw per-transaction data.</span>`;
     document.getElementById('stripe-fees-download-btn').style.display = '';
-    keyEl.value = '';
+    document.getElementById('stripe-fees-clear-btn').style.display = '';
   } catch (e) {
     const msg = String(e.message || e);
     let hint = '';
@@ -7769,6 +7779,19 @@ async function fetchStripeFeesByYear() {
     statusEl.innerHTML = `<span style="color:var(--red);">Error: ${msg}</span>${hint}`;
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function clearStoredStripeKey() {
+  try {
+    if (TAX_CENTER.settings) delete TAX_CENTER.settings.stripeKey;
+    const keyEl = document.getElementById('stripe-fees-key');
+    if (keyEl) keyEl.value = '';
+    if (typeof saveTaxCenter === 'function') await saveTaxCenter();
+    showToast('Stripe key cleared.');
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Failed to clear key', 'err');
   }
 }
 
@@ -7803,7 +7826,7 @@ function downloadStripeFeesAuditCSV() {
 
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
-  fetchStripeFeesByYear, downloadStripeFeesAuditCSV,
+  fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey,
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, submitManual,
