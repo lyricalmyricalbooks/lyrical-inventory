@@ -6425,6 +6425,7 @@ function addRecurring() {
   if(!desc || !amount) { showToast('⚠ Details required','warn'); return; }
   if(!TAX_CENTER.recurring) TAX_CENTER.recurring = [];
   TAX_CENTER.recurring.push({ desc, cat, currency, amount, startDate, lastInjected: '' });
+  processRecurringExpenses();
   saveTaxCenter();
   renderTaxCenter();
   showToast('✓ Subscription added');
