@@ -6036,15 +6036,22 @@ function renderTaxCenter() {
       const catSummary = {};
       expenses.forEach(ex => {
           const c = ex.cat || 'Uncategorized';
-          if (!catSummary[c]) catSummary[c] = { total: 0, count: 0 };
+          if (!catSummary[c]) catSummary[c] = { total: 0, count: 0, items: [] };
           catSummary[c].total += ex.baseAmount;
           catSummary[c].count++;
+          catSummary[c].items.push(ex);
       });
       const catList = Object.keys(catSummary).map(c => ({ name: c, ...catSummary[c] })).sort((a,b) => b.total - a.total);
-      
+
+      // Stash by index so the detail modal can read transactions without escaping issues.
+      window._tcCategoryDetail = {
+        baseCurrency,
+        byName: catSummary
+      };
+
       catBody.innerHTML = catList.map(c => `
-          <tr>
-            <td>${c.name}</td>
+          <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${c.name.replace(/"/g,'&quot;')}" style="cursor:pointer;" title="Click to view ${c.count} transaction${c.count===1?'':'s'}">
+            <td style="color:var(--gold3);text-decoration:underline;">${c.name}</td>
             <td class="r">${c.count}</td>
             <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}</td>
           </tr>
@@ -6177,6 +6184,50 @@ async function removeLedgerEntry(type, bid, id) {
   
   renderTaxCenter();
   showToast('✓ Entry removed from ledger');
+}
+
+function showCategoryDetail(catName) {
+  const detail = window._tcCategoryDetail;
+  if (!detail || !detail.byName[catName]) return;
+  const { baseCurrency } = detail;
+  const { items, total, count } = detail.byName[catName];
+
+  const sorted = items.slice().sort((a,b) => new Date(b.date) - new Date(a.date));
+
+  const rows = sorted.map(item => {
+    let refCell = '';
+    let r = item.receipt || '';
+    let displayRef = item.ref || '';
+    if (displayRef && displayRef.includes('local://')) {
+      const match = displayRef.match(/href="([^"]+)"/);
+      if (match) r = match[1];
+      displayRef = '';
+    }
+    if (displayRef) refCell = displayRef;
+    else if (!r) refCell = '';
+    else if (r.startsWith('local://')) {
+      const fn = r.replace('local://', '');
+      refCell = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn}')" style="color:var(--gold3);text-decoration:underline;">View Local</a>`;
+    } else {
+      refCell = `<a href="${r}" target="_blank" style="color:var(--gold3);">Receipt</a>`;
+    }
+    const origSym = getSym(item.origCurrency || 'CAD');
+    const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
+    return `
+      <tr style="color:var(--red);">
+        <td style="font-size:12px;">${item.date || '—'}</td>
+        <td><span class="tag amber">${item.type}</span></td>
+        <td style="font-size:12px;">${item.desc || ''}</td>
+        <td style="font-size:12px;">${refCell}</td>
+        <td class="r" style="font-size:12px;">${origDisplay}</td>
+        <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
+      </tr>`;
+  }).join('');
+
+  $('tc-cat-detail-title').textContent = catName;
+  $('tc-cat-detail-summary').innerHTML = `${count} transaction${count===1?'':'s'} · <span style="color:var(--red);font-weight:bold;">Total: - ${fmt(total, baseCurrency)}</span>`;
+  $('tc-cat-detail-body').innerHTML = rows;
+  openM('tc-cat-detail');
 }
 
 async function saveTaxCenterSettings() {
@@ -7404,7 +7455,8 @@ Object.assign(window, {
   submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
-  openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts
+  openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
+  showCategoryDetail
 });
 
 // ── STARTUP ROUTING
