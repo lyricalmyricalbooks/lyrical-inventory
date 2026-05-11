@@ -7634,7 +7634,12 @@ async function fetchStripeFeesByYear() {
   tbody.innerHTML = '';
   wrap.style.display = 'none';
 
-  const byYear = {};
+  // Bucket per year+currency+type. Stripe balance_transactions include many types:
+  //   charge, refund, payment, payment_refund, adjustment, stripe_fee, payout, payout_failure, etc.
+  // Mixing them gives garbage fee%; we keep them split and surface "Sales (charges)" separately.
+  const data = {}; // year -> cur -> type -> {gross, fee, net, count}
+  const byYearCurAll = {}; // year -> cur -> { gross, fee, net, count } across types
+  const allTxns = []; // for CSV/audit
   let count = 0;
   let starting_after = null;
 
@@ -7653,12 +7658,25 @@ async function fetchStripeFeesByYear() {
       for (const tx of (json.data || [])) {
         const year = new Date((tx.created || 0) * 1000).getUTCFullYear();
         const cur = (tx.currency || '').toUpperCase();
-        const slot = byYear[year] = byYear[year] || {};
-        const row = slot[cur] = slot[cur] || { gross: 0, fee: 0, net: 0, count: 0 };
-        row.gross += tx.amount || 0;
-        row.fee   += tx.fee || 0;
-        row.net   += tx.net || 0;
-        row.count += 1;
+        const type = tx.type || 'unknown';
+        const y = data[year] = data[year] || {};
+        const c = y[cur] = y[cur] || {};
+        const t = c[type] = c[type] || { gross: 0, fee: 0, net: 0, count: 0 };
+        t.gross += tx.amount || 0;
+        t.fee   += tx.fee || 0;
+        t.net   += tx.net || 0;
+        t.count += 1;
+        const ya = byYearCurAll[year] = byYearCurAll[year] || {};
+        const ca = ya[cur] = ya[cur] || { gross: 0, fee: 0, net: 0, count: 0 };
+        ca.gross += tx.amount || 0;
+        ca.fee   += tx.fee || 0;
+        ca.net   += tx.net || 0;
+        ca.count += 1;
+        allTxns.push({
+          id: tx.id, created: tx.created, year, currency: cur, type,
+          amount: tx.amount, fee: tx.fee, net: tx.net,
+          source: tx.source, description: tx.description || ''
+        });
         count++;
       }
       statusEl.textContent = `Fetched ${count} transactions…`;
@@ -7666,29 +7684,81 @@ async function fetchStripeFeesByYear() {
       starting_after = json.data[json.data.length - 1].id;
     }
 
-    const years = Object.keys(byYear).sort();
+    window._stripeFeesAudit = allTxns; // available for CSV download / console inspection
+
+    const years = Object.keys(data).sort();
     const rows = [];
+    const SALES_TYPES = new Set(['charge', 'payment']); // gross sales (positive amount, has fee)
     for (const year of years) {
-      const curEntries = Object.entries(byYear[year]).sort((a,b) => b[1].gross - a[1].gross);
-      for (const [cur, r] of curEntries) {
-        const gross = _stripeMinorToMajor(r.gross, cur);
-        const fee   = _stripeMinorToMajor(r.fee, cur);
-        const net   = _stripeMinorToMajor(r.net, cur);
-        const pct   = r.gross ? (r.fee / r.gross) * 100 : 0;
-        rows.push(`<tr>
-          <td><strong>${year}</strong></td>
+      const curs = Object.keys(data[year]).sort();
+      for (const cur of curs) {
+        const types = data[year][cur];
+        // 1) Sales (charge + payment) — this is the line that matches "fees on revenue"
+        const salesAgg = { gross: 0, fee: 0, net: 0, count: 0 };
+        for (const t of Object.keys(types)) {
+          if (SALES_TYPES.has(t)) {
+            salesAgg.gross += types[t].gross;
+            salesAgg.fee   += types[t].fee;
+            salesAgg.net   += types[t].net;
+            salesAgg.count += types[t].count;
+          }
+        }
+        if (salesAgg.count > 0) {
+          const gross = _stripeMinorToMajor(salesAgg.gross, cur);
+          const fee   = _stripeMinorToMajor(salesAgg.fee, cur);
+          const net   = _stripeMinorToMajor(salesAgg.net, cur);
+          const pct   = salesAgg.gross ? (salesAgg.fee / salesAgg.gross) * 100 : 0;
+          rows.push(`<tr style="background:rgba(212,175,55,.06);">
+            <td><strong>${year}</strong></td>
+            <td>${cur}</td>
+            <td>Sales (charges)</td>
+            <td class="r">${salesAgg.count}</td>
+            <td class="r">${gross.toFixed(2)}</td>
+            <td class="r" style="color:var(--red);">${fee.toFixed(2)}</td>
+            <td class="r"><strong>${pct.toFixed(2)}%</strong></td>
+            <td class="r">${net.toFixed(2)}</td>
+          </tr>`);
+        }
+        // 2) Other types — refunds, stripe_fee, payouts, adjustments, etc.
+        const otherTypes = Object.keys(types).filter(t => !SALES_TYPES.has(t)).sort();
+        for (const t of otherTypes) {
+          const r = types[t];
+          const gross = _stripeMinorToMajor(r.gross, cur);
+          const fee   = _stripeMinorToMajor(r.fee, cur);
+          const net   = _stripeMinorToMajor(r.net, cur);
+          rows.push(`<tr style="opacity:.85;">
+            <td>${year}</td>
+            <td>${cur}</td>
+            <td><span style="font-size:11px;color:var(--text3);">${t}</span></td>
+            <td class="r">${r.count}</td>
+            <td class="r">${gross.toFixed(2)}</td>
+            <td class="r" style="color:var(--red);">${fee.toFixed(2)}</td>
+            <td class="r">—</td>
+            <td class="r">${net.toFixed(2)}</td>
+          </tr>`);
+        }
+        // 3) Year+currency total (matches Stripe Dashboard Balance summary)
+        const tot = byYearCurAll[year][cur];
+        const tgross = _stripeMinorToMajor(tot.gross, cur);
+        const tfee   = _stripeMinorToMajor(tot.fee, cur);
+        const tnet   = _stripeMinorToMajor(tot.net, cur);
+        rows.push(`<tr style="border-top:2px solid var(--gold-line);font-weight:600;">
+          <td>${year}</td>
           <td>${cur}</td>
-          <td class="r">${r.count}</td>
-          <td class="r">${gross.toFixed(2)}</td>
-          <td class="r" style="color:var(--red);">${fee.toFixed(2)}</td>
-          <td class="r">${pct.toFixed(2)}%</td>
-          <td class="r">${net.toFixed(2)}</td>
+          <td style="font-style:italic;color:var(--text3);">All activity (matches Stripe report)</td>
+          <td class="r">${tot.count}</td>
+          <td class="r">${tgross.toFixed(2)}</td>
+          <td class="r" style="color:var(--red);">${tfee.toFixed(2)}</td>
+          <td class="r">—</td>
+          <td class="r">${tnet.toFixed(2)}</td>
         </tr>`);
       }
     }
-    tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text3);">No transactions found.</td></tr>';
+    tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text3);">No transactions found.</td></tr>';
     wrap.style.display = '';
-    statusEl.innerHTML = `<span style="color:var(--green);">✓ Done — ${count} transactions across ${years.length} year(s). Key cleared from input.</span>`;
+    statusEl.innerHTML = `<span style="color:var(--green);">✓ Done — ${count} balance transactions across ${years.length} year(s). Key cleared.</span>
+      <br><span style="font-size:11px;color:var(--text3);">Verify against your Stripe Dashboard: <a href="https://dashboard.stripe.com/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance</a> · <a href="https://dashboard.stripe.com/reports/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance reports</a> (set the date range to a calendar year). Click "Download audit CSV" below for the raw per-transaction data.</span>`;
+    document.getElementById('stripe-fees-download-btn').style.display = '';
     keyEl.value = '';
   } catch (e) {
     const msg = String(e.message || e);
@@ -7702,9 +7772,38 @@ async function fetchStripeFeesByYear() {
   }
 }
 
+function downloadStripeFeesAuditCSV() {
+  const rows = window._stripeFeesAudit || [];
+  if (!rows.length) { showToast('Run a Stripe fees fetch first.', 'warn'); return; }
+  const header = ['id','created_iso','year','currency','type','amount_major','fee_major','net_major','source','description'];
+  const esc = v => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  };
+  const lines = [header.join(',')];
+  for (const r of rows) {
+    lines.push([
+      r.id,
+      new Date(r.created * 1000).toISOString(),
+      r.year, r.currency, r.type,
+      _stripeMinorToMajor(r.amount, r.currency).toFixed(2),
+      _stripeMinorToMajor(r.fee, r.currency).toFixed(2),
+      _stripeMinorToMajor(r.net, r.currency).toFixed(2),
+      r.source || '', r.description || ''
+    ].map(esc).join(','));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `stripe-balance-transactions-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
-  fetchStripeFeesByYear,
+  fetchStripeFeesByYear, downloadStripeFeesAuditCSV,
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, submitManual,

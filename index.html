@@ -766,9 +766,16 @@
     <div id="stripe-fees-status" style="font-size:12px;color:var(--text3);margin-bottom:8px;min-height:16px;"></div>
     <div class="tbl-wrap" id="stripe-fees-results-wrap" style="display:none;">
       <table class="tbl">
-        <thead><tr><th>Year</th><th>Currency</th><th class="r">Txns</th><th class="r">Gross</th><th class="r">Fees</th><th class="r">Fee %</th><th class="r">Net</th></tr></thead>
+        <thead><tr><th>Year</th><th>Currency</th><th>Type</th><th class="r">Txns</th><th class="r">Gross</th><th class="r">Fees</th><th class="r">Fee %</th><th class="r">Net</th></tr></thead>
         <tbody id="stripe-fees-results"></tbody>
       </table>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;">⬇ Download audit CSV (every transaction)</button>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--text3);line-height:1.5;">
+      <strong>How to read this:</strong> The gold row <em>Sales (charges)</em> is what you want for "what % does Stripe take from my sales" — gross is what customers paid you, fees is what Stripe kept, fee % is the effective rate.
+      Other rows (<code>stripe_fee</code>, <code>refund</code>, <code>payout</code>, <code>adjustment</code>) are non-sale balance movements — included for transparency. The bold <em>All activity</em> row is the sum of everything and should match your Stripe Dashboard's Balance report for the same year.
     </div>
   </div>
 
