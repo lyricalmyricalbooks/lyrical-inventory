@@ -5858,6 +5858,24 @@ async function boot(forcedBook) {
 }
 
 // ── TAX CENTER LOGIC
+const TC_CATEGORIES = [
+  'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
+  'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
+  'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
+  'Packaging Materials', 'Office Supplies', 'Travel & Meals', 'Professional Services',
+  'Books, Research & Reference', 'Events & Exhibitions', 'Artist Royalties', 'Other'
+];
+
+function changeExpenseCategory(itemId, newCat) {
+  const exp = (TAX_CENTER.businessExpenses || []).find(e => e.id == itemId);
+  if (!exp) return;
+  if (exp.cat === newCat) return;
+  exp.cat = newCat;
+  saveTaxCenter();
+  renderTaxCenter();
+  showToast(`✓ Moved to ${newCat}`);
+}
+
 const TC_LEDGER_PAGE_SIZE = 25;
 let _tcLedgerPage = 0;
 
@@ -6094,12 +6112,19 @@ function renderTaxCenter() {
         const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
         const cadDisplay = `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}`;
 
+        const catCell = item.sourceType === 'businessExpense'
+          ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:11px;padding:2px 4px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,.15);border-radius:4px;max-width:170px;" title="Change category">
+              ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g,'&quot;')}"${c===item.cat?' selected':''}>${c}</option>`).join('')}
+              ${TC_CATEGORIES.includes(item.cat) ? '' : `<option value="${(item.cat||'').replace(/"/g,'&quot;')}" selected>${item.cat||''}</option>`}
+            </select>`
+          : item.cat;
+
         return `
         <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'}">
             <td style="font-size:12px;">${item.date || '—'}</td>
             <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
             <td style="font-size:12px;">${item.desc}</td>
-            <td style="font-size:12px;">${item.cat}</td>
+            <td style="font-size:12px;">${catCell}</td>
             <td style="font-size:12px;">${refCell}</td>
             <td class="r" style="font-size:12px;">${origDisplay}</td>
             <td class="r" style="font-weight:600;">${cadDisplay}</td>
@@ -6213,6 +6238,11 @@ function showCategoryDetail(catName) {
     }
     const origSym = getSym(item.origCurrency || 'CAD');
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
+    const moveCell = item.sourceType === 'businessExpense'
+      ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:11px;padding:2px 4px;border:1px solid rgba(255,255,255,.15);border-radius:4px;max-width:170px;" title="Move to another category">
+          ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g,'&quot;')}"${c===item.cat?' selected':''}>${c}</option>`).join('')}
+        </select>`
+      : '<span style="font-size:11px;color:var(--text3);">—</span>';
     return `
       <tr style="color:var(--red);">
         <td style="font-size:12px;">${item.date || '—'}</td>
@@ -6221,6 +6251,7 @@ function showCategoryDetail(catName) {
         <td style="font-size:12px;">${refCell}</td>
         <td class="r" style="font-size:12px;">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
+        <td>${moveCell}</td>
       </tr>`;
   }).join('');
 
@@ -7456,7 +7487,7 @@ Object.assign(window, {
   removeLedgerEntry, setupReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
-  showCategoryDetail
+  showCategoryDetail, changeExpenseCategory
 });
 
 // ── STARTUP ROUTING
