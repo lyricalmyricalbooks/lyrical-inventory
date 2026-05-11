@@ -6141,8 +6141,8 @@ function renderTaxCenter() {
     } else {
       const from = allLedger.length ? pageStart + 1 : 0;
       const to = Math.min(pageStart + TC_LEDGER_PAGE_SIZE, allLedger.length);
-      const btnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--cream);';
-      const activeBtnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gold3);background:var(--gold3);color:black;font-weight:600;';
+      const btnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--cream2);color:var(--text);';
+      const activeBtnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gold);background:var(--gold);color:var(--ink);font-weight:600;';
       // Show at most 7 page buttons around current page
       const maxBtns = 7;
       let startBtn = Math.max(0, _tcLedgerPage - Math.floor(maxBtns / 2));
