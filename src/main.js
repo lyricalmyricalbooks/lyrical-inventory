@@ -2744,7 +2744,7 @@ const EXPENSE_CATEGORIES = [
   'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
   'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
   'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
-  'Packaging Materials', 'Office Supplies', 'Travel & Meals', 'Professional Services',
+  'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Professional Services',
   'Books, Research & Reference', 'Events & Exhibitions', 'Other'
 ];
 
@@ -2777,7 +2777,25 @@ function inferReceiptCategory(vendor, description) {
     ['costco', 'Office Supplies'],
     ['staples', 'Office Supplies'],
     ['uline', 'Packaging Materials'],
-    ['airbnb', 'Travel & Meals']
+    ['airbnb', 'Travel & Meals'],
+    ['rent', 'Home Office'],
+    ['landlord', 'Home Office'],
+    ['property management', 'Home Office'],
+    ['hydro', 'Home Office'],
+    ['electric', 'Home Office'],
+    ['enbridge', 'Home Office'],
+    ['utility', 'Home Office'],
+    ['utilities', 'Home Office'],
+    ['internet', 'Home Office'],
+    ['rogers', 'Home Office'],
+    ['bell canada', 'Home Office'],
+    ['telus', 'Home Office'],
+    ['comcast', 'Home Office'],
+    ['home insurance', 'Home Office'],
+    ['tenant insurance', 'Home Office'],
+    ['condo fee', 'Home Office'],
+    ['strata', 'Home Office'],
+    ['property tax', 'Home Office']
   ];
   for (const [kw, cat] of map) if (hay.includes(kw)) return cat;
   return 'Other';
@@ -5862,7 +5880,7 @@ const TC_CATEGORIES = [
   'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
   'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
   'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
-  'Packaging Materials', 'Office Supplies', 'Travel & Meals', 'Professional Services',
+  'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Professional Services',
   'Books, Research & Reference', 'Events & Exhibitions', 'Artist Royalties', 'Other'
 ];
 
