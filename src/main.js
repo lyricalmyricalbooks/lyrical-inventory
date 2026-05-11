@@ -7613,8 +7613,98 @@ window.downloadFullTaxSeasonExport = function() {
   a.click();
 };
 
+// ── STRIPE FEES BY YEAR
+const _STRIPE_ZERO_DECIMAL = new Set(['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','UGX','VND','VUV','XAF','XOF','XPF']);
+function _stripeMinorToMajor(amt, cur) {
+  return _STRIPE_ZERO_DECIMAL.has((cur || '').toUpperCase()) ? amt : amt / 100;
+}
+
+async function fetchStripeFeesByYear() {
+  const keyEl = document.getElementById('stripe-fees-key');
+  const statusEl = document.getElementById('stripe-fees-status');
+  const btn = document.getElementById('stripe-fees-btn');
+  const wrap = document.getElementById('stripe-fees-results-wrap');
+  const tbody = document.getElementById('stripe-fees-results');
+  const key = (keyEl.value || '').trim();
+  if (!key) { statusEl.textContent = 'Please paste a Stripe restricted key.'; return; }
+  if (!/^(rk|sk)_/.test(key)) { statusEl.innerHTML = '<span style="color:var(--red);">That doesn\'t look like a Stripe secret/restricted key (expected rk_… or sk_…).</span>'; return; }
+
+  btn.disabled = true;
+  statusEl.textContent = 'Fetching balance transactions…';
+  tbody.innerHTML = '';
+  wrap.style.display = 'none';
+
+  const byYear = {};
+  let count = 0;
+  let starting_after = null;
+
+  try {
+    while (true) {
+      const params = new URLSearchParams({ limit: '100' });
+      if (starting_after) params.set('starting_after', starting_after);
+      const resp = await fetch(`https://api.stripe.com/v1/balance_transactions?${params.toString()}`, {
+        headers: { 'Authorization': 'Bearer ' + key }
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+      }
+      const json = await resp.json();
+      for (const tx of (json.data || [])) {
+        const year = new Date((tx.created || 0) * 1000).getUTCFullYear();
+        const cur = (tx.currency || '').toUpperCase();
+        const slot = byYear[year] = byYear[year] || {};
+        const row = slot[cur] = slot[cur] || { gross: 0, fee: 0, net: 0, count: 0 };
+        row.gross += tx.amount || 0;
+        row.fee   += tx.fee || 0;
+        row.net   += tx.net || 0;
+        row.count += 1;
+        count++;
+      }
+      statusEl.textContent = `Fetched ${count} transactions…`;
+      if (!json.has_more || !json.data.length) break;
+      starting_after = json.data[json.data.length - 1].id;
+    }
+
+    const years = Object.keys(byYear).sort();
+    const rows = [];
+    for (const year of years) {
+      const curEntries = Object.entries(byYear[year]).sort((a,b) => b[1].gross - a[1].gross);
+      for (const [cur, r] of curEntries) {
+        const gross = _stripeMinorToMajor(r.gross, cur);
+        const fee   = _stripeMinorToMajor(r.fee, cur);
+        const net   = _stripeMinorToMajor(r.net, cur);
+        const pct   = r.gross ? (r.fee / r.gross) * 100 : 0;
+        rows.push(`<tr>
+          <td><strong>${year}</strong></td>
+          <td>${cur}</td>
+          <td class="r">${r.count}</td>
+          <td class="r">${gross.toFixed(2)}</td>
+          <td class="r" style="color:var(--red);">${fee.toFixed(2)}</td>
+          <td class="r">${pct.toFixed(2)}%</td>
+          <td class="r">${net.toFixed(2)}</td>
+        </tr>`);
+      }
+    }
+    tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text3);">No transactions found.</td></tr>';
+    wrap.style.display = '';
+    statusEl.innerHTML = `<span style="color:var(--green);">✓ Done — ${count} transactions across ${years.length} year(s). Key cleared from input.</span>`;
+    keyEl.value = '';
+  } catch (e) {
+    const msg = String(e.message || e);
+    let hint = '';
+    if (/Failed to fetch|NetworkError|CORS/i.test(msg)) {
+      hint = '<br><span style="font-size:11px;">If this is a CORS error, run <code>scripts/stripe-fees-by-year.js</code> locally instead — your browser may be blocking direct Stripe API calls.</span>';
+    }
+    statusEl.innerHTML = `<span style="color:var(--red);">Error: ${msg}</span>${hint}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
+  fetchStripeFeesByYear,
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, submitManual,
