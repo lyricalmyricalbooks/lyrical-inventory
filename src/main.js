@@ -7193,9 +7193,10 @@ window.printPaymentQRCodes = function() {
   .tagline { margin-top: 9px; font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent); }
   .date-line { margin-top: 5px; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; color: #aaa; }
 
-  .grid { display: grid; grid-template-columns: repeat(${cols}, 1fr); }
+  .grid { display: flex; flex-wrap: wrap; justify-content: center; }
 
   .card {
+    width: calc(100% / ${cols});
     padding: 32px 24px 28px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
     display: flex; flex-direction: column; align-items: center; position: relative;
   }
