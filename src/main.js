@@ -6038,7 +6038,8 @@ function renderTaxCenter() {
             hasRateError: false,
             isIncome: false,
             sourceType: 'businessExpense',
-            itemId: e.id
+            itemId: e.id,
+            trip: e.trip || ''
         });
   });
 
@@ -6048,6 +6049,43 @@ function renderTaxCenter() {
   if ($('tc-expenses')) $('tc-expenses').textContent = fmt(totalOperatingExpenses, baseCurrency);
   if ($('tc-net')) $('tc-net').textContent = fmt(netCashFlow, baseCurrency);
   
+  // Trips panel + autocomplete suggestions
+  const tripBody = $('tc-trip-body');
+  const tripSummary = {};
+  (TAX_CENTER.businessExpenses || []).forEach(e => {
+    const eYear = e.date ? e.date.substring(0, 4) : '';
+    if (selectedYear !== 'all' && eYear !== selectedYear) return;
+    const t = (e.trip || '').trim();
+    if (!t) return;
+    const eCur = e.currency || 'CAD';
+    const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+    if (!tripSummary[t]) tripSummary[t] = { total: 0, count: 0, items: [] };
+    tripSummary[t].total += eBase;
+    tripSummary[t].count++;
+    tripSummary[t].items.push({ ...e, baseAmount: eBase, origCurrency: eCur, origAmount: e.amount || 0 });
+  });
+  window._tcTripDetail = { baseCurrency, byName: tripSummary };
+
+  // Populate datalists for trip autocomplete (use ALL trips ever seen, not just filtered year)
+  const allTripNames = Array.from(new Set(
+    (TAX_CENTER.businessExpenses || []).map(e => (e.trip || '').trim()).filter(Boolean)
+  )).sort();
+  ['tc-trip-suggestions', 'tc-trip-suggestions-modal'].forEach(id => {
+    const dl = $(id);
+    if (dl) dl.innerHTML = allTripNames.map(t => `<option value="${t.replace(/"/g,'&quot;')}">`).join('');
+  });
+
+  if (tripBody) {
+    const tripList = Object.keys(tripSummary).map(t => ({ name: t, ...tripSummary[t] })).sort((a,b) => b.total - a.total);
+    tripBody.innerHTML = tripList.map(t => `
+        <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${t.name.replace(/"/g,'&quot;')}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count===1?'':'s'}">
+          <td style="color:var(--gold);text-decoration:underline;">✈ ${t.name}</td>
+          <td class="r">${t.count}</td>
+          <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(t.total, baseCurrency)}</td>
+        </tr>
+    `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;color:var(--text3);">No trips yet — add a Trip name when logging an expense to group them here.</td></tr>`;
+  }
+
   const catBody = $('tc-category-body');
   if (catBody) {
       const expenses = allLedger.filter(item => !item.isIncome);
@@ -6119,11 +6157,20 @@ function renderTaxCenter() {
             </select>`
           : item.cat;
 
+        let descCell = item.desc || '';
+        if (item.sourceType === 'businessExpense') {
+          const tripText = (item.trip || '').replace(/"/g,'&quot;');
+          const tripPill = item.trip
+            ? `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Edit trip">✈ ${item.trip}</span>`
+            : `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;color:var(--text3);border:1px dashed var(--border);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Assign to a trip">+ trip</span>`;
+          descCell = `<div>${item.desc || ''}</div>${tripPill}`;
+        }
+
         return `
         <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'}">
             <td style="font-size:12px;">${item.date || '—'}</td>
             <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
-            <td style="font-size:12px;">${item.desc}</td>
+            <td style="font-size:12px;">${descCell}</td>
             <td style="font-size:12px;">${catCell}</td>
             <td style="font-size:12px;">${refCell}</td>
             <td class="r" style="font-size:12px;">${origDisplay}</td>
@@ -6141,8 +6188,8 @@ function renderTaxCenter() {
     } else {
       const from = allLedger.length ? pageStart + 1 : 0;
       const to = Math.min(pageStart + TC_LEDGER_PAGE_SIZE, allLedger.length);
-      const btnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--cream);';
-      const activeBtnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gold3);background:var(--gold3);color:black;font-weight:600;';
+      const btnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--cream2);color:var(--text);';
+      const activeBtnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gold);background:var(--gold);color:var(--ink);font-weight:600;';
       // Show at most 7 page buttons around current page
       const maxBtns = 7;
       let startBtn = Math.max(0, _tcLedgerPage - Math.floor(maxBtns / 2));
@@ -6209,6 +6256,86 @@ async function removeLedgerEntry(type, bid, id) {
   
   renderTaxCenter();
   showToast('✓ Entry removed from ledger');
+}
+
+let _tcEditTripId = null;
+let _tcOpenTripName = null;
+
+function openEditTrip(itemId) {
+  const exp = (TAX_CENTER.businessExpenses || []).find(e => e.id == itemId);
+  if (!exp) return;
+  _tcEditTripId = itemId;
+  $('tc-edit-trip-context').textContent = `${exp.desc || 'Expense'} · ${exp.date || ''}`;
+  $('tc-edit-trip-input').value = exp.trip || '';
+  openM('tc-edit-trip');
+  setTimeout(() => $('tc-edit-trip-input').focus(), 50);
+}
+
+function saveTripAssignment() {
+  if (_tcEditTripId == null) return;
+  const newTrip = ($('tc-edit-trip-input').value || '').trim();
+  const exp = (TAX_CENTER.businessExpenses || []).find(e => e.id == _tcEditTripId);
+  if (!exp) return;
+  exp.trip = newTrip;
+  saveTaxCenter();
+  closeM('tc-edit-trip');
+  _tcEditTripId = null;
+  renderTaxCenter();
+  showToast(newTrip ? `✓ Assigned to ${newTrip}` : '✓ Removed from trip');
+}
+
+function showTripDetail(tripName) {
+  const detail = window._tcTripDetail;
+  if (!detail || !detail.byName[tripName]) return;
+  const { baseCurrency } = detail;
+  const { items, total, count } = detail.byName[tripName];
+  _tcOpenTripName = tripName;
+
+  const sorted = items.slice().sort((a,b) => new Date(a.date) - new Date(b.date));
+  const rows = sorted.map(item => {
+    let r = item.receipt || '';
+    let refCell = '';
+    if (!r) refCell = '';
+    else if (r.startsWith('local://')) {
+      const fn = r.replace('local://', '');
+      refCell = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn}')" style="color:var(--gold3);text-decoration:underline;">View Local</a>`;
+    } else {
+      refCell = `<a href="${r}" target="_blank" style="color:var(--gold3);">Receipt</a>`;
+    }
+    const origSym = getSym(item.origCurrency || 'CAD');
+    const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
+    return `
+      <tr style="color:var(--red);">
+        <td style="font-size:12px;">${item.date || '—'}</td>
+        <td style="font-size:12px;">${item.desc || ''}</td>
+        <td style="font-size:12px;">${item.cat || ''}</td>
+        <td style="font-size:12px;">${refCell}</td>
+        <td class="r" style="font-size:12px;">${origDisplay}</td>
+        <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
+        <td><button class="btn" style="font-size:10px;padding:3px 8px;" onclick="openEditTrip('${item.id}')" title="Move to a different trip">Move</button></td>
+      </tr>`;
+  }).join('');
+
+  $('tc-trip-detail-title').textContent = tripName;
+  $('tc-trip-detail-summary').innerHTML = `${count} expense${count===1?'':'s'} · <span style="color:var(--red);font-weight:bold;">Trip total: - ${fmt(total, baseCurrency)}</span>`;
+  $('tc-trip-detail-body').innerHTML = rows;
+  openM('tc-trip-detail');
+}
+
+function renameTripPrompt() {
+  if (!_tcOpenTripName) return;
+  const next = (window.prompt('Rename trip', _tcOpenTripName) || '').trim();
+  if (!next || next === _tcOpenTripName) return;
+  let changed = 0;
+  (TAX_CENTER.businessExpenses || []).forEach(e => {
+    if ((e.trip || '') === _tcOpenTripName) { e.trip = next; changed++; }
+  });
+  if (changed === 0) return;
+  saveTaxCenter();
+  closeM('tc-trip-detail');
+  _tcOpenTripName = null;
+  renderTaxCenter();
+  showToast(`✓ Renamed trip (${changed} expense${changed===1?'':'s'})`);
 }
 
 function showCategoryDetail(catName) {
@@ -6388,12 +6515,14 @@ async function submitTaxExpense() {
   const baseAmount = amount * fxRate;
 
   if(!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-  TAX_CENTER.businessExpenses.unshift({id: Date.now(), desc, cat, currency, amount, fxRate, baseAmount, date, ref: '', receipt: receiptUrl});
-  
+  const trip = ($('tc-exp-trip')?.value || '').trim();
+  TAX_CENTER.businessExpenses.unshift({id: Date.now(), desc, cat, currency, amount, fxRate, baseAmount, date, ref: '', receipt: receiptUrl, trip});
+
   saveTaxCenter();
   renderTaxCenter();
-  showToast('✓ Business Expense logged');
+  showToast(trip ? `✓ Logged to trip: ${trip}` : '✓ Business Expense logged');
   $('tc-exp-desc').value='';$('tc-exp-amount').value='';$('tc-exp-date').value=today();
+  if($('tc-exp-trip')) $('tc-exp-trip').value='';
   if(fileInput) fileInput.value = '';
 }
 
@@ -7487,7 +7616,8 @@ Object.assign(window, {
   removeLedgerEntry, setupReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
-  showCategoryDetail, changeExpenseCategory
+  showCategoryDetail, changeExpenseCategory,
+  showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt
 });
 
 // ── STARTUP ROUTING
