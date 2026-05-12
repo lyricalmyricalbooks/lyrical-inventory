@@ -3779,11 +3779,20 @@ function submitGratuity(){
   if(expenseIt && expVal > 0) {
     if(!s.expenses) s.expenses = [];
     const totalExp = qty * expVal;
+    
+    const currency = getBookCurrencyCode(book);
+    const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
+    const baseAmount = cadRate ? (totalExp * cadRate) : totalExp;
+
     s.expenses.unshift({
       id: Date.now(),
       desc: `Gratuity: ${ref || notes || 'Gifted copy'}`,
       cat: 'Marketing',
       amount: totalExp,
+      currency: currency,
+      origAmount: totalExp,
+      origCurrency: currency,
+      baseAmount: baseAmount,
       date: date,
       ref: num,
       received: false
@@ -3817,19 +3826,35 @@ window.backfillGratuityExpenses = function() {
   }
 
   let added = 0;
+  let patched = 0;
   // find all gratuities in history
   const gratuities = s.hist.filter(h => h.gratuity && !h.voided);
   
   gratuities.forEach(h => {
-    // check if we already expensed this by matching the ref or finding one with same date and amount
-    // The ref we generated in submitGratuity was `h.num`
-    const alreadyExpensed = s.expenses.some(e => e.ref === h.num || (e.date === h.date && e.desc.includes(h.notes || 'Gifted')));
-    if (!alreadyExpensed) {
+    const existing = s.expenses.find(e => e.ref === h.num || (e.date === h.date && e.desc.includes(h.notes || 'Gifted')));
+    const amount = h.qty * unitCost;
+    const currency = getBookCurrencyCode(book);
+    const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
+    const baseAmount = cadRate ? (amount * cadRate) : amount;
+
+    if (existing) {
+      if (!existing.currency) {
+        existing.currency = currency;
+        existing.origAmount = amount;
+        existing.origCurrency = currency;
+        existing.baseAmount = baseAmount;
+        patched++;
+      }
+    } else {
       s.expenses.push({
         id: Date.now() + Math.floor(Math.random() * 1000) + added,
         desc: `Gratuity: ${h.notes || 'Gifted copy'}`,
         cat: 'Marketing',
-        amount: h.qty * unitCost,
+        amount: amount,
+        currency: currency,
+        origAmount: amount,
+        origCurrency: currency,
+        baseAmount: baseAmount,
         date: h.date,
         ref: h.num,
         received: false
@@ -3838,15 +3863,16 @@ window.backfillGratuityExpenses = function() {
     }
   });
 
-  if (added > 0) {
+  if (added > 0 || patched > 0) {
     // sort expenses to keep newest first
     s.expenses.sort((a,b) => b.id - a.id);
     renderExpenses();
     updateDash();
     saveState(activeBook);
-    showToast(`✓ Backfilled ${added} past gratuity expenses`);
+    if(typeof renderTaxCenter === 'function') renderTaxCenter();
+    showToast(`✓ Backfilled ${added} and fixed ${patched} past gratuity expenses`);
   } else {
-    showToast('All past gratuities are already accounted for');
+    showToast('All past gratuities are already accounted for properly');
   }
 }
 
