@@ -384,6 +384,14 @@
           </select>
           <input type="number" id="m-price" value="40.00" step="0.01" oninput="phint()">
         </div>
+        <div id="m-manual-rate-row" style="display:none;margin-top:8px;">
+          <label style="font-size:11px;color:var(--red);margin-bottom:4px;display:block;">Live rate unavailable — enter exchange rate manually:</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="m-manual-rate-label" style="font-size:12px;color:var(--text3);white-space:nowrap;">1 USD =</span>
+            <input type="number" id="m-manual-rate" step="0.0001" placeholder="e.g. 1.3700" style="width:120px;" oninput="calcManualFxRate()">
+            <span id="m-manual-rate-book-cur" style="font-size:12px;color:var(--text3);"></span>
+          </div>
+        </div>
       </div>
       <div class="form-group"><label>&nbsp;</label><button class="btn gold" style="width:100%;height:44px;font-size:14px;" onclick="submitManual()">＋ Add order</button></div>
     </div>

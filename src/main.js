@@ -2222,12 +2222,14 @@ let _expenseFxRate = null;
 
 async function onManualCurrencyChange() {
   const resultSpan = $('m-fx-inline-result');
+  const manualRateRow = $('m-manual-rate-row');
   const cur = $('m-price-cur').value;
   const book = getBook();
   const native = getBookCurrencyCode(book);
 
   if (cur === 'BOOK' || cur === native) {
     if (resultSpan) resultSpan.style.display = 'none';
+    if (manualRateRow) manualRateRow.style.display = 'none';
     _manualFxRate = null;
     phint();
     return;
@@ -2239,6 +2241,7 @@ async function onManualCurrencyChange() {
     resultSpan.textContent = '(fetching rate...)';
     resultSpan.style.color = 'var(--text3)';
   }
+  if (manualRateRow) manualRateRow.style.display = 'none';
   
   const key = `${cur}_${native}`;
   let rate = _fxRateCache[key];
@@ -2255,12 +2258,22 @@ async function onManualCurrencyChange() {
   if (rate) {
     _manualFxRate = rate;
     calcFx();
+    if (manualRateRow) manualRateRow.style.display = 'none';
   } else {
     if (resultSpan) {
-      resultSpan.textContent = '(rate unavailable)';
+      resultSpan.textContent = '(rate unavailable — enter below)';
       resultSpan.style.color = 'var(--red)';
     }
     _manualFxRate = null;
+    // Show manual rate input
+    if (manualRateRow) {
+      manualRateRow.style.display = 'block';
+      const lbl = $('m-manual-rate-label');
+      const bookCurSpan = $('m-manual-rate-book-cur');
+      if (lbl) lbl.textContent = `1 ${cur} =`;
+      if (bookCurSpan) bookCurSpan.textContent = native;
+      if ($('m-manual-rate')) { $('m-manual-rate').value = ''; $('m-manual-rate').focus(); }
+    }
   }
   phint();
 }
@@ -2275,6 +2288,20 @@ function calcFx() {
   
   resultSpan.textContent = `≈ ${fmt(converted, book.currency)}`;
   resultSpan.style.color = 'var(--gold)';
+}
+
+function calcManualFxRate() {
+  const rateVal = parseFloat($('m-manual-rate').value);
+  const resultSpan = $('m-fx-inline-result');
+  if (!rateVal || rateVal <= 0) {
+    _manualFxRate = null;
+    if (resultSpan) { resultSpan.style.display = 'none'; }
+    return;
+  }
+  _manualFxRate = rateVal;
+  if (resultSpan) resultSpan.style.display = 'inline';
+  calcFx();
+  phint();
 }
 
 async function onExpenseCurrencyChange() {
@@ -3448,9 +3475,16 @@ async function submitManual(){
   
   const cur = $('m-price-cur').value;
   const native = getBookCurrencyCode(book);
-  if (cur !== 'BOOK' && cur !== native && _manualFxRate) {
+  const isForeignCurrency = cur !== 'BOOK' && cur !== native;
+
+  if (isForeignCurrency) {
+    if (!_manualFxRate) {
+      showToast('⚠ Enter an exchange rate to convert this currency', 'warn');
+      if ($('m-manual-rate')) $('m-manual-rate').focus();
+      return;
+    }
     price = rawPrice * _manualFxRate;
-    fxNote = `Paid ${cur} ${rawPrice.toFixed(2)}`;
+    fxNote = `Paid ${cur} ${rawPrice.toFixed(2)} @ ${_manualFxRate.toFixed(4)}`;
     payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled: true, fxCur: cur, fxAmt: rawPrice, fxRate: _manualFxRate });
   } else {
     payment = buildPaymentMeta({ book, qty, unitPrice: price });
@@ -7951,7 +7985,7 @@ Object.assign(window, {
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey,
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
-  fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, submitManual,
+  fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
 
   submitGratuity, openM, closeM, addStore, openSend, confirmSend, openSale, confirmSale,
