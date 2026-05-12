@@ -3404,6 +3404,10 @@ function updateManualForm() {
   // Update book context bar
   const ctxTitle = $('bc-title-man');
   if (ctxTitle) ctxTitle.textContent = book.title;
+  
+  const gExpWrap = $('g-expense-wrap');
+  if (gExpWrap) gExpWrap.style.display = isAuthor() ? 'none' : 'flex';
+  
   phint();
 }
 
@@ -3735,8 +3739,33 @@ function renderPendingExpenses(){
 }
 
 
+window.toggleGratuityExpense = function() {
+  const cb = $('g-expense-cb');
+  const fields = $('g-expense-fields');
+  if (cb.checked) {
+    fields.style.display = 'grid';
+    const book = getBook();
+    const unitCost = (book.productionCost || 0) / (book.maxPrint || 1);
+    $('g-exp-val').value = unitCost.toFixed(2);
+    updateGratuityExpenseHint();
+  } else {
+    fields.style.display = 'none';
+  }
+}
+
+window.updateGratuityExpenseHint = function() {
+  const qty = parseInt($('g-qty').value) || 1;
+  const val = parseFloat($('g-exp-val').value) || 0;
+  const book = getBook();
+  $('g-exp-total').textContent = fmt(qty * val, book.currency);
+}
+
 function submitGratuity(){
   const book=getBook(),qty=parseInt($('g-qty').value)||1,ref=$('g-ref').value.trim(),notes=$('g-notes').value.trim(),date=$('g-date').value||today();
+  const expenseIt = $('g-expense-cb') && $('g-expense-cb').checked;
+  let expVal = 0;
+  if (expenseIt) expVal = parseFloat($('g-exp-val').value) || 0;
+
   const s=getState();
   if(qty>s.stock){showToast('⚠ Not enough stock on hand','warn');return;}
   const num='GRAT-'+Date.now().toString().slice(-6);
@@ -3746,12 +3775,79 @@ function submitGratuity(){
   s.chStats['Gratuity'].txns++;s.chStats['Gratuity'].units+=qty;
   const sheetsId = makeEventId();
   s.hist.unshift({num,chan:'Gratuity',qty,price:0,after:s.stock,notes:(ref?(ref+(notes?' · '+notes:'')):notes)||'',date,gratuity:true,sheetsId});
-  renderHist();updateDash();saveState(activeBook);
+  
+  if(expenseIt && expVal > 0) {
+    if(!s.expenses) s.expenses = [];
+    const totalExp = qty * expVal;
+    s.expenses.unshift({
+      id: Date.now(),
+      desc: `Gratuity: ${ref || notes || 'Gifted copy'}`,
+      cat: 'Marketing',
+      amount: totalExp,
+      date: date,
+      ref: num,
+      received: false
+    });
+  }
+
+  renderHist();
+  if(expenseIt) renderExpenses();
+  updateDash();saveState(activeBook);
   syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes,sheetsId,currency:getBookCurrencyCode(book)});
   addLog('log-gratuity',`${num}: ${qty} gifted → ${s.stock} remaining`,'ok');
   if(s.stock<=book.threshold)addLog('log-gratuity','⚠ Below threshold!','warn');
   $('g-ref').value='';$('g-qty').value='1';$('g-notes').value='';$('g-date').value=today();
-  showToast('✓ Gratuity logged');
+  if($('g-expense-cb')) {
+    $('g-expense-cb').checked=false;
+    toggleGratuityExpense();
+  }
+  showToast('✓ Gratuity logged' + (expenseIt && expVal > 0 ? ' and expensed' : ''));
+}
+
+window.backfillGratuityExpenses = function() {
+  const book = getBook();
+  const s = getState();
+  if (!s.hist) return;
+  if (!s.expenses) s.expenses = [];
+  
+  const unitCost = (book.productionCost || 0) / (book.maxPrint || 1);
+  if (unitCost <= 0) {
+    showToast('⚠ Book has no production cost to expense', 'warn');
+    return;
+  }
+
+  let added = 0;
+  // find all gratuities in history
+  const gratuities = s.hist.filter(h => h.gratuity && !h.voided);
+  
+  gratuities.forEach(h => {
+    // check if we already expensed this by matching the ref or finding one with same date and amount
+    // The ref we generated in submitGratuity was `h.num`
+    const alreadyExpensed = s.expenses.some(e => e.ref === h.num || (e.date === h.date && e.desc.includes(h.notes || 'Gifted')));
+    if (!alreadyExpensed) {
+      s.expenses.push({
+        id: Date.now() + Math.floor(Math.random() * 1000) + added,
+        desc: `Gratuity: ${h.notes || 'Gifted copy'}`,
+        cat: 'Marketing',
+        amount: h.qty * unitCost,
+        date: h.date,
+        ref: h.num,
+        received: false
+      });
+      added++;
+    }
+  });
+
+  if (added > 0) {
+    // sort expenses to keep newest first
+    s.expenses.sort((a,b) => b.id - a.id);
+    renderExpenses();
+    updateDash();
+    saveState(activeBook);
+    showToast(`✓ Backfilled ${added} past gratuity expenses`);
+  } else {
+    showToast('All past gratuities are already accounted for');
+  }
 }
 
 function storeById(id){return getState().stores.find(s=>s.id===id);}
