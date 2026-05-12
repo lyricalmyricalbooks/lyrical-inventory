@@ -415,7 +415,7 @@ function isAuthor() {
 
 // ── UTILITIES
 const $ = id => document.getElementById(id);
-const CURRENCY_SYMBOL_TO_CODE = { '€':'EUR', '$':'CAD', 'US$':'USD', '£':'GBP', '¥':'JPY', 'CHF':'CHF' };
+const CURRENCY_SYMBOL_TO_CODE = { '€':'EUR', '$':'CAD', 'CA$':'CAD', 'US$':'USD', '£':'GBP', '¥':'JPY', 'CHF':'CHF' };
 const CODE_TO_SYMBOL = { 'EUR':'€', 'CAD':'$', 'USD':'US$', 'GBP':'£', 'JPY':'¥', 'CHF':'CHF', 'AUD':'A$' };
 const getSym = c => CODE_TO_SYMBOL[c] || c;
 
