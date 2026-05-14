@@ -476,6 +476,73 @@ function convertToCAD_(amount, fromCcy) {
   return Math.round(amount * rate * 100) / 100;
 }
 
+// Static fallback rates → CAD. Used only when both GOOGLEFINANCE and
+// the live HTTP API fail (e.g. UrlFetchApp permission not granted yet).
+// Approximate end-of-2024 rates — good enough for legacy backfill.
+const FALLBACK_RATES_TO_CAD = {
+  USD: 1.36, EUR: 1.47, GBP: 1.73, AUD: 0.90,
+  JPY: 0.009, CHF: 1.55, MXN: 0.067, SEK: 0.13,
+  NOK: 0.13,  DKK: 0.20
+};
+
+// Evaluate a GOOGLEFINANCE currency rate via a hidden helper sheet.
+// If a date is given, returns the historical rate on that date (frozen);
+// otherwise returns the current rate.
+function evaluateGoogleFinanceRate_(from, to, dateObj) {
+  if (!from || !to || from === to) return null;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let helper = ss.getSheetByName('__FxHelper');
+  if (!helper) {
+    helper = ss.insertSheet('__FxHelper');
+    helper.hideSheet();
+  }
+  const pair = `CURRENCY:${from}${to}`;
+  const liveFallback = `IFERROR(GOOGLEFINANCE("${pair}"), "")`;
+  let formula;
+  if (dateObj instanceof Date && !isNaN(dateObj.getTime())) {
+    const y = dateObj.getFullYear(), m = dateObj.getMonth() + 1, d = dateObj.getDate();
+    formula = `=IFERROR(INDEX(GOOGLEFINANCE("${pair}","price",DATE(${y},${m},${d}),DATE(${y},${m},${d}+5),"DAILY"),2,2), ${liveFallback})`;
+  } else {
+    formula = `=${liveFallback}`;
+  }
+  try {
+    helper.getRange('A1').setFormula(formula);
+    SpreadsheetApp.flush();
+    const v = helper.getRange('A1').getValue();
+    helper.getRange('A1').clearContent();
+    return (typeof v === 'number' && v > 0) ? v : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Try GOOGLEFINANCE (historical if date provided) → HTTP API → static
+// fallback, in that order. Tracks failures so the backfill alert can
+// surface them.
+function getCadRateForRow_(fromCcy, dateObj, problems) {
+  const ccy = normalizeCcy_(fromCcy);
+  if (!ccy || ccy === 'CAD') return null;
+  let rate = evaluateGoogleFinanceRate_(ccy, 'CAD', dateObj);
+  if (rate) return rate;
+  try {
+    rate = getFxRate_(ccy, 'CAD');
+    if (rate) return rate;
+  } catch (_) {}
+  if (FALLBACK_RATES_TO_CAD[ccy]) {
+    if (problems) problems[ccy] = (problems[ccy] || 0) + 1;
+    return FALLBACK_RATES_TO_CAD[ccy];
+  }
+  if (problems) problems[`${ccy}!`] = (problems[`${ccy}!`] || 0) + 1;
+  return null;
+}
+
+function parseRowDate_(raw) {
+  if (!raw) return null;
+  if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // Normalize messy currency inputs ("CA$", "C$", "$", "US$", "€", …) to
 // 3-letter ISO codes so the Currency column and the FX lookup agree.
 function normalizeCcy_(raw) {
@@ -502,7 +569,9 @@ function normalizeCcy_(raw) {
 // Repair pass: normalize the Currency column (e.g. "CA$" → "CAD") and
 // fill in missing CAD Equivalent values for non-CAD rows. Walks every
 // managed sheet (any tab whose first column header is "_eventId"), so
-// both the Overview tab and the per-book tabs get cleaned up.
+// both the Overview tab and the per-book tabs get cleaned up. Uses
+// GOOGLEFINANCE with the row's date for historical accuracy, falling
+// back to live FX and a static rate table if those fail.
 // Safe to re-run; only touches cells that need it.
 function backfillCurrencyAndCad() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -515,20 +584,23 @@ function backfillCurrencyAndCad() {
     return;
   }
 
-  let totalNormalized = 0, totalFilled = 0, sheetsTouched = 0;
+  let totalNormalized = 0, totalFilled = 0;
   const perSheet = [];
+  const fallbackUsage = {};
 
   for (const sheet of sheets) {
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) continue;
 
-    const ccyRange = sheet.getRange(2, COL.Currency, lastRow - 1, 1);
-    const totRange = sheet.getRange(2, COL['Total/Amount'], lastRow - 1, 1);
-    const cadRange = sheet.getRange(2, COL['CAD Equivalent'], lastRow - 1, 1);
+    const ccyRange  = sheet.getRange(2, COL.Currency, lastRow - 1, 1);
+    const totRange  = sheet.getRange(2, COL['Total/Amount'], lastRow - 1, 1);
+    const cadRange  = sheet.getRange(2, COL['CAD Equivalent'], lastRow - 1, 1);
+    const dateRange = sheet.getRange(2, COL.Date, lastRow - 1, 1);
 
-    const ccyVals = ccyRange.getValues();
-    const totVals = totRange.getValues();
-    const cadVals = cadRange.getValues();
+    const ccyVals  = ccyRange.getValues();
+    const totVals  = totRange.getValues();
+    const cadVals  = cadRange.getValues();
+    const dateVals = dateRange.getValues();
 
     let normalized = 0, filled = 0;
     for (let i = 0; i < ccyVals.length; i++) {
@@ -547,9 +619,10 @@ function backfillCurrencyAndCad() {
           cadVals[i][0] = total;
           filled++;
         } else {
-          const conv = convertToCAD_(total, ccy);
-          if (conv !== '' && conv !== null && conv !== undefined) {
-            cadVals[i][0] = conv;
+          const rowDate = parseRowDate_(dateVals[i][0]);
+          const rate = getCadRateForRow_(ccy, rowDate, fallbackUsage);
+          if (rate) {
+            cadVals[i][0] = Math.round(total * rate * 100) / 100;
             filled++;
           }
         }
@@ -558,18 +631,25 @@ function backfillCurrencyAndCad() {
 
     ccyRange.setValues(ccyVals);
     cadRange.setValues(cadVals);
-    if (normalized || filled) sheetsTouched++;
     totalNormalized += normalized;
     totalFilled += filled;
     perSheet.push(`• ${sheet.getName()}: ${normalized} ccy, ${filled} CAD`);
   }
 
+  // Clean up the hidden helper sheet so it doesn't linger.
+  const helper = ss.getSheetByName('__FxHelper');
+  if (helper) ss.deleteSheet(helper);
+
   refreshOverviewSummary_(ss);
+
+  const fallbackNote = Object.keys(fallbackUsage).length
+    ? `\n\nFX fallback used for: ${Object.entries(fallbackUsage).map(([k,v]) => `${k}×${v}`).join(', ')}`
+    : '';
   SpreadsheetApp.getUi().alert(
     `Backfill done across ${sheets.length} sheet(s).\n` +
     `Currency cells normalized: ${totalNormalized}\n` +
     `CAD Equivalent cells filled: ${totalFilled}\n\n` +
-    perSheet.join('\n')
+    perSheet.join('\n') + fallbackNote
   );
 }
 
