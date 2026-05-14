@@ -139,7 +139,7 @@ function doPost(e) {
           JSON.stringify(d.data || {}, null, 2)
         ].join('\n');
         MailApp.sendEmail({
-          to: 'lyricalmyrical@gmail.com',
+          to: 'lyricalmyricalbooks@gmail.com',
           subject: subject,
           body: body
         });
