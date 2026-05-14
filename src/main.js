@@ -2671,6 +2671,7 @@ async function submitExpense(){
       await window._fbSubmitActivity(activeBook, 'expenses', newExpense);
       addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,currency)} (Submitted)`,'ok');
       showToast('✓ Expense submitted for approval');
+      notifyPublisherSubmission('Expense', newExpense, `${cat}: ${desc} — ${fmt(amount,currency)}`);
     } catch(e) {
       console.error("Submission error:", e);
       if (e.message && e.message.includes('PERMISSION_DENIED')) {
@@ -3501,6 +3502,7 @@ async function submitManual(){
     try {
       await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
       addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — (Submitted)`,'warn');
+      notifyPublisherSubmission('Sale', entryPayload, `${num}: -${qty} @ ${fmt(price,book.currency)}${paymentType ? ' · ' + paymentType : ''}`);
       
       if (paymentType === 'Payment directly to artist') {
         showToast('⏳ Order submitted — you will owe a transfer to the publisher upon approval', 'warn');
@@ -4508,6 +4510,28 @@ async function postToSheets(body){
     });
     return 'unknown';
   }
+}
+
+async function notifyPublisherSubmission(kind, data, summary){
+  if(!sheetsUrl) return;
+  try{
+    const book = (typeof getBook === 'function') ? getBook() : (BOOKS && BOOKS[activeBook]) || {};
+    await postToSheets({
+      version: 2,
+      action: 'notifyPublisher',
+      eventId: 'notify-' + Date.now(),
+      payload: {
+        action: 'notifyPublisher',
+        kind,
+        bookId: activeBook,
+        bookTitle: book.title || activeBook || '',
+        authorEmail: book.authorEmail || '',
+        submittedAt: new Date().toISOString(),
+        summary: summary || '',
+        data
+      }
+    });
+  }catch(e){ console.warn('notifyPublisher failed', e); }
 }
 
 async function _processQueue(){

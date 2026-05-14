@@ -120,6 +120,35 @@ function doPost(e) {
       'add'
     ).toString().toLowerCase();
 
+    // ── Publisher notification email ──
+    if (action === 'notifypublisher') {
+      const d = payload.payload || {};
+      try {
+        const subject = `[Lyrical Inventory] ${d.kind || 'Submission'} awaiting approval — ${d.bookTitle || ''}`;
+        const body = [
+          `A ${d.kind || 'submission'} from an author is awaiting your confirmation.`,
+          '',
+          `Book:      ${d.bookTitle || ''} (${d.bookId || ''})`,
+          `Author:    ${d.authorEmail || 'unknown'}`,
+          `Submitted: ${d.submittedAt || ''}`,
+          '',
+          'Summary:',
+          d.summary || '(no summary provided)',
+          '',
+          'Details:',
+          JSON.stringify(d.data || {}, null, 2)
+        ].join('\n');
+        MailApp.sendEmail({
+          to: 'lyricalmyrical@gmail.com',
+          subject: subject,
+          body: body
+        });
+        return jsonOut_({ ok: true, notified: true });
+      } catch (err) {
+        return jsonOut_({ error: 'mail failed: ' + String(err) });
+      }
+    }
+
     // ── Void / delete: remove rows matching sheetsId (preferred) or eventId ──
     if (action === 'void' || action === 'delete') {
       const deleteId = (payload.payload && payload.payload.sheetsId) || eventId;
