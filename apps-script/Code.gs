@@ -499,58 +499,77 @@ function normalizeCcy_(raw) {
   return u;
 }
 
-// Repair pass for the Overview tab: normalize the Currency column
-// (e.g. "CA$" → "CAD") and fill in missing CAD Equivalent values for
-// non-CAD rows. Safe to re-run; only touches cells that need it.
+// Repair pass: normalize the Currency column (e.g. "CA$" → "CAD") and
+// fill in missing CAD Equivalent values for non-CAD rows. Walks every
+// managed sheet (any tab whose first column header is "_eventId"), so
+// both the Overview tab and the per-book tabs get cleaned up.
+// Safe to re-run; only touches cells that need it.
 function backfillCurrencyAndCad() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('Overview');
-  if (!sheet) {
-    SpreadsheetApp.getUi().alert('No "Overview" sheet found.');
+  const sheets = ss.getSheets().filter(sh => {
+    if (sh.getLastColumn() < 1 || sh.getLastRow() < 1) return false;
+    return sh.getRange(1, 1).getValue() === '_eventId';
+  });
+  if (!sheets.length) {
+    SpreadsheetApp.getUi().alert('No managed sheets found (looking for "_eventId" in A1).');
     return;
   }
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return;
 
-  const ccyRange = sheet.getRange(2, COL.Currency, lastRow - 1, 1);
-  const totRange = sheet.getRange(2, COL['Total/Amount'], lastRow - 1, 1);
-  const cadRange = sheet.getRange(2, COL['CAD Equivalent'], lastRow - 1, 1);
+  let totalNormalized = 0, totalFilled = 0, sheetsTouched = 0;
+  const perSheet = [];
 
-  const ccyVals = ccyRange.getValues();
-  const totVals = totRange.getValues();
-  const cadVals = cadRange.getValues();
+  for (const sheet of sheets) {
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) continue;
 
-  let normalized = 0, filled = 0;
-  for (let i = 0; i < ccyVals.length; i++) {
-    const orig = ccyVals[i][0];
-    const norm = normalizeCcy_(orig);
-    if (norm && norm !== orig) {
-      ccyVals[i][0] = norm;
-      normalized++;
-    }
-    const ccy = ccyVals[i][0];
-    const total = numOrBlank_(totVals[i][0]);
-    const cad = cadVals[i][0];
-    const cadBlank = cad === '' || cad === null || cad === undefined;
-    if (cadBlank && total !== '' && ccy) {
-      if (ccy === 'CAD') {
-        cadVals[i][0] = total;
-        filled++;
-      } else {
-        const conv = convertToCAD_(total, ccy);
-        if (conv !== '' && conv !== null && conv !== undefined) {
-          cadVals[i][0] = conv;
+    const ccyRange = sheet.getRange(2, COL.Currency, lastRow - 1, 1);
+    const totRange = sheet.getRange(2, COL['Total/Amount'], lastRow - 1, 1);
+    const cadRange = sheet.getRange(2, COL['CAD Equivalent'], lastRow - 1, 1);
+
+    const ccyVals = ccyRange.getValues();
+    const totVals = totRange.getValues();
+    const cadVals = cadRange.getValues();
+
+    let normalized = 0, filled = 0;
+    for (let i = 0; i < ccyVals.length; i++) {
+      const orig = ccyVals[i][0];
+      const norm = normalizeCcy_(orig);
+      if (norm && norm !== orig) {
+        ccyVals[i][0] = norm;
+        normalized++;
+      }
+      const ccy = ccyVals[i][0];
+      const total = numOrBlank_(totVals[i][0]);
+      const cad = cadVals[i][0];
+      const cadBlank = cad === '' || cad === null || cad === undefined;
+      if (cadBlank && total !== '' && ccy) {
+        if (ccy === 'CAD') {
+          cadVals[i][0] = total;
           filled++;
+        } else {
+          const conv = convertToCAD_(total, ccy);
+          if (conv !== '' && conv !== null && conv !== undefined) {
+            cadVals[i][0] = conv;
+            filled++;
+          }
         }
       }
     }
+
+    ccyRange.setValues(ccyVals);
+    cadRange.setValues(cadVals);
+    if (normalized || filled) sheetsTouched++;
+    totalNormalized += normalized;
+    totalFilled += filled;
+    perSheet.push(`• ${sheet.getName()}: ${normalized} ccy, ${filled} CAD`);
   }
 
-  ccyRange.setValues(ccyVals);
-  cadRange.setValues(cadVals);
   refreshOverviewSummary_(ss);
   SpreadsheetApp.getUi().alert(
-    `Backfill done.\nCurrency cells normalized: ${normalized}\nCAD Equivalent cells filled: ${filled}`
+    `Backfill done across ${sheets.length} sheet(s).\n` +
+    `Currency cells normalized: ${totalNormalized}\n` +
+    `CAD Equivalent cells filled: ${totalFilled}\n\n` +
+    perSheet.join('\n')
   );
 }
 
