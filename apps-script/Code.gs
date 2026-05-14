@@ -190,7 +190,7 @@ function doPost(e) {
 function processSheetEntry_(ss, sheetName, data) {
   const sheet = ensureSheet_(ss, sheetName);
 
-  const currency = (data.currency || data.paymentCurrency || '').toUpperCase();
+  const currency = normalizeCcy_(data.currency || data.paymentCurrency);
   const total = numOrBlank_(data.amountDue ?? data.total);
 
   // Prefer the CAD value captured at the time of sale (frozen rate) over a
@@ -469,10 +469,96 @@ function refreshOverviewSummary_(ss) {
 // FX: cache 6h, fall back to last known or 1.0
 // ─────────────────────────────────────────────────────────────
 function convertToCAD_(amount, fromCcy) {
-  if (!fromCcy || fromCcy === 'CAD') return amount;
-  const rate = getFxRate_(fromCcy, 'CAD');
+  const ccy = normalizeCcy_(fromCcy);
+  if (!ccy || ccy === 'CAD') return amount;
+  const rate = getFxRate_(ccy, 'CAD');
   if (!rate) return '';
   return Math.round(amount * rate * 100) / 100;
+}
+
+// Normalize messy currency inputs ("CA$", "C$", "$", "US$", "€", …) to
+// 3-letter ISO codes so the Currency column and the FX lookup agree.
+function normalizeCcy_(raw) {
+  if (raw === null || raw === undefined) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  const u = s.toUpperCase();
+  const symMap = {
+    'CA$': 'CAD', 'C$': 'CAD', 'CDN$': 'CAD', '$CAD': 'CAD',
+    'US$': 'USD', 'USD$': 'USD', '$US': 'USD',
+    '€': 'EUR', 'EUR€': 'EUR',
+    '£': 'GBP',
+    '¥': 'JPY',
+    'A$': 'AUD', 'AU$': 'AUD',
+    'CHF': 'CHF',
+    '$': 'CAD' // app's home currency
+  };
+  if (symMap[u]) return symMap[u];
+  if (symMap[s]) return symMap[s];
+  if (/^[A-Z]{3}$/.test(u)) return u;
+  return u;
+}
+
+// Repair pass for the Overview tab: normalize the Currency column
+// (e.g. "CA$" → "CAD") and fill in missing CAD Equivalent values for
+// non-CAD rows. Safe to re-run; only touches cells that need it.
+function backfillCurrencyAndCad() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Overview');
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('No "Overview" sheet found.');
+    return;
+  }
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  const ccyRange = sheet.getRange(2, COL.Currency, lastRow - 1, 1);
+  const totRange = sheet.getRange(2, COL['Total/Amount'], lastRow - 1, 1);
+  const cadRange = sheet.getRange(2, COL['CAD Equivalent'], lastRow - 1, 1);
+
+  const ccyVals = ccyRange.getValues();
+  const totVals = totRange.getValues();
+  const cadVals = cadRange.getValues();
+
+  let normalized = 0, filled = 0;
+  for (let i = 0; i < ccyVals.length; i++) {
+    const orig = ccyVals[i][0];
+    const norm = normalizeCcy_(orig);
+    if (norm && norm !== orig) {
+      ccyVals[i][0] = norm;
+      normalized++;
+    }
+    const ccy = ccyVals[i][0];
+    const total = numOrBlank_(totVals[i][0]);
+    const cad = cadVals[i][0];
+    const cadBlank = cad === '' || cad === null || cad === undefined;
+    if (cadBlank && total !== '' && ccy) {
+      if (ccy === 'CAD') {
+        cadVals[i][0] = total;
+        filled++;
+      } else {
+        const conv = convertToCAD_(total, ccy);
+        if (conv !== '' && conv !== null && conv !== undefined) {
+          cadVals[i][0] = conv;
+          filled++;
+        }
+      }
+    }
+  }
+
+  ccyRange.setValues(ccyVals);
+  cadRange.setValues(cadVals);
+  refreshOverviewSummary_(ss);
+  SpreadsheetApp.getUi().alert(
+    `Backfill done.\nCurrency cells normalized: ${normalized}\nCAD Equivalent cells filled: ${filled}`
+  );
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Inventory')
+    .addItem('Normalize currencies + fill CAD', 'backfillCurrencyAndCad')
+    .addToUi();
 }
 
 function getFxRate_(from, to) {
