@@ -416,7 +416,7 @@ function isAuthor() {
 // ── UTILITIES
 const $ = id => document.getElementById(id);
 const CURRENCY_SYMBOL_TO_CODE = { '€':'EUR', '$':'CAD', 'CA$':'CAD', 'US$':'USD', '£':'GBP', '¥':'JPY', 'CHF':'CHF' };
-const CODE_TO_SYMBOL = { 'EUR':'€', 'CAD':'$', 'USD':'US$', 'GBP':'£', 'JPY':'¥', 'CHF':'CHF', 'AUD':'A$' };
+const CODE_TO_SYMBOL = { 'EUR':'€', 'CAD':'CA$', 'USD':'US$', 'GBP':'£', 'JPY':'¥', 'CHF':'CHF', 'AUD':'A$' };
 const getSym = c => CODE_TO_SYMBOL[c] || c;
 
 function normalizeCurrencyCode(cur, fallback = 'CAD') {
@@ -6890,14 +6890,15 @@ function savePosExchangeRates() {
   localStorage.setItem(POS_FX_STORAGE_KEY, JSON.stringify(posExchangeRates));
 }
 
+// Delegate to the canonical helpers defined earlier so the POS uses the
+// same symbol↔code mapping as the rest of the app (avoids CA$/CAD and
+// $/USD ambiguities).
 function currencyToCode(cur) {
-  const map = { '€': 'EUR', 'CA$': 'CAD', '$': 'USD', '£': 'GBP' };
-  return map[cur] || cur || 'EUR';
+  return normalizeCurrencyCode(cur, 'EUR');
 }
 
 function codeToSymbol(code) {
-  const map = { EUR: '€', CAD: 'CA$', USD: '$', GBP: '£' };
-  return map[code] || code;
+  return getSym(code);
 }
 
 function posFormat(amount, currencyCode) {
