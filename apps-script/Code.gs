@@ -124,9 +124,14 @@ function doPost(e) {
     if (action === 'notifypublisher') {
       const d = payload.payload || {};
       try {
-        const subject = `[Lyrical Inventory] ${d.kind || 'Submission'} awaiting approval — ${d.bookTitle || ''}`;
+        const kind = d.kind || 'Submission';
+        const needsAction = /approval|payment|transfer/i.test(kind);
+        const prefix = needsAction ? '[ACTION REQUIRED]' : '[Lyrical Inventory]';
+        const subject = `${prefix} ${kind} awaiting approval — ${d.bookTitle || ''}`;
         const body = [
-          `A ${d.kind || 'submission'} from an author is awaiting your confirmation.`,
+          needsAction
+            ? `An author submission requires your action: ${kind}.`
+            : `A ${kind.toLowerCase()} from an author is awaiting your confirmation.`,
           '',
           `Book:      ${d.bookTitle || ''} (${d.bookId || ''})`,
           `Author:    ${d.authorEmail || 'unknown'}`,
