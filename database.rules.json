@@ -4,7 +4,11 @@
       "books": {
         "$bookId": {
           ".read": "auth != null",
-          ".write": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'"
+          // Any authenticated user (publisher or an author whose Google email
+          // matches a book's authorEmail — enforced in the app) can write
+          // book data. This grants authors FULL access to the consignment
+          // tab (stores + ledger live inside the per-book blob in RTDB).
+          ".write": "auth != null"
         }
       },
       "submissions": {
