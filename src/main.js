@@ -610,6 +610,7 @@ async function loadBook(bookId) {
     window._fbWatchSubmissions(bookId, data => {
       window.authorSubmissions[bookId] = data || {};
       if (activeBook === bookId || activeBook === 'all') renderCurrent();
+      else { try { updatePublisherActionBanner(); } catch(_) {} }
     });
     
     window._fbWatch(bookId, json2 => {
@@ -1287,6 +1288,102 @@ function updateContextBanners() {
   if (dashMeta) dashMeta.textContent = book.author || '—';
 }
 
+// ── GLOBAL PUBLISHER ACTION BANNER (sticky, app-wide)
+let _pabDismissedSignature = '';
+function updatePublisherActionBanner() {
+  const banner = document.getElementById('publisher-action-banner');
+  if (!banner) return;
+  if (isAuthor() || !isPublisherSession()) { banner.style.display = 'none'; return; }
+
+  const subs = window.authorSubmissions || {};
+  let salesCount = 0, expCount = 0;
+  const booksWithPending = [];
+  Object.keys(subs).forEach(bookId => {
+    const sc = Object.keys(subs[bookId]?.sales || {}).length;
+    const ec = Object.keys(subs[bookId]?.expenses || {}).length;
+    if (sc + ec > 0) {
+      booksWithPending.push({ bookId, sc, ec });
+      salesCount += sc;
+      expCount += ec;
+    }
+  });
+
+  // Detect "artist-payment" sales (need transfer approval) for stronger wording
+  let artistPaymentCount = 0;
+  booksWithPending.forEach(({ bookId }) => {
+    const pbSales = subs[bookId]?.sales || {};
+    Object.keys(pbSales).forEach(k => {
+      try {
+        const raw = (typeof pbSales[k].data === 'string') ? JSON.parse(pbSales[k].data) : pbSales[k].data;
+        const isDirect = raw && (raw.paymentType === 'Payment directly to artist'
+          || (raw.notes || '').includes('Payment directly to artist'));
+        if (isDirect) artistPaymentCount++;
+      } catch(_) {}
+    });
+  });
+
+  const total = salesCount + expCount;
+  const signature = `${salesCount}|${expCount}|${artistPaymentCount}|${booksWithPending.map(b=>b.bookId).join(',')}`;
+
+  if (total === 0) {
+    banner.style.display = 'none';
+    _pabDismissedSignature = '';
+    return;
+  }
+  if (signature === _pabDismissedSignature) { banner.style.display = 'none'; return; }
+
+  const titleEl = document.getElementById('pab-title');
+  const subEl = document.getElementById('pab-sub');
+  const actEl = document.getElementById('pab-actions');
+
+  const parts = [];
+  if (artistPaymentCount > 0) parts.push(`${artistPaymentCount} artist payment${artistPaymentCount>1?'s':''} to approve`);
+  if (salesCount - artistPaymentCount > 0) parts.push(`${salesCount - artistPaymentCount} sale${(salesCount-artistPaymentCount)>1?'s':''}`);
+  if (expCount > 0) parts.push(`${expCount} expense${expCount>1?'s':''}`);
+
+  titleEl.textContent = artistPaymentCount > 0
+    ? `Action required · ${artistPaymentCount} artist payment${artistPaymentCount>1?'s':''} awaiting approval`
+    : `Action required · ${total} pending submission${total>1?'s':''}`;
+  subEl.textContent = parts.join(' · ') + ` — across ${booksWithPending.length} book${booksWithPending.length>1?'s':''}.`;
+
+  // Build action buttons: jump straight to the first pending book, plus per-section buttons if a single book has pending
+  actEl.innerHTML = '';
+  if (booksWithPending.length === 1) {
+    const { bookId, sc, ec } = booksWithPending[0];
+    if (sc > 0) {
+      const b = document.createElement('button');
+      b.className = 'pab-btn'; b.type = 'button';
+      b.textContent = `Review ${sc} sale${sc>1?'s':''} →`;
+      b.onclick = () => { try { switchBook(bookId); } catch(_) {} setTimeout(()=>switchTab('history'), 50); };
+      actEl.appendChild(b);
+    }
+    if (ec > 0) {
+      const b = document.createElement('button');
+      b.className = 'pab-btn'; b.type = 'button';
+      b.textContent = `Review ${ec} expense${ec>1?'s':''} →`;
+      b.onclick = () => { try { switchBook(bookId); } catch(_) {} setTimeout(()=>switchTab('expenses'), 50); };
+      actEl.appendChild(b);
+    }
+  } else {
+    const b = document.createElement('button');
+    b.className = 'pab-btn'; b.type = 'button';
+    b.textContent = 'Review all →';
+    b.onclick = () => { try { switchBook('all'); } catch(_) {} };
+    actEl.appendChild(b);
+  }
+
+  const dismiss = document.getElementById('pab-dismiss');
+  if (dismiss) {
+    dismiss.onclick = () => {
+      _pabDismissedSignature = signature;
+      banner.style.display = 'none';
+    };
+  }
+
+  banner.style.display = 'flex';
+}
+window.updatePublisherActionBanner = updatePublisherActionBanner;
+
 // ── DASHBOARD (per book)
 function renderBookPendingAlert() {
   if (isAuthor() || activeBook === 'all') return;
@@ -1710,6 +1807,7 @@ function renderAll() {
 function renderCurrent() {
   if (activeBook === 'all') { updateAllOverview(); updateHeader(); }
   else renderAll();
+  try { updatePublisherActionBanner(); } catch(_) {}
 
   // Firestore DB status indicator update
   const fsBtn = document.getElementById('fs-toggle-btn');

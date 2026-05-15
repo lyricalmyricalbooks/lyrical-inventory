@@ -73,6 +73,17 @@
   </div>
 </header>
 
+<div id="publisher-action-banner" class="publisher-action-banner" style="display:none;" role="alert" aria-live="polite">
+  <div class="pab-pulse" aria-hidden="true"></div>
+  <div class="pab-icon" aria-hidden="true">⚠</div>
+  <div class="pab-text">
+    <div class="pab-title" id="pab-title">Action required</div>
+    <div class="pab-sub" id="pab-sub">You have pending author submissions awaiting your approval.</div>
+  </div>
+  <div class="pab-actions" id="pab-actions"></div>
+  <button type="button" class="pab-dismiss" id="pab-dismiss" title="Snooze until next change" aria-label="Dismiss">×</button>
+</div>
+
 <div class="sync-bar">
   <div class="sync-dot syncing" id="sync-dot"></div>
   <div class="sync-label" id="sync-label"><b>Firestore</b> · connecting…</div>
