@@ -4079,7 +4079,7 @@ function renderLedger(){
   const indexed = s.ledger.map((e,i)=>({e,i}));
   b.innerHTML=[...indexed].reverse().map(({e,i})=>{
     const voided = e.voided?' voided':'';
-    const editBtn = isAuthor() ? '' : `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry">✎</button>`;
+    const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry">✎</button>`;
     return`<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${e.storeName}${editBtn}</td><td>${e.type}</td><td class="r">${e.qty}</td><td class="r">${e.type==='Sale'?e.rate+'%':'—'}</td><td class="r" style="font-weight:600;">${e.amountDue>0?fmt(e.amountDue,cur):'—'}</td><td style="font-size:12px;color:var(--text3);">${e.notes||'—'}</td><td>${pill(e)}${e.status==='pending'&&!e.voided?` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>`:''}</td></tr>`;
   }).join('');
 }
