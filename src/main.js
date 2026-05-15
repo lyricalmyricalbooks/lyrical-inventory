@@ -3502,9 +3502,15 @@ async function submitManual(){
     try {
       await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
       addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — (Submitted)`,'warn');
-      notifyPublisherSubmission('Sale', entryPayload, `${num}: -${qty} @ ${fmt(price,book.currency)}${paymentType ? ' · ' + paymentType : ''}`);
-      
-      if (paymentType === 'Payment directly to artist') {
+      const isArtistPayment = paymentType === 'Payment directly to artist';
+      const notifyKind = isArtistPayment ? 'Artist Payment Approval' : 'Sale';
+      const baseSummary = `${num}: -${qty} @ ${fmt(price,book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
+      const notifySummary = isArtistPayment
+        ? `ACTION REQUIRED — artist payment of ${fmt(qty*price,book.currency)} awaiting your approval. ${baseSummary}`
+        : baseSummary;
+      notifyPublisherSubmission(notifyKind, entryPayload, notifySummary);
+
+      if (isArtistPayment) {
         showToast('⏳ Order submitted — you will owe a transfer to the publisher upon approval', 'warn');
       } else {
         showToast('✓ Order submitted for approval');
