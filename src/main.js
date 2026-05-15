@@ -7905,12 +7905,51 @@ function _stripeMinorToMajor(amt, cur) {
   return _STRIPE_ZERO_DECIMAL.has((cur || '').toUpperCase()) ? amt : amt / 100;
 }
 
+const _STRIPE_TYPE_LABELS = {
+  charge: 'Customer payments',
+  payment: 'Customer payments',
+  refund: 'Refunds issued',
+  payment_refund: 'Refunds issued',
+  payment_refund_reversal: 'Refund reversals',
+  refund_failure: 'Failed refunds',
+  payout: 'Payouts to your bank',
+  payout_cancel: 'Cancelled payouts',
+  payout_failure: 'Failed payouts',
+  stripe_fee: 'Stripe service fees',
+  application_fee: 'App / platform fees',
+  application_fee_refund: 'App fee refunds',
+  adjustment: 'Adjustments',
+  transfer: 'Transfers',
+  transfer_cancel: 'Cancelled transfers',
+  transfer_failure: 'Failed transfers',
+  transfer_refund: 'Transfer refunds',
+  dispute: 'Disputes / chargebacks',
+  dispute_reversal: 'Dispute reversals',
+  reserve_transaction: 'Reserve holds',
+  reserved_funds: 'Reserved funds',
+  topup: 'Account top-ups',
+  topup_reversal: 'Top-up reversals',
+  contribution: 'Contributions',
+  issuing_authorization_hold: 'Card auth hold',
+  issuing_authorization_release: 'Card auth release',
+  issuing_transaction: 'Card transaction',
+  issuing_dispute: 'Card dispute',
+  tax_fee: 'Tax fees',
+};
+function _stripeFriendlyType(t) {
+  return _STRIPE_TYPE_LABELS[t] || (t || 'Other').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+function _stripeFmtMoney(amt, cur) {
+  const sign = amt < 0 ? '-' : '';
+  const abs = Math.abs(amt);
+  return `${sign}${cur ? cur + ' ' : ''}${abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 async function fetchStripeFeesByYear() {
   const keyEl = document.getElementById('stripe-fees-key');
   const statusEl = document.getElementById('stripe-fees-status');
   const btn = document.getElementById('stripe-fees-btn');
   const wrap = document.getElementById('stripe-fees-results-wrap');
-  const tbody = document.getElementById('stripe-fees-results');
   const key = (keyEl.value || '').trim();
   if (!key) { statusEl.textContent = 'Please paste a Stripe restricted key.'; return; }
   if (!/^(rk|sk)_/.test(key)) { statusEl.innerHTML = '<span style="color:var(--red);">That doesn\'t look like a Stripe secret/restricted key (expected rk_… or sk_…).</span>'; return; }
@@ -7926,7 +7965,7 @@ async function fetchStripeFeesByYear() {
 
   btn.disabled = true;
   statusEl.textContent = 'Fetching balance transactions…';
-  tbody.innerHTML = '';
+  wrap.innerHTML = '';
   wrap.style.display = 'none';
 
   // Bucket per year+currency+type. Stripe balance_transactions include many types:
@@ -7981,14 +8020,13 @@ async function fetchStripeFeesByYear() {
 
     window._stripeFeesAudit = allTxns; // available for CSV download / console inspection
 
-    const years = Object.keys(data).sort();
-    const rows = [];
+    const years = Object.keys(data).sort((a, b) => Number(b) - Number(a)); // newest first
+    const cards = [];
     const SALES_TYPES = new Set(['charge', 'payment']); // gross sales (positive amount, has fee)
     for (const year of years) {
       const curs = Object.keys(data[year]).sort();
       for (const cur of curs) {
         const types = data[year][cur];
-        // 1) Sales (charge + payment) — this is the line that matches "fees on revenue"
         const salesAgg = { gross: 0, fee: 0, net: 0, count: 0 };
         for (const t of Object.keys(types)) {
           if (SALES_TYPES.has(t)) {
@@ -7998,58 +8036,107 @@ async function fetchStripeFeesByYear() {
             salesAgg.count += types[t].count;
           }
         }
+
+        // Headline (sales) section
+        let headline;
         if (salesAgg.count > 0) {
           const gross = _stripeMinorToMajor(salesAgg.gross, cur);
           const fee   = _stripeMinorToMajor(salesAgg.fee, cur);
           const net   = _stripeMinorToMajor(salesAgg.net, cur);
           const pct   = salesAgg.gross ? (salesAgg.fee / salesAgg.gross) * 100 : 0;
-          rows.push(`<tr style="background:rgba(212,175,55,.06);">
-            <td><strong>${year}</strong></td>
-            <td>${cur}</td>
-            <td>Sales (charges)</td>
+          headline = `
+            <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:flex-end;">
+              <div style="flex:2;min-width:240px;">
+                <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Stripe fees on your sales</div>
+                <div style="font-family:'DM Mono',monospace;font-size:32px;font-weight:500;color:var(--red);line-height:1;">${_stripeFmtMoney(fee, cur)}</div>
+                <div style="font-size:13px;color:var(--text2);margin-top:8px;line-height:1.5;">
+                  on <strong>${_stripeFmtMoney(gross, cur)}</strong> across <strong>${salesAgg.count}</strong> customer ${salesAgg.count === 1 ? 'payment' : 'payments'}<br>
+                  You received <strong style="color:var(--green);">${_stripeFmtMoney(net, cur)}</strong> net into your Stripe balance
+                </div>
+              </div>
+              <div style="flex:1;min-width:120px;text-align:right;">
+                <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;">Effective rate</div>
+                <div style="font-family:'DM Mono',monospace;font-size:32px;font-weight:500;color:var(--gold);line-height:1;">${pct.toFixed(2)}%</div>
+                <div style="font-size:11px;color:var(--text3);margin-top:8px;">of gross sales</div>
+              </div>
+            </div>`;
+        } else {
+          headline = `<div style="font-size:13px;color:var(--text3);font-style:italic;">No customer payments in this year — only balance activity below.</div>`;
+        }
+
+        // Detail rows for other activity
+        const otherTypes = Object.keys(types).filter(t => !SALES_TYPES.has(t)).sort();
+        const detailRows = [];
+        if (salesAgg.count > 0) {
+          const gross = _stripeMinorToMajor(salesAgg.gross, cur);
+          const fee   = _stripeMinorToMajor(salesAgg.fee, cur);
+          const net   = _stripeMinorToMajor(salesAgg.net, cur);
+          detailRows.push(`<tr style="background:rgba(200,145,58,.06);">
+            <td><strong>Customer payments</strong><div style="font-size:10px;color:var(--text3);">charge · payment</div></td>
             <td class="r">${salesAgg.count}</td>
-            <td class="r">${gross.toFixed(2)}</td>
-            <td class="r" style="color:var(--red);">${fee.toFixed(2)}</td>
-            <td class="r"><strong>${pct.toFixed(2)}%</strong></td>
-            <td class="r">${net.toFixed(2)}</td>
+            <td class="r">${_stripeFmtMoney(gross, '')}</td>
+            <td class="r" style="color:var(--red);">${_stripeFmtMoney(fee, '')}</td>
+            <td class="r"><strong>${_stripeFmtMoney(net, '')}</strong></td>
           </tr>`);
         }
-        // 2) Other types — refunds, stripe_fee, payouts, adjustments, etc.
-        const otherTypes = Object.keys(types).filter(t => !SALES_TYPES.has(t)).sort();
         for (const t of otherTypes) {
           const r = types[t];
           const gross = _stripeMinorToMajor(r.gross, cur);
           const fee   = _stripeMinorToMajor(r.fee, cur);
           const net   = _stripeMinorToMajor(r.net, cur);
-          rows.push(`<tr style="opacity:.85;">
-            <td>${year}</td>
-            <td>${cur}</td>
-            <td><span style="font-size:11px;color:var(--text3);">${t}</span></td>
+          detailRows.push(`<tr>
+            <td>${_stripeFriendlyType(t)}<div style="font-size:10px;color:var(--text3);">${t}</div></td>
             <td class="r">${r.count}</td>
-            <td class="r">${gross.toFixed(2)}</td>
-            <td class="r" style="color:var(--red);">${fee.toFixed(2)}</td>
-            <td class="r">—</td>
-            <td class="r">${net.toFixed(2)}</td>
+            <td class="r">${_stripeFmtMoney(gross, '')}</td>
+            <td class="r" style="color:${fee !== 0 ? 'var(--red)' : 'var(--text3)'};">${fee !== 0 ? _stripeFmtMoney(fee, '') : '—'}</td>
+            <td class="r">${_stripeFmtMoney(net, '')}</td>
           </tr>`);
         }
-        // 3) Year+currency total (matches Stripe Dashboard Balance summary)
+
         const tot = byYearCurAll[year][cur];
         const tgross = _stripeMinorToMajor(tot.gross, cur);
         const tfee   = _stripeMinorToMajor(tot.fee, cur);
         const tnet   = _stripeMinorToMajor(tot.net, cur);
-        rows.push(`<tr style="border-top:2px solid var(--gold-line);font-weight:600;">
-          <td>${year}</td>
-          <td>${cur}</td>
-          <td style="font-style:italic;color:var(--text3);">All activity (matches Stripe report)</td>
-          <td class="r">${tot.count}</td>
-          <td class="r">${tgross.toFixed(2)}</td>
-          <td class="r" style="color:var(--red);">${tfee.toFixed(2)}</td>
-          <td class="r">—</td>
-          <td class="r">${tnet.toFixed(2)}</td>
-        </tr>`);
+        const detailId = `stripe-detail-${year}-${cur}`;
+
+        cards.push(`
+          <div class="card" style="margin-bottom:1rem;padding:1.25rem 1.4rem;">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px;">
+              <div style="font-family:'Playfair Display',serif;font-size:22px;color:var(--text);">${year}</div>
+              <span class="pill gold">${cur}</span>
+            </div>
+            ${headline}
+            ${detailRows.length ? `
+            <div style="margin-top:14px;">
+              <button type="button" class="btn tag" onclick="(function(el){var d=document.getElementById('${detailId}');var open=d.style.display!=='none';d.style.display=open?'none':'';el.innerHTML=(open?'▸':'▾')+' '+el.dataset.label;})(this)" data-label="Show all balance activity (${detailRows.length} line ${detailRows.length === 1 ? 'item' : 'items'})" style="background:transparent;border:1px dashed var(--gold-line);">▸ Show all balance activity (${detailRows.length} line ${detailRows.length === 1 ? 'item' : 'items'})</button>
+              <div id="${detailId}" style="display:none;margin-top:12px;">
+                <div class="tbl-wrap" style="margin-bottom:8px;">
+                  <table class="tbl">
+                    <thead><tr><th>Activity</th><th class="r">Count</th><th class="r">Amount</th><th class="r">Stripe fee</th><th class="r">Net</th></tr></thead>
+                    <tbody>${detailRows.join('')}
+                      <tr style="border-top:2px solid var(--gold-line);font-weight:600;background:var(--cream2);">
+                        <td>All activity total<div style="font-size:10px;color:var(--text3);font-weight:400;">matches Stripe Dashboard Balance report</div></td>
+                        <td class="r">${tot.count}</td>
+                        <td class="r">${_stripeFmtMoney(tgross, '')}</td>
+                        <td class="r" style="color:var(--red);">${_stripeFmtMoney(tfee, '')}</td>
+                        <td class="r">${_stripeFmtMoney(tnet, '')}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+                  <strong>Customer payments</strong> is the line that answers "what % does Stripe take from my sales".
+                  The other rows (refunds, payouts, service fees, adjustments) are non-sale balance movements — included so the total reconciles with Stripe's Balance report.
+                </div>
+              </div>
+            </div>` : ''}
+          </div>`);
       }
     }
-    tbody.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text3);">No transactions found.</td></tr>';
+
+    wrap.innerHTML = cards.length
+      ? cards.join('')
+      : '<div class="card" style="text-align:center;color:var(--text3);padding:2rem;">No balance transactions found.</div>';
     wrap.style.display = '';
     statusEl.innerHTML = `<span style="color:var(--green);">✓ Done — ${count} balance transactions across ${years.length} year(s). Key saved for next time.</span>
       <br><span style="font-size:11px;color:var(--text3);">Verify against your Stripe Dashboard: <a href="https://dashboard.stripe.com/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance</a> · <a href="https://dashboard.stripe.com/reports/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance reports</a> (set the date range to a calendar year). Click "Download audit CSV" below for the raw per-transaction data.</span>`;
