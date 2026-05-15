@@ -2821,43 +2821,27 @@ async function scanProjectReceiptWithAI() {
         const base64Data = reader.result.split(',')[1];
         const mimeType = file.type;
 
-        // Calling Gemini 1.5 Flash Vision
-        const payload = {
-            contents: [{
-                parts: [
-                    { "text": "Extract these exact 3 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase). No markdown, just raw JSON." },
-                    {
-                        "inline_data": {
-                            "mime_type": mimeType,
-                            "data": base64Data
-                        }
-                    }
-                ]
-            }],
-            generationConfig: { response_mime_type: "application/json" }
-        };
+        const parts = [
+            { text: "Extract these exact 3 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase). No markdown, just raw JSON." },
+            { inline_data: { mime_type: mimeType, data: base64Data } }
+        ];
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        const data = await _callGeminiForReceipts(apiKey, parts);
 
-        if(!res.ok) throw new Error("API call failed");
-        const data = await res.json();
-        
-        const extractedJsonStr = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        let extractedJsonStr = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!extractedJsonStr) throw new Error("No text returned from AI");
+        extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
         const extracted = JSON.parse(extractedJsonStr);
 
         if(extracted.vendor) $('exp-desc').value = extracted.vendor;
         if(extracted.date) $('exp-date').value = extracted.date;
         if(extracted.amount) $('exp-amount').value = extracted.amount;
         if(extracted.currency && $('exp-cur')) $('exp-cur').value = extracted.currency;
-        
+
         showToast('✓ Receipt data extracted');
     } catch(e) {
         console.error("AI Scan Error:", e);
-        showToast('⚠ AI extraction failed', 'err');
+        showToast(`⚠ AI extraction failed: ${e.message}`, 'err');
     }
     btn.textContent = oldText; btn.disabled = false;
 }
@@ -6729,49 +6713,25 @@ async function scanReceiptWithAI() {
         const base64Data = reader.result.split(',')[1];
         const mimeType = file.type;
 
-        // Calling Gemini 1.5 Flash Vision
-        const payload = {
-            contents: [{
-                parts: [
-                    { "text": "Extract these exact 4 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase, e.g., CAD, USD). No markdown, just raw JSON. If currency is not found, assume CAD." },
-                    {
-                        "inline_data": {
-                            "mime_type": mimeType,
-                            "data": base64Data
-                        }
-                    }
-                ]
-            }]
-        };
+        const parts = [
+            { text: "Extract these exact 4 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase, e.g., CAD, USD). No markdown, just raw JSON. If currency is not found, assume CAD." },
+            { inline_data: { mime_type: mimeType, data: base64Data } }
+        ];
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        const data = await _callGeminiForReceipts(apiKey, parts);
 
-        if(!res.ok) {
-            const errData = await res.json().catch(() => ({ error: { message: "Unknown error" } }));
-            const errMsg = errData.error?.message || "API call failed";
-            console.error("Gemini API Error:", errData);
-            throw new Error(errMsg);
-        }
-        const data = await res.json();
-        
         let extractedJsonStr = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!extractedJsonStr) throw new Error("No text returned from AI");
-        
-        // Sometimes the AI still includes markdown code blocks despite instructions
+
         extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-        
+
         const extracted = JSON.parse(extractedJsonStr);
 
         if(extracted.vendor) $('tc-exp-desc').value = extracted.vendor;
         if(extracted.date) $('tc-exp-date').value = extracted.date;
         if(extracted.amount) $('tc-exp-amount').value = extracted.amount;
         if(extracted.currency) $('tc-exp-cur').value = extracted.currency;
-        
-        // Auto categorize via input event trigger so TAX_CATEGORIES hook fires
+
         const ev = new Event('input');
         $('tc-exp-desc').dispatchEvent(ev);
 
