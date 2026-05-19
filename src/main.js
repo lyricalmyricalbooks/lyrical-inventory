@@ -4206,13 +4206,22 @@ function saveEntryEdit() {
     // Skip for consignment-mirrored hist entries: the matching ledger row is
     // the canonical record and would just overwrite this write.
     if (sheetsUrl && !h.consignmentLink) {
+      const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+      const totalNative = h.qty * h.price;
+      let cadEquiv = '';
+      if (nativeCur === 'CAD') cadEquiv = totalNative;
+      else if (h.payment && h.payment.currency === 'CAD' && h.payment.amount) cadEquiv = h.payment.amount;
       syncToSheets({
         type: 'order', book: book.title,
         date: h.date, num: h.num, chan: h.chan,
-        qty: h.qty, price: h.price, total: h.qty * h.price,
+        qty: h.qty, price: h.price, total: totalNative,
         stockAfter: h.after, notes: h.notes,
         sheetsId: h.sheetsId || '',
-        currency: h.payment?.currency || getBookCurrencyCode(book),
+        currency: nativeCur,
+        paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+        paymentAmount: h.payment?.amount ?? totalNative,
+        paymentRate: h.payment?.rate ?? '',
+        convertedTotal: cadEquiv,
         enteredBy: h.enteredBy || '',
         status: h.voided ? 'VOID' : 'OK'
       });
@@ -4317,19 +4326,29 @@ function syncHistoryVoidDeletion(h, isVoided) {
     return;
   }
   // Unvoid: re-sync the full entry (upsert will replace the row)
+  const book = getBook();
+  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  const totalNative = h.qty * h.price;
+  let cadEquiv = '';
+  if (nativeCur === 'CAD') cadEquiv = totalNative;
+  else if (h.payment && h.payment.currency === 'CAD' && h.payment.amount) cadEquiv = h.payment.amount;
   syncToSheets({
     type: 'order',
-    book: getBook().title,
+    book: book.title,
     date: h.date,
     num: h.num,
     chan: h.chan,
     qty: h.qty,
     price: h.price,
-    total: h.qty * h.price,
+    total: totalNative,
     stockAfter: h.after,
     notes: h.notes || '',
     sheetsId: h.sheetsId || '',
-    currency: h.payment?.currency || getBook().currency,
+    currency: nativeCur,
+    paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+    paymentAmount: h.payment?.amount ?? totalNative,
+    paymentRate: h.payment?.rate ?? '',
+    convertedTotal: cadEquiv,
     enteredBy: h.enteredBy || '',
     status: 'OK'
   });
