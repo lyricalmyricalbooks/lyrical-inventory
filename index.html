@@ -906,6 +906,32 @@
     </div>
   </div>
 
+  <!-- BANK FEEDS -->
+  <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+    <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:0.5rem;display:flex;align-items:center;gap:10px;">
+      🏦 AI Bank Feeds
+      <span class="pill" style="font-size:10px;background:var(--gold-line);color:var(--dark);font-weight:700;">AI</span>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">
+      Upload or paste a CSV bank export — AI categorizes each transaction for fast approval. Supports most bank CSV formats (Date, Description, Amount columns).
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px;">Upload bank CSV</label>
+        <input type="file" id="bankfeed-csv-file" accept=".csv,text/csv" style="font-size:11px;margin-top:2px;width:100%;">
+      </div>
+      <div style="flex:2;min-width:260px;">
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px;">Or paste CSV rows directly</label>
+        <textarea id="bankfeed-csv-paste" rows="3" placeholder="Date,Description,Amount&#10;2025-01-15,Adobe Creative Cloud,-54.99&#10;2025-01-18,Canada Post,-12.00" style="width:100%;font-size:11px;font-family:'DM Mono',monospace;resize:vertical;box-sizing:border-box;"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+      <button class="btn gold" onclick="runBankFeedAI()" id="bankfeed-ai-btn">✨ Categorize with AI</button>
+      <span style="font-size:11px;color:var(--text3);">Requires Gemini API key in Tax Center Config</span>
+    </div>
+    <div id="bankfeed-results"></div>
+  </div>
+
   <div class="card" style="margin-bottom:1.5rem;">
     <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:0.5rem;">💳 Stripe Processing Fees by Year</div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">

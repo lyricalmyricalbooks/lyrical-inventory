@@ -3339,6 +3339,232 @@ async function importEmailReceiptDrafts() {
   else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
 }
 
+// ── BANK FEEDS ──────────────────────────────────────────────────────────────
+let _bankFeedDrafts = [];
+
+function _parseBankCSV(raw) {
+  const lines = raw.trim().split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+
+  const parseRow = (line) => {
+    const cells = [];
+    let inQ = false, cur = '';
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQ = !inQ; continue; }
+      if (ch === ',' && !inQ) { cells.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    cells.push(cur.trim());
+    return cells;
+  };
+
+  const header = parseRow(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const dateIdx = header.findIndex(h => h.includes('date') || h.includes('posted'));
+  const descIdx = header.findIndex(h => h.includes('desc') || h.includes('memo') || h.includes('narr') || h.includes('particular'));
+  const amtIdx = header.findIndex(h => h === 'amount' || h === 'debit' || h === 'credit' || h.includes('amount'));
+
+  if (dateIdx < 0 || descIdx < 0 || amtIdx < 0) {
+    // try positional fallback for simple 3-col
+    if (header.length >= 3) {
+      return lines.slice(1).map(l => {
+        const c = parseRow(l);
+        const amt = parseFloat((c[2] || '').replace(/[^0-9.\-]/g, '')) || 0;
+        if (!amt || amt > 0) return null; // skip income rows
+        return { date: c[0] || today(), description: c[1] || '', amount: Math.abs(amt) };
+      }).filter(Boolean);
+    }
+    return [];
+  }
+
+  return lines.slice(1).map(l => {
+    const c = parseRow(l);
+    const rawAmt = (c[amtIdx] || '').replace(/[$,\s]/g, '');
+    const amt = parseFloat(rawAmt) || 0;
+    if (!amt || amt > 0) return null;
+    return { date: c[dateIdx] || today(), description: c[descIdx] || '', amount: Math.abs(amt) };
+  }).filter(Boolean);
+}
+
+async function runBankFeedAI() {
+  const apiKey = TAX_CENTER.settings?.geminiKey;
+  if (!apiKey) { showToast('Gemini API Key required in Tax Center Config', 'err'); return; }
+
+  const fileInput = $('bankfeed-csv-file');
+  const pasteArea = $('bankfeed-csv-paste');
+  const file = fileInput?.files?.[0];
+  let rawCSV = (pasteArea?.value || '').trim();
+
+  if (file) {
+    rawCSV = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result);
+      r.onerror = rej;
+      r.readAsText(file);
+    });
+  }
+
+  if (!rawCSV) { showToast('Upload a CSV or paste rows first', 'warn'); return; }
+
+  const rows = _parseBankCSV(rawCSV);
+  if (!rows.length) { showToast('No expense rows found. Make sure the CSV has Date, Description, Amount columns.', 'err'); return; }
+
+  const btn = $('bankfeed-ai-btn');
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Categorizing…';
+  $('bankfeed-results').innerHTML = `<div style="font-size:12px;color:var(--text3);">Sending ${rows.length} transactions to Gemini…</div>`;
+
+  try {
+    const allowedCats = EXPENSE_CATEGORIES.join(' | ');
+    const prompt = `You are a bookkeeper for a small publisher. Categorize each bank transaction into the best tax category.
+Return ONLY valid JSON: {"transactions":[{"date":"YYYY-MM-DD","description":"string","amount":number,"category":"one of the allowed categories","confidence":0.0}]}
+Allowed categories: ${allowedCats}
+Use "Other" only if nothing fits. confidence is 0.0–1.0.
+Transactions:
+${JSON.stringify(rows)}`;
+
+    const data = await _callGeminiForReceipts(apiKey, [{ text: prompt }]);
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    let parsed;
+    try {
+      const clean = text.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch (_) {
+      const m = text.match(/\{[\s\S]*\}/);
+      parsed = m ? JSON.parse(m[0]) : null;
+    }
+    const txns = parsed?.transactions;
+    if (!Array.isArray(txns) || !txns.length) throw new Error('No transactions returned');
+
+    _bankFeedDrafts = txns.map(t => ({ ...t, include: true }));
+    renderBankFeedDrafts();
+  } catch (e) {
+    $('bankfeed-results').innerHTML = `<div style="font-size:12px;color:var(--red);">AI error: ${e.message}</div>`;
+    showToast('AI categorization failed', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+function renderBankFeedDrafts() {
+  const wrap = $('bankfeed-results');
+  if (!wrap) return;
+  const drafts = _bankFeedDrafts;
+  if (!drafts.length) { wrap.innerHTML = '<div class="empty-state" style="padding:14px;font-size:12px;color:var(--text3);">No transactions to show.</div>'; return; }
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const catOptions = (sel) => EXPENSE_CATEGORIES.map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const dupCount = drafts.filter(d => _isLikelyDuplicateExpense({ ...d, currency: TAX_CENTER.settings?.baseCurrency || 'CAD' })).length;
+
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:12px;color:var(--text3);">${drafts.length} transaction${drafts.length>1?'s':''} categorized${dupCount?` · <span style="color:var(--amber);">${dupCount} possible duplicate${dupCount>1?'s':''}</span>`:''}. Deselect any you don't want to import.</div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn sm" type="button" onclick="toggleAllBankFeedDrafts(true)">Select all</button>
+        <button class="btn sm" type="button" onclick="toggleAllBankFeedDrafts(false)">Select none</button>
+      </div>
+    </div>
+    <div class="tbl-wrap" style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:var(--r2);">
+      <table class="tbl" style="font-size:12px;">
+        <thead><tr><th></th><th>Date</th><th>Description</th><th>Category</th><th class="r">Amount</th></tr></thead>
+        <tbody>
+        ${drafts.map((d, i) => {
+          const dup = _isLikelyDuplicateExpense({ ...d, currency: TAX_CENTER.settings?.baseCurrency || 'CAD' });
+          const lowConf = (d.confidence ?? 1) < 0.6;
+          return `<tr data-bfd-row="${i}" style="${dup?'background:rgba(220,170,40,.06);':''}">
+            <td><input type="checkbox" data-bfd-include="${i}" ${d.include!==false?'checked':''}></td>
+            <td><input type="date" data-bfd-field="date" data-bfd-i="${i}" value="${esc(d.date)}" style="font-size:12px;width:130px;"></td>
+            <td>
+              <input type="text" data-bfd-field="description" data-bfd-i="${i}" value="${esc(d.description)}" style="font-size:12px;width:100%;">
+              ${dup?`<div style="font-size:10px;color:var(--amber);margin-top:2px;">⚠ possible duplicate</div>`:''}
+              ${lowConf?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">low confidence (${((d.confidence??0)*100)|0}%)</div>`:''}
+            </td>
+            <td><select data-bfd-field="category" data-bfd-i="${i}" style="font-size:12px;">${catOptions(d.category)}</select></td>
+            <td class="r"><input type="number" step="0.01" data-bfd-field="amount" data-bfd-i="${i}" value="${Number(d.amount).toFixed(2)}" style="font-size:12px;width:90px;text-align:right;"></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:flex-end;">
+      <span style="font-size:11px;color:var(--text3);">Currency: ${TAX_CENTER.settings?.baseCurrency || 'CAD'}</span>
+      <button class="btn gold" type="button" onclick="importBankFeedDrafts()">Import selected</button>
+    </div>
+  `;
+
+  wrap.querySelectorAll('[data-bfd-field]').forEach(el => {
+    el.addEventListener('change', () => {
+      const i = Number(el.getAttribute('data-bfd-i'));
+      const f = el.getAttribute('data-bfd-field');
+      if (!_bankFeedDrafts[i]) return;
+      let v = el.value;
+      if (f === 'amount') v = Number(v) || 0;
+      _bankFeedDrafts[i][f] = v;
+    });
+  });
+  wrap.querySelectorAll('[data-bfd-include]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const i = Number(cb.getAttribute('data-bfd-include'));
+      if (_bankFeedDrafts[i]) _bankFeedDrafts[i].include = !!cb.checked;
+    });
+  });
+}
+
+function toggleAllBankFeedDrafts(on) {
+  _bankFeedDrafts.forEach(d => { d.include = !!on; });
+  document.querySelectorAll('[data-bfd-include]').forEach(cb => { cb.checked = !!on; });
+}
+
+async function importBankFeedDrafts() {
+  const selected = _bankFeedDrafts.filter(d => d.include !== false);
+  if (!selected.length) { showToast('No transactions selected', 'warn'); return; }
+
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  const baseCur = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  let imported = 0, skipped = 0;
+
+  for (const item of selected) {
+    const amount = Number(item.amount || 0);
+    if (!amount) continue;
+    if (_isLikelyDuplicateExpense({ date: item.date, amount, currency: baseCur })) { skipped++; continue; }
+    TAX_CENTER.businessExpenses.unshift({
+      id: Date.now() + Math.floor(Math.random() * 100000),
+      desc: item.description || 'Bank transaction',
+      cat: EXPENSE_CATEGORIES.includes(item.category) ? item.category : 'Other',
+      currency: baseCur,
+      amount,
+      origCurrency: baseCur,
+      origAmount: amount,
+      fxRate: 1,
+      baseAmount: amount,
+      date: item.date || today(),
+      ref: 'bank-feed',
+      receipt: '',
+      importedFromBankFeed: true,
+      importedAt: new Date().toISOString()
+    });
+    imported++;
+  }
+
+  await saveTaxCenter();
+  if (typeof renderTaxCenter === 'function') renderTaxCenter();
+
+  const parts = [];
+  if (imported) parts.push(`✓ Imported ${imported} transaction${imported>1?'s':''}`);
+  if (skipped) parts.push(`${skipped} duplicate${skipped>1?'s':''} skipped`);
+  showToast(parts.join(' · ') || 'Nothing imported', imported ? 'ok' : 'warn');
+
+  if (imported) {
+    _bankFeedDrafts = [];
+    $('bankfeed-results').innerHTML = '';
+    const f = $('bankfeed-csv-file'); if (f) f.value = '';
+    const p = $('bankfeed-csv-paste'); if (p) p.value = '';
+  }
+}
+// ── END BANK FEEDS ───────────────────────────────────────────────────────────
+
 function renderExpenses(){
   const s=getState(),book=getBook(),cur=book.currency;
   const expenses=s.expenses||[];
