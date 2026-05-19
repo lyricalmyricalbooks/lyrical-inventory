@@ -14,6 +14,13 @@ const updateSW = registerSW({ onNeedRefresh() {} });
 // ═══════════════════════════════════════════════════════
 let BOOKS = {};
 let editingBookId = null;
+// IDs of DEFAULT_BOOKS that the user has explicitly removed. Persisted in the
+// catalog Firebase doc so the merge below doesn't resurrect them on next load.
+let deletedDefaultIds = [];
+
+function saveCatalogWithDeletions() {
+  return window._fbSaveCatalog({ ...BOOKS, _deletedDefaults: deletedDefaultIds });
+}
 const DEFAULT_BOOKS = {
   altrove: { id: 'altrove', title: 'Un Fantastico Altrove', author: 'Silvia Clo Di Gregorio', isbn: '978-88-XXXXXX', maxPrint: 120, listPrice: 40, currency: '€', threshold: 15, productionCost: 0, paymentLink: 'https://paypal.me/lyricalmyricalbooks', accent: '#c8913a', accentBg: 'rgba(200,145,58,.1)', urlParam: 'altrove', authorPassword: 'silvia2025' },
   hound: { id: 'hound', title: 'The Hound', author: '', isbn: '—', maxPrint: 300, listPrice: 65, currency: 'CA$', threshold: 30, productionCost: 15000, paymentLink: 'https://paypal.me/lyricalmyricalbooks', accent: '#3a7cc8', accentBg: 'rgba(58,124,200,.1)', urlParam: 'hound', authorPassword: 'hound2025' },
@@ -27,17 +34,26 @@ async function loadCatalog() {
   try {
     const stored = await window._fbLoadCatalog(); // handles FS → RTDB fallback internally
     if (stored) {
-      BOOKS = { ...DEFAULT_BOOKS, ...stored };
-      if (Object.keys(BOOKS).length > Object.keys(stored).length) {
-        await window._fbSaveCatalog(BOOKS);
+      deletedDefaultIds = Array.isArray(stored._deletedDefaults) ? stored._deletedDefaults.slice() : [];
+      const storedBooks = { ...stored };
+      delete storedBooks._deletedDefaults;
+      const filteredDefaults = {};
+      Object.keys(DEFAULT_BOOKS).forEach(id => {
+        if (!deletedDefaultIds.includes(id)) filteredDefaults[id] = DEFAULT_BOOKS[id];
+      });
+      BOOKS = { ...filteredDefaults, ...storedBooks };
+      if (Object.keys(BOOKS).length > Object.keys(storedBooks).length) {
+        await saveCatalogWithDeletions();
       }
     } else {
-      BOOKS = DEFAULT_BOOKS;
-      await window._fbSaveCatalog(BOOKS);
+      BOOKS = { ...DEFAULT_BOOKS };
+      deletedDefaultIds = [];
+      await saveCatalogWithDeletions();
     }
   } catch (e) {
     console.error('Critical error loading catalog', e);
-    BOOKS = DEFAULT_BOOKS;
+    BOOKS = { ...DEFAULT_BOOKS };
+    deletedDefaultIds = [];
   }
 }
 
@@ -126,7 +142,12 @@ async function saveBookFromModal() {
   }
   BOOKS[id] = book;
   if (!states[id]) states[id] = defaultState(book);
-  await window._fbSaveCatalog(BOOKS);
+  // Re-adding a previously-deleted default removes it from the tombstone list.
+  if (DEFAULT_BOOKS[id]) {
+    const i = deletedDefaultIds.indexOf(id);
+    if (i !== -1) deletedDefaultIds.splice(i, 1);
+  }
+  await saveCatalogWithDeletions();
   showToast(editingBookId ? '✓ Book updated' : '✓ Book added to catalog');
   closeAddBookModal();
   buildBookSwitcher();
@@ -163,7 +184,13 @@ async function deleteBook(id) {
   if (!confirm(`Permanently remove "${BOOKS[id].title}" and all its inventory records?`)) return;
   delete BOOKS[id];
   delete states[id];
-  await window._fbSaveCatalog(BOOKS);
+  if (DEFAULT_BOOKS[id] && !deletedDefaultIds.includes(id)) {
+    deletedDefaultIds.push(id);
+  }
+  await saveCatalogWithDeletions();
+  if (typeof window._fbDeleteBook === 'function') {
+    try { await window._fbDeleteBook(id); } catch (e) { console.warn('fbDeleteBook failed', e); }
+  }
   buildBookSwitcher();
   renderCatalogList();
   if (psActiveBookId === id) psActiveBookId = null;
@@ -658,7 +685,7 @@ async function toggleFirestoreMode() {
         window._enableFirestoreGlobal();
         
         // Mirror current memory state to Firestore
-        await window._fbSaveCatalog(BOOKS);
+        await saveCatalogWithDeletions();
         await saveTaxCenter();
         
         const prodCosts = {};
@@ -709,7 +736,7 @@ async function toggleFirestoreMode() {
     if (!anyOtherFSBook) {
       window._disableFirestoreGlobal();
       await saveTaxCenter();
-      await window._fbSaveCatalog(BOOKS);
+      await saveCatalogWithDeletions();
     }
 
     showToast(`Reverted to Realtime Database`, 'ok', 4000);
@@ -5318,7 +5345,10 @@ async function createSystemBackupNow() {
 async function applyBackupData(data) {
   // 1. Restore Catalog
   BOOKS = data.BOOKS;
-  await window._fbSaveCatalog(BOOKS);
+  // Rebuild the default-deletion tombstones from the restored catalog so
+  // defaults missing from the backup don't reappear after the next load.
+  deletedDefaultIds = Object.keys(DEFAULT_BOOKS).filter(id => !BOOKS[id]);
+  await saveCatalogWithDeletions();
 
   // 2. Restore individual book states
   for (const bid in data.states) {
@@ -5545,7 +5575,7 @@ async function saveProductionCosts(){
   try{ await window._fbSaveSettings('productionCosts', stored); }catch(_){}
   localStorage.setItem('lm-production-costs',JSON.stringify(stored));
   // Persist synced profitTiers so the threshold survives a page reload
-  try{ await window._fbSaveCatalog(BOOKS); }catch(_){}
+  try{ await saveCatalogWithDeletions(); }catch(_){}
   showToast('✓ Break-even targets saved');
   if(activeBook&&activeBook!=='all') updateDash();
   else updateAllOverview();
@@ -5771,7 +5801,7 @@ async function saveProfitTiers() {
   const ind = $('ps-save-indicator');
   if (ind) ind.classList.add('show');
   try {
-    await window._fbSaveCatalog(BOOKS);
+    await saveCatalogWithDeletions();
     showToast('✓ Profit tiers saved');
     if (activeBook === psActiveBookId) updateDash();
   } catch(e) {

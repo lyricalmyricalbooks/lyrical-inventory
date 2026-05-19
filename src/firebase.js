@@ -311,6 +311,46 @@ window._fbWatchSubmissions = (bookId, cb) => {
   } catch (e) { console.error("fbWatchSub failed", e); }
 };
 
+// Permanently delete every Firebase artifact for a book: per-book state
+// (Firestore parts + RTDB), submissions, and any live watchers. Called from
+// deleteBook() so removed books don't reappear when their data is re-watched.
+window._fbDeleteBook = async (bookId) => {
+  try {
+    // Tear down active watchers so onSnapshot callbacks can't reinstate state.
+    if (_fsWatchUnsubs[bookId]) {
+      _fsWatchUnsubs[bookId].forEach(u => { try { u(); } catch (_) {} });
+      delete _fsWatchUnsubs[bookId];
+    }
+    if (_fsSubUnsubs[bookId]) {
+      _fsSubUnsubs[bookId].forEach(u => { try { u(); } catch (_) {} });
+      delete _fsSubUnsubs[bookId];
+    }
+    if (window._fsHashes && window._fsHashes[bookId]) delete window._fsHashes[bookId];
+
+    const partNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'];
+    const subTypes = ['expenses', 'sales'];
+
+    if (window._useFirestoreForBook(bookId)) {
+      await Promise.all(partNames.map(name =>
+        deleteDoc(doc(fs, 'books', bookId, 'data', name)).catch(() => {})
+      ));
+      for (const type of subTypes) {
+        const snap = await get(ref(db, `lyrical/submissions/${bookId}/${type}`)).catch(() => null);
+        if (snap && snap.exists()) {
+          await Promise.all(Object.keys(snap.val()).map(id =>
+            deleteDoc(doc(fs, 'submissions', bookId, type, id)).catch(() => {})
+          ));
+        }
+      }
+    }
+    // Always wipe RTDB copies too — books may have lived there before migration.
+    await remove(ref(db, `lyrical/books/${bookId}`)).catch(() => {});
+    await remove(ref(db, `lyrical/submissions/${bookId}`)).catch(() => {});
+  } catch (e) {
+    console.error('fbDeleteBook failed', e);
+  }
+};
+
 window._fbDeleteSubmission = async (bookId, type, subId) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
