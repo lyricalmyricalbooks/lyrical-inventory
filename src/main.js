@@ -4153,7 +4153,7 @@ function saveInvoiceSettings(){
 
 function invoicesVisibleHere(){
   // Publisher only, single-book view only (invoice numbering is per-book)
-  return isPublisherSession() && !isAuthor() && activeBook && activeBook !== 'all';
+  return !!window.IS_PUBLISHER && !isAuthor() && activeBook && activeBook !== 'all';
 }
 
 function renderInvoices(){
