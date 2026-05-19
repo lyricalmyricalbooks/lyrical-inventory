@@ -19,6 +19,102 @@
 <meta name="apple-mobile-web-app-title" content="Lyrical-Inv">
 <meta name="theme-color" content="#0e0c0a">
 
+<style>
+  /* ─── INVOICE PAPER (sharp, printable) ─────────────────────────────── */
+  .invoice-paper{
+    background:#fff;color:#1a1814;
+    width:100%;max-width:780px;margin:0 auto;
+    border-radius:6px;
+    box-shadow:0 14px 40px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08);
+    padding:48px 56px;font-family:'Syne',sans-serif;
+    line-height:1.5;letter-spacing:.005em;
+    position:relative;overflow:hidden;
+  }
+  .invoice-paper::before{
+    content:"";position:absolute;left:0;top:0;height:6px;width:100%;
+    background:linear-gradient(90deg, var(--book-accent, #c8913a), #e5a93f 65%, #f0c060);
+  }
+  .invoice-paper .inv-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:32px;flex-wrap:wrap;}
+  .invoice-paper .inv-brand{flex:1;min-width:240px;}
+  .invoice-paper .inv-brand h1{font-family:'Playfair Display',serif;font-weight:700;font-size:28px;color:#0e0c0a;margin:0 0 4px;letter-spacing:.005em;}
+  .invoice-paper .inv-brand .inv-sub{font-size:12px;color:#6b665e;letter-spacing:.04em;}
+  .invoice-paper .inv-brand .inv-addr{font-size:11px;color:#8a847a;margin-top:10px;line-height:1.55;white-space:pre-wrap;}
+  .invoice-paper .inv-id{text-align:right;}
+  .invoice-paper .inv-id .inv-word{font-family:'Playfair Display',serif;font-size:22px;color:#c8913a;letter-spacing:.18em;text-transform:uppercase;font-weight:600;margin-bottom:6px;}
+  .invoice-paper .inv-id .inv-num{font-family:'DM Mono',monospace;font-size:13px;color:#1a1814;font-weight:600;}
+  .invoice-paper .inv-status{display:inline-block;margin-top:8px;font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;padding:5px 12px;border-radius:99px;}
+  .invoice-paper .inv-status.draft{background:#e9e6e0;color:#6b665e;}
+  .invoice-paper .inv-status.sent{background:#ebf2ff;color:#1d4cb3;}
+  .invoice-paper .inv-status.paid{background:#e0f5ea;color:#1d7a4a;}
+  .invoice-paper .inv-status.overdue{background:#fde6e0;color:#a13a1b;}
+  .invoice-paper .inv-status.cancelled{background:#eee;color:#5a544c;text-decoration:line-through;}
+
+  .invoice-paper .inv-meta-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:18px;padding:18px 0;border-top:1px solid #eee5d5;border-bottom:1px solid #eee5d5;margin-bottom:24px;}
+  .invoice-paper .inv-meta-grid label{font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#a8a094;display:block;margin-bottom:6px;}
+  .invoice-paper .inv-meta-grid strong{font-size:13px;color:#1a1814;display:block;line-height:1.45;}
+  .invoice-paper .inv-meta-grid .inv-meta-sub{font-size:11px;color:#6b665e;margin-top:2px;line-height:1.45;white-space:pre-wrap;}
+
+  .invoice-paper .inv-items{width:100%;border-collapse:collapse;margin-bottom:18px;}
+  .invoice-paper .inv-items th{font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#a8a094;text-align:left;padding:0 12px 10px;border-bottom:1px solid #eee5d5;}
+  .invoice-paper .inv-items th.r,.invoice-paper .inv-items td.r{text-align:right;}
+  .invoice-paper .inv-items td{font-size:13px;padding:14px 12px;border-bottom:1px solid #f5f1e6;color:#1a1814;vertical-align:top;}
+  .invoice-paper .inv-items td.r{font-family:'DM Mono',monospace;}
+  .invoice-paper .inv-items tr:last-child td{border-bottom:none;}
+
+  .invoice-paper .inv-totals{margin-left:auto;width:280px;font-size:13px;margin-bottom:32px;}
+  .invoice-paper .inv-totals .tr{display:flex;justify-content:space-between;padding:6px 12px;color:#4a443c;}
+  .invoice-paper .inv-totals .tr .val{font-family:'DM Mono',monospace;}
+  .invoice-paper .inv-totals .grand{margin-top:8px;padding:14px 12px;background:#0e0c0a;color:#f7f2e9;border-radius:6px;font-size:16px;font-weight:700;letter-spacing:.04em;}
+  .invoice-paper .inv-totals .grand .val{color:#f0c060;font-size:18px;}
+
+  .invoice-paper .inv-pay{background:#faf6ec;border:1px solid #eee5d5;border-radius:8px;padding:20px 22px;margin-bottom:24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;}
+  .invoice-paper .inv-pay .inv-pay-info{flex:1;min-width:220px;}
+  .invoice-paper .inv-pay .inv-pay-info h3{font-family:'Playfair Display',serif;font-size:16px;color:#0e0c0a;margin:0 0 6px;}
+  .invoice-paper .inv-pay .inv-pay-info p{font-size:12px;color:#6b665e;margin:0 0 10px;line-height:1.55;}
+  .invoice-paper .inv-pay .pay-btn{display:inline-block;background:#0e0c0a;color:#f0c060;padding:10px 22px;border-radius:99px;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;letter-spacing:.16em;text-transform:uppercase;text-decoration:none;border:none;}
+  .invoice-paper .inv-pay .pay-btn:hover{background:#1c1917;}
+  .invoice-paper .inv-pay .pay-methods{font-size:10px;color:#a8a094;margin-top:8px;letter-spacing:.04em;}
+  .invoice-paper .inv-pay .inv-qr{background:#fff;padding:10px;border-radius:4px;border:1px solid #eee5d5;}
+  .invoice-paper .inv-pay .inv-qr canvas, .invoice-paper .inv-pay .inv-qr img{display:block;}
+
+  .invoice-paper .inv-notes{font-size:11.5px;color:#6b665e;line-height:1.7;border-top:1px solid #eee5d5;padding-top:18px;}
+  .invoice-paper .inv-notes h4{font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#a8a094;margin:0 0 6px;}
+  .invoice-paper .inv-notes .inv-notes-block{margin-bottom:14px;white-space:pre-wrap;}
+  .invoice-paper .inv-foot{text-align:center;font-size:11px;color:#a8a094;margin-top:24px;font-style:italic;}
+
+  /* Invoice list cards */
+  .invoice-card{background:#fff;border-radius:var(--r2);border:1px solid var(--border);padding:14px 18px;margin-bottom:10px;display:grid;grid-template-columns:auto 1.6fr 1fr 1fr 1fr auto;gap:16px;align-items:center;transition:border-color .14s;}
+  .invoice-card:hover{border-color:var(--gold-line);}
+  .invoice-card .inv-c-num{font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);font-weight:600;}
+  .invoice-card .inv-c-store{font-weight:700;color:var(--text);font-size:13px;}
+  .invoice-card .inv-c-store .inv-c-store-meta{font-weight:400;font-size:11px;color:var(--text3);margin-top:2px;}
+  .invoice-card .inv-c-cell{font-size:11px;color:var(--text3);}
+  .invoice-card .inv-c-cell strong{display:block;font-family:'DM Mono',monospace;color:var(--text);font-weight:600;font-size:13px;margin-top:2px;}
+  .invoice-card .inv-c-cell.amt strong{color:var(--gold);}
+  .invoice-card .inv-c-actions{display:flex;gap:6px;}
+  @media (max-width:780px){
+    .invoice-card{grid-template-columns:1fr;gap:8px;}
+    .invoice-card .inv-c-actions{justify-content:flex-end;}
+  }
+  .inv-item-row td{padding:6px 4px;}
+  .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
+  .inv-item-row input[type=number]{font-family:'DM Mono',monospace;text-align:right;}
+  .inv-item-row .inv-item-amt{display:block;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--text);padding:7px 6px;}
+  .inv-item-row .inv-item-remove{background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;}
+  .inv-item-row .inv-item-remove:hover{color:#a13a1b;}
+
+  /* ─── PRINT ─────────────────────────────────────────────────────────── */
+  @media print {
+    body{background:#fff !important;}
+    body > *:not(#m-invoice-view){display:none !important;}
+    #m-invoice-view{position:static !important;background:#fff !important;display:block !important;backdrop-filter:none !important;}
+    #m-invoice-view .modal{box-shadow:none !important;background:#fff !important;max-width:none !important;max-height:none !important;padding:0 !important;border:none !important;border-radius:0 !important;}
+    .no-print{display:none !important;}
+    #invoice-print-area{box-shadow:none !important;border-radius:0 !important;padding:0 !important;max-width:none !important;}
+    .invoice-paper::before{display:none;}
+    @page{margin:0.6in;}
+  }
+</style>
 
 </head>
 <body>
@@ -473,6 +569,21 @@
   </div>
   <div id="stores-list"><div class="empty-state"><div class="e-icon">🏪</div>No stores yet.</div></div>
   <div class="divider"></div>
+
+  <!-- INVOICES (publisher only) -->
+  <div id="invoices-section" style="display:none;">
+    <div class="row-between">
+      <div class="section-hed">Invoices</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div id="inv-summary" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;"></div>
+        <button class="btn ink" onclick="openInvoiceTemplateSettings()" title="Edit publisher details & default terms">⚙ Settings</button>
+        <button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button>
+      </div>
+    </div>
+    <div id="invoices-list"><div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.</div></div>
+    <div class="divider"></div>
+  </div>
+
   <div class="sect">Consignment ledger</div>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Store</th><th>Type</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Due to you</th><th>Notes</th><th>Status</th></tr></thead><tbody id="ledger-body"></tbody></table></div>
 </div>
@@ -1517,6 +1628,133 @@ function json_(obj) {
     <button class="btn gold" onclick="saveEntryEdit()">Save changes</button>
   </div>
 </div></div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- INVOICE EDIT MODAL                                     -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="overlay no-print" id="m-invoice-edit" style="display:none;"><div class="modal" style="max-width:780px;max-height:92vh;overflow-y:auto;">
+  <div class="modal-title" id="inv-edit-title">New invoice</div>
+
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>Bill to (store)</label>
+      <select id="inv-store" onchange="onInvoiceStoreChange()"><option value="">— Select store —</option></select>
+    </div>
+    <div class="form-group"><label>Invoice number</label><input id="inv-num" type="text" placeholder="auto"></div>
+  </div>
+
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>Issue date</label><input id="inv-date" type="date"></div>
+    <div class="form-group"><label>Due date</label><input id="inv-due" type="date"></div>
+  </div>
+
+  <div class="form-group" style="margin-bottom:8px;">
+    <label>Line items <button class="btn sm" type="button" onclick="addInvoiceItem()" style="margin-left:8px;">+ Add line</button>
+      <button class="btn sm ink" type="button" onclick="prefillFromPendingSales()" style="margin-left:4px;" title="Pull all unpaid consignment sales for the selected store">⚡ Import pending sales</button>
+    </label>
+  </div>
+  <div class="tbl-wrap" style="margin-bottom:8px;">
+    <table class="tbl" style="font-size:12px;">
+      <thead><tr><th style="width:42%;">Description</th><th class="r" style="width:10%;">Qty</th><th class="r" style="width:18%;">Unit price</th><th class="r" style="width:18%;">Amount</th><th></th></tr></thead>
+      <tbody id="inv-items-body"></tbody>
+    </table>
+  </div>
+
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>Discount (flat, optional)</label>
+      <div class="price-wrap"><span class="sym" id="inv-discount-sym">€</span><input id="inv-discount" type="number" step="0.01" min="0" value="0" oninput="recalcInvoiceTotals()"></div>
+    </div>
+    <div class="form-group"><label>Tax / VAT rate (%)</label>
+      <input id="inv-tax" type="number" step="0.01" min="0" max="100" value="0" oninput="recalcInvoiceTotals()">
+    </div>
+  </div>
+
+  <div style="background:var(--cream2);border-radius:var(--r2);padding:12px 16px;margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Subtotal</span><span id="inv-sub-val" style="font-family:'DM Mono',monospace;font-weight:600;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Discount</span><span id="inv-disc-val" style="font-family:'DM Mono',monospace;font-weight:600;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Tax</span><span id="inv-tax-val" style="font-family:'DM Mono',monospace;font-weight:600;">—</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:14px;color:var(--text);border-top:1px solid var(--border);padding-top:6px;margin-top:4px;font-weight:700;"><span>TOTAL</span><span id="inv-total-val" style="font-family:'DM Mono',monospace;color:var(--gold);font-size:18px;">—</span></div>
+  </div>
+
+  <div class="form-group" style="margin-bottom:12px;">
+    <label>Payment link (Stripe Payment Link, PayPal.me, Interac…)</label>
+    <input id="inv-paylink" type="url" placeholder="https://buy.stripe.com/… (defaults to this book's link)">
+    <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
+      Leave blank to use the book's default payment link. Stripe Payment Links auto-prefill via <code>?prefilled_email</code> &amp; <code>?client_reference_id</code>.
+    </div>
+  </div>
+
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>Notes (visible on invoice)</label><textarea id="inv-notes" rows="2" placeholder="Reporting period, batch references, thank-you…"></textarea></div>
+    <div class="form-group"><label>Terms</label><textarea id="inv-terms" rows="2" placeholder="Net 30 · Late payments incur…"></textarea></div>
+  </div>
+
+  <div class="modal-footer" style="justify-content:space-between;">
+    <button class="btn danger-btn" id="inv-delete-btn" style="display:none;" onclick="deleteInvoice()">Delete invoice</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" onclick="closeM('invoice-edit')">Cancel</button>
+      <button class="btn ink" onclick="saveInvoice('draft')">Save draft</button>
+      <button class="btn gold" onclick="saveInvoice('sent')">Save &amp; finalize</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- INVOICE VIEW MODAL  (sharp, printable)                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="overlay" id="m-invoice-view" style="display:none;"><div class="modal invoice-view-modal" style="max-width:880px;max-height:94vh;overflow:hidden;padding:0;background:#f0ece4;">
+
+  <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 22px;background:var(--ink);color:var(--cream);border-radius:var(--r3) var(--r3) 0 0;flex-wrap:wrap;">
+    <div style="font-family:'Playfair Display',serif;font-size:15px;">Invoice preview</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn ink" onclick="editInvoiceFromView()">✎ Edit</button>
+      <button class="btn ink" onclick="emailInvoice()">✉ Email</button>
+      <button class="btn ink" onclick="copyInvoicePayLink()">🔗 Copy pay link</button>
+      <button class="btn ink" onclick="downloadInvoiceHTML()">⬇ Download</button>
+      <button class="btn ink" onclick="printInvoice()">🖨 Print / PDF</button>
+      <button class="btn gold" id="inv-mark-paid-btn" onclick="markInvoicePaidFromView()">✓ Mark paid</button>
+      <button class="btn" onclick="closeM('invoice-view')">Close</button>
+    </div>
+  </div>
+
+  <div style="overflow:auto;max-height:calc(94vh - 68px);padding:24px;background:#f0ece4;">
+    <div id="invoice-print-area" class="invoice-paper"></div>
+  </div>
+</div></div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- INVOICE SETTINGS MODAL (publisher branding & defaults) -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="overlay no-print" id="m-invoice-settings" style="display:none;"><div class="modal" style="max-width:560px;">
+  <div class="modal-title">Invoice settings</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">These details appear on every invoice you generate. Stored locally per browser.</div>
+
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>Publisher name</label><input id="ivs-name" type="text" placeholder="Lyricalmyrical Books"></div>
+    <div class="form-group"><label>Contact email</label><input id="ivs-email" type="email" placeholder="hello@…"></div>
+  </div>
+  <div class="form-group" style="margin-bottom:12px;"><label>Address (one block, supports line breaks)</label>
+    <textarea id="ivs-addr" rows="3" placeholder="Via Roma 1&#10;20121 Milan, Italy"></textarea>
+  </div>
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>VAT / Tax ID</label><input id="ivs-vat" type="text" placeholder="optional"></div>
+    <div class="form-group"><label>Website</label><input id="ivs-web" type="url" placeholder="https://lyricalmyrical.com"></div>
+  </div>
+  <div class="form-group" style="margin-bottom:12px;"><label>Default terms (used as a starting point)</label>
+    <textarea id="ivs-terms" rows="2" placeholder="Net 30. Payment in EUR via Stripe / SEPA / PayPal."></textarea>
+  </div>
+  <div class="form-group" style="margin-bottom:12px;"><label>Default footer message</label>
+    <input id="ivs-footer" type="text" placeholder="Thank you for stocking our books.">
+  </div>
+  <div class="form-group" style="margin-bottom:12px;"><label>Bank / wire details (optional, shown on invoice)</label>
+    <textarea id="ivs-bank" rows="2" placeholder="IBAN IT60 X054 2811 1010 0000 0123 456&#10;BIC ABCDITMM"></textarea>
+  </div>
+
+  <div class="modal-footer">
+    <button class="btn" onclick="closeM('invoice-settings')">Cancel</button>
+    <button class="btn gold" onclick="saveInvoiceSettings()">Save settings</button>
+  </div>
+</div></div>
+
 <!-- SHIPPING LABEL MODAL -->
 <div class="overlay" id="m-shipping-label" style="display:none;">
   <div class="modal" style="max-width:540px;">

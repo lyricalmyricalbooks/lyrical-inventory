@@ -558,7 +558,7 @@ if (sheetsUrl) {
 }
 
 function defaultState(book) {
-  return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], expenses: [], artistPaymentLink: '' };
+  return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0 };
 }
 
 function getState() { 
@@ -1019,6 +1019,9 @@ function syncRoleUI() {
 
   // When switching BACK to publisher view — redirect away from author-only myqr tab
   if (!authorNow && $('tab-myqr')?.classList.contains('active')) switchTab('dashboard');
+
+  // Invoices section: publisher-only inside the Consignment tab
+  if (typeof renderInvoices === 'function') renderInvoices();
 }
 
 function toggleCurrentBookView() {
@@ -1112,7 +1115,7 @@ function switchTab(name) {
   if(name==='dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
   if(name==='history') renderHist();
   if(name==='manual') updateManualForm();
-  if(name==='consignment'){ renderStores(); renderLedger(); }
+  if(name==='consignment'){ renderStores(); renderLedger(); renderInvoices(); }
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
   if(name==='financials') renderFinancials();
   if(name==='taxcenter') renderTaxCenter();
@@ -1828,7 +1831,7 @@ window.deleteArtistPayout = deleteArtistPayout;
 
 function renderAll() {
   if (activeBook === 'all') { updateAllOverview(); updateHeader(); return; }
-  updateDash(); renderStores(); renderLedger(); renderHist(); renderExpenses(); renderArtistReimburseBanner(); renderPendingExpenses();
+  updateDash(); renderStores(); renderLedger(); renderInvoices(); renderHist(); renderExpenses(); renderArtistReimburseBanner(); renderPendingExpenses();
 }
 
 function renderCurrent() {
@@ -4109,6 +4112,551 @@ function renderLedger(){
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry">✎</button>`;
     return`<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${e.storeName}${editBtn}</td><td>${e.type}</td><td class="r">${e.qty}</td><td class="r">${e.type==='Sale'?e.rate+'%':'—'}</td><td class="r" style="font-weight:600;">${e.amountDue>0?fmt(e.amountDue,cur):'—'}</td><td style="font-size:12px;color:var(--text3);">${e.notes||'—'}</td><td>${pill(e)}${e.status==='pending'&&!e.voided?` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>`:''}</td></tr>`;
   }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  INVOICES (publisher-only, lives inside Consignment tab)
+// ═══════════════════════════════════════════════════════════════════════
+const INVOICE_SETTINGS_KEY = 'lm-invoice-settings';
+function getInvoiceSettings(){
+  try { return JSON.parse(localStorage.getItem(INVOICE_SETTINGS_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function saveInvoiceSettingsObj(o){ localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(o||{})); }
+
+function openInvoiceTemplateSettings(){
+  const s = getInvoiceSettings();
+  $('ivs-name').value  = s.name  || 'Lyricalmyrical Books';
+  $('ivs-email').value = s.email || '';
+  $('ivs-addr').value  = s.addr  || '';
+  $('ivs-vat').value   = s.vat   || '';
+  $('ivs-web').value   = s.web   || '';
+  $('ivs-terms').value = s.terms || 'Net 30. Payment via Stripe, PayPal, or bank transfer.';
+  $('ivs-footer').value= s.footer|| 'Thank you for stocking our books.';
+  $('ivs-bank').value  = s.bank  || '';
+  openM('invoice-settings');
+}
+function saveInvoiceSettings(){
+  saveInvoiceSettingsObj({
+    name:  $('ivs-name').value.trim(),
+    email: $('ivs-email').value.trim(),
+    addr:  $('ivs-addr').value.trim(),
+    vat:   $('ivs-vat').value.trim(),
+    web:   $('ivs-web').value.trim(),
+    terms: $('ivs-terms').value.trim(),
+    footer:$('ivs-footer').value.trim(),
+    bank:  $('ivs-bank').value.trim(),
+  });
+  closeM('invoice-settings');
+  showToast('✓ Invoice settings saved');
+}
+
+function invoicesVisibleHere(){
+  // Publisher only, single-book view only (invoice numbering is per-book)
+  return isPublisherSession() && !isAuthor() && activeBook && activeBook !== 'all';
+}
+
+function renderInvoices(){
+  const section = $('invoices-section');
+  if (!section) return;
+  if (!invoicesVisibleHere()) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  const s = getState(), book = getBook(), cur = book.currency, list = $('invoices-list'), summary = $('inv-summary');
+  const invs = (s.invoices || []).slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.createdAt||0) - (a.createdAt||0));
+
+  // Mark overdue automatically (visual only, not persisted)
+  const todayStr = today();
+  for (const inv of invs) {
+    if (inv.status === 'sent' && inv.dueDate && inv.dueDate < todayStr) inv._overdue = true;
+  }
+
+  // Summary line
+  const outstanding = invs.filter(i => i.status === 'sent').reduce((a,i)=> a + (i.total || 0), 0);
+  const paid       = invs.filter(i => i.status === 'paid').reduce((a,i)=> a + (i.total || 0), 0);
+  const drafts     = invs.filter(i => i.status === 'draft').length;
+  summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts?` · ${drafts} draft${drafts>1?'s':''}`:''}`;
+
+  if (!invs.length){
+    list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.</div>';
+    return;
+  }
+
+  list.innerHTML = invs.map(inv => {
+    const statusLabel = inv._overdue ? 'OVERDUE' : (inv.status||'draft').toUpperCase();
+    const statusCls   = inv._overdue ? 'overdue' : (inv.status||'draft');
+    const due = inv.dueDate ? fmtD(inv.dueDate) : '—';
+    return `<div class="invoice-card">
+      <div class="inv-c-num">${inv.num}</div>
+      <div class="inv-c-store">${inv.storeName || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).join(' · ') || '—'}</div></div>
+      <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
+      <div class="inv-c-cell">Due<strong>${due}</strong></div>
+      <div class="inv-c-cell amt">Total<strong>${fmt(inv.total||0, cur)}</strong></div>
+      <div class="inv-c-actions" style="flex-direction:column;align-items:stretch;gap:6px;">
+        <span class="inv-status ${statusCls}" style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:4px 10px;border-radius:99px;text-align:center;
+          background:${statusCls==='paid'?'#e0f5ea':statusCls==='sent'?'#ebf2ff':statusCls==='overdue'?'#fde6e0':statusCls==='cancelled'?'#eee':'#e9e6e0'};
+          color:${statusCls==='paid'?'#1d7a4a':statusCls==='sent'?'#1d4cb3':statusCls==='overdue'?'#a13a1b':statusCls==='cancelled'?'#5a544c':'#6b665e'};">${statusLabel}</span>
+        <div style="display:flex;gap:4px;justify-content:flex-end;">
+          <button class="btn sm" onclick="viewInvoice('${inv.id}')">View</button>
+          <button class="btn sm ink" onclick="openCreateInvoice(null,'${inv.id}')">Edit</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── invoice editor state ────────────────────────────────────────────────
+let invoiceCtx = null; // { editingId, items: [{description,qty,unitPrice}] }
+
+function openCreateInvoice(storeId, editingId){
+  const s = getState(), book = getBook();
+  // Populate store dropdown
+  const sel = $('inv-store');
+  sel.innerHTML = '<option value="">— Select store —</option>' + (s.stores||[]).map(st => `<option value="${st.id}">${st.name}${st.city?' · '+st.city:''}</option>`).join('');
+
+  $('inv-discount-sym').textContent = getSym(book.currency);
+
+  if (editingId){
+    const inv = (s.invoices||[]).find(i => i.id === editingId);
+    if (!inv) { showToast('Invoice not found', 'err'); return; }
+    invoiceCtx = { editingId, items: JSON.parse(JSON.stringify(inv.items || [])) };
+    $('inv-edit-title').textContent = `Edit ${inv.num}`;
+    sel.value     = inv.storeId || '';
+    $('inv-num').value  = inv.num || '';
+    $('inv-date').value = inv.date || today();
+    $('inv-due').value  = inv.dueDate || '';
+    $('inv-discount').value = inv.discount || 0;
+    $('inv-tax').value      = inv.taxRate  || 0;
+    $('inv-paylink').value  = inv.paymentLink || '';
+    $('inv-notes').value    = inv.notes || '';
+    $('inv-terms').value    = inv.terms || '';
+    $('inv-delete-btn').style.display = '';
+  } else {
+    invoiceCtx = { editingId: null, items: [] };
+    $('inv-edit-title').textContent = 'New invoice';
+    sel.value = storeId ? String(storeId) : '';
+    $('inv-num').value  = nextInvoiceNumber();
+    $('inv-date').value = today();
+    // default due date = 30 days from today
+    const d = new Date(); d.setDate(d.getDate()+30);
+    $('inv-due').value = d.toISOString().split('T')[0];
+    $('inv-discount').value = 0;
+    $('inv-tax').value = 0;
+    $('inv-paylink').value = '';
+    const settings = getInvoiceSettings();
+    $('inv-notes').value = '';
+    $('inv-terms').value = settings.terms || 'Net 30. Payment via Stripe, PayPal, or bank transfer.';
+    $('inv-delete-btn').style.display = 'none';
+    if (storeId) prefillFromPendingSales(storeId);
+    else addInvoiceItem();
+  }
+  renderInvoiceItems();
+  recalcInvoiceTotals();
+  openM('invoice-edit');
+}
+
+function nextInvoiceNumber(){
+  const s = getState(), book = getBook();
+  const year = new Date().getFullYear();
+  const prefix = (book.id || 'BOOK').slice(0,6).toUpperCase();
+  // determine next seq from existing invoices for this year
+  const existing = (s.invoices||[]).filter(i => (i.num||'').includes(`-${year}-`));
+  const maxSeq = existing.reduce((m,i)=>{
+    const mt = /-(\d+)$/.exec(i.num||''); return mt ? Math.max(m, parseInt(mt[1],10)) : m;
+  }, s.invoiceSeq || 0);
+  return `INV-${prefix}-${year}-${String(maxSeq+1).padStart(3,'0')}`;
+}
+
+function onInvoiceStoreChange(){
+  // No automatic refill — user might be editing.  Just keep selection.
+}
+
+function addInvoiceItem(description='', qty=1, unitPrice=0){
+  invoiceCtx.items.push({ description, qty, unitPrice });
+  renderInvoiceItems();
+  recalcInvoiceTotals();
+}
+
+function removeInvoiceItem(idx){
+  invoiceCtx.items.splice(idx, 1);
+  renderInvoiceItems();
+  recalcInvoiceTotals();
+}
+
+function updateInvoiceItem(idx, field, value){
+  const it = invoiceCtx.items[idx]; if (!it) return;
+  if (field === 'description') it.description = value;
+  else it[field] = parseFloat(value) || 0;
+  // Re-render only the amount cell for performance
+  const amtEl = document.querySelector(`#inv-items-body tr[data-i="${idx}"] .inv-item-amt`);
+  if (amtEl) amtEl.textContent = fmt((it.qty||0)*(it.unitPrice||0), getBook().currency);
+  recalcInvoiceTotals();
+}
+
+function renderInvoiceItems(){
+  const body = $('inv-items-body'), cur = getBook().currency;
+  if (!invoiceCtx.items.length){
+    body.innerHTML = `<tr><td colspan="5" style="font-size:12px;color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
+    return;
+  }
+  body.innerHTML = invoiceCtx.items.map((it, i) => `<tr class="inv-item-row" data-i="${i}">
+    <td><input type="text" value="${escapeHTML(it.description||'')}" placeholder="e.g. ${getBook().title} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></td>
+    <td><input type="number" min="0" step="1" value="${it.qty||0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
+    <td><input type="number" min="0" step="0.01" value="${(it.unitPrice||0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
+    <td class="r"><span class="inv-item-amt">${fmt((it.qty||0)*(it.unitPrice||0), cur)}</span></td>
+    <td><button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove line">×</button></td>
+  </tr>`).join('');
+}
+
+function escapeHTML(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function recalcInvoiceTotals(){
+  const cur = getBook().currency;
+  const subtotal = invoiceCtx.items.reduce((a,it)=> a + (parseFloat(it.qty)||0) * (parseFloat(it.unitPrice)||0), 0);
+  const discount = parseFloat($('inv-discount').value) || 0;
+  const taxRate  = parseFloat($('inv-tax').value) || 0;
+  const taxable  = Math.max(0, subtotal - discount);
+  const tax      = taxable * (taxRate/100);
+  const total    = taxable + tax;
+  $('inv-sub-val').textContent  = fmt(subtotal, cur);
+  $('inv-disc-val').textContent = discount ? '−' + fmt(discount, cur) : fmt(0, cur);
+  $('inv-tax-val').textContent  = fmt(tax, cur);
+  $('inv-total-val').textContent= fmt(total, cur);
+  return { subtotal, discount, taxRate, tax, total };
+}
+
+function prefillFromPendingSales(forceStoreId){
+  const s = getState(), book = getBook();
+  const storeId = forceStoreId ? Number(forceStoreId) : Number($('inv-store').value);
+  if (!storeId) { showToast('Pick a store first', 'warn'); return; }
+  $('inv-store').value = String(storeId);
+  const store = (s.stores||[]).find(st => st.id === storeId);
+  if (!store) return;
+  // pull all unpaid, un-voided Sale ledger entries for that store
+  const pending = (s.ledger||[]).filter(e => e.storeId === storeId && e.type === 'Sale' && !e.voided && e.status !== 'paid');
+  if (!pending.length){
+    showToast('No unpaid consignment sales for this store', 'warn');
+    if (!invoiceCtx.items.length) addInvoiceItem();
+    return;
+  }
+  // group by month
+  invoiceCtx.items = pending.map(e => ({
+    description: `${book.title} — consignment sale${e.date?' · '+fmtD(e.date):''} (qty ${e.qty} @ ${(100-e.rate).toFixed(0)}% net)`,
+    qty: e.qty,
+    unitPrice: e.qty ? (e.amountDue / e.qty) : 0,
+    _ledgerId: e.id,
+  }));
+  renderInvoiceItems();
+  recalcInvoiceTotals();
+  showToast(`✓ Imported ${pending.length} pending sale${pending.length>1?'s':''}`);
+}
+
+function saveInvoice(status){
+  const s = getState(), book = getBook();
+  const storeId = Number($('inv-store').value);
+  if (!storeId){ showToast('Choose a store to bill', 'err'); return; }
+  if (!invoiceCtx.items.length){ showToast('Add at least one line item', 'err'); return; }
+  const store = (s.stores||[]).find(st => st.id === storeId);
+  if (!store){ showToast('Store not found', 'err'); return; }
+
+  const totals = recalcInvoiceTotals();
+  if (totals.total <= 0){ showToast('Invoice total must be greater than zero', 'err'); return; }
+
+  const num = ($('inv-num').value || '').trim() || nextInvoiceNumber();
+  const date = $('inv-date').value || today();
+  const dueDate = $('inv-due').value || '';
+
+  const payload = {
+    id: invoiceCtx.editingId || ('inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7)),
+    num, storeId, storeName: store.name, storeEmail: store.email||'', storeCity: store.city||'', storeContact: store.contact||'',
+    date, dueDate,
+    items: invoiceCtx.items.map(it => ({ description: it.description||'', qty: parseFloat(it.qty)||0, unitPrice: parseFloat(it.unitPrice)||0, _ledgerId: it._ledgerId || null })),
+    subtotal: totals.subtotal,
+    discount: totals.discount,
+    taxRate: totals.taxRate,
+    tax: totals.tax,
+    total: totals.total,
+    currency: book.currency,
+    paymentLink: $('inv-paylink').value.trim() || '',
+    notes: $('inv-notes').value.trim(),
+    terms: $('inv-terms').value.trim(),
+    status,
+    createdAt: invoiceCtx.editingId ? (s.invoices.find(i=>i.id===invoiceCtx.editingId)?.createdAt || Date.now()) : Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  if (invoiceCtx.editingId){
+    const idx = s.invoices.findIndex(i => i.id === invoiceCtx.editingId);
+    if (idx >= 0) {
+      // preserve paid metadata if existing
+      const old = s.invoices[idx];
+      payload.paidAt = old.paidAt || null;
+      payload.paidMethod = old.paidMethod || null;
+      s.invoices[idx] = payload;
+    } else {
+      s.invoices.push(payload);
+    }
+  } else {
+    s.invoices = s.invoices || [];
+    s.invoices.push(payload);
+    // bump seq counter for safety
+    const mt = /-(\d+)$/.exec(num);
+    if (mt) s.invoiceSeq = Math.max(s.invoiceSeq || 0, parseInt(mt[1],10));
+  }
+
+  saveState(activeBook);
+  closeM('invoice-edit');
+  renderInvoices();
+  showToast(status === 'draft' ? '✓ Draft saved' : '✓ Invoice saved');
+  // After save, auto-open the view
+  setTimeout(()=> viewInvoice(payload.id), 80);
+}
+
+function deleteInvoice(){
+  if (!invoiceCtx || !invoiceCtx.editingId) return;
+  const s = getState();
+  const inv = (s.invoices||[]).find(i => i.id === invoiceCtx.editingId);
+  if (!inv) return;
+  if (!confirm(`Delete invoice ${inv.num}? This cannot be undone.`)) return;
+  s.invoices = s.invoices.filter(i => i.id !== invoiceCtx.editingId);
+  saveState(activeBook);
+  closeM('invoice-edit');
+  renderInvoices();
+  showToast('✓ Invoice deleted');
+}
+
+// ── invoice view (printable) ────────────────────────────────────────────
+let currentViewInvoiceId = null;
+
+function viewInvoice(id){
+  const s = getState();
+  const inv = (s.invoices||[]).find(i => i.id === id);
+  if (!inv){ showToast('Invoice not found', 'err'); return; }
+  currentViewInvoiceId = id;
+  $('invoice-print-area').innerHTML = renderInvoicePaperHTML(inv);
+  // hide mark-paid button if already paid
+  const mp = $('inv-mark-paid-btn');
+  if (mp) mp.style.display = inv.status === 'paid' ? 'none' : '';
+  openM('invoice-view');
+  // Render QR if QRCode library is available
+  setTimeout(()=>{
+    const qrEl = document.querySelector('#invoice-print-area .inv-qr');
+    const url = effectivePaymentLink(inv);
+    if (qrEl && url && typeof QRCode !== 'undefined'){
+      qrEl.innerHTML = '';
+      new QRCode(qrEl, { text: url, width: 104, height: 104, colorDark: '#0e0c0a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    }
+  }, 30);
+}
+
+function effectivePaymentLink(inv){
+  const book = BOOKS[activeBook] || getBook();
+  let url = inv.paymentLink || book.stripeLink || book.paymentLink || '';
+  if (!url) return '';
+  // Best-effort: append client_reference_id for Stripe Payment Links so the payment is tagged
+  try {
+    if (/buy\.stripe\.com/i.test(url)) {
+      const u = new URL(url);
+      if (!u.searchParams.has('client_reference_id')) u.searchParams.set('client_reference_id', inv.num);
+      if (inv.storeEmail && !u.searchParams.has('prefilled_email')) u.searchParams.set('prefilled_email', inv.storeEmail);
+      url = u.toString();
+    }
+  } catch(e){}
+  return url;
+}
+
+function renderInvoicePaperHTML(inv){
+  const settings = getInvoiceSettings();
+  const book = BOOKS[activeBook] || getBook();
+  const cur = inv.currency || book.currency;
+  const payUrl = effectivePaymentLink(inv);
+  const todayStr = today();
+  const overdue = inv.status === 'sent' && inv.dueDate && inv.dueDate < todayStr;
+  const statusLabel = overdue ? 'OVERDUE' : (inv.status||'draft').toUpperCase();
+  const statusCls   = overdue ? 'overdue' : (inv.status||'draft');
+
+  const accent = book.accent || '#c8913a';
+  const itemsHtml = (inv.items||[]).map(it => `<tr>
+    <td>${escapeHTML(it.description||'—')}</td>
+    <td class="r">${(it.qty||0)}</td>
+    <td class="r">${fmt(it.unitPrice||0, cur)}</td>
+    <td class="r"><strong>${fmt((it.qty||0)*(it.unitPrice||0), cur)}</strong></td>
+  </tr>`).join('');
+
+  const payMethodsLabel = [
+    payUrl && /buy\.stripe\.com/i.test(payUrl) ? 'Stripe' : null,
+    payUrl && /paypal/i.test(payUrl) ? 'PayPal' : null,
+    payUrl && /^[^\s@]+@[^\s@]+$/.test(payUrl) ? 'Interac e-Transfer' : null,
+    settings.bank ? 'Bank transfer' : null,
+  ].filter(Boolean).join(' · ') || 'See payment instructions below';
+
+  const payBlock = payUrl ? `
+    <section class="inv-pay no-print" style="--book-accent:${accent};">
+      <div class="inv-pay-info">
+        <h3>Pay this invoice</h3>
+        <p>Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> securely, or scan the QR with your phone.</p>
+        <a class="pay-btn" href="${payUrl}" target="_blank" rel="noopener">Pay ${fmt(inv.total||0, cur)} →</a>
+        <div class="pay-methods">${payMethodsLabel}</div>
+      </div>
+      <div class="inv-qr"></div>
+    </section>` : '';
+
+  const bankBlock = settings.bank ? `
+    <div class="inv-notes-block">
+      <h4>Bank transfer details</h4>
+      <div>${escapeHTML(settings.bank)}</div>
+    </div>` : '';
+
+  return `<div style="--book-accent:${accent};">
+    <header class="inv-head">
+      <div class="inv-brand">
+        <h1>${escapeHTML(settings.name || 'Lyricalmyrical Books')}</h1>
+        <div class="inv-sub">${escapeHTML(book.title)}${book.author?' — '+escapeHTML(book.author):''}</div>
+        <div class="inv-addr">${escapeHTML(settings.addr || '')}${settings.email?'\n'+escapeHTML(settings.email):''}${settings.web?'\n'+escapeHTML(settings.web):''}${settings.vat?'\nVAT/Tax ID: '+escapeHTML(settings.vat):''}</div>
+      </div>
+      <div class="inv-id">
+        <div class="inv-word">Invoice</div>
+        <div class="inv-num">${escapeHTML(inv.num)}</div>
+        <div><span class="inv-status ${statusCls}">${statusLabel}</span></div>
+      </div>
+    </header>
+
+    <section class="inv-meta-grid">
+      <div>
+        <label>Billed to</label>
+        <strong>${escapeHTML(inv.storeName||'—')}</strong>
+        <div class="inv-meta-sub">${[inv.storeContact, inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHTML).join('\n')}</div>
+      </div>
+      <div>
+        <label>Issue date</label>
+        <strong>${fmtD(inv.date)}</strong>
+        ${inv.dueDate?`<div class="inv-meta-sub">Due ${fmtD(inv.dueDate)}</div>`:''}
+      </div>
+      <div>
+        <label>Amount due</label>
+        <strong style="color:${statusCls==='paid'?'#1d7a4a':'#0e0c0a'};font-size:18px;">${fmt(inv.total||0, cur)}</strong>
+        <div class="inv-meta-sub">${(inv.items||[]).reduce((a,i)=>a+(i.qty||0),0)} item${(inv.items||[]).reduce((a,i)=>a+(i.qty||0),0)===1?'':'s'}</div>
+      </div>
+    </section>
+
+    <table class="inv-items">
+      <thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>
+
+    <div class="inv-totals">
+      <div class="tr"><span>Subtotal</span><span class="val">${fmt(inv.subtotal||0, cur)}</span></div>
+      ${(inv.discount||0)>0 ? `<div class="tr"><span>Discount</span><span class="val">−${fmt(inv.discount, cur)}</span></div>` : ''}
+      ${(inv.taxRate||0)>0 ? `<div class="tr"><span>Tax (${inv.taxRate}%)</span><span class="val">${fmt(inv.tax||0, cur)}</span></div>` : ''}
+      <div class="grand"><div class="tr" style="padding:0;color:inherit;"><span>Total due</span><span class="val">${fmt(inv.total||0, cur)}</span></div></div>
+    </div>
+
+    ${payBlock}
+
+    <div class="inv-notes">
+      ${inv.notes?`<div class="inv-notes-block"><h4>Notes</h4><div>${escapeHTML(inv.notes)}</div></div>`:''}
+      ${inv.terms?`<div class="inv-notes-block"><h4>Terms</h4><div>${escapeHTML(inv.terms)}</div></div>`:''}
+      ${bankBlock}
+    </div>
+
+    <div class="inv-foot">${escapeHTML(settings.footer || 'Thank you for stocking our books.')}</div>
+  </div>`;
+}
+
+function editInvoiceFromView(){
+  if (!currentViewInvoiceId) return;
+  closeM('invoice-view');
+  setTimeout(()=> openCreateInvoice(null, currentViewInvoiceId), 60);
+}
+
+function markInvoicePaidFromView(){
+  if (!currentViewInvoiceId) return;
+  const s = getState(), book = getBook();
+  const inv = (s.invoices||[]).find(i => i.id === currentViewInvoiceId);
+  if (!inv) return;
+  if (!confirm(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`)) return;
+  inv.status = 'paid';
+  inv.paidAt = Date.now();
+  inv.paidMethod = (inv.paymentLink && /buy\.stripe\.com/i.test(inv.paymentLink)) ? 'Stripe' :
+                   (inv.paymentLink && /paypal/i.test(inv.paymentLink))           ? 'PayPal' :
+                   (book.stripeLink ? 'Stripe' : 'Other');
+  // settle any linked pending ledger entries
+  for (const it of (inv.items||[])){
+    if (it._ledgerId){
+      const e = s.ledger.find(x => x.id === it._ledgerId);
+      if (e && e.status === 'pending' && !e.voided){
+        const st = (s.stores||[]).find(x => x.id === e.storeId);
+        if (st) st.amountOwed = Math.max(0, (st.amountOwed||0) - (e.amountDue||0));
+        e.status = 'paid';
+        e.paid = 'paid';
+      }
+    }
+  }
+  saveState(activeBook);
+  renderInvoices();
+  renderStores();
+  renderLedger();
+  updateDash();
+  viewInvoice(currentViewInvoiceId);
+  showToast(`✓ ${inv.num} marked paid`);
+}
+
+function printInvoice(){
+  if (!currentViewInvoiceId) return;
+  window.print();
+}
+
+function copyInvoicePayLink(){
+  if (!currentViewInvoiceId) return;
+  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  if (!inv) return;
+  const url = effectivePaymentLink(inv);
+  if (!url){ showToast('No payment link set for this book or invoice', 'warn'); return; }
+  navigator.clipboard.writeText(url).then(
+    () => showToast('✓ Payment link copied'),
+    () => showToast('Could not copy — your browser blocked it', 'err')
+  );
+}
+
+function emailInvoice(){
+  if (!currentViewInvoiceId) return;
+  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  if (!inv) return;
+  const settings = getInvoiceSettings();
+  const cur = inv.currency || getBook().currency;
+  const payUrl = effectivePaymentLink(inv);
+  const subject = `Invoice ${inv.num} — ${settings.name || 'Lyricalmyrical Books'}`;
+  const lines = [
+    `Hi ${inv.storeContact || inv.storeName || 'there'},`,
+    ``,
+    `Please find invoice ${inv.num} (${fmt(inv.total||0, cur)}) attached. Issued ${fmtD(inv.date)}${inv.dueDate?', due '+fmtD(inv.dueDate):''}.`,
+    ``,
+    payUrl ? `Pay online: ${payUrl}` : ``,
+    ``,
+    inv.notes ? `Notes: ${inv.notes}` : ``,
+    ``,
+    `Thank you,`,
+    settings.name || 'Lyricalmyrical Books',
+  ].filter(Boolean).join('\n');
+  const to = encodeURIComponent(inv.storeEmail || '');
+  const url = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
+  window.location.href = url;
+}
+
+function downloadInvoiceHTML(){
+  if (!currentViewInvoiceId) return;
+  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  if (!inv) return;
+  const head = document.head.innerHTML;
+  const body = `<body style="background:#f0ece4;padding:40px;"><div class="invoice-paper" style="background:#fff;">${$('invoice-print-area').innerHTML}</div></body>`;
+  const html = `<!doctype html><html><head>${head}</head>${body}</html>`;
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${inv.num}.html`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  showToast('✓ Invoice downloaded (open & print to PDF)');
 }
 
 // ── EDIT & VOID SYSTEM ─────────────────────────────────────────────────────
@@ -8228,7 +8776,14 @@ Object.assign(window, {
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
   showCategoryDetail, changeExpenseCategory,
-  showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt
+  showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt,
+  // Invoices
+  renderInvoices, openCreateInvoice, viewInvoice,
+  addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
+  onInvoiceStoreChange, prefillFromPendingSales, recalcInvoiceTotals,
+  saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
+  printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML,
+  openInvoiceTemplateSettings, saveInvoiceSettings,
 });
 
 // ── STARTUP ROUTING
