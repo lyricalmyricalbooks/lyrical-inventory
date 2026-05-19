@@ -4167,7 +4167,8 @@ async function createStripePaymentLinkForInvoice(invoice){
   if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe restricted/secret key (expected rk_… or sk_…)");
 
   const book = BOOKS[activeBook] || getBook();
-  const curCode = (getBookCurrencyCode({ currency: invoice.currency || book.currency }) || 'EUR').toLowerCase();
+  // prefer the stored ISO code; fall back to symbol→code lookup
+  const curCode = (invoice.currencyCode || getBookCurrencyCode({ currency: invoice.currency || book.currency }) || 'EUR').toLowerCase();
   const isZeroDec = _STRIPE_ZERO_DECIMAL_INV.has(curCode.toUpperCase());
   const total = Number(invoice.total || 0);
   const amount = isZeroDec ? Math.round(total) : Math.round(total * 100);
@@ -4314,7 +4315,10 @@ function openCreateInvoice(storeId, editingId){
   const sel = $('inv-store');
   sel.innerHTML = '<option value="">— Select store —</option>' + (s.stores||[]).map(st => `<option value="${st.id}">${st.name}${st.city?' · '+st.city:''}</option>`).join('');
 
-  $('inv-discount-sym').textContent = getSym(book.currency);
+  // set currency dropdown — default to book currency
+  const bookCurCode = getBookCurrencyCode(book);
+  if ($('inv-currency')) $('inv-currency').value = bookCurCode;
+  $('inv-discount-sym').textContent = getSym(bookCurCode);
 
   if (editingId){
     const inv = (s.invoices||[]).find(i => i.id === editingId);
@@ -4331,6 +4335,10 @@ function openCreateInvoice(storeId, editingId){
     $('inv-notes').value    = inv.notes || '';
     $('inv-terms').value    = inv.terms || '';
     $('inv-delete-btn').style.display = '';
+    // restore invoice's own currency
+    const invCurCode = normalizeCurrencyCode(inv.currency || bookCurCode, bookCurCode);
+    if ($('inv-currency')) $('inv-currency').value = invCurCode;
+    $('inv-discount-sym').textContent = getSym(invCurCode);
   } else {
     invoiceCtx = { editingId: null, items: [] };
     $('inv-edit-title').textContent = 'New invoice';
@@ -4368,7 +4376,20 @@ function nextInvoiceNumber(){
 }
 
 function onInvoiceStoreChange(){
-  // No automatic refill — user might be editing.  Just keep selection.
+  // No automatic refill — user might be editing. Just keep selection.
+}
+
+function getInvoiceCurrency(){
+  const sel = $('inv-currency');
+  if (sel && sel.value) return sel.value;
+  return getBookCurrencyCode(getBook());
+}
+
+function onInvoiceCurrencyChange(){
+  const code = getInvoiceCurrency();
+  $('inv-discount-sym').textContent = getSym(code);
+  renderInvoiceItems();
+  recalcInvoiceTotals();
 }
 
 function addInvoiceItem(description='', qty=1, unitPrice=0){
@@ -4389,12 +4410,12 @@ function updateInvoiceItem(idx, field, value){
   else it[field] = parseFloat(value) || 0;
   // Re-render only the amount cell for performance
   const amtEl = document.querySelector(`#inv-items-body tr[data-i="${idx}"] .inv-item-amt`);
-  if (amtEl) amtEl.textContent = fmt((it.qty||0)*(it.unitPrice||0), getBook().currency);
+  if (amtEl) amtEl.textContent = fmt((it.qty||0)*(it.unitPrice||0), getSym(getInvoiceCurrency()));
   recalcInvoiceTotals();
 }
 
 function renderInvoiceItems(){
-  const body = $('inv-items-body'), cur = getBook().currency;
+  const body = $('inv-items-body'), cur = getSym(getInvoiceCurrency());
   if (!invoiceCtx.items.length){
     body.innerHTML = `<tr><td colspan="5" style="font-size:12px;color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
     return;
@@ -4411,7 +4432,7 @@ function renderInvoiceItems(){
 function escapeHTML(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function recalcInvoiceTotals(){
-  const cur = getBook().currency;
+  const cur = getSym(getInvoiceCurrency());
   const subtotal = invoiceCtx.items.reduce((a,it)=> a + (parseFloat(it.qty)||0) * (parseFloat(it.unitPrice)||0), 0);
   const discount = parseFloat($('inv-discount').value) || 0;
   const taxRate  = parseFloat($('inv-tax').value) || 0;
@@ -4465,6 +4486,9 @@ function saveInvoice(status){
   const num = ($('inv-num').value || '').trim() || nextInvoiceNumber();
   const date = $('inv-date').value || today();
   const dueDate = $('inv-due').value || '';
+  // Use the currency selected in the editor (ISO code → symbol for storage, consistent with book.currency pattern)
+  const invoiceCurCode = getInvoiceCurrency();
+  const invoiceCurSym  = getSym(invoiceCurCode); // e.g. "US$", "€"
 
   const payload = {
     id: invoiceCtx.editingId || ('inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7)),
@@ -4476,7 +4500,8 @@ function saveInvoice(status){
     taxRate: totals.taxRate,
     tax: totals.tax,
     total: totals.total,
-    currency: book.currency,
+    currency: invoiceCurSym,  // stored as symbol (€, CA$, US$…) consistent with book.currency
+    currencyCode: invoiceCurCode, // ISO code stored alongside for Stripe
     paymentLink: $('inv-paylink').value.trim() || '',
     notes: $('inv-notes').value.trim(),
     terms: $('inv-terms').value.trim(),
@@ -8966,7 +8991,7 @@ Object.assign(window, {
   saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
   printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML,
   openInvoiceTemplateSettings, saveInvoiceSettings,
-  regenerateStripeLinkFromView,
+  regenerateStripeLinkFromView, onInvoiceCurrencyChange,
 });
 
 // ── STARTUP ROUTING

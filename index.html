@@ -1647,6 +1647,23 @@ function json_(obj) {
     <div class="form-group"><label>Due date</label><input id="inv-due" type="date"></div>
   </div>
 
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label>Currency</label>
+      <select id="inv-currency" onchange="onInvoiceCurrencyChange()">
+        <option value="EUR">EUR — €</option>
+        <option value="CAD">CAD — CA$</option>
+        <option value="USD">USD — US$</option>
+        <option value="GBP">GBP — £</option>
+        <option value="AUD">AUD — A$</option>
+        <option value="CHF">CHF — CHF</option>
+        <option value="JPY">JPY — ¥</option>
+      </select>
+    </div>
+    <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;">
+      <div style="font-size:11px;color:var(--text3);line-height:1.6;padding-bottom:4px;">Stripe Checkout will charge in this currency. Changing it after a link is created will invalidate the old link.</div>
+    </div>
+  </div>
+
   <div class="form-group" style="margin-bottom:8px;">
     <label>Line items <button class="btn sm" type="button" onclick="addInvoiceItem()" style="margin-left:8px;">+ Add line</button>
       <button class="btn sm ink" type="button" onclick="prefillFromPendingSales()" style="margin-left:4px;" title="Pull all unpaid consignment sales for the selected store">⚡ Import pending sales</button>
