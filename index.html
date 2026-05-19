@@ -1709,6 +1709,7 @@ function json_(obj) {
       <button class="btn ink" onclick="editInvoiceFromView()">✎ Edit</button>
       <button class="btn ink" onclick="emailInvoice()">✉ Email</button>
       <button class="btn ink" onclick="copyInvoicePayLink()">🔗 Copy pay link</button>
+      <button class="btn ink" id="inv-stripe-btn" onclick="regenerateStripeLinkFromView()" title="Create a Stripe Payment Link with the exact invoice amount">💳 Stripe link</button>
       <button class="btn ink" onclick="downloadInvoiceHTML()">⬇ Download</button>
       <button class="btn ink" onclick="printInvoice()">🖨 Print / PDF</button>
       <button class="btn gold" id="inv-mark-paid-btn" onclick="markInvoicePaidFromView()">✓ Mark paid</button>
@@ -1747,6 +1748,31 @@ function json_(obj) {
   </div>
   <div class="form-group" style="margin-bottom:12px;"><label>Bank / wire details (optional, shown on invoice)</label>
     <textarea id="ivs-bank" rows="2" placeholder="IBAN IT60 X054 2811 1010 0000 0123 456&#10;BIC ABCDITMM"></textarea>
+  </div>
+
+  <div style="border-top:1px solid var(--border);margin:18px 0 12px;padding-top:14px;">
+    <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Stripe Checkout (dynamic amounts)</div>
+    <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;">
+      Paste a Stripe <strong>Restricted Key</strong> with write permissions on <em>Products</em>, <em>Prices</em>, and <em>Payment Links</em>.
+      When you finalize an invoice, the app auto-creates a Stripe Payment Link with the <strong>exact amount owed</strong> — so a store can never accidentally pay the wrong quarter.
+      <a href="https://dashboard.stripe.com/apikeys/create?name=Lyrical%20Inv%20Pay%20Links&permissions[]=rak_payment_links_write&permissions[]=rak_prices_write&permissions[]=rak_products_write" target="_blank" style="color:var(--gold);">Create a restricted key →</a>
+    </div>
+    <div class="form-group" style="margin-bottom:8px;"><label>Stripe Restricted Key</label>
+      <input id="ivs-stripe-key" type="password" placeholder="rk_live_… or rk_test_…" autocomplete="off">
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">Stored locally in this browser only. Never synced.</div>
+    </div>
+    <div class="g2" style="margin-bottom:8px;">
+      <div class="form-group" style="margin:0;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
+          <input id="ivs-stripe-auto" type="checkbox" style="margin:0;"> Auto-create on finalize
+        </label>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-weight:500;text-transform:none;letter-spacing:0;">
+          <input id="ivs-stripe-test" type="checkbox" style="margin:0;"> Test mode badge
+        </label>
+      </div>
+    </div>
   </div>
 
   <div class="modal-footer">

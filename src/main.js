@@ -4134,6 +4134,9 @@ function openInvoiceTemplateSettings(){
   $('ivs-terms').value = s.terms || 'Net 30. Payment via Stripe, PayPal, or bank transfer.';
   $('ivs-footer').value= s.footer|| 'Thank you for stocking our books.';
   $('ivs-bank').value  = s.bank  || '';
+  if ($('ivs-stripe-key'))  $('ivs-stripe-key').value  = s.stripeKey || '';
+  if ($('ivs-stripe-auto')) $('ivs-stripe-auto').checked = s.stripeAuto !== false; // default ON
+  if ($('ivs-stripe-test')) $('ivs-stripe-test').checked = !!s.stripeTest;
   openM('invoice-settings');
 }
 function saveInvoiceSettings(){
@@ -4146,9 +4149,103 @@ function saveInvoiceSettings(){
     terms: $('ivs-terms').value.trim(),
     footer:$('ivs-footer').value.trim(),
     bank:  $('ivs-bank').value.trim(),
+    stripeKey:  $('ivs-stripe-key')  ? $('ivs-stripe-key').value.trim() : '',
+    stripeAuto: $('ivs-stripe-auto') ? !!$('ivs-stripe-auto').checked : true,
+    stripeTest: $('ivs-stripe-test') ? !!$('ivs-stripe-test').checked : false,
   });
   closeM('invoice-settings');
   showToast('✓ Invoice settings saved');
+}
+
+// ── STRIPE DYNAMIC PAYMENT LINK (exact-amount Checkout per invoice) ─────
+const _STRIPE_ZERO_DECIMAL_INV = new Set(['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','UGX','VND','VUV','XAF','XOF','XPF']);
+
+async function createStripePaymentLinkForInvoice(invoice){
+  const settings = getInvoiceSettings();
+  const key = (settings.stripeKey || '').trim();
+  if (!key) throw new Error('Stripe key not set — open Invoice Settings to add one');
+  if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe restricted/secret key (expected rk_… or sk_…)");
+
+  const book = BOOKS[activeBook] || getBook();
+  const curCode = (getBookCurrencyCode({ currency: invoice.currency || book.currency }) || 'EUR').toLowerCase();
+  const isZeroDec = _STRIPE_ZERO_DECIMAL_INV.has(curCode.toUpperCase());
+  const total = Number(invoice.total || 0);
+  const amount = isZeroDec ? Math.round(total) : Math.round(total * 100);
+  if (amount < 50 && !isZeroDec) throw new Error('Amount too small for Stripe (minimum 0.50)');
+  if (amount < 1) throw new Error('Amount must be greater than zero');
+
+  const description = `${invoice.num} — ${invoice.storeName || 'Consignment store'} (${book.title || 'Book'})`;
+
+  // 1. Create a Price (with inline product_data — Stripe creates the product on the fly)
+  const priceParams = new URLSearchParams();
+  priceParams.set('unit_amount', String(amount));
+  priceParams.set('currency', curCode);
+  priceParams.set('product_data[name]', description.slice(0, 250));
+  priceParams.set('nickname', invoice.num);
+  // attach metadata to the price so it shows up in the Stripe dashboard
+  priceParams.set('metadata[invoice_num]', invoice.num || '');
+  priceParams.set('metadata[store_name]', invoice.storeName || '');
+  priceParams.set('metadata[book_id]',   book.id || '');
+
+  const priceRes = await fetch('https://api.stripe.com/v1/prices', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: priceParams.toString(),
+  });
+  if (!priceRes.ok){
+    const err = await priceRes.json().catch(()=>({}));
+    throw new Error('Stripe price: ' + (err.error?.message || ('HTTP ' + priceRes.status)));
+  }
+  const price = await priceRes.json();
+
+  // 2. Create the Payment Link
+  const linkParams = new URLSearchParams();
+  linkParams.set('line_items[0][price]', price.id);
+  linkParams.set('line_items[0][quantity]', '1');
+  linkParams.set('metadata[invoice_num]', invoice.num || '');
+  linkParams.set('metadata[store_id]',   String(invoice.storeId || ''));
+  linkParams.set('metadata[store_name]', invoice.storeName || '');
+  linkParams.set('metadata[book_id]',    book.id || '');
+  linkParams.set('payment_intent_data[description]', description.slice(0, 350));
+  linkParams.set('payment_intent_data[metadata][invoice_num]', invoice.num || '');
+  linkParams.set('payment_intent_data[metadata][store_name]', invoice.storeName || '');
+  linkParams.set('payment_intent_data[statement_descriptor_suffix]', (invoice.num || 'Invoice').replace(/[^A-Za-z0-9\- ]/g,'').slice(0, 22));
+  linkParams.set('allow_promotion_codes', 'false');
+  linkParams.set('billing_address_collection', 'auto');
+
+  const linkRes = await fetch('https://api.stripe.com/v1/payment_links', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: linkParams.toString(),
+  });
+  if (!linkRes.ok){
+    const err = await linkRes.json().catch(()=>({}));
+    throw new Error('Stripe payment link: ' + (err.error?.message || ('HTTP ' + linkRes.status)));
+  }
+  const link = await linkRes.json();
+
+  return {
+    url: link.url,
+    paymentLinkId: link.id,
+    priceId: price.id,
+    amount, currency: curCode,
+    livemode: !!link.livemode,
+    createdAt: Date.now(),
+  };
+}
+
+async function deactivateStripePaymentLink(paymentLinkId){
+  const key = (getInvoiceSettings().stripeKey || '').trim();
+  if (!key || !paymentLinkId) return;
+  try {
+    const params = new URLSearchParams();
+    params.set('active', 'false');
+    await fetch(`https://api.stripe.com/v1/payment_links/${encodeURIComponent(paymentLinkId)}`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+  } catch(e){ /* best effort */ }
 }
 
 function invoicesVisibleHere(){
@@ -4186,8 +4283,11 @@ function renderInvoices(){
     const statusLabel = inv._overdue ? 'OVERDUE' : (inv.status||'draft').toUpperCase();
     const statusCls   = inv._overdue ? 'overdue' : (inv.status||'draft');
     const due = inv.dueDate ? fmtD(inv.dueDate) : '—';
+    const stripeChip = isDynamicStripeLink(inv)
+      ? `<span title="Dynamic Stripe Checkout · exact amount" style="display:inline-block;margin-left:6px;background:#0e0c0a;color:#f0c060;font-size:8px;font-weight:700;letter-spacing:.16em;padding:2px 6px;border-radius:99px;">💳 STRIPE</span>`
+      : '';
     return `<div class="invoice-card">
-      <div class="inv-c-num">${inv.num}</div>
+      <div class="inv-c-num">${inv.num}${stripeChip}</div>
       <div class="inv-c-store">${inv.storeName || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).join(' · ') || '—'}</div></div>
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
@@ -4385,6 +4485,7 @@ function saveInvoice(status){
     updatedAt: Date.now(),
   };
 
+  let oldStripeLinkId = null;
   if (invoiceCtx.editingId){
     const idx = s.invoices.findIndex(i => i.id === invoiceCtx.editingId);
     if (idx >= 0) {
@@ -4392,6 +4493,15 @@ function saveInvoice(status){
       const old = s.invoices[idx];
       payload.paidAt = old.paidAt || null;
       payload.paidMethod = old.paidMethod || null;
+      // preserve Stripe link only if amount/currency unchanged
+      const amountChanged = (Number(old.total||0).toFixed(2) !== Number(payload.total||0).toFixed(2))
+                          || (old.currency !== payload.currency);
+      if (old.stripe && !amountChanged) {
+        payload.stripe = old.stripe;
+      } else if (old.stripe) {
+        // amount changed → invalidate old link (will deactivate below)
+        oldStripeLinkId = old.stripe.paymentLinkId;
+      }
       s.invoices[idx] = payload;
     } else {
       s.invoices.push(payload);
@@ -4408,8 +4518,65 @@ function saveInvoice(status){
   closeM('invoice-edit');
   renderInvoices();
   showToast(status === 'draft' ? '✓ Draft saved' : '✓ Invoice saved');
-  // After save, auto-open the view
-  setTimeout(()=> viewInvoice(payload.id), 80);
+
+  // Stripe Payment Link: auto-create on finalize (or regenerate after edit)
+  const settings = getInvoiceSettings();
+  const shouldAutoStripe = status !== 'draft' && settings.stripeAuto !== false && !!settings.stripeKey && !payload.stripe;
+  if (oldStripeLinkId) deactivateStripePaymentLink(oldStripeLinkId);
+
+  if (shouldAutoStripe){
+    showToast('Creating Stripe Payment Link…', 'ok', 1800);
+    createStripePaymentLinkForInvoice(payload).then(stripe => {
+      const s2 = getState();
+      const inv = (s2.invoices||[]).find(i => i.id === payload.id);
+      if (!inv) return;
+      inv.stripe = stripe;
+      inv.paymentLink = stripe.url; // also set as the primary payment link so QR/etc. use it
+      saveState(activeBook);
+      renderInvoices();
+      setTimeout(()=> viewInvoice(payload.id), 60);
+      showToast(`✓ Stripe link ready — ${fmt(payload.total, payload.currency)} owed`);
+    }).catch(err => {
+      console.error('Stripe link creation failed:', err);
+      showToast('Stripe link failed: ' + err.message, 'err', 5000);
+      setTimeout(()=> viewInvoice(payload.id), 60);
+    });
+  } else {
+    setTimeout(()=> viewInvoice(payload.id), 80);
+  }
+}
+
+async function regenerateStripeLinkFromView(){
+  if (!currentViewInvoiceId) return;
+  const s = getState();
+  const inv = (s.invoices||[]).find(i => i.id === currentViewInvoiceId);
+  if (!inv) return;
+  const settings = getInvoiceSettings();
+  if (!settings.stripeKey){
+    if (confirm('No Stripe key configured yet. Open Invoice Settings to add one?')) {
+      closeM('invoice-view');
+      setTimeout(openInvoiceTemplateSettings, 80);
+    }
+    return;
+  }
+  const oldId = inv.stripe?.paymentLinkId;
+  const btn = $('inv-stripe-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Creating…'; }
+  try {
+    const stripe = await createStripePaymentLinkForInvoice(inv);
+    if (oldId) deactivateStripePaymentLink(oldId);
+    inv.stripe = stripe;
+    inv.paymentLink = stripe.url;
+    saveState(activeBook);
+    renderInvoices();
+    viewInvoice(currentViewInvoiceId);
+    showToast(`✓ Stripe link ready — ${fmt(inv.total, inv.currency)} owed`);
+  } catch(e){
+    console.error(e);
+    showToast('Stripe: ' + e.message, 'err', 5500);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💳 Stripe link'; }
+  }
 }
 
 function deleteInvoice(){
@@ -4451,6 +4618,8 @@ function viewInvoice(id){
 
 function effectivePaymentLink(inv){
   const book = BOOKS[activeBook] || getBook();
+  // Dynamic Stripe link (exact amount) always wins
+  if (inv.stripe && inv.stripe.url) return inv.stripe.url;
   let url = inv.paymentLink || book.stripeLink || book.paymentLink || '';
   if (!url) return '';
   // Best-effort: append client_reference_id for Stripe Payment Links so the payment is tagged
@@ -4464,6 +4633,8 @@ function effectivePaymentLink(inv){
   } catch(e){}
   return url;
 }
+
+function isDynamicStripeLink(inv){ return !!(inv && inv.stripe && inv.stripe.url); }
 
 function renderInvoicePaperHTML(inv){
   const settings = getInvoiceSettings();
@@ -4490,11 +4661,19 @@ function renderInvoicePaperHTML(inv){
     settings.bank ? 'Bank transfer' : null,
   ].filter(Boolean).join(' · ') || 'See payment instructions below';
 
+  const dyn = isDynamicStripeLink(inv);
+  const testBadge = (dyn && inv.stripe.livemode === false) ? `<span style="display:inline-block;margin-left:8px;background:#fde6e0;color:#a13a1b;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:3px 8px;border-radius:99px;">Test mode</span>` : '';
+  const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#0e0c0a;color:#f0c060;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:99px;margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge?' ':''}${testBadge}</div>` : '';
+  const payCopy = dyn
+    ? `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> via Stripe Checkout. The amount is locked to this invoice — no risk of paying the wrong quarter.`
+    : `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> securely, or scan the QR with your phone.`;
+
   const payBlock = payUrl ? `
     <section class="inv-pay no-print" style="--book-accent:${accent};">
       <div class="inv-pay-info">
+        ${dynBadge}
         <h3>Pay this invoice</h3>
-        <p>Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> securely, or scan the QR with your phone.</p>
+        <p>${payCopy}</p>
         <a class="pay-btn" href="${payUrl}" target="_blank" rel="noopener">Pay ${fmt(inv.total||0, cur)} →</a>
         <div class="pay-methods">${payMethodsLabel}</div>
       </div>
@@ -4577,9 +4756,12 @@ function markInvoicePaidFromView(){
   if (!confirm(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`)) return;
   inv.status = 'paid';
   inv.paidAt = Date.now();
-  inv.paidMethod = (inv.paymentLink && /buy\.stripe\.com/i.test(inv.paymentLink)) ? 'Stripe' :
-                   (inv.paymentLink && /paypal/i.test(inv.paymentLink))           ? 'PayPal' :
-                   (book.stripeLink ? 'Stripe' : 'Other');
+  inv.paidMethod = isDynamicStripeLink(inv) ? 'Stripe Checkout'
+                : (inv.paymentLink && /buy\.stripe\.com/i.test(inv.paymentLink)) ? 'Stripe'
+                : (inv.paymentLink && /paypal/i.test(inv.paymentLink))           ? 'PayPal'
+                : (book.stripeLink ? 'Stripe' : 'Other');
+  // best-effort: deactivate the Stripe Payment Link so it can't be paid twice
+  if (inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
   // settle any linked pending ledger entries
   for (const it of (inv.items||[])){
     if (it._ledgerId){
@@ -8784,6 +8966,7 @@ Object.assign(window, {
   saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
   printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML,
   openInvoiceTemplateSettings, saveInvoiceSettings,
+  regenerateStripeLinkFromView,
 });
 
 // ── STARTUP ROUTING
