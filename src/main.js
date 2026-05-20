@@ -3080,7 +3080,7 @@ async function extractReceiptsFromEmailText() {
 
   const btn = $('email-receipt-scan-btn');
   const prev = btn.textContent;
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
   btn.textContent = 'Extracting…';
 
   const wrap = $('email-receipt-results');
@@ -3154,7 +3154,7 @@ Rules:
     }
     showToast('Could not extract receipts', 'err');
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
     btn.textContent = prev;
   }
 }
@@ -5505,7 +5505,7 @@ async function pushAllToSheets() {
   const stats = $('sync-stats');
 
   _isBulkSync = true;
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
   btn.textContent = 'Queueing...';
   bar.style.display = 'block';
   stats.style.display = 'block';
@@ -5557,7 +5557,7 @@ async function pushAllToSheets() {
   if(_bulkTotal === 0) {
     showToast('No records found to sync','warn');
     _isBulkSync = false;
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
     btn.textContent = 'Sync all data';
     bar.style.display = 'none';
     stats.style.display = 'none';
@@ -7575,6 +7575,7 @@ async function importShippoShippingFromApi() {
     .map(ref => String(ref).replace(/^shippo:/, ''))
     .filter(Boolean));
   const fetchedIds = new Set();
+  const pendingExpenses = [];
 
   let imported = 0;
   let skipped = 0;
@@ -7601,7 +7602,8 @@ async function importShippoShippingFromApi() {
       const json = await resp.json();
       const rows = json.results || [];
       for (const tx of rows) {
-        if (!tx || tx.status === 'REFUNDED') { skipped++; continue; }
+        const status = String(tx?.status || '').toUpperCase();
+        if (!tx || status === 'REFUNDED' || status === 'ERROR' || status === 'INVALID') { skipped++; continue; }
         const amount = parseFloat(tx.rate_amount || tx.amount || 0);
         if (!Number.isFinite(amount) || amount <= 0) { skipped++; continue; }
         const currency = String(tx.rate_currency || tx.currency || 'USD').toUpperCase();
@@ -7620,7 +7622,7 @@ async function importShippoShippingFromApi() {
         const fxKey = `${currency}_CAD`;
         const fxRate = _fxRateCache[fxKey] || 1;
 
-        TAX_CENTER.businessExpenses.unshift({
+        pendingExpenses.push({
           id: Date.now() + imported + 1,
           desc: `Shippo shipping label${tx.tracking_number ? ` #${tx.tracking_number}` : ''}`,
           cat: 'Shipping & Postage',
@@ -7649,6 +7651,10 @@ async function importShippoShippingFromApi() {
         showToast('Shippo import cancelled before insertion', 'warn');
         return;
       }
+    }
+
+    if (pendingExpenses.length > 0) {
+      TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
     }
 
     TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
