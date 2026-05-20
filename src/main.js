@@ -7569,9 +7569,12 @@ async function importShippoShippingFromApi() {
   const existingRefs = new Set((TAX_CENTER.businessExpenses || [])
     .filter(e => e && e.ref && String(e.ref).startsWith('shippo:'))
     .map(e => String(e.ref)));
-  const importedIds = new Set(Array.isArray(TAX_CENTER.settings.shippoImportedObjectIds)
-    ? TAX_CENTER.settings.shippoImportedObjectIds.map(String)
-    : []);
+  // Source of truth is current expense refs, so deleted/edited rows don't get permanently blocked
+  // by stale saved object IDs from prior runs.
+  const importedIds = new Set(Array.from(existingRefs)
+    .map(ref => String(ref).replace(/^shippo:/, ''))
+    .filter(Boolean));
+  const fetchedIds = new Set();
 
   let imported = 0;
   let skipped = 0;
@@ -7602,10 +7605,12 @@ async function importShippoShippingFromApi() {
         const txId = String(tx.object_id || '').trim();
         if (!txId) { skipped++; continue; } // require stable ID so repeat imports are idempotent
         const ref = `shippo:${txId}`;
+        if (fetchedIds.has(txId)) { skipped++; continue; }
         if (importedIds.has(txId)) { skipped++; continue; }
         if (existingRefs.has(ref)) { skipped++; continue; }
         existingRefs.add(ref);
         importedIds.add(txId);
+        fetchedIds.add(txId);
 
         const dateRaw = tx.object_created || tx.object_updated || '';
         const date = /^\d{4}-\d{2}-\d{2}/.test(dateRaw) ? dateRaw.slice(0, 10) : today();
