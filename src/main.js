@@ -7583,8 +7583,11 @@ async function importShippoShippingFromApi() {
   let hasMore = true;
 
   try {
-    while (hasMore && page <= 50) {
-      const url = `https://api.goshippo.com/transactions/?page=${page}&results=100&object_state=VALID`;
+    while (hasMore && page <= 200) {
+      // Do not pass object_state filter here: Shippo can return active purchases in
+      // other states depending on account/version, which caused false "no new"
+      // imports for valid paid labels.
+      const url = `https://api.goshippo.com/transactions/?page=${page}&results=100`;
       const resp = await fetch(url, {
         headers: {
           Authorization: `ShippoToken ${token}`,
@@ -7637,6 +7640,15 @@ async function importShippoShippingFromApi() {
       hasMore = Boolean(json.next);
       page += 1;
       if (statusEl) statusEl.textContent = `Fetched ${imported + skipped} transactions…`; 
+    }
+
+    if (imported > 0) {
+      const accept = confirm(`Import ${imported} new Shippo expense${imported === 1 ? '' : 's'} into your ledger now?`);
+      if (!accept) {
+        if (statusEl) statusEl.textContent = `Found ${imported} new Shippo transactions. Import cancelled before ledger insertion.`;
+        showToast('Shippo import cancelled before insertion', 'warn');
+        return;
+      }
     }
 
     TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
