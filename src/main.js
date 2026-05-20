@@ -2340,9 +2340,29 @@ async function fetchLiveRate(from, to) {
       }
     }
     return { error: `API ${res.status}`, context: `${from}->${to}` };
-  } catch(e) { 
+  } catch(e) {
     return { error: 'network', details: e.message || String(e), context: `${from}->${to}` };
   }
+}
+
+// Exchange rate as of a specific date (YYYY-MM-DD), for accurate bookkeeping on
+// historical expenses. Frankfurter returns the nearest prior business day for
+// weekends/holidays. Cached per pair+date.
+async function fetchHistoricalRate(from, to, date) {
+  if (from === to) return { rate: 1 };
+  if (!from || !to || from === 'OTHER' || to === 'OTHER') return { error: 'manual' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { error: 'bad-date' };
+  const key = `${from}_${to}@${date}`;
+  if (_fxRateCache[key]) return { rate: _fxRateCache[key] };
+  try {
+    const res = await fetch(`https://api.frankfurter.app/${date}?from=${from}&to=${to}`);
+    if (res.ok) {
+      const json = await res.json();
+      const rate = json?.rates?.[to];
+      if (rate) { _fxRateCache[key] = rate; return { rate }; }
+    }
+  } catch (e) { /* fall through to caller's live-rate fallback */ }
+  return { error: 'historical-unavailable', context: `${from}->${to}@${date}` };
 }
 
 let _manualFxRate = null;
@@ -6980,6 +7000,15 @@ function renderTaxCenter() {
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
   if($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
   if($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
+  const _shippoStatusEl = $('tc-shippo-status');
+  if (_shippoStatusEl && TAX_CENTER.settings?.shippoLastImportAt) {
+    const last = new Date(TAX_CENTER.settings.shippoLastImportAt);
+    if (!isNaN(last)) {
+      const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+      const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+      _shippoStatusEl.textContent = `Last synced ${ago} (${last.toISOString().slice(0, 10)}). Imports non-refunded transaction rates as Shipping & Postage expenses.`;
+    }
+  }
 
   // Update receipt folder display
   loadReceiptFolderHandle().then(async handle => {
@@ -7577,8 +7606,56 @@ async function importShippoShippingFromApi() {
   const fetchedIds = new Set();
   const pendingExpenses = [];
 
+  // The list endpoint returns `rate` as a bare object-ID string (no cost on the
+  // transaction itself), so we request expand[]=rate to get amount/currency
+  // inline. If a row still arrives unexpanded, fall back to fetching the rate.
+  const _rateCostCache = new Map();
+  async function getTxCost(tx) {
+    if (tx.rate && typeof tx.rate === 'object') {
+      return { amount: parseFloat(tx.rate.amount), currency: String(tx.rate.currency || 'USD').toUpperCase() };
+    }
+    if (tx.rate_amount != null || tx.amount != null) {
+      return { amount: parseFloat(tx.rate_amount != null ? tx.rate_amount : tx.amount),
+               currency: String(tx.rate_currency || tx.currency || 'USD').toUpperCase() };
+    }
+    if (tx.rate && typeof tx.rate === 'string') {
+      if (_rateCostCache.has(tx.rate)) return _rateCostCache.get(tx.rate);
+      try {
+        const r = await fetch(`https://api.goshippo.com/rates/${tx.rate}`, {
+          headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (r.ok) {
+          const rate = await r.json();
+          const out = { amount: parseFloat(rate.amount), currency: String(rate.currency || 'USD').toUpperCase() };
+          _rateCostCache.set(tx.rate, out);
+          return out;
+        }
+      } catch (_) { /* fall through to NaN */ }
+    }
+    return { amount: NaN, currency: 'USD' };
+  }
+
+  // Shippo label URLs can expire, so try to save a permanent copy to the local
+  // receipts folder. Best-effort: returns a local:// path on success, otherwise
+  // null so the caller keeps the original URL. May fail on CORS or no folder.
+  async function saveLabelLocally(labelUrl, txId) {
+    if (!labelUrl || typeof saveReceiptToLocalFile !== 'function') return null;
+    try {
+      const r = await fetch(labelUrl);
+      if (!r.ok) return null;
+      const blob = await r.blob();
+      const ext = (blob.type && blob.type.includes('png')) ? 'png'
+        : (/\.png(\?|$)/i.test(labelUrl) ? 'png' : 'pdf');
+      const file = new File([blob], `shippo_${txId}.${ext}`, { type: blob.type || 'application/pdf' });
+      return await saveReceiptToLocalFile(file, 'Shippo');
+    } catch (_) {
+      return null;
+    }
+  }
+
   let imported = 0;
   let skipped = 0;
+  let alreadyImported = 0; // already in the ledger from a prior run (deduped)
   let totalUsd = 0;
   let page = 1;
   let hasMore = true;
@@ -7590,7 +7667,7 @@ async function importShippoShippingFromApi() {
       //   tracking_status, page, results). We intentionally avoid status
       //   query filters here so valid paid labels in non-default states
       //   still appear and can be imported.
-      const url = `https://api.goshippo.com/transactions/?page=${page}&results=100`;
+      const url = `https://api.goshippo.com/transactions/?page=${page}&results=100&expand[]=rate`;
       const resp = await fetch(url, {
         headers: {
           Authorization: `ShippoToken ${token}`,
@@ -7606,23 +7683,36 @@ async function importShippoShippingFromApi() {
       for (const tx of rows) {
         const status = String(tx?.status || '').toUpperCase();
         if (!tx || status === 'REFUNDED' || status === 'ERROR' || status === 'INVALID') { skipped++; continue; }
-        const amount = parseFloat(tx.rate_amount || tx.amount || 0);
-        if (!Number.isFinite(amount) || amount <= 0) { skipped++; continue; }
-        const currency = String(tx.rate_currency || tx.currency || 'USD').toUpperCase();
         const txId = String(tx.object_id || '').trim();
         if (!txId) { skipped++; continue; } // require stable ID so repeat imports are idempotent
         const ref = `shippo:${txId}`;
-        if (fetchedIds.has(txId)) { skipped++; continue; }
-        if (importedIds.has(txId)) { skipped++; continue; }
-        if (existingRefs.has(ref)) { skipped++; continue; }
+        // Dedupe before the (possibly networked) cost lookup so re-syncs stay cheap.
+        // Keyed on Shippo's stable object_id (persisted as ref:"shippo:<id>"),
+        // so re-running weeks later only adds labels not already in the ledger.
+        if (fetchedIds.has(txId) || importedIds.has(txId) || existingRefs.has(ref)) { alreadyImported++; continue; }
+
+        const { amount, currency } = await getTxCost(tx);
+        if (!Number.isFinite(amount) || amount <= 0) { skipped++; continue; }
+
         existingRefs.add(ref);
         importedIds.add(txId);
         fetchedIds.add(txId);
 
         const dateRaw = tx.object_created || tx.object_updated || '';
         const date = /^\d{4}-\d{2}-\d{2}/.test(dateRaw) ? dateRaw.slice(0, 10) : today();
-        const fxKey = `${currency}_CAD`;
-        const fxRate = _fxRateCache[fxKey] || 1;
+
+        // Convert to CAD for the master ledger using the rate as of the label's
+        // date (what the CRA expects), falling back to live then cached rates.
+        let fxRate = currency === 'CAD' ? 1 : 0;
+        if (currency !== 'CAD') {
+          try { const h = await fetchHistoricalRate(currency, 'CAD', date); fxRate = h?.rate || 0; } catch (_) { /* fall through */ }
+          if (!fxRate) { try { const r = await fetchLiveRate(currency, 'CAD'); fxRate = r?.rate || 0; } catch (_) { /* fall through */ } }
+          if (!fxRate) fxRate = _fxRateCache[`${currency}_CAD`] || 0;
+        }
+        if (!fxRate) fxRate = 1; // last resort so the cost is still recorded
+
+        const labelUrl = tx.label_url || '';
+        const localReceipt = labelUrl ? await saveLabelLocally(labelUrl, txId) : null;
 
         pendingExpenses.push({
           id: Date.now() + imported + 1,
@@ -7630,11 +7720,13 @@ async function importShippoShippingFromApi() {
           cat: 'Shipping & Postage',
           currency,
           amount,
+          origCurrency: currency,
+          origAmount: amount,
           fxRate,
           baseAmount: amount * fxRate,
           date,
           ref,
-          receipt: tx.label_url || '',
+          receipt: localReceipt || labelUrl,
           trip: ''
         });
         imported++;
@@ -7647,9 +7739,26 @@ async function importShippoShippingFromApi() {
     }
 
     if (imported > 0) {
-      const accept = confirm(`Import ${imported} new Shippo expense${imported === 1 ? '' : 's'} into your ledger now?`);
+      // Build a cost breakdown so the confirmation reflects what will actually
+      // be written: total CAD, original amounts per currency, and date range.
+      const totalCad = pendingExpenses.reduce((s, e) => s + (e.baseAmount || 0), 0);
+      const byCur = {};
+      for (const e of pendingExpenses) byCur[e.currency] = (byCur[e.currency] || 0) + (e.amount || 0);
+      const curLines = Object.keys(byCur).sort()
+        .map(c => `  • ${byCur[c].toFixed(2)} ${c}`).join('\n');
+      const dates = pendingExpenses.map(e => e.date).filter(Boolean).sort();
+      const range = dates.length ? `${dates[0]} → ${dates[dates.length - 1]}` : '—';
+
+      const accept = confirm(
+        `Add ${imported} new Shippo shipping cost${imported === 1 ? '' : 's'} to your master ledger?\n\n` +
+        `Total: ${totalCad.toFixed(2)} CAD\n` +
+        `Original amounts:\n${curLines}\n` +
+        `Dates: ${range}\n` +
+        (alreadyImported ? `Already in ledger (skipped): ${alreadyImported}\n` : '') +
+        `\nOnly new labels are listed above — nothing is written until you click OK.`
+      );
       if (!accept) {
-        if (statusEl) statusEl.textContent = `Found ${imported} new Shippo transactions. Import cancelled before ledger insertion.`;
+        if (statusEl) statusEl.textContent = `Found ${imported} new Shippo transactions (${totalCad.toFixed(2)} CAD). Import cancelled before ledger insertion.`;
         showToast('Shippo import cancelled before insertion', 'warn');
         return;
       }
@@ -7663,10 +7772,16 @@ async function importShippoShippingFromApi() {
     TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
     await saveTaxCenter();
     renderTaxCenter();
+    const dupNote = alreadyImported ? ` ${alreadyImported} already imported.` : '';
     if (statusEl) statusEl.textContent = imported
-      ? `Imported ${imported} Shippo transactions (${skipped} skipped).${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}`
-      : `No new Shippo transactions imported (${skipped} skipped).`;
-    showToast(imported ? `✓ Imported ${imported} Shippo expenses` : 'No new Shippo expenses to import', imported ? 'ok' : 'warn');
+      ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}`
+      : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}`;
+    showToast(
+      imported
+        ? `✓ Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
+        : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import'),
+      imported ? 'ok' : 'warn'
+    );
   } catch (e) {
     console.error(e);
     if (statusEl) statusEl.textContent = `Error: ${e.message || e}`;
