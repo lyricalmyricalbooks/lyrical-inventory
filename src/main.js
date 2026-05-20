@@ -7608,6 +7608,7 @@ async function importShippoShippingFromApi() {
 
   let imported = 0;
   let skipped = 0;
+  let alreadyImported = 0; // already in the ledger from a prior run (deduped)
   let totalUsd = 0;
   let page = 1;
   let hasMore = true;
@@ -7639,7 +7640,9 @@ async function importShippoShippingFromApi() {
         if (!txId) { skipped++; continue; } // require stable ID so repeat imports are idempotent
         const ref = `shippo:${txId}`;
         // Dedupe before the (possibly networked) cost lookup so re-syncs stay cheap.
-        if (fetchedIds.has(txId) || importedIds.has(txId) || existingRefs.has(ref)) { skipped++; continue; }
+        // Keyed on Shippo's stable object_id (persisted as ref:"shippo:<id>"),
+        // so re-running weeks later only adds labels not already in the ledger.
+        if (fetchedIds.has(txId) || importedIds.has(txId) || existingRefs.has(ref)) { alreadyImported++; continue; }
 
         const { amount, currency } = await getTxCost(tx);
         if (!Number.isFinite(amount) || amount <= 0) { skipped++; continue; }
@@ -7698,8 +7701,9 @@ async function importShippoShippingFromApi() {
         `Add ${imported} new Shippo shipping cost${imported === 1 ? '' : 's'} to your master ledger?\n\n` +
         `Total: ${totalCad.toFixed(2)} CAD\n` +
         `Original amounts:\n${curLines}\n` +
-        `Dates: ${range}\n\n` +
-        `Nothing is written until you click OK.`
+        `Dates: ${range}\n` +
+        (alreadyImported ? `Already in ledger (skipped): ${alreadyImported}\n` : '') +
+        `\nOnly new labels are listed above — nothing is written until you click OK.`
       );
       if (!accept) {
         if (statusEl) statusEl.textContent = `Found ${imported} new Shippo transactions (${totalCad.toFixed(2)} CAD). Import cancelled before ledger insertion.`;
@@ -7716,10 +7720,11 @@ async function importShippoShippingFromApi() {
     TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
     await saveTaxCenter();
     renderTaxCenter();
+    const dupNote = alreadyImported ? ` ${alreadyImported} already imported.` : '';
     if (statusEl) statusEl.textContent = imported
-      ? `Imported ${imported} Shippo transactions (${skipped} skipped).${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}`
-      : `No new Shippo transactions imported (${skipped} skipped).`;
-    showToast(imported ? `✓ Imported ${imported} Shippo expenses` : 'No new Shippo expenses to import', imported ? 'ok' : 'warn');
+      ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}`
+      : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}`;
+    showToast(imported ? `✓ Imported ${imported} new Shippo expenses` : 'No new Shippo expenses to import', imported ? 'ok' : 'warn');
   } catch (e) {
     console.error(e);
     if (statusEl) statusEl.textContent = `Error: ${e.message || e}`;
