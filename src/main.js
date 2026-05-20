@@ -7684,9 +7684,25 @@ async function importShippoShippingFromApi() {
     }
 
     if (imported > 0) {
-      const accept = confirm(`Import ${imported} new Shippo expense${imported === 1 ? '' : 's'} into your ledger now?`);
+      // Build a cost breakdown so the confirmation reflects what will actually
+      // be written: total CAD, original amounts per currency, and date range.
+      const totalCad = pendingExpenses.reduce((s, e) => s + (e.baseAmount || 0), 0);
+      const byCur = {};
+      for (const e of pendingExpenses) byCur[e.currency] = (byCur[e.currency] || 0) + (e.amount || 0);
+      const curLines = Object.keys(byCur).sort()
+        .map(c => `  • ${byCur[c].toFixed(2)} ${c}`).join('\n');
+      const dates = pendingExpenses.map(e => e.date).filter(Boolean).sort();
+      const range = dates.length ? `${dates[0]} → ${dates[dates.length - 1]}` : '—';
+
+      const accept = confirm(
+        `Add ${imported} new Shippo shipping cost${imported === 1 ? '' : 's'} to your master ledger?\n\n` +
+        `Total: ${totalCad.toFixed(2)} CAD\n` +
+        `Original amounts:\n${curLines}\n` +
+        `Dates: ${range}\n\n` +
+        `Nothing is written until you click OK.`
+      );
       if (!accept) {
-        if (statusEl) statusEl.textContent = `Found ${imported} new Shippo transactions. Import cancelled before ledger insertion.`;
+        if (statusEl) statusEl.textContent = `Found ${imported} new Shippo transactions (${totalCad.toFixed(2)} CAD). Import cancelled before ledger insertion.`;
         showToast('Shippo import cancelled before insertion', 'warn');
         return;
       }
