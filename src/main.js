@@ -2905,6 +2905,7 @@ const EXPENSE_CATEGORIES = [
   'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
   'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
   'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Professional Services',
+  'Sales Processing Fees',
   'Books, Research & Reference', 'Events & Exhibitions', 'Other'
 ];
 
@@ -3404,17 +3405,22 @@ function renderExpenses(){
       :'<span style="font-size:11px;color:var(--text4);">Pending</span>';
     const actionCell=(!e.received && !isAuthor())
       ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
-    const receiptCell = e.receipt ? (
-      e.receipt.startsWith('local://') 
+    const baseReceiptLink = e.receipt ? (
+      e.receipt.startsWith('local://')
       ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${e.receipt.replace('local://','')}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
       : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
     ) : `<span style="font-size:11px;color:var(--text4); font-weight: 500;">Missing</span>`;
-    
+    const trackLink = e.trackingUrl
+      ? ` <a href="${e.trackingUrl}" target="_blank" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
+      : '';
+    const receiptCell = baseReceiptLink + trackLink;
+
     // Calculate multi-currency stuff
     const eCur = e.currency || cur;
     const isBase = eCur === 'CAD';
     let baseAmountText = '';
-    
+    let baseAmountTitle = '';
+
     if (window.IS_PUBLISHER) {
        if (isBase) {
            baseAmountText = '-';
@@ -3425,6 +3431,11 @@ function renderExpenses(){
        } else {
            baseAmountText = '<span style="color:var(--amber);" title="Missing exchange rate">⚠️</span>';
        }
+       // Audit trail: show the exact rate used and on which date.
+       const usedRate = (Number(e.fxRate) > 0) ? Number(e.fxRate) : _fxRateCache[`${eCur}_CAD`];
+       if (!isBase && usedRate > 0) {
+           baseAmountTitle = `1 ${eCur} = ${usedRate.toFixed(4)} CAD${e.date ? ` on ${e.date}` : ''}`;
+       }
     }
 
     return `<tr style="${e.received?'opacity:.5;':''}">
@@ -3434,7 +3445,7 @@ function renderExpenses(){
       <td style="font-size:11px;color:var(--text3);">${e.ref||'—'}</td>
       <td>${receiptCell}</td>
       <td class="r" style="color:${e.received?'var(--text4)':'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount,eCur)}</td>
-      ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);">${baseAmountText}</td>` : ''}
+      ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
       <td>${statusCell}</td>
       <td>${actionCell}</td>
     </tr>`;
@@ -6999,6 +7010,15 @@ function renderTaxCenter() {
   // Initialize AI key input UI
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
   if($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
+  const _stripeStatusEl = $('stripe-fees-status');
+  if (_stripeStatusEl && !_stripeStatusEl.textContent && TAX_CENTER.settings?.stripeFeesLastImportAt) {
+    const last = new Date(TAX_CENTER.settings.stripeFeesLastImportAt);
+    if (!isNaN(last)) {
+      const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+      const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+      _stripeStatusEl.textContent = `Fees last inserted into ledger ${ago} (${last.toISOString().slice(0, 10)}). Fetch again to refresh.`;
+    }
+  }
   if($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
   const _shippoStatusEl = $('tc-shippo-status');
   if (_shippoStatusEl && TAX_CENTER.settings?.shippoLastImportAt) {
@@ -7727,6 +7747,7 @@ async function importShippoShippingFromApi() {
           date,
           ref,
           receipt: localReceipt || labelUrl,
+          trackingUrl: tx.tracking_url_provider || '',
           trip: ''
         });
         imported++;
@@ -8975,6 +8996,8 @@ async function fetchStripeFeesByYear() {
   statusEl.textContent = 'Fetching balance transactions…';
   wrap.innerHTML = '';
   wrap.style.display = 'none';
+  const reconcileWrap = document.getElementById('stripe-fees-reconcile-wrap');
+  if (reconcileWrap) { reconcileWrap.innerHTML = ''; reconcileWrap.style.display = 'none'; }
 
   // Bucket per year+currency+type. Stripe balance_transactions include many types:
   //   charge, refund, payment, payment_refund, adjustment, stripe_fee, payout, payout_failure, etc.
@@ -9027,6 +9050,30 @@ async function fetchStripeFeesByYear() {
     }
 
     window._stripeFeesAudit = allTxns; // available for CSV download / console inspection
+
+    // Per year+currency aggregates used for ledger insertion and reconciliation.
+    const SALES_FEE_TYPES = new Set(['charge', 'payment']);
+    const ledgerData = [];
+    for (const yr of Object.keys(data)) {
+      for (const cur of Object.keys(data[yr])) {
+        let salesFeeMinor = 0, salesCount = 0, totalFeeMinor = 0, salesGrossMinor = 0, stripeBillingMinor = 0;
+        for (const t of Object.keys(data[yr][cur])) {
+          totalFeeMinor += data[yr][cur][t].fee;
+          if (SALES_FEE_TYPES.has(t)) {
+            salesFeeMinor += data[yr][cur][t].fee;
+            salesGrossMinor += data[yr][cur][t].gross;
+            salesCount += data[yr][cur][t].count;
+          }
+          // Stripe billing/service fees (monthly fee, Radar, etc.) post as their
+          // own negative-amount transactions; the cost is abs(amount/gross).
+          if (t === 'stripe_fee') stripeBillingMinor += Math.abs(data[yr][cur][t].gross);
+        }
+        if (salesFeeMinor > 0 || stripeBillingMinor > 0 || salesGrossMinor > 0) {
+          ledgerData.push({ year: Number(yr), cur, salesFeeMinor, salesCount, totalFeeMinor, salesGrossMinor, stripeBillingMinor });
+        }
+      }
+    }
+    window._stripeFeesLedgerData = ledgerData;
 
     const years = Object.keys(data).sort((a, b) => Number(b) - Number(a)); // newest first
     const cards = [];
@@ -9150,6 +9197,18 @@ async function fetchStripeFeesByYear() {
       <br><span style="font-size:11px;color:var(--text3);">Verify against your Stripe Dashboard: <a href="https://dashboard.stripe.com/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance</a> · <a href="https://dashboard.stripe.com/reports/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance reports</a> (set the date range to a calendar year). Click "Download audit CSV" below for the raw per-transaction data.</span>`;
     document.getElementById('stripe-fees-download-btn').style.display = '';
     document.getElementById('stripe-fees-clear-btn').style.display = '';
+    const hasLedgerData = window._stripeFeesLedgerData.length > 0;
+    const insertBtn = document.getElementById('stripe-fees-insert-btn');
+    if (insertBtn) insertBtn.style.display = hasLedgerData ? '' : 'none';
+    const reconcileBtn = document.getElementById('stripe-fees-reconcile-btn');
+    if (reconcileBtn) reconcileBtn.style.display = hasLedgerData ? '' : 'none';
+    // Populate the year filter for ledger insertion (newest first, plus "All years").
+    const yearSel = document.getElementById('stripe-fees-year');
+    if (yearSel) {
+      const ledgerYears = [...new Set(window._stripeFeesLedgerData.map(r => r.year))].sort((a, b) => b - a);
+      yearSel.innerHTML = `<option value="all">All years</option>` + ledgerYears.map(y => `<option value="${y}">${y}</option>`).join('');
+      yearSel.style.display = hasLedgerData ? '' : 'none';
+    }
   } catch (e) {
     const msg = String(e.message || e);
     let hint = '';
@@ -9160,6 +9219,183 @@ async function fetchStripeFeesByYear() {
   } finally {
     btn.disabled = false;
   }
+}
+
+// Insert Stripe processing fees on sales into the master ledger, one entry per
+// year+currency, categorized as "Sales Processing Fees" and converted to CAD at
+// the year-end rate. Idempotent: re-running upserts by ref "stripe-fees:<yr>:<cur>"
+// so the current year's running total is refreshed without duplicating.
+async function insertStripeFeesIntoLedger() {
+  let rows = window._stripeFeesLedgerData || [];
+  if (!rows.length) { showToast('Run "Fetch fees" first.', 'warn'); return; }
+
+  // Optional year filter so the user can insert just one year at a time.
+  const yearSel = document.getElementById('stripe-fees-year');
+  const yearFilter = yearSel && yearSel.value !== 'all' ? Number(yearSel.value) : null;
+  if (yearFilter != null) rows = rows.filter(r => r.year === yearFilter);
+
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+  const currentYear = new Date().getFullYear();
+
+  // CAD rate for a year+currency: year-end rate for closed years, today's for the
+  // current (still-accruing) year, with live then cached fallbacks.
+  const rateFor = async (cur, year) => {
+    if (cur === 'CAD') return 1;
+    const fxDate = year < currentYear ? `${year}-12-31` : today();
+    let rate = 0;
+    try { const h = await fetchHistoricalRate(cur, 'CAD', fxDate); rate = h?.rate || 0; } catch (_) { /* fall through */ }
+    if (!rate) { try { const lr = await fetchLiveRate(cur, 'CAD'); rate = lr?.rate || 0; } catch (_) { /* fall through */ } }
+    if (!rate) rate = _fxRateCache[`${cur}_CAD`] || 0;
+    return rate || 1;
+  };
+
+  const planned = [];
+  for (const r of rows) {
+    const cur = r.cur.toUpperCase();
+    const entryDate = r.year < currentYear ? `${r.year}-12-31` : today();
+    const fxRate = await rateFor(cur, r.year);
+
+    const salesFee = _stripeMinorToMajor(r.salesFeeMinor, r.cur);
+    if (salesFee > 0) {
+      planned.push({
+        year: r.year,
+        ref: `stripe-fees:${r.year}:${cur}`,
+        desc: `Stripe processing fees on sales ${r.year}${r.salesCount ? ` (${r.salesCount} payment${r.salesCount === 1 ? '' : 's'})` : ''}`,
+        cat: 'Sales Processing Fees',
+        currency: cur, amount: salesFee, origCurrency: cur, origAmount: salesFee,
+        fxRate, baseAmount: salesFee * fxRate, date: entryDate,
+      });
+    }
+
+    const billing = _stripeMinorToMajor(r.stripeBillingMinor, r.cur);
+    if (billing > 0) {
+      planned.push({
+        year: r.year,
+        ref: `stripe-billing:${r.year}:${cur}`,
+        desc: `Stripe billing & service fees ${r.year}`,
+        cat: 'Software & Subscriptions',
+        currency: cur, amount: billing, origCurrency: cur, origAmount: billing,
+        fxRate, baseAmount: billing * fxRate, date: entryDate,
+      });
+    }
+  }
+  if (!planned.length) { showToast('No Stripe fees to insert for that selection.', 'warn'); return; }
+
+  const byRef = new Map((TAX_CENTER.businessExpenses || [])
+    .filter(e => e && typeof e.ref === 'string' && (e.ref.startsWith('stripe-fees:') || e.ref.startsWith('stripe-billing:')))
+    .map(e => [e.ref, e]));
+  const newCount = planned.filter(p => !byRef.has(p.ref)).length;
+  const updateCount = planned.length - newCount;
+  const totalCad = planned.reduce((s, p) => s + (p.baseAmount || 0), 0);
+  const lines = planned.sort((a, b) => a.ref.localeCompare(b.ref))
+    .map(p => `  • ${p.year} ${p.cat === 'Software & Subscriptions' ? 'billing' : 'sales fees'}: ${p.amount.toFixed(2)} ${p.currency} → ${p.baseAmount.toFixed(2)} CAD`).join('\n');
+
+  const scope = yearFilter != null ? `${yearFilter}` : 'all years';
+  const accept = confirm(
+    `Insert Stripe fees (${scope}) into your master ledger?\n\n` +
+    `${newCount} new${updateCount ? `, ${updateCount} updated (refreshed in place)` : ''}\n` +
+    `Total: ${totalCad.toFixed(2)} CAD\n\n${lines}\n\n` +
+    `Nothing is written until you click OK.`
+  );
+  if (!accept) { showToast('Stripe fee insertion cancelled', 'warn'); return; }
+
+  let inserted = 0, updated = 0;
+  for (const p of planned) {
+    const existing = byRef.get(p.ref);
+    if (existing) {
+      Object.assign(existing, {
+        desc: p.desc, cat: p.cat, currency: p.currency, amount: p.amount,
+        origCurrency: p.origCurrency, origAmount: p.origAmount,
+        fxRate: p.fxRate, baseAmount: p.baseAmount, date: p.date,
+      });
+      updated++;
+    } else {
+      const { year: _y, ...rest } = p;
+      TAX_CENTER.businessExpenses.unshift({ id: Date.now() + inserted + 1, ...rest, receipt: '', trip: '' });
+      inserted++;
+    }
+  }
+
+  TAX_CENTER.settings.stripeFeesLastImportAt = new Date().toISOString();
+  await saveTaxCenter();
+  renderTaxCenter();
+  showToast(`✓ Stripe fees: ${inserted} added${updated ? `, ${updated} updated` : ''}`, 'ok');
+  const statusEl = document.getElementById('stripe-fees-status');
+  if (statusEl) statusEl.innerHTML += `<br><span style="color:var(--green);">Ledger updated: ${inserted} added${updated ? `, ${updated} updated` : ''} (${totalCad.toFixed(2)} CAD).</span>`;
+}
+
+// Compare what Stripe says you collected (gross customer payments, converted to
+// CAD) against the sales you recorded in the app, per year — a quick gap check.
+async function reconcileStripeAgainstSales() {
+  const rows = window._stripeFeesLedgerData || [];
+  const wrap = document.getElementById('stripe-fees-reconcile-wrap');
+  if (!rows.length) { showToast('Run "Fetch fees" first.', 'warn'); return; }
+  if (wrap) { wrap.style.display = ''; wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px;">Computing reconciliation…</div>'; }
+  const currentYear = new Date().getFullYear();
+
+  // Stripe gross customer payments per year, converted to CAD.
+  const stripeByYear = {};
+  for (const r of rows) {
+    const cur = r.cur.toUpperCase();
+    const grossMajor = _stripeMinorToMajor(r.salesGrossMinor, r.cur);
+    if (!(grossMajor > 0)) continue;
+    let rate = 1;
+    if (cur !== 'CAD') {
+      const fxDate = r.year < currentYear ? `${r.year}-12-31` : today();
+      try { const h = await fetchHistoricalRate(cur, 'CAD', fxDate); rate = h?.rate || 0; } catch (_) { /* fall through */ }
+      if (!rate) { try { const lr = await fetchLiveRate(cur, 'CAD'); rate = lr?.rate || 0; } catch (_) { /* fall through */ } }
+      if (!rate) rate = _fxRateCache[`${cur}_CAD`] || 1;
+    }
+    stripeByYear[r.year] = (stripeByYear[r.year] || 0) + grossMajor * rate;
+  }
+
+  // Recorded sales per year from the app's per-book history.
+  const salesByYear = {};
+  for (const book of Object.values(BOOKS)) {
+    const s = states[book.id] || (typeof defaultState === 'function' ? defaultState(book) : { hist: [] });
+    for (const h of (s.hist || [])) {
+      if (h.voided || h.gratuity || !h.date) continue;
+      const y = Number(String(h.date).slice(0, 4));
+      if (!y) continue;
+      salesByYear[y] = (salesByYear[y] || 0) + (h.qty || 0) * (h.price || 0);
+    }
+  }
+
+  const years = [...new Set([...Object.keys(stripeByYear), ...Object.keys(salesByYear)].map(Number))].sort((a, b) => b - a);
+  if (!years.length) { if (wrap) wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px;">No data to reconcile.</div>'; return; }
+
+  const fmtCad = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const bodyRows = years.map(y => {
+    const stripe = stripeByYear[y] || 0;
+    const recorded = salesByYear[y] || 0;
+    const diff = recorded - stripe;
+    const aligned = Math.abs(diff) < 0.01 || (stripe > 0 && Math.abs(diff) / stripe < 0.02); // within 2%
+    const diffColor = aligned ? 'var(--green)' : 'var(--amber)';
+    return `<tr>
+      <td>${y}</td>
+      <td class="r" style="font-family:'DM Mono',monospace;">${fmtCad(stripe)}</td>
+      <td class="r" style="font-family:'DM Mono',monospace;">${fmtCad(recorded)}</td>
+      <td class="r" style="font-family:'DM Mono',monospace;color:${diffColor};">${diff >= 0 ? '+' : ''}${fmtCad(diff)}</td>
+      <td class="r">${aligned ? '<span class="pill green" style="font-size:10px;">✓ Aligned</span>' : '<span class="pill" style="font-size:10px;background:var(--amber);color:#3a2a05;">Review</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  if (wrap) wrap.innerHTML = `
+    <div class="card" style="margin-bottom:1rem;padding:1.1rem 1.3rem;">
+      <div style="font-family:'Playfair Display',serif;font-size:16px;margin-bottom:8px;">Reconciliation — Stripe vs recorded sales</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Year</th><th class="r">Stripe collected (CAD)</th><th class="r">Recorded sales (CAD)</th><th class="r">Difference</th><th class="r">Status</th></tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:8px;">
+        <strong>Stripe collected</strong> = gross customer payments (charge/payment) converted to CAD at the year-end rate.
+        <strong>Recorded sales</strong> = qty × price from your book history, summed as entered.
+        Differences can be legitimate (cash/PayPal sales, refunds, Stripe payments not yet logged as sales) — this is a directional check, not an exact tie-out.
+      </div>
+    </div>`;
 }
 
 async function clearStoredStripeKey() {
@@ -9206,7 +9442,7 @@ function downloadStripeFeesAuditCSV() {
 
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
-  fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey,
+  fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
