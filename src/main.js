@@ -7577,6 +7577,35 @@ async function importShippoShippingFromApi() {
   const fetchedIds = new Set();
   const pendingExpenses = [];
 
+  // The list endpoint returns `rate` as a bare object-ID string (no cost on the
+  // transaction itself), so we request expand[]=rate to get amount/currency
+  // inline. If a row still arrives unexpanded, fall back to fetching the rate.
+  const _rateCostCache = new Map();
+  async function getTxCost(tx) {
+    if (tx.rate && typeof tx.rate === 'object') {
+      return { amount: parseFloat(tx.rate.amount), currency: String(tx.rate.currency || 'USD').toUpperCase() };
+    }
+    if (tx.rate_amount != null || tx.amount != null) {
+      return { amount: parseFloat(tx.rate_amount != null ? tx.rate_amount : tx.amount),
+               currency: String(tx.rate_currency || tx.currency || 'USD').toUpperCase() };
+    }
+    if (tx.rate && typeof tx.rate === 'string') {
+      if (_rateCostCache.has(tx.rate)) return _rateCostCache.get(tx.rate);
+      try {
+        const r = await fetch(`https://api.goshippo.com/rates/${tx.rate}`, {
+          headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (r.ok) {
+          const rate = await r.json();
+          const out = { amount: parseFloat(rate.amount), currency: String(rate.currency || 'USD').toUpperCase() };
+          _rateCostCache.set(tx.rate, out);
+          return out;
+        }
+      } catch (_) { /* fall through to NaN */ }
+    }
+    return { amount: NaN, currency: 'USD' };
+  }
+
   let imported = 0;
   let skipped = 0;
   let totalUsd = 0;
@@ -7590,7 +7619,7 @@ async function importShippoShippingFromApi() {
       //   tracking_status, page, results). We intentionally avoid status
       //   query filters here so valid paid labels in non-default states
       //   still appear and can be imported.
-      const url = `https://api.goshippo.com/transactions/?page=${page}&results=100`;
+      const url = `https://api.goshippo.com/transactions/?page=${page}&results=100&expand[]=rate`;
       const resp = await fetch(url, {
         headers: {
           Authorization: `ShippoToken ${token}`,
@@ -7606,23 +7635,29 @@ async function importShippoShippingFromApi() {
       for (const tx of rows) {
         const status = String(tx?.status || '').toUpperCase();
         if (!tx || status === 'REFUNDED' || status === 'ERROR' || status === 'INVALID') { skipped++; continue; }
-        const amount = parseFloat(tx.rate_amount || tx.amount || 0);
-        if (!Number.isFinite(amount) || amount <= 0) { skipped++; continue; }
-        const currency = String(tx.rate_currency || tx.currency || 'USD').toUpperCase();
         const txId = String(tx.object_id || '').trim();
         if (!txId) { skipped++; continue; } // require stable ID so repeat imports are idempotent
         const ref = `shippo:${txId}`;
-        if (fetchedIds.has(txId)) { skipped++; continue; }
-        if (importedIds.has(txId)) { skipped++; continue; }
-        if (existingRefs.has(ref)) { skipped++; continue; }
+        // Dedupe before the (possibly networked) cost lookup so re-syncs stay cheap.
+        if (fetchedIds.has(txId) || importedIds.has(txId) || existingRefs.has(ref)) { skipped++; continue; }
+
+        const { amount, currency } = await getTxCost(tx);
+        if (!Number.isFinite(amount) || amount <= 0) { skipped++; continue; }
+
         existingRefs.add(ref);
         importedIds.add(txId);
         fetchedIds.add(txId);
 
         const dateRaw = tx.object_created || tx.object_updated || '';
         const date = /^\d{4}-\d{2}-\d{2}/.test(dateRaw) ? dateRaw.slice(0, 10) : today();
-        const fxKey = `${currency}_CAD`;
-        const fxRate = _fxRateCache[fxKey] || 1;
+
+        // Convert to CAD for the master ledger. Pull a live rate when the pair
+        // isn't already cached, mirroring the email-receipt import path.
+        let fxRate = currency === 'CAD' ? 1 : (_fxRateCache[`${currency}_CAD`] || 0);
+        if (!fxRate) {
+          try { const r = await fetchLiveRate(currency, 'CAD'); fxRate = r?.rate || 0; } catch (_) { /* fall through */ }
+        }
+        if (!fxRate) fxRate = 1; // last resort so the cost is still recorded
 
         pendingExpenses.push({
           id: Date.now() + imported + 1,
@@ -7630,6 +7665,8 @@ async function importShippoShippingFromApi() {
           cat: 'Shipping & Postage',
           currency,
           amount,
+          origCurrency: currency,
+          origAmount: amount,
           fxRate,
           baseAmount: amount * fxRate,
           date,
