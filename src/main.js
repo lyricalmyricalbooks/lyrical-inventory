@@ -2340,9 +2340,29 @@ async function fetchLiveRate(from, to) {
       }
     }
     return { error: `API ${res.status}`, context: `${from}->${to}` };
-  } catch(e) { 
+  } catch(e) {
     return { error: 'network', details: e.message || String(e), context: `${from}->${to}` };
   }
+}
+
+// Exchange rate as of a specific date (YYYY-MM-DD), for accurate bookkeeping on
+// historical expenses. Frankfurter returns the nearest prior business day for
+// weekends/holidays. Cached per pair+date.
+async function fetchHistoricalRate(from, to, date) {
+  if (from === to) return { rate: 1 };
+  if (!from || !to || from === 'OTHER' || to === 'OTHER') return { error: 'manual' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return { error: 'bad-date' };
+  const key = `${from}_${to}@${date}`;
+  if (_fxRateCache[key]) return { rate: _fxRateCache[key] };
+  try {
+    const res = await fetch(`https://api.frankfurter.app/${date}?from=${from}&to=${to}`);
+    if (res.ok) {
+      const json = await res.json();
+      const rate = json?.rates?.[to];
+      if (rate) { _fxRateCache[key] = rate; return { rate }; }
+    }
+  } catch (e) { /* fall through to caller's live-rate fallback */ }
+  return { error: 'historical-unavailable', context: `${from}->${to}@${date}` };
 }
 
 let _manualFxRate = null;
@@ -6980,6 +7000,15 @@ function renderTaxCenter() {
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
   if($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
   if($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
+  const _shippoStatusEl = $('tc-shippo-status');
+  if (_shippoStatusEl && TAX_CENTER.settings?.shippoLastImportAt) {
+    const last = new Date(TAX_CENTER.settings.shippoLastImportAt);
+    if (!isNaN(last)) {
+      const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+      const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+      _shippoStatusEl.textContent = `Last synced ${ago} (${last.toISOString().slice(0, 10)}). Imports non-refunded transaction rates as Shipping & Postage expenses.`;
+    }
+  }
 
   // Update receipt folder display
   loadReceiptFolderHandle().then(async handle => {
@@ -7606,6 +7635,24 @@ async function importShippoShippingFromApi() {
     return { amount: NaN, currency: 'USD' };
   }
 
+  // Shippo label URLs can expire, so try to save a permanent copy to the local
+  // receipts folder. Best-effort: returns a local:// path on success, otherwise
+  // null so the caller keeps the original URL. May fail on CORS or no folder.
+  async function saveLabelLocally(labelUrl, txId) {
+    if (!labelUrl || typeof saveReceiptToLocalFile !== 'function') return null;
+    try {
+      const r = await fetch(labelUrl);
+      if (!r.ok) return null;
+      const blob = await r.blob();
+      const ext = (blob.type && blob.type.includes('png')) ? 'png'
+        : (/\.png(\?|$)/i.test(labelUrl) ? 'png' : 'pdf');
+      const file = new File([blob], `shippo_${txId}.${ext}`, { type: blob.type || 'application/pdf' });
+      return await saveReceiptToLocalFile(file, 'Shippo');
+    } catch (_) {
+      return null;
+    }
+  }
+
   let imported = 0;
   let skipped = 0;
   let alreadyImported = 0; // already in the ledger from a prior run (deduped)
@@ -7654,13 +7701,18 @@ async function importShippoShippingFromApi() {
         const dateRaw = tx.object_created || tx.object_updated || '';
         const date = /^\d{4}-\d{2}-\d{2}/.test(dateRaw) ? dateRaw.slice(0, 10) : today();
 
-        // Convert to CAD for the master ledger. Pull a live rate when the pair
-        // isn't already cached, mirroring the email-receipt import path.
-        let fxRate = currency === 'CAD' ? 1 : (_fxRateCache[`${currency}_CAD`] || 0);
-        if (!fxRate) {
-          try { const r = await fetchLiveRate(currency, 'CAD'); fxRate = r?.rate || 0; } catch (_) { /* fall through */ }
+        // Convert to CAD for the master ledger using the rate as of the label's
+        // date (what the CRA expects), falling back to live then cached rates.
+        let fxRate = currency === 'CAD' ? 1 : 0;
+        if (currency !== 'CAD') {
+          try { const h = await fetchHistoricalRate(currency, 'CAD', date); fxRate = h?.rate || 0; } catch (_) { /* fall through */ }
+          if (!fxRate) { try { const r = await fetchLiveRate(currency, 'CAD'); fxRate = r?.rate || 0; } catch (_) { /* fall through */ } }
+          if (!fxRate) fxRate = _fxRateCache[`${currency}_CAD`] || 0;
         }
         if (!fxRate) fxRate = 1; // last resort so the cost is still recorded
+
+        const labelUrl = tx.label_url || '';
+        const localReceipt = labelUrl ? await saveLabelLocally(labelUrl, txId) : null;
 
         pendingExpenses.push({
           id: Date.now() + imported + 1,
@@ -7674,7 +7726,7 @@ async function importShippoShippingFromApi() {
           baseAmount: amount * fxRate,
           date,
           ref,
-          receipt: tx.label_url || '',
+          receipt: localReceipt || labelUrl,
           trip: ''
         });
         imported++;
@@ -7724,7 +7776,12 @@ async function importShippoShippingFromApi() {
     if (statusEl) statusEl.textContent = imported
       ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}`
       : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}`;
-    showToast(imported ? `✓ Imported ${imported} new Shippo expenses` : 'No new Shippo expenses to import', imported ? 'ok' : 'warn');
+    showToast(
+      imported
+        ? `✓ Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
+        : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import'),
+      imported ? 'ok' : 'warn'
+    );
   } catch (e) {
     console.error(e);
     if (statusEl) statusEl.textContent = `Error: ${e.message || e}`;
