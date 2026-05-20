@@ -6979,6 +6979,7 @@ function renderTaxCenter() {
   // Initialize AI key input UI
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
   if($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
+  if($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
 
   // Update receipt folder display
   loadReceiptFolderHandle().then(async handle => {
@@ -7545,6 +7546,109 @@ async function scanReceiptWithAI() {
         showToast(`⚠ AI extraction failed: ${e.message}`, 'err');
     }
     btn.textContent = oldText; btn.disabled = false;
+}
+
+
+async function importShippoShippingFromApi() {
+  const keyEl = $('tc-shippo-key');
+  const statusEl = $('tc-shippo-status');
+  const btn = $('tc-shippo-btn');
+  const token = (keyEl?.value || '').trim();
+  if (!token) { showToast('⚠ Enter your Shippo API token first', 'warn'); return; }
+
+  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+  if (TAX_CENTER.settings.shippoKey !== token) {
+    TAX_CENTER.settings.shippoKey = token;
+    saveTaxCenter().catch(e => console.warn('Shippo key save failed', e));
+  }
+
+  btn.disabled = true;
+  if (statusEl) statusEl.textContent = 'Fetching Shippo transactions…';
+
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  const existingRefs = new Set((TAX_CENTER.businessExpenses || [])
+    .filter(e => e && e.ref && String(e.ref).startsWith('shippo:'))
+    .map(e => String(e.ref)));
+  const importedIds = new Set(Array.isArray(TAX_CENTER.settings.shippoImportedObjectIds)
+    ? TAX_CENTER.settings.shippoImportedObjectIds.map(String)
+    : []);
+
+  let imported = 0;
+  let skipped = 0;
+  let totalUsd = 0;
+  let page = 1;
+  let hasMore = true;
+
+  try {
+    while (hasMore && page <= 50) {
+      const url = `https://api.goshippo.com/transactions/?page=${page}&results=100&object_state=VALID`;
+      const resp = await fetch(url, {
+        headers: {
+          Authorization: `ShippoToken ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => '');
+        throw new Error(`Shippo API error ${resp.status}${txt ? `: ${txt.slice(0,140)}` : ''}`);
+      }
+      const json = await resp.json();
+      const rows = json.results || [];
+      for (const tx of rows) {
+        if (!tx || tx.status === 'REFUNDED') { skipped++; continue; }
+        const amount = parseFloat(tx.rate_amount || tx.amount || 0);
+        if (!Number.isFinite(amount) || amount <= 0) { skipped++; continue; }
+        const currency = String(tx.rate_currency || tx.currency || 'USD').toUpperCase();
+        const txId = String(tx.object_id || '').trim();
+        if (!txId) { skipped++; continue; } // require stable ID so repeat imports are idempotent
+        const ref = `shippo:${txId}`;
+        if (importedIds.has(txId)) { skipped++; continue; }
+        if (existingRefs.has(ref)) { skipped++; continue; }
+        existingRefs.add(ref);
+        importedIds.add(txId);
+
+        const dateRaw = tx.object_created || tx.object_updated || '';
+        const date = /^\d{4}-\d{2}-\d{2}/.test(dateRaw) ? dateRaw.slice(0, 10) : today();
+        const fxKey = `${currency}_CAD`;
+        const fxRate = _fxRateCache[fxKey] || 1;
+
+        TAX_CENTER.businessExpenses.unshift({
+          id: Date.now() + imported + 1,
+          desc: `Shippo shipping label${tx.tracking_number ? ` #${tx.tracking_number}` : ''}`,
+          cat: 'Shipping & Postage',
+          currency,
+          amount,
+          fxRate,
+          baseAmount: amount * fxRate,
+          date,
+          ref,
+          receipt: tx.label_url || '',
+          trip: ''
+        });
+        imported++;
+        if (currency === 'USD') totalUsd += amount;
+      }
+
+      hasMore = Boolean(json.next);
+      page += 1;
+      if (statusEl) statusEl.textContent = `Fetched ${imported + skipped} transactions…`; 
+    }
+
+    TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
+    TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
+    await saveTaxCenter();
+    renderTaxCenter();
+    if (statusEl) statusEl.textContent = imported
+      ? `Imported ${imported} Shippo transactions (${skipped} skipped).${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}`
+      : `No new Shippo transactions imported (${skipped} skipped).`;
+    showToast(imported ? `✓ Imported ${imported} Shippo expenses` : 'No new Shippo expenses to import', imported ? 'ok' : 'warn');
+  } catch (e) {
+    console.error(e);
+    if (statusEl) statusEl.textContent = `Error: ${e.message || e}`;
+    showToast('⚠ Shippo import failed', 'err');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function submitTaxExpense() {
@@ -8978,7 +9082,7 @@ Object.assign(window, {
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
-  submitTaxExpense, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
+  submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
