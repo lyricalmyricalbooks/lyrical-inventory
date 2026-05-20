@@ -2905,6 +2905,7 @@ const EXPENSE_CATEGORIES = [
   'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
   'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
   'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Professional Services',
+  'Sales Processing Fees',
   'Books, Research & Reference', 'Events & Exhibitions', 'Other'
 ];
 
@@ -6999,6 +7000,15 @@ function renderTaxCenter() {
   // Initialize AI key input UI
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
   if($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
+  const _stripeStatusEl = $('stripe-fees-status');
+  if (_stripeStatusEl && !_stripeStatusEl.textContent && TAX_CENTER.settings?.stripeFeesLastImportAt) {
+    const last = new Date(TAX_CENTER.settings.stripeFeesLastImportAt);
+    if (!isNaN(last)) {
+      const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+      const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+      _stripeStatusEl.textContent = `Fees last inserted into ledger ${ago} (${last.toISOString().slice(0, 10)}). Fetch again to refresh.`;
+    }
+  }
   if($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
   const _shippoStatusEl = $('tc-shippo-status');
   if (_shippoStatusEl && TAX_CENTER.settings?.shippoLastImportAt) {
@@ -9028,6 +9038,25 @@ async function fetchStripeFeesByYear() {
 
     window._stripeFeesAudit = allTxns; // available for CSV download / console inspection
 
+    // Per year+currency aggregate of processing fees on customer payments, for
+    // inserting into the master ledger (see insertStripeFeesIntoLedger).
+    const SALES_FEE_TYPES = new Set(['charge', 'payment']);
+    const ledgerData = [];
+    for (const yr of Object.keys(data)) {
+      for (const cur of Object.keys(data[yr])) {
+        let salesFeeMinor = 0, salesCount = 0, totalFeeMinor = 0;
+        for (const t of Object.keys(data[yr][cur])) {
+          totalFeeMinor += data[yr][cur][t].fee;
+          if (SALES_FEE_TYPES.has(t)) {
+            salesFeeMinor += data[yr][cur][t].fee;
+            salesCount += data[yr][cur][t].count;
+          }
+        }
+        if (salesFeeMinor > 0) ledgerData.push({ year: Number(yr), cur, salesFeeMinor, salesCount, totalFeeMinor });
+      }
+    }
+    window._stripeFeesLedgerData = ledgerData;
+
     const years = Object.keys(data).sort((a, b) => Number(b) - Number(a)); // newest first
     const cards = [];
     const SALES_TYPES = new Set(['charge', 'payment']); // gross sales (positive amount, has fee)
@@ -9150,6 +9179,8 @@ async function fetchStripeFeesByYear() {
       <br><span style="font-size:11px;color:var(--text3);">Verify against your Stripe Dashboard: <a href="https://dashboard.stripe.com/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance</a> · <a href="https://dashboard.stripe.com/reports/balance" target="_blank" rel="noopener" style="color:var(--gold);">Balance reports</a> (set the date range to a calendar year). Click "Download audit CSV" below for the raw per-transaction data.</span>`;
     document.getElementById('stripe-fees-download-btn').style.display = '';
     document.getElementById('stripe-fees-clear-btn').style.display = '';
+    const insertBtn = document.getElementById('stripe-fees-insert-btn');
+    if (insertBtn) insertBtn.style.display = window._stripeFeesLedgerData.length ? '' : 'none';
   } catch (e) {
     const msg = String(e.message || e);
     let hint = '';
@@ -9160,6 +9191,90 @@ async function fetchStripeFeesByYear() {
   } finally {
     btn.disabled = false;
   }
+}
+
+// Insert Stripe processing fees on sales into the master ledger, one entry per
+// year+currency, categorized as "Sales Processing Fees" and converted to CAD at
+// the year-end rate. Idempotent: re-running upserts by ref "stripe-fees:<yr>:<cur>"
+// so the current year's running total is refreshed without duplicating.
+async function insertStripeFeesIntoLedger() {
+  const rows = window._stripeFeesLedgerData || [];
+  if (!rows.length) { showToast('Run "Fetch fees" first.', 'warn'); return; }
+
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+  const currentYear = new Date().getFullYear();
+
+  const planned = [];
+  for (const r of rows) {
+    const amount = _stripeMinorToMajor(r.salesFeeMinor, r.cur);
+    if (!(amount > 0)) continue;
+    const cur = r.cur.toUpperCase();
+    // Past years are final at Dec 31; the current year is still accruing, so use today.
+    const fxDate = r.year < currentYear ? `${r.year}-12-31` : today();
+    let fxRate = cur === 'CAD' ? 1 : 0;
+    if (cur !== 'CAD') {
+      try { const h = await fetchHistoricalRate(cur, 'CAD', fxDate); fxRate = h?.rate || 0; } catch (_) { /* fall through */ }
+      if (!fxRate) { try { const lr = await fetchLiveRate(cur, 'CAD'); fxRate = lr?.rate || 0; } catch (_) { /* fall through */ } }
+      if (!fxRate) fxRate = _fxRateCache[`${cur}_CAD`] || 0;
+    }
+    if (!fxRate) fxRate = 1;
+    planned.push({
+      year: r.year,
+      ref: `stripe-fees:${r.year}:${cur}`,
+      desc: `Stripe processing fees on sales ${r.year}${r.salesCount ? ` (${r.salesCount} payment${r.salesCount === 1 ? '' : 's'})` : ''}`,
+      cat: 'Sales Processing Fees',
+      currency: cur,
+      amount,
+      origCurrency: cur,
+      origAmount: amount,
+      fxRate,
+      baseAmount: amount * fxRate,
+      date: r.year < currentYear ? `${r.year}-12-31` : today(),
+    });
+  }
+  if (!planned.length) { showToast('No Stripe sales fees to insert.', 'warn'); return; }
+
+  const byRef = new Map((TAX_CENTER.businessExpenses || [])
+    .filter(e => e && typeof e.ref === 'string' && e.ref.startsWith('stripe-fees:'))
+    .map(e => [e.ref, e]));
+  const newCount = planned.filter(p => !byRef.has(p.ref)).length;
+  const updateCount = planned.length - newCount;
+  const totalCad = planned.reduce((s, p) => s + (p.baseAmount || 0), 0);
+  const lines = planned.sort((a, b) => a.ref.localeCompare(b.ref))
+    .map(p => `  • ${p.year || p.ref}: ${p.amount.toFixed(2)} ${p.currency} → ${p.baseAmount.toFixed(2)} CAD`).join('\n');
+
+  const accept = confirm(
+    `Insert Stripe processing fees into your master ledger?\n\n` +
+    `${newCount} new${updateCount ? `, ${updateCount} updated (current/known years refreshed)` : ''}\n` +
+    `Total: ${totalCad.toFixed(2)} CAD\n\n${lines}\n\n` +
+    `Nothing is written until you click OK.`
+  );
+  if (!accept) { showToast('Stripe fee insertion cancelled', 'warn'); return; }
+
+  let inserted = 0, updated = 0;
+  for (const p of planned) {
+    const existing = byRef.get(p.ref);
+    if (existing) {
+      Object.assign(existing, {
+        desc: p.desc, cat: p.cat, currency: p.currency, amount: p.amount,
+        origCurrency: p.origCurrency, origAmount: p.origAmount,
+        fxRate: p.fxRate, baseAmount: p.baseAmount, date: p.date,
+      });
+      updated++;
+    } else {
+      const { year: _y, ...rest } = p;
+      TAX_CENTER.businessExpenses.unshift({ id: Date.now() + inserted + 1, ...rest, receipt: '', trip: '' });
+      inserted++;
+    }
+  }
+
+  TAX_CENTER.settings.stripeFeesLastImportAt = new Date().toISOString();
+  await saveTaxCenter();
+  renderTaxCenter();
+  showToast(`✓ Stripe fees: ${inserted} added${updated ? `, ${updated} updated` : ''}`, 'ok');
+  const statusEl = document.getElementById('stripe-fees-status');
+  if (statusEl) statusEl.innerHTML += `<br><span style="color:var(--green);">Ledger updated: ${inserted} added${updated ? `, ${updated} updated` : ''} (${totalCad.toFixed(2)} CAD).</span>`;
 }
 
 async function clearStoredStripeKey() {
@@ -9206,7 +9321,7 @@ function downloadStripeFeesAuditCSV() {
 
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
-  fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey,
+  fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger,
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
