@@ -7585,9 +7585,11 @@ async function importShippoShippingFromApi() {
 
   try {
     while (hasMore && page <= 200) {
-      // Do not pass object_state filter here: Shippo can return active purchases in
-      // other states depending on account/version, which caused false "no new"
-      // imports for valid paid labels.
+      // Shippo list transactions endpoint:
+      //   GET /transactions with optional filters (rate, object_status,
+      //   tracking_status, page, results). We intentionally avoid status
+      //   query filters here so valid paid labels in non-default states
+      //   still appear and can be imported.
       const url = `https://api.goshippo.com/transactions/?page=${page}&results=100`;
       const resp = await fetch(url, {
         headers: {
