@@ -4721,7 +4721,7 @@ function renderInvoicePaperHTML(inv){
   const testBadge = (dyn && inv.stripe.livemode === false) ? `<span style="display:inline-block;margin-left:8px;background:#fde6e0;color:#a13a1b;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:3px 8px;border-radius:99px;">Test mode</span>` : '';
   const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#0e0c0a;color:#f0c060;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:99px;margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge?' ':''}${testBadge}</div>` : '';
   const payCopy = dyn
-    ? `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> via Stripe Checkout. The amount is locked to this invoice — no risk of paying the wrong quarter.`
+    ? `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> via Stripe Checkout.`
     : `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> securely, or scan the QR with your phone.`;
 
   const payBlock = payUrl ? `
@@ -4746,7 +4746,6 @@ function renderInvoicePaperHTML(inv){
     <header class="inv-head">
       <div class="inv-brand">
         <h1>${escapeHTML(settings.name || 'Lyricalmyrical Books')}</h1>
-        <div class="inv-sub">${escapeHTML(book.title)}${book.author?' — '+escapeHTML(book.author):''}</div>
         <div class="inv-addr">${escapeHTML(settings.addr || '')}${settings.email?'\n'+escapeHTML(settings.email):''}${settings.web?'\n'+escapeHTML(settings.web):''}${settings.vat?'\nVAT/Tax ID: '+escapeHTML(settings.vat):''}</div>
       </div>
       <div class="inv-id">
