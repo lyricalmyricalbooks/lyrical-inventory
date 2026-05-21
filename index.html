@@ -1572,6 +1572,15 @@ function json_(obj) {
   <div class="modal-footer"><button class="btn" onclick="closeM('add-store')">Cancel</button><button class="btn gold" onclick="addStore()">Add store</button></div>
 </div></div>
 
+<div class="overlay" id="m-edit-store" style="display:none;"><div class="modal">
+  <div class="modal-title">Edit consignment store</div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Store name *</label><input id="es-name" placeholder="e.g. Libreria Feltrinelli"></div><div class="form-group"><label>Contact person</label><input id="es-contact" placeholder="e.g. Maria Rossi"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Email</label><input id="es-email" type="email" placeholder="store@email.com"></div><div class="form-group"><label>City</label><input id="es-city" placeholder="e.g. Milan"></div></div>
+  <div class="form-group" style="margin-bottom:12px;"><label>Commission rate (%)</label><input id="es-rate" type="number" value="40" min="0" max="100"></div>
+  <div class="form-group"><label>Notes</label><textarea id="es-notes" placeholder="Special terms, delivery info…"></textarea></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('edit-store')">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
+</div></div>
+
 <div class="overlay" id="m-send-books" style="display:none;"><div class="modal">
   <div class="modal-title">Send books to <span id="send-sname"></span></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty to send</label><input id="send-qty" type="number" value="10" min="1"></div><div class="form-group"><label>Date sent</label><input id="send-date" type="date"></div></div>

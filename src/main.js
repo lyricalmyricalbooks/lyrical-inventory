@@ -4072,10 +4072,17 @@ function renderStores(){
   if(!s.stores.length){el.innerHTML='<div class="empty-state"><div class="e-icon">🏪</div>No stores yet. Add your first consignment account.</div>';return;}
   el.innerHTML=s.stores.map(st=>{
     const sp=st.outstanding===0&&st.sent>0?'<span class="pill gray">Settled</span>':st.amountOwed>0?'<span class="pill amber">Payment due</span>':'<span class="pill green">Active</span>';
-    return`<div class="store-card"><div class="store-head"><div><div class="store-name">${st.name}</div><div class="store-meta">${[st.city,st.contact,st.email].filter(Boolean).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div><div class="sk-v ${st.outstanding>0?'warn':''}">${st.outstanding}</div></div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed>0?'warn':''}">${st.amountOwed>0?fmt(st.amountOwed,cur):'—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${st.id})">Send books</button><button class="btn sm ink" onclick="openSale(${st.id})" ${!st.outstanding?'disabled':''}>Record sale</button><button class="btn sm" onclick="openRet(${st.id})" ${!st.outstanding?'disabled':''}>Return</button><button class="btn sm danger-btn" onclick="removeStore(${st.id})">Remove</button></div></div>`;
+    return`<div class="store-card"><div class="store-head"><div><div class="store-name">${st.name}</div><div class="store-meta">${[st.city,st.contact,st.email].filter(Boolean).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div><div class="sk-v ${st.outstanding>0?'warn':''}">${st.outstanding}</div></div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed>0?'warn':''}">${st.amountOwed>0?fmt(st.amountOwed,cur):'—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${st.id})">Send books</button><button class="btn sm ink" onclick="openSale(${st.id})" ${!st.outstanding?'disabled':''}>Record sale</button><button class="btn sm" onclick="openRet(${st.id})" ${!st.outstanding?'disabled':''}>Return</button><button class="btn sm" onclick="openEditStore(${st.id})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${st.id})">Remove</button></div></div>`;
   }).join('');
 }
 function removeStore(id){if(!confirm('Remove store?'))return;getState().stores=getState().stores.filter(s=>s.id!==id);renderStores();updateDash();saveState(activeBook);}
+function openEditStore(id){activeId=id;const st=storeById(id);if(!st)return;$('es-name').value=st.name;$('es-contact').value=st.contact||'';$('es-email').value=st.email||'';$('es-city').value=st.city||'';$('es-rate').value=st.rate;$('es-notes').value=st.notes||'';openM('edit-store');}
+function confirmEditStore(){
+  const st=storeById(activeId);if(!st)return;
+  const name=$('es-name').value.trim();if(!name)return;
+  st.name=name;st.contact=$('es-contact').value.trim();st.email=$('es-email').value.trim();st.city=$('es-city').value.trim();st.rate=parseFloat($('es-rate').value)||st.rate;st.notes=$('es-notes').value.trim();
+  closeM('edit-store');renderStores();updateDash();saveState(activeBook);showToast('✓ Store updated');
+}
 function openSend(id){activeId=id;const st=storeById(id);$('send-sname').textContent=st.name;$('send-rate').value=st.rate;openM('send-books');}
 function confirmSend(){
   const s=getState(),book=getBook(),st=storeById(activeId),qty=parseInt($('send-qty').value)||0,date=$('send-date').value,rate=parseFloat($('send-rate').value)||st.rate,notes=$('send-notes').value.trim();
@@ -9447,7 +9454,7 @@ Object.assign(window, {
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
 
-  submitGratuity, openM, closeM, addStore, openSend, confirmSend, openSale, confirmSale,
+  submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
