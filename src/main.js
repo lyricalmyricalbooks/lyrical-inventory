@@ -4064,8 +4064,8 @@ window.backfillGratuityExpenses = function() {
 function storeById(id){return getState().stores.find(s=>s.id===id);}
 function addStore(){
   const name=$('ns-name').value.trim();if(!name)return;
-  getState().stores.push({id:Date.now(),name,contact:$('ns-contact').value.trim(),email:$('ns-email').value.trim(),city:$('ns-city').value.trim(),rate:parseFloat($('ns-rate').value)||40,notes:$('ns-notes').value.trim(),sent:0,sold:0,returned:0,outstanding:0,amountOwed:0});
-  closeM('add-store');['ns-name','ns-contact','ns-email','ns-city','ns-notes'].forEach(id=>$(id).value='');$('ns-rate').value='40';renderStores();updateDash();saveState(activeBook);showToast('✓ Store added');
+  getState().stores.push({id:Date.now(),name,contact:$('ns-contact').value.trim(),email:$('ns-email').value.trim(),phone:$('ns-phone').value.trim(),address:$('ns-address').value.trim(),city:$('ns-city').value.trim(),region:$('ns-region').value.trim(),postal:$('ns-postal').value.trim(),country:$('ns-country').value.trim(),website:$('ns-website').value.trim(),terms:$('ns-terms').value.trim(),rate:parseFloat($('ns-rate').value)||40,notes:$('ns-notes').value.trim(),sent:0,sold:0,returned:0,outstanding:0,amountOwed:0});
+  closeM('add-store');['ns-name','ns-contact','ns-email','ns-phone','ns-address','ns-city','ns-region','ns-postal','ns-country','ns-website','ns-terms','ns-notes'].forEach(id=>$(id).value='');$('ns-rate').value='40';renderStores();updateDash();saveState(activeBook);showToast('✓ Store added');
 }
 function renderStores(){
   const s=getState(),el=$('stores-list'),book=getBook(),cur=book.currency;
@@ -4076,11 +4076,11 @@ function renderStores(){
   }).join('');
 }
 function removeStore(id){if(!confirm('Remove store?'))return;getState().stores=getState().stores.filter(s=>s.id!==id);renderStores();updateDash();saveState(activeBook);}
-function openEditStore(id){activeId=id;const st=storeById(id);if(!st)return;$('es-name').value=st.name;$('es-contact').value=st.contact||'';$('es-email').value=st.email||'';$('es-city').value=st.city||'';$('es-rate').value=st.rate;$('es-notes').value=st.notes||'';openM('edit-store');}
+function openEditStore(id){activeId=id;const st=storeById(id);if(!st)return;$('es-name').value=st.name;$('es-contact').value=st.contact||'';$('es-email').value=st.email||'';$('es-phone').value=st.phone||'';$('es-address').value=st.address||'';$('es-city').value=st.city||'';$('es-region').value=st.region||'';$('es-postal').value=st.postal||'';$('es-country').value=st.country||'';$('es-website').value=st.website||'';$('es-terms').value=st.terms||'';$('es-rate').value=st.rate;$('es-notes').value=st.notes||'';openM('edit-store');}
 function confirmEditStore(){
   const st=storeById(activeId);if(!st)return;
   const name=$('es-name').value.trim();if(!name)return;
-  st.name=name;st.contact=$('es-contact').value.trim();st.email=$('es-email').value.trim();st.city=$('es-city').value.trim();st.rate=parseFloat($('es-rate').value)||st.rate;st.notes=$('es-notes').value.trim();
+  st.name=name;st.contact=$('es-contact').value.trim();st.email=$('es-email').value.trim();st.phone=$('es-phone').value.trim();st.address=$('es-address').value.trim();st.city=$('es-city').value.trim();st.region=$('es-region').value.trim();st.postal=$('es-postal').value.trim();st.country=$('es-country').value.trim();st.website=$('es-website').value.trim();st.terms=$('es-terms').value.trim();st.rate=parseFloat($('es-rate').value)||st.rate;st.notes=$('es-notes').value.trim();
   closeM('edit-store');renderStores();updateDash();saveState(activeBook);showToast('✓ Store updated');
 }
 function openSend(id){activeId=id;const st=storeById(id);$('send-sname').textContent=st.name;$('send-rate').value=st.rate;openM('send-books');}
