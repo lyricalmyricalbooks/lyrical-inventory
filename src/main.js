@@ -4530,7 +4530,7 @@ function saveInvoice(status){
 
   const payload = {
     id: invoiceCtx.editingId || ('inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7)),
-    num, storeId, storeName: store.name, storeEmail: store.email||'', storeCity: store.city||'', storeContact: store.contact||'',
+    num, storeId, storeName: store.name, storeEmail: store.email||'', storeCity: store.city||'', storeContact: store.contact||'', storePhone: store.phone||'', storeAddress: store.address||'', storeRegion: store.region||'', storePostal: store.postal||'', storeCountry: store.country||'',
     date, dueDate,
     items: invoiceCtx.items.map(it => ({ description: it.description||'', qty: parseFloat(it.qty)||0, unitPrice: parseFloat(it.unitPrice)||0, _ledgerId: it._ledgerId || null })),
     subtotal: totals.subtotal,
@@ -4766,7 +4766,7 @@ function renderInvoicePaperHTML(inv){
       <div>
         <label>Billed to</label>
         <strong>${escapeHTML(inv.storeName||'—')}</strong>
-        <div class="inv-meta-sub">${[inv.storeContact, inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHTML).join('\n')}</div>
+        <div class="inv-meta-sub">${[inv.storeContact, inv.storeEmail, inv.storePhone, inv.storeAddress, [inv.storeCity, inv.storeRegion, inv.storePostal].filter(Boolean).join(', '), inv.storeCountry].filter(Boolean).map(escapeHTML).join('\n')}</div>
       </div>
       <div>
         <label>Issue date</label>
