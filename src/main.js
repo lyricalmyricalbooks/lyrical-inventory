@@ -4493,7 +4493,7 @@ function prefillFromPendingSales(forceStoreId){
   }
   // group by month
   invoiceCtx.items = pending.map(e => ({
-    description: `${book.title} — consignment sale${e.date?' · '+fmtD(e.date):''} (qty ${e.qty} @ ${(100-e.rate).toFixed(0)}% net)`,
+    description: `${book.title} — consignment sale${e.date?' · '+fmtD(e.date):''} (qty ${e.qty} @ ${(100-e.rate).toFixed(0)}% net of ${book.currency}${book.listPrice} retail)`,
     qty: e.qty,
     unitPrice: e.qty ? (e.amountDue / e.qty) : 0,
     _ledgerId: e.id,
