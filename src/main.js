@@ -4732,7 +4732,7 @@ function renderInvoicePaperHTML(inv){
     : `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> securely, or scan the QR with your phone.`;
 
   const payBlock = payUrl ? `
-    <section class="inv-pay no-print" style="--book-accent:${accent};">
+    <section class="inv-pay" style="--book-accent:${accent};">
       <div class="inv-pay-info">
         ${dynBadge}
         <h3>Pay this invoice</h3>
@@ -4869,13 +4869,17 @@ function emailInvoice(){
   const settings = getInvoiceSettings();
   const cur = inv.currency || getBook().currency;
   const payUrl = effectivePaymentLink(inv);
+  // Download an email-ready copy of the invoice with the Stripe pay link embedded,
+  // so the user has a document to attach (mailto cannot attach files itself).
+  downloadInvoiceHTML({ silent: true });
   const subject = `Invoice ${inv.num} — ${settings.name || 'Lyricalmyrical Books'}`;
   const lines = [
     `Hi ${inv.storeContact || inv.storeName || 'there'},`,
     ``,
     `Please find invoice ${inv.num} (${fmt(inv.total||0, cur)}) attached. Issued ${fmtD(inv.date)}${inv.dueDate?', due '+fmtD(inv.dueDate):''}.`,
     ``,
-    payUrl ? `Pay online: ${payUrl}` : ``,
+    payUrl ? `Pay securely online${isDynamicStripeLink(inv)?' (exact amount via Stripe)':''}:` : ``,
+    payUrl || ``,
     ``,
     inv.notes ? `Notes: ${inv.notes}` : ``,
     ``,
@@ -4885,22 +4889,62 @@ function emailInvoice(){
   const to = encodeURIComponent(inv.storeEmail || '');
   const url = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
   window.location.href = url;
+  showToast('✓ Pay link added to the email. Attach the downloaded invoice file to send it too.');
 }
 
-function downloadInvoiceHTML(){
+// Builds a fully self-contained invoice document with the Stripe pay link embedded
+// (clickable button + scannable QR + plain-text URL) that survives PDF export and
+// email-client styling — so the link is never dropped when the invoice is sent.
+function buildStandaloneInvoiceHTML(inv){
+  const payUrl = effectivePaymentLink(inv);
+  let bodyInner = renderInvoicePaperHTML(inv);
+
+  // Capture the QR that was rendered into the live preview as an <img> so it
+  // persists in the standalone file (the QR is drawn to a <canvas> at view time).
+  const liveQr = document.querySelector('#invoice-print-area .inv-qr canvas');
+  if (liveQr){
+    try {
+      bodyInner = bodyInner.replace(
+        '<div class="inv-qr"></div>',
+        `<div class="inv-qr"><img src="${liveQr.toDataURL('image/png')}" width="104" height="104" alt="Scan to pay" style="display:block;"></div>`
+      );
+    } catch(e){}
+  }
+
+  // Plain-text clickable URL fallback — stays visible even if an email client
+  // strips the styled button.
+  const payFallback = payUrl ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#444;margin:14px 2px 0;word-break:break-all;">Pay online: <a href="${payUrl}" style="color:#0a7d4b;">${escapeHTML(payUrl)}</a></p>` : '';
+
+  // Force the pay block to render in print/PDF and keep button colors.
+  const overrideCss = `<style>
+    .invoice-paper .inv-pay{display:flex !important;}
+    @media print{
+      .invoice-paper .inv-pay{display:flex !important;}
+      .invoice-paper .inv-pay .pay-btn,.invoice-paper .inv-pay{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+    }
+  </style>`;
+
+  const head = document.head.innerHTML + overrideCss;
+  const body = `<body style="background:#f0ece4;padding:40px;"><div class="invoice-paper" style="background:#fff;">${bodyInner}${payFallback}</div></body>`;
+  return `<!doctype html><html><head>${head}</head>${body}</html>`;
+}
+
+function downloadInvoiceHTML(opts){
   if (!currentViewInvoiceId) return;
   const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
-  const head = document.head.innerHTML;
-  const body = `<body style="background:#f0ece4;padding:40px;"><div class="invoice-paper" style="background:#fff;">${$('invoice-print-area').innerHTML}</div></body>`;
-  const html = `<!doctype html><html><head>${head}</head>${body}</html>`;
+  const html = buildStandaloneInvoiceHTML(inv);
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = `${inv.num}.html`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
-  showToast('✓ Invoice downloaded (open & print to PDF)');
+  if (!(opts && opts.silent)){
+    showToast(effectivePaymentLink(inv)
+      ? '✓ Invoice downloaded with the Stripe pay link embedded — attach it or print to PDF.'
+      : '✓ Invoice downloaded (open & print to PDF).');
+  }
 }
 
 // ── EDIT & VOID SYSTEM ─────────────────────────────────────────────────────
