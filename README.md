@@ -33,6 +33,19 @@ Build frontend:
 npm run build
 ```
 
+## Quality checks
+
+```bash
+# Run the linter (warnings are informational; CI exits 0 unless there are errors)
+npm run lint
+
+# Run the test suite (currently covers pure money/currency helpers in src/lib)
+npm test
+
+# Watch mode while developing
+npm run test:watch
+```
+
 ## Backend quickstart
 
 1. Copy env template:

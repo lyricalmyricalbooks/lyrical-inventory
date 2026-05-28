@@ -8,12 +8,18 @@
     "build": "vite build",
     "preview": "vite preview",
     "dev:backend": "node backend/server.js",
-    "dev:all": "sh -c \"npm run dev:backend & npm run dev\""
+    "dev:all": "sh -c \"npm run dev:backend & npm run dev\"",
+    "lint": "eslint src --ext .js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@vite-pwa/assets-generator": "^1.0.2",
+    "eslint": "^9.18.0",
+    "globals": "^15.14.0",
     "sharp": "^0.34.5",
     "vite": "^7.3.1",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite-plugin-pwa": "^1.2.0",
+    "vitest": "^2.1.8"
   }
 }

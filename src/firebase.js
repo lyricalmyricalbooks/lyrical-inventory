@@ -124,6 +124,9 @@ window._fbDeleteReceipt = async (url) => {
     await deleteObject(fileRef);
   } catch (e) {
     console.error("Firebase deletion failed", e);
+    if (typeof window.showToast === 'function') {
+      window.showToast('⚠ Could not delete cloud file — it may still exist in storage', 'warn', 4000);
+    }
   }
 };
 
@@ -165,7 +168,12 @@ window._fbSave = async (bookId, json) => {
       return;
     }
     await set(ref(db, `lyrical/books/${bookId}`), { data: json, ts: Date.now() });
-  } catch (e) { console.error("fbSave failed", e); }
+  } catch (e) {
+    console.error("fbSave failed", e);
+    if (typeof window.showToast === 'function') {
+      window.showToast('⚠ Save to cloud failed — check connection', 'err', 4000);
+    }
+  }
 };
 
 window._fbLoad = async (bookId) => {

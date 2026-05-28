@@ -1,6 +1,19 @@
 import './style.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
+import {
+  CURRENCY_SYMBOL_TO_CODE,
+  CODE_TO_SYMBOL,
+  getSym,
+  normalizeCurrencyCode,
+  fmt,
+  fmtNum,
+  fmtD,
+  getBookCurrencyCode,
+  paymentSummary,
+  buildPaymentMeta,
+  hexToRgba,
+} from './lib/money.js';
 
 const updateSW = registerSW({ onNeedRefresh() {} });
 
@@ -164,10 +177,7 @@ async function saveBookFromModal() {
   renderCurrent();
 }
 
-function hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
+// hexToRgba moved to ./lib/money.js
 
 function renderCatalogList() {
   const container = $('catalog-list');
@@ -189,7 +199,7 @@ function renderCatalogList() {
 }
 
 async function deleteBook(id) {
-  if (!confirm(`Permanently remove "${BOOKS[id].title}" and all its inventory records?`)) return;
+  if (!(await confirmDialog(`Permanently remove "${BOOKS[id].title}" and all its inventory records?`, { danger: true, okLabel: 'Remove book' }))) return;
   delete BOOKS[id];
   delete states[id];
   if (DEFAULT_BOOKS[id] && !deletedDefaultIds.includes(id)) {
@@ -197,7 +207,10 @@ async function deleteBook(id) {
   }
   await saveCatalogWithDeletions();
   if (typeof window._fbDeleteBook === 'function') {
-    try { await window._fbDeleteBook(id); } catch (e) { console.warn('fbDeleteBook failed', e); }
+    try { await window._fbDeleteBook(id); } catch (e) {
+      console.warn('fbDeleteBook failed', e);
+      showToast('⚠ Cloud delete failed — local data removed but cloud copy may remain', 'err', 5000);
+    }
   }
   buildBookSwitcher();
   renderCatalogList();
@@ -452,71 +465,11 @@ function isAuthor() {
 
 // ── UTILITIES
 const $ = id => document.getElementById(id);
-const CURRENCY_SYMBOL_TO_CODE = { '€':'EUR', '$':'CAD', 'CA$':'CAD', 'US$':'USD', '£':'GBP', '¥':'JPY', 'CHF':'CHF' };
-const CODE_TO_SYMBOL = { 'EUR':'€', 'CAD':'CA$', 'USD':'US$', 'GBP':'£', 'JPY':'¥', 'CHF':'CHF', 'AUD':'A$' };
-const getSym = c => CODE_TO_SYMBOL[c] || c;
-
-function normalizeCurrencyCode(cur, fallback = 'CAD') {
-  const raw = String(cur || '').trim();
-  if (!raw) return fallback;
-  const upper = raw.toUpperCase();
-  if (CODE_TO_SYMBOL[upper]) return upper;
-  if (CURRENCY_SYMBOL_TO_CODE[raw]) return CURRENCY_SYMBOL_TO_CODE[raw];
-  if (upper === 'CA$' || upper === 'C$') return 'CAD';
-  if (upper === 'US$') return 'USD';
-  if (upper === '€' || upper === 'EUR') return 'EUR';
-  return /^[A-Z]{3}$/.test(upper) ? upper : fallback;
-}
-
-const fmt = (n, cur='€') => getSym(cur) + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-const fmtNum = n => Number(n).toFixed(2);
-const fmtD = d => {
-  if (!d || d === '—' || d === 'Invalid Date') return '—';
-  // Try parsing as-is (works for ISO and most human strings)
-  let dt = new Date(d);
-  // Fallback for YYYY-MM-DD to avoid timezone shifting
-  if (isNaN(dt.getTime()) || (typeof d === 'string' && d.length === 10 && d.includes('-'))) {
-    const noon = new Date(d + 'T12:00:00');
-    if (!isNaN(noon.getTime())) dt = noon;
-  }
-  if (isNaN(dt.getTime())) return '—';
-  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-};
+// Money helpers (CURRENCY_SYMBOL_TO_CODE, CODE_TO_SYMBOL, getSym,
+// normalizeCurrencyCode, fmt, fmtNum, fmtD, getBookCurrencyCode,
+// paymentSummary, buildPaymentMeta) are imported from ./lib/money.js
 
 const today = () => new Date().toISOString().split('T')[0];
-
-function getBookCurrencyCode(book) {
-  const c = book.currency || 'EUR';
-  return CURRENCY_SYMBOL_TO_CODE[c] || (String(c).length === 3 ? c : 'EUR');
-}
-
-function paymentSummary(payment, book) {
-  if (!payment || !payment.currency) return '';
-  const native = getBookCurrencyCode(book);
-  const amount = Number(payment.amount || 0);
-  const converted = Number(payment.convertedTotal || 0);
-  if (payment.currency === native) return `Paid ${payment.currency} ${fmtNum(amount)}`;
-  const ratePart = payment.rate ? ` @ ${payment.rate}` : '';
-  return `Paid ${payment.currency} ${fmtNum(amount)}${ratePart} → ${fmt(converted, book.currency)}`;
-}
-
-function buildPaymentMeta({ book, qty, unitPrice, fxEnabled, fxCur, fxAmt, fxRate }) {
-  const total = (Number(qty) || 0) * (Number(unitPrice) || 0);
-  if (fxEnabled) {
-    return {
-      currency: fxCur || 'EUR',
-      amount: Number(fxAmt) || 0,
-      rate: (Number(fxRate) || 0) > 0 ? Number(fxRate) : null,
-      convertedTotal: total
-    };
-  }
-  return {
-    currency: getBookCurrencyCode(book),
-    amount: total,
-    rate: null,
-    convertedTotal: total
-  };
-}
 
 // ── PER-BOOK STATE
 // states[bookId] = { stock, sold, revenue, chStats, hist, stores, ledger, doneIds }
@@ -553,6 +506,7 @@ async function processSyncQueue() {
     else showToast('✅ All offline changes synced to Firestore');
   } catch (e) {
     console.error('Queue sync failed', e);
+    showToast('⚠ Offline sync failed — changes will retry later', 'err', 4000);
   }
 }
 
@@ -584,6 +538,61 @@ function showToast(msg, type='ok', dur=2800) {
   const t=$('toast'); t.textContent=msg;
   t.className='toast show'+(type==='warn'?' warn':type==='err'?' err':'');
   clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),dur);
+}
+// Expose so modules loaded before main.js completes (firebase.js) can call back.
+window.showToast = showToast;
+
+// Styled replacement for window.confirm — returns a Promise<boolean>.
+// Falls back to native confirm() if the modal isn't present (e.g. very
+// early bootstrap or unit tests).
+function confirmDialog(message, opts = {}) {
+  const overlay = $('m-confirm');
+  const body = $('m-confirm-body');
+  const titleEl = $('m-confirm-title');
+  const ok = $('m-confirm-ok');
+  const cancel = $('m-confirm-cancel');
+  if (!overlay || !body || !ok || !cancel) {
+    // Should never happen in production, but keep a working fallback.
+    // eslint-disable-next-line no-alert
+    return Promise.resolve(window.confirm(message));
+  }
+  body.textContent = String(message ?? '');
+  if (titleEl) titleEl.textContent = opts.title || 'Are you sure?';
+  ok.textContent = opts.okLabel || 'Confirm';
+  cancel.textContent = opts.cancelLabel || 'Cancel';
+  ok.classList.toggle('danger-btn', !!opts.danger);
+  ok.classList.toggle('gold', !opts.danger);
+  overlay.style.display = 'flex';
+
+  return new Promise(resolve => {
+    const cleanup = (result) => {
+      overlay.style.display = 'none';
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      overlay.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    const onBackdrop = (e) => { if (e.target === overlay) cleanup(false); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') cleanup(false);
+      else if (e.key === 'Enter') cleanup(true);
+    };
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    overlay.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKey);
+    // Focus the safe (cancel) button by default for destructive prompts.
+    setTimeout(() => (opts.danger ? cancel : ok).focus(), 0);
+  });
+}
+
+// Non-blocking alert replacement: shows a styled toast.
+// `type` is 'ok' | 'warn' | 'err'.
+function notify(msg, type = 'warn') {
+  showToast(msg, type, 3600);
 }
 
 // ── SYNC UI
@@ -677,13 +686,14 @@ async function toggleFirestoreMode() {
   const isCurrentlyFS = window._useFirestoreForBook(activeBook);
 
   if (!isCurrentlyFS) {
-    if (!confirm(
+    if (!(await confirmDialog(
       `Migrate "${BOOKS[activeBook]?.title || activeBook}" to Cloud Firestore?\n\n` +
       `• This book's data will be copied to Firestore now.\n` +
       `• If this is the FIRST book being migrated, global settings (catalog, tax center, rates) will also be copied.\n` +
       `• All other books stay on Realtime Database until you migrate them individually.\n\n` +
-      `You can revert at any time using this same button.`
-    )) return;
+      `You can revert at any time using this same button.`,
+      { title: 'Migrate to Firestore', okLabel: 'Migrate' }
+    ))) return;
 
     // --- Migrate global settings on first book ---
     const isFirstMigration = !window._useFirestoreGlobal();
@@ -731,11 +741,12 @@ async function toggleFirestoreMode() {
   } else {
     const anyOtherFSBook = Object.keys(BOOKS).filter(id => id !== activeBook).some(id => window._useFirestoreForBook(id));
 
-    if (!confirm(
+    if (!(await confirmDialog(
       `Revert "${BOOKS[activeBook]?.title || activeBook}" back to Realtime Database?\n\n` +
       `${!anyOtherFSBook ? '• No other books are on Firestore — global settings will also revert to RTDB.\n' : ''}` +
-      `• Current state will be written back to the old database.`
-    )) return;
+      `• Current state will be written back to the old database.`,
+      { title: 'Revert database', okLabel: 'Revert', danger: true }
+    ))) return;
 
     // --- Revert this book ---
     window._setBookFirestoreMode(activeBook, false);
@@ -756,12 +767,13 @@ async function toggleFirestoreMode() {
 window.toggleFirestoreMode = toggleFirestoreMode;
 
 window.performFullMigration = async () => {
-  if (!confirm(
+  if (!(await confirmDialog(
     "🚨 MASS MIGRATION TO CLOUD FIRESTORE 🚨\n\n" +
     "This will read EVERY book, EVERY expense, EVERY sale, and ALL settings from the Realtime Database and bulk-slice them into Cloud Firestore.\n\n" +
     "This cannot be easily undone. Once this process reaches 100%, your application will be permanently cut over to Firestore globally.\n\n" +
-    "Are you absolutely sure you want to proceed?"
-  )) return;
+    "Are you absolutely sure you want to proceed?",
+    { title: 'Mass migration', okLabel: 'Proceed', danger: true }
+  ))) return;
   
   if (prompt('Type "CONFIRM" to start massive data migration:') !== "CONFIRM") {
     return showToast('Migration aborted.', 'warn');
@@ -788,8 +800,7 @@ window.performFullMigration = async () => {
     document.body.style.pointerEvents = 'auto';
     document.body.style.opacity = '1';
     console.error("Migration error:", e);
-    alert("Migration failed! Error: " + (e.message || "Unknown error"));
-    showToast('⚠ Migration failed — check console', 'err', 5000);
+    showToast('⚠ Migration failed: ' + (e.message || 'Unknown error'), 'err', 6000);
   }
 };
 
@@ -1840,8 +1851,8 @@ async function recordArtistPayout(bookId) {
   renderProfitSharingBreakdown(bookId);
 }
 
-function deleteArtistPayout(bookId, payoutId) {
-  if (!confirm('Delete this payout record?')) return;
+async function deleteArtistPayout(bookId, payoutId) {
+  if (!(await confirmDialog('Delete this payout record?', { danger: true, okLabel: 'Delete' }))) return;
   const s = states[bookId];
   if (!s || !s.artistPayouts) return;
   s.artistPayouts = s.artistPayouts.filter(p => p.id !== payoutId);
@@ -3266,7 +3277,7 @@ function renderEmailReceiptDrafts(receipts) {
                 <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:12px;width:90px;text-align:right;">
               </div>
             </td>
-            <td>${r.sourceSnippet?`<button class="btn sm" type="button" title="View source snippet" onclick="alert(${JSON.stringify(r.sourceSnippet)})">👁</button>`:''}</td>
+            <td>${r.sourceSnippet?`<button class="btn sm" type="button" title="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>`:''}</td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -3759,7 +3770,7 @@ window.approveSubmission = async function(type, subKey) {
 }
 
 window.rejectSubmission = async function(type, subKey) {
-  if (!confirm('Reject this submission from the author?')) return;
+  if (!(await confirmDialog('Reject this submission from the author?', { okLabel: 'Reject', danger: true }))) return;
   await window._fbDeleteSubmission(activeBook, type, subKey);
   showToast('Submission removed', 'warn');
   if (activeBook === 'all') updateAllOverview();
@@ -4100,7 +4111,11 @@ function renderStores(){
     return`<div class="store-card"><div class="store-head"><div><div class="store-name">${st.name}</div><div class="store-meta">${[st.city,st.contact,st.email].filter(Boolean).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div><div class="sk-v ${st.outstanding>0?'warn':''}">${st.outstanding}</div></div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed>0?'warn':''}">${st.amountOwed>0?fmt(st.amountOwed,cur):'—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${st.id})">Send books</button><button class="btn sm ink" onclick="openSale(${st.id})" ${!st.outstanding?'disabled':''}>Record sale</button><button class="btn sm" onclick="openRet(${st.id})" ${!st.outstanding?'disabled':''}>Return</button><button class="btn sm" onclick="openEditStore(${st.id})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${st.id})">Remove</button></div></div>`;
   }).join('');
 }
-function removeStore(id){if(!confirm('Remove store?'))return;getState().stores=getState().stores.filter(s=>s.id!==id);renderStores();updateDash();saveState(activeBook);}
+async function removeStore(id){
+  if(!(await confirmDialog('Remove this store?', { okLabel: 'Remove', danger: true }))) return;
+  getState().stores=getState().stores.filter(s=>s.id!==id);
+  renderStores();updateDash();saveState(activeBook);
+}
 function openEditStore(id){activeId=id;const st=storeById(id);if(!st)return;$('es-name').value=st.name;$('es-contact').value=st.contact||'';$('es-email').value=st.email||'';$('es-phone').value=st.phone||'';$('es-address').value=st.address||'';$('es-city').value=st.city||'';$('es-region').value=st.region||'';$('es-postal').value=st.postal||'';$('es-country').value=st.country||'';$('es-website').value=st.website||'';$('es-terms').value=st.terms||'';$('es-rate').value=st.rate;$('es-notes').value=st.notes||'';openM('edit-store');}
 function confirmEditStore(){
   const st=storeById(activeId);if(!st)return;
@@ -4111,7 +4126,7 @@ function confirmEditStore(){
 function openSend(id){activeId=id;const st=storeById(id);$('send-sname').textContent=st.name;$('send-rate').value=st.rate;openM('send-books');}
 function confirmSend(){
   const s=getState(),book=getBook(),st=storeById(activeId),qty=parseInt($('send-qty').value)||0,date=$('send-date').value,rate=parseFloat($('send-rate').value)||st.rate,notes=$('send-notes').value.trim();
-  if(qty>s.stock){alert('Not enough stock on hand!');return;}
+  if(qty>s.stock){notify('Not enough stock on hand!', 'warn');return;}
   s.stock-=qty;st.sent+=qty;st.outstanding+=qty;
   const sheetsId = makeEventId();
   s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Shipment',date,qty,rate,amountDue:0,paid:'n/a',notes,status:'sent',sheetsId});
@@ -4122,7 +4137,7 @@ function confirmSend(){
 function openSale(id){activeId=id;const book=getBook();$('sale-sym').textContent=book.currency;$('sale-price').value=book.listPrice.toFixed(2);$('sale-sname').textContent=storeById(id).name;openM('record-sale');}
 function confirmSale(){
   const s=getState(),book=getBook(),cur=book.currency,st=storeById(activeId),qty=parseInt($('sale-qty').value)||0,date=$('sale-date').value,price=parseFloat($('sale-price').value)||book.listPrice,paid=$('sale-paid').value,notes=$('sale-notes').value.trim();
-  if(qty>st.outstanding){alert('Qty exceeds outstanding books.');return;}
+  if(qty>st.outstanding){notify('Qty exceeds outstanding books.', 'warn');return;}
   const gross=qty*price,pub=gross*(1-st.rate/100);
   st.sold+=qty;st.outstanding-=qty;st.amountOwed+=paid==='pending'?pub:0;
   s.sold+=qty;s.revenue+=pub;
@@ -4142,7 +4157,7 @@ function confirmSale(){
 function openRet(id){activeId=id;$('ret-sname').textContent=storeById(id).name;openM('return');}
 function confirmReturn(){
   const s=getState(),book=getBook(),st=storeById(activeId),qty=parseInt($('ret-qty').value)||0,date=$('ret-date').value,cond=$('ret-cond').value,notes=$('ret-notes').value.trim();
-  if(qty>st.outstanding){alert('Qty exceeds outstanding.');return;}
+  if(qty>st.outstanding){notify('Qty exceeds outstanding.', 'warn');return;}
   st.returned+=qty;st.outstanding-=qty;const good=cond.startsWith('Good');if(good)s.stock+=qty;
   const sheetsId = makeEventId();
   s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Return',date,qty,rate:st.rate,amountDue:0,paid:'n/a',notes:(notes?notes+' · ':'')+cond,status:good?'restocked':'written off',sheetsId});
@@ -4641,7 +4656,7 @@ async function regenerateStripeLinkFromView(){
   if (!inv) return;
   const settings = getInvoiceSettings();
   if (!settings.stripeKey){
-    if (confirm('No Stripe key configured yet. Open Invoice Settings to add one?')) {
+    if (await confirmDialog('No Stripe key configured yet. Open Invoice Settings to add one?', { okLabel: 'Open settings' })) {
       closeM('invoice-view');
       setTimeout(openInvoiceTemplateSettings, 80);
     }
@@ -4667,12 +4682,12 @@ async function regenerateStripeLinkFromView(){
   }
 }
 
-function deleteInvoice(){
+async function deleteInvoice(){
   if (!invoiceCtx || !invoiceCtx.editingId) return;
   const s = getState();
   const inv = (s.invoices||[]).find(i => i.id === invoiceCtx.editingId);
   if (!inv) return;
-  if (!confirm(`Delete invoice ${inv.num}? This cannot be undone.`)) return;
+  if (!(await confirmDialog(`Delete invoice ${inv.num}? This cannot be undone.`, { okLabel: 'Delete invoice', danger: true }))) return;
   s.invoices = s.invoices.filter(i => i.id !== invoiceCtx.editingId);
   saveState(activeBook);
   closeM('invoice-edit');
@@ -4835,12 +4850,12 @@ function editInvoiceFromView(){
   setTimeout(()=> openCreateInvoice(null, currentViewInvoiceId), 60);
 }
 
-function markInvoicePaidFromView(){
+async function markInvoicePaidFromView(){
   if (!currentViewInvoiceId) return;
   const s = getState(), book = getBook();
   const inv = (s.invoices||[]).find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
-  if (!confirm(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`)) return;
+  if (!(await confirmDialog(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`, { okLabel: 'Mark paid' }))) return;
   inv.status = 'paid';
   inv.paidAt = Date.now();
   inv.paidMethod = isDynamicStripeLink(inv) ? 'Stripe Checkout'
@@ -5279,10 +5294,10 @@ function voidEntry() {
 }
 
 // ── RESET
-function resetBookData(){
+async function resetBookData(){
   const book=getBook();
-  if(!confirm(`Reset ALL data for "${book.title}"? Orders, history and consignment will be cleared. Your Google Sheet backup is untouched.`))return;
-  if(!confirm('Last chance — this cannot be undone. Reset now?'))return;
+  if(!(await confirmDialog(`Reset ALL data for "${book.title}"? Orders, history and consignment will be cleared. Your Google Sheet backup is untouched.`, { okLabel: 'Continue', danger: true })))return;
+  if(!(await confirmDialog('Last chance — this cannot be undone. Reset now?', { okLabel: 'Reset everything', danger: true })))return;
   states[activeBook]=defaultState(book);lastSavedHashes[activeBook]='';
   renderAll();saveState(activeBook);showToast('✓ Book data reset. Sheet backup untouched.','warn',4000);
 }
@@ -5399,7 +5414,17 @@ async function connectSheets(){
   showSheetsConnected();
   showToast('✓ Google Sheets connected and verified!');
 }
-function disconnectSheets(){if(!confirm('Disconnect?'))return;sheetsUrl='';sheetsSpreadsheetUrl='';localStorage.removeItem('lm-sheets-url');localStorage.removeItem('lm-sheets-spreadsheet-url');localStorage.removeItem('lm-sheets-secret');$('sheets-setup-card').style.display='';$('sheets-connected-card').style.display='none';updateSheetsBadge();showToast('Sheets disconnected','warn');}
+async function disconnectSheets(){
+  if(!(await confirmDialog('Disconnect Google Sheets?', { okLabel: 'Disconnect', danger: true })))return;
+  sheetsUrl='';sheetsSpreadsheetUrl='';
+  localStorage.removeItem('lm-sheets-url');
+  localStorage.removeItem('lm-sheets-spreadsheet-url');
+  localStorage.removeItem('lm-sheets-secret');
+  $('sheets-setup-card').style.display='';
+  $('sheets-connected-card').style.display='none';
+  updateSheetsBadge();
+  showToast('Sheets disconnected','warn');
+}
 function showSheetsConnected(){$('sheets-setup-card').style.display='none';$('sheets-connected-card').style.display='';$('sheets-url-display').textContent=sheetsUrl;updateSheetsBadge();}
 function testSheets(){
   if(!sheetsUrl)return;
@@ -5462,13 +5487,14 @@ window.backfillSheetsIds = backfillSheetsIds;
 
 async function backfillAndResync() {
   if (!sheetsUrl) { showToast('Connect Google Sheets first', 'warn'); return; }
-  if (!confirm(
+  if (!(await confirmDialog(
     'This will:\n' +
     '1. Stamp a stable ID on every record missing one\n' +
     '2. Re-send every record to Sheets so existing rows get the new ID\n' +
     '   (the backend will replace duplicates rather than create them)\n\n' +
-    'Continue?'
-  )) return;
+    'Continue?',
+    { title: 'Backfill & resync', okLabel: 'Continue' }
+  ))) return;
   const counts = await backfillSheetsIds();
   showToast(`Stamped IDs on ${counts.hist + counts.ledger + counts.transfers} record(s) across ${counts.books} book(s)`);
   if (typeof pushAllToSheets === 'function') pushAllToSheets();
@@ -5603,7 +5629,7 @@ let _bulkDone = 0;
 
 async function pushAllToSheets() {
   if(!sheetsUrl) { showToast('Connect Google Sheets first','warn'); return; }
-  if(!confirm('This will enqueue all historical records for all books, then deliver them with retry. Continue?')) return;
+  if(!(await confirmDialog('This will enqueue all historical records for all books, then deliver them with retry. Continue?', { okLabel: 'Continue' }))) return;
 
   const btn = $('push-all-btn');
   const bar = $('sync-progress-bar');
@@ -5938,6 +5964,7 @@ async function saveReceiptToLocalFile(file, subfolderName = '') {
     return subfolderName ? `local://${subfolderName}/${filename}` : `local://${filename}`;
   } catch (e) {
     console.error('Local receipt save failed', e);
+    showToast('⚠ Receipt file save failed — check folder permissions', 'err', 4500);
     return null;
   }
 }
@@ -6255,7 +6282,7 @@ async function applyBackupData(data) {
 async function restoreSystemBackup(id) {
   const backup = systemBackups.find(b => b.id === id);
   if (!backup || !backup.snapshot) return;
-  if (!confirm('Restore this system backup? This will OVERWRITE your current database and reload the app.')) return;
+  if (!(await confirmDialog('Restore this system backup? This will OVERWRITE your current database and reload the app.', { title: 'Restore backup', okLabel: 'Restore', danger: true }))) return;
   try {
     await applyBackupData(backup.snapshot);
     showToast('✓ System backup restored! Reloading...');
@@ -6279,7 +6306,7 @@ async function handleBackupImportFile(e) {
       const data = JSON.parse(event.target.result);
       if (!data.BOOKS || !data.states) throw new Error('Invalid backup format: Missing core data');
       
-      if (!confirm('Are you sure? This will OVERWRITE your entire existing database and reload the app.')) {
+      if (!(await confirmDialog('Are you sure? This will OVERWRITE your entire existing database and reload the app.', { title: 'Restore from file', okLabel: 'Overwrite & restore', danger: true }))) {
         if (info) info.textContent = 'Import cancelled';
         return;
       }
@@ -7445,7 +7472,7 @@ function renderTaxCenter() {
 }
 
 async function removeLedgerEntry(type, bid, id) {
-  if (!confirm('Are you sure you want to permanently delete this entry from the ledger?')) return;
+  if (!(await confirmDialog('Are you sure you want to permanently delete this entry from the ledger?', { okLabel: 'Delete entry', danger: true }))) return;
   
   if (type === 'businessExpense') {
     TAX_CENTER.businessExpenses = (TAX_CENTER.businessExpenses || []).filter(e => e.id != id);
@@ -7845,13 +7872,14 @@ async function importShippoShippingFromApi() {
       const dates = pendingExpenses.map(e => e.date).filter(Boolean).sort();
       const range = dates.length ? `${dates[0]} → ${dates[dates.length - 1]}` : '—';
 
-      const accept = confirm(
+      const accept = await confirmDialog(
         `Add ${imported} new Shippo shipping cost${imported === 1 ? '' : 's'} to your master ledger?\n\n` +
         `Total: ${totalCad.toFixed(2)} CAD\n` +
         `Original amounts:\n${curLines}\n` +
         `Dates: ${range}\n` +
         (alreadyImported ? `Already in ledger (skipped): ${alreadyImported}\n` : '') +
-        `\nOnly new labels are listed above — nothing is written until you click OK.`
+        `\nOnly new labels are listed above — nothing is written until you confirm.`,
+        { title: 'Import Shippo shipping costs', okLabel: 'Add to ledger' }
       );
       if (!accept) {
         if (statusEl) statusEl.textContent = `Found ${imported} new Shippo transactions (${totalCad.toFixed(2)} CAD). Import cancelled before ledger insertion.`;
@@ -9367,11 +9395,12 @@ async function insertStripeFeesIntoLedger() {
     .map(p => `  • ${p.year} ${p.cat === 'Software & Subscriptions' ? 'billing' : 'sales fees'}: ${p.amount.toFixed(2)} ${p.currency} → ${p.baseAmount.toFixed(2)} CAD`).join('\n');
 
   const scope = yearFilter != null ? `${yearFilter}` : 'all years';
-  const accept = confirm(
+  const accept = await confirmDialog(
     `Insert Stripe fees (${scope}) into your master ledger?\n\n` +
     `${newCount} new${updateCount ? `, ${updateCount} updated (refreshed in place)` : ''}\n` +
     `Total: ${totalCad.toFixed(2)} CAD\n\n${lines}\n\n` +
-    `Nothing is written until you click OK.`
+    `Nothing is written until you confirm.`,
+    { title: 'Insert Stripe fees', okLabel: 'Insert fees' }
   );
   if (!accept) { showToast('Stripe fee insertion cancelled', 'warn'); return; }
 
@@ -9517,6 +9546,7 @@ function downloadStripeFeesAuditCSV() {
 
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
+  confirmDialog, notify,
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
