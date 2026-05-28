@@ -14,6 +14,7 @@ import {
   buildPaymentMeta,
   hexToRgba,
 } from './lib/money.js';
+import { escapeHtml } from './lib/html.js';
 
 const updateSW = registerSW({ onNeedRefresh() {} });
 
@@ -122,9 +123,12 @@ function closeAddBookModal() {
 }
 
 async function saveBookFromModal() {
-  const id = $('nb-id').value.trim();
+  // Book id doubles as a database key and is used in URLs/handlers, so
+  // restrict it to a safe slug (lowercase letters, digits, dashes).
+  const rawId = $('nb-id').value.trim();
+  const id = rawId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const title = $('nb-title').value.trim();
-  if (!id || !title) { showToast('ID and Title are required', 'warn'); return; }
+  if (!id || !title) { showToast('A valid ID (letters/numbers) and Title are required', 'warn'); return; }
   
   const currentBook = BOOKS[editingBookId] || BOOKS[id] || {};
   const book = {
@@ -187,13 +191,13 @@ function renderCatalogList() {
        <div style="display:flex;align-items:center;gap:10px;">
          <div style="width:12px;height:12px;border-radius:50%;background:${b.accent}"></div>
          <div>
-           <div style="font-size:13px;font-weight:600;color:var(--cream);">${b.title}</div>
-           <div style="font-size:11px;color:rgba(255,255,255,.55);">${b.id} · ${b.currency}${b.listPrice}</div>
+           <div style="font-size:13px;font-weight:600;color:var(--cream);">${escapeHtml(b.title)}</div>
+           <div style="font-size:11px;color:rgba(255,255,255,.55);">${escapeHtml(b.id)} · ${b.currency}${b.listPrice}</div>
          </div>
        </div>
        <div style="display:flex;gap:8px;">
-         <button class="btn sm" onclick="openEditBookModal('${b.id}')">Edit</button>
-         <button class="btn sm danger-btn" onclick="deleteBook('${b.id}')">Remove</button>
+         <button class="btn sm" onclick="openEditBookModal('${escapeHtml(b.id)}')">Edit</button>
+         <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
        </div>
     </div>`).join('');
 }
@@ -300,8 +304,8 @@ function renderAllQRCodes() {
     header.innerHTML = `
       <div style="width:10px;height:10px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
       <div style="flex:1;">
-        <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--cream);">${book.title}</div>
-        <div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px;">${book.author || '—'} · ${book.currency}${book.listPrice}</div>
+        <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--cream);">${escapeHtml(book.title)}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px;">${escapeHtml(book.author) || '—'} · ${book.currency}${book.listPrice}</div>
       </div>`;
     card.appendChild(header);
 
@@ -489,24 +493,68 @@ const RECEIPT_FOLDER_DB = 'lm-receipt-folder-db';
 const RECEIPT_FOLDER_STORE = 'handles';
 const RECEIPT_FOLDER_KEY = 'preferred-receipt-folder';
 
+let _syncRetryTimer = null;
+let _syncRetryAttempt = 0;
+let _syncFlushing = false;
+
+// Persist a not-yet-saved book state so an optimistic UI change is never
+// lost. Only the LATEST snapshot per book is kept — a newer edit supersedes
+// an older queued one, so rapid edits don't grow the queue unbounded.
 function queueSync(bookId, state) {
+  syncQueue = syncQueue.filter(item => item.bookId !== bookId);
   syncQueue.push({ bookId, state, ts: Date.now() });
   localStorage.setItem('lm-sync-queue', JSON.stringify(syncQueue));
+  updatePendingIndicator();
   processSyncQueue();
 }
 
+// Reflects the number of pending (queued, not-yet-saved) book states in the
+// sync status bar so an optimistic change that hasn't reached the cloud yet
+// is always visible to the user.
+function updatePendingIndicator() {
+  const n = syncQueue.length;
+  if (n > 0) {
+    setSyncState('syncing', `<b>Firestore</b> · ${n} change${n === 1 ? '' : 's'} pending…`);
+  }
+}
+
 async function processSyncQueue() {
+  if (_syncFlushing) return;
   if (!navigator.onLine || !fbReady || !syncQueue.length) return;
+  _syncFlushing = true;
   const item = syncQueue[0];
   try {
     await window._fbSave(item.bookId, JSON.stringify(item.state));
+    // Mark this exact snapshot as saved so saveState won't re-send it.
+    const json = JSON.stringify(item.state);
+    if (states[item.bookId] && JSON.stringify(states[item.bookId]) === json) {
+      lastSavedHashes[item.bookId] = json;
+      lastSaveTimes[item.bookId] = Date.now();
+    }
     syncQueue.shift();
     localStorage.setItem('lm-sync-queue', JSON.stringify(syncQueue));
-    if (syncQueue.length) processSyncQueue();
-    else showToast('✅ All offline changes synced to Firestore');
+    _syncRetryAttempt = 0;
+    _syncFlushing = false;
+    if (syncQueue.length) {
+      updatePendingIndicator();
+      processSyncQueue();
+    } else {
+      setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
+      showToast('✅ All changes synced');
+    }
   } catch (e) {
     console.error('Queue sync failed', e);
-    showToast('⚠ Offline sync failed — changes will retry later', 'err', 4000);
+    _syncFlushing = false;
+    // Schedule an automatic retry with exponential backoff (capped at 30s)
+    // so a transient failure reconciles itself without user action.
+    _syncRetryAttempt++;
+    const delay = Math.min(30000, 2000 * Math.pow(2, _syncRetryAttempt - 1));
+    setSyncState('error', `<b>Firestore</b> · ${syncQueue.length} pending · retrying…`);
+    if (_syncRetryAttempt === 1) {
+      showToast('⚠ Save failed — your change is saved locally and will retry', 'err', 4000);
+    }
+    clearTimeout(_syncRetryTimer);
+    _syncRetryTimer = setTimeout(processSyncQueue, delay);
   }
 }
 
@@ -624,11 +672,12 @@ async function saveState(bookId) {
     lastSaveTimes[bookId] = Date.now();
     setSyncState('ok', '<b>Firestore</b> · saved · live sync on');
     const ind=$('save-ind'); if(ind){ind.classList.add('show');setTimeout(()=>ind.classList.remove('show'),2000);}
-  } catch(e) { 
+  } catch(e) {
     console.error(`Firebase Save Error [${bookId}]:`, e);
-    const err = e.message || e.code || 'save failed';
-    setSyncState('error', `<b>Firestore</b> · ${err}`); 
-    showToast(`⚠ Sync Error: ${err}`, 'err');
+    // The optimistic UI already shows this change, but the cloud write
+    // failed. Queue it (with backoff retry) so the change is never lost
+    // and reconciles automatically instead of silently diverging.
+    queueSync(bookId, state);
   }
 }
 
@@ -1197,8 +1246,8 @@ function updateAllOverview() {
     return `<div class="book-strip">
       <div class="book-strip-accent" style="background:${book.accent}"></div>
       <div class="book-strip-info">
-        <div class="book-strip-title">${book.title}</div>
-        <div class="book-strip-meta">${book.author||'—'} &nbsp;·&nbsp; ${book.currency}${book.listPrice} &nbsp;·&nbsp; ${book.maxPrint} printed</div>
+        <div class="book-strip-title">${escapeHtml(book.title)}</div>
+        <div class="book-strip-meta">${escapeHtml(book.author)||'—'} &nbsp;·&nbsp; ${book.currency}${book.listPrice} &nbsp;·&nbsp; ${book.maxPrint} printed</div>
         <div style="margin-top:8px;"><div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;"><div class="bar-fill" style="width:${pct}%;background:${book.accent};"></div></div></div>
         ${beBar}
       </div>
@@ -1232,7 +1281,7 @@ function updateAllOverview() {
       const isBest = chan === bestChan && rev > 0 && entries.length > 1;
       const shareStr = bookRev > 0 ? sharePct.toFixed(0)+'%' : '—';
       const bestTag = isBest ? ' <span class="pill gold" style="font-size:9px;padding:1px 6px;margin-left:4px;vertical-align:middle;">TOP</span>' : '';
-      rows.push(`<tr><td style="font-weight:600;">${book.title}${bestTag}</td><td>${chan}</td><td class="r">${txns}</td><td class="r">${units}</td><td class="r">${fmt(rev,book.currency)}</td><td class="r">${txns?fmt(avgTxn,book.currency):'—'}</td><td class="r">${units?fmt(revUnit,book.currency):'—'}</td><td class="r">${shareStr}</td></tr>`);
+      rows.push(`<tr><td style="font-weight:600;">${escapeHtml(book.title)}${bestTag}</td><td>${escapeHtml(chan)}</td><td class="r">${txns}</td><td class="r">${units}</td><td class="r">${fmt(rev,book.currency)}</td><td class="r">${txns?fmt(avgTxn,book.currency):'—'}</td><td class="r">${units?fmt(revUnit,book.currency):'—'}</td><td class="r">${shareStr}</td></tr>`);
 
       const t = channelTotals[chan] = channelTotals[chan] || {};
       const c = t[book.currency] = t[book.currency] || {txns:0,units:0,revenue:0,books:new Set()};
@@ -1290,7 +1339,7 @@ function updateAllOverview() {
   Object.values(BOOKS).forEach(book => {
     const s = states[book.id] || defaultState(book);
     s.stores.forEach(st => {
-      conRows.push(`<tr><td style="font-weight:600;">${book.title}</td><td>${st.name}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.outstanding}</td><td>${st.outstanding>0?'<span class="pill amber">Active</span>':'<span class="pill gray">Settled</span>'}</td></tr>`);
+      conRows.push(`<tr><td style="font-weight:600;">${escapeHtml(book.title)}</td><td>${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.outstanding}</td><td>${st.outstanding>0?'<span class="pill amber">Active</span>':'<span class="pill gray">Settled</span>'}</td></tr>`);
     });
   });
   $('all-con-body').innerHTML = conRows.length ? conRows.join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
@@ -1326,7 +1375,7 @@ function renderGlobalPendingAlert() {
           ${pendingBooks.map(b => `
             <div style="display:flex; justify-content:space-between; align-items:center; background:white; padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
               <div>
-                <strong style="color:var(--text2);">${b.title}</strong>
+                <strong style="color:var(--text2);">${escapeHtml(b.title)}</strong>
                 <span style="font-size:12px; color:var(--text3); margin-left:8px;">
                   ${b.sCount ? `${b.sCount} sale(s)` : ''} ${b.sCount && b.eCount ? '·' : ''} ${b.eCount ? `${b.eCount} expense(s)` : ''}
                 </span>
@@ -1543,7 +1592,7 @@ function updateDash() {
   else{al.className='stock-alert ok';al.textContent='Stock is healthy.';}
   const ckeys=Object.keys(s.chStats||{});
   $('ch-body').innerHTML=ckeys.length?ckeys.map(k=>{const cs=s.chStats[k];return`<tr><td style="font-weight:600;">${k}</td><td class="r">${cs.txns}</td><td class="r">${cs.units}</td><td class="r">${fmt(cs.revenue,cur)}</td></tr>`;}).join(''):'<tr><td colspan="4"><div class="empty-state" style="padding:1rem;">No sales yet.</div></td></tr>';
-  $('dash-con-body').innerHTML=s.stores.length?s.stores.map(st=>`<tr><td style="font-weight:600;">${st.name}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding>0?'<span class="pill amber">Active</span>':'<span class="pill gray">Settled</span>'}</td></tr>`).join(''):'<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
+  $('dash-con-body').innerHTML=s.stores.length?s.stores.map(st=>`<tr><td style="font-weight:600;">${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding>0?'<span class="pill amber">Active</span>':'<span class="pill gray">Settled</span>'}</td></tr>`).join(''):'<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
   // Show danger zone only for publisher
   if (!isAuthor()) {
     $('danger-zone-sect').style.display='';
@@ -1571,9 +1620,9 @@ function updateDash() {
         $('d-exp-body').innerHTML = unreceivedExp.map(e=>`
           <tr>
             <td style="padding:6px 0;color:rgba(255,255,255,.35);white-space:nowrap;">${fmtD(e.date)}</td>
-            <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${e.desc}</td>
-            <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);padding:2px 8px;border-radius:100px;">${e.cat}</span></td>
-            <td style="padding:6px 8px;color:rgba(255,255,255,.25);">${e.ref||'—'}</td>
+            <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
+            <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
+            <td style="padding:6px 8px;color:rgba(255,255,255,.25);">${escapeHtml(e.ref)||'—'}</td>
             <td style="padding:6px 0;text-align:right;color:#f87171;font-weight:500;">${fmt(e.amount,cur)}</td>
           </tr>`).join('');
         // Payment button
@@ -1937,14 +1986,14 @@ function renderHist() {
            const actionCell = window.IS_PUBLISHER
              ? `<button class="edit-btn" onclick="approveSubmission('sales', '${h._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('sales', '${h._subKey}')" style="color:var(--red);">✕</button>`
              : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
-           return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${h.num}</td><td>${h.chan} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price,cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty*h.price,cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${h.notes||'—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill amber" style="font-size:10px;">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+           return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${escapeHtml(h.num)}</td><td>${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price,cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty*h.price,cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes)||'—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill amber" style="font-size:10px;">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
         }
         const voided = h.voided ? ' voided' : '';
         const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
         const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry">✎</button>`;
         const isGrat = h.gratuity || h.chan === 'Gratuity';
         const isPending = h.artistPending;
-        const chanCell = isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${h.chan} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : h.chan;
+        const chanCell = isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : escapeHtml(h.chan);
         const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price,cur);
         const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty*h.price,cur)}</span>` : fmt(h.qty*h.price,cur);
         const rowStyle = isGrat ? ' style="background:var(--cream2);font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
@@ -1959,13 +2008,13 @@ function renderHist() {
           : '';
         const paymentInfo = paymentSummary(h.payment, book);
         const notesCell = paymentInfo
-          ? `${h.notes || '—'}<br><span style="font-size:11px;color:var(--text4);">${paymentInfo}</span>`
-          : (h.notes || '—');
+          ? `${escapeHtml(h.notes) || '—'}<br><span style="font-size:11px;color:var(--text4);">${escapeHtml(paymentInfo)}</span>`
+          : (escapeHtml(h.notes) || '—');
         const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
         const enteredByPill = enteredBy === 'Artist'
           ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
           : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
-        return `<tr class="${voided}"${rowStyle}><td class="mono">${h.num}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+        return `<tr class="${voided}"${rowStyle}><td class="mono">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
       }).join('')
     : '<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">No orders yet.</div></td></tr>';
 }
@@ -2021,7 +2070,7 @@ function renderOrders() {
       ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
       : '';
     const bookLabel = o.bookId && BOOKS[o.bookId]
-      ? `<span style="font-size:10px;background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:100px;padding:2px 8px;margin-right:6px;">${BOOKS[o.bookId].title}</span>`
+      ? `<span style="font-size:10px;background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:100px;padding:2px 8px;margin-right:6px;">${escapeHtml(BOOKS[o.bookId].title)}</span>`
       : '';
     const viewEmailBtn = o.id
       ? `<a href="https://mail.google.com/mail/u/0/#all/${o.id}" target="_blank" class="btn sm" style="font-size:10px;opacity:.7;">📧 View</a>`
@@ -2029,8 +2078,8 @@ function renderOrders() {
     return `<div class="order-card${done ? ' done' : ''}">
       <div class="order-row">
         <div>
-          <div class="order-num">${o.orderNum}</div>
-          <div class="order-meta">${o.date} · ${o.customer || '—'} · <span style="opacity:.6;">${o.email || ''}</span></div>
+          <div class="order-num">${escapeHtml(o.orderNum)}</div>
+          <div class="order-meta">${escapeHtml(o.date)} · ${escapeHtml(o.customer) || '—'} · <span style="opacity:.6;">${escapeHtml(o.email)}</span></div>
           ${addrLine}
         </div>
         <span class="pill ${done ? 'gray' : 'gold'}">${done ? 'Applied' : 'New'}</span>
@@ -2627,7 +2676,7 @@ function printShippingLabel() {
   const toLines = [ship.addr1, ship.addr2, cityPostal].filter(Boolean);
   const country = (ship.country||'').toUpperCase();
 
-  const esc = (s) => String(s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const esc = escapeHtml;
 
   const labelHTML = `
   <div class="label">
@@ -2750,7 +2799,7 @@ function renderArtistReimburseBanner(){
   $('arb-items').innerHTML=received.map(e=>`
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.35);">
-        ${e.desc} · ${fmtD(e.date)} · <span style="font-size:9px;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:100px;">${e.cat}</span>
+        ${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span style="font-size:9px;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:100px;">${escapeHtml(e.cat)}</span>
       </div>
       <div style="font-family:'DM Mono',monospace;font-size:13px;color:#6ee7a8;font-weight:500;">${fmt(e.amount,cur)}</div>
     </div>`).join('');
@@ -3233,8 +3282,7 @@ function renderEmailReceiptDrafts(receipts) {
     wrap.innerHTML = '<div class="empty-state" style="padding:14px;font-size:12px;color:var(--text3);">No valid receipts found.</div>';
     return;
   }
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const esc = escapeHtml;
   const catOptions = (sel) => EXPENSE_CATEGORIES
     .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
   const curOptions = (sel) => ['CAD','USD','EUR','GBP','AUD','JPY','MXN','CHF','SEK','NOK','DKK']
@@ -3425,9 +3473,9 @@ function renderExpenses(){
         : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
       return `<tr style="opacity:0.8;background:#fffcede3;">
         <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
-        <td style="font-weight:600;">${e.desc}</td>
-        <td><span class="pill gray" style="font-size:10px;">${e.cat}</span></td>
-        <td class="mono" style="font-size:11px;color:var(--text3);">${e.ref||'—'}</td>
+        <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
+        <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
+        <td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref)||'—'}</td>
         <td>—</td>
         <td class="r" style="font-weight:600;">${fmt(e.amount, e.currency)}</td>
         ${window.IS_PUBLISHER ? '<td class="r">—</td>' : ''}
@@ -3443,7 +3491,7 @@ function renderExpenses(){
       ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
     const baseReceiptLink = e.receipt ? (
       e.receipt.startsWith('local://')
-      ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${e.receipt.replace('local://','')}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
+      ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://',''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
       : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
     ) : `<span style="font-size:11px;color:var(--text4); font-weight: 500;">Missing</span>`;
     const trackLink = e.trackingUrl
@@ -3476,9 +3524,9 @@ function renderExpenses(){
 
     return `<tr style="${e.received?'opacity:.5;':''}">
       <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
-      <td style="font-weight:600;">${e.desc}</td>
-      <td><span class="pill gray" style="font-size:10px;">${e.cat}</span></td>
-      <td style="font-size:11px;color:var(--text3);">${e.ref||'—'}</td>
+      <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
+      <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
+      <td style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref)||'—'}</td>
       <td>${receiptCell}</td>
       <td class="r" style="color:${e.received?'var(--text4)':'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount,eCur)}</td>
       ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
@@ -3554,13 +3602,13 @@ function handleImportFile(event) {
       $('import-count').textContent = _importRows.length;
       $('import-preview-body').innerHTML = _importRows.map(r => `
         <tr>
-          <td class="mono">${r.num}</td>
+          <td class="mono">${escapeHtml(r.num)}</td>
           <td style="font-size:12px;color:var(--text3);">${fmtD(r.date)}</td>
-          <td>${r.chan}</td>
+          <td>${escapeHtml(r.chan)}</td>
           <td class="r">${r.qty}</td>
           <td class="r">${book.currency}${r.price.toFixed(2)}</td>
           <td class="r" style="font-weight:600;">${book.currency}${(r.qty*r.price).toFixed(2)}</td>
-          <td style="font-size:11px;color:var(--text3);">${r.notes||'—'}</td>
+          <td style="font-size:11px;color:var(--text3);">${escapeHtml(r.notes)||'—'}</td>
           <td><span class="pill blue" style="font-size:10px;">New</span></td>
         </tr>`).join('');
       openM('import');
@@ -3880,7 +3928,7 @@ function renderArtistTransfers(){
       $('apb-transfers').innerHTML=transfers.map(t=>`
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; opacity: ${t.status==='pending'?'.6': '1'}">
           <div style="font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.35);">
-            ${t.num} · ${fmtD(t.date)} · ${t.qty}× ${t.status==='pending'?' (Pending Approval)':''}
+            ${escapeHtml(t.num)} · ${fmtD(t.date)} · ${t.qty}× ${t.status==='pending'?' (Pending Approval)':''}
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--gold2);font-weight:500;">${fmt(t.total,cur)}</div>
         </div>`).join('');
@@ -3904,11 +3952,11 @@ function renderArtistTransfers(){
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
           <span class="pill amber">⏳ Awaiting transfer</span>
-          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${t.num}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${escapeHtml(t.num)}</span>
           ${t.status === 'pending' ? `<span class="pill gray" style="font-size:10px;">Pending Approval</span>` : ''}
         </div>
         <div style="font-size:12px;color:var(--text3);">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong style="color:var(--amber);">${fmt(t.total,cur)} held</strong></div>
-        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${t.notes||'—'}</div>
+        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${escapeHtml(t.notes)||'—'}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${payHtml}
@@ -3949,8 +3997,8 @@ function renderPendingExpenses(){
           <span class="pill amber">⏳ Awaiting payment</span>
           <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${fmt(e.amount,cur)}</span>
         </div>
-        <div style="font-size:12px;color:var(--text3);">${fmtD(e.date)} · <span style="background:var(--cream3);padding:1px 7px;border-radius:100px;font-size:10px;">${e.cat}</span> · <strong style="color:var(--text2);">${e.desc}</strong></div>
-        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${e.ref||''}</div>
+        <div style="font-size:12px;color:var(--text3);">${fmtD(e.date)} · <span style="background:var(--cream3);padding:1px 7px;border-radius:100px;font-size:10px;">${escapeHtml(e.cat)}</span> · <strong style="color:var(--text2);">${escapeHtml(e.desc)}</strong></div>
+        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${escapeHtml(e.ref)||''}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${payHtml}
@@ -4108,7 +4156,7 @@ function renderStores(){
   if(!s.stores.length){el.innerHTML='<div class="empty-state"><div class="e-icon">🏪</div>No stores yet. Add your first consignment account.</div>';return;}
   el.innerHTML=s.stores.map(st=>{
     const sp=st.outstanding===0&&st.sent>0?'<span class="pill gray">Settled</span>':st.amountOwed>0?'<span class="pill amber">Payment due</span>':'<span class="pill green">Active</span>';
-    return`<div class="store-card"><div class="store-head"><div><div class="store-name">${st.name}</div><div class="store-meta">${[st.city,st.contact,st.email].filter(Boolean).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div><div class="sk-v ${st.outstanding>0?'warn':''}">${st.outstanding}</div></div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed>0?'warn':''}">${st.amountOwed>0?fmt(st.amountOwed,cur):'—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${st.id})">Send books</button><button class="btn sm ink" onclick="openSale(${st.id})" ${!st.outstanding?'disabled':''}>Record sale</button><button class="btn sm" onclick="openRet(${st.id})" ${!st.outstanding?'disabled':''}>Return</button><button class="btn sm" onclick="openEditStore(${st.id})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${st.id})">Remove</button></div></div>`;
+    return`<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city,st.contact,st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div><div class="sk-v ${st.outstanding>0?'warn':''}">${st.outstanding}</div></div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed>0?'warn':''}">${st.amountOwed>0?fmt(st.amountOwed,cur):'—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${st.id})">Send books</button><button class="btn sm ink" onclick="openSale(${st.id})" ${!st.outstanding?'disabled':''}>Record sale</button><button class="btn sm" onclick="openRet(${st.id})" ${!st.outstanding?'disabled':''}>Return</button><button class="btn sm" onclick="openEditStore(${st.id})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${st.id})">Remove</button></div></div>`;
   }).join('');
 }
 async function removeStore(id){
@@ -4188,7 +4236,7 @@ function renderLedger(){
   b.innerHTML=[...indexed].reverse().map(({e,i})=>{
     const voided = e.voided?' voided':'';
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry">✎</button>`;
-    return`<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${e.storeName}${editBtn}</td><td>${e.type}</td><td class="r">${e.qty}</td><td class="r">${e.type==='Sale'?e.rate+'%':'—'}</td><td class="r" style="font-weight:600;">${e.amountDue>0?fmt(e.amountDue,cur):'—'}</td><td style="font-size:12px;color:var(--text3);">${e.notes||'—'}</td><td>${pill(e)}${e.status==='pending'&&!e.voided?` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>`:''}</td></tr>`;
+    return`<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type==='Sale'?e.rate+'%':'—'}</td><td class="r" style="font-weight:600;">${e.amountDue>0?fmt(e.amountDue,cur):'—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes)||'—'}</td><td>${pill(e)}${e.status==='pending'&&!e.voided?` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>`:''}</td></tr>`;
   }).join('');
 }
 
@@ -4366,8 +4414,8 @@ function renderInvoices(){
       ? `<span title="Dynamic Stripe Checkout · exact amount" style="display:inline-block;margin-left:6px;background:#0e0c0a;color:#f0c060;font-size:8px;font-weight:700;letter-spacing:.16em;padding:2px 6px;border-radius:99px;">💳 STRIPE</span>`
       : '';
     return `<div class="invoice-card">
-      <div class="inv-c-num">${inv.num}${stripeChip}</div>
-      <div class="inv-c-store">${inv.storeName || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).join(' · ') || '—'}</div></div>
+      <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}</div>
+      <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div></div>
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
       <div class="inv-c-cell amt">Total<strong>${fmt(inv.total||0, cur)}</strong></div>
@@ -4391,7 +4439,7 @@ function openCreateInvoice(storeId, editingId){
   const s = getState(), book = getBook();
   // Populate store dropdown
   const sel = $('inv-store');
-  sel.innerHTML = '<option value="">— Select store —</option>' + (s.stores||[]).map(st => `<option value="${st.id}">${st.name}${st.city?' · '+st.city:''}</option>`).join('');
+  sel.innerHTML = '<option value="">— Select store —</option>' + (s.stores||[]).map(st => `<option value="${st.id}">${escapeHtml(st.name)}${st.city?' · '+escapeHtml(st.city):''}</option>`).join('');
 
   // set currency dropdown — default to book currency
   const bookCurCode = getBookCurrencyCode(book);
@@ -4507,7 +4555,7 @@ function renderInvoiceItems(){
   </tr>`).join('');
 }
 
-function escapeHTML(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeHTML(s){ return escapeHtml(s); }
 
 function recalcInvoiceTotals(){
   const cur = getSym(getInvoiceCurrency());
@@ -6444,7 +6492,7 @@ function renderProductionCostFields(){
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:220px;">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
-        <span style="font-size:13px;font-weight:600;color:var(--text);">${book.title}</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text);">${escapeHtml(book.title)}</span>
         <span style="font-size:11px;color:var(--text3);">${book.currency}</span>
       </div>
       <div class="form-group" style="flex:1;margin:0;">
@@ -6508,7 +6556,7 @@ function renderPaymentLinkFields(){
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:200px;">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
-        <span style="font-size:13px;font-weight:600;color:var(--text);">${book.title}</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text);">${escapeHtml(book.title)}</span>
       </div>
       <div class="form-group" style="flex:1;margin:0;">
         <input type="text" id="pl-${book.id}" value="${book.paymentLink||''}" placeholder="https://paypal.me/… or email@interac.ca">
@@ -6554,7 +6602,7 @@ function renderProfitSettings() {
     selectorCont.innerHTML = `
       <select id="ps-book-selector">
         <option value="">Select a book...</option>
-        ${Object.values(BOOKS).map(b => `<option value="${b.id}" ${b.id===currentVal?'selected':''}>${b.title}</option>`).join('')}
+        ${Object.values(BOOKS).map(b => `<option value="${escapeHtml(b.id)}" ${b.id===currentVal?'selected':''}>${escapeHtml(b.title)}</option>`).join('')}
       </select>
     `;
     const sel = $('ps-book-selector');
@@ -6929,7 +6977,7 @@ function renderFinancials() {
   if (booksBody) {
     booksBody.innerHTML = fin.bookStats.map(bs => `
       <tr>
-        <td style="font-weight:600;">${bs.title}</td>
+        <td style="font-weight:600;">${escapeHtml(bs.title)}</td>
         <td class="r">${bs.units}</td>
         <td class="r">${fmt(bs.revenue, cur)}</td>
         <td class="r">${fmt(bs.unitCost, cur)}</td>
@@ -7321,8 +7369,8 @@ function renderTaxCenter() {
   if (tripBody) {
     const tripList = Object.keys(tripSummary).map(t => ({ name: t, ...tripSummary[t] })).sort((a,b) => b.total - a.total);
     tripBody.innerHTML = tripList.map(t => `
-        <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${t.name.replace(/"/g,'&quot;')}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count===1?'':'s'}">
-          <td style="color:var(--gold);text-decoration:underline;">✈ ${t.name}</td>
+        <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${escapeHtml(t.name)}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count===1?'':'s'}">
+          <td style="color:var(--gold);text-decoration:underline;">✈ ${escapeHtml(t.name)}</td>
           <td class="r">${t.count}</td>
           <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(t.total, baseCurrency)}</td>
         </tr>
@@ -7349,8 +7397,8 @@ function renderTaxCenter() {
       };
 
       catBody.innerHTML = catList.map(c => `
-          <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${c.name.replace(/"/g,'&quot;')}" style="cursor:pointer;" title="Click to view ${c.count} transaction${c.count===1?'':'s'}">
-            <td style="color:var(--gold3);text-decoration:underline;">${c.name}</td>
+          <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${escapeHtml(c.name)}" style="cursor:pointer;" title="Click to view ${c.count} transaction${c.count===1?'':'s'}">
+            <td style="color:var(--gold3);text-decoration:underline;">${escapeHtml(c.name)}</td>
             <td class="r">${c.count}</td>
             <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}</td>
           </tr>
@@ -8215,7 +8263,7 @@ function renderPOS() {
     return `
       <div class="card pos-card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.1rem;">
         <div>
-          <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:600; margin-bottom:4px; color:var(--cream);">${book.title}</div>
+          <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:600; margin-bottom:4px; color:var(--cream);">${escapeHtml(book.title)}</div>
           <div style="font-size:12px; color:var(--text3);">${posFormat(book.listPrice || 0, sourceCode)} · ${convertedLabel}</div>
         </div>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; background:rgba(255,255,255,.05); border-radius:var(--r2); padding:6px;">
@@ -8231,7 +8279,7 @@ function renderPOS() {
     cartItemsEl.innerHTML = cartRows.length ? cartRows.map((row) => `
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.08);">
         <div>
-          <div style="font-size:13px;color:var(--cream);font-weight:600;">${row.book.title}</div>
+          <div style="font-size:13px;color:var(--cream);font-weight:600;">${escapeHtml(row.book.title)}</div>
           <div style="font-size:11px;color:var(--text3);">${row.qty} × ${posFormat(row.sourceUnit, row.sourceCode)}</div>
         </div>
         <div style="text-align:right;">
@@ -8393,7 +8441,7 @@ window.posCheckout = function() {
 
   $('pos-confirm-items').innerHTML = rows.map((row) => {
     const lineDisplay = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency);
-    return `<tr><td>${row.book.title}</td><td class="r">${row.qty}</td><td class="r">${lineDisplay}</td></tr>`;
+    return `<tr><td>${escapeHtml(row.book.title)}</td><td class="r">${row.qty}</td><td class="r">${lineDisplay}</td></tr>`;
   }).join('');
   $('pos-confirm-payment').textContent = method;
   $('pos-confirm-timestamp').textContent = localeTs;
@@ -8469,7 +8517,7 @@ window.posPrintReceipt = function() {
   if (!posPendingSale) return;
   const rowsHtml = posPendingSale.rows.map((row) => {
     const line = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posPendingSale.currency);
-    return `<tr><td>${row.book.title}</td><td>${row.qty}</td><td style="text-align:right;">${line}</td></tr>`;
+    return `<tr><td>${escapeHtml(row.book.title)}</td><td>${row.qty}</td><td style="text-align:right;">${line}</td></tr>`;
   }).join('');
   const win = window.open('', '_blank', 'width=420,height=600');
   if (!win) return;
@@ -8556,14 +8604,7 @@ window.salesTrackerRemoveCustom = function(idx) {
   renderSalesTrackerBookList();
 };
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+// escapeHtml is imported from ./lib/html.js
 
 window.printSalesTracker = function() {
   const eventName = (document.getElementById('st-event').value || '').trim();
