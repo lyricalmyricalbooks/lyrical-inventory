@@ -340,6 +340,17 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 @media (prefers-reduced-motion: reduce){
   .overlay,.modal,.overlay.closing,.overlay.closing .modal{animation:none !important;}
 }
+
+/* VIEW TRANSITIONS (#9) — cross-fade tab/book switches.
+   JS already skips the transition under reduced motion; the media query
+   below is a belt-and-suspenders guard for the default UA animation. */
+@keyframes vt-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes vt-fade-out{from{opacity:1}to{opacity:0}}
+::view-transition-old(root){animation:vt-fade-out .18s ease both;}
+::view-transition-new(root){animation:vt-fade-in .22s ease both;}
+@media (prefers-reduced-motion: reduce){
+  ::view-transition-old(root),::view-transition-new(root){animation:none;}
+}
 .modal-title{font-family:'Playfair Display',serif;font-size:22px;color:var(--text);margin-bottom:1.4rem;}
 .modal-footer{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-5);}
 
