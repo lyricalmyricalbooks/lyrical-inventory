@@ -10,6 +10,9 @@
   --blue:#1a4472; --blue-bg:#dbe8f5;
   --border:rgba(14,12,10,.09); --border2:rgba(14,12,10,.05);
   --r:5px; --r2:10px; --r3:16px;
+  /* Spacing scale — use these instead of ad-hoc px so padding/margins stay
+     consistent as new screens are added. Roughly a 1.5x step from 4px. */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
   --shadow:0 2px 12px rgba(14,12,10,.07);
   --shadow2:0 8px 32px rgba(14,12,10,.12);
   /* Per-book accent - overridden by JS */
@@ -325,11 +328,86 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .sync-stats{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:4px;display:none;}
 
 /* MODALS */
-.overlay{position:fixed;inset:0;background:rgba(14,12,10,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;}
-.modal{background:var(--cream);border-radius:var(--r3);border:1px solid var(--border);padding:2rem;width:100%;max-width:500px;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn .2s ease;}
+.overlay{position:fixed;inset:0;background:rgba(14,12,10,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn .2s ease;}
+.modal{background:var(--cream);border-radius:var(--r3);border:1px solid var(--border);padding:var(--space-6);width:100%;max-width:500px;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn .2s ease;}
 @keyframes modalIn{from{opacity:0;transform:scale(.97) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes overlayIn{from{opacity:0}to{opacity:1}}
+@keyframes modalOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.97) translateY(8px)}}
+@keyframes overlayOut{from{opacity:1}to{opacity:0}}
+/* Exit animation — closeM() adds .closing, then hides on animationend. */
+.overlay.closing{animation:overlayOut .18s ease forwards;}
+.overlay.closing .modal{animation:modalOut .18s ease forwards;}
+@media (prefers-reduced-motion: reduce){
+  .overlay,.modal,.overlay.closing,.overlay.closing .modal{animation:none !important;}
+}
 .modal-title{font-family:'Playfair Display',serif;font-size:22px;color:var(--text);margin-bottom:1.4rem;}
-.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:1.5rem;}
+.modal-footer{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-5);}
+
+/* INLINE FORM VALIDATION (#3) */
+.form-group.invalid input,.form-group.invalid select,.form-group.invalid textarea{
+  border-color:var(--red);
+  box-shadow:0 0 0 3px rgba(149,32,32,.12);
+}
+.field-error{
+  color:var(--red);
+  font-size:11px;
+  font-weight:600;
+  margin-top:var(--space-1);
+  font-family:'Syne',sans-serif;
+  display:flex;align-items:center;gap:5px;
+}
+.field-error::before{content:'⚠';font-size:11px;}
+
+/* TOOLTIPS (#10) — add data-tip="..." to any element. */
+.tip{position:relative;cursor:help;}
+.tip[data-tip]:hover::after,.tip[data-tip]:focus-visible::after{
+  content:attr(data-tip);
+  position:absolute;
+  left:50%;
+  bottom:calc(100% + 8px);
+  transform:translateX(-50%);
+  background:var(--ink);
+  color:var(--cream);
+  font-family:'Syne',sans-serif;
+  font-size:11px;
+  font-weight:500;
+  line-height:1.4;
+  letter-spacing:normal;
+  text-transform:none;
+  white-space:normal;
+  width:max-content;
+  max-width:220px;
+  padding:var(--space-2) var(--space-3);
+  border-radius:var(--r2);
+  box-shadow:var(--shadow2);
+  z-index:1300;
+  pointer-events:none;
+  animation:overlayIn .14s ease;
+}
+.tip[data-tip]:hover::before,.tip[data-tip]:focus-visible::before{
+  content:'';
+  position:absolute;
+  left:50%;
+  bottom:calc(100% + 3px);
+  transform:translateX(-50%);
+  border:5px solid transparent;
+  border-top-color:var(--ink);
+  z-index:1300;
+  pointer-events:none;
+}
+.tip-mark{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:15px;height:15px;margin-left:5px;
+  border-radius:50%;
+  background:var(--border);
+  color:var(--text3);
+  font-size:10px;font-weight:700;
+  font-family:'Syne',sans-serif;
+  vertical-align:middle;
+}
+@media (prefers-reduced-motion: reduce){
+  .tip[data-tip]:hover::after,.tip[data-tip]:focus-visible::after{animation:none;}
+}
 
 /* MISC */
 .divider{height:1px;background:var(--border);margin:1.25rem 0;}

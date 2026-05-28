@@ -4147,7 +4147,11 @@ window.backfillGratuityExpenses = function() {
 
 function storeById(id){return getState().stores.find(s=>s.id===id);}
 function addStore(){
-  const name=$('ns-name').value.trim();if(!name)return;
+  if(!validateFields([
+    {id:'ns-name',test:v=>v.trim().length>0,msg:'Store name is required'},
+    {id:'ns-rate',test:v=>{if(v.trim()==='')return true;const n=parseFloat(v);return !isNaN(n)&&n>=0&&n<=100;},msg:'Commission must be between 0 and 100'},
+  ]))return;
+  const name=$('ns-name').value.trim();
   getState().stores.push({id:Date.now(),name,contact:$('ns-contact').value.trim(),email:$('ns-email').value.trim(),phone:$('ns-phone').value.trim(),address:$('ns-address').value.trim(),city:$('ns-city').value.trim(),region:$('ns-region').value.trim(),postal:$('ns-postal').value.trim(),country:$('ns-country').value.trim(),website:$('ns-website').value.trim(),terms:$('ns-terms').value.trim(),rate:parseFloat($('ns-rate').value)||40,notes:$('ns-notes').value.trim(),sent:0,sold:0,returned:0,outstanding:0,amountOwed:0});
   closeM('add-store');['ns-name','ns-contact','ns-email','ns-phone','ns-address','ns-city','ns-region','ns-postal','ns-country','ns-website','ns-terms','ns-notes'].forEach(id=>$(id).value='');$('ns-rate').value='40';renderStores();updateDash();saveState(activeBook);showToast('✓ Store added');
 }
@@ -4167,14 +4171,23 @@ async function removeStore(id){
 function openEditStore(id){activeId=id;const st=storeById(id);if(!st)return;$('es-name').value=st.name;$('es-contact').value=st.contact||'';$('es-email').value=st.email||'';$('es-phone').value=st.phone||'';$('es-address').value=st.address||'';$('es-city').value=st.city||'';$('es-region').value=st.region||'';$('es-postal').value=st.postal||'';$('es-country').value=st.country||'';$('es-website').value=st.website||'';$('es-terms').value=st.terms||'';$('es-rate').value=st.rate;$('es-notes').value=st.notes||'';openM('edit-store');}
 function confirmEditStore(){
   const st=storeById(activeId);if(!st)return;
-  const name=$('es-name').value.trim();if(!name)return;
+  if(!validateFields([
+    {id:'es-name',test:v=>v.trim().length>0,msg:'Store name is required'},
+    {id:'es-rate',test:v=>{if(v.trim()==='')return true;const n=parseFloat(v);return !isNaN(n)&&n>=0&&n<=100;},msg:'Commission must be between 0 and 100'},
+  ]))return;
+  const name=$('es-name').value.trim();
   st.name=name;st.contact=$('es-contact').value.trim();st.email=$('es-email').value.trim();st.phone=$('es-phone').value.trim();st.address=$('es-address').value.trim();st.city=$('es-city').value.trim();st.region=$('es-region').value.trim();st.postal=$('es-postal').value.trim();st.country=$('es-country').value.trim();st.website=$('es-website').value.trim();st.terms=$('es-terms').value.trim();st.rate=parseFloat($('es-rate').value)||st.rate;st.notes=$('es-notes').value.trim();
   closeM('edit-store');renderStores();updateDash();saveState(activeBook);showToast('✓ Store updated');
 }
 function openSend(id){activeId=id;const st=storeById(id);$('send-sname').textContent=st.name;$('send-rate').value=st.rate;openM('send-books');}
 function confirmSend(){
-  const s=getState(),book=getBook(),st=storeById(activeId),qty=parseInt($('send-qty').value)||0,date=$('send-date').value,rate=parseFloat($('send-rate').value)||st.rate,notes=$('send-notes').value.trim();
-  if(qty>s.stock){notify('Not enough stock on hand!', 'warn');return;}
+  const s=getState(),book=getBook(),st=storeById(activeId);
+  if(!validateFields([
+    {id:'send-qty',test:v=>(parseInt(v)||0)>0,msg:'Enter a quantity greater than 0'},
+    {id:'send-qty',test:v=>(parseInt(v)||0)<=s.stock,msg:`Only ${s.stock} in stock`},
+    {id:'send-rate',test:v=>{const n=parseFloat(v);return !isNaN(n)&&n>=0&&n<=100;},msg:'Commission must be between 0 and 100'},
+  ]))return;
+  const qty=parseInt($('send-qty').value)||0,date=$('send-date').value,rate=parseFloat($('send-rate').value)||st.rate,notes=$('send-notes').value.trim();
   s.stock-=qty;st.sent+=qty;st.outstanding+=qty;
   const sheetsId = makeEventId();
   s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Shipment',date,qty,rate,amountDue:0,paid:'n/a',notes,status:'sent',sheetsId});
@@ -4184,8 +4197,13 @@ function confirmSend(){
 }
 function openSale(id){activeId=id;const book=getBook();$('sale-sym').textContent=book.currency;$('sale-price').value=book.listPrice.toFixed(2);$('sale-sname').textContent=storeById(id).name;openM('record-sale');}
 function confirmSale(){
-  const s=getState(),book=getBook(),cur=book.currency,st=storeById(activeId),qty=parseInt($('sale-qty').value)||0,date=$('sale-date').value,price=parseFloat($('sale-price').value)||book.listPrice,paid=$('sale-paid').value,notes=$('sale-notes').value.trim();
-  if(qty>st.outstanding){notify('Qty exceeds outstanding books.', 'warn');return;}
+  const s=getState(),book=getBook(),cur=book.currency,st=storeById(activeId);
+  if(!validateFields([
+    {id:'sale-qty',test:v=>(parseInt(v)||0)>0,msg:'Enter a quantity greater than 0'},
+    {id:'sale-qty',test:v=>(parseInt(v)||0)<=st.outstanding,msg:`Only ${st.outstanding} outstanding`},
+    {id:'sale-price',test:v=>(parseFloat(v)||0)>0,msg:'Enter a price greater than 0'},
+  ]))return;
+  const qty=parseInt($('sale-qty').value)||0,date=$('sale-date').value,price=parseFloat($('sale-price').value)||book.listPrice,paid=$('sale-paid').value,notes=$('sale-notes').value.trim();
   const gross=qty*price,pub=gross*(1-st.rate/100);
   st.sold+=qty;st.outstanding-=qty;st.amountOwed+=paid==='pending'?pub:0;
   s.sold+=qty;s.revenue+=pub;
@@ -4204,8 +4222,12 @@ function confirmSale(){
 }
 function openRet(id){activeId=id;$('ret-sname').textContent=storeById(id).name;openM('return');}
 function confirmReturn(){
-  const s=getState(),book=getBook(),st=storeById(activeId),qty=parseInt($('ret-qty').value)||0,date=$('ret-date').value,cond=$('ret-cond').value,notes=$('ret-notes').value.trim();
-  if(qty>st.outstanding){notify('Qty exceeds outstanding.', 'warn');return;}
+  const s=getState(),book=getBook(),st=storeById(activeId);
+  if(!validateFields([
+    {id:'ret-qty',test:v=>(parseInt(v)||0)>0,msg:'Enter a quantity greater than 0'},
+    {id:'ret-qty',test:v=>(parseInt(v)||0)<=st.outstanding,msg:`Only ${st.outstanding} outstanding`},
+  ]))return;
+  const qty=parseInt($('ret-qty').value)||0,date=$('ret-date').value,cond=$('ret-cond').value,notes=$('ret-notes').value.trim();
   st.returned+=qty;st.outstanding-=qty;const good=cond.startsWith('Good');if(good)s.stock+=qty;
   const sheetsId = makeEventId();
   s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Return',date,qty,rate:st.rate,amountDue:0,paid:'n/a',notes:(notes?notes+' · ':'')+cond,status:good?'restocked':'written off',sheetsId});
@@ -5351,8 +5373,110 @@ async function resetBookData(){
 }
 
 // ── MODAL HELPERS
-function openM(id){$('m-'+id).style.display='flex';const d=id==='send-books'?'send-date':id==='record-sale'?'sale-date':'ret-date';if($(d))$(d).value=today();}
-function closeM(id){$('m-'+id).style.display='none';}
+// Snapshot of a modal's field values, taken when it opens — used by the
+// backdrop/Esc close guard to detect unsaved edits.
+let _modalSnapshots = {};
+function _modalFieldSig(id){
+  const el=$('m-'+id); if(!el) return '';
+  return Array.from(el.querySelectorAll('input,select,textarea'))
+    .map(f=>(f.type==='checkbox'||f.type==='radio')?(f.checked?'1':'0'):(f.value||''))
+    .join('');
+}
+function _prefersReducedMotion(){
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+function openM(id){
+  const el=$('m-'+id); if(!el) return;
+  el.classList.remove('closing');
+  clearFieldErrors(el);
+  el.style.display='flex';
+  const d=id==='send-books'?'send-date':id==='record-sale'?'sale-date':'ret-date';
+  if($(d))$(d).value=today();
+  // Snapshot AFTER open* helpers and date defaults have populated fields, so a
+  // later mismatch means the *user* changed something.
+  _modalSnapshots[id]=_modalFieldSig(id);
+}
+function closeM(id){
+  const el=$('m-'+id); if(!el) return;
+  delete _modalSnapshots[id];
+  if(el.classList.contains('closing')) return;
+  if(_prefersReducedMotion()){ el.style.display='none'; clearFieldErrors(el); return; }
+  el.classList.add('closing');
+  let t;
+  const done=()=>{
+    el.style.display='none';
+    el.classList.remove('closing');
+    clearFieldErrors(el);
+    el.removeEventListener('animationend',done);
+    clearTimeout(t);
+  };
+  t=setTimeout(done,240); // fallback if animationend doesn't fire
+  el.addEventListener('animationend',done);
+}
+// Close a modal, but if the user has unsaved edits, confirm first. Used by the
+// backdrop-click and Esc handlers so a stray tap can't silently lose data.
+async function attemptCloseModal(id){
+  if(_modalSnapshots[id]!==undefined && _modalFieldSig(id)!==_modalSnapshots[id]){
+    if(!(await confirmDialog('Discard your unsaved changes?',
+      { okLabel:'Discard', cancelLabel:'Keep editing', danger:true }))) return;
+  }
+  closeM(id);
+}
+
+// ── INLINE FORM VALIDATION ──────────────────────────────────────────────
+function fieldError(id, msg){
+  const el=$(id); if(!el) return;
+  const fg=el.closest('.form-group')||el.parentElement;
+  if(fg){
+    fg.classList.add('invalid');
+    let e=fg.querySelector('.field-error');
+    if(!e){ e=document.createElement('div'); e.className='field-error'; fg.appendChild(e); }
+    e.textContent=msg;
+  }
+  el.setAttribute('aria-invalid','true');
+}
+function clearFieldError(el){
+  const fg=el && el.closest && el.closest('.form-group');
+  if(fg){
+    fg.classList.remove('invalid');
+    const e=fg.querySelector('.field-error'); if(e) e.remove();
+  }
+  if(el && el.removeAttribute) el.removeAttribute('aria-invalid');
+}
+function clearFieldErrors(scope){
+  const root=scope||document;
+  root.querySelectorAll('.form-group.invalid').forEach(fg=>{
+    fg.classList.remove('invalid');
+    const e=fg.querySelector('.field-error'); if(e) e.remove();
+  });
+  root.querySelectorAll('[aria-invalid]').forEach(el=>el.removeAttribute('aria-invalid'));
+}
+// rules: [{ id, test:(value, el)=>bool, msg }]. Multiple rules may target the
+// same field; the first failing rule wins and later ones for it are skipped.
+// Returns true when every field passes.
+function validateFields(rules){
+  let firstBad=null; const failed=new Set();
+  rules.forEach(r=>{
+    const el=$(r.id); if(!el || failed.has(r.id)) return;
+    if(r.test(el.value, el)){ clearFieldError(el); }
+    else { fieldError(r.id, r.msg); failed.add(r.id); if(!firstBad) firstBad=el; }
+  });
+  if(firstBad && firstBad.focus) firstBad.focus();
+  return failed.size===0;
+}
+
+// ── BUTTON LOADING STATE ────────────────────────────────────────────────
+// Disables the clicked button and shows a spinner while an async op runs, so
+// users can't double-submit. Pass the click event; safe to call with none.
+async function withButtonLoading(ev, busyLabel, fn){
+  const btn = ev && (ev.currentTarget ||
+    (ev.target && ev.target.closest && ev.target.closest('button')));
+  let original;
+  if(btn){ original=btn.innerHTML; btn.disabled=true; btn.innerHTML=`<span class="spinner"></span>${busyLabel}`; }
+  try { return await fn(); }
+  finally { if(btn){ btn.disabled=false; btn.innerHTML=original; } }
+}
+window.withButtonLoading = withButtonLoading;
 function addLog(lid,msg,type=''){const el=$(lid);el.style.display='block';const s=document.createElement('span');s.className='log-line '+type;s.textContent=new Date().toLocaleTimeString()+' · '+msg;el.appendChild(s);el.scrollTop=el.scrollHeight;}
 
 // ── GOOGLE SHEETS
@@ -6134,27 +6258,29 @@ async function downloadAndLocalizeReceipt(url, projectName) {
   return null;
 }
 
-async function exportToJSON() {
-  const data = buildBackupPayload();
-  const filename = backupFileName();
-  const savedToFolder = await writeBackupToChosenFolder(data, filename);
+async function exportToJSON(ev) {
+  return withButtonLoading(ev, 'Saving…', async () => {
+    const data = buildBackupPayload();
+    const filename = backupFileName();
+    const savedToFolder = await writeBackupToChosenFolder(data, filename);
 
-  if (!savedToFolder) {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 500);
-  }
-  
-  localStorage.setItem('lm-last-backup-ts', Date.now().toString());
-  updateLastBackupDisplay();
-  if($('backup-reminder')) $('backup-reminder').style.display = 'none';
-  showToast(savedToFolder ? '✓ JSON backup saved to your selected folder' : '✓ JSON backup downloaded');
+    if (!savedToFolder) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 500);
+    }
+
+    localStorage.setItem('lm-last-backup-ts', Date.now().toString());
+    updateLastBackupDisplay();
+    if($('backup-reminder')) $('backup-reminder').style.display = 'none';
+    showToast(savedToFolder ? '✓ JSON backup saved to your selected folder' : '✓ JSON backup downloaded');
+  });
 }
 
 function maybeAutoDownloadDailyBackup() {
@@ -8141,6 +8267,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById(id);
     if (!el) return;
     el.setAttribute('inputmode', 'decimal');
+  });
+});
+
+// ── MODAL UX: backdrop-click + Esc to close, clear validation on input ──
+document.addEventListener('DOMContentLoaded', () => {
+  // True while the confirmDialog overlay is on screen — its own handlers own
+  // the interaction, so the generic backdrop/Esc handlers stand down.
+  const confirmOpen = () => {
+    const c = document.getElementById('m-confirm');
+    return !!c && c.style.display !== 'none';
+  };
+
+  // Click the dimmed backdrop (not a child) to close the modal.
+  document.addEventListener('click', (e) => {
+    if (confirmOpen()) return;
+    const ov = e.target;
+    if (!ov || !ov.classList || !ov.classList.contains('overlay')) return;
+    if (ov.id === 'm-confirm') return;            // confirmDialog manages its own backdrop
+    if (ov.hasAttribute('data-no-backdrop-close')) return;
+    if (!ov.id.startsWith('m-')) return;
+    attemptCloseModal(ov.id.slice(2));
+  });
+
+  // Esc closes the topmost open modal (the confirm dialog handles its own Esc).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (confirmOpen()) return;
+    const open = Array.from(document.querySelectorAll('.overlay')).filter(o =>
+      o.style.display !== 'none' && o.id !== 'm-confirm' &&
+      !o.classList.contains('closing') && o.id.startsWith('m-') &&
+      !o.hasAttribute('data-no-backdrop-close'));
+    if (!open.length) return;
+    attemptCloseModal(open[open.length - 1].id.slice(2));
+  });
+
+  // Clear a field's error state as soon as the user edits it.
+  document.addEventListener('input', (e) => {
+    const t = e.target;
+    if (t && t.closest && t.closest('.form-group.invalid')) clearFieldError(t);
   });
 });
 
