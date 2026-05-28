@@ -1069,8 +1069,9 @@ function switchBook(bookId) {
 
   if (bookId === 'all') {
     // Show combined overview, hide per-book tabs
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    $('tab-all-overview').classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
+    const overview = $('tab-all-overview');
+    if (overview) { overview.classList.add('active'); overview.style.display = 'block'; }
     $('tab-bar').style.display = 'none';
     updateAllOverview();
     updateHeader();
