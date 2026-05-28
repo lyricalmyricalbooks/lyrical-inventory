@@ -1123,9 +1123,6 @@ function switchBook(bookId) {
   // If a non-'all' bookId no longer exists (e.g. just deleted), fall back to 'all'.
   if (bookId !== 'all' && !BOOKS[bookId]) bookId = 'all';
   closeBookDropdown();
-  withViewTransition(() => _switchBookView(bookId));
-}
-function _switchBookView(bookId) {
   activeBook = bookId;
   // Update custom dropdown label + dot
   const label = $('book-dropdown-label');
@@ -1172,10 +1169,7 @@ function switchTab(name) {
   if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
-
-  withViewTransition(() => _switchTabView(name));
-}
-function _switchTabView(name) {
+  
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
   const names = ['dashboard','website','manual','consignment','history','expenses','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
@@ -5391,23 +5385,6 @@ function _modalFieldSig(id){
 function _prefersReducedMotion(){
   return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
-
-// Wrap a DOM-mutating UI update in the View Transitions API so tab/book
-// switches cross-fade instead of hard-cutting. Falls back to running the
-// update directly where the API is unsupported or reduced motion is requested.
-// Nested calls (e.g. switchBook -> switchTab) run inline so only one
-// transition is captured for the whole switch.
-let _inViewTransition = false;
-function withViewTransition(update){
-  if(_inViewTransition || typeof document.startViewTransition !== 'function' || _prefersReducedMotion()){
-    update();
-    return;
-  }
-  _inViewTransition = true;
-  const t = document.startViewTransition(update);
-  t.finished.finally(() => { _inViewTransition = false; });
-}
-
 function openM(id){
   const el=$('m-'+id); if(!el) return;
   el.classList.remove('closing');
