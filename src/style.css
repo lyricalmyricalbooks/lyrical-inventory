@@ -488,14 +488,14 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   /* Book switcher */
   .book-switcher{
     padding:.55rem 1rem !important;
-    overflow-x:auto;
-    -webkit-overflow-scrolling:touch;
-    scroll-snap-type:x proximity;
+    overflow:visible;
     gap:8px !important;
+    flex-wrap:wrap;
   }
-  .book-switcher::-webkit-scrollbar{display:none;}
-  .book-tab{scroll-snap-align:start;padding:.55rem 1rem;}
-  #book-dropdown-btn{min-width:180px !important;font-size:12px;}
+  .book-tab{padding:.55rem 1rem;}
+  #book-dropdown{flex:1;min-width:0;}
+  #book-dropdown-btn{min-width:0 !important;width:100%;font-size:12px;}
+  #book-dropdown-menu{max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   #role-toggle-btn{position:static !important;transform:none !important;margin-left:auto;}
 
   /* Panels */

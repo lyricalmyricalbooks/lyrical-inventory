@@ -920,22 +920,26 @@ async function forceSync() {
 }
 
 // ── BOOK SWITCHER (build custom dropdown)
+let _bookDropdownOutsideHandler = null;
+
 function buildBookSwitcher() {
   const menu = $('book-dropdown-menu');
   if (!menu) return;
-  // All books option
-  menu.innerHTML = `<div class="book-dd-item active" data-id="all" onclick="switchBook('all');closeBookDropdown();" style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-family:'Syne',sans-serif;font-size:12px;font-weight:600;color:var(--gold3);background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.06);">
-    <div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);flex-shrink:0;"></div>All books
-  </div>`;
-  Object.values(BOOKS).forEach(book => {
+  menu.innerHTML = '';
+
+  const items = [{ id: 'all', title: 'All books', accent: 'rgba(255,255,255,.25)' }]
+    .concat(Object.values(BOOKS).map(b => ({ id: b.id, title: b.title, accent: b.accent })));
+
+  items.forEach((it, idx) => {
+    const isActive = (activeBook || 'all') === it.id;
     const item = document.createElement('div');
-    item.className = 'book-dd-item';
-    item.dataset.id = book.id;
-    item.onclick = () => { switchBook(book.id); closeBookDropdown(); };
-    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-family:\'Syne\',sans-serif;font-size:12px;font-weight:600;color:rgba(255,255,255,.7);transition:background .12s;border-bottom:1px solid rgba(255,255,255,.04);';
-    item.onmouseover = () => item.style.background = 'rgba(255,255,255,.06)';
-    item.onmouseout  = () => item.style.background = '';
-    item.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>${book.title}`;
+    item.className = 'book-dd-item' + (isActive ? ' active' : '');
+    item.dataset.id = it.id;
+    item.style.cssText = `display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;font-family:'Syne',sans-serif;font-size:12px;font-weight:600;color:${isActive ? 'var(--gold3)' : 'rgba(255,255,255,.7)'};background:${isActive ? 'rgba(255,255,255,.04)' : ''};border-bottom:1px solid rgba(255,255,255,${idx === 0 ? '.06' : '.04'});transition:background .12s;`;
+    item.onmouseover = () => { if (!item.classList.contains('active')) item.style.background = 'rgba(255,255,255,.06)'; };
+    item.onmouseout  = () => { if (!item.classList.contains('active')) item.style.background = ''; };
+    item.onclick = (e) => { e.stopPropagation(); switchBook(it.id); closeBookDropdown(); };
+    item.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:${it.accent};flex-shrink:0;"></div>${it.title}`;
     menu.appendChild(item);
   });
 }
@@ -943,26 +947,31 @@ function buildBookSwitcher() {
 function toggleBookDropdown() {
   const menu = $('book-dropdown-menu');
   if (!menu) return;
-  const isOpen = menu.style.display !== 'none';
-  if (isOpen) {
-    menu.style.display = 'none';
+  if (menu.style.display === 'block') {
+    closeBookDropdown();
   } else {
+    // Rebuild so highlight reflects current activeBook
+    buildBookSwitcher();
     menu.style.display = 'block';
-    // Defer outside-click listener so it doesn't fire on this same click
+    // Defer outside-click listener so it doesn't fire on the click that opened the menu
     setTimeout(() => {
-      function outsideClick(e) {
-        if (!$('book-dropdown')?.contains(e.target)) {
-          menu.style.display = 'none';
-          document.removeEventListener('click', outsideClick);
-        }
+      if (_bookDropdownOutsideHandler) {
+        document.removeEventListener('click', _bookDropdownOutsideHandler, true);
       }
-      document.addEventListener('click', outsideClick);
+      _bookDropdownOutsideHandler = (e) => {
+        if (!$('book-dropdown')?.contains(e.target)) closeBookDropdown();
+      };
+      document.addEventListener('click', _bookDropdownOutsideHandler, true);
     }, 0);
   }
 }
 function closeBookDropdown() {
   const menu = $('book-dropdown-menu');
   if (menu) menu.style.display = 'none';
+  if (_bookDropdownOutsideHandler) {
+    document.removeEventListener('click', _bookDropdownOutsideHandler, true);
+    _bookDropdownOutsideHandler = null;
+  }
 }
 
 function updateRoleToggleButton() {
