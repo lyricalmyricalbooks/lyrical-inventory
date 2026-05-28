@@ -153,6 +153,14 @@ async function saveBookFromModal() {
   buildBookSwitcher();
   renderCatalogList();
   renderProfitSettings();
+  // Refresh the dropdown header (label/dot/accent) if the active book was edited.
+  if (activeBook && activeBook !== 'all' && BOOKS[activeBook]) {
+    const ab = BOOKS[activeBook];
+    const lbl = $('book-dropdown-label'); if (lbl) lbl.textContent = ab.title;
+    const dt  = $('book-dropdown-dot');   if (dt)  dt.style.background = ab.accent;
+    document.documentElement.style.setProperty('--book-accent', ab.accent);
+    document.documentElement.style.setProperty('--book-accent-bg', ab.accentBg);
+  }
   renderCurrent();
 }
 
@@ -195,7 +203,9 @@ async function deleteBook(id) {
   renderCatalogList();
   if (psActiveBookId === id) psActiveBookId = null;
   renderProfitSettings();
-  renderCurrent();
+  // If the deleted book was being viewed, fall back to the All Books overview.
+  if (activeBook === id) switchBook('all');
+  else renderCurrent();
   showToast('Book removed');
 }
 
@@ -1048,6 +1058,11 @@ function toggleCurrentBookView() {
 }
 
 function switchBook(bookId) {
+  // Author sessions are locked to a single book; never switch them.
+  if (isAuthor() && bookId !== activeBook) return;
+  // If a non-'all' bookId no longer exists (e.g. just deleted), fall back to 'all'.
+  if (bookId !== 'all' && !BOOKS[bookId]) bookId = 'all';
+  closeBookDropdown();
   activeBook = bookId;
   // Update custom dropdown label + dot
   const label = $('book-dropdown-label');
