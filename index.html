@@ -1969,6 +1969,18 @@ function json_(obj) {
 
 <div class="toast" id="toast"></div>
 
+<!-- Styled confirm dialog (replaces browser confirm/alert) -->
+<div class="overlay" id="m-confirm" style="display:none;z-index:1200;">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title" id="m-confirm-title">Are you sure?</div>
+    <div id="m-confirm-body" style="font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn" id="m-confirm-cancel">Cancel</button>
+      <button type="button" class="btn gold" id="m-confirm-ok">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>

@@ -349,6 +349,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);color:var(--cream);font-size:12px;font-family:'DM Mono',monospace;padding:11px 18px;border-radius:var(--r2);border-left:3px solid #4ade80;box-shadow:var(--shadow2);z-index:1100;opacity:0;transform:translateY(10px);transition:opacity .22s,transform .22s;pointer-events:none;max-width:320px;}
 .toast.show{opacity:1;transform:translateY(0);}
 .toast.warn{border-left-color:#fb923c;}
+.toast.err{border-left-color:#ef4444;}
 
 /* EDIT / VOID */
 .tbl tbody tr.voided td{opacity:.35;}
