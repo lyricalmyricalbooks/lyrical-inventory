@@ -4023,6 +4023,57 @@ async function settleArtistTransferKeepShare(transferId){
   showToast(`✓ Settled — artist keeps ${fmt(share,book.currency)}; ${fmt(publisherCut,book.currency)} still to forward`);
 }
 
+// Settle a held transfer where the artist keeps the FULL gross — the publisher
+// forgives their cut entirely. The full sale is booked to revenue and the full
+// gross is recorded as a payout to the artist (they owe nothing further).
+async function settleArtistTransferKeepAll(transferId){
+  const s=getState(),book=getBook();
+  const t=s.artistTransfers.find(x=>x.id===transferId);
+  if(!t)return;
+
+  if(!(await confirmDialog(
+    `Settle ${escapeHtml(t.num)} — artist keeps everything?\n\n`+
+    `The full ${fmt(t.total,book.currency)} sale is booked to revenue and recorded as a `+
+    `payout to the artist. Your publisher cut is forgiven — the artist owes nothing further.`,
+    { okLabel: 'Settle — forgive publisher cut' }
+  ))) return;
+
+  const h=s.hist.find(x=>x.num===t.num&&x.artistPending);
+
+  // Credit the full gross to revenue and resolve the pending history entry.
+  s.revenue+=t.total;
+  if(!s.chStats[t.chan])s.chStats[t.chan]={txns:0,units:0,revenue:0};
+  s.chStats[t.chan].revenue+=t.total;
+  if(h){h.artistPending=false;h.notes=(h.notes?h.notes+' · ':'')+'Artist kept full amount (publisher cut forgiven)';}
+
+  // Record the full gross as a payout — artist held all of it.
+  if(!s.artistPayouts)s.artistPayouts=[];
+  s.artistPayouts.push({
+    id:Date.now(),
+    date:today(),
+    amount:t.total,
+    method:'Kept from direct sale (full)',
+    notes:`${t.num} — artist retained full gross; publisher cut forgiven`
+  });
+
+  s.artistTransfers=s.artistTransfers.filter(x=>x.id!==transferId);
+  renderHist();updateDash();renderArtistTransfers();await saveState(activeBook);
+  const nativeCurA = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  let cadEquivA = '';
+  if (nativeCurA === 'CAD') cadEquivA = t.total;
+  else if (t.payment && t.payment.currency === 'CAD' && t.payment.amount) cadEquivA = t.payment.amount;
+  syncToSheets({
+    type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST KEPT ALL — PUBLISHER CUT FORGIVEN]',
+    sheetsId: t.sheetsId || (h && h.sheetsId) || '',
+    currency: nativeCurA,
+    paymentCurrency: normalizeCurrencyCode(t.payment?.currency || nativeCurA, 'CAD'),
+    paymentAmount: t.payment?.amount ?? t.total,
+    paymentRate: t.payment?.rate ?? '',
+    convertedTotal: cadEquivA
+  });
+  showToast(`✓ Settled — artist keeps full ${fmt(t.total,book.currency)}; publisher cut forgiven`);
+}
+
 function renderArtistTransfers(){
   const s=getState(),book=getBook(),cur=book.currency;
   let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
@@ -4099,6 +4150,7 @@ function renderArtistTransfers(){
         ${t.status === 'pending'
           ? `<button class="btn sm outline" disabled>Approve sale first</button>`
           : `<button class="btn sm outline" onclick="settleArtistTransferKeepShare(${t.id})" title="Artist keeps their share; only your cut is forwarded">Artist keeps share</button>
+             <button class="btn sm outline" onclick="settleArtistTransferKeepAll(${t.id})" title="Artist keeps everything — publisher forgives their cut">Artist keeps all</button>
              <button class="btn gold" onclick="markArtistTransferReceived(${t.id})" title="Artist forwarded the full amount to you">✓ Mark transfer received</button>`}
       </div>
     </div>`).join('');
@@ -9859,7 +9911,7 @@ Object.assign(window, {
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
-  saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, markExpenseReceived,
+  saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
