@@ -1795,8 +1795,52 @@ function renderProfitSharingBreakdown(bookId) {
   }
 
   const owed = stats.owedToArtist;
-  const owedClass = owed > 0.01 ? 'owed-due' : 'owed-clear';
-  const owedColor = owed > 0.01 ? 'var(--gold2)' : 'var(--green)';
+  const hasHeld = stats.heldByArtistGross > 0.01;
+  const artistOwesPublisher = owed < -0.01;
+
+  // The "Owed to artist" card flips meaning when the artist is holding more cash
+  // than they've earned: the artist then owes the publisher the unforwarded cut.
+  let owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor;
+  if (artistOwesPublisher) {
+    owedLabel = '⚠ Artist owes you';
+    owedVal = fmt(Math.abs(owed), cur);
+    owedSub = 'unforwarded cut — collect from artist';
+    owedValColor = 'var(--red)';
+    owedSubColor = 'var(--red)';
+    owedCardBg = 'rgba(248,113,113,.12)';
+    owedCardBorder = '1px solid rgba(248,113,113,.4)';
+  } else if (owed > 0.01) {
+    owedLabel = '⚠ Owed to artist';
+    owedVal = fmt(owed, cur);
+    owedSub = 'action needed';
+    owedValColor = 'var(--gold2)';
+    owedSubColor = 'var(--gold2)';
+    owedCardBg = 'rgba(212,175,55,.12)';
+    owedCardBorder = '1px solid rgba(212,175,55,.35)';
+  } else {
+    owedLabel = 'Owed to artist';
+    owedVal = fmt(0, cur);
+    owedSub = 'all settled ✓';
+    owedValColor = 'var(--green)';
+    owedSubColor = 'var(--green)';
+    owedCardBg = 'rgba(74,222,128,.1)';
+    owedCardBorder = '1px solid rgba(74,222,128,.3)';
+  }
+
+  const heldCardHtml = hasHeld ? `
+      <div class="card" style="margin:0; background:rgba(212,175,55,.08); border:1px solid rgba(212,175,55,.25);">
+        <div class="hs-label" style="color:var(--text3);">Held by artist</div>
+        <div class="hs-val" style="color:var(--gold2); font-size:22px;">${fmt(stats.heldByArtistGross, cur)}</div>
+        <div style="font-size:10px; color:var(--text3); margin-top:2px;">incl. ${fmt(stats.publisherCutHeldByArtist, cur)} your cut</div>
+      </div>` : '';
+
+  const heldNoteHtml = hasHeld ? `
+    <div style="font-size:11px; color:var(--text3); margin:-0.75rem 0 1.25rem; line-height:1.5; padding:8px 10px; background:var(--cream2); border-radius:var(--r2);">
+      The artist collected <strong>${fmt(stats.heldByArtistGross, cur)}</strong> directly and hasn't forwarded it yet —
+      <strong>${fmt(stats.heldByArtistShare, cur)}</strong> is their own share, the remaining
+      <strong>${fmt(stats.publisherCutHeldByArtist, cur)}</strong> is your cut.
+      <br>Owed to artist = lifetime earnings − payouts − cash the artist is holding.
+    </div>` : '';
 
   const payoutHistoryHtml = (stats.payouts || []).length > 0
     ? stats.payouts.slice().sort((a,b) => (b.date || '').localeCompare(a.date || '')).map(p => `
@@ -1812,7 +1856,7 @@ function renderProfitSharingBreakdown(bookId) {
     : '<div style="padding:12px; font-size:11px; color:var(--text3); text-align:center;">No payouts recorded yet.</div>';
 
   content.innerHTML = `
-    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:1.5rem;">
+    <div style="display:grid; grid-template-columns:repeat(${hasHeld ? 4 : 3}, 1fr); gap:12px; margin-bottom:1.5rem;">
       <div class="card" style="margin:0; background:var(--cream2); border:none;">
         <div class="hs-label" style="color:var(--text3);">Artist earnings</div>
         <div class="hs-val" style="color:var(--green); font-size:22px;">${fmt(stats.totalArtistEarned, cur)}</div>
@@ -1823,12 +1867,14 @@ function renderProfitSharingBreakdown(bookId) {
         <div class="hs-val" style="color:var(--text); font-size:22px; opacity:.85;">${fmt(stats.totalPaidToArtist, cur)}</div>
         <div style="font-size:10px; color:var(--text3); margin-top:2px;">${stats.payouts?.length || 0} payout${(stats.payouts?.length || 0) !== 1 ? 's' : ''} recorded</div>
       </div>
-      <div class="card" style="margin:0; background:${owed > 0.01 ? 'rgba(212,175,55,.12)' : 'rgba(74,222,128,.1)'}; border:1px solid ${owed > 0.01 ? 'rgba(212,175,55,.35)' : 'rgba(74,222,128,.3)'};">
-        <div class="hs-label" style="color:var(--text3);">${owed > 0.01 ? '⚠ Owed to artist' : 'Owed to artist'}</div>
-        <div class="hs-val" style="color:${owedColor}; font-size:22px; font-weight:700;">${fmt(Math.max(0, owed), cur)}</div>
-        <div style="font-size:10px; color:${owedColor}; margin-top:2px; opacity:.8;">${owed > 0.01 ? 'action needed' : 'all paid up ✓'}</div>
+      ${heldCardHtml}
+      <div class="card" style="margin:0; background:${owedCardBg}; border:${owedCardBorder};">
+        <div class="hs-label" style="color:var(--text3);">${owedLabel}</div>
+        <div class="hs-val" style="color:${owedValColor}; font-size:22px; font-weight:700;">${owedVal}</div>
+        <div style="font-size:10px; color:${owedSubColor}; margin-top:2px; opacity:.8;">${owedSub}</div>
       </div>
     </div>
+    ${heldNoteHtml}
     <div style="margin-bottom:1rem;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
          <span class="sect" style="font-size:8px; margin:0;">Payout Tiers</span>
@@ -6904,9 +6950,16 @@ function calculateArtistEarnings(bookId) {
 
   let totalArtistEarned = 0;
   let cumulativeRevenue = 0;
+  // Direct-to-artist sales: the artist collected the cash and hasn't forwarded
+  // it yet. We fold these into the breakdown so the money the artist is holding
+  // is visible and reconciled, tracking their share vs. the publisher cut.
+  let heldByArtistGross = 0;   // full cash collected directly, not yet forwarded
+  let heldByArtistShare = 0;   // the artist's own share within that held cash
   const perTier = tiers.map(t => ({ tier: t, revenue: 0, artistEarned: 0 }));
 
-  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && !h.artistPending && h.qty > 0 && h.price > 0);
+  // Include artistPending entries (money held by the artist) in the tier walk so
+  // their earnings count toward lifetime totals and land in the correct tier.
+  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
 
   const tierEffectiveCap = (t) => {
     const isBreakEvenTier = (t.label || '').toLowerCase().includes('break');
@@ -6915,7 +6968,9 @@ function calculateArtistEarnings(bookId) {
   };
 
   sortedHist.forEach(h => {
+    const isHeld = !!h.artistPending;
     let revRemaining = h.qty * h.price;
+    if (isHeld) heldByArtistGross += revRemaining;
     while (revRemaining > 0.001) {
       const tierIdx = tiers.findIndex(t => tierEffectiveCap(t) !== null && cumulativeRevenue < tierEffectiveCap(t));
       const idx = tierIdx === -1 ? tiers.length - 1 : tierIdx;
@@ -6925,6 +6980,7 @@ function calculateArtistEarnings(bookId) {
       const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tCap - cumulativeRevenue);
       const earned = capacity * (tier.artistPct / 100);
       totalArtistEarned += earned;
+      if (isHeld) heldByArtistShare += earned;
       perTier[idx].revenue += capacity;
       perTier[idx].artistEarned += earned;
       cumulativeRevenue += capacity;
@@ -6934,15 +6990,24 @@ function calculateArtistEarnings(bookId) {
 
   const payouts = (s.artistPayouts || []).filter(p => !p.voided);
   const totalPaidToArtist = payouts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-  const owedToArtist = totalArtistEarned - totalPaidToArtist;
+  // The artist already holds heldByArtistGross in cash, so net it against what
+  // they're owed. This can go negative — meaning the artist is holding more than
+  // their share and owes the publisher the difference (the unforwarded cut).
+  const owedToArtist = totalArtistEarned - totalPaidToArtist - heldByArtistGross;
+  const publisherCutHeldByArtist = heldByArtistGross - heldByArtistShare;
 
   return {
     totalArtistEarned,
     cumulativeRevenue,
-    netPublisher: s.revenue - totalArtistEarned,
+    // Publisher keeps their cut of every sale, including the cut the artist is
+    // still holding (s.revenue excludes pending transfers, so add it back in).
+    netPublisher: (s.revenue + heldByArtistGross) - totalArtistEarned,
     perTier,
     totalPaidToArtist,
     owedToArtist,
+    heldByArtistGross,
+    heldByArtistShare,
+    publisherCutHeldByArtist,
     payouts
   };
 }
