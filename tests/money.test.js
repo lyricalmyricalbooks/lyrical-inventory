@@ -11,6 +11,8 @@ import {
   paymentSummary,
   buildPaymentMeta,
   hexToRgba,
+  PAYMENT_TYPE_DIRECT_TO_ARTIST,
+  isDirectToArtistSale,
 } from '../src/lib/money.js';
 
 describe('getSym', () => {
@@ -200,5 +202,26 @@ describe('CURRENCY_SYMBOL_TO_CODE / CODE_TO_SYMBOL round-trip', () => {
     for (const [, code] of Object.entries(CURRENCY_SYMBOL_TO_CODE)) {
       expect(CODE_TO_SYMBOL[code]).toBeDefined();
     }
+  });
+});
+
+describe('isDirectToArtistSale', () => {
+  it('detects the structured flag', () => {
+    expect(isDirectToArtistSale({ directToArtist: true })).toBe(true);
+  });
+  it('detects the legacy paymentType field', () => {
+    expect(isDirectToArtistSale({ paymentType: PAYMENT_TYPE_DIRECT_TO_ARTIST })).toBe(true);
+  });
+  it('detects the legacy payment.type field', () => {
+    expect(isDirectToArtistSale({ payment: { type: PAYMENT_TYPE_DIRECT_TO_ARTIST } })).toBe(true);
+  });
+  it('falls back to note text for old records', () => {
+    expect(isDirectToArtistSale({ notes: 'Sold at fair · Payment directly to artist' })).toBe(true);
+  });
+  it('is false for publisher-collected sales and empty input', () => {
+    expect(isDirectToArtistSale({ paymentType: 'Payment directly to publisher' })).toBe(false);
+    expect(isDirectToArtistSale({ notes: 'regular sale' })).toBe(false);
+    expect(isDirectToArtistSale({})).toBe(false);
+    expect(isDirectToArtistSale(null)).toBe(false);
   });
 });
