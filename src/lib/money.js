@@ -85,6 +85,23 @@ export function buildPaymentMeta({ book, qty, unitPrice, fxEnabled, fxCur, fxAmt
   };
 }
 
+// The label stored on a sale when the artist collected the payment directly
+// (rather than it flowing to the publisher). Kept as a single source of truth
+// so detection doesn't rely on string literals scattered across the codebase.
+export const PAYMENT_TYPE_DIRECT_TO_ARTIST = 'Payment directly to artist';
+
+// True when a sale entry/payload represents cash the artist collected directly
+// and still owes the publisher their cut. Prefers the structured `directToArtist`
+// flag; falls back to the legacy paymentType / payment.type / notes text so
+// records created before the flag existed are still recognised.
+export function isDirectToArtistSale(entry) {
+  if (!entry) return false;
+  if (entry.directToArtist === true) return true;
+  if (entry.paymentType === PAYMENT_TYPE_DIRECT_TO_ARTIST) return true;
+  if (entry.payment && entry.payment.type === PAYMENT_TYPE_DIRECT_TO_ARTIST) return true;
+  return (entry.notes || '').includes(PAYMENT_TYPE_DIRECT_TO_ARTIST);
+}
+
 export function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);

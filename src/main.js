@@ -13,7 +13,10 @@ import {
   paymentSummary,
   buildPaymentMeta,
   hexToRgba,
+  PAYMENT_TYPE_DIRECT_TO_ARTIST,
+  isDirectToArtistSale,
 } from './lib/money.js';
+import { calcArtistEarnings } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 
 const updateSW = registerSW({ onNeedRefresh() {} });
@@ -1430,9 +1433,7 @@ function updatePublisherActionBanner() {
     Object.keys(pbSales).forEach(k => {
       try {
         const raw = (typeof pbSales[k].data === 'string') ? JSON.parse(pbSales[k].data) : pbSales[k].data;
-        const isDirect = raw && (raw.paymentType === 'Payment directly to artist'
-          || (raw.notes || '').includes('Payment directly to artist'));
-        if (isDirect) artistPaymentCount++;
+        if (isDirectToArtistSale(raw)) artistPaymentCount++;
       } catch(_) {}
     });
   });
@@ -1565,9 +1566,7 @@ function updateDash() {
   const pbSales2 = window.authorSubmissions[activeBook]?.sales || {};
   Object.keys(pbSales2).forEach(k => {
     const raw = (typeof pbSales2[k].data === 'string') ? JSON.parse(pbSales2[k].data) : pbSales2[k].data;
-    const isDirectToArtist = raw.paymentType === 'Payment directly to artist'
-      || (raw.notes || '').includes('Payment directly to artist');
-    if (isDirectToArtist) {
+    if (isDirectToArtistSale(raw)) {
       pendingTransfers.push({
         ...raw,
         total: (raw.qty || 0) * (raw.price || 0)
@@ -3766,16 +3765,17 @@ async function submitManual(){
 
   const fullNotes=[notes,fxNote,paymentType].filter(Boolean).join(' · ');
 
-  // Create standard entry payload
-  // paymentType stored on the payload so it can be detected in renderArtistTransfers / updateDash
-  const entryPayload = { num, chan, qty, price, notes: fullNotes, payment, paymentType, date: today(), id: Date.now() };
+  // Create standard entry payload. `directToArtist` is the structured flag used
+  // for detection (isDirectToArtistSale); paymentType is kept for display/back-compat.
+  const directToArtist = paymentType === PAYMENT_TYPE_DIRECT_TO_ARTIST;
+  const entryPayload = { num, chan, qty, price, notes: fullNotes, payment, paymentType, directToArtist, date: today(), id: Date.now() };
 
   if (isAuthor()) {
     // Author queue route
     try {
       await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
       addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — (Submitted)`,'warn');
-      const isArtistPayment = paymentType === 'Payment directly to artist';
+      const isArtistPayment = directToArtist;
       const notifyKind = isArtistPayment ? 'Artist Payment Approval' : 'Sale';
       const baseSummary = `${num}: -${qty} @ ${fmt(price,book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
       const notifySummary = isArtistPayment
@@ -3802,7 +3802,7 @@ async function submitManual(){
     }
   } else {
     // Publisher direct route
-    if(paymentType==='Payment directly to artist'){
+    if(directToArtist){
       recordOrderPendingTransfer(num,chan,qty,price,fullNotes,payment);
       addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — ⏳ awaiting artist transfer`,'warn');
       showToast('⏳ Order logged — awaiting artist transfer to publisher');
@@ -3842,7 +3842,7 @@ window.approveSubmission = async function(type, subKey) {
     }, 100);
   } else if (type === 'sales') {
     let pendingTransfer = false;
-    if(raw.payment?.type==='Payment directly to artist'){
+    if(isDirectToArtistSale(raw)){
       recordOrderPendingTransfer(raw.num,raw.chan,raw.qty,raw.price,raw.notes,raw.payment);
       pendingTransfer = true;
     } else {
@@ -3878,9 +3878,10 @@ function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
   s.sold+=qty;
   if(!s.chStats[chan])s.chStats[chan]={txns:0,units:0,revenue:0};
   s.chStats[chan].txns++;s.chStats[chan].units+=qty;
-  // Add to history with pending flag
+  // Add to history with pending flag. directToArtist marks this as cash the
+  // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),artistPending:true,payment,sheetsId});
+  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),artistPending:true,directToArtist:true,payment,sheetsId});
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
   s.artistTransfers.push({id:Date.now(),num,chan,qty,price,total:qty*price,notes:notes||'',date:today(),payment,sheetsId});
   renderHist();updateDash();saveState(activeBook);
@@ -3930,6 +3931,70 @@ function markArtistTransferReceived(transferId){
   showToast(`✓ Transfer received — ${fmt(t.total,book.currency)} added to revenue`);
 }
 
+// Settle a held transfer where the artist KEEPS their share and only forwards
+// the publisher's cut (the common real-world case). Unlike "mark received" — which
+// assumes the artist forwards the full gross — this credits the sale to revenue,
+// records the artist's share as already-paid (they kept the cash), and leaves only
+// the publisher cut as the amount the artist still owes you.
+async function settleArtistTransferKeepShare(transferId){
+  const s=getState(),book=getBook();
+  const t=s.artistTransfers.find(x=>x.id===transferId);
+  if(!t)return;
+
+  // The held sale already counts toward earnings, so its marginal share is the
+  // drop in lifetime earnings if it were removed (this respects tier placement).
+  const h=s.hist.find(x=>x.num===t.num&&x.artistPending);
+  const full=calculateArtistEarnings(activeBook);
+  const without=calcArtistEarnings(book, { ...s, hist: s.hist.filter(x => x !== h) });
+  const share=(full&&without)
+    ? Math.max(0, +(full.totalArtistEarned - without.totalArtistEarned).toFixed(2))
+    : +(t.total/2).toFixed(2);
+  const publisherCut=+(t.total - share).toFixed(2);
+
+  if(!(await confirmDialog(
+    `Settle ${escapeHtml(t.num)} — artist keeps their ${fmt(share,book.currency)} share?\n\n`+
+    `The full ${fmt(t.total,book.currency)} sale is booked to revenue. The artist's `+
+    `${fmt(share,book.currency)} share is recorded as paid (they kept the cash), leaving `+
+    `${fmt(publisherCut,book.currency)} — your cut — for them to forward.`,
+    { okLabel: 'Settle' }
+  ))) return;
+
+  // Credit the sale to revenue and resolve the pending history entry.
+  s.revenue+=t.total;
+  if(!s.chStats[t.chan])s.chStats[t.chan]={txns:0,units:0,revenue:0};
+  s.chStats[t.chan].revenue+=t.total;
+  if(h){h.artistPending=false;h.notes=(h.notes?h.notes+' · ':'')+'Artist kept their share';}
+
+  // Record the artist's share as a payout — they already hold that cash.
+  if(!s.artistPayouts)s.artistPayouts=[];
+  if(share>0){
+    s.artistPayouts.push({
+      id:Date.now(),
+      date:today(),
+      amount:share,
+      method:'Kept from direct sale',
+      notes:`${t.num} — artist retained their share`
+    });
+  }
+
+  s.artistTransfers=s.artistTransfers.filter(x=>x.id!==transferId);
+  renderHist();updateDash();renderArtistTransfers();await saveState(activeBook);
+  const nativeCurS = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  let cadEquivS = '';
+  if (nativeCurS === 'CAD') cadEquivS = t.total;
+  else if (t.payment && t.payment.currency === 'CAD' && t.payment.amount) cadEquivS = t.payment.amount;
+  syncToSheets({
+    type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST KEPT SHARE]',
+    sheetsId: t.sheetsId || (h && h.sheetsId) || '',
+    currency: nativeCurS,
+    paymentCurrency: normalizeCurrencyCode(t.payment?.currency || nativeCurS, 'CAD'),
+    paymentAmount: t.payment?.amount ?? t.total,
+    paymentRate: t.payment?.rate ?? '',
+    convertedTotal: cadEquivS
+  });
+  showToast(`✓ Settled — artist keeps ${fmt(share,book.currency)}; ${fmt(publisherCut,book.currency)} still to forward`);
+}
+
 function renderArtistTransfers(){
   const s=getState(),book=getBook(),cur=book.currency;
   let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
@@ -3939,10 +4004,7 @@ function renderArtistTransfers(){
   const pbSales = window.authorSubmissions[activeBook]?.sales || {};
   Object.keys(pbSales).forEach(k => {
     const raw = (typeof pbSales[k].data === 'string') ? JSON.parse(pbSales[k].data) : pbSales[k].data;
-    // Check paymentType field (set on payload) OR fallback to notes containing the text
-    const isDirectToArtist = raw.paymentType === 'Payment directly to artist'
-      || (raw.notes || '').includes('Payment directly to artist');
-    if (isDirectToArtist) {
+    if (isDirectToArtistSale(raw)) {
       transfers.push({
         ...raw,
         total: (raw.qty || 0) * (raw.price || 0),
@@ -4006,9 +4068,10 @@ function renderArtistTransfers(){
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${payHtml}
-        ${t.status === 'pending' 
+        ${t.status === 'pending'
           ? `<button class="btn sm outline" disabled>Approve sale first</button>`
-          : `<button class="btn gold" onclick="markArtistTransferReceived(${t.id})">✓ Mark transfer received</button>`}
+          : `<button class="btn sm outline" onclick="settleArtistTransferKeepShare(${t.id})" title="Artist keeps their share; only your cut is forwarded">Artist keeps share</button>
+             <button class="btn gold" onclick="markArtistTransferReceived(${t.id})" title="Artist forwarded the full amount to you">✓ Mark transfer received</button>`}
       </div>
     </div>`).join('');
 }
@@ -6938,78 +7001,14 @@ async function saveProfitTiers() {
   }
 }
 
+// Thin wrapper over the pure calcArtistEarnings (src/lib/earnings.js) that
+// resolves the book/state from app globals. The money math itself is unit-tested
+// in tests/earnings.test.js.
 function calculateArtistEarnings(bookId) {
   const book = BOOKS[bookId];
   if (!book) return null;
   const s = states[bookId] || defaultState(book);
-  const tiers = book.profitTiers && book.profitTiers.length > 0
-    ? [...book.profitTiers].sort((a,b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity))
-    : [];
-
-  if (tiers.length === 0) return null;
-
-  let totalArtistEarned = 0;
-  let cumulativeRevenue = 0;
-  // Direct-to-artist sales: the artist collected the cash and hasn't forwarded
-  // it yet. We fold these into the breakdown so the money the artist is holding
-  // is visible and reconciled, tracking their share vs. the publisher cut.
-  let heldByArtistGross = 0;   // full cash collected directly, not yet forwarded
-  let heldByArtistShare = 0;   // the artist's own share within that held cash
-  const perTier = tiers.map(t => ({ tier: t, revenue: 0, artistEarned: 0 }));
-
-  // Include artistPending entries (money held by the artist) in the tier walk so
-  // their earnings count toward lifetime totals and land in the correct tier.
-  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
-
-  const tierEffectiveCap = (t) => {
-    const isBreakEvenTier = (t.label || '').toLowerCase().includes('break');
-    if (isBreakEvenTier && book.productionCost > 0) return book.productionCost;
-    return Number.isFinite(t.revenueUpTo) && t.revenueUpTo > 0 ? t.revenueUpTo : null;
-  };
-
-  sortedHist.forEach(h => {
-    const isHeld = !!h.artistPending;
-    let revRemaining = h.qty * h.price;
-    if (isHeld) heldByArtistGross += revRemaining;
-    while (revRemaining > 0.001) {
-      const tierIdx = tiers.findIndex(t => tierEffectiveCap(t) !== null && cumulativeRevenue < tierEffectiveCap(t));
-      const idx = tierIdx === -1 ? tiers.length - 1 : tierIdx;
-      const tier = tiers[idx];
-      const tCap = tierEffectiveCap(tier);
-      const isLastTier = idx === tiers.length - 1 || tCap === null;
-      const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tCap - cumulativeRevenue);
-      const earned = capacity * (tier.artistPct / 100);
-      totalArtistEarned += earned;
-      if (isHeld) heldByArtistShare += earned;
-      perTier[idx].revenue += capacity;
-      perTier[idx].artistEarned += earned;
-      cumulativeRevenue += capacity;
-      revRemaining -= capacity;
-    }
-  });
-
-  const payouts = (s.artistPayouts || []).filter(p => !p.voided);
-  const totalPaidToArtist = payouts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-  // The artist already holds heldByArtistGross in cash, so net it against what
-  // they're owed. This can go negative — meaning the artist is holding more than
-  // their share and owes the publisher the difference (the unforwarded cut).
-  const owedToArtist = totalArtistEarned - totalPaidToArtist - heldByArtistGross;
-  const publisherCutHeldByArtist = heldByArtistGross - heldByArtistShare;
-
-  return {
-    totalArtistEarned,
-    cumulativeRevenue,
-    // Publisher keeps their cut of every sale, including the cut the artist is
-    // still holding (s.revenue excludes pending transfers, so add it back in).
-    netPublisher: (s.revenue + heldByArtistGross) - totalArtistEarned,
-    perTier,
-    totalPaidToArtist,
-    owedToArtist,
-    heldByArtistGross,
-    heldByArtistShare,
-    publisherCutHeldByArtist,
-    payouts
-  };
+  return calcArtistEarnings(book, s);
 }
 
 // ── FINANCIAL CENTER LOGIC
@@ -7114,8 +7113,11 @@ function filterArtistEarningsByYear(bookId, year) {
   let yearArtistEarned = 0;
   let cumulativeRevenue = 0;
 
-  // Walk history chronologically so cumulative revenue tracks correctly across all time
-  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && !h.artistPending && h.qty > 0 && h.price > 0);
+  // Walk history chronologically so cumulative revenue tracks correctly across all time.
+  // Deliberately INCLUDE artistPending (direct-to-artist) sales: calculateFinancials
+  // already counts their gross in revenue, so their artist share must be counted too,
+  // otherwise profit would be overstated on funds the artist is holding.
+  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
 
   sortedHist.forEach(h => {
     const inYear = new Date(h.date) >= start && new Date(h.date) <= end;
@@ -9829,7 +9831,7 @@ Object.assign(window, {
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
-  saveArtistPaymentLink, markArtistTransferReceived, markExpenseReceived,
+  saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
