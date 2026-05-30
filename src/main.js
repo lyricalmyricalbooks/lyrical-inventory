@@ -1797,13 +1797,14 @@ function renderProfitSharingBreakdown(bookId) {
   const hasHeld = stats.heldByArtistGross > 0.01;
   const artistOwesPublisher = owed < -0.01;
 
-  // The "Owed to artist" card flips meaning when the artist is holding more cash
-  // than they've earned: the artist then owes the publisher the unforwarded cut.
+  // The "Owed to artist" card flips to an overpaid state when payouts exceed the
+  // artist's net earnings (the publisher's cut held by the artist is tracked
+  // separately on the "Held by artist" card, not netted in here).
   let owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor;
   if (artistOwesPublisher) {
-    owedLabel = '⚠ Artist owes you';
+    owedLabel = '⚠ Overpaid to artist';
     owedVal = fmt(Math.abs(owed), cur);
-    owedSub = 'unforwarded cut — collect from artist';
+    owedSub = 'credit against future earnings';
     owedValColor = 'var(--red)';
     owedSubColor = 'var(--red)';
     owedCardBg = 'rgba(248,113,113,.12)';
@@ -1836,9 +1837,9 @@ function renderProfitSharingBreakdown(bookId) {
   const heldNoteHtml = hasHeld ? `
     <div style="font-size:11px; color:var(--text3); margin:-0.75rem 0 1.25rem; line-height:1.5; padding:8px 10px; background:var(--cream2); border-radius:var(--r2);">
       The artist collected <strong>${fmt(stats.heldByArtistGross, cur)}</strong> directly and hasn't forwarded it yet —
-      <strong>${fmt(stats.heldByArtistShare, cur)}</strong> is their own share, the remaining
-      <strong>${fmt(stats.publisherCutHeldByArtist, cur)}</strong> is your cut.
-      <br>Owed to artist = lifetime earnings − payouts − cash the artist is holding.
+      <strong>${fmt(stats.heldByArtistShare, cur)}</strong> is their own share (so they've effectively taken that much of their earnings),
+      and the remaining <strong>${fmt(stats.publisherCutHeldByArtist, cur)}</strong> is your cut to collect back from them.
+      <br>Owed to artist = lifetime earnings − payouts − the artist's own share they're holding.
     </div>` : '';
 
   const payoutHistoryHtml = (stats.payouts || []).length > 0
