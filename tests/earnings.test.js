@@ -63,7 +63,7 @@ describe('calcArtistEarnings', () => {
   });
 
   describe('held (direct-to-artist) sales', () => {
-    it('counts a held sale in earnings and nets its gross out of owed', () => {
+    it('counts a held sale in earnings but only credits the artist share against owed', () => {
       const book = { profitTiers: [tier('Royalty', null, 50)] };
       // 100 settled + 20 collected directly and held by the artist
       const state = {
@@ -75,23 +75,35 @@ describe('calcArtistEarnings', () => {
       expect(r.totalArtistEarned).toBeCloseTo(60);          // 50 + 10
       expect(r.heldByArtistGross).toBeCloseTo(20);
       expect(r.heldByArtistShare).toBeCloseTo(10);
-      expect(r.publisherCutHeldByArtist).toBeCloseTo(10);
-      // owed = earned - payouts - held gross = 60 - 0 - 20 = 40
-      expect(r.owedToArtist).toBeCloseTo(40);
+      expect(r.publisherCutHeldByArtist).toBeCloseTo(10);    // the cut to collect back
+      // owed = earned - payouts - artist's own held share = 60 - 0 - 10 = 50.
+      // The publisher's $10 cut held by the artist is a separate receivable and
+      // must NOT reduce owed (it isn't a payment to the artist).
+      expect(r.owedToArtist).toBeCloseTo(50);
       // publisher keeps their cut of all sales incl. held gross: 100 + 20 - 60 = 60
       expect(r.netPublisher).toBeCloseTo(60);
     });
 
-    it('goes negative when the artist holds more than they have earned', () => {
+    it('owes nothing extra when a held sale exactly covers the artist share', () => {
       const book = { profitTiers: [tier('Royalty', null, 50)] };
-      // only a held sale, no settled earnings to offset it
+      // a single held sale, no settled earnings
       const state = { revenue: 0, hist: [sale(1, 20, { artistPending: true })], artistPayouts: [] };
       const r = calcArtistEarnings(book, state);
       expect(r.totalArtistEarned).toBeCloseTo(10);
       expect(r.heldByArtistGross).toBeCloseTo(20);
-      // owed = 10 - 0 - 20 = -10 → the artist owes the publisher 10
-      expect(r.owedToArtist).toBeCloseTo(-10);
+      // owed = 10 - 0 - 10 = 0: the artist already holds their full $10 share.
+      expect(r.owedToArtist).toBeCloseTo(0);
+      // ...and still owes the publisher their $10 cut, surfaced separately.
       expect(r.publisherCutHeldByArtist).toBeCloseTo(10);
+    });
+
+    it('goes negative only on genuine overpayment (payouts exceed net earnings)', () => {
+      const book = { profitTiers: [tier('Royalty', null, 50)] };
+      const state = { revenue: 100, hist: [sale(1, 100)], artistPayouts: [{ amount: 70 }] };
+      const r = calcArtistEarnings(book, state);
+      expect(r.totalArtistEarned).toBeCloseTo(50);
+      // owed = 50 - 70 = -20 → the artist has been overpaid by 20
+      expect(r.owedToArtist).toBeCloseTo(-20);
     });
   });
 

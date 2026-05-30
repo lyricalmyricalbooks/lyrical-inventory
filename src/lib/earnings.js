@@ -62,10 +62,13 @@ export function calcArtistEarnings(book, state) {
 
   const payouts = (s.artistPayouts || []).filter(p => !p.voided);
   const totalPaidToArtist = payouts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-  // The artist already holds heldByArtistGross in cash, so net it against what
-  // they're owed. This can go negative — meaning the artist is holding more than
-  // their share and owes the publisher the difference (the unforwarded cut).
-  const owedToArtist = totalArtistEarned - totalPaidToArtist - heldByArtistGross;
+  // By holding direct-sale cash the artist has effectively collected their OWN
+  // share of those sales, so only that share reduces what the publisher owes.
+  // The publisher's cut sitting in the held cash is a separate receivable
+  // (publisherCutHeldByArtist) — it is NOT a payment to the artist, so it must
+  // not reduce owedToArtist. owedToArtist still goes negative on genuine
+  // overpayment (payouts exceeding net earnings).
+  const owedToArtist = totalArtistEarned - totalPaidToArtist - heldByArtistShare;
   const publisherCutHeldByArtist = heldByArtistGross - heldByArtistShare;
 
   return {

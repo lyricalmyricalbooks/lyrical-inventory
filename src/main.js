@@ -1217,7 +1217,7 @@ function updateHeader() {
   if (activeBook === 'all') {
     // Sum all books
     const totalStock = Object.values(states).reduce((a,s)=>a+(s.stock||0),0);
-    const totalRev = Object.values(states).reduce((a,s)=>a+(s.revenue||0),0);
+    const totalRev = Object.values(states).reduce((a,s)=>a+recognizedRevenueOf(s),0);
     const totalCon = Object.values(states).reduce((a,s)=>a+s.stores.reduce((b,st)=>b+st.outstanding,0),0);
     $('h-stock').textContent = totalStock;
     $('h-revenue').textContent = '~'+totalRev.toFixed(0);
@@ -1226,7 +1226,7 @@ function updateHeader() {
     const s = getState(), book = getBook();
     const cur = book.currency;
     $('h-stock').textContent = s.stock;
-    $('h-revenue').textContent = fmt(s.revenue, cur);
+    $('h-revenue').textContent = fmt(recognizedRevenueOf(s), cur);
     $('h-consigned').textContent = s.stores.reduce((a,st)=>a+st.outstanding,0);
   }
 }
@@ -1242,8 +1242,9 @@ function updateAllOverview() {
     const pct = Math.max(0,s.stock/book.maxPrint*100);
     const stockClass = s.stock<=book.threshold?'danger':s.stock<=book.threshold*2?'warn':'gold';
     const cost = book.productionCost || 0;
-    const broken = cost > 0 && s.revenue >= cost;
-    const bePct = cost > 0 ? Math.min(100, s.revenue/cost*100) : null;
+    const recognizedRev = recognizedRevenueOf(s);
+    const broken = cost > 0 && recognizedRev >= cost;
+    const bePct = cost > 0 ? Math.min(100, recognizedRev/cost*100) : null;
     const beBar = (!isAuthor() && bePct !== null) ? `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;"><div style="flex:1;"><div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">Break-even</div><div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;"><div class="bar-fill" style="width:${bePct}%;background:${broken?'#4ade80':'var(--gold2)'};"></div></div></div><span style="font-size:10px;font-family:'DM Mono',monospace;white-space:nowrap;color:${broken?'var(--green)':'var(--text3)'};">${broken?'✓ Broken even':bePct.toFixed(0)+'%'}</span></div>` : '';
     const expTotal = (s.expenses||[]).reduce((a,e)=>a+(e.amount||0),0);
     return `<div class="book-strip">
@@ -1273,11 +1274,17 @@ function updateAllOverview() {
     const s = states[book.id] || defaultState(book);
     const entries = Object.entries(s.chStats||{});
     if (!entries.length) return;
-    const bookRev = entries.reduce((a,[,cs])=>a+(cs.revenue||0),0);
+    // Direct-to-artist sales bump a channel's txns/units but not its revenue until
+    // forwarded; fold the held gross back in per channel so the channel revenue is
+    // recognized consistently with the headline figures.
+    const heldByChan = {};
+    (s.artistTransfers||[]).forEach(t => { heldByChan[t.chan] = (heldByChan[t.chan]||0) + (t.total||0); });
+    const revOf = (chan, cs) => (cs.revenue||0) + (heldByChan[chan]||0);
+    const bookRev = entries.reduce((a,[chan,cs])=>a+revOf(chan,cs),0);
     let bestChan = null, bestRev = -1;
-    entries.forEach(([chan,cs]) => { if ((cs.revenue||0) > bestRev) { bestRev = cs.revenue||0; bestChan = chan; } });
+    entries.forEach(([chan,cs]) => { if (revOf(chan,cs) > bestRev) { bestRev = revOf(chan,cs); bestChan = chan; } });
     entries.forEach(([chan,cs]) => {
-      const txns = cs.txns||0, units = cs.units||0, rev = cs.revenue||0;
+      const txns = cs.txns||0, units = cs.units||0, rev = revOf(chan,cs);
       const avgTxn = txns ? rev/txns : 0;
       const revUnit = units ? rev/units : 0;
       const sharePct = bookRev > 0 ? (rev/bookRev*100) : 0;
@@ -1538,6 +1545,20 @@ function renderBookPendingAlert() {
   }
 }
 
+// Gross of direct-to-artist sales the artist has collected but not yet forwarded.
+function heldGrossOf(s) {
+  return (s.artistTransfers || []).reduce((sum, t) => sum + (t.total || 0), 0);
+}
+// Revenue recognized for a book: cash collected plus the gross still held by the
+// artist. A sale is complete the moment it happens, so its full value is recognized
+// immediately and the held cash is treated as a receivable — NOT as deferred revenue.
+// This keeps headline revenue consistent with the units-sold, tier, earnings, and
+// Financial Center figures (all of which already count completed sales), while the
+// collected-vs-held split shows the publisher's actual cash position.
+function recognizedRevenueOf(s) {
+  return (s.revenue || 0) + heldGrossOf(s);
+}
+
 // ── DASHBOARD (per book)
 function updateDash() {
   if (!activeBook || activeBook === 'all') return;
@@ -1553,8 +1574,14 @@ function updateDash() {
   $('d-thresh-label').textContent = 'Alert at '+book.threshold+' units';
   $('d-stock').textContent=s.stock; $('h-stock').textContent=s.stock;
   $('d-sold').textContent=s.sold;
-  $('d-revenue').textContent=fmt(s.revenue,cur); $('h-revenue').textContent=fmt(s.revenue,cur);
-  $('d-avg-sub').textContent='avg '+(s.sold>0?fmt(s.revenue/s.sold,cur):'—');
+  const heldGross=heldGrossOf(s);
+  const recognizedRev=recognizedRevenueOf(s);
+  $('d-revenue').textContent=fmt(recognizedRev,cur); $('h-revenue').textContent=fmt(recognizedRev,cur);
+  const revSub=$('d-revenue-sub');
+  if(revSub) revSub.textContent = heldGross>0.01
+    ? `${fmt(s.revenue,cur)} collected · ${fmt(heldGross,cur)} held by artist`
+    : 'total collected';
+  $('d-avg-sub').textContent='avg '+(s.sold>0?fmt(recognizedRev/s.sold,cur):'—');
   const consigned=s.stores.reduce((a,st)=>a+st.outstanding,0);
   $('d-consigned').textContent=consigned; $('h-consigned').textContent=consigned;
   $('d-stores').textContent=s.stores.length;
@@ -1650,17 +1677,17 @@ function updateDash() {
   if(!isAuthor() && cost > 0){
     $('d-breakeven-kpi').style.display='';
     $('d-breakeven-block').style.display='';
-    const pctBe = Math.min(100, s.revenue / cost * 100);
-    const remaining = Math.max(0, cost - s.revenue);
-    const broken = s.revenue >= cost;
+    const pctBe = Math.min(100, recognizedRev / cost * 100);
+    const remaining = Math.max(0, cost - recognizedRev);
+    const broken = recognizedRev >= cost;
     $('d-breakeven-val').textContent = broken ? '✓ Done' : fmt(remaining,cur)+' to go';
     $('d-breakeven-val').className = 'kpi-value' + (broken ? ' gold' : '');
     $('d-breakeven-sub').textContent = `of ${fmt(cost,cur)} production cost`;
     $('d-be-title').textContent = broken ? 'Project has broken even' : 'Not yet broken even';
-    $('d-be-sub').textContent = `Production cost: ${fmt(cost,cur)} · Revenue to date: ${fmt(s.revenue,cur)}`;
+    $('d-be-sub').textContent = `Production cost: ${fmt(cost,cur)} · Revenue to date: ${fmt(recognizedRev,cur)}`;
     $('d-be-bar').style.width = pctBe+'%';
     $('d-be-bar').style.background = broken ? '#4ade80' : pctBe>=70 ? '#fb923c' : 'var(--gold2)';
-    $('d-be-bar-label').textContent = `${fmt(s.revenue,cur)} recovered (${pctBe.toFixed(1)}%)`;
+    $('d-be-bar-label').textContent = `${fmt(recognizedRev,cur)} recovered (${pctBe.toFixed(1)}%)`;
     $('d-be-bar-right').textContent = broken ? 'Break-even reached ✓' : `${fmt(remaining,cur)} remaining`;
     const al=$('d-be-alert');
     if(broken){al.className='stock-alert ok';al.textContent='✓ Production costs fully recovered — everything earned from here is profit.';}
@@ -1781,7 +1808,7 @@ function renderProfitSharingBreakdown(bookId) {
         <div class="bar-track" style="height:5px; margin-bottom:0;">
           <div class="bar-fill" style="width:${pct}%; background:var(--gold2); height:5px; border-radius:100px;"></div>
         </div>
-        <div style="font-size:10px;color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} collected · ${fmt(target, cur)} needed to reach ${enterTier ? enterTier.label : 'next tier'}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} of ${fmt(target, cur)} to reach ${enterTier ? enterTier.label : 'next tier'}</div>
       </div>
     `;
   } else {
@@ -1797,13 +1824,14 @@ function renderProfitSharingBreakdown(bookId) {
   const hasHeld = stats.heldByArtistGross > 0.01;
   const artistOwesPublisher = owed < -0.01;
 
-  // The "Owed to artist" card flips meaning when the artist is holding more cash
-  // than they've earned: the artist then owes the publisher the unforwarded cut.
+  // The "Owed to artist" card flips to an overpaid state when payouts exceed the
+  // artist's net earnings (the publisher's cut held by the artist is tracked
+  // separately on the "Held by artist" card, not netted in here).
   let owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor;
   if (artistOwesPublisher) {
-    owedLabel = '⚠ Artist owes you';
+    owedLabel = '⚠ Overpaid to artist';
     owedVal = fmt(Math.abs(owed), cur);
-    owedSub = 'unforwarded cut — collect from artist';
+    owedSub = 'credit against future earnings';
     owedValColor = 'var(--red)';
     owedSubColor = 'var(--red)';
     owedCardBg = 'rgba(248,113,113,.12)';
@@ -1836,9 +1864,9 @@ function renderProfitSharingBreakdown(bookId) {
   const heldNoteHtml = hasHeld ? `
     <div style="font-size:11px; color:var(--text3); margin:-0.75rem 0 1.25rem; line-height:1.5; padding:8px 10px; background:var(--cream2); border-radius:var(--r2);">
       The artist collected <strong>${fmt(stats.heldByArtistGross, cur)}</strong> directly and hasn't forwarded it yet —
-      <strong>${fmt(stats.heldByArtistShare, cur)}</strong> is their own share, the remaining
-      <strong>${fmt(stats.publisherCutHeldByArtist, cur)}</strong> is your cut.
-      <br>Owed to artist = lifetime earnings − payouts − cash the artist is holding.
+      <strong>${fmt(stats.heldByArtistShare, cur)}</strong> is their own share (so they've effectively taken that much of their earnings),
+      and the remaining <strong>${fmt(stats.publisherCutHeldByArtist, cur)}</strong> is your cut to collect back from them.
+      <br>Owed to artist = lifetime earnings − payouts − the artist's own share they're holding.
     </div>` : '';
 
   const payoutHistoryHtml = (stats.payouts || []).length > 0
