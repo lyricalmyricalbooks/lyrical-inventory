@@ -1650,6 +1650,13 @@ function json_(obj) {
     </div>
   </div>
 
+  <!-- KEPT-ALL RECONCILE ZONE (direct-to-artist) -->
+  <div class="void-zone" id="edit-settle-zone" style="display:none;border-color:var(--gold-line);background:var(--gold-bg);">
+    <div class="void-zone-title" style="color:var(--gold2);">Artist forwarded the full transfer?</div>
+    <div class="void-zone-body" id="edit-settle-body"></div>
+    <button class="btn gold" id="edit-settle-btn" onclick="convertKeptAllToReceived()">Record full transfer received</button>
+  </div>
+
   <!-- VOID ZONE -->
   <div class="void-zone" id="edit-void-zone">
     <div class="void-zone-title">Void this entry</div>
