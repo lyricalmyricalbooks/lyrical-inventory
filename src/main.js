@@ -10206,7 +10206,14 @@ async function reconcileSync() {
   } catch (e) {
     const msg = String(e.message || e);
     let hint = '';
-    if (/Failed to fetch|NetworkError|CORS/i.test(msg)) {
+    if (/permission|rak_charge_read|rak_payment_intent_read/i.test(msg)) {
+      hint = `<br><span style="font-size:11px;line-height:1.6;display:inline-block;margin-top:4px;">
+        Your restricted key is missing a read scope. In
+        <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener" style="color:var(--gold);">Stripe → API keys</a>,
+        edit the key (or create a new one) and grant <strong>Read</strong> on
+        <strong>Charges</strong> and <strong>PaymentIntents</strong> (keep <strong>Balance transactions</strong> for the fees tool).
+        A full <code>sk_live_…</code> secret key also works. Then paste it above and sync again.</span>`;
+    } else if (/Failed to fetch|NetworkError|CORS/i.test(msg)) {
       hint = '<br><span style="font-size:11px;">Your browser may be blocking the direct Stripe call (CORS). Try again, or use a restricted key.</span>';
     }
     if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);">Error: ${msg}</span>${hint}`;
