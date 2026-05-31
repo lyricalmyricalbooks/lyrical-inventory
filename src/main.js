@@ -459,7 +459,10 @@ function saveAuthorViewOverrides() {
 }
 
 function isPublisherSession() {
-  return sessionStorage.getItem('lm-unlocked') === 'publisher';
+  // Source of truth is the runtime flag set after Google sign-in (showApp).
+  // The legacy 'lm-unlocked' sessionStorage key is never written, so relying on
+  // it here hid the "Author view" preview toggle from every signed-in publisher.
+  return !!window.IS_PUBLISHER;
 }
 
 // Runtime role check — works for both URL-based AND password-based author login
