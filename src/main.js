@@ -5249,6 +5249,75 @@ function downloadInvoiceHTML(opts){
 // ── EDIT & VOID SYSTEM ─────────────────────────────────────────────────────
 let editCtx = null; // { kind:'hist'|'ledger', idx, snapshot }
 
+// Locate the payout recorded when a direct-to-artist sale was settled as
+// "artist keeps all" (publisher cut forgiven). Returns the index in
+// s.artistPayouts, or -1 if none matches this order number.
+function findKeptAllPayout(s, num) {
+  if (!s.artistPayouts || !num) return -1;
+  return s.artistPayouts.findIndex(p =>
+    !p.voided &&
+    p.method === 'Kept from direct sale (full)' &&
+    typeof p.notes === 'string' &&
+    p.notes.includes(num)
+  );
+}
+
+// Reverse an "artist keeps all" settlement after the fact: the artist had kept
+// the full gross (publisher cut forgiven), but later forwarded the entire amount.
+// This removes the kept-all payout so the publisher holds the cash and the artist
+// is owed their normal share — matching the "transfer received" outcome. Revenue
+// was already booked at settlement time, so it is left untouched.
+async function convertKeptAllToReceived() {
+  if (!editCtx || editCtx.kind !== 'hist') return;
+  const s = getState(), book = getBook();
+  const h = s.hist[editCtx.idx];
+  if (!h) return;
+  const pIdx = findKeptAllPayout(s, h.num);
+  if (pIdx === -1) { showToast('No "kept all" payout found for this entry'); return; }
+  const payout = s.artistPayouts[pIdx];
+
+  if (!(await confirmDialog(
+    `Record ${escapeHtml(h.num)} as fully forwarded?\n\n`+
+    `This sale was settled as "artist keeps all" — the artist kept ${fmt(payout.amount,book.currency)} `+
+    `and your cut was forgiven. Recording the full transfer removes that `+
+    `${fmt(payout.amount,book.currency)} payout: the publisher now holds all the cash and the artist `+
+    `is owed their normal share again.`,
+    { okLabel: 'Record full transfer' }
+  ))) return;
+
+  // Remove the kept-all payout — the artist no longer keeps the cash.
+  s.artistPayouts.splice(pIdx, 1);
+  // Refresh the note to reflect the forwarded transfer.
+  h.notes = (h.notes || '').replace(/\s*·?\s*Artist kept full amount \(publisher cut forgiven\)/, '').trim();
+  h.notes = (h.notes ? h.notes + ' · ' : '') + 'Full transfer received';
+  h.edited = true;
+
+  closeM('edit-entry');
+  renderHist(); updateDash(); renderArtistTransfers(); await saveState(activeBook);
+
+  if (sheetsUrl && !h.consignmentLink) {
+    const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+    const totalNative = h.qty * h.price;
+    let cadEquiv = '';
+    if (nativeCur === 'CAD') cadEquiv = totalNative;
+    else if (h.payment && h.payment.currency === 'CAD' && h.payment.amount) cadEquiv = h.payment.amount;
+    syncToSheets({
+      type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
+      qty:h.qty, price:h.price, total:totalNative, stockAfter:h.after,
+      notes:(h.notes||'')+' [FULL TRANSFER RECEIVED AFTER KEEP-ALL]',
+      sheetsId:h.sheetsId||'',
+      currency:nativeCur,
+      paymentCurrency:normalizeCurrencyCode(h.payment?.currency||nativeCur,'CAD'),
+      paymentAmount:h.payment?.amount ?? totalNative,
+      paymentRate:h.payment?.rate ?? '',
+      convertedTotal:cadEquiv,
+      enteredBy:h.enteredBy||'',
+      status:'OK'
+    });
+  }
+  showToast(`✓ Full transfer recorded — ${fmt(payout.amount,book.currency)} payout reversed`);
+}
+
 function openEditHist(idx) {
   const s = getState(), book = getBook(), h = s.hist[idx];
   if (!h) return;
@@ -5265,6 +5334,21 @@ function openEditHist(idx) {
   $('edit-chan').value = h.chan;
   $('edit-notes').value = h.notes || '';
   $('edit-diff-preview').style.display = 'none';
+  // Direct-to-artist "kept all" entries can be reconciled later if the artist
+  // ends up forwarding the full amount after their cut was forgiven.
+  const settleZone = $('edit-settle-zone');
+  if (settleZone) {
+    const pIdx = findKeptAllPayout(s, h.num);
+    if (h.directToArtist && !h.artistPending && pIdx !== -1) {
+      const amt = s.artistPayouts[pIdx].amount;
+      settleZone.style.display = '';
+      $('edit-settle-body').innerHTML =
+        `This sale was settled as <strong>artist keeps all</strong> — the artist kept ${fmt(amt, book.currency)} and your cut was forgiven. ` +
+        `If they later forwarded the full amount, record it to reverse that payout so the publisher holds the cash and the artist is owed their normal share.`;
+    } else {
+      settleZone.style.display = 'none';
+    }
+  }
   const voidZone = $('edit-void-zone');
   if (h.voided) {
     $('edit-void-btn').textContent = 'Unvoid this entry';
@@ -5284,6 +5368,8 @@ function openEditLedger(idx) {
   $('edit-modal-type-badge').textContent = e.storeName + ' · ' + e.type;
   $('edit-order-fields').style.display = 'none';
   $('edit-ledger-fields').style.display = '';
+  const settleZoneL = $('edit-settle-zone');
+  if (settleZoneL) settleZoneL.style.display = 'none';
   $('edit-l-date').value = e.date;
   $('edit-l-qty').value = e.qty;
   $('edit-l-rate').value = e.rate;
@@ -9907,7 +9993,7 @@ Object.assign(window, {
   onExpenseCurrencyChange, calcExpenseFx,
 
   submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale,
-  openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, voidEntry,
+  openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
