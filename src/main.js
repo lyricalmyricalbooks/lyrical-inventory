@@ -1071,6 +1071,8 @@ function syncRoleUI() {
   const qrBtn = $('d-qr-btn');
   const qrcodesTabBtn = $('qrcodes-tab-btn');
   const myqrTabBtn = $('myqr-tab-btn');
+  const reconcileTabBtn = $('reconcile-tab-btn');
+  if (reconcileTabBtn) reconcileTabBtn.style.display = authorNow ? 'none' : '';
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
   if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
   if (globalActions) globalActions.style.display = authorNow ? 'none' : 'flex';
@@ -1096,7 +1098,8 @@ function syncRoleUI() {
     || $('tab-taxcenter')?.classList.contains('active')
     || $('tab-sheets')?.classList.contains('active')
     || $('tab-backups')?.classList.contains('active')
-    || $('tab-qrcodes')?.classList.contains('active');
+    || $('tab-qrcodes')?.classList.contains('active')
+    || $('tab-reconcile')?.classList.contains('active');
   if (authorNow && publisherOnlyActive) switchTab('dashboard');
 
   // When switching BACK to publisher view — redirect away from author-only myqr tab
@@ -1169,13 +1172,13 @@ function switchBook(bookId) {
 // ── TABS
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
   
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
-  const names = ['dashboard','website','manual','consignment','history','expenses','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
+  const names = ['dashboard','website','manual','consignment','history','expenses','reconcile','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
   
   document.querySelectorAll('.tab-btn, .header-action-btn').forEach((b) => {
     // We match by checking onclick text to be safe if order ever changes
@@ -1205,6 +1208,7 @@ function switchTab(name) {
   if(name==='manual') updateManualForm();
   if(name==='consignment'){ renderStores(); renderLedger(); renderInvoices(); }
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
+  if(name==='reconcile') renderReconcile();
   if(name==='financials') renderFinancials();
   if(name==='taxcenter') renderTaxCenter();
   if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
@@ -9983,10 +9987,527 @@ function downloadStripeFeesAuditCSV() {
   URL.revokeObjectURL(url);
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// STRIPE PAYMENT RECONCILIATION (per-payment worklist)
+// ─────────────────────────────────────────────────────────────────────────
+// The "Stripe fees by year" tools above answer "how much did Stripe take" and
+// give a dollar-level yearly tie-out. This section answers the operational
+// question the publisher actually lives with: "which individual Stripe
+// payments have NOT yet made it into my inventory?" It pulls each charge,
+// auto-matches the ones it can (invoices by INV-… number, Big Cartel orders by
+// order number, and our own SKU-tagged payment links by metadata.book_id), and
+// leaves the rest as a short worklist where she picks the book and logs the sale.
+// ════════════════════════════════════════════════════════════════════════
+
+const RECON_MEMORY_KEY = 'lm-stripe-reconcile';
+function getReconMemory() {
+  try {
+    const m = JSON.parse(localStorage.getItem(RECON_MEMORY_KEY) || '{}');
+    m.recorded = m.recorded || {};   // chargeId -> { bookId, num, at }
+    m.dismissed = m.dismissed || {};  // chargeId -> reason/true
+    return m;
+  } catch (_) { return { recorded: {}, dismissed: {} }; }
+}
+function saveReconMemory(m) { localStorage.setItem(RECON_MEMORY_KEY, JSON.stringify(m || {})); }
+
+// Resolve a usable Stripe key: prefer the Tax Center key (where the fees tool
+// stores it), then the Invoice Settings key, then whatever is in the field.
+function getReconStripeKey() {
+  const field = document.getElementById('recon-key');
+  return (TAX_CENTER?.settings?.stripeKey
+    || getInvoiceSettings().stripeKey
+    || (field && field.value)
+    || '').trim();
+}
+
+// Persist a freshly-entered key back to the same place the fees tool reads it,
+// so the user only ever pastes it once anywhere in the app.
+async function _reconPersistKey(key) {
+  try {
+    if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+    if (TAX_CENTER.settings.stripeKey !== key) {
+      TAX_CENTER.settings.stripeKey = key;
+      if (typeof saveTaxCenter === 'function') await saveTaxCenter();
+    }
+  } catch (e) { console.warn('Stripe key persist failed:', e); }
+}
+
+// Pull recent charges and normalize them. We expand the PaymentIntent so we can
+// read link metadata (book_id/sku) and the richer description that payment
+// links attach to the intent rather than the charge.
+async function fetchStripePaymentsForReconcile(maxPages = 3) {
+  const key = getReconStripeKey();
+  if (!key) throw new Error('No Stripe key — paste a restricted/secret key first.');
+  if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe key (expected rk_… or sk_…).");
+  await _reconPersistKey(key);
+
+  const out = [];
+  let starting_after = null;
+  for (let page = 0; page < maxPages; page++) {
+    const params = new URLSearchParams({ limit: '100' });
+    params.append('expand[]', 'data.payment_intent');
+    if (starting_after) params.set('starting_after', starting_after);
+    const resp = await fetch(`https://api.stripe.com/v1/charges?${params.toString()}`, {
+      headers: { 'Authorization': 'Bearer ' + key },
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+    }
+    const json = await resp.json();
+    for (const ch of (json.data || [])) {
+      // Only successful, captured money movements are interesting here.
+      if (ch.status !== 'succeeded' || ch.paid === false) continue;
+      const pi = (ch.payment_intent && typeof ch.payment_intent === 'object') ? ch.payment_intent : null;
+      const metadata = Object.assign({}, pi?.metadata || {}, ch.metadata || {});
+      const cur = (ch.currency || '').toUpperCase();
+      out.push({
+        id: ch.id,
+        piId: pi?.id || (typeof ch.payment_intent === 'string' ? ch.payment_intent : ''),
+        amount: _stripeMinorToMajor(ch.amount, cur),
+        currency: cur,
+        created: (ch.created || 0) * 1000,
+        date: new Date((ch.created || 0) * 1000).toISOString().slice(0, 10),
+        description: (ch.description || pi?.description || '').trim(),
+        email: ch.billing_details?.email || ch.receipt_email || '',
+        customer: ch.billing_details?.name || '',
+        refunded: !!ch.refunded || (ch.amount_refunded > 0),
+        disputed: !!ch.disputed,
+        metadata,
+      });
+    }
+    if (!json.has_more || !json.data.length) break;
+    starting_after = json.data[json.data.length - 1].id;
+  }
+  return out;
+}
+
+// Build the set of "stripe-<chargeId>" sheetsIds already present in history so a
+// payment we previously logged is recognized even on a fresh device / new memory.
+function _reconRecordedChargeIds() {
+  const ids = new Set();
+  Object.values(states).forEach(s => (s.hist || []).forEach(h => {
+    if (typeof h.sheetsId === 'string' && h.sheetsId.startsWith('stripe-')) {
+      ids.add(h.sheetsId.slice('stripe-'.length));
+    }
+  }));
+  return ids;
+}
+
+// Find an invoice (across every book) by its INV-… number.
+function _reconFindInvoice(num) {
+  for (const bookId of Object.keys(states)) {
+    const inv = (states[bookId].invoices || []).find(i => i.num === num);
+    if (inv) return { bookId, inv };
+  }
+  return null;
+}
+
+// Soft heuristic: did the publisher likely already log this payment by hand?
+// Matches a non-void history entry with the same paid amount+currency within a
+// few days. Used only to keep already-handled payments out of the urgent list.
+function _reconLikelyAlreadyLogged(p) {
+  const target = Math.round(p.amount * 100);
+  for (const s of Object.values(states)) {
+    for (const h of (s.hist || [])) {
+      if (h.voided || h.gratuity) continue;
+      const pay = h.payment;
+      if (!pay || !pay.amount || normalizeCurrencyCode(pay.currency || '', '') !== p.currency) continue;
+      if (Math.round(pay.amount * 100) !== target) continue;
+      const dDays = Math.abs((new Date(h.date).getTime() - p.created) / 86400000);
+      if (dDays <= 3) return true;
+    }
+  }
+  return false;
+}
+
+// Classify a payment into one of the matchable channels.
+function classifyStripePayment(p) {
+  const mem = getReconMemory();
+  const recordedIds = _reconRecordedChargeIds();
+
+  if (mem.dismissed[p.id]) return { kind: 'dismissed' };
+  if (mem.recorded[p.id] || recordedIds.has(p.id)) return { kind: 'recorded', bookId: mem.recorded[p.id]?.bookId };
+
+  // Our own SKU-tagged links (book payment links / invoices) carry book_id.
+  const metaBookId = p.metadata?.book_id && BOOKS[p.metadata.book_id] ? p.metadata.book_id : null;
+
+  // Invoice payment (INV-2026-222 …)
+  const invMatch = /\b(INV-\d{4}-\d+)\b/i.exec(p.description) || (p.metadata?.invoice_num ? [null, p.metadata.invoice_num] : null);
+  if (invMatch) {
+    const found = _reconFindInvoice(invMatch[1]);
+    return { kind: 'invoice', ref: invMatch[1], bookId: found?.bookId || metaBookId, inv: found?.inv || null };
+  }
+
+  // Big Cartel order (Payment for Big Cartel order #ABCD-123456 …)
+  const bcMatch = /Big Cartel order\s*#?\s*([A-Za-z0-9-]+)/i.exec(p.description);
+  if (bcMatch) {
+    const orderNum = '#' + bcMatch[1].replace(/^#/, '');
+    const applied = getAllAppliedIds();
+    const isApplied = applied.has(orderNum) || applied.has(bcMatch[1]);
+    const scanned = (typeof orders !== 'undefined' ? orders : []).find(o => o.orderNum === orderNum || o.orderNum === bcMatch[1]);
+    return { kind: 'bigcartel', ref: orderNum, applied: isApplied, scanned: scanned || null, bookId: scanned?.bookId || metaBookId };
+  }
+
+  // A direct charge we can identify by metadata still needs a confirm-click.
+  if (metaBookId) return { kind: 'direct', bookId: metaBookId };
+
+  if (_reconLikelyAlreadyLogged(p)) return { kind: 'likely' };
+
+  return { kind: 'direct', bookId: null };
+}
+
+// Apply a sale to a SPECIFIC book (the reconcile worklist records against the
+// book the user picks, not necessarily the active one). Mirrors recordOrder's
+// state mutations + Sheets sync, keyed by a deterministic stripe sheetsId.
+function _reconApplySaleToBook(bookId, qty, price, payment, chargeId, notes, extra = {}) {
+  const st = states[bookId], bk = BOOKS[bookId];
+  if (!st || !bk) throw new Error('Unknown book');
+  st.stock = Math.max(0, st.stock - qty);
+  st.sold += qty;
+  st.revenue += qty * price;
+  const chan = 'Website';
+  if (!st.chStats[chan]) st.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
+  st.chStats[chan].txns++; st.chStats[chan].units += qty; st.chStats[chan].revenue += qty * price;
+  const sheetsId = 'stripe-' + chargeId;
+  const entry = {
+    num: extra.num || '', chan, qty, price, after: st.stock,
+    notes: notes || 'Stripe', date: extra.date || today(),
+    payment, enteredBy: 'Publisher', sheetsId,
+    shipEmail: extra.email || '',
+  };
+  st.hist.unshift(entry);
+  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD');
+  syncToSheets({
+    type: 'order', book: bk.title, date: entry.date, num: entry.num, chan, qty, price,
+    total: qty * price, stockAfter: st.stock, notes: entry.notes, sheetsId, currency: nativeCur,
+    paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
+    paymentAmount: payment?.amount ?? (qty * price),
+  });
+  saveState(bookId);
+}
+
+async function reconcileSync() {
+  const btn = document.getElementById('recon-sync-btn');
+  const statusEl = document.getElementById('recon-status');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Syncing…'; }
+  if (statusEl) statusEl.textContent = 'Fetching payments from Stripe…';
+  try {
+    const payments = await fetchStripePaymentsForReconcile();
+    window._reconPayments = payments;
+    const mem = getReconMemory();
+    mem.lastSync = new Date().toISOString();
+    saveReconMemory(mem);
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--green);">✓ Pulled ${payments.length} payment${payments.length === 1 ? '' : 's'} from Stripe.</span>`;
+    renderReconcile();
+  } catch (e) {
+    const msg = String(e.message || e);
+    let hint = '';
+    if (/Failed to fetch|NetworkError|CORS/i.test(msg)) {
+      hint = '<br><span style="font-size:11px;">Your browser may be blocking the direct Stripe call (CORS). Try again, or use a restricted key.</span>';
+    }
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);">Error: ${msg}</span>${hint}`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Sync from Stripe'; }
+  }
+}
+
+function _reconBookOptions(selectedId) {
+  return Object.values(BOOKS).map(b =>
+    `<option value="${escapeHtml(b.id)}"${b.id === selectedId ? ' selected' : ''}>${escapeHtml(b.title)} · ${b.currency}${b.listPrice}</option>`
+  ).join('');
+}
+
+function renderReconcile() {
+  const needsEl = document.getElementById('recon-needs');
+  const matchedEl = document.getElementById('recon-matched');
+  const summaryEl = document.getElementById('recon-summary');
+  const keyField = document.getElementById('recon-key');
+  if (!needsEl) return;
+
+  // Prefill the saved key (read-only convenience; the field is mostly a fallback).
+  if (keyField && !keyField.value) {
+    const k = TAX_CENTER?.settings?.stripeKey || getInvoiceSettings().stripeKey || '';
+    if (k) keyField.value = k;
+  }
+
+  const mem = getReconMemory();
+  const lastSyncEl = document.getElementById('recon-last-sync');
+  if (lastSyncEl) lastSyncEl.textContent = mem.lastSync ? `Last synced ${new Date(mem.lastSync).toLocaleString()}` : 'Not synced yet';
+
+  const payments = window._reconPayments || [];
+  if (!payments.length) {
+    needsEl.innerHTML = '<div class="empty-state"><div class="e-icon">💳</div>Press <strong>Sync from Stripe</strong> to pull your payments and see which ones still need logging.</div>';
+    matchedEl.innerHTML = '';
+    if (summaryEl) summaryEl.textContent = '';
+    return;
+  }
+
+  const needs = [];
+  const matched = [];
+  for (const p of payments) {
+    const c = classifyStripePayment(p);
+    if (c.kind === 'dismissed') { matched.push({ p, c, label: 'Dismissed', tone: 'gray', note: 'Marked "not inventory".' }); continue; }
+    if (c.kind === 'recorded') { matched.push({ p, c, label: 'Logged', tone: 'green', note: c.bookId && BOOKS[c.bookId] ? `Recorded against ${BOOKS[c.bookId].title}.` : 'Recorded in inventory.' }); continue; }
+    if (c.kind === 'likely') { matched.push({ p, c, label: 'Likely logged', tone: 'gray', note: 'Matches a sale you already recorded (same amount & date).' }); continue; }
+    if (p.refunded) { matched.push({ p, c, label: 'Refunded', tone: 'gray', note: 'Refunded in Stripe — no stock to deduct.' }); continue; }
+    if (c.kind === 'invoice' && c.inv && c.inv.status === 'paid') { matched.push({ p, c, label: 'Invoice paid', tone: 'green', note: `${c.ref} already marked paid.` }); continue; }
+    if (c.kind === 'bigcartel' && c.applied) { matched.push({ p, c, label: 'Big Cartel', tone: 'green', note: `Order ${c.ref} already applied to stock.` }); continue; }
+    needs.push({ p, c });
+  }
+
+  // Summary
+  if (summaryEl) {
+    const reviewMoney = {};
+    needs.forEach(({ p }) => { reviewMoney[p.currency] = (reviewMoney[p.currency] || 0) + p.amount; });
+    const moneyStr = Object.entries(reviewMoney).map(([cur, amt]) => _stripeFmtMoney(amt, cur)).join(' · ') || '—';
+    summaryEl.innerHTML = `<strong style="color:var(--gold);">${needs.length}</strong> need review (${moneyStr}) · <strong>${matched.length}</strong> reconciled · ${payments.length} total`;
+  }
+
+  // ── Needs review worklist
+  if (!needs.length) {
+    needsEl.innerHTML = '<div class="empty-state"><div class="e-icon">✅</div>Every Stripe payment is accounted for. Nothing to review.</div>';
+  } else {
+    needsEl.innerHTML = needs.map(({ p, c }) => {
+      const idSafe = p.id.replace(/[^A-Za-z0-9_]/g, '');
+      const who = [p.customer, p.email].filter(Boolean).join(' · ') || '—';
+      const desc = p.description ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
+      const amountBadge = `<span style="font-family:'DM Mono',monospace;font-weight:600;font-size:16px;">${_stripeFmtMoney(p.amount, p.currency)}</span>`;
+
+      // Invoice not yet marked paid → send her to the proper invoice flow.
+      if (c.kind === 'invoice') {
+        const goBtn = c.bookId
+          ? `<button class="btn gold sm" onclick="reconcileOpenInvoice('${idSafe}')">Open invoice ${escapeHtml(c.ref)} →</button>`
+          : `<span style="font-size:11px;color:var(--amber);">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
+        return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+          <div class="row-between" style="align-items:flex-start;">
+            <div><div>${amountBadge} <span class="pill" style="font-size:10px;background:#e8eef9;color:#27508f;">Invoice</span></div>
+              <div style="font-size:12px;color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}</div>
+            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">${goBtn}
+              <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale">Dismiss</button></div>
+          </div></div>`;
+      }
+
+      // Big Cartel order that was scanned but not yet applied → one-click apply.
+      if (c.kind === 'bigcartel' && c.scanned) {
+        return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+          <div class="row-between" style="align-items:flex-start;">
+            <div><div>${amountBadge} <span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel ${escapeHtml(c.ref)}</span></div>
+              <div style="font-size:12px;color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}</div>
+            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+              <button class="btn gold sm" onclick="reconcileApplyBigCartel('${idSafe}')">Apply order</button>
+              <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')">Dismiss</button></div>
+          </div></div>`;
+      }
+
+      // Direct sale (bare pi_…) or Big Cartel order we never scanned → pick a book.
+      const kindPill = c.kind === 'bigcartel'
+        ? `<span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel ${escapeHtml(c.ref)}</span>`
+        : `<span class="pill gold" style="font-size:10px;">Direct sale</span>`;
+      const suggest = c.bookId ? `<span style="font-size:10px;color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
+      return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+        <div class="row-between" style="align-items:flex-start;">
+          <div><div>${amountBadge} ${kindPill}${suggest}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
+          <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+            <label style="font-size:10px;">Book</label>
+            <select id="recon-book-${idSafe}">${_reconBookOptions(c.bookId)}</select>
+          </div>
+          <div class="form-group" style="margin:0;width:70px;">
+            <label style="font-size:10px;">Qty</label>
+            <input type="number" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
+          </div>
+          <button class="btn gold sm" style="height:38px;" onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
+          <button class="btn tag sm" style="height:38px;" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
+        </div></div>`;
+    }).join('');
+  }
+
+  // ── Reconciled (collapsed detail)
+  if (!matched.length) { matchedEl.innerHTML = ''; return; }
+  const rows = matched.map(({ p, label, tone, note }) => `<tr>
+    <td style="white-space:nowrap;">${escapeHtml(p.date)}</td>
+    <td class="r" style="font-family:'DM Mono',monospace;white-space:nowrap;">${_stripeFmtMoney(p.amount, p.currency)}</td>
+    <td>${escapeHtml([p.customer, p.email].filter(Boolean).join(' · ') || p.description || '—')}</td>
+    <td><span class="pill ${tone}" style="font-size:10px;">${label}</span> <span style="font-size:11px;color:var(--text3);">${escapeHtml(note)}</span></td>
+    <td class="r">${getReconMemory().recorded[p.id] || getReconMemory().dismissed[p.id] ? `<button class="btn tag sm" onclick="reconcileUndo('${p.id.replace(/[^A-Za-z0-9_]/g, '')}')">Undo</button>` : ''}</td>
+  </tr>`).join('');
+  matchedEl.innerHTML = `
+    <button type="button" class="btn tag" style="background:transparent;border:1px dashed var(--gold-line);margin-top:16px;" onclick="(function(el){var d=document.getElementById('recon-matched-tbl');var open=d.style.display!=='none';d.style.display=open?'none':'';el.textContent=(open?'▸':'▾')+' Reconciled payments (${matched.length})';})(this)">▸ Reconciled payments (${matched.length})</button>
+    <div id="recon-matched-tbl" style="display:none;margin-top:10px;">
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th class="r">Amount</th><th>Customer</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+}
+
+function _reconFindPayment(idSafe) {
+  return (window._reconPayments || []).find(p => p.id.replace(/[^A-Za-z0-9_]/g, '') === idSafe);
+}
+
+function reconcileRecordSale(idSafe) {
+  const p = _reconFindPayment(idSafe);
+  if (!p) return;
+  const bookId = document.getElementById('recon-book-' + idSafe)?.value;
+  const qty = Math.max(1, parseInt(document.getElementById('recon-qty-' + idSafe)?.value, 10) || 1);
+  if (!bookId || !BOOKS[bookId]) { showToast('Pick a book first', 'warn'); return; }
+  const bk = BOOKS[bookId];
+  const bookCur = normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD');
+  const payCur = p.currency;
+  // When the paid currency matches the book currency, the per-unit price is the
+  // real paid amount; otherwise keep the book's list price and attach the paid
+  // cash as a payment record so FX is preserved (same shape as recordOrder).
+  const price = (payCur === bookCur) ? Math.round((p.amount / qty) * 100) / 100 : (bk.listPrice || 0);
+  const payment = { currency: payCur, amount: p.amount, ref: p.id };
+  try {
+    _reconApplySaleToBook(bookId, qty, price, payment, p.id, 'Stripe direct', { date: p.date, email: p.email });
+  } catch (e) { showToast('Could not record: ' + (e.message || e), 'err'); return; }
+  const mem = getReconMemory();
+  mem.recorded[p.id] = { bookId, num: '', at: Date.now() };
+  saveReconMemory(mem);
+  if (bookId === activeBook) updateDash();
+  showToast(`✓ Logged ${qty}× ${bk.title} → stock ${states[bookId].stock}`);
+  renderReconcile();
+}
+
+function reconcileApplyBigCartel(idSafe) {
+  const p = _reconFindPayment(idSafe);
+  if (!p) return;
+  const c = classifyStripePayment(p);
+  if (c.scanned && typeof applyOne === 'function') {
+    applyOne(c.scanned.id);
+    const mem = getReconMemory();
+    mem.recorded[p.id] = { bookId: c.scanned.bookId || '', num: c.ref, at: Date.now() };
+    saveReconMemory(mem);
+    renderReconcile();
+  } else {
+    showToast('Order not found in scan — record it manually below', 'warn');
+  }
+}
+
+function reconcileOpenInvoice(idSafe) {
+  const p = _reconFindPayment(idSafe);
+  if (!p) return;
+  const c = classifyStripePayment(p);
+  if (!c.bookId) { showToast('Invoice not found in this app', 'warn'); return; }
+  if (typeof switchBook === 'function') switchBook(c.bookId);
+  switchTab('consignment');
+  setTimeout(() => { try { if (c.inv) viewInvoice(c.inv.id); } catch (_) {} }, 60);
+}
+
+function reconcileDismiss(idSafe) {
+  const p = _reconFindPayment(idSafe);
+  if (!p) return;
+  const mem = getReconMemory();
+  mem.dismissed[p.id] = true;
+  saveReconMemory(mem);
+  renderReconcile();
+}
+
+function reconcileUndo(idSafe) {
+  const p = _reconFindPayment(idSafe);
+  if (!p) return;
+  const mem = getReconMemory();
+  delete mem.dismissed[p.id];
+  // Note: undoing a *recorded* sale only clears the reconcile flag; it does not
+  // reverse the stock change (use the History tab's edit/void for that).
+  const wasRecorded = !!mem.recorded[p.id];
+  delete mem.recorded[p.id];
+  saveReconMemory(mem);
+  if (wasRecorded) showToast('Reconcile flag cleared. Stock was not changed — edit/void in History if needed.', 'warn', 5000);
+  renderReconcile();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BOOK PAYMENT LINK WITH SKU METADATA
+// Generate a Stripe Payment Link for a book at its list price, tagged with
+// book_id/sku/isbn metadata so future direct sales self-identify in the
+// reconcile worklist above (no manual book-picking needed next time).
+// ─────────────────────────────────────────────────────────────────────────
+async function createStripePaymentLinkForBook(book) {
+  const key = getReconStripeKey();
+  if (!key) throw new Error('Stripe key not set — add one in Invoice Settings, the Tax Centre, or the Payments tab.');
+  if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe restricted/secret key (expected rk_… or sk_…).");
+
+  const curCode = (getBookCurrencyCode(book) || 'CAD').toLowerCase();
+  const isZeroDec = _STRIPE_ZERO_DECIMAL.has(curCode.toUpperCase());
+  const major = Number(book.listPrice || 0);
+  const amount = isZeroDec ? Math.round(major) : Math.round(major * 100);
+  if (amount < 50 && !isZeroDec) throw new Error('List price too small for Stripe (minimum 0.50).');
+
+  const priceParams = new URLSearchParams();
+  priceParams.set('unit_amount', String(amount));
+  priceParams.set('currency', curCode);
+  priceParams.set('product_data[name]', (book.title || 'Book').slice(0, 250));
+  priceParams.set('metadata[book_id]', book.id || '');
+  priceParams.set('metadata[sku]', book.id || '');
+  priceParams.set('metadata[isbn]', book.isbn && book.isbn !== '—' ? book.isbn : '');
+  const priceRes = await fetch('https://api.stripe.com/v1/prices', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: priceParams.toString(),
+  });
+  if (!priceRes.ok) {
+    const err = await priceRes.json().catch(() => ({}));
+    throw new Error('Stripe price: ' + (err.error?.message || ('HTTP ' + priceRes.status)));
+  }
+  const price = await priceRes.json();
+
+  const linkParams = new URLSearchParams();
+  linkParams.set('line_items[0][price]', price.id);
+  linkParams.set('line_items[0][quantity]', '1');
+  linkParams.set('line_items[0][adjustable_quantity][enabled]', 'true');
+  linkParams.set('metadata[book_id]', book.id || '');
+  linkParams.set('metadata[sku]', book.id || '');
+  linkParams.set('payment_intent_data[description]', (book.title || 'Book').slice(0, 350));
+  linkParams.set('payment_intent_data[metadata][book_id]', book.id || '');
+  linkParams.set('payment_intent_data[metadata][sku]', book.id || '');
+  linkParams.set('billing_address_collection', 'auto');
+  const linkRes = await fetch('https://api.stripe.com/v1/payment_links', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: linkParams.toString(),
+  });
+  if (!linkRes.ok) {
+    const err = await linkRes.json().catch(() => ({}));
+    throw new Error('Stripe payment link: ' + (err.error?.message || ('HTTP ' + linkRes.status)));
+  }
+  const link = await linkRes.json();
+  return link.url;
+}
+
+// Wired to the "Generate SKU link" button in the book edit modal. Fills the
+// Stripe link field with a freshly-created, metadata-tagged link (the user
+// still saves the book to persist it).
+async function generateBookStripeLink() {
+  const btn = document.getElementById('nb-gen-stripe-btn');
+  const field = document.getElementById('nb-paylink');
+  const title = (document.getElementById('nb-title')?.value || '').trim();
+  const idRaw = (document.getElementById('nb-id')?.value || '').trim();
+  const id = idRaw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const listPrice = parseFloat(document.getElementById('nb-price')?.value) || 0;
+  const currency = document.getElementById('nb-cur')?.value || '€';
+  const isbn = (document.getElementById('nb-isbn')?.value || '').trim();
+  if (!id || !title) { showToast('Set a book ID and title first', 'warn'); return; }
+  if (!(listPrice > 0)) { showToast('Set a list price first', 'warn'); return; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Creating…'; }
+  try {
+    const url = await createStripePaymentLinkForBook({ id, title, listPrice, currency, isbn });
+    if (field) field.value = url;
+    showToast('✓ SKU-tagged Stripe link created — Save the book to keep it');
+  } catch (e) {
+    showToast('Stripe: ' + (e.message || e), 'err', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ Generate SKU link'; }
+  }
+}
+
 // Global exposure for HTML handlers (cleaned up)
 Object.assign(window, {
   confirmDialog, notify,
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
+  reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
+  generateBookStripeLink,
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,

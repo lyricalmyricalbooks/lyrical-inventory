@@ -224,6 +224,7 @@
   <button class="tab-btn" onclick="switchTab('consignment')">Consignment</button>
   <button class="tab-btn" onclick="switchTab('history')">History</button>
   <button class="tab-btn" onclick="switchTab('expenses')">Expenses</button>
+  <button class="tab-btn" onclick="switchTab('reconcile')" id="reconcile-tab-btn">💳 Payments</button>
   <button class="tab-btn" onclick="switchTab('qrcodes')" id="qrcodes-tab-btn" style="display:none;">📱 QR Codes</button>
   <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;">📲 My QR Code</button>
 </nav>
@@ -461,6 +462,28 @@
   <div id="orders-list"><div class="empty-state"><div class="e-icon">📬</div>Press "Scan Gmail" to pull in new orders.</div></div>
   <button class="btn gold" id="apply-all-btn" onclick="applyAll()" disabled style="width:100%;margin-top:4px;">Apply all new orders</button>
   <div class="log-console" id="log-web"></div>
+</div>
+
+<!-- PAYMENTS / STRIPE RECONCILIATION -->
+<div class="tab-panel" id="tab-reconcile" style="display:none;">
+  <div class="row-between">
+    <div class="section-hed">Stripe payments to reconcile</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span id="recon-last-sync" style="font-size:11px;color:var(--text3);">Not synced yet</span>
+      <button class="btn ink" id="recon-sync-btn" onclick="reconcileSync()">↻ Sync from Stripe</button>
+    </div>
+  </div>
+  <p style="font-size:12px;color:var(--text3);margin:6px 0 14px;line-height:1.6;">
+    Pulls your recent Stripe payments and checks each one against your inventory. Invoices (INV-…), Big Cartel
+    orders, and SKU-tagged links match automatically — the rest land in a short worklist where you pick the book and log the sale.
+  </p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+    <input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off">
+  </div>
+  <div id="recon-status" style="font-size:12px;color:var(--text3);margin-bottom:8px;min-height:16px;"></div>
+  <div id="recon-summary" style="font-size:13px;color:var(--text2);margin-bottom:14px;"></div>
+  <div id="recon-needs"><div class="empty-state"><div class="e-icon">💳</div>Press <strong>Sync from Stripe</strong> to pull your payments.</div></div>
+  <div id="recon-matched"></div>
 </div>
 
 <!-- MANUAL -->
@@ -1920,9 +1943,12 @@ function json_(obj) {
   <div class="form-group"><label>Initial Production Cost</label><input id="nb-prod" type="number" value="0"></div>
   <div class="form-group" style="margin-top:4px;">
     <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for QR codes)</span></label>
-    <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;">
+      <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
+    </div>
     <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
-      Create a Payment Link in your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a> → copy and paste the URL here. The QR code will point directly to this link.
+      Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a>, or click <strong>Generate SKU link</strong> to create one tagged with this book's SKU — so direct sales auto-match in the Payments tab. The QR code points to this link.
     </div>
   </div>
   <div class="modal-footer"><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
