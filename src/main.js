@@ -1088,7 +1088,9 @@ function syncRoleUI() {
   const qrcodesTabBtn = $('qrcodes-tab-btn');
   const myqrTabBtn = $('myqr-tab-btn');
   const reconcileTabBtn = $('reconcile-tab-btn');
+  const opencallTabBtn = $('opencall-tab-btn');
   if (reconcileTabBtn) reconcileTabBtn.style.display = authorNow ? 'none' : '';
+  if (opencallTabBtn) opencallTabBtn.style.display = authorNow ? 'none' : '';
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
   if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
   if (globalActions) globalActions.style.display = authorNow ? 'none' : 'flex';
@@ -1199,7 +1201,7 @@ window.clearHistChanFilter = function() { histChanFilter = null; renderHist(); }
 // ── TABS
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'opencall')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
   
@@ -2149,9 +2151,18 @@ function ocList() {
   return s.openCall;
 }
 
+// Open Call is a publisher-only workflow. This guards every entry point
+// (render + mutations) so an author session can't view or change it even
+// if a handler is reached outside the (hidden) tab.
+function ocBlockedForAuthor_() {
+  return isAuthor();
+}
+
 function renderOpenCall() {
   const body = $('opencall-body');
   if (!body) return;
+
+  if (ocBlockedForAuthor_()) { body.innerHTML = ''; return; }
 
   if (!activeBook || activeBook === 'all') {
     const t = $('bc-title-oc'); if (t) t.textContent = 'No book selected';
@@ -2236,6 +2247,7 @@ function renderOpenCall() {
 }
 
 function ocAdd() {
+  if (ocBlockedForAuthor_()) return;
   const name = ($('oc-name')?.value || '').trim();
   const email = ($('oc-email')?.value || '').trim();
   const photo = ($('oc-photo')?.value || '').trim();
@@ -2247,11 +2259,13 @@ function ocAdd() {
 }
 
 function ocToggleImport() {
+  if (ocBlockedForAuthor_()) return;
   ocImportOpen = !ocImportOpen;
   renderOpenCall();
 }
 
 function ocRunImport() {
+  if (ocBlockedForAuthor_()) return;
   const raw = ($('oc-import-text')?.value || '').trim();
   if (!raw) { showToast('Paste some rows first', 'warn'); return; }
   const list = ocList();
@@ -2266,6 +2280,7 @@ function ocRunImport() {
 }
 
 function ocToggle(id, key) {
+  if (ocBlockedForAuthor_()) return;
   const c = ocList().find(x => x.id === id);
   if (!c) return;
   c[key] = !c[key];
@@ -2274,6 +2289,7 @@ function ocToggle(id, key) {
 }
 
 async function ocDelete(id) {
+  if (ocBlockedForAuthor_()) return;
   const c = ocList().find(x => x.id === id);
   if (!c) return;
   const ok = await confirmDialog(`Remove ${c.name || c.email || 'this contributor'} from the open call?`, { danger: true, okLabel: 'Remove' });
@@ -2286,6 +2302,7 @@ async function ocDelete(id) {
 }
 
 function ocCopyEmails() {
+  if (ocBlockedForAuthor_()) return;
   const emails = ocList().map(c => c.email).filter(Boolean);
   if (!emails.length) { showToast('No emails to copy', 'warn'); return; }
   const text = emails.join(', ');
