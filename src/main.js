@@ -10764,7 +10764,13 @@ async function createStripePaymentLinkForBook(book) {
   });
   if (!priceRes.ok) {
     const err = await priceRes.json().catch(() => ({}));
-    throw new Error('Stripe price: ' + (err.error?.message || ('HTTP ' + priceRes.status)));
+    const msg = err.error?.message || ('HTTP ' + priceRes.status);
+    // The Prices endpoint needs the "Prices" (a.k.a. Plans) write scope. A key
+    // missing it is the most common failure here, so point at the exact fix.
+    const hint = /permission|rak_/i.test(msg)
+      ? ' — your restricted key needs Write on Prices, Products and Payment Links.'
+      : '';
+    throw new Error('Stripe price: ' + msg + hint);
   }
   const price = await priceRes.json();
 
