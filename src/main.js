@@ -1274,9 +1274,10 @@ function updateAllOverview() {
     </div>`;
   }).join('');
 
-  // Combined channel table + analytics
-  const rows = [];
-  const channelTotals = {}; // chan -> currency -> {txns,units,revenue, books:Set}
+  // Combined channel analytics — collect structured data grouped by currency so
+  // the view can render visually (stacked bars + per-currency toggle) instead of
+  // one dense, hard-to-scan table.
+  const byCur = {}; // currency -> { books:[...], channelTotals:{chan:{txns,units,revenue,books:Set}} }
   Object.values(BOOKS).forEach(book => {
     const s = states[book.id] || defaultState(book);
     const entries = Object.entries(s.chStats||{});
@@ -1288,68 +1289,24 @@ function updateAllOverview() {
     (s.artistTransfers||[]).forEach(t => { heldByChan[t.chan] = (heldByChan[t.chan]||0) + (t.total||0); });
     const revOf = (chan, cs) => (cs.revenue||0) + (heldByChan[chan]||0);
     const bookRev = entries.reduce((a,[chan,cs])=>a+revOf(chan,cs),0);
-    let bestChan = null, bestRev = -1;
-    entries.forEach(([chan,cs]) => { if (revOf(chan,cs) > bestRev) { bestRev = revOf(chan,cs); bestChan = chan; } });
-    entries.forEach(([chan,cs]) => {
+    const cur = book.currency;
+    const cd = byCur[cur] = byCur[cur] || { books:[], channelTotals:{} };
+    const channels = entries.map(([chan,cs]) => {
       const txns = cs.txns||0, units = cs.units||0, rev = revOf(chan,cs);
-      const avgTxn = txns ? rev/txns : 0;
-      const revUnit = units ? rev/units : 0;
-      const sharePct = bookRev > 0 ? (rev/bookRev*100) : 0;
-      const isBest = chan === bestChan && rev > 0 && entries.length > 1;
-      const shareStr = bookRev > 0 ? sharePct.toFixed(0)+'%' : '—';
-      const bestTag = isBest ? ' <span class="pill gold" style="font-size:9px;padding:1px 6px;margin-left:4px;vertical-align:middle;">TOP</span>' : '';
-      rows.push(`<tr><td style="font-weight:600;">${escapeHtml(book.title)}${bestTag}</td><td>${escapeHtml(chan)}</td><td class="r">${txns}</td><td class="r">${units}</td><td class="r">${fmt(rev,book.currency)}</td><td class="r">${txns?fmt(avgTxn,book.currency):'—'}</td><td class="r">${units?fmt(revUnit,book.currency):'—'}</td><td class="r">${shareStr}</td></tr>`);
-
-      const t = channelTotals[chan] = channelTotals[chan] || {};
-      const c = t[book.currency] = t[book.currency] || {txns:0,units:0,revenue:0,books:new Set()};
-      c.txns += txns; c.units += units; c.revenue += rev; c.books.add(book.title);
-    });
+      const t = cd.channelTotals[chan] = cd.channelTotals[chan] || {txns:0,units:0,revenue:0,books:new Set()};
+      t.txns += txns; t.units += units; t.revenue += rev; t.books.add(book.title);
+      return { chan, txns, units, rev,
+        avgTxn: txns ? rev/txns : 0, revUnit: units ? rev/units : 0,
+        share: bookRev>0 ? rev/bookRev*100 : 0 };
+    }).sort((a,b)=>b.rev-a.rev);
+    const bestChan = (channels.length>1 && channels[0].rev>0) ? channels[0].chan : null;
+    cd.books.push({ title: book.title, accent: book.accent||'var(--gold2)', cur, total: bookRev, channels, bestChan });
   });
-  $('all-ch-body').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="8"><div class="empty-state" style="padding:1rem;">No sales yet.</div></td></tr>';
-
-  // Channel performance summary (grouped by currency to avoid mixing)
-  const insights = $('all-ch-insights');
-  if (insights) {
-    const chanNames = Object.keys(channelTotals);
-    if (!chanNames.length) {
-      insights.innerHTML = '';
-    } else {
-      // Build per-currency leaderboards
-      const byCur = {}; // currency -> [{chan, txns, units, revenue, books}]
-      chanNames.forEach(chan => {
-        Object.entries(channelTotals[chan]).forEach(([cur, c]) => {
-          (byCur[cur] = byCur[cur] || []).push({chan, ...c});
-        });
-      });
-      const blocks = Object.entries(byCur).map(([cur, list]) => {
-        list.sort((a,b)=>b.revenue-a.revenue);
-        const totalRev = list.reduce((a,x)=>a+x.revenue,0);
-        const totalUnits = list.reduce((a,x)=>a+x.units,0);
-        const totalTxns = list.reduce((a,x)=>a+x.txns,0);
-        const top = list[0];
-        const topShare = totalRev>0 ? (top.revenue/totalRev*100) : 0;
-        const cards = list.map(x => {
-          const share = totalRev>0 ? (x.revenue/totalRev*100) : 0;
-          const avgTxn = x.txns ? x.revenue/x.txns : 0;
-          const revUnit = x.units ? x.revenue/x.units : 0;
-          return `<div style="background:white;border:1px solid var(--border);border-radius:var(--r1);padding:10px 12px;min-width:180px;flex:1;">
-            <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">${x.chan}</div>
-            <div style="font-weight:700;font-size:15px;color:var(--text2);">${fmt(x.revenue,cur)} <span style="font-size:11px;color:var(--text3);font-weight:500;">(${share.toFixed(0)}%)</span></div>
-            <div class="bar-track" style="background:rgba(0,0,0,.06);margin:6px 0;height:4px;"><div class="bar-fill" style="width:${share}%;background:var(--gold2);height:4px;"></div></div>
-            <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${x.txns} txn · ${x.units} u · ${x.txns?fmt(avgTxn,cur):'—'}/txn · ${x.units?fmt(revUnit,cur):'—'}/u</div>
-          </div>`;
-        }).join('');
-        return `<div style="margin-bottom:1rem;">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
-            <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);font-weight:600;">Channel performance · ${cur}</div>
-            <div style="font-size:11px;color:var(--text3);">Total ${fmt(totalRev,cur)} · ${totalTxns} txn · ${totalUnits} u${top?` · Top: <strong style="color:var(--text2);">${top.chan}</strong> (${topShare.toFixed(0)}%)`:''}</div>
-          </div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;">${cards}</div>
-        </div>`;
-      }).join('');
-      insights.innerHTML = blocks;
-    }
-  }
+  Object.values(byCur).forEach(cd => cd.books.sort((a,b)=>b.total-a.total));
+  window._allChData = byCur;
+  const curKeys = Object.keys(byCur);
+  if (!curKeys.includes(window._allChCur)) window._allChCur = curKeys[0] || null;
+  renderChannelAnalytics();
 
   // Combined consignment table
   const conRows = [];
@@ -1363,6 +1320,93 @@ function updateAllOverview() {
 
   renderGlobalPendingAlert();
 }
+
+// ── CHANNEL ANALYTICS RENDERING
+// Fixed colour per sales channel so the eye can track a channel across the
+// chart, the stacked book bars and the legend dots. Unknown channels get a
+// stable colour hashed from a small fallback palette.
+const CHANNEL_COLORS = {
+  'in person':'#e5a93f', 'book fair':'#2f8f8f', 'website':'#3a7cc8',
+  'gratuity':'#b8b0a5', 'consignment':'#8a5cc8', 'direct':'#c8693a', '':'#c8693a',
+};
+const _CHAN_FALLBACK = ['#6b8f2f','#c84a6b','#3a6ec8','#a8852f','#5c7a8a'];
+function channelColor(chan) {
+  const k = (chan||'').toLowerCase().trim();
+  if (CHANNEL_COLORS[k] != null) return CHANNEL_COLORS[k];
+  let h = 0; for (let i=0;i<k.length;i++) h = (h*31 + k.charCodeAt(i)) >>> 0;
+  return _CHAN_FALLBACK[h % _CHAN_FALLBACK.length];
+}
+const chanLabel = (chan) => (chan && chan.trim()) ? chan : 'Direct';
+
+function renderChannelAnalytics() {
+  const host = $('all-ch-analytics');
+  if (!host) return;
+  const byCur = window._allChData || {};
+  const curKeys = Object.keys(byCur);
+  if (!curKeys.length) {
+    host.innerHTML = '<div class="empty-state" style="padding:1.5rem;">No sales yet.</div>';
+    return;
+  }
+  let cur = window._allChCur;
+  if (!curKeys.includes(cur)) cur = window._allChCur = curKeys[0];
+  const cd = byCur[cur];
+
+  // Currency toggle — only when more than one currency is in play
+  let toggle = '';
+  if (curKeys.length > 1) {
+    toggle = `<div class="ch-cur-toggle">` + curKeys.map(c => {
+      const tot = (byCur[c].books||[]).reduce((a,b)=>a+b.total,0);
+      return `<button class="ch-cur-btn${c===cur?' active':''}" onclick="selectAllChCurrency('${c.replace(/'/g,"\\'")}')">${escapeHtml(c)} <span>${fmt(tot,c)}</span></button>`;
+    }).join('') + `</div>`;
+  }
+
+  // Channel performance — comparative horizontal bar chart
+  const chans = Object.entries(cd.channelTotals).map(([chan,t])=>({chan, ...t})).sort((a,b)=>b.revenue-a.revenue);
+  const grandRev = chans.reduce((a,x)=>a+x.revenue,0);
+  const grandTxn = chans.reduce((a,x)=>a+x.txns,0);
+  const grandU = chans.reduce((a,x)=>a+x.units,0);
+  const maxRev = chans.reduce((a,x)=>Math.max(a,x.revenue),0) || 1;
+  const top = chans[0];
+  const chartRows = chans.map(x => {
+    const share = grandRev>0 ? x.revenue/grandRev*100 : 0;
+    const col = channelColor(x.chan);
+    const avgTxn = x.txns ? x.revenue/x.txns : 0;
+    const revUnit = x.units ? x.revenue/x.units : 0;
+    return `<div class="ch-bar-row">
+      <div class="ch-bar-head"><span class="ch-dot" style="background:${col}"></span><span class="ch-bar-name">${escapeHtml(chanLabel(x.chan))}</span><span class="ch-bar-val">${fmt(x.revenue,cur)} <em>${share.toFixed(0)}%</em></span></div>
+      <div class="ch-bar-track"><div class="ch-bar-fill" style="width:${x.revenue/maxRev*100}%;background:${col}"></div></div>
+      <div class="ch-bar-meta">${x.txns} txn · ${x.units} u${x.txns?` · ${fmt(avgTxn,cur)}/txn`:''}${x.units?` · ${fmt(revUnit,cur)}/u`:''}</div>
+    </div>`;
+  }).join('');
+  const chart = `<div class="ch-panel">
+    <div class="ch-panel-head"><span>Channel performance</span><span class="ch-panel-sub">${fmt(grandRev,cur)} · ${grandTxn} txn · ${grandU} u${top?` · Top <strong>${escapeHtml(chanLabel(top.chan))}</strong>`:''}</span></div>
+    ${chartRows}
+  </div>`;
+
+  // Per-book cards — one stacked channel-mix bar per book + colour-keyed legend
+  const cards = cd.books.map(b => {
+    const segs = b.channels.filter(c=>c.rev>0).map(c =>
+      `<div class="ch-seg" style="width:${b.total>0?c.rev/b.total*100:0}%;background:${channelColor(c.chan)}" title="${escapeHtml(chanLabel(c.chan))}: ${fmt(c.rev,b.cur)}"></div>`
+    ).join('') || `<div class="ch-seg" style="width:100%;background:var(--cream3)"></div>`;
+    const legend = b.channels.map(c => {
+      const top = c.chan === b.bestChan;
+      return `<div class="ch-leg-row">
+        <span class="ch-dot" style="background:${channelColor(c.chan)}"></span>
+        <span class="ch-leg-name">${escapeHtml(chanLabel(c.chan))}${top?' <span class="pill gold ch-top">TOP</span>':''}</span>
+        <span class="ch-leg-val">${fmt(c.rev,b.cur)} <em>${c.share.toFixed(0)}%</em></span>
+        <span class="ch-leg-meta">${c.txns} txn · ${c.units} u</span>
+      </div>`;
+    }).join('');
+    return `<div class="ch-book-card">
+      <div class="ch-book-head"><span class="ch-book-title">${escapeHtml(b.title)}</span><span class="ch-book-total">${fmt(b.total,b.cur)}</span></div>
+      <div class="ch-stack">${segs}</div>
+      <div class="ch-legend">${legend}</div>
+    </div>`;
+  }).join('');
+
+  host.innerHTML = toggle + chart + `<div class="ch-book-grid">${cards}</div>`;
+}
+window.selectAllChCurrency = function(c) { window._allChCur = c; renderChannelAnalytics(); };
 
 // ── BOOK CONTEXT BANNERS
 function renderGlobalPendingAlert() {

@@ -726,3 +726,53 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .sheets-empty{text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;}
 .sheets-pager{text-align:center;padding:1rem;background:rgba(0,0,0,.03);}
 .sheets-page-label{margin:0 15px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;}
+
+/* ── Channel analytics (All books overview) ───────────────────────────── */
+.ch-analytics{margin-bottom:1.5rem;}
+
+/* Currency toggle */
+.ch-cur-toggle{display:inline-flex;gap:2px;background:var(--cream2);border:1px solid var(--border);border-radius:100px;padding:3px;margin-bottom:1.1rem;}
+.ch-cur-btn{border:none;background:transparent;color:var(--text3);font-family:'DM Mono',monospace;font-size:12px;font-weight:600;padding:6px 14px;border-radius:100px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:background .15s,color .15s;}
+.ch-cur-btn span{font-size:11px;opacity:.7;font-weight:500;}
+.ch-cur-btn.active{background:var(--ink);color:var(--cream);}
+.ch-cur-btn.active span{opacity:.85;}
+
+/* Shared dot */
+.ch-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block;}
+
+/* Channel performance bar chart */
+.ch-panel{background:white;border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:1.25rem;box-shadow:var(--shadow);}
+.ch-panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text3);}
+.ch-panel-sub{font-size:11px;font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--text3);font-family:'DM Mono',monospace;}
+.ch-panel-sub strong{color:var(--text2);}
+.ch-bar-row{margin-bottom:12px;}
+.ch-bar-row:last-child{margin-bottom:0;}
+.ch-bar-head{display:flex;align-items:center;gap:7px;margin-bottom:5px;}
+.ch-bar-name{font-size:12px;font-weight:600;color:var(--text2);flex:1;}
+.ch-bar-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);font-weight:600;white-space:nowrap;}
+.ch-bar-val em{font-style:normal;color:var(--text3);font-weight:500;font-size:11px;margin-left:3px;}
+.ch-bar-track{height:8px;background:var(--cream2);border-radius:100px;overflow:hidden;}
+.ch-bar-fill{height:8px;border-radius:100px;transition:width .7s cubic-bezier(.16,1,.3,1);}
+.ch-bar-meta{font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:4px;}
+
+/* Per-book channel-mix cards */
+.ch-book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
+.ch-book-card{background:white;border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow);}
+.ch-book-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px;}
+.ch-book-title{font-family:'Playfair Display',serif;font-size:15px;color:var(--text);}
+.ch-book-total{font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;}
+.ch-stack{display:flex;height:12px;border-radius:100px;overflow:hidden;background:var(--cream2);margin-bottom:12px;}
+.ch-seg{height:100%;transition:width .7s cubic-bezier(.16,1,.3,1);}
+.ch-seg + .ch-seg{box-shadow:-1px 0 0 rgba(255,255,255,.55);}
+.ch-legend{display:flex;flex-direction:column;gap:7px;}
+.ch-leg-row{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"dot name val" "dot meta meta";column-gap:8px;row-gap:1px;align-items:center;}
+.ch-leg-row .ch-dot{grid-area:dot;}
+.ch-leg-name{grid-area:name;font-size:12px;font-weight:600;color:var(--text2);display:flex;align-items:center;gap:5px;}
+.ch-leg-val{grid-area:val;font-family:'DM Mono',monospace;font-size:12px;color:var(--text);font-weight:600;white-space:nowrap;}
+.ch-leg-val em{font-style:normal;color:var(--text3);font-weight:500;font-size:11px;margin-left:2px;}
+.ch-leg-meta{grid-area:meta;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;}
+.pill.ch-top{font-size:8px;padding:0 5px;line-height:1.5;}
+
+@media(max-width:640px){
+  .ch-book-grid{grid-template-columns:1fr;}
+}
