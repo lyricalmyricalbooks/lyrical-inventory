@@ -2151,9 +2151,18 @@ function ocList() {
   return s.openCall;
 }
 
+// Open Call is a publisher-only workflow. This guards every entry point
+// (render + mutations) so an author session can't view or change it even
+// if a handler is reached outside the (hidden) tab.
+function ocBlockedForAuthor_() {
+  return isAuthor();
+}
+
 function renderOpenCall() {
   const body = $('opencall-body');
   if (!body) return;
+
+  if (ocBlockedForAuthor_()) { body.innerHTML = ''; return; }
 
   if (!activeBook || activeBook === 'all') {
     const t = $('bc-title-oc'); if (t) t.textContent = 'No book selected';
@@ -2238,6 +2247,7 @@ function renderOpenCall() {
 }
 
 function ocAdd() {
+  if (ocBlockedForAuthor_()) return;
   const name = ($('oc-name')?.value || '').trim();
   const email = ($('oc-email')?.value || '').trim();
   const photo = ($('oc-photo')?.value || '').trim();
@@ -2249,11 +2259,13 @@ function ocAdd() {
 }
 
 function ocToggleImport() {
+  if (ocBlockedForAuthor_()) return;
   ocImportOpen = !ocImportOpen;
   renderOpenCall();
 }
 
 function ocRunImport() {
+  if (ocBlockedForAuthor_()) return;
   const raw = ($('oc-import-text')?.value || '').trim();
   if (!raw) { showToast('Paste some rows first', 'warn'); return; }
   const list = ocList();
@@ -2268,6 +2280,7 @@ function ocRunImport() {
 }
 
 function ocToggle(id, key) {
+  if (ocBlockedForAuthor_()) return;
   const c = ocList().find(x => x.id === id);
   if (!c) return;
   c[key] = !c[key];
@@ -2276,6 +2289,7 @@ function ocToggle(id, key) {
 }
 
 async function ocDelete(id) {
+  if (ocBlockedForAuthor_()) return;
   const c = ocList().find(x => x.id === id);
   if (!c) return;
   const ok = await confirmDialog(`Remove ${c.name || c.email || 'this contributor'} from the open call?`, { danger: true, okLabel: 'Remove' });
@@ -2288,6 +2302,7 @@ async function ocDelete(id) {
 }
 
 function ocCopyEmails() {
+  if (ocBlockedForAuthor_()) return;
   const emails = ocList().map(c => c.email).filter(Boolean);
   if (!emails.length) { showToast('No emails to copy', 'warn'); return; }
   const text = emails.join(', ');
