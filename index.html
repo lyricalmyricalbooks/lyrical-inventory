@@ -1973,9 +1973,62 @@ function json_(obj) {
   </div>
 </div></div>
 
+<!-- POS-ONLY BOOK MODAL (add / edit + instant Stripe link & QR) -->
+<div class="overlay" id="m-pos-book" style="display:none;"><div class="modal" style="max-width:620px;">
+  <div class="modal-title" id="pb-modal-title">Add POS-only book</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.55;">
+    A quick title for the sales table — guest authors, consignment, one-off stock. It shows up at the Point of Sale, in the printable sales tracker, and on the QR sheet, but <strong>stays out of your catalog, inventory, and financials</strong>.
+  </div>
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group" style="margin:0;"><label>Title *</label><input id="pb-title" placeholder="e.g. Guest Poetry Zine"></div>
+    <div class="form-group" style="margin:0;"><label>Author</label><input id="pb-author" placeholder="Author name"></div>
+  </div>
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group" style="margin:0;"><label>Price</label><input id="pb-price" type="number" step="0.01" value="40"></div>
+    <div class="form-group" style="margin:0;">
+      <label>Currency</label>
+      <select id="pb-cur">
+        <option value="€">Euro (€)</option>
+        <option value="CA$">Canadian Dollar (CA$)</option>
+        <option value="US$">US Dollar (US$)</option>
+        <option value="£">British Pound (£)</option>
+      </select>
+    </div>
+  </div>
+  <div class="form-group" style="margin-bottom:12px;"><label>Accent Color</label><input id="pb-accent" type="color" value="#c8913a"></div>
+
+  <div class="form-group" style="margin-bottom:12px;">
+    <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for the QR code)</span></label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="url" id="pb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;" oninput="renderPosBookModalQR()">
+      <button type="button" class="btn gold sm" id="pb-gen-stripe-btn" onclick="generatePosBookStripeLink()" style="white-space:nowrap;">⚡ Generate Stripe link</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
+      Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a>, or click <strong>Generate Stripe link</strong> to mint one at this price instantly (needs your Stripe restricted key saved in the Payments tab or Invoice Settings).
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:1rem;">
+    <div style="background:white;padding:14px;border-radius:var(--r2);width:208px;height:208px;display:flex;align-items:center;justify-content:center;">
+      <div id="pb-qr-canvas"></div>
+    </div>
+    <div id="pb-qr-note" style="font-size:11px;color:var(--text3);min-height:14px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="btn ink sm" onclick="copyPosBookLink()">Copy link</button>
+      <button type="button" class="btn gold sm" onclick="downloadPosBookQR()">Download QR</button>
+    </div>
+  </div>
+
+  <div class="modal-footer">
+    <button class="btn" onclick="closePosBookModal()">Cancel</button>
+    <button class="btn danger-btn" id="pb-remove-btn" style="display:none;" onclick="removeCurrentPosBook()">Remove</button>
+    <button class="btn gold" id="pb-save-btn" onclick="savePosBook()">Add to POS</button>
+  </div>
+</div></div>
+
 <div class="overlay" id="m-pos-sale-confirm" style="display:none;"><div class="modal" style="max-width:640px;">
   <div class="modal-title">Confirm Event Sale</div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;">Review the sale details before finalizing. This transaction will deduct inventory immediately.</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;">Review the sale details before finalizing. Catalog books deduct inventory immediately; POS-only titles are tallied on the card.</div>
   <div class="tbl-wrap" style="margin-bottom:1rem;">
     <table class="tbl">
       <thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Line</th></tr></thead>
