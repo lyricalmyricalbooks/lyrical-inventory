@@ -8655,6 +8655,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── EVENT POS ──
 let posCart = {};
+// Per-book custom unit price (in the book's native currency), keyed by book id.
+// Set via the "Adjust price" control on a cart line. Lets the seller discount
+// or hand-price a title at the table. Cleared when the item is removed or the
+// sale completes.
+let posPriceOverrides = {};
+let _posPriceEditId = null;
 let posPendingSale = null;
 const POS_FX_STORAGE_KEY = 'lm_pos_exchange_rates_v1';
 const POS_FX_FETCHED_AT_KEY = 'lm_pos_fx_fetched_at';
@@ -8738,13 +8744,18 @@ function buildPOSCartRows() {
     const book = posResolveBook(bookId);
     if (!book) continue;
     const sourceCode = currencyToCode(book.currency);
-    const convertedUnit = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
+    const listUnit = book.listPrice || 0;
+    const hasOverride = Object.prototype.hasOwnProperty.call(posPriceOverrides, bookId);
+    const unit = hasOverride ? posPriceOverrides[bookId] : listUnit;
+    const convertedUnit = convertCurrency(unit, sourceCode, posTransactionCurrency);
     items.push({
       book,
       qty,
       sourceCode,
-      sourceUnit: book.listPrice || 0,
-      sourceLine: (book.listPrice || 0) * qty,
+      sourceUnit: unit,
+      listUnit,
+      overridden: hasOverride && unit !== listUnit,
+      sourceLine: unit * qty,
       convertedUnit,
       convertedLine: convertedUnit === null ? null : convertedUnit * qty
     });
@@ -8829,18 +8840,27 @@ function renderPOS() {
     ` : '');
 
   if (cartItemsEl) {
-    cartItemsEl.innerHTML = cartRows.length ? cartRows.map((row) => `
+    cartItemsEl.innerHTML = cartRows.length ? cartRows.map((row) => {
+      const unitLabel = row.overridden
+        ? `<span style="text-decoration:line-through;color:var(--text3);">${posFormat(row.listUnit, row.sourceCode)}</span> <span style="color:var(--gold);font-weight:600;">${posFormat(row.sourceUnit, row.sourceCode)}</span> <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);">Adj</span>`
+        : posFormat(row.sourceUnit, row.sourceCode);
+      return `
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.08);">
         <div>
           <div style="font-size:13px;color:var(--cream);font-weight:600;">${escapeHtml(row.book.title)}</div>
-          <div style="font-size:11px;color:var(--text3);">${row.qty} × ${posFormat(row.sourceUnit, row.sourceCode)}</div>
+          <div style="font-size:11px;color:var(--text3);">${row.qty} × ${unitLabel}</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:13px;color:var(--cream);">${row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency)}</div>
-          <button class="btn sm" style="padding:2px 6px;font-size:11px;margin-top:3px;" onclick="posRemoveItem('${row.book.id}')">Remove</button>
+          <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:3px;">
+            <button class="btn sm" style="padding:2px 6px;font-size:11px;" onclick="openPosPriceModal('${row.book.id}')">Adjust</button>
+            <button class="btn sm" style="padding:2px 6px;font-size:11px;" onclick="posGenerateLineQR('${row.book.id}')" title="Payment QR for this line">QR</button>
+            <button class="btn sm" style="padding:2px 6px;font-size:11px;" onclick="posRemoveItem('${row.book.id}')">Remove</button>
+          </div>
         </div>
       </div>
-    `).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 0;">Cart is empty.</div>';
+    `;
+    }).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 0;">Cart is empty.</div>';
   }
 
   if (subtotalEl) {
@@ -8868,7 +8888,179 @@ window.posUpdateQty = function(bookId, delta) {
 
 window.posRemoveItem = function(bookId) {
   delete posCart[bookId];
+  delete posPriceOverrides[bookId];
   renderPOS();
+};
+
+// ── PER-LINE PRICE / DISCOUNT OVERRIDE ──
+// Opens a compact editor for one cart line so the seller can hand-price a book
+// or apply a quick discount. Prices are edited in the book's native currency
+// (what flows into revenue/ledger); the cart converts to the txn currency.
+window.openPosPriceModal = function(bookId) {
+  const book = posResolveBook(bookId);
+  if (!book) return;
+  _posPriceEditId = bookId;
+  const code = currencyToCode(book.currency);
+  const list = book.listPrice || 0;
+  const current = Object.prototype.hasOwnProperty.call(posPriceOverrides, bookId)
+    ? posPriceOverrides[bookId]
+    : list;
+  $('pp-title').textContent = book.title;
+  $('pp-list').textContent = posFormat(list, code);
+  $('pp-cur-sym').textContent = codeToSymbol(code);
+  const input = $('pp-price');
+  input.value = (current || 0).toFixed(2);
+  $('pp-reset-btn').style.display = (current !== list) ? '' : 'none';
+  window.posPricePreview();
+  openM('pos-price');
+  // Select the field so a one-handed edit is immediate.
+  setTimeout(() => { input.focus(); input.select(); }, 60);
+};
+
+// Quick discount buttons: set the field to a percentage off the list price.
+window.posPriceQuick = function(pct) {
+  const book = posResolveBook(_posPriceEditId);
+  if (!book) return;
+  const list = book.listPrice || 0;
+  const val = Math.max(0, list * (1 - (pct / 100)));
+  $('pp-price').value = val.toFixed(2);
+  window.posPricePreview();
+};
+
+window.posPricePreview = function() {
+  const book = posResolveBook(_posPriceEditId);
+  if (!book) return;
+  const list = book.listPrice || 0;
+  const code = currencyToCode(book.currency);
+  let val = parseFloat($('pp-price').value);
+  const note = $('pp-preview');
+  if (!(val >= 0) || isNaN(val)) { note.textContent = ''; return; }
+  if (list > 0 && val < list) {
+    const off = Math.round((1 - val / list) * 100);
+    note.innerHTML = `New price <strong>${posFormat(val, code)}</strong> · <span style="color:var(--gold);">${off}% off</span>`;
+  } else if (list > 0 && val > list) {
+    note.innerHTML = `New price <strong>${posFormat(val, code)}</strong> · markup`;
+  } else {
+    note.innerHTML = `New price <strong>${posFormat(val, code)}</strong>`;
+  }
+};
+
+window.savePosPrice = function() {
+  const book = posResolveBook(_posPriceEditId);
+  if (!book) return;
+  const val = parseFloat($('pp-price').value);
+  if (!(val >= 0) || isNaN(val)) { showToast('Enter a valid price (0 or more)', 'warn'); return; }
+  const list = book.listPrice || 0;
+  // Make sure the line is actually in the cart (Adjust implies selling one).
+  if (!posCart[_posPriceEditId]) posCart[_posPriceEditId] = 1;
+  if (val === list) delete posPriceOverrides[_posPriceEditId];
+  else posPriceOverrides[_posPriceEditId] = Math.round(val * 100) / 100;
+  closeM('pos-price');
+  _posPriceEditId = null;
+  renderPOS();
+  showToast('✓ Price updated');
+};
+
+window.posResetPrice = function() {
+  if (_posPriceEditId) delete posPriceOverrides[_posPriceEditId];
+  closeM('pos-price');
+  _posPriceEditId = null;
+  renderPOS();
+  showToast('Reset to list price');
+};
+
+// ── PAYMENT QR FOR THE EXACT (DISCOUNTED) AMOUNT ──
+// Mint a Stripe Payment Link for what the customer actually owes — either the
+// whole sale or a single adjusted line — and show a scannable QR. Needs the
+// network and a saved Stripe restricted key (same one the catalog QR uses).
+let _posQRLink = '';
+
+function _showPosQR(url, amountLabel, sub) {
+  _posQRLink = url || '';
+  $('pos-qr-amount').textContent = amountLabel || '';
+  $('pos-qr-sub').textContent = sub || '';
+  $('pos-qr-link').value = url || '';
+  const wrap = $('pos-qr-canvas');
+  wrap.innerHTML = '';
+  if (url && typeof QRCode !== 'undefined') {
+    new QRCode(wrap, { text: url, width: 220, height: 220, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
+  } else {
+    wrap.innerHTML = '<div style="color:#aaa;font-size:12px;">QR library not ready.</div>';
+  }
+  openM('pos-qr');
+}
+
+window.copyPosQRLink = function() {
+  if (!_posQRLink) { showToast('No link yet', 'warn'); return; }
+  navigator.clipboard.writeText(_posQRLink).then(() => showToast('Payment link copied')).catch(() => {
+    const ta = document.createElement('textarea'); ta.value = _posQRLink; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Payment link copied');
+  });
+};
+
+window.downloadPosQR = function() {
+  const canvas = document.querySelector('#pos-qr-canvas canvas');
+  if (!canvas) { showToast('QR not ready', 'warn'); return; }
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `pos-payment-qr.png`;
+  a.click();
+  showToast('Downloading QR Code image');
+};
+
+// QR for the whole cart at the exact total (discounts included), in the
+// transaction currency the customer is paying.
+window.posGenerateSaleQR = async function() {
+  const rows = buildPOSCartRows();
+  if (!rows.length) { showToast('Cart is empty', 'warn'); return; }
+  if (rows.some((r) => r.convertedLine === null)) {
+    showToast('Set FX rates first — some lines have no rate for ' + posTransactionCurrency, 'warn', 5000);
+    return;
+  }
+  const total = rows.reduce((s, r) => s + (r.convertedLine || 0), 0);
+  const units = rows.reduce((s, r) => s + r.qty, 0);
+  const desc = rows.length === 1
+    ? `${rows[0].book.title}${rows[0].qty > 1 ? ` ×${rows[0].qty}` : ''}`
+    : `Book fair sale — ${units} item${units === 1 ? '' : 's'}`;
+  const btn = $('pos-sale-qr-btn');
+  const restore = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Creating…'; }
+  try {
+    const url = await createStripePaymentLinkForAmount({
+      amountMajor: total,
+      currencyCode: posTransactionCurrency,
+      description: desc,
+      metadata: { source: 'pos_sale', sku: rows.length === 1 ? rows[0].book.id : 'pos-multi' },
+    });
+    _showPosQR(url, posFormat(total, posTransactionCurrency), desc);
+    showToast('✓ Payment QR ready');
+  } catch (e) {
+    showToast('Stripe: ' + (e.message || e), 'err', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = restore; }
+  }
+};
+
+// QR for a single cart line at its adjusted price, in the transaction currency.
+window.posGenerateLineQR = async function(bookId) {
+  const row = buildPOSCartRows().find((r) => r.book.id === bookId);
+  if (!row) { showToast('Item not in cart', 'warn'); return; }
+  if (row.convertedLine === null) {
+    showToast('Set FX rates first — no rate for ' + posTransactionCurrency, 'warn', 5000);
+    return;
+  }
+  const desc = `${row.book.title}${row.qty > 1 ? ` ×${row.qty}` : ''}`;
+  try {
+    const url = await createStripePaymentLinkForAmount({
+      amountMajor: row.convertedLine,
+      currencyCode: posTransactionCurrency,
+      description: desc,
+      metadata: { source: 'pos_line', book_id: row.book.id, sku: row.book.id },
+    });
+    _showPosQR(url, posFormat(row.convertedLine, posTransactionCurrency), desc);
+    showToast('✓ Payment QR ready');
+  } catch (e) {
+    showToast('Stripe: ' + (e.message || e), 'err', 6000);
+  }
 };
 
 window.posSetCurrency = function(code) {
@@ -8943,7 +9135,7 @@ function renderPOSFxStatus() {
 //
 // fxRate must be the live rate from paymentCurrency → bookNativeCurrency
 // (i.e. the same direction fetchLiveRate uses), matching how manual entry works.
-function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate) {
+function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate, priceNote) {
   const nativeCurCode = getBookCurrencyCode(book);
   const isFx = txnCurCode !== nativeCurCode;
 
@@ -8962,7 +9154,7 @@ function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode
 
   const num = `POS-${Date.now().toString().slice(-6)}`;
   const chan = 'Book Fair';
-  const notes = paymentMethod;
+  const notes = priceNote ? `${paymentMethod} · ${priceNote}` : paymentMethod;
   return { num, chan, qty, price: basePrice, notes, payment };
 }
 
@@ -8994,7 +9186,10 @@ window.posCheckout = function() {
 
   $('pos-confirm-items').innerHTML = rows.map((row) => {
     const lineDisplay = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency);
-    return `<tr><td>${escapeHtml(row.book.title)}</td><td class="r">${row.qty}</td><td class="r">${lineDisplay}</td></tr>`;
+    const adj = row.overridden
+      ? ` <span style="font-size:11px;color:var(--gold);">(was ${posFormat(row.listUnit, row.sourceCode)} ea)</span>`
+      : '';
+    return `<tr><td>${escapeHtml(row.book.title)}${adj}</td><td class="r">${row.qty}</td><td class="r">${lineDisplay}</td></tr>`;
   }).join('');
   $('pos-confirm-payment').textContent = method;
   $('pos-confirm-timestamp').textContent = localeTs;
@@ -9059,9 +9254,14 @@ window.posConfirmSale = async function() {
     // Temporarily set activeBook so recordOrder's getState()/getBook() resolve correctly
     activeBook = book.id;
 
+    // Record a price adjustment (custom price / discount) in the ledger note.
+    const priceNote = row.overridden
+      ? `Price ${posFormat(row.listUnit, row.sourceCode)}→${posFormat(row.sourceUnit, row.sourceCode)}`
+      : null;
+
     const { num, chan, notes, payment } = _posItemToManualPayload(
       book, qty, posPendingSale.method,
-      basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate
+      basePrice, txnCurCode, convertedUnitInTxnCur, nativePerTxnRate, priceNote
     );
 
     // recordOrder is the single shared sale-writing function used by manual entry.
@@ -9076,6 +9276,7 @@ window.posConfirmSale = async function() {
   closeM('pos-sale-confirm');
   posPendingSale = null;
   posCart = {};
+  posPriceOverrides = {};
   renderPOS();
   if (typeof renderAllOverview === 'function') renderAllOverview();
   updateHeader();
@@ -10783,6 +10984,65 @@ async function createStripePaymentLinkForBook(book) {
   linkParams.set('payment_intent_data[description]', (book.title || 'Book').slice(0, 350));
   linkParams.set('payment_intent_data[metadata][book_id]', book.id || '');
   linkParams.set('payment_intent_data[metadata][sku]', book.id || '');
+  linkParams.set('billing_address_collection', 'auto');
+  const linkRes = await fetch('https://api.stripe.com/v1/payment_links', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: linkParams.toString(),
+  });
+  if (!linkRes.ok) {
+    const err = await linkRes.json().catch(() => ({}));
+    throw new Error('Stripe payment link: ' + (err.error?.message || ('HTTP ' + linkRes.status)));
+  }
+  const link = await linkRes.json();
+  return link.url;
+}
+
+// Mint a Stripe Payment Link for an arbitrary amount + currency. Used by the
+// POS to collect the exact (possibly discounted) amount a customer owes —
+// either for the whole sale or for a single adjusted line. Mirrors
+// createStripePaymentLinkForBook but takes a free-form amount/description.
+async function createStripePaymentLinkForAmount({ amountMajor, currencyCode, description, metadata }) {
+  const key = getReconStripeKey();
+  if (!key) throw new Error('Stripe key not set — add one in Invoice Settings, the Tax Centre, or the Payments tab.');
+  if (!/^(rk|sk)_/.test(key)) throw new Error("That doesn't look like a Stripe restricted/secret key (expected rk_… or sk_…).");
+
+  const curCode = (currencyCode || 'CAD').toUpperCase();
+  const isZeroDec = _STRIPE_ZERO_DECIMAL.has(curCode);
+  const major = Number(amountMajor || 0);
+  if (!(major > 0)) throw new Error('Nothing to charge — the amount is zero.');
+  const amount = isZeroDec ? Math.round(major) : Math.round(major * 100);
+  if (amount < 50 && !isZeroDec) throw new Error('Amount too small for Stripe (minimum 0.50).');
+
+  const meta = metadata || {};
+  const priceParams = new URLSearchParams();
+  priceParams.set('unit_amount', String(amount));
+  priceParams.set('currency', curCode.toLowerCase());
+  priceParams.set('product_data[name]', (description || 'Book fair sale').slice(0, 250));
+  Object.entries(meta).forEach(([k, v]) => priceParams.set(`metadata[${k}]`, v == null ? '' : String(v)));
+  const priceRes = await fetch('https://api.stripe.com/v1/prices', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: priceParams.toString(),
+  });
+  if (!priceRes.ok) {
+    const err = await priceRes.json().catch(() => ({}));
+    const msg = err.error?.message || ('HTTP ' + priceRes.status);
+    const hint = /permission|rak_/i.test(msg)
+      ? ' — your restricted key needs Write on Prices, Products and Payment Links.'
+      : '';
+    throw new Error('Stripe price: ' + msg + hint);
+  }
+  const price = await priceRes.json();
+
+  const linkParams = new URLSearchParams();
+  linkParams.set('line_items[0][price]', price.id);
+  linkParams.set('line_items[0][quantity]', '1');
+  linkParams.set('payment_intent_data[description]', (description || 'Book fair sale').slice(0, 350));
+  Object.entries(meta).forEach(([k, v]) => {
+    linkParams.set(`metadata[${k}]`, v == null ? '' : String(v));
+    linkParams.set(`payment_intent_data[metadata][${k}]`, v == null ? '' : String(v));
+  });
   linkParams.set('billing_address_collection', 'auto');
   const linkRes = await fetch('https://api.stripe.com/v1/payment_links', {
     method: 'POST',
