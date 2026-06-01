@@ -1088,7 +1088,9 @@ function syncRoleUI() {
   const qrcodesTabBtn = $('qrcodes-tab-btn');
   const myqrTabBtn = $('myqr-tab-btn');
   const reconcileTabBtn = $('reconcile-tab-btn');
+  const opencallTabBtn = $('opencall-tab-btn');
   if (reconcileTabBtn) reconcileTabBtn.style.display = authorNow ? 'none' : '';
+  if (opencallTabBtn) opencallTabBtn.style.display = authorNow ? 'none' : '';
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
   if (financialsTabBtn) financialsTabBtn.style.display = authorNow ? 'none' : '';
   if (globalActions) globalActions.style.display = authorNow ? 'none' : 'flex';
@@ -1199,7 +1201,7 @@ window.clearHistChanFilter = function() { histChanFilter = null; renderHist(); }
 // ── TABS
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'opencall')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
   
