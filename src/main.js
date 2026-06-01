@@ -1680,7 +1680,7 @@ function updateDash() {
    
     renderPendingExpenses();
     const expenses = s.expenses||[];
-    const unreceivedExp = expenses.filter(e=>!e.received);
+    const unreceivedExp = expenses.filter(e=>!e.received && !isGratuityExpense(e));
     const expKpi = $('d-expenses-kpi');
     const expSect = $('d-expenses-sect');
     if(unreceivedExp.length){
@@ -2896,6 +2896,13 @@ function saveArtistPaymentLink(){
   showToast('✓ Payment link saved');
 }
 
+// Gratuity expenses track the publisher's own cost of gifted copies — they are
+// never reimbursed to the author, so they must be excluded from every "owed /
+// reimbursement" surface. Legacy records (pre-flag) are detected by their GRAT- ref.
+function isGratuityExpense(e){
+  return !!(e && (e.gratuity === true || (typeof e.ref === 'string' && e.ref.startsWith('GRAT-'))));
+}
+
 function renderArtistReimburseBanner(){
   const s=getState(),book=getBook(),cur=book.currency;
   // Show payment link card for authors
@@ -2913,7 +2920,7 @@ function renderArtistReimburseBanner(){
   const banner=$('artist-reimburse-banner');
   if(!banner) return;
   if(!isAuthor()){ banner.style.display='none'; return; }
-  const received=(s.expenses||[]).filter(e=>e.received);
+  const received=(s.expenses||[]).filter(e=>e.received && !isGratuityExpense(e));
   if(!received.length){ banner.style.display='none'; return; }
   const total=received.reduce((a,e)=>a+(e.amount||0),0);
   banner.style.display='';
@@ -3585,7 +3592,7 @@ function renderExpenses(){
     return;
   }
 
-  const unreceived=combined.filter(e=>!e.received && !e.pendingAuth);
+  const unreceived=combined.filter(e=>!e.received && !e.pendingAuth && !isGratuityExpense(e));
   const total=unreceived.reduce((a,e)=>a+(e.amount||0),0);
   
   $('exp-head-row').innerHTML = `<tr><th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
@@ -3608,10 +3615,12 @@ function renderExpenses(){
       </tr>`;
     }
 
-    const statusCell=e.received
+    const statusCell=isGratuityExpense(e)
+      ?'<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — not reimbursed to the author">Publisher expense</span>'
+      :e.received
       ?'<span class="pill green" style="font-size:10px;">✓ Received</span>'
       :'<span style="font-size:11px;color:var(--text4);">Pending</span>';
-    const actionCell=(!e.received && !isAuthor())
+    const actionCell=(!e.received && !isAuthor() && !isGratuityExpense(e))
       ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
     const baseReceiptLink = e.receipt ? (
       e.receipt.startsWith('local://')
@@ -4220,7 +4229,7 @@ function markExpenseReceived(id){
 
 function renderPendingExpenses(){
   const s=getState(),book=getBook(),cur=book.currency;
-  const pending=(s.expenses||[]).filter(e=>!e.received);
+  const pending=(s.expenses||[]).filter(e=>!e.received && !isGratuityExpense(e));
   const sect=$('d-pending-expenses-sect'),list=$('d-pending-expenses-list');
   if(!sect) return;
   if(!pending.length){sect.style.display='none';return;}
@@ -4304,7 +4313,8 @@ function submitGratuity(){
       baseAmount: baseAmount,
       date: date,
       ref: num,
-      received: false
+      received: false,
+      gratuity: true
     });
   }
 
@@ -4366,7 +4376,8 @@ window.backfillGratuityExpenses = function() {
         baseAmount: baseAmount,
         date: h.date,
         ref: h.num,
-        received: false
+        received: false,
+        gratuity: true
       });
       added++;
     }
