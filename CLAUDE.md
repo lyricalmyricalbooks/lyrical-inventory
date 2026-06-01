@@ -42,6 +42,7 @@ screen · keeping catalog and ledger consistent.
 - Do NOT investigate merge status, git history, or ask clarifying questions
 - Action: Push branch with `git push -u origin <branch>` then create PR via GitHub MCP
 - Use a descriptive PR title based on the feature/fix being implemented
+- **After a PR is merged, start the next change on a brand-new branch and open a new PR** — never push more commits onto a merged PR's branch to revive or extend it. One merged PR = done; the next piece of work gets its own branch and its own PR.
 
 ## General Principles
 - Prefer action over investigation when intent is clear
