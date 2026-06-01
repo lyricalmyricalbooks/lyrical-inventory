@@ -1172,6 +1172,17 @@ function switchBook(bookId) {
   syncRoleUI();
 }
 
+// Active channel drill-down filter for the history tab. Set by tapping a
+// channel row in the All-books analytics legend; cleared via the chip's ✕,
+// or automatically once the active book no longer matches.
+let histChanFilter = null; // { bookId, chan } | null
+window.drillToChannel = function(bookId, chan) {
+  histChanFilter = { bookId, chan };
+  switchBook(bookId);
+  switchTab('history');
+};
+window.clearHistChanFilter = function() { histChanFilter = null; renderHist(); };
+
 // ── TABS
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
@@ -1300,7 +1311,7 @@ function updateAllOverview() {
         share: bookRev>0 ? rev/bookRev*100 : 0 };
     }).sort((a,b)=>b.rev-a.rev);
     const bestChan = (channels.length>1 && channels[0].rev>0) ? channels[0].chan : null;
-    cd.books.push({ title: book.title, accent: book.accent||'var(--gold2)', cur, total: bookRev, channels, bestChan });
+    cd.books.push({ id: book.id, title: book.title, accent: book.accent||'var(--gold2)', cur, total: bookRev, channels, bestChan });
   });
   Object.values(byCur).forEach(cd => cd.books.sort((a,b)=>b.total-a.total));
   window._allChData = byCur;
@@ -1390,11 +1401,17 @@ function renderChannelAnalytics() {
     ).join('') || `<div class="ch-seg" style="width:100%;background:var(--cream3)"></div>`;
     const legend = b.channels.map(c => {
       const top = c.chan === b.bestChan;
-      return `<div class="ch-leg-row">
+      // Rows with real transactions drill into that book + channel's order history.
+      const clickable = c.txns > 0;
+      const jsChan = (c.chan||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const tap = clickable
+        ? ` class="ch-leg-row ch-leg-tap" title="View ${escapeHtml(chanLabel(c.chan))} orders" onclick="${escapeHtml(`drillToChannel('${b.id}','${jsChan}')`)}"`
+        : ` class="ch-leg-row"`;
+      return `<div${tap}>
         <span class="ch-dot" style="background:${channelColor(c.chan)}"></span>
         <span class="ch-leg-name">${escapeHtml(chanLabel(c.chan))}${top?' <span class="pill gold ch-top">TOP</span>':''}</span>
         <span class="ch-leg-val">${fmt(c.rev,b.cur)} <em>${c.share.toFixed(0)}%</em></span>
-        <span class="ch-leg-meta">${c.txns} txn · ${c.units} u</span>
+        <span class="ch-leg-meta">${c.txns} txn · ${c.units} u${clickable?' <span class="ch-leg-go">›</span>':''}</span>
       </div>`;
     }).join('');
     return `<div class="ch-book-card">
@@ -2102,7 +2119,23 @@ function renderHist() {
     return { ...raw, _subKey: k, pendingAuth: true, after: '?' };
   });
   
-  const combined = [...pendingSales, ...s.hist];
+  let combined = [...pendingSales, ...s.hist];
+
+  // Channel drill-down filter (from the analytics legend). Only applies while
+  // the active book matches the one that was tapped.
+  if (histChanFilter && histChanFilter.bookId !== activeBook) histChanFilter = null;
+  const chanFilter = histChanFilter ? histChanFilter.chan : null;
+  if (chanFilter !== null) combined = combined.filter(h => (h.chan||'') === chanFilter);
+  const filterBar = $('hist-filter-bar');
+  if (filterBar) {
+    if (chanFilter !== null) {
+      filterBar.style.display = '';
+      filterBar.innerHTML = `<div class="hist-filter-chip"><span class="ch-dot" style="background:${channelColor(chanFilter)}"></span>Showing <strong>${escapeHtml(chanLabel(chanFilter))}</strong> orders · ${combined.length} found<button onclick="clearHistChanFilter()" title="Clear filter">✕ Clear</button></div>`;
+    } else {
+      filterBar.style.display = 'none';
+      filterBar.innerHTML = '';
+    }
+  }
 
   $('hist-body').innerHTML = combined.length
     ? combined.map((h,i)=>{
@@ -2140,7 +2173,7 @@ function renderHist() {
           : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
         return `<tr class="${voided}"${rowStyle}><td class="mono">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
       }).join('')
-    : '<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">No orders yet.</div></td></tr>';
+    : `<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">${chanFilter !== null ? `No ${escapeHtml(chanLabel(chanFilter))} orders for this book.` : 'No orders yet.'}</div></td></tr>`;
 }
 
 // ── WEBSITE ORDERS — persistent scan memory
