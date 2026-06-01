@@ -588,7 +588,7 @@ if (sheetsUrl) {
 }
 
 function defaultState(book) {
-  return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0 };
+  return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0, openCall: [] };
 }
 
 function getState() { 
@@ -1204,7 +1204,7 @@ function switchTab(name) {
   
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
-  const names = ['dashboard','website','manual','consignment','history','expenses','reconcile','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
+  const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
   
   document.querySelectorAll('.tab-btn, .header-action-btn').forEach((b) => {
     // We match by checking onclick text to be safe if order ever changes
@@ -1234,6 +1234,7 @@ function switchTab(name) {
   if(name==='manual') updateManualForm();
   if(name==='consignment'){ renderStores(); renderLedger(); renderInvoices(); }
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
+  if(name==='opencall') renderOpenCall();
   if(name==='reconcile') renderReconcile();
   if(name==='financials') renderFinancials();
   if(name==='taxcenter') renderTaxCenter();
@@ -2097,6 +2098,145 @@ function renderCurrent() {
       fsBtn.style = '';
     }
   }
+}
+
+// ── OPEN CALL — contributor pipeline tracker
+// Mirrors the open-call spreadsheet inside the app so the whole pipeline
+// (who's been emailed, who sent their credit name / files) lives in one
+// screen. Stored on the active book's state.openCall array, so it syncs
+// and works offline through the same saveState path as everything else.
+const OC_STAGES = [
+  { key: 'selectionSent',  label: 'Selected',       hint: 'Send the selection email' },
+  { key: 'creditReceived', label: 'Credit name',    hint: 'Awaiting credit-name reply' },
+  { key: 'cmykSent',       label: 'Files requested', hint: 'Send the CMYK/files request' },
+  { key: 'filesReceived',  label: 'Files in',        hint: 'Awaiting high-res files' },
+  { key: 'preorderSent',   label: 'Pre-order',       hint: 'Send the pre-order email' },
+];
+
+function ocList() {
+  const s = getState();
+  if (!Array.isArray(s.openCall)) s.openCall = [];
+  return s.openCall;
+}
+
+// First stage not yet ticked = the next thing to do for this contributor.
+function ocNextAction(c) {
+  const stage = OC_STAGES.find(st => !c[st.key]);
+  return stage ? stage.hint : null;
+}
+
+function renderOpenCall() {
+  const body = $('opencall-body');
+  if (!body) return;
+
+  if (!activeBook || activeBook === 'all') {
+    const t = $('bc-title-oc'); if (t) t.textContent = 'No book selected';
+    body.innerHTML = `<div class="card" style="text-align:center;color:var(--text2);">Select a single book above to track its open-call contributors.</div>`;
+    return;
+  }
+
+  const book = getBook();
+  const t = $('bc-title-oc'); if (t) t.textContent = book.title || activeBook;
+
+  const list = ocList();
+  const total = list.length;
+  const done = list.filter(c => OC_STAGES.every(st => c[st.key])).length;
+
+  // Per-stage progress chips.
+  const stageCounts = OC_STAGES.map(st => {
+    const n = list.filter(c => c[st.key]).length;
+    return `<span class="pill ${n === total && total ? 'green' : 'gray'}" title="${st.label}">${st.label}: ${n}/${total}</span>`;
+  }).join(' ');
+
+  const summary = `
+    <div class="card">
+      <div class="row-between" style="flex-wrap:wrap;gap:10px;">
+        <div class="section-hed">Contributors · ${total}${total ? ` · ${done} complete` : ''}</div>
+        <button class="btn sm" onclick="ocCopyEmails()" ${total ? '' : 'disabled'}>Copy all emails</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${total ? stageCounts : '<span style="color:var(--text2);font-size:12px;">No contributors yet.</span>'}</div>
+    </div>`;
+
+  const addForm = `
+    <div class="card">
+      <div class="section-hed" style="margin-bottom:10px;">Add contributor</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <input id="oc-name" placeholder="Artist name" style="flex:1;min-width:140px;">
+        <input id="oc-email" placeholder="Email" type="email" style="flex:1;min-width:160px;">
+        <input id="oc-photo" placeholder="Photo file (optional)" style="flex:1;min-width:140px;">
+        <button class="btn gold" onclick="ocAdd()">Add</button>
+      </div>
+    </div>`;
+
+  const cards = list.map(c => {
+    const pills = OC_STAGES.map(st =>
+      `<button class="pill ${c[st.key] ? 'green' : 'gray'}" style="cursor:pointer;border:none;" onclick="ocToggle('${c.id}','${st.key}')">${c[st.key] ? '✓ ' : ''}${st.label}</button>`
+    ).join(' ');
+    const next = ocNextAction(c);
+    return `
+      <div class="card">
+        <div class="row-between" style="flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-weight:700;">${escapeHtml(c.name || '—')}</div>
+            <div style="font-size:12px;color:var(--text2);">
+              ${c.email ? `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>` : '<span>no email</span>'}
+              ${c.photo ? ` · ${escapeHtml(c.photo)}` : ''}
+            </div>
+          </div>
+          <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')">Remove</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${pills}</div>
+        ${next ? `<div style="font-size:11px;color:var(--amber);margin-top:8px;font-weight:600;">Next: ${next}</div>`
+               : `<div style="font-size:11px;color:var(--green);margin-top:8px;font-weight:600;">✓ All stages complete</div>`}
+      </div>`;
+  }).join('');
+
+  body.innerHTML = summary + addForm + cards;
+}
+
+function ocAdd() {
+  const name = ($('oc-name')?.value || '').trim();
+  const email = ($('oc-email')?.value || '').trim();
+  const photo = ($('oc-photo')?.value || '').trim();
+  if (!name && !email) { showToast('Enter a name or email', 'warn'); return; }
+  ocList().push({
+    id: 'oc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    name, email, photo,
+    selectionSent: false, creditReceived: false, cmykSent: false, filesReceived: false, preorderSent: false,
+    createdAt: today(),
+  });
+  saveState(activeBook);
+  renderOpenCall();
+  showToast('Contributor added');
+}
+
+function ocToggle(id, key) {
+  const c = ocList().find(x => x.id === id);
+  if (!c) return;
+  c[key] = !c[key];
+  saveState(activeBook);
+  renderOpenCall();
+}
+
+async function ocDelete(id) {
+  const c = ocList().find(x => x.id === id);
+  if (!c) return;
+  const ok = await confirmDialog(`Remove ${c.name || c.email || 'this contributor'} from the open call?`, { danger: true, okLabel: 'Remove' });
+  if (!ok) return;
+  const list = ocList();
+  const i = list.findIndex(x => x.id === id);
+  if (i !== -1) list.splice(i, 1);
+  saveState(activeBook);
+  renderOpenCall();
+}
+
+function ocCopyEmails() {
+  const emails = ocList().map(c => c.email).filter(Boolean);
+  if (!emails.length) { showToast('No emails to copy', 'warn'); return; }
+  const text = emails.join(', ');
+  const done = () => showToast(`Copied ${emails.length} email${emails.length > 1 ? 's' : ''}`);
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => showToast('Copy failed', 'err'));
+  else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); }
 }
 
 // ── ORDER RECORDING
@@ -11107,6 +11247,7 @@ Object.assign(window, {
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   generateBookStripeLink,
   logout, switchTab, toggleBookDropdown, switchBook, forceSync,
+  renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
