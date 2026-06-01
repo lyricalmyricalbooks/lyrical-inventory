@@ -776,3 +776,16 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 @media(max-width:640px){
   .ch-book-grid{grid-template-columns:1fr;}
 }
+
+/* Tappable legend rows — drill into a book + channel's order history */
+.ch-leg-tap{cursor:pointer;border-radius:var(--r);margin:0 -6px;padding:3px 6px;transition:background .12s;}
+.ch-leg-tap:hover,.ch-leg-tap:focus-visible{background:var(--cream2);outline:none;}
+.ch-leg-tap:active{background:var(--cream3);}
+.ch-leg-go{color:var(--text4);font-weight:700;margin-left:2px;}
+.ch-leg-tap:hover .ch-leg-go{color:var(--gold2);}
+
+/* History channel-filter chip */
+.hist-filter-chip{display:inline-flex;align-items:center;gap:8px;background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:100px;padding:6px 8px 6px 12px;margin-bottom:1rem;font-size:12px;color:var(--text2);}
+.hist-filter-chip strong{color:var(--text);}
+.hist-filter-chip button{border:none;background:var(--ink);color:var(--cream);font-size:11px;font-weight:600;border-radius:100px;padding:4px 10px;margin-left:4px;cursor:pointer;font-family:'DM Mono',monospace;transition:opacity .12s;}
+.hist-filter-chip button:hover{opacity:.85;}
