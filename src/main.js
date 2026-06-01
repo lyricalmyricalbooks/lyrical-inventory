@@ -34,9 +34,17 @@ let editingBookId = null;
 // IDs of DEFAULT_BOOKS that the user has explicitly removed. Persisted in the
 // catalog Firebase doc so the merge below doesn't resurrect them on next load.
 let deletedDefaultIds = [];
+// POS-only books. These live entirely outside BOOKS so they never touch the
+// catalog, inventory, ledger, financials, or history (all of which iterate
+// BOOKS). They surface only at the Point of Sale, the printable sales tracker,
+// and the printable payment-QR sheet. Keyed by id. Each carries an isolated
+// `sold`/`revenue` tally updated at checkout. Persisted in the catalog doc
+// under `_posExtra` so it syncs across devices and survives offline.
+let posExtraBooks = {};
+let editingPosBookId = null;
 
 function saveCatalogWithDeletions() {
-  return window._fbSaveCatalog({ ...BOOKS, _deletedDefaults: deletedDefaultIds });
+  return window._fbSaveCatalog({ ...BOOKS, _deletedDefaults: deletedDefaultIds, _posExtra: posExtraBooks });
 }
 const DEFAULT_BOOKS = {
   altrove: { id: 'altrove', title: 'Un Fantastico Altrove', author: 'Silvia Clo Di Gregorio', isbn: '978-88-XXXXXX', maxPrint: 120, listPrice: 40, currency: '€', threshold: 15, productionCost: 0, paymentLink: 'https://paypal.me/lyricalmyricalbooks', accent: '#c8913a', accentBg: 'rgba(200,145,58,.1)', urlParam: 'altrove', authorPassword: 'silvia2025' },
@@ -52,8 +60,10 @@ async function loadCatalog() {
     const stored = await window._fbLoadCatalog(); // handles FS → RTDB fallback internally
     if (stored) {
       deletedDefaultIds = Array.isArray(stored._deletedDefaults) ? stored._deletedDefaults.slice() : [];
+      posExtraBooks = (stored._posExtra && typeof stored._posExtra === 'object') ? { ...stored._posExtra } : {};
       const storedBooks = { ...stored };
       delete storedBooks._deletedDefaults;
+      delete storedBooks._posExtra;
       const filteredDefaults = {};
       Object.keys(DEFAULT_BOOKS).forEach(id => {
         if (!deletedDefaultIds.includes(id)) filteredDefaults[id] = DEFAULT_BOOKS[id];
@@ -65,12 +75,14 @@ async function loadCatalog() {
     } else {
       BOOKS = { ...DEFAULT_BOOKS };
       deletedDefaultIds = [];
+      posExtraBooks = {};
       await saveCatalogWithDeletions();
     }
   } catch (e) {
     console.error('Critical error loading catalog', e);
     BOOKS = { ...DEFAULT_BOOKS };
     deletedDefaultIds = [];
+    posExtraBooks = {};
   }
 }
 
@@ -8649,9 +8661,27 @@ const POS_FX_FETCHED_AT_KEY = 'lm_pos_fx_fetched_at';
 const POS_DEFAULT_CAD_RATES = { CAD: 1, EUR: 1.47, USD: 1.36, GBP: 1.73 };
 let posExchangeRates = loadPosExchangeRates();
 
-// Default to the native currency of the first book in the catalog, falling back to EUR
+// ── POS-ONLY BOOK RESOLUTION ──
+// The POS, sales tracker and QR sheet all draw from catalog books PLUS the
+// POS-only extras. These helpers keep that merge in one place so the three
+// surfaces stay consistent. Authors only ever see their single active book, so
+// POS-only extras (a publisher tool) are excluded for them.
+function posBooksMap() {
+  if (isAuthor() && activeBook !== 'all') {
+    return BOOKS[activeBook] ? { [activeBook]: BOOKS[activeBook] } : {};
+  }
+  return { ...BOOKS, ...posExtraBooks };
+}
+function posResolveBook(id) {
+  return BOOKS[id] || posExtraBooks[id] || null;
+}
+function isPosOnlyBook(id) {
+  return !!posExtraBooks[id] && !BOOKS[id];
+}
+
+// Default to the native currency of the first available book, falling back to EUR
 function _getPosDefaultCurrency() {
-  const firstBook = Object.values(BOOKS)[0];
+  const firstBook = Object.values(posBooksMap())[0];
   return firstBook ? currencyToCode(firstBook.currency) : 'EUR';
 }
 let posTransactionCurrency = _getPosDefaultCurrency();
@@ -8696,7 +8726,7 @@ function convertCurrency(amount, fromCode, toCode) {
 }
 
 function getPOSCurrencies() {
-  const fromBooks = Object.values(BOOKS).map((b) => currencyToCode(b.currency));
+  const fromBooks = Object.values(posBooksMap()).map((b) => currencyToCode(b.currency));
   const unique = Array.from(new Set([...fromBooks, 'EUR', 'CAD', 'USD']));
   return unique.filter(Boolean);
 }
@@ -8705,7 +8735,7 @@ function buildPOSCartRows() {
   const items = [];
   for (const [bookId, qty] of Object.entries(posCart)) {
     if (!qty) continue;
-    const book = BOOKS[bookId];
+    const book = posResolveBook(bookId);
     if (!book) continue;
     const sourceCode = currencyToCode(book.currency);
     const convertedUnit = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
@@ -8749,7 +8779,8 @@ function renderPOS() {
     else convertedTotal += row.convertedLine;
   });
 
-  const booksToRender = isAuthor() && activeBook !== 'all' ? { [activeBook]: BOOKS[activeBook] } : BOOKS;
+  const booksToRender = posBooksMap();
+  const allowPosOnly = !(isAuthor() && activeBook !== 'all');
   grid.innerHTML = Object.values(booksToRender).map((book) => {
     const qty = posCart[book.id] || 0;
     const sourceCode = currencyToCode(book.currency);
@@ -8757,20 +8788,45 @@ function renderPOS() {
     const convertedLabel = converted === null
       ? `No FX rate → ${posFormat(book.listPrice || 0, sourceCode)}`
       : `${posFormat(converted, posTransactionCurrency)} (${sourceCode})`;
+    const posOnly = isPosOnlyBook(book.id);
+    const idAttr = escapeHtml(book.id);
+    const badge = posOnly
+      ? `<span style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:6px;padding:2px 6px;margin-bottom:6px;">POS-only</span>`
+      : '';
+    const soldNote = (posOnly && book.sold)
+      ? `<div style="font-size:11px;color:var(--green);margin-top:3px;">${book.sold} sold${book.revenue ? ' · ' + posFormat(book.revenue, sourceCode) : ''}</div>`
+      : '';
+    const editControls = posOnly
+      ? `<div style="display:flex;gap:6px;margin-top:8px;">
+           <button class="btn sm" style="flex:1;font-size:11px;" onclick="openPosBookModal('${idAttr}')">✎ Edit / QR</button>
+           <button class="btn sm danger-btn" style="font-size:11px;" onclick="removePosBook('${idAttr}')" title="Remove POS-only book">✕</button>
+         </div>`
+      : '';
     return `
-      <div class="card pos-card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.1rem;">
+      <div class="card pos-card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.1rem;${posOnly ? 'border:1px solid var(--gold-line);' : ''}">
         <div>
+          ${badge}
           <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:600; margin-bottom:4px; color:var(--cream);">${escapeHtml(book.title)}</div>
           <div style="font-size:12px; color:var(--text3);">${posFormat(book.listPrice || 0, sourceCode)} · ${convertedLabel}</div>
+          ${soldNote}
         </div>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; background:rgba(255,255,255,.05); border-radius:var(--r2); padding:6px;">
-          <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', -1)">-</button>
-          <span style="font-size:18px; font-weight:700; font-family:'DM Mono',monospace; width:40px; text-align:center;">${qty}</span>
-          <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${book.id}', 1)">+</button>
+        <div>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; background:rgba(255,255,255,.05); border-radius:var(--r2); padding:6px;">
+            <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${idAttr}', -1)">-</button>
+            <span style="font-size:18px; font-weight:700; font-family:'DM Mono',monospace; width:40px; text-align:center;">${qty}</span>
+            <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${idAttr}', 1)">+</button>
+          </div>
+          ${editControls}
         </div>
       </div>
     `;
-  }).join('');
+  }).join('') + (allowPosOnly ? `
+      <button type="button" class="card pos-card" onclick="openPosBookModal()" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:1.1rem;border:1.5px dashed var(--gold-line);background:transparent;cursor:pointer;color:var(--gold);min-height:120px;">
+        <div style="font-size:28px;line-height:1;">＋</div>
+        <div style="font-size:13px;font-weight:600;">Add POS-only book</div>
+        <div style="font-size:11px;color:var(--text3);text-align:center;">Guest / consignment titles. Stays out of your catalog & ledger.</div>
+      </button>
+    ` : '');
 
   if (cartItemsEl) {
     cartItemsEl.innerHTML = cartRows.length ? cartRows.map((row) => `
@@ -8950,6 +9006,7 @@ window.posConfirmSale = async function() {
   if (!posPendingSale) return;
 
   const previousBook = activeBook;
+  let posExtraTouched = false;
 
   for (const row of posPendingSale.rows) {
     const book = row.book;
@@ -8957,6 +9014,19 @@ window.posConfirmSale = async function() {
 
     // basePrice = native-currency unit price (what flows into revenue, ledger, and Sheets)
     const basePrice = row.sourceUnit;
+
+    // POS-only books never touch the catalog ledger. Keep an isolated tally on
+    // the book itself so the seller sees a running "sold" count at the table,
+    // then persist it with the catalog doc. Skip the recordOrder path entirely.
+    if (isPosOnlyBook(book.id) && posExtraBooks[book.id]) {
+      const pb = posExtraBooks[book.id];
+      pb.sold = (pb.sold || 0) + qty;
+      pb.revenue = (pb.revenue || 0) + qty * basePrice;
+      pb.lastSold = today();
+      posExtraTouched = true;
+      continue;
+    }
+
     const nativeCurCode = getBookCurrencyCode(book);
 
     // txnCurCode = the currency the customer actually paid in
@@ -9001,13 +9071,15 @@ window.posConfirmSale = async function() {
 
   activeBook = previousBook;
 
+  if (posExtraTouched) { try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only tally save failed', e); } }
+
   closeM('pos-sale-confirm');
   posPendingSale = null;
   posCart = {};
   renderPOS();
   if (typeof renderAllOverview === 'function') renderAllOverview();
   updateHeader();
-  showToast('✓ Sale complete — recorded to ledger', 'ok');
+  showToast('✓ Sale complete', 'ok');
 };
 
 window.posPrintReceipt = function() {
@@ -9039,10 +9111,8 @@ let salesTrackerCustomBooks = [];
 function renderSalesTrackerBookList() {
   const list = document.getElementById('st-books-list');
   if (!list) return;
-  const booksToShow = isAuthor() && activeBook !== 'all'
-    ? { [activeBook]: BOOKS[activeBook] }
-    : BOOKS;
-  const inventoryEntries = Object.values(booksToShow);
+  // posBooksMap() includes POS-only extras (publisher) or just the active book (author).
+  const inventoryEntries = Object.values(posBooksMap());
 
   const inventoryHtml = inventoryEntries.map((book) => `
     <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);">
@@ -9139,7 +9209,7 @@ window.printSalesTracker = function() {
       title = cb.title;
       author = cb.author || '';
     } else {
-      const book = BOOKS[sel.value];
+      const book = posResolveBook(sel.value);
       if (!book) return '';
       title = book.title;
       author = book.author || '';
@@ -9242,10 +9312,8 @@ window.printSalesTracker = function() {
 function renderQRPrintBookList() {
   const list = document.getElementById('qrp-books-list');
   if (!list) return;
-  const booksToShow = isAuthor() && activeBook !== 'all'
-    ? { [activeBook]: BOOKS[activeBook] }
-    : BOOKS;
-  const entries = Object.values(booksToShow);
+  // posBooksMap() includes POS-only extras (publisher) or just the active book (author).
+  const entries = Object.values(posBooksMap());
   if (!entries.length) {
     list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available.</div>';
     return;
@@ -9297,7 +9365,7 @@ window.printPaymentQRCodes = function() {
   if (showUSD) currenciesShown.push('USD');
 
   const booksData = selectedIds.map((id) => {
-    const book = BOOKS[id];
+    const book = posResolveBook(id);
     const url = book.stripeLink || book.paymentLink || '';
     const nativeCode = currencyToCode(book.currency);
     const listedCode = baseCur === 'auto' ? nativeCode : baseCur;
@@ -9471,6 +9539,151 @@ renderQRs();
   win.document.close();
   win.focus();
   closeM('qr-print');
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// POS-ONLY BOOKS — add / edit / remove + instant Stripe link & QR
+// These books live entirely in posExtraBooks (persisted in the catalog doc
+// under _posExtra). They surface only at the POS, the printable sales tracker,
+// and the printable QR sheet — never in the catalog, inventory, ledger, or
+// financials. Each can mint a Stripe Payment Link (and matching QR) on the spot.
+// ─────────────────────────────────────────────────────────────────────────
+let _posBookQR = null;
+
+// Build a collision-free, URL-safe id, prefixed so it can never shadow a
+// catalog book in posResolveBook (which checks BOOKS first).
+function _posSlugId(title) {
+  let base = 'pos-' + ((title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'book');
+  let id = base, n = 2;
+  while (BOOKS[id] || (posExtraBooks[id] && id !== editingPosBookId)) { id = base + '-' + (n++); }
+  return id;
+}
+
+window.openPosBookModal = function(id) {
+  editingPosBookId = id || null;
+  const book = id ? posExtraBooks[id] : null;
+  $('pb-modal-title').textContent = book ? `Edit POS-only book · ${book.title}` : 'Add POS-only book';
+  $('pb-save-btn').textContent = book ? 'Save changes' : 'Add to POS';
+  $('pb-title').value = book?.title || '';
+  $('pb-author').value = book?.author || '';
+  $('pb-price').value = book?.listPrice ?? 40;
+  $('pb-cur').value = book?.currency || '€';
+  $('pb-accent').value = book?.accent || '#c8913a';
+  $('pb-paylink').value = book?.stripeLink || book?.paymentLink || '';
+  const removeBtn = $('pb-remove-btn');
+  if (removeBtn) removeBtn.style.display = book ? '' : 'none';
+  renderPosBookModalQR();
+  openM('pos-book');
+};
+
+window.closePosBookModal = function() { closeM('pos-book'); editingPosBookId = null; };
+
+function renderPosBookModalQR() {
+  const wrap = $('pb-qr-canvas');
+  if (!wrap) return;
+  const url = ($('pb-paylink')?.value || '').trim();
+  const note = $('pb-qr-note');
+  wrap.innerHTML = '';
+  _posBookQR = null;
+  if (!url) {
+    wrap.innerHTML = '<div style="color:#aaa;font-size:11px;text-align:center;padding:1rem;">Add or generate a payment link to preview its QR.</div>';
+    if (note) note.textContent = '';
+    return;
+  }
+  if (typeof QRCode !== 'undefined') {
+    _posBookQR = new QRCode(wrap, { text: url, width: 180, height: 180, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
+    if (note) note.textContent = 'Customers scan this to pay via Stripe.';
+  } else {
+    wrap.innerHTML = '<div style="color:#aaa;font-size:11px;">QR library not ready.</div>';
+  }
+}
+window.renderPosBookModalQR = renderPosBookModalQR;
+
+window.generatePosBookStripeLink = async function() {
+  const btn = $('pb-gen-stripe-btn');
+  const title = ($('pb-title')?.value || '').trim();
+  const listPrice = parseFloat($('pb-price')?.value) || 0;
+  const currency = $('pb-cur')?.value || '€';
+  if (!title) { showToast('Set a title first', 'warn'); return; }
+  if (!(listPrice > 0)) { showToast('Set a price first', 'warn'); return; }
+  const id = editingPosBookId || _posSlugId(title);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Creating…'; }
+  try {
+    const url = await createStripePaymentLinkForBook({ id, title, listPrice, currency, isbn: '' });
+    if ($('pb-paylink')) $('pb-paylink').value = url;
+    renderPosBookModalQR();
+    showToast('✓ Stripe link & QR ready — Save to keep it');
+  } catch (e) {
+    showToast('Stripe: ' + (e.message || e), 'err', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ Generate Stripe link'; }
+  }
+};
+
+window.copyPosBookLink = function() {
+  const url = ($('pb-paylink')?.value || '').trim();
+  if (!url) { showToast('No link to copy', 'warn'); return; }
+  navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
+    const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Link copied');
+  });
+};
+
+window.downloadPosBookQR = function() {
+  const canvas = document.querySelector('#pb-qr-canvas canvas');
+  if (!canvas) { showToast('Generate or add a link first', 'warn'); return; }
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `${editingPosBookId || _posSlugId($('pb-title')?.value || 'book')}-payment-qr.png`;
+  a.click();
+  showToast('Downloading QR Code image');
+};
+
+window.savePosBook = async function() {
+  const title = ($('pb-title')?.value || '').trim();
+  if (!title) { showToast('Title is required', 'warn'); $('pb-title')?.focus(); return; }
+  const listPrice = parseFloat($('pb-price')?.value) || 0;
+  const currency = $('pb-cur')?.value || '€';
+  const accent = $('pb-accent')?.value || '#c8913a';
+  const link = ($('pb-paylink')?.value || '').trim();
+  const id = editingPosBookId || _posSlugId(title);
+  const existing = posExtraBooks[id] || {};
+  posExtraBooks[id] = {
+    ...existing,
+    id,
+    title,
+    author: ($('pb-author')?.value || '').trim(),
+    isbn: existing.isbn || '—',
+    listPrice,
+    currency,
+    accent,
+    accentBg: hexToRgba(accent, 0.1),
+    stripeLink: link,
+    paymentLink: existing.paymentLink || '',
+    maxPrint: 999999,
+    threshold: 0,
+    posOnly: true,
+    sold: existing.sold || 0,
+    revenue: existing.revenue || 0,
+  };
+  try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only save failed', e); }
+  showToast(editingPosBookId ? '✓ POS-only book updated' : '✓ POS-only book added');
+  editingPosBookId = null;
+  closeM('pos-book');
+  renderPOS();
+};
+
+window.removeCurrentPosBook = function() { if (editingPosBookId) window.removePosBook(editingPosBookId); };
+
+window.removePosBook = async function(id) {
+  const book = posExtraBooks[id];
+  if (!book) return;
+  if (!(await confirmDialog(`Remove POS-only book "${book.title}"?\n\nIt will disappear from the POS, the sales tracker, and the QR sheet. Its isolated sales tally is discarded.`, { danger: true, okLabel: 'Remove' }))) return;
+  delete posExtraBooks[id];
+  delete posCart[id];
+  try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only remove failed', e); }
+  if (editingPosBookId === id) { editingPosBookId = null; closeM('pos-book'); }
+  showToast('POS-only book removed');
+  renderPOS();
 };
 
 // ── TAX SEASON EXPORT ──
