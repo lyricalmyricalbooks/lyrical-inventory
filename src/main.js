@@ -5862,7 +5862,32 @@ function syncLedgerVoid(e, isVoided) {
 }
 
 
+// Keep the "Consignment" line in Sales by channel honest by deriving it from
+// the consignment ledger — the canonical record of each sale — instead of
+// trusting the running chStats counter. That counter can drift out of sync
+// with the per-store tallies (older entries, partial updates, a sale recorded
+// before this channel was tracked), which is exactly how a store can show
+// "Sold 6" while the channel still reads 0. Rebuilding from the ledger makes
+// the figure self-healing on every load and after any void/unvoid.
+function reconcileConsignmentChannel(s) {
+  if (!s || !Array.isArray(s.ledger)) return;
+  const sales = s.ledger.filter(e => e.type === 'Sale' && !e.voided);
+  if (sales.length) {
+    s.chStats = s.chStats || {};
+    s.chStats['Consignment'] = sales.reduce((a, e) => {
+      a.txns++; a.units += (e.qty || 0); a.revenue += (e.amountDue || 0); return a;
+    }, { txns: 0, units: 0, revenue: 0 });
+  } else if (s.chStats && s.chStats['Consignment']) {
+    // No live consignment sales on record — drop a stale all-zero line so it
+    // doesn't linger as a confusing "Consignment  0  0  $0.00" row. A non-zero
+    // legacy figure is left alone (there's nothing in the ledger to rebuild it).
+    const c = s.chStats['Consignment'];
+    if (!(c.txns || c.units || c.revenue)) delete s.chStats['Consignment'];
+  }
+}
+
 function recomputeAfters(s) {
+  reconcileConsignmentChannel(s);
   // Walk history newest→oldest and recompute each entry's `after` value
   // so the Stock After column stays accurate after voids/unvoids.
   let running = s.stock;
