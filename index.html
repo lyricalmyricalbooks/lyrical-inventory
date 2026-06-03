@@ -1707,6 +1707,35 @@ function formatSheet_(sheet) {
   });
 
   sheet.setConditionalFormatRules(rules);
+
+  lockDownSheet_(sheet);
+}
+
+// Convenience + integrity guards: a Currency dropdown on the data rows, and
+// warning-only protection on the header row and the hidden _eventId column —
+// the two things a stray fair-day edit could change to break sync matching.
+// Warning-only never locks the owner out; it just prompts before an edit.
+// Existing protections are detected by description so re-runs don't stack them.
+function lockDownSheet_(sheet) {
+  const maxRow = Math.max(sheet.getMaxRows(), 1000);
+
+  const ccyRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'CHF'], true)
+    .setAllowInvalid(true) // don't hard-reject legacy/un-normalized codes
+    .build();
+  sheet.getRange(2, COL.Currency, maxRow - 1, 1).setDataValidation(ccyRule);
+
+  const existing = {};
+  sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
+    .forEach(p =&gt; { existing[p.getDescription()] = true; });
+  if (!existing['LMB:header']) {
+    sheet.getRange(1, 1, 1, HEADERS.length).protect()
+      .setDescription('LMB:header').setWarningOnly(true);
+  }
+  if (!existing['LMB:id']) {
+    sheet.getRange(1, COL._eventId, maxRow, 1).protect()
+      .setDescription('LMB:id').setWarningOnly(true);
+  }
 }
 
 function columnLetter_(col) {
@@ -1817,6 +1846,84 @@ function refreshOverviewSummary_(ss) {
   summary.getRange(1, 1, totalRow, 4)
     .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
   summary.getRange(totalRow, 1, 1, 4).setBackground('#fef3c7');
+
+  // ── KPI panel (columns F–G), computed from Overview so it stays robust
+  // regardless of how dates/currencies are stored. Refreshed on every sync. ──
+  const kpi = computeOverviewKpis_(overview, ss.getSpreadsheetTimeZone());
+  summary.getRange(1, 6, 1, 2).merge().setValue('Key numbers')
+    .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
+    .setBackground('#0f172a').setFontColor('#ffffff')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  const kpiRows = [
+    ['Books sold (qty)', kpi.unitsSold],
+    ['Revenue (CAD)',    kpi.revenueCAD],
+    ['Entries (live)',   kpi.entries],
+    ['Top book',         kpi.topBook || '—'],
+    ['Top channel',      kpi.topChannel || '—'],
+    [`This month (${kpi.monthLabel})`, kpi.monthCAD]
+  ];
+  summary.getRange(2, 6, kpiRows.length, 2).setValues(kpiRows);
+  summary.setColumnWidth(5, 24);   // slim gap between the two panels
+  summary.setColumnWidth(6, 185);
+  summary.setColumnWidth(7, 150);
+  summary.getRange(2, 6, kpiRows.length, 1).setFontWeight('bold');
+  summary.getRange(2, 7, kpiRows.length, 1).setHorizontalAlignment('right');
+  summary.getRange(2, 7).setNumberFormat('#,##0');                 // Books sold
+  summary.getRange(4, 7).setNumberFormat('#,##0');                 // Entries
+  summary.getRange(3, 7).setNumberFormat('"CA$"#,##0.00')          // Revenue
+    .setFontColor('#064e3b').setFontWeight('bold').setBackground('#ecfdf5');
+  summary.getRange(7, 7).setNumberFormat('"CA$"#,##0.00')          // This month
+    .setFontColor('#064e3b').setFontWeight('bold').setBackground('#ecfdf5');
+  summary.getRange(1, 6, kpiRows.length + 1, 2)
+    .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+}
+
+// Read the Overview tab and compute headline figures. "Books sold" counts only
+// real sales (orders, plus consignment rows whose Event is "Sale") so that
+// consignment shipments/returns don't inflate the tally. Revenue/top tallies
+// use CAD Equivalent, which is 0 for non-sale consignment rows anyway.
+function computeOverviewKpis_(overview, tz) {
+  const zone = tz || 'America/Toronto';
+  const out = {
+    unitsSold: 0, revenueCAD: 0, entries: 0,
+    topBook: '', topChannel: '', monthCAD: 0,
+    monthLabel: Utilities.formatDate(new Date(), zone, 'yyyy-MM')
+  };
+  const lastRow = overview.getLastRow();
+  if (lastRow &lt; 2) return out;
+  const values = overview.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+  const byBook = {}, byChan = {};
+  for (const r of values) {
+    const status = String(r[COL.Status - 1] || '').toUpperCase();
+    if (status.indexOf('VOID') &gt;= 0 || status.indexOf('CANCEL') &gt;= 0) continue;
+    const book = String(r[COL.Book - 1] || '').trim();
+    const evnum = String(r[COL['Event/Num'] - 1] || '').trim();
+    if (!book &amp;&amp; !evnum) continue; // skip blank rows
+    out.entries++;
+    const qty = Number(r[COL.Qty - 1]) || 0;
+    const cad = Number(r[COL['CAD Equivalent'] - 1]) || 0;
+    const type = String(r[COL.Type - 1] || '').toLowerCase();
+    const isSale = type === 'order' || (type === 'consignment' &amp;&amp; /^sale$/i.test(evnum));
+    if (isSale) out.unitsSold += qty;
+    out.revenueCAD += cad;
+    const chan = String(r[COL['Store/Chan'] - 1] || '').trim();
+    if (book) byBook[book] = (byBook[book] || 0) + cad;
+    if (chan) byChan[chan] = (byChan[chan] || 0) + cad;
+    const d = r[COL.Date - 1];
+    const mk = (d instanceof Date &amp;&amp; !isNaN(d.getTime()))
+      ? Utilities.formatDate(d, zone, 'yyyy-MM')
+      : String(d || '').slice(0, 7);
+    if (mk === out.monthLabel) out.monthCAD += cad;
+  }
+  out.topBook = topKey_(byBook);
+  out.topChannel = topKey_(byChan);
+  return out;
+}
+
+function topKey_(map) {
+  let best = '', bestVal = -Infinity;
+  for (const k in map) { if (map[k] &gt; bestVal) { bestVal = map[k]; best = k; } }
+  return best;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2011,7 +2118,169 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Inventory')
     .addItem('Normalize currencies + fill CAD', 'backfillCurrencyAndCad')
+    .addItem('Monthly summary (CAD)', 'buildMonthlySummary')
+    .addItem('Health check', 'healthCheck')
     .addToUi();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Monthly summary: a Month × Book pivot of CAD revenue (+ totals) on its own
+// "Monthly (CAD)" tab, rebuilt on demand. Pulls from Overview, counts only
+// real sales (skips voids and non-sale consignment rows), and is safe to
+// re-run — it isn't a managed sheet, so reset/backfill leave it alone.
+// ─────────────────────────────────────────────────────────────
+function buildMonthlySummary() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const overview = ss.getSheetByName('Overview');
+  if (!overview || overview.getLastRow() &lt; 2) {
+    SpreadsheetApp.getUi().alert('No data in Overview yet.');
+    return;
+  }
+  const zone = ss.getSpreadsheetTimeZone();
+  const values = overview.getRange(2, 1, overview.getLastRow() - 1, HEADERS.length).getValues();
+
+  const byMonthBook = {};         // 'YYYY-MM' -&gt; { book -&gt; cad }
+  const bookSet = {}, monthSet = {};
+  for (const r of values) {
+    const status = String(r[COL.Status - 1] || '').toUpperCase();
+    if (status.indexOf('VOID') &gt;= 0 || status.indexOf('CANCEL') &gt;= 0) continue;
+    const type = String(r[COL.Type - 1] || '').toLowerCase();
+    const evnum = String(r[COL['Event/Num'] - 1] || '').trim();
+    const isSale = type === 'order' || (type === 'consignment' &amp;&amp; /^sale$/i.test(evnum));
+    if (!isSale) continue;
+    const cad = Number(r[COL['CAD Equivalent'] - 1]) || 0;
+    if (!cad) continue;
+    const book = String(r[COL.Book - 1] || '(unknown)').trim() || '(unknown)';
+    const d = r[COL.Date - 1];
+    const mk = (d instanceof Date &amp;&amp; !isNaN(d.getTime()))
+      ? Utilities.formatDate(d, zone, 'yyyy-MM')
+      : String(d || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(mk)) continue; // skip rows without a usable date
+    (byMonthBook[mk] = byMonthBook[mk] || {});
+    byMonthBook[mk][book] = (byMonthBook[mk][book] || 0) + cad;
+    bookSet[book] = true; monthSet[mk] = true;
+  }
+
+  const months = Object.keys(monthSet).sort();
+  const books = Object.keys(bookSet).sort();
+  if (!months.length) {
+    SpreadsheetApp.getUi().alert('No dated sales found to summarize.');
+    return;
+  }
+
+  // Build the grid: header, one row per month, then a totals row.
+  const header = ['Month'].concat(books, ['Total']);
+  const grid = [header];
+  const bookTotals = books.map(() =&gt; 0);
+  let grand = 0;
+  for (const m of months) {
+    const row = [m];
+    let monthTotal = 0;
+    books.forEach((b, i) =&gt; {
+      const v = (byMonthBook[m][b] || 0);
+      row.push(v);
+      monthTotal += v; bookTotals[i] += v;
+    });
+    row.push(monthTotal);
+    grand += monthTotal;
+    grid.push(row);
+  }
+  grid.push(['Total'].concat(bookTotals, [grand]));
+
+  let sheet = ss.getSheetByName('Monthly (CAD)');
+  if (!sheet) sheet = ss.insertSheet('Monthly (CAD)');
+  else { sheet.clear(); sheet.clearConditionalFormatRules(); }
+
+  const nCols = header.length, nRows = grid.length;
+  sheet.getRange(1, 1, nRows, nCols).setValues(grid);
+
+  // Formatting
+  sheet.getRange(1, 1, 1, nCols)
+    .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
+    .setBackground('#0f172a').setFontColor('#ffffff')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 34);
+  sheet.setFrozenRows(1);
+  sheet.setFrozenColumns(1);
+  sheet.getRange(2, 1, nRows - 1, 1).setFontWeight('bold'); // month labels
+  sheet.getRange(2, 2, nRows - 1, nCols - 1)
+    .setNumberFormat('"CA$"#,##0.00').setHorizontalAlignment('right');
+  sheet.getRange(nRows, 1, 1, nCols).setBackground('#fef3c7').setFontWeight('bold');
+  sheet.getRange(1, nCols, nRows, 1).setFontWeight('bold').setBackground('#ecfdf5').setFontColor('#064e3b');
+  sheet.getRange(1, 1, nRows, nCols)
+    .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.setColumnWidth(1, 90);
+  for (let c = 2; c &lt;= nCols; c++) sheet.setColumnWidth(c, 130);
+
+  SpreadsheetApp.getUi().alert(
+    `Monthly summary rebuilt: ${months.length} month(s) × ${books.length} book(s).\n` +
+    `Total CAD revenue: CA$${grand.toFixed(2)}`
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Health check: scan managed sheets for anomalies that would quietly break
+// sync or totals, and report counts + a few examples. Read-only (touches
+// nothing), so it's always safe to run.
+// ─────────────────────────────────────────────────────────────
+function healthCheck() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = ss.getSheets().filter(sh =&gt;
+    sh.getLastColumn() &gt;= 1 &amp;&amp; sh.getRange(1, 1).getValue() === '_eventId');
+  if (!sheets.length) {
+    SpreadsheetApp.getUi().alert('No managed sheets found (looking for "_eventId" in A1).');
+    return;
+  }
+
+  const idCounts = {};            // id -&gt; [locations]
+  const blankId = [];
+  const blankCad = [];
+  let scanned = 0;
+
+  for (const sheet of sheets) {
+    const lastRow = sheet.getLastRow();
+    if (lastRow &lt; 2) continue;
+    const vals = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+    for (let i = 0; i &lt; vals.length; i++) {
+      const r = vals[i];
+      const book = String(r[COL.Book - 1] || '').trim();
+      const evnum = String(r[COL['Event/Num'] - 1] || '').trim();
+      if (!book &amp;&amp; !evnum) continue; // ignore blank rows
+      scanned++;
+      const where = `${sheet.getName()}!${i + 2}`;
+      const id = String(r[COL._eventId - 1] || '').trim();
+      if (!id) blankId.push(where);
+      else (idCounts[id] = idCounts[id] || []).push(where);
+
+      const status = String(r[COL.Status - 1] || '').toUpperCase();
+      const isVoid = status.indexOf('VOID') &gt;= 0 || status.indexOf('CANCEL') &gt;= 0;
+      const total = numOrBlank_(r[COL['Total/Amount'] - 1]);
+      const cad = r[COL['CAD Equivalent'] - 1];
+      const cadBlank = cad === '' || cad === null || cad === undefined;
+      if (!isVoid &amp;&amp; cadBlank &amp;&amp; total !== '' &amp;&amp; total !== 0) blankCad.push(where);
+    }
+  }
+
+  const dupIds = Object.keys(idCounts).filter(id =&gt; idCounts[id].length &gt; 1);
+  const dupLocs = [];
+  dupIds.forEach(id =&gt; idCounts[id].forEach(loc =&gt; dupLocs.push(loc)));
+
+  const sample = (arr) =&gt; arr.slice(0, 6).join(', ') + (arr.length &gt; 6 ? ', …' : '');
+  const lines = [
+    `Scanned ${scanned} row(s) across ${sheets.length} sheet(s).`,
+    '',
+    `• Duplicate sync IDs: ${dupIds.length}${dupIds.length ? '  (' + sample(dupLocs) + ')' : ''}`,
+    `• Rows missing a sync ID: ${blankId.length}${blankId.length ? '  (' + sample(blankId) + ')' : ''}`,
+    `• Live rows with a blank CAD Equivalent: ${blankCad.length}${blankCad.length ? '  (' + sample(blankCad) + ')' : ''}`,
+    ''
+  ];
+  if (!dupIds.length &amp;&amp; !blankId.length &amp;&amp; !blankCad.length) {
+    lines.push('✓ All clear — nothing to fix.');
+  } else {
+    lines.push('Tip: run "Repair legacy rows" in the app to fix IDs and refill CAD,');
+    lines.push('or "Normalize currencies + fill CAD" to fill CAD in place.');
+  }
+  SpreadsheetApp.getUi().alert('Inventory health check', lines.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function getFxRate_(from, to) {
