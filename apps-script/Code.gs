@@ -1,9 +1,12 @@
-/* Lyricalmyrical Inventory — Unified Backend (v3)
+/* Lyricalmyrical Inventory — Unified Backend (v4)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
  *  2. Sheets sync with:
  *     - Per-book tabs + unified "Overview" tab
- *     - Void/delete by eventId (removes the matching row)
+ *     - Void/delete by eventId (removes the matching row); any VOID/CANCEL
+ *       write is treated as a delete so voided sales never linger
+ *     - 'reset' action clears managed sheets for a clean client rebuild
+ *       (wipes duplicates, stale VOID rows, and blank-CAD legacy rows)
  *     - CAD-equivalent column using live FX (cached 6h)
  *     - Cleaner formatting: frozen header, banding, currency formats, hidden ID col
  */
@@ -34,7 +37,9 @@ function doGet(e) {
     return scanGmail_(e);
   }
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v3',
+    service: 'lyrical-sheets-webhook-v4',
+    scriptVersion: 'v4',
+    capabilities: { reset: true, voidDeletes: true },
     sheetName: SpreadsheetApp.getActiveSpreadsheet().getName()
   });
 }
@@ -154,6 +159,15 @@ function doPost(e) {
       }
     }
 
+    // ── Reset / rebuild: clear every managed sheet so the client can resend a
+    // clean copy. Removes duplicate rows, stale VOID rows, and legacy rows with
+    // a blank CAD Equivalent in one pass. The app remains the source of truth. ──
+    if (action === 'reset' || action === 'rebuild') {
+      const cleared = clearManagedSheets_(ss);
+      refreshOverviewSummary_(ss);
+      return jsonOut_({ ok: true, cleared });
+    }
+
     // ── Void / delete: remove rows matching sheetsId (preferred) or eventId ──
     if (action === 'void' || action === 'delete') {
       const deleteId = (payload.payload && payload.payload.sheetsId) || eventId;
@@ -170,6 +184,15 @@ function doPost(e) {
     const data = payload.payload || {};
     const stableId = data.sheetsId || eventId || '';
     data._eventId = stableId;
+
+    // A voided/cancelled record must never persist as a row — remove any match
+    // and stop, so the sheet only ever holds live entries. This is the backend
+    // safety net behind the client's explicit delete on void.
+    if (/VOID|CANCEL/i.test(String(data.status || ''))) {
+      const removedVoid = stableId ? removeByEventId_(ss, stableId) : 0;
+      refreshOverviewSummary_(ss);
+      return jsonOut_({ ok: true, voided: true, removed: removedVoid });
+    }
 
     let replaced = 0;
     if (stableId) replaced = removeByEventId_(ss, stableId);
@@ -390,6 +413,9 @@ function columnLetter_(col) {
 
 function removeByEventId_(ss, eventId) {
   let removed = 0;
+  // Never match a blank id — that would risk deleting unrelated legacy rows
+  // whose hidden id cell happens to be empty.
+  if (eventId === '' || eventId === null || eventId === undefined) return 0;
   const sheets = ss.getSheets();
   for (const sheet of sheets) {
     if (sheet.getLastRow() < 2) continue;
@@ -405,6 +431,25 @@ function removeByEventId_(ss, eventId) {
     }
   }
   return removed;
+}
+
+// Clear all data rows (keeping the header) from every managed sheet — any tab
+// whose A1 is "_eventId". Used by the 'reset' action so the client can rebuild
+// a clean copy from the app (the source of truth), wiping duplicates, stale
+// VOID rows, and legacy rows with a blank CAD Equivalent.
+function clearManagedSheets_(ss) {
+  let cleared = 0;
+  const sheets = ss.getSheets();
+  for (const sheet of sheets) {
+    if (sheet.getLastColumn() < 1) continue;
+    if (sheet.getRange(1, 1).getValue() !== '_eventId') continue; // managed only
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      sheet.deleteRows(2, lastRow - 1);
+      cleared += (lastRow - 1);
+    }
+  }
+  return cleared;
 }
 
 // ─────────────────────────────────────────────────────────────

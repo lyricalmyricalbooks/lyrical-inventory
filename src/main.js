@@ -12,6 +12,7 @@ import {
   getBookCurrencyCode,
   paymentSummary,
   buildPaymentMeta,
+  cadEquivalentForSale,
   hexToRgba,
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   isDirectToArtistSale,
@@ -2324,9 +2325,7 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
-  let cadEquiv = '';
-  if (nativeCur === 'CAD') cadEquiv = totalNative;
-  else if (payment && payment.currency === 'CAD' && payment.amount) cadEquiv = payment.amount;
+  const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
     type:'order',book:book.title,date:today(),num,chan,qty,price,total:totalNative,stockAfter:s.stock,notes:notes||'',
     sheetsId,
@@ -4254,9 +4253,7 @@ function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
   renderHist();updateDash();saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
-  let cadEquiv = '';
-  if (nativeCur === 'CAD') cadEquiv = totalNative;
-  else if (payment && payment.currency === 'CAD' && payment.amount) cadEquiv = payment.amount;
+  const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
     type:'order',book:book.title,date:today(),num,chan,qty,price,total:totalNative,stockAfter:s.stock,notes:(notes||'')+' [PENDING ARTIST TRANSFER]',
     sheetsId,
@@ -5639,9 +5636,7 @@ async function convertKeptAllToReceived() {
   if (sheetsUrl && !h.consignmentLink) {
     const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
     const totalNative = h.qty * h.price;
-    let cadEquiv = '';
-    if (nativeCur === 'CAD') cadEquiv = totalNative;
-    else if (h.payment && h.payment.currency === 'CAD' && h.payment.amount) cadEquiv = h.payment.amount;
+    const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
     syncToSheets({
       type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
       qty:h.qty, price:h.price, total:totalNative, stockAfter:h.after,
@@ -5764,29 +5759,31 @@ function saveEntryEdit() {
     h.date = newDate; h.notes = newNotes;
     h.edited = true;
 
-    // Sync edit to sheets — upsert replaces the old row via sheetsId.
-    // Skip for consignment-mirrored hist entries: the matching ledger row is
-    // the canonical record and would just overwrite this write.
+    // Sync edit to sheets. Skip consignment-mirrored hist entries: the matching
+    // ledger row is the canonical record and would just overwrite this write.
     if (sheetsUrl && !h.consignmentLink) {
-      const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
-      const totalNative = h.qty * h.price;
-      let cadEquiv = '';
-      if (nativeCur === 'CAD') cadEquiv = totalNative;
-      else if (h.payment && h.payment.currency === 'CAD' && h.payment.amount) cadEquiv = h.payment.amount;
-      syncToSheets({
-        type: 'order', book: book.title,
-        date: h.date, num: h.num, chan: h.chan,
-        qty: h.qty, price: h.price, total: totalNative,
-        stockAfter: h.after, notes: h.notes,
-        sheetsId: h.sheetsId || '',
-        currency: nativeCur,
-        paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
-        paymentAmount: h.payment?.amount ?? totalNative,
-        paymentRate: h.payment?.rate ?? '',
-        convertedTotal: cadEquiv,
-        enteredBy: h.enteredBy || '',
-        status: h.voided ? 'VOID' : 'OK'
-      });
+      if (h.voided) {
+        // A voided entry has no row in the sheet — remove any match, don't re-add.
+        syncHistoryVoidDeletion(h, true);
+      } else {
+        const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+        const totalNative = h.qty * h.price;
+        const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
+        syncToSheets({
+          type: 'order', book: book.title,
+          date: h.date, num: h.num, chan: h.chan,
+          qty: h.qty, price: h.price, total: totalNative,
+          stockAfter: h.after, notes: h.notes,
+          sheetsId: h.sheetsId || '',
+          currency: nativeCur,
+          paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+          paymentAmount: h.payment?.amount ?? totalNative,
+          paymentRate: h.payment?.rate ?? '',
+          convertedTotal: cadEquiv,
+          enteredBy: h.enteredBy || '',
+          status: 'OK'
+        });
+      }
     }
 
   } else {
@@ -5822,16 +5819,20 @@ function saveEntryEdit() {
     e.rate = newRate;
     e.edited = true;
 
-    // Sync ledger edit to sheets — upsert replaces the old row via sheetsId
+    // Sync ledger edit to sheets. A voided entry is removed; otherwise upsert.
     if (sheetsUrl && e.sheetsId) {
-      syncToSheets({
-        type: 'consignment', book: book.title,
-        date: e.date, store: e.storeName, event: e.type,
-        qty: e.qty, rate: e.rate, amountDue: e.amountDue || 0,
-        notes: e.notes || '', status: e.voided ? 'VOID' : (e.status || ''),
-        sheetsId: e.sheetsId,
-        currency: getBookCurrencyCode(book)
-      });
+      if (e.voided) {
+        syncLedgerVoid(e, true);
+      } else {
+        syncToSheets({
+          type: 'consignment', book: book.title,
+          date: e.date, store: e.storeName, event: e.type,
+          qty: e.qty, rate: e.rate, amountDue: e.amountDue || 0,
+          notes: e.notes || '', status: e.status || 'OK',
+          sheetsId: e.sheetsId,
+          currency: getBookCurrencyCode(book)
+        });
+      }
     }
   }
 
@@ -5902,13 +5903,15 @@ function syncHistoryVoidDeletion(h, isVoided) {
   // Consignment-mirrored hist entries are handled via the ledger row.
   if (h.consignmentLink) return;
   if (isVoided) {
-    // Hard delete: send void action with the stable sheetsId so the backend
-    // can find and remove the exact row regardless of when it was written.
+    // Hard delete by stable sheetsId so the backend removes the exact row.
+    // Without an id we can't safely target one (an empty id risks matching
+    // unrelated legacy rows), so skip — a later rebuild clears it.
+    if (!h.sheetsId) return;
     syncToSheets({
       action: 'delete',
       type: 'order',
       book: getBook().title,
-      sheetsId: h.sheetsId || ''
+      sheetsId: h.sheetsId
     });
     return;
   }
@@ -5916,9 +5919,7 @@ function syncHistoryVoidDeletion(h, isVoided) {
   const book = getBook();
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = h.qty * h.price;
-  let cadEquiv = '';
-  if (nativeCur === 'CAD') cadEquiv = totalNative;
-  else if (h.payment && h.payment.currency === 'CAD' && h.payment.amount) cadEquiv = h.payment.amount;
+  const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
   syncToSheets({
     type: 'order',
     book: book.title,
@@ -6301,16 +6302,16 @@ window.backfillSheetsIds = backfillSheetsIds;
 async function backfillAndResync() {
   if (!sheetsUrl) { showToast('Connect Google Sheets first', 'warn'); return; }
   if (!(await confirmDialog(
-    'This will:\n' +
-    '1. Stamp a stable ID on every record missing one\n' +
-    '2. Re-send every record to Sheets so existing rows get the new ID\n' +
-    '   (the backend will replace duplicates rather than create them)\n\n' +
-    'Continue?',
-    { title: 'Backfill & resync', okLabel: 'Continue' }
+    'This repairs the Google Sheet in one pass:\n' +
+    '1. Stamps a stable ID on every record missing one\n' +
+    '2. Clears the sheet, then re-adds a clean copy of every live record\n\n' +
+    'Result: duplicate rows disappear, CAD equivalents refill, and voided\n' +
+    'entries drop off. Your app data is untouched. Continue?',
+    { title: 'Repair legacy rows', okLabel: 'Continue' }
   ))) return;
   const counts = await backfillSheetsIds();
   showToast(`Stamped IDs on ${counts.hist + counts.ledger + counts.transfers} record(s) across ${counts.books} book(s)`);
-  if (typeof pushAllToSheets === 'function') pushAllToSheets();
+  if (typeof pushAllToSheets === 'function') pushAllToSheets({ rebuild: true, skipConfirm: true });
 }
 window.backfillAndResync = backfillAndResync;
 function retryDelayMs(attempt){ return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0,attempt-1))); }
@@ -6416,9 +6417,13 @@ async function _processQueue(){
 
 function syncToSheets(payload){
   if(!sheetsUrl)return;
-  const summary=payload.type==='order'
-    ?`${payload.num} · ${payload.chan} · ${payload.qty}×`
-    :`${payload.store} · ${payload.event} · ${payload.qty}×`;
+  const action = payload.action;
+  const typeLabel = action === 'reset' ? 'Rebuild'
+    : payload.type==='order' ? 'Order' : 'Consignment';
+  const summary = action === 'reset' ? 'Clear sheet for rebuild'
+    : action === 'delete' ? `${payload.type==='order' ? (payload.num||'order') : (payload.store||'consignment')} · remove row`
+    : payload.type==='order' ? `${payload.num} · ${payload.chan} · ${payload.qty}×`
+    : `${payload.store} · ${payload.event} · ${payload.qty}×`;
   // Use the record's own sheetsId as the queue id so the backend can match
   // and replace the row; fall back to a fresh id for first-time writes.
   const queueId = payload.sheetsId || makeEventId();
@@ -6427,12 +6432,12 @@ function syncToSheets(payload){
     payload,
     summary,
     book:payload.book,
-    type:payload.type==='order'?'Order':'Consignment',
+    type:typeLabel,
     attempts:0,
     nextTryAt:Date.now()
   });
   persistSheetsQueue();
-  addSheetsLog(payload.book,payload.type==='order'?'Order':'Consignment',summary,'queued');
+  addSheetsLog(payload.book,typeLabel,summary,'queued');
   _processQueue();
 }
 
@@ -6440,9 +6445,60 @@ let _isBulkSync = false;
 let _bulkTotal = 0;
 let _bulkDone = 0;
 
-async function pushAllToSheets() {
+// Cache the backend's advertised capabilities for this session so the rebuild
+// flow can tell whether the deployed Apps Script understands the 'reset'
+// action. An out-of-date backend would otherwise mistake the control message
+// for a blank data row, so we only send it when support is confirmed.
+let _sheetsCaps = null;
+async function fetchSheetsCapabilities() {
+  if (_sheetsCaps) return _sheetsCaps;
+  if (!sheetsUrl) return {};
+  try {
+    const res = await fetch(sheetsUrl);
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      // Only cache a backend that actually advertises capabilities. An older
+      // deployment returns none — leave the cache empty so a retry after the
+      // user redeploys can detect the new support without a page reload.
+      if (data && data.capabilities) { _sheetsCaps = data.capabilities; return _sheetsCaps; }
+    }
+  } catch (_) { /* offline / CORS — treat as no advertised capabilities */ }
+  return {};
+}
+
+// Build the Sheets payload for one in-app order (history) entry. Voided entries
+// are never turned into rows — they are removed from the sheet instead.
+function orderRowPayload(book, nativeCur, h) {
+  const totalNative = h.qty * h.price;
+  const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
+  return {
+    type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
+    qty:h.qty, price:h.price, total:totalNative, stockAfter:h.after,
+    notes:h.notes||'',
+    sheetsId: h.sheetsId || '',
+    currency: nativeCur,
+    paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+    paymentAmount: h.payment?.amount ?? totalNative,
+    paymentRate: h.payment?.rate ?? '',
+    convertedTotal: cadEquiv,
+    status: 'OK'
+  };
+}
+
+// Push every live record to Sheets.
+//   • rebuild:true  → clear the managed sheets first (removes duplicates, stale
+//     VOID rows and blank-CAD legacy rows), then re-add a clean copy. Requires a
+//     backend that advertises the 'reset' capability; falls back to in-place.
+//   • rebuild:false → in-place upsert by stable id; voided entries are deleted.
+async function pushAllToSheets(opts = {}) {
+  const { rebuild = false, skipConfirm = false } = opts;
   if(!sheetsUrl) { showToast('Connect Google Sheets first','warn'); return; }
-  if(!(await confirmDialog('This will enqueue all historical records for all books, then deliver them with retry. Continue?', { okLabel: 'Continue' }))) return;
+  if(!skipConfirm){
+    const msg = rebuild
+      ? 'Rebuild the Google Sheet from the app: this clears the current rows, then re-adds every live record so duplicates disappear, CAD equivalents refill, and voided entries drop off. Continue?'
+      : 'This will enqueue all live records for all books, then deliver them with retry. Voided entries are removed from the sheet. Continue?';
+    if(!(await confirmDialog(msg, { okLabel: 'Continue' }))) return;
+  }
 
   const btn = $('push-all-btn');
   const bar = $('sync-progress-bar');
@@ -6450,68 +6506,76 @@ async function pushAllToSheets() {
   const stats = $('sync-stats');
 
   _isBulkSync = true;
-  if (btn) btn.disabled = true;
-  btn.textContent = 'Queueing...';
-  bar.style.display = 'block';
-  stats.style.display = 'block';
-  fill.style.width = '0%';
+  if (btn) { btn.disabled = true; btn.textContent = 'Queueing...'; }
+  if (bar) bar.style.display = 'block';
+  if (stats) stats.style.display = 'block';
+  if (fill) fill.style.width = '0%';
+
+  // A true rebuild needs the backend to clear managed sheets first. Only ask for
+  // that when the deployed script advertises support.
+  let willReset = false;
+  if (rebuild) {
+    const caps = await fetchSheetsCapabilities();
+    willReset = !!caps.reset;
+    if (!willReset) {
+      showToast('Redeploy your Apps Script to enable a full rebuild — resyncing in place for now', 'warn', 5000);
+    }
+  }
+
+  const control = [];
+  if (willReset) control.push({ action: 'reset', type: 'control', book: 'Overview' });
 
   const toSync = [];
+  const deletions = [];
   Object.keys(BOOKS).forEach(bid => {
     const s = states[bid] || defaultState(BOOKS[bid]);
     const book = BOOKS[bid];
     const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
     (s.hist || []).forEach(h => {
       if (h.consignmentLink) return; // ledger is the canonical row
-      const totalNative = h.qty * h.price;
-      let cadEquiv = '';
-      if (nativeCur === 'CAD') cadEquiv = totalNative;
-      else if (h.payment && h.payment.currency === 'CAD' && h.payment.amount) cadEquiv = h.payment.amount;
-      toSync.push({
-        type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
-        qty: h.voided ? 0 : h.qty, price:h.price, total: h.voided ? 0 : totalNative, stockAfter:h.after,
-        notes:(h.voided?'[VOID] ':'')+(h.notes||''),
-        sheetsId: h.sheetsId || '',
-        currency: nativeCur,
-        paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
-        paymentAmount: h.payment?.amount ?? totalNative,
-        paymentRate: h.payment?.rate ?? '',
-        convertedTotal: h.voided ? '' : cadEquiv,
-        status: h.voided ? 'VOID' : 'OK'
-      });
+      if (h.voided) {
+        // A reset empties the sheet, so only the in-place path needs an explicit
+        // delete to clear a previously-synced row.
+        if (!willReset && h.sheetsId) deletions.push({ action:'delete', type:'order', book:book.title, sheetsId:h.sheetsId });
+        return;
+      }
+      toSync.push(orderRowPayload(book, nativeCur, h));
     });
     (s.ledger || []).forEach(e => {
       const ledgerCur = normalizeCurrencyCode(book.currency, 'CAD');
+      if (e.voided) {
+        if (!willReset && e.sheetsId) deletions.push({ action:'delete', type:'consignment', book:book.title, sheetsId:e.sheetsId });
+        return;
+      }
       const totalNative = e.amountDue || 0;
-      let cadEquiv = '';
-      if (ledgerCur === 'CAD') cadEquiv = totalNative;
+      const cadEquiv = cadEquivalentForSale({ nativeCurrency: ledgerCur, totalNative });
       toSync.push({
         type:'consignment', book:book.title, date:e.date, store:e.storeName,
-        event:e.type, qty: e.voided ? 0 : e.qty, rate:e.rate, amountDue: e.voided ? 0 : totalNative,
-        notes:(e.voided?'[VOID] ':'')+(e.notes||''), status: e.voided ? 'VOID' : e.status,
+        event:e.type, qty:e.qty, rate:e.rate, amountDue:totalNative,
+        notes:e.notes||'', status: e.status || 'OK',
         sheetsId: e.sheetsId || '',
         currency: ledgerCur,
-        convertedTotal: e.voided ? '' : cadEquiv
+        convertedTotal: cadEquiv
       });
     });
   });
 
-  _bulkTotal = toSync.length;
+  const queue = control.concat(deletions, toSync);
+  _bulkTotal = queue.length;
   _bulkDone = 0;
 
   if(_bulkTotal === 0) {
     showToast('No records found to sync','warn');
     _isBulkSync = false;
-    if (btn) btn.disabled = false;
-    btn.textContent = 'Sync all data';
-    bar.style.display = 'none';
-    stats.style.display = 'none';
+    if (btn) { btn.disabled = false; btn.textContent = 'Sync all data'; }
+    if (bar) bar.style.display = 'none';
+    if (stats) stats.style.display = 'none';
     return;
   }
 
-  stats.textContent = `Queueing ${_bulkTotal} records...`;
-  for(const row of toSync) syncToSheets(row);
-  btn.textContent = 'Syncing...';
+  if (stats) stats.textContent = `Queueing ${_bulkTotal} records...`;
+  for(const row of queue) syncToSheets(row);
+  if (btn) btn.textContent = 'Syncing...';
 }
 
 function updateBulkProgress() {
@@ -6593,7 +6657,7 @@ async function verifyUrl(){
     const res = await fetch(sheetsUrl);
     if(res.ok) {
       const data = await res.json();
-      if(data && data.service === 'lyrical-sheets-webhook-v2') {
+      if(data && typeof data.service === 'string' && data.service.indexOf('lyrical-sheets-webhook') === 0) {
         showToast(`✓ Connection verified: ${data.sheetName || 'Active'}`);
         addSheetsLog('System', 'Verify', 'Handshake successful', 'ok');
       } else {
