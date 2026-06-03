@@ -85,6 +85,24 @@ export function buildPaymentMeta({ book, qty, unitPrice, fxEnabled, fxCur, fxAmt
   };
 }
 
+// The CAD value to record on a Sheets row for a sale, mirroring how the app
+// captures revenue at the moment of sale (a frozen figure that must not drift
+// as FX rates move later):
+//   • book sells in CAD             → the native total IS the CAD value
+//   • non-CAD book, paid in CAD     → the CAD cash collected is the value
+//   • anything else                 → '' (blank); the Sheets backend fills it
+//     from the stored converted total or a live FX lookup.
+// Returns a Number, or '' when the CAD value can't be determined client-side.
+export function cadEquivalentForSale({ nativeCurrency, totalNative, payment } = {}) {
+  const native = normalizeCurrencyCode(nativeCurrency, 'CAD');
+  const total = Number(totalNative) || 0;
+  if (native === 'CAD') return total;
+  if (payment && normalizeCurrencyCode(payment.currency, '') === 'CAD' && Number(payment.amount)) {
+    return Number(payment.amount);
+  }
+  return '';
+}
+
 // The label stored on a sale when the artist collected the payment directly
 // (rather than it flowing to the publisher). Kept as a single source of truth
 // so detection doesn't rely on string literals scattered across the codebase.

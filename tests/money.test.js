@@ -10,6 +10,7 @@ import {
   getBookCurrencyCode,
   paymentSummary,
   buildPaymentMeta,
+  cadEquivalentForSale,
   hexToRgba,
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   isDirectToArtistSale,
@@ -186,6 +187,43 @@ describe('buildPaymentMeta', () => {
     const meta = buildPaymentMeta({ book, qty: 'oops', unitPrice: null, fxEnabled: false });
     expect(meta.amount).toBe(0);
     expect(meta.convertedTotal).toBe(0);
+  });
+});
+
+describe('cadEquivalentForSale', () => {
+  it('uses the native total when the book sells in CAD', () => {
+    expect(cadEquivalentForSale({ nativeCurrency: 'CAD', totalNative: 20 })).toBe(20);
+  });
+  it('normalizes CAD symbols for the native currency', () => {
+    expect(cadEquivalentForSale({ nativeCurrency: 'CA$', totalNative: 12.5 })).toBe(12.5);
+  });
+  it('uses the CAD cash collected when a non-CAD book is paid in CAD', () => {
+    expect(cadEquivalentForSale({
+      nativeCurrency: 'EUR', totalNative: 10,
+      payment: { currency: 'CAD', amount: 16.02 },
+    })).toBe(16.02);
+  });
+  it('returns blank for a non-CAD book paid in a non-CAD currency', () => {
+    // Left for the Sheets backend to convert via stored rate / live FX.
+    expect(cadEquivalentForSale({
+      nativeCurrency: 'EUR', totalNative: 10,
+      payment: { currency: 'EUR', amount: 10 },
+    })).toBe('');
+  });
+  it('returns blank for a non-CAD book with no payment info', () => {
+    expect(cadEquivalentForSale({ nativeCurrency: 'GBP', totalNative: 8 })).toBe('');
+  });
+  it('ignores a CAD payment with a zero/missing amount', () => {
+    expect(cadEquivalentForSale({
+      nativeCurrency: 'USD', totalNative: 5,
+      payment: { currency: 'CAD', amount: 0 },
+    })).toBe('');
+  });
+  it('defaults a missing native currency to CAD (native total wins)', () => {
+    expect(cadEquivalentForSale({ totalNative: 7.25 })).toBe(7.25);
+  });
+  it('coerces a non-numeric total to 0 for a CAD book', () => {
+    expect(cadEquivalentForSale({ nativeCurrency: 'CAD', totalNative: 'oops' })).toBe(0);
   });
 });
 
