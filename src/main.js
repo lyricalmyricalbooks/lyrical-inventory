@@ -1835,25 +1835,8 @@ function updateDash() {
   renderProfitSharingBreakdown(activeBook);
 }
 
-function renderProfitSharingBreakdown(bookId) {
-  const block = $('d-profit-sharing-block');
-  const content = $('ps-dash-content');
-  if (!block || !content) return;
 
-  const book = BOOKS[bookId];
-  if (!book || !book.profitTiers || book.profitTiers.length === 0) {
-    block.style.display = 'none';
-    return;
-  }
-
-  block.style.display = '';
-  const stats = calculateArtistEarnings(bookId);
-  if (!stats) {
-    content.innerHTML = '<div class="empty-state">No earnings data yet.</div>';
-    return;
-  }
-
-  const cur = book.currency;
+function getProfitTiersHtml(book, stats, cur) {
   const hasCap = (t) => Number.isFinite(t.revenueUpTo) && t.revenueUpTo > 0;
   const effectiveCap = (t) => {
     const isBreakEvenTier = (t.label || '').toLowerCase().includes('break');
@@ -1910,6 +1893,10 @@ function renderProfitSharingBreakdown(bookId) {
     `;
   }).join('');
 
+  return { tierHeader, tierHtml, tiers, nextTier, effectiveCap };
+}
+
+function getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur) {
   let progressHtml = '';
   if (nextTier && effectiveCap(nextTier) !== null) {
     const isBreakEvenTier = nextTier.label.toLowerCase().includes('break');
@@ -1939,14 +1926,17 @@ function renderProfitSharingBreakdown(bookId) {
       </div>
     `;
   }
+  return progressHtml;
+}
 
+function getOwedCardDetails(stats, cur) {
   const owed = stats.owedToArtist;
-  const hasHeld = stats.heldByArtistGross > 0.01;
   const artistOwesPublisher = owed < -0.01;
 
   // The "Owed to artist" card flips to an overpaid state when payouts exceed the
   // artist's net earnings (the publisher's cut held by the artist is tracked
   // separately on the "Held by artist" card, not netted in here).
+
   let owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor;
   if (artistOwesPublisher) {
     owedLabel = '⚠ Overpaid to artist';
@@ -1973,6 +1963,11 @@ function renderProfitSharingBreakdown(bookId) {
     owedCardBg = 'rgba(74,222,128,.1)';
     owedCardBorder = '1px solid rgba(74,222,128,.3)';
   }
+  return { owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor, owed };
+}
+
+function getArtistHeldHtml(stats, cur) {
+  const hasHeld = stats.heldByArtistGross > 0.01;
 
   const heldCardHtml = hasHeld ? `
       <div class="card" style="margin:0; background:rgba(212,175,55,.08); border:1px solid rgba(212,175,55,.25);">
@@ -1989,7 +1984,11 @@ function renderProfitSharingBreakdown(bookId) {
       <br>Owed to artist = lifetime earnings − payouts − the artist's own share they're holding.
     </div>` : '';
 
-  const payoutHistoryHtml = (stats.payouts || []).length > 0
+  return { heldCardHtml, heldNoteHtml, hasHeld };
+}
+
+function getPayoutHistoryHtml(stats, bookId, cur) {
+  return (stats.payouts || []).length > 0
     ? stats.payouts.slice().sort((a,b) => (b.date || '').localeCompare(a.date || '')).map(p => `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; font-size:12px;
           border-bottom:1px solid rgba(0,0,0,.05);">
@@ -2001,6 +2000,32 @@ function renderProfitSharingBreakdown(bookId) {
             onclick="deleteArtistPayout('${bookId}', ${p.id})" title="Delete this payout">✕</button>
         </div>`).join('')
     : '<div style="padding:12px; font-size:11px; color:var(--text3); text-align:center;">No payouts recorded yet.</div>';
+}
+function renderProfitSharingBreakdown(bookId) {
+  const block = $('d-profit-sharing-block');
+  const content = $('ps-dash-content');
+  if (!block || !content) return;
+
+  const book = BOOKS[bookId];
+  if (!book || !book.profitTiers || book.profitTiers.length === 0) {
+    block.style.display = 'none';
+    return;
+  }
+
+  block.style.display = '';
+  const stats = calculateArtistEarnings(bookId);
+  if (!stats) {
+    content.innerHTML = '<div class="empty-state">No earnings data yet.</div>';
+    return;
+  }
+
+  const cur = book.currency;
+
+  const { tierHeader, tierHtml, tiers, nextTier, effectiveCap } = getProfitTiersHtml(book, stats, cur);
+  const progressHtml = getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur);
+  const { owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor, owed } = getOwedCardDetails(stats, cur);
+  const { heldCardHtml, heldNoteHtml, hasHeld } = getArtistHeldHtml(stats, cur);
+  const payoutHistoryHtml = getPayoutHistoryHtml(stats, bookId, cur);
 
   content.innerHTML = `
     <div style="display:grid; grid-template-columns:repeat(${hasHeld ? 4 : 3}, 1fr); gap:12px; margin-bottom:1.5rem;">
