@@ -6913,9 +6913,13 @@ async function syncAllReceipts() {
   }
 
   // 2. Sync Per-Book Expenses
-  for (const bid in BOOKS) {
+  const bookIds = Object.keys(BOOKS);
+  const states = await Promise.all(bookIds.map(bid => window._fbLoad(bid)));
+
+  for (let i = 0; i < bookIds.length; i++) {
+    const bid = bookIds[i];
     const book = BOOKS[bid];
-    const state = await window._fbLoad(bid);
+    const state = states[i];
     if (!state || !state.expenses) continue;
 
     let bookSynced = 0;
