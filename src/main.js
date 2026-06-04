@@ -197,8 +197,6 @@ async function saveBookFromModal() {
   renderCurrent();
 }
 
-// hexToRgba moved to ./lib/money.js
-
 function renderCatalogList() {
   const container = $('catalog-list');
   if (!container) return;
