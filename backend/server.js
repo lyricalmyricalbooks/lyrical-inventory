@@ -10,8 +10,17 @@ const __dirname = path.dirname(__filename);
 loadEnv(path.join(__dirname, '.env'));
 
 const PORT = Number(process.env.BACKEND_PORT || process.env.PORT || 8787);
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me';
-const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-me-secret';
+
+if (!process.env.ADMIN_PASSWORD) {
+  throw new Error('ADMIN_PASSWORD environment variable is missing.');
+}
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!process.env.TOKEN_SECRET) {
+  throw new Error('TOKEN_SECRET environment variable is missing.');
+}
+const TOKEN_SECRET = process.env.TOKEN_SECRET;
+
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
 const DATA_DIR = path.join(__dirname, 'data');
