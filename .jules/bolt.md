@@ -1,0 +1,3 @@
+## 2024-06-04 - [Performance Optimization in escapeHtml]
+**Learning:** Found a recurring micro-optimization in string replace methods. The original `escapeHtml` function instantiated a new object dictionary (`{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }`) for every match found during replacement. In apps with heavy string/HTML interpolation like this one, this causes noticeable GC pressure and performance drops.
+**Action:** Always hoist inline objects and arrays in loops and callback functions (like `String.prototype.replace`) into constants defined outside the function scope.
