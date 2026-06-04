@@ -3,7 +3,6 @@ import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import {
   CURRENCY_SYMBOL_TO_CODE,
-  CODE_TO_SYMBOL,
   getSym,
   normalizeCurrencyCode,
   fmt,
