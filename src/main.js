@@ -3026,10 +3026,6 @@ function toggleShipped() {
   renderHist();
 }
 
-function getShippingData(){}   // no-op
-function clearShippingFields(){}  // no-op
-function openShippingLabel(){}  // no-op
-
 function printShippingLabel() {
   const h = getState().hist[_labelOrderIndex];
   const book = getBook();
