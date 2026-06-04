@@ -71,4 +71,12 @@ describe('parseContributorRows', () => {
     const { contributors } = parseContributorRows('Ada, ada@x.com');
     OC_STAGES.forEach(st => expect(contributors[0][st.key]).toBe(false));
   });
+
+  it('handles null or undefined input safely', () => {
+    const nullResult = parseContributorRows(null);
+    expect(nullResult).toEqual({ contributors: [], added: 0, skipped: 0 });
+
+    const undefinedResult = parseContributorRows(undefined);
+    expect(undefinedResult).toEqual({ contributors: [], added: 0, skipped: 0 });
+  });
 });
