@@ -99,6 +99,16 @@ describe('fmtD', () => {
     const out = fmtD('2024-01-15');
     expect(out).toMatch(/15 Jan 2024/);
   });
+  it('formats a predefined Date object correctly', () => {
+    // We use a date at noon UTC to ensure consistent formatting across timezones
+    const d = new Date('2023-10-31T12:00:00Z');
+    expect(fmtD(d)).toMatch(/31 Oct 2023/);
+  });
+  it('formats a numeric timestamp correctly', () => {
+    // 1700050000000 = Wed Nov 15 2023 12:06:40 GMT+0000
+    const timestamp = 1700050000000;
+    expect(fmtD(timestamp)).toMatch(/15 Nov 2023/);
+  });
 });
 
 describe('getBookCurrencyCode', () => {
