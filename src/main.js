@@ -6294,7 +6294,7 @@ async function backfillSheetsIds() {
     }
     if (dirty) touched.add(bookId);
   }
-  for (const bookId of touched) await saveState(bookId);
+  await Promise.all(Array.from(touched).map(bookId => saveState(bookId)));
   return { hist, ledger, transfers, books: touched.size };
 }
 window.backfillSheetsIds = backfillSheetsIds;
