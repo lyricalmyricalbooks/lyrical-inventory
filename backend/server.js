@@ -10,8 +10,19 @@ const __dirname = path.dirname(__filename);
 loadEnv(path.join(__dirname, '.env'));
 
 const PORT = Number(process.env.BACKEND_PORT || process.env.PORT || 8787);
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me';
-const TOKEN_SECRET = process.env.TOKEN_SECRET || 'change-me-secret';
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) {
+  console.error("FATAL: ADMIN_PASSWORD environment variable is not set.");
+  process.exit(1);
+}
+
+const TOKEN_SECRET = process.env.TOKEN_SECRET;
+if (!TOKEN_SECRET) {
+  console.error("FATAL: TOKEN_SECRET environment variable is not set.");
+  process.exit(1);
+}
+
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
 const DATA_DIR = path.join(__dirname, 'data');
