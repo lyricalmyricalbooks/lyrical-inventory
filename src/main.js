@@ -1994,7 +1994,8 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
           border-bottom:1px solid rgba(0,0,0,.05);">
           <span style="display:flex; flex-direction:column;">
             <span style="font-family:'DM Mono',monospace; color:var(--green); font-weight:600;">${fmt(parseFloat(p.amount) || 0, cur)}</span>
-            <span style="font-size:10px; color:var(--text3);">${p.date || '—'}${p.method ? ' · ' + String(p.method).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) : ''}${p.notes ? ' · ' + String(p.notes).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) : ''}</span>
+            <!-- ⚡ Bolt Optimization: Use shared escapeHtml to prevent GC pressure from inline object creation during replace operations -->
+            <span style="font-size:10px; color:var(--text3);">${p.date || '—'}${p.method ? ' · ' + escapeHtml(p.method) : ''}${p.notes ? ' · ' + escapeHtml(p.notes) : ''}</span>
           </span>
           <button class="btn" style="padding:4px 8px; font-size:10px; background:transparent; color:var(--text3); border:1px solid rgba(0,0,0,.1);"
             onclick="deleteArtistPayout('${bookId}', ${p.id})" title="Delete this payout">✕</button>
