@@ -1999,7 +1999,7 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
             <span style="font-size:10px; color:var(--text3);">${p.date || '—'}${p.method ? ' · ' + escapeHtml(p.method) : ''}${p.notes ? ' · ' + escapeHtml(p.notes) : ''}</span>
           </span>
           <button class="btn" style="padding:4px 8px; font-size:10px; background:transparent; color:var(--text3); border:1px solid rgba(0,0,0,.1);"
-            onclick="deleteArtistPayout('${bookId}', ${p.id})" title="Delete this payout">✕</button>
+            onclick="deleteArtistPayout('${bookId}', ${p.id})" title="Delete this payout" aria-label="Delete payout">✕</button>
         </div>`).join('')
     : '<div style="padding:12px; font-size:11px; color:var(--text3); text-align:center;">No payouts recorded yet.</div>';
 }
@@ -2381,7 +2381,7 @@ function renderHist() {
   if (filterBar) {
     if (chanFilter !== null) {
       filterBar.style.display = '';
-      filterBar.innerHTML = `<div class="hist-filter-chip"><span class="ch-dot" style="background:${channelColor(chanFilter)}"></span>Showing <strong>${escapeHtml(chanLabel(chanFilter))}</strong> orders · ${combined.length} found<button onclick="clearHistChanFilter()" title="Clear filter">✕ Clear</button></div>`;
+      filterBar.innerHTML = `<div class="hist-filter-chip"><span class="ch-dot" style="background:${channelColor(chanFilter)}"></span>Showing <strong>${escapeHtml(chanLabel(chanFilter))}</strong> orders · ${combined.length} found<button onclick="clearHistChanFilter()" title="Clear filter" aria-label="Clear filter">✕ Clear</button></div>`;
     } else {
       filterBar.style.display = 'none';
       filterBar.innerHTML = '';
@@ -2392,13 +2392,13 @@ function renderHist() {
     ? combined.map((h,i)=>{
         if (h.pendingAuth) {
            const actionCell = window.IS_PUBLISHER
-             ? `<button class="edit-btn" onclick="approveSubmission('sales', '${h._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('sales', '${h._subKey}')" style="color:var(--red);">✕</button>`
+             ? `<button class="edit-btn" onclick="approveSubmission('sales', '${h._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;" aria-label="Approve">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('sales', '${h._subKey}')" style="color:var(--red);" aria-label="Reject">✕</button>`
              : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
            return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${escapeHtml(h.num)}</td><td>${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price,cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty*h.price,cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes)||'—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill amber" style="font-size:10px;">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
         }
         const voided = h.voided ? ' voided' : '';
         const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
-        const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry">✎</button>`;
+        const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
         const isGrat = h.gratuity || h.chan === 'Gratuity';
         const isPending = h.artistPending;
         const chanCell = isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : escapeHtml(h.chan);
@@ -3754,7 +3754,7 @@ function renderEmailReceiptDrafts(receipts) {
                 <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:12px;width:90px;text-align:right;">
               </div>
             </td>
-            <td>${r.sourceSnippet?`<button class="btn sm" type="button" title="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>`:''}</td>
+            <td>${r.sourceSnippet?`<button class="btn sm" type="button" title="View source snippet" aria-label="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>`:''}</td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -3898,7 +3898,7 @@ function renderExpenses(){
   body.innerHTML=combined.map(e=>{
     if (e.pendingAuth) {
       const actionCell = window.IS_PUBLISHER
-        ? `<button class="edit-btn" onclick="approveSubmission('expenses', '${e._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('expenses', '${e._subKey}')" style="color:var(--red);">✕</button>`
+        ? `<button class="edit-btn" onclick="approveSubmission('expenses', '${e._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;" aria-label="Approve">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('expenses', '${e._subKey}')" style="color:var(--red);" aria-label="Reject">✕</button>`
         : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
       return `<tr style="opacity:0.8;background:#fffcede3;">
         <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
@@ -3919,7 +3919,7 @@ function renderExpenses(){
       ?'<span class="pill green" style="font-size:10px;">✓ Received</span>'
       :'<span style="font-size:11px;color:var(--text4);">Pending</span>';
     const actionCell=(!e.received && !isAuthor() && !isGratuityExpense(e))
-      ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
+      ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
     const baseReceiptLink = e.receipt ? (
       e.receipt.startsWith('local://')
       ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://',''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
@@ -4804,7 +4804,7 @@ function renderLedger(){
   const indexed = s.ledger.map((e,i)=>({e,i}));
   b.innerHTML=[...indexed].reverse().map(({e,i})=>{
     const voided = e.voided?' voided':'';
-    const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry">✎</button>`;
+    const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     return`<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type==='Sale'?e.rate+'%':'—'}</td><td class="r" style="font-weight:600;">${e.amountDue>0?fmt(e.amountDue,cur):'—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes)||'—'}</td><td>${pill(e)}${e.status==='pending'&&!e.voided?` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>`:''}</td></tr>`;
   }).join('');
 }
@@ -5120,7 +5120,7 @@ function renderInvoiceItems(){
     <td><input type="number" min="0" step="1" value="${it.qty||0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
     <td><input type="number" min="0" step="0.01" value="${(it.unitPrice||0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
     <td class="r"><span class="inv-item-amt">${fmt((it.qty||0)*(it.unitPrice||0), cur)}</span></td>
-    <td><button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove line">×</button></td>
+    <td><button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove line" aria-label="Remove line">×</button></td>
   </tr>`).join('');
 }
 
@@ -9148,8 +9148,8 @@ function renderPOS() {
       : '';
     const editControls = posOnly
       ? `<div style="display:flex;gap:6px;margin-top:8px;">
-           <button class="btn sm" style="flex:1;font-size:11px;" onclick="openPosBookModal('${idAttr}')">✎ Edit / QR</button>
-           <button class="btn sm danger-btn" style="font-size:11px;" onclick="removePosBook('${idAttr}')" title="Remove POS-only book">✕</button>
+           <button class="btn sm" style="flex:1;font-size:11px;" onclick="openPosBookModal('${idAttr}')" aria-label="Edit or view QR">✎ Edit / QR</button>
+           <button class="btn sm danger-btn" style="font-size:11px;" onclick="removePosBook('${idAttr}')" title="Remove POS-only book" aria-label="Remove POS-only book">✕</button>
          </div>`
       : '';
     return `
@@ -9667,7 +9667,7 @@ function renderSalesTrackerBookList() {
       <input type="checkbox" class="st-book-check" data-kind="custom" value="${idx}" checked style="width:16px;height:16px;cursor:pointer;">
       <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
       <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
-      <button type="button" onclick="salesTrackerRemoveCustom(${idx})" style="background:none;border:none;color:#a00;cursor:pointer;font-size:14px;padding:0 4px;" title="Remove">✕</button>
+      <button type="button" onclick="salesTrackerRemoveCustom(${idx})" style="background:none;border:none;color:#a00;cursor:pointer;font-size:14px;padding:0 4px;" title="Remove" aria-label="Remove">✕</button>
     </label>
   `).join('');
 
