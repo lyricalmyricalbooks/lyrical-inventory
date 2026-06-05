@@ -618,7 +618,7 @@ function confirmDialog(message, opts = {}) {
   const cancel = $('m-confirm-cancel');
   if (!overlay || !body || !ok || !cancel) {
     // Should never happen in production, but keep a working fallback.
-    // eslint-disable-next-line no-alert
+
     return Promise.resolve(window.confirm(message));
   }
   body.textContent = String(message ?? '');
@@ -627,28 +627,29 @@ function confirmDialog(message, opts = {}) {
   cancel.textContent = opts.cancelLabel || 'Cancel';
   ok.classList.toggle('danger-btn', !!opts.danger);
   ok.classList.toggle('gold', !opts.danger);
-  overlay.style.display = 'flex';
 
   return new Promise(resolve => {
     const cleanup = (result) => {
-      overlay.style.display = 'none';
+      overlay.removeEventListener('modal-close', onCloseEvent);
+      closeM('confirm');
       ok.removeEventListener('click', onOk);
       cancel.removeEventListener('click', onCancel);
-      overlay.removeEventListener('click', onBackdrop);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onEnter);
       resolve(result);
     };
     const onOk = () => cleanup(true);
     const onCancel = () => cleanup(false);
-    const onBackdrop = (e) => { if (e.target === overlay) cleanup(false); };
-    const onKey = (e) => {
-      if (e.key === 'Escape') cleanup(false);
-      else if (e.key === 'Enter') cleanup(true);
+    const onCloseEvent = () => cleanup(false);
+    const onEnter = (e) => {
+      if (e.key === 'Enter') cleanup(true);
     };
+
     ok.addEventListener('click', onOk);
     cancel.addEventListener('click', onCancel);
-    overlay.addEventListener('click', onBackdrop);
-    document.addEventListener('keydown', onKey);
+    overlay.addEventListener('modal-close', onCloseEvent);
+    document.addEventListener('keydown', onEnter);
+
+    openM('confirm');
     // Focus the safe (cancel) button by default for destructive prompts.
     setTimeout(() => (opts.danger ? cancel : ok).focus(), 0);
   });
@@ -6059,6 +6060,7 @@ function openM(id){
 }
 function closeM(id){
   const el=$('m-'+id); if(!el) return;
+  el.dispatchEvent(new Event('modal-close'));
   delete _modalSnapshots[id];
   if(el.classList.contains('closing')) return;
   if(_prefersReducedMotion()){ el.style.display='none'; clearFieldErrors(el); return; }
@@ -8963,30 +8965,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── MODAL UX: backdrop-click + Esc to close, clear validation on input ──
 document.addEventListener('DOMContentLoaded', () => {
-  // True while the confirmDialog overlay is on screen — its own handlers own
-  // the interaction, so the generic backdrop/Esc handlers stand down.
-  const confirmOpen = () => {
-    const c = document.getElementById('m-confirm');
-    return !!c && c.style.display !== 'none';
-  };
-
   // Click the dimmed backdrop (not a child) to close the modal.
   document.addEventListener('click', (e) => {
-    if (confirmOpen()) return;
     const ov = e.target;
     if (!ov || !ov.classList || !ov.classList.contains('overlay')) return;
-    if (ov.id === 'm-confirm') return;            // confirmDialog manages its own backdrop
     if (ov.hasAttribute('data-no-backdrop-close')) return;
     if (!ov.id.startsWith('m-')) return;
     attemptCloseModal(ov.id.slice(2));
   });
 
-  // Esc closes the topmost open modal (the confirm dialog handles its own Esc).
+  // Esc closes the topmost open modal.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (confirmOpen()) return;
     const open = Array.from(document.querySelectorAll('.overlay')).filter(o =>
-      o.style.display !== 'none' && o.id !== 'm-confirm' &&
+      o.style.display !== 'none' &&
       !o.classList.contains('closing') && o.id.startsWith('m-') &&
       !o.hasAttribute('data-no-backdrop-close'));
     if (!open.length) return;
