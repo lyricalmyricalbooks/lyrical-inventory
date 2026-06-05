@@ -21,6 +21,9 @@ if (!process.env.TOKEN_SECRET) {
 }
 const TOKEN_SECRET = process.env.TOKEN_SECRET;
 
+if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
+  throw new Error('CORS_ORIGIN environment variable is required in production.');
+}
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
 const DATA_DIR = path.join(__dirname, 'data');
