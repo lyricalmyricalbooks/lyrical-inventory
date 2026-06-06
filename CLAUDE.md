@@ -6,7 +6,7 @@ End with 2–4 "Next moves" suggestions, ranked best-first. Each is one line: wh
 ## Stack constraints
 - Vanilla JS, no build step
 - Firebase Firestore, static hosting on GitHub Pages
-- Mobile-first PWA with offline POS and later sync
+- PWA with offline POS and later sync
 
 ## Pull Requests
 - When asked for a new PR: push and create it immediately, no investigation
