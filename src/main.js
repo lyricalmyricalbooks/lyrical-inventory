@@ -7645,8 +7645,7 @@ function calculateFinancials(year) {
     missingReceiptsCount: 0
   };
 
-  const start = new Date(year, 0, 1);
-  const end = new Date(year, 11, 31, 23, 59, 59);
+  const yearStr = String(year);
 
   // Helper for consistent amount extraction
   const getAmt = (e) => e.baseAmount || e.amountCAD || e.amount || 0;
@@ -7660,8 +7659,8 @@ function calculateFinancials(year) {
     let bookUnits = 0;
     
     (s.hist || []).forEach(h => {
-      const d = new Date(h.date);
-      if (!h.voided && !h.gratuity && d >= start && d <= end) {
+      const inYear = h.date && h.date.startsWith(yearStr);
+      if (!h.voided && !h.gratuity && inYear) {
         bookRev += (parseFloat(h.qty) || 0) * (parseFloat(h.price) || 0);
         bookUnits += (parseInt(h.qty) || 0);
       }
@@ -7685,8 +7684,8 @@ function calculateFinancials(year) {
     });
     
     (s.expenses || []).forEach(e => {
-      const d = new Date(e.date);
-      if (!e.voided && d >= start && d <= end) {
+      const inYear = e.date && e.date.startsWith(yearStr);
+      if (!e.voided && inYear) {
         const amt = getAmt(e);
         result.opex += amt;
         const cat = e.cat || 'Uncategorized';
@@ -7703,8 +7702,8 @@ function calculateFinancials(year) {
 
   // 2. Process Global Publisher Expenses (Tax Center)
   (TAX_CENTER.businessExpenses || []).forEach(e => {
-    const d = new Date(e.date);
-    if (!e.voided && d >= start && d <= end) {
+    const inYear = e.date && e.date.startsWith(yearStr);
+    if (!e.voided && inYear) {
       const amt = getAmt(e);
       result.opex += amt;
       const cat = e.cat || 'Uncategorized (Publisher)';
@@ -7728,8 +7727,7 @@ function filterArtistEarningsByYear(bookId, year) {
   const tiers = [...(book.profitTiers || [])].sort((a,b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
   if (tiers.length === 0) return 0;
 
-  const start = new Date(year, 0, 1);
-  const end   = new Date(year, 11, 31, 23, 59, 59);
+  const yearStr = String(year);
 
   let yearArtistEarned = 0;
   let cumulativeRevenue = 0;
@@ -7741,7 +7739,7 @@ function filterArtistEarningsByYear(bookId, year) {
   const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
 
   sortedHist.forEach(h => {
-    const inYear = new Date(h.date) >= start && new Date(h.date) <= end;
+    const inYear = h.date && h.date.startsWith(yearStr);
     let revRemaining = h.qty * h.price;
     while (revRemaining > 0.001) {
       const tier = tiers.find(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
