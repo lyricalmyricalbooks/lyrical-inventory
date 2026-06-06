@@ -8280,7 +8280,7 @@ function renderTaxCenter() {
             <td style="font-size:12px;">${refCell}</td>
             <td class="r" style="font-size:12px;">${origDisplay}</td>
             <td class="r" style="font-weight:600;">${cadDisplay}</td>
-            <td class="r">${item.itemId ? `<button class="btn-icon" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}</td>
+            <td class="r">${item.itemId ? `<button class="btn-icon" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry" aria-label="Delete entry">🗑️</button>` : ''}</td>
         </tr>`;
       }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">No data for selected period</td></tr>`;
   }
@@ -9162,9 +9162,9 @@ function renderPOS() {
         </div>
         <div>
           <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; background:rgba(255,255,255,.05); border-radius:var(--r2); padding:6px;">
-            <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${idAttr}', -1)">-</button>
+            <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${idAttr}', -1)" aria-label="Decrease quantity">-</button>
             <span style="font-size:18px; font-weight:700; font-family:'DM Mono',monospace; width:40px; text-align:center;">${qty}</span>
-            <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${idAttr}', 1)">+</button>
+            <button class="btn sm pos-qty-btn" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${idAttr}', 1)" aria-label="Increase quantity">+</button>
           </div>
           ${editControls}
         </div>

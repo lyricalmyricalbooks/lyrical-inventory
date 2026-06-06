@@ -719,7 +719,7 @@
   </div>
   <div class="modal-footer" style="margin-top:14px;justify-content:space-between;">
     <button class="btn" onclick="renameTripPrompt()">✎ Rename trip</button>
-    <button class="btn" onclick="closeM('tc-trip-detail')">Close</button>
+    <button class="btn" onclick="closeM('tc-trip-detail')" aria-label="Close">Close</button>
   </div>
 </div></div>
 
@@ -733,7 +733,7 @@
     <datalist id="tc-trip-suggestions-modal"></datalist>
   </div>
   <div class="modal-footer" style="margin-top:14px;">
-    <button class="btn" onclick="closeM('tc-edit-trip')">Cancel</button>
+    <button class="btn" onclick="closeM('tc-edit-trip')" aria-label="Cancel">Cancel</button>
     <button class="btn gold" onclick="saveTripAssignment()">Save</button>
   </div>
 </div></div>
@@ -749,7 +749,7 @@
     </table>
   </div>
   <div class="modal-footer" style="margin-top:14px;">
-    <button class="btn" onclick="closeM('tc-cat-detail')">Close</button>
+    <button class="btn" onclick="closeM('tc-cat-detail')" aria-label="Close">Close</button>
   </div>
 </div></div>
 
@@ -968,7 +968,7 @@
       <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;">➕ Insert fees into ledger</button>
       <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;">⚖ Reconcile against recorded sales</button>
       <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;">⬇ Download audit CSV (every transaction)</button>
-      <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;">🗑 Forget saved key</button>
+      <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;" aria-label="Forget saved key">🗑 Forget saved key</button>
     </div>
   </div>
 
@@ -1034,11 +1034,11 @@
       <div style="font-size:12px;color:var(--text3);">Fast checkout for book fairs and live events with controlled currency handling and itemized checkout review.</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-      <button class="btn" onclick="openSalesTrackerModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px;">
+      <button class="btn" onclick="openSalesTrackerModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px;" aria-label="Print sales tracker">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
         Print sales tracker
       </button>
-      <button class="btn" onclick="openQRPrintModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px;">
+      <button class="btn" onclick="openQRPrintModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px;" aria-label="Print payment QR codes">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h3v1h-3zM20 17h1v4h-4v-1"></path></svg>
         Print payment QR codes
       </button>
@@ -1150,7 +1150,7 @@
     <div style="font-size:11px;color:var(--text3);margin-top:6px;">Books added here only appear on this tracker — they're not saved to your inventory.</div>
 
     <div class="modal-footer">
-      <button class="btn" onclick="closeM('sales-tracker')">Cancel</button>
+      <button class="btn" onclick="closeM('sales-tracker')" aria-label="Cancel">Cancel</button>
       <button class="btn gold" onclick="printSalesTracker()">🖨 Print tracker</button>
     </div>
   </div>
@@ -1203,7 +1203,7 @@
     <div id="qrp-books-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;border:1px solid rgba(0,0,0,.12);border-radius:var(--r2);padding:10px;background:rgba(0,0,0,.03);"></div>
 
     <div class="modal-footer">
-      <button class="btn" onclick="closeM('qr-print')">Cancel</button>
+      <button class="btn" onclick="closeM('qr-print')" aria-label="Cancel">Cancel</button>
       <button class="btn gold" onclick="printPaymentQRCodes()">🖨 Print QR sheet</button>
     </div>
   </div>
@@ -2463,7 +2463,7 @@ function jsonOut_(obj) {
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Website</label><input id="ns-website" placeholder="e.g. store.com"></div><div class="form-group"><label>Commission rate (%)<span class="tip tip-mark" data-tip="The store's cut of each sale. At 40%, you keep 60% of the list price on every book they sell.">?</span></label><input id="ns-rate" type="number" value="40" min="0" max="100"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label>Payment terms<span class="tip tip-mark" data-tip="When the store pays you for sold books — e.g. Net 30 (within 30 days) or paid on each sale. For your reference only.">?</span></label><input id="ns-terms" placeholder="e.g. Net 30, paid on sale"></div>
   <div class="form-group"><label>Notes</label><textarea id="ns-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('add-store')">Cancel</button><button class="btn gold" onclick="addStore()">Add store</button></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('add-store')" aria-label="Cancel">Cancel</button><button class="btn gold" onclick="addStore()">Add store</button></div>
 </div></div>
 
 <div class="overlay" id="m-edit-store" style="display:none;"><div class="modal">
@@ -2476,7 +2476,7 @@ function jsonOut_(obj) {
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Website</label><input id="es-website" placeholder="e.g. store.com"></div><div class="form-group"><label>Commission rate (%)</label><input id="es-rate" type="number" value="40" min="0" max="100"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label>Payment terms</label><input id="es-terms" placeholder="e.g. Net 30, paid on sale"></div>
   <div class="form-group"><label>Notes</label><textarea id="es-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('edit-store')">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('edit-store')" aria-label="Cancel">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
 </div></div>
 
 <div class="overlay" id="m-send-books" style="display:none;"><div class="modal">
@@ -2484,7 +2484,7 @@ function jsonOut_(obj) {
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty to send</label><input id="send-qty" type="number" value="10" min="1"></div><div class="form-group"><label>Date sent</label><input id="send-date" type="date"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label>Commission rate (%)</label><input id="send-rate" type="number" value="40" min="0" max="100"></div>
   <div class="form-group"><label>Notes</label><input id="send-notes" placeholder="e.g. delivery ref, batch #"></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('send-books')" aria-label="Cancel">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
 </div></div>
 
 <div class="overlay" id="m-record-sale" style="display:none;"><div class="modal">
@@ -2492,7 +2492,7 @@ function jsonOut_(obj) {
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty sold by store</label><input id="sale-qty" type="number" value="1" min="1"></div><div class="form-group"><label>Date</label><input id="sale-date" type="date"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Sale price per unit</label><div class="price-wrap"><span class="sym" id="sale-sym">€</span><input id="sale-price" type="number" value="40.00" step="0.01"></div></div><div class="form-group"><label>Payment status</label><select id="sale-paid"><option value="pending">Pending</option><option value="paid">Paid</option></select></div></div>
   <div class="form-group"><label>Notes</label><input id="sale-notes" placeholder="e.g. invoice ref, reporting period"></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('record-sale')">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('record-sale')" aria-label="Cancel">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
 </div></div>
 
 <div class="overlay" id="m-return" style="display:none;"><div class="modal">
@@ -2500,7 +2500,7 @@ function jsonOut_(obj) {
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty returned</label><input id="ret-qty" type="number" value="1" min="1"></div><div class="form-group"><label>Date</label><input id="ret-date" type="date"></div></div>
   <div class="form-group"><label>Condition</label><select id="ret-cond"><option>Good — return to stock</option><option>Damaged — write off</option></select></div>
   <div class="form-group" style="margin-top:12px;"><label>Notes</label><input id="ret-notes" placeholder="e.g. reason for return"></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('return')">Cancel</button><button class="btn gold" onclick="confirmReturn()">Record return</button></div>
+  <div class="modal-footer"><button class="btn" onclick="closeM('return')" aria-label="Cancel">Cancel</button><button class="btn gold" onclick="confirmReturn()">Record return</button></div>
 </div></div>
 
 
@@ -2553,7 +2553,7 @@ function jsonOut_(obj) {
   </div>
 
   <div class="modal-footer">
-    <button class="btn" onclick="closeM('edit-entry')">Cancel</button>
+    <button class="btn" onclick="closeM('edit-entry')" aria-label="Cancel">Cancel</button>
     <button class="btn gold" onclick="saveEntryEdit()">Save changes</button>
   </div>
 </div></div>
@@ -2637,7 +2637,7 @@ function jsonOut_(obj) {
   <div class="modal-footer" style="justify-content:space-between;">
     <button class="btn danger-btn" id="inv-delete-btn" style="display:none;" onclick="deleteInvoice()">Delete invoice</button>
     <div style="display:flex;gap:8px;">
-      <button class="btn" onclick="closeM('invoice-edit')">Cancel</button>
+      <button class="btn" onclick="closeM('invoice-edit')" aria-label="Cancel">Cancel</button>
       <button class="btn ink" onclick="saveInvoice('draft')">Save draft</button>
       <button class="btn gold" onclick="saveInvoice('sent')">Save &amp; finalize</button>
     </div>
@@ -2659,7 +2659,7 @@ function jsonOut_(obj) {
       <button class="btn ink" onclick="downloadInvoiceHTML()">⬇ Download</button>
       <button class="btn ink" onclick="printInvoice()">🖨 Print / PDF</button>
       <button class="btn gold" id="inv-mark-paid-btn" onclick="markInvoicePaidFromView()">✓ Mark paid</button>
-      <button class="btn" onclick="closeM('invoice-view')">Close</button>
+      <button class="btn" onclick="closeM('invoice-view')" aria-label="Close">Close</button>
     </div>
   </div>
 
@@ -2722,7 +2722,7 @@ function jsonOut_(obj) {
   </div>
 
   <div class="modal-footer">
-    <button class="btn" onclick="closeM('invoice-settings')">Cancel</button>
+    <button class="btn" onclick="closeM('invoice-settings')" aria-label="Cancel">Cancel</button>
     <button class="btn gold" onclick="saveInvoiceSettings()">Save settings</button>
   </div>
 </div></div>
@@ -2752,7 +2752,7 @@ function jsonOut_(obj) {
     <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:6px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;"></div>
 
     <div class="modal-footer">
-      <button class="btn" onclick="closeM('shipping-label')">Cancel</button>
+      <button class="btn" onclick="closeM('shipping-label')" aria-label="Cancel">Cancel</button>
       <button class="btn" id="sl-toggle-shipped-btn" onclick="toggleShipped()" style="display:none;">Mark as shipped</button>
       <button class="btn gold" onclick="printShippingLabel()">🖨 Print &amp; mark shipped</button>
     </div>
@@ -2776,7 +2776,7 @@ function jsonOut_(obj) {
       ⚠ This will <strong>add</strong> these rows to the current book's history. It will not overwrite existing data. Stock and revenue will be recalculated.
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="closeM('import')">Cancel</button>
+      <button class="btn" onclick="closeM('import')" aria-label="Cancel">Cancel</button>
       <button class="btn gold" onclick="confirmImport()">Import <span id="import-count">0</span> orders</button>
     </div>
   </div>
@@ -2836,7 +2836,7 @@ function jsonOut_(obj) {
     </div>
   </div>
   <div class="modal-footer">
-    <button class="btn" onclick="closeM('payment-qr')">Close</button>
+    <button class="btn" onclick="closeM('payment-qr')" aria-label="Close">Close</button>
     <button class="btn gold" onclick="downloadPaymentQR()">Download Image</button>
   </div>
 </div></div>
@@ -2920,7 +2920,7 @@ function jsonOut_(obj) {
 
   <div class="modal-footer">
     <button class="btn" id="pp-reset-btn" onclick="posResetPrice()">Reset to list</button>
-    <button class="btn" onclick="closeM('pos-price')">Cancel</button>
+    <button class="btn" onclick="closeM('pos-price')" aria-label="Cancel">Cancel</button>
     <button class="btn gold" onclick="savePosPrice()">Apply price</button>
   </div>
 </div></div>
@@ -2941,7 +2941,7 @@ function jsonOut_(obj) {
     </div>
   </div>
   <div class="modal-footer">
-    <button class="btn" onclick="closeM('pos-qr')">Close</button>
+    <button class="btn" onclick="closeM('pos-qr')" aria-label="Close">Close</button>
     <button class="btn gold" onclick="downloadPosQR()">Download Image</button>
   </div>
 </div></div>
@@ -2964,7 +2964,7 @@ function jsonOut_(obj) {
     <strong id="pos-confirm-total" style="font-size:18px;color:var(--green);"></strong>
   </div>
   <div class="modal-footer">
-    <button class="btn" onclick="closeM('pos-sale-confirm')">Cancel</button>
+    <button class="btn" onclick="closeM('pos-sale-confirm')" aria-label="Cancel">Cancel</button>
     <button class="btn" onclick="posPrintReceipt()">Print receipt</button>
     <button class="btn gold" onclick="posConfirmSale()">Confirm sale</button>
   </div>
