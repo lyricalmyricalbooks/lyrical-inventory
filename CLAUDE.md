@@ -7,7 +7,7 @@ app, ranked best-first.
 Each suggestion is one or two lines:
 
 - **What** — a concrete, specific action (not "add tests" — say which test and why).
-- **Why** — the payoff: time saved at a fair, a sale not lost, a faster screen, a bug avoided.
+- **Why** — the payoff: a sale not lost, a faster screen, a bug avoided.
 - **Effort** — quick / medium / larger.
 
 Then offer to do the top one right away.
@@ -15,8 +15,7 @@ Then offer to do the top one right away.
 ### What makes a suggestion good here
 - Tied to what just changed. First ask yourself: did this edit open an edge case,
   threaten offline sync, or leave an obvious next step? Lead with that.
-- High-leverage, not generic. Skip boilerplate best-practice filler. Favour things
-  that save real time at a book fair or stop a sale from being lost.
+- High-leverage, not generic. Skip boilerplate best-practice filler.
 - Specific. Name the file, function, or screen. "Debounce the catalog search box"
   beats "improve performance."
 - Honest. If nothing is genuinely worth doing, say "nothing pressing" and stop.
@@ -29,13 +28,12 @@ Then offer to do the top one right away.
 - Vanilla JS — no framework, no build step, no bundler.
 - Firebase Firestore backend; static hosting on GitHub Pages — no server, no secret
   keys in client code.
-- Mobile-first PWA; offline POS must keep working and sync later.
-- Used live at book fairs — one-handed phone use beats cleverness.
+- PWA; offline POS must keep working and sync later.
 
 ### Angles worth scanning each time
 Bug / edge case the change introduced · the next logical feature · offline & sync
-robustness · Firestore data integrity · mobile UX at the table · the speed of a slow
-screen · keeping catalog and ledger consistent.
+robustness · Firestore data integrity · the speed of a slow screen · keeping catalog
+and ledger consistent.
 
 ## Pull Requests
 - When asked for "a new pull request", "new PR", or similar: **create it immediately** from the current branch
