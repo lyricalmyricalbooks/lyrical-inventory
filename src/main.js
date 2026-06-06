@@ -735,6 +735,7 @@ async function loadBook(bookId) {
     if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
       recomputeAfters(states[bookId]);
       lastSavedHashes[bookId] = json2;
+      _appliedIdsCache = null;
       if (activeBook === bookId || activeBook === 'all') renderCurrent();
       // Suppress the echo-toast that fires right after a local save is written to Firestore
       const timeSinceLastSave = Date.now() - (lastSaveTimes[bookId] || 0);
@@ -2436,12 +2437,17 @@ function saveScanMemory(mem) {
   localStorage.setItem(SCAN_MEMORY_KEY, JSON.stringify(mem));
 }
 
-// Build a cross-book set of all order IDs already applied across any session
+// Build a cross-book set of all order IDs already applied across any session.
+// Cached until explicitly invalidated — rebuilt at most once per render cycle.
+let _appliedIdsCache = null;
 function getAllAppliedIds() {
+  if (_appliedIdsCache) return _appliedIdsCache;
   const ids = new Set();
-  Object.values(states).forEach(s => (s.doneIds || []).forEach(id => ids.add(id)));
-  // Also include any order nums already in any book's history
-  Object.values(states).forEach(s => (s.hist || []).forEach(h => { if (h.num) ids.add(h.num); }));
+  Object.values(states).forEach(s => {
+    (s.doneIds || []).forEach(id => ids.add(id));
+    (s.hist || []).forEach(h => { if (h.num) ids.add(h.num); });
+  });
+  _appliedIdsCache = ids;
   return ids;
 }
 
@@ -2513,7 +2519,8 @@ function applyOne(id) {
   const s = getState(), book = getBook();
   const o = orders.find(x => x.id === id);
   if (!o) return;
-  const alreadyDone = getAllAppliedIds().has(id) || getAllAppliedIds().has(o.orderNum);
+  const _checkedIds = getAllAppliedIds();
+  const alreadyDone = _checkedIds.has(id) || _checkedIds.has(o.orderNum);
   if (alreadyDone) { showToast('Order already applied', 'warn'); return; }
   // Use the matched book if it differs from active
   const targetBook = o.bookId && BOOKS[o.bookId] ? o.bookId : activeBook;
@@ -2542,6 +2549,7 @@ function applyOne(id) {
   targetState.hist.unshift(entry);
   if (!targetState.doneIds) targetState.doneIds = [];
   targetState.doneIds.push(id);
+  _appliedIdsCache = null;
   // Save scan memory — record this order num as seen
   const mem = getScanMemory();
   if (!mem.appliedNums) mem.appliedNums = [];
