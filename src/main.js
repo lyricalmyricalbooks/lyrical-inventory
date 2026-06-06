@@ -722,7 +722,7 @@ async function loadBook(bookId) {
     // Watch for live updates
     window._fbWatchSubmissions(bookId, data => {
       window.authorSubmissions[bookId] = data || {};
-      if (activeBook === bookId || activeBook === 'all') renderCurrent();
+      if (activeBook === bookId || activeBook === 'all') scheduleRender();
       else { try { updatePublisherActionBanner(); } catch(_) {} }
     });
     
@@ -735,7 +735,8 @@ async function loadBook(bookId) {
     if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
       recomputeAfters(states[bookId]);
       lastSavedHashes[bookId] = json2;
-      if (activeBook === bookId || activeBook === 'all') renderCurrent();
+      _appliedIdsCache = null;
+      if (activeBook === bookId || activeBook === 'all') scheduleRender();
       // Suppress the echo-toast that fires right after a local save is written to Firestore
       const timeSinceLastSave = Date.now() - (lastSaveTimes[bookId] || 0);
       if (timeSinceLastSave > 3000) {
@@ -1248,10 +1249,13 @@ function switchTab(name) {
 
 function updateHeader() {
   if (activeBook === 'all') {
-    // Sum all books
-    const totalStock = Object.values(states).reduce((a,s)=>a+(s.stock||0),0);
-    const totalRev = Object.values(states).reduce((a,s)=>a+recognizedRevenueOf(s),0);
-    const totalCon = Object.values(states).reduce((a,s)=>a+s.stores.reduce((b,st)=>b+st.outstanding,0),0);
+    // Sum all books in a single pass (was three separate reduce iterations).
+    let totalStock = 0, totalRev = 0, totalCon = 0;
+    Object.values(states).forEach(s => {
+      totalStock += (s.stock || 0);
+      totalRev += recognizedRevenueOf(s);
+      totalCon += s.stores.reduce((b,st)=>b+st.outstanding,0);
+    });
     $('h-stock').textContent = totalStock;
     $('h-revenue').textContent = '~'+totalRev.toFixed(0);
     $('h-consigned').textContent = totalCon;
@@ -2162,6 +2166,21 @@ function renderCurrent() {
   }
 }
 
+// Coalesce bursts of render requests into a single paint. Firestore delivers
+// each watched doc as its own snapshot, so a single remote save can fire the
+// watch callback many times in a few milliseconds; without this, each one
+// triggers a full renderCurrent(). rAF collapses all of them into one render
+// on the next frame. State is mutated synchronously before each call, so the
+// single deferred render always reflects the latest data.
+let _renderScheduled = false;
+function scheduleRender() {
+  if (_renderScheduled) return;
+  _renderScheduled = true;
+  const run = () => { _renderScheduled = false; renderCurrent(); };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  else setTimeout(run, 16);
+}
+
 // ── OPEN CALL — contributor pipeline tracker
 // Mirrors the open-call spreadsheet inside the app so the whole pipeline
 // (who's been emailed, who sent their credit name / files) lives in one
@@ -2436,12 +2455,17 @@ function saveScanMemory(mem) {
   localStorage.setItem(SCAN_MEMORY_KEY, JSON.stringify(mem));
 }
 
-// Build a cross-book set of all order IDs already applied across any session
+// Build a cross-book set of all order IDs already applied across any session.
+// Cached until explicitly invalidated — rebuilt at most once per render cycle.
+let _appliedIdsCache = null;
 function getAllAppliedIds() {
+  if (_appliedIdsCache) return _appliedIdsCache;
   const ids = new Set();
-  Object.values(states).forEach(s => (s.doneIds || []).forEach(id => ids.add(id)));
-  // Also include any order nums already in any book's history
-  Object.values(states).forEach(s => (s.hist || []).forEach(h => { if (h.num) ids.add(h.num); }));
+  Object.values(states).forEach(s => {
+    (s.doneIds || []).forEach(id => ids.add(id));
+    (s.hist || []).forEach(h => { if (h.num) ids.add(h.num); });
+  });
+  _appliedIdsCache = ids;
   return ids;
 }
 
@@ -2509,11 +2533,12 @@ function renderOrders() {
   $('apply-all-btn').disabled = !visible.some(o => !appliedIds.has(o.id) && !appliedIds.has(o.orderNum));
 }
 
-function applyOne(id) {
+function applyOne(id, { deferRender = false } = {}) {
   const s = getState(), book = getBook();
   const o = orders.find(x => x.id === id);
   if (!o) return;
-  const alreadyDone = getAllAppliedIds().has(id) || getAllAppliedIds().has(o.orderNum);
+  const _checkedIds = getAllAppliedIds();
+  const alreadyDone = _checkedIds.has(id) || _checkedIds.has(o.orderNum);
   if (alreadyDone) { showToast('Order already applied', 'warn'); return; }
   // Use the matched book if it differs from active
   const targetBook = o.bookId && BOOKS[o.bookId] ? o.bookId : activeBook;
@@ -2542,6 +2567,7 @@ function applyOne(id) {
   targetState.hist.unshift(entry);
   if (!targetState.doneIds) targetState.doneIds = [];
   targetState.doneIds.push(id);
+  _appliedIdsCache = null;
   // Save scan memory — record this order num as seen
   const mem = getScanMemory();
   if (!mem.appliedNums) mem.appliedNums = [];
@@ -2552,13 +2578,19 @@ function applyOne(id) {
   addLog('log-web', `✓ ${o.orderNum} (${targetBk.title}): -${o.qty} → ${targetState.stock} remaining`, 'ok');
   if (targetState.stock <= targetBk.threshold) addLog('log-web', `⚠ ${targetBk.title} below threshold!`, 'warn');
   saveState(targetBook);
-  renderOrders();
-  if (targetBook === activeBook) updateDash();
+  if (!deferRender) {
+    renderOrders();
+    if (targetBook === activeBook) updateDash();
+  }
 }
 
 function applyAll() {
   const applied = getAllAppliedIds();
-  orders.filter(o => o.hasBook && !applied.has(o.id) && !applied.has(o.orderNum)).forEach(o => applyOne(o.id));
+  const toApply = orders.filter(o => o.hasBook && !applied.has(o.id) && !applied.has(o.orderNum));
+  // Apply the whole batch without rendering, then paint once at the end —
+  // turns N full renderOrders()/updateDash() cycles into a single render.
+  toApply.forEach(o => applyOne(o.id, { deferRender: true }));
+  if (toApply.length) { renderOrders(); updateDash(); }
 }
 
 async function fetchOrders() {
@@ -7509,8 +7541,12 @@ function renderProfitTierList() {
       inp.type = type;
       inp.value = val;
       inp.style.width = '100%';
-      inp.addEventListener('input', () => onChange(inp.value));
-      inp.addEventListener('change', () => onChange(inp.value));
+      // Both events stay bound for cross-browser coverage, but the handler skips
+      // the redundant second fire (input then change) when the value is unchanged.
+      let last = inp.value;
+      const handle = () => { if (inp.value === last) return; last = inp.value; onChange(inp.value); };
+      inp.addEventListener('input', handle);
+      inp.addEventListener('change', handle);
       wrap.appendChild(lbl);
       wrap.appendChild(inp);
       return wrap;
@@ -7538,8 +7574,10 @@ function renderProfitTierList() {
       inp.value = t.revenueUpTo || '';
       inp.placeholder = 'e.g. production cost';
       inp.style.width = '100%';
-      inp.addEventListener('input', () => { t.revenueUpTo = parseFloat(inp.value) || 0; });
-      inp.addEventListener('change', () => { t.revenueUpTo = parseFloat(inp.value) || 0; });
+      let lastThresh = inp.value;
+      const handleThresh = () => { if (inp.value === lastThresh) return; lastThresh = inp.value; t.revenueUpTo = parseFloat(inp.value) || 0; };
+      inp.addEventListener('input', handleThresh);
+      inp.addEventListener('change', handleThresh);
       threshWrap.appendChild(inp);
     }
 
