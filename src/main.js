@@ -31,6 +31,7 @@ const updateSW = registerSW({ onNeedRefresh() {} });
 //  BOOK CATALOGUE (Dynamicly loaded from Firebase)
 // ═══════════════════════════════════════════════════════
 let BOOKS = {};
+let BOOK_LIST = []; // always mirrors Object.values(BOOKS) — updated at every BOOKS mutation
 let editingBookId = null;
 // IDs of DEFAULT_BOOKS that the user has explicitly removed. Persisted in the
 // catalog Firebase doc so the merge below doesn't resurrect them on next load.
@@ -70,11 +71,13 @@ async function loadCatalog() {
         if (!deletedDefaultIds.includes(id)) filteredDefaults[id] = DEFAULT_BOOKS[id];
       });
       BOOKS = { ...filteredDefaults, ...storedBooks };
+      BOOK_LIST = Object.values(BOOKS);
       if (Object.keys(BOOKS).length > Object.keys(storedBooks).length) {
         await saveCatalogWithDeletions();
       }
     } else {
       BOOKS = { ...DEFAULT_BOOKS };
+      BOOK_LIST = Object.values(BOOKS);
       deletedDefaultIds = [];
       posExtraBooks = {};
       await saveCatalogWithDeletions();
@@ -82,6 +85,7 @@ async function loadCatalog() {
   } catch (e) {
     console.error('Critical error loading catalog', e);
     BOOKS = { ...DEFAULT_BOOKS };
+    BOOK_LIST = Object.values(BOOKS);
     deletedDefaultIds = [];
     posExtraBooks = {};
   }
@@ -174,6 +178,7 @@ async function saveBookFromModal() {
     }
   }
   BOOKS[id] = book;
+  BOOK_LIST = Object.values(BOOKS);
   if (!states[id]) states[id] = defaultState(book);
   // Re-adding a previously-deleted default removes it from the tombstone list.
   if (DEFAULT_BOOKS[id]) {
@@ -200,7 +205,7 @@ async function saveBookFromModal() {
 function renderCatalogList() {
   const container = $('catalog-list');
   if (!container) return;
-  container.innerHTML = Object.values(BOOKS).map(b => `
+  container.innerHTML = BOOK_LIST.map(b => `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--ink);border-radius:var(--r2);border:1px solid rgba(255,255,255,0.05);">
        <div style="display:flex;align-items:center;gap:10px;">
          <div style="width:12px;height:12px;border-radius:50%;background:${b.accent}"></div>
@@ -219,6 +224,7 @@ function renderCatalogList() {
 async function deleteBook(id) {
   if (!(await confirmDialog(`Permanently remove "${BOOKS[id].title}" and all its inventory records?`, { danger: true, okLabel: 'Remove book' }))) return;
   delete BOOKS[id];
+  BOOK_LIST = Object.values(BOOKS);
   delete states[id];
   if (DEFAULT_BOOKS[id] && !deletedDefaultIds.includes(id)) {
     deletedDefaultIds.push(id);
@@ -307,7 +313,7 @@ function renderAllQRCodes() {
   if (!grid) return;
   grid.innerHTML = '';
 
-  Object.values(BOOKS).forEach(book => {
+  BOOK_LIST.forEach(book => {
     const url = book.stripeLink || book.paymentLink || '';
     const card = document.createElement('div');
     card.style.cssText = `background:var(--ink2);border:1px solid rgba(255,255,255,.08);border-radius:var(--r3);padding:1.5rem;display:flex;flex-direction:column;align-items:center;gap:1rem;`;
@@ -592,11 +598,11 @@ function defaultState(book) {
 
 function getState() { 
   if (!states[activeBook]) {
-    states[activeBook] = defaultState(BOOKS[activeBook] || Object.values(BOOKS)[0]);
+    states[activeBook] = defaultState(BOOKS[activeBook] || BOOK_LIST[0]);
   }
   return states[activeBook];
 }
-function getBook()  { return BOOKS[activeBook] || Object.values(BOOKS)[0]; }
+function getBook()  { return BOOKS[activeBook] || BOOK_LIST[0]; }
 
 // ── TOAST
 function showToast(msg, type='ok', dur=2800) {
@@ -1017,7 +1023,7 @@ function buildBookSwitcher() {
   menu.innerHTML = '';
 
   const items = [{ id: 'all', title: 'All books', accent: 'rgba(255,255,255,.25)' }]
-    .concat(Object.values(BOOKS).map(b => ({ id: b.id, title: b.title, accent: b.accent })));
+    .concat(BOOK_LIST.map(b => ({ id: b.id, title: b.title, accent: b.accent })));
 
   items.forEach((it, idx) => {
     const isActive = (activeBook || 'all') === it.id;
@@ -1272,7 +1278,7 @@ function updateHeader() {
 function updateAllOverview() {
   // Book strips
   const list = $('all-books-list');
-  list.innerHTML = Object.values(BOOKS).map(book => {
+  list.innerHTML = BOOK_LIST.map(book => {
     const s = states[book.id] || defaultState(book);
     const consigned = s.stores.reduce((a,st)=>a+st.outstanding,0);
     const owed = s.stores.reduce((a,st)=>a+st.amountOwed,0);
@@ -1308,7 +1314,7 @@ function updateAllOverview() {
   // the view can render visually (stacked bars + per-currency toggle) instead of
   // one dense, hard-to-scan table.
   const byCur = {}; // currency -> { books:[...], channelTotals:{chan:{txns,units,revenue,books:Set}} }
-  Object.values(BOOKS).forEach(book => {
+  BOOK_LIST.forEach(book => {
     const s = states[book.id] || defaultState(book);
     const entries = Object.entries(s.chStats||{});
     if (!entries.length) return;
@@ -1340,7 +1346,7 @@ function updateAllOverview() {
 
   // Combined consignment table
   const conRows = [];
-  Object.values(BOOKS).forEach(book => {
+  BOOK_LIST.forEach(book => {
     const s = states[book.id] || defaultState(book);
     s.stores.forEach(st => {
       conRows.push(`<tr><td style="font-weight:600;">${escapeHtml(book.title)}</td><td>${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.outstanding}</td><td>${st.outstanding>0?'<span class="pill amber">Active</span>':'<span class="pill gray">Settled</span>'}</td></tr>`);
@@ -1676,8 +1682,14 @@ function heldGrossOf(s) {
 // This keeps headline revenue consistent with the units-sold, tier, earnings, and
 // Financial Center figures (all of which already count completed sales), while the
 // collected-vs-held split shows the publisher's actual cash position.
+// Cleared at the start of every renderAll() so the cache is per-render-cycle
+// and can never return a value stale from a previous state mutation.
+let _revMemo = new Map();
 function recognizedRevenueOf(s) {
-  return (s.revenue || 0) + heldGrossOf(s);
+  if (_revMemo.has(s)) return _revMemo.get(s);
+  const v = (s.revenue || 0) + heldGrossOf(s);
+  _revMemo.set(s, v);
+  return v;
 }
 
 // ── DASHBOARD (per book)
@@ -2139,6 +2151,7 @@ window.recordArtistPayout = recordArtistPayout;
 window.deleteArtistPayout = deleteArtistPayout;
 
 function renderAll() {
+  _revMemo.clear();
   if (activeBook === 'all') { updateAllOverview(); updateHeader(); return; }
   updateDash(); renderStores(); renderLedger(); renderInvoices(); renderHist(); renderExpenses(); renderArtistReimburseBanner(); renderPendingExpenses();
 }
@@ -2634,7 +2647,7 @@ async function fetchOrders() {
   const inferBookIdFromText = (value) => {
     const txt = normalizeText(value);
     if (!txt) return null;
-    for (const b of Object.values(BOOKS)) {
+    for (const b of BOOK_LIST) {
       const tokens = [b.id, b.title, b.urlParam, b.author, ...(b.title || '').split(/\s+/)]
         .filter(Boolean)
         .map(v => normalizeText(v))
@@ -7188,6 +7201,7 @@ async function createSystemBackupNow() {
 async function applyBackupData(data) {
   // 1. Restore Catalog
   BOOKS = data.BOOKS;
+  BOOK_LIST = Object.values(BOOKS);
   // Rebuild the default-deletion tombstones from the restored catalog so
   // defaults missing from the backup don't reappear after the next load.
   deletedDefaultIds = Object.keys(DEFAULT_BOOKS).filter(id => !BOOKS[id]);
@@ -7376,7 +7390,7 @@ function exportAllToCSV() {
 function renderProductionCostFields(){
   const container=$('production-cost-fields');
   if(!container)return;
-  container.innerHTML=Object.values(BOOKS).map(book=>`
+  container.innerHTML=BOOK_LIST.map(book=>`
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:220px;">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
@@ -7394,7 +7408,7 @@ function renderProductionCostFields(){
 
 async function saveProductionCosts(){
   const stored={};
-  Object.values(BOOKS).forEach(book=>{
+  BOOK_LIST.forEach(book=>{
     const inp=$('pc-'+book.id);
     if(inp){
       const previousCost = book.productionCost || 0;
@@ -7428,19 +7442,19 @@ async function loadProductionCosts(){
   try{
     // Try Firebase first
     const stored = await window._fbLoadSettings('productionCosts');
-    if(stored){ Object.values(BOOKS).forEach(b=>{ if(stored[b.id]!=null) b.productionCost=stored[b.id]; }); return; }
+    if(stored){ BOOK_LIST.forEach(b=>{ if(stored[b.id]!=null) b.productionCost=stored[b.id]; }); return; }
   }catch(_){}
   // Fallback to localStorage
   try{
     const stored=JSON.parse(localStorage.getItem('lm-production-costs')||'{}');
-    Object.values(BOOKS).forEach(b=>{ if(stored[b.id]!=null) b.productionCost=stored[b.id]; });
+    BOOK_LIST.forEach(b=>{ if(stored[b.id]!=null) b.productionCost=stored[b.id]; });
   }catch(_){}
 }
 
 function renderPaymentLinkFields(){
   const container=$('payment-link-fields');
   if(!container)return;
-  container.innerHTML=Object.values(BOOKS).map(book=>`
+  container.innerHTML=BOOK_LIST.map(book=>`
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:200px;">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
@@ -7453,12 +7467,12 @@ function renderPaymentLinkFields(){
 }
 
 async function savePaymentLinks(){
-  Object.values(BOOKS).forEach(book=>{
+  BOOK_LIST.forEach(book=>{
     const inp=$('pl-'+book.id);
     if(inp) book.paymentLink=inp.value.trim();
   });
   const stored={};
-  Object.values(BOOKS).forEach(b=>stored[b.id]=b.paymentLink||'');
+  BOOK_LIST.forEach(b=>stored[b.id]=b.paymentLink||'');
   // Save to Firebase (syncs across all devices) + localStorage as fallback
   try{ await window._fbSaveSettings('paymentLinks', stored); }catch(_){}
   localStorage.setItem('lm-payment-links',JSON.stringify(stored));
@@ -7470,7 +7484,7 @@ async function loadPaymentLinks(){
   try{
     // Try Firebase first
     const stored = await window._fbLoadSettings('paymentLinks');
-    if(stored){ Object.values(BOOKS).forEach(b=>{ if(stored[b.id]) b.paymentLink=stored[b.id]; }); return; }
+    if(stored){ BOOK_LIST.forEach(b=>{ if(stored[b.id]) b.paymentLink=stored[b.id]; }); return; }
   }catch(_){}
 }
 
@@ -7490,7 +7504,7 @@ function renderProfitSettings() {
     selectorCont.innerHTML = `
       <select id="ps-book-selector">
         <option value="">Select a book...</option>
-        ${Object.values(BOOKS).map(b => `<option value="${escapeHtml(b.id)}" ${b.id===currentVal?'selected':''}>${escapeHtml(b.title)}</option>`).join('')}
+        ${BOOK_LIST.map(b => `<option value="${escapeHtml(b.id)}" ${b.id===currentVal?'selected':''}>${escapeHtml(b.title)}</option>`).join('')}
       </select>
     `;
     const sel = $('ps-book-selector');
@@ -7689,7 +7703,7 @@ function calculateFinancials(year) {
   const getAmt = (e) => e.baseAmount || e.amountCAD || e.amount || 0;
 
   // 1. Process Book-specific data
-  Object.values(BOOKS).forEach(book => {
+  BOOK_LIST.forEach(book => {
     const s = states[book.id] || defaultState(book);
     const unitCost = (book.productionCost || 0) / (book.maxPrint || 1);
     
@@ -7847,7 +7861,7 @@ function downloadTaxReport() {
   const start = new Date(year, 0, 1);
   const end = new Date(year, 11, 31, 23, 59, 59);
 
-  Object.values(BOOKS).forEach(book => {
+  BOOK_LIST.forEach(book => {
     const s = states[book.id] || defaultState(book);
     s.hist.filter(h => !h.voided && !h.gratuity).forEach(h => {
       const d = new Date(h.date);
@@ -10279,7 +10293,7 @@ window.downloadFullTaxSeasonExport = function() {
   csv += '--- REVENUE BY BOOK ---\n';
   csv += 'Book Title,Gross Revenue,Net Revenue (after COGS & Royalty),Total Units Sold\n';
   
-  Object.values(BOOKS).forEach(book => {
+  BOOK_LIST.forEach(book => {
       const s = states[book.id] || defaultState(book);
       
       // Filter history
@@ -10318,7 +10332,7 @@ window.downloadFullTaxSeasonExport = function() {
   csv += 'Date,Book/Entity,Category,Description,Amount (CAD),Receipt Link\n';
   
   // 2a. Book-level expenses & payouts
-  Object.values(BOOKS).forEach(book => {
+  BOOK_LIST.forEach(book => {
       const s = states[book.id] || defaultState(book);
       
       // Book Expenses
@@ -10806,7 +10820,7 @@ async function reconcileStripeAgainstSales() {
 
   // Recorded sales per year from the app's per-book history.
   const salesByYear = {};
-  for (const book of Object.values(BOOKS)) {
+  for (const book of BOOK_LIST) {
     const s = states[book.id] || (typeof defaultState === 'function' ? defaultState(book) : { hist: [] });
     for (const h of (s.hist || [])) {
       if (h.voided || h.gratuity || !h.date) continue;
@@ -11127,7 +11141,7 @@ async function reconcileSync() {
 }
 
 function _reconBookOptions(selectedId) {
-  return Object.values(BOOKS).map(b =>
+  return BOOK_LIST.map(b =>
     `<option value="${escapeHtml(b.id)}"${b.id === selectedId ? ' selected' : ''}>${escapeHtml(b.title)} · ${b.currency}${b.listPrice}</option>`
   ).join('');
 }
