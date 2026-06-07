@@ -7855,24 +7855,22 @@ function renderFinancials() {
 function downloadTaxReport() {
   const year = $('fin-year-selector').value;
   const fin = calculateFinancials(parseInt(year));
+  const yearStr = String(year);
   
   let csv = 'Date,Type,Book/Source,Category,Description,Receipt URL,Revenue,COGS,Expense,Artist Payout,Net\n';
-  
-  const start = new Date(year, 0, 1);
-  const end = new Date(year, 11, 31, 23, 59, 59);
 
   BOOK_LIST.forEach(book => {
     const s = states[book.id] || defaultState(book);
     s.hist.filter(h => !h.voided && !h.gratuity).forEach(h => {
-      const d = new Date(h.date);
-      if (d >= start && d <= end) {
+      // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
+      if (h.date && h.date.startsWith(yearStr)) {
         csv += `${h.date},Order,${book.title},Sale,"${h.chan} Order #${h.num}",,${(h.qty*h.price).toFixed(2)},0,0,0,${(h.qty*h.price).toFixed(2)}\n`;
       }
     });
 
     (s.expenses || []).forEach(e => {
-        const d = new Date(e.date);
-        if (d >= start && d <= end) {
+        // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
+        if (e.date && e.date.startsWith(yearStr)) {
           csv += `${e.date},Expense,${book.title},${e.cat},"${e.desc}","${e.receipt || ''}",0,0,${e.amount.toFixed(2)},0,-${e.amount.toFixed(2)}\n`;
         }
     });
@@ -8269,7 +8267,12 @@ function renderTaxCenter() {
       `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;">No deductible expenses recorded</td></tr>`;
   }
 
-  allLedger.sort((a,b) => new Date(b.date) - new Date(a.date));
+  // ⚡ Bolt Optimization: Use string comparison instead of parsing to Date for sorting "YYYY-MM-DD" formatted dates
+  allLedger.sort((a, b) => {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    return dateA > dateB ? -1 : dateA < dateB ? 1 : 0;
+  });
 
   // Clamp page to valid range
   const totalPages = Math.max(1, Math.ceil(allLedger.length / TC_LEDGER_PAGE_SIZE));
@@ -8446,7 +8449,12 @@ function showTripDetail(tripName) {
   const { items, total, count } = detail.byName[tripName];
   _tcOpenTripName = tripName;
 
-  const sorted = items.slice().sort((a,b) => new Date(a.date) - new Date(b.date));
+  // ⚡ Bolt Optimization: Use string comparison instead of parsing to Date for sorting "YYYY-MM-DD" formatted dates
+  const sorted = items.slice().sort((a, b) => {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    return dateA > dateB ? 1 : dateA < dateB ? -1 : 0;
+  });
   const rows = sorted.map(item => {
     let r = item.receipt || '';
     let refCell = '';
@@ -8499,7 +8507,12 @@ function showCategoryDetail(catName) {
   const { baseCurrency } = detail;
   const { items, total, count } = detail.byName[catName];
 
-  const sorted = items.slice().sort((a,b) => new Date(b.date) - new Date(a.date));
+  // ⚡ Bolt Optimization: Use string comparison instead of parsing to Date for sorting "YYYY-MM-DD" formatted dates
+  const sorted = items.slice().sort((a, b) => {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    return dateA > dateB ? -1 : dateA < dateB ? 1 : 0;
+  });
 
   const rows = sorted.map(item => {
     let refCell = '';
