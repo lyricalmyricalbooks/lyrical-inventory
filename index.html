@@ -797,6 +797,26 @@
   </div>
 </div></div>
 
+<!-- WEBCAM RECEIPT CAPTURE -->
+<div class="overlay" id="m-receipt-camera-modal" style="display:none;"><div class="modal" style="max-width:680px;">
+  <div class="modal-title">📷 Capture Receipt</div>
+  <div style="background:rgba(180,140,20,.08);border:1px solid rgba(180,140,20,.2);border-radius:var(--r2);padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.5;">
+    Hold the receipt flat and well-lit, then snap. The photo will be attached to this expense and saved to your local receipts folder when you log it.
+  </div>
+  <div id="receipt-cam-stage" style="position:relative;background:#000;border-radius:var(--r2);overflow:hidden;min-height:280px;display:flex;align-items:center;justify-content:center;">
+    <video id="receipt-cam-video" autoplay playsinline muted style="width:100%;max-height:60vh;display:block;"></video>
+    <canvas id="receipt-cam-canvas" style="display:none;width:100%;max-height:60vh;"></canvas>
+    <div id="receipt-cam-status" style="position:absolute;color:#fff;font-size:12px;font-family:'DM Mono',monospace;text-align:center;padding:14px;display:none;"></div>
+  </div>
+  <div id="receipt-cam-preview-note" style="font-size:11px;color:var(--text3);margin-top:8px;display:none;">Preview — click Retake to try again, or Use Photo to attach.</div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeReceiptCameraModal()">Cancel</button>
+    <button class="btn gold outline" onclick="retakeReceiptPhoto()" id="receipt-cam-retake-btn" style="display:none;">↻ Retake</button>
+    <button class="btn gold" onclick="captureReceiptPhoto()" id="receipt-cam-capture-btn">📷 Snap</button>
+    <button class="btn gold" onclick="useReceiptPhoto()" id="receipt-cam-use-btn" style="display:none;">✓ Use Photo</button>
+  </div>
+</div></div>
+
 <!-- TAX CENTER (publisher only) -->
 <div class="tab-panel" id="tab-taxcenter" style="display:none;">
   <div class="book-context" style="margin-bottom: 2rem;">
@@ -866,10 +886,12 @@
       </div>
       <div class="form-group"><label>Date</label><input type="date" id="tc-exp-date"></div>
       <div class="form-group" id="tc-exp-file-group"><label>Receipt</label>
-        <div style="display:flex;gap:4px;">
-          <input type="file" id="tc-exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px;flex:1;">
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          <input type="file" id="tc-exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px;flex:1;min-width:140px;">
+          <button class="btn gold outline" style="padding: 0 8px; font-size:12px; margin-top: 6px;" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
           <button class="btn gold" style="padding: 0 8px; font-size:12px; margin-top: 6px;" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn">✨ AI Scan</button>
         </div>
+        <div id="tc-exp-file-preview" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
       </div>
     </div>
     <div class="form-group" style="margin-top:8px;"><label>Trip / Project (optional — groups expenses for a single business trip)</label>
