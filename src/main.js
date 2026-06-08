@@ -6874,6 +6874,122 @@ async function setupReceiptFolder() {
   }
 }
 
+// ── WEBCAM RECEIPT CAPTURE
+let _receiptCamStream = null;
+let _receiptCamBlob = null;
+
+function _setReceiptCamStatus(msg) {
+  const s = $('receipt-cam-status');
+  if (!s) return;
+  if (msg) { s.style.display = 'flex'; s.textContent = msg; s.style.alignItems = 'center'; s.style.justifyContent = 'center'; s.style.inset = '0'; s.style.background = 'rgba(0,0,0,.55)'; }
+  else { s.style.display = 'none'; s.textContent = ''; }
+}
+
+async function openReceiptCameraModal() {
+  const modal = $('m-receipt-camera-modal');
+  const video = $('receipt-cam-video');
+  const canvas = $('receipt-cam-canvas');
+  if (!modal || !video) return;
+
+  _receiptCamBlob = null;
+  video.style.display = 'block';
+  canvas.style.display = 'none';
+  $('receipt-cam-capture-btn').style.display = '';
+  $('receipt-cam-retake-btn').style.display = 'none';
+  $('receipt-cam-use-btn').style.display = 'none';
+  $('receipt-cam-preview-note').style.display = 'none';
+  modal.style.display = 'flex';
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    _setReceiptCamStatus('Webcam access not supported in this browser.');
+    return;
+  }
+  _setReceiptCamStatus('Requesting camera…');
+  try {
+    _receiptCamStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    video.srcObject = _receiptCamStream;
+    _setReceiptCamStatus('');
+  } catch (e) {
+    console.error('Camera error', e);
+    const msg = e?.name === 'NotAllowedError'
+      ? 'Camera permission denied. Allow access in your browser settings.'
+      : e?.name === 'NotFoundError' ? 'No camera detected on this device.'
+      : 'Could not start camera.';
+    _setReceiptCamStatus(msg);
+  }
+}
+
+function _stopReceiptCamStream() {
+  if (_receiptCamStream) {
+    _receiptCamStream.getTracks().forEach(t => t.stop());
+    _receiptCamStream = null;
+  }
+  const video = $('receipt-cam-video');
+  if (video) video.srcObject = null;
+}
+
+function closeReceiptCameraModal() {
+  _stopReceiptCamStream();
+  _receiptCamBlob = null;
+  const modal = $('m-receipt-camera-modal');
+  if (modal) modal.style.display = 'none';
+  _setReceiptCamStatus('');
+}
+
+function captureReceiptPhoto() {
+  const video = $('receipt-cam-video');
+  const canvas = $('receipt-cam-canvas');
+  if (!video || !canvas || !video.videoWidth) {
+    showToast('⚠ Camera not ready yet', 'warn');
+    return;
+  }
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob((blob) => {
+    if (!blob) { showToast('⚠ Capture failed', 'err'); return; }
+    _receiptCamBlob = blob;
+    video.style.display = 'none';
+    canvas.style.display = 'block';
+    $('receipt-cam-capture-btn').style.display = 'none';
+    $('receipt-cam-retake-btn').style.display = '';
+    $('receipt-cam-use-btn').style.display = '';
+    $('receipt-cam-preview-note').style.display = 'block';
+  }, 'image/jpeg', 0.92);
+}
+
+function retakeReceiptPhoto() {
+  _receiptCamBlob = null;
+  const video = $('receipt-cam-video');
+  const canvas = $('receipt-cam-canvas');
+  if (video) video.style.display = 'block';
+  if (canvas) canvas.style.display = 'none';
+  $('receipt-cam-capture-btn').style.display = '';
+  $('receipt-cam-retake-btn').style.display = 'none';
+  $('receipt-cam-use-btn').style.display = 'none';
+  $('receipt-cam-preview-note').style.display = 'none';
+}
+
+function useReceiptPhoto() {
+  if (!_receiptCamBlob) { showToast('⚠ No photo captured', 'warn'); return; }
+  const fileInput = $('tc-exp-file');
+  if (!fileInput) { showToast('⚠ Receipt field not available', 'err'); return; }
+  const stamp = new Date().toISOString().replace(/[:T]/g, '-').split('.')[0];
+  const file = new File([_receiptCamBlob], `webcam-receipt-${stamp}.jpg`, { type: 'image/jpeg' });
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  fileInput.files = dt.files;
+  fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  const preview = $('tc-exp-file-preview');
+  if (preview) preview.textContent = `📷 Captured: ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+  showToast('✓ Photo attached — submit to save', 'ok');
+  closeReceiptCameraModal();
+}
+
 async function authorizeReceiptFolder() {
   const handle = await loadReceiptFolderHandle();
   if (!handle) return;
@@ -8895,6 +9011,8 @@ async function submitTaxExpense() {
   $('tc-exp-desc').value='';$('tc-exp-amount').value='';$('tc-exp-date').value=today();
   if($('tc-exp-trip')) $('tc-exp-trip').value='';
   if(fileInput) fileInput.value = '';
+  const filePreview = $('tc-exp-file-preview');
+  if (filePreview) filePreview.textContent = '';
 }
 
 function addRecurring() {
@@ -11539,6 +11657,7 @@ Object.assign(window, {
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, viewLocalReceipt, setTcLedgerPage,
+  openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
   showCategoryDetail, changeExpenseCategory,
