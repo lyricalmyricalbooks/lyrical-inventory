@@ -2425,7 +2425,7 @@ function renderHist() {
     ? combined.map((h,i)=>{
         if (h.pendingAuth) {
            const actionCell = window.IS_PUBLISHER
-             ? `<button class="edit-btn" onclick="approveSubmission('sales', '${h._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;" aria-label="Approve">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('sales', '${h._subKey}')" style="color:var(--red);" aria-label="Reject">✕</button>`
+             ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
              : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
            return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${escapeHtml(h.num)}</td><td>${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price,cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty*h.price,cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes)||'—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill amber" style="font-size:10px;">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
         }
@@ -3944,7 +3944,7 @@ function renderExpenses(){
   body.innerHTML=combined.map(e=>{
     if (e.pendingAuth) {
       const actionCell = window.IS_PUBLISHER
-        ? `<button class="edit-btn" onclick="approveSubmission('expenses', '${e._subKey}')" style="color:var(--green);font-weight:bold;margin-right:8px;" aria-label="Approve">✓ Approve</button><button class="edit-btn" onclick="rejectSubmission('expenses', '${e._subKey}')" style="color:var(--red);" aria-label="Reject">✕</button>`
+        ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', '${e._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', '${e._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
         : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
       return `<tr style="opacity:0.8;background:#fffcede3;">
         <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
