@@ -4160,96 +4160,98 @@ function phint(){
      h.textContent=q>1?`Total ${fmt(t,book.currency)}`:'';
   }
 }
-async function submitManual(){
-  const book=getBook(),qty=parseInt($('m-qty').value)||1;
-  const rawPrice=parseFloat($('m-price').value)||book.listPrice;
-  const num=$('m-num').value.trim()||'MAN-'+Date.now(),chan=$('m-chan').value,notes=$('m-notes').value.trim();
-  const paymentType=$('m-payment-type').value;
-  if(!paymentType){
-    $('m-payment-type').style.borderColor='var(--red)';
-    $('m-payment-type').focus();
-    showToast('⚠ Please select a payment type','warn');
-    return;
-  }
-  $('m-payment-type').style.borderColor='';
-  
-  let price = rawPrice;
-  let fxNote = '';
-  let payment = null;
-  
-  const cur = $('m-price-cur').value;
-  const native = getBookCurrencyCode(book);
-  const isForeignCurrency = cur !== 'BOOK' && cur !== native;
-
-  if (isForeignCurrency) {
-    if (!_manualFxRate) {
-      showToast('⚠ Enter an exchange rate to convert this currency', 'warn');
-      if ($('m-manual-rate')) $('m-manual-rate').focus();
+async function submitManual(ev){
+  return withButtonLoading(ev, 'Saving…', async () => {
+    const book=getBook(),qty=parseInt($('m-qty').value)||1;
+    const rawPrice=parseFloat($('m-price').value)||book.listPrice;
+    const num=$('m-num').value.trim()||'MAN-'+Date.now(),chan=$('m-chan').value,notes=$('m-notes').value.trim();
+    const paymentType=$('m-payment-type').value;
+    if(!paymentType){
+      $('m-payment-type').style.borderColor='var(--red)';
+      $('m-payment-type').focus();
+      showToast('⚠ Please select a payment type','warn');
       return;
     }
-    price = rawPrice * _manualFxRate;
-    fxNote = `Paid ${cur} ${rawPrice.toFixed(2)} @ ${_manualFxRate.toFixed(4)}`;
-    payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled: true, fxCur: cur, fxAmt: rawPrice, fxRate: _manualFxRate });
-  } else {
-    payment = buildPaymentMeta({ book, qty, unitPrice: price });
-  }
+    $('m-payment-type').style.borderColor='';
 
-  const fullNotes=[notes,fxNote,paymentType].filter(Boolean).join(' · ');
+    let price = rawPrice;
+    let fxNote = '';
+    let payment = null;
 
-  // Create standard entry payload. `directToArtist` is the structured flag used
-  // for detection (isDirectToArtistSale); paymentType is kept for display/back-compat.
-  const directToArtist = paymentType === PAYMENT_TYPE_DIRECT_TO_ARTIST;
-  const entryPayload = { num, chan, qty, price, notes: fullNotes, payment, paymentType, directToArtist, date: today(), id: Date.now() };
+    const cur = $('m-price-cur').value;
+    const native = getBookCurrencyCode(book);
+    const isForeignCurrency = cur !== 'BOOK' && cur !== native;
 
-  if (isAuthor()) {
-    // Author queue route
-    try {
-      await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
-      addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — (Submitted)`,'warn');
-      const isArtistPayment = directToArtist;
-      const notifyKind = isArtistPayment ? 'Artist Payment Approval' : 'Sale';
-      const baseSummary = `${num}: -${qty} @ ${fmt(price,book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
-      const notifySummary = isArtistPayment
-        ? `ACTION REQUIRED — artist payment of ${fmt(qty*price,book.currency)} awaiting your approval. ${baseSummary}`
-        : baseSummary;
-      notifyPublisherSubmission(notifyKind, entryPayload, notifySummary);
-
-      if (isArtistPayment) {
-        showToast('⏳ Order submitted — you will owe a transfer to the publisher upon approval', 'warn');
-      } else {
-        showToast('✓ Order submitted for approval');
+    if (isForeignCurrency) {
+      if (!_manualFxRate) {
+        showToast('⚠ Enter an exchange rate to convert this currency', 'warn');
+        if ($('m-manual-rate')) $('m-manual-rate').focus();
+        return;
       }
-      
-      // Update UI so the "Amount Owed" banner updates immediately
-      updateDash();
-
-    } catch (e) {
-      console.error("Submission error:", e);
-      if (e.message && e.message.includes('PERMISSION_DENIED')) {
-        showToast('⚠ Permission denied by Firestore Rules', 'err');
-      } else {
-        showToast('⚠ Failed to submit order', 'err');
-      }
-    }
-  } else {
-    // Publisher direct route
-    if(directToArtist){
-      recordOrderPendingTransfer(num,chan,qty,price,fullNotes,payment);
-      addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — ⏳ awaiting artist transfer`,'warn');
-      showToast('⏳ Order logged — awaiting artist transfer to publisher');
+      price = rawPrice * _manualFxRate;
+      fxNote = `Paid ${cur} ${rawPrice.toFixed(2)} @ ${_manualFxRate.toFixed(4)}`;
+      payment = buildPaymentMeta({ book, qty, unitPrice: price, fxEnabled: true, fxCur: cur, fxAmt: rawPrice, fxRate: _manualFxRate });
     } else {
-      recordOrder(num,chan,qty,price,fullNotes,payment);
-      addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)}${fxNote?' ('+fxNote+')':''} → ${getState().stock} remaining`,'ok');
-      if(getState().stock<=book.threshold)addLog('log-manual','⚠ Below threshold!','warn');
-      showToast('✓ Order saved · syncing to Sheets…');
+      payment = buildPaymentMeta({ book, qty, unitPrice: price });
     }
-  }
 
-  $('m-num').value='';$('m-qty').value='1';
-  $('m-price').value=book.listPrice.toFixed(2);
-  $('m-notes').value='';$('m-payment-type').value='';$('m-hint').textContent='';
-  $('m-price-cur').value='BOOK';
-  onManualCurrencyChange(); // reset fx logic
+    const fullNotes=[notes,fxNote,paymentType].filter(Boolean).join(' · ');
+
+    // Create standard entry payload. `directToArtist` is the structured flag used
+    // for detection (isDirectToArtistSale); paymentType is kept for display/back-compat.
+    const directToArtist = paymentType === PAYMENT_TYPE_DIRECT_TO_ARTIST;
+    const entryPayload = { num, chan, qty, price, notes: fullNotes, payment, paymentType, directToArtist, date: today(), id: Date.now() };
+
+    if (isAuthor()) {
+      // Author queue route
+      try {
+        await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
+        addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — (Submitted)`,'warn');
+        const isArtistPayment = directToArtist;
+        const notifyKind = isArtistPayment ? 'Artist Payment Approval' : 'Sale';
+        const baseSummary = `${num}: -${qty} @ ${fmt(price,book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
+        const notifySummary = isArtistPayment
+          ? `ACTION REQUIRED — artist payment of ${fmt(qty*price,book.currency)} awaiting your approval. ${baseSummary}`
+          : baseSummary;
+        notifyPublisherSubmission(notifyKind, entryPayload, notifySummary);
+
+        if (isArtistPayment) {
+          showToast('⏳ Order submitted — you will owe a transfer to the publisher upon approval', 'warn');
+        } else {
+          showToast('✓ Order submitted for approval');
+        }
+
+        // Update UI so the "Amount Owed" banner updates immediately
+        updateDash();
+
+      } catch (e) {
+        console.error("Submission error:", e);
+        if (e.message && e.message.includes('PERMISSION_DENIED')) {
+          showToast('⚠ Permission denied by Firestore Rules', 'err');
+        } else {
+          showToast('⚠ Failed to submit order', 'err');
+        }
+      }
+    } else {
+      // Publisher direct route
+      if(directToArtist){
+        recordOrderPendingTransfer(num,chan,qty,price,fullNotes,payment);
+        addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — ⏳ awaiting artist transfer`,'warn');
+        showToast('⏳ Order logged — awaiting artist transfer to publisher');
+      } else {
+        recordOrder(num,chan,qty,price,fullNotes,payment);
+        addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)}${fxNote?' ('+fxNote+')':''} → ${getState().stock} remaining`,'ok');
+        if(getState().stock<=book.threshold)addLog('log-manual','⚠ Below threshold!','warn');
+        showToast('✓ Order saved · syncing to Sheets…');
+      }
+    }
+
+    $('m-num').value='';$('m-qty').value='1';
+    $('m-price').value=book.listPrice.toFixed(2);
+    $('m-notes').value='';$('m-payment-type').value='';$('m-hint').textContent='';
+    $('m-price-cur').value='BOOK';
+    onManualCurrencyChange(); // reset fx logic
+  });
 }
 
 window.approveSubmission = async function(type, subKey) {
@@ -4606,7 +4608,7 @@ window.toggleGratuityExpense = function() {
     const book = getBook();
     const unitCost = (book.productionCost || 0) / (book.maxPrint || 1);
     $('g-exp-val').value = unitCost.toFixed(2);
-    updateGratuityExpenseHint();
+    window.updateGratuityExpenseHint();
   } else {
     fields.style.display = 'none';
   }
@@ -4619,58 +4621,60 @@ window.updateGratuityExpenseHint = function() {
   $('g-exp-total').textContent = fmt(qty * val, book.currency);
 }
 
-function submitGratuity(){
-  const book=getBook(),qty=parseInt($('g-qty').value)||1,ref=$('g-ref').value.trim(),notes=$('g-notes').value.trim(),date=$('g-date').value||today();
-  const expenseIt = $('g-expense-cb') && $('g-expense-cb').checked;
-  let expVal = 0;
-  if (expenseIt) expVal = parseFloat($('g-exp-val').value) || 0;
+async function submitGratuity(ev){
+  return withButtonLoading(ev, 'Saving…', async () => {
+    const book=getBook(),qty=parseInt($('g-qty').value)||1,ref=$('g-ref').value.trim(),notes=$('g-notes').value.trim(),date=$('g-date').value||today();
+    const expenseIt = $('g-expense-cb') && $('g-expense-cb').checked;
+    let expVal = 0;
+    if (expenseIt) expVal = parseFloat($('g-exp-val').value) || 0;
 
-  const s=getState();
-  if(qty>s.stock){showToast('⚠ Not enough stock on hand','warn');return;}
-  const num='GRAT-'+Date.now().toString().slice(-6);
-  // Reduce stock only — no revenue, no sold count
-  s.stock=Math.max(0,s.stock-qty);
-  if(!s.chStats['Gratuity'])s.chStats['Gratuity']={txns:0,units:0,revenue:0};
-  s.chStats['Gratuity'].txns++;s.chStats['Gratuity'].units+=qty;
-  const sheetsId = makeEventId();
-  s.hist.unshift({num,chan:'Gratuity',qty,price:0,after:s.stock,notes:(ref?(ref+(notes?' · '+notes:'')):notes)||'',date,gratuity:true,sheetsId});
-  
-  if(expenseIt && expVal > 0) {
-    if(!s.expenses) s.expenses = [];
-    const totalExp = qty * expVal;
+    const s=getState();
+    if(qty>s.stock){showToast('⚠ Not enough stock on hand','warn');return;}
+    const num='GRAT-'+Date.now().toString().slice(-6);
+    // Reduce stock only — no revenue, no sold count
+    s.stock=Math.max(0,s.stock-qty);
+    if(!s.chStats['Gratuity'])s.chStats['Gratuity']={txns:0,units:0,revenue:0};
+    s.chStats['Gratuity'].txns++;s.chStats['Gratuity'].units+=qty;
+    const sheetsId = makeEventId();
+    s.hist.unshift({num,chan:'Gratuity',qty,price:0,after:s.stock,notes:(ref?(ref+(notes?' · '+notes:'')):notes)||'',date,gratuity:true,sheetsId});
     
-    const currency = getBookCurrencyCode(book);
-    const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
-    const baseAmount = cadRate ? (totalExp * cadRate) : totalExp;
+    if(expenseIt && expVal > 0) {
+      if(!s.expenses) s.expenses = [];
+      const totalExp = qty * expVal;
 
-    s.expenses.unshift({
-      id: Date.now(),
-      desc: `Gratuity: ${ref || notes || 'Gifted copy'}`,
-      cat: 'Marketing',
-      amount: totalExp,
-      currency: currency,
-      origAmount: totalExp,
-      origCurrency: currency,
-      baseAmount: baseAmount,
-      date: date,
-      ref: num,
-      received: false,
-      gratuity: true
-    });
-  }
+      const currency = getBookCurrencyCode(book);
+      const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
+      const baseAmount = cadRate ? (totalExp * cadRate) : totalExp;
 
-  renderHist();
-  if(expenseIt) renderExpenses();
-  updateDash();saveState(activeBook);
-  syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes,sheetsId,currency:getBookCurrencyCode(book)});
-  addLog('log-gratuity',`${num}: ${qty} gifted → ${s.stock} remaining`,'ok');
-  if(s.stock<=book.threshold)addLog('log-gratuity','⚠ Below threshold!','warn');
-  $('g-ref').value='';$('g-qty').value='1';$('g-notes').value='';$('g-date').value=today();
-  if($('g-expense-cb')) {
-    $('g-expense-cb').checked=false;
-    toggleGratuityExpense();
-  }
-  showToast('✓ Gratuity logged' + (expenseIt && expVal > 0 ? ' and expensed' : ''));
+      s.expenses.unshift({
+        id: Date.now(),
+        desc: `Gratuity: ${ref || notes || 'Gifted copy'}`,
+        cat: 'Marketing',
+        amount: totalExp,
+        currency: currency,
+        origAmount: totalExp,
+        origCurrency: currency,
+        baseAmount: baseAmount,
+        date: date,
+        ref: num,
+        received: false,
+        gratuity: true
+      });
+    }
+
+    renderHist();
+    if(expenseIt) renderExpenses();
+    updateDash();saveState(activeBook);
+    syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes,sheetsId,currency:getBookCurrencyCode(book)});
+    addLog('log-gratuity',`${num}: ${qty} gifted → ${s.stock} remaining`,'ok');
+    if(s.stock<=book.threshold)addLog('log-gratuity','⚠ Below threshold!','warn');
+    $('g-ref').value='';$('g-qty').value='1';$('g-notes').value='';$('g-date').value=today();
+    if($('g-expense-cb')) {
+      $('g-expense-cb').checked=false;
+      window.toggleGratuityExpense();
+    }
+    showToast('✓ Gratuity logged' + (expenseIt && expVal > 0 ? ' and expensed' : ''));
+  });
 }
 
 window.backfillGratuityExpenses = function() {
