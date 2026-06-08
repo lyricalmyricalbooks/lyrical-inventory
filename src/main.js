@@ -6877,6 +6877,10 @@ async function setupReceiptFolder() {
 // ── WEBCAM RECEIPT CAPTURE
 let _receiptCamStream = null;
 let _receiptCamBlob = null;
+// Filled when a webcam capture has already been written to the local
+// receipts folder, so submitTaxExpense() reuses the path instead of
+// re-saving the same file (which would create a duplicate).
+let _pendingWebcamReceipt = null;
 
 function _setReceiptCamStatus(msg) {
   const s = $('receipt-cam-status');
@@ -6974,18 +6978,68 @@ function retakeReceiptPhoto() {
   $('receipt-cam-preview-note').style.display = 'none';
 }
 
-function useReceiptPhoto() {
+async function useReceiptPhoto() {
   if (!_receiptCamBlob) { showToast('⚠ No photo captured', 'warn'); return; }
   const fileInput = $('tc-exp-file');
   if (!fileInput) { showToast('⚠ Receipt field not available', 'err'); return; }
+  const preview = $('tc-exp-file-preview');
   const stamp = new Date().toISOString().replace(/[:T]/g, '-').split('.')[0];
   const file = new File([_receiptCamBlob], `webcam-receipt-${stamp}.jpg`, { type: 'image/jpeg' });
+
+  // Always attach to the file input so the standard submit flow has a
+  // fallback path even if the immediate local save can't run.
   const dt = new DataTransfer();
   dt.items.add(file);
   fileInput.files = dt.files;
   fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-  const preview = $('tc-exp-file-preview');
-  if (preview) preview.textContent = `📷 Captured: ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+
+  // If no local receipt folder is connected yet, prompt the user to pick
+  // one right now — they explicitly asked for the photo to be saved to
+  // local storage, so an unconfigured destination is worth surfacing.
+  let folderHandle = await loadReceiptFolderHandle();
+  if (!folderHandle) {
+    if (!('showDirectoryPicker' in window)) {
+      if (preview) preview.textContent = `📷 Captured: ${file.name} (${(file.size / 1024).toFixed(0)} KB) — local file saving not supported in this browser; will be embedded in the cloud record on submit.`;
+      showToast('⚠ Local folder saving not supported in this browser', 'warn', 4000);
+      closeReceiptCameraModal();
+      return;
+    }
+    const proceed = await confirmDialog('No local receipt folder is connected yet. Pick one now so the photo can be saved as a file?', { okLabel: 'Choose folder…', cancelLabel: 'Skip for now', title: 'Save photo locally' });
+    if (proceed) {
+      await setupReceiptFolder();
+      folderHandle = await loadReceiptFolderHandle();
+    }
+  }
+
+  if (folderHandle) {
+    const btn = $('receipt-cam-use-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '💾 Saving…'; }
+    try {
+      const localUrl = await saveReceiptToLocalFile(file, 'General');
+      if (localUrl) {
+        _pendingWebcamReceipt = { name: file.name, size: file.size, url: localUrl };
+        if (preview) {
+          const relPath = localUrl.replace('local://', '');
+          preview.innerHTML = `📷 Saved: <strong>${escapeHtml(file.name)}</strong> (${(file.size / 1024).toFixed(0)} KB) — <a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(relPath)}')" style="color:var(--gold);text-decoration:underline;">View receipt</a>`;
+        }
+        showToast('✓ Photo saved to local receipt folder', 'ok');
+        closeReceiptCameraModal();
+        return;
+      }
+      // saveReceiptToLocalFile already toasts on permission/write failure
+      if (preview) preview.textContent = `📷 Captured: ${file.name} (${(file.size / 1024).toFixed(0)} KB) — local save failed; will retry on submit.`;
+    } catch (e) {
+      console.error('Immediate webcam receipt save failed', e);
+      showToast('⚠ Could not save photo locally — will retry on submit', 'err', 4000);
+      if (preview) preview.textContent = `📷 Captured: ${file.name} (${(file.size / 1024).toFixed(0)} KB) — local save failed; will retry on submit.`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✓ Use Photo'; }
+    }
+    closeReceiptCameraModal();
+    return;
+  }
+
+  if (preview) preview.textContent = `📷 Captured: ${file.name} (${(file.size / 1024).toFixed(0)} KB) — no folder connected; submit to save in cloud.`;
   showToast('✓ Photo attached — submit to save', 'ok');
   closeReceiptCameraModal();
 }
@@ -8981,20 +9035,27 @@ async function submitTaxExpense() {
   let receiptUrl = '';
   if(fileInput && fileInput.files.length > 0) {
     const file = fileInput.files[0];
-    const submitBtn = $('tc-submit-exp-btn');
-    const oldText = submitBtn.textContent;
-    submitBtn.textContent = 'Saving locally...'; submitBtn.disabled = true;
-    try {
-      // For Tax Centre, use a "General" subfolder or the project name if applicable
-      const localUrl = await saveReceiptToLocalFile(file, 'General');
-      if (localUrl) receiptUrl = localUrl;
-    } catch(e) {
-      console.error(e);
-      showToast('⚠ Error saving receipt', 'err');
+    // Webcam captures are written to the local folder immediately on
+    // "Use Photo", so reuse that path instead of writing the same bytes
+    // a second time (which would create a duplicate file).
+    if (_pendingWebcamReceipt && _pendingWebcamReceipt.name === file.name && _pendingWebcamReceipt.size === file.size) {
+      receiptUrl = _pendingWebcamReceipt.url;
+    } else {
+      const submitBtn = $('tc-submit-exp-btn');
+      const oldText = submitBtn.textContent;
+      submitBtn.textContent = 'Saving locally...'; submitBtn.disabled = true;
+      try {
+        // For Tax Centre, use a "General" subfolder or the project name if applicable
+        const localUrl = await saveReceiptToLocalFile(file, 'General');
+        if (localUrl) receiptUrl = localUrl;
+      } catch(e) {
+        console.error(e);
+        showToast('⚠ Error saving receipt', 'err');
+        submitBtn.textContent = oldText; submitBtn.disabled = false;
+        return;
+      }
       submitBtn.textContent = oldText; submitBtn.disabled = false;
-      return;
     }
-    submitBtn.textContent = oldText; submitBtn.disabled = false;
   }
 
   // Multi-currency calculation
@@ -9013,6 +9074,7 @@ async function submitTaxExpense() {
   if(fileInput) fileInput.value = '';
   const filePreview = $('tc-exp-file-preview');
   if (filePreview) filePreview.textContent = '';
+  _pendingWebcamReceipt = null;
 }
 
 function addRecurring() {
