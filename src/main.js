@@ -2006,7 +2006,8 @@ function getArtistHeldHtml(stats, cur) {
 
 function getPayoutHistoryHtml(stats, bookId, cur) {
   return (stats.payouts || []).length > 0
-    ? stats.payouts.slice().sort((a,b) => (b.date || '').localeCompare(a.date || '')).map(p => `
+    // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
+    ? stats.payouts.slice().sort((a,b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : 0); }).map(p => `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; font-size:12px;
           border-bottom:1px solid rgba(0,0,0,.05);">
           <span style="display:flex; flex-direction:column;">
@@ -5001,7 +5002,8 @@ function renderInvoices(){
   section.style.display = '';
 
   const s = getState(), book = getBook(), cur = book.currency, list = $('invoices-list'), summary = $('inv-summary');
-  const invs = (s.invoices || []).slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.createdAt||0) - (a.createdAt||0));
+  // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
+  const invs = (s.invoices || []).slice().sort((a,b)=> { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : ((b.createdAt||0) - (a.createdAt||0))); });
 
   // Mark overdue automatically (visual only, not persisted)
   const todayStr = today();
@@ -10768,7 +10770,8 @@ async function insertStripeFeesIntoLedger() {
   const newCount = planned.filter(p => !byRef.has(p.ref)).length;
   const updateCount = planned.length - newCount;
   const totalCad = planned.reduce((s, p) => s + (p.baseAmount || 0), 0);
-  const lines = planned.sort((a, b) => a.ref.localeCompare(b.ref))
+  // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ref strings
+  const lines = planned.sort((a, b) => a.ref > b.ref ? 1 : (a.ref < b.ref ? -1 : 0))
     .map(p => `  • ${p.year} ${p.cat === 'Software & Subscriptions' ? 'billing' : 'sales fees'}: ${p.amount.toFixed(2)} ${p.currency} → ${p.baseAmount.toFixed(2)} CAD`).join('\n');
 
   const scope = yearFilter != null ? `${yearFilter}` : 'all years';

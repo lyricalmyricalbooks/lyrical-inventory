@@ -7,3 +7,6 @@
 ## $(date +%Y-%m-%d) - Sorting date strings directly
 **Learning:** Using `new Date(a.date) - new Date(b.date)` for sorting lists of dates (like the `allLedger` array) is slow and memory-intensive. `localeCompare()` or simple inequality operators (`<`, `>`) on ISO 8601 or "YYYY-MM-DD" date strings accomplish the exact same sort order without allocating thousands of throwaway Date objects during the sort iterations.
 **Action:** When sorting arrays of objects by an ISO or "YYYY-MM-DD" date string, use string comparison techniques instead of `new Date()`. Always provide a fallback (like `a.date || ''`) so `undefined` properties don't throw errors.
+## 2025-06-08 - Use string inequality operators for sorting YYYY-MM-DD instead of localeCompare
+**Learning:** Using `localeCompare` to sort string fields is significantly slower (often 10x-100x slower) than `<` and `>` inequality operators because `localeCompare` invokes complex internationalization rules and collations. For standard, machine-generated predictable formats like ISO 8601 or `YYYY-MM-DD` date strings, simple inequality operators return the same chronological sort result with far less CPU overhead.
+**Action:** When sorting arrays of ISO date strings or IDs, replace `.sort((a, b) => a.date.localeCompare(b.date))` with basic ternary conditional bounds `a.date > b.date ? 1 : (a.date < b.date ? -1 : 0)`.
