@@ -892,6 +892,11 @@
           <button class="btn gold" style="padding: 0 8px; font-size:12px; margin-top: 6px;" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn">✨ AI Scan</button>
         </div>
         <div id="tc-exp-file-preview" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+        <div id="tc-exp-storage-row" style="font-size:11px;color:var(--text3);margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span id="tc-exp-storage-status">Storage: Cloud (Firestore)</span>
+          <button class="btn tx" type="button" onclick="setupReceiptFolder()" style="padding:2px 8px;font-size:11px;">📁 Choose folder…</button>
+          <button class="btn tx" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="padding:2px 8px;font-size:11px;background:var(--gold3);color:black;display:none;">Authorize access</button>
+        </div>
       </div>
     </div>
     <div class="form-group" style="margin-top:8px;"><label>Trip / Project (optional — groups expenses for a single business trip)</label>
