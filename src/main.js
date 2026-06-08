@@ -8218,20 +8218,32 @@ function renderTaxCenter() {
     }
   }
 
-  // Update receipt folder display
+  // Update receipt folder display (both the dedicated card and the inline
+  // status shown next to the Receipt input on Log Business Expense).
   loadReceiptFolderHandle().then(async handle => {
     const el = $('receipt-folder-display');
-    if (!el) return;
+    const inlineStatus = $('tc-exp-storage-status');
+    const inlineAuthBtn = $('tc-exp-storage-auth-btn');
+    const setInline = (text, color, showAuth) => {
+      if (inlineStatus) {
+        inlineStatus.innerHTML = text;
+        inlineStatus.style.color = color || 'var(--text3)';
+      }
+      if (inlineAuthBtn) inlineAuthBtn.style.display = showAuth ? '' : 'none';
+    };
     if (!handle) {
-      el.innerHTML = `Status: <span style="color:var(--text3);">Saving to Cloud (Firestore)</span>`;
+      if (el) el.innerHTML = `Status: <span style="color:var(--text3);">Saving to Cloud (Firestore)</span>`;
+      setInline('Storage: <strong>Cloud (Firestore)</strong> — pick a local folder to save receipts as files', 'var(--text3)', false);
       return;
     }
     const perm = await handle.queryPermission({ mode: 'readwrite' });
     if (perm === 'granted') {
-      el.innerHTML = `Status: <span style="color:var(--green);">✓ Connected to folder: <strong>${handle.name}</strong></span>`;
+      if (el) el.innerHTML = `Status: <span style="color:var(--green);">✓ Connected to folder: <strong>${handle.name}</strong></span>`;
+      setInline(`Saving to: <strong>${handle.name}</strong>/receipts/General/`, 'var(--green)', false);
     } else {
-      el.innerHTML = `Status: <span style="color:var(--amber);">⚠ Access Required: <strong>${handle.name}</strong></span> 
+      if (el) el.innerHTML = `Status: <span style="color:var(--amber);">⚠ Access Required: <strong>${handle.name}</strong></span>
         <button class="btn tx" onclick="authorizeReceiptFolder()" style="margin-left:10px;padding:2px 8px;font-size:11px;background:var(--gold3);color:black;">Authorize Access</button>`;
+      setInline(`⚠ Access needed for folder: <strong>${handle.name}</strong>`, 'var(--amber)', true);
     }
   });
 
@@ -11718,7 +11730,7 @@ Object.assign(window, {
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
-  removeLedgerEntry, setupReceiptFolder, viewLocalReceipt, setTcLedgerPage,
+  removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
