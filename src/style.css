@@ -435,6 +435,15 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .edit-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:var(--r);background:transparent;border:1px solid transparent;color:var(--text4);cursor:pointer;font-size:13px;transition:all .14s;vertical-align:middle;margin-left:4px;opacity:0;}
 .tbl tbody tr:hover .edit-btn{opacity:1;background:var(--cream2);border-color:var(--border);color:var(--text2);}
 .edit-btn:hover{background:var(--gold-bg) !important;border-color:var(--gold-line) !important;color:var(--gold) !important;}
+/* APPROVAL ACTIONS — always visible, solid call-to-action on pending rows */
+.approval-actions{display:inline-flex;gap:7px;align-items:center;white-space:nowrap;}
+.appr-btn{height:30px;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:0 13px;border-radius:var(--r2);font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:.04em;cursor:pointer;transition:all .14s;border:1px solid transparent;touch-action:manipulation;line-height:1;}
+.appr-btn.approve{background:var(--green);color:#fff;border-color:var(--green);box-shadow:0 1px 2px rgba(42,99,72,.25);}
+.appr-btn.approve:hover{background:#21513a;border-color:#21513a;box-shadow:0 2px 7px rgba(42,99,72,.32);transform:translateY(-1px);}
+.appr-btn.approve .ico{font-size:13px;line-height:1;}
+.appr-btn.reject{width:30px;padding:0;font-size:14px;background:var(--red-bg);color:var(--red);border-color:rgba(149,32,32,.25);}
+.appr-btn.reject:hover{background:#f5c0c0;border-color:rgba(149,32,32,.4);}
+.appr-btn:active{transform:translateY(0);}
 .void-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:.06em;background:var(--red-bg);color:var(--red);}
 .edit-modal{max-width:560px;}
 .edit-modal-type{display:inline-flex;align-items:center;padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;background:var(--cream3);color:var(--text3);margin-bottom:1rem;}
