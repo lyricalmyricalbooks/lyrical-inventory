@@ -8218,10 +8218,9 @@ function renderTaxCenter() {
     }
   }
 
-  // Update receipt folder display (both the dedicated card and the inline
-  // status shown next to the Receipt input on Log Business Expense).
+  // Update the receipt storage status shown inline next to the Receipt
+  // input on Log Business Expense.
   loadReceiptFolderHandle().then(async handle => {
-    const el = $('receipt-folder-display');
     const inlineStatus = $('tc-exp-storage-status');
     const inlineAuthBtn = $('tc-exp-storage-auth-btn');
     const setInline = (text, color, showAuth) => {
@@ -8232,18 +8231,17 @@ function renderTaxCenter() {
       if (inlineAuthBtn) inlineAuthBtn.style.display = showAuth ? '' : 'none';
     };
     if (!handle) {
-      if (el) el.innerHTML = `Status: <span style="color:var(--text3);">Saving to Cloud (Firestore)</span>`;
       setInline('Storage: <strong>Cloud (Firestore)</strong> — pick a local folder to save receipts as files', 'var(--text3)', false);
       return;
     }
     const perm = await handle.queryPermission({ mode: 'readwrite' });
     if (perm === 'granted') {
-      if (el) el.innerHTML = `Status: <span style="color:var(--green);">✓ Connected to folder: <strong>${handle.name}</strong></span>`;
-      setInline(`Saving to: <strong>${handle.name}</strong>/receipts/General/`, 'var(--green)', false);
+      // Use a chevron between the chosen folder and the sub-path so a
+      // folder that happens to be named "receipts" doesn't read as the
+      // confusing "receipts/receipts/General/".
+      setInline(`Saving to: <strong>${escapeHtml(handle.name)}</strong> › receipts/General`, 'var(--green)', false);
     } else {
-      if (el) el.innerHTML = `Status: <span style="color:var(--amber);">⚠ Access Required: <strong>${handle.name}</strong></span>
-        <button class="btn tx" onclick="authorizeReceiptFolder()" style="margin-left:10px;padding:2px 8px;font-size:11px;background:var(--gold3);color:black;">Authorize Access</button>`;
-      setInline(`⚠ Access needed for folder: <strong>${handle.name}</strong>`, 'var(--amber)', true);
+      setInline(`⚠ Access needed for folder: <strong>${escapeHtml(handle.name)}</strong>`, 'var(--amber)', true);
     }
   });
 
