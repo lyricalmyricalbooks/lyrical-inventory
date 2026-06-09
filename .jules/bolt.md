@@ -10,3 +10,6 @@
 ## 2025-06-08 - Use string inequality operators for sorting YYYY-MM-DD instead of localeCompare
 **Learning:** Using `localeCompare` to sort string fields is significantly slower (often 10x-100x slower) than `<` and `>` inequality operators because `localeCompare` invokes complex internationalization rules and collations. For standard, machine-generated predictable formats like ISO 8601 or `YYYY-MM-DD` date strings, simple inequality operators return the same chronological sort result with far less CPU overhead.
 **Action:** When sorting arrays of ISO date strings or IDs, replace `.sort((a, b) => a.date.localeCompare(b.date))` with basic ternary conditional bounds `a.date > b.date ? 1 : (a.date < b.date ? -1 : 0)`.
+## 2024-06-09 - Combine multiple loops into a single pass when parsing the same array
+**Learning:** There are spots in the codebase where the same array is iterated over multiple times with separate `.filter()` and `.reduce()` or `.length` operations (e.g., calculating outstanding, paid, and draft invoice totals separately). This results in multiple passes over the same dataset.
+**Action:** When calculating multiple aggregates or extracting subsets from the same array, combine them into a single `for...of` loop or a single `.reduce()` pass. This avoids O(k*N) iteration scaling and reduces array allocation overhead.
