@@ -807,3 +807,124 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   from { opacity: 0; transform: scale(0.985) translateY(6px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
+
+/* Modal Sub-tabs */
+.modal-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text3);
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  padding: 8px 16px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.modal-tab-btn:hover {
+  color: var(--text2);
+}
+.modal-tab-btn.active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+/* Gmail Email List styling */
+.email-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.email-list-row {
+  border-bottom: 1px solid var(--border2);
+  background: white;
+  transition: background 0.15s ease;
+}
+.email-list-row:hover {
+  background: var(--cream2);
+}
+.email-list-row.selected {
+  background: rgba(200, 145, 58, 0.04);
+}
+.email-list-cell {
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+.email-subject {
+  font-weight: 600;
+  color: var(--text);
+}
+.email-from {
+  color: var(--text3);
+  font-size: 11px;
+}
+.email-snippet {
+  color: var(--text4);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 380px;
+}
+
+/* Email Drawer Preview */
+.email-preview-drawer {
+  background: var(--cream3);
+  border-top: 1px dashed var(--border);
+  padding: 12px;
+  font-size: 11px;
+  animation: slideDown 0.2s ease;
+}
+.email-preview-body {
+  font-family: 'DM Mono', monospace;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  padding: 8px 12px;
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+  color: var(--text2);
+  line-height: 1.45;
+}
+
+/* Filter Chips */
+.filter-chip {
+  background: var(--cream2);
+  border: 1px solid var(--border);
+  color: var(--text3);
+  border-radius: 100px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.filter-chip:hover {
+  background: var(--cream3);
+  color: var(--text2);
+}
+.filter-chip.active {
+  background: var(--gold-bg);
+  border-color: var(--gold-line);
+  color: var(--gold);
+}
+
+/* Skeleton Loading Animation */
+.skeleton-line {
+  height: 12px;
+  background: linear-gradient(90deg, #f3f3f3 25%, #e6e6e6 50%, #f3f3f3 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.skeleton-line:last-child {
+  margin-bottom: 0;
+}
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

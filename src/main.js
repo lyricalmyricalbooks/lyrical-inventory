@@ -3494,6 +3494,9 @@ async function scanProjectReceiptWithAI() {
 // ── EMAIL RECEIPT IMPORT
 // Module-level draft store so we don't smuggle JSON through onclick attributes.
 let _emailReceiptDrafts = [];
+let _activeEmailImportTab = 'gmail';
+let _gmailEmailsFetched = [];
+let _emailContentCache = {};
 
 const EXPENSE_CATEGORIES = [
   'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
@@ -3625,6 +3628,32 @@ function openEmailReceiptImportModal() {
   openM('email-receipt-import-modal');
   if ($('email-receipt-results')) $('email-receipt-results').innerHTML = '';
   _emailReceiptDrafts = [];
+  _activeEmailImportTab = 'gmail';
+  _gmailEmailsFetched = [];
+  _emailContentCache = {};
+
+  // Reset tab to Gmail
+  switchEmailImportTab('gmail');
+
+  // Render Preset chips
+  renderGmailChips();
+
+  // Set default search query
+  const queryInput = $('email-gmail-search-query');
+  if (queryInput) {
+    queryInput.value = 'newer_than:30d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")';
+  }
+
+  // Reset list wrap
+  const listWrap = $('email-gmail-list-wrap');
+  if (listWrap) {
+    listWrap.innerHTML = `
+      <div class="empty-state" style="padding:30px 20px;font-size:12px;color:var(--text3);text-align:center;">
+        <span style="font-size:24px;display:block;margin-bottom:8px;">📬</span>
+        Click a quick preset or search above to pull recent emails.
+      </div>`;
+  }
+
   const fileInput = $('email-receipt-files');
   const list = $('email-receipt-files-list');
   if (fileInput) {
@@ -3641,6 +3670,279 @@ function openEmailReceiptImportModal() {
 
 function closeEmailReceiptImportModal() {
   closeM('email-receipt-import-modal');
+}
+
+function switchEmailImportTab(tab) {
+  _activeEmailImportTab = tab;
+  const tabGmail = $('email-tab-gmail');
+  const tabManual = $('email-tab-manual');
+  const panelGmail = $('email-panel-gmail');
+  const panelManual = $('email-panel-manual');
+  if (tab === 'gmail') {
+    tabGmail?.classList.add('active');
+    tabManual?.classList.remove('active');
+    if (panelGmail) panelGmail.style.display = 'block';
+    if (panelManual) panelManual.style.display = 'none';
+  } else {
+    tabGmail?.classList.remove('active');
+    tabManual?.classList.add('active');
+    if (panelGmail) panelGmail.style.display = 'none';
+    if (panelManual) panelManual.style.display = 'block';
+  }
+}
+
+function renderGmailChips() {
+  const chipsContainer = $('email-gmail-chips');
+  if (!chipsContainer) return;
+
+  const presets = [
+    { label: 'Past 7 Days', query: 'newer_than:7d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Past 30 Days', query: 'newer_than:30d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Invoices / Bills', query: '(subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Shipping costs', query: 'subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
+  ];
+
+  chipsContainer.innerHTML = presets.map((p, idx) => {
+    return `<button type="button" class="filter-chip" onclick="applyGmailPresetQuery(${idx})">${escapeHtml(p.label)}</button>`;
+  }).join('');
+}
+
+function applyGmailPresetQuery(index) {
+  const presets = [
+    { label: 'Past 7 Days', query: 'newer_than:7d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Past 30 Days', query: 'newer_than:30d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Invoices / Bills', query: '(subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Shipping costs', query: 'subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
+  ];
+  const p = presets[index];
+  if (!p) return;
+  const input = $('email-gmail-search-query');
+  if (input) input.value = p.query;
+  searchGmailEmails();
+}
+
+async function searchGmailEmails() {
+  if (!sheetsUrl) {
+    showToast('Connect Google Sheets first to scan Gmail', 'warn');
+    return;
+  }
+  const queryInput = $('email-gmail-search-query');
+  const query = (queryInput?.value || '').trim();
+  if (!query) {
+    showToast('Please enter a search query', 'warn');
+    return;
+  }
+
+  const btn = $('email-gmail-search-btn');
+  const prevBtnText = btn ? btn.textContent : 'Search';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Searching…';
+  }
+
+  const listWrap = $('email-gmail-list-wrap');
+  if (listWrap) {
+    listWrap.innerHTML = `
+      <div style="padding:40px 20px;text-align:center;">
+        <div class="spinner" style="width:20px;height:20px;margin-bottom:12px;"></div>
+        <div style="font-size:12px;color:var(--text3);">Searching Gmail inbox (Apps Script)…</div>
+      </div>`;
+  }
+
+  try {
+    const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=listReceiptEmails&q=' + encodeURIComponent(query);
+    const res = await fetch(destUrl, { method: 'GET', mode: 'cors' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data || !data.ok) throw new Error(data.error || 'Fetch failed');
+    
+    _gmailEmailsFetched = data.emails || [];
+    renderGmailEmailsList();
+  } catch (err) {
+    console.error('[searchGmailEmails]', err);
+    if (listWrap) {
+      listWrap.innerHTML = `
+        <div class="empty-state" style="padding:20px;color:var(--red);">
+          ❌ Search failed: ${escapeHtml(err.message || err)}<br>
+          <span style="font-size:11px;color:var(--text3);margin-top:6px;display:block;">Check Apps Script deployment and connection parameters.</span>
+        </div>`;
+    }
+    showToast('Gmail search failed', 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevBtnText;
+    }
+  }
+}
+
+function renderGmailEmailsList() {
+  const listWrap = $('email-gmail-list-wrap');
+  if (!listWrap) return;
+  if (!_gmailEmailsFetched.length) {
+    listWrap.innerHTML = `
+      <div class="empty-state" style="padding:30px 20px;font-size:12px;color:var(--text3);text-align:center;">
+        <span style="font-size:24px;display:block;margin-bottom:8px;">📭</span>
+        No matching emails found. Try a different search query.
+      </div>`;
+    return;
+  }
+
+  const esc = escapeHtml;
+  const rowsHtml = _gmailEmailsFetched.map((email) => {
+    const dateStr = new Date(email.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+    const attachmentBadge = email.hasAttachments 
+      ? `<span class="pill gray" style="font-size:10px;padding:1px 6px;" title="${esc(email.attachmentNames.join(', '))} font-weight:normal;">📎 ${email.attachmentCount}</span>` 
+      : '—';
+      
+    const fromParts = email.from.match(/^(.*?)\s*<.*>$/);
+    const cleanFrom = fromParts ? fromParts[1].replace(/['"]/g, '').trim() : email.from;
+
+    return `
+      <tr class="email-list-row" id="email-row-${email.id}">
+        <td class="email-list-cell" style="width:36px;text-align:center;">
+          <input type="checkbox" class="gmail-email-cb" data-msg-id="${email.id}" onchange="toggleEmailRowSelection('${email.id}', this.checked)">
+        </td>
+        <td class="email-list-cell" style="white-space:nowrap;color:var(--text3);font-size:11px;">${dateStr}</td>
+        <td class="email-list-cell" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;" title="${esc(email.from)}">${esc(cleanFrom)}</td>
+        <td class="email-list-cell">
+          <div class="email-subject">${esc(email.subject)}</div>
+          <div class="email-snippet" title="${esc(email.snippet)}">${esc(email.snippet)}</div>
+        </td>
+        <td class="email-list-cell" style="text-align:center;">${attachmentBadge}</td>
+        <td class="email-list-cell" style="text-align:center;">
+          <button type="button" class="btn sm" id="email-preview-btn-${email.id}" onclick="toggleEmailPreview('${email.id}')">Preview</button>
+        </td>
+      </tr>
+      <tr id="email-preview-row-${email.id}" style="display:none;background:var(--cream3);">
+        <td colspan="6" class="email-list-cell" style="padding:0;">
+          <div class="email-preview-drawer" id="email-preview-drawer-${email.id}">
+            <!-- populated dynamically -->
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  listWrap.innerHTML = `
+    <table class="email-list-table">
+      <thead>
+        <tr style="background:var(--ink);color:rgba(255,255,255,.45);font-size:9px;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid var(--border);">
+          <th style="padding:8px 12px;text-align:center;width:36px;"><input type="checkbox" id="gmail-email-select-all" onchange="toggleAllGmailSelections(this.checked)"></th>
+          <th style="padding:8px 12px;text-align:left;">Date</th>
+          <th style="padding:8px 12px;text-align:left;">Sender</th>
+          <th style="padding:8px 12px;text-align:left;">Subject</th>
+          <th style="padding:8px 12px;text-align:center;width:60px;">Files</th>
+          <th style="padding:8px 12px;text-align:center;width:80px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  `;
+}
+
+function toggleEmailRowSelection(msgId, isChecked) {
+  const row = $('email-row-' + msgId);
+  if (row) {
+    if (isChecked) {
+      row.classList.add('selected');
+    } else {
+      row.classList.remove('selected');
+    }
+  }
+}
+
+function toggleAllGmailSelections(isChecked) {
+  const checkboxes = document.querySelectorAll('.gmail-email-cb');
+  checkboxes.forEach(cb => {
+    cb.checked = isChecked;
+    const msgId = cb.getAttribute('data-msg-id');
+    toggleEmailRowSelection(msgId, isChecked);
+  });
+}
+
+async function toggleEmailPreview(msgId) {
+  const row = $('email-preview-row-' + msgId);
+  const btn = $('email-preview-btn-' + msgId);
+  if (!row || !btn) return;
+
+  const isVisible = row.style.display !== 'none';
+  if (isVisible) {
+    row.style.display = 'none';
+    btn.textContent = 'Preview';
+  } else {
+    row.style.display = '';
+    btn.textContent = 'Close';
+    
+    const drawer = $('email-preview-drawer-' + msgId);
+    if (drawer && !_emailContentCache[msgId]) {
+      drawer.innerHTML = `
+        <div style="padding:16px;text-align:center;">
+          <div class="spinner" style="width:14px;height:14px;margin-bottom:6px;"></div>
+          <div style="font-size:11px;color:var(--text3);">Fetching email contents &amp; attachments…</div>
+        </div>`;
+
+      try {
+        const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=getEmailContent&id=' + msgId;
+        const res = await fetch(destUrl, { method: 'GET', mode: 'cors' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data || !data.ok) throw new Error(data.error || 'Failed to fetch content');
+        
+        _emailContentCache[msgId] = data.email;
+        renderEmailPreviewContent(msgId, drawer);
+      } catch (err) {
+        console.error('[toggleEmailPreview]', err);
+        drawer.innerHTML = `<div style="padding:12px;color:var(--red);font-size:11px;">Error loading content: ${escapeHtml(err.message || err)}</div>`;
+      }
+    } else if (drawer) {
+      renderEmailPreviewContent(msgId, drawer);
+    }
+  }
+}
+
+function renderEmailPreviewContent(msgId, container) {
+  const email = _emailContentCache[msgId];
+  if (!email || !container) return;
+
+  const esc = escapeHtml;
+  const truncatedBody = email.body.length > 2500 ? email.body.substring(0, 2500) + '\n\n[TRUNCATED FOR PREVIEW]' : email.body;
+
+  let attachmentsHtml = '';
+  if (email.fileParts && email.fileParts.length) {
+    const listItems = email.fileParts.map((f, idx) => {
+      const isDoc = f.mime === 'application/pdf';
+      const typeLabel = isDoc ? 'PDF Document' : 'Image';
+      const icon = isDoc ? '📄' : '🖼️';
+      return `
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0;padding:2px 0;">
+          <input type="checkbox" class="email-att-cb-${msgId}" data-idx="${idx}" checked style="width:14px;height:14px;">
+          <span style="font-family:'DM Mono',monospace;font-size:11px;">${icon} ${esc(f.name)} <span style="opacity:.6;font-size:10px;">(${typeLabel})</span></span>
+        </label>
+      `;
+    }).join('');
+    
+    attachmentsHtml = `
+      <div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;">
+        <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:var(--text2);">Include attachments in AI Scan (${email.fileParts.length}):</div>
+        <div style="background:white;padding:6px 12px;border:1px solid var(--border2);border-radius:var(--r);max-height:100px;overflow-y:auto;">
+          ${listItems}
+        </div>
+      </div>
+    `;
+  } else {
+    attachmentsHtml = `<div style="margin-top:6px;font-size:10px;color:var(--text4);font-style:italic;">No PDF or image attachments found.</div>`;
+  }
+
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <div style="font-weight:700;font-size:11px;color:var(--text2);margin-bottom:4px;">Email Body Preview:</div>
+      <div class="email-preview-body">${esc(truncatedBody)}</div>
+      ${attachmentsHtml}
+    </div>
+  `;
 }
 
 // Model used for receipt/invoice vision extraction. One place to change it.
@@ -3709,23 +4011,13 @@ async function extractReceiptsFromEmailText() {
   const apiKey = TAX_CENTER.settings?.claudeKey;
   if (!apiKey) { showToast('Claude API Key required in Config', 'err'); return; }
 
-  const pasted = ($('email-receipt-source')?.value || '').trim();
-  const fileInput = $('email-receipt-files');
-  const files = Array.from(fileInput?.files || []);
-  if (!pasted && !files.length) { showToast('Paste emails or attach files first', 'warn'); return; }
-
   const btn = $('email-receipt-scan-btn');
   const prev = btn.textContent;
-  if (btn) btn.disabled = true;
-  btn.textContent = 'Extracting…';
-
   const wrap = $('email-receipt-results');
-  if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Reading attachments and querying Claude…</div>`;
 
-  try {
-    const fileParts = await readReceiptFiles(files);
-    const allowedCats = EXPENSE_CATEGORIES.join(' | ');
-    const prompt = `You extract purchase receipts/invoices from emails for bookkeeping.
+  let parts = [];
+  const allowedCats = EXPENSE_CATEGORIES.join(' | ');
+  const prompt = `You extract purchase receipts/invoices from emails for bookkeeping.
 Return ONLY valid JSON: {"receipts":[{"vendor":"string","date":"YYYY-MM-DD","amount":number,"currency":"ISO 4217 uppercase","description":"short human label","reference":"order/invoice number if any","category":"one of: ${allowedCats}","sourceSnippet":"<= 240 chars of the original line(s) that justify this row","confidence":0.0}]}
 Rules:
 1. Include EVERY distinct purchase, payment, invoice, charge, or receipt — including subscriptions, ad spend, shipping labels, software, postage, services, and book printing. One row per receipt.
@@ -3739,26 +4031,101 @@ Rules:
 9. Do not invent data. If amount/currency/date cannot be determined, omit the row entirely.
 10. Output JSON only — no markdown, no commentary.`;
 
-    const parts = [{ text: prompt }];
-    const cleanedText = parseEmlOrText(pasted);
-    if (cleanedText) parts.push({ text: '--- PASTED EMAIL TEXT ---\n' + cleanedText.slice(0, 120000) });
-    for (const fp of fileParts) {
-      if (fp.kind === 'text' && fp.text) {
-        parts.push({ text: `--- FILE: ${fp.name} ---\n` + fp.text.slice(0, 60000) });
-      } else if (fp.kind === 'inline' && fp.base64) {
-        parts.push({ inline_data: { mime_type: fp.mime, data: fp.base64 } });
-      }
+  parts.push({ text: prompt });
+
+  if (_activeEmailImportTab === 'gmail') {
+    const checkedCbs = Array.from(document.querySelectorAll('.gmail-email-cb:checked'));
+    if (!checkedCbs.length) {
+      showToast('Select at least one email to extract drafts from', 'warn');
+      return;
     }
 
+    if (btn) btn.disabled = true;
+    btn.textContent = 'Extracting…';
+    if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Fetching details and preparing AI Scan…</div>`;
+
+    try {
+      let emailIndex = 0;
+      for (const cb of checkedCbs) {
+        const msgId = cb.getAttribute('data-msg-id');
+        emailIndex++;
+        if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Loading email content (${emailIndex}/${checkedCbs.length})…</div>`;
+
+        if (!_emailContentCache[msgId]) {
+          const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=getEmailContent&id=' + msgId;
+          const res = await fetch(destUrl, { method: 'GET', mode: 'cors' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (!data || !data.ok) throw new Error(data.error || 'Failed to fetch content');
+          _emailContentCache[msgId] = data.email;
+        }
+
+        const email = _emailContentCache[msgId];
+        parts.push({ text: `--- EMAIL: "${email.subject}" FROM: ${email.from} DATE: ${email.date} ---\n` + email.body.slice(0, 80000) });
+
+        const attCheckboxes = Array.from(document.querySelectorAll(`.email-att-cb-${msgId}:checked`));
+        for (const attCb of attCheckboxes) {
+          const idx = parseInt(attCb.getAttribute('data-idx'));
+          const f = email.fileParts[idx];
+          if (f && f.base64) {
+            parts.push({ inline_data: { mime_type: f.mime, data: f.base64 } });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[email-receipt-import] fetch failed', e);
+      if (wrap) {
+        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Gmail retrieval failed: ${(e.message || e).toString().replace(/</g,'&lt;')}</div>`;
+      }
+      showToast('Could not fetch email details', 'err');
+      if (btn) btn.disabled = false;
+      btn.textContent = prev;
+      return;
+    }
+  } else {
+    const pasted = ($('email-receipt-source')?.value || '').trim();
+    const fileInput = $('email-receipt-files');
+    const files = Array.from(fileInput?.files || []);
+    if (!pasted && !files.length) { showToast('Paste emails or attach files first', 'warn'); return; }
+
+    if (btn) btn.disabled = true;
+    btn.textContent = 'Extracting…';
+    if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Reading attachments and querying Claude…</div>`;
+
+    try {
+      const fileParts = await readReceiptFiles(files);
+      const cleanedText = parseEmlOrText(pasted);
+      if (cleanedText) parts.push({ text: '--- PASTED EMAIL TEXT ---\n' + cleanedText.slice(0, 120000) });
+      for (const fp of fileParts) {
+        if (fp.kind === 'text' && fp.text) {
+          parts.push({ text: `--- FILE: ${fp.name} ---\n` + fp.text.slice(0, 60000) });
+        } else if (fp.kind === 'inline' && fp.base64) {
+          parts.push({ inline_data: { mime_type: fp.mime, data: fp.base64 } });
+        }
+      }
+    } catch (e) {
+      console.error('[email-receipt-import] file read failed', e);
+      if (wrap) {
+        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g,'&lt;')}</div>`;
+      }
+      showToast('Could not read files', 'err');
+      if (btn) btn.disabled = false;
+      btn.textContent = prev;
+      return;
+    }
+  }
+
+  if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sending content to Claude AI…</div>`;
+  try {
     const text = (await _callClaudeForReceipts(apiKey, parts)) || '{}';
     let parsed;
     try { parsed = JSON.parse(text); }
     catch (_) {
-      // Try to recover JSON from a possibly-fenced response
       const m = text.match(/\{[\s\S]*\}/);
       parsed = m ? JSON.parse(m[0]) : { receipts: [] };
     }
 
+    const fallbackCat = $('email-receipt-default-cat')?.value || 'Other';
     const drafts = (parsed.receipts || []).map(r => ({
       vendor: String(r.vendor || '').trim(),
       description: String(r.description || r.vendor || 'Receipt').trim(),
@@ -3777,15 +4144,14 @@ Rules:
     _emailReceiptDrafts = drafts;
     renderEmailReceiptDrafts(drafts);
     if (!drafts.length) {
-      showToast('No receipts detected — try pasting more context or attaching the original email file.', 'warn');
+      showToast('No receipts detected — check your email selection or pasted text.', 'warn');
     } else {
       showToast(`✓ Found ${drafts.length} receipt${drafts.length > 1 ? 's' : ''}`);
     }
   } catch (e) {
-    console.error('[email-receipt-import]', e);
-    const wrap2 = $('email-receipt-results');
-    if (wrap2) {
-      wrap2.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Extraction failed: ${(e.message || e).toString().replace(/</g,'&lt;')}<br><span style="color:var(--text3);">Verify your Claude API key in Config and try again.</span></div>`;
+    console.error('[email-receipt-import] Claude failed', e);
+    if (wrap) {
+      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Extraction failed: ${(e.message || e).toString().replace(/</g,'&lt;')}<br><span style="color:var(--text3);">Verify your Claude API key and parameters.</span></div>`;
     }
     showToast('Could not extract receipts', 'err');
   } finally {
@@ -11786,6 +12152,7 @@ Object.assign(window, {
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
+  switchEmailImportTab, searchGmailEmails, applyGmailPresetQuery, toggleEmailPreview, toggleEmailRowSelection, toggleAllGmailSelections,
   showCategoryDetail, changeExpenseCategory,
   showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt,
   // Invoices

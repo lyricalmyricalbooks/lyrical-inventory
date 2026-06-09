@@ -36,6 +36,12 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'scanGmail') {
     return scanGmail_(e);
   }
+  if (e.parameter && e.parameter.action === 'listReceiptEmails') {
+    return listReceiptEmails_(e);
+  }
+  if (e.parameter && e.parameter.action === 'getEmailContent') {
+    return getEmailContent_(e);
+  }
   return jsonOut_({
     service: 'lyrical-sheets-webhook-v4',
     scriptVersion: 'v4',
@@ -101,6 +107,95 @@ function scanGmail_(e) {
     }
   }
   return jsonOut_({ ok: true, orders });
+}
+
+function listReceiptEmails_(e) {
+  const query = e.parameter.q || '';
+  const limit = Math.min(100, parseInt(e.parameter.limit || 20));
+  if (!query) {
+    return jsonOut_({ error: 'Search query parameter q is required' });
+  }
+
+  const threads = GmailApp.search(query, 0, limit);
+  const emails = [];
+
+  for (const thread of threads) {
+    const messages = thread.getMessages();
+    if (!messages.length) continue;
+    // Get the latest message in the thread
+    const msg = messages[messages.length - 1];
+    const attachments = msg.getAttachments();
+    
+    // We only count PDF and image attachments for the list badge
+    const relevantAttachments = attachments.filter(a => {
+      const mime = a.getContentType();
+      const name = a.getName();
+      return /pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name);
+    });
+
+    emails.push({
+      id: msg.getId(),
+      threadId: thread.getId(),
+      subject: msg.getSubject() || '(No Subject)',
+      from: msg.getFrom() || 'Unknown Sender',
+      date: msg.getDate().toISOString(),
+      snippet: msg.getSnippet() || '',
+      hasAttachments: relevantAttachments.length > 0,
+      attachmentCount: relevantAttachments.length,
+      attachmentNames: relevantAttachments.map(a => a.getName())
+    });
+  }
+
+  // Sort by date descending (should already be sorted but safe to ensure)
+  emails.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return jsonOut_({ ok: true, emails });
+}
+
+function getEmailContent_(e) {
+  const id = e.parameter.id;
+  if (!id) {
+    return jsonOut_({ error: 'Message ID is required' });
+  }
+
+  try {
+    const msg = GmailApp.getMessageById(id);
+    if (!msg) {
+      return jsonOut_({ error: 'Message not found' });
+    }
+
+    const body = msg.getPlainBody() || msg.getBody() || '';
+    const attachments = msg.getAttachments();
+    const fileParts = [];
+
+    for (const att of attachments) {
+      const mime = att.getContentType();
+      const name = att.getName();
+      // Only process PDF and images to prevent huge payloads and Claude limitations
+      const isAllowed = /pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name);
+      if (isAllowed) {
+        fileParts.push({
+          name: name,
+          mime: mime,
+          base64: Utilities.base64Encode(att.getBytes())
+        });
+      }
+    }
+
+    return jsonOut_({
+      ok: true,
+      email: {
+        id: msg.getId(),
+        subject: msg.getSubject() || '',
+        from: msg.getFrom() || '',
+        date: msg.getDate().toISOString(),
+        body: body,
+        fileParts: fileParts
+      }
+    });
+  } catch (err) {
+    return jsonOut_({ error: 'Failed to fetch email: ' + String(err) });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
