@@ -3904,7 +3904,9 @@ async function searchGmailEmails() {
       account: data.account || '',
       query: data.query || query,
       threadsFound: typeof data.threadsFound === 'number' ? data.threadsFound : null,
-      count: typeof data.count === 'number' ? data.count : _gmailEmailsFetched.length
+      count: typeof data.count === 'number' ? data.count : _gmailEmailsFetched.length,
+      skipped: typeof data.skipped === 'number' ? data.skipped : 0,
+      skipError: data.skipError || ''
     };
     renderGmailEmailsList();
   } else {
@@ -3938,18 +3940,25 @@ function renderGmailEmailsList() {
   if (!_gmailEmailsFetched.length) {
     const meta = _gmailSearchMeta || {};
     const acct = meta.account ? escapeHtml(meta.account) : '';
-    const acctLine = acct
-      ? `Searched the Gmail account <b>${acct}</b> — no emails matched.`
-      : 'No matching emails found.';
+    // Gmail matched threads but every one failed to read — an Apps Script
+    // problem (usually a stale deployment), not an empty mailbox. Say so,
+    // with the real error, instead of the misleading "no emails matched".
+    const allSkipped = typeof meta.threadsFound === 'number' && meta.threadsFound > 0;
+    const acctLine = allSkipped
+      ? `Gmail matched <b>${meta.threadsFound}</b> conversation${meta.threadsFound > 1 ? 's' : ''}${acct ? ` in <b>${acct}</b>` : ''}, but none could be read.`
+      : (acct
+        ? `Searched the Gmail account <b>${acct}</b> — no emails matched.`
+        : 'No matching emails found.');
+    const hint = allSkipped
+      ? `The deployed Apps Script hit an error on every email — copy the latest code from the <b>Connect your Google Sheet</b> tab and deploy a new version.${meta.skipError ? `<br>Error: <code>${escapeHtml(meta.skipError)}</code>` : ''}`
+      : `If your receipts are in a different Google account, re-deploy the Apps Script from that account.
+          Otherwise widen the window (try the <b>Past 30 Days</b> chip) or simplify the query.`;
     const q = meta.query ? escapeHtml(meta.query) : '';
     listWrap.innerHTML = `
       <div class="empty-state" style="padding:26px 20px;font-size:12px;color:var(--text3);text-align:center;line-height:1.6;">
         <span style="font-size:24px;display:block;margin-bottom:8px;">📭</span>
         ${acctLine}
-        <span style="font-size:11px;display:block;margin-top:8px;">
-          If your receipts are in a different Google account, re-deploy the Apps Script from that account.
-          Otherwise widen the window (try the <b>Past 30 Days</b> chip) or simplify the query.
-        </span>
+        <span style="font-size:11px;display:block;margin-top:8px;">${hint}</span>
         ${q ? `<code style="font-size:10px;display:block;margin-top:8px;word-break:break-all;">${q}</code>` : ''}
       </div>`;
     return;
@@ -3994,10 +4003,11 @@ function renderGmailEmailsList() {
   const meta = _gmailSearchMeta || {};
   const shown = _gmailEmailsFetched.length;
   const moreNote = (typeof meta.threadsFound === 'number' && meta.threadsFound > shown) ? ` of ${meta.threadsFound} matched` : '';
+  const skippedNote = meta.skipped ? ` · ${meta.skipped} unreadable` : '';
   const metaHeader = `
     <div style="padding:7px 12px;font-size:11px;color:var(--text3);background:var(--cream3);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center;">
       <span>✓ Searched ${meta.account ? `<b>${escapeHtml(meta.account)}</b>` : 'Gmail'}</span>
-      <span style="white-space:nowrap;">${shown} shown${moreNote}</span>
+      <span style="white-space:nowrap;">${shown} shown${moreNote}${skippedNote}</span>
     </div>`;
 
   listWrap.innerHTML = `
@@ -6930,7 +6940,7 @@ async function checkSheetsVersion() {
       const data = await res.json().catch(() => null);
       if (data && data.service && data.service.indexOf('lyrical-sheets-webhook') === 0) {
         const deployedVer = data.scriptVersion || 'unknown';
-        if (deployedVer !== 'v5') {
+        if (deployedVer !== 'v6') {
           if (versionEl) versionEl.textContent = deployedVer;
           warningEl.style.display = 'block';
         } else {
@@ -7369,7 +7379,7 @@ async function verifyUrl(){
         const warningEl = $('sheets-version-warning');
         const versionEl = $('sheets-deployed-version');
         if (warningEl) {
-          if (deployedVer !== 'v5') {
+          if (deployedVer !== 'v6') {
             if (versionEl) versionEl.textContent = deployedVer;
             warningEl.style.display = 'block';
           } else {
