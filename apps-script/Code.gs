@@ -142,7 +142,7 @@ function listReceiptEmails_(e) {
         const msg = messages[messages.length - 1];
         // Skip inline images (logos, signatures) so the badge counts real
         // receipt files, and avoids pulling embedded marketing graphics.
-        const attachments = msg.getAttachments({ includeInlineImages: false, includeAttachments: true });
+        const attachments = msg.getAttachments({ includeInlineImages: false });
 
         // We only count PDF and image attachments for the list badge
         const relevantAttachments = attachments.filter(a => {

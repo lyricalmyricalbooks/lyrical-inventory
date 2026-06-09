@@ -3810,10 +3810,11 @@ function renderGmailChips() {
   if (!chipsContainer) return;
 
   const presets = [
-    { label: 'Past 7 Days', query: 'newer_than:7d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
-    { label: 'Past 30 Days', query: 'newer_than:30d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
-    { label: 'Invoices / Bills', query: '(subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
-    { label: 'Shipping costs', query: 'subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
+    { label: 'Past 7 Days', query: 'newer_than:7d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Past 30 Days', query: 'newer_than:30d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'With Attachments', query: 'newer_than:30d has:attachment -from:me (receipt OR invoice OR bill)' },
+    { label: 'Invoices / Bills', query: '-from:me (subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Shipping costs', query: '-from:me subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
   ];
 
   chipsContainer.innerHTML = presets.map((p, idx) => {
@@ -3823,10 +3824,11 @@ function renderGmailChips() {
 
 function applyGmailPresetQuery(index) {
   const presets = [
-    { label: 'Past 7 Days', query: 'newer_than:7d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
-    { label: 'Past 30 Days', query: 'newer_than:30d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
-    { label: 'Invoices / Bills', query: '(subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
-    { label: 'Shipping costs', query: 'subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
+    { label: 'Past 7 Days', query: 'newer_than:7d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Past 30 Days', query: 'newer_than:30d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'With Attachments', query: 'newer_than:30d has:attachment -from:me (receipt OR invoice OR bill)' },
+    { label: 'Invoices / Bills', query: '-from:me (subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
+    { label: 'Shipping costs', query: '-from:me subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
   ];
   const p = presets[index];
   if (!p) return;
