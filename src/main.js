@@ -3499,6 +3499,7 @@ async function scanProjectReceiptWithAI() {
 let _emailReceiptDrafts = [];
 let _activeEmailImportTab = 'gmail';
 let _gmailEmailsFetched = [];
+let _gmailSearchMeta = null;
 let _emailContentCache = {};
 
 const EXPENSE_CATEGORIES = [
@@ -3633,6 +3634,7 @@ function openEmailReceiptImportModal() {
   _emailReceiptDrafts = [];
   _activeEmailImportTab = 'gmail';
   _gmailEmailsFetched = [];
+  _gmailSearchMeta = null;
   _emailContentCache = {};
 
   // Reset tab to Gmail
@@ -3760,7 +3762,7 @@ async function searchGmailEmails() {
   while (attempt < MAX_RETRIES) {
     attempt++;
     try {
-      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=listReceiptEmails&q=' + encodeURIComponent(query);
+      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=listReceiptEmails&limit=50&q=' + encodeURIComponent(query);
       const res = await fetch(destUrl, { method: 'GET', mode: 'cors' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       data = await res.json();
@@ -3785,6 +3787,14 @@ async function searchGmailEmails() {
 
   if (data && data.ok) {
     _gmailEmailsFetched = data.emails || [];
+    // Capture which mailbox answered and how much it matched, so the UI can
+    // prove the search actually reached Gmail (and which account's Gmail).
+    _gmailSearchMeta = {
+      account: data.account || '',
+      query: data.query || query,
+      threadsFound: typeof data.threadsFound === 'number' ? data.threadsFound : null,
+      count: typeof data.count === 'number' ? data.count : _gmailEmailsFetched.length
+    };
     renderGmailEmailsList();
   } else {
     const msg = (lastError && lastError.message) ? lastError.message : String(lastError || 'Unknown error');
@@ -3815,10 +3825,21 @@ function renderGmailEmailsList() {
   const listWrap = $('email-gmail-list-wrap');
   if (!listWrap) return;
   if (!_gmailEmailsFetched.length) {
+    const meta = _gmailSearchMeta || {};
+    const acct = meta.account ? escapeHtml(meta.account) : '';
+    const acctLine = acct
+      ? `Searched the Gmail account <b>${acct}</b> — no emails matched.`
+      : 'No matching emails found.';
+    const q = meta.query ? escapeHtml(meta.query) : '';
     listWrap.innerHTML = `
-      <div class="empty-state" style="padding:30px 20px;font-size:12px;color:var(--text3);text-align:center;">
+      <div class="empty-state" style="padding:26px 20px;font-size:12px;color:var(--text3);text-align:center;line-height:1.6;">
         <span style="font-size:24px;display:block;margin-bottom:8px;">📭</span>
-        No matching emails found. Try a different search query.
+        ${acctLine}
+        <span style="font-size:11px;display:block;margin-top:8px;">
+          If your receipts are in a different Google account, re-deploy the Apps Script from that account.
+          Otherwise widen the window (try the <b>Past 30 Days</b> chip) or simplify the query.
+        </span>
+        ${q ? `<code style="font-size:10px;display:block;margin-top:8px;word-break:break-all;">${q}</code>` : ''}
       </div>`;
     return;
   }
@@ -3859,7 +3880,17 @@ function renderGmailEmailsList() {
     `;
   }).join('');
 
+  const meta = _gmailSearchMeta || {};
+  const shown = _gmailEmailsFetched.length;
+  const moreNote = (typeof meta.threadsFound === 'number' && meta.threadsFound > shown) ? ` of ${meta.threadsFound} matched` : '';
+  const metaHeader = `
+    <div style="padding:7px 12px;font-size:11px;color:var(--text3);background:var(--cream3);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center;">
+      <span>✓ Searched ${meta.account ? `<b>${escapeHtml(meta.account)}</b>` : 'Gmail'}</span>
+      <span style="white-space:nowrap;">${shown} shown${moreNote}</span>
+    </div>`;
+
   listWrap.innerHTML = `
+    ${metaHeader}
     <table class="email-list-table">
       <thead>
         <tr style="background:var(--ink);color:rgba(255,255,255,.45);font-size:9px;text-transform:uppercase;letter-spacing:.1em;border-bottom:1px solid var(--border);">
