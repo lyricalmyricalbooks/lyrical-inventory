@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v5)
+/* Lyricalmyrical Inventory — Unified Backend (v6)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
  *  2. Sheets sync with:
@@ -10,6 +10,9 @@
  *     - CAD-equivalent column using live FX (cached 6h)
  *     - Cleaner formatting: frozen header, banding, currency formats, hidden ID col
  *  3. Email receipt scanner & fetcher (v5 additions)
+ *  4. v6: receipt search actually returns results (GmailMessage has no
+ *     getSnippet(), so every thread used to fail silently) and reports
+ *     skipped threads instead of hiding them
  */
 
 const HEADERS = [
@@ -45,8 +48,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v5',
-    scriptVersion: 'v5',
+    service: 'lyrical-sheets-webhook-v6',
+    scriptVersion: 'v6',
     capabilities: { reset: true, voidDeletes: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -131,6 +134,8 @@ function listReceiptEmails_(e) {
 
     const threads = GmailApp.search(query, 0, limit);
     const emails = [];
+    let skipped = 0;
+    let skipError = '';
 
     for (const thread of threads) {
       // Guard each thread so one unreadable message/attachment doesn't abort
@@ -151,19 +156,30 @@ function listReceiptEmails_(e) {
           return /pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name);
         });
 
+        // GmailMessage has no getSnippet() — derive a preview from the plain
+        // body instead. Guarded separately so an unreadable body still leaves
+        // the email listed, just without a preview.
+        let snippet = '';
+        try {
+          snippet = (msg.getPlainBody() || '').replace(/\s+/g, ' ').trim().substring(0, 180);
+        } catch (_) { snippet = ''; }
+
         emails.push({
           id: msg.getId(),
           threadId: thread.getId(),
           subject: msg.getSubject() || '(No Subject)',
           from: msg.getFrom() || 'Unknown Sender',
           date: msg.getDate().toISOString(),
-          snippet: msg.getSnippet() || '',
+          snippet: snippet,
           hasAttachments: relevantAttachments.length > 0,
           attachmentCount: relevantAttachments.length,
           attachmentNames: relevantAttachments.map(a => a.getName())
         });
       } catch (threadErr) {
-        // Skip this thread and keep going.
+        // Record the failure instead of hiding it — if every thread fails,
+        // the client can show why rather than a misleading "no emails matched".
+        skipped++;
+        if (!skipError) skipError = String(threadErr);
         continue;
       }
     }
@@ -177,6 +193,8 @@ function listReceiptEmails_(e) {
       query: query,
       threadsFound: threads.length,
       count: emails.length,
+      skipped: skipped,
+      skipError: skipError,
       emails: emails
     });
   } catch (err) {
