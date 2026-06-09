@@ -4090,6 +4090,28 @@ async function toggleEmailPreview(msgId) {
   }
 }
 
+// Build a self-contained HTML receipt from an email that has no file
+// attachment (e.g. an emailed HTML receipt like Anthropic/Stripe). Saving
+// this means every imported expense gets a locally-viewable receipt in the
+// ledger instead of showing "Missing".
+function _emailBodyToReceiptFile(email, item) {
+  const subject = email.subject || item.description || item.vendor || 'Email receipt';
+  const meta = [
+    email.from ? `From: ${email.from}` : '',
+    email.date ? `Date: ${email.date}` : '',
+    item.reference ? `Reference: ${item.reference}` : ''
+  ].filter(Boolean).map(escapeHtml).join('<br>');
+  const bodyHtml = escapeHtml(email.body || '').replace(/\n/g, '<br>');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:720px;margin:24px auto;padding:0 18px;color:#1a1a1a;line-height:1.5;}
+h1{font-size:18px;margin:0 0 4px;}.meta{color:#666;font-size:12px;margin-bottom:18px;border-bottom:1px solid #ddd;padding-bottom:12px;}
+.body{font-size:13px;white-space:normal;}</style></head>
+<body><h1>${escapeHtml(subject)}</h1><div class="meta">${meta}</div><div class="body">${bodyHtml}</div></body></html>`;
+  const nameBase = (item.vendor || subject || 'receipt')
+    .replace(/[^a-zA-Z0-9.\-_ ]/g, '').trim().slice(0, 60) || 'receipt';
+  return new File([html], `${nameBase}.html`, { type: 'text/html' });
+}
+
 // Which of an email's PDF/image attachments are selected for scanning/saving.
 // The preview drawer's checkboxes default to checked, but they only exist
 // once the drawer has been opened — so no checkboxes in the DOM means "all
@@ -4409,7 +4431,9 @@ function renderEmailReceiptDrafts(receipts) {
               <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:11px;width:100%;color:var(--text2);">
               ${dup?`<div style="font-size:10px;color:var(--amber);margin-top:2px;">⚠ matches an existing expense</div>`:''}
               ${lowConf?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">low confidence (${(r.confidence*100|0)}%)</div>`:''}
-              ${(r.selectedAtts&&r.selectedAtts.length)?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">📎 ${r.selectedAtts.length} file${r.selectedAtts.length>1?'s':''} → receipts folder on import</div>`:''}
+              ${(r.selectedAtts&&r.selectedAtts.length)
+                ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">📎 ${r.selectedAtts.length} file${r.selectedAtts.length>1?'s':''} → receipts folder on import</div>`
+                : (r.msgId?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">📄 email saved as receipt on import</div>`:'')}
             </td>
             <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:12px;">${catOptions(r.category)}</select></td>
             <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:12px;width:120px;"></td>
@@ -4542,7 +4566,28 @@ async function importEmailReceiptDrafts() {
       }
     }
 
-    const receiptPath = addonLocal || gmailLocal || item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
+    // Body-only receipts (no attachment): save the email itself locally so the
+    // ledger still gets a viewable receipt instead of "Missing". Saved once per
+    // source email, sharing the same gmailSavedByMsg cache.
+    let bodyLocal = '';
+    if (!addonLocal && !gmailLocal && !item.receipt && item.msgId &&
+        typeof saveReceiptToLocalFile === 'function') {
+      if (gmailSavedByMsg[item.msgId] !== undefined) {
+        bodyLocal = gmailSavedByMsg[item.msgId];
+      } else {
+        const email = _emailContentCache[item.msgId];
+        if (email && (email.body || email.subject)) {
+          try {
+            bodyLocal = (await saveReceiptToLocalFile(_emailBodyToReceiptFile(email, item), 'email-imports')) || '';
+          } catch (err) {
+            console.error('Failed to save email body as receipt', err);
+          }
+          gmailSavedByMsg[item.msgId] = bodyLocal;
+        }
+      }
+    }
+
+    const receiptPath = addonLocal || gmailLocal || bodyLocal || item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
     TAX_CENTER.businessExpenses.unshift({
       id: Date.now() + Math.floor(Math.random() * 100000),
       desc: item.description || item.vendor || 'Email receipt',
