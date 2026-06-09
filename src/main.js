@@ -4136,7 +4136,7 @@ function renderEmailPreviewContent(msgId, container) {
 // Accepts Gemini-style `parts` (e.g. `{ text }` and `{ inline_data: { mime_type, data } }`).
 // Runs directly browser → Google API using the publisher's own key.
 async function _callGeminiForReceipts(apiKey, parts) {
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest'];
   let lastErr;
   for (const model of models) {
     try {
