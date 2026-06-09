@@ -4194,7 +4194,7 @@ async function extractReceiptsFromEmailText() {
   let parts = [];
   const allowedCats = EXPENSE_CATEGORIES.join(' | ');
   const prompt = `You extract purchase receipts/invoices from emails for bookkeeping.
-Return ONLY valid JSON: {"receipts":[{"vendor":"string","date":"YYYY-MM-DD","amount":number,"currency":"ISO 4217 uppercase","description":"short human label","reference":"order/invoice number if any","category":"one of: ${allowedCats}","sourceSnippet":"<= 240 chars of the original line(s) that justify this row","confidence":0.0}]}
+Return ONLY valid JSON: {"receipts":[{"vendor":"string","date":"YYYY-MM-DD","amount":number,"currency":"ISO 4217 uppercase","description":"short human label","reference":"order/invoice number if any","category":"one of: ${allowedCats}","sourceSnippet":"<= 240 chars of the original line(s) that justify this row","confidence":0.0,"emailId":"string"}]}
 Rules:
 1. Include EVERY distinct purchase, payment, invoice, charge, or receipt — including subscriptions, ad spend, shipping labels, software, postage, services, and book printing. One row per receipt.
 2. Skip pure shipping-tracking updates, marketing emails, password resets, statements/balances with no charge, payment requests, refunds (note refunds as negative amount).
@@ -4205,7 +4205,8 @@ Rules:
 7. confidence is 0.0–1.0 reflecting how sure you are this is a real receipt.
 8. If an attachment is a PDF/image of a receipt, extract from it directly.
 9. Do not invent data. If amount/currency/date cannot be determined, omit the row entirely.
-10. Output JSON only — no markdown, no commentary.`;
+10. Output JSON only — no markdown, no commentary.
+11. If there are multiple emails, emailId must be the Email ID found in the header of the email this receipt belongs to (e.g. --- EMAIL ID: <msgId> ---).`;
 
   parts.push({ text: prompt });
 
@@ -4237,7 +4238,7 @@ Rules:
         }
 
         const email = _emailContentCache[msgId];
-        parts.push({ text: `--- EMAIL: "${email.subject}" FROM: ${email.from} DATE: ${email.date} ---\n` + email.body.slice(0, 80000) });
+        parts.push({ text: `--- EMAIL ID: ${msgId} SUBJECT: "${email.subject}" FROM: ${email.from} DATE: ${email.date} ---\n` + email.body.slice(0, 80000) });
 
         const attCheckboxes = Array.from(document.querySelectorAll(`.email-att-cb-${msgId}:checked`));
         for (const attCb of attCheckboxes) {
@@ -4302,20 +4303,37 @@ Rules:
     }
 
     const fallbackCat = $('email-receipt-default-cat')?.value || 'Other';
-    const drafts = (parsed.receipts || []).map(r => ({
-      vendor: String(r.vendor || '').trim(),
-      description: String(r.description || r.vendor || 'Receipt').trim(),
-      date: normalizeReceiptDate(r.date) || today(),
-      amount: Number(r.amount || 0),
-      currency: String(r.currency || 'CAD').toUpperCase().slice(0, 3),
-      reference: String(r.reference || '').trim(),
-      category: EXPENSE_CATEGORIES.includes(r.category)
-        ? r.category
-        : inferReceiptCategory(r.vendor, r.description),
-      sourceSnippet: String(r.sourceSnippet || '').slice(0, 240),
-      confidence: Number(r.confidence || 0.7),
-      include: true
-    })).filter(r => r.amount && r.currency);
+    const checkedCbs = _activeEmailImportTab === 'gmail' ? Array.from(document.querySelectorAll('.gmail-email-cb:checked')) : [];
+    const drafts = (parsed.receipts || []).map(r => {
+      const msgId = String(r.emailId || '').trim() || (checkedCbs.length === 1 ? checkedCbs[0].getAttribute('data-msg-id') : '');
+      const email = msgId ? _emailContentCache[msgId] : null;
+      
+      let selectedAtts = [];
+      if (msgId && email) {
+        const attCheckboxes = Array.from(document.querySelectorAll(`.email-att-cb-${msgId}:checked`));
+        selectedAtts = attCheckboxes.map(attCb => {
+          const idx = parseInt(attCb.getAttribute('data-idx'));
+          return email.fileParts?.[idx];
+        }).filter(Boolean);
+      }
+
+      return {
+        vendor: String(r.vendor || '').trim(),
+        description: String(r.description || r.vendor || 'Receipt').trim(),
+        date: normalizeReceiptDate(r.date) || today(),
+        amount: Number(r.amount || 0),
+        currency: String(r.currency || 'CAD').toUpperCase().slice(0, 3),
+        reference: String(r.reference || '').trim(),
+        category: EXPENSE_CATEGORIES.includes(r.category)
+          ? r.category
+          : inferReceiptCategory(r.vendor, r.description),
+        sourceSnippet: String(r.sourceSnippet || '').slice(0, 240),
+        confidence: Number(r.confidence || 0.7),
+        include: true,
+        msgId,
+        selectedAtts
+      };
+    }).filter(r => r.amount && r.currency);
 
     _emailReceiptDrafts = drafts;
     renderEmailReceiptDrafts(drafts);
@@ -4485,7 +4503,36 @@ async function importEmailReceiptDrafts() {
     // locally-saved manual attachment.
     let addonLocal = '';
     if (item._inboxId) addonLocal = await localizeInboxReceiptFiles(item);
-    const receiptPath = addonLocal || item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
+
+    // Save Gmail Search attachments locally if present
+    let gmailLocal = '';
+    if (item.selectedAtts && item.selectedAtts.length) {
+      if (typeof saveReceiptToLocalFile === 'function') {
+        let firstLocal = '';
+        for (const att of item.selectedAtts) {
+          try {
+            const byteCharacters = atob(att.base64.replace(/\s/g, ''));
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: att.mime });
+            const file = new File([blob], att.name, { type: att.mime });
+            
+            const localPath = await saveReceiptToLocalFile(file, 'email-imports');
+            if (localPath && !firstLocal) {
+              firstLocal = localPath;
+            }
+          } catch (err) {
+            console.error('Failed to save Gmail attachment locally', err);
+          }
+        }
+        gmailLocal = firstLocal;
+      }
+    }
+
+    const receiptPath = addonLocal || gmailLocal || item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
     TAX_CENTER.businessExpenses.unshift({
       id: Date.now() + Math.floor(Math.random() * 100000),
       desc: item.description || item.vendor || 'Email receipt',
