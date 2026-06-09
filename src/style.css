@@ -798,3 +798,12 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .hist-filter-chip strong{color:var(--text);}
 .hist-filter-chip button{border:none;background:var(--ink);color:var(--cream);font-size:11px;font-weight:600;border-radius:100px;padding:4px 10px;margin-left:4px;cursor:pointer;font-family:'DM Mono',monospace;transition:opacity .12s;}
 .hist-filter-chip button:hover{opacity:.85;}
+
+/* Card entrance micro-animation on view state changes */
+.card, .kpi, .metric-banner, .stock-block, .store-card, .stock-alert {
+  animation: cardEntrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes cardEntrance {
+  from { opacity: 0; transform: scale(0.985) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}

@@ -492,6 +492,59 @@ function isAuthor() {
 
 // ── UTILITIES
 const $ = id => document.getElementById(id);
+
+// Count up animation for KPIs
+function animateCountValue(id, target, duration = 350, formatFunc = null) {
+  const obj = $(id);
+  if (!obj) return;
+  // If the target is not a numeric value (e.g. has currency symbol or suffix), extract the number
+  let targetNum = parseFloat(String(target).replace(/[^\d.-]/g, ''));
+  if (isNaN(targetNum)) {
+    obj.textContent = target;
+    return;
+  }
+  const isNegative = targetNum < 0;
+  targetNum = Math.abs(targetNum);
+  
+  // Format function defaults to preserving decimals or currency
+  const format = formatFunc || (val => {
+    const rounded = Math.round(val * 100) / 100;
+    // Try to match formatting of original target
+    if (String(target).includes('$')) return (isNegative ? '-' : '') + '$' + rounded.toLocaleString(undefined, { minimumFractionDigits: String(target).includes('.') ? 2 : 0, maximumFractionDigits: 2 });
+    if (String(target).includes('£')) return (isNegative ? '-' : '') + '£' + rounded.toLocaleString(undefined, { minimumFractionDigits: String(target).includes('.') ? 2 : 0, maximumFractionDigits: 2 });
+    return (isNegative ? '-' : '') + rounded.toLocaleString(undefined, { minimumFractionDigits: String(target).includes('.') ? 2 : 0, maximumFractionDigits: 2 });
+  });
+
+  const start = 0;
+  const startTime = performance.now();
+
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    // Ease out quad
+    const easeProgress = progress * (2 - progress);
+    const currentVal = start + easeProgress * (targetNum - start);
+    obj.textContent = format(currentVal);
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    } else {
+      // Ensure exact end value is set to avoid rounding discrepancies
+      obj.textContent = target;
+    }
+  }
+  requestAnimationFrame(update);
+}
+
+// Micro-animations for view state changes
+function triggerCardAnimations() {
+  const cards = document.querySelectorAll('.card, .kpi, .metric-banner, .stock-block, .store-card, .stock-alert');
+  cards.forEach(card => {
+    // Reset animation
+    card.style.animation = 'none';
+    card.offsetHeight; // trigger reflow
+    card.style.animation = null;
+  });
+}
 // Money helpers (CURRENCY_SYMBOL_TO_CODE, CODE_TO_SYMBOL, getSym,
 // normalizeCurrencyCode, fmt, fmtNum, fmtD, getBookCurrencyCode,
 // paymentSummary, buildPaymentMeta) are imported from ./lib/money.js
@@ -1191,6 +1244,7 @@ function switchBook(bookId) {
   }
   updateRoleToggleButton();
   syncRoleUI();
+  triggerCardAnimations();
 }
 
 // Active channel drill-down filter for the history tab. Set by tapping a
@@ -1262,15 +1316,15 @@ function updateHeader() {
       totalRev += recognizedRevenueOf(s);
       totalCon += s.stores.reduce((b,st)=>b+st.outstanding,0);
     });
-    $('h-stock').textContent = totalStock;
-    $('h-revenue').textContent = '~'+totalRev.toFixed(0);
-    $('h-consigned').textContent = totalCon;
+    animateCountValue('h-stock', totalStock);
+    animateCountValue('h-revenue', '~'+totalRev.toFixed(0));
+    animateCountValue('h-consigned', totalCon);
   } else {
     const s = getState(), book = getBook();
     const cur = book.currency;
-    $('h-stock').textContent = s.stock;
-    $('h-revenue').textContent = fmt(recognizedRevenueOf(s), cur);
-    $('h-consigned').textContent = s.stores.reduce((a,st)=>a+st.outstanding,0);
+    animateCountValue('h-stock', s.stock);
+    animateCountValue('h-revenue', fmt(recognizedRevenueOf(s), cur));
+    animateCountValue('h-consigned', s.stores.reduce((a,st)=>a+st.outstanding,0));
   }
 }
 
@@ -1705,21 +1759,21 @@ function updateDash() {
   $('d-stock-sub').textContent = 'of '+book.maxPrint+' printed';
   $('d-thresh-sub').textContent = 'threshold: '+book.threshold+' units';
   $('d-thresh-label').textContent = 'Alert at '+book.threshold+' units';
-  $('d-stock').textContent=s.stock; $('h-stock').textContent=s.stock;
-  $('d-sold').textContent=s.sold;
+  animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
+  animateCountValue('d-sold', s.sold);
   const heldGross=heldGrossOf(s);
   const recognizedRev=recognizedRevenueOf(s);
-  $('d-revenue').textContent=fmt(recognizedRev,cur); $('h-revenue').textContent=fmt(recognizedRev,cur);
+  animateCountValue('d-revenue', fmt(recognizedRev,cur)); animateCountValue('h-revenue', fmt(recognizedRev,cur));
   const revSub=$('d-revenue-sub');
   if(revSub) revSub.textContent = heldGross>0.01
     ? `${fmt(s.revenue,cur)} collected · ${fmt(heldGross,cur)} held by artist`
     : 'total collected';
   $('d-avg-sub').textContent='avg '+(s.sold>0?fmt(recognizedRev/s.sold,cur):'—');
   const consigned=s.stores.reduce((a,st)=>a+st.outstanding,0);
-  $('d-consigned').textContent=consigned; $('h-consigned').textContent=consigned;
+  animateCountValue('d-consigned', consigned); animateCountValue('h-consigned', consigned);
   $('d-stores').textContent=s.stores.length;
   const owed=s.stores.reduce((a,st)=>a+st.amountOwed,0);
-  $('d-owed').textContent=fmt(owed,cur); $('d-owed').className='kpi-value'+(owed>0?' warn':'');
+  animateCountValue('d-owed', fmt(owed,cur)); $('d-owed').className='kpi-value'+(owed>0?' warn':'');
   const pendingTransfers=[...(s.artistTransfers||[])];
   
   // Merge pending sales where they collected payment
@@ -1735,7 +1789,7 @@ function updateDash() {
   });
 
   const pendingTotal=pendingTransfers.reduce((a,t)=>a+t.total,0);
-  $('d-artist-pending').textContent=pendingTransfers.length>0?fmt(pendingTotal,cur):'—';
+  animateCountValue('d-artist-pending', pendingTransfers.length>0?fmt(pendingTotal,cur):'—');
   $('d-artist-pending').className='kpi-value'+(pendingTransfers.length>0?' warn':'');
   $('d-artist-pending-sub').textContent=pendingTransfers.length>0?`${pendingTransfers.length} order${pendingTransfers.length>1?'s':''} (incl. pending) awaiting forwarding`:'no pending transfers';
   renderArtistTransfers();
@@ -1773,12 +1827,12 @@ function updateDash() {
       const expTotal = unreceivedExp.reduce((a,e)=>a+(e.amount||0),0);
       // KPI tile
       if(expKpi){ expKpi.style.display=''; }
-      $('d-expenses-owed').textContent = fmt(expTotal,cur);
+      animateCountValue('d-expenses-owed', fmt(expTotal,cur));
       $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length!==1?'s':''} outstanding`;
       // Detail table — dark banner style
       if(expSect){
         expSect.style.display='';
-        $('d-exp-total').textContent = fmt(expTotal,cur);
+        animateCountValue('d-exp-total', fmt(expTotal,cur));
         $('d-exp-count').textContent = `${expenses.length} expense${expenses.length!==1?'s':''} logged`;
         $('d-exp-body').innerHTML = unreceivedExp.map(e=>`
           <tr>
@@ -1842,7 +1896,7 @@ function updateDash() {
     const earningsStats = calculateArtistEarnings(activeBook);
     if (earningsStats && $('d-net-publisher-kpi')) {
       $('d-net-publisher-kpi').style.display = '';
-      $('d-net-publisher').textContent = fmt(earningsStats.netPublisher, cur);
+      animateCountValue('d-net-publisher', fmt(earningsStats.netPublisher, cur));
     }
   } else if ($('d-net-publisher-kpi')) {
     $('d-net-publisher-kpi').style.display = 'none';
