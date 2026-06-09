@@ -117,10 +117,16 @@ function listReceiptEmails_(e) {
   // as the opaque "Failed to fetch" instead of a readable message.
   try {
     const query = (e && e.parameter && e.parameter.q) || '';
-    const limit = Math.min(100, parseInt((e && e.parameter && e.parameter.limit) || 20, 10) || 20);
+    const limit = Math.min(100, parseInt((e && e.parameter && e.parameter.limit) || 50, 10) || 50);
     if (!query) {
       return jsonOut_({ error: 'Search query parameter q is required' });
     }
+
+    // The mailbox actually being searched is the account that deployed this
+    // Web App (Execute as: Me). Surfacing it lets the client confirm the search
+    // is hitting the right Gmail instead of guessing.
+    let account = '';
+    try { account = Session.getEffectiveUser().getEmail() || ''; } catch (_) { account = ''; }
 
     const threads = GmailApp.search(query, 0, limit);
     const emails = [];
@@ -164,7 +170,14 @@ function listReceiptEmails_(e) {
     // Sort by date descending (should already be sorted but safe to ensure)
     emails.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    return jsonOut_({ ok: true, emails });
+    return jsonOut_({
+      ok: true,
+      account: account,
+      query: query,
+      threadsFound: threads.length,
+      count: emails.length,
+      emails: emails
+    });
   } catch (err) {
     return jsonOut_({ error: 'Gmail search failed: ' + String(err) });
   }
