@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v4)
+/* Lyricalmyrical Inventory — Unified Backend (v5)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
  *  2. Sheets sync with:
@@ -9,6 +9,7 @@
  *       (wipes duplicates, stale VOID rows, and blank-CAD legacy rows)
  *     - CAD-equivalent column using live FX (cached 6h)
  *     - Cleaner formatting: frozen header, banding, currency formats, hidden ID col
+ *  3. Email receipt scanner & fetcher (v5 additions)
  */
 
 const HEADERS = [
@@ -44,8 +45,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v4',
-    scriptVersion: 'v4',
+    service: 'lyrical-sheets-webhook-v5',
+    scriptVersion: 'v5',
     capabilities: { reset: true, voidDeletes: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });

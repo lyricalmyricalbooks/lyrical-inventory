@@ -1,4 +1,4 @@
-/* Lyricalmyrical — Open Call automation
+/* Lyricalmyrical — Open Call automation (v1)
  *
  * Turns the manual "Collective Photobook open call" spreadsheet into a
  * three-stage mail-merge run from a Gmail menu. For each artist row it
