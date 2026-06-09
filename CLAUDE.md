@@ -46,3 +46,5 @@ and ledger consistent.
 - Prefer action over investigation when intent is clear
 - If the user asks for something, assume they know what they want
 - Only ask clarifying questions if the request is genuinely ambiguous
+- **Always update the embedded Apps Script code** in the "Connect your Google Sheet" tab (`index.html`'s `<pre id="gas-code">` container) whenever `apps-script/Code.gs` is modified. Ensure you HTML-escape `<` as `&lt;`, `>` as `&gt;`, and `&` as `&amp;`, and use a replacement function in JavaScript (not a raw string) to avoid duplication issues caused by dollar signs (`$`) in the source code.
+
