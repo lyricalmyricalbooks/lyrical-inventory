@@ -4090,6 +4090,28 @@ async function toggleEmailPreview(msgId) {
   }
 }
 
+// Build a self-contained HTML receipt from an email that has no file
+// attachment (e.g. an emailed HTML receipt like Anthropic/Stripe). Saving
+// this means every imported expense gets a locally-viewable receipt in the
+// ledger instead of showing "Missing".
+function _emailBodyToReceiptFile(email, item) {
+  const subject = email.subject || item.description || item.vendor || 'Email receipt';
+  const meta = [
+    email.from ? `From: ${email.from}` : '',
+    email.date ? `Date: ${email.date}` : '',
+    item.reference ? `Reference: ${item.reference}` : ''
+  ].filter(Boolean).map(escapeHtml).join('<br>');
+  const bodyHtml = escapeHtml(email.body || '').replace(/\n/g, '<br>');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:720px;margin:24px auto;padding:0 18px;color:#1a1a1a;line-height:1.5;}
+h1{font-size:18px;margin:0 0 4px;}.meta{color:#666;font-size:12px;margin-bottom:18px;border-bottom:1px solid #ddd;padding-bottom:12px;}
+.body{font-size:13px;white-space:normal;}</style></head>
+<body><h1>${escapeHtml(subject)}</h1><div class="meta">${meta}</div><div class="body">${bodyHtml}</div></body></html>`;
+  const nameBase = (item.vendor || subject || 'receipt')
+    .replace(/[^a-zA-Z0-9.\-_ ]/g, '').trim().slice(0, 60) || 'receipt';
+  return new File([html], `${nameBase}.html`, { type: 'text/html' });
+}
+
 // Which of an email's PDF/image attachments are selected for scanning/saving.
 // The preview drawer's checkboxes default to checked, but they only exist
 // once the drawer has been opened — so no checkboxes in the DOM means "all
@@ -4409,7 +4431,9 @@ function renderEmailReceiptDrafts(receipts) {
               <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:11px;width:100%;color:var(--text2);">
               ${dup?`<div style="font-size:10px;color:var(--amber);margin-top:2px;">⚠ matches an existing expense</div>`:''}
               ${lowConf?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">low confidence (${(r.confidence*100|0)}%)</div>`:''}
-              ${(r.selectedAtts&&r.selectedAtts.length)?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">📎 ${r.selectedAtts.length} file${r.selectedAtts.length>1?'s':''} → receipts folder on import</div>`:''}
+              ${r.msgId
+                ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">${(r.selectedAtts&&r.selectedAtts.length)?`📎 ${r.selectedAtts.length} file${r.selectedAtts.length>1?'s':''} + email`:`📄 email`} → receipts folder on import</div>`
+                : ''}
             </td>
             <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:12px;">${catOptions(r.category)}</select></td>
             <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:12px;width:120px;"></td>
@@ -4483,7 +4507,7 @@ async function importEmailReceiptDrafts() {
 
   let imported = 0, skippedDup = 0;
   let draftIdx = 0;
-  const gmailSavedByMsg = {}; // msgId → first saved local:// path for that email
+  const gmailSavedByMsg = {}; // msgId → [saved local:// paths] for that email
   for (const item of drafts) {
     const currency = (item.currency || baseCur).toUpperCase();
     const amount = Number(item.amount || 0);
@@ -4505,44 +4529,57 @@ async function importEmailReceiptDrafts() {
 
     // Receipt file: for a Gmail add-on item, download its staged file(s) into
     // the local receipts folder (just like a manually-attached email receipt).
-    // Fall back to the cloud URL if no local folder is connected, then to any
-    // locally-saved manual attachment.
     let addonLocal = '';
     if (item._inboxId) addonLocal = await localizeInboxReceiptFiles(item);
 
-    // Save Gmail Search attachments locally if present. Saved once per source
-    // email — two receipts extracted from the same email share the same files.
-    let gmailLocal = '';
-    if (item.selectedAtts && item.selectedAtts.length) {
-      if (item.msgId && gmailSavedByMsg[item.msgId] !== undefined) {
-        gmailLocal = gmailSavedByMsg[item.msgId];
-      } else if (typeof saveReceiptToLocalFile === 'function') {
-        let firstLocal = '';
-        for (const att of item.selectedAtts) {
+    // For a Gmail Search receipt, save the email body AND every selected
+    // attachment locally, so each one is viewable in the ledger. Saved once per
+    // source email and shared across drafts from that email. PDF attachments
+    // come first (they're usually the real invoice), then the email body, then
+    // image attachments (often just logos), so the primary link is the most
+    // receipt-like file.
+    let emailFiles = [];
+    if (item.msgId && typeof saveReceiptToLocalFile === 'function') {
+      if (gmailSavedByMsg[item.msgId] !== undefined) {
+        emailFiles = gmailSavedByMsg[item.msgId];
+      } else {
+        const email = _emailContentCache[item.msgId];
+        const atts = item.selectedAtts || [];
+        const isPdf = a => /pdf/i.test(a.mime || '') || /\.pdf$/i.test(a.name || '');
+        const ordered = [...atts.filter(isPdf), '__BODY__', ...atts.filter(a => !isPdf(a))];
+        const paths = [];
+        for (const entry of ordered) {
           try {
-            const byteCharacters = atob(att.base64.replace(/\s/g, ''));
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: att.mime });
-            const file = new File([blob], att.name, { type: att.mime });
-
-            const localPath = await saveReceiptToLocalFile(file, 'email-imports');
-            if (localPath && !firstLocal) {
-              firstLocal = localPath;
+            if (entry === '__BODY__') {
+              if (email && (email.body || email.subject)) {
+                const bp = await saveReceiptToLocalFile(_emailBodyToReceiptFile(email, item), 'email-imports');
+                if (bp) paths.push(bp);
+              }
+            } else {
+              const byteChars = atob(entry.base64.replace(/\s/g, ''));
+              const byteArray = new Uint8Array(byteChars.length);
+              for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+              const file = new File([byteArray], entry.name, { type: entry.mime });
+              const lp = await saveReceiptToLocalFile(file, 'email-imports');
+              if (lp) paths.push(lp);
             }
           } catch (err) {
-            console.error('Failed to save Gmail attachment locally', err);
+            console.error('Failed to save receipt file locally', err);
           }
         }
-        gmailLocal = firstLocal;
-        if (item.msgId) gmailSavedByMsg[item.msgId] = gmailLocal;
+        emailFiles = paths;
+        gmailSavedByMsg[item.msgId] = paths;
       }
     }
 
-    const receiptPath = addonLocal || gmailLocal || item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
+    // All receipt files for this expense, with a single-string fallback to the
+    // add-on copy, a cloud URL, or a manually-attached file.
+    let receiptFiles = emailFiles.slice();
+    if (!receiptFiles.length) {
+      const fallback = addonLocal || item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
+      if (fallback) receiptFiles = [fallback];
+    }
+    const receiptPath = receiptFiles[0] || '';
     TAX_CENTER.businessExpenses.unshift({
       id: Date.now() + Math.floor(Math.random() * 100000),
       desc: item.description || item.vendor || 'Email receipt',
@@ -4557,6 +4594,7 @@ async function importEmailReceiptDrafts() {
       date: item.date || today(),
       ref: item.reference || 'email-import',
       receipt: receiptPath,
+      receiptFiles,
       sourceSnippet: item.sourceSnippet || '',
       importedFromEmail: true,
       importedAt: new Date().toISOString()
@@ -7809,6 +7847,28 @@ async function saveReceiptToLocalFile(file, subfolderName = '') {
   }
 }
 
+// Build the ledger's receipt cell from an expense/ledger item. Supports the
+// new receiptFiles array (body + each attachment, each independently viewable)
+// and falls back to the single legacy receipt string. Local files open via
+// viewLocalReceipt; remote URLs open in a new tab.
+function _localReceiptCell(item) {
+  const files = (Array.isArray(item.receiptFiles) && item.receiptFiles.length)
+    ? item.receiptFiles
+    : (item.receipt ? [item.receipt] : []);
+  if (!files.length) return '';
+  const multi = files.length > 1;
+  return files.map((r, idx) => {
+    if (typeof r === 'string' && r.startsWith('local://')) {
+      const fn = r.replace('local://', '');
+      const base = fn.split('/').pop();
+      const label = multi ? `View ${idx + 1}` : 'View Local';
+      return `<a href="#" title="${escapeHtml(base)}" onclick="event.preventDefault(); viewLocalReceipt('${fn.replace(/'/g, "\\'")}')" style="color:var(--gold3);text-decoration:underline;">${label}</a>`;
+    }
+    const label = multi ? `Receipt ${idx + 1}` : 'Receipt';
+    return `<a href="${r}" target="_blank" style="color:var(--gold3);">${label}</a>`;
+  }).join(' · ');
+}
+
 async function viewLocalReceipt(path) {
   const dirHandle = await loadReceiptFolderHandle();
   if (!dirHandle) { showToast('⚠ Receipt folder not connected', 'warn'); return; }
@@ -9092,6 +9152,7 @@ function renderTaxCenter() {
             cat: e.cat || 'Other',
             ref: e.ref || '',
             receipt: e.receipt || '',
+            receiptFiles: e.receiptFiles || [],
             origCurrency: eCur,
             origAmount: e.amount || 0,
             baseAmount: eBase,
@@ -9193,21 +9254,15 @@ function renderTaxCenter() {
       ledTbody.innerHTML = pageLedger.map(item => {
         // Build receipt/ref cell
         let refCell = '';
-        let r = item.receipt || '';
         let displayRef = item.ref || '';
         // Legacy cleanup: if ref contains a local link, extract it
         if (displayRef && displayRef.includes('local://')) {
           const match = displayRef.match(/href="([^"]+)"/);
-          if (match) r = match[1];
-          displayRef = '';
-        }
-        if (displayRef) refCell = displayRef;
-        else if (!r) refCell = '';
-        else if (r.startsWith('local://')) {
-          const fn = r.replace('local://', '');
-          refCell = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn}')" style="color:var(--gold3);text-decoration:underline;">View Local</a>`;
+          refCell = match ? _localReceiptCell({ receipt: match[1] }) : '';
+        } else if (displayRef) {
+          refCell = displayRef;
         } else {
-          refCell = `<a href="${r}" target="_blank" style="color:var(--gold3);">Receipt</a>`;
+          refCell = _localReceiptCell(item);
         }
 
         // Show original amount in its native currency; show CAD equivalent separately
@@ -9363,15 +9418,7 @@ function showTripDetail(tripName) {
     return dateA > dateB ? 1 : dateA < dateB ? -1 : 0;
   });
   const rows = sorted.map(item => {
-    let r = item.receipt || '';
-    let refCell = '';
-    if (!r) refCell = '';
-    else if (r.startsWith('local://')) {
-      const fn = r.replace('local://', '');
-      refCell = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn}')" style="color:var(--gold3);text-decoration:underline;">View Local</a>`;
-    } else {
-      refCell = `<a href="${r}" target="_blank" style="color:var(--gold3);">Receipt</a>`;
-    }
+    const refCell = _localReceiptCell(item);
     const origSym = getSym(item.origCurrency || 'CAD');
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
     return `
@@ -9423,20 +9470,14 @@ function showCategoryDetail(catName) {
 
   const rows = sorted.map(item => {
     let refCell = '';
-    let r = item.receipt || '';
     let displayRef = item.ref || '';
     if (displayRef && displayRef.includes('local://')) {
       const match = displayRef.match(/href="([^"]+)"/);
-      if (match) r = match[1];
-      displayRef = '';
-    }
-    if (displayRef) refCell = displayRef;
-    else if (!r) refCell = '';
-    else if (r.startsWith('local://')) {
-      const fn = r.replace('local://', '');
-      refCell = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn}')" style="color:var(--gold3);text-decoration:underline;">View Local</a>`;
+      refCell = match ? _localReceiptCell({ receipt: match[1] }) : '';
+    } else if (displayRef) {
+      refCell = displayRef;
     } else {
-      refCell = `<a href="${r}" target="_blank" style="color:var(--gold3);">Receipt</a>`;
+      refCell = _localReceiptCell(item);
     }
     const origSym = getSym(item.origCurrency || 'CAD');
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
