@@ -1057,6 +1057,7 @@ async function loadAllBooks() {
   setSyncState('syncing','<b>Firestore</b> · loading all books.');
   await Promise.all(Object.keys(BOOKS).map(id => loadBook(id)));
   await loadTaxCenter();
+  startEmailInboxWatcher();
   setSyncState('ok','<b>Firestore</b> · connected · live sync on');
   $('hdr-sub').textContent = 'Inventory App · Synced '+new Date().toLocaleTimeString();
   renderCurrent();
@@ -3500,6 +3501,9 @@ let _emailReceiptDrafts = [];
 let _activeEmailImportTab = 'gmail';
 let _gmailEmailsFetched = [];
 let _emailContentCache = {};
+// Receipts pushed in by the Gmail add-on (Firestore `emailReceiptInbox`).
+let _emailInboxItems = [];
+let _emailInboxSeen = null; // Set of seen ids; null until the first snapshot.
 
 const EXPENSE_CATEGORIES = [
   'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
@@ -3669,10 +3673,80 @@ function openEmailReceiptImportModal() {
         : '';
     };
   }
+
+  // Surface anything the Gmail add-on has pushed in as ready-to-edit drafts.
+  loadGmailInboxDrafts();
 }
 
 function closeEmailReceiptImportModal() {
   closeM('email-receipt-import-modal');
+}
+
+// ── Gmail add-on inbox ───────────────────────────────────────────────
+// The add-on writes draft expenses to Firestore `emailReceiptInbox`; we watch
+// that collection live and feed items into the existing review/import flow.
+function startEmailInboxWatcher() {
+  if (isAuthor() || typeof window._fbWatchEmailInbox !== 'function') return;
+  window._fbWatchEmailInbox(items => {
+    _emailInboxItems = Array.isArray(items) ? items : [];
+    const ids = new Set(_emailInboxItems.map(i => i._inboxId));
+    // Only toast for items that landed after the first snapshot, so we don't
+    // shout on every page load about a backlog the user already knows about.
+    if (_emailInboxSeen) {
+      const fresh = _emailInboxItems.filter(i => !_emailInboxSeen.has(i._inboxId));
+      if (fresh.length) {
+        showToast(`📥 ${fresh.length} receipt${fresh.length > 1 ? 's' : ''} sent from Gmail — open Import from Email to review`, 'ok', 6000);
+      }
+    }
+    _emailInboxSeen = ids;
+    updateEmailInboxBadge();
+    // If the import modal is already open, refresh the loaded drafts live.
+    const modal = $('m-email-receipt-import-modal');
+    if (modal && modal.style.display !== 'none') loadGmailInboxDrafts();
+  });
+}
+
+function updateEmailInboxBadge() {
+  const badge = $('email-inbox-badge');
+  if (!badge) return;
+  const n = _emailInboxItems.length;
+  badge.textContent = n ? String(n) : '';
+  badge.style.display = n ? '' : 'none';
+}
+
+// Map an inbox doc to the editable-draft shape the import table expects.
+function _inboxItemToDraft(item) {
+  return {
+    vendor: item.vendor || '',
+    description: item.description || item.vendor || 'Email receipt',
+    date: normalizeReceiptDate(item.date) || today(),
+    amount: Number(item.amount || 0),
+    currency: String(item.currency || 'CAD').toUpperCase().slice(0, 3),
+    reference: item.reference || '',
+    category: EXPENSE_CATEGORIES.includes(item.category)
+      ? item.category
+      : inferReceiptCategory(item.vendor, item.description),
+    sourceSnippet: item.sourceSnippet || '',
+    confidence: typeof item.confidence === 'number' ? item.confidence : 1,
+    include: true,
+    _inboxId: item._inboxId
+  };
+}
+
+// Load add-on receipts into the import modal's draft table (with a banner).
+function loadGmailInboxDrafts() {
+  if (!_emailInboxItems.length) return;
+  _emailReceiptDrafts = _emailInboxItems.map(_inboxItemToDraft);
+  renderEmailReceiptDrafts(_emailReceiptDrafts);
+  const wrap = $('email-receipt-results');
+  if (wrap && !wrap.querySelector('[data-inbox-banner]')) {
+    const banner = document.createElement('div');
+    banner.setAttribute('data-inbox-banner', '1');
+    banner.style.cssText = 'background:rgba(40,140,90,.08);border:1px solid rgba(40,140,90,.25);border-radius:var(--r2);padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.5;';
+    const n = _emailInboxItems.length;
+    banner.innerHTML = `📥 <b>${n}</b> receipt${n > 1 ? 's' : ''} sent from the Gmail add-on. Review below and import — each imported row is cleared from the queue.`;
+    wrap.prepend(banner);
+  }
 }
 
 function switchEmailImportTab(tab) {
@@ -4342,6 +4416,16 @@ async function importEmailReceiptDrafts() {
   }
 
   await saveTaxCenter();
+
+  // Drafts that came from the Gmail add-on carry an _inboxId — remove those
+  // Firestore docs now that they've been reviewed so the queue stays clean.
+  const inboxIds = drafts.map(d => d._inboxId).filter(Boolean);
+  if (inboxIds.length && typeof window._fbDeleteInboxItem === 'function') {
+    await Promise.all(inboxIds.map(id => window._fbDeleteInboxItem(id)));
+    _emailInboxItems = _emailInboxItems.filter(i => !inboxIds.includes(i._inboxId));
+    updateEmailInboxBadge();
+  }
+
   if (typeof renderTaxCenter === 'function') renderTaxCenter();
 
   const msgParts = [];

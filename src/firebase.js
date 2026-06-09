@@ -397,6 +397,35 @@ window._fbLoadSettings = async (key) => {
   } catch (e) { console.error("fbLoadSettings failed", e); return null; }
 };
 
+// ─────────────────────────────────────────────
+// EMAIL RECEIPT INBOX  (Gmail add-on → app)
+// The Gmail add-on writes draft expenses here as { data: JSON, ts, source }.
+// The app watches the collection live and surfaces them in the existing
+// "Import Receipts from Email" review screen.
+// ─────────────────────────────────────────────
+let _inboxUnsub = null;
+window._fbWatchEmailInbox = (cb) => {
+  try {
+    if (_inboxUnsub) { try { _inboxUnsub(); } catch (_) {} _inboxUnsub = null; }
+    const collRef = collection(fs, 'emailReceiptInbox');
+    _inboxUnsub = onSnapshot(collRef, (snap) => {
+      const items = [];
+      snap.forEach(d => {
+        const raw = d.data() || {};
+        const draft = safeParse(raw.data) || {};
+        items.push({ ...draft, _inboxId: d.id, _ts: raw.ts || 0 });
+      });
+      items.sort((a, b) => (b._ts || 0) - (a._ts || 0));
+      cb(items);
+    }, (err) => console.error('inbox watch failed', err));
+  } catch (e) { console.error('fbWatchEmailInbox failed', e); }
+};
+
+window._fbDeleteInboxItem = async (id) => {
+  try { await deleteDoc(doc(fs, 'emailReceiptInbox', id)); }
+  catch (e) { console.error('fbDeleteInboxItem failed', e); }
+};
+
 window._fbSaveCatalog = async (catalog) => {
   try {
     if (window._useFirestoreGlobal()) {
