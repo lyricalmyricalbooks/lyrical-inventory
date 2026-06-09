@@ -4136,7 +4136,7 @@ function renderEmailPreviewContent(msgId, container) {
 // Accepts Gemini-style `parts` (e.g. `{ text }` and `{ inline_data: { mime_type, data } }`).
 // Runs directly browser → Google API using the publisher's own key.
 async function _callGeminiForReceipts(apiKey, parts) {
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-latest'];
+  const models = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
   let lastErr;
   for (const model of models) {
     try {
@@ -4159,8 +4159,18 @@ async function _callGeminiForReceipts(apiKey, parts) {
       }
       if (!res.ok) {
         let detail = `HTTP ${res.status} from ${model}`;
-        try { const err = await res.json(); if (err?.error?.message) detail = err.error.message; } catch (_) {}
+        let shouldStop = false;
+        try {
+          const err = await res.json();
+          if (err?.error?.message) {
+            detail = err.error.message;
+            if (res.status === 429 || /prepayment|credits|billing|quota/i.test(detail)) {
+              shouldStop = true;
+            }
+          }
+        } catch (_) {}
         lastErr = new Error(detail);
+        if (shouldStop) throw lastErr;
         continue;
       }
       const data = await res.json();
