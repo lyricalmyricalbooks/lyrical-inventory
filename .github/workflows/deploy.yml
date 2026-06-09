@@ -11,6 +11,14 @@ permissions:
   pages: write
   id-token: write
 
+# Serialize Pages deployments. Two merges close together (e.g. #195 then #196)
+# would otherwise race: the second deploy 400s with "in progress deployment"
+# because Pages allows only one at a time. Queue them instead of failing, and
+# don't cancel an in-flight deploy.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
