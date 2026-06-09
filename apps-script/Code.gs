@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v6)
+/* Lyricalmyrical Inventory — Unified Backend (v7)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
  *  2. Sheets sync with:
@@ -13,6 +13,8 @@
  *  4. v6: receipt search actually returns results (GmailMessage has no
  *     getSnippet(), so every thread used to fail silently) and reports
  *     skipped threads instead of hiding them
+ *  5. v7: getEmailContent excludes inline images so saved receipt files
+ *     are real attachments, not signature logos
  */
 
 const HEADERS = [
@@ -48,8 +50,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v6',
-    scriptVersion: 'v6',
+    service: 'lyrical-sheets-webhook-v7',
+    scriptVersion: 'v7',
     capabilities: { reset: true, voidDeletes: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -215,7 +217,9 @@ function getEmailContent_(e) {
     }
 
     const body = msg.getPlainBody() || msg.getBody() || '';
-    const attachments = msg.getAttachments();
+    // Skip inline images (logos, signatures) — the client saves these files
+    // into the local receipts folder, so only real attachments belong here.
+    const attachments = msg.getAttachments({ includeInlineImages: false });
     const fileParts = [];
 
     for (const att of attachments) {
