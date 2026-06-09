@@ -4090,6 +4090,21 @@ async function toggleEmailPreview(msgId) {
   }
 }
 
+// Which of an email's PDF/image attachments are selected for scanning/saving.
+// The preview drawer's checkboxes default to checked, but they only exist
+// once the drawer has been opened — so no checkboxes in the DOM means "all
+// attachments", not "none". Otherwise the common select → extract → import
+// flow (which never opens a preview) would silently drop every file.
+function _selectedFileParts(msgId, email) {
+  const all = (email && email.fileParts) || [];
+  const boxes = Array.from(document.querySelectorAll(`.email-att-cb-${msgId}`));
+  if (!boxes.length) return all.slice();
+  return boxes
+    .filter(cb => cb.checked)
+    .map(cb => all[parseInt(cb.getAttribute('data-idx'))])
+    .filter(Boolean);
+}
+
 function renderEmailPreviewContent(msgId, container) {
   const email = _emailContentCache[msgId];
   if (!email || !container) return;
@@ -4240,10 +4255,7 @@ Rules:
         const email = _emailContentCache[msgId];
         parts.push({ text: `--- EMAIL ID: ${msgId} SUBJECT: "${email.subject}" FROM: ${email.from} DATE: ${email.date} ---\n` + email.body.slice(0, 80000) });
 
-        const attCheckboxes = Array.from(document.querySelectorAll(`.email-att-cb-${msgId}:checked`));
-        for (const attCb of attCheckboxes) {
-          const idx = parseInt(attCb.getAttribute('data-idx'));
-          const f = email.fileParts[idx];
+        for (const f of _selectedFileParts(msgId, email)) {
           if (f && f.base64) {
             parts.push({ inline_data: { mime_type: f.mime, data: f.base64 } });
           }
@@ -4307,15 +4319,7 @@ Rules:
     const drafts = (parsed.receipts || []).map(r => {
       const msgId = String(r.emailId || '').trim() || (checkedCbs.length === 1 ? checkedCbs[0].getAttribute('data-msg-id') : '');
       const email = msgId ? _emailContentCache[msgId] : null;
-      
-      let selectedAtts = [];
-      if (msgId && email) {
-        const attCheckboxes = Array.from(document.querySelectorAll(`.email-att-cb-${msgId}:checked`));
-        selectedAtts = attCheckboxes.map(attCb => {
-          const idx = parseInt(attCb.getAttribute('data-idx'));
-          return email.fileParts?.[idx];
-        }).filter(Boolean);
-      }
+      const selectedAtts = (msgId && email) ? _selectedFileParts(msgId, email) : [];
 
       return {
         vendor: String(r.vendor || '').trim(),
@@ -4405,6 +4409,7 @@ function renderEmailReceiptDrafts(receipts) {
               <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:11px;width:100%;color:var(--text2);">
               ${dup?`<div style="font-size:10px;color:var(--amber);margin-top:2px;">⚠ matches an existing expense</div>`:''}
               ${lowConf?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">low confidence (${(r.confidence*100|0)}%)</div>`:''}
+              ${(r.selectedAtts&&r.selectedAtts.length)?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">📎 ${r.selectedAtts.length} file${r.selectedAtts.length>1?'s':''} → receipts folder on import</div>`:''}
             </td>
             <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:12px;">${catOptions(r.category)}</select></td>
             <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:12px;width:120px;"></td>
@@ -4478,6 +4483,7 @@ async function importEmailReceiptDrafts() {
 
   let imported = 0, skippedDup = 0;
   let draftIdx = 0;
+  const gmailSavedByMsg = {}; // msgId → first saved local:// path for that email
   for (const item of drafts) {
     const currency = (item.currency || baseCur).toUpperCase();
     const amount = Number(item.amount || 0);
@@ -4504,10 +4510,13 @@ async function importEmailReceiptDrafts() {
     let addonLocal = '';
     if (item._inboxId) addonLocal = await localizeInboxReceiptFiles(item);
 
-    // Save Gmail Search attachments locally if present
+    // Save Gmail Search attachments locally if present. Saved once per source
+    // email — two receipts extracted from the same email share the same files.
     let gmailLocal = '';
     if (item.selectedAtts && item.selectedAtts.length) {
-      if (typeof saveReceiptToLocalFile === 'function') {
+      if (item.msgId && gmailSavedByMsg[item.msgId] !== undefined) {
+        gmailLocal = gmailSavedByMsg[item.msgId];
+      } else if (typeof saveReceiptToLocalFile === 'function') {
         let firstLocal = '';
         for (const att of item.selectedAtts) {
           try {
@@ -4519,7 +4528,7 @@ async function importEmailReceiptDrafts() {
             const byteArray = new Uint8Array(byteNumbers);
             const blob = new Blob([byteArray], { type: att.mime });
             const file = new File([blob], att.name, { type: att.mime });
-            
+
             const localPath = await saveReceiptToLocalFile(file, 'email-imports');
             if (localPath && !firstLocal) {
               firstLocal = localPath;
@@ -4529,6 +4538,7 @@ async function importEmailReceiptDrafts() {
           }
         }
         gmailLocal = firstLocal;
+        if (item.msgId) gmailSavedByMsg[item.msgId] = gmailLocal;
       }
     }
 
@@ -6997,7 +7007,7 @@ async function checkSheetsVersion() {
       const data = await res.json().catch(() => null);
       if (data && data.service && data.service.indexOf('lyrical-sheets-webhook') === 0) {
         const deployedVer = data.scriptVersion || 'unknown';
-        if (deployedVer !== 'v6') {
+        if (deployedVer !== 'v7') {
           if (versionEl) versionEl.textContent = deployedVer;
           warningEl.style.display = 'block';
         } else {
@@ -7436,7 +7446,7 @@ async function verifyUrl(){
         const warningEl = $('sheets-version-warning');
         const versionEl = $('sheets-deployed-version');
         if (warningEl) {
-          if (deployedVer !== 'v6') {
+          if (deployedVer !== 'v7') {
             if (versionEl) versionEl.textContent = deployedVer;
             warningEl.style.display = 'block';
           } else {
