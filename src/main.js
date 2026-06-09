@@ -932,7 +932,7 @@ window.performFullMigration = async () => {
 };
 
 // ── TAX CENTER STATE (Publisher Only)
-let TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', claudeKey: '' } };
+let TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' } };
 let _fxRateCache = { 'CAD_CAD': 1 };
 
 async function loadTaxCenter() {
@@ -940,7 +940,10 @@ async function loadTaxCenter() {
   try {
     const json = await window._fbLoadSettings('taxCenter'); // handles FS → RTDB fallback internally
     if (json) {
-      TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', claudeKey: '' }, ...json };
+      TAX_CENTER = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...json };
+      if (TAX_CENTER.settings?.claudeKey && !TAX_CENTER.settings?.geminiKey) {
+        TAX_CENTER.settings.geminiKey = TAX_CENTER.settings.claudeKey;
+      }
     }
     if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
     await refreshDailyRates();
@@ -1038,7 +1041,7 @@ async function refreshDailyRates() {
              });
              rates['CAD_CAD'] = 1;
              Object.assign(_fxRateCache, rates);
-             if(!TAX_CENTER.settings) TAX_CENTER.settings = { baseCurrency: 'CAD', claudeKey: '' };
+             if(!TAX_CENTER.settings) TAX_CENTER.settings = { baseCurrency: 'CAD', geminiKey: '' };
              TAX_CENTER.settings.rates = rates;
              TAX_CENTER.settings.lastRateSync = todayStr;
              saveTaxCenter();
@@ -3452,8 +3455,8 @@ async function scanProjectReceiptWithAI() {
     const fileInput = $('exp-file');
     if(!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
     
-    const apiKey = TAX_CENTER.settings?.claudeKey;
-    if(!apiKey) { showToast('⚠ Claude API Key required in Config', 'err'); return; }
+    const apiKey = TAX_CENTER.settings?.geminiKey;
+    if(!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
 
     const file = fileInput.files[0];
     const btn = $('exp-ai-btn');
@@ -3472,7 +3475,7 @@ async function scanProjectReceiptWithAI() {
             { inline_data: { mime_type: mimeType, data: base64Data } }
         ];
 
-        let extractedJsonStr = await _callClaudeForReceipts(apiKey, parts);
+        let extractedJsonStr = await _callGeminiForReceipts(apiKey, parts);
         if (!extractedJsonStr) throw new Error("No text returned from AI");
         extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
         const _jsonMatch = extractedJsonStr.match(/\{[\s\S]*\}/);
@@ -3945,71 +3948,50 @@ function renderEmailPreviewContent(msgId, container) {
   `;
 }
 
-// Model used for receipt/invoice vision extraction. One place to change it.
-const CLAUDE_RECEIPT_MODEL = 'claude-opus-4-8';
-
-// Calls Claude (Anthropic Messages API) to read a receipt/invoice and return
-// its text response as a string. Accepts the same Gemini-style `parts` the
-// callers already build — `{ text }` and `{ inline_data: { mime_type, data } }`
-// — and translates them into Anthropic content blocks, so the three call sites
-// only changed how they read the result, not how they assemble the input.
-//
-// Runs directly browser → Anthropic with the publisher's own key (same trust
-// model as the old Gemini path: the key lives in their Tax Center settings,
-// never in the repo). The `anthropic-dangerous-direct-browser-access` header is
-// what makes the cross-origin call succeed without a backend.
-async function _callClaudeForReceipts(apiKey, parts) {
-  const content = (parts || []).map(p => {
-    if (p.text != null) return { type: 'text', text: p.text };
-    const mime = p.inline_data?.mime_type || 'application/octet-stream';
-    const data = p.inline_data?.data || '';
-    if (mime === 'application/pdf') {
-      return { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } };
+// Calls Gemini API to read a receipt/invoice and return its text response as a string.
+// Accepts Gemini-style `parts` (e.g. `{ text }` and `{ inline_data: { mime_type, data } }`).
+// Runs directly browser → Google API using the publisher's own key.
+async function _callGeminiForReceipts(apiKey, parts) {
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastErr;
+  for (const model of models) {
+    try {
+      const send = () => fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { response_mime_type: 'application/json', temperature: 0.1 }
+          })
+        }
+      );
+      let res = await send();
+      // Retry once on transient overload / rate-limit / server errors.
+      if (!res.ok && (res.status === 429 || res.status >= 500)) {
+        await new Promise(r => setTimeout(r, 800));
+        res = await send();
+      }
+      if (!res.ok) {
+        let detail = `HTTP ${res.status} from ${model}`;
+        try { const err = await res.json(); if (err?.error?.message) detail = err.error.message; } catch (_) {}
+        lastErr = new Error(detail);
+        continue;
+      }
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text.trim();
+    } catch (e) {
+      lastErr = e;
     }
-    // Claude vision accepts jpeg/png/gif/webp; coerce odd phone-camera mime
-    // strings (e.g. "image/jpg") to jpeg so the scan still goes through.
-    const media_type = /^image\/(jpeg|png|gif|webp)$/.test(mime) ? mime : 'image/jpeg';
-    return { type: 'image', source: { type: 'base64', media_type, data } };
-  });
-
-  const send = () => fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: CLAUDE_RECEIPT_MODEL,
-      max_tokens: 4096,
-      messages: [{ role: 'user', content }]
-    })
-  });
-
-  let res = await send();
-  // Retry once on transient overload / rate-limit / server errors.
-  if (!res.ok && (res.status === 429 || res.status === 529 || res.status >= 500)) {
-    await new Promise(r => setTimeout(r, 800));
-    res = await send();
   }
-  if (!res.ok) {
-    let detail = `HTTP ${res.status}`;
-    try { const err = await res.json(); if (err?.error?.message) detail = err.error.message; } catch (_) { /* ignore */ }
-    throw new Error(detail);
-  }
-
-  const data = await res.json();
-  return (data.content || [])
-    .filter(b => b.type === 'text')
-    .map(b => b.text)
-    .join('')
-    .trim();
+  throw lastErr || new Error('All Gemini models failed');
 }
 
 async function extractReceiptsFromEmailText() {
-  const apiKey = TAX_CENTER.settings?.claudeKey;
-  if (!apiKey) { showToast('Claude API Key required in Config', 'err'); return; }
+  const apiKey = TAX_CENTER.settings?.geminiKey;
+  if (!apiKey) { showToast('Gemini API Key required in Config', 'err'); return; }
 
   const btn = $('email-receipt-scan-btn');
   const prev = btn.textContent;
@@ -4090,7 +4072,7 @@ Rules:
 
     if (btn) btn.disabled = true;
     btn.textContent = 'Extracting…';
-    if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Reading attachments and querying Claude…</div>`;
+    if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Reading attachments and querying Gemini…</div>`;
 
     try {
       const fileParts = await readReceiptFiles(files);
@@ -4115,9 +4097,9 @@ Rules:
     }
   }
 
-  if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sending content to Claude AI…</div>`;
+  if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sending content to Gemini AI…</div>`;
   try {
-    const text = (await _callClaudeForReceipts(apiKey, parts)) || '{}';
+    const text = (await _callGeminiForReceipts(apiKey, parts)) || '{}';
     let parsed;
     try { parsed = JSON.parse(text); }
     catch (_) {
@@ -4149,9 +4131,9 @@ Rules:
       showToast(`✓ Found ${drafts.length} receipt${drafts.length > 1 ? 's' : ''}`);
     }
   } catch (e) {
-    console.error('[email-receipt-import] Claude failed', e);
+    console.error('[email-receipt-import] Gemini failed', e);
     if (wrap) {
-      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Extraction failed: ${(e.message || e).toString().replace(/</g,'&lt;')}<br><span style="color:var(--text3);">Verify your Claude API key and parameters.</span></div>`;
+      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Extraction failed: ${(e.message || e).toString().replace(/</g,'&lt;')}<br><span style="color:var(--text3);">Verify your Gemini API key and parameters.</span></div>`;
     }
     showToast('Could not extract receipts', 'err');
   } finally {
@@ -8616,7 +8598,7 @@ function setTcLedgerPage(n) {
 function renderTaxCenter() {
   if (isAuthor()) return;
   // Initialize AI key input UI
-  if($('tc-api-key') && TAX_CENTER.settings?.claudeKey) $('tc-api-key').value = TAX_CENTER.settings.claudeKey;
+  if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
   if($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
   const _stripeStatusEl = $('stripe-fees-status');
   if (_stripeStatusEl && !_stripeStatusEl.textContent && TAX_CENTER.settings?.stripeFeesLastImportAt) {
@@ -9168,7 +9150,7 @@ async function saveTaxCenterSettings() {
     btn.textContent = 'Saving...'; btn.disabled = true;
 
     if(!TAX_CENTER.settings) TAX_CENTER.settings = {};
-    TAX_CENTER.settings.claudeKey = document.getElementById('tc-api-key').value.trim();
+    TAX_CENTER.settings.geminiKey = document.getElementById('tc-api-key').value.trim();
     
     try {
         await saveTaxCenter();
@@ -9185,8 +9167,8 @@ async function scanReceiptWithAI() {
     const fileInput = $('tc-exp-file');
     if(!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
     
-    const apiKey = TAX_CENTER.settings?.claudeKey || document.getElementById('tc-api-key').value.trim();
-    if(!apiKey) { showToast('⚠ Claude API Key required in Config', 'err'); return; }
+    const apiKey = TAX_CENTER.settings?.geminiKey || document.getElementById('tc-api-key').value.trim();
+    if(!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
 
     const file = fileInput.files[0];
     const btn = $('tc-ai-scan-btn');
@@ -9205,7 +9187,7 @@ async function scanReceiptWithAI() {
             { inline_data: { mime_type: mimeType, data: base64Data } }
         ];
 
-        let extractedJsonStr = await _callClaudeForReceipts(apiKey, parts);
+        let extractedJsonStr = await _callGeminiForReceipts(apiKey, parts);
         if (!extractedJsonStr) throw new Error("No text returned from AI");
 
         extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();

@@ -171,7 +171,7 @@ function getEmailContent_(e) {
     for (const att of attachments) {
       const mime = att.getContentType();
       const name = att.getName();
-      // Only process PDF and images to prevent huge payloads and Claude limitations
+      // Only process PDF and images to prevent huge payloads and Gemini limitations
       const isAllowed = /pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name);
       if (isAllowed) {
         fileParts.push({
