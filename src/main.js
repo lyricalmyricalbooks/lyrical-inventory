@@ -3752,30 +3752,62 @@ async function searchGmailEmails() {
       </div>`;
   }
 
-  try {
-    const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=listReceiptEmails&q=' + encodeURIComponent(query);
-    const res = await fetch(destUrl, { method: 'GET', mode: 'cors' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (!data || !data.ok) throw new Error(data.error || 'Fetch failed');
-    
+  const MAX_RETRIES = 3;
+  let attempt = 0;
+  let lastError = null;
+  let data = null;
+
+  while (attempt < MAX_RETRIES) {
+    attempt++;
+    try {
+      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=listReceiptEmails&q=' + encodeURIComponent(query);
+      const res = await fetch(destUrl, { method: 'GET', mode: 'cors' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await res.json();
+      if (!data || !data.ok) throw new Error(data.error || 'Server returned failure');
+      break;
+    } catch (err) {
+      lastError = err;
+      data = null;
+      console.warn(`[searchGmailEmails] attempt ${attempt}/${MAX_RETRIES} failed:`, err);
+      if (attempt < MAX_RETRIES) {
+        if (listWrap) {
+          listWrap.innerHTML = `
+            <div style="padding:40px 20px;text-align:center;">
+              <div class="spinner" style="width:20px;height:20px;margin-bottom:12px;"></div>
+              <div style="font-size:12px;color:var(--text3);">Retrying… (${attempt}/${MAX_RETRIES})</div>
+            </div>`;
+        }
+        await new Promise(r => setTimeout(r, 900 * attempt));
+      }
+    }
+  }
+
+  if (data && data.ok) {
     _gmailEmailsFetched = data.emails || [];
     renderGmailEmailsList();
-  } catch (err) {
-    console.error('[searchGmailEmails]', err);
+  } else {
+    const msg = (lastError && lastError.message) ? lastError.message : String(lastError || 'Unknown error');
+    // A raw "Failed to fetch" means the browser couldn't read a CORS response —
+    // almost always an outdated or unauthorized Apps Script deployment rather
+    // than a bad query. Point the user at the real fix instead of a vague hint.
+    const isNetwork = /failed to fetch|networkerror|load failed|cors/i.test(msg);
+    const hint = isNetwork
+      ? 'The Apps Script didn\'t return a readable response. Re-deploy the latest <code>Code.gs</code> as a Web App (Execute as: <b>Me</b> · Who has access: <b>Anyone</b>) and authorize Gmail access when prompted, then try again.'
+      : 'Check that the Apps Script Web App URL is correct and the latest code is deployed.';
     if (listWrap) {
       listWrap.innerHTML = `
         <div class="empty-state" style="padding:20px;color:var(--red);">
-          ❌ Search failed: ${escapeHtml(err.message || err)}<br>
-          <span style="font-size:11px;color:var(--text3);margin-top:6px;display:block;">Check Apps Script deployment and connection parameters.</span>
+          ❌ Search failed: ${escapeHtml(msg)}<br>
+          <span style="font-size:11px;color:var(--text3);margin-top:6px;display:block;">${hint}</span>
         </div>`;
     }
     showToast('Gmail search failed', 'err');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = prevBtnText;
-    }
+  }
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = prevBtnText;
   }
 }
 
@@ -6631,7 +6663,10 @@ async function probeSheetsConnection(url){
     const res = await fetch(url);
     if (res.ok) {
       const json = await res.json().catch(() => null);
-      if (json && json.service === 'lyrical-sheets-webhook-v2') {
+      // Match any deployed version (…-v2, -v4, …) so a server bump doesn't
+      // silently fail the fast GET handshake and fall back to a POST that
+      // writes a throwaway "Connection Probe" row.
+      if (json && typeof json.service === 'string' && json.service.indexOf('lyrical-sheets-webhook') === 0) {
         return { ok: true, method: 'GET', sheetName: json.sheetName };
       }
     }

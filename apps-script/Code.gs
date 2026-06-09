@@ -111,46 +111,63 @@ function scanGmail_(e) {
 }
 
 function listReceiptEmails_(e) {
-  const query = e.parameter.q || '';
-  const limit = Math.min(100, parseInt(e.parameter.limit || 20));
-  if (!query) {
-    return jsonOut_({ error: 'Search query parameter q is required' });
+  // Wrap everything so any failure returns a CORS-safe JSON error. An uncaught
+  // exception here makes Apps Script emit an HTML error page with no
+  // Access-Control-Allow-Origin header, which the browser blocks and surfaces
+  // as the opaque "Failed to fetch" instead of a readable message.
+  try {
+    const query = (e && e.parameter && e.parameter.q) || '';
+    const limit = Math.min(100, parseInt((e && e.parameter && e.parameter.limit) || 20, 10) || 20);
+    if (!query) {
+      return jsonOut_({ error: 'Search query parameter q is required' });
+    }
+
+    const threads = GmailApp.search(query, 0, limit);
+    const emails = [];
+
+    for (const thread of threads) {
+      // Guard each thread so one unreadable message/attachment doesn't abort
+      // the entire search.
+      try {
+        const messages = thread.getMessages();
+        if (!messages.length) continue;
+        // Get the latest message in the thread
+        const msg = messages[messages.length - 1];
+        // Skip inline images (logos, signatures) so the badge counts real
+        // receipt files, and avoids pulling embedded marketing graphics.
+        const attachments = msg.getAttachments({ includeInlineImages: false, includeAttachments: true });
+
+        // We only count PDF and image attachments for the list badge
+        const relevantAttachments = attachments.filter(a => {
+          const mime = a.getContentType();
+          const name = a.getName();
+          return /pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name);
+        });
+
+        emails.push({
+          id: msg.getId(),
+          threadId: thread.getId(),
+          subject: msg.getSubject() || '(No Subject)',
+          from: msg.getFrom() || 'Unknown Sender',
+          date: msg.getDate().toISOString(),
+          snippet: msg.getSnippet() || '',
+          hasAttachments: relevantAttachments.length > 0,
+          attachmentCount: relevantAttachments.length,
+          attachmentNames: relevantAttachments.map(a => a.getName())
+        });
+      } catch (threadErr) {
+        // Skip this thread and keep going.
+        continue;
+      }
+    }
+
+    // Sort by date descending (should already be sorted but safe to ensure)
+    emails.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    return jsonOut_({ ok: true, emails });
+  } catch (err) {
+    return jsonOut_({ error: 'Gmail search failed: ' + String(err) });
   }
-
-  const threads = GmailApp.search(query, 0, limit);
-  const emails = [];
-
-  for (const thread of threads) {
-    const messages = thread.getMessages();
-    if (!messages.length) continue;
-    // Get the latest message in the thread
-    const msg = messages[messages.length - 1];
-    const attachments = msg.getAttachments();
-    
-    // We only count PDF and image attachments for the list badge
-    const relevantAttachments = attachments.filter(a => {
-      const mime = a.getContentType();
-      const name = a.getName();
-      return /pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name);
-    });
-
-    emails.push({
-      id: msg.getId(),
-      threadId: thread.getId(),
-      subject: msg.getSubject() || '(No Subject)',
-      from: msg.getFrom() || 'Unknown Sender',
-      date: msg.getDate().toISOString(),
-      snippet: msg.getSnippet() || '',
-      hasAttachments: relevantAttachments.length > 0,
-      attachmentCount: relevantAttachments.length,
-      attachmentNames: relevantAttachments.map(a => a.getName())
-    });
-  }
-
-  // Sort by date descending (should already be sorted but safe to ensure)
-  emails.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-  return jsonOut_({ ok: true, emails });
 }
 
 function getEmailContent_(e) {
