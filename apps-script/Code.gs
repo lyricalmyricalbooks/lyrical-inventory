@@ -52,62 +52,76 @@ function doGet(e) {
 }
 
 function scanGmail_(e) {
-  const daysBack = parseInt(e.parameter.daysBack || 30);
-  const threads = GmailApp.search(
-    `from:support@bigcartel.com "You've received a new order!" newer_than:${daysBack}d`,
-    0, 50
-  );
-  const orders = [];
+  // Wrap so any failure returns a CORS-safe JSON error instead of an uncaught
+  // exception. Apps Script renders an uncaught error as an HTML page with no
+  // Access-Control-Allow-Origin header, which the browser blocks and surfaces
+  // as the opaque "Failed to fetch" — mirrors listReceiptEmails_.
+  try {
+    const daysBack = parseInt((e && e.parameter && e.parameter.daysBack) || 30, 10) || 30;
+    const threads = GmailApp.search(
+      `from:support@bigcartel.com "You've received a new order!" newer_than:${daysBack}d`,
+      0, 50
+    );
+    const orders = [];
 
-  for (const thread of threads) {
-    for (const msg of thread.getMessages()) {
-      const body = msg.getPlainBody() || msg.getBody();
-      if (!body) continue;
+    for (const thread of threads) {
+      // Guard each thread so one unreadable message doesn't abort the scan.
+      try {
+        for (const msg of thread.getMessages()) {
+          const body = msg.getPlainBody() || msg.getBody();
+          if (!body) continue;
 
-      const orderNumMatch = body.match(/Order number[\s\S]{0,100}?(#[A-Z0-9-]+)/i)
-        || body.match(/(#[A-Z0-9]+-\d+)/i);
-      const dateMatch = body.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4})/i);
-      const subtotalMatch = body.match(/(?:\n|\r|^|\s)Subtotal[\s\n]*\$?\s*([0-9.,]+)/i);
+          const orderNumMatch = body.match(/Order number[\s\S]{0,100}?(#[A-Z0-9-]+)/i)
+            || body.match(/(#[A-Z0-9]+-\d+)/i);
+          const dateMatch = body.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4})/i);
+          const subtotalMatch = body.match(/(?:\n|\r|^|\s)Subtotal[\s\n]*\$?\s*([0-9.,]+)/i);
 
-      let shipName='', shipAddr1='', shipCity='', shipProvince='', shipPostal='', shipCountry='', shipEmail='';
-      const shipBlock = body.match(/Shipping address\s*\n+([\s\S]*?)(?:\n\s*\n|\n\s*Contact)/i);
-      if (shipBlock) {
-        const lines = shipBlock[1].split(/\r?\n/).map(l => l.trim()).filter(l => l);
-        if (lines.length >= 3) {
-          shipName = lines[0];
-          shipAddr1 = lines[1];
-          let bottomLine = lines[lines.length-1];
-          let cityLine = lines[lines.length-2];
-          if (!bottomLine.includes(',')) shipCountry = bottomLine;
-          else cityLine = bottomLine;
-          const cityMatch = cityLine.match(/^(.*?),\s*(.*?)\s+([A-Z0-9\s-]+)$/i);
-          if (cityMatch) {
-            shipCity = cityMatch[1].trim();
-            shipProvince = cityMatch[2].trim();
-            shipPostal = cityMatch[3].trim();
-          } else {
-            shipCity = cityLine;
+          let shipName='', shipAddr1='', shipCity='', shipProvince='', shipPostal='', shipCountry='', shipEmail='';
+          const shipBlock = body.match(/Shipping address\s*\n+([\s\S]*?)(?:\n\s*\n|\n\s*Contact)/i);
+          if (shipBlock) {
+            const lines = shipBlock[1].split(/\r?\n/).map(l => l.trim()).filter(l => l);
+            if (lines.length >= 3) {
+              shipName = lines[0];
+              shipAddr1 = lines[1];
+              let bottomLine = lines[lines.length-1];
+              let cityLine = lines[lines.length-2];
+              if (!bottomLine.includes(',')) shipCountry = bottomLine;
+              else cityLine = bottomLine;
+              const cityMatch = cityLine.match(/^(.*?),\s*(.*?)\s+([A-Z0-9\s-]+)$/i);
+              if (cityMatch) {
+                shipCity = cityMatch[1].trim();
+                shipProvince = cityMatch[2].trim();
+                shipPostal = cityMatch[3].trim();
+              } else {
+                shipCity = cityLine;
+              }
+            }
+          }
+          const emailMatch = body.match(/Contact and payment info\s*\n+([^\s]+@[^\s]+)/i);
+          if (emailMatch) shipEmail = emailMatch[1].trim();
+
+          if (orderNumMatch) {
+            orders.push({
+              id: msg.getId(),
+              orderNum: orderNumMatch[1].trim(),
+              date: dateMatch ? dateMatch[1].trim() : msg.getDate().toISOString().split('T')[0],
+              price: subtotalMatch ? parseFloat(subtotalMatch[1].replace(/,/g, '')) : 0,
+              customer: shipName,
+              email: shipEmail,
+              shipName, shipAddr1, shipCity, shipProvince, shipPostal, shipCountry,
+              body: body.substring(0, 1500)
+            });
           }
         }
-      }
-      const emailMatch = body.match(/Contact and payment info\s*\n+([^\s]+@[^\s]+)/i);
-      if (emailMatch) shipEmail = emailMatch[1].trim();
-
-      if (orderNumMatch) {
-        orders.push({
-          id: msg.getId(),
-          orderNum: orderNumMatch[1].trim(),
-          date: dateMatch ? dateMatch[1].trim() : msg.getDate().toISOString().split('T')[0],
-          price: subtotalMatch ? parseFloat(subtotalMatch[1].replace(/,/g, '')) : 0,
-          customer: shipName,
-          email: shipEmail,
-          shipName, shipAddr1, shipCity, shipProvince, shipPostal, shipCountry,
-          body: body.substring(0, 1500)
-        });
+      } catch (threadErr) {
+        // Skip this thread and keep going.
+        continue;
       }
     }
+    return jsonOut_({ ok: true, orders });
+  } catch (err) {
+    return jsonOut_({ error: 'Gmail scan failed: ' + String(err) });
   }
-  return jsonOut_({ ok: true, orders });
 }
 
 function listReceiptEmails_(e) {
