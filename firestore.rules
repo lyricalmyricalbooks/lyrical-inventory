@@ -34,5 +34,13 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.token.email == 'lyricalmyricalbooks@gmail.com';
     }
+
+    // Email receipt inbox — draft expenses pushed by the Gmail add-on.
+    // The add-on writes via the owner's OAuth token (IAM, which bypasses these
+    // rules); the publisher client reads them live and deletes each one after
+    // importing it into the tax centre.
+    match /emailReceiptInbox/{document} {
+      allow read, write: if request.auth != null && request.auth.token.email == 'lyricalmyricalbooks@gmail.com';
+    }
   }
 }
