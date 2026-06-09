@@ -33,20 +33,21 @@ const COL = HEADERS.reduce((m, h, i) => (m[h] = i + 1, m), {});
 // doGet: Gmail scanner (preserved) + default health check
 // ─────────────────────────────────────────────────────────────
 function doGet(e) {
-  if (e.parameter && e.parameter.action === 'scanGmail') {
+  if (e && e.parameter && e.parameter.action === 'scanGmail') {
     return scanGmail_(e);
   }
-  if (e.parameter && e.parameter.action === 'listReceiptEmails') {
+  if (e && e.parameter && e.parameter.action === 'listReceiptEmails') {
     return listReceiptEmails_(e);
   }
-  if (e.parameter && e.parameter.action === 'getEmailContent') {
+  if (e && e.parameter && e.parameter.action === 'getEmailContent') {
     return getEmailContent_(e);
   }
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
     service: 'lyrical-sheets-webhook-v4',
     scriptVersion: 'v4',
     capabilities: { reset: true, voidDeletes: true },
-    sheetName: SpreadsheetApp.getActiveSpreadsheet().getName()
+    sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
 
