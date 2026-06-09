@@ -6958,6 +6958,7 @@ function testSheets(){
     notes:'Connection test — check your sheet for this row'
   });
   showToast('✓ Test row sent — check your Google Sheet');
+  checkSheetsVersion();
   setTimeout(()=>{if(btn){btn.textContent='Test connection';btn.disabled=false;}},500);
 }
 // Sheets delivery engine (rebuilt): durable queue + retry + deterministic event IDs
@@ -7360,6 +7361,19 @@ async function verifyUrl(){
       if(data && typeof data.service === 'string' && data.service.indexOf('lyrical-sheets-webhook') === 0) {
         showToast(`✓ Connection verified: ${data.sheetName || 'Active'}`);
         addSheetsLog('System', 'Verify', 'Handshake successful', 'ok');
+        
+        // Version Check
+        const deployedVer = data.scriptVersion || 'unknown';
+        const warningEl = $('sheets-version-warning');
+        const versionEl = $('sheets-deployed-version');
+        if (warningEl) {
+          if (deployedVer !== 'v5') {
+            if (versionEl) versionEl.textContent = deployedVer;
+            warningEl.style.display = 'block';
+          } else {
+            warningEl.style.display = 'none';
+          }
+        }
       } else {
         showToast('⚠ Unexpected response from URL', 'warn');
       }
