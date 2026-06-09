@@ -20,6 +20,8 @@
 
 var FIREBASE_PROJECT_ID = 'lyricalmyrical-37c46';
 var INBOX_COLLECTION = 'emailReceiptInbox';
+// Firebase Storage bucket (matches firebaseConfig.storageBucket in src/firebase.js).
+var STORAGE_BUCKET = 'lyricalmyrical-37c46.firebasestorage.app';
 
 // Must mirror EXPENSE_CATEGORIES in src/main.js so an imported category lands
 // on a real bucket instead of falling back to "Other".
@@ -120,13 +122,16 @@ function importReceiptToApp(e) {
       return notify_('Enter an amount before sending.');
     }
 
-    // Best-effort enrichment from the live message (snippet + order/ref number).
+    // Best-effort enrichment from the live message (snippet + order/ref number)
+    // and upload of the receipt file(s) so the imported expense keeps the PDF.
     try {
       var msg = GmailApp.getMessageById(messageId);
       draft.sourceSnippet = String(msg.getPlainBody() || '').replace(/\s+/g, ' ').slice(0, 240);
       var refm = String(msg.getSubject() || '').match(/#\s*([A-Z0-9][A-Z0-9\-]{3,})/i);
       if (refm) draft.reference = refm[1];
-    } catch (_) { /* metadata-only access; skip enrichment */ }
+      var files = uploadReceiptFiles_(msg);
+      if (files.length) { draft.receipt = files[0]; draft.receiptUrls = files; }
+    } catch (_) { /* metadata-only access; skip enrichment/upload */ }
 
     writeInboxDoc_(draft);
     return notify_('✓ Sent to Lyrical Inventory — review it in the app.');
@@ -135,10 +140,14 @@ function importReceiptToApp(e) {
   }
 }
 
-/** POST a new inbox document to Firestore using the owner's OAuth token. */
+/** Upsert the inbox document to Firestore using the owner's OAuth token. */
 function writeInboxDoc_(draft) {
+  // Key the document on the Gmail message id so pressing "Send" twice on the
+  // same email overwrites its draft instead of queueing a duplicate expense.
+  // PATCH upserts — it creates the doc if it doesn't exist yet.
+  var docId = 'gmail_' + String(draft.gmailMessageId || Date.now()).replace(/[^A-Za-z0-9_-]/g, '_');
   var url = 'https://firestore.googleapis.com/v1/projects/' + FIREBASE_PROJECT_ID +
-    '/databases/(default)/documents/' + INBOX_COLLECTION;
+    '/databases/(default)/documents/' + INBOX_COLLECTION + '/' + docId;
   var body = {
     fields: {
       // Mirror the app's { data: JSON, ts } convention so the client parses it
@@ -149,7 +158,7 @@ function writeInboxDoc_(draft) {
     }
   };
   var res = UrlFetchApp.fetch(url, {
-    method: 'post',
+    method: 'patch',
     contentType: 'application/json',
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
     payload: JSON.stringify(body),
@@ -159,6 +168,64 @@ function writeInboxDoc_(draft) {
   if (code < 200 || code >= 300) {
     throw new Error('Firestore HTTP ' + code + ': ' + res.getContentText().slice(0, 300));
   }
+}
+
+/**
+ * Upload the message's PDF/image attachments to Firebase Storage and return
+ * public Firebase download URLs. Uses the owner's OAuth token (devstorage
+ * scope): the upload goes through IAM (bypassing Storage rules) and the
+ * resulting ?token= URL grants read like any Firebase download URL. Failures
+ * are swallowed so the receipt still imports (just without the file) if an
+ * upload hiccups.
+ */
+function uploadReceiptFiles_(msg) {
+  var urls = [];
+  var atts;
+  try {
+    atts = msg.getAttachments({ includeInlineImages: false, includeAttachments: true });
+  } catch (_) { return urls; }
+
+  for (var i = 0; i < atts.length; i++) {
+    try {
+      var att = atts[i];
+      var mime = att.getContentType();
+      var name = att.getName();
+      if (!(/pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name))) continue;
+
+      var objectPath = 'email-receipts/' + msg.getId() + '/' + name;
+      var enc = encodeURIComponent(objectPath);
+      var token = Utilities.getUuid();
+
+      // 1) upload the bytes
+      var up = UrlFetchApp.fetch(
+        'https://storage.googleapis.com/upload/storage/v1/b/' + STORAGE_BUCKET +
+          '/o?uploadType=media&name=' + enc,
+        {
+          method: 'post',
+          contentType: mime || 'application/octet-stream',
+          headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+          payload: att.getBytes(),
+          muteHttpExceptions: true
+        });
+      if (up.getResponseCode() < 200 || up.getResponseCode() >= 300) continue;
+
+      // 2) stamp a Firebase download token so the app can read it via a
+      //    standard Firebase Storage download URL
+      UrlFetchApp.fetch(
+        'https://storage.googleapis.com/storage/v1/b/' + STORAGE_BUCKET + '/o/' + enc,
+        {
+          method: 'patch',
+          contentType: 'application/json',
+          headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+          payload: JSON.stringify({ metadata: { firebaseStorageDownloadTokens: token } }),
+          muteHttpExceptions: true
+        });
+
+      urls.push('https://firebasestorage.googleapis.com/v0/b/' + STORAGE_BUCKET +
+        '/o/' + enc + '?alt=media&token=' + token);
+    } catch (_) { /* skip this attachment */ }
+  }
+  return urls;
 }
 
 /** Light heuristic extraction so the card opens pre-filled. */

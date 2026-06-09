@@ -3729,6 +3729,9 @@ function _inboxItemToDraft(item) {
     sourceSnippet: item.sourceSnippet || '',
     confidence: typeof item.confidence === 'number' ? item.confidence : 1,
     include: true,
+    // Receipt file(s) the add-on uploaded to Firebase Storage.
+    receipt: item.receipt || '',
+    receiptUrls: Array.isArray(item.receiptUrls) ? item.receiptUrls : (item.receipt ? [item.receipt] : []),
     _inboxId: item._inboxId
   };
 }
@@ -4391,8 +4394,9 @@ async function importEmailReceiptDrafts() {
     }
     if (!fxRate) fxRate = 1; // last resort
 
-    // Associate a saved receipt file: use per-draft index if available, else first saved file
-    const receiptPath = savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
+    // Receipt file: prefer one the Gmail add-on already uploaded, then a
+    // locally-saved file (per-draft index, else first saved file).
+    const receiptPath = item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
     TAX_CENTER.businessExpenses.unshift({
       id: Date.now() + Math.floor(Math.random() * 100000),
       desc: item.description || item.vendor || 'Email receipt',
