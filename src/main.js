@@ -6904,10 +6904,42 @@ async function disconnectSheets(){
   localStorage.removeItem('lm-sheets-secret');
   $('sheets-setup-card').style.display='';
   $('sheets-connected-card').style.display='none';
+  const warningEl = $('sheets-version-warning');
+  if (warningEl) warningEl.style.display = 'none';
   updateSheetsBadge();
   showToast('Sheets disconnected','warn');
 }
-function showSheetsConnected(){$('sheets-setup-card').style.display='none';$('sheets-connected-card').style.display='';$('sheets-url-display').textContent=sheetsUrl;updateSheetsBadge();}
+function showSheetsConnected(){
+  $('sheets-setup-card').style.display='none';
+  $('sheets-connected-card').style.display='';
+  $('sheets-url-display').textContent=sheetsUrl;
+  updateSheetsBadge();
+  checkSheetsVersion();
+}
+
+async function checkSheetsVersion() {
+  const warningEl = $('sheets-version-warning');
+  const versionEl = $('sheets-deployed-version');
+  if (!warningEl || !sheetsUrl) return;
+
+  try {
+    const res = await fetch(sheetsUrl);
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && data.service && data.service.indexOf('lyrical-sheets-webhook') === 0) {
+        const deployedVer = data.scriptVersion || 'unknown';
+        if (deployedVer !== 'v5') {
+          if (versionEl) versionEl.textContent = deployedVer;
+          warningEl.style.display = 'block';
+        } else {
+          warningEl.style.display = 'none';
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to verify sheets script version:', e);
+  }
+}
 function testSheets(){
   if(!sheetsUrl)return;
   const btn=document.querySelector('[onclick="testSheets()"]');
@@ -12315,7 +12347,7 @@ Object.assign(window, {
 
   submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
-  resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl,
+  resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
