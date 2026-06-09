@@ -5605,9 +5605,13 @@ function renderInvoices(){
   }
 
   // Summary line
-  const outstanding = invs.filter(i => i.status === 'sent').reduce((a,i)=> a + (i.total || 0), 0);
-  const paid       = invs.filter(i => i.status === 'paid').reduce((a,i)=> a + (i.total || 0), 0);
-  const drafts     = invs.filter(i => i.status === 'draft').length;
+  // ⚡ Bolt Optimization: Calculate outstanding, paid, and drafts in a single pass instead of iterating over the `invs` array three times.
+  let outstanding = 0, paid = 0, drafts = 0;
+  for (const i of invs) {
+    if (i.status === 'sent') outstanding += (i.total || 0);
+    else if (i.status === 'paid') paid += (i.total || 0);
+    else if (i.status === 'draft') drafts++;
+  }
   summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts?` · ${drafts} draft${drafts>1?'s':''}`:''}`;
 
   if (!invs.length){
