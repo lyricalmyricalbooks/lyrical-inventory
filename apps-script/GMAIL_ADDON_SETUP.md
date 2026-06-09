@@ -70,6 +70,11 @@ Gmail, open any email, and approve the authorization prompt the first time
    review the draft(s) in the table, and **Import selected drafts**. Each
    imported row is removed from the queue automatically.
 
+On import, the email's PDF/image attachment is downloaded into your **local
+receipts folder** (under `receipts/email-imports/`), exactly like a
+manually-attached email receipt, and the cloud staging copy is removed. If no
+local folder is connected, the expense keeps the cloud download link instead.
+
 ## Troubleshooting
 - **"Firestore HTTP 403 / PERMISSION_DENIED"** — the script isn't linked to the
   Firebase GCP project (step 2), or the Firestore API isn't enabled (step 3),

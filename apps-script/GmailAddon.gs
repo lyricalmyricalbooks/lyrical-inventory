@@ -192,7 +192,10 @@ function uploadReceiptFiles_(msg) {
       var name = att.getName();
       if (!(/pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name))) continue;
 
-      var objectPath = 'email-receipts/' + msg.getId() + '/' + name;
+      // Stage under receipts/ so the app can read it via the download token AND
+      // delete this copy once it's saved to the local folder (Storage rules
+      // cover receipts/**).
+      var objectPath = 'receipts/email-imports/' + msg.getId() + '/' + name;
       var enc = encodeURIComponent(objectPath);
       var token = Utilities.getUuid();
 

@@ -3752,6 +3752,38 @@ function loadGmailInboxDrafts() {
   }
 }
 
+// Pull the receipt file(s) the Gmail add-on staged in Firebase Storage into the
+// local receipts folder — the same place manually-attached email receipts go —
+// and return the local:// path of the first one. Returns '' when no folder is
+// connected, so the caller keeps the cloud URL as the receipt instead.
+async function localizeInboxReceiptFiles(item) {
+  if (typeof saveReceiptToLocalFile !== 'function') return '';
+  const urls = (Array.isArray(item.receiptUrls) && item.receiptUrls.length)
+    ? item.receiptUrls
+    : (item.receipt && /^https?:/i.test(item.receipt) ? [item.receipt] : []);
+  if (!urls.length) return '';
+
+  let firstLocal = '';
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      // Filename from the Storage object path: …/o/receipts%2Femail-imports%2F<id>%2F<name>?…
+      let name = decodeURIComponent((url.split('/o/')[1] || '').split('?')[0] || '').split('/').pop();
+      name = (name || 'receipt').replace(/[^a-zA-Z0-9.\-_]/g, '') || 'receipt';
+      const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
+      const local = await saveReceiptToLocalFile(file, 'email-imports');
+      if (local) {
+        if (!firstLocal) firstLocal = local;
+        // The cloud copy was only a staging area — remove it now it's local.
+        try { await window._fbDeleteReceipt(url); } catch (_) {}
+      }
+    } catch (_) { /* skip this file, keep going */ }
+  }
+  return firstLocal;
+}
+
 function switchEmailImportTab(tab) {
   _activeEmailImportTab = tab;
   const tabGmail = $('email-tab-gmail');
@@ -4394,9 +4426,13 @@ async function importEmailReceiptDrafts() {
     }
     if (!fxRate) fxRate = 1; // last resort
 
-    // Receipt file: prefer one the Gmail add-on already uploaded, then a
-    // locally-saved file (per-draft index, else first saved file).
-    const receiptPath = item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
+    // Receipt file: for a Gmail add-on item, download its staged file(s) into
+    // the local receipts folder (just like a manually-attached email receipt).
+    // Fall back to the cloud URL if no local folder is connected, then to any
+    // locally-saved manual attachment.
+    let addonLocal = '';
+    if (item._inboxId) addonLocal = await localizeInboxReceiptFiles(item);
+    const receiptPath = addonLocal || item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
     TAX_CENTER.businessExpenses.unshift({
       id: Date.now() + Math.floor(Math.random() * 100000),
       desc: item.description || item.vendor || 'Email receipt',
