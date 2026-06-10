@@ -234,6 +234,25 @@ window._fbLoad = async (bookId) => {
 };
 
 let _fsWatchUnsubs = {};
+
+// Surface live-sync listener failures to the user instead of dying silently in
+// the console. A failed watcher means edits from other devices stop arriving
+// while the UI keeps looking healthy — the user should know. Rate-limited so
+// the eight per-part listeners failing at once produce one toast, not eight.
+let _lastWatchErrToast = 0;
+function _reportWatchError(scope, err) {
+  console.error(`${scope} failed`, err);
+  const now = Date.now();
+  if (now - _lastWatchErrToast < 30000) return;
+  _lastWatchErrToast = now;
+  if (typeof window.showToast === 'function') {
+    const denied = err && (err.code === 'permission-denied' || err.code === 'PERMISSION_DENIED');
+    window.showToast(denied
+      ? '⚠ Live sync stopped: no permission for this book — changes from other devices won\'t appear'
+      : '⚠ Live sync interrupted — changes from other devices may not appear until you reload', 'err', 6000);
+  }
+}
+
 window._fbWatch = (bookId, cb) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
@@ -275,12 +294,13 @@ window._fbWatch = (bookId, cb) => {
             };
             cb(JSON.stringify(stitched));
           }
-        }, err => console.error("Watch failed", name, err));
+        }, err => _reportWatchError(`Watch ${name}`, err));
         _fsWatchUnsubs[bookId].push(unsub);
       });
       return;
     }
-    onValue(ref(db, `lyrical/books/${bookId}`), s => { if (s.exists()) cb(s.val().data); });
+    onValue(ref(db, `lyrical/books/${bookId}`), s => { if (s.exists()) cb(s.val().data); },
+      err => _reportWatchError('RTDB watch', err));
   } catch (e) { console.error("fbWatch setup failed", e); }
 };
 
@@ -323,12 +343,13 @@ window._fbWatchSubmissions = (bookId, cb) => {
           initializedTypes.add(type);
           // Only notify once both sub-collections have had their first snapshot
           if (initializedTypes.size === TYPES.length) notify();
-        }, (err) => console.error("Sub watch failed", err));
+        }, (err) => _reportWatchError('Sub watch', err));
         _fsSubUnsubs[bookId].push(unsub);
       });
       return;
     }
-    onValue(ref(db, `lyrical/submissions/${bookId}`), s => cb(s.exists() ? s.val() : null));
+    onValue(ref(db, `lyrical/submissions/${bookId}`), s => cb(s.exists() ? s.val() : null),
+      err => _reportWatchError('RTDB sub watch', err));
   } catch (e) { console.error("fbWatchSub failed", e); }
 };
 
