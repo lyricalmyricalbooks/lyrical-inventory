@@ -8,7 +8,12 @@
           // matches a book's authorEmail — enforced in the app) can write
           // book data. This grants authors FULL access to the consignment
           // tab (stores + ledger live inside the per-book blob in RTDB).
-          ".write": "auth != null"
+          ".write": "auth != null",
+          // Shape guard: the app always writes the whole node as
+          // { data: <json string>, ts: <number> }. Reject anything else and cap
+          // the blob at ~5 MB so a buggy or malicious client can't bloat the DB
+          // (deletes set null and skip validation, so this doesn't block them).
+          ".validate": "newData.hasChildren(['data','ts']) && newData.child('data').isString() && newData.child('data').val().length < 5000000 && newData.child('ts').isNumber()"
         }
       },
       "submissions": {

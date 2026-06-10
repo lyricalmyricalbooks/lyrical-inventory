@@ -46,5 +46,5 @@ and ledger consistent.
 - Prefer action over investigation when intent is clear
 - If the user asks for something, assume they know what they want
 - Only ask clarifying questions if the request is genuinely ambiguous
-- **Always update the embedded Apps Script code** in the "Connect your Google Sheet" tab (`index.html`'s `<pre id="gas-code">` container) whenever `apps-script/Code.gs` is modified. Ensure you HTML-escape `<` as `&lt;`, `>` as `&gt;`, and `&` as `&amp;`, and use a replacement function in JavaScript (not a raw string) to avoid duplication issues caused by dollar signs (`$`) in the source code.
+- **Always update the externalized Apps Script copy** whenever `apps-script/Code.gs` is modified: copy it **verbatim** (no HTML-escaping) to `public/gas-code.txt`. The "Connect your Google Sheet" tab (`index.html`'s `<pre id="gas-code">`) lazy-fetches this file via `loadGasCode()` in `src/main.js` the first time the tab opens and assigns it with `textContent`, so no escaping is needed. The Vite `syncAppsScriptPlugin` also regenerates `public/gas-code.txt` from `Code.gs` on every build/dev change, but commit the updated copy so static deploys stay in sync. Do **not** re-embed the source inline in `index.html` — that block was removed to keep ~50 KB off every page load.
 
