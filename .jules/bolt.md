@@ -13,3 +13,6 @@
 ## 2024-06-09 - Combine multiple loops into a single pass when parsing the same array
 **Learning:** There are spots in the codebase where the same array is iterated over multiple times with separate `.filter()` and `.reduce()` or `.length` operations (e.g., calculating outstanding, paid, and draft invoice totals separately). This results in multiple passes over the same dataset.
 **Action:** When calculating multiple aggregates or extracting subsets from the same array, combine them into a single `for...of` loop or a single `.reduce()` pass. This avoids O(k*N) iteration scaling and reduces array allocation overhead.
+## 2024-06-09 - Combine multiple aggregate passes into a single loop
+**Learning:** The frontend makes heavy use of chained array methods, such as repeatedly calling `.reduce()` to calculate various aggregates (e.g., revenue, outstanding stock, fees) on the same arrays. In large datasets, these `O(k*N)` iterations cause unnecessary overhead when calculating multiple KPIs.
+**Action:** When calculating multiple aggregate values (KPIs, counts, sums) from the same collection, combine them into a single `for` or `for...of` loop pass. Avoid `array.reduce()` if it means iterating through the same array multiple times. Use `|| 0` to defend against null properties safely.
