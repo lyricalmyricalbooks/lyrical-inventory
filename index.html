@@ -8,9 +8,14 @@
 <!-- Firebase -->
 
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com">
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="dns-prefetch" href="https://lyricalmyrical-37c46-default-rtdb.firebaseio.com">
+<link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
@@ -492,8 +497,8 @@
   <div class="section-hed" style="margin-bottom:1.25rem;">Log an order</div>
   <div class="card">
     <div class="g4" style="margin-bottom:12px;">
-      <div class="form-group"><label>Order #</label><input type="text" id="m-num" placeholder="optional"></div>
-      <div class="form-group"><label>Qty</label><input type="number" id="m-qty" value="1" min="1" oninput="phint()"></div>
+      <div class="form-group"><label for="m-num">Order #</label><input type="text" id="m-num" placeholder="optional"></div>
+      <div class="form-group"><label for="m-qty">Qty</label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group">
         <label id="m-price-label">Price paid <span id="m-fx-inline-result" style="display:none;color:var(--gold);font-weight:600;margin-left:8px;"></span></label>
         <div class="price-inline">
@@ -511,13 +516,13 @@
             <option value="DKK">DKK kr</option>
             <option value="OTHER">Other</option>
           </select>
-          <input type="number" id="m-price" value="40.00" step="0.01" oninput="phint()">
+          <input type="number" inputmode="decimal" id="m-price" value="40.00" step="0.01" oninput="phint()">
         </div>
         <div id="m-manual-rate-row" style="display:none;margin-top:8px;">
           <label style="font-size:11px;color:var(--red);margin-bottom:4px;display:block;">Live rate unavailable — enter exchange rate manually:</label>
           <div style="display:flex;gap:8px;align-items:center;">
             <span id="m-manual-rate-label" style="font-size:12px;color:var(--text3);white-space:nowrap;">1 USD =</span>
-            <input type="number" id="m-manual-rate" step="0.0001" placeholder="e.g. 1.3700" style="width:120px;" oninput="calcManualFxRate()">
+            <input type="number" inputmode="decimal" id="m-manual-rate" step="0.0001" placeholder="e.g. 1.3700" style="width:120px;" oninput="calcManualFxRate()">
             <span id="m-manual-rate-book-cur" style="font-size:12px;color:var(--text3);"></span>
           </div>
         </div>
@@ -526,12 +531,12 @@
     </div>
     <!-- Channel and Notes -->
     <div class="g2">
-      <div class="form-group"><label>Channel</label><select id="m-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Other</option></select></div>
-      <div class="form-group"><label>Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
+      <div class="form-group"><label for="m-chan">Channel</label><select id="m-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Other</option></select></div>
+      <div class="form-group"><label for="m-notes">Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
     </div>
     <div class="g2" style="margin-top:12px;">
       <div class="form-group">
-        <label>Payment Type <span style="color:var(--red);font-size:11px;">required</span></label>
+        <label for="m-payment-type">Payment Type <span style="color:var(--red);font-size:11px;">required</span></label>
         <select id="m-payment-type" required>
           <option value="">— Select payment type —</option>
           <option value="Payment directly to artist">Payment directly to artist</option>
@@ -551,13 +556,13 @@
   <p style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">Gratuity books reduce stock but are <strong>not</strong> counted as revenue or sold units.</p>
   <div class="card" style="border-left:3px solid var(--gold-line);">
     <div class="g4" style="margin-bottom:12px;">
-      <div class="form-group"><label>Recipient / Ref</label><input type="text" id="g-ref" placeholder="e.g. reviewer, press"></div>
-      <div class="form-group"><label>Qty</label><input type="number" id="g-qty" value="1" min="1" oninput="updateGratuityExpenseHint()"></div>
-      <div class="form-group"><label>Date</label><input type="date" id="g-date"></div>
+      <div class="form-group"><label for="g-ref">Recipient / Ref</label><input type="text" id="g-ref" placeholder="e.g. reviewer, press"></div>
+      <div class="form-group"><label for="g-qty">Qty</label><input type="number" inputmode="numeric" id="g-qty" value="1" min="1" oninput="updateGratuityExpenseHint()"></div>
+      <div class="form-group"><label for="g-date">Date</label><input type="date" id="g-date"></div>
       <div class="form-group"><label>&nbsp;</label><button class="btn ink" style="width:100%;height:38px;" onclick="submitGratuity(event)">Log gratuity</button></div>
     </div>
     <div class="g2">
-      <div class="form-group"><label>Notes</label><input type="text" id="g-notes" placeholder="e.g. press copy, author gift, launch event"></div>
+      <div class="form-group"><label for="g-notes">Notes</label><input type="text" id="g-notes" placeholder="e.g. press copy, author gift, launch event"></div>
       <div class="form-group" id="g-expense-wrap" style="display:flex; flex-direction: column; justify-content:center;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:18px;user-select:none;">
           <input type="checkbox" id="g-expense-cb" onchange="toggleGratuityExpense()" style="width:16px;height:16px;accent-color:var(--gold);">
@@ -567,8 +572,8 @@
     </div>
     <div id="g-expense-fields" class="g3" style="display:none; margin-top:12px; padding-top:12px; border-top:1px dashed rgba(255,255,255,.1);">
       <div class="form-group">
-        <label>Expense Value (per book)</label>
-        <input type="number" id="g-exp-val" step="0.01" placeholder="0.00" oninput="updateGratuityExpenseHint()">
+        <label for="g-exp-val">Expense Value (per book)</label>
+        <input type="number" inputmode="decimal" id="g-exp-val" step="0.01" placeholder="0.00" oninput="updateGratuityExpenseHint()">
       </div>
       <div class="form-group" style="display:flex; flex-direction:column; justify-content:center;">
         <span style="font-size:11px;color:var(--text3);line-height:1.4;margin-top:14px;">Will add a <strong id="g-exp-total" style="color:var(--gold);">0.00</strong> expense to this project's ledger.</span>
@@ -657,8 +662,8 @@
   <div class="section-hed" style="margin-bottom:1.25rem;">Log an expense</div>
   <div class="card">
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label>Description</label><input type="text" id="exp-desc" placeholder="e.g. Padded envelopes x20"></div>
-      <div class="form-group"><label>Category</label>
+      <div class="form-group"><label for="exp-desc">Description</label><input type="text" id="exp-desc" placeholder="e.g. Padded envelopes x20"></div>
+      <div class="form-group"><label for="exp-cat">Category</label>
         <select id="exp-cat">
           <option>Shipping supplies</option>
           <option>Postage</option>
@@ -682,11 +687,11 @@
             <option value="GBP">GBP</option>
             <option value="AUD">AUD</option>
           </select>
-          <input type="number" id="exp-amount" step="0.01" min="0" placeholder="0.00" oninput="calcExpenseFx()">
+          <input type="number" inputmode="decimal" id="exp-amount" step="0.01" min="0" placeholder="0.00" oninput="calcExpenseFx()">
         </div>
       </div>
-      <div class="form-group"><label>Date</label><input type="date" id="exp-date"></div>
-      <div class="form-group" id="pub-exp-ref-group"><label>Receipt / ref</label><input type="text" id="exp-ref" placeholder="optional"></div>
+      <div class="form-group"><label for="exp-date">Date</label><input type="date" id="exp-date"></div>
+      <div class="form-group" id="pub-exp-ref-group"><label for="exp-ref">Receipt / ref</label><input type="text" id="exp-ref" placeholder="optional"></div>
       <div class="form-group" id="exp-file-group"><label>Upload file (optional)</label>
         <div style="display:flex;gap:4px;">
           <input type="file" id="exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px; flex: 1;">
@@ -708,8 +713,8 @@
 
 <!-- EMAIL RECEIPT IMPORT -->
 <!-- TAX CENTER TRIP DETAIL MODAL -->
-<div class="overlay" id="m-tc-trip-detail" style="display:none;"><div class="modal" style="max-width:980px;">
-  <div class="modal-title">Trip: <span id="tc-trip-detail-title"></span></div>
+<div class="overlay" id="m-tc-trip-detail" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:980px;">
+  <div class="modal-title" role="dialog" aria-modal="true">Trip: <span id="tc-trip-detail-title"></span></div>
   <div id="tc-trip-detail-summary" style="font-size:13px;color:var(--text2);margin-bottom:14px;"></div>
   <div class="tbl-wrap" style="max-height:60vh;overflow:auto;">
     <table class="tbl">
@@ -717,30 +722,30 @@
       <tbody id="tc-trip-detail-body"></tbody>
     </table>
   </div>
-  <div class="modal-footer" style="margin-top:14px;justify-content:space-between;">
+  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;justify-content:space-between;">
     <button class="btn" onclick="renameTripPrompt()">✎ Rename trip</button>
     <button class="btn" onclick="closeM('tc-trip-detail')">Close</button>
   </div>
 </div></div>
 
 <!-- TAX CENTER EDIT TRIP MODAL -->
-<div class="overlay" id="m-tc-edit-trip" style="display:none;"><div class="modal" style="max-width:480px;">
-  <div class="modal-title">Assign to a trip</div>
+<div class="overlay" id="m-tc-edit-trip" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
+  <div class="modal-title" role="dialog" aria-modal="true">Assign to a trip</div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:10px;" id="tc-edit-trip-context"></div>
   <div class="form-group">
-    <label>Trip name (leave blank to remove)<span class="tip tip-mark" data-tip="Group expenses under a named trip (e.g. a book fair) so you can total travel, lodging and meals per event for your tax records.">?</span></label>
+    <label for="tc-edit-trip-input">Trip name (leave blank to remove)<span class="tip tip-mark" data-tip="Group expenses under a named trip (e.g. a book fair) so you can total travel, lodging and meals per event for your tax records.">?</span></label>
     <input type="text" id="tc-edit-trip-input" list="tc-trip-suggestions-modal" placeholder="e.g. Toronto Book Fair · Oct 2025">
     <datalist id="tc-trip-suggestions-modal"></datalist>
   </div>
-  <div class="modal-footer" style="margin-top:14px;">
+  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
     <button class="btn" onclick="closeM('tc-edit-trip')">Cancel</button>
     <button class="btn gold" onclick="saveTripAssignment()">Save</button>
   </div>
 </div></div>
 
 <!-- TAX CENTER CATEGORY DETAIL MODAL -->
-<div class="overlay" id="m-tc-cat-detail" style="display:none;"><div class="modal" style="max-width:980px;">
-  <div class="modal-title">Transactions: <span id="tc-cat-detail-title"></span></div>
+<div class="overlay" id="m-tc-cat-detail" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:980px;">
+  <div class="modal-title" role="dialog" aria-modal="true">Transactions: <span id="tc-cat-detail-title"></span></div>
   <div id="tc-cat-detail-summary" style="font-size:13px;color:var(--text2);margin-bottom:14px;"></div>
   <div class="tbl-wrap" style="max-height:60vh;overflow:auto;">
     <table class="tbl">
@@ -748,16 +753,16 @@
       <tbody id="tc-cat-detail-body"></tbody>
     </table>
   </div>
-  <div class="modal-footer" style="margin-top:14px;">
+  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
     <button class="btn" onclick="closeM('tc-cat-detail')">Close</button>
   </div>
 </div></div>
 
-<div class="overlay" id="m-email-receipt-import-modal" style="display:none;"><div class="modal" style="max-width:820px;">
-  <div class="modal-title">📧 Import Receipts from Email</div>
+<div class="overlay" id="m-email-receipt-import-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:820px;">
+  <div class="modal-title" role="dialog" aria-modal="true">📧 Import Receipts from Email</div>
   
   <!-- Sub-Tabs for Modal -->
-  <div class="modal-tabs" style="display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;gap:8px;">
+  <div class="modal-tabs" role="dialog" aria-modal="true" style="display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;gap:8px;">
     <button type="button" class="modal-tab-btn active" id="email-tab-gmail" onclick="switchEmailImportTab('gmail')">📬 Gmail Search</button>
     <button type="button" class="modal-tab-btn" id="email-tab-manual" onclick="switchEmailImportTab('manual')">📂 Paste &amp; Upload</button>
   </div>
@@ -828,15 +833,15 @@
   </div>
 
   <div id="email-receipt-results" style="margin-top:14px;"></div>
-  <div class="modal-footer" style="margin-top:14px;">
+  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
     <button type="button" class="btn" onclick="closeEmailReceiptImportModal()">Cancel</button>
     <button type="button" class="btn gold" onclick="extractReceiptsFromEmailText()" id="email-receipt-scan-btn">✨ Extract drafts</button>
   </div>
 </div></div>
 
 <!-- WEBCAM RECEIPT CAPTURE -->
-<div class="overlay" id="m-receipt-camera-modal" style="display:none;"><div class="modal" style="max-width:680px;">
-  <div class="modal-title">📷 Capture Receipt</div>
+<div class="overlay" id="m-receipt-camera-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:680px;">
+  <div class="modal-title" role="dialog" aria-modal="true">📷 Capture Receipt</div>
   <div style="background:rgba(180,140,20,.08);border:1px solid rgba(180,140,20,.2);border-radius:var(--r2);padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.5;">
     Hold the receipt flat and well-lit, then snap. The photo will be attached to this expense and saved to your local receipts folder when you log it.
   </div>
@@ -846,7 +851,7 @@
     <div id="receipt-cam-status" style="position:absolute;color:#fff;font-size:12px;font-family:'DM Mono',monospace;text-align:center;padding:14px;display:none;"></div>
   </div>
   <div id="receipt-cam-preview-note" style="font-size:11px;color:var(--text3);margin-top:8px;display:none;">Preview — click Retake to try again, or Use Photo to attach.</div>
-  <div class="modal-footer">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeReceiptCameraModal()">Cancel</button>
     <button class="btn gold outline" onclick="retakeReceiptPhoto()" id="receipt-cam-retake-btn" style="display:none;">↻ Retake</button>
     <button class="btn gold" onclick="captureReceiptPhoto()" id="receipt-cam-capture-btn">📷 Snap</button>
@@ -885,8 +890,8 @@
   <div class="card" style="margin-bottom:1.5rem;">
     <div class="section-hed" style="margin-bottom:1rem;">Log Business Expense</div>
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label>Description (Auto-categorizes)</label><input type="text" id="tc-exp-desc" placeholder="e.g. Squarespace or Shopify"></div>
-      <div class="form-group"><label>Tax Category</label>
+      <div class="form-group"><label for="tc-exp-desc">Description (Auto-categorizes)</label><input type="text" id="tc-exp-desc" placeholder="e.g. Squarespace or Shopify"></div>
+      <div class="form-group"><label for="tc-exp-cat">Tax Category</label>
         <select id="tc-exp-cat">
           <option>Software & Subscriptions</option>
           <option>Marketing & Advertising</option>
@@ -918,10 +923,10 @@
             <option value="EUR">EUR</option>
             <option value="GBP">GBP</option>
           </select>
-          <input type="number" id="tc-exp-amount" step="0.01" min="0" placeholder="0.00" style="flex:1;">
+          <input type="number" inputmode="decimal" id="tc-exp-amount" step="0.01" min="0" placeholder="0.00" style="flex:1;">
         </div>
       </div>
-      <div class="form-group"><label>Date</label><input type="date" id="tc-exp-date"></div>
+      <div class="form-group"><label for="tc-exp-date">Date</label><input type="date" id="tc-exp-date"></div>
       <div class="form-group" id="tc-exp-file-group"><label>Receipt</label>
         <div style="display:flex;gap:4px;flex-wrap:wrap;">
           <input type="file" id="tc-exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px;flex:1;min-width:140px;">
@@ -936,7 +941,7 @@
         </div>
       </div>
     </div>
-    <div class="form-group" style="margin-top:8px;"><label>Trip / Project (optional — groups expenses for a single business trip)</label>
+    <div class="form-group" style="margin-top:8px;"><label for="tc-exp-trip">Trip / Project (optional — groups expenses for a single business trip)</label>
       <input type="text" id="tc-exp-trip" list="tc-trip-suggestions" placeholder="e.g. Toronto Book Fair · Oct 2025">
       <datalist id="tc-trip-suggestions"></datalist>
     </div>
@@ -955,9 +960,9 @@
       <tbody id="tc-recurring-body"></tbody>
     </table></div>
     <div class="g4">
-      <div class="form-group"><label>Description</label><input type="text" id="tc-rec-desc" placeholder="e.g. Hosting"></div>
+      <div class="form-group"><label for="tc-rec-desc">Description</label><input type="text" id="tc-rec-desc" placeholder="e.g. Hosting"></div>
       <div class="form-group">
-        <label>Category</label>
+        <label for="tc-rec-cat">Category</label>
         <select id="tc-rec-cat">
           <option>Software & Subscriptions</option>
           <option>Marketing & Advertising</option>
@@ -979,7 +984,7 @@
           <option>Other</option>
         </select>
       </div>
-      <div class="form-group"><label>Date Started</label><input type="date" id="tc-rec-start"></div>
+      <div class="form-group"><label for="tc-rec-start">Date Started</label><input type="date" id="tc-rec-start"></div>
       <div class="form-group">
         <label>Monthly Amount</label>
         <div style="display:flex;gap:4px;">
@@ -989,7 +994,7 @@
             <option value="EUR">EUR</option>
             <option value="GBP">GBP</option>
           </select>
-          <input type="number" id="tc-rec-amount" placeholder="0.00" style="flex:1;">
+          <input type="number" inputmode="numeric" id="tc-rec-amount" placeholder="0.00" style="flex:1;">
           <button class="btn gold" onclick="addRecurring()">Add</button>
         </div>
       </div>
@@ -1041,7 +1046,7 @@
             <button id="tc-save-config-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save API Config</button>
           </div>
         </div>
-        <div class="form-group"><label>Base Currency</label>
+        <div class="form-group"><label for="tc-base-cur">Base Currency</label>
         <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled>
             <option value="CAD">CAD (Default)</option>
         </select>
@@ -1133,7 +1138,7 @@
       <div id="pos-subtotal-lines" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--cream);margin-bottom:12px;">—</div>
 
       <div class="form-group" style="margin-bottom:10px;">
-        <label>Payment Method</label>
+        <label for="pos-payment-method">Payment Method</label>
         <select id="pos-payment-method">
           <option value="Cash">Cash</option>
           <option value="Card">Card</option>
@@ -1156,25 +1161,25 @@
 
 <!-- SALES TRACKER MODAL -->
 <div class="overlay" id="m-sales-tracker" style="display:none;">
-  <div class="modal" style="max-width:560px;">
-    <div class="modal-title">🖨 Printable book sales tracker</div>
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:560px;">
+    <div class="modal-title" role="dialog" aria-modal="true">🖨 Printable book sales tracker</div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.5;">
       Generates a printable tally sheet for in-person events. Pick the books you'll be selling, set the number of tally columns, and print.
     </div>
 
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group" style="margin:0;"><label>Event name</label><input type="text" id="st-event" placeholder="e.g. Toronto Art Book Fair"></div>
-      <div class="form-group" style="margin:0;"><label>Date</label><input type="date" id="st-date"></div>
+      <div class="form-group" style="margin:0;"><label for="st-event">Event name</label><input type="text" id="st-event" placeholder="e.g. Toronto Art Book Fair"></div>
+      <div class="form-group" style="margin:0;"><label for="st-date">Date</label><input type="date" id="st-date"></div>
     </div>
 
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group" style="margin:0;">
-        <label>Tally columns per book</label>
-        <input type="number" id="st-cols" value="10" min="1" max="30">
+        <label for="st-cols">Tally columns per book</label>
+        <input type="number" inputmode="numeric" id="st-cols" value="10" min="1" max="30">
         <div style="font-size:11px;color:var(--text3);margin-top:4px;">Each column is one sale.</div>
       </div>
       <div class="form-group" style="margin:0;">
-        <label>Currency</label>
+        <label for="st-currency">Currency</label>
         <select id="st-currency">
           <option value="EUR">€ EUR</option>
           <option value="CAD">CA$ CAD</option>
@@ -1208,7 +1213,7 @@
     </div>
     <div style="font-size:11px;color:var(--text3);margin-top:6px;">Books added here only appear on this tracker — they're not saved to your inventory.</div>
 
-    <div class="modal-footer">
+    <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="closeM('sales-tracker')">Cancel</button>
       <button class="btn gold" onclick="printSalesTracker()">🖨 Print tracker</button>
     </div>
@@ -1217,19 +1222,19 @@
 
 <!-- QR CODES PRINT MODAL -->
 <div class="overlay" id="m-qr-print" style="display:none;">
-  <div class="modal" style="max-width:560px;">
-    <div class="modal-title">📱 Printable payment QR codes</div>
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:560px;">
+    <div class="modal-title" role="dialog" aria-modal="true">📱 Printable payment QR codes</div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.5;">
       Generates an editorial-style printable sheet of payment QR codes for the books you select. Each card shows the QR, title, prices, and the underlying Stripe link.
     </div>
 
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group" style="margin:0;">
-        <label>Columns per row</label>
-        <input type="number" id="qrp-cols" value="3" min="1" max="6">
+        <label for="qrp-cols">Columns per row</label>
+        <input type="number" inputmode="numeric" id="qrp-cols" value="3" min="1" max="6">
       </div>
       <div class="form-group" style="margin:0;">
-        <label>Base currency</label>
+        <label for="qrp-base-cur">Base currency</label>
         <select id="qrp-base-cur">
           <option value="auto" selected>Per-book native</option>
           <option value="EUR">EUR (€)</option>
@@ -1261,7 +1266,7 @@
     </div>
     <div id="qrp-books-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;border:1px solid rgba(0,0,0,.12);border-radius:var(--r2);padding:10px;background:rgba(0,0,0,.03);"></div>
 
-    <div class="modal-footer">
+    <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="closeM('qr-print')">Cancel</button>
       <button class="btn gold" onclick="printPaymentQRCodes()">🖨 Print QR sheet</button>
     </div>
@@ -1361,1177 +1366,7 @@
           <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
           <div style="font-size:12px;color:var(--red-bg);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
           <div style="position:relative;">
-            <pre id="gas-code" style="background:var(--ink);color:#a8d8a8;font-family:'DM Mono',monospace;font-size:11px;padding:16px;border-radius:var(--r2);overflow-x:auto;line-height:1.75;white-space:pre-wrap;">/* Lyricalmyrical Inventory — Unified Backend (v7)
- * Features:
- *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
- *  2. Sheets sync with:
- *     - Per-book tabs + unified "Overview" tab
- *     - Void/delete by eventId (removes the matching row); any VOID/CANCEL
- *       write is treated as a delete so voided sales never linger
- *     - 'reset' action clears managed sheets for a clean client rebuild
- *       (wipes duplicates, stale VOID rows, and blank-CAD legacy rows)
- *     - CAD-equivalent column using live FX (cached 6h)
- *     - Cleaner formatting: frozen header, banding, currency formats, hidden ID col
- *  3. Email receipt scanner &amp; fetcher (v5 additions)
- *  4. v6: receipt search actually returns results (GmailMessage has no
- *     getSnippet(), so every thread used to fail silently) and reports
- *     skipped threads instead of hiding them
- *  5. v7: getEmailContent excludes inline images so saved receipt files
- *     are real attachments, not signature logos
- */
-
-const HEADERS = [
-  '_eventId',     // hidden — used for void/delete lookups
-  'Date',
-  'Book',
-  'Type',
-  'Event/Num',
-  'Store/Chan',
-  'Qty',
-  'Currency',
-  'Price/Rate',
-  'Total/Amount',
-  'CAD Equivalent',
-  'Status',
-  'Notes'
-];
-
-const COL = HEADERS.reduce((m, h, i) =&gt; (m[h] = i + 1, m), {});
-
-// ─────────────────────────────────────────────────────────────
-// doGet: Gmail scanner (preserved) + default health check
-// ─────────────────────────────────────────────────────────────
-function doGet(e) {
-  if (e &amp;&amp; e.parameter &amp;&amp; e.parameter.action === 'scanGmail') {
-    return scanGmail_(e);
-  }
-  if (e &amp;&amp; e.parameter &amp;&amp; e.parameter.action === 'listReceiptEmails') {
-    return listReceiptEmails_(e);
-  }
-  if (e &amp;&amp; e.parameter &amp;&amp; e.parameter.action === 'getEmailContent') {
-    return getEmailContent_(e);
-  }
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  return jsonOut_({
-    service: 'lyrical-sheets-webhook-v7',
-    scriptVersion: 'v7',
-    capabilities: { reset: true, voidDeletes: true },
-    sheetName: ss ? ss.getName() : 'Standalone Script'
-  });
-}
-
-function scanGmail_(e) {
-  const daysBack = parseInt(e.parameter.daysBack || 30);
-  const threads = GmailApp.search(
-    `from:support@bigcartel.com "You've received a new order!" newer_than:${daysBack}d`,
-    0, 50
-  );
-  const orders = [];
-
-  for (const thread of threads) {
-    for (const msg of thread.getMessages()) {
-      const body = msg.getPlainBody() || msg.getBody();
-      if (!body) continue;
-
-      const orderNumMatch = body.match(/Order number[\s\S]{0,100}?(#[A-Z0-9-]+)/i)
-        || body.match(/(#[A-Z0-9]+-\d+)/i);
-      const dateMatch = body.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4})/i);
-      const subtotalMatch = body.match(/(?:\n|\r|^|\s)Subtotal[\s\n]*\$?\s*([0-9.,]+)/i);
-
-      let shipName='', shipAddr1='', shipCity='', shipProvince='', shipPostal='', shipCountry='', shipEmail='';
-      const shipBlock = body.match(/Shipping address\s*\n+([\s\S]*?)(?:\n\s*\n|\n\s*Contact)/i);
-      if (shipBlock) {
-        const lines = shipBlock[1].split(/\r?\n/).map(l =&gt; l.trim()).filter(l =&gt; l);
-        if (lines.length &gt;= 3) {
-          shipName = lines[0];
-          shipAddr1 = lines[1];
-          let bottomLine = lines[lines.length-1];
-          let cityLine = lines[lines.length-2];
-          if (!bottomLine.includes(',')) shipCountry = bottomLine;
-          else cityLine = bottomLine;
-          const cityMatch = cityLine.match(/^(.*?),\s*(.*?)\s+([A-Z0-9\s-]+)$/i);
-          if (cityMatch) {
-            shipCity = cityMatch[1].trim();
-            shipProvince = cityMatch[2].trim();
-            shipPostal = cityMatch[3].trim();
-          } else {
-            shipCity = cityLine;
-          }
-        }
-      }
-      const emailMatch = body.match(/Contact and payment info\s*\n+([^\s]+@[^\s]+)/i);
-      if (emailMatch) shipEmail = emailMatch[1].trim();
-
-      if (orderNumMatch) {
-        orders.push({
-          id: msg.getId(),
-          orderNum: orderNumMatch[1].trim(),
-          date: dateMatch ? dateMatch[1].trim() : msg.getDate().toISOString().split('T')[0],
-          price: subtotalMatch ? parseFloat(subtotalMatch[1].replace(/,/g, '')) : 0,
-          customer: shipName,
-          email: shipEmail,
-          shipName, shipAddr1, shipCity, shipProvince, shipPostal, shipCountry,
-          body: body.substring(0, 1500)
-        });
-      }
-    }
-  }
-  return jsonOut_({ ok: true, orders });
-}
-
-function listReceiptEmails_(e) {
-  // Wrap everything so any failure returns a CORS-safe JSON error. An uncaught
-  // exception here makes Apps Script emit an HTML error page with no
-  // Access-Control-Allow-Origin header, which the browser blocks and surfaces
-  // as the opaque "Failed to fetch" instead of a readable message.
-  try {
-    const query = (e &amp;&amp; e.parameter &amp;&amp; e.parameter.q) || '';
-    const limit = Math.min(100, parseInt((e &amp;&amp; e.parameter &amp;&amp; e.parameter.limit) || 50, 10) || 50);
-    if (!query) {
-      return jsonOut_({ error: 'Search query parameter q is required' });
-    }
-
-    // The mailbox actually being searched is the account that deployed this
-    // Web App (Execute as: Me). Surfacing it lets the client confirm the search
-    // is hitting the right Gmail instead of guessing.
-    let account = '';
-    try { account = Session.getEffectiveUser().getEmail() || ''; } catch (_) { account = ''; }
-
-    const threads = GmailApp.search(query, 0, limit);
-    const emails = [];
-    let skipped = 0;
-    let skipError = '';
-
-    for (const thread of threads) {
-      // Guard each thread so one unreadable message/attachment doesn't abort
-      // the entire search.
-      try {
-        const messages = thread.getMessages();
-        if (!messages.length) continue;
-        // Get the latest message in the thread
-        const msg = messages[messages.length - 1];
-        // Skip inline images (logos, signatures) so the badge counts real
-        // receipt files, and avoids pulling embedded marketing graphics.
-        const attachments = msg.getAttachments({ includeInlineImages: false });
-
-        // We only count PDF and image attachments for the list badge
-        const relevantAttachments = attachments.filter(a =&gt; {
-          const mime = a.getContentType();
-          const name = a.getName();
-          return /pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name);
-        });
-
-        // GmailMessage has no getSnippet() — derive a preview from the plain
-        // body instead. Guarded separately so an unreadable body still leaves
-        // the email listed, just without a preview.
-        let snippet = '';
-        try {
-          snippet = (msg.getPlainBody() || '').replace(/\s+/g, ' ').trim().substring(0, 180);
-        } catch (_) { snippet = ''; }
-
-        emails.push({
-          id: msg.getId(),
-          threadId: thread.getId(),
-          subject: msg.getSubject() || '(No Subject)',
-          from: msg.getFrom() || 'Unknown Sender',
-          date: msg.getDate().toISOString(),
-          snippet: snippet,
-          hasAttachments: relevantAttachments.length &gt; 0,
-          attachmentCount: relevantAttachments.length,
-          attachmentNames: relevantAttachments.map(a =&gt; a.getName())
-        });
-      } catch (threadErr) {
-        // Record the failure instead of hiding it — if every thread fails,
-        // the client can show why rather than a misleading "no emails matched".
-        skipped++;
-        if (!skipError) skipError = String(threadErr);
-        continue;
-      }
-    }
-
-    // Sort by date descending (should already be sorted but safe to ensure)
-    emails.sort((a, b) =&gt; new Date(b.date) - new Date(a.date));
-
-    return jsonOut_({
-      ok: true,
-      account: account,
-      query: query,
-      threadsFound: threads.length,
-      count: emails.length,
-      skipped: skipped,
-      skipError: skipError,
-      emails: emails
-    });
-  } catch (err) {
-    return jsonOut_({ error: 'Gmail search failed: ' + String(err) });
-  }
-}
-
-function getEmailContent_(e) {
-  const id = e.parameter.id;
-  if (!id) {
-    return jsonOut_({ error: 'Message ID is required' });
-  }
-
-  try {
-    const msg = GmailApp.getMessageById(id);
-    if (!msg) {
-      return jsonOut_({ error: 'Message not found' });
-    }
-
-    const body = msg.getPlainBody() || msg.getBody() || '';
-    // Skip inline images (logos, signatures) — the client saves these files
-    // into the local receipts folder, so only real attachments belong here.
-    const attachments = msg.getAttachments({ includeInlineImages: false });
-    const fileParts = [];
-
-    for (const att of attachments) {
-      const mime = att.getContentType();
-      const name = att.getName();
-      // Only process PDF and images to prevent huge payloads and Gemini limitations
-      const isAllowed = /pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name);
-      if (isAllowed) {
-        fileParts.push({
-          name: name,
-          mime: mime,
-          base64: Utilities.base64Encode(att.getBytes())
-        });
-      }
-    }
-
-    return jsonOut_({
-      ok: true,
-      email: {
-        id: msg.getId(),
-        subject: msg.getSubject() || '',
-        from: msg.getFrom() || '',
-        date: msg.getDate().toISOString(),
-        body: body,
-        fileParts: fileParts
-      }
-    });
-  } catch (err) {
-    return jsonOut_({ error: 'Failed to fetch email: ' + String(err) });
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// doPost: sync (add) + void/delete by eventId
-// ─────────────────────────────────────────────────────────────
-function doPost(e) {
-  try {
-    const payload = JSON.parse(e.postData.contents);
-    if (payload.version !== 2) {
-      return jsonOut_({ error: 'Unknown payload format' });
-    }
-
-    const eventId = payload.eventId;
-    if (eventId &amp;&amp; eventId.toString().startsWith('probe-')) {
-      return jsonOut_({ ok: true });
-    }
-
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const action = (
-      payload.action ||
-      (payload.payload &amp;&amp; payload.payload.action) ||
-      'add'
-    ).toString().toLowerCase();
-
-    // ── Publisher notification email ──
-    if (action === 'notifypublisher') {
-      const d = payload.payload || {};
-      try {
-        const kind = d.kind || 'Submission';
-        const needsAction = /approval|payment|transfer/i.test(kind);
-        const prefix = needsAction ? '[ACTION REQUIRED]' : '[Lyrical Inventory]';
-        const subject = `${prefix} ${kind} awaiting approval — ${d.bookTitle || ''}`;
-        const body = [
-          needsAction
-            ? `An author submission requires your action: ${kind}.`
-            : `A ${kind.toLowerCase()} from an author is awaiting your confirmation.`,
-          '',
-          `Book:      ${d.bookTitle || ''} (${d.bookId || ''})`,
-          `Author:    ${d.authorEmail || 'unknown'}`,
-          `Submitted: ${d.submittedAt || ''}`,
-          '',
-          'Summary:',
-          d.summary || '(no summary provided)',
-          '',
-          'Details:',
-          JSON.stringify(d.data || {}, null, 2)
-        ].join('\n');
-        MailApp.sendEmail({
-          to: 'lyricalmyricalbooks@gmail.com',
-          subject: subject,
-          body: body
-        });
-        return jsonOut_({ ok: true, notified: true });
-      } catch (err) {
-        return jsonOut_({ error: 'mail failed: ' + String(err) });
-      }
-    }
-
-    // ── Reset / rebuild: clear every managed sheet so the client can resend a
-    // clean copy. Removes duplicate rows, stale VOID rows, and legacy rows with
-    // a blank CAD Equivalent in one pass. The app remains the source of truth. ──
-    if (action === 'reset' || action === 'rebuild') {
-      const cleared = clearManagedSheets_(ss);
-      refreshOverviewSummary_(ss);
-      return jsonOut_({ ok: true, cleared });
-    }
-
-    // ── Void / delete: remove rows matching sheetsId (preferred) or eventId ──
-    if (action === 'void' || action === 'delete') {
-      const deleteId = (payload.payload &amp;&amp; payload.payload.sheetsId) || eventId;
-      if (!deleteId) return jsonOut_({ error: 'sheetsId or eventId required for void' });
-      const removed = removeByEventId_(ss, deleteId);
-      refreshOverviewSummary_(ss);
-      return jsonOut_({ ok: true, removed });
-    }
-
-    // ── Add / Edit (upsert) ──
-    // The client sends a stable sheetsId on the payload (set when the record
-    // was first created). We prefer that over the queue-level eventId so that
-    // edits and voids can match the original row.
-    const data = payload.payload || {};
-    const stableId = data.sheetsId || eventId || '';
-    data._eventId = stableId;
-
-    // A voided/cancelled record must never persist as a row — remove any match
-    // and stop, so the sheet only ever holds live entries. This is the backend
-    // safety net behind the client's explicit delete on void.
-    if (/VOID|CANCEL/i.test(String(data.status || ''))) {
-      const removedVoid = stableId ? removeByEventId_(ss, stableId) : 0;
-      refreshOverviewSummary_(ss);
-      return jsonOut_({ ok: true, voided: true, removed: removedVoid });
-    }
-
-    let replaced = 0;
-    if (stableId) replaced = removeByEventId_(ss, stableId);
-
-    const rawName = data.book ? String(data.book).trim() : 'Overview';
-    let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
-    if (!sheetName) sheetName = 'Overview';
-
-    processSheetEntry_(ss, sheetName, data);
-    if (sheetName !== 'Overview') {
-      processSheetEntry_(ss, 'Overview', data);
-    }
-    refreshOverviewSummary_(ss);
-    return jsonOut_({ ok: true, replaced });
-  } catch (err) {
-    return jsonOut_({ error: String(err) });
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Sheet helpers
-// ─────────────────────────────────────────────────────────────
-function processSheetEntry_(ss, sheetName, data) {
-  const sheet = ensureSheet_(ss, sheetName);
-
-  const currency = normalizeCcy_(data.currency || data.paymentCurrency);
-  const total = numOrBlank_(data.amountDue ?? data.total);
-
-  // Prefer the CAD value captured at the time of sale (frozen rate) over a
-  // live re-conversion. This keeps historical revenue from drifting as
-  // rates change. Fall back to live FX only if nothing was captured.
-  let cad = '';
-  if (currency === 'CAD' &amp;&amp; total !== '') {
-    cad = total;
-  } else if (data.convertedTotal !== undefined &amp;&amp; data.convertedTotal !== '' &amp;&amp; data.convertedTotal !== null) {
-    cad = numOrBlank_(data.convertedTotal);
-  } else if (data.paymentRate &amp;&amp; total !== '') {
-    cad = Math.round(total * parseFloat(data.paymentRate) * 100) / 100;
-  } else if (currency &amp;&amp; total !== '') {
-    cad = convertToCAD_(total, currency);
-  }
-
-  const row = new Array(HEADERS.length).fill('');
-  row[COL._eventId - 1]        = data._eventId || '';
-  row[COL.Date - 1]            = data.date ?? '';
-  row[COL.Book - 1]            = data.book ?? '';
-  row[COL.Type - 1]            = data.type ?? '';
-  row[COL['Event/Num'] - 1]    = data.event ?? data.num ?? '';
-  row[COL['Store/Chan'] - 1]   = data.store ?? data.chan ?? '';
-  row[COL.Qty - 1]             = numOrBlank_(data.qty);
-  row[COL.Currency - 1]        = currency;
-  row[COL['Price/Rate'] - 1]   = numOrBlank_(data.rate ?? data.price);
-  row[COL['Total/Amount'] - 1] = total;
-  row[COL['CAD Equivalent'] - 1] = cad;
-  row[COL.Status - 1]          = data.status ?? 'OK';
-  row[COL.Notes - 1]           = data.notes ?? '';
-
-  sheet.appendRow(row);
-}
-
-function ensureSheet_(ss, name) {
-  let sheet = ss.getSheetByName(name);
-  if (sheet) {
-    const firstRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-    const looksOld = !firstRow || firstRow[0] !== '_eventId';
-    if (looksOld) {
-      sheet.insertRowBefore(1);
-      sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-    }
-    formatSheet_(sheet);
-    return sheet;
-  }
-  sheet = ss.insertSheet(name);
-  sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-  formatSheet_(sheet);
-  return sheet;
-}
-
-function formatSheet_(sheet) {
-  const lastCol = HEADERS.length;
-  const maxRow  = Math.max(sheet.getMaxRows(), 1000);
-
-  // ── HEADER ──────────────────────────────────────────────
-  sheet.setRowHeight(1, 38);
-  const headerRange = sheet.getRange(1, 1, 1, lastCol);
-  headerRange
-    .setFontWeight('bold')
-    .setFontSize(11)
-    .setFontFamily('Inter')
-    .setFontColor('#ffffff')
-    .setBackground('#0f172a')
-    .setHorizontalAlignment('center')
-    .setVerticalAlignment('middle')
-    .setBorder(true, true, true, true, true, true, '#0f172a', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
-  sheet.setFrozenRows(1);
-  sheet.hideColumns(COL._eventId);
-
-  // ── COLUMN WIDTHS ───────────────────────────────────────
-  sheet.setColumnWidth(COL.Date, 105);
-  sheet.setColumnWidth(COL.Book, 240);
-  sheet.setColumnWidth(COL.Type, 95);
-  sheet.setColumnWidth(COL['Event/Num'], 130);
-  sheet.setColumnWidth(COL['Store/Chan'], 130);
-  sheet.setColumnWidth(COL.Qty, 65);
-  sheet.setColumnWidth(COL.Currency, 90);
-  sheet.setColumnWidth(COL['Price/Rate'], 110);
-  sheet.setColumnWidth(COL['Total/Amount'], 120);
-  sheet.setColumnWidth(COL['CAD Equivalent'], 135);
-  sheet.setColumnWidth(COL.Status, 95);
-  sheet.setColumnWidth(COL.Notes, 320);
-
-  // ── BODY DEFAULTS ───────────────────────────────────────
-  const body = sheet.getRange(2, 1, maxRow - 1, lastCol);
-  body
-    .setFontFamily('Inter')
-    .setFontSize(10)
-    .setVerticalAlignment('middle');
-  sheet.setRowHeights(2, maxRow - 1, 26);
-
-  // Per-column number formats + alignment
-  sheet.getRange(2, COL.Date, maxRow - 1, 1).setNumberFormat('yyyy-mm-dd').setHorizontalAlignment('center');
-  sheet.getRange(2, COL.Type, maxRow - 1, 1).setHorizontalAlignment('center').setFontWeight('bold');
-  sheet.getRange(2, COL['Event/Num'], maxRow - 1, 1).setHorizontalAlignment('center').setFontFamily('Roboto Mono');
-  sheet.getRange(2, COL.Qty, maxRow - 1, 1).setNumberFormat('0').setHorizontalAlignment('center');
-  sheet.getRange(2, COL.Currency, maxRow - 1, 1).setHorizontalAlignment('center').setFontWeight('bold');
-  sheet.getRange(2, COL['Price/Rate'], maxRow - 1, 1).setNumberFormat('#,##0.00').setHorizontalAlignment('right');
-  sheet.getRange(2, COL['Total/Amount'], maxRow - 1, 1).setNumberFormat('#,##0.00').setHorizontalAlignment('right');
-  sheet.getRange(2, COL['CAD Equivalent'], maxRow - 1, 1)
-    .setNumberFormat('"CA$"#,##0.00')
-    .setHorizontalAlignment('right')
-    .setFontWeight('bold')
-    .setFontColor('#064e3b')
-    .setBackground('#ecfdf5');
-  sheet.getRange(2, COL.Status, maxRow - 1, 1).setHorizontalAlignment('center').setFontWeight('bold');
-
-  // ── BANDING ─────────────────────────────────────────────
-  try {
-    const bandRange = sheet.getRange(1, 2, maxRow, lastCol - 1);
-    bandRange.getBandings().forEach(b =&gt; b.remove());
-    bandRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false)
-      .setHeaderRowColor('#0f172a')
-      .setFirstRowColor('#ffffff')
-      .setSecondRowColor('#f1f5f9');
-  } catch (_) {}
-
-  // ── BORDERS (full grid) ─────────────────────────────────
-  sheet.getRange(1, 2, maxRow, lastCol - 1)
-    .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
-  // Heavy left border on CAD column to set it apart
-  sheet.getRange(1, COL['CAD Equivalent'], maxRow, 1)
-    .setBorder(null, true, null, null, null, null, '#10b981', SpreadsheetApp.BorderStyle.SOLID_THICK);
-
-  // ── CONDITIONAL FORMATTING ──────────────────────────────
-  const rules = [];
-  const dataRange = sheet.getRange(2, 2, maxRow - 1, lastCol - 1);
-  const statusRange = sheet.getRange(2, COL.Status, maxRow - 1, 1);
-  const typeRange = sheet.getRange(2, COL.Type, maxRow - 1, 1);
-  const ccyRange = sheet.getRange(2, COL.Currency, maxRow - 1, 1);
-
-  // Status pills
-  rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextContains('VOID').setBackground('#fee2e2').setFontColor('#991b1b').setBold(true)
-    .setRanges([statusRange]).build());
-  rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextContains('CANCEL').setBackground('#fee2e2').setFontColor('#991b1b').setBold(true)
-    .setRanges([statusRange]).build());
-  rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo('OK').setBackground('#dcfce7').setFontColor('#166534').setBold(true)
-    .setRanges([statusRange]).build());
-  rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextContains('PEND').setBackground('#fef9c3').setFontColor('#854d0e').setBold(true)
-    .setRanges([statusRange]).build());
-
-  // Strike-through entire row when status = VOID
-  rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=REGEXMATCH(UPPER($${columnLetter_(COL.Status)}2),"VOID|CANCEL")`)
-    .setFontColor('#9ca3af').setStrikethrough(true)
-    .setRanges([dataRange]).build());
-
-  // Type color tags (sale, expense, transfer, etc.)
-  const typeColors = [
-    ['SALE',     '#dbeafe', '#1e40af'],
-    ['EXPENSE',  '#fee2e2', '#991b1b'],
-    ['TRANSFER', '#ede9fe', '#5b21b6'],
-    ['REFUND',   '#fed7aa', '#9a3412'],
-    ['STOCK',    '#cffafe', '#155e75'],
-    ['PRINT',    '#fce7f3', '#9d174d']
-  ];
-  typeColors.forEach(([word, bg, fg]) =&gt; {
-    rules.push(SpreadsheetApp.newConditionalFormatRule()
-      .whenTextContains(word).setBackground(bg).setFontColor(fg).setBold(true)
-      .setRanges([typeRange]).build());
-  });
-
-  // Currency tags
-  const ccyColors = [
-    ['CAD', '#fef2f2', '#b91c1c'],
-    ['USD', '#ecfdf5', '#065f46'],
-    ['EUR', '#eff6ff', '#1e3a8a'],
-    ['GBP', '#fdf4ff', '#86198f'],
-    ['AUD', '#fff7ed', '#9a3412'],
-    ['JPY', '#f5f3ff', '#5b21b6']
-  ];
-  ccyColors.forEach(([word, bg, fg]) =&gt; {
-    rules.push(SpreadsheetApp.newConditionalFormatRule()
-      .whenTextEqualTo(word).setBackground(bg).setFontColor(fg).setBold(true)
-      .setRanges([ccyRange]).build());
-  });
-
-  sheet.setConditionalFormatRules(rules);
-
-  lockDownSheet_(sheet);
-}
-
-// Convenience + integrity guards: a Currency dropdown on the data rows, and
-// warning-only protection on the header row and the hidden _eventId column —
-// the two things a stray fair-day edit could change to break sync matching.
-// Warning-only never locks the owner out; it just prompts before an edit.
-// Existing protections are detected by description so re-runs don't stack them.
-function lockDownSheet_(sheet) {
-  const maxRow = Math.max(sheet.getMaxRows(), 1000);
-
-  const ccyRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'CHF'], true)
-    .setAllowInvalid(true) // don't hard-reject legacy/un-normalized codes
-    .build();
-  sheet.getRange(2, COL.Currency, maxRow - 1, 1).setDataValidation(ccyRule);
-
-  const existing = {};
-  sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
-    .forEach(p =&gt; { existing[p.getDescription()] = true; });
-  if (!existing['LMB:header']) {
-    sheet.getRange(1, 1, 1, HEADERS.length).protect()
-      .setDescription('LMB:header').setWarningOnly(true);
-  }
-  if (!existing['LMB:id']) {
-    sheet.getRange(1, COL._eventId, maxRow, 1).protect()
-      .setDescription('LMB:id').setWarningOnly(true);
-  }
-}
-
-function columnLetter_(col) {
-  let s = '', n = col;
-  while (n &gt; 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
-  return s;
-}
-
-function removeByEventId_(ss, eventId) {
-  let removed = 0;
-  // Never match a blank id — that would risk deleting unrelated legacy rows
-  // whose hidden id cell happens to be empty.
-  if (eventId === '' || eventId === null || eventId === undefined) return 0;
-  const sheets = ss.getSheets();
-  for (const sheet of sheets) {
-    if (sheet.getLastRow() &lt; 2) continue;
-    const firstRow = sheet.getRange(1, 1).getValue();
-    if (firstRow !== '_eventId') continue; // only our managed sheets
-    const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-    // Iterate from bottom so row indices stay valid as we delete
-    for (let i = ids.length - 1; i &gt;= 0; i--) {
-      if (String(ids[i][0]) === String(eventId)) {
-        sheet.deleteRow(i + 2);
-        removed++;
-      }
-    }
-  }
-  return removed;
-}
-
-// Clear all data rows (keeping the header) from every managed sheet — any tab
-// whose A1 is "_eventId". Used by the 'reset' action so the client can rebuild
-// a clean copy from the app (the source of truth), wiping duplicates, stale
-// VOID rows, and legacy rows with a blank CAD Equivalent.
-function clearManagedSheets_(ss) {
-  let cleared = 0;
-  const sheets = ss.getSheets();
-  for (const sheet of sheets) {
-    if (sheet.getLastColumn() &lt; 1) continue;
-    if (sheet.getRange(1, 1).getValue() !== '_eventId') continue; // managed only
-    const lastRow = sheet.getLastRow();
-    if (lastRow &gt;= 2) {
-      sheet.deleteRows(2, lastRow - 1);
-      cleared += (lastRow - 1);
-    }
-  }
-  return cleared;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Overview summary block — currency totals + CAD grand total
-// Lives in a separate sheet ("__Summary") so it doesn't clutter rows.
-// ─────────────────────────────────────────────────────────────
-function refreshOverviewSummary_(ss) {
-  const overview = ss.getSheetByName('Overview');
-  if (!overview) return;
-  let summary = ss.getSheetByName('__Summary');
-  if (!summary) {
-    summary = ss.insertSheet('__Summary');
-  } else {
-    summary.clear();
-    summary.clearConditionalFormatRules();
-  }
-
-  const ovName = "'Overview'!";
-  const ccyCol = columnLetter_(COL.Currency);
-  const totCol = columnLetter_(COL['Total/Amount']);
-  const cadCol = columnLetter_(COL['CAD Equivalent']);
-  const statCol = columnLetter_(COL.Status);
-
-  // Header
-  summary.getRange(1, 1, 1, 4).setValues([['Currency', 'Entries', 'Total (native)', 'Total (CAD)']]);
-  summary.getRange(1, 1, 1, 4)
-    .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
-    .setBackground('#0f172a').setFontColor('#ffffff')
-    .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  summary.setRowHeight(1, 36);
-  summary.setFrozenRows(1);
-
-  summary.setColumnWidth(1, 110);
-  summary.setColumnWidth(2, 90);
-  summary.setColumnWidth(3, 150);
-  summary.setColumnWidth(4, 160);
-
-  // One row per currency, generated as formulas so the sheet auto-updates
-  // when you edit data in Overview directly.
-  const ccyList = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY'];
-  const rows = ccyList.map(c =&gt; [
-    c,
-    `=COUNTIFS(${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"&lt;&gt;VOID")`,
-    `=SUMIFS(${ovName}${totCol}:${totCol},${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"&lt;&gt;VOID")`,
-    `=SUMIFS(${ovName}${cadCol}:${cadCol},${ovName}${ccyCol}:${ccyCol},"${c}",${ovName}${statCol}:${statCol},"&lt;&gt;VOID")`
-  ]);
-  summary.getRange(2, 1, rows.length, 4).setValues(rows);
-
-  // Grand total in CAD
-  const totalRow = rows.length + 2;
-  summary.getRange(totalRow, 1).setValue('TOTAL (CAD)').setFontWeight('bold');
-  summary.getRange(totalRow, 4).setFormula(`=SUM(D2:D${rows.length + 1})`).setFontWeight('bold');
-
-  // Formatting
-  summary.getRange(2, 1, rows.length, 1).setHorizontalAlignment('center').setFontWeight('bold');
-  summary.getRange(2, 2, rows.length, 1).setHorizontalAlignment('center');
-  summary.getRange(2, 3, rows.length, 1).setNumberFormat('#,##0.00').setHorizontalAlignment('right');
-  summary.getRange(2, 4, rows.length + 1, 1)
-    .setNumberFormat('"CA$"#,##0.00').setHorizontalAlignment('right')
-    .setFontColor('#064e3b').setBackground('#ecfdf5').setFontWeight('bold');
-  summary.getRange(1, 1, totalRow, 4)
-    .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
-  summary.getRange(totalRow, 1, 1, 4).setBackground('#fef3c7');
-
-  // ── KPI panel (columns F–G), computed from Overview so it stays robust
-  // regardless of how dates/currencies are stored. Refreshed on every sync. ──
-  const kpi = computeOverviewKpis_(overview, ss.getSpreadsheetTimeZone());
-  summary.getRange(1, 6, 1, 2).merge().setValue('Key numbers')
-    .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
-    .setBackground('#0f172a').setFontColor('#ffffff')
-    .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  const kpiRows = [
-    ['Books sold (qty)', kpi.unitsSold],
-    ['Revenue (CAD)',    kpi.revenueCAD],
-    ['Entries (live)',   kpi.entries],
-    ['Top book',         kpi.topBook || '—'],
-    ['Top channel',      kpi.topChannel || '—'],
-    [`This month (${kpi.monthLabel})`, kpi.monthCAD]
-  ];
-  summary.getRange(2, 6, kpiRows.length, 2).setValues(kpiRows);
-  summary.setColumnWidth(5, 24);   // slim gap between the two panels
-  summary.setColumnWidth(6, 185);
-  summary.setColumnWidth(7, 150);
-  summary.getRange(2, 6, kpiRows.length, 1).setFontWeight('bold');
-  summary.getRange(2, 7, kpiRows.length, 1).setHorizontalAlignment('right');
-  summary.getRange(2, 7).setNumberFormat('#,##0');                 // Books sold
-  summary.getRange(4, 7).setNumberFormat('#,##0');                 // Entries
-  summary.getRange(3, 7).setNumberFormat('"CA$"#,##0.00')          // Revenue
-    .setFontColor('#064e3b').setFontWeight('bold').setBackground('#ecfdf5');
-  summary.getRange(7, 7).setNumberFormat('"CA$"#,##0.00')          // This month
-    .setFontColor('#064e3b').setFontWeight('bold').setBackground('#ecfdf5');
-  summary.getRange(1, 6, kpiRows.length + 1, 2)
-    .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
-}
-
-// Read the Overview tab and compute headline figures. "Books sold" counts only
-// real sales (orders, plus consignment rows whose Event is "Sale") so that
-// consignment shipments/returns don't inflate the tally. Revenue/top tallies
-// use CAD Equivalent, which is 0 for non-sale consignment rows anyway.
-function computeOverviewKpis_(overview, tz) {
-  const zone = tz || 'America/Toronto';
-  const out = {
-    unitsSold: 0, revenueCAD: 0, entries: 0,
-    topBook: '', topChannel: '', monthCAD: 0,
-    monthLabel: Utilities.formatDate(new Date(), zone, 'yyyy-MM')
-  };
-  const lastRow = overview.getLastRow();
-  if (lastRow &lt; 2) return out;
-  const values = overview.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
-  const byBook = {}, byChan = {};
-  for (const r of values) {
-    const status = String(r[COL.Status - 1] || '').toUpperCase();
-    if (status.indexOf('VOID') &gt;= 0 || status.indexOf('CANCEL') &gt;= 0) continue;
-    const book = String(r[COL.Book - 1] || '').trim();
-    const evnum = String(r[COL['Event/Num'] - 1] || '').trim();
-    if (!book &amp;&amp; !evnum) continue; // skip blank rows
-    out.entries++;
-    const qty = Number(r[COL.Qty - 1]) || 0;
-    const cad = Number(r[COL['CAD Equivalent'] - 1]) || 0;
-    const type = String(r[COL.Type - 1] || '').toLowerCase();
-    const isSale = type === 'order' || (type === 'consignment' &amp;&amp; /^sale$/i.test(evnum));
-    if (isSale) out.unitsSold += qty;
-    out.revenueCAD += cad;
-    const chan = String(r[COL['Store/Chan'] - 1] || '').trim();
-    if (book) byBook[book] = (byBook[book] || 0) + cad;
-    if (chan) byChan[chan] = (byChan[chan] || 0) + cad;
-    const d = r[COL.Date - 1];
-    const mk = (d instanceof Date &amp;&amp; !isNaN(d.getTime()))
-      ? Utilities.formatDate(d, zone, 'yyyy-MM')
-      : String(d || '').slice(0, 7);
-    if (mk === out.monthLabel) out.monthCAD += cad;
-  }
-  out.topBook = topKey_(byBook);
-  out.topChannel = topKey_(byChan);
-  return out;
-}
-
-function topKey_(map) {
-  let best = '', bestVal = -Infinity;
-  for (const k in map) { if (map[k] &gt; bestVal) { bestVal = map[k]; best = k; } }
-  return best;
-}
-
-// ─────────────────────────────────────────────────────────────
-// FX: cache 6h, fall back to last known or 1.0
-// ─────────────────────────────────────────────────────────────
-function convertToCAD_(amount, fromCcy) {
-  const ccy = normalizeCcy_(fromCcy);
-  if (!ccy || ccy === 'CAD') return amount;
-  const rate = getFxRate_(ccy, 'CAD');
-  if (!rate) return '';
-  return Math.round(amount * rate * 100) / 100;
-}
-
-// Static fallback rates → CAD. Used only when both GOOGLEFINANCE and
-// the live HTTP API fail (e.g. UrlFetchApp permission not granted yet).
-// Approximate end-of-2024 rates — good enough for legacy backfill.
-const FALLBACK_RATES_TO_CAD = {
-  USD: 1.36, EUR: 1.47, GBP: 1.73, AUD: 0.90,
-  JPY: 0.009, CHF: 1.55, MXN: 0.067, SEK: 0.13,
-  NOK: 0.13,  DKK: 0.20
-};
-
-// Evaluate a GOOGLEFINANCE currency rate via a hidden helper sheet.
-// If a date is given, returns the historical rate on that date (frozen);
-// otherwise returns the current rate.
-function evaluateGoogleFinanceRate_(from, to, dateObj) {
-  if (!from || !to || from === to) return null;
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let helper = ss.getSheetByName('__FxHelper');
-  if (!helper) {
-    helper = ss.insertSheet('__FxHelper');
-    helper.hideSheet();
-  }
-  const pair = `CURRENCY:${from}${to}`;
-  const liveFallback = `IFERROR(GOOGLEFINANCE("${pair}"), "")`;
-  let formula;
-  if (dateObj instanceof Date &amp;&amp; !isNaN(dateObj.getTime())) {
-    const y = dateObj.getFullYear(), m = dateObj.getMonth() + 1, d = dateObj.getDate();
-    formula = `=IFERROR(INDEX(GOOGLEFINANCE("${pair}","price",DATE(${y},${m},${d}),DATE(${y},${m},${d}+5),"DAILY"),2,2), ${liveFallback})`;
-  } else {
-    formula = `=${liveFallback}`;
-  }
-  try {
-    helper.getRange('A1').setFormula(formula);
-    SpreadsheetApp.flush();
-    const v = helper.getRange('A1').getValue();
-    helper.getRange('A1').clearContent();
-    return (typeof v === 'number' &amp;&amp; v &gt; 0) ? v : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// Try GOOGLEFINANCE (historical if date provided) → HTTP API → static
-// fallback, in that order. Tracks failures so the backfill alert can
-// surface them.
-function getCadRateForRow_(fromCcy, dateObj, problems) {
-  const ccy = normalizeCcy_(fromCcy);
-  if (!ccy || ccy === 'CAD') return null;
-  let rate = evaluateGoogleFinanceRate_(ccy, 'CAD', dateObj);
-  if (rate) return rate;
-  try {
-    rate = getFxRate_(ccy, 'CAD');
-    if (rate) return rate;
-  } catch (_) {}
-  if (FALLBACK_RATES_TO_CAD[ccy]) {
-    if (problems) problems[ccy] = (problems[ccy] || 0) + 1;
-    return FALLBACK_RATES_TO_CAD[ccy];
-  }
-  if (problems) problems[`${ccy}!`] = (problems[`${ccy}!`] || 0) + 1;
-  return null;
-}
-
-function parseRowDate_(raw) {
-  if (!raw) return null;
-  if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
-  const d = new Date(raw);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-// Normalize messy currency inputs ("CA$", "C$", "$", "US$", "€", …) to
-// 3-letter ISO codes so the Currency column and the FX lookup agree.
-function normalizeCcy_(raw) {
-  if (raw === null || raw === undefined) return '';
-  const s = String(raw).trim();
-  if (!s) return '';
-  const u = s.toUpperCase();
-  const symMap = {
-    'CA$': 'CAD', 'C$': 'CAD', 'CDN$': 'CAD', '$CAD': 'CAD',
-    'US$': 'USD', 'USD$': 'USD', '$US': 'USD',
-    '€': 'EUR', 'EUR€': 'EUR',
-    '£': 'GBP',
-    '¥': 'JPY',
-    'A$': 'AUD', 'AU$': 'AUD',
-    'CHF': 'CHF',
-    '$': 'CAD' // app's home currency
-  };
-  if (symMap[u]) return symMap[u];
-  if (symMap[s]) return symMap[s];
-  if (/^[A-Z]{3}$/.test(u)) return u;
-  return u;
-}
-
-// Repair pass: normalize the Currency column (e.g. "CA$" → "CAD") and
-// fill in missing CAD Equivalent values for non-CAD rows. Walks every
-// managed sheet (any tab whose first column header is "_eventId"), so
-// both the Overview tab and the per-book tabs get cleaned up. Uses
-// GOOGLEFINANCE with the row's date for historical accuracy, falling
-// back to live FX and a static rate table if those fail.
-// Safe to re-run; only touches cells that need it.
-function backfillCurrencyAndCad() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheets = ss.getSheets().filter(sh =&gt; {
-    if (sh.getLastColumn() &lt; 1 || sh.getLastRow() &lt; 1) return false;
-    return sh.getRange(1, 1).getValue() === '_eventId';
-  });
-  if (!sheets.length) {
-    SpreadsheetApp.getUi().alert('No managed sheets found (looking for "_eventId" in A1).');
-    return;
-  }
-
-  let totalNormalized = 0, totalFilled = 0;
-  const perSheet = [];
-  const fallbackUsage = {};
-
-  for (const sheet of sheets) {
-    const lastRow = sheet.getLastRow();
-    if (lastRow &lt; 2) continue;
-
-    const ccyRange  = sheet.getRange(2, COL.Currency, lastRow - 1, 1);
-    const totRange  = sheet.getRange(2, COL['Total/Amount'], lastRow - 1, 1);
-    const cadRange  = sheet.getRange(2, COL['CAD Equivalent'], lastRow - 1, 1);
-    const dateRange = sheet.getRange(2, COL.Date, lastRow - 1, 1);
-
-    const ccyVals  = ccyRange.getValues();
-    const totVals  = totRange.getValues();
-    const cadVals  = cadRange.getValues();
-    const dateVals = dateRange.getValues();
-
-    let normalized = 0, filled = 0;
-    for (let i = 0; i &lt; ccyVals.length; i++) {
-      const orig = ccyVals[i][0];
-      const norm = normalizeCcy_(orig);
-      if (norm &amp;&amp; norm !== orig) {
-        ccyVals[i][0] = norm;
-        normalized++;
-      }
-      const ccy = ccyVals[i][0];
-      const total = numOrBlank_(totVals[i][0]);
-      const cad = cadVals[i][0];
-      const cadBlank = cad === '' || cad === null || cad === undefined;
-      if (cadBlank &amp;&amp; total !== '' &amp;&amp; ccy) {
-        if (ccy === 'CAD') {
-          cadVals[i][0] = total;
-          filled++;
-        } else {
-          const rowDate = parseRowDate_(dateVals[i][0]);
-          const rate = getCadRateForRow_(ccy, rowDate, fallbackUsage);
-          if (rate) {
-            cadVals[i][0] = Math.round(total * rate * 100) / 100;
-            filled++;
-          }
-        }
-      }
-    }
-
-    ccyRange.setValues(ccyVals);
-    cadRange.setValues(cadVals);
-    totalNormalized += normalized;
-    totalFilled += filled;
-    perSheet.push(`• ${sheet.getName()}: ${normalized} ccy, ${filled} CAD`);
-  }
-
-  // Clean up the hidden helper sheet so it doesn't linger.
-  const helper = ss.getSheetByName('__FxHelper');
-  if (helper) ss.deleteSheet(helper);
-
-  refreshOverviewSummary_(ss);
-
-  const fallbackNote = Object.keys(fallbackUsage).length
-    ? `\n\nFX fallback used for: ${Object.entries(fallbackUsage).map(([k,v]) =&gt; `${k}×${v}`).join(', ')}`
-    : '';
-  SpreadsheetApp.getUi().alert(
-    `Backfill done across ${sheets.length} sheet(s).\n` +
-    `Currency cells normalized: ${totalNormalized}\n` +
-    `CAD Equivalent cells filled: ${totalFilled}\n\n` +
-    perSheet.join('\n') + fallbackNote
-  );
-}
-
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('Inventory')
-    .addItem('Normalize currencies + fill CAD', 'backfillCurrencyAndCad')
-    .addItem('Monthly summary (CAD)', 'buildMonthlySummary')
-    .addItem('Health check', 'healthCheck')
-    .addToUi();
-}
-
-// ─────────────────────────────────────────────────────────────
-// Monthly summary: a Month × Book pivot of CAD revenue (+ totals) on its own
-// "Monthly (CAD)" tab, rebuilt on demand. Pulls from Overview, counts only
-// real sales (skips voids and non-sale consignment rows), and is safe to
-// re-run — it isn't a managed sheet, so reset/backfill leave it alone.
-// ─────────────────────────────────────────────────────────────
-function buildMonthlySummary() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const overview = ss.getSheetByName('Overview');
-  if (!overview || overview.getLastRow() &lt; 2) {
-    SpreadsheetApp.getUi().alert('No data in Overview yet.');
-    return;
-  }
-  const zone = ss.getSpreadsheetTimeZone();
-  const values = overview.getRange(2, 1, overview.getLastRow() - 1, HEADERS.length).getValues();
-
-  const byMonthBook = {};         // 'YYYY-MM' -&gt; { book -&gt; cad }
-  const bookSet = {}, monthSet = {};
-  for (const r of values) {
-    const status = String(r[COL.Status - 1] || '').toUpperCase();
-    if (status.indexOf('VOID') &gt;= 0 || status.indexOf('CANCEL') &gt;= 0) continue;
-    const type = String(r[COL.Type - 1] || '').toLowerCase();
-    const evnum = String(r[COL['Event/Num'] - 1] || '').trim();
-    const isSale = type === 'order' || (type === 'consignment' &amp;&amp; /^sale$/i.test(evnum));
-    if (!isSale) continue;
-    const cad = Number(r[COL['CAD Equivalent'] - 1]) || 0;
-    if (!cad) continue;
-    const book = String(r[COL.Book - 1] || '(unknown)').trim() || '(unknown)';
-    const d = r[COL.Date - 1];
-    const mk = (d instanceof Date &amp;&amp; !isNaN(d.getTime()))
-      ? Utilities.formatDate(d, zone, 'yyyy-MM')
-      : String(d || '').slice(0, 7);
-    if (!/^\d{4}-\d{2}$/.test(mk)) continue; // skip rows without a usable date
-    (byMonthBook[mk] = byMonthBook[mk] || {});
-    byMonthBook[mk][book] = (byMonthBook[mk][book] || 0) + cad;
-    bookSet[book] = true; monthSet[mk] = true;
-  }
-
-  const months = Object.keys(monthSet).sort();
-  const books = Object.keys(bookSet).sort();
-  if (!months.length) {
-    SpreadsheetApp.getUi().alert('No dated sales found to summarize.');
-    return;
-  }
-
-  // Build the grid: header, one row per month, then a totals row.
-  const header = ['Month'].concat(books, ['Total']);
-  const grid = [header];
-  const bookTotals = books.map(() =&gt; 0);
-  let grand = 0;
-  for (const m of months) {
-    const row = [m];
-    let monthTotal = 0;
-    books.forEach((b, i) =&gt; {
-      const v = (byMonthBook[m][b] || 0);
-      row.push(v);
-      monthTotal += v; bookTotals[i] += v;
-    });
-    row.push(monthTotal);
-    grand += monthTotal;
-    grid.push(row);
-  }
-  grid.push(['Total'].concat(bookTotals, [grand]));
-
-  let sheet = ss.getSheetByName('Monthly (CAD)');
-  if (!sheet) sheet = ss.insertSheet('Monthly (CAD)');
-  else { sheet.clear(); sheet.clearConditionalFormatRules(); }
-
-  const nCols = header.length, nRows = grid.length;
-  sheet.getRange(1, 1, nRows, nCols).setValues(grid);
-
-  // Formatting
-  sheet.getRange(1, 1, 1, nCols)
-    .setFontWeight('bold').setFontSize(11).setFontFamily('Inter')
-    .setBackground('#0f172a').setFontColor('#ffffff')
-    .setHorizontalAlignment('center').setVerticalAlignment('middle');
-  sheet.setRowHeight(1, 34);
-  sheet.setFrozenRows(1);
-  sheet.setFrozenColumns(1);
-  sheet.getRange(2, 1, nRows - 1, 1).setFontWeight('bold'); // month labels
-  sheet.getRange(2, 2, nRows - 1, nCols - 1)
-    .setNumberFormat('"CA$"#,##0.00').setHorizontalAlignment('right');
-  sheet.getRange(nRows, 1, 1, nCols).setBackground('#fef3c7').setFontWeight('bold');
-  sheet.getRange(1, nCols, nRows, 1).setFontWeight('bold').setBackground('#ecfdf5').setFontColor('#064e3b');
-  sheet.getRange(1, 1, nRows, nCols)
-    .setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
-  sheet.setColumnWidth(1, 90);
-  for (let c = 2; c &lt;= nCols; c++) sheet.setColumnWidth(c, 130);
-
-  SpreadsheetApp.getUi().alert(
-    `Monthly summary rebuilt: ${months.length} month(s) × ${books.length} book(s).\n` +
-    `Total CAD revenue: CA$${grand.toFixed(2)}`
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Health check: scan managed sheets for anomalies that would quietly break
-// sync or totals, and report counts + a few examples. Read-only (touches
-// nothing), so it's always safe to run.
-// ─────────────────────────────────────────────────────────────
-function healthCheck() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheets = ss.getSheets().filter(sh =&gt;
-    sh.getLastColumn() &gt;= 1 &amp;&amp; sh.getRange(1, 1).getValue() === '_eventId');
-  if (!sheets.length) {
-    SpreadsheetApp.getUi().alert('No managed sheets found (looking for "_eventId" in A1).');
-    return;
-  }
-
-  const idCounts = {};            // id -&gt; [locations]
-  const blankId = [];
-  const blankCad = [];
-  let scanned = 0;
-
-  for (const sheet of sheets) {
-    const lastRow = sheet.getLastRow();
-    if (lastRow &lt; 2) continue;
-    const vals = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
-    for (let i = 0; i &lt; vals.length; i++) {
-      const r = vals[i];
-      const book = String(r[COL.Book - 1] || '').trim();
-      const evnum = String(r[COL['Event/Num'] - 1] || '').trim();
-      if (!book &amp;&amp; !evnum) continue; // ignore blank rows
-      scanned++;
-      const where = `${sheet.getName()}!${i + 2}`;
-      const id = String(r[COL._eventId - 1] || '').trim();
-      if (!id) blankId.push(where);
-      else (idCounts[id] = idCounts[id] || []).push(where);
-
-      const status = String(r[COL.Status - 1] || '').toUpperCase();
-      const isVoid = status.indexOf('VOID') &gt;= 0 || status.indexOf('CANCEL') &gt;= 0;
-      const total = numOrBlank_(r[COL['Total/Amount'] - 1]);
-      const cad = r[COL['CAD Equivalent'] - 1];
-      const cadBlank = cad === '' || cad === null || cad === undefined;
-      if (!isVoid &amp;&amp; cadBlank &amp;&amp; total !== '' &amp;&amp; total !== 0) blankCad.push(where);
-    }
-  }
-
-  const dupIds = Object.keys(idCounts).filter(id =&gt; idCounts[id].length &gt; 1);
-  const dupLocs = [];
-  dupIds.forEach(id =&gt; idCounts[id].forEach(loc =&gt; dupLocs.push(loc)));
-
-  const sample = (arr) =&gt; arr.slice(0, 6).join(', ') + (arr.length &gt; 6 ? ', …' : '');
-  const lines = [
-    `Scanned ${scanned} row(s) across ${sheets.length} sheet(s).`,
-    '',
-    `• Duplicate sync IDs: ${dupIds.length}${dupIds.length ? '  (' + sample(dupLocs) + ')' : ''}`,
-    `• Rows missing a sync ID: ${blankId.length}${blankId.length ? '  (' + sample(blankId) + ')' : ''}`,
-    `• Live rows with a blank CAD Equivalent: ${blankCad.length}${blankCad.length ? '  (' + sample(blankCad) + ')' : ''}`,
-    ''
-  ];
-  if (!dupIds.length &amp;&amp; !blankId.length &amp;&amp; !blankCad.length) {
-    lines.push('✓ All clear — nothing to fix.');
-  } else {
-    lines.push('Tip: run "Repair legacy rows" in the app to fix IDs and refill CAD,');
-    lines.push('or "Normalize currencies + fill CAD" to fill CAD in place.');
-  }
-  SpreadsheetApp.getUi().alert('Inventory health check', lines.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-function getFxRate_(from, to) {
-  const cache = CacheService.getScriptCache();
-  const key = `fx_${from}_${to}`;
-  const hit = cache.get(key);
-  if (hit) return parseFloat(hit);
-
-  try {
-    // open.er-api.com — free, no API key required
-    const url = `https://open.er-api.com/v6/latest/${encodeURIComponent(from)}`;
-    const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    if (resp.getResponseCode() === 200) {
-      const j = JSON.parse(resp.getContentText());
-      const r = j &amp;&amp; j.rates &amp;&amp; j.rates[to];
-      if (r) {
-        cache.put(key, String(r), 21600); // 6h
-        PropertiesService.getScriptProperties().setProperty(key, String(r));
-        return r;
-      }
-    }
-  } catch (_) {}
-
-  // Fallback to last persisted value
-  const persisted = PropertiesService.getScriptProperties().getProperty(key);
-  return persisted ? parseFloat(persisted) : null;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Utils
-// ─────────────────────────────────────────────────────────────
-function numOrBlank_(v) {
-  if (v === null || v === undefined || v === '') return '';
-  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
-  return isNaN(n) ? '' : n;
-}
-
-function jsonOut_(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-</pre>
+            <pre id="gas-code" style="background:var(--ink);color:#a8d8a8;font-family:'DM Mono',monospace;font-size:11px;padding:16px;border-radius:var(--r2);overflow-x:auto;line-height:1.75;white-space:pre-wrap;">Loading the latest backend code…</pre>
             <button class="btn sm" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.15);" onclick="copyGasCode()">Copy</button>
           </div>
           <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This v3 script writes normalized event + payment currency fields to one "Events" tab and de-duplicates retries using event IDs.</div>
@@ -2542,8 +1377,8 @@ function jsonOut_(obj) {
         <div style="flex:1;">
           <div style="font-weight:700;font-size:13px;margin-bottom:10px;">Paste your URLs and connect</div>
           <div style="display:flex;flex-direction:column;gap:10px;">
-            <div class="form-group" style="margin:0;"><label>Web App URL</label><input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec"></div>
-            <div class="form-group" style="margin:0;"><label>Google Sheet URL (for the Open link)</label><input type="url" id="sheets-spreadsheet-input" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
+            <div class="form-group" style="margin:0;"><label for="sheets-url-input">Web App URL</label><input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec"></div>
+            <div class="form-group" style="margin:0;"><label for="sheets-spreadsheet-input">Google Sheet URL (for the Open link)</label><input type="url" id="sheets-spreadsheet-input" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
             <div><button class="btn gold" onclick="connectSheets()">Connect</button></div>
           </div>
         </div>
@@ -2664,75 +1499,75 @@ function jsonOut_(obj) {
 </div><!-- /#pw-app -->
 
 <!-- MODALS -->
-<div class="overlay" id="m-add-store" style="display:none;"><div class="modal">
-  <div class="modal-title">Add consignment store</div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Store name *</label><input id="ns-name" placeholder="e.g. Libreria Feltrinelli"></div><div class="form-group"><label>Contact person</label><input id="ns-contact" placeholder="e.g. Maria Rossi"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Email</label><input id="ns-email" type="email" placeholder="store@email.com"></div><div class="form-group"><label>Phone</label><input id="ns-phone" placeholder="e.g. +1 416-539-9595"></div></div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Street address</label><input id="ns-address" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>City</label><input id="ns-city" placeholder="e.g. Milan"></div><div class="form-group"><label>State / Province</label><input id="ns-region" placeholder="e.g. ON"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Postal / ZIP code</label><input id="ns-postal" placeholder="e.g. M5V 2J4"></div><div class="form-group"><label>Country</label><input id="ns-country" placeholder="e.g. Canada"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Website</label><input id="ns-website" placeholder="e.g. store.com"></div><div class="form-group"><label>Commission rate (%)<span class="tip tip-mark" data-tip="The store's cut of each sale. At 40%, you keep 60% of the list price on every book they sell.">?</span></label><input id="ns-rate" type="number" value="40" min="0" max="100"></div></div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Payment terms<span class="tip tip-mark" data-tip="When the store pays you for sold books — e.g. Net 30 (within 30 days) or paid on each sale. For your reference only.">?</span></label><input id="ns-terms" placeholder="e.g. Net 30, paid on sale"></div>
-  <div class="form-group"><label>Notes</label><textarea id="ns-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('add-store')">Cancel</button><button class="btn gold" onclick="addStore()">Add store</button></div>
+<div class="overlay" id="m-add-store" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true">Add consignment store</div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-name">Store name *</label><input id="ns-name" placeholder="e.g. Libreria Feltrinelli"></div><div class="form-group"><label for="ns-contact">Contact person</label><input id="ns-contact" placeholder="e.g. Maria Rossi"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-email">Email</label><input id="ns-email" type="email" placeholder="store@email.com"></div><div class="form-group"><label for="ns-phone">Phone</label><input id="ns-phone" placeholder="e.g. +1 416-539-9595"></div></div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="ns-address">Street address</label><input id="ns-address" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-city">City</label><input id="ns-city" placeholder="e.g. Milan"></div><div class="form-group"><label for="ns-region">State / Province</label><input id="ns-region" placeholder="e.g. ON"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-postal">Postal / ZIP code</label><input id="ns-postal" placeholder="e.g. M5V 2J4"></div><div class="form-group"><label for="ns-country">Country</label><input id="ns-country" placeholder="e.g. Canada"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-website">Website</label><input id="ns-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="ns-rate">Commission rate (%)<span class="tip tip-mark" data-tip="The store's cut of each sale. At 40%, you keep 60% of the list price on every book they sell.">?</span></label><input id="ns-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div></div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="ns-terms">Payment terms<span class="tip tip-mark" data-tip="When the store pays you for sold books — e.g. Net 30 (within 30 days) or paid on each sale. For your reference only.">?</span></label><input id="ns-terms" placeholder="e.g. Net 30, paid on sale"></div>
+  <div class="form-group"><label for="ns-notes">Notes</label><textarea id="ns-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('add-store')">Cancel</button><button class="btn gold" onclick="addStore()">Add store</button></div>
 </div></div>
 
-<div class="overlay" id="m-edit-store" style="display:none;"><div class="modal">
-  <div class="modal-title">Edit consignment store</div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Store name *</label><input id="es-name" placeholder="e.g. Libreria Feltrinelli"></div><div class="form-group"><label>Contact person</label><input id="es-contact" placeholder="e.g. Maria Rossi"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Email</label><input id="es-email" type="email" placeholder="store@email.com"></div><div class="form-group"><label>Phone</label><input id="es-phone" placeholder="e.g. +1 416-539-9595"></div></div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Street address</label><input id="es-address" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>City</label><input id="es-city" placeholder="e.g. Milan"></div><div class="form-group"><label>State / Province</label><input id="es-region" placeholder="e.g. ON"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Postal / ZIP code</label><input id="es-postal" placeholder="e.g. M5V 2J4"></div><div class="form-group"><label>Country</label><input id="es-country" placeholder="e.g. Canada"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Website</label><input id="es-website" placeholder="e.g. store.com"></div><div class="form-group"><label>Commission rate (%)</label><input id="es-rate" type="number" value="40" min="0" max="100"></div></div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Payment terms</label><input id="es-terms" placeholder="e.g. Net 30, paid on sale"></div>
-  <div class="form-group"><label>Notes</label><textarea id="es-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('edit-store')">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
+<div class="overlay" id="m-edit-store" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true">Edit consignment store</div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-name">Store name *</label><input id="es-name" placeholder="e.g. Libreria Feltrinelli"></div><div class="form-group"><label for="es-contact">Contact person</label><input id="es-contact" placeholder="e.g. Maria Rossi"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-email">Email</label><input id="es-email" type="email" placeholder="store@email.com"></div><div class="form-group"><label for="es-phone">Phone</label><input id="es-phone" placeholder="e.g. +1 416-539-9595"></div></div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="es-address">Street address</label><input id="es-address" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-city">City</label><input id="es-city" placeholder="e.g. Milan"></div><div class="form-group"><label for="es-region">State / Province</label><input id="es-region" placeholder="e.g. ON"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-postal">Postal / ZIP code</label><input id="es-postal" placeholder="e.g. M5V 2J4"></div><div class="form-group"><label for="es-country">Country</label><input id="es-country" placeholder="e.g. Canada"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-website">Website</label><input id="es-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="es-rate">Commission rate (%)</label><input id="es-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div></div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="es-terms">Payment terms</label><input id="es-terms" placeholder="e.g. Net 30, paid on sale"></div>
+  <div class="form-group"><label for="es-notes">Notes</label><textarea id="es-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('edit-store')">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
 </div></div>
 
-<div class="overlay" id="m-send-books" style="display:none;"><div class="modal">
-  <div class="modal-title">Send books to <span id="send-sname"></span></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty to send</label><input id="send-qty" type="number" value="10" min="1"></div><div class="form-group"><label>Date sent</label><input id="send-date" type="date"></div></div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Commission rate (%)</label><input id="send-rate" type="number" value="40" min="0" max="100"></div>
-  <div class="form-group"><label>Notes</label><input id="send-notes" placeholder="e.g. delivery ref, batch #"></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
+<div class="overlay" id="m-send-books" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true">Send books to <span id="send-sname"></span></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="send-qty">Qty to send</label><input id="send-qty" type="number" inputmode="numeric" value="10" min="1"></div><div class="form-group"><label for="send-date">Date sent</label><input id="send-date" type="date"></div></div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="send-rate">Commission rate (%)</label><input id="send-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div>
+  <div class="form-group"><label for="send-notes">Notes</label><input id="send-notes" placeholder="e.g. delivery ref, batch #"></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
 </div></div>
 
-<div class="overlay" id="m-record-sale" style="display:none;"><div class="modal">
-  <div class="modal-title">Record sale — <span id="sale-sname"></span></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty sold by store</label><input id="sale-qty" type="number" value="1" min="1"></div><div class="form-group"><label>Date</label><input id="sale-date" type="date"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Sale price per unit</label><div class="price-wrap"><span class="sym" id="sale-sym">€</span><input id="sale-price" type="number" value="40.00" step="0.01"></div></div><div class="form-group"><label>Payment status</label><select id="sale-paid"><option value="pending">Pending</option><option value="paid">Paid</option></select></div></div>
-  <div class="form-group"><label>Notes</label><input id="sale-notes" placeholder="e.g. invoice ref, reporting period"></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('record-sale')">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
+<div class="overlay" id="m-record-sale" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true">Record sale — <span id="sale-sname"></span></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-qty">Qty sold by store</label><input id="sale-qty" type="number" inputmode="numeric" value="1" min="1"></div><div class="form-group"><label for="sale-date">Date</label><input id="sale-date" type="date"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-price">Sale price per unit</label><div class="price-wrap"><span class="sym" id="sale-sym">€</span><input id="sale-price" type="number" inputmode="decimal" value="40.00" step="0.01"></div></div><div class="form-group"><label for="sale-paid">Payment status</label><select id="sale-paid"><option value="pending">Pending</option><option value="paid">Paid</option></select></div></div>
+  <div class="form-group"><label for="sale-notes">Notes</label><input id="sale-notes" placeholder="e.g. invoice ref, reporting period"></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('record-sale')">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
 </div></div>
 
-<div class="overlay" id="m-return" style="display:none;"><div class="modal">
-  <div class="modal-title">Record return — <span id="ret-sname"></span></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Qty returned</label><input id="ret-qty" type="number" value="1" min="1"></div><div class="form-group"><label>Date</label><input id="ret-date" type="date"></div></div>
-  <div class="form-group"><label>Condition</label><select id="ret-cond"><option>Good — return to stock</option><option>Damaged — write off</option></select></div>
-  <div class="form-group" style="margin-top:12px;"><label>Notes</label><input id="ret-notes" placeholder="e.g. reason for return"></div>
-  <div class="modal-footer"><button class="btn" onclick="closeM('return')">Cancel</button><button class="btn gold" onclick="confirmReturn()">Record return</button></div>
+<div class="overlay" id="m-return" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true">Record return — <span id="ret-sname"></span></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ret-qty">Qty returned</label><input id="ret-qty" type="number" inputmode="numeric" value="1" min="1"></div><div class="form-group"><label for="ret-date">Date</label><input id="ret-date" type="date"></div></div>
+  <div class="form-group"><label for="ret-cond">Condition</label><select id="ret-cond"><option>Good — return to stock</option><option>Damaged — write off</option></select></div>
+  <div class="form-group" style="margin-top:12px;"><label for="ret-notes">Notes</label><input id="ret-notes" placeholder="e.g. reason for return"></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('return')">Cancel</button><button class="btn gold" onclick="confirmReturn()">Record return</button></div>
 </div></div>
 
 
 <!-- EDIT ENTRY MODAL -->
-<div class="overlay" id="m-edit-entry" style="display:none;"><div class="modal edit-modal">
-  <div class="modal-title" id="edit-modal-title">Edit entry</div>
+<div class="overlay" id="m-edit-entry" style="display:none;"><div class="modal edit-modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true" id="edit-modal-title">Edit entry</div>
   <div class="edit-modal-type" id="edit-modal-type-badge">Order</div>
 
   <!-- ORDER EDIT FIELDS -->
   <div id="edit-order-fields">
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label>Order #</label><input id="edit-num" type="text"></div>
-      <div class="form-group"><label>Date</label><input id="edit-date" type="date"></div>
+      <div class="form-group"><label for="edit-num">Order #</label><input id="edit-num" type="text"></div>
+      <div class="form-group"><label for="edit-date">Date</label><input id="edit-date" type="date"></div>
     </div>
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label>Qty</label><input id="edit-qty" type="number" min="1"></div>
-      <div class="form-group"><label>Unit price</label><div class="price-wrap"><span class="sym" id="edit-sym">€</span><input id="edit-price" type="number" step="0.01"></div></div>
+      <div class="form-group"><label for="edit-qty">Qty</label><input id="edit-qty" type="number" inputmode="numeric" min="1"></div>
+      <div class="form-group"><label for="edit-price">Unit price</label><div class="price-wrap"><span class="sym" id="edit-sym">€</span><input id="edit-price" type="number" inputmode="decimal" step="0.01"></div></div>
     </div>
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label>Channel</label><select id="edit-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Other</option></select></div>
-      <div class="form-group"><label>Notes</label><input id="edit-notes" type="text"></div>
+      <div class="form-group"><label for="edit-chan">Channel</label><select id="edit-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Other</option></select></div>
+      <div class="form-group"><label for="edit-notes">Notes</label><input id="edit-notes" type="text"></div>
     </div>
     <div class="edit-diff" id="edit-diff-preview" style="display:none;">Changes will recalculate stock and revenue.</div>
   </div>
@@ -2740,12 +1575,12 @@ function jsonOut_(obj) {
   <!-- CONSIGNMENT LEDGER EDIT FIELDS -->
   <div id="edit-ledger-fields" style="display:none;">
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label>Date</label><input id="edit-l-date" type="date"></div>
-      <div class="form-group"><label>Qty</label><input id="edit-l-qty" type="number" min="1"></div>
+      <div class="form-group"><label for="edit-l-date">Date</label><input id="edit-l-date" type="date"></div>
+      <div class="form-group"><label for="edit-l-qty">Qty</label><input id="edit-l-qty" type="number" inputmode="numeric" min="1"></div>
     </div>
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label>Rate (%)</label><input id="edit-l-rate" type="number" min="0" max="100" step="0.1"></div>
-      <div class="form-group"><label>Notes</label><input id="edit-l-notes" type="text"></div>
+      <div class="form-group"><label for="edit-l-rate">Rate (%)</label><input id="edit-l-rate" type="number" inputmode="decimal" min="0" max="100" step="0.1"></div>
+      <div class="form-group"><label for="edit-l-notes">Notes</label><input id="edit-l-notes" type="text"></div>
     </div>
   </div>
 
@@ -2763,7 +1598,7 @@ function jsonOut_(obj) {
     <button class="btn danger-btn" id="edit-void-btn" onclick="voidEntry()">Void this entry</button>
   </div>
 
-  <div class="modal-footer">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeM('edit-entry')">Cancel</button>
     <button class="btn gold" onclick="saveEntryEdit()">Save changes</button>
   </div>
@@ -2772,23 +1607,23 @@ function jsonOut_(obj) {
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- INVOICE EDIT MODAL                                     -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="overlay no-print" id="m-invoice-edit" style="display:none;"><div class="modal" style="max-width:780px;max-height:92vh;overflow-y:auto;">
-  <div class="modal-title" id="inv-edit-title">New invoice</div>
+<div class="overlay no-print" id="m-invoice-edit" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:780px;max-height:92vh;overflow-y:auto;">
+  <div class="modal-title" role="dialog" aria-modal="true" id="inv-edit-title">New invoice</div>
 
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label>Bill to (store)</label>
+    <div class="form-group"><label for="inv-store">Bill to (store)</label>
       <select id="inv-store" onchange="onInvoiceStoreChange()"><option value="">— Select store —</option></select>
     </div>
-    <div class="form-group"><label>Invoice number</label><input id="inv-num" type="text" placeholder="auto"></div>
+    <div class="form-group"><label for="inv-num">Invoice number</label><input id="inv-num" type="text" placeholder="auto"></div>
   </div>
 
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label>Issue date</label><input id="inv-date" type="date"></div>
-    <div class="form-group"><label>Due date</label><input id="inv-due" type="date"></div>
+    <div class="form-group"><label for="inv-date">Issue date</label><input id="inv-date" type="date"></div>
+    <div class="form-group"><label for="inv-due">Due date</label><input id="inv-due" type="date"></div>
   </div>
 
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label>Currency</label>
+    <div class="form-group"><label for="inv-currency">Currency</label>
       <select id="inv-currency" onchange="onInvoiceCurrencyChange()">
         <option value="EUR">EUR — €</option>
         <option value="CAD">CAD — CA$</option>
@@ -2817,11 +1652,11 @@ function jsonOut_(obj) {
   </div>
 
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label>Discount (flat, optional)</label>
-      <div class="price-wrap"><span class="sym" id="inv-discount-sym">€</span><input id="inv-discount" type="number" step="0.01" min="0" value="0" oninput="recalcInvoiceTotals()"></div>
+    <div class="form-group"><label for="inv-discount">Discount (flat, optional)</label>
+      <div class="price-wrap"><span class="sym" id="inv-discount-sym">€</span><input id="inv-discount" type="number" inputmode="decimal" step="0.01" min="0" value="0" oninput="recalcInvoiceTotals()"></div>
     </div>
-    <div class="form-group"><label>Tax / VAT rate (%)</label>
-      <input id="inv-tax" type="number" step="0.01" min="0" max="100" value="0" oninput="recalcInvoiceTotals()">
+    <div class="form-group"><label for="inv-tax">Tax / VAT rate (%)</label>
+      <input id="inv-tax" type="number" inputmode="decimal" step="0.01" min="0" max="100" value="0" oninput="recalcInvoiceTotals()">
     </div>
   </div>
 
@@ -2833,7 +1668,7 @@ function jsonOut_(obj) {
   </div>
 
   <div class="form-group" style="margin-bottom:12px;">
-    <label>Payment link (Stripe Payment Link, PayPal.me, Interac…)</label>
+    <label for="inv-paylink">Payment link (Stripe Payment Link, PayPal.me, Interac…)</label>
     <input id="inv-paylink" type="url" placeholder="https://buy.stripe.com/… (defaults to this book's link)">
     <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
       Leave blank to use the book's default payment link. Stripe Payment Links auto-prefill via <code>?prefilled_email</code> &amp; <code>?client_reference_id</code>.
@@ -2841,11 +1676,11 @@ function jsonOut_(obj) {
   </div>
 
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label>Notes (visible on invoice)</label><textarea id="inv-notes" rows="2" placeholder="Reporting period, batch references, thank-you…"></textarea></div>
-    <div class="form-group"><label>Terms</label><textarea id="inv-terms" rows="2" placeholder="Net 30 · Late payments incur…"></textarea></div>
+    <div class="form-group"><label for="inv-notes">Notes (visible on invoice)</label><textarea id="inv-notes" rows="2" placeholder="Reporting period, batch references, thank-you…"></textarea></div>
+    <div class="form-group"><label for="inv-terms">Terms</label><textarea id="inv-terms" rows="2" placeholder="Net 30 · Late payments incur…"></textarea></div>
   </div>
 
-  <div class="modal-footer" style="justify-content:space-between;">
+  <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;">
     <button class="btn danger-btn" id="inv-delete-btn" style="display:none;" onclick="deleteInvoice()">Delete invoice</button>
     <div style="display:flex;gap:8px;">
       <button class="btn" onclick="closeM('invoice-edit')">Cancel</button>
@@ -2858,7 +1693,7 @@ function jsonOut_(obj) {
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- INVOICE VIEW MODAL  (sharp, printable)                  -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="overlay" id="m-invoice-view" style="display:none;"><div class="modal invoice-view-modal" style="max-width:880px;max-height:94vh;overflow:hidden;padding:0;background:#f0ece4;">
+<div class="overlay" id="m-invoice-view" style="display:none;"><div class="modal invoice-view-modal" role="dialog" aria-modal="true" style="max-width:880px;max-height:94vh;overflow:hidden;padding:0;background:#f0ece4;">
 
   <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 22px;background:var(--ink);color:var(--cream);border-radius:var(--r3) var(--r3) 0 0;flex-wrap:wrap;">
     <div style="font-family:'Playfair Display',serif;font-size:15px;">Invoice preview</div>
@@ -2882,28 +1717,28 @@ function jsonOut_(obj) {
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- INVOICE SETTINGS MODAL (publisher branding & defaults) -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="overlay no-print" id="m-invoice-settings" style="display:none;"><div class="modal" style="max-width:560px;">
-  <div class="modal-title">Invoice settings</div>
+<div class="overlay no-print" id="m-invoice-settings" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:560px;">
+  <div class="modal-title" role="dialog" aria-modal="true">Invoice settings</div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">These details appear on every invoice you generate. Stored locally per browser.</div>
 
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label>Publisher name</label><input id="ivs-name" type="text" placeholder="Lyricalmyrical Books"></div>
-    <div class="form-group"><label>Contact email</label><input id="ivs-email" type="email" placeholder="hello@…"></div>
+    <div class="form-group"><label for="ivs-name">Publisher name</label><input id="ivs-name" type="text" placeholder="Lyricalmyrical Books"></div>
+    <div class="form-group"><label for="ivs-email">Contact email</label><input id="ivs-email" type="email" placeholder="hello@…"></div>
   </div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Address (one block, supports line breaks)</label>
+  <div class="form-group" style="margin-bottom:12px;"><label for="ivs-addr">Address (one block, supports line breaks)</label>
     <textarea id="ivs-addr" rows="3" placeholder="Via Roma 1&#10;20121 Milan, Italy"></textarea>
   </div>
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label>VAT / Tax ID</label><input id="ivs-vat" type="text" placeholder="optional"></div>
-    <div class="form-group"><label>Website</label><input id="ivs-web" type="url" placeholder="https://lyricalmyrical.com"></div>
+    <div class="form-group"><label for="ivs-vat">VAT / Tax ID</label><input id="ivs-vat" type="text" placeholder="optional"></div>
+    <div class="form-group"><label for="ivs-web">Website</label><input id="ivs-web" type="url" placeholder="https://lyricalmyrical.com"></div>
   </div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Default terms (used as a starting point)</label>
+  <div class="form-group" style="margin-bottom:12px;"><label for="ivs-terms">Default terms (used as a starting point)</label>
     <textarea id="ivs-terms" rows="2" placeholder="Net 30. Payment in EUR via Stripe / SEPA / PayPal."></textarea>
   </div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Default footer message</label>
+  <div class="form-group" style="margin-bottom:12px;"><label for="ivs-footer">Default footer message</label>
     <input id="ivs-footer" type="text" placeholder="Thank you for stocking our books.">
   </div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Bank / wire details (optional, shown on invoice)</label>
+  <div class="form-group" style="margin-bottom:12px;"><label for="ivs-bank">Bank / wire details (optional, shown on invoice)</label>
     <textarea id="ivs-bank" rows="2" placeholder="IBAN IT60 X054 2811 1010 0000 0123 456&#10;BIC ABCDITMM"></textarea>
   </div>
 
@@ -2914,7 +1749,7 @@ function jsonOut_(obj) {
       When you finalize an invoice, the app auto-creates a Stripe Payment Link with the <strong>exact amount owed</strong> — so a store can never accidentally pay the wrong quarter.
       <a href="https://dashboard.stripe.com/apikeys/create?name=Lyrical%20Inv%20Pay%20Links&permissions[]=rak_payment_link_write&permissions[]=rak_product_write&permissions[]=rak_plan_write&permissions[]=rak_payment_links_write&permissions[]=rak_prices_write&permissions[]=rak_products_write" target="_blank" style="color:var(--gold);">Create a restricted key →</a>
     </div>
-    <div class="form-group" style="margin-bottom:8px;"><label>Stripe Restricted Key</label>
+    <div class="form-group" style="margin-bottom:8px;"><label for="ivs-stripe-key">Stripe Restricted Key</label>
       <input id="ivs-stripe-key" type="password" placeholder="rk_live_… or rk_test_…" autocomplete="off">
       <div style="font-size:10px;color:var(--text3);margin-top:4px;">Stored locally in this browser only. Never synced.</div>
     </div>
@@ -2932,7 +1767,7 @@ function jsonOut_(obj) {
     </div>
   </div>
 
-  <div class="modal-footer">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeM('invoice-settings')">Cancel</button>
     <button class="btn gold" onclick="saveInvoiceSettings()">Save settings</button>
   </div>
@@ -2940,29 +1775,29 @@ function jsonOut_(obj) {
 
 <!-- SHIPPING LABEL MODAL -->
 <div class="overlay" id="m-shipping-label" style="display:none;">
-  <div class="modal" style="max-width:540px;">
-    <div class="modal-title">📦 Shipping label</div>
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:540px;">
+    <div class="modal-title" role="dialog" aria-modal="true">📦 Shipping label</div>
     <div id="shipping-label-order-info" style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;font-family:'DM Mono',monospace;"></div>
 
     <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;">Ship to</div>
     <div class="g2" style="margin-bottom:10px;">
-      <div class="form-group" style="margin:0;"><label>Customer name</label><input type="text" id="sl-name" placeholder="Full name"></div>
-      <div class="form-group" style="margin:0;"><label>Email (optional)</label><input type="text" id="sl-email" placeholder="customer@email.com"></div>
+      <div class="form-group" style="margin:0;"><label for="sl-name">Customer name</label><input type="text" id="sl-name" placeholder="Full name"></div>
+      <div class="form-group" style="margin:0;"><label for="sl-email">Email (optional)</label><input type="text" id="sl-email" placeholder="customer@email.com"></div>
     </div>
-    <div class="form-group" style="margin-bottom:10px;"><label>Address line 1</label><input type="text" id="sl-addr1" placeholder="Street address"></div>
-    <div class="form-group" style="margin-bottom:10px;"><label>Address line 2 (optional)</label><input type="text" id="sl-addr2" placeholder="Apt, suite, unit…"></div>
+    <div class="form-group" style="margin-bottom:10px;"><label for="sl-addr1">Address line 1</label><input type="text" id="sl-addr1" placeholder="Street address"></div>
+    <div class="form-group" style="margin-bottom:10px;"><label for="sl-addr2">Address line 2 (optional)</label><input type="text" id="sl-addr2" placeholder="Apt, suite, unit…"></div>
     <div class="g2" style="margin-bottom:10px;">
-      <div class="form-group" style="margin:0;"><label>City</label><input type="text" id="sl-city" placeholder="City"></div>
-      <div class="form-group" style="margin:0;"><label>Province / State <span style="font-weight:400;color:var(--text4);">(optional)</span></label><input type="text" id="sl-province" placeholder="e.g. ON"></div>
+      <div class="form-group" style="margin:0;"><label for="sl-city">City</label><input type="text" id="sl-city" placeholder="City"></div>
+      <div class="form-group" style="margin:0;"><label for="sl-province">Province / State <span style="font-weight:400;color:var(--text4);">(optional)</span></label><input type="text" id="sl-province" placeholder="e.g. ON"></div>
     </div>
     <div class="g2" style="margin-bottom:1.25rem;">
-      <div class="form-group" style="margin:0;"><label>Postal / ZIP</label><input type="text" id="sl-postal" placeholder="e.g. M5V 2T6"></div>
-      <div class="form-group" style="margin:0;"><label>Country</label><input type="text" id="sl-country" placeholder="e.g. Canada" value="Canada"></div>
+      <div class="form-group" style="margin:0;"><label for="sl-postal">Postal / ZIP</label><input type="text" id="sl-postal" placeholder="e.g. M5V 2T6"></div>
+      <div class="form-group" style="margin:0;"><label for="sl-country">Country</label><input type="text" id="sl-country" placeholder="e.g. Canada" value="Canada"></div>
     </div>
 
     <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:6px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;"></div>
 
-    <div class="modal-footer">
+    <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="closeM('shipping-label')">Cancel</button>
       <button class="btn" id="sl-toggle-shipped-btn" onclick="toggleShipped()" style="display:none;">Mark as shipped</button>
       <button class="btn gold" onclick="printShippingLabel()">🖨 Print &amp; mark shipped</button>
@@ -2972,8 +1807,8 @@ function jsonOut_(obj) {
 
 <!-- IMPORT MODAL -->
 <div class="overlay" id="m-import" style="display:none;">
-  <div class="modal" style="max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
-    <div class="modal-title">Import order history</div>
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
+    <div class="modal-title" role="dialog" aria-modal="true">Import order history</div>
     <div id="import-summary" style="font-size:13px;color:var(--text2);margin-bottom:1rem;"></div>
     <div style="flex:1;overflow-y:auto;min-height:0;">
       <div class="tbl-wrap" style="margin-bottom:0;">
@@ -2986,7 +1821,7 @@ function jsonOut_(obj) {
     <div style="margin-top:1rem;padding:10px 14px;background:var(--amber-bg);border-radius:var(--r2);border-left:3px solid var(--amber);font-size:12px;color:var(--amber);">
       ⚠ This will <strong>add</strong> these rows to the current book's history. It will not overwrite existing data. Stock and revenue will be recalculated.
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="closeM('import')">Cancel</button>
       <button class="btn gold" onclick="confirmImport()">Import <span id="import-count">0</span> orders</button>
     </div>
@@ -2994,29 +1829,29 @@ function jsonOut_(obj) {
 </div>
 
 <!-- ADD BOOK MODAL -->
-<div class="overlay" id="m-add-book" style="display:none;"><div class="modal">
-  <div class="modal-title" id="add-book-modal-title">Add new book</div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Book ID (URL safe) *</label><input id="nb-id" placeholder="e.g. photobook-2026"></div><div class="form-group"><label>Title *</label><input id="nb-title" placeholder="e.g. My Awesome Book"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label>Author</label><input id="nb-author" placeholder="Author name"></div><div class="form-group"><label>ISBN</label><input id="nb-isbn" placeholder="—"></div></div>
+<div class="overlay" id="m-add-book" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true" id="add-book-modal-title">Add new book</div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="nb-id">Book ID (URL safe) *</label><input id="nb-id" placeholder="e.g. photobook-2026"></div><div class="form-group"><label for="nb-title">Title *</label><input id="nb-title" placeholder="e.g. My Awesome Book"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="nb-author">Author</label><input id="nb-author" placeholder="Author name"></div><div class="form-group"><label for="nb-isbn">ISBN</label><input id="nb-isbn" placeholder="—"></div></div>
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label>Print Run</label><input id="nb-max" type="number" value="100"></div>
-    <div class="form-group"><label>List Price</label><input id="nb-price" type="number" value="40"></div>
+    <div class="form-group"><label for="nb-max">Print Run</label><input id="nb-max" type="number" inputmode="numeric" value="100"></div>
+    <div class="form-group"><label for="nb-price">List Price</label><input id="nb-price" type="number" inputmode="numeric" value="40"></div>
   </div>
   <div class="g2" style="margin-bottom:12px;">
     <div class="form-group">
-      <label>Currency</label>
+      <label for="nb-cur">Currency</label>
       <select id="nb-cur">
         <option value="€">Euro (€)</option>
         <option value="CA$">Canadian Dollar (CA$)</option>
       </select>
     </div>
-    <div class="form-group"><label>Low Stock Threshold</label><input id="nb-thresh" type="number" value="10"></div>
+    <div class="form-group"><label for="nb-thresh">Low Stock Threshold</label><input id="nb-thresh" type="number" inputmode="numeric" value="10"></div>
   </div>
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label>Accent Color</label><input id="nb-accent" type="color" value="#c8913a"></div>
-    <div class="form-group"><label>Author Google Email</label><input type="email" id="nb-pw" placeholder="Used for author sign-in access"></div>
+    <div class="form-group"><label for="nb-accent">Accent Color</label><input id="nb-accent" type="color" value="#c8913a"></div>
+    <div class="form-group"><label for="nb-pw">Author Google Email</label><input type="email" id="nb-pw" placeholder="Used for author sign-in access"></div>
   </div>
-  <div class="form-group"><label>Initial Production Cost</label><input id="nb-prod" type="number" value="0"></div>
+  <div class="form-group"><label for="nb-prod">Initial Production Cost</label><input id="nb-prod" type="number" inputmode="numeric" value="0"></div>
   <div class="form-group" style="margin-top:4px;">
     <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for QR codes)</span></label>
     <div style="display:flex;gap:8px;align-items:center;">
@@ -3027,12 +1862,12 @@ function jsonOut_(obj) {
       Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a>, or click <strong>Generate SKU link</strong> to create one tagged with this book's SKU — so direct sales auto-match in the Payments tab. The QR code points to this link.
     </div>
   </div>
-  <div class="modal-footer"><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
 </div></div>
 
 <!-- PAYMENT QR MODAL -->
-<div class="overlay" id="m-payment-qr" style="display:none;"><div class="modal">
-  <div class="modal-title">Payment QR Code</div>
+<div class="overlay" id="m-payment-qr" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true">Payment QR Code</div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.6;">
     Scan this code to pay for <strong id="qr-book-title" style="color:var(--cream);"></strong>.
   </div>
@@ -3046,26 +1881,26 @@ function jsonOut_(obj) {
       <button class="btn ink" onclick="copyPaymentLink()" style="flex-shrink:0;">Copy</button>
     </div>
   </div>
-  <div class="modal-footer">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeM('payment-qr')">Close</button>
     <button class="btn gold" onclick="downloadPaymentQR()">Download Image</button>
   </div>
 </div></div>
 
 <!-- POS-ONLY BOOK MODAL (add / edit + instant Stripe link & QR) -->
-<div class="overlay" id="m-pos-book" style="display:none;"><div class="modal" style="max-width:620px;">
-  <div class="modal-title" id="pb-modal-title">Add POS-only book</div>
+<div class="overlay" id="m-pos-book" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:620px;">
+  <div class="modal-title" role="dialog" aria-modal="true" id="pb-modal-title">Add POS-only book</div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.55;">
     A quick title for the sales table — guest authors, consignment, one-off stock. It shows up at the Point of Sale, in the printable sales tracker, and on the QR sheet, but <strong>stays out of your catalog, inventory, and financials</strong>.
   </div>
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group" style="margin:0;"><label>Title *</label><input id="pb-title" placeholder="e.g. Guest Poetry Zine"></div>
-    <div class="form-group" style="margin:0;"><label>Author</label><input id="pb-author" placeholder="Author name"></div>
+    <div class="form-group" style="margin:0;"><label for="pb-title">Title *</label><input id="pb-title" placeholder="e.g. Guest Poetry Zine"></div>
+    <div class="form-group" style="margin:0;"><label for="pb-author">Author</label><input id="pb-author" placeholder="Author name"></div>
   </div>
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group" style="margin:0;"><label>Price</label><input id="pb-price" type="number" step="0.01" value="40"></div>
+    <div class="form-group" style="margin:0;"><label for="pb-price">Price</label><input id="pb-price" type="number" inputmode="decimal" step="0.01" value="40"></div>
     <div class="form-group" style="margin:0;">
-      <label>Currency</label>
+      <label for="pb-cur">Currency</label>
       <select id="pb-cur">
         <option value="€">Euro (€)</option>
         <option value="CA$">Canadian Dollar (CA$)</option>
@@ -3074,7 +1909,7 @@ function jsonOut_(obj) {
       </select>
     </div>
   </div>
-  <div class="form-group" style="margin-bottom:12px;"><label>Accent Color</label><input id="pb-accent" type="color" value="#c8913a"></div>
+  <div class="form-group" style="margin-bottom:12px;"><label for="pb-accent">Accent Color</label><input id="pb-accent" type="color" value="#c8913a"></div>
 
   <div class="form-group" style="margin-bottom:12px;">
     <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for the QR code)</span></label>
@@ -3098,7 +1933,7 @@ function jsonOut_(obj) {
     </div>
   </div>
 
-  <div class="modal-footer">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closePosBookModal()">Cancel</button>
     <button class="btn danger-btn" id="pb-remove-btn" style="display:none;" onclick="removeCurrentPosBook()">Remove</button>
     <button class="btn gold" id="pb-save-btn" onclick="savePosBook()">Add to POS</button>
@@ -3106,8 +1941,8 @@ function jsonOut_(obj) {
 </div></div>
 
 <!-- POS ADJUST PRICE / DISCOUNT MODAL -->
-<div class="overlay" id="m-pos-price" style="display:none;"><div class="modal" style="max-width:420px;">
-  <div class="modal-title">Adjust price</div>
+<div class="overlay" id="m-pos-price" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:420px;">
+  <div class="modal-title" role="dialog" aria-modal="true">Adjust price</div>
   <div style="font-size:13px;color:var(--cream);font-weight:600;margin-bottom:2px;" id="pp-title"></div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">List price: <span id="pp-list"></span></div>
 
@@ -3120,7 +1955,7 @@ function jsonOut_(obj) {
   </div>
 
   <div class="form-group" style="margin-bottom:8px;">
-    <label>Custom price</label>
+    <label for="pp-price">Custom price</label>
     <div style="display:flex;align-items:center;gap:8px;">
       <span id="pp-cur-sym" style="font-family:'DM Mono',monospace;font-size:15px;color:var(--text2);"></span>
       <input id="pp-price" type="number" step="0.01" min="0" inputmode="decimal" style="flex:1;" oninput="posPricePreview()">
@@ -3129,7 +1964,7 @@ function jsonOut_(obj) {
   </div>
   <div id="pp-preview" style="font-size:13px;color:var(--cream);min-height:18px;margin-bottom:10px;"></div>
 
-  <div class="modal-footer">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" id="pp-reset-btn" onclick="posResetPrice()">Reset to list</button>
     <button class="btn" onclick="closeM('pos-price')">Cancel</button>
     <button class="btn gold" onclick="savePosPrice()">Apply price</button>
@@ -3137,8 +1972,8 @@ function jsonOut_(obj) {
 </div></div>
 
 <!-- POS PAYMENT QR MODAL (exact / discounted amount) -->
-<div class="overlay" id="m-pos-qr" style="display:none;"><div class="modal" style="max-width:380px;">
-  <div class="modal-title">Scan to pay</div>
+<div class="overlay" id="m-pos-qr" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:380px;">
+  <div class="modal-title" role="dialog" aria-modal="true">Scan to pay</div>
   <div style="text-align:center;margin-bottom:4px;"><span id="pos-qr-amount" style="font-family:'Syne',sans-serif;font-size:26px;font-weight:700;color:var(--green);"></span></div>
   <div id="pos-qr-sub" style="text-align:center;font-size:12px;color:var(--text3);margin-bottom:14px;"></div>
   <div style="display:flex;justify-content:center;margin-bottom:1rem;background:white;padding:1.25rem;border-radius:var(--r2);width:max-content;margin-left:auto;margin-right:auto;">
@@ -3151,14 +1986,14 @@ function jsonOut_(obj) {
       <button class="btn ink" onclick="copyPosQRLink()" style="flex-shrink:0;">Copy</button>
     </div>
   </div>
-  <div class="modal-footer">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeM('pos-qr')">Close</button>
     <button class="btn gold" onclick="downloadPosQR()">Download Image</button>
   </div>
 </div></div>
 
-<div class="overlay" id="m-pos-sale-confirm" style="display:none;"><div class="modal" style="max-width:640px;">
-  <div class="modal-title">Confirm Event Sale</div>
+<div class="overlay" id="m-pos-sale-confirm" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:640px;">
+  <div class="modal-title" role="dialog" aria-modal="true">Confirm Event Sale</div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;">Review the sale details before finalizing. Catalog books deduct inventory immediately; POS-only titles are tallied on the card.</div>
   <div class="tbl-wrap" style="margin-bottom:1rem;">
     <table class="tbl">
@@ -3174,7 +2009,7 @@ function jsonOut_(obj) {
     <span style="font-size:12px;color:var(--text3);">Total charged</span>
     <strong id="pos-confirm-total" style="font-size:18px;color:var(--green);"></strong>
   </div>
-  <div class="modal-footer">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="closeM('pos-sale-confirm')">Cancel</button>
     <button class="btn" onclick="posPrintReceipt()">Print receipt</button>
     <button class="btn gold" onclick="posConfirmSale()">Confirm sale</button>
@@ -3185,10 +2020,10 @@ function jsonOut_(obj) {
 
 <!-- Styled confirm dialog (replaces browser confirm/alert) -->
 <div class="overlay" id="m-confirm" style="display:none;z-index:1200;">
-  <div class="modal" style="max-width:440px;">
-    <div class="modal-title" id="m-confirm-title">Are you sure?</div>
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:440px;">
+    <div class="modal-title" role="dialog" aria-modal="true" id="m-confirm-title">Are you sure?</div>
     <div id="m-confirm-body" style="font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;"></div>
-    <div class="modal-footer">
+    <div class="modal-footer" role="dialog" aria-modal="true">
       <button type="button" class="btn" id="m-confirm-cancel">Cancel</button>
       <button type="button" class="btn gold" id="m-confirm-ok">Confirm</button>
     </div>

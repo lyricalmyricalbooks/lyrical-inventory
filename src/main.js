@@ -1305,7 +1305,7 @@ function switchTab(name) {
   if(name==='reconcile') renderReconcile();
   if(name==='financials') renderFinancials();
   if(name==='taxcenter') renderTaxCenter();
-  if(name==='sheets'){ renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
+  if(name==='sheets'){ loadGasCode(); renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
   if(name==='qrcodes') renderAllQRCodes();
   if(name==='myqr') renderAuthorQRPage();
   if(name==='pos') { renderPOS(); renderPOSFxStatus(); }
@@ -5010,12 +5010,21 @@ async function submitManual(ev){
   });
 }
 
+// Guard against double-taps: a second click on Approve/Reject while the first
+// is still awaiting the Firestore delete would record the same sale/expense
+// twice (inventory off, revenue double-counted). Keys are `${type}:${subKey}`.
+const _submissionsInFlight = new Set();
+
 window.approveSubmission = async function(type, subKey) {
   const queue = window.authorSubmissions[activeBook]?.[type] || {};
   if (!queue[subKey]) return;
+  const flightKey = `${activeBook}:${type}:${subKey}`;
+  if (_submissionsInFlight.has(flightKey)) return;
+  _submissionsInFlight.add(flightKey);
+  try {
   const raw = JSON.parse(queue[subKey].data);
   const s = getState();
-  
+
   if (type === 'expenses') {
     if (!s.expenses) s.expenses = [];
 
@@ -5050,14 +5059,24 @@ window.approveSubmission = async function(type, subKey) {
       renderHist();
     }
   }
+  } finally {
+    _submissionsInFlight.delete(flightKey);
+  }
 }
 
 window.rejectSubmission = async function(type, subKey) {
+  const flightKey = `${activeBook}:${type}:${subKey}`;
+  if (_submissionsInFlight.has(flightKey)) return;
   if (!(await confirmDialog('Reject this submission from the author?', { okLabel: 'Reject', danger: true }))) return;
-  await window._fbDeleteSubmission(activeBook, type, subKey);
-  showToast('Submission removed', 'warn');
-  if (activeBook === 'all') updateAllOverview();
-  else { updateDash(); renderHist(); renderExpenses(); }
+  _submissionsInFlight.add(flightKey);
+  try {
+    await window._fbDeleteSubmission(activeBook, type, subKey);
+    showToast('Submission removed', 'warn');
+    if (activeBook === 'all') updateAllOverview();
+    else { updateDash(); renderHist(); renderExpenses(); }
+  } finally {
+    _submissionsInFlight.delete(flightKey);
+  }
 }
 
 function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
@@ -6857,6 +6876,7 @@ function _modalFieldSig(id){
 function _prefersReducedMotion(){
   return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
+let _modalReturnFocus=null;
 function openM(id){
   const el=$('m-'+id); if(!el) return;
   el.classList.remove('closing');
@@ -6867,11 +6887,21 @@ function openM(id){
   // Snapshot AFTER open* helpers and date defaults have populated fields, so a
   // later mismatch means the *user* changed something.
   _modalSnapshots[id]=_modalFieldSig(id);
+  // Move keyboard focus into the dialog and remember where to send it back, so
+  // keyboard/screen-reader users aren't stranded on the (now-inert) page behind.
+  _modalReturnFocus=document.activeElement;
+  const focusable=el.querySelector('input:not([type=hidden]),select,textarea,button,[tabindex]:not([tabindex="-1"])');
+  if(focusable) setTimeout(()=>{ try{ focusable.focus(); }catch{} }, 0);
 }
 function closeM(id){
   const el=$('m-'+id); if(!el) return;
   el.dispatchEvent(new Event('modal-close'));
   delete _modalSnapshots[id];
+  // Restore focus to whatever opened the modal (if it's still around).
+  if(_modalReturnFocus && el.contains(document.activeElement)){
+    try{ _modalReturnFocus.focus(); }catch{}
+  }
+  _modalReturnFocus=null;
   if(el.classList.contains('closing')) return;
   if(_prefersReducedMotion()){ el.style.display='none'; clearFieldErrors(el); return; }
   el.classList.add('closing');
@@ -7513,7 +7543,29 @@ function renderSheetsLog(){
   }
   b.innerHTML=html;
 }
-function copyGasCode(){navigator.clipboard.writeText($('gas-code').textContent).then(()=>showToast('✓ Code copied!'));}
+// The Apps Script source (~50 KB) is no longer embedded in index.html — it is
+// fetched on demand the first time the "Connect your Google Sheet" tab opens,
+// keeping that weight off every page load. Assigned via textContent so the raw
+// source needs no HTML-escaping. _gasCodeLoaded guards against re-fetching.
+let _gasCodeLoaded = false;
+async function loadGasCode(){
+  if(_gasCodeLoaded) return;
+  const el=$('gas-code'); if(!el) return;
+  try{
+    const res=await fetch(`${import.meta.env.BASE_URL}gas-code.txt`, {cache:'no-cache'});
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    el.textContent=await res.text();
+    _gasCodeLoaded=true;
+  }catch(e){
+    el.textContent='Could not load the backend code. Check your connection and reopen this tab.';
+    console.warn('[gas-code] load failed', e);
+  }
+}
+function copyGasCode(){
+  const text=$('gas-code').textContent;
+  if(!_gasCodeLoaded||!text){ showToast('Code still loading — try again in a moment', 'warn'); return; }
+  navigator.clipboard.writeText(text).then(()=>showToast('✓ Code copied!'));
+}
 async function verifyUrl(){
   if(!sheetsUrl)return;
   const btn=$('verify-url-btn');

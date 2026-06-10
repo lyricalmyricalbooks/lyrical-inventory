@@ -9,26 +9,21 @@ const __dirname = path.dirname(__filename);
 
 function syncAppsScriptPlugin() {
   const codeGsPath = path.resolve(__dirname, 'apps-script/Code.gs');
-  const indexHtmlPath = path.resolve(__dirname, 'index.html');
+  // The "Connect your Google Sheet" tab no longer embeds the ~50 KB of Apps
+  // Script source inline in index.html — it lazy-fetches this verbatim copy the
+  // first time that tab is opened. Keeping it as a plain .txt (assigned via
+  // textContent in the client) means no HTML-escaping is needed: Code.gs is the
+  // single source of truth, copied here byte-for-byte on every build/edit.
+  const gasCodeOutPath = path.resolve(__dirname, 'public/gas-code.txt');
 
   const update = () => {
     try {
-      let codeContent = fs.readFileSync(codeGsPath, 'utf8');
-      const escapedCode = codeContent
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
-      let indexContent = fs.readFileSync(indexHtmlPath, 'utf8');
-      const preRegex = /(<pre id="gas-code"[^>]*>)([\s\S]*?)(<\/pre>)/;
-      
-      const match = indexContent.match(preRegex);
-      if (!match) return;
-
-      const newIndexContent = indexContent.replace(preRegex, (m, p1, p2, p3) => p1 + escapedCode + p3);
-      if (newIndexContent !== indexContent) {
-        fs.writeFileSync(indexHtmlPath, newIndexContent, 'utf8');
-        console.log('\n[Vite] Google Apps Script synced to index.html successfully.');
+      const codeContent = fs.readFileSync(codeGsPath, 'utf8');
+      let current = '';
+      try { current = fs.readFileSync(gasCodeOutPath, 'utf8'); } catch { /* first run */ }
+      if (current !== codeContent) {
+        fs.writeFileSync(gasCodeOutPath, codeContent, 'utf8');
+        console.log('\n[Vite] Apps Script copied to public/gas-code.txt successfully.');
       }
     } catch (err) {
       console.error('\n[Vite] Failed to sync Apps Script:', err);
@@ -58,7 +53,10 @@ export default defineConfig({
     syncAppsScriptPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'maskable-icon-512x512.png'],
+      // gas-code.txt is lazy-fetched by the "Connect your Google Sheet" tab;
+      // precaching it (a background fetch after load, not render-blocking) keeps
+      // that tab working offline without bloating the initial HTML parse.
+      includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'maskable-icon-512x512.png', 'gas-code.txt'],
       manifest: {
         name: 'Lyricalmyrical Inventory',
         short_name: 'Lyrical-Inv',

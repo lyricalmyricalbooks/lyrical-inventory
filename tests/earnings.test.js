@@ -131,4 +131,20 @@ describe('calcArtistEarnings', () => {
     expect(r.perTier[0].artistEarned).toBeCloseTo(250);
     expect(r.perTier[1].artistEarned).toBeCloseTo(90);
   });
+
+  it('accumulates to exact cents over many tiny sales (no float drift)', () => {
+    // 0.10 @ 33% = 0.033 → rounds to 0.03 per sale. 300 such sales must land on
+    // an exact-cents value, not a 0.3000000000004-style float artifact.
+    const book = { profitTiers: [tier('Royalty', null, 33)] };
+    const hist = Array.from({ length: 300 }, () => sale(1, 0.1));
+    const state = { revenue: 30, hist, artistPayouts: [{ amount: 0.1 }, { amount: 0.2 }] };
+    const r = calcArtistEarnings(book, state);
+    // Each accumulator should be a clean 2-decimal number.
+    const cents = (n) => Math.abs(Math.round(n * 100) - n * 100);
+    expect(cents(r.totalArtistEarned)).toBeLessThan(1e-6);
+    expect(cents(r.owedToArtist)).toBeLessThan(1e-6);
+    expect(cents(r.totalPaidToArtist)).toBeLessThan(1e-6);
+    // 0.1 + 0.2 must be exactly 0.3, not 0.30000000000000004.
+    expect(r.totalPaidToArtist).toBe(0.3);
+  });
 });
