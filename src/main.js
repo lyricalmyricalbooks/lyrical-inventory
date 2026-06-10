@@ -9287,18 +9287,21 @@ function renderTaxCenter() {
   const ledTbody = $('tc-ledger-body');
   if(ledTbody) {
       ledTbody.innerHTML = pageLedger.map(item => {
-        // Build receipt/ref cell
-        let refCell = '';
+        // Build receipt/ref cell — receipt links AND the reference number
+        // together; a ref must never hide the saved receipt files.
         let displayRef = item.ref || '';
+        let legacyReceipt = '';
         // Legacy cleanup: if ref contains a local link, extract it
         if (displayRef && displayRef.includes('local://')) {
           const match = displayRef.match(/href="([^"]+)"/);
-          refCell = match ? _localReceiptCell({ receipt: match[1] }) : '';
-        } else if (displayRef) {
-          refCell = displayRef;
-        } else {
-          refCell = _localReceiptCell(item);
+          if (match) legacyReceipt = match[1];
+          displayRef = '';
         }
+        const links = _localReceiptCell(item) || (legacyReceipt ? _localReceiptCell({ receipt: legacyReceipt }) : '');
+        const refCell = [
+          links,
+          displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : ''
+        ].filter(Boolean).join('<br>');
 
         // Show original amount in its native currency; show CAD equivalent separately
         const origSym = getSym(item.origCurrency || 'CAD');
@@ -9504,16 +9507,20 @@ function showCategoryDetail(catName) {
   });
 
   const rows = sorted.map(item => {
-    let refCell = '';
+    // Receipt links AND the reference number together — a ref must never
+    // hide the saved receipt files.
     let displayRef = item.ref || '';
+    let legacyReceipt = '';
     if (displayRef && displayRef.includes('local://')) {
       const match = displayRef.match(/href="([^"]+)"/);
-      refCell = match ? _localReceiptCell({ receipt: match[1] }) : '';
-    } else if (displayRef) {
-      refCell = displayRef;
-    } else {
-      refCell = _localReceiptCell(item);
+      if (match) legacyReceipt = match[1];
+      displayRef = '';
     }
+    const links = _localReceiptCell(item) || (legacyReceipt ? _localReceiptCell({ receipt: legacyReceipt }) : '');
+    const refCell = [
+      links,
+      displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : ''
+    ].filter(Boolean).join('<br>');
     const origSym = getSym(item.origCurrency || 'CAD');
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
     const moveCell = item.sourceType === 'businessExpense'
