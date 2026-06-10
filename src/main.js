@@ -1338,8 +1338,12 @@ function updateAllOverview() {
   const list = $('all-books-list');
   list.innerHTML = BOOK_LIST.map(book => {
     const s = states[book.id] || defaultState(book);
-    const consigned = s.stores.reduce((a,st)=>a+st.outstanding,0);
-    const owed = s.stores.reduce((a,st)=>a+st.amountOwed,0);
+    // ⚡ Bolt Optimization: Calculate consigned and owed in a single loop
+    let consigned = 0, owed = 0;
+    for (let i = 0; i < s.stores.length; i++) {
+      consigned += s.stores[i].outstanding || 0;
+      owed += s.stores[i].amountOwed || 0;
+    }
     const pct = Math.max(0,s.stock/book.maxPrint*100);
     const stockClass = s.stock<=book.threshold?'danger':s.stock<=book.threshold*2?'warn':'gold';
     const cost = book.productionCost || 0;
@@ -1456,10 +1460,16 @@ function renderChannelAnalytics() {
 
   // Channel performance — comparative horizontal bar chart
   const chans = Object.entries(cd.channelTotals).map(([chan,t])=>({chan, ...t})).sort((a,b)=>b.revenue-a.revenue);
-  const grandRev = chans.reduce((a,x)=>a+x.revenue,0);
-  const grandTxn = chans.reduce((a,x)=>a+x.txns,0);
-  const grandU = chans.reduce((a,x)=>a+x.units,0);
-  const maxRev = chans.reduce((a,x)=>Math.max(a,x.revenue),0) || 1;
+  // ⚡ Bolt Optimization: Combine multiple channel aggregate passes into a single loop instead of 4 separate reduces
+  let grandRev = 0, grandTxn = 0, grandU = 0, maxRev = 0;
+  for (let i = 0; i < chans.length; i++) {
+    const x = chans[i];
+    grandRev += x.revenue || 0;
+    grandTxn += x.txns || 0;
+    grandU += x.units || 0;
+    if (x.revenue > maxRev) maxRev = x.revenue;
+  }
+  if (maxRev === 0) maxRev = 1;
   const top = chans[0];
   const chartRows = chans.map(x => {
     const share = grandRev>0 ? x.revenue/grandRev*100 : 0;
@@ -1773,10 +1783,14 @@ function updateDash() {
     ? `${fmt(s.revenue,cur)} collected · ${fmt(heldGross,cur)} held by artist`
     : 'total collected';
   $('d-avg-sub').textContent='avg '+(s.sold>0?fmt(recognizedRev/s.sold,cur):'—');
-  const consigned=s.stores.reduce((a,st)=>a+st.outstanding,0);
+  // ⚡ Bolt Optimization: Calculate consigned and owed in a single loop
+  let consigned = 0, owed = 0;
+  for (let i = 0; i < s.stores.length; i++) {
+    consigned += s.stores[i].outstanding || 0;
+    owed += s.stores[i].amountOwed || 0;
+  }
   animateCountValue('d-consigned', consigned); animateCountValue('h-consigned', consigned);
   $('d-stores').textContent=s.stores.length;
-  const owed=s.stores.reduce((a,st)=>a+st.amountOwed,0);
   animateCountValue('d-owed', fmt(owed,cur)); $('d-owed').className='kpi-value'+(owed>0?' warn':'');
   const pendingTransfers=[...(s.artistTransfers||[])];
   
