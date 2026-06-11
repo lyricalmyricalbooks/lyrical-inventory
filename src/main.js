@@ -8040,6 +8040,8 @@ async function syncAllReceipts() {
   const bookIds = Object.keys(BOOKS);
   const states = await Promise.all(bookIds.map(bid => window._fbLoad(bid)));
 
+  const savePromises = [];
+
   for (let i = 0; i < bookIds.length; i++) {
     const bid = bookIds[i];
     const book = BOOKS[bid];
@@ -8058,9 +8060,11 @@ async function syncAllReceipts() {
       }
     }
     if (bookSynced > 0) {
-      await window._fbSave(bid, JSON.stringify(state));
+      savePromises.push(window._fbSave(bid, JSON.stringify(state)));
     }
   }
+
+  await Promise.all(savePromises);
 
   if (totalSynced > 0) {
     showToast(`✓ Synced ${totalSynced} receipts to local folder`);
