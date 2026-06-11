@@ -524,3 +524,5 @@ function slug(v) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || crypto.randomUUID();
 }
+
+export { normalizeBook };
