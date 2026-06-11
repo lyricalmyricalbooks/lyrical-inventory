@@ -1091,7 +1091,7 @@ function buildBookSwitcher() {
     item.onmouseover = () => { if (!item.classList.contains('active')) item.style.background = 'rgba(255,255,255,.06)'; };
     item.onmouseout  = () => { if (!item.classList.contains('active')) item.style.background = ''; };
     item.onclick = (e) => { e.stopPropagation(); switchBook(it.id); closeBookDropdown(); };
-    item.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:${it.accent};flex-shrink:0;"></div>${it.title}`;
+    item.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:${it.accent};flex-shrink:0;"></div>${escapeHtml(it.title)}`;
     menu.appendChild(item);
   });
 }
