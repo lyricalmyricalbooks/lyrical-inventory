@@ -525,4 +525,4 @@ function slug(v) {
     .replace(/^-+|-+$/g, '') || crypto.randomUUID();
 }
 
-export { normalizeBook };
+export { normalizeBook, slug };
