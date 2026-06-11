@@ -9445,11 +9445,11 @@ function renderTaxCenter() {
   if(recBody) {
       recBody.innerHTML = (TAX_CENTER.recurring || []).map((sub, i) => `
         <tr>
-            <td>${sub.desc}</td>
-            <td>${sub.cat}</td>
+            <td>${escapeHtml(sub.desc)}</td>
+            <td>${escapeHtml(sub.cat)}</td>
             <td>${fmt(sub.amount, sub.currency||'CAD')}</td>
-            <td>${sub.startDate || '-'}</td>
-            <td>${sub.lastInjected || 'Never'}</td>
+            <td>${escapeHtml(sub.startDate || '-')}</td>
+            <td>${escapeHtml(sub.lastInjected || 'Never')}</td>
             <td><button class="btn tx" onclick="removeRecurring(${i})">Remove</button></td>
         </tr>
       `).join('') || `<tr><td colspan="5" class="r" style="text-align:center;">No active subscriptions</td></tr>`;
