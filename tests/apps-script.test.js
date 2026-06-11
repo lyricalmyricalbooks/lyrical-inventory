@@ -35,4 +35,43 @@ describe('Apps Script Integration', () => {
     expect(match[1].length).toBeLessThan(200);
     expect(match[1]).not.toContain('function doPost');
   });
+
+  describe('numOrBlank_ (Utility Function)', () => {
+    let numOrBlank_;
+
+    it('can be extracted and executed from Code.gs', () => {
+      const codeContent = fs.readFileSync(codeGsPath, 'utf8');
+      const match = codeContent.match(/function numOrBlank_\(v\) \{[\s\S]+?\n\}/);
+      expect(match).not.toBeNull();
+
+      // Create an executable function from the source
+      const funcStr = match[0];
+      numOrBlank_ = new Function('v', funcStr + '\nreturn numOrBlank_(v);');
+    });
+
+    it('returns empty string for null, undefined, or empty string', () => {
+      expect(numOrBlank_(null)).toBe('');
+      expect(numOrBlank_(undefined)).toBe('');
+      expect(numOrBlank_('')).toBe('');
+    });
+
+    it('returns the number itself if input is a number', () => {
+      expect(numOrBlank_(10)).toBe(10);
+      expect(numOrBlank_(0)).toBe(0);
+      expect(numOrBlank_(-5.5)).toBe(-5.5);
+    });
+
+    it('parses strings and removes commas', () => {
+      expect(numOrBlank_('10')).toBe(10);
+      expect(numOrBlank_('1,000')).toBe(1000);
+      expect(numOrBlank_('1,234,567.89')).toBe(1234567.89);
+      expect(numOrBlank_('-1,000.5')).toBe(-1000.5);
+    });
+
+    it('returns empty string if parsing results in NaN', () => {
+      expect(numOrBlank_('abc')).toBe('');
+      expect(numOrBlank_('NaN')).toBe('');
+      expect(numOrBlank_({})).toBe('');
+    });
+  });
 });
