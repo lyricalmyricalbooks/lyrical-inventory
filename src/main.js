@@ -11674,7 +11674,7 @@ function renderStripeFeesCards(data, byYearCurAll) {
           ${headline}
           ${detailRows.length ? `
           <div style="margin-top:14px;">
-            <button type="button" class="btn tag" onclick="(function(el){var d=document.getElementById('${detailId}');var open=d.style.display!=='none';d.style.display=open?'none':'';el.innerHTML=(open?'▸':'▾')+' '+el.dataset.label;})(this)" data-label="Show all balance activity (${detailRows.length} line ${detailRows.length === 1 ? 'item' : 'items'})" style="background:transparent;border:1px dashed var(--gold-line);">▸ Show all balance activity (${detailRows.length} line ${detailRows.length === 1 ? 'item' : 'items'})</button>
+            <button type="button" class="btn tag" onclick="(function(el){const d=document.getElementById('${detailId}');const open=d.style.display!=='none';d.style.display=open?'none':'';el.innerHTML=(open?'▸':'▾')+' '+el.dataset.label;})(this)" data-label="Show all balance activity (${detailRows.length} line ${detailRows.length === 1 ? 'item' : 'items'})" style="background:transparent;border:1px dashed var(--gold-line);">▸ Show all balance activity (${detailRows.length} line ${detailRows.length === 1 ? 'item' : 'items'})</button>
             <div id="${detailId}" style="display:none;margin-top:12px;">
               <div class="tbl-wrap" style="margin-bottom:8px;">
                 <table class="tbl">
@@ -12350,7 +12350,7 @@ function renderReconcile() {
     <td class="r">${getReconMemory().recorded[p.id] || getReconMemory().dismissed[p.id] ? `<button class="btn tag sm" onclick="reconcileUndo('${p.id.replace(/[^A-Za-z0-9_]/g, '')}')">Undo</button>` : ''}</td>
   </tr>`).join('');
   matchedEl.innerHTML = `
-    <button type="button" class="btn tag" style="background:transparent;border:1px dashed var(--gold-line);margin-top:16px;" onclick="(function(el){var d=document.getElementById('recon-matched-tbl');var open=d.style.display!=='none';d.style.display=open?'none':'';el.textContent=(open?'▸':'▾')+' Reconciled payments (${matched.length})';})(this)">▸ Reconciled payments (${matched.length})</button>
+    <button type="button" class="btn tag" style="background:transparent;border:1px dashed var(--gold-line);margin-top:16px;" onclick="(function(el){const d=document.getElementById('recon-matched-tbl');const open=d.style.display!=='none';d.style.display=open?'none':'';el.textContent=(open?'▸':'▾')+' Reconciled payments (${matched.length})';})(this)">▸ Reconciled payments (${matched.length})</button>
     <div id="recon-matched-tbl" style="display:none;margin-top:10px;">
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th class="r">Amount</th><th>Customer</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
