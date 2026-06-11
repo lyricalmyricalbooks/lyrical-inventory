@@ -8022,18 +8022,32 @@ async function syncAllReceipts() {
 
   let totalSynced = 0;
 
+  const BATCH_SIZE = 5;
+
+  async function processBatch(tasks) {
+    for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
+      const batch = tasks.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(t => t()));
+    }
+  }
+
   // 1. Sync Tax Center Business Expenses
   if (TAX_CENTER.businessExpenses) {
+    const tasks = [];
     for (let exp of TAX_CENTER.businessExpenses) {
       if (exp.receipt && exp.receipt.startsWith('http')) {
-        const localPath = await downloadAndLocalizeReceipt(exp.receipt, 'Business');
-        if (localPath) {
-          exp.receipt = localPath;
-          totalSynced++;
-        }
+        tasks.push(() => downloadAndLocalizeReceipt(exp.receipt, 'Business').then(localPath => {
+          if (localPath) {
+            exp.receipt = localPath;
+            totalSynced++;
+          }
+        }));
       }
     }
-    if (totalSynced > 0) saveTaxCenter();
+    if (tasks.length > 0) {
+      await processBatch(tasks);
+      if (totalSynced > 0) saveTaxCenter();
+    }
   }
 
   // 2. Sync Per-Book Expenses
@@ -8047,18 +8061,25 @@ async function syncAllReceipts() {
     if (!state || !state.expenses) continue;
 
     let bookSynced = 0;
+    const tasks = [];
+
     for (let exp of state.expenses) {
       if (exp.receipt && exp.receipt.startsWith('http')) {
-        const localPath = await downloadAndLocalizeReceipt(exp.receipt, book.title || bid);
-        if (localPath) {
-          exp.receipt = localPath;
-          bookSynced++;
-          totalSynced++;
-        }
+        tasks.push(() => downloadAndLocalizeReceipt(exp.receipt, book.title || bid).then(localPath => {
+          if (localPath) {
+            exp.receipt = localPath;
+            bookSynced++;
+            totalSynced++;
+          }
+        }));
       }
     }
-    if (bookSynced > 0) {
-      await window._fbSave(bid, JSON.stringify(state));
+
+    if (tasks.length > 0) {
+      await processBatch(tasks);
+      if (bookSynced > 0) {
+        await window._fbSave(bid, JSON.stringify(state));
+      }
     }
   }
 
