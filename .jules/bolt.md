@@ -16,3 +16,7 @@
 ## 2024-06-09 - Combine multiple aggregate passes into a single loop
 **Learning:** The frontend makes heavy use of chained array methods, such as repeatedly calling `.reduce()` to calculate various aggregates (e.g., revenue, outstanding stock, fees) on the same arrays. In large datasets, these `O(k*N)` iterations cause unnecessary overhead when calculating multiple KPIs.
 **Action:** When calculating multiple aggregate values (KPIs, counts, sums) from the same collection, combine them into a single `for` or `for...of` loop pass. Avoid `array.reduce()` if it means iterating through the same array multiple times. Use `|| 0` to defend against null properties safely.
+## 2024-06-03 - Sequential Await for Settings Migration
+
+**Learning:** Sequential awaits for independent operations within a loop are a common bottleneck in I/O operations such as Firebase fetches.
+**Action:** Identified sequential awaits during the Firebase Settings Migration loop (`get` for each setting sequentially) and refactored it to use `Promise.all` with a map, optimizing execution time (from ~250ms to ~50ms in benchmarks).

@@ -533,10 +533,13 @@ window._fbMassMigrate = async (BOOKS) => {
 
   // 3. Migrate Settings
   const settingsKeys = ['catalog', 'taxCenter', 'productionCosts', 'paymentLinks', 'systemBackups'];
-  for (const key of settingsKeys) {
-    const setSnap = await get(ref(db, `lyrical/settings/${key}`));
-    if (setSnap.exists()) {
-       const settingObj = setSnap.val();
+  const settingsSnaps = await Promise.all(
+    settingsKeys.map(key => get(ref(db, `lyrical/settings/${key}`)).then(snap => ({ key, snap })))
+  );
+
+  for (const { key, snap } of settingsSnaps) {
+    if (snap.exists()) {
+       const settingObj = snap.val();
        const dRef = doc(fs, 'settings', key);
        promises.push(setDoc(dRef, { data: settingObj.data, ts: settingObj.ts || Date.now() }));
     }
