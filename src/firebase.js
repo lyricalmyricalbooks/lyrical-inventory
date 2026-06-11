@@ -492,7 +492,7 @@ window._fbMassMigrate = async (BOOKS) => {
   const promises = [];
 
   // 1. Migrate Books
-  for (const bookId of Object.keys(BOOKS)) {
+  const bookFetches = Object.keys(BOOKS).map(async (bookId) => {
     const snap = await get(ref(db, `lyrical/books/${bookId}`));
     if (snap.exists()) {
       const bookObj = snap.val();
@@ -514,11 +514,11 @@ window._fbMassMigrate = async (BOOKS) => {
         }
       }
     }
-  }
+  });
 
   // 2. Migrate Submissions
-  for (const bookId of Object.keys(BOOKS)) {
-    for (const type of ['expenses', 'sales']) {
+  const subFetches = Object.keys(BOOKS).flatMap(bookId => {
+    return ['expenses', 'sales'].map(async (type) => {
       const typeSnap = await get(ref(db, `lyrical/submissions/${bookId}/${type}`));
       if (typeSnap.exists()) {
         const subData = typeSnap.val();
@@ -528,20 +528,21 @@ window._fbMassMigrate = async (BOOKS) => {
            promises.push(setDoc(dRef, { data: subObj.data, ts: subObj.ts || Date.now() }));
         });
       }
-    }
-  }
+    });
+  });
 
   // 3. Migrate Settings
   const settingsKeys = ['catalog', 'taxCenter', 'productionCosts', 'paymentLinks', 'systemBackups'];
-  for (const key of settingsKeys) {
+  const settingFetches = settingsKeys.map(async (key) => {
     const setSnap = await get(ref(db, `lyrical/settings/${key}`));
     if (setSnap.exists()) {
        const settingObj = setSnap.val();
        const dRef = doc(fs, 'settings', key);
        promises.push(setDoc(dRef, { data: settingObj.data, ts: settingObj.ts || Date.now() }));
     }
-  }
+  });
 
+  await Promise.all([...bookFetches, ...subFetches, ...settingFetches]);
   await Promise.all(promises);
   return true;
 };

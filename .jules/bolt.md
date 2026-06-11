@@ -16,3 +16,6 @@
 ## 2024-06-09 - Combine multiple aggregate passes into a single loop
 **Learning:** The frontend makes heavy use of chained array methods, such as repeatedly calling `.reduce()` to calculate various aggregates (e.g., revenue, outstanding stock, fees) on the same arrays. In large datasets, these `O(k*N)` iterations cause unnecessary overhead when calculating multiple KPIs.
 **Action:** When calculating multiple aggregate values (KPIs, counts, sums) from the same collection, combine them into a single `for` or `for...of` loop pass. Avoid `array.reduce()` if it means iterating through the same array multiple times. Use `|| 0` to defend against null properties safely.
+## 2024-05-18 - Promise.all Concurrency in Array Iteration
+**Learning:** Sequential await loops are a major architectural bottleneck in initialization/migration logic causing N+1 latency blocks. Concurrent iteration must be used safely in JS via `Promise.all` alongside `.map` and `.flatMap`.
+**Action:** Always refactor sequential `for...of` loops holding `await` calls to `.map(async () => {})` aggregating into a single `Promise.all` boundary whenever ordering guarantees are not strictly required.
