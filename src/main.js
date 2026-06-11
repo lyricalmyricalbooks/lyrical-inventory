@@ -11375,23 +11375,26 @@ window.downloadFullTaxSeasonExport = function() {
   BOOK_LIST.forEach(book => {
       const s = states[book.id] || defaultState(book);
       
-      // Filter history
-      const filteredHist = s.hist.filter(h => {
-          if (h.voided || h.gratuity) return false;
-          if (isAllTime) return true;
-          return h.date && h.date.startsWith(year);
-      });
+      // ⚡ Bolt Optimization: Loop Fusion - Compute sold and revenue in a single pass without intermediate array allocation
+      let sold = 0;
+      let revenue = 0;
+      for (let i = 0; i < s.hist.length; i++) {
+        const h = s.hist[i];
+        if (h.voided || h.gratuity) continue;
+        if (!isAllTime && (!h.date || !h.date.startsWith(year))) continue;
+        sold += (h.qty || 0);
+        revenue += ((h.qty || 0) * (h.price || 0));
+      }
       
-      const sold = filteredHist.reduce((acc, h) => acc + (h.qty||0), 0);
-      const revenue = filteredHist.reduce((acc, h) => acc + ((h.qty||0) * (h.price||0)), 0);
-      
-      // Filter expenses
-      const filteredExpenses = (s.expenses || []).filter(e => {
-          if (e.voided) return false;
-          if (isAllTime) return true;
-          return e.date && e.date.startsWith(year);
-      });
-      const expTotal = filteredExpenses.reduce((acc, e) => acc + getAmt(e), 0);
+      // ⚡ Bolt Optimization: Loop Fusion - Compute expTotal in a single pass without intermediate array allocation
+      let expTotal = 0;
+      const expenses = s.expenses || [];
+      for (let i = 0; i < expenses.length; i++) {
+        const e = expenses[i];
+        if (e.voided) continue;
+        if (!isAllTime && (!e.date || !e.date.startsWith(year))) continue;
+        expTotal += getAmt(e);
+      }
       
       // Royalty
       let shares = 0;
