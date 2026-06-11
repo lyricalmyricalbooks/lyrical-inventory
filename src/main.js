@@ -9058,7 +9058,7 @@ const TC_CATEGORIES = [
 ];
 
 function changeExpenseCategory(itemId, newCat) {
-  const exp = (TAX_CENTER.businessExpenses || []).find(e => e.id == itemId);
+  const exp = (TAX_CENTER.businessExpenses || []).find(e => String(e.id) === String(itemId));
   if (!exp) return;
   if (exp.cat === newCat) return;
   exp.cat = newCat;
@@ -9486,7 +9486,7 @@ let _tcEditTripId = null;
 let _tcOpenTripName = null;
 
 function openEditTrip(itemId) {
-  const exp = (TAX_CENTER.businessExpenses || []).find(e => e.id == itemId);
+  const exp = (TAX_CENTER.businessExpenses || []).find(e => String(e.id) === String(itemId));
   if (!exp) return;
   _tcEditTripId = itemId;
   $('tc-edit-trip-context').textContent = `${exp.desc || 'Expense'} · ${exp.date || ''}`;
@@ -9496,9 +9496,9 @@ function openEditTrip(itemId) {
 }
 
 function saveTripAssignment() {
-  if (_tcEditTripId == null) return;
+  if (_tcEditTripId === null) return;
   const newTrip = ($('tc-edit-trip-input').value || '').trim();
-  const exp = (TAX_CENTER.businessExpenses || []).find(e => e.id == _tcEditTripId);
+  const exp = (TAX_CENTER.businessExpenses || []).find(e => String(e.id) === String(_tcEditTripId));
   if (!exp) return;
   exp.trip = newTrip;
   saveTaxCenter();
