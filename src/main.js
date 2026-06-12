@@ -6721,12 +6721,21 @@ function syncLedgerVoid(e, isVoided) {
 // the figure self-healing on every load and after any void/unvoid.
 function reconcileConsignmentChannel(s) {
   if (!s || !Array.isArray(s.ledger)) return;
-  const sales = s.ledger.filter(e => e.type === 'Sale' && !e.voided);
-  if (sales.length) {
+
+  // ⚡ Bolt Optimization: Loop Fusion
+  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
+  let txns = 0, units = 0, revenue = 0;
+  for (const e of s.ledger) {
+    if (e.type === 'Sale' && !e.voided) {
+      txns++;
+      units += (e.qty || 0);
+      revenue += (e.amountDue || 0);
+    }
+  }
+
+  if (txns > 0) {
     s.chStats = s.chStats || {};
-    s.chStats['Consignment'] = sales.reduce((a, e) => {
-      a.txns++; a.units += (e.qty || 0); a.revenue += (e.amountDue || 0); return a;
-    }, { txns: 0, units: 0, revenue: 0 });
+    s.chStats['Consignment'] = { txns, units, revenue };
   } else if (s.chStats && s.chStats['Consignment']) {
     // No live consignment sales on record — drop a stale all-zero line so it
     // doesn't linger as a confusing "Consignment  0  0  $0.00" row. A non-zero
