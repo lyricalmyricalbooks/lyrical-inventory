@@ -5891,11 +5891,18 @@ function nextInvoiceNumber(){
   const s = getState(), book = getBook();
   const year = new Date().getFullYear();
   const prefix = (book.id || 'BOOK').slice(0,6).toUpperCase();
-  // determine next seq from existing invoices for this year
-  const existing = (s.invoices||[]).filter(i => (i.num||'').includes(`-${year}-`));
-  const maxSeq = existing.reduce((m,i)=>{
-    const mt = /-(\d+)$/.exec(i.num||''); return mt ? Math.max(m, parseInt(mt[1],10)) : m;
-  }, s.invoiceSeq || 0);
+  // ⚡ Bolt Optimization: Loop Fusion
+  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
+  let maxSeq = s.invoiceSeq || 0;
+  for (const i of (s.invoices || [])) {
+    const numStr = i.num || '';
+    if (numStr.includes(`-${year}-`)) {
+      const mt = /-(\d+)$/.exec(numStr);
+      if (mt) {
+        maxSeq = Math.max(maxSeq, parseInt(mt[1], 10));
+      }
+    }
+  }
   return `INV-${prefix}-${year}-${String(maxSeq+1).padStart(3,'0')}`;
 }
 
@@ -10497,8 +10504,15 @@ window.posGenerateSaleQR = async function() {
     showToast('Set FX rates first — some lines have no rate for ' + posTransactionCurrency, 'warn', 5000);
     return;
   }
-  const total = rows.reduce((s, r) => s + (r.convertedLine || 0), 0);
-  const units = rows.reduce((s, r) => s + r.qty, 0);
+
+  // ⚡ Bolt Optimization: Loop Fusion
+  // Calculate total and units in a single pass instead of multiple .reduce() calls
+  let total = 0, units = 0;
+  for (const r of rows) {
+    total += r.convertedLine || 0;
+    units += r.qty || 0;
+  }
+
   const desc = rows.length === 1
     ? `${rows[0].book.title}${rows[0].qty > 1 ? ` ×${rows[0].qty}` : ''}`
     : `Book fair sale — ${units} item${units === 1 ? '' : 's'}`;
