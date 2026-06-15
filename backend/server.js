@@ -411,9 +411,22 @@ function normalizeBook(raw) {
 
 function buildDashboardStats() {
   const books = Object.values(store.books);
-  const totalInventory = books.reduce((sum, b) => sum + (Number(b.inventoryCount) || 0), 0);
-  const lowStockBooks = books.filter((b) => (Number(b.inventoryCount) || 0) <= (Number(b.lowStockThreshold) || 0)).length;
-  const featuredBooks = books.filter((b) => b.featured).length;
+
+  // ⚡ Bolt Optimization: Loop Fusion
+  // Combined one .reduce() and two .filter() calls into a single loop to reduce iteration passes and eliminate intermediate arrays
+  let totalInventory = 0;
+  let lowStockBooks = 0;
+  let featuredBooks = 0;
+
+  for (const b of books) {
+    const invCount = Number(b.inventoryCount) || 0;
+    const threshold = Number(b.lowStockThreshold) || 0;
+
+    totalInventory += invCount;
+    if (invCount <= threshold) lowStockBooks++;
+    if (b.featured) featuredBooks++;
+  }
+
   return {
     books: books.length,
     authors: Object.keys(store.authors).length,
