@@ -1736,6 +1736,13 @@ function updateDash() {
   const cur = book.currency;
   updateContextBanners();
   $('d-book-title').textContent = book.title;
+  // "Email artist for payment" button: publisher-only, needs an artist email on
+  // file and a connected Sheet/Web App to actually send through.
+  const emailArtistBtn = $('d-email-artist-btn');
+  if(emailArtistBtn){
+    const canEmail = !isAuthor() && !!(book.authorEmail||'').trim() && !!sheetsUrl;
+    emailArtistBtn.style.display = canEmail ? '' : 'none';
+  }
   $('d-book-author').textContent = (book.author||'—') + ' · List price '+cur+book.listPrice;
   $('d-book-isbn').textContent = book.isbn || '—';
   $('d-stock-sub').textContent = 'of '+book.maxPrint+' printed';
@@ -7276,6 +7283,48 @@ async function notifyPublisherSubmission(kind, data, summary){
     });
   }catch(e){ console.warn('notifyPublisher failed', e); }
 }
+
+// Publisher-only: email the book's artist a payment request via the connected
+// Apps Script Web App (free Gmail send — no API key in the client). Triggered
+// by the "Email artist for payment" button on the per-book dashboard.
+async function emailArtistForPayment(){
+  if(isAuthor()){ showToast('Publisher only','warn'); return; }
+  if(!activeBook || activeBook==='all'){ showToast('Open a book first','warn'); return; }
+  if(!sheetsUrl){ showToast('Connect your Google Sheet first to send email','warn'); return; }
+  const book = getBook();
+  const to = (book.authorEmail||'').trim();
+  if(!to){ showToast('No artist email on file for this book','warn'); return; }
+  if(!confirm(`Send a payment-request email to ${to}?`)) return;
+  const title = book.title || activeBook;
+  const subject = `Payment request — ${title}`;
+  const body = [
+    'Hi,',
+    '',
+    `This is a friendly reminder regarding outstanding payments for "${title}".`,
+    'When you have a moment, please log in to the inventory app and submit or forward any payments due so the ledger stays up to date.',
+    '',
+    'Thank you,',
+    'Lyricalmyrical Books'
+  ].join('\n');
+  const btn = $('d-email-artist-btn');
+  const prev = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Sending…'; }
+  try{
+    await postToSheets({
+      version: 2,
+      action: 'emailAuthor',
+      eventId: 'emailauthor-' + Date.now(),
+      payload: { action:'emailAuthor', to, bookId: activeBook, bookTitle: title, subject, body }
+    });
+    showToast('✓ Payment request sent to '+to);
+  }catch(e){
+    console.warn('emailAuthor failed', e);
+    showToast('⚠ Could not send email','err');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = prev; }
+  }
+}
+window.emailArtistForPayment = emailArtistForPayment;
 
 async function _processQueue(){
   if(_sheetsWriting||!_sheetsQueue.length||!sheetsUrl||!navigator.onLine)return;
