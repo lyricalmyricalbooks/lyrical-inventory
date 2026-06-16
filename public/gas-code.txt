@@ -312,6 +312,38 @@ function doPost(e) {
       }
     }
 
+    // ── Email an author/artist (e.g. a payment request) ──
+    if (action === 'emailauthor') {
+      const d = payload.payload || {};
+      try {
+        // Strip CR/LF + control chars from header-bound values (subject, to) so a
+        // crafted value can't inject extra mail headers. The body keeps newlines
+        // but drops the other control chars for the same reason.
+        const clean_ = (s) => String(s == null ? '' : s).replace(/[\x00-\x1F\x7F]+/g, ' ').trim();
+        const cleanBody_ = (s) => String(s == null ? '' : s).replace(/\r/g, '').replace(/[\x00-\x09\x0B-\x1F\x7F]+/g, ' ').trim();
+        const to = clean_(d.to);
+        if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+          return jsonOut_({ error: 'invalid recipient' });
+        }
+        const bookTitle = clean_(d.bookTitle);
+        const subject = clean_(d.subject) || ('Payment request' + (bookTitle ? ' — ' + bookTitle : ''));
+        const body = cleanBody_(d.body) ||
+          ('Hi,\n\nThis is a friendly reminder regarding outstanding payments' +
+           (bookTitle ? ' for "' + bookTitle + '"' : '') +
+           '. When you have a moment, please submit or forward any payments due so the ledger stays up to date.\n\nThank you,\nLyricalmyrical Books');
+        MailApp.sendEmail({
+          to: to,
+          subject: subject,
+          body: body,
+          name: 'Lyricalmyrical Books',
+          replyTo: 'lyricalmyricalbooks@gmail.com'
+        });
+        return jsonOut_({ ok: true, emailed: true });
+      } catch (err) {
+        return jsonOut_({ error: 'mail failed: ' + String(err) });
+      }
+    }
+
     // ── Reset / rebuild: clear every managed sheet so the client can resend a
     // clean copy. Removes duplicate rows, stale VOID rows, and legacy rows with
     // a blank CAD Equivalent in one pass. The app remains the source of truth. ──
