@@ -1838,11 +1838,17 @@ function updateDash() {
    
     renderPendingExpenses();
     const expenses = s.expenses||[];
-    const unreceivedExp = expenses.filter(e=>!e.received && !isGratuityExpense(e));
+    const unreceivedExp = [];
+    let expTotal = 0;
+    for (const e of expenses) {
+      if (!e.received && !isGratuityExpense(e)) {
+        unreceivedExp.push(e);
+        expTotal += (e.amount || 0);
+      }
+    }
     const expKpi = $('d-expenses-kpi');
     const expSect = $('d-expenses-sect');
     if(unreceivedExp.length){
-      const expTotal = unreceivedExp.reduce((a,e)=>a+(e.amount||0),0);
       // KPI tile
       if(expKpi){ expKpi.style.display=''; }
       animateCountValue('d-expenses-owed', fmt(expTotal,cur));
@@ -3318,9 +3324,17 @@ function renderArtistReimburseBanner(){
   const banner=$('artist-reimburse-banner');
   if(!banner) return;
   if(!isAuthor()){ banner.style.display='none'; return; }
-  const received=(s.expenses||[]).filter(e=>e.received && !isGratuityExpense(e));
+  // ⚡ Bolt Optimization: Loop Fusion
+  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
+  const received = [];
+  let total = 0;
+  for (const e of (s.expenses || [])) {
+    if (e.received && !isGratuityExpense(e)) {
+      received.push(e);
+      total += (e.amount || 0);
+    }
+  }
   if(!received.length){ banner.style.display='none'; return; }
-  const total=received.reduce((a,e)=>a+(e.amount||0),0);
   banner.style.display='';
   $('arb-amount').textContent=fmt(total,cur);
   $('arb-detail').textContent=`${received.length} expense${received.length!==1?'s':''} marked as received by publisher`;
@@ -4691,8 +4705,16 @@ function renderExpenses(){
     return;
   }
 
-  const unreceived=combined.filter(e=>!e.received && !e.pendingAuth && !isGratuityExpense(e));
-  const total=unreceived.reduce((a,e)=>a+(e.amount||0),0);
+  // ⚡ Bolt Optimization: Loop Fusion
+  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
+  const unreceived = [];
+  let total = 0;
+  for (const e of combined) {
+    if (!e.received && !e.pendingAuth && !isGratuityExpense(e)) {
+      unreceived.push(e);
+      total += (e.amount || 0);
+    }
+  }
   
   $('exp-head-row').innerHTML = `<tr><th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
   
@@ -5347,7 +5369,12 @@ function markExpenseReceived(id){
 
 function renderPendingExpenses(){
   const s=getState(),book=getBook(),cur=book.currency;
-  const pending=(s.expenses||[]).filter(e=>!e.received && !isGratuityExpense(e));
+  const pending = [];
+  for (const e of (s.expenses || [])) {
+    if (!e.received && !isGratuityExpense(e)) {
+      pending.push(e);
+    }
+  }
   const sect=$('d-pending-expenses-sect'),list=$('d-pending-expenses-list');
   if(!sect) return;
   if(!pending.length){sect.style.display='none';return;}
