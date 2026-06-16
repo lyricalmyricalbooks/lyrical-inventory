@@ -1750,6 +1750,20 @@ function updateDash() {
     const canEmail = !isAuthor() && !!(book.authorEmail||'').trim() && !!sheetsUrl;
     emailArtistBtn.style.display = canEmail ? '' : 'none';
   }
+  // Approval-emails status: publisher-only at-a-glance check that artist
+  // submissions can actually reach you. "On" needs a shared notify endpoint
+  // (set when the Sheet was connected); "off" means submissions sync silently.
+  const notifyStatus = $('d-notify-status');
+  if(notifyStatus){
+    if(isAuthor()){
+      notifyStatus.style.display='none';
+    }else{
+      const on = !!(sheetsUrl || notifyUrl);
+      notifyStatus.style.display='';
+      notifyStatus.textContent = on ? '✓ Approval emails on' : '⚠ Approval emails off';
+      notifyStatus.className = 'pill ' + (on ? 'green' : 'amber');
+    }
+  }
   $('d-book-author').textContent = (book.author||'—') + ' · List price '+cur+book.listPrice;
   $('d-book-isbn').textContent = book.isbn || '—';
   $('d-stock-sub').textContent = 'of '+book.maxPrint+' printed';
@@ -7299,8 +7313,53 @@ async function notifyPublisherSubmission(kind, data, summary){
         data
       }
     }, url);
-  }catch(e){ console.warn('notifyPublisher failed', e); }
+  }catch(e){
+    // Don't fail silently: a misconfigured/stale endpoint means the publisher
+    // never learns a submission is waiting. Surface it so it can be fixed.
+    console.warn('notifyPublisher failed', e);
+    showToast('⚠ Submitted, but could not alert the publisher by email', 'warn', 4000);
+  }
 }
+
+// Publisher-only: fire a harmless notifyPublisher probe so the whole approval-
+// email chain (Web App reachable + MailApp authorised + correct deployment) can
+// be confirmed end-to-end without staging a real submission.
+async function sendTestNotification(){
+  const url = sheetsUrl || notifyUrl;
+  if(!url){ showToast('Connect your Google Sheet first','warn'); return; }
+  const btn = $('test-notify-btn');
+  const prev = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Sending…'; }
+  try{
+    const res = await postToSheets({
+      version: 2,
+      action: 'notifyPublisher',
+      eventId: 'notify-test-' + Date.now(),
+      payload: {
+        action: 'notifyPublisher',
+        kind: 'Test Notification',
+        bookId: activeBook || '',
+        bookTitle: 'Test — please ignore',
+        authorEmail: '',
+        submittedAt: new Date().toISOString(),
+        summary: 'This is a test of the approval-notification email. If it reached your inbox, alerts are working.',
+        data: { test: true }
+      }
+    }, url);
+    if(res && res.ok && res.notified){
+      showToast('✓ Test email sent to lyricalmyricalbooks@gmail.com');
+    }else{
+      // no-cors fallback (res === 'unknown') can't read the response — the POST
+      // went out but we can't confirm the send. Tell the user to check.
+      showToast('Sent — check lyricalmyricalbooks@gmail.com to confirm','warn',4500);
+    }
+  }catch(e){
+    showToast('⚠ Test failed: '+(e.message||'could not reach the notifier'),'err',5000);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent=prev; }
+  }
+}
+window.sendTestNotification = sendTestNotification;
 
 // Publisher-only: email the book's artist a payment request via the connected
 // Apps Script Web App (free Gmail send — no API key in the client). Triggered
