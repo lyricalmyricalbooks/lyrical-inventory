@@ -605,6 +605,13 @@ async function processSyncQueue() {
 window.addEventListener('online', processSyncQueue);
 let sheetsUrl = localStorage.getItem('lm-sheets-url') || '';
 let sheetsSpreadsheetUrl = localStorage.getItem('lm-sheets-spreadsheet-url') || '';
+// Apps Script Web App endpoint used ONLY to fire the "needs approval"
+// notification email. The publisher connects the Sheet on their own device, but
+// the approval-needed email has to be sent from the ARTIST's browser at submit
+// time — and that device never ran the Sheet setup. So we mirror the endpoint
+// into shared cloud settings (settings/notifyEndpoint) on connect and load it
+// here on every device, giving artist sessions a URL to POST the email to.
+let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -7100,6 +7107,10 @@ async function connectSheets(){
     }
   }
   sheetsUrl=normalizedUrl;localStorage.setItem('lm-sheets-url',normalizedUrl);
+  // Share the endpoint so artist sessions on other devices can send the
+  // approval-needed email when they submit a payment/expense.
+  notifyUrl=normalizedUrl;localStorage.setItem('lm-notify-url',normalizedUrl);
+  try{ await window._fbSaveSettings('notifyEndpoint', { url: normalizedUrl }); }catch(_){}
   if(spreadUrl){
     sheetsSpreadsheetUrl=spreadUrl;
     localStorage.setItem('lm-sheets-spreadsheet-url',spreadUrl);
@@ -7112,10 +7123,12 @@ async function connectSheets(){
 }
 async function disconnectSheets(){
   if(!(await confirmDialog('Disconnect Google Sheets?', { okLabel: 'Disconnect', danger: true })))return;
-  sheetsUrl='';sheetsSpreadsheetUrl='';
+  sheetsUrl='';sheetsSpreadsheetUrl='';notifyUrl='';
   localStorage.removeItem('lm-sheets-url');
   localStorage.removeItem('lm-sheets-spreadsheet-url');
   localStorage.removeItem('lm-sheets-secret');
+  localStorage.removeItem('lm-notify-url');
+  try{ await window._fbSaveSettings('notifyEndpoint', { url: '' }); }catch(_){}
   $('sheets-setup-card').style.display='';
   $('sheets-connected-card').style.display='none';
   const warningEl = $('sheets-version-warning');
@@ -7231,11 +7244,12 @@ async function backfillAndResync() {
 window.backfillAndResync = backfillAndResync;
 function retryDelayMs(attempt){ return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0,attempt-1))); }
 
-async function postToSheets(body){
+async function postToSheets(body, urlOverride){
+  const url = urlOverride || sheetsUrl;
   const payload = JSON.stringify(body);
-  
+
   try{
-    const res=await fetch(sheetsUrl,{
+    const res=await fetch(url,{
       method:'POST',
       mode:'cors',
       headers:{
@@ -7250,7 +7264,7 @@ async function postToSheets(body){
     return { ok: true };
   }catch(e){
     // Fallback to no-cors for strict environments.
-    await fetch(sheetsUrl, {
+    await fetch(url, {
       method:'POST',
       mode:'no-cors',
       headers:{
@@ -7263,7 +7277,11 @@ async function postToSheets(body){
 }
 
 async function notifyPublisherSubmission(kind, data, summary){
-  if(!sheetsUrl) return;
+  // Prefer the local Sheet URL (publisher device); fall back to the shared
+  // endpoint loaded from cloud settings (artist devices that never set up the
+  // Sheet) so the approval email fires no matter who submitted.
+  const url = sheetsUrl || notifyUrl;
+  if(!url) return;
   try{
     const book = (typeof getBook === 'function') ? getBook() : (BOOKS && BOOKS[activeBook]) || {};
     await postToSheets({
@@ -7280,7 +7298,7 @@ async function notifyPublisherSubmission(kind, data, summary){
         summary: summary || '',
         data
       }
-    });
+    }, url);
   }catch(e){ console.warn('notifyPublisher failed', e); }
 }
 
@@ -12707,6 +12725,14 @@ async function initStartup() {
     // Load shared Firestore mode flags FIRST — before any data reads.
     // This ensures all devices agree on which database to use.
     await window._fbLoadModeFlags();
+
+    // Pull the shared notification endpoint so artist sessions — which never ran
+    // the Sheet setup locally — still have a URL to POST the approval-needed
+    // email to when they submit. Publisher writes it; everyone can read it.
+    try {
+      const ep = await window._fbLoadSettings('notifyEndpoint');
+      if (ep && ep.url) { notifyUrl = ep.url; localStorage.setItem('lm-notify-url', ep.url); }
+    } catch (_) {}
 
     // NOW that we have a valid token, we pull the protected catalog.
     await loadCatalog(); 
