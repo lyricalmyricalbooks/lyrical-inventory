@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v7)
+/* Lyricalmyrical Inventory — Unified Backend (v8)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
  *  2. Sheets sync with:
@@ -15,6 +15,9 @@
  *     skipped threads instead of hiding them
  *  5. v7: getEmailContent excludes inline images so saved receipt files
  *     are real attachments, not signature logos
+ *  6. v8: 'emailauthor' action sends artist payment-request emails, plus the
+ *     'notifypublisher' approval-alert path. Bump flags any deploy still on v7
+ *     (which lacks these) as outdated so the publisher knows to redeploy.
  */
 
 const HEADERS = [
@@ -50,8 +53,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v7',
-    scriptVersion: 'v7',
+    service: 'lyrical-sheets-webhook-v8',
+    scriptVersion: 'v8',
     capabilities: { reset: true, voidDeletes: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
