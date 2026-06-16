@@ -612,6 +612,10 @@ let sheetsSpreadsheetUrl = localStorage.getItem('lm-sheets-spreadsheet-url') || 
 // into shared cloud settings (settings/notifyEndpoint) on connect and load it
 // here on every device, giving artist sessions a URL to POST the email to.
 let notifyUrl = localStorage.getItem('lm-notify-url') || '';
+// The Apps Script `scriptVersion` the client expects. Bump this (and the value
+// in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
+// deploy — the connection card flags any older deployed version as outdated.
+const EXPECTED_SCRIPT_VERSION = 'v8';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -7161,6 +7165,8 @@ function showSheetsConnected(){
 async function checkSheetsVersion() {
   const warningEl = $('sheets-version-warning');
   const versionEl = $('sheets-deployed-version');
+  const expectedEl = $('sheets-expected-version');
+  if (expectedEl) expectedEl.textContent = EXPECTED_SCRIPT_VERSION;
   if (!warningEl || !sheetsUrl) return;
 
   try {
@@ -7169,7 +7175,7 @@ async function checkSheetsVersion() {
       const data = await res.json().catch(() => null);
       if (data && data.service && data.service.indexOf('lyrical-sheets-webhook') === 0) {
         const deployedVer = data.scriptVersion || 'unknown';
-        if (deployedVer !== 'v7') {
+        if (deployedVer !== EXPECTED_SCRIPT_VERSION) {
           if (versionEl) versionEl.textContent = deployedVer;
           warningEl.style.display = 'block';
         } else {
@@ -7722,7 +7728,7 @@ async function verifyUrl(){
         const warningEl = $('sheets-version-warning');
         const versionEl = $('sheets-deployed-version');
         if (warningEl) {
-          if (deployedVer !== 'v7') {
+          if (deployedVer !== EXPECTED_SCRIPT_VERSION) {
             if (versionEl) versionEl.textContent = deployedVer;
             warningEl.style.display = 'block';
           } else {
