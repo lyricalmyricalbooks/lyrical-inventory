@@ -493,46 +493,14 @@ function isAuthor() {
 // ── UTILITIES
 const $ = id => document.getElementById(id);
 
-// Count up animation for KPIs
-function animateCountValue(id, target, duration = 350, formatFunc = null) {
+// Set a KPI value. Previously this ran a count-up tween, but on startup the
+// header refreshes several times (initial render + sync), so the tween kept
+// restarting from 0 and the numbers spun erratically. Just show the final
+// value — it appears naturally and stays stable.
+function animateCountValue(id, target, _duration, _formatFunc) {
   const obj = $(id);
   if (!obj) return;
-  // If the target is not a numeric value (e.g. has currency symbol or suffix), extract the number
-  let targetNum = parseFloat(String(target).replace(/[^\d.-]/g, ''));
-  if (isNaN(targetNum)) {
-    obj.textContent = target;
-    return;
-  }
-  const isNegative = targetNum < 0;
-  targetNum = Math.abs(targetNum);
-  
-  // Format function defaults to preserving decimals or currency
-  const format = formatFunc || (val => {
-    const rounded = Math.round(val * 100) / 100;
-    // Try to match formatting of original target
-    if (String(target).includes('$')) return (isNegative ? '-' : '') + '$' + rounded.toLocaleString(undefined, { minimumFractionDigits: String(target).includes('.') ? 2 : 0, maximumFractionDigits: 2 });
-    if (String(target).includes('£')) return (isNegative ? '-' : '') + '£' + rounded.toLocaleString(undefined, { minimumFractionDigits: String(target).includes('.') ? 2 : 0, maximumFractionDigits: 2 });
-    return (isNegative ? '-' : '') + rounded.toLocaleString(undefined, { minimumFractionDigits: String(target).includes('.') ? 2 : 0, maximumFractionDigits: 2 });
-  });
-
-  const start = 0;
-  const startTime = performance.now();
-
-  function update(currentTime) {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    // Ease out quad
-    const easeProgress = progress * (2 - progress);
-    const currentVal = start + easeProgress * (targetNum - start);
-    obj.textContent = format(currentVal);
-    if (progress < 1) {
-      requestAnimationFrame(update);
-    } else {
-      // Ensure exact end value is set to avoid rounding discrepancies
-      obj.textContent = target;
-    }
-  }
-  requestAnimationFrame(update);
+  obj.textContent = target;
 }
 
 // Micro-animations for view state changes
