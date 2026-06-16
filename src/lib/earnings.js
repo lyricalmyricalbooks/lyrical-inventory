@@ -62,10 +62,17 @@ export function calcArtistEarnings(book, state) {
     }
   });
 
-  const payouts = (s.artistPayouts || []).filter(p => !p.voided);
-  const totalPaidToArtist = roundCents(
-    payouts.reduce((sum, p) => roundCents(sum + (parseFloat(p.amount) || 0)), 0)
-  );
+  // ⚡ Bolt Optimization: Loop Fusion
+  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
+  const payouts = [];
+  let sumPayouts = 0;
+  for (const p of (s.artistPayouts || [])) {
+    if (!p.voided) {
+      payouts.push(p);
+      sumPayouts = roundCents(sumPayouts + (parseFloat(p.amount) || 0));
+    }
+  }
+  const totalPaidToArtist = sumPayouts;
   // By holding direct-sale cash the artist has effectively collected their OWN
   // share of those sales, so only that share reduces what the publisher owes.
   // The publisher's cut sitting in the held cash is a separate receivable
