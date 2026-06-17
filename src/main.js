@@ -1244,13 +1244,13 @@ window.clearHistChanFilter = function() { histChanFilter = null; renderHist(); }
 // ── TABS
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'opencall')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
   
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
-  const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
+  const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','customers','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
   
   document.querySelectorAll('.tab-btn, .header-action-btn').forEach((b) => {
     // We match by checking onclick text to be safe if order ever changes
@@ -1282,6 +1282,7 @@ function switchTab(name) {
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
   if(name==='opencall') renderOpenCall();
   if(name==='reconcile') renderReconcile();
+  if(name==='customers') renderCustomers();
   if(name==='financials') renderFinancials();
   if(name==='taxcenter') renderTaxCenter();
   if(name==='sheets'){ loadGasCode(); renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
@@ -12735,8 +12736,237 @@ async function generateBookStripeLink() {
 }
 
 // Global exposure for HTML handlers (cleaned up)
+// ── CUSTOMERS / MAILING LIST ────────────────────────────────────────────────
+// Aggregates every buyer we can identify into one de-duplicated contact list
+// keyed by email. Local order history + scanned-but-unapplied website orders
+// work fully offline; a one-tap Stripe pull enriches the list with card buyers
+// who may never have been reconciled by hand. Spend is best-effort (kept per
+// currency, never mixed) — the Tax Centre remains the source of truth for money.
+const CUSTOMER_STRIPE_KEY = 'lm-customer-stripe';
+let _customerFilter = '';
+
+function _loadCustomerStripeCache() {
+  try { return JSON.parse(localStorage.getItem(CUSTOMER_STRIPE_KEY) || '[]'); }
+  catch (_) { return []; }
+}
+function _saveCustomerStripeCache(rows) {
+  try { localStorage.setItem(CUSTOMER_STRIPE_KEY, JSON.stringify(rows || [])); } catch (_) {}
+}
+
+// Stable dedup key for a buyer — lowercased, trimmed email.
+function _custEmailKey(email) { return String(email || '').trim().toLowerCase(); }
+
+function _custUpsert(map, email, name) {
+  const key = _custEmailKey(email);
+  if (!key) return null;
+  let rec = map.get(key);
+  if (!rec) {
+    rec = { email: String(email).trim(), name: '', orders: 0, units: 0,
+            books: new Set(), channels: new Set(), sources: new Set(),
+            spend: {}, first: '', last: '' };
+    map.set(key, rec);
+  }
+  const nm = String(name || '').trim();
+  if (nm && nm.length > rec.name.length) rec.name = nm; // keep the fullest name seen
+  return rec;
+}
+function _custAddSpend(rec, cur, amt) {
+  const c = normalizeCurrencyCode(cur || '', '') || String(cur || '').toUpperCase();
+  const n = Number(amt);
+  if (!c || !isFinite(n) || n === 0) return;
+  rec.spend[c] = (rec.spend[c] || 0) + n;
+}
+function _custTouchDate(rec, date) {
+  const d = String(date || '').slice(0, 10);
+  if (!d) return;
+  if (!rec.first || d < rec.first) rec.first = d;
+  if (!rec.last || d > rec.last) rec.last = d;
+}
+
+// Build the de-duplicated buyer list from every available source.
+function buildCustomerList() {
+  const map = new Map();
+  let noEmail = 0;
+
+  // 1) Order history across every book (authoritative, works offline).
+  Object.keys(states).forEach(bid => {
+    const bk = BOOKS[bid];
+    const bookCur = bk ? normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD') : 'CAD';
+    const bookTitle = bk?.title || bid;
+    (states[bid].hist || []).forEach(h => {
+      if (h.voided || h.gratuity || h.chan === 'Gratuity') return;
+      const email = h.shipEmail || h.email || '';
+      if (!_custEmailKey(email)) { noEmail++; return; }
+      const rec = _custUpsert(map, email, h.shipName || h.customer || '');
+      rec.orders++;
+      rec.units += Number(h.qty) || 0;
+      rec.books.add(bookTitle);
+      if (h.chan) rec.channels.add(h.chan);
+      const isStripe = typeof h.sheetsId === 'string' && h.sheetsId.startsWith('stripe-');
+      rec.sources.add(isStripe ? 'Stripe' : (h.chan === 'Website' ? 'Website' : (h.chan || 'Order')));
+      const payCur = h.payment?.currency ? normalizeCurrencyCode(h.payment.currency, bookCur) : bookCur;
+      const payAmt = h.payment?.amount != null ? h.payment.amount : (Number(h.qty) || 0) * (Number(h.price) || 0);
+      _custAddSpend(rec, payCur, payAmt);
+      _custTouchDate(rec, h.date);
+    });
+  });
+
+  // 2) Scanned website orders not yet applied — still real buyers. Skip any
+  //    whose order number is already in history to avoid double-counting.
+  const applied = (typeof getAllAppliedIds === 'function') ? getAllAppliedIds() : new Set();
+  (typeof orders !== 'undefined' ? orders : []).forEach(o => {
+    if (!_custEmailKey(o.email)) return;
+    if (applied.has(o.orderNum) || applied.has(o.id)) return;
+    const rec = _custUpsert(map, o.email, o.customer || o.shipName || '');
+    rec.orders++;
+    rec.units += Number(o.qty) || 0;
+    const bk = o.bookId && BOOKS[o.bookId] ? BOOKS[o.bookId] : null;
+    if (bk) {
+      rec.books.add(bk.title);
+      _custAddSpend(rec, normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD'), (Number(o.qty) || 0) * (Number(o.price) || bk.listPrice || 0));
+    }
+    rec.channels.add('Website');
+    rec.sources.add('Website');
+    _custTouchDate(rec, o.date);
+  });
+
+  // 3) Stripe pull cache — discover/enrich card buyers. Only add counts + spend
+  //    for buyers we don't already know locally, so payments already reconciled
+  //    into history aren't double-counted.
+  _loadCustomerStripeCache().forEach(p => {
+    if (p.refunded || !_custEmailKey(p.email)) return;
+    const existed = map.has(_custEmailKey(p.email));
+    const rec = _custUpsert(map, p.email, p.customer || '');
+    rec.sources.add('Stripe');
+    _custTouchDate(rec, p.date);
+    if (!existed) {
+      rec.orders++;
+      _custAddSpend(rec, p.currency, p.amount);
+    }
+  });
+
+  const list = Array.from(map.values());
+  list.sort((a, b) => (b.last || '').localeCompare(a.last || '')); // most recent first
+  list._noEmail = noEmail;
+  return list;
+}
+
+function _custSpendStr(spend) {
+  return Object.keys(spend).sort().map(c => {
+    const sym = (typeof codeToSymbol === 'function' ? codeToSymbol(c) : '') || (c + ' ');
+    return `${sym}${spend[c].toFixed(2)}`;
+  }).join(' · ');
+}
+
+function _custApplyFilter(list) {
+  const q = _customerFilter.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter(r => r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q));
+}
+
+function renderCustomers() {
+  const body = $('cust-body');
+  if (!body) return;
+  const all = buildCustomerList();
+  const list = _custApplyFilter(all);
+
+  const summary = $('cust-summary');
+  if (summary) {
+    const srcSet = new Set();
+    all.forEach(r => r.sources.forEach(s => srcSet.add(s)));
+    const srcStr = Array.from(srcSet).sort().join(', ') || '—';
+    const q = _customerFilter.trim();
+    summary.textContent = `${all.length} customer${all.length === 1 ? '' : 's'} with email`
+      + (q ? ` · ${list.length} shown` : '')
+      + (all._noEmail ? ` · ${all._noEmail} order${all._noEmail === 1 ? '' : 's'} had no email` : '')
+      + ` · from ${srcStr}`;
+  }
+
+  body.innerHTML = list.length
+    ? list.map(r => `<tr>
+        <td>${escapeHtml(r.name) || '<span style="color:var(--text4);">—</span>'}</td>
+        <td><a href="mailto:${escapeHtml(r.email)}" style="color:var(--gold2);">${escapeHtml(r.email)}</a></td>
+        <td class="r">${r.orders}</td>
+        <td class="r">${r.units || '—'}</td>
+        <td style="font-size:12px;color:var(--text3);">${escapeHtml(Array.from(r.books).join(', ')) || '—'}</td>
+        <td style="font-size:12px;color:var(--text3);">${_custSpendStr(r.spend) || '—'}</td>
+        <td style="font-size:12px;color:var(--text3);">${r.last ? fmtD(r.last) : '—'}</td>
+        <td>${Array.from(r.sources).map(s => `<span class="pill gray" style="font-size:10px;">${escapeHtml(s)}</span>`).join(' ')}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="8"><div class="empty-state" style="padding:1.5rem;">${_customerFilter.trim() ? 'No customers match your search.' : 'No customers found yet. Apply some website orders, log in-person sales with an email, or pull buyers from Stripe.'}</div></td></tr>`;
+}
+
+function filterCustomers(v) { _customerFilter = v || ''; renderCustomers(); }
+
+async function customerPullStripe() {
+  const btn = $('cust-stripe-btn');
+  const status = $('cust-stripe-status');
+  const key = (typeof getReconStripeKey === 'function') ? getReconStripeKey() : '';
+  if (!key) {
+    if (status) status.innerHTML = '<span style="color:var(--amber);">No Stripe key saved yet — add one in the Payments or Tax Centre tab, then pull again.</span>';
+    showToast('Add your Stripe key in Payments first', 'warn');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Pulling…'; }
+  if (status) status.textContent = 'Fetching buyers from Stripe…';
+  try {
+    const payments = await fetchStripePaymentsForReconcile(5);
+    const slim = payments.filter(p => _custEmailKey(p.email)).map(p => ({
+      email: p.email, customer: p.customer || '', amount: p.amount,
+      currency: p.currency, date: p.date, refunded: !!p.refunded,
+    }));
+    _saveCustomerStripeCache(slim);
+    const uniq = new Set(slim.map(p => _custEmailKey(p.email))).size;
+    if (status) status.innerHTML = `<span style="color:var(--green);">✓ Pulled ${uniq} buyer${uniq === 1 ? '' : 's'} with an email from ${payments.length} Stripe payment${payments.length === 1 ? '' : 's'}.</span>`;
+    renderCustomers();
+  } catch (e) {
+    const msg = String(e.message || e);
+    if (status) status.innerHTML = `<span style="color:var(--red);">Error: ${escapeHtml(msg)}</span>`;
+    showToast('Stripe pull failed: ' + msg, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Pull buyers from Stripe'; }
+  }
+}
+
+function copyCustomerEmails() {
+  const emails = Array.from(new Set(_custApplyFilter(buildCustomerList()).map(r => r.email)));
+  if (!emails.length) { showToast('No emails to copy', 'warn'); return; }
+  const text = emails.join(', ');
+  const done = () => showToast(`✓ Copied ${emails.length} email${emails.length === 1 ? '' : 's'}`);
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => { _custFallbackCopy(text); done(); });
+  } else { _custFallbackCopy(text); done(); }
+}
+function _custFallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch (_) {}
+  ta.remove();
+}
+
+function exportCustomersCSV() {
+  const list = buildCustomerList();
+  if (!list.length) { showToast('No customers to export', 'warn'); return; }
+  const rows = [['Name', 'Email', 'Orders', 'Units', 'Books', 'Channels', 'First Order', 'Last Order', 'Spend', 'Sources']];
+  list.forEach(r => rows.push([
+    r.name, r.email, r.orders, r.units || '',
+    Array.from(r.books).join('; '), Array.from(r.channels).join('; '),
+    r.first || '', r.last || '', _custSpendStr(r.spend), Array.from(r.sources).join('; '),
+  ]));
+  const csv = rows.map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `lyrical-customers-${today()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+  showToast(`✓ Exported ${list.length} customer${list.length === 1 ? '' : 's'}`);
+}
+
 Object.assign(window, {
   confirmDialog, notify,
+  renderCustomers, filterCustomers, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   generateBookStripeLink,
