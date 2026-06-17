@@ -10698,7 +10698,9 @@ window.posConfigureRates = async function() {
   if (btn) { btn.disabled = true; btn.textContent = 'Fetching…'; }
 
   let fetched = 0, failed = [];
-  for (const code of currencies) {
+  // ⚡ Bolt Optimization: Parallelize Asynchronous I/O
+  // Replaced sequential `for...of` loops with `Promise.all` to fetch FX rates concurrently.
+  await Promise.all(currencies.map(async (code) => {
     // Rate: how many CAD per 1 unit of `code` (e.g. 1 EUR → 1.47 CAD)
     const result = await fetchLiveRate(code, 'CAD');
     if (result.rate) {
@@ -10713,12 +10715,12 @@ window.posConfigureRates = async function() {
       _fxRateCache[`CAD_${code}`] = 1 / result.rate;
     }
     // For non-CAD book currencies vs non-CAD txn currencies, cache cross-pairs too
-    for (const other of currencies) {
-      if (other === code) continue;
+    await Promise.all(currencies.map(async (other) => {
+      if (other === code) return;
       const crossResult = await fetchLiveRate(code, other);
       if (crossResult.rate) _fxRateCache[`${code}_${other}`] = crossResult.rate;
-    }
-  }
+    }));
+  }));
   posExchangeRates.CAD = 1;
   _fxRateCache['CAD_CAD'] = 1;
   savePosExchangeRates();
