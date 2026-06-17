@@ -497,22 +497,24 @@
     <div>
       <div class="section-hed">Customers &amp; mailing list</div>
       <div style="font-size:12px;color:var(--text3);max-width:580px;line-height:1.6;">
-        Every buyer we can find — gathered from your website orders, in-person &amp; POS sales, and Stripe payments, then de-duplicated by email. Export the list or copy the addresses for a newsletter or launch announcement.
+        Every buyer we can find — gathered from your website orders, in-person &amp; POS sales, and Stripe payments, then de-duplicated by email. Filter to one title for a targeted launch email, mark anyone who opts out as <em>unsubscribed</em> (they're then kept out of every copy &amp; export), and download the rest for your newsletter.
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
       <button class="btn ink" id="cust-stripe-btn" onclick="customerPullStripe()" title="Pull buyer names &amp; emails from your Stripe payments (needs internet + your saved Stripe key)">↻ Pull buyers from Stripe</button>
+      <button class="btn" id="cust-stripe-more-btn" onclick="customerPullDeeper()" style="display:none;" title="Reach further back through your Stripe history">↓ Load older</button>
       <button class="btn" onclick="copyCustomerEmails()">📋 Copy emails</button>
       <button class="btn gold" onclick="exportCustomersCSV()">⬇ Export CSV</button>
     </div>
   </div>
   <div style="display:flex;gap:10px;align-items:center;margin:14px 0 8px;flex-wrap:wrap;">
     <input type="search" id="cust-search" oninput="filterCustomers(this.value)" placeholder="Search name or email…" style="flex:1;min-width:200px;max-width:340px;">
+    <select id="cust-book-filter" onchange="setCustomerBookFilter(this.value)" title="Show only buyers of one title — for a targeted launch email" style="max-width:240px;"><option value="">All books</option></select>
     <span id="cust-summary" style="font-size:12px;color:var(--text3);"></span>
   </div>
   <div id="cust-stripe-status" style="font-size:11px;color:var(--text3);margin-bottom:10px;min-height:14px;line-height:1.5;"></div>
   <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Name</th><th>Email</th><th class="r">Orders</th><th class="r">Units</th><th>Books</th><th>Spend</th><th>Last order</th><th>Source</th></tr></thead>
+    <thead><tr><th>Name</th><th>Email</th><th class="r">Orders</th><th class="r">Units</th><th>Books</th><th>Spend</th><th>Last order</th><th>Source</th><th>Action</th></tr></thead>
     <tbody id="cust-body"></tbody>
   </table></div>
 </div>

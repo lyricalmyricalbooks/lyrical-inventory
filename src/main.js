@@ -9155,6 +9155,7 @@ async function boot(forcedBook) {
   buildBookSwitcher();
   await loadPaymentLinks();
   await loadProductionCosts();
+  await loadCustomerSuppression();
   renderCatalogList();
   renderProfitSettings();
   if(sheetsUrl) showSheetsConnected();
@@ -12743,7 +12744,39 @@ async function generateBookStripeLink() {
 // who may never have been reconciled by hand. Spend is best-effort (kept per
 // currency, never mixed) — the Tax Centre remains the source of truth for money.
 const CUSTOMER_STRIPE_KEY = 'lm-customer-stripe';
+const CUSTOMER_SUPPRESS_KEY = 'lm-customer-suppress';
 let _customerFilter = '';
+let _customerBookFilter = '';      // bookId to segment by; '' = all books
+let _customerSuppress = new Set(); // lowercased emails opted out of mailing
+let _customerStripeDepth = 5;      // Stripe pull depth, in pages of 100
+let _customerStripeMaybeMore = false;
+
+// Opt-out (suppression) list — Firestore-backed so an unsubscribe on one device
+// is honoured everywhere, with a localStorage fallback so it still works offline.
+function _isCustomerSuppressed(email) { return _customerSuppress.has(_custEmailKey(email)); }
+async function loadCustomerSuppression() {
+  try {
+    const stored = await window._fbLoadSettings('customerSuppress');
+    if (stored && Array.isArray(stored.emails)) { _customerSuppress = new Set(stored.emails.map(_custEmailKey)); return; }
+  } catch (_) {}
+  try {
+    const local = JSON.parse(localStorage.getItem(CUSTOMER_SUPPRESS_KEY) || '[]');
+    if (Array.isArray(local)) _customerSuppress = new Set(local.map(_custEmailKey));
+  } catch (_) {}
+}
+async function _persistCustomerSuppression() {
+  const emails = Array.from(_customerSuppress);
+  try { await window._fbSaveSettings('customerSuppress', { emails }); } catch (_) {}
+  try { localStorage.setItem(CUSTOMER_SUPPRESS_KEY, JSON.stringify(emails)); } catch (_) {}
+}
+async function toggleCustomerSuppress(encEmail) {
+  const key = _custEmailKey(decodeURIComponent(encEmail));
+  if (!key) return;
+  if (_customerSuppress.has(key)) _customerSuppress.delete(key); else _customerSuppress.add(key);
+  renderCustomers();
+  await _persistCustomerSuppression();
+}
+function setCustomerBookFilter(v) { _customerBookFilter = v || ''; renderCustomers(); }
 
 function _loadCustomerStripeCache() {
   try { return JSON.parse(localStorage.getItem(CUSTOMER_STRIPE_KEY) || '[]'); }
@@ -12762,7 +12795,7 @@ function _custUpsert(map, email, name) {
   let rec = map.get(key);
   if (!rec) {
     rec = { email: String(email).trim(), name: '', orders: 0, units: 0,
-            books: new Set(), channels: new Set(), sources: new Set(),
+            books: new Set(), bookIds: new Set(), channels: new Set(), sources: new Set(),
             spend: {}, first: '', last: '' };
     map.set(key, rec);
   }
@@ -12801,6 +12834,7 @@ function buildCustomerList() {
       rec.orders++;
       rec.units += Number(h.qty) || 0;
       rec.books.add(bookTitle);
+      rec.bookIds.add(bid);
       if (h.chan) rec.channels.add(h.chan);
       const isStripe = typeof h.sheetsId === 'string' && h.sheetsId.startsWith('stripe-');
       rec.sources.add(isStripe ? 'Stripe' : (h.chan === 'Website' ? 'Website' : (h.chan || 'Order')));
@@ -12823,6 +12857,7 @@ function buildCustomerList() {
     const bk = o.bookId && BOOKS[o.bookId] ? BOOKS[o.bookId] : null;
     if (bk) {
       rec.books.add(bk.title);
+      rec.bookIds.add(o.bookId);
       _custAddSpend(rec, normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD'), (Number(o.qty) || 0) * (Number(o.price) || bk.listPrice || 0));
     }
     rec.channels.add('Website');
@@ -12859,41 +12894,68 @@ function _custSpendStr(spend) {
 }
 
 function _custApplyFilter(list) {
+  let out = list;
+  if (_customerBookFilter) out = out.filter(r => r.bookIds.has(_customerBookFilter));
   const q = _customerFilter.trim().toLowerCase();
-  if (!q) return list;
-  return list.filter(r => r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q));
+  if (q) out = out.filter(r => r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q));
+  return out;
+}
+
+// The mailing-safe slice: what's on screen, minus anyone who has opted out.
+function _custMailable(all) {
+  return _custApplyFilter(all).filter(r => !_isCustomerSuppressed(r.email));
+}
+
+function _custSyncBookFilterOptions() {
+  const sel = $('cust-book-filter');
+  if (!sel) return;
+  const want = '<option value="">All books</option>' +
+    BOOK_LIST.map(b => `<option value="${escapeHtml(b.id)}">${escapeHtml(b.title)}</option>`).join('');
+  if (sel.dataset.sig !== want) { sel.innerHTML = want; sel.dataset.sig = want; }
+  sel.value = _customerBookFilter;
 }
 
 function renderCustomers() {
   const body = $('cust-body');
   if (!body) return;
+  _custSyncBookFilterOptions();
   const all = buildCustomerList();
   const list = _custApplyFilter(all);
+  const suppressedShown = list.filter(r => _isCustomerSuppressed(r.email)).length;
 
   const summary = $('cust-summary');
   if (summary) {
     const srcSet = new Set();
     all.forEach(r => r.sources.forEach(s => srcSet.add(s)));
     const srcStr = Array.from(srcSet).sort().join(', ') || '—';
-    const q = _customerFilter.trim();
+    const filtered = _customerFilter.trim() || _customerBookFilter;
     summary.textContent = `${all.length} customer${all.length === 1 ? '' : 's'} with email`
-      + (q ? ` · ${list.length} shown` : '')
+      + (filtered ? ` · ${list.length} shown` : '')
+      + (suppressedShown ? ` · ${suppressedShown} unsubscribed (excluded from export)` : '')
       + (all._noEmail ? ` · ${all._noEmail} order${all._noEmail === 1 ? '' : 's'} had no email` : '')
       + ` · from ${srcStr}`;
   }
 
   body.innerHTML = list.length
-    ? list.map(r => `<tr>
+    ? list.map(r => {
+        const sup = _isCustomerSuppressed(r.email);
+        const emailCell = sup
+          ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(r.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
+          : `<a href="mailto:${escapeHtml(r.email)}" style="color:var(--gold2);">${escapeHtml(r.email)}</a>`;
+        const actionBtn = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
+        return `<tr${sup ? ' style="opacity:.55;"' : ''}>
         <td>${escapeHtml(r.name) || '<span style="color:var(--text4);">—</span>'}</td>
-        <td><a href="mailto:${escapeHtml(r.email)}" style="color:var(--gold2);">${escapeHtml(r.email)}</a></td>
+        <td>${emailCell}</td>
         <td class="r">${r.orders}</td>
         <td class="r">${r.units || '—'}</td>
         <td style="font-size:12px;color:var(--text3);">${escapeHtml(Array.from(r.books).join(', ')) || '—'}</td>
         <td style="font-size:12px;color:var(--text3);">${_custSpendStr(r.spend) || '—'}</td>
         <td style="font-size:12px;color:var(--text3);">${r.last ? fmtD(r.last) : '—'}</td>
         <td>${Array.from(r.sources).map(s => `<span class="pill gray" style="font-size:10px;">${escapeHtml(s)}</span>`).join(' ')}</td>
-      </tr>`).join('')
-    : `<tr><td colspan="8"><div class="empty-state" style="padding:1.5rem;">${_customerFilter.trim() ? 'No customers match your search.' : 'No customers found yet. Apply some website orders, log in-person sales with an email, or pull buyers from Stripe.'}</div></td></tr>`;
+        <td>${actionBtn}</td>
+      </tr>`;
+      }).join('')
+    : `<tr><td colspan="9"><div class="empty-state" style="padding:1.5rem;">${(_customerFilter.trim() || _customerBookFilter) ? 'No customers match this filter.' : 'No customers found yet. Apply some website orders, log in-person sales with an email, or pull buyers from Stripe.'}</div></td></tr>`;
 }
 
 function filterCustomers(v) { _customerFilter = v || ''; renderCustomers(); }
@@ -12907,17 +12969,22 @@ async function customerPullStripe() {
     showToast('Add your Stripe key in Payments first', 'warn');
     return;
   }
+  const moreBtn = $('cust-stripe-more-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Pulling…'; }
-  if (status) status.textContent = 'Fetching buyers from Stripe…';
+  if (moreBtn) moreBtn.disabled = true;
+  if (status) status.textContent = `Fetching buyers from Stripe (up to ${_customerStripeDepth * 100} most recent payments)…`;
   try {
-    const payments = await fetchStripePaymentsForReconcile(5);
+    const payments = await fetchStripePaymentsForReconcile(_customerStripeDepth);
     const slim = payments.filter(p => _custEmailKey(p.email)).map(p => ({
       email: p.email, customer: p.customer || '', amount: p.amount,
       currency: p.currency, date: p.date, refunded: !!p.refunded,
     }));
     _saveCustomerStripeCache(slim);
+    // If we filled the page budget, older payments probably remain.
+    _customerStripeMaybeMore = payments.length >= _customerStripeDepth * 100 && _customerStripeDepth < 50;
     const uniq = new Set(slim.map(p => _custEmailKey(p.email))).size;
-    if (status) status.innerHTML = `<span style="color:var(--green);">✓ Pulled ${uniq} buyer${uniq === 1 ? '' : 's'} with an email from ${payments.length} Stripe payment${payments.length === 1 ? '' : 's'}.</span>`;
+    if (status) status.innerHTML = `<span style="color:var(--green);">✓ Pulled ${uniq} buyer${uniq === 1 ? '' : 's'} with an email from ${payments.length} Stripe payment${payments.length === 1 ? '' : 's'}.</span>`
+      + (_customerStripeMaybeMore ? ' <span style="color:var(--text3);">Older buyers may remain — use “Load older”.</span>' : '');
     renderCustomers();
   } catch (e) {
     const msg = String(e.message || e);
@@ -12925,12 +12992,19 @@ async function customerPullStripe() {
     showToast('Stripe pull failed: ' + msg, 'err');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '↻ Pull buyers from Stripe'; }
+    if (moreBtn) { moreBtn.disabled = false; moreBtn.style.display = _customerStripeMaybeMore ? '' : 'none'; }
   }
 }
 
+// Reach further back through Stripe history, 5 pages (~500 payments) at a time.
+async function customerPullDeeper() {
+  _customerStripeDepth = Math.min(50, _customerStripeDepth + 5);
+  await customerPullStripe();
+}
+
 function copyCustomerEmails() {
-  const emails = Array.from(new Set(_custApplyFilter(buildCustomerList()).map(r => r.email)));
-  if (!emails.length) { showToast('No emails to copy', 'warn'); return; }
+  const emails = Array.from(new Set(_custMailable(buildCustomerList()).map(r => r.email)));
+  if (!emails.length) { showToast('No mailable emails here (unsubscribed are excluded)', 'warn'); return; }
   const text = emails.join(', ');
   const done = () => showToast(`✓ Copied ${emails.length} email${emails.length === 1 ? '' : 's'}`);
   if (navigator.clipboard?.writeText) {
@@ -12946,8 +13020,10 @@ function _custFallbackCopy(text) {
 }
 
 function exportCustomersCSV() {
-  const list = buildCustomerList();
-  if (!list.length) { showToast('No customers to export', 'warn'); return; }
+  // Export exactly what's filtered on screen, minus anyone who unsubscribed —
+  // so a re-import into a newsletter tool can't re-add opted-out buyers.
+  const list = _custMailable(buildCustomerList());
+  if (!list.length) { showToast('Nothing to export in this view (unsubscribed are excluded)', 'warn'); return; }
   const rows = [['Name', 'Email', 'Orders', 'Units', 'Books', 'Channels', 'First Order', 'Last Order', 'Spend', 'Sources']];
   list.forEach(r => rows.push([
     r.name, r.email, r.orders, r.units || '',
@@ -12967,6 +13043,7 @@ function exportCustomersCSV() {
 Object.assign(window, {
   confirmDialog, notify,
   renderCustomers, filterCustomers, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
+  toggleCustomerSuppress, setCustomerBookFilter, customerPullDeeper,
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   generateBookStripeLink,
