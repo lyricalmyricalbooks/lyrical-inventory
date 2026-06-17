@@ -1396,7 +1396,28 @@ function updateAllOverview() {
   });
   $('all-con-body').innerHTML = conRows.length ? conRows.join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
 
+  renderCustomersStat();
   renderGlobalPendingAlert();
+}
+
+// Compact, clickable buyers/mailing-list snapshot on the all-books overview.
+function renderCustomersStat() {
+  const host = $('all-customers-stat');
+  if (!host) return;
+  const buyers = buildCustomerList();
+  const repeat = buyers.filter(r => r.orders >= 2).length;
+  const onList = mailingSubsArray().filter(s => !_isCustomerSuppressed(s.email)).length;
+  if (!buyers.length && !onList) { host.innerHTML = ''; return; }
+  const stat = (label, val) => `<div><div style="font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:2px;">${label}</div><div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--gold2);">${val}</div></div>`;
+  host.innerHTML = `<div class="card" style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:space-between;margin-bottom:1.5rem;">
+    <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:center;">
+      <div style="font-size:20px;">👥</div>
+      ${stat('Buyers on file', buyers.length)}
+      ${stat('Repeat buyers', repeat)}
+      ${stat('On mailing list', onList)}
+    </div>
+    <button class="btn gold sm" onclick="switchTab('customers')">Open mailing list →</button>
+  </div>`;
 }
 
 // ── CHANNEL ANALYTICS RENDERING
@@ -9156,6 +9177,7 @@ async function boot(forcedBook) {
   await loadPaymentLinks();
   await loadProductionCosts();
   await loadCustomerSuppression();
+  await loadMailingList();
   renderCatalogList();
   renderProfitSettings();
   if(sheetsUrl) showSheetsConnected();
@@ -12778,6 +12800,184 @@ async function toggleCustomerSuppress(encEmail) {
 }
 function setCustomerBookFilter(v) { _customerBookFilter = v || ''; renderCustomers(); }
 
+// ── Curated mailing list ─────────────────────────────────────────────────────
+// A persistent, editable subscriber list (Firestore-backed) layered on top of
+// the auto-discovered buyers: add anyone by hand, bulk-add the buyers we found,
+// or flip on auto-add so new buyers join by themselves. Copy / Export / Email
+// here always act on this curated list, minus anyone who has unsubscribed.
+const MAILING_LIST_KEY = 'lm-mailing-list';
+let MAILING_LIST = { subs: {}, autoAdd: false };
+
+function mailingSubsArray() {
+  return Object.values(MAILING_LIST.subs || {}).sort((a, b) => (b.added || '').localeCompare(a.added || ''));
+}
+function mailingListHas(email) { return !!MAILING_LIST.subs[_custEmailKey(email)]; }
+
+async function loadMailingList() {
+  let data = null;
+  try { data = await window._fbLoadSettings('mailingList'); } catch (_) {}
+  if (!data) { try { data = JSON.parse(localStorage.getItem(MAILING_LIST_KEY) || 'null'); } catch (_) {} }
+  if (data && typeof data === 'object') {
+    MAILING_LIST = { subs: (data.subs && typeof data.subs === 'object') ? data.subs : {}, autoAdd: !!data.autoAdd };
+  }
+}
+async function _persistMailingList() {
+  try { await window._fbSaveSettings('mailingList', MAILING_LIST); } catch (_) {}
+  try { localStorage.setItem(MAILING_LIST_KEY, JSON.stringify(MAILING_LIST)); } catch (_) {}
+}
+
+// Upsert one subscriber. Returns true only when a brand-new entry is created.
+function _mailingUpsert(email, name, source) {
+  const key = _custEmailKey(email);
+  if (!key) return false;
+  const existing = MAILING_LIST.subs[key];
+  if (existing) {
+    if (name && name.length > (existing.name || '').length) existing.name = name;
+    return false;
+  }
+  MAILING_LIST.subs[key] = { email: String(email).trim(), name: String(name || '').trim(), source: source || 'Manual', added: today() };
+  return true;
+}
+
+async function addManualSubscriber() {
+  const nameEl = $('ml-add-name'), emailEl = $('ml-add-email');
+  const email = (emailEl?.value || '').trim();
+  const name = (nameEl?.value || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { showToast('Enter a valid email address', 'warn'); return; }
+  if (_isCustomerSuppressed(email)) { showToast('That address has unsubscribed — re-subscribe it first', 'warn'); return; }
+  const isNew = _mailingUpsert(email, name, 'Manual');
+  if (emailEl) emailEl.value = '';
+  if (nameEl) nameEl.value = '';
+  await _persistMailingList();
+  renderMailingList(); renderCustomers();
+  showToast(isNew ? '✓ Added to mailing list' : 'Already on the list — name updated');
+}
+
+async function addBuyerToMailingList(encEmail) {
+  const email = decodeURIComponent(encEmail);
+  if (_isCustomerSuppressed(email)) { showToast('That buyer has unsubscribed', 'warn'); return; }
+  const rec = buildCustomerList().find(r => _custEmailKey(r.email) === _custEmailKey(email));
+  const isNew = _mailingUpsert(email, rec?.name || '', 'Buyer');
+  if (isNew) await _persistMailingList();
+  renderMailingList(); renderCustomers();
+  showToast(isNew ? '✓ Added to mailing list' : 'Already on your list');
+}
+
+async function removeFromMailingList(encEmail) {
+  const key = _custEmailKey(decodeURIComponent(encEmail));
+  if (!MAILING_LIST.subs[key]) return;
+  delete MAILING_LIST.subs[key];
+  await _persistMailingList();
+  renderMailingList(); renderCustomers();
+}
+
+// Merge every non-suppressed discovered buyer into the list. Returns count added.
+function _mailingMergeBuyers(list) {
+  let added = 0;
+  (list || buildCustomerList()).forEach(r => {
+    if (_isCustomerSuppressed(r.email)) return;
+    if (_mailingUpsert(r.email, r.name, 'Buyer')) added++;
+  });
+  return added;
+}
+
+async function addAllBuyersToMailingList() {
+  const added = _mailingMergeBuyers();
+  if (added) await _persistMailingList();
+  renderMailingList(); renderCustomers();
+  showToast(added ? `✓ Added ${added} buyer${added === 1 ? '' : 's'} to your mailing list` : 'All buyers are already on your list');
+}
+
+async function toggleMailingAutoAdd(cb) {
+  MAILING_LIST.autoAdd = !!(cb && cb.checked);
+  let added = 0;
+  if (MAILING_LIST.autoAdd) added = _mailingMergeBuyers();
+  await _persistMailingList();
+  renderMailingList(); renderCustomers();
+  showToast(MAILING_LIST.autoAdd
+    ? `Auto-add on — new buyers join automatically${added ? ` (added ${added} now)` : ''}`
+    : 'Auto-add off');
+}
+
+// When auto-add is on, fold any newly discovered buyers in (persist only if changed).
+function _mailingAutoSync(list) {
+  if (!MAILING_LIST.autoAdd) return;
+  if (_mailingMergeBuyers(list) > 0) _persistMailingList();
+}
+
+function renderMailingList() {
+  const body = $('ml-body');
+  if (!body) return;
+  const cb = $('ml-autoadd');
+  if (cb) cb.checked = !!MAILING_LIST.autoAdd;
+  const subs = mailingSubsArray();
+  const unsub = subs.filter(s => _isCustomerSuppressed(s.email)).length;
+  const countEl = $('ml-count');
+  if (countEl) countEl.textContent = `${subs.length} subscriber${subs.length === 1 ? '' : 's'}` + (unsub ? ` · ${unsub} unsubscribed (excluded from sends)` : '');
+  body.innerHTML = subs.length
+    ? subs.map(s => {
+        const sup = _isCustomerSuppressed(s.email);
+        const emailCell = sup
+          ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(s.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
+          : `<a href="mailto:${escapeHtml(s.email)}" style="color:var(--gold2);">${escapeHtml(s.email)}</a>`;
+        return `<tr${sup ? ' style="opacity:.55;"' : ''}>
+          <td>${escapeHtml(s.name) || '<span style="color:var(--text4);">—</span>'}</td>
+          <td>${emailCell}</td>
+          <td style="font-size:12px;color:var(--text3);">${s.added ? fmtD(s.added) : '—'}</td>
+          <td><span class="pill gray" style="font-size:10px;">${escapeHtml(s.source || 'Manual')}</span></td>
+          <td><button class="btn sm" onclick="removeFromMailingList('${encodeURIComponent(s.email)}')" title="Remove from mailing list">Remove</button></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="5"><div class="empty-state" style="padding:1.25rem;">Your mailing list is empty. Add someone by hand above, or click <strong>Add all buyers</strong> to pull in everyone we found below.</div></td></tr>`;
+}
+
+// Email / copy helpers shared by the derived segment and the curated list.
+function _uniqueMailable(records) {
+  return Array.from(new Set(records.filter(r => !_isCustomerSuppressed(r.email)).map(r => r.email)));
+}
+// Open Gmail's web compose with the addresses pre-filled as BCC. Chunks past a
+// safe URL length so a big list opens what it can and copies the rest.
+function _openGmailBcc(emails, label) {
+  if (!emails.length) { showToast(`No mailable addresses${label ? ' (' + label + ')' : ''}`, 'warn'); return; }
+  const BUDGET = 1600;
+  const chunks = []; let cur = [];
+  emails.forEach(e => {
+    if (cur.length && encodeURIComponent([...cur, e].join(',')).length > BUDGET) { chunks.push(cur); cur = []; }
+    cur.push(e);
+  });
+  if (cur.length) chunks.push(cur);
+  window.open('https://mail.google.com/mail/?view=cm&fs=1&bcc=' + encodeURIComponent(chunks[0].join(',')), '_blank', 'noopener');
+  if (chunks.length > 1) {
+    _custFallbackCopy(emails.join(', '));
+    showToast(`Opened Gmail with ${chunks[0].length} of ${emails.length}. Full list copied — send in batches (Gmail caps recipients per email).`, 'warn');
+  } else {
+    showToast(`Opened Gmail · ${emails.length} recipient${emails.length === 1 ? '' : 's'} in BCC`);
+  }
+}
+function emailCustomerSegment() { _openGmailBcc(_uniqueMailable(_custApplyFilter(buildCustomerList())), 'current segment'); }
+function emailMailingList() { _openGmailBcc(_uniqueMailable(mailingSubsArray()), 'mailing list'); }
+function copyMailingListEmails() {
+  const emails = _uniqueMailable(mailingSubsArray());
+  if (!emails.length) { showToast('No mailable emails on your list', 'warn'); return; }
+  const done = () => showToast(`✓ Copied ${emails.length} email${emails.length === 1 ? '' : 's'}`);
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(emails.join(', ')).then(done).catch(() => { _custFallbackCopy(emails.join(', ')); done(); });
+  else { _custFallbackCopy(emails.join(', ')); done(); }
+}
+function exportMailingListCSV() {
+  const subs = mailingSubsArray().filter(s => !_isCustomerSuppressed(s.email));
+  if (!subs.length) { showToast('No mailable subscribers to export', 'warn'); return; }
+  const rows = [['Name', 'Email', 'Source', 'Added']];
+  subs.forEach(s => rows.push([s.name || '', s.email, s.source || '', s.added || '']));
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `lyrical-mailing-list-${today()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+  showToast(`✓ Exported ${subs.length} subscriber${subs.length === 1 ? '' : 's'}`);
+}
+
 function _loadCustomerStripeCache() {
   try { return JSON.parse(localStorage.getItem(CUSTOMER_STRIPE_KEY) || '[]'); }
   catch (_) { return []; }
@@ -12920,6 +13120,8 @@ function renderCustomers() {
   if (!body) return;
   _custSyncBookFilterOptions();
   const all = buildCustomerList();
+  _mailingAutoSync(all);
+  renderMailingList();
   const list = _custApplyFilter(all);
   const suppressedShown = list.filter(r => _isCustomerSuppressed(r.email)).length;
 
@@ -12942,7 +13144,13 @@ function renderCustomers() {
         const emailCell = sup
           ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(r.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
           : `<a href="mailto:${escapeHtml(r.email)}" style="color:var(--gold2);">${escapeHtml(r.email)}</a>`;
-        const actionBtn = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
+        const onList = mailingListHas(r.email);
+        const listBtn = sup
+          ? ''
+          : (onList
+              ? `<button class="btn sm" disabled title="Already on your mailing list" style="opacity:.55;">✓ On list</button>`
+              : `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(r.email)}')" title="Add to your mailing list">＋ List</button>`);
+        const supBtn = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
         return `<tr${sup ? ' style="opacity:.55;"' : ''}>
         <td>${escapeHtml(r.name) || '<span style="color:var(--text4);">—</span>'}</td>
         <td>${emailCell}</td>
@@ -12952,7 +13160,7 @@ function renderCustomers() {
         <td style="font-size:12px;color:var(--text3);">${_custSpendStr(r.spend) || '—'}</td>
         <td style="font-size:12px;color:var(--text3);">${r.last ? fmtD(r.last) : '—'}</td>
         <td>${Array.from(r.sources).map(s => `<span class="pill gray" style="font-size:10px;">${escapeHtml(s)}</span>`).join(' ')}</td>
-        <td>${actionBtn}</td>
+        <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${listBtn}${supBtn}</div></td>
       </tr>`;
       }).join('')
     : `<tr><td colspan="9"><div class="empty-state" style="padding:1.5rem;">${(_customerFilter.trim() || _customerBookFilter) ? 'No customers match this filter.' : 'No customers found yet. Apply some website orders, log in-person sales with an email, or pull buyers from Stripe.'}</div></td></tr>`;
@@ -13044,6 +13252,8 @@ Object.assign(window, {
   confirmDialog, notify,
   renderCustomers, filterCustomers, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
   toggleCustomerSuppress, setCustomerBookFilter, customerPullDeeper,
+  addManualSubscriber, addBuyerToMailingList, removeFromMailingList, addAllBuyersToMailingList,
+  toggleMailingAutoAdd, emailCustomerSegment, emailMailingList, copyMailingListEmails, exportMailingListCSV,
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   generateBookStripeLink,
