@@ -492,7 +492,9 @@ window._fbMassMigrate = async (BOOKS) => {
   const promises = [];
 
   // 1. Migrate Books
-  for (const bookId of Object.keys(BOOKS)) {
+  // ⚡ Bolt Optimization: Parallelize Asynchronous I/O
+  // Replaced sequential `for...of` loops with `Promise.all` to fetch book data concurrently.
+  await Promise.all(Object.keys(BOOKS).map(async bookId => {
     const snap = await get(ref(db, `lyrical/books/${bookId}`));
     if (snap.exists()) {
       const bookObj = snap.val();
@@ -514,11 +516,13 @@ window._fbMassMigrate = async (BOOKS) => {
         }
       }
     }
-  }
+  }));
 
   // 2. Migrate Submissions
-  for (const bookId of Object.keys(BOOKS)) {
-    for (const type of ['expenses', 'sales']) {
+  // ⚡ Bolt Optimization: Parallelize Asynchronous I/O
+  // Replaced sequential `for...of` loops with `Promise.all` to fetch submission data concurrently.
+  await Promise.all(Object.keys(BOOKS).map(async bookId => {
+    await Promise.all(['expenses', 'sales'].map(async type => {
       const typeSnap = await get(ref(db, `lyrical/submissions/${bookId}/${type}`));
       if (typeSnap.exists()) {
         const subData = typeSnap.val();
@@ -528,19 +532,21 @@ window._fbMassMigrate = async (BOOKS) => {
            promises.push(setDoc(dRef, { data: subObj.data, ts: subObj.ts || Date.now() }));
         });
       }
-    }
-  }
+    }));
+  }));
 
   // 3. Migrate Settings
+  // ⚡ Bolt Optimization: Parallelize Asynchronous I/O
+  // Replaced sequential `for...of` loops with `Promise.all` to fetch settings concurrently.
   const settingsKeys = ['catalog', 'taxCenter', 'productionCosts', 'paymentLinks', 'systemBackups'];
-  for (const key of settingsKeys) {
+  await Promise.all(settingsKeys.map(async key => {
     const setSnap = await get(ref(db, `lyrical/settings/${key}`));
     if (setSnap.exists()) {
        const settingObj = setSnap.val();
        const dRef = doc(fs, 'settings', key);
        promises.push(setDoc(dRef, { data: settingObj.data, ts: settingObj.ts || Date.now() }));
     }
-  }
+  }));
 
   await Promise.all(promises);
   return true;
