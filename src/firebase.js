@@ -470,6 +470,23 @@ window._fbSaveCatalog = async (catalog) => {
   } catch (e) { console.error("fbSaveCatalog failed", e); }
 };
 
+// Rules-readable ownership map: { bookId: authorEmailLower }. Stored as PLAIN
+// fields (not the usual { data: <stringified JSON> } blob) so the security
+// rules — which cannot parse JSON strings — can verify an author only writes
+// their own book. Written to BOTH backends so ownership resolves whichever
+// store a book lives in. Publisher-only; the rules reject author settings writes.
+window._fbSaveBookOwners = async (owners) => {
+  const clean = {};
+  Object.keys(owners || {}).forEach(id => {
+    const email = String(owners[id] || '').toLowerCase().trim();
+    if (email) clean[id] = email;
+  });
+  try { await set(ref(db, 'lyrical/settings/bookOwners'), clean); }
+  catch (e) { console.error('fbSaveBookOwners (RTDB) failed', e); }
+  try { await setDoc(doc(fs, 'settings', 'bookOwners'), clean); }
+  catch (e) { console.error('fbSaveBookOwners (Firestore) failed', e); }
+};
+
 window._fbLoadCatalog = async () => {
   try {
     if (window._useFirestoreGlobal()) {

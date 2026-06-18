@@ -4,11 +4,12 @@
       "books": {
         "$bookId": {
           ".read": "auth != null",
-          // Any authenticated user (publisher or an author whose Google email
-          // matches a book's authorEmail — enforced in the app) can write
-          // book data. This grants authors FULL access to the consignment
-          // tab (stores + ledger live inside the per-book blob in RTDB).
-          ".write": "auth != null",
+          // Publisher writes any book; an author writes ONLY the book whose
+          // authorEmail matches theirs in settings/bookOwners (a plain map
+          // maintained by the publisher client). Ownership lives there because
+          // the per-book payload is a stringified JSON string these rules can't
+          // introspect. Missing map/entry → not the owner → denied.
+          ".write": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())",
           // Shape guard: the app always writes the whole node as
           // { data: <json string>, ts: <number> }. Reject anything else and cap
           // the blob at ~5 MB so a buggy or malicious client can't bloat the DB
@@ -18,8 +19,10 @@
       },
       "submissions": {
         "$bookId": {
-          ".read": "auth != null",
-          ".write": "auth != null"
+          // Publisher sees/writes every book's submissions; an author may only
+          // read and write submissions for their own book.
+          ".read": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())",
+          ".write": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())"
         }
       },
       "settings": {

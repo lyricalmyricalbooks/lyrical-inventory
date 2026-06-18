@@ -45,7 +45,25 @@ let deletedDefaultIds = [];
 let posExtraBooks = {};
 let editingPosBookId = null;
 
+// Build the rules-readable ownership map from the live catalog. Keyed by book
+// id → owning author's (lowercased) Google email; books with no author are left
+// out so they stay publisher-only.
+function ownersFromBooks() {
+  const owners = {};
+  Object.keys(BOOKS).forEach(id => {
+    const email = (BOOKS[id].authorEmail || '').toLowerCase().trim();
+    if (email) owners[id] = email;
+  });
+  return owners;
+}
+
 function saveCatalogWithDeletions() {
+  // Keep the rules-readable ownership map in step with the catalog so the
+  // tightened security rules can verify author→book ownership. Publisher-only —
+  // authors can't write settings (rules reject), so skip to avoid noisy errors.
+  if (window.IS_PUBLISHER && typeof window._fbSaveBookOwners === 'function') {
+    window._fbSaveBookOwners(ownersFromBooks());
+  }
   return window._fbSaveCatalog({ ...BOOKS, _deletedDefaults: deletedDefaultIds, _posExtra: posExtraBooks });
 }
 const DEFAULT_BOOKS = {
@@ -13411,6 +13429,10 @@ async function initStartup() {
     if (uEmail === publisherEmail || uEmail === 'lyricalmyricalbooks@gmail.com') {
       window.IS_PUBLISHER = true;
       IS_AUTHOR_MODE = false;
+      // Seed/refresh the rules-readable ownership map now we're authenticated as
+      // publisher, so authors' per-book writes resolve under the tightened rules
+      // even if the catalog isn't edited this session.
+      if (typeof window._fbSaveBookOwners === 'function') window._fbSaveBookOwners(ownersFromBooks());
       showApp('publisher', null);
       return;
     }
