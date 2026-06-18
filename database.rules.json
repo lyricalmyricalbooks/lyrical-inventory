@@ -28,6 +28,11 @@
       "settings": {
         ".read": "auth != null",
         ".write": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'"
+      },
+      "backups": {
+        // System backup snapshots — one node per backup, publisher only.
+        ".read": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'",
+        ".write": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'"
       }
     }
   }
