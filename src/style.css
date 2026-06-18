@@ -455,49 +455,38 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .void-zone-title{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:.5rem;}
 .void-zone-body{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:.75rem;}
 
-/* PASSWORD GATE */
-#pw-gate{position:fixed;inset:0;z-index:9999;background:#080a0b;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;overflow:hidden;}
-#pw-gate::before{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(to right,rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(to right,rgba(255,255,255,.015) 1px,transparent 1px),radial-gradient(circle at 7% 12%,rgba(197,141,58,.22),transparent 34%),radial-gradient(circle at 84% 88%,rgba(197,141,58,.2),transparent 32%),linear-gradient(180deg,rgba(6,8,10,.78),rgba(6,8,10,.9));background-size:20% 100%,40% 100%,100% 100%,100% 100%,100% 100%;opacity:.95;}
-#pw-gate .gate-topbar{position:fixed;top:0;left:0;right:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:1.7rem 2.7rem;}
-#pw-gate .wm{font-family:'Syne',sans-serif;font-size:.92rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:#cf973a;white-space:nowrap;}
-#pw-gate .gate-lock{display:flex;align-items:center;justify-content:center;color:#cf973a;opacity:.95;}
-#pw-gate .gate-main{position:relative;z-index:2;width:min(100%,640px);}
-#pw-gate .box{width:100%;background:linear-gradient(145deg,rgba(39,30,28,.52),rgba(15,11,11,.84) 58%,rgba(10,8,8,.95));border:1px solid rgba(80,69,55,.4);border-radius:32px;padding:2.6rem 2.8rem 2.3rem;box-shadow:0 24px 48px rgba(0,0,0,.5),0 35px 40px -20px rgba(198,145,58,.2);text-align:center;position:relative;backdrop-filter:blur(7px);}
-#pw-gate .gate-brand-icon{display:inline-flex;align-items:center;justify-content:center;width:76px;height:76px;border-radius:999px;background:rgba(55,52,50,.9);border:1px solid rgba(200,145,58,.35);color:#efbc58;margin-bottom:1.2rem;}
-#pw-gate .gate-brand-icon svg{width:38px;height:38px;display:block;fill:currentColor;}
-#pw-gate .gate-title{font-family:'Playfair Display',serif;font-size:clamp(2.45rem,4vw,3rem);line-height:1.06;color:#f4ece1;margin-bottom:.45rem;font-weight:500;white-space:nowrap;}
-#pw-gate .sub{font-size:.82rem;font-weight:500;letter-spacing:.22em;text-transform:uppercase;color:#cabaa7;margin-bottom:1.75rem;}
-#pw-gate #gate-desc{font-size:12px;color:var(--cream3);line-height:1.6;display:none;margin-bottom:1.25rem;}
-#pw-gate .gate-field{text-align:left;margin-bottom:1.25rem;}
-#pw-gate .gate-field label{display:block;font-size:13px;font-weight:700;letter-spacing:.31em;text-transform:uppercase;color:rgba(157,142,126,.8);margin-bottom:.8rem;}
-#pw-gate .gate-input-row{display:flex;align-items:center;gap:.65rem;border-bottom:1px solid #504537;padding-bottom:.6rem;transition:border-color .2s;}
-#pw-gate .gate-input-row:focus-within{border-bottom-color:var(--gold);}
-#pw-gate input{display:block;width:100%;padding:10px 0;font-size:21px;font-family:'Syne',sans-serif;font-weight:500;letter-spacing:.32em;background:transparent;border:none;color:#b4a289;outline:none;}
-#pw-gate input::placeholder{color:#41362c;letter-spacing:.36em;}
-#pw-gate #pw-toggle{width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;color:#a39380;cursor:pointer;transition:color .15s;}
-#pw-gate #pw-toggle svg{width:22px;height:22px;fill:currentColor;}
-#pw-gate #pw-toggle .eye-closed{display:none;}
-#pw-gate #pw-toggle.showing .eye-open{display:none;}
-#pw-gate #pw-toggle.showing .eye-closed{display:block;}
-#pw-gate #pw-toggle:hover{color:var(--gold2);}
-#pw-gate input.bad{border-color:#f87171 !important;animation:pwshake .35s ease;}
-@keyframes pwshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-9px)}75%{transform:translateX(9px)}}
-#pw-gate .gate-submit{width:100%;margin-top:1rem;padding:14px 18px;font-family:'Syne',sans-serif;font-size:.95rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;background:#c58f3a;color:#100e0c;border:none;border-radius:999px;cursor:pointer;transition:transform .15s;display:flex;justify-content:center;align-items:center;box-shadow:0 14px 24px rgba(197,143,58,.28);}
-#pw-gate .gate-lock svg{width:22px;height:22px;display:block;fill:currentColor;}
-#pw-gate .gate-submit:hover{transform:translateY(-1px);}
-#pw-gate .err{min-height:20px;margin-top:10px;font-family:'DM Mono',monospace;font-size:12px;color:#f87171;}
-#pw-gate .gate-glow{position:fixed;pointer-events:none;border-radius:999px;filter:blur(90px);background:var(--gold);opacity:.14;z-index:1;}
-#pw-gate .gate-glow-right{bottom:-120px;right:-100px;width:42vw;height:42vw;max-width:520px;max-height:520px;}
-#pw-gate .gate-glow-left{top:-120px;left:-120px;width:30vw;height:30vw;max-width:380px;max-height:380px;}
+/* PASSWORD GATE — punk poster */
+#pw-gate{position:fixed;inset:0;z-index:9999;min-height:100vh;background:#0c0b0a;color:#f2ede1;font-family:'Archivo',sans-serif;display:flex;padding:28px;overflow:hidden;}
+#pw-gate .pw-scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,0.018) 0 1px,transparent 1px 4px);pointer-events:none;z-index:1;}
+#pw-gate .pw-frame{flex:1;border:3px solid #f2ede1;box-shadow:14px 14px 0 rgba(242,237,225,0.12);position:relative;display:flex;padding:14px;z-index:2;}
+#pw-gate .pw-inner{flex:1;border:1px solid rgba(242,237,225,0.45);display:flex;flex-direction:column;padding:clamp(28px,4vw,56px);position:relative;}
+#pw-gate .pw-corner-label{position:absolute;top:clamp(12px,2vw,20px);right:clamp(16px,2.5vw,28px);}
+#pw-gate .pw-corner-label .wm{font-family:'Archivo',sans-serif;font-weight:700;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:rgba(242,237,225,0.5);white-space:nowrap;}
+#pw-gate .pw-logo{font-family:'Anton',sans-serif;text-transform:uppercase;line-height:0.8;letter-spacing:0.01em;}
+#pw-gate .pw-logo>div{font-size:clamp(72px,13vw,168px);color:#f2ede1;}
+#pw-gate .pw-logo .pw-logo-outline{color:transparent;-webkit-text-stroke:2px #f2ede1;}
+#pw-gate .pw-tag-row{margin-top:14px;}
+#pw-gate .pw-marker{font-family:'Permanent Marker',cursive;font-size:clamp(20px,2.4vw,30px);letter-spacing:0.04em;color:#0c0b0a;background:#f2ede1;padding:3px 16px;display:inline-block;transform:rotate(-3deg);}
+#pw-gate .pw-band{flex:1;min-height:120px;position:relative;margin:clamp(28px,4vw,52px) 0;overflow:hidden;border-top:2px solid rgba(242,237,225,0.25);border-bottom:2px solid rgba(242,237,225,0.25);display:flex;align-items:center;}
+#pw-gate .pw-band-stripe{position:absolute;left:-60px;width:140%;background:#f2ede1;transform:rotate(-7deg);}
+#pw-gate .pw-band-stripe-1{top:42%;height:22px;}
+#pw-gate .pw-band-stripe-2{top:58%;height:8px;}
+#pw-gate .pw-star{position:absolute;right:clamp(40px,7vw,110px);top:50%;transform:translateY(-50%);width:clamp(74px,8vw,108px);height:clamp(74px,8vw,108px);background:#f2ede1;clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);}
+#pw-gate #gate-desc{display:none;font-family:'Archivo',sans-serif;font-weight:600;font-size:13px;line-height:1.6;color:#f2ede1;margin-bottom:clamp(16px,2vw,22px);}
+#pw-gate .pw-signin{width:100%;border:3px solid #f2ede1;background:#f2ede1;color:#0c0b0a;font-family:'Archivo',sans-serif;font-weight:900;font-size:clamp(19px,2.2vw,26px);letter-spacing:0.06em;text-transform:uppercase;padding:clamp(20px,2.4vw,28px);display:flex;align-items:center;justify-content:center;gap:16px;cursor:pointer;transition:background 0.12s,color 0.12s;}
+#pw-gate .pw-signin:hover{background:#0c0b0a;color:#f2ede1;}
+#pw-gate .pw-signin:disabled{opacity:.6;cursor:default;}
+#pw-gate .pw-g{width:clamp(28px,3vw,36px);height:clamp(28px,3vw,36px);border:2px solid currentColor;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;padding:5px;flex-shrink:0;background:#fff;}
+#pw-gate .pw-g svg{display:block;}
+#pw-gate .err{min-height:18px;margin-top:14px;text-align:center;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.04em;color:#ff8a80;}
+#pw-gate .pw-footnote{margin-top:clamp(10px,1.4vw,16px);text-align:center;font-weight:600;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(242,237,225,0.4);}
 
 @media(max-width:880px){
-  #pw-gate .gate-topbar{padding:1.5rem 1.5rem;}
-  #pw-gate .wm{font-size:.85rem;letter-spacing:.2em;}
-  #pw-gate .box{padding:2rem 1.5rem 1.8rem;border-radius:24px;}
-  #pw-gate .gate-title{font-size:2rem;}
-  #pw-gate .sub{font-size:.76rem;}
-  #pw-gate input{font-size:16px;}
-  #pw-gate .gate-submit{font-size:.92rem;}
+  #pw-gate{padding:14px;}
+  #pw-gate .pw-frame{box-shadow:8px 8px 0 rgba(242,237,225,0.12);padding:10px;}
+  #pw-gate .pw-inner{padding:26px 18px;}
+  #pw-gate .pw-corner-label{display:none;}
+  #pw-gate .pw-band{min-height:90px;}
 }
 
 /* AUTHOR VIEW */
