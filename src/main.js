@@ -8744,6 +8744,7 @@ function renderPaymentLinkFields(){
 }
 
 async function savePaymentLinks(){
+  await syncCatalog();
   BOOK_LIST.forEach(book=>{
     const inp=$('pl-'+book.id);
     if(inp) book.paymentLink=inp.value.trim();
@@ -9845,10 +9846,12 @@ async function saveTaxCenterSettings() {
     const oldText = btn.textContent;
     btn.textContent = 'Saving...'; btn.disabled = true;
 
-    if(!TAX_CENTER.settings) TAX_CENTER.settings = {};
-    TAX_CENTER.settings.geminiKey = document.getElementById('tc-api-key').value.trim();
+    const geminiKey = document.getElementById('tc-api-key').value.trim();
     
     try {
+        await loadTaxCenter();
+        if(!TAX_CENTER.settings) TAX_CENTER.settings = {};
+        TAX_CENTER.settings.geminiKey = geminiKey;
         await saveTaxCenter();
         showToast('✓ Settings saved to Firebase');
     } catch(e) {
@@ -10185,7 +10188,7 @@ async function submitTaxExpense() {
   _pendingWebcamReceipt = null;
 }
 
-function addRecurring() {
+async function addRecurring() {
   const desc = ($('tc-rec-desc').value || '').trim();
   const cat = $('tc-rec-cat').value;
   const currency = $('tc-rec-cur').value || 'CAD';
@@ -10193,17 +10196,35 @@ function addRecurring() {
   const startDate = $('tc-rec-start').value || today();
 
   if(!desc || !amount) { showToast('⚠ Details required','warn'); return; }
+  
+  await loadTaxCenter();
   if(!TAX_CENTER.recurring) TAX_CENTER.recurring = [];
   TAX_CENTER.recurring.push({ desc, cat, currency, amount, startDate, lastInjected: '' });
-  saveTaxCenter();
+  await saveTaxCenter();
   renderTaxCenter();
   showToast('✓ Subscription added');
   $('tc-rec-desc').value=''; $('tc-rec-amount').value=''; $('tc-rec-start').value='';
 }
 
-function removeRecurring(idx) {
-    TAX_CENTER.recurring.splice(idx, 1);
-    saveTaxCenter();
+async function removeRecurring(idx) {
+    const itemToRemove = TAX_CENTER.recurring[idx];
+    if (!itemToRemove) return;
+    
+    await loadTaxCenter();
+    
+    const freshIdx = TAX_CENTER.recurring.findIndex(sub => 
+      sub.desc === itemToRemove.desc && 
+      sub.amount === itemToRemove.amount && 
+      sub.startDate === itemToRemove.startDate && 
+      sub.cat === itemToRemove.cat
+    );
+    
+    if (freshIdx !== -1) {
+      TAX_CENTER.recurring.splice(freshIdx, 1);
+    } else {
+      TAX_CENTER.recurring.splice(idx, 1);
+    }
+    await saveTaxCenter();
     renderTaxCenter();
     showToast('✓ Subscription removed');
 }
