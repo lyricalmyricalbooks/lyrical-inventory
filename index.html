@@ -16,7 +16,7 @@
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://lyricalmyrical-37c46-default-rtdb.firebaseio.com">
 <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&family=Anton&family=Archivo:wght@500;600;700;800;900&family=Permanent+Marker&display=swap" rel="stylesheet">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -128,31 +128,43 @@
 
 <!-- PASSWORD GATE (publisher only — hidden in author mode) -->
 <div id="pw-gate">
-  <header class="gate-topbar">
-    <div class="wm">Lyricalmyrical Books</div>
-    <div class="gate-lock" aria-hidden="true">
-      <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M17 10h-1V8a4 4 0 10-8 0v2H7a2 2 0 00-2 2v8a2 2 0 002 2h10a2 2 0 002-2v-8a2 2 0 00-2-2zM10 8a2 2 0 114 0v2h-4V8zm7 12H7v-8h10v8z"/></svg>
-    </div>
-  </header>
-  <main class="gate-main">
-    <div class="box">
-      <div class="gate-brand-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M17 10h-1V8a4 4 0 10-8 0v2H7a2 2 0 00-2 2v8a2 2 0 002 2h10a2 2 0 002-2v-8a2 2 0 00-2-2zM10 8a2 2 0 114 0v2h-4V8zm7 12H7v-8h10v8z"/></svg>
+  <div class="pw-scan" aria-hidden="true"></div>
+  <div class="pw-frame">
+    <div class="pw-inner">
+
+      <div class="pw-corner-label"><span class="wm">Lyricalmyrical Books</span></div>
+
+      <div class="pw-logo" aria-label="Lyricalmyrical Books">
+        <div>Lyrical</div>
+        <div>Myrical</div>
+        <div class="pw-logo-outline">Books</div>
       </div>
-      <h1 class="gate-title">Lyricalmyrical Books</h1>
-      <div class="sub" id="gate-sub">Inventory App</div>
+
+      <div class="pw-tag-row">
+        <span class="pw-marker" id="gate-sub">inventory app</span>
+      </div>
+
+      <div class="pw-band" aria-hidden="true">
+        <div class="pw-band-stripe pw-band-stripe-1"></div>
+        <div class="pw-band-stripe pw-band-stripe-2"></div>
+        <div class="pw-star"></div>
+      </div>
+
       <div id="gate-desc"></div>
-      <div style="margin-top: 1.5rem; text-align: center;">
-        <button class="gate-submit" onclick="tryGoogleLogin()" style="background: white; color: black; display: flex; align-items: center; justify-content: center; gap: 10px;">
-          <svg viewBox="0 0 48 48" width="20px" height="20px"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.7 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-          <span style="font-family: 'Syne', sans-serif; font-weight: 600;">Sign in with Google</span>
-        </button>
-      </div>
+
+      <button class="pw-signin" type="button" onclick="tryGoogleLogin()">
+        <span class="pw-g" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="100%" height="100%"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.7 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        </span>
+        Sign in w/ Google
+      </button>
+
       <div class="err" id="pw-err"></div>
+
+      <div class="pw-footnote">Authorized personnel only</div>
+
     </div>
-  </main>
-  <div class="gate-glow gate-glow-right"></div>
-  <div class="gate-glow gate-glow-left"></div>
+  </div>
 </div>
 
 <div id="pw-app" style="display:none;">

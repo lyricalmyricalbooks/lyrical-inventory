@@ -13389,7 +13389,7 @@ async function initStartup() {
 function setupGate(errMsg) {
   $('pw-gate').style.display='';
   $('pw-app').style.display='none';
-  document.querySelector('#gate-sub').textContent = 'Inventory App';
+  document.querySelector('#gate-sub').textContent = 'inventory app';
   document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
   const desc = document.getElementById('gate-desc');
   if (desc) {
