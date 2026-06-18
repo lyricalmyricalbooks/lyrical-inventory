@@ -456,24 +456,24 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .void-zone-body{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:.75rem;}
 
 /* PASSWORD GATE — punk poster */
-#pw-gate{position:fixed;inset:0;z-index:9999;min-height:100vh;background:#0c0b0a;color:#f2ede1;font-family:'Archivo',sans-serif;display:flex;padding:28px;overflow:hidden;}
+#pw-gate{position:fixed;inset:0;z-index:9999;min-height:100vh;background:#0c0b0a;color:#f2ede1;font-family:'Archivo',sans-serif;display:flex;padding:clamp(14px,2.5vh,28px);overflow:auto;}
 #pw-gate .pw-scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,0.018) 0 1px,transparent 1px 4px);pointer-events:none;z-index:1;}
 #pw-gate .pw-frame{flex:1;border:3px solid #f2ede1;box-shadow:14px 14px 0 rgba(242,237,225,0.12);position:relative;display:flex;padding:14px;z-index:2;}
-#pw-gate .pw-inner{flex:1;border:1px solid rgba(242,237,225,0.45);display:flex;flex-direction:column;padding:clamp(28px,4vw,56px);position:relative;}
+#pw-gate .pw-inner{flex:1;border:1px solid rgba(242,237,225,0.45);display:flex;flex-direction:column;padding:clamp(22px,min(4vw,4vh),56px);position:relative;}
 #pw-gate .pw-corner-label{position:absolute;top:clamp(12px,2vw,20px);right:clamp(16px,2.5vw,28px);}
 #pw-gate .pw-corner-label .wm{font-family:'Archivo',sans-serif;font-weight:700;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:rgba(242,237,225,0.5);white-space:nowrap;}
 #pw-gate .pw-logo{font-family:'Anton',sans-serif;text-transform:uppercase;line-height:0.8;letter-spacing:0.01em;}
-#pw-gate .pw-logo>div{font-size:clamp(72px,13vw,168px);color:#f2ede1;}
+#pw-gate .pw-logo>div{font-size:clamp(56px,min(13vw,16vh),168px);color:#f2ede1;}
 #pw-gate .pw-logo .pw-logo-outline{color:transparent;-webkit-text-stroke:2px #f2ede1;}
 #pw-gate .pw-tag-row{margin-top:14px;}
 #pw-gate .pw-marker{font-family:'Permanent Marker',cursive;font-size:clamp(20px,2.4vw,30px);letter-spacing:0.04em;color:#0c0b0a;background:#f2ede1;padding:3px 16px;display:inline-block;transform:rotate(-3deg);}
-#pw-gate .pw-band{flex:1;min-height:120px;position:relative;margin:clamp(28px,4vw,52px) 0;overflow:hidden;border-top:2px solid rgba(242,237,225,0.25);border-bottom:2px solid rgba(242,237,225,0.25);display:flex;align-items:center;}
+#pw-gate .pw-band{flex:1 1 auto;min-height:clamp(64px,10vh,120px);position:relative;margin:clamp(16px,3vh,52px) 0;overflow:hidden;border-top:2px solid rgba(242,237,225,0.25);border-bottom:2px solid rgba(242,237,225,0.25);display:flex;align-items:center;}
 #pw-gate .pw-band-stripe{position:absolute;left:-60px;width:140%;background:#f2ede1;transform:rotate(-7deg);}
 #pw-gate .pw-band-stripe-1{top:42%;height:22px;}
 #pw-gate .pw-band-stripe-2{top:58%;height:8px;}
 #pw-gate .pw-star{position:absolute;right:clamp(40px,7vw,110px);top:50%;transform:translateY(-50%);width:clamp(74px,8vw,108px);height:clamp(74px,8vw,108px);background:#f2ede1;clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);}
 #pw-gate #gate-desc{display:none;font-family:'Archivo',sans-serif;font-weight:600;font-size:13px;line-height:1.6;color:#f2ede1;margin-bottom:clamp(16px,2vw,22px);}
-#pw-gate .pw-signin{width:100%;border:3px solid #f2ede1;background:#f2ede1;color:#0c0b0a;font-family:'Archivo',sans-serif;font-weight:900;font-size:clamp(19px,2.2vw,26px);letter-spacing:0.06em;text-transform:uppercase;padding:clamp(20px,2.4vw,28px);display:flex;align-items:center;justify-content:center;gap:16px;cursor:pointer;transition:background 0.12s,color 0.12s;}
+#pw-gate .pw-signin{width:100%;border:3px solid #f2ede1;background:#f2ede1;color:#0c0b0a;font-family:'Archivo',sans-serif;font-weight:900;font-size:clamp(19px,2.2vw,26px);letter-spacing:0.06em;text-transform:uppercase;padding:clamp(16px,2vh,28px);display:flex;align-items:center;justify-content:center;gap:16px;cursor:pointer;transition:background 0.12s,color 0.12s;flex-shrink:0;}
 #pw-gate .pw-signin:hover{background:#0c0b0a;color:#f2ede1;}
 #pw-gate .pw-signin:disabled{opacity:.6;cursor:default;}
 #pw-gate .pw-g{width:clamp(28px,3vw,36px);height:clamp(28px,3vw,36px);border:2px solid currentColor;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;padding:5px;flex-shrink:0;background:#fff;}
