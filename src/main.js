@@ -8484,9 +8484,9 @@ async function applyBackupData(data) {
   await saveCatalogWithDeletions();
 
   // 2. Restore individual book states
-  for (const bid in data.states) {
-    await window._fbSave(bid, JSON.stringify(data.states[bid]));
-  }
+  // ⚡ Bolt Optimization: Parallelize Asynchronous I/O
+  // Replaced sequential `for...in` loop with `Promise.all` to save book states concurrently.
+  await Promise.all(Object.keys(data.states).map(bid => window._fbSave(bid, JSON.stringify(data.states[bid]))));
 
   // 3. Tax Center
   if (data.TAX_CENTER) {
