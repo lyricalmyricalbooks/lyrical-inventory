@@ -53,6 +53,12 @@ service cloud.firestore {
       allow write: if isPublisher();
     }
 
+    // System backup snapshots — one doc per backup (keeps the settings manifest
+    // small and avoids the 1 MiB per-document limit). Publisher only.
+    match /backups/{id} {
+      allow read, write: if isPublisher();
+    }
+
     // Email receipt inbox — draft expenses pushed by the Gmail add-on.
     // The add-on writes via the owner's OAuth token (IAM, which bypasses these
     // rules); the publisher client reads them live and deletes each one after

@@ -8406,7 +8406,13 @@ function buildBackupPayload() {
 }
 
 async function saveSystemBackups() {
-  await window._fbSaveSettings(SYSTEM_BACKUP_KEY, systemBackups);
+  // Persist only the lean manifest — never inline snapshots (that's what blew
+  // Firestore's 1 MiB doc limit). Each snapshot lives in its own backups doc.
+  const manifest = systemBackups.map(b => {
+    const { snapshot: _snapshot, ...meta } = b;
+    return meta;
+  });
+  await window._fbSaveSettings(SYSTEM_BACKUP_KEY, manifest);
 }
 
 async function loadSystemBackups() {
@@ -8416,6 +8422,31 @@ async function loadSystemBackups() {
   } catch (e) {
     systemBackups = [];
   }
+
+  // One-time migration: older manifests inlined the full snapshot in every
+  // entry (the 1 MiB-doc bug). Move any inlined snapshot into its own backups
+  // doc, capture its book count, then drop it so the next save writes a lean
+  // index. Only rewrite the manifest once EVERY snapshot is safely in its own
+  // doc — otherwise (e.g. backup rules not yet deployed) we'd lose the ones
+  // that failed to migrate.
+  const inlined = systemBackups.filter(b => b && b.id && b.snapshot);
+  if (inlined.length) {
+    let allMigrated = true;
+    for (const b of inlined) {
+      try {
+        await window._fbSaveBackupSnapshot(b.id, b.snapshot);
+        if (b.bookCount == null) b.bookCount = Object.keys(b.snapshot.BOOKS || {}).length;
+        delete b.snapshot;
+      } catch (e) {
+        console.error('Backup migration failed for', b.id, e);
+        allMigrated = false;
+      }
+    }
+    if (allMigrated) {
+      try { await saveSystemBackups(); } catch (e) { console.error('Backup manifest migration save failed', e); }
+    }
+  }
+
   renderSystemBackups();
 }
 
@@ -8441,7 +8472,7 @@ function renderSystemBackups() {
     <tr>
       <td>${new Date(b.createdAt).toLocaleString()}</td>
       <td>${b.type === 'manual' ? 'Manual' : 'Auto daily'}</td>
-      <td class="r">${Object.keys(b.snapshot?.BOOKS || {}).length}</td>
+      <td class="r">${b.bookCount ?? Object.keys(b.snapshot?.BOOKS || {}).length}</td>
       <td class="r"><button class="btn sm" onclick="restoreSystemBackup('${b.id}')">Restore</button></td>
     </tr>
   `).join('');
@@ -8463,17 +8494,35 @@ async function createSystemBackup(type = 'auto') {
   const dayKey = today();
   if (type === 'auto' && systemBackups.some(b => b.dayKey === dayKey)) return false;
 
+  const id = `sb-${Date.now()}`;
+  const snapshot = buildBackupPayload();
+
+  // Write the heavy snapshot to its own doc FIRST; only record it in the
+  // manifest if that succeeds, so the index never points at a missing backup.
+  try {
+    await window._fbSaveBackupSnapshot(id, snapshot);
+  } catch (e) {
+    console.error('System backup snapshot write failed', e);
+    showToast('⚠ Backup failed to save — your data was NOT backed up', 'err', 5000);
+    return false;
+  }
+
   const entry = {
-    id: `sb-${Date.now()}`,
+    id,
     dayKey,
     type,
     createdAt: Date.now(),
-    snapshot: buildBackupPayload()
+    bookCount: Object.keys(snapshot.BOOKS || {}).length
   };
   systemBackups.unshift(entry);
+
+  // Prune snapshots beyond the limit — delete their docs too so they don't orphan.
   if (systemBackups.length > SYSTEM_BACKUP_LIMIT) {
+    const dropped = systemBackups.slice(SYSTEM_BACKUP_LIMIT);
     systemBackups = systemBackups.slice(0, SYSTEM_BACKUP_LIMIT);
+    for (const d of dropped) { if (d.id) await window._fbDeleteBackupSnapshot(d.id); }
   }
+
   await saveSystemBackups();
   renderSystemBackups();
   return true;
@@ -8525,10 +8574,16 @@ async function applyBackupData(data) {
 
 async function restoreSystemBackup(id) {
   const backup = systemBackups.find(b => b.id === id);
-  if (!backup || !backup.snapshot) return;
+  if (!backup) return;
   if (!(await confirmDialog('Restore this system backup? This will OVERWRITE your current database and reload the app.', { title: 'Restore backup', okLabel: 'Restore', danger: true }))) return;
   try {
-    await applyBackupData(backup.snapshot);
+    // New backups keep the snapshot in its own doc; older ones inlined it.
+    const snapshot = backup.snapshot || await window._fbLoadBackupSnapshot(id);
+    if (!snapshot) {
+      showToast('Backup data could not be found', 'err');
+      return;
+    }
+    await applyBackupData(snapshot);
     showToast('✓ System backup restored! Reloading...');
     setTimeout(() => location.reload(), 1500);
   } catch (e) {

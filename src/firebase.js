@@ -487,6 +487,43 @@ window._fbSaveBookOwners = async (owners) => {
   catch (e) { console.error('fbSaveBookOwners (Firestore) failed', e); }
 };
 
+// ─────────────────────────────────────────────
+// SYSTEM BACKUP SNAPSHOTS
+// Each snapshot lives in its OWN doc/node instead of being inlined into the
+// settings manifest, so a growing catalog can't push the manifest past
+// Firestore's 1 MiB per-document limit. Mirrors the global Firestore/RTDB mode
+// used for settings. The SAVE intentionally THROWS on failure so callers can
+// surface a toast instead of losing the backup silently.
+// ─────────────────────────────────────────────
+window._fbSaveBackupSnapshot = async (id, snapshot) => {
+  const payload = { data: JSON.stringify(snapshot), ts: Date.now() };
+  if (window._useFirestoreGlobal()) {
+    await setDoc(doc(fs, 'backups', id), payload);
+  } else {
+    await set(ref(db, `lyrical/backups/${id}`), payload);
+  }
+};
+
+window._fbLoadBackupSnapshot = async (id) => {
+  try {
+    if (window._useFirestoreGlobal()) {
+      const s = await getDoc(doc(fs, 'backups', id));
+      if (s.exists()) return safeParse(s.data().data);
+      // Fallback in case the snapshot predates a Firestore mode switch.
+      const rt = await get(ref(db, `lyrical/backups/${id}`));
+      return rt.exists() ? safeParse(rt.val().data) : null;
+    }
+    const s = await get(ref(db, `lyrical/backups/${id}`));
+    return s.exists() ? safeParse(s.val().data) : null;
+  } catch (e) { console.error('fbLoadBackupSnapshot failed', e); return null; }
+};
+
+window._fbDeleteBackupSnapshot = async (id) => {
+  // Best-effort delete from both stores so a pruned/old snapshot never orphans.
+  try { await deleteDoc(doc(fs, 'backups', id)); } catch (e) { /* missing / RTDB-only */ }
+  try { await remove(ref(db, `lyrical/backups/${id}`)); } catch (e) { /* ignore */ }
+};
+
 window._fbLoadCatalog = async () => {
   try {
     if (window._useFirestoreGlobal()) {
