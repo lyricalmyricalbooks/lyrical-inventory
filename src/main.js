@@ -91,6 +91,12 @@ async function loadCatalog() {
   }
 }
 
+async function syncCatalog() {
+  await loadCatalog();
+  await loadPaymentLinks();
+  await loadProductionCosts();
+}
+
 function resetBookForm() {
   editingBookId = null;
   $('add-book-modal-title').textContent = 'Add new book';
@@ -149,6 +155,8 @@ async function saveBookFromModal() {
   const id = rawId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const title = $('nb-title').value.trim();
   if (!id || !title) { showToast('A valid ID (letters/numbers) and Title are required', 'warn'); return; }
+  
+  await syncCatalog();
   
   const currentBook = BOOKS[editingBookId] || BOOKS[id] || {};
   const book = {
@@ -222,6 +230,14 @@ function renderCatalogList() {
 }
 
 async function deleteBook(id) {
+  await syncCatalog();
+  if (!BOOKS[id]) {
+    showToast('Book already removed or does not exist', 'warn');
+    buildBookSwitcher();
+    renderCatalogList();
+    renderProfitSettings();
+    return;
+  }
   if (!(await confirmDialog(`Permanently remove "${BOOKS[id].title}" and all its inventory records?`, { danger: true, okLabel: 'Remove book' }))) return;
   delete BOOKS[id];
   BOOK_LIST = Object.values(BOOKS);
@@ -8667,6 +8683,7 @@ function renderProductionCostFields(){
 }
 
 async function saveProductionCosts(){
+  await syncCatalog();
   const stored={};
   BOOK_LIST.forEach(book=>{
     const inp=$('pc-'+book.id);
@@ -8923,7 +8940,14 @@ async function saveProfitTiers() {
   if (!psActiveBookId) { showToast('No book selected', 'warn'); return; }
   const ind = $('ps-save-indicator');
   if (ind) ind.classList.add('show');
+  
+  const editedTiers = BOOKS[psActiveBookId] ? BOOKS[psActiveBookId].profitTiers : null;
+  
   try {
+    await syncCatalog();
+    if (BOOKS[psActiveBookId] && editedTiers) {
+      BOOKS[psActiveBookId].profitTiers = editedTiers;
+    }
     await saveCatalogWithDeletions();
     showToast('✓ Profit tiers saved');
     if (activeBook === psActiveBookId) updateDash();
@@ -10880,7 +10904,7 @@ window.posCheckout = function() {
 
 window.posConfirmSale = async function() {
   if (!posPendingSale) return;
-
+  await syncCatalog();
   const previousBook = activeBook;
   let posExtraTouched = false;
 
@@ -11528,6 +11552,9 @@ window.savePosBook = async function() {
   const accent = $('pb-accent')?.value || '#c8913a';
   const link = ($('pb-paylink')?.value || '').trim();
   const id = editingPosBookId || _posSlugId(title);
+  
+  await syncCatalog();
+  
   const existing = posExtraBooks[id] || {};
   posExtraBooks[id] = {
     ...existing,
@@ -11560,6 +11587,9 @@ window.removePosBook = async function(id) {
   const book = posExtraBooks[id];
   if (!book) return;
   if (!(await confirmDialog(`Remove POS-only book "${book.title}"?\n\nIt will disappear from the POS, the sales tracker, and the QR sheet. Its isolated sales tally is discarded.`, { danger: true, okLabel: 'Remove' }))) return;
+  
+  await syncCatalog();
+  
   delete posExtraBooks[id];
   delete posCart[id];
   try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only remove failed', e); }
