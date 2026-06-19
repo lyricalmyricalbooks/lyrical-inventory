@@ -1834,6 +1834,15 @@ function recognizedRevenueOf(s) {
 }
 
 // ── DASHBOARD (per book)
+// Signature of an on-hand drift the publisher chose to dismiss for this session.
+// Cleared implicitly whenever the numbers change (the signature stops matching),
+// so a genuinely new discrepancy resurfaces rather than staying hidden forever.
+let _dismissedDriftSig = null;
+function dismissStockDrift() {
+  const b = $('d-stock-drift-banner');
+  if (b) { _dismissedDriftSig = b.dataset.sig || null; b.style.display = 'none'; }
+}
+
 function updateDash() {
   if (!activeBook || activeBook === 'all') return;
   const s = getState(), book = getBook();
@@ -1871,18 +1880,25 @@ function updateDash() {
   // Surface on-hand drift: if the stored count disagrees with what the records
   // imply (a sale/return/consignment that didn't update inventory, or an
   // offline-merge hiccup), nudge toward the one-click repair instead of letting
-  // a silently-wrong number sit on the dashboard.
+  // a silently-wrong number sit on the dashboard. Reconciling on-hand is a
+  // publisher action, so the banner and the repair button stay hidden for
+  // authors — and the banner can be dismissed without forcing a recalculation.
   const driftBanner = $('d-stock-drift-banner');
   if (driftBanner) {
     const derivedOnHand = deriveOnHand(s, book);
-    if (derivedOnHand !== s.stock) {
+    const sig = `${activeBook}:${s.stock}:${derivedOnHand}`;
+    const show = !isAuthor() && derivedOnHand !== s.stock && _dismissedDriftSig !== sig;
+    if (show) {
       const diff = derivedOnHand - s.stock;
       $('d-stock-drift-value').textContent = `${s.stock} on file · ${derivedOnHand} per records (${diff > 0 ? '+' : ''}${diff})`;
+      driftBanner.dataset.sig = sig;
       driftBanner.style.display = '';
     } else {
       driftBanner.style.display = 'none';
     }
   }
+  const recalcWrap = $('d-recalc-onhand-wrap');
+  if (recalcWrap) recalcWrap.style.display = isAuthor() ? 'none' : '';
   animateCountValue('d-sold', s.sold);
   const heldGross=heldGrossOf(s);
   const recognizedRev=recognizedRevenueOf(s);
@@ -2581,6 +2597,34 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   });
 }
 
+// Read-only Order-History row for a consignment movement (shipment out / return
+// back). These live in the ledger, but showing them inline makes it visible that
+// consigned copies left on-hand — they're sitting at the store, not lost. The
+// real on-hand number is owned by the dashboard + Recalculate, so Stock After is
+// left as "—" here rather than fabricating an interleaved running balance.
+function renderConsignHistRow(e) {
+  const store = escapeHtml(e.storeName || 'store');
+  const restocked = e.type === 'Return' && e.status === 'restocked';
+  let badge, qtyCell, label;
+  if (e.type === 'Shipment') {
+    badge = `<span class="pill blue" style="font-size:10px;">📦 Consignment</span> → ${store}`;
+    qtyCell = `-${e.qty}`;            // left your on-hand for the store
+    label = 'SENT';
+  } else if (restocked) {
+    badge = `<span class="pill green" style="font-size:10px;">↩ Consignment return</span> ← ${store}`;
+    qtyCell = `+${e.qty}`;            // came back into on-hand
+    label = 'RETURN';
+  } else {
+    badge = `<span class="pill red" style="font-size:10px;">↩ Return · written off</span> ← ${store}`;
+    qtyCell = '0';                    // off the store's books, not back on your shelf
+    label = 'RETURN';
+  }
+  const voided = e.voided ? ' voided' : '';
+  const voidPill = e.voided ? '<span class="void-badge">Void</span>' : '';
+  const manageBtn = `<button class="edit-btn" onclick="switchTab('consignment')" title="Manage in the Consignment tab" aria-label="Manage in Consignment">→</button>`;
+  return `<tr class="${voided}" style="background:var(--cream2);"><td class="mono" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r">${e.voided ? '' : qtyCell}</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r">—</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill gray" style="font-size:10px;">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
+}
+
 function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
 
@@ -2590,18 +2634,35 @@ function renderHist() {
     return { ...raw, _subKey: k, pendingAuth: true, after: '?' };
   });
   
-  let combined = [...pendingSales, ...s.hist];
-
   // Channel drill-down filter (from the analytics legend). Only applies while
   // the active book matches the one that was tapped.
   if (histChanFilter && histChanFilter.bookId !== activeBook) histChanFilter = null;
   const chanFilter = histChanFilter ? histChanFilter.chan : null;
-  if (chanFilter !== null) combined = combined.filter(h => (h.chan||'') === chanFilter);
+
+  // Build a unified, date-sorted timeline. Each history entry keeps its index
+  // into s.hist so the edit/ship buttons stay correct no matter how many
+  // pending submissions sit on top. Consignment shipments and returns are
+  // pulled in from the ledger as read-only rows so the publisher can SEE the
+  // copies that left for a store — those are out of on-hand, not lost.
+  let rows = s.hist.map((h, i) => ({ type: 'hist', h, i }));
+  let pend = pendingSales.map(h => ({ type: 'pending', h }));
+  if (chanFilter !== null) {
+    rows = rows.filter(r => (r.h.chan || '') === chanFilter);
+    pend = pend.filter(r => (r.h.chan || '') === chanFilter);
+  } else {
+    for (const e of (s.ledger || [])) {
+      if (e.type === 'Shipment' || e.type === 'Return') rows.push({ type: 'consign', e });
+    }
+  }
+  const _rowDate = r => r.type === 'consign' ? (r.e.date || '') : (r.h.date || '');
+  rows.sort((a, b) => { const da = _rowDate(a), db = _rowDate(b); return da === db ? 0 : (db < da ? -1 : 1); });
+  const matchCount = rows.length + pend.length;
+  const combined = [...pend, ...rows];
   const filterBar = $('hist-filter-bar');
   if (filterBar) {
     if (chanFilter !== null) {
       filterBar.style.display = '';
-      filterBar.innerHTML = `<div class="hist-filter-chip"><span class="ch-dot" style="background:${channelColor(chanFilter)}"></span>Showing <strong>${escapeHtml(chanLabel(chanFilter))}</strong> orders · ${combined.length} found<button onclick="clearHistChanFilter()" title="Clear filter" aria-label="Clear filter">✕ Clear</button></div>`;
+      filterBar.innerHTML = `<div class="hist-filter-chip"><span class="ch-dot" style="background:${channelColor(chanFilter)}"></span>Showing <strong>${escapeHtml(chanLabel(chanFilter))}</strong> orders · ${matchCount} found<button onclick="clearHistChanFilter()" title="Clear filter" aria-label="Clear filter">✕ Clear</button></div>`;
     } else {
       filterBar.style.display = 'none';
       filterBar.innerHTML = '';
@@ -2609,7 +2670,9 @@ function renderHist() {
   }
 
   $('hist-body').innerHTML = combined.length
-    ? combined.map((h,i)=>{
+    ? combined.map((row)=>{
+        if (row.type === 'consign') return renderConsignHistRow(row.e);
+        const h = row.h, i = row.i;
         if (h.pendingAuth) {
            const actionCell = window.IS_PUBLISHER
              ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
@@ -13513,7 +13576,7 @@ Object.assign(window, {
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   generateBookStripeLink,
-  logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, switchBook, forceSync, recalcOnHand,
+  logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
