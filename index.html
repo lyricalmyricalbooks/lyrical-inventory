@@ -384,6 +384,21 @@
     <div id="arb-items" class="metric-banner-items"></div>
   </div>
 
+  <!-- ON-HAND DRIFT BANNER — shown when stored on-hand disagrees with the records -->
+  <div id="d-stock-drift-banner" class="metric-banner metric-banner-gold" style="display:none;">
+    <div class="metric-banner-overlay"></div>
+    <div class="metric-banner-head">
+      <div>
+        <div class="metric-banner-label">On-hand doesn't match your records</div>
+        <div class="metric-banner-value gold" id="d-stock-drift-value">—</div>
+        <div class="metric-banner-sub" id="d-stock-drift-sub">A sale, return, or consignment may not have updated inventory.</div>
+      </div>
+      <div class="metric-banner-actions">
+        <button class="btn sm gold" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records">↻ Recalculate on-hand</button>
+      </div>
+    </div>
+  </div>
+
   <div class="kpi-grid kpi-grid-primary">
     <div class="kpi"><div class="kpi-label">Stock on hand</div><div class="kpi-value gold" id="d-stock">—</div><div class="kpi-sub" id="d-stock-sub">of — printed</div></div>
     <div class="kpi"><div class="kpi-label">Revenue</div><div class="kpi-value gold" id="d-revenue">—</div><div class="kpi-sub" id="d-revenue-sub">total collected</div></div>

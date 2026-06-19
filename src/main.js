@@ -19,6 +19,7 @@ import {
 import { calcArtistEarnings } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 import { OC_STAGES, ocNextAction, newContributor, parseContributorRows } from './lib/opencall.js';
+import { deriveOnHand } from './lib/inventory.js';
 
 const updateSW = registerSW({ onNeedRefresh() {} });
 
@@ -1830,6 +1831,21 @@ function updateDash() {
   $('d-thresh-sub').textContent = 'threshold: '+book.threshold+' units';
   $('d-thresh-label').textContent = 'Alert at '+book.threshold+' units';
   animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
+  // Surface on-hand drift: if the stored count disagrees with what the records
+  // imply (a sale/return/consignment that didn't update inventory, or an
+  // offline-merge hiccup), nudge toward the one-click repair instead of letting
+  // a silently-wrong number sit on the dashboard.
+  const driftBanner = $('d-stock-drift-banner');
+  if (driftBanner) {
+    const derivedOnHand = deriveOnHand(s, book);
+    if (derivedOnHand !== s.stock) {
+      const diff = derivedOnHand - s.stock;
+      $('d-stock-drift-value').textContent = `${s.stock} on file · ${derivedOnHand} per records (${diff > 0 ? '+' : ''}${diff})`;
+      driftBanner.style.display = '';
+    } else {
+      driftBanner.style.display = 'none';
+    }
+  }
   animateCountValue('d-sold', s.sold);
   const heldGross=heldGrossOf(s);
   const recognizedRev=recognizedRevenueOf(s);
@@ -6888,31 +6904,15 @@ function recomputeAfters(s) {
   reconcileConsignmentChannel(s);
   reconcileStores(s);
   // Walk history newest→oldest and recompute each entry's `after` value
-  // so the Stock After column stays accurate after voids/unvoids.
+  // so the Stock After column stays accurate after voids/unvoids. Consignment
+  // SALES are skipped when adding qty back: those copies left inventory as a
+  // Shipment, not at the moment of sale, so counting them here would push the
+  // reconstructed Stock After on older rows above what was really on hand.
   let running = s.stock;
   for (const h of s.hist) {
     h.after = running;
-    if (!h.voided) running += h.qty;
+    if (!h.voided && !h.consignmentLink) running += h.qty;
   }
-}
-
-// Derive on-hand stock purely from the books' records: everything ever printed,
-// minus direct sales, minus books currently out on consignment, plus any good
-// returns that came back. Consignment SALES are excluded — those copies already
-// left inventory as a Shipment, so counting them again would double-subtract.
-// (There is no "restock" action in the app, so maxPrint is the only baseline.)
-function deriveOnHand(s, book) {
-  let stock = (book && Number.isFinite(book.maxPrint)) ? book.maxPrint : (s.stock || 0);
-  for (const h of (s.hist || [])) {
-    if (h.voided || h.consignmentLink) continue;
-    stock -= (h.qty || 0);
-  }
-  for (const e of (s.ledger || [])) {
-    if (e.voided) continue;
-    if (e.type === 'Shipment') stock -= (e.qty || 0);
-    else if (e.type === 'Return' && e.status === 'restocked') stock += (e.qty || 0);
-  }
-  return Math.max(0, stock);
 }
 
 // User-triggered repair for on-hand drift (e.g. a consignment that didn't
