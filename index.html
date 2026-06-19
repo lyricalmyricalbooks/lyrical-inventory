@@ -176,14 +176,53 @@
     <div class="header-tag" id="hdr-sub">Inventory App · connecting…</div>
   </div>
   <div class="header-actions" id="global-actions" style="display:none; align-items:center;">
-    <button class="header-action-btn" onclick="switchTab('pos')" id="global-pos-btn">🛒 Event POS</button>
-    <button class="header-action-btn" onclick="switchTab('opencall')" id="opencall-tab-btn">📣 Open Call</button>
-    <button class="header-action-btn" onclick="switchTab('reconcile')" id="reconcile-tab-btn">💳 Payments</button>
-    <button class="header-action-btn" onclick="switchTab('customers')" id="customers-tab-btn">👥 Customers</button>
-    <button class="header-action-btn" onclick="switchTab('qrcodes')" id="qrcodes-tab-btn" style="display:none;">📱 QR Codes</button>
-    <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn">⚖️ Tax Centre</button>
-    <button class="header-action-btn" onclick="switchTab('sheets')" id="global-sheets-btn">📊 Sheets</button>
-    <button class="header-action-btn" onclick="switchTab('backups')" id="global-backups-btn" style="display:none;">💾 Backups</button>
+    <button class="header-action-btn primary" onclick="switchTab('pos')" id="global-pos-btn" title="Sell books at an event">🛒 Event POS</button>
+    <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn" title="Expenses &amp; tax season">⚖️ Tax Centre</button>
+
+    <!-- MONEY -->
+    <div class="header-menu" id="hmenu-money">
+      <button type="button" class="header-action-btn header-menu-trigger" onclick="toggleHeaderMenu('money')" aria-haspopup="true" aria-expanded="false">
+        💳 Money <svg class="hm-caret" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M0 0l5 6 5-6z" fill="currentColor"/></svg>
+      </button>
+      <div class="header-menu-panel">
+        <button class="header-menu-item" onclick="switchTab('reconcile')" id="reconcile-tab-btn">
+          <span class="hmi-ico">💳</span><span class="hmi-txt"><span class="hmi-label">Payments</span><span class="hmi-sub">Reconcile Stripe payouts</span></span>
+        </button>
+        <button class="header-menu-item" onclick="switchTab('qrcodes')" id="qrcodes-tab-btn">
+          <span class="hmi-ico">📱</span><span class="hmi-txt"><span class="hmi-label">QR Codes</span><span class="hmi-sub">Payment links to print</span></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- AUDIENCE -->
+    <div class="header-menu" id="hmenu-audience">
+      <button type="button" class="header-action-btn header-menu-trigger" onclick="toggleHeaderMenu('audience')" aria-haspopup="true" aria-expanded="false">
+        👥 Audience <svg class="hm-caret" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M0 0l5 6 5-6z" fill="currentColor"/></svg>
+      </button>
+      <div class="header-menu-panel">
+        <button class="header-menu-item" onclick="switchTab('customers')" id="customers-tab-btn">
+          <span class="hmi-ico">👥</span><span class="hmi-txt"><span class="hmi-label">Customers</span><span class="hmi-sub">Buyers &amp; mailing list</span></span>
+        </button>
+        <button class="header-menu-item" onclick="switchTab('opencall')" id="opencall-tab-btn">
+          <span class="hmi-ico">📣</span><span class="hmi-txt"><span class="hmi-label">Open Call</span><span class="hmi-sub">Contributor submissions</span></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- DATA -->
+    <div class="header-menu" id="hmenu-data">
+      <button type="button" class="header-action-btn header-menu-trigger" onclick="toggleHeaderMenu('data')" aria-haspopup="true" aria-expanded="false">
+        🗄 Data <svg class="hm-caret" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M0 0l5 6 5-6z" fill="currentColor"/></svg>
+      </button>
+      <div class="header-menu-panel">
+        <button class="header-menu-item" onclick="switchTab('sheets')" id="global-sheets-btn">
+          <span class="hmi-ico">📊</span><span class="hmi-txt"><span class="hmi-label">Sheets</span><span class="hmi-sub">Google Sheets sync</span></span>
+        </button>
+        <button class="header-menu-item" onclick="switchTab('backups')" id="global-backups-btn">
+          <span class="hmi-ico">💾</span><span class="hmi-txt"><span class="hmi-label">Backups</span><span class="hmi-sub">Export &amp; restore data</span></span>
+        </button>
+      </div>
+    </div>
   </div>
   <div class="header-right">
     <div class="header-stat"><div class="hs-val" id="h-stock">—</div><div class="hs-label">On hand</div></div>

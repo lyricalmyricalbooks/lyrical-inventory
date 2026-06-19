@@ -1139,6 +1139,34 @@ function closeBookDropdown() {
   }
 }
 
+// ── HEADER CATEGORY MENUS (Money / Audience / Data) ──────────────────────────
+let _headerMenuOutsideHandler = null;
+function toggleHeaderMenu(key) {
+  const wrap = document.getElementById('hmenu-' + key);
+  if (!wrap) return;
+  const wasOpen = wrap.classList.contains('open');
+  closeHeaderMenus();
+  if (!wasOpen) {
+    wrap.classList.add('open');
+    wrap.querySelector('.header-menu-trigger')?.setAttribute('aria-expanded', 'true');
+    // Defer outside-click listener so it doesn't fire on the click that opened the menu
+    setTimeout(() => {
+      _headerMenuOutsideHandler = (e) => { if (!wrap.contains(e.target)) closeHeaderMenus(); };
+      document.addEventListener('click', _headerMenuOutsideHandler, true);
+    }, 0);
+  }
+}
+function closeHeaderMenus() {
+  document.querySelectorAll('.header-menu.open').forEach((w) => {
+    w.classList.remove('open');
+    w.querySelector('.header-menu-trigger')?.setAttribute('aria-expanded', 'false');
+  });
+  if (_headerMenuOutsideHandler) {
+    document.removeEventListener('click', _headerMenuOutsideHandler, true);
+    _headerMenuOutsideHandler = null;
+  }
+}
+
 function updateRoleToggleButton() {
   const btn = $('role-toggle-btn');
   if (!btn) return;
@@ -1285,14 +1313,23 @@ function switchTab(name) {
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
   const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','customers','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
-  
-  document.querySelectorAll('.tab-btn, .header-action-btn').forEach((b) => {
+
+  // Selecting a destination closes any open header category menu.
+  closeHeaderMenus();
+
+  document.querySelectorAll('.tab-btn, .header-action-btn, .header-menu-item').forEach((b) => {
     // We match by checking onclick text to be safe if order ever changes
     if (b.getAttribute('onclick')?.includes(`'${name}'`)) {
       b.classList.add('active');
     } else {
       b.classList.remove('active');
     }
+  });
+
+  // Reflect the active destination on the parent category trigger so a grouped
+  // tool (e.g. Payments under Money) still lights its menu button.
+  document.querySelectorAll('.header-menu').forEach((m) => {
+    m.classList.toggle('has-active', !!m.querySelector('.header-menu-item.active'));
   });
 
   names.forEach(n => {
@@ -13417,7 +13454,7 @@ Object.assign(window, {
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   generateBookStripeLink,
-  logout, switchTab, toggleBookDropdown, switchBook, forceSync,
+  logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, switchBook, forceSync,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
