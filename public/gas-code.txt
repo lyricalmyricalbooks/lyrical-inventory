@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v8)
+/* Lyricalmyrical Inventory — Unified Backend (v9)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
  *  2. Sheets sync with:
@@ -18,6 +18,12 @@
  *  6. v8: 'emailauthor' action sends artist payment-request emails, plus the
  *     'notifypublisher' approval-alert path. Bump flags any deploy still on v7
  *     (which lacks these) as outdated so the publisher knows to redeploy.
+ *  7. v9: artist payment-request email can be routed through a third-party
+ *     transactional email provider (Resend / Brevo / SendGrid / Mailgun /
+ *     Postmark) via sendMail_, so it sends from a neutral "the app" address
+ *     instead of the script owner's Gmail. Configure it in Script Properties
+ *     (see configureMail_). With no provider configured it falls back to
+ *     MailApp unchanged. Bump flags v8-and-older deploys as outdated.
  */
 
 const HEADERS = [
@@ -53,9 +59,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v8',
-    scriptVersion: 'v8',
-    capabilities: { reset: true, voidDeletes: true },
+    service: 'lyrical-sheets-webhook-v9',
+    scriptVersion: 'v9',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -334,14 +340,13 @@ function doPost(e) {
           ('Hi,\n\nThis is a friendly reminder regarding outstanding payments' +
            (bookTitle ? ' for "' + bookTitle + '"' : '') +
            '. When you have a moment, please submit or forward any payments due so the ledger stays up to date.\n\nThank you,\nLyricalmyrical Books');
-        MailApp.sendEmail({
-          to: to,
-          subject: subject,
-          body: body,
-          name: 'Lyricalmyrical Books',
-          replyTo: 'lyricalmyricalbooks@gmail.com'
-        });
-        return jsonOut_({ ok: true, emailed: true });
+        // Route through sendMail_ so, when a transactional provider is
+        // configured in Script Properties, the message goes out from a neutral
+        // "the app" address instead of the script owner's Gmail. Reply-to is
+        // intentionally left to the provider config (MAIL_REPLY_TO) rather than
+        // hard-coding the publisher's Gmail, which would re-expose it.
+        const sent = sendMail_({ to: to, subject: subject, body: body });
+        return jsonOut_({ ok: true, emailed: true, via: sent.provider });
       } catch (err) {
         return jsonOut_({ error: 'mail failed: ' + String(err) });
       }
@@ -1206,4 +1211,148 @@ function jsonOut_(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Outbound email — provider-agnostic sender
+//
+// By default email goes out through MailApp, which Google forces to send from
+// the account that owns this script (e.g. lyricalmyricalbooks@gmail.com). To
+// make payment-request emails come from a neutral "the app" address instead,
+// configure a transactional email provider in this script's Script Properties
+// (Project Settings ▸ Script Properties, or run configureMail_ once):
+//
+//   MAIL_PROVIDER   resend | brevo | sendgrid | mailgun | postmark
+//   MAIL_API_KEY    the provider API key / server token
+//   MAIL_FROM       a verified sender address, e.g. noreply@lyricalmyrical.app
+//   MAIL_FROM_NAME  display name shown to recipients (optional, default below)
+//   MAIL_REPLY_TO   where replies should go (optional; leave unset to keep the
+//                   publisher's personal address hidden)
+//   MAIL_DOMAIN     Mailgun sending domain        (Mailgun only)
+//   MAIL_REGION     "eu" for Mailgun's EU region  (Mailgun only, optional)
+//
+// The API key lives in Script Properties on Google's servers — never in the
+// repo or client code — so the static-hosting / no-client-secrets rule holds.
+// If MAIL_PROVIDER (or the key / from address) is unset, this falls back to
+// MailApp unchanged, so deployments keep working until a provider is set up.
+function sendMail_(opts) {
+  const props = PropertiesService.getScriptProperties();
+  const provider = String(props.getProperty('MAIL_PROVIDER') || '').trim().toLowerCase();
+  const apiKey = String(props.getProperty('MAIL_API_KEY') || '').trim();
+  const fromEmail = String(props.getProperty('MAIL_FROM') || '').trim();
+  const fromName = String(props.getProperty('MAIL_FROM_NAME') || 'Lyrical Inventory').trim();
+  const replyTo = String(opts.replyTo || props.getProperty('MAIL_REPLY_TO') || '').trim();
+  const to = String(opts.to || '').trim();
+  const subject = String(opts.subject || '');
+  const body = String(opts.body || '');
+
+  // No provider configured → preserve the original MailApp behavior. This still
+  // sends from the script owner's Gmail; only the display name is app-branded.
+  if (!provider || !apiKey || !fromEmail) {
+    const mailOpts = { to: to, subject: subject, body: body, name: fromName };
+    if (replyTo) mailOpts.replyTo = replyTo;
+    MailApp.sendEmail(mailOpts);
+    return { provider: 'mailapp' };
+  }
+
+  const fromHeader = fromName ? (fromName + ' <' + fromEmail + '>') : fromEmail;
+  let url, params;
+
+  if (provider === 'resend') {
+    url = 'https://api.resend.com/emails';
+    const payload = { from: fromHeader, to: [to], subject: subject, text: body };
+    if (replyTo) payload.reply_to = replyTo;
+    params = {
+      method: 'post', contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + apiKey },
+      payload: JSON.stringify(payload), muteHttpExceptions: true
+    };
+
+  } else if (provider === 'brevo' || provider === 'sendinblue') {
+    url = 'https://api.brevo.com/v3/smtp/email';
+    const payload = {
+      sender: { name: fromName, email: fromEmail },
+      to: [{ email: to }], subject: subject, textContent: body
+    };
+    if (replyTo) payload.replyTo = { email: replyTo };
+    params = {
+      method: 'post', contentType: 'application/json',
+      headers: { 'api-key': apiKey, accept: 'application/json' },
+      payload: JSON.stringify(payload), muteHttpExceptions: true
+    };
+
+  } else if (provider === 'sendgrid') {
+    url = 'https://api.sendgrid.com/v3/mail/send';
+    const payload = {
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: fromEmail, name: fromName },
+      subject: subject,
+      content: [{ type: 'text/plain', value: body }]
+    };
+    if (replyTo) payload.reply_to = { email: replyTo };
+    params = {
+      method: 'post', contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + apiKey },
+      payload: JSON.stringify(payload), muteHttpExceptions: true
+    };
+
+  } else if (provider === 'mailgun') {
+    const domain = String(props.getProperty('MAIL_DOMAIN') || '').trim();
+    if (!domain) throw new Error('Mailgun needs MAIL_DOMAIN in Script Properties');
+    const base = String(props.getProperty('MAIL_REGION') || '').trim().toLowerCase() === 'eu'
+      ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net';
+    url = base + '/v3/' + domain + '/messages';
+    const form = { from: fromHeader, to: to, subject: subject, text: body };
+    if (replyTo) form['h:Reply-To'] = replyTo;
+    params = {
+      method: 'post',
+      headers: { Authorization: 'Basic ' + Utilities.base64Encode('api:' + apiKey) },
+      payload: form, muteHttpExceptions: true
+    };
+
+  } else if (provider === 'postmark') {
+    url = 'https://api.postmarkapp.com/email';
+    const payload = {
+      From: fromHeader, To: to, Subject: subject,
+      TextBody: body, MessageStream: 'outbound'
+    };
+    if (replyTo) payload.ReplyTo = replyTo;
+    params = {
+      method: 'post', contentType: 'application/json',
+      headers: { 'X-Postmark-Server-Token': apiKey, Accept: 'application/json' },
+      payload: JSON.stringify(payload), muteHttpExceptions: true
+    };
+
+  } else {
+    throw new Error('Unknown MAIL_PROVIDER "' + provider + '" — use resend, brevo, sendgrid, mailgun or postmark');
+  }
+
+  const resp = UrlFetchApp.fetch(url, params);
+  const code = resp.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error(provider + ' send failed (' + code + '): ' + String(resp.getContentText()).slice(0, 500));
+  }
+  return { provider: provider };
+}
+
+// One-time setup convenience: fill in the blanks, run this once from the Apps
+// Script editor (it writes the values into Script Properties), then BLANK the
+// key out again and re-run, or just delete the key text, so the secret isn't
+// left sitting in the script source. Prefer Project Settings ▸ Script
+// Properties if you'd rather not paste the key here at all.
+function configureMail_() {
+  const cfg = {
+    MAIL_PROVIDER: '',   // resend | brevo | sendgrid | mailgun | postmark
+    MAIL_API_KEY: '',    // provider API key / server token
+    MAIL_FROM: '',       // verified sender, e.g. noreply@lyricalmyrical.app
+    MAIL_FROM_NAME: 'Lyrical Inventory',
+    MAIL_REPLY_TO: '',   // optional
+    MAIL_DOMAIN: '',     // Mailgun only
+    MAIL_REGION: ''      // Mailgun only: "eu" or blank for US
+  };
+  const props = PropertiesService.getScriptProperties();
+  Object.keys(cfg).forEach(function (k) {
+    if (cfg[k] !== '') props.setProperty(k, String(cfg[k]));
+  });
+  Logger.log('Mail config saved for provider: ' + (cfg.MAIL_PROVIDER || '(unchanged)'));
 }

@@ -1513,6 +1513,20 @@
             <button class="btn sm" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.15);" onclick="copyGasCode()">Copy</button>
           </div>
           <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This v3 script writes normalized event + payment currency fields to one "Events" tab and de-duplicates retries using event IDs.</div>
+          <details style="margin-top:12px;font-size:12px;color:var(--text3);line-height:1.6;">
+            <summary style="cursor:pointer;font-weight:700;color:var(--text2);">Optional: send "Email artist for payment" from the app, not your Gmail</summary>
+            <div style="margin-top:8px;">
+              By default this email sends from the Google account that owns the script (your Gmail). To make it come from a neutral address instead, sign up for a transactional email provider — <b>Resend, Brevo, SendGrid, Mailgun,</b> or <b>Postmark</b> — and verify a sender address. Then in the Apps Script editor open <b>Project Settings → Script properties</b> and add:
+              <ul style="margin:8px 0 0 18px;padding:0;">
+                <li><code>MAIL_PROVIDER</code> — one of <code>resend</code>, <code>brevo</code>, <code>sendgrid</code>, <code>mailgun</code>, <code>postmark</code></li>
+                <li><code>MAIL_API_KEY</code> — your provider's API key (stays on Google's servers, never in this app)</li>
+                <li><code>MAIL_FROM</code> — the verified sender, e.g. <code>noreply@yourdomain</code></li>
+                <li><code>MAIL_FROM_NAME</code> — display name (optional, e.g. <code>Lyrical Inventory</code>)</li>
+                <li><code>MAIL_REPLY_TO</code> — where replies should go (optional; leave blank to keep your address hidden)</li>
+              </ul>
+              <div style="margin-top:6px;">Mailgun also needs <code>MAIL_DOMAIN</code> (and <code>MAIL_REGION=eu</code> for the EU region). Redeploy after saving. If these aren't set, the email still sends from your Gmail as before.</div>
+            </div>
+          </details>
         </div>
       </div>
       <div style="display:flex;gap:14px;align-items:flex-start;">
@@ -1535,7 +1549,7 @@
           <div style="font-weight:700;font-size:14px;color:var(--green);margin-bottom:4px;">✓ Google Sheets connected — all books sync here</div>
           <div style="font-size:12px;color:var(--text3);word-break:break-all;" id="sheets-url-display"></div>
           <div id="sheets-version-warning" style="display:none;font-size:12px;color:var(--amber);margin-top:6px;font-weight:600;line-height:1.4;">
-            ⚠ Outdated script version detected (running <span id="sheets-deployed-version"></span>, expected <span id="sheets-expected-version">v8</span>). Please copy the latest code below and deploy a new version.
+            ⚠ Outdated script version detected (running <span id="sheets-deployed-version"></span>, expected <span id="sheets-expected-version">v9</span>). Please copy the latest code below and deploy a new version.
           </div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
