@@ -8256,7 +8256,9 @@ async function syncAllReceipts() {
 
   // 1. Sync Tax Center Business Expenses
   if (TAX_CENTER.businessExpenses) {
-    for (let exp of TAX_CENTER.businessExpenses) {
+    // ⚡ Bolt Optimization: Parallelize Asynchronous I/O
+    // Replaced sequential for...of loop with Promise.all to download tax center receipts concurrently.
+    await Promise.all(TAX_CENTER.businessExpenses.map(async (exp) => {
       if (exp.receipt && exp.receipt.startsWith('http')) {
         const localPath = await downloadAndLocalizeReceipt(exp.receipt, 'Business');
         if (localPath) {
@@ -8264,7 +8266,7 @@ async function syncAllReceipts() {
           totalSynced++;
         }
       }
-    }
+    }));
     if (totalSynced > 0) saveTaxCenter();
   }
 
@@ -8274,14 +8276,15 @@ async function syncAllReceipts() {
 
   const savePromises = [];
 
-  for (let i = 0; i < bookIds.length; i++) {
-    const bid = bookIds[i];
+  // ⚡ Bolt Optimization: Parallelize Asynchronous I/O
+  // Replaced sequential loops with Promise.all to download per-book receipts concurrently.
+  await Promise.all(bookIds.map(async (bid, i) => {
     const book = BOOKS[bid];
     const state = states[i];
-    if (!state || !state.expenses) continue;
+    if (!state || !state.expenses) return;
 
     let bookSynced = 0;
-    for (let exp of state.expenses) {
+    await Promise.all(state.expenses.map(async (exp) => {
       if (exp.receipt && exp.receipt.startsWith('http')) {
         const localPath = await downloadAndLocalizeReceipt(exp.receipt, book.title || bid);
         if (localPath) {
@@ -8290,11 +8293,11 @@ async function syncAllReceipts() {
           totalSynced++;
         }
       }
-    }
+    }));
     if (bookSynced > 0) {
       savePromises.push(window._fbSave(bid, JSON.stringify(state)));
     }
-  }
+  }));
 
   await Promise.all(savePromises);
 
