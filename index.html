@@ -469,6 +469,9 @@
     <div class="bar-track"><div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);"></div></div>
     <div class="bar-meta"><span id="d-bar-label">— / — on hand</span><span id="d-thresh-label">Alert at — units</span></div>
     <div class="stock-alert ok" id="d-alert">Loading…</div>
+    <div style="margin-top:0.75rem;text-align:right;">
+      <button class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
+    </div>
   </div>
   <div id="d-breakeven-block" style="display:none;">
     <div class="sect">Break-even tracker</div>

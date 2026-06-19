@@ -6763,14 +6763,31 @@ function saveEntryEdit() {
     }
 
   } else {
-    // Ledger entry edit (date, qty, rate, notes — non-destructive for stock, 
-    // since consignment stock effects are complex; just update the displayed values)
+    // Ledger entry edit (date, qty, rate, notes). Quantity changes are
+    // reconciled against on-hand stock and the store's counters so the
+    // ledger, the store card, and inventory never drift apart.
     const e = s.ledger[editCtx.idx];
     e.date = $('edit-l-date').value || e.date;
     e.notes = $('edit-l-notes').value.trim();
     // qty and rate — update display only, reverse/reapply amountDue if sale
     const newQty = parseInt($('edit-l-qty').value) || e.qty;
     const newRate = parseFloat($('edit-l-rate').value) || e.rate;
+    if (e.type === 'Shipment' && !e.voided) {
+      // A shipment removed e.qty from on-hand. Re-shipping more (or fewer)
+      // books must move on-hand the same way the original Send did — without
+      // this, editing a shipment's quantity left inventory stuck at the old
+      // number while the store card showed the new "sent"/"outstanding".
+      const delta = newQty - e.qty;
+      s.stock = Math.max(0, s.stock - delta);
+      const st = s.stores.find(x => x.id === e.storeId);
+      if (st) { st.sent = Math.max(0, st.sent + delta); st.outstanding = Math.max(0, st.outstanding + delta); }
+    } else if (e.type === 'Return' && !e.voided) {
+      // Good returns come back into on-hand; written-off returns don't.
+      const delta = newQty - e.qty;
+      const st = s.stores.find(x => x.id === e.storeId);
+      if (st) { st.returned = Math.max(0, st.returned + delta); st.outstanding = Math.max(0, st.outstanding - delta); }
+      if (e.status === 'restocked') s.stock = Math.max(0, s.stock + delta);
+    }
     if (e.type === 'Sale' && !e.voided) {
       // Find the store and adjust owed
       const st = getState().stores.find(st=>st.id===e.storeId);
@@ -6914,6 +6931,48 @@ function recomputeAfters(s) {
     h.after = running;
     if (!h.voided) running += h.qty;
   }
+}
+
+// Derive on-hand stock purely from the books' records: everything ever printed,
+// minus direct sales, minus books currently out on consignment, plus any good
+// returns that came back. Consignment SALES are excluded — those copies already
+// left inventory as a Shipment, so counting them again would double-subtract.
+// (There is no "restock" action in the app, so maxPrint is the only baseline.)
+function deriveOnHand(s, book) {
+  let stock = (book && Number.isFinite(book.maxPrint)) ? book.maxPrint : (s.stock || 0);
+  for (const h of (s.hist || [])) {
+    if (h.voided || h.consignmentLink) continue;
+    stock -= (h.qty || 0);
+  }
+  for (const e of (s.ledger || [])) {
+    if (e.voided) continue;
+    if (e.type === 'Shipment') stock -= (e.qty || 0);
+    else if (e.type === 'Return' && e.status === 'restocked') stock += (e.qty || 0);
+  }
+  return Math.max(0, stock);
+}
+
+// User-triggered repair for on-hand drift (e.g. a consignment that didn't
+// reduce inventory, or an offline-merge hiccup). Shows the before/after and
+// the assumption before touching anything, since maxPrint is the baseline.
+async function recalcOnHand() {
+  const s = getState(), book = getBook();
+  const current = s.stock || 0;
+  const derived = deriveOnHand(s, book);
+  if (derived === current) { showToast('✓ On-hand already matches your records'); return; }
+  const diff = derived - current;
+  const ok = await confirmDialog(
+    `Recalculate on-hand for "${book.title}" from your records? ` +
+    `It will change from ${current} to ${derived} (${diff > 0 ? '+' : ''}${diff}). ` +
+    `On-hand = ${book.maxPrint} printed − direct sales − books out on consignment + restocked returns, ` +
+    `so confirm ${book.maxPrint} is the total you've ever printed.`,
+    { title: 'Recalculate on-hand', okLabel: 'Apply' }
+  );
+  if (!ok) return;
+  s.stock = derived;
+  recomputeAfters(s);
+  renderAll(); updateDash(); saveState(activeBook);
+  showToast(`✓ On-hand recalculated: ${current} → ${derived}`);
 }
 
 function syncHistoryVoidDeletion(h, isVoided) {
@@ -13454,7 +13513,7 @@ Object.assign(window, {
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   generateBookStripeLink,
-  logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, switchBook, forceSync,
+  logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, switchBook, forceSync, recalcOnHand,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
