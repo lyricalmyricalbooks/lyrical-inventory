@@ -19,7 +19,7 @@ import {
 import { calcArtistEarnings } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 import { OC_STAGES, ocNextAction, newContributor, parseContributorRows } from './lib/opencall.js';
-import { deriveOnHand } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline } from './lib/inventory.js';
 
 const updateSW = registerSW({ onNeedRefresh() {} });
 
@@ -2598,11 +2598,10 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
 }
 
 // Read-only Order-History row for a consignment movement (shipment out / return
-// back). These live in the ledger, but showing them inline makes it visible that
-// consigned copies left on-hand — they're sitting at the store, not lost. The
-// real on-hand number is owned by the dashboard + Recalculate, so Stock After is
-// left as "—" here rather than fabricating an interleaved running balance.
-function renderConsignHistRow(e) {
+// back). These live in the ledger, but showing them inline — with the same
+// running Stock After as every sale — makes it visible that consigned copies
+// left on-hand: they're sitting at the store, not lost.
+function renderConsignHistRow(e, after) {
   const store = escapeHtml(e.storeName || 'store');
   const restocked = e.type === 'Return' && e.status === 'restocked';
   let badge, qtyCell, label;
@@ -2622,7 +2621,7 @@ function renderConsignHistRow(e) {
   const voided = e.voided ? ' voided' : '';
   const voidPill = e.voided ? '<span class="void-badge">Void</span>' : '';
   const manageBtn = `<button class="edit-btn" onclick="switchTab('consignment')" title="Manage in the Consignment tab" aria-label="Manage in Consignment">→</button>`;
-  return `<tr class="${voided}" style="background:var(--cream2);"><td class="mono" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r">${e.voided ? '' : qtyCell}</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r">—</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill gray" style="font-size:10px;">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
+  return `<tr class="${voided}" style="background:var(--cream2);"><td class="mono" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r">${e.voided ? '' : qtyCell}</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill gray" style="font-size:10px;">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
 }
 
 function renderHist() {
@@ -2639,23 +2638,20 @@ function renderHist() {
   if (histChanFilter && histChanFilter.bookId !== activeBook) histChanFilter = null;
   const chanFilter = histChanFilter ? histChanFilter.chan : null;
 
-  // Build a unified, date-sorted timeline. Each history entry keeps its index
-  // into s.hist so the edit/ship buttons stay correct no matter how many
-  // pending submissions sit on top. Consignment shipments and returns are
-  // pulled in from the ledger as read-only rows so the publisher can SEE the
-  // copies that left for a store — those are out of on-hand, not lost.
-  let rows = s.hist.map((h, i) => ({ type: 'hist', h, i }));
+  // Full stock timeline (direct sales from history + consignment shipments/
+  // returns from the ledger) with a running "Stock After" that walks the print
+  // run down to the records-true on-hand, so every book is accounted for between
+  // maxPrint and now. Each history row keeps its s.hist index so edit/ship
+  // buttons stay correct regardless of how many pending submissions sit on top.
+  const timeline = buildOrderTimeline(s, book);
+
+  // Channel drill-down hides everything but the tapped channel (consignment
+  // movement rows drop out); the running balance above stays the true on-hand.
+  const rows = chanFilter !== null
+    ? timeline.filter(r => r.type === 'hist' && (r.h.chan || '') === chanFilter)
+    : timeline;
   let pend = pendingSales.map(h => ({ type: 'pending', h }));
-  if (chanFilter !== null) {
-    rows = rows.filter(r => (r.h.chan || '') === chanFilter);
-    pend = pend.filter(r => (r.h.chan || '') === chanFilter);
-  } else {
-    for (const e of (s.ledger || [])) {
-      if (e.type === 'Shipment' || e.type === 'Return') rows.push({ type: 'consign', e });
-    }
-  }
-  const _rowDate = r => r.type === 'consign' ? (r.e.date || '') : (r.h.date || '');
-  rows.sort((a, b) => { const da = _rowDate(a), db = _rowDate(b); return da === db ? 0 : (db < da ? -1 : 1); });
+  if (chanFilter !== null) pend = pend.filter(r => (r.h.chan || '') === chanFilter);
   const matchCount = rows.length + pend.length;
   const combined = [...pend, ...rows];
   const filterBar = $('hist-filter-bar');
@@ -2671,7 +2667,7 @@ function renderHist() {
 
   $('hist-body').innerHTML = combined.length
     ? combined.map((row)=>{
-        if (row.type === 'consign') return renderConsignHistRow(row.e);
+        if (row.type === 'consign') return renderConsignHistRow(row.e, row._after);
         const h = row.h, i = row.i;
         if (h.pendingAuth) {
            const actionCell = window.IS_PUBLISHER
@@ -2705,7 +2701,7 @@ function renderHist() {
         const enteredByPill = enteredBy === 'Artist'
           ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
           : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
-        return `<tr class="${voided}"${rowStyle}><td class="mono">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+        return `<tr class="${voided}"${rowStyle}><td class="mono">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${row._after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
       }).join('')
     : `<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">${chanFilter !== null ? `No ${escapeHtml(chanLabel(chanFilter))} orders for this book.` : 'No orders yet.'}</div></td></tr>`;
 }
