@@ -20,6 +20,33 @@ export function deriveOnHand(s, book) {
   return Math.max(0, stock);
 }
 
+// Full accounting of a print run: where every copy is right now. By identity
+// printed === onHand + directSold + consignSold + onConsignment + writtenOff, so
+// `unaccounted` is normally 0 — a non-zero value flags drift the records can't
+// explain (e.g. maxPrint was edited after sales began).
+export function inventoryBreakdown(s, book) {
+  const printed = (book && Number.isFinite(book.maxPrint)) ? book.maxPrint : ((s && s.stock) || 0);
+  let directSold = 0, consignSold = 0;
+  for (const h of ((s && s.hist) || [])) {
+    if (h.voided) continue;
+    if (h.consignmentLink) consignSold += (h.qty || 0); // sold through a store
+    else directSold += (h.qty || 0);                    // website / manual / etc.
+  }
+  let shipped = 0, restocked = 0, writtenOff = 0;
+  for (const e of ((s && s.ledger) || [])) {
+    if (e.voided) continue;
+    if (e.type === 'Shipment') shipped += (e.qty || 0);
+    else if (e.type === 'Return') {
+      if (e.status === 'restocked') restocked += (e.qty || 0);
+      else writtenOff += (e.qty || 0);
+    }
+  }
+  const onConsignment = Math.max(0, shipped - consignSold - restocked - writtenOff);
+  const onHand = deriveOnHand(s, book);
+  const accounted = onHand + directSold + consignSold + onConsignment + writtenOff;
+  return { printed, onHand, directSold, consignSold, onConsignment, writtenOff, unaccounted: printed - accounted };
+}
+
 // Stock change a single timeline row applies to on-hand. Negative = books left
 // (a direct sale or a consignment shipment); positive = a good return came back.
 // Voided rows and consignment SALES are no-ops: the latter's copies already left

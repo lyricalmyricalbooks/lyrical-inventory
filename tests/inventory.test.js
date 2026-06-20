@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveOnHand, buildOrderTimeline } from '../src/lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown } from '../src/lib/inventory.js';
 
 const book = (maxPrint = 100) => ({ maxPrint });
 const sale = (qty, extra = {}) => ({ qty, ...extra });
@@ -129,5 +129,33 @@ describe('buildOrderTimeline', () => {
     const tl = buildOrderTimeline(s, book(10));
     expect(tl[0]._after).toBe(9); // only the live sale counts
     expect(tl[0]._after).toBe(deriveOnHand(s, book(10)));
+  });
+});
+
+describe('inventoryBreakdown', () => {
+  it('accounts for every printed copy (buckets sum to printed)', () => {
+    const s = state({
+      hist: [sale(10), sale(5), sale(6, { consignmentLink: true }), sale(3, { voided: true })],
+      ledger: [ship(20), ret(4, 'restocked'), ret(2, 'written off')],
+    });
+    const bd = inventoryBreakdown(s, book(100));
+    expect(bd).toEqual({
+      printed: 100,
+      onHand: 69,        // 100 − 15 direct − 20 shipped + 4 restocked
+      directSold: 15,
+      consignSold: 6,
+      onConsignment: 8,  // 20 shipped − 6 sold at store − 4 restocked − 2 written off
+      writtenOff: 2,
+      unaccounted: 0,    // 69 + 15 + 6 + 8 + 2 = 100
+    });
+    expect(bd.onHand).toBe(deriveOnHand(s, book(100)));
+  });
+
+  it('flags an unaccounted gap when the baseline cannot explain the records', () => {
+    const s = state({ hist: [sale(15)] });
+    const bd = inventoryBreakdown(s, book(10)); // can't sell 15 of 10 printed
+    expect(bd.onHand).toBe(0);          // clamped
+    expect(bd.directSold).toBe(15);
+    expect(bd.unaccounted).toBe(-5);    // surfaced rather than hidden
   });
 });
