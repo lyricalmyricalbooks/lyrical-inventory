@@ -132,6 +132,8 @@ function resetBookForm() {
   $('nb-accent').value = '#c8913a';
   $('nb-pw').value = '';
   $('nb-prod').value = '0';
+  if ($('nb-pub-grat')) $('nb-pub-grat').value = '0';
+  if ($('nb-author-grat')) $('nb-author-grat').value = '0';
   $('nb-paylink').value = '';
 }
 
@@ -158,6 +160,8 @@ function openEditBookModal(id) {
   $('nb-accent').value = book.accent || '#c8913a';
   $('nb-pw').value = book.authorEmail || '';
   $('nb-prod').value = book.productionCost ?? 0;
+  if ($('nb-pub-grat')) $('nb-pub-grat').value = book.pubGratuity ?? 0;
+  if ($('nb-author-grat')) $('nb-author-grat').value = book.authorGratuity ?? 0;
   $('nb-paylink').value = book.stripeLink || '';
   openM('add-book');
 }
@@ -188,6 +192,8 @@ async function saveBookFromModal() {
     currency: $('nb-cur').value || '€',
     threshold: parseInt($('nb-thresh').value) || 10,
     productionCost: parseFloat($('nb-prod').value) || 0,
+    pubGratuity: parseInt($('nb-pub-grat')?.value) || 0,
+    authorGratuity: parseInt($('nb-author-grat')?.value) || 0,
     paymentLink: currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
     stripeLink: $('nb-paylink').value.trim() || currentBook.stripeLink || '',
     accent: $('nb-accent').value,
@@ -5123,8 +5129,9 @@ function updateManualForm() {
   
   const gExpWrap = $('g-expense-wrap');
   if (gExpWrap) gExpWrap.style.display = isAuthor() ? 'none' : 'flex';
-  
+
   phint();
+  if (typeof updateGratuitySourceHint === 'function') updateGratuitySourceHint();
 }
 
 function phint(){
@@ -5630,9 +5637,31 @@ window.updateGratuityExpenseHint = function() {
   $('g-exp-total').textContent = fmt(qty * val, book.currency);
 }
 
+window.updateGratuitySourceHint = function() {
+  const book = getBook(); if (!book) return;
+  const s = getState(); if (!s) return;
+  const hist = s.hist || [];
+  const usedPub = hist.filter(h => h.gratuity && !h.voided && h.gratSource === 'publisher').reduce((a,h)=>a+(h.qty||0),0);
+  const usedAuth = hist.filter(h => h.gratuity && !h.voided && h.gratSource === 'author').reduce((a,h)=>a+(h.qty||0),0);
+  const pubAlloc = book.pubGratuity || 0, authAlloc = book.authorGratuity || 0;
+  const pubLeft = pubAlloc - usedPub, authLeft = authAlloc - usedAuth;
+  const sel = $('g-source');
+  if (sel) {
+    const opts = sel.options;
+    if (opts[0]) opts[0].textContent = `Publisher's pile (${pubLeft} of ${pubAlloc} left)`;
+    if (opts[1]) opts[1].textContent = `Author's pile (${authLeft} of ${authAlloc} left)`;
+  }
+  const hint = $('g-source-remaining');
+  if (hint) {
+    const warnPub = pubLeft < 0, warnAuth = authLeft < 0;
+    hint.innerHTML = `Publisher: <strong${warnPub?' style="color:var(--danger,#c8693a)"':''}>${pubLeft}</strong> of ${pubAlloc} left · Author: <strong${warnAuth?' style="color:var(--danger,#c8693a)"':''}>${authLeft}</strong> of ${authAlloc} left`;
+  }
+};
+
 async function submitGratuity(ev){
   return withButtonLoading(ev, 'Saving…', async () => {
     const book=getBook(),qty=parseInt($('g-qty').value)||1,ref=$('g-ref').value.trim(),notes=$('g-notes').value.trim(),date=$('g-date').value||today();
+    const gratSource = ($('g-source') && $('g-source').value) || 'publisher';
     const expenseIt = $('g-expense-cb') && $('g-expense-cb').checked;
     let expVal = 0;
     if (expenseIt) expVal = parseFloat($('g-exp-val').value) || 0;
@@ -5645,7 +5674,7 @@ async function submitGratuity(ev){
     if(!s.chStats['Gratuity'])s.chStats['Gratuity']={txns:0,units:0,revenue:0};
     s.chStats['Gratuity'].txns++;s.chStats['Gratuity'].units+=qty;
     const sheetsId = makeEventId();
-    s.hist.unshift({num,chan:'Gratuity',qty,price:0,after:s.stock,notes:(ref?(ref+(notes?' · '+notes:'')):notes)||'',date,gratuity:true,sheetsId});
+    s.hist.unshift({num,chan:'Gratuity',qty,price:0,after:s.stock,notes:(ref?(ref+(notes?' · '+notes:'')):notes)||'',date,gratuity:true,gratSource,sheetsId});
     
     if(expenseIt && expVal > 0) {
       if(!s.expenses) s.expenses = [];
@@ -5674,7 +5703,7 @@ async function submitGratuity(ev){
     renderHist();
     if(expenseIt) renderExpenses();
     updateDash();saveState(activeBook);
-    syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes,sheetsId,currency:getBookCurrencyCode(book)});
+    syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes+(notes||ref?' · ':'')+gratSource+' pile',sheetsId,currency:getBookCurrencyCode(book)});
     addLog('log-gratuity',`${num}: ${qty} gifted → ${s.stock} remaining`,'ok');
     if(s.stock<=book.threshold)addLog('log-gratuity','⚠ Below threshold!','warn');
     $('g-ref').value='';$('g-qty').value='1';$('g-notes').value='';$('g-date').value=today();
@@ -5682,6 +5711,7 @@ async function submitGratuity(ev){
       $('g-expense-cb').checked=false;
       window.toggleGratuityExpense();
     }
+    if (typeof updateGratuitySourceHint==='function') updateGratuitySourceHint();
     showToast('✓ Gratuity logged' + (expenseIt && expVal > 0 ? ' and expensed' : ''));
   });
 }
