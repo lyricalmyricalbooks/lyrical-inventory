@@ -19,7 +19,7 @@ import {
 import { calcArtistEarnings } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 import { OC_STAGES, ocNextAction, newContributor, parseContributorRows } from './lib/opencall.js';
-import { deriveOnHand } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown } from './lib/inventory.js';
 
 const updateSW = registerSW({ onNeedRefresh() {} });
 
@@ -790,7 +790,7 @@ async function loadBook(bookId) {
     if (!states[bookId].expenses) states[bookId].expenses = [];
     // Sync artist payment link to book object so publisher can read it in reimbursements
     if (states[bookId].artistPaymentLink) BOOKS[bookId].artistPaymentLink = states[bookId].artistPaymentLink;
-    recomputeAfters(states[bookId]);
+    recomputeAfters(states[bookId], BOOKS[bookId]);
     lastSavedHashes[bookId] = JSON.stringify(states[bookId]);
     // Watch for live updates
     window._fbWatchSubmissions(bookId, data => {
@@ -806,7 +806,7 @@ async function loadBook(bookId) {
       if (!states[bookId].doneIds) states[bookId].doneIds = [];
       if (!states[bookId].artistTransfers) states[bookId].artistTransfers = [];
     if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
-      recomputeAfters(states[bookId]);
+      recomputeAfters(states[bookId], BOOKS[bookId]);
       lastSavedHashes[bookId] = json2;
       _appliedIdsCache = null;
       if (activeBook === bookId || activeBook === 'all') scheduleRender();
@@ -2597,12 +2597,19 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   });
 }
 
+// Order History pagination — render in pages so books with hundreds of orders
+// stay snappy. The window resets when the book or active filter changes.
+const HIST_PAGE = 50;
+let _histLimit = HIST_PAGE;
+let _histPageSig = null;
+function showMoreHist() { _histLimit += HIST_PAGE; renderHist(); }
+function showAllHist() { _histLimit = Infinity; renderHist(); }
+
 // Read-only Order-History row for a consignment movement (shipment out / return
-// back). These live in the ledger, but showing them inline makes it visible that
-// consigned copies left on-hand — they're sitting at the store, not lost. The
-// real on-hand number is owned by the dashboard + Recalculate, so Stock After is
-// left as "—" here rather than fabricating an interleaved running balance.
-function renderConsignHistRow(e) {
+// back). These live in the ledger, but showing them inline — with the same
+// running Stock After as every sale — makes it visible that consigned copies
+// left on-hand: they're sitting at the store, not lost.
+function renderConsignHistRow(e, after) {
   const store = escapeHtml(e.storeName || 'store');
   const restocked = e.type === 'Return' && e.status === 'restocked';
   let badge, qtyCell, label;
@@ -2622,7 +2629,7 @@ function renderConsignHistRow(e) {
   const voided = e.voided ? ' voided' : '';
   const voidPill = e.voided ? '<span class="void-badge">Void</span>' : '';
   const manageBtn = `<button class="edit-btn" onclick="switchTab('consignment')" title="Manage in the Consignment tab" aria-label="Manage in Consignment">→</button>`;
-  return `<tr class="${voided}" style="background:var(--cream2);"><td class="mono" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r">${e.voided ? '' : qtyCell}</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r">—</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill gray" style="font-size:10px;">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
+  return `<tr class="${voided}" style="background:var(--cream2);"><td class="mono" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r">${e.voided ? '' : qtyCell}</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill gray" style="font-size:10px;">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
 }
 
 function renderHist() {
@@ -2639,23 +2646,20 @@ function renderHist() {
   if (histChanFilter && histChanFilter.bookId !== activeBook) histChanFilter = null;
   const chanFilter = histChanFilter ? histChanFilter.chan : null;
 
-  // Build a unified, date-sorted timeline. Each history entry keeps its index
-  // into s.hist so the edit/ship buttons stay correct no matter how many
-  // pending submissions sit on top. Consignment shipments and returns are
-  // pulled in from the ledger as read-only rows so the publisher can SEE the
-  // copies that left for a store — those are out of on-hand, not lost.
-  let rows = s.hist.map((h, i) => ({ type: 'hist', h, i }));
+  // Full stock timeline (direct sales from history + consignment shipments/
+  // returns from the ledger) with a running "Stock After" that walks the print
+  // run down to the records-true on-hand, so every book is accounted for between
+  // maxPrint and now. Each history row keeps its s.hist index so edit/ship
+  // buttons stay correct regardless of how many pending submissions sit on top.
+  const timeline = buildOrderTimeline(s, book);
+
+  // Channel drill-down hides everything but the tapped channel (consignment
+  // movement rows drop out); the running balance above stays the true on-hand.
+  const rows = chanFilter !== null
+    ? timeline.filter(r => r.type === 'hist' && (r.h.chan || '') === chanFilter)
+    : timeline;
   let pend = pendingSales.map(h => ({ type: 'pending', h }));
-  if (chanFilter !== null) {
-    rows = rows.filter(r => (r.h.chan || '') === chanFilter);
-    pend = pend.filter(r => (r.h.chan || '') === chanFilter);
-  } else {
-    for (const e of (s.ledger || [])) {
-      if (e.type === 'Shipment' || e.type === 'Return') rows.push({ type: 'consign', e });
-    }
-  }
-  const _rowDate = r => r.type === 'consign' ? (r.e.date || '') : (r.h.date || '');
-  rows.sort((a, b) => { const da = _rowDate(a), db = _rowDate(b); return da === db ? 0 : (db < da ? -1 : 1); });
+  if (chanFilter !== null) pend = pend.filter(r => (r.h.chan || '') === chanFilter);
   const matchCount = rows.length + pend.length;
   const combined = [...pend, ...rows];
   const filterBar = $('hist-filter-bar');
@@ -2669,9 +2673,40 @@ function renderHist() {
     }
   }
 
+  // Reconciliation summary — where every printed copy is right now. Only in the
+  // full (unfiltered) view; a channel drill-down is a focused subset.
+  const recon = $('hist-recon');
+  if (recon) {
+    if (chanFilter === null && combined.length) {
+      const bd = inventoryBreakdown(s, book);
+      const parts = [`${bd.onHand} on hand`];
+      if (bd.directSold) parts.push(`${bd.directSold} direct sales`);
+      if (bd.consignSold) parts.push(`${bd.consignSold} sold at stores`);
+      if (bd.onConsignment) parts.push(`${bd.onConsignment} on consignment`);
+      if (bd.writtenOff) parts.push(`${bd.writtenOff} written off`);
+      const warn = bd.unaccounted
+        ? ` &nbsp;·&nbsp; <span style="color:var(--red);">⚠ ${Math.abs(bd.unaccounted)} unaccounted</span>`
+        : '';
+      recon.style.display = '';
+      recon.innerHTML = `<div style="padding:.6rem .85rem;margin-bottom:.6rem;background:var(--cream2);border-radius:8px;font-size:13px;color:var(--text2);"><strong>${bd.printed}</strong> printed = ${parts.join(' + ')}${warn}</div>`;
+    } else {
+      recon.style.display = 'none';
+      recon.innerHTML = '';
+    }
+  }
+
+  // Page the (already date-sorted) rows; reset the window per book/filter view.
+  const pageSig = `${activeBook}|${chanFilter ?? ''}`;
+  if (_histPageSig !== pageSig) { _histLimit = HIST_PAGE; _histPageSig = pageSig; }
+  const shownRows = combined.slice(0, _histLimit);
+  const moreCount = combined.length - shownRows.length;
+  const moreRow = moreCount > 0
+    ? `<tr class="hist-more-row"><td colspan="10" style="text-align:center;padding:.9rem;"><button class="btn sm" onclick="showMoreHist()">Show ${Math.min(HIST_PAGE, moreCount)} more</button> <button class="btn sm" onclick="showAllHist()">Show all ${combined.length}</button> <span style="color:var(--text3);font-size:12px;margin-left:8px;">showing ${shownRows.length} of ${combined.length}</span></td></tr>`
+    : '';
+
   $('hist-body').innerHTML = combined.length
-    ? combined.map((row)=>{
-        if (row.type === 'consign') return renderConsignHistRow(row.e);
+    ? shownRows.map((row)=>{
+        if (row.type === 'consign') return renderConsignHistRow(row.e, row._after);
         const h = row.h, i = row.i;
         if (h.pendingAuth) {
            const actionCell = window.IS_PUBLISHER
@@ -2705,8 +2740,8 @@ function renderHist() {
         const enteredByPill = enteredBy === 'Artist'
           ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
           : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
-        return `<tr class="${voided}"${rowStyle}><td class="mono">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${h.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
-      }).join('')
+        return `<tr class="${voided}"${rowStyle}><td class="mono">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${row._after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+      }).join('') + moreRow
     : `<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">${chanFilter !== null ? `No ${escapeHtml(chanLabel(chanFilter))} orders for this book.` : 'No orders yet.'}</div></td></tr>`;
 }
 
@@ -7000,18 +7035,18 @@ function reconcileStores(s) {
   }
 }
 
-function recomputeAfters(s) {
+function recomputeAfters(s, book) {
   reconcileConsignmentChannel(s);
   reconcileStores(s);
-  // Walk history newest→oldest and recompute each entry's `after` value
-  // so the Stock After column stays accurate after voids/unvoids. Consignment
-  // SALES are skipped when adding qty back: those copies left inventory as a
-  // Shipment, not at the moment of sale, so counting them here would push the
-  // reconstructed Stock After on older rows above what was really on hand.
-  let running = s.stock;
-  for (const h of s.hist) {
-    h.after = running;
-    if (!h.voided && !h.consignmentLink) running += h.qty;
+  // Stock After mirrors the History view: a single running balance over the
+  // full timeline (direct sales + consignment movements) from the print run
+  // down to the records-true on-hand. Computing it here too keeps each entry's
+  // stored `after` — the value synced to the Google Sheet — agreeing with the
+  // app instead of anchoring to a header count that may have drifted.
+  const bk = book || (typeof getBook === 'function' ? getBook() : null);
+  const timeline = buildOrderTimeline(s, bk);
+  for (const r of timeline) {
+    if (r.type === 'hist') r.h.after = r._after;
   }
 }
 
@@ -7033,7 +7068,7 @@ async function recalcOnHand() {
   );
   if (!ok) return;
   s.stock = derived;
-  recomputeAfters(s);
+  recomputeAfters(s, book);
   renderAll(); updateDash(); saveState(activeBook);
   showToast(`✓ On-hand recalculated: ${current} → ${derived}`);
 }
@@ -7101,7 +7136,7 @@ function voidEntry() {
         if (s.chStats[h.chan].txns <= 0) delete s.chStats[h.chan];
       }
       h.voided = true;
-      recomputeAfters(s);
+      recomputeAfters(s, book);
       syncHistoryVoidDeletion(h, true);
       showToast('Entry voided — stock & revenue reversed (Sheets row delete queued)', 'warn');
     } else {
@@ -7114,7 +7149,7 @@ function voidEntry() {
       s.chStats[h.chan].units += h.qty;
       s.chStats[h.chan].revenue += h.qty * h.price;
       h.voided = false;
-      recomputeAfters(s);
+      recomputeAfters(s, book);
       syncHistoryVoidDeletion(h, false);
       showToast('Entry unvoided — effects restored (Sheets row restore queued)');
     }
@@ -13577,6 +13612,7 @@ Object.assign(window, {
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   generateBookStripeLink,
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, switchBook, forceSync, recalcOnHand, dismissStockDrift,
+  showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
