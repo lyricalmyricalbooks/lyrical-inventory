@@ -705,6 +705,18 @@
       <div class="form-group"><label for="g-date">Date</label><input type="date" id="g-date"></div>
       <div class="form-group"><label>&nbsp;</label><button class="btn ink" style="width:100%;height:38px;" onclick="submitGratuity(event)">Log gratuity</button></div>
     </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="g-source">Gratuity pile</label>
+        <select id="g-source" onchange="updateGratuitySourceHint()">
+          <option value="publisher">Publisher's pile</option>
+          <option value="author">Author's pile</option>
+        </select>
+      </div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:center;">
+        <span id="g-source-remaining" style="font-size:11px;color:var(--text3);line-height:1.4;margin-top:14px;">—</span>
+      </div>
+    </div>
     <div class="g2">
       <div class="form-group"><label for="g-notes">Notes</label><input type="text" id="g-notes" placeholder="e.g. press copy, author gift, launch event"></div>
       <div class="form-group" id="g-expense-wrap" style="display:flex; flex-direction: column; justify-content:center;">
@@ -2012,6 +2024,10 @@
     <div class="form-group"><label for="nb-pw">Author Google Email</label><input type="email" id="nb-pw" placeholder="Used for author sign-in access"></div>
   </div>
   <div class="form-group"><label for="nb-prod">Initial Production Cost</label><input id="nb-prod" type="number" inputmode="numeric" value="0"></div>
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label for="nb-pub-grat">Publisher gratuity copies</label><input id="nb-pub-grat" type="number" inputmode="numeric" min="0" value="0"></div>
+    <div class="form-group"><label for="nb-author-grat">Author gratuity copies</label><input id="nb-author-grat" type="number" inputmode="numeric" min="0" value="0"></div>
+  </div>
   <div class="form-group" style="margin-top:4px;">
     <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for QR codes)</span></label>
     <div style="display:flex;gap:8px;align-items:center;">
