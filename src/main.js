@@ -1509,12 +1509,34 @@ function updateAllOverview() {
 
   // Combined consignment table
   const conRows = [];
+  const conTotals = { accounts: 0, active: 0, settled: 0, sent: 0, sold: 0, outstanding: 0 };
   BOOK_LIST.forEach(book => {
     const s = states[book.id] || defaultState(book);
     s.stores.forEach(st => {
-      conRows.push(`<tr><td style="font-weight:600;">${escapeHtml(book.title)}</td><td>${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.outstanding}</td><td>${st.outstanding>0?'<span class="pill amber">Active</span>':'<span class="pill gray">Settled</span>'}</td></tr>`);
+      const isActive = st.outstanding > 0;
+      conTotals.accounts += 1;
+      conTotals.active += isActive ? 1 : 0;
+      conTotals.settled += isActive ? 0 : 1;
+      conTotals.sent += st.sent || 0;
+      conTotals.sold += st.sold || 0;
+      conTotals.outstanding += st.outstanding || 0;
+      conRows.push(`<tr class="${isActive ? 'is-active' : 'is-settled'}"><td style="font-weight:700;">${escapeHtml(book.title)}</td><td><span class="store-name-cell">${escapeHtml(st.name)}</span></td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r outstanding-cell">${st.outstanding}</td><td>${isActive?'<span class="pill amber">● Active</span>':'<span class="pill gray">✓ Settled</span>'}</td></tr>`);
     });
   });
+  const sellThrough = conTotals.sent ? Math.round((conTotals.sold / conTotals.sent) * 100) : 0;
+  const statsHost = $('all-con-stats');
+  if (statsHost) {
+    statsHost.innerHTML = `
+      <div class="consignment-stat-card focus"><span>Outstanding</span><strong>${conTotals.outstanding}</strong><em>copies still on shelves</em></div>
+      <div class="consignment-stat-card"><span>Active accounts</span><strong>${conTotals.active}</strong><em>${conTotals.settled} settled</em></div>
+      <div class="consignment-stat-card"><span>Sell-through</span><strong>${sellThrough}%</strong><em>${conTotals.sold} of ${conTotals.sent} sold</em></div>
+    `;
+  }
+  const statusChip = $('all-con-status-chip');
+  if (statusChip) {
+    statusChip.className = `pill ${conTotals.active ? 'amber' : 'green'}`;
+    statusChip.textContent = conTotals.accounts ? `${conTotals.accounts} account${conTotals.accounts === 1 ? '' : 's'}` : 'No accounts';
+  }
   $('all-con-body').innerHTML = conRows.length ? conRows.join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
 
   renderCustomersStat();

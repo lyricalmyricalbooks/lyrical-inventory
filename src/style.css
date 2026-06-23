@@ -1242,3 +1242,38 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .order-done{font-size:11px;color:var(--text3);}
 .orders-hidden-note{text-align:center;font-size:11px;color:var(--text3);padding:12px 0;}
 @media(max-width:760px){.web-orders-hero{align-items:stretch;flex-direction:column;padding:1.2rem;}.web-orders-actions{justify-content:stretch;}.web-orders-actions .btn{flex:1;justify-content:center;}.web-orders-status{grid-template-columns:1fr;}.order-row{align-items:flex-start;flex-direction:column;}.order-actions{width:100%;}.order-actions .btn{flex:1;justify-content:center;}}
+
+/* Combined consignment summary */
+.consignment-summary-panel{
+  background:linear-gradient(135deg, rgba(255,255,255,.82), rgba(247,242,233,.94));
+  border:1px solid var(--border);
+  border-radius:var(--r3);
+  box-shadow:var(--shadow);
+  padding:var(--space-5);
+  margin-bottom:1.75rem;
+}
+.consignment-summary-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4);}
+.consignment-summary-head .sect{margin-bottom:.45rem;}
+.section-subcopy{max-width:720px;font-size:13px;line-height:1.55;color:var(--text3);}
+.consignment-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);margin-bottom:var(--space-4);}
+.consignment-stat-card{position:relative;overflow:hidden;background:#fff;border:1px solid var(--border2);border-radius:var(--r2);padding:14px 16px;box-shadow:0 1px 0 rgba(14,12,10,.03);}
+.consignment-stat-card::after{content:'';position:absolute;inset:auto 0 0;height:3px;background:var(--cream3);}
+.consignment-stat-card.focus::after{background:linear-gradient(90deg,var(--gold),var(--gold3));}
+.consignment-stat-card span{display:block;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;}
+.consignment-stat-card strong{display:block;font-family:'DM Mono',monospace;font-size:25px;font-weight:600;line-height:1;color:var(--text);}
+.consignment-stat-card em{display:block;margin-top:7px;font-style:normal;font-size:12px;color:var(--text3);}
+.all-consignment-table{margin-bottom:0;box-shadow:none;border-color:rgba(14,12,10,.07);}
+.all-consignment-table .tbl thead{background:linear-gradient(90deg,var(--ink),var(--ink3));}
+.all-consignment-table .tbl th{padding-top:13px;padding-bottom:13px;color:rgba(255,255,255,.5);}
+.all-consignment-table .tbl td{padding-top:14px;padding-bottom:14px;}
+.all-consignment-table .tbl tbody tr.is-active td:first-child{box-shadow:inset 3px 0 0 var(--gold2);}
+.all-consignment-table .tbl tbody tr.is-settled td{color:var(--text2);}
+.store-name-cell{color:var(--text2);font-weight:600;}
+.outstanding-cell{font-weight:700;color:var(--amber)!important;}
+.is-settled .outstanding-cell{color:var(--text3)!important;}
+
+@media (max-width: 720px){
+  .consignment-summary-panel{padding:var(--space-4);}
+  .consignment-summary-head{flex-direction:column;}
+  .consignment-stat-grid{grid-template-columns:1fr;}
+}
