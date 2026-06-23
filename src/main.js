@@ -6729,6 +6729,9 @@ function renderInvoicePaperHTML(inv){
     ? `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> via Stripe Checkout.`
     : `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> securely, or scan the QR with your phone.`;
 
+  const payFallback = payUrl ? `
+    <p class="inv-pay-fallback">Pay online: <a href="${payUrl}" target="_blank" rel="noopener">${escapeHTML(payUrl)}</a></p>` : '';
+
   const payBlock = payUrl ? `
     <section class="inv-pay" style="--book-accent:${accent};">
       <div class="inv-pay-info">
@@ -6739,7 +6742,8 @@ function renderInvoicePaperHTML(inv){
         <div class="pay-methods">${payMethodsLabel}</div>
       </div>
       <div class="inv-qr"></div>
-    </section>` : '';
+    </section>
+    ${payFallback}` : '';
 
   const bankBlock = settings.bank ? `
     <div class="inv-notes-block">
@@ -7074,7 +7078,6 @@ function collectInvoicePaperCss(){
 // (clickable button + scannable QR + plain-text URL) that survives PDF export and
 // email-client styling — so the link is never dropped when the invoice is sent.
 function buildStandaloneInvoiceHTML(inv){
-  const payUrl = effectivePaymentLink(inv);
   let bodyInner = renderInvoicePaperHTML(inv);
 
   // Capture the QR that was rendered into the live preview as an <img> so it
@@ -7089,10 +7092,6 @@ function buildStandaloneInvoiceHTML(inv){
     } catch(e){}
   }
 
-  // Plain-text clickable URL fallback — stays visible even if an email client
-  // strips the styled button.
-  const payFallback = payUrl ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#444;margin:14px 2px 0;word-break:break-all;">Pay online: <a href="${payUrl}" style="color:#0a7d4b;">${escapeHTML(payUrl)}</a></p>` : '';
-
   // Only the font stylesheets/preconnects are carried over from the page; the
   // rest of the document is our own clean, print-safe CSS.
   const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"], link[rel="preconnect"]'))
@@ -7105,12 +7104,25 @@ function buildStandaloneInvoiceHTML(inv){
     body{background:#f0ece4;padding:40px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;}
     .invoice-paper{background:#fff;}
     ${collectInvoicePaperCss()}
-    .invoice-paper .inv-pay{display:flex !important;}
-    @page{margin:0.5in;}
+    .invoice-paper.invoice-paper--standalone{max-width:780px;padding:26px 42px;}
+    .invoice-paper.invoice-paper--standalone .inv-head{margin-bottom:18px;}
+    .invoice-paper.invoice-paper--standalone .inv-meta-grid{padding:10px 0;margin-bottom:14px;}
+    .invoice-paper.invoice-paper--standalone .inv-items{margin-bottom:8px;}
+    .invoice-paper.invoice-paper--standalone .inv-items th{padding-bottom:8px;}
+    .invoice-paper.invoice-paper--standalone .inv-items td{padding:8px 12px;}
+    .invoice-paper.invoice-paper--standalone .inv-totals{margin-bottom:18px;}
+    .invoice-paper.invoice-paper--standalone .inv-pay{display:flex !important;padding:14px 18px;margin-bottom:10px;gap:16px;}
+    .invoice-paper.invoice-paper--standalone .inv-pay .inv-pay-info h3{margin-bottom:4px;}
+    .invoice-paper.invoice-paper--standalone .inv-pay .inv-pay-info p{margin-bottom:8px;}
+    .invoice-paper.invoice-paper--standalone .inv-pay-fallback{font-size:10.5px;margin:0 2px 12px;}
+    .invoice-paper.invoice-paper--standalone .inv-notes{padding-top:12px;line-height:1.45;}
+    .invoice-paper.invoice-paper--standalone .inv-notes .inv-notes-block{margin-bottom:8px;}
+    .invoice-paper.invoice-paper--standalone .inv-foot{margin-top:14px;}
+    @page{margin:0.35in;}
     @media print{
       html,body{background:#fff !important;}
       body{padding:0 !important;}
-      .invoice-paper{box-shadow:none !important;border-radius:0 !important;max-width:none !important;}
+      .invoice-paper{box-shadow:none !important;border-radius:0 !important;max-width:none !important;padding:0.28in 0.34in !important;}
       .invoice-paper::before{display:none !important;}
       .invoice-paper .inv-pay{display:flex !important;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
       .invoice-paper .inv-pay .pay-btn{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
@@ -7118,7 +7130,7 @@ function buildStandaloneInvoiceHTML(inv){
   `;
 
   const head = `<meta charset="utf-8"><title>Invoice ${escapeHTML(inv.num || '')}</title>${fontLinks}<style>${css}</style>`;
-  const body = `<body><div class="invoice-paper">${bodyInner}${payFallback}</div></body>`;
+  const body = `<body><div class="invoice-paper invoice-paper--standalone">${bodyInner}</div></body>`;
   return `<!doctype html><html><head>${head}</head>${body}</html>`;
 }
 
