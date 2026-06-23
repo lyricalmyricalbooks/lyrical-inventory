@@ -1411,9 +1411,6 @@ function updateAllOverview() {
     const broken = cost > 0 && recognizedRev >= cost;
     const bePct = cost > 0 ? Math.min(100, recognizedRev / cost * 100) : null;
     
-    // 3D cover initials (e.g. "Un Fantastico Altrove" -> "UFA")
-    const initials = book.title ? book.title.split(/\s+/).filter(Boolean).map(w => w[0]).join('').substring(0, 3).toUpperCase() : '';
-    
     const beBar = (!isAuthor() && bePct !== null) ? `
       <div class="book-progress-wrapper">
         <div class="book-progress-header">
@@ -1430,13 +1427,6 @@ function updateAllOverview() {
     const expTotal = (s.expenses||[]).reduce((a,e)=>a+(e.amount||0),0);
 
     return `<div class="book-strip" style="--accent-color: ${book.accent}">
-      <div class="book-cover-container">
-        <div class="book-cover-3d" style="background:${book.accent}">
-          <span class="book-cover-initials">${escapeHtml(initials)}</span>
-          <div class="book-cover-spine"></div>
-          <div class="book-cover-pages"></div>
-        </div>
-      </div>
       <div class="book-strip-info">
         <div class="book-strip-title">${escapeHtml(book.title)}</div>
         <div class="book-strip-meta">

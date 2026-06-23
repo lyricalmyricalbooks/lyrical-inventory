@@ -229,68 +229,6 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   gap: 4px;
 }
 
-/* 3D BOOK COVER PREVIEW */
-.book-cover-container {
-  perspective: 800px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-right: 4px;
-}
-.book-cover-3d {
-  width: 42px;
-  height: 58px;
-  position: relative;
-  transform-style: preserve-3d;
-  transform: rotateY(-18deg) rotateX(5deg);
-  transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.4s;
-  border-radius: 2px 4px 4px 2px;
-  box-shadow: 2px 4px 10px rgba(14, 12, 10, 0.25), -1px 2px 4px rgba(14, 12, 10, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.95);
-  border-left: 2px solid rgba(255, 255, 255, 0.4);
-}
-.book-strip:hover .book-cover-3d {
-  transform: rotateY(-8deg) rotateX(2deg) scale(1.04);
-  box-shadow: 4px 8px 16px rgba(14, 12, 10, 0.3), -2px 3px 6px rgba(14, 12, 10, 0.15);
-}
-.book-cover-initials {
-  font-family: 'Playfair Display', serif;
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  z-index: 2;
-  padding: 0 3px;
-  text-align: center;
-  word-break: break-all;
-  line-height: 1.1;
-}
-.book-cover-spine {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: rgba(0, 0, 0, 0.25);
-  z-index: 3;
-  border-radius: 2px 0 0 2px;
-}
-.book-cover-pages {
-  position: absolute;
-  right: -2px;
-  top: 2px;
-  bottom: 2px;
-  width: 2px;
-  background: #f1ebd9;
-  z-index: 1;
-  border-radius: 0 2px 2px 0;
-  box-shadow: inset -1px 0 1px rgba(0,0,0,0.1);
-}
 
 /* PROGRESS WRAPPERS */
 .book-progress-wrapper {
@@ -857,14 +795,10 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .kpi{padding:1rem 1.1rem;}
   .kpi-value{font-size:24px;}
 
-  /* Book strip */
   .book-strip {
     padding: 1.25rem 1rem;
     gap: 1.25rem;
     align-items: stretch;
-  }
-  .book-cover-container {
-    align-self: flex-start;
   }
   .book-strip-info {
     min-width: 0;
