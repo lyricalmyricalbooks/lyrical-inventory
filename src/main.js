@@ -6984,15 +6984,14 @@ function collectInvoicePaperCss(){
   return out.join('\n');
 }
 
-// Builds a fully self-contained invoice document with the Stripe pay link embedded
-// (clickable button + scannable QR + plain-text URL) that survives PDF export and
-// email-client styling — so the link is never dropped when the invoice is sent.
-function buildStandaloneInvoiceHTML(inv){
+// Renders the invoice's inner HTML for export (standalone file, print, or PDF):
+// the styled paper plus a captured QR (drawn to a <canvas> at view time, inlined
+// as an <img> so it survives) and a plain-text pay-link fallback that stays
+// visible even when an email client strips the styled button.
+function invoiceExportBodyHTML(inv){
   const payUrl = effectivePaymentLink(inv);
   let bodyInner = renderInvoicePaperHTML(inv);
 
-  // Capture the QR that was rendered into the live preview as an <img> so it
-  // persists in the standalone file (the QR is drawn to a <canvas> at view time).
   const liveQr = document.querySelector('#invoice-print-area .inv-qr canvas');
   if (liveQr){
     try {
@@ -7003,9 +7002,15 @@ function buildStandaloneInvoiceHTML(inv){
     } catch(e){}
   }
 
-  // Plain-text clickable URL fallback — stays visible even if an email client
-  // strips the styled button.
   const payFallback = payUrl ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#444;margin:14px 2px 0;word-break:break-all;">Pay online: <a href="${payUrl}" style="color:#0a7d4b;">${escapeHTML(payUrl)}</a></p>` : '';
+  return bodyInner + payFallback;
+}
+
+// Builds a fully self-contained invoice document with the Stripe pay link embedded
+// (clickable button + scannable QR + plain-text URL) that survives PDF export and
+// email-client styling — so the link is never dropped when the invoice is sent.
+function buildStandaloneInvoiceHTML(inv){
+  const bodyInner = invoiceExportBodyHTML(inv);
 
   // Only the font stylesheets/preconnects are carried over from the page; the
   // rest of the document is our own clean, print-safe CSS.
@@ -7032,7 +7037,7 @@ function buildStandaloneInvoiceHTML(inv){
   `;
 
   const head = `<meta charset="utf-8"><title>Invoice ${escapeHTML(inv.num || '')}</title>${fontLinks}<style>${css}</style>`;
-  const body = `<body><div class="invoice-paper">${bodyInner}${payFallback}</div></body>`;
+  const body = `<body><div class="invoice-paper">${bodyInner}</div></body>`;
   return `<!doctype html><html><head>${head}</head>${body}</html>`;
 }
 
@@ -7051,6 +7056,100 @@ function downloadInvoiceHTML(opts){
     showToast(effectivePaymentLink(inv)
       ? '✓ Invoice downloaded with the Stripe pay link embedded — attach it or print to PDF.'
       : '✓ Invoice downloaded (open & print to PDF).');
+  }
+}
+
+// Lazily inject an external script once and resolve when it's ready. The libs
+// live on cdnjs (cached by the service worker — see vite.config.js), so after
+// the first online load this works offline too. Failures reject so callers can
+// fall back gracefully.
+const _externalScripts = {};
+function loadExternalScript(src){
+  if (_externalScripts[src]) return _externalScripts[src];
+  _externalScripts[src] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => { delete _externalScripts[src]; reject(new Error('Failed to load ' + src)); };
+    document.head.appendChild(s);
+  });
+  return _externalScripts[src];
+}
+
+// jsPDF + html2canvas are ~0.5 MB combined, so they're only fetched the first
+// time the user actually exports a PDF (not on every page load).
+async function ensurePdfLibs(){
+  if (!(window.jspdf && window.jspdf.jsPDF)){
+    await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  }
+  if (!window.html2canvas){
+    await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  }
+}
+
+// One-click, true PDF download — no browser print dialog. The invoice is
+// rendered into an off-screen node inside THIS document so the app's already
+// loaded fonts apply (correct typography even offline), rasterized with
+// html2canvas, then placed into an A4 jsPDF and saved as <invoice>.pdf. Falls
+// back to the print/Save-as-PDF flow if the libraries can't be loaded.
+async function downloadInvoicePDF(){
+  if (!currentViewInvoiceId) return;
+  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  if (!inv) return;
+  const btn = $('inv-pdf-btn');
+  const prevLabel = btn ? btn.textContent : '';
+  if (btn){ btn.disabled = true; btn.textContent = '… Building PDF'; }
+
+  let holder;
+  try {
+    await ensurePdfLibs();
+
+    holder = document.createElement('div');
+    holder.setAttribute('aria-hidden', 'true');
+    holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:#fff;';
+    holder.innerHTML = `<div class="invoice-paper" style="box-shadow:none;border-radius:0;max-width:none;">${invoiceExportBodyHTML(inv)}</div>`;
+    document.body.appendChild(holder);
+    try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(e){}
+
+    const canvas = await window.html2canvas(holder.firstElementChild, {
+      scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false
+    });
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
+    const margin = 24;
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const imgW = pageW - margin * 2;
+    const imgH = canvas.height * (imgW / canvas.width);
+    const imgData = canvas.toDataURL('image/png');
+    const contentH = pageH - margin * 2;
+
+    if (imgH <= contentH){
+      pdf.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
+    } else {
+      // Taller than one page: place the full image and shift it up per page so
+      // each page shows the next slice (content outside the page is clipped).
+      let heightLeft = imgH, position = margin;
+      pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH);
+      heightLeft -= contentH;
+      while (heightLeft > 0){
+        position = margin - (imgH - heightLeft);
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH);
+        heightLeft -= contentH;
+      }
+    }
+
+    pdf.save(`${inv.num || 'invoice'}.pdf`);
+    showToast('✓ PDF downloaded');
+  } catch(e){
+    console.error('PDF export failed:', e);
+    showToast('Could not build the PDF — opening the print dialog instead.', 'warn');
+    printInvoice();
+  } finally {
+    if (holder) { try { holder.remove(); } catch(e){} }
+    if (btn){ btn.disabled = false; btn.textContent = prevLabel; }
   }
 }
 
@@ -14482,7 +14581,7 @@ Object.assign(window, {
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
   onInvoiceStoreChange, prefillFromPendingSales, recalcInvoiceTotals,
   saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
-  printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML,
+  printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML, downloadInvoicePDF,
   openInvoiceTemplateSettings, saveInvoiceSettings,
   regenerateStripeLinkFromView, onInvoiceCurrencyChange,
 });
