@@ -21,6 +21,7 @@ import { escapeHtml } from './lib/html.js';
 import { OC_STAGES, ocNextAction, newContributor, parseContributorRows } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
+import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
 
 const updateSW = registerSW({ onNeedRefresh() {} });
 
@@ -5983,88 +5984,9 @@ function confirmReturn(){
 // invoiceId/paidState/ledgerDivergedAt stay LOCAL-ONLY. invoiceNum is the one
 // exception: it is mirrored to the Google Sheet's "Invoice" column on every
 // consignment row sync (see consignmentSyncPayload) so the sheet tracks renames.
-
-// The s.hist mirror row for a ledger Sale. The mirror and its ledger entry are
-// minted sharing one sheetsId (see confirmSale), so that's the primary join.
-// BUT legacy rows created before sheetsId existed were later backfilled with
-// INDEPENDENT ids (backfillSheetsIds() mints a fresh one per record), which
-// orphans the mirror from its ledger sale. Fall back to the mirror's stable
-// shape — store + date + qty + due amount — so the join survives that split.
-// Returns null when there's no resolvable mirror.
-function histMirrorForLedger(s, e){
-  if(!e) return null;
-  const hist = s.hist || [];
-  if(e.sheetsId){
-    const byId = hist.find(h => h.consignmentLink && h.sheetsId === e.sheetsId);
-    if(byId) return byId;
-  }
-  if(e.type !== 'Sale') return null;
-  return hist.find(h =>
-    h.consignmentLink &&
-    h.notes === e.storeName &&
-    h.date === e.date &&
-    (h.qty||0) === (e.qty||0) &&
-    Math.abs((h.price||0)*(h.qty||0) - (e.amountDue||0)) < 0.01
-  ) || null;
-}
-
-// The only writer of the invoice back-pointers: sets (or clears, when inv===null)
-// invoiceId/invoiceNum on a ledger entry AND its hist mirror in lockstep.
-function stampLedgerInvoiceLink(s, ledgerId, inv){
-  const e = (s.ledger||[]).find(x => x.id === ledgerId);
-  if(!e) return;
-  e.invoiceId  = inv ? inv.id  : null;
-  e.invoiceNum = inv ? inv.num : null;
-  const h = histMirrorForLedger(s, e);
-  if(h){
-    // Heal a legacy split sheetsId so future lookups stay O(1) and robust. The
-    // consignment mirror is never synced to Sheets on its own (the ledger row is
-    // canonical), so realigning its id has no sheet-side effect.
-    if(e.sheetsId && h.sheetsId !== e.sheetsId) h.sheetsId = e.sheetsId;
-    h.invoiceId = inv ? inv.id : null;
-    h.invoiceNum = inv ? inv.num : null;
-  }
-}
-
-// Re-derive every consignment Sale mirror's invoice fields from the canonical
-// ledger entry + the live invoice, healing legacy split sheetsIds along the way.
-// This makes an invoice rename reflect in the History tab and Tax Center even
-// for rows whose mirror link was previously broken — without forcing a re-save.
-// Idempotent and cheap; safe to call at the top of a render.
-function reconcileConsignmentInvoiceLinks(s){
-  if(!s || !Array.isArray(s.ledger)) return;
-  const invoices = s.invoices || [];
-  for(const e of s.ledger){
-    if(e.type !== 'Sale') continue;
-    // Keep the ledger's own denormalized number current with the live invoice
-    // (renamed after the link was stamped → e.invoiceNum would be stale).
-    if(e.invoiceId){
-      const inv = invoices.find(i => i.id === e.invoiceId);
-      if(inv) e.invoiceNum = inv.num;
-      else { e.invoiceId = null; e.invoiceNum = null; } // invoice was deleted
-    }
-    const h = histMirrorForLedger(s, e);
-    if(!h) continue;
-    if(e.sheetsId && h.sheetsId !== e.sheetsId) h.sheetsId = e.sheetsId;
-    h.invoiceId  = e.invoiceId  || null;
-    h.invoiceNum = e.invoiceNum || null;
-  }
-}
-
-// Build the Google Sheets payload for a consignment ledger row. Centralised so
-// the invoice number (and every other field) syncs identically from confirmSale,
-// edits, voids, invoice renames and the full resync.
-function consignmentSyncPayload(book, e){
-  return {
-    type:'consignment', book:book.title,
-    date:e.date, store:e.storeName, event:e.type,
-    qty:e.qty, rate:e.rate, amountDue:e.amountDue||0,
-    notes:e.notes||'', status:e.status||'OK',
-    invoiceNum: e.invoiceNum || '',
-    sheetsId:e.sheetsId,
-    currency:getBookCurrencyCode(book)
-  };
-}
+// histMirrorForLedger / stampLedgerInvoiceLink / reconcileConsignmentInvoiceLinks
+// / consignmentSyncPayload are pure and live in ./lib/consignment.js (tested
+// there); they're imported at the top of this module.
 
 // Canonical "mark this sale paid": guards pending/non-voided, reduces the store's
 // owed, flips ledger + hist mirror state. Returns true if it actually changed.
@@ -6139,8 +6061,11 @@ function renderLedger(){
 function exportConsignmentLedgerCSV(){
   const s=getState(),book=getBook(),rows=s.ledger||[];
   if(!rows.length){showToast('No ledger entries to export','warn');return;}
+  // Refresh each Sale's invoice number from its live invoice before exporting so
+  // accountants reconciling the CSV see which invoice billed each sale.
+  reconcileConsignmentInvoiceLinks(s);
   const curCode=getBookCurrencyCode(book);
-  const header=['Date','Store','Type','Qty','Commission %','Due to you','Currency','Status','Voided','Notes'];
+  const header=['Date','Store','Type','Qty','Commission %','Due to you','Currency','Status','Voided','Invoice','Notes'];
   // Chronological order (the on-screen table shows newest first; a CSV reads
   // better oldest→newest for a running statement).
   const sorted=[...rows].sort((a,b)=>{const da=a.date||'',db=b.date||'';return da<db?-1:da>db?1:0;});
@@ -6156,6 +6081,7 @@ function exportConsignmentLedgerCSV(){
       curCode,
       e.voided?'VOID':(e.status||''),
       e.voided?'YES':'',
+      e.invoiceNum||'',
       e.notes||''
     ]);
   }
