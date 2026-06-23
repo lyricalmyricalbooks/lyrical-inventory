@@ -6851,30 +6851,56 @@ function printInvoice(){
   if (!currentViewInvoiceId) return;
   const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
-  // Print the self-contained invoice document in an isolated window instead of
-  // window.print() on the app — that avoids dragging in the dark modal toolbar,
-  // scrollbars and app chrome (which produced a malformed PDF) and is immune to
-  // overlay/stacking issues. buildStandaloneInvoiceHTML captures the live QR.
+  // Print the self-contained invoice document (its own clean stylesheet — no app
+  // chrome, scripts, or print-isolation CSS) via a hidden, off-screen iframe.
+  // An iframe can't be blocked like a popup and prints only its own document, so
+  // "Save as PDF" renders the invoice instead of a blank page. buildStandalone-
+  // InvoiceHTML captures the live QR. Falls back to a popup, then window.print().
   const html = buildStandaloneInvoiceHTML(inv);
+  let iframe;
+  try {
+    iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    // Real page-sized dimensions but parked off-screen: some engines print a
+    // blank page from a 0×0 or visibility:hidden frame, so size it and hide it
+    // by position instead.
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1123px;border:0;';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    const triggerPrint = () => {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
+      catch(e){ printInvoiceViaPopup(html); }
+      finally { setTimeout(() => { try { iframe.remove(); } catch(e){} }, 1500); }
+    };
+    // Wait for the doc (and its embedded QR/image + fonts) to settle, otherwise
+    // the QR/styles may be missing in the PDF.
+    if (iframe.contentWindow.document.readyState === 'complete'){
+      setTimeout(triggerPrint, 250);
+    } else {
+      iframe.addEventListener('load', () => setTimeout(triggerPrint, 250), { once: true });
+    }
+  } catch(e){
+    if (iframe) { try { iframe.remove(); } catch(_){} }
+    printInvoiceViaPopup(html);
+  }
+}
+
+// Last-resort print path: open the standalone invoice doc in a new tab and print
+// it. Used when the hidden-iframe route is unavailable (e.g. sandboxed frames).
+function printInvoiceViaPopup(html){
   const w = window.open('', '_blank');
   if (!w){
-    // Popup blocked — fall back to printing the page (the @media print CSS in
-    // index.html isolates #m-invoice-view) and nudge the user to allow popups.
-    showToast('Allow popups for a cleaner PDF — printing the page instead.', 'warn');
+    // Popup blocked too — fall back to printing the page (the @media print CSS
+    // in index.html isolates #m-invoice-view) and nudge toward Download instead.
+    showToast('Allow popups to print, or use “Download” and print the saved file.', 'warn');
     window.print();
     return;
   }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  // Wait for the new document (and its embedded QR/image) to finish loading
-  // before invoking print, otherwise the QR/styles may be missing in the PDF.
-  const triggerPrint = () => { try { w.focus(); w.print(); } catch(e){} };
-  if (w.document.readyState === 'complete'){
-    setTimeout(triggerPrint, 200);
-  } else {
-    w.addEventListener('load', () => setTimeout(triggerPrint, 200), { once: true });
-  }
+  w.document.open(); w.document.write(html); w.document.close();
+  const go = () => { try { w.focus(); w.print(); } catch(e){} };
+  if (w.document.readyState === 'complete') setTimeout(go, 250);
+  else w.addEventListener('load', () => setTimeout(go, 250), { once: true });
 }
 
 function copyInvoicePayLink(){
@@ -6933,6 +6959,31 @@ function emailInvoice(){
   }
 }
 
+// Pulls just the .invoice-paper visual styles from the live page so the
+// standalone invoice document stays pixel-identical to the on-screen preview
+// without duplicating ~60 lines of CSS in JS. We deliberately grab only the
+// invoice-scoped rules — NOT the whole <head> — because copying document.head
+// dragged in the app's print-isolation rule (`body > *:not(#m-invoice-view)
+// {display:none}`), which has no #m-invoice-view to match in this standalone doc
+// and so blanked the entire page in the PDF. Cross-origin sheets (Google Fonts)
+// throw on .cssRules access and are skipped — their fonts come via the <link>.
+function collectInvoicePaperCss(){
+  const out = [];
+  for (const sheet of Array.from(document.styleSheets || [])){
+    let rules;
+    try { rules = sheet.cssRules; } catch(e){ continue; }
+    if (!rules) continue;
+    for (const rule of Array.from(rules)){
+      // Plain style rules scoped to the invoice paper; @media/@font-face blocks
+      // (no selectorText) are skipped — we supply our own clean print rules.
+      if (rule.selectorText && rule.selectorText.includes('.invoice-paper')){
+        out.push(rule.cssText);
+      }
+    }
+  }
+  return out.join('\n');
+}
+
 // Builds a fully self-contained invoice document with the Stripe pay link embedded
 // (clickable button + scannable QR + plain-text URL) that survives PDF export and
 // email-client styling — so the link is never dropped when the invoice is sent.
@@ -6956,17 +7007,32 @@ function buildStandaloneInvoiceHTML(inv){
   // strips the styled button.
   const payFallback = payUrl ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#444;margin:14px 2px 0;word-break:break-all;">Pay online: <a href="${payUrl}" style="color:#0a7d4b;">${escapeHTML(payUrl)}</a></p>` : '';
 
-  // Force the pay block to render in print/PDF and keep button colors.
-  const overrideCss = `<style>
-    .invoice-paper .inv-pay{display:flex !important;}
-    @media print{
-      .invoice-paper .inv-pay{display:flex !important;}
-      .invoice-paper .inv-pay .pay-btn,.invoice-paper .inv-pay{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
-    }
-  </style>`;
+  // Only the font stylesheets/preconnects are carried over from the page; the
+  // rest of the document is our own clean, print-safe CSS.
+  const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"], link[rel="preconnect"]'))
+    .filter(l => /fonts\.(googleapis|gstatic)\.com/.test(l.href || ''))
+    .map(l => l.outerHTML).join('\n');
 
-  const head = document.head.innerHTML + overrideCss;
-  const body = `<body style="background:#f0ece4;padding:40px;"><div class="invoice-paper" style="background:#fff;">${bodyInner}${payFallback}</div></body>`;
+  const css = `
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;}
+    body{background:#f0ece4;padding:40px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;}
+    .invoice-paper{background:#fff;}
+    ${collectInvoicePaperCss()}
+    .invoice-paper .inv-pay{display:flex !important;}
+    @page{margin:0.5in;}
+    @media print{
+      html,body{background:#fff !important;}
+      body{padding:0 !important;}
+      .invoice-paper{box-shadow:none !important;border-radius:0 !important;max-width:none !important;}
+      .invoice-paper::before{display:none !important;}
+      .invoice-paper .inv-pay{display:flex !important;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+      .invoice-paper .inv-pay .pay-btn{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+    }
+  `;
+
+  const head = `<meta charset="utf-8"><title>Invoice ${escapeHTML(inv.num || '')}</title>${fontLinks}<style>${css}</style>`;
+  const body = `<body><div class="invoice-paper">${bodyInner}${payFallback}</div></body>`;
   return `<!doctype html><html><head>${head}</head>${body}</html>`;
 }
 
