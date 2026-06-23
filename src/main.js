@@ -5830,7 +5830,99 @@ function confirmSend(){
   syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Shipment',qty,rate,amountDue:0,notes,status:'sent',sheetsId,currency:getBookCurrencyCode(book)});
   showToast(`✓ ${qty} books sent to ${st.name}`);
 }
-function openSale(id){activeId=id;const book=getBook();$('sale-sym').textContent=book.currency;$('sale-price').value=book.listPrice.toFixed(2);$('sale-sname').textContent=storeById(id).name;openM('record-sale');}
+
+// ── BULK SEND (ship to several stores in one pass) ──────────────────────
+function openBulkSend(){
+  const s=getState();
+  if(!s.stores.length){showToast('Add a store first','warn');return;}
+  $('bulk-send-list').innerHTML=s.stores.map(st=>`<label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+    <input type="checkbox" class="bulk-send-check" data-sid="${st.id}" onchange="bulkCheckChanged('${st.id}')" style="width:auto;margin:0;">
+    <span style="flex:1;min-width:0;"><span style="font-weight:600;">${escapeHtml(st.name)}</span>${st.city?`<span style="color:var(--text3);font-size:12px;"> · ${escapeHtml(st.city)}</span>`:''}<br><span style="color:var(--text3);font-size:11px;">${st.rate}% commission · ${st.outstanding} outstanding</span></span>
+    <input type="number" class="bulk-send-qty" data-sid="${st.id}" min="0" value="0" style="width:64px;" oninput="bulkQtyChanged('${st.id}')">
+  </label>`).join('');
+  $('bulk-qty').value='10';
+  $('bulk-date').value=today();
+  $('bulk-rate').value='';
+  $('bulk-notes').value='';
+  $('bulk-send-stock').textContent=s.stock;
+  updateBulkSendSummary();
+  openM('bulk-send');
+}
+function bulkRowEls(sid){
+  return {
+    cb:document.querySelector(`#bulk-send-list .bulk-send-check[data-sid="${sid}"]`),
+    qty:document.querySelector(`#bulk-send-list .bulk-send-qty[data-sid="${sid}"]`),
+  };
+}
+function bulkApplyQty(){
+  const q=parseInt($('bulk-qty').value)||0;
+  getState().stores.forEach(st=>{
+    const {cb,qty}=bulkRowEls(st.id);
+    if(cb)cb.checked=q>0;
+    if(qty)qty.value=q;
+  });
+  updateBulkSendSummary();
+}
+function bulkQtyChanged(sid){
+  const {cb,qty}=bulkRowEls(sid);
+  const q=qty?parseInt(qty.value)||0:0;
+  if(cb)cb.checked=q>0;
+  updateBulkSendSummary();
+}
+function bulkCheckChanged(sid){
+  const {cb,qty}=bulkRowEls(sid);
+  if(cb&&qty){
+    if(cb.checked&&(parseInt(qty.value)||0)<=0)qty.value=parseInt($('bulk-qty').value)||1;
+    else if(!cb.checked)qty.value=0;
+  }
+  updateBulkSendSummary();
+}
+function updateBulkSendSummary(){
+  let total=0,count=0;
+  getState().stores.forEach(st=>{
+    const {cb,qty}=bulkRowEls(st.id);
+    const q=qty?parseInt(qty.value)||0:0;
+    if(cb&&cb.checked&&q>0){total+=q;count++;}
+  });
+  const stock=getState().stock;
+  $('bulk-send-total').textContent=total;
+  $('bulk-send-count').textContent=count;
+  const totEl=$('bulk-send-total');
+  if(totEl)totEl.style.color=total>stock?'#c0392b':'';
+}
+function confirmBulkSend(){
+  const s=getState(),book=getBook();
+  const rateRaw=$('bulk-rate').value.trim();
+  const overrideRate=rateRaw===''?null:parseFloat(rateRaw);
+  if(overrideRate!==null&&(isNaN(overrideRate)||overrideRate<0||overrideRate>100)){showToast('Commission override must be between 0 and 100','err');return;}
+  const date=$('bulk-date').value||today();
+  const notes=$('bulk-notes').value.trim();
+  const picks=[];
+  s.stores.forEach(st=>{
+    const {cb,qty}=bulkRowEls(st.id);
+    const q=qty?parseInt(qty.value)||0:0;
+    if(cb&&cb.checked&&q>0)picks.push({st,qty:q});
+  });
+  if(!picks.length){showToast('Select at least one store and a quantity','warn');return;}
+  const totalQty=picks.reduce((a,p)=>a+p.qty,0);
+  if(totalQty>s.stock){showToast(`Only ${s.stock} in stock — you selected ${totalQty}`,'err');return;}
+  picks.forEach((p,i)=>{
+    const st=p.st,qty=p.qty,rate=overrideRate!==null?overrideRate:st.rate;
+    s.stock-=qty;st.sent+=qty;st.outstanding+=qty;
+    const sheetsId=makeEventId();
+    s.ledger.push({id:Date.now()+i,storeId:st.id,storeName:st.name,type:'Shipment',date,qty,rate,amountDue:0,paid:'n/a',notes,status:'sent',sheetsId});
+    syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Shipment',qty,rate,amountDue:0,notes,status:'sent',sheetsId,currency:getBookCurrencyCode(book)});
+  });
+  closeM('bulk-send');renderStores();renderLedger();updateDash();saveState(activeBook);
+  showToast(`✓ Sent ${totalQty} book${totalQty>1?'s':''} to ${picks.length} store${picks.length>1?'s':''}`);
+}
+function openSale(id){activeId=id;const book=getBook();$('sale-sym').textContent=book.currency;$('sale-price').value=book.listPrice.toFixed(2);$('sale-sname').textContent=storeById(id).name;
+  // The "draft an invoice after saving" shortcut only makes sense where the
+  // Invoices panel is available (publisher, single-book view).
+  const invRow=$('sale-invoice-row');
+  if(invRow)invRow.style.display=invoicesVisibleHere()?'':'none';
+  if($('sale-makeinvoice'))$('sale-makeinvoice').checked=false;
+  openM('record-sale');}
 function confirmSale(){
   const s=getState(),book=getBook(),cur=book.currency,st=storeById(activeId);
   if(!validateFields([
@@ -5839,6 +5931,9 @@ function confirmSale(){
     {id:'sale-price',test:v=>(parseFloat(v)||0)>0,msg:'Enter a price greater than 0'},
   ]))return;
   const qty=parseInt($('sale-qty').value)||0,date=$('sale-date').value,price=parseFloat($('sale-price').value)||book.listPrice,paid=$('sale-paid').value,notes=$('sale-notes').value.trim();
+  // Capture before closeM clears modal state: open a prefilled invoice afterward?
+  const makeInvoice=invoicesVisibleHere()&&$('sale-makeinvoice')&&$('sale-makeinvoice').checked;
+  const invoiceStoreId=st.id;
   const gross=qty*price,pub=gross*(1-st.rate/100);
   st.sold+=qty;st.outstanding-=qty;st.amountOwed+=paid==='pending'?pub:0;
   s.sold+=qty;s.revenue+=pub;
@@ -5854,6 +5949,9 @@ function confirmSale(){
   closeM('record-sale');renderStores();renderLedger();renderHist();updateDash();saveState(activeBook);
   syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Sale',qty,rate:st.rate,amountDue:pub,notes,status:paid,sheetsId,currency:getBookCurrencyCode(book)});
   showToast(`✓ Sale recorded — ${fmt(pub,cur)} due to you`);
+  // Hand straight off to the invoice editor, prefilled from this store's
+  // unpaid sales (which now includes the one just recorded).
+  if(makeInvoice)setTimeout(()=>openCreateInvoice(invoiceStoreId),160);
 }
 function openRet(id){activeId=id;$('ret-sname').textContent=storeById(id).name;openM('return');}
 function confirmReturn(){
@@ -5895,6 +5993,43 @@ function renderLedger(){
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     return`<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type==='Sale'?e.rate+'%':'—'}</td><td class="r" style="font-weight:600;">${e.amountDue>0?fmt(e.amountDue,cur):'—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes)||'—'}</td><td>${pill(e)}${e.status==='pending'&&!e.voided?` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>`:''}</td></tr>`;
   }).join('');
+}
+
+// Export the current book's consignment ledger (shipments, sales, returns) as a
+// CSV for accounting — independent of the full Google Sheets sync so it works
+// offline and without a connected sheet.
+function exportConsignmentLedgerCSV(){
+  const s=getState(),book=getBook(),rows=s.ledger||[];
+  if(!rows.length){showToast('No ledger entries to export','warn');return;}
+  const curCode=getBookCurrencyCode(book);
+  const header=['Date','Store','Type','Qty','Commission %','Due to you','Currency','Status','Voided','Notes'];
+  // Chronological order (the on-screen table shows newest first; a CSV reads
+  // better oldest→newest for a running statement).
+  const sorted=[...rows].sort((a,b)=>{const da=a.date||'',db=b.date||'';return da<db?-1:da>db?1:0;});
+  const out=[header];
+  for(const e of sorted){
+    out.push([
+      e.date||'',
+      e.storeName||'',
+      e.type||'',
+      e.qty??'',
+      e.type==='Sale'?(e.rate??''):'',
+      e.amountDue?Number(e.amountDue).toFixed(2):'',
+      curCode,
+      e.voided?'VOID':(e.status||''),
+      e.voided?'YES':'',
+      e.notes||''
+    ]);
+  }
+  const csv=out.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const slug=String(book.id||book.title||'book').replace(/[^a-z0-9]+/gi,'-').toLowerCase();
+  a.href=url;a.download=`consignment-ledger-${slug}-${today()}.csv`;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),500);
+  showToast('✓ Consignment ledger exported');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -6830,6 +6965,18 @@ function openEditLedger(idx) {
   $('edit-l-qty').value = e.qty;
   $('edit-l-rate').value = e.rate;
   $('edit-l-notes').value = e.notes || '';
+  // Sale price is editable directly for Sale rows (other types carry no price).
+  // Back-derive the current per-unit price from amountDue so the field shows
+  // what was actually charged, then let the user correct a mistaken price.
+  const priceRow = $('edit-l-price-row');
+  if (e.type === 'Sale') {
+    const derivedPrice = (e.amountDue > 0 && e.qty) ? (e.amountDue / (e.qty * (1 - e.rate/100))) : book.listPrice;
+    $('edit-l-price').value = (derivedPrice || 0).toFixed(2);
+    if ($('edit-l-price-sym')) $('edit-l-price-sym').textContent = book.currency;
+    if (priceRow) priceRow.style.display = '';
+  } else if (priceRow) {
+    priceRow.style.display = 'none';
+  }
   if (e.voided) {
     $('edit-void-btn').textContent = 'Unvoid this entry';
     $('edit-void-body').textContent = 'This entry is currently voided. Unvoiding will re-apply its effects on consignment stock and payments.';
@@ -6937,8 +7084,11 @@ function saveEntryEdit() {
       const st = getState().stores.find(st=>st.id===e.storeId);
       if (st) {
         const oldDue = e.amountDue;
-        // We need the sale price — estimate from old amountDue
-        const salePrice = oldDue > 0 ? (oldDue / (e.qty * (1 - e.rate/100))) : book.listPrice;
+        // Prefer the price the user typed in the edit modal; otherwise estimate
+        // it from the old amountDue so quantity/rate-only edits behave as before.
+        const derivedPrice = oldDue > 0 ? (oldDue / (e.qty * (1 - e.rate/100))) : book.listPrice;
+        const typedPrice = parseFloat($('edit-l-price') ? $('edit-l-price').value : '');
+        const salePrice = (!isNaN(typedPrice) && typedPrice > 0) ? typedPrice : derivedPrice;
         const newDue = newQty * salePrice * (1 - newRate/100);
         if (e.paid === 'pending' && st) {
           st.amountOwed = Math.max(0, st.amountOwed - oldDue + newDue);
@@ -13893,6 +14043,7 @@ Object.assign(window, {
   onExpenseCurrencyChange, calcExpenseFx,
 
   submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale,
+  exportConsignmentLedgerCSV, openBulkSend, bulkApplyQty, bulkQtyChanged, bulkCheckChanged, updateBulkSendSummary, confirmBulkSend,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
   resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
