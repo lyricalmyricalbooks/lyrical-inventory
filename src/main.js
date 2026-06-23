@@ -6739,7 +6739,32 @@ async function markInvoicePaidFromView(){
 
 function printInvoice(){
   if (!currentViewInvoiceId) return;
-  window.print();
+  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  if (!inv) return;
+  // Print the self-contained invoice document in an isolated window instead of
+  // window.print() on the app — that avoids dragging in the dark modal toolbar,
+  // scrollbars and app chrome (which produced a malformed PDF) and is immune to
+  // overlay/stacking issues. buildStandaloneInvoiceHTML captures the live QR.
+  const html = buildStandaloneInvoiceHTML(inv);
+  const w = window.open('', '_blank');
+  if (!w){
+    // Popup blocked — fall back to printing the page (the @media print CSS in
+    // index.html isolates #m-invoice-view) and nudge the user to allow popups.
+    showToast('Allow popups for a cleaner PDF — printing the page instead.', 'warn');
+    window.print();
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  // Wait for the new document (and its embedded QR/image) to finish loading
+  // before invoking print, otherwise the QR/styles may be missing in the PDF.
+  const triggerPrint = () => { try { w.focus(); w.print(); } catch(e){} };
+  if (w.document.readyState === 'complete'){
+    setTimeout(triggerPrint, 200);
+  } else {
+    w.addEventListener('load', () => setTimeout(triggerPrint, 200), { once: true });
+  }
 }
 
 function copyInvoicePayLink(){
@@ -6778,10 +6803,24 @@ function emailInvoice(){
     `Thank you,`,
     settings.name || 'Lyricalmyrical Books',
   ].filter(Boolean).join('\n');
-  const to = encodeURIComponent(inv.storeEmail || '');
-  const url = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
-  window.location.href = url;
-  showToast('✓ Pay link added to the email. Attach the downloaded invoice file to send it too.');
+  const to = inv.storeEmail || '';
+  // Open Gmail's web compose directly (the user works in Gmail) rather than
+  // handing off to the OS default mail handler. Gmail can't attach a file from
+  // a URL either, so the downloaded HTML above is still what the user attaches.
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
+  // Don't pass 'noopener' here: with it, window.open returns null even on
+  // success, which would mis-trigger the popup-blocked fallback. Open normally
+  // (so a null return reliably means "blocked"), then sever the opener link.
+  const w = window.open(gmailUrl, '_blank');
+  if (w){
+    try { w.opener = null; } catch(e){}
+    showToast('✓ Gmail compose opened in a new tab — attach the downloaded invoice file before sending.');
+  } else {
+    // Popup blocked — fall back to the OS mail handler so nothing is lost.
+    const mailtoUrl = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
+    window.location.href = mailtoUrl;
+    showToast('✓ Pay link added to the email. Attach the downloaded invoice file to send it too.');
+  }
 }
 
 // Builds a fully self-contained invoice document with the Stripe pay link embedded
