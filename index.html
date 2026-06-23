@@ -748,7 +748,10 @@
   </div>
   <div class="row-between">
     <div class="section-hed">Consignment accounts</div>
-    <button class="btn gold" onclick="openM('add-store')">+ Add store</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn" onclick="openBulkSend()" title="Send books to several stores at once">📦 Bulk send</button>
+      <button class="btn gold" onclick="openM('add-store')">+ Add store</button>
+    </div>
   </div>
   <div id="stores-list"><div class="empty-state"><div class="e-icon">🏪</div>No stores yet.<div style="margin-top:12px;"><button class="btn gold" onclick="openM('add-store')">+ Add store</button></div></div></div>
   <div class="divider"></div>
@@ -767,7 +770,10 @@
     <div class="divider"></div>
   </div>
 
-  <div class="sect">Consignment ledger</div>
+  <div class="row-between" style="margin-bottom:1rem;">
+    <div class="sect" style="margin-bottom:0;flex:1;">Consignment ledger</div>
+    <button class="btn" onclick="exportConsignmentLedgerCSV()" title="Download this book's consignment ledger as a CSV">⤓ Export CSV</button>
+  </div>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Store</th><th>Type</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Due to you</th><th>Notes</th><th>Status</th></tr></thead><tbody id="ledger-body"></tbody></table></div>
 </div>
 
@@ -1715,11 +1721,32 @@
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
 </div></div>
 
+<div class="overlay" id="m-bulk-send" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true">Bulk send books</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:12px;"><span id="bulk-send-stock">0</span> in stock · sending <strong id="bulk-send-total">0</strong> to <strong id="bulk-send-count">0</strong> store(s)</div>
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label for="bulk-qty">Qty to each</label><div style="display:flex;gap:6px;"><input id="bulk-qty" type="number" inputmode="numeric" min="0" value="10"><button type="button" class="btn sm" onclick="bulkApplyQty()" title="Set every store to this quantity">Apply to all</button></div></div>
+    <div class="form-group"><label for="bulk-date">Date sent</label><input id="bulk-date" type="date"></div>
+  </div>
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group"><label for="bulk-rate">Commission override (%)<span class="tip tip-mark" data-tip="Leave blank to use each store's own commission rate.">?</span></label><input id="bulk-rate" type="number" inputmode="numeric" min="0" max="100" placeholder="store default"></div>
+    <div class="form-group"><label for="bulk-notes">Notes (all)</label><input id="bulk-notes" placeholder="e.g. spring launch batch"></div>
+  </div>
+  <div id="bulk-send-list" style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:2px 12px;margin-bottom:6px;"></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('bulk-send')">Cancel</button><button class="btn gold" onclick="confirmBulkSend()">Send books</button></div>
+</div></div>
+
 <div class="overlay" id="m-record-sale" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
   <div class="modal-title" role="dialog" aria-modal="true">Record sale — <span id="sale-sname"></span></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-qty">Qty sold by store</label><input id="sale-qty" type="number" inputmode="numeric" value="1" min="1"></div><div class="form-group"><label for="sale-date">Date</label><input id="sale-date" type="date"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="sale-price">Sale price per unit</label><div class="price-wrap"><span class="sym" id="sale-sym">€</span><input id="sale-price" type="number" inputmode="decimal" value="40.00" step="0.01"></div></div><div class="form-group"><label for="sale-paid">Payment status</label><select id="sale-paid"><option value="pending">Pending</option><option value="paid">Paid</option></select></div></div>
   <div class="form-group"><label for="sale-notes">Notes</label><input id="sale-notes" placeholder="e.g. invoice ref, reporting period"></div>
+  <div class="form-group" id="sale-invoice-row" style="display:none;margin-top:12px;">
+    <label for="sale-makeinvoice" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal;text-transform:none;letter-spacing:normal;">
+      <input type="checkbox" id="sale-makeinvoice" style="width:auto;margin:0;">
+      <span>Draft an invoice for this store after saving</span>
+    </label>
+  </div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('record-sale')">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
 </div></div>
 
@@ -1763,6 +1790,10 @@
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group"><label for="edit-l-rate">Rate (%)</label><input id="edit-l-rate" type="number" inputmode="decimal" min="0" max="100" step="0.1"></div>
       <div class="form-group"><label for="edit-l-notes">Notes</label><input id="edit-l-notes" type="text"></div>
+    </div>
+    <div class="g2" id="edit-l-price-row" style="margin-bottom:12px;display:none;">
+      <div class="form-group"><label for="edit-l-price">Sale price / unit<span class="tip tip-mark" data-tip="What each copy actually sold for at retail. Editing this recalculates what the store owes you.">?</span></label><div class="price-wrap"><span class="sym" id="edit-l-price-sym">$</span><input id="edit-l-price" type="number" inputmode="decimal" min="0" step="0.01"></div></div>
+      <div class="form-group" aria-hidden="true"></div>
     </div>
   </div>
 
