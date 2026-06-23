@@ -16,7 +16,7 @@ import {
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   isDirectToArtistSale,
 } from './lib/money.js';
-import { calcArtistEarnings } from './lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 import { OC_STAGES, ocNextAction, newContributor, parseContributorRows } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown } from './lib/inventory.js';
@@ -9068,6 +9068,7 @@ async function loadPaymentLinks(){
 
 // ── PROFIT SHARING LOGIC
 let psActiveBookId = null;
+let psSimGross = null;   // "what-if" gross revenue for the live earnings preview
 
 function renderProfitSettings() {
   if (isAuthor()) return;
@@ -9080,8 +9081,9 @@ function renderProfitSettings() {
   if (selectorCont) {
     const currentVal = psActiveBookId || '';
     selectorCont.innerHTML = `
+      <label for="ps-book-selector">Book</label>
       <select id="ps-book-selector">
-        <option value="">Select a book...</option>
+        <option value="">Select a book…</option>
         ${BOOK_LIST.map(b => `<option value="${escapeHtml(b.id)}" ${b.id===currentVal?'selected':''}>${escapeHtml(b.title)}</option>`).join('')}
       </select>
     `;
@@ -9089,6 +9091,7 @@ function renderProfitSettings() {
     if (sel) {
       sel.addEventListener('change', () => {
         psActiveBookId = sel.value || null;
+        psSimGross = null;   // reset the preview when switching books
         renderProfitTierList();
       });
     }
@@ -9097,14 +9100,55 @@ function renderProfitSettings() {
   renderProfitTierList();
 }
 
+// Walk an arbitrary gross-revenue figure through the configured tiers and return
+// the artist/publisher split + per-tier breakdown. Mirrors calcArtistEarnings'
+// tier walk (using the same shared tierEffectiveCap) but for a single what-if
+// number rather than the real sales history.
+function psSimulateSplit(tiers, productionCost, gross) {
+  const capOf = (t) => tierEffectiveCap(t, productionCost);
+  const sorted = [...tiers].sort((a, b) => {
+    const ca = capOf(a), cb = capOf(b);
+    return (ca == null ? Infinity : ca) - (cb == null ? Infinity : cb);
+  });
+  const rows = sorted.map(t => ({ tier: t, revenue: 0, artist: 0 }));
+  let cumulative = 0, remaining = Math.max(0, gross), totalArtist = 0;
+  let guard = 0;
+  while (remaining > 0.001 && guard++ < 1000) {
+    const found = sorted.findIndex(t => { const c = capOf(t); return c != null && cumulative < c; });
+    const i = found === -1 ? sorted.length - 1 : found;
+    const c = capOf(sorted[i]);
+    const isLast = i === sorted.length - 1 || c == null;
+    const capacity = isLast ? remaining : Math.min(remaining, c - cumulative);
+    if (capacity <= 0) break;
+    const pct = parseFloat(sorted[i].artistPct) || 0;
+    const earned = capacity * (pct / 100);
+    rows[i].revenue += capacity;
+    rows[i].artist += earned;
+    totalArtist += earned;
+    cumulative += capacity;
+    remaining -= capacity;
+  }
+  return { sorted, rows, totalArtist, publisher: Math.max(0, gross) - totalArtist, gross: Math.max(0, gross) };
+}
+
 function renderProfitTierList() {
   const list = $('profit-tier-list');
+  const actions = $('ps-actions');
+  const summary = $('ps-summary');
   if (!list) return;
 
   list.innerHTML = '';
+  if (summary) summary.innerHTML = '';
 
+  // No book selected — friendly prompt + how it works
   if (!psActiveBookId || !BOOKS[psActiveBookId]) {
-    list.innerHTML = '<div class="empty-state">Select a book to manage profit tiers.</div>';
+    if (actions) actions.style.display = 'none';
+    list.innerHTML = `
+      <div class="empty-state" style="padding:2.5rem 1rem;">
+        <div class="e-icon">📊</div>
+        <div style="font-weight:600;color:var(--text2);margin-bottom:.35rem;">Choose a book to manage its profit tiers</div>
+        <div style="font-size:12px;max-width:460px;margin:0 auto;line-height:1.6;">Pick a title from the dropdown above, then set the share an artist earns at each stage of recovering production costs.</div>
+      </div>`;
     return;
   }
 
@@ -9112,18 +9156,84 @@ function renderProfitTierList() {
   if (!book.profitTiers) book.profitTiers = [];
   const tiers = book.profitTiers;
   const cur = book.currency || '€';
+  const productionCost = book.productionCost || 0;
 
+  if (actions) actions.style.display = 'flex';
+
+  // No tiers yet — offer a one-click recommended template
   if (tiers.length === 0) {
-    list.innerHTML = '<div class="empty-state">No tiers defined yet. Click "+ Add Tier" to start. The first tier typically covers the period before production costs are recovered.</div>';
+    const pcText = productionCost > 0 ? fmt(productionCost, cur) : 'your production cost';
+    list.innerHTML = `
+      <div style="text-align:center;padding:2rem 1.25rem;border:1px dashed var(--gold-line);border-radius:var(--r2);background:var(--cream2);">
+        <div style="font-size:30px;opacity:.55;margin-bottom:.5rem;">🎚️</div>
+        <div style="font-weight:600;color:var(--text2);margin-bottom:.4rem;">No tiers defined yet</div>
+        <div style="font-size:12px;color:var(--text3);max-width:480px;margin:0 auto 1.1rem;line-height:1.6;">
+          Start with the recommended two-stage model: a lower share until <b>${pcText}</b> is recovered, then a higher share once you break even. You can fine-tune every number afterward.
+        </div>
+        <button class="btn gold" id="ps-quickstart-btn">✨ Use recommended template</button>
+        <div style="font-size:11px;color:var(--text3);margin-top:.85rem;">…or build it up one stage at a time with <b>+ Add Tier</b> below.</div>
+      </div>`;
+    const qs = $('ps-quickstart-btn');
+    if (qs) qs.addEventListener('click', psApplyTemplate);
     return;
   }
+
+  // ── Context strip: production cost + where the book stands today
+  let liveStats = null;
+  try { liveStats = calculateArtistEarnings(psActiveBookId); } catch (_) { liveStats = null; }
+  const ctx = document.createElement('div');
+  ctx.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px 26px;padding:11px 16px;background:var(--ink);border-radius:var(--r2);margin-bottom:14px;';
+  const ctxItem = (label, val, accent) => `
+    <div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:3px;">${label}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:14px;color:${accent || 'var(--cream)'};">${val}</div>
+    </div>`;
+  let ctxHtml = ctxItem('Production cost', productionCost > 0 ? fmt(productionCost, cur) : 'Not set', productionCost > 0 ? 'var(--cream)' : 'var(--gold3)');
+  if (liveStats) {
+    ctxHtml += ctxItem('Revenue to date', fmt(liveStats.cumulativeRevenue, cur), 'var(--gold3)');
+    ctxHtml += ctxItem('Artist earned', fmt(liveStats.totalArtistEarned, cur), 'var(--cream)');
+  }
+  ctx.innerHTML = ctxHtml;
+  list.appendChild(ctx);
+
+  // ── Tier cards. Keep references so live edits update derived UI without a
+  // full re-render (which would steal focus from the input being typed in).
+  const rowRefreshers = [];
+  const capOf = (t) => tierEffectiveCap(t, productionCost);
 
   tiers.forEach((t, i) => {
     const isLast = i === tiers.length - 1;
     const row = document.createElement('div');
-    row.style.cssText = 'display:grid; grid-template-columns: 2fr 1.5fr 1fr auto; gap:10px; align-items:end; background:var(--cream2); padding:12px; border-radius:var(--r2); border:1px solid var(--border);';
+    row.style.cssText = 'position:relative;background:var(--cream2);padding:14px 16px 16px;border-radius:var(--r2);border:1px solid var(--border);border-left:3px solid var(--gold-line);margin-bottom:10px;';
 
-    function makeField(labelText, type, val, onChange) {
+    // Top line: stage badge + covered revenue range + remove button
+    const top = document.createElement('div');
+    top.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:12px;';
+    const badge = document.createElement('span');
+    badge.style.cssText = 'flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--gold);color:var(--ink);font-family:\'Syne\',sans-serif;font-weight:700;font-size:12px;display:inline-flex;align-items:center;justify-content:center;';
+    badge.textContent = String(i + 1);
+    const range = document.createElement('div');
+    range.style.cssText = 'flex:1;min-width:0;font-size:11px;color:var(--text3);font-family:\'DM Mono\',monospace;';
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn sm';
+    removeBtn.style.cssText = 'flex-shrink:0;background:transparent;color:var(--text3);border:1px solid var(--border);padding:4px 9px;';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove this tier';
+    removeBtn.setAttribute('aria-label', 'Remove tier');
+    removeBtn.addEventListener('click', () => {
+      book.profitTiers.splice(i, 1);
+      renderProfitTierList();
+    });
+    top.appendChild(badge);
+    top.appendChild(range);
+    top.appendChild(removeBtn);
+    row.appendChild(top);
+
+    // Input grid: Label · Threshold · Artist %
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;';
+
+    const makeField = (labelText, type, val, placeholder, onChange) => {
       const wrap = document.createElement('div');
       wrap.className = 'form-group';
       wrap.style.margin = '0';
@@ -9132,33 +9242,32 @@ function renderProfitTierList() {
       const inp = document.createElement('input');
       inp.type = type;
       inp.value = val;
+      if (placeholder) inp.placeholder = placeholder;
       inp.style.width = '100%';
-      // Both events stay bound for cross-browser coverage, but the handler skips
-      // the redundant second fire (input then change) when the value is unchanged.
+      // input + change both bound for cross-browser coverage; skip the redundant
+      // second fire when the value hasn't actually changed.
       let last = inp.value;
-      const handle = () => { if (inp.value === last) return; last = inp.value; onChange(inp.value); };
+      const handle = () => { if (inp.value === last) return; last = inp.value; onChange(inp.value); psUpdateDerived(); };
       inp.addEventListener('input', handle);
       inp.addEventListener('change', handle);
       wrap.appendChild(lbl);
       wrap.appendChild(inp);
       return wrap;
-    }
+    };
 
-    const labelField = makeField('Label', 'text', t.label, v => { t.label = v; });
-    const pctField   = makeField('Artist %', 'number', t.artistPct, v => { t.artistPct = parseFloat(v) || 0; });
+    grid.appendChild(makeField('Stage label', 'text', t.label, 'e.g. Pre break-even', v => { t.label = v; }));
 
-    // Revenue threshold field: editable for all but last, which is always ∞
+    // Threshold: editable except the final tier (always uncapped)
     const threshWrap = document.createElement('div');
     threshWrap.className = 'form-group';
     threshWrap.style.margin = '0';
     const threshLbl = document.createElement('label');
-    threshLbl.textContent = `Revenue threshold (${cur})`;
+    threshLbl.textContent = `Up to (${cur} gross)`;
     threshWrap.appendChild(threshLbl);
-
     if (isLast) {
       const pill = document.createElement('div');
-      pill.style.cssText = 'height:38px; display:flex; align-items:center; font-family:\'DM Mono\',monospace; font-size:13px; font-weight:600; color:var(--gold); padding:0 4px;';
-      pill.textContent = '∞ Unlimited (final tier)';
+      pill.style.cssText = 'height:38px;display:flex;align-items:center;gap:6px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:600;color:var(--gold);';
+      pill.innerHTML = '<span style="font-size:16px;">∞</span> No ceiling';
       threshWrap.appendChild(pill);
     } else {
       const inp = document.createElement('input');
@@ -9166,34 +9275,169 @@ function renderProfitTierList() {
       inp.value = t.revenueUpTo || '';
       inp.placeholder = 'e.g. production cost';
       inp.style.width = '100%';
-      let lastThresh = inp.value;
-      const handleThresh = () => { if (inp.value === lastThresh) return; lastThresh = inp.value; t.revenueUpTo = parseFloat(inp.value) || 0; };
-      inp.addEventListener('input', handleThresh);
-      inp.addEventListener('change', handleThresh);
+      let last = inp.value;
+      const handle = () => { if (inp.value === last) return; last = inp.value; t.revenueUpTo = parseFloat(inp.value) || 0; psUpdateDerived(); };
+      inp.addEventListener('input', handle);
+      inp.addEventListener('change', handle);
       threshWrap.appendChild(inp);
     }
+    grid.appendChild(threshWrap);
 
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'btn sm danger-btn';
-    removeBtn.textContent = 'Remove';
-    removeBtn.style.marginBottom = '2px';
-    removeBtn.addEventListener('click', () => {
-      book.profitTiers.splice(i, 1);
-      renderProfitTierList();
-    });
+    grid.appendChild(makeField('Artist %', 'number', t.artistPct, '', v => { t.artistPct = parseFloat(v) || 0; }));
+    row.appendChild(grid);
 
-    row.appendChild(labelField);
-    row.appendChild(threshWrap);
-    row.appendChild(pctField);
-    row.appendChild(removeBtn);
+    // Split bar: artist vs publisher share for this tier
+    const split = document.createElement('div');
+    split.style.cssText = 'margin-top:12px;';
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;height:7px;border-radius:100px;overflow:hidden;background:var(--cream4);';
+    const artistFill = document.createElement('div');
+    artistFill.style.cssText = 'height:100%;background:var(--gold);transition:width .15s;';
+    bar.appendChild(artistFill);
+    const cap = document.createElement('div');
+    cap.style.cssText = 'display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:5px;';
+    split.appendChild(bar);
+    split.appendChild(cap);
+    row.appendChild(split);
+
     list.appendChild(row);
+
+    // Per-row refresher: recompute range text + split bar from current values
+    rowRefreshers.push(() => {
+      const pct = Math.max(0, Math.min(100, parseFloat(t.artistPct) || 0));
+      artistFill.style.width = pct + '%';
+      cap.innerHTML = `<span style="color:var(--gold);font-weight:600;">Artist ${pct}%</span><span>Publisher ${Math.round((100 - pct) * 10) / 10}%</span>`;
+      const prevCap = i > 0 ? capOf(tiers[i - 1]) : 0;
+      const from = i === 0 ? fmt(0, cur) : (prevCap != null ? fmt(prevCap, cur) : '—');
+      const thisCap = capOf(t);
+      const to = thisCap != null ? fmt(thisCap, cur) : '∞';
+      range.textContent = `${from}  →  ${to}`;
+    });
   });
 
-  // Legend hint
+  // ── Legend
   const hint = document.createElement('div');
-  hint.style.cssText = 'font-size:11px; color:var(--text3); margin-top:6px; line-height:1.6;';
-  hint.textContent = 'Revenue threshold: cumulative gross revenue at which the NEXT tier begins. The final tier has no ceiling.';
+  hint.style.cssText = 'font-size:11px;color:var(--text3);margin-top:2px;line-height:1.6;';
+  hint.innerHTML = '“Up to” is the cumulative gross revenue at which the <b>next</b> stage begins. A stage labelled “break-even” automatically caps at the book’s production cost. The final stage has no ceiling.';
   list.appendChild(hint);
+
+  // ── Validation + live preview live in #ps-summary so they redraw on every edit
+  psUpdateDerived = function () {
+    rowRefreshers.forEach(fn => fn());
+    psRenderSummary(book, cur, productionCost);
+  };
+  psUpdateDerived();
+}
+
+// Re-assigned inside renderProfitTierList so input handlers can refresh derived
+// UI (range text, split bars, validation, preview) without rebuilding inputs.
+let psUpdateDerived = () => {};
+
+// Recommended starter: lower share until break-even, higher share after.
+function psApplyTemplate() {
+  if (!psActiveBookId || !BOOKS[psActiveBookId]) return;
+  const book = BOOKS[psActiveBookId];
+  const pc = book.productionCost || 0;
+  book.profitTiers = [
+    { label: 'Pre Break-even', revenueUpTo: pc || 1000, artistPct: 15 },
+    { label: 'Post Break-even', revenueUpTo: null, artistPct: 35 },
+  ];
+  psSimGross = null;
+  renderProfitTierList();
+  showToast('Template applied — adjust the numbers, then Save');
+}
+
+// Validation warnings + a what-if earnings simulator, rendered into #ps-summary.
+function psRenderSummary(book, cur, productionCost) {
+  const summary = $('ps-summary');
+  if (!summary) return;
+  const tiers = book.profitTiers || [];
+  const capOf = (t) => tierEffectiveCap(t, productionCost);
+
+  // ── Validation
+  const warnings = [];
+  if (productionCost <= 0 && tiers.some(t => (t.label || '').toLowerCase().includes('break'))) {
+    warnings.push('A “break-even” stage caps at the production cost, but this book’s production cost is 0. Set it in <b>Book Catalog → Edit</b> so the cap works.');
+  }
+  if (tiers.some(t => { const p = parseFloat(t.artistPct); return isNaN(p) || p < 0 || p > 100; })) {
+    warnings.push('Every artist % should be between 0 and 100.');
+  }
+  // Effective caps should rise across stages (sorted view)
+  const sortedCaps = tiers.map(capOf).filter(c => c != null);
+  for (let i = 1; i < sortedCaps.length; i++) {
+    if (sortedCaps[i] <= sortedCaps[i - 1]) { warnings.push('Stage thresholds should increase — each “Up to” must be larger than the one before.'); break; }
+  }
+  // Percentages are meant to climb as costs are recovered
+  const sortedByCap = [...tiers].sort((a, b) => { const ca = capOf(a), cb = capOf(b); return (ca == null ? Infinity : ca) - (cb == null ? Infinity : cb); });
+  for (let i = 1; i < sortedByCap.length; i++) {
+    if ((parseFloat(sortedByCap[i].artistPct) || 0) < (parseFloat(sortedByCap[i - 1].artistPct) || 0)) {
+      warnings.push('Usually the artist’s % rises after break-even — a later stage currently pays a lower % than an earlier one. Intentional? Otherwise bump it up.');
+      break;
+    }
+  }
+
+  const validationHtml = warnings.length
+    ? `<div style="background:rgba(200,145,58,.1);border:1px solid var(--gold-line);border-radius:var(--r2);padding:11px 14px;margin-top:1.1rem;font-size:11.5px;color:var(--gold);line-height:1.6;">
+         <b>⚠ Check these:</b><ul style="margin:6px 0 0;padding-left:18px;">${warnings.map(w => `<li style="margin-bottom:3px;">${w}</li>`).join('')}</ul>
+       </div>`
+    : `<div style="background:var(--green-bg);border:1px solid rgba(42,99,72,.2);border-radius:var(--r2);padding:9px 14px;margin-top:1.1rem;font-size:11.5px;color:var(--green);">✓ Tiers look consistent.</div>`;
+
+  // ── What-if simulator
+  let defaultGross = productionCost > 0 ? Math.round(productionCost * 2) : 1000;
+  try { const st = calculateArtistEarnings(psActiveBookId); if (st && st.cumulativeRevenue > 0) defaultGross = Math.round(st.cumulativeRevenue); } catch (_) {}
+  const gross = psSimGross == null ? defaultGross : psSimGross;
+  const sim = psSimulateSplit(tiers, productionCost, gross);
+  const artistPct = sim.gross > 0 ? (sim.totalArtist / sim.gross) * 100 : 0;
+
+  const tierRowsHtml = sim.sorted.map((t, i) => {
+    const r = sim.rows[i];
+    if (r.revenue <= 0.001) return '';
+    const c = capOf(t);
+    const label = escapeHtml(t.label || `Stage ${i + 1}`);
+    const cTxt = c != null ? `up to ${fmt(c, cur)}` : 'no ceiling';
+    return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;font-size:11px;padding:5px 0;border-top:1px solid var(--border2);">
+        <span>${label} <span style="color:var(--text3);">· ${cTxt} · ${parseFloat(t.artistPct) || 0}%</span></span>
+        <span style="font-family:'DM Mono',monospace;color:var(--text3);" title="Revenue falling in this stage">${fmt(r.revenue, cur)}</span>
+        <span style="font-family:'DM Mono',monospace;color:var(--green);" title="Artist earns from this stage">${fmt(r.artist, cur)}</span>
+      </div>`;
+  }).join('');
+
+  summary.innerHTML = `
+    ${validationHtml}
+    <div style="margin-top:1.1rem;background:var(--ink);border-radius:var(--r2);padding:14px 16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);">Earnings preview</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:11px;color:rgba(255,255,255,.55);">If this book grosses</span>
+          <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--cream);outline:none;">
+          <span style="font-size:11px;color:rgba(255,255,255,.55);">${escapeHtml(cur)}</span>
+        </div>
+      </div>
+      <div style="display:flex;height:10px;border-radius:100px;overflow:hidden;background:rgba(255,255,255,.08);margin-bottom:8px;">
+        <div style="height:100%;background:var(--gold);width:${Math.max(0, Math.min(100, artistPct))}%;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:10px;">
+        <span style="color:var(--gold3);font-family:'DM Mono',monospace;">Artist ${fmt(sim.totalArtist, cur)} <span style="opacity:.6;">(${artistPct.toFixed(1)}%)</span></span>
+        <span style="color:rgba(255,255,255,.7);font-family:'DM Mono',monospace;">Publisher ${fmt(sim.publisher, cur)}</span>
+      </div>
+      <div style="background:rgba(255,255,255,.03);border-radius:var(--r);padding:2px 12px 8px;">
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);padding:8px 0 4px;">
+          <span>Stage</span><span>Revenue</span><span>Artist</span>
+        </div>
+        <div style="color:rgba(247,242,233,.85);">${tierRowsHtml || '<div style="font-size:11px;color:rgba(255,255,255,.4);padding:6px 0;">Enter a revenue figure to preview the split.</div>'}</div>
+      </div>
+    </div>`;
+
+  const simInput = $('ps-sim-input');
+  if (simInput) {
+    // 'change' fires on blur/enter, so re-rendering the panel here won't steal
+    // focus mid-typing.
+    simInput.addEventListener('change', () => {
+      const v = parseFloat(simInput.value);
+      psSimGross = isNaN(v) ? 0 : v;
+      psRenderSummary(book, cur, productionCost);
+    });
+  }
 }
 
 function addProfitTier() {
