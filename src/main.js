@@ -1404,33 +1404,84 @@ function updateAllOverview() {
       consigned += s.stores[i].outstanding || 0;
       owed += s.stores[i].amountOwed || 0;
     }
-    const pct = Math.max(0,s.stock/book.maxPrint*100);
-    const stockClass = s.stock<=book.threshold?'danger':s.stock<=book.threshold*2?'warn':'gold';
+    const pct = Math.max(0, s.stock / book.maxPrint * 100);
+    const stockClass = s.stock <= book.threshold ? 'danger' : s.stock <= book.threshold * 2 ? 'warn' : 'gold';
     const cost = book.productionCost || 0;
     const recognizedRev = recognizedRevenueOf(s);
     const broken = cost > 0 && recognizedRev >= cost;
-    const bePct = cost > 0 ? Math.min(100, recognizedRev/cost*100) : null;
-    const beBar = (!isAuthor() && bePct !== null) ? `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;"><div style="flex:1;"><div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:3px;">Break-even</div><div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;"><div class="bar-fill" style="width:${bePct}%;background:${broken?'#4ade80':'var(--gold2)'};"></div></div></div><span style="font-size:10px;font-family:'DM Mono',monospace;white-space:nowrap;color:${broken?'var(--green)':'var(--text3)'};">${broken?'✓ Broken even':bePct.toFixed(0)+'%'}</span></div>` : '';
+    const bePct = cost > 0 ? Math.min(100, recognizedRev / cost * 100) : null;
+    
+    // 3D cover initials (e.g. "Un Fantastico Altrove" -> "UFA")
+    const initials = book.title ? book.title.split(/\s+/).filter(Boolean).map(w => w[0]).join('').substring(0, 3).toUpperCase() : '';
+    
+    const beBar = (!isAuthor() && bePct !== null) ? `
+      <div class="book-progress-wrapper">
+        <div class="book-progress-header">
+          <span>Break-even</span>
+          <span class="progress-pct" style="color:${broken ? 'var(--green)' : 'var(--text3)'}; font-weight:700;">
+            ${broken ? '✓ Broken even' : bePct.toFixed(0) + '%'}
+          </span>
+        </div>
+        <div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;">
+          <div class="bar-fill" style="width:${bePct}%;background:${broken ? 'var(--green)' : 'var(--gold2)'};"></div>
+        </div>
+      </div>` : '';
+
     const expTotal = (s.expenses||[]).reduce((a,e)=>a+(e.amount||0),0);
-    return `<div class="book-strip">
-      <div class="book-strip-accent" style="background:${book.accent}"></div>
+
+    return `<div class="book-strip" style="--accent-color: ${book.accent}">
+      <div class="book-cover-container">
+        <div class="book-cover-3d" style="background:${book.accent}">
+          <span class="book-cover-initials">${escapeHtml(initials)}</span>
+          <div class="book-cover-spine"></div>
+          <div class="book-cover-pages"></div>
+        </div>
+      </div>
       <div class="book-strip-info">
         <div class="book-strip-title">${escapeHtml(book.title)}</div>
-        <div class="book-strip-meta">${escapeHtml(book.author)||'—'} &nbsp;·&nbsp; ${book.currency}${book.listPrice} &nbsp;·&nbsp; ${book.maxPrint} printed</div>
-        <div style="margin-top:8px;"><div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;"><div class="bar-fill" style="width:${pct}%;background:${book.accent};"></div></div></div>
+        <div class="book-strip-meta">
+          <span>✍ ${escapeHtml(book.author) || '—'}</span>
+          <span>&nbsp;·&nbsp; 🏷 ${book.currency}${book.listPrice}</span>
+          <span>&nbsp;·&nbsp; 🖨 ${book.maxPrint} printed</span>
+        </div>
+        <div class="book-progress-wrapper">
+          <div class="book-progress-header">
+            <span>Stock on hand</span>
+            <span class="progress-pct">${s.stock} / ${book.maxPrint} (${pct.toFixed(0)}%)</span>
+          </div>
+          <div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;">
+            <div class="bar-fill" style="width:${pct}%;background:${book.accent};"></div>
+          </div>
+        </div>
         ${beBar}
       </div>
       <div class="book-strip-kpis">
-        <div class="bsk"><div class="bsk-val ${stockClass}">${s.stock}</div><div class="bsk-label">On hand</div></div>
-        <div class="bsk"><div class="bsk-val">${s.sold}</div><div class="bsk-label">Sold</div></div>
-        <div class="bsk"><div class="bsk-val">${owed>0?fmt(owed,book.currency):'—'}</div><div class="bsk-label">Owed</div></div>
-        <div class="bsk"><div class="bsk-val${expTotal>0?' warn':''}">${expTotal>0?fmt(expTotal,book.currency):'—'}</div><div class="bsk-label">Expenses</div></div>
+        <div class="bsk">
+          <div class="bsk-val ${stockClass}">${s.stock}</div>
+          <div class="bsk-label">On hand</div>
+        </div>
+        <div class="bsk">
+          <div class="bsk-val">${s.sold}</div>
+          <div class="bsk-label">Sold</div>
+        </div>
+        <div class="bsk">
+          <div class="bsk-val">${owed > 0 ? fmt(owed, book.currency) : '—'}</div>
+          <div class="bsk-label">Owed</div>
+        </div>
+        <div class="bsk">
+          <div class="bsk-val ${expTotal > 0 ? 'warn' : ''}">${expTotal > 0 ? fmt(expTotal, book.currency) : '—'}</div>
+          <div class="bsk-label">Expenses</div>
+        </div>
       </div>
       <div class="book-strip-actions">
-        <button class="btn sm gold" onclick="switchBook('${book.id}')">Manage →</button>
+        <button class="btn sm gold manage-btn" onclick="switchBook('${book.id}')">
+          <span>Manage</span>
+          <svg class="manage-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
       </div>
     </div>`;
   }).join('');
+
 
   // Combined channel analytics — collect structured data grouped by currency so
   // the view can render visually (stacked bars + per-currency toggle) instead of
