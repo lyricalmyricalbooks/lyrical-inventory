@@ -1909,7 +1909,6 @@
     <button class="btn danger-btn" id="inv-delete-btn" style="display:none;" onclick="deleteInvoice()">Delete invoice</button>
     <div style="display:flex;gap:8px;">
       <button class="btn" onclick="closeM('invoice-edit')">Cancel</button>
-      <button class="btn ink" onclick="saveInvoice('draft')">Save draft</button>
       <button class="btn gold" onclick="saveInvoice('sent')">Save &amp; finalize</button>
     </div>
   </div>
@@ -1927,8 +1926,9 @@
       <button class="btn ink" onclick="emailInvoice()">✉ Email</button>
       <button class="btn ink" onclick="copyInvoicePayLink()">🔗 Copy pay link</button>
       <button class="btn ink" id="inv-stripe-btn" onclick="regenerateStripeLinkFromView()" title="Create a Stripe Payment Link with the exact invoice amount">💳 Stripe link</button>
-      <button class="btn ink" onclick="downloadInvoiceHTML()">⬇ Download</button>
-      <button class="btn ink" onclick="printInvoice()">🖨 Print / PDF</button>
+      <button class="btn ink" id="inv-pdf-btn" onclick="downloadInvoicePDF()" title="Download a ready-to-send PDF — no print dialog">⬇ PDF</button>
+      <button class="btn ink" onclick="downloadInvoiceHTML()" title="Download the invoice as an HTML file">⬇ HTML</button>
+      <button class="btn ink" onclick="printInvoice()">🖨 Print</button>
       <button class="btn gold" id="inv-mark-paid-btn" onclick="markInvoicePaidFromView()">✓ Mark paid</button>
       <button class="btn" onclick="closeM('invoice-view')">Close</button>
     </div>

@@ -6657,9 +6657,29 @@ function viewInvoice(id){
   if (!inv){ showToast('Invoice not found', 'err'); return; }
   currentViewInvoiceId = id;
   $('invoice-print-area').innerHTML = renderInvoicePaperHTML(inv);
-  // hide mark-paid button if already paid
+  // Paid invoices show a non-clickable "✓ Paid" badge; unpaid ones keep the
+  // clickable gold "✓ Mark paid" action. (Same element is reused across
+  // invoices, so set the full state both ways.)
   const mp = $('inv-mark-paid-btn');
-  if (mp) mp.style.display = inv.status === 'paid' ? 'none' : '';
+  if (mp){
+    const paid = inv.status === 'paid';
+    mp.style.display = '';
+    mp.disabled = paid;
+    mp.textContent = paid ? '✓ Paid' : '✓ Mark paid';
+    if (paid){
+      mp.classList.remove('gold');
+      mp.style.background = '#e0f5ea';
+      mp.style.color = '#1d7a4a';
+      mp.style.cursor = 'default';
+      mp.style.opacity = '1';
+    } else {
+      mp.classList.add('gold');
+      mp.style.background = '';
+      mp.style.color = '';
+      mp.style.cursor = '';
+      mp.style.opacity = '';
+    }
+  }
   openM('invoice-view');
   // Render QR if QRCode library is available
   setTimeout(()=>{
@@ -7074,14 +7094,11 @@ function collectInvoicePaperCss(){
   return out.join('\n');
 }
 
-// Builds a fully self-contained invoice document with the Stripe pay link embedded
-// (clickable button + scannable QR + plain-text URL) that survives PDF export and
-// email-client styling — so the link is never dropped when the invoice is sent.
-function buildStandaloneInvoiceHTML(inv){
+// Returns the invoice paper's inner HTML with the live QR (drawn to a <canvas>
+// at view time) inlined as a PNG <img>, so it survives outside the live preview
+// (standalone file, print window, or rasterized PDF).
+function invoicePaperBodyWithQR(inv){
   let bodyInner = renderInvoicePaperHTML(inv);
-
-  // Capture the QR that was rendered into the live preview as an <img> so it
-  // persists in the standalone file (the QR is drawn to a <canvas> at view time).
   const liveQr = document.querySelector('#invoice-print-area .inv-qr canvas');
   if (liveQr){
     try {
@@ -7091,6 +7108,14 @@ function buildStandaloneInvoiceHTML(inv){
       );
     } catch(e){}
   }
+  return bodyInner;
+}
+
+// Builds a fully self-contained invoice document with the Stripe pay link embedded
+// (clickable button + scannable QR + plain-text URL) that survives PDF export and
+// email-client styling — so the link is never dropped when the invoice is sent.
+function buildStandaloneInvoiceHTML(inv){
+  const bodyInner = invoicePaperBodyWithQR(inv);
 
   // Only the font stylesheets/preconnects are carried over from the page; the
   // rest of the document is our own clean, print-safe CSS.
@@ -7136,6 +7161,100 @@ function downloadInvoiceHTML(opts){
     showToast(effectivePaymentLink(inv)
       ? '✓ Invoice downloaded with the Stripe pay link embedded — attach it or print to PDF.'
       : '✓ Invoice downloaded (open & print to PDF).');
+  }
+}
+
+// Lazily inject an external script once and resolve when it's ready. The libs
+// live on cdnjs (cached by the service worker — see vite.config.js), so after
+// the first online load this works offline too. Failures reject so callers can
+// fall back gracefully.
+const _externalScripts = {};
+function loadExternalScript(src){
+  if (_externalScripts[src]) return _externalScripts[src];
+  _externalScripts[src] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => { delete _externalScripts[src]; reject(new Error('Failed to load ' + src)); };
+    document.head.appendChild(s);
+  });
+  return _externalScripts[src];
+}
+
+// jsPDF + html2canvas are ~0.5 MB combined, so they're only fetched the first
+// time the user actually exports a PDF (not on every page load).
+async function ensurePdfLibs(){
+  if (!(window.jspdf && window.jspdf.jsPDF)){
+    await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  }
+  if (!window.html2canvas){
+    await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  }
+}
+
+// One-click, true PDF download — no browser print dialog. The invoice is
+// rendered into an off-screen node inside THIS document so the app's already
+// loaded fonts apply (correct typography even offline), rasterized with
+// html2canvas, then placed into an A4 jsPDF and saved as <invoice>.pdf. Falls
+// back to the print/Save-as-PDF flow if the libraries can't be loaded.
+async function downloadInvoicePDF(){
+  if (!currentViewInvoiceId) return;
+  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  if (!inv) return;
+  const btn = $('inv-pdf-btn');
+  const prevLabel = btn ? btn.textContent : '';
+  if (btn){ btn.disabled = true; btn.textContent = '… Building PDF'; }
+
+  let holder;
+  try {
+    await ensurePdfLibs();
+
+    holder = document.createElement('div');
+    holder.setAttribute('aria-hidden', 'true');
+    holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:#fff;';
+    holder.innerHTML = `<div class="invoice-paper" style="box-shadow:none;border-radius:0;max-width:none;">${invoicePaperBodyWithQR(inv)}</div>`;
+    document.body.appendChild(holder);
+    try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(e){}
+
+    const canvas = await window.html2canvas(holder.firstElementChild, {
+      scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false
+    });
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
+    const margin = 24;
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const imgW = pageW - margin * 2;
+    const imgH = canvas.height * (imgW / canvas.width);
+    const imgData = canvas.toDataURL('image/png');
+    const contentH = pageH - margin * 2;
+
+    if (imgH <= contentH){
+      pdf.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
+    } else {
+      // Taller than one page: place the full image and shift it up per page so
+      // each page shows the next slice (content outside the page is clipped).
+      let heightLeft = imgH, position = margin;
+      pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH);
+      heightLeft -= contentH;
+      while (heightLeft > 0){
+        position = margin - (imgH - heightLeft);
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH);
+        heightLeft -= contentH;
+      }
+    }
+
+    pdf.save(`${inv.num || 'invoice'}.pdf`);
+    showToast('✓ PDF downloaded');
+  } catch(e){
+    console.error('PDF export failed:', e);
+    showToast('Could not build the PDF — opening the print dialog instead.', 'warn');
+    printInvoice();
+  } finally {
+    if (holder) { try { holder.remove(); } catch(e){} }
+    if (btn){ btn.disabled = false; btn.textContent = prevLabel; }
   }
 }
 
@@ -14567,7 +14686,7 @@ Object.assign(window, {
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
   onInvoiceStoreChange, prefillFromPendingSales, recalcInvoiceTotals,
   saveInvoice, deleteInvoice, editInvoiceFromView, markInvoicePaidFromView,
-  printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML,
+  printInvoice, copyInvoicePayLink, emailInvoice, downloadInvoiceHTML, downloadInvoicePDF,
   openInvoiceTemplateSettings, saveInvoiceSettings,
   regenerateStripeLinkFromView, onInvoiceCurrencyChange,
 });
