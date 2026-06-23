@@ -57,6 +57,37 @@ export default defineConfig({
       // precaching it (a background fetch after load, not render-blocking) keeps
       // that tab working offline without bloating the initial HTML parse.
       includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'maskable-icon-512x512.png', 'gas-code.txt'],
+      workbox: {
+        // Cache cross-origin assets at runtime so the app keeps its typography
+        // and lazy-loaded libraries (jsPDF/html2canvas, xlsx, qrcode) offline
+        // after the first online visit. Without this, an offline invoice PDF
+        // dropped to system fonts and "Download PDF" failed with no network.
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'google-fonts-stylesheets' }
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-webfonts',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/cdnjs\.cloudflare\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'cdnjs-libs',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          }
+        ]
+      },
       manifest: {
         name: 'Lyricalmyrical Inventory',
         short_name: 'Lyrical-Inv',
