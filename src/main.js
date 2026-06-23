@@ -20,6 +20,7 @@ import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 import { OC_STAGES, ocNextAction, newContributor, parseContributorRows } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown } from './lib/inventory.js';
+import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 
 const updateSW = registerSW({ onNeedRefresh() {} });
 
@@ -10455,9 +10456,11 @@ function _tcRestoreLedgerPrefs() {
     const el = $('tc-ledger-type'); if (el) el.value = p.type;
   }
   if (typeof p.year === 'string') {
-    const el = $('tc-year');
-    // Only restore a year the dropdown actually offers.
-    if (el && Array.from(el.options).some(o => o.value === p.year)) el.value = p.year;
+    // Apply to BOTH year selects (Cash Flow Summary + Master Ledger) so they
+    // agree on the restored period. Only restore a year the dropdown offers.
+    [$('tc-year'), $('tc-year-ledger')].forEach(el => {
+      if (el && Array.from(el.options).some(o => o.value === p.year)) el.value = p.year;
+    });
   }
 }
 
@@ -10483,10 +10486,26 @@ function tcLedgerTypeFilter(v) {
 
 // Year dropdown change — reset to page 1 (the inline handler used to set a stray
 // global instead of the module's _tcLedgerPage) and persist the choice.
-function tcLedgerYearChange() {
+// Canonical year-filter handler. Both the Cash Flow Summary select (#tc-year)
+// and the Master Ledger select (#tc-year-ledger) call this so they stay in sync
+// and drive the same render. renderTaxCenter() reads #tc-year, so push the new
+// value there too in case the change came from the ledger control.
+function tcYearChange(value) {
+  const v = typeof value === 'string' ? value : 'all';
+  [$('tc-year'), $('tc-year-ledger')].forEach(el => {
+    if (el && Array.from(el.options).some(o => o.value === v)) el.value = v;
+  });
   _tcLedgerPage = 0;
   _tcSaveLedgerPrefs();
   renderTaxCenter();
+}
+
+// Retained for backward-compatibility (older inline handlers / persisted code
+// paths may still call it). Delegates to the canonical handler using the
+// current #tc-year value.
+function tcLedgerYearChange() {
+  const el = $('tc-year') || $('tc-year-ledger');
+  tcYearChange(el ? el.value : 'all');
 }
 
 // Clear the Master Ledger search + type filter in one click. The year is left
@@ -10605,6 +10624,8 @@ function renderTaxCenter() {
             origCurrency: cur,
             origAmount: amt,
             baseAmount: baseAmt,
+            qty: h.qty || 1,
+            voided: !!h.voided,
             hasRateError: !hRate,
             isIncome: true,
             sourceType: 'sale',
@@ -10709,11 +10730,15 @@ function renderTaxCenter() {
   });
 
   const netCashFlow = totalGrossSales - totalOperatingExpenses;
-  
-  if ($('tc-sales')) $('tc-sales').textContent = fmt(totalGrossSales, baseCurrency);
-  if ($('tc-expenses')) $('tc-expenses').textContent = fmt(totalOperatingExpenses, baseCurrency);
-  if ($('tc-net')) $('tc-net').textContent = fmt(netCashFlow, baseCurrency);
-  
+
+  // Render the redesigned Cash Flow Summary card (headline stats + deltas +
+  // secondary KPIs + monthly mini-chart + FX-staleness banner). Pass the
+  // already-built ledger so the chart and counts never re-iterate or drift.
+  _tcRenderCashFlowSummary({
+    selectedYear, baseCurrency, allLedger,
+    totalGrossSales, totalOperatingExpenses, netCashFlow,
+  });
+
   // Trips panel + autocomplete suggestions
   const tripBody = $('tc-trip-body');
   const tripSummary = {};
@@ -10942,6 +10967,178 @@ function renderTaxCenter() {
         </tr>
       `).join('') || `<tr><td colspan="5" class="r" style="text-align:center;">No active subscriptions</td></tr>`;
   }
+
+  // Keep BOTH year selects in agreement with the period that was just rendered,
+  // regardless of which control triggered the change (or a restored pref).
+  [$('tc-year'), $('tc-year-ledger')].forEach(el => {
+    if (el && el.value !== selectedYear &&
+        Array.from(el.options).some(o => o.value === selectedYear)) {
+      el.value = selectedYear;
+    }
+  });
+}
+
+// Escape a value for safe interpolation into an SVG/HTML attribute or text node.
+function _tcSvgEsc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Build a delta chip ("▲ 12% vs 2024" / "new" / "—") for a headline stat.
+// `goodWhenUp` flips colour semantics for expenses (a rise is bad / red).
+function _tcDeltaChip(delta, prevYear, goodWhenUp) {
+  if (!delta) return '';
+  if (delta.kind === 'new') {
+    return `<span class="cf-chip-new" title="No activity in ${prevYear}">new</span>`;
+  }
+  const up = delta.dir === 'up';
+  const flat = delta.dir === 'flat';
+  const arrow = flat ? '→' : up ? '▲' : '▼';
+  // For income/net: up = good (green). For expenses: up = bad (red).
+  const good = flat ? null : (goodWhenUp ? up : !up);
+  const cls = good === null ? 'cf-chip-flat' : good ? 'cf-chip-up' : 'cf-chip-down';
+  const pct = Math.abs(delta.pct);
+  const pctStr = pct >= 100 ? Math.round(pct) : pct.toFixed(pct < 10 ? 1 : 0);
+  return `<span class="${cls}" title="vs ${prevYear}">${arrow} ${pctStr}% <span class="cf-chip-vs">vs ${prevYear}</span></span>`;
+}
+
+// Render the redesigned Cash Flow Summary card. Pulls headline figures from the
+// totals renderTaxCenter already computed, derives period-over-period deltas and
+// secondary KPIs via the pure cashflow helpers, and draws an inline-SVG mini
+// chart. No external libraries; everything is a string built here.
+function _tcRenderCashFlowSummary(ctx) {
+  const { selectedYear, baseCurrency, allLedger,
+          totalGrossSales, totalOperatingExpenses, netCashFlow } = ctx;
+
+  // ---- Headline values + colours -----------------------------------------
+  const salesEl = $('tc-sales');
+  const expEl = $('tc-expenses');
+  const netEl = $('tc-net');
+  if (salesEl) salesEl.textContent = fmt(totalGrossSales, baseCurrency);
+  if (expEl) expEl.textContent = fmt(totalOperatingExpenses, baseCurrency);
+  if (netEl) netEl.textContent = fmt(netCashFlow, baseCurrency);
+
+  // Net is green when in the black, red when underwater (previously always green).
+  const netCard = $('tc-net-card');
+  if (netCard) {
+    netCard.classList.remove('cf-income', 'cf-expense');
+    netCard.classList.add(netCashFlow >= 0 ? 'cf-income' : 'cf-expense');
+  }
+
+  // ---- Secondary KPI metrics for the selected period ----------------------
+  const sources = { books: BOOKS, states, taxCenter: TAX_CENTER, fxRateCache: _fxRateCache };
+  const cur = computeCashFlowMetrics(sources, selectedYear);
+  const artistPayouts = cur.artistPayouts;
+  const netAfterPayouts = netCashFlow - artistPayouts;
+  const profitMargin = totalGrossSales > 0 ? (netCashFlow / totalGrossSales) * 100 : null;
+  const avgSale = cur.txnCount > 0 ? totalGrossSales / cur.txnCount : null;
+
+  // ---- Period-over-period deltas (single year only) -----------------------
+  const salesDeltaEl = $('tc-sales-delta');
+  const expDeltaEl = $('tc-expenses-delta');
+  const netDeltaEl = $('tc-net-delta');
+  if (selectedYear !== 'all' && /^\d{4}$/.test(selectedYear)) {
+    const prevYear = String(Number(selectedYear) - 1);
+    const prev = computeCashFlowMetrics(sources, prevYear);
+    const prevNet = prev.grossSales - prev.operatingExpenses;
+    if (salesDeltaEl) salesDeltaEl.innerHTML = _tcDeltaChip(cashFlowDelta(cur.grossSales, prev.grossSales), prevYear, true);
+    if (expDeltaEl) expDeltaEl.innerHTML = _tcDeltaChip(cashFlowDelta(cur.operatingExpenses, prev.operatingExpenses), prevYear, false);
+    if (netDeltaEl) netDeltaEl.innerHTML = _tcDeltaChip(cashFlowDelta(netCashFlow, prevNet), prevYear, true);
+  } else {
+    if (salesDeltaEl) salesDeltaEl.innerHTML = '';
+    if (expDeltaEl) expDeltaEl.innerHTML = '';
+    if (netDeltaEl) netDeltaEl.innerHTML = '';
+  }
+
+  // ---- Secondary KPI chips row --------------------------------------------
+  const kpisEl = $('tc-cf-kpis');
+  if (kpisEl) {
+    const marginCls = profitMargin == null ? '' : profitMargin >= 0 ? 'cf-kpi-good' : 'cf-kpi-bad';
+    const napCls = netAfterPayouts >= 0 ? 'cf-kpi-good' : 'cf-kpi-bad';
+    const chip = (label, value, valCls = '', title = '') =>
+      `<div class="cf-kpi"${title ? ` title="${_tcSvgEsc(title)}"` : ''}>
+        <div class="cf-kpi-val ${valCls}">${value}</div>
+        <div class="cf-kpi-label">${label}</div>
+      </div>`;
+    kpisEl.innerHTML = [
+      chip('Profit Margin', profitMargin == null ? '—' : `${profitMargin.toFixed(1)}%`, marginCls, 'Net cash flow ÷ gross sales'),
+      chip('Transactions', String(cur.txnCount), '', 'Number of sales in this period'),
+      chip('Avg Sale', avgSale == null ? '—' : fmt(avgSale, baseCurrency), '', 'Gross sales ÷ transactions'),
+      chip('Artist Payouts', fmt(artistPayouts, baseCurrency), 'cf-kpi-muted', 'Paid to artists — excluded from operating expenses'),
+      chip('Net After Payouts', fmt(netAfterPayouts, baseCurrency), napCls, 'Net cash flow minus artist payouts'),
+    ].join('');
+  }
+
+  // ---- FX rate-staleness banner -------------------------------------------
+  const fxEl = $('tc-fx-warning');
+  if (fxEl) {
+    const stale = (allLedger || []).filter(r => r.hasRateError).length;
+    if (stale > 0) {
+      fxEl.innerHTML =
+        `<div class="cf-fx-warn" role="status">
+          <span class="cf-fx-ic" aria-hidden="true">⚠</span>
+          <span>${stale} transaction${stale === 1 ? '' : 's'} used a fallback exchange rate (1.0) — totals may be inaccurate. Refresh FX rates and reload.</span>
+        </div>`;
+    } else {
+      fxEl.innerHTML = '';
+    }
+  }
+
+  // ---- Monthly / yearly mini bar chart (inline SVG) -----------------------
+  const chartEl = $('tc-cf-chart');
+  if (chartEl) chartEl.innerHTML = _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency);
+}
+
+// Build a responsive inline-SVG paired-bar chart (green income / red expenses)
+// from the ledger. Months for a single year, years for "All Time". Returns ''
+// when there is nothing to plot so the chart hides gracefully.
+function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
+  const buckets = buildCashFlowBuckets(allLedger, selectedYear);
+  const hasData = buckets.some(b => b.income > 0 || b.expense > 0);
+  if (!buckets.length || !hasData) return '';
+
+  const W = 720, H = 200;
+  const padL = 8, padR = 8, padTop = 14, padBottom = 26;
+  const plotW = W - padL - padR;
+  const plotH = H - padTop - padBottom;
+  const baseY = padTop + plotH;
+  const max = Math.max(1, ...buckets.map(b => Math.max(b.income, b.expense)));
+  const n = buckets.length;
+  const groupW = plotW / n;
+  const barGap = Math.min(4, groupW * 0.08);
+  const barW = Math.max(2, (groupW - barGap * 3) / 2);
+
+  let bars = '';
+  let labels = '';
+  buckets.forEach((b, i) => {
+    const gx = padL + i * groupW;
+    const incH = (b.income / max) * plotH;
+    const expH = (b.expense / max) * plotH;
+    const x1 = gx + barGap;
+    const x2 = x1 + barW + barGap;
+    if (b.income > 0) {
+      bars += `<rect x="${x1.toFixed(1)}" y="${(baseY - incH).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" rx="2" fill="var(--green)"><title>${_tcSvgEsc(b.label)} income: ${_tcSvgEsc(fmt(b.income, baseCurrency))}</title></rect>`;
+    }
+    if (b.expense > 0) {
+      bars += `<rect x="${x2.toFixed(1)}" y="${(baseY - expH).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" rx="2" fill="var(--red)"><title>${_tcSvgEsc(b.label)} expenses: ${_tcSvgEsc(fmt(b.expense, baseCurrency))}</title></rect>`;
+    }
+    labels += `<text x="${(gx + groupW / 2).toFixed(1)}" y="${(H - 8).toFixed(1)}" text-anchor="middle" class="cf-chart-axis">${_tcSvgEsc(b.label)}</text>`;
+  });
+
+  const title = selectedYear === 'all' ? 'Income vs expenses by year' : `Income vs expenses by month — ${selectedYear}`;
+  return `
+    <div class="cf-chart-head">
+      <span class="cf-chart-title">${_tcSvgEsc(title)}</span>
+      <span class="cf-legend">
+        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:var(--green);"></span>Income</span>
+        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:var(--red);"></span>Expenses</span>
+      </span>
+    </div>
+    <svg class="cf-chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${_tcSvgEsc(title)}">
+      <line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" class="cf-chart-base"/>
+      ${bars}
+      ${labels}
+    </svg>`;
 }
 
 async function removeLedgerEntry(type, bid, id) {
@@ -14674,7 +14871,7 @@ Object.assign(window, {
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
-  tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcClearLedgerFilters,
+  tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcYearChange, tcClearLedgerFilters,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
