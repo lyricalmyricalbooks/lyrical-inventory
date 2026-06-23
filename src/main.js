@@ -6910,50 +6910,141 @@ function copyInvoicePayLink(){
   );
 }
 
-function emailInvoice(){
+function invoiceEmailPlainText(inv){
+  const settings = getInvoiceSettings();
+  const cur = inv.currency || getBook().currency;
+  const payUrl = effectivePaymentLink(inv);
+  return [
+    `Hi ${inv.storeContact || inv.storeName || 'there'},`,
+    ``,
+    `Your invoice ${inv.num} for ${fmt(inv.total||0, cur)} is below. Issued ${fmtD(inv.date)}${inv.dueDate?', due '+fmtD(inv.dueDate):''}.`,
+    payUrl ? `` : null,
+    payUrl ? `Pay securely online${isDynamicStripeLink(inv)?' (exact amount via Stripe)':''}: ${payUrl}` : null,
+    inv.notes ? `` : null,
+    inv.notes ? `Notes: ${inv.notes}` : null,
+    ``,
+    `Thank you,`,
+    settings.name || 'Lyricalmyrical Books',
+  ].filter(v => v !== null).join('\n');
+}
+
+// Gmail compose URLs only support plain-text bodies. To make invoice emails look
+// like the invoice itself, copy a rich, inline-styled email (greeting + invoice
+// card + pay button) to the clipboard, then open Gmail with just recipient and
+// subject filled so the user can paste the formatted invoice into the message.
+function buildInvoiceEmailHTML(inv){
+  const settings = getInvoiceSettings();
+  const cur = inv.currency || getBook().currency;
+  const payUrl = effectivePaymentLink(inv);
+  const accent = (BOOKS[activeBook] || getBook()).accent || '#c8913a';
+  const contact = escapeHTML(inv.storeContact || inv.storeName || 'there');
+  const items = (inv.items || []).map(it => `
+    <tr>
+      <td style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;">${escapeHTML(it.description || '—')}</td>
+      <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${it.qty || 0}</td>
+      <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(it.unitPrice || 0, cur)}</td>
+      <td align="right" style="padding:12px 10px;border-bottom:1px solid #f1eadc;color:#1a1814;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;">${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</td>
+    </tr>`).join('');
+  const billedTo = [inv.storeContact, inv.storeEmail, inv.storePhone, inv.storeAddress, [inv.storeCity, inv.storeRegion, inv.storePostal].filter(Boolean).join(', '), inv.storeCountry]
+    .filter(Boolean).map(escapeHTML).join('<br>');
+  const notes = [
+    inv.notes ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:4px;">Notes</div><div style="white-space:pre-wrap;">${escapeHTML(inv.notes)}</div></div>` : '',
+    inv.terms ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:4px;">Terms</div><div style="white-space:pre-wrap;">${escapeHTML(inv.terms)}</div></div>` : '',
+  ].join('');
+  return `
+<div style="margin:0;padding:0;background:#f7f2e9;color:#1a1814;font-family:Arial,Helvetica,sans-serif;">
+  <div style="max-width:760px;margin:0 auto;padding:24px 14px;">
+    <p style="font-size:16px;line-height:1.55;margin:0 0 16px;">Hi ${contact},</p>
+    <p style="font-size:15px;line-height:1.55;margin:0 0 22px;">Here is invoice <strong>${escapeHTML(inv.num)}</strong> for <strong>${fmt(inv.total||0, cur)}</strong>. It is also ready to print or save as a PDF from the invoice screen.</p>
+    <div style="background:#ffffff;border:1px solid #eadfca;border-radius:12px;overflow:hidden;box-shadow:0 8px 28px rgba(14,12,10,.10);">
+      <div style="height:7px;background:${escapeHTML(accent)};"></div>
+      <div style="padding:30px 34px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:26px;">
+          <tr>
+            <td style="vertical-align:top;">
+              <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#0e0c0a;line-height:1.1;">${escapeHTML(settings.name || 'Lyricalmyrical Books')}</div>
+              <div style="font-size:12px;line-height:1.55;color:#756e64;margin-top:10px;white-space:pre-wrap;">${escapeHTML(settings.addr || '')}${settings.email?'<br>'+escapeHTML(settings.email):''}${settings.web?'<br>'+escapeHTML(settings.web):''}</div>
+            </td>
+            <td align="right" style="vertical-align:top;white-space:nowrap;">
+              <div style="font-family:Georgia,'Times New Roman',serif;font-size:22px;color:${escapeHTML(accent)};letter-spacing:.16em;text-transform:uppercase;font-weight:700;">Invoice</div>
+              <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;font-weight:700;margin-top:8px;">${escapeHTML(inv.num)}</div>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border-top:1px solid #eadfca;border-bottom:1px solid #eadfca;margin-bottom:22px;">
+          <tr>
+            <td style="padding:16px 12px 16px 0;vertical-align:top;width:45%;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Billed to</div><div style="font-weight:700;">${escapeHTML(inv.storeName || '—')}</div><div style="font-size:12px;line-height:1.5;color:#756e64;margin-top:4px;">${billedTo}</div></td>
+            <td style="padding:16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Issue date</div><div style="font-weight:700;">${fmtD(inv.date)}</div>${inv.dueDate?`<div style="font-size:12px;color:#756e64;margin-top:4px;">Due ${fmtD(inv.dueDate)}</div>`:''}</td>
+            <td align="right" style="padding:16px 0 16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Amount due</div><div style="font-size:22px;font-weight:800;color:#0e0c0a;">${fmt(inv.total||0, cur)}</div></td>
+          </tr>
+        </table>
+        <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:18px;">
+          <thead><tr><th align="left" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9b9184;">Description</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9b9184;">Qty</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9b9184;">Unit price</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9b9184;">Amount</th></tr></thead>
+          <tbody>${items}</tbody>
+        </table>
+        <table role="presentation" align="right" width="300" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:22px;">
+          <tr><td style="padding:6px 12px;color:#4a443c;">Subtotal</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(inv.subtotal||0, cur)}</td></tr>
+          ${(inv.discount||0)>0 ? `<tr><td style="padding:6px 12px;color:#4a443c;">Discount</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">−${fmt(inv.discount, cur)}</td></tr>` : ''}
+          ${(inv.taxRate||0)>0 ? `<tr><td style="padding:6px 12px;color:#4a443c;">Tax (${inv.taxRate}%)</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(inv.tax||0, cur)}</td></tr>` : ''}
+          <tr><td style="padding:14px 12px;background:#0e0c0a;color:#f7f2e9;border-radius:6px 0 0 6px;font-weight:800;">Total due</td><td align="right" style="padding:14px 12px;background:#0e0c0a;color:#f0c060;border-radius:0 6px 6px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:800;">${fmt(inv.total||0, cur)}</td></tr>
+        </table>
+        <div style="clear:both;"></div>
+        ${payUrl ? `<div style="background:#faf6ec;border:1px solid #eadfca;border-radius:10px;padding:18px 20px;margin:16px 0 20px;"><div style="font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Pay this invoice</div><div style="font-size:13px;line-height:1.5;color:#675f55;margin-bottom:14px;">Pay <strong>${fmt(inv.total||0, cur)}</strong> securely online${isDynamicStripeLink(inv)?' via Stripe Checkout':''}.</div><a href="${payUrl}" style="display:inline-block;background:#0e0c0a;color:#f0c060;text-decoration:none;border-radius:999px;padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;">Pay ${fmt(inv.total||0, cur)} →</a><div style="font-size:11px;line-height:1.4;color:#8c8378;margin-top:10px;word-break:break-all;">${escapeHTML(payUrl)}</div></div>` : ''}
+        ${notes}
+        <div style="text-align:center;font-size:12px;color:#9b9184;margin-top:24px;font-style:italic;">${escapeHTML(settings.footer || 'Thank you for stocking our books.')}</div>
+      </div>
+    </div>
+    <p style="font-size:15px;line-height:1.55;margin:22px 0 0;">Thank you,<br>${escapeHTML(settings.name || 'Lyricalmyrical Books')}</p>
+  </div>
+</div>`;
+}
+
+async function copyInvoiceEmailToClipboard(inv){
+  const html = buildInvoiceEmailHTML(inv);
+  const text = invoiceEmailPlainText(inv);
+  if (navigator.clipboard && window.ClipboardItem){
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+      })
+    ]);
+    return true;
+  }
+  if (navigator.clipboard?.writeText){ await navigator.clipboard.writeText(text); return false; }
+  throw new Error('Clipboard unavailable');
+}
+
+async function emailInvoice(){
   if (!currentViewInvoiceId) return;
   const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
   const settings = getInvoiceSettings();
-  const cur = inv.currency || getBook().currency;
-  const payUrl = effectivePaymentLink(inv);
-  // Download an email-ready copy of the invoice with the Stripe pay link embedded,
-  // so the user has a document to attach (mailto cannot attach files itself).
-  downloadInvoiceHTML({ silent: true });
   const subject = `Invoice ${inv.num} — ${settings.name || 'Lyricalmyrical Books'}`;
-  const lines = [
-    `Hi ${inv.storeContact || inv.storeName || 'there'},`,
-    ``,
-    `Please find invoice ${inv.num} (${fmt(inv.total||0, cur)}) attached. Issued ${fmtD(inv.date)}${inv.dueDate?', due '+fmtD(inv.dueDate):''}.`,
-    ``,
-    payUrl ? `Pay securely online${isDynamicStripeLink(inv)?' (exact amount via Stripe)':''}:` : ``,
-    payUrl || ``,
-    ``,
-    inv.notes ? `Notes: ${inv.notes}` : ``,
-    ``,
-    `Thank you,`,
-    settings.name || 'Lyricalmyrical Books',
-  ].filter(Boolean).join('\n');
   const to = inv.storeEmail || '';
-  // Open Gmail's web compose directly (the user works in Gmail) rather than
-  // handing off to the OS default mail handler. Gmail can't attach a file from
-  // a URL either, so the downloaded HTML above is still what the user attaches.
-  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
-  // Don't pass 'noopener' here: with it, window.open returns null even on
-  // success, which would mis-trigger the popup-blocked fallback. Open normally
-  // (so a null return reliably means "blocked"), then sever the opener link.
+  let richCopied = false;
+  try {
+    richCopied = await copyInvoiceEmailToClipboard(inv);
+  } catch(e){
+    showToast('Could not copy the formatted invoice email. Your browser may have blocked clipboard access.', 'warn');
+  }
+  // Still download the one-page invoice file as a backup attachment / PDF source,
+  // but the email body itself is now the formatted invoice copied above.
+  downloadInvoiceHTML({ silent: true });
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}`;
   const w = window.open(gmailUrl, '_blank');
+  const msg = richCopied
+    ? '✓ Formatted invoice email copied. Paste into Gmail compose, then attach the downloaded invoice if you want.'
+    : '✓ Plain invoice text copied. Paste into Gmail compose, then attach the downloaded invoice if you want.';
   if (w){
     try { w.opener = null; } catch(e){}
-    showToast('✓ Gmail compose opened in a new tab — attach the downloaded invoice file before sending.');
+    showToast(msg);
   } else {
-    // Popup blocked — fall back to the OS mail handler so nothing is lost.
-    const mailtoUrl = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines)}`;
+    const mailtoUrl = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(invoiceEmailPlainText(inv))}`;
     window.location.href = mailtoUrl;
-    showToast('✓ Pay link added to the email. Attach the downloaded invoice file to send it too.');
+    showToast('Popup blocked — opened your mail app with the plain invoice text instead.');
   }
 }
-
 // Pulls just the .invoice-paper visual styles from the live page so the
 // standalone invoice document stays pixel-identical to the on-screen preview
 // without duplicating ~60 lines of CSS in JS. We deliberately grab only the
