@@ -9908,6 +9908,18 @@ function tcLedgerYearChange() {
   renderTaxCenter();
 }
 
+// Clear the Master Ledger search + type filter in one click. The year is left
+// alone — it has its own visible dropdown and scopes the summary cards too.
+function tcClearLedgerFilters() {
+  _tcLedgerSearch = '';
+  _tcLedgerType = 'all';
+  _tcLedgerPage = 0;
+  const sEl = $('tc-ledger-search'); if (sEl) sEl.value = '';
+  const tEl = $('tc-ledger-type'); if (tEl) tEl.value = 'all';
+  _tcSaveLedgerPrefs();
+  renderTaxCenter();
+}
+
 // Apply the active search + type filter to the full (year-filtered) ledger array.
 function _tcApplyLedgerFilter(rows) {
   let out = rows;
@@ -10287,6 +10299,20 @@ function renderTaxCenter() {
           </td>
         </tr>`;
     }
+  }
+
+  // Active-filter chip (search + type) — makes it obvious why the table shows
+  // fewer rows than the year-scoped summary cards, with one-click reset.
+  const filterChip = $('tc-ledger-filter-chip');
+  if (filterChip) {
+    const parts = [];
+    if (_tcLedgerType === 'sales') parts.push('Sales only');
+    else if (_tcLedgerType === 'expenses') parts.push('Expenses only');
+    const q = _tcLedgerSearch.trim();
+    if (q) parts.push(`“${escapeHtml(q)}”`);
+    filterChip.innerHTML = parts.length
+      ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:14px;padding:3px 6px 3px 12px;">Filtered: ${parts.join(' · ')}<button onclick="tcClearLedgerFilters()" title="Clear filters" aria-label="Clear filters" style="border:none;background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 4px;">✕</button></span>`
+      : '';
   }
 
   // Pagination controls
@@ -12300,6 +12326,13 @@ window.downloadFullTaxSeasonExport = function() {
   const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
   const getAmt = (e) => (parseFloat(e.baseAmount || e.amountCAD || e.amount || 0));
 
+  // Track books exported with no saved CAD rate (fell back to 1.0 — a silently
+  // wrong tax figure). Keyed by book id so a book is listed at most once.
+  const rateWarnings = new Map();
+  const flagRateIfMissing = (book, cur, rawRate, hasAmount) => {
+    if (hasAmount && cur && cur !== 'CAD' && !rawRate) rateWarnings.set(book.id, { title: book.title, cur });
+  };
+
   // Section 1: Revenue by Book
   csv += '--- REVENUE BY BOOK ---\n';
   csv += 'Book Title,Gross Revenue,Net Revenue (after COGS & Royalty),Total Units Sold\n';
@@ -12309,7 +12342,8 @@ window.downloadFullTaxSeasonExport = function() {
       // Sales + royalty are recorded in the book's native currency; convert to the
       // export's base (CAD) so they're comparable with the CAD expense figures.
       const cur = getBookCurrencyCode(book);
-      const hRate = _fxRateCache[`${cur}_CAD`] || 1;
+      const rawRate = _fxRateCache[`${cur}_CAD`];
+      const hRate = rawRate || 1;
 
       // ⚡ Bolt Optimization: Loop Fusion - Compute sold and revenue in a single pass without intermediate array allocation
       let sold = 0;
@@ -12346,6 +12380,7 @@ window.downloadFullTaxSeasonExport = function() {
       const revenueCAD = revenue * hRate;
       const sharesCAD = shares * hRate;
       const net = revenueCAD - expTotal - sharesCAD;
+      flagRateIfMissing(book, cur, rawRate, revenue > 0 || shares > 0);
       csv += `${esc(book.title)},${revenueCAD.toFixed(2)},${net.toFixed(2)},${sold}\n`;
   });
   
@@ -12357,7 +12392,8 @@ window.downloadFullTaxSeasonExport = function() {
   BOOK_LIST.forEach(book => {
       const s = states[book.id] || defaultState(book);
       const cur = getBookCurrencyCode(book);
-      const hRate = _fxRateCache[`${cur}_CAD`] || 1;
+      const rawRate = _fxRateCache[`${cur}_CAD`];
+      const hRate = rawRate || 1;
 
       // Book Expenses
       (s.expenses || []).filter(e => {
@@ -12375,7 +12411,9 @@ window.downloadFullTaxSeasonExport = function() {
       }).forEach(t => {
           // Use .total for payouts as per state structure; payout totals are in the
           // book's native currency — convert to CAD to match the column header.
-          const payoutCAD = (parseFloat(t.total || t.amount || 0)) * hRate;
+          const payoutRaw = parseFloat(t.total || t.amount || 0);
+          flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
+          const payoutCAD = payoutRaw * hRate;
           csv += `${t.date},${esc(book.title)},"Artist Payout","Transfer to Artist",${payoutCAD.toFixed(2)},""\n`;
       });
   });
@@ -12390,12 +12428,26 @@ window.downloadFullTaxSeasonExport = function() {
       csv += `${l.date},"Publisher (General)",${esc(l.cat)},${esc(l.desc)},${getAmt(l).toFixed(2)},${esc(l.receipt)}\n`;
   });
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  // Section 3: FX rate warnings — surface any book exported at 1.0 because no
+  // CAD rate was saved, so a wrong tax figure can't slip through unnoticed.
+  if (rateWarnings.size) {
+    csv += '\n--- ⚠ FX RATE WARNINGS ---\n';
+    csv += `${esc('No saved CAD exchange rate for these books — their amounts above were exported UNCONVERTED (rate 1.0) and are NOT correct. Refresh FX rates (POS cart → ↻ FX Rates), then re-export.')}\n`;
+    csv += 'Book Title,Currency,Rate Used\n';
+    rateWarnings.forEach(w => { csv += `${esc(w.title)},${esc(w.cur)},1.00\n`; });
+  }
+
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.setAttribute('href', url);
   a.setAttribute('download', `Lyrical_Tax_Season_${isAllTime ? 'AllTime' : year}_Export.csv`);
   a.click();
+
+  if (rateWarnings.size) {
+    const names = Array.from(rateWarnings.values()).map(w => `${w.title} (${w.cur})`).join(', ');
+    showToast(`⚠ Exported, but ${rateWarnings.size} book${rateWarnings.size === 1 ? '' : 's'} had no CAD rate — shown unconverted: ${names}. Refresh FX rates and re-export.`, 'warn', 7000);
+  }
 };
 
 // ── STRIPE FEES BY YEAR
@@ -14040,7 +14092,7 @@ Object.assign(window, {
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
-  tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange,
+  tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcClearLedgerFilters,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
