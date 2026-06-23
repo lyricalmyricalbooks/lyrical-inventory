@@ -1356,7 +1356,7 @@ function switchTab(name) {
   if(name==='dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
   if(name==='history') renderHist();
   if(name==='manual') updateManualForm();
-  if(name==='consignment'){ renderStores(); renderLedger(); renderInvoices(); }
+  if(name==='consignment'){ if(backfillConsignmentLinks(getState())) saveState(activeBook); renderStores(); renderLedger(); renderInvoices(); }
   if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
   if(name==='opencall') renderOpenCall();
   if(name==='reconcile') renderReconcile();
@@ -6023,6 +6023,32 @@ function maybeAutoPayInvoiceForLedger(s, e){
   if(!linked.length) return;                         // nothing resolvable → skip
   if(linked.some(x => x.status !== 'paid')) return;  // not all paid yet → wait
   inv.status = 'paid'; inv.paidAt = Date.now(); inv.paidMethod = 'Ledger';
+}
+
+// Backfill links onto historical data: invoices created before the invoiceId
+// back-pointer existed still reference their sales via item._ledgerId. Stamp any
+// MISSING link (never overwrite — last-writer-wins stays with live edits) and
+// seed each Sale mirror's paidState, so badges + two-way sync work on existing
+// invoices, not just new ones. Idempotent; returns whether anything changed.
+function backfillConsignmentLinks(s){
+  if(!s || !s.invoices || !s.ledger) return false;
+  let changed = false;
+  for(const inv of s.invoices){
+    if(inv.status === 'cancelled') continue;
+    for(const it of (inv.items||[])){
+      if(!it._ledgerId) continue;
+      const e = s.ledger.find(x => x.id === it._ledgerId);
+      if(e && !e.invoiceId){ stampLedgerInvoiceLink(s, e.id, inv); changed = true; }
+    }
+  }
+  for(const e of (s.ledger||[])){
+    if(e.type !== 'Sale' || !e.sheetsId) continue;
+    const h = histMirrorForLedger(s, e);
+    if(h && h.paidState === undefined && (e.status === 'paid' || e.status === 'pending')){
+      h.paidState = e.status; changed = true;
+    }
+  }
+  return changed;
 }
 
 // A small clickable badge linking a ledger/history row back to its invoice; '' when
