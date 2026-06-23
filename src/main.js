@@ -2818,8 +2818,8 @@ function renderOrders() {
 
   if (!visible.length) {
     const msg = hiddenCount > 0
-      ? `<div class="empty-state"><div class="e-icon">✅</div>All ${hiddenCount} found order(s) already applied.<br><span style="font-size:11px;color:var(--text3);">Scan again to check for newer orders.</span></div>`
-      : `<div class="empty-state"><div class="e-icon">📬</div>No orders found for this book.<br><span style="font-size:11px;color:var(--text3);">Make sure your Google Sheets is connected.</span></div>`;
+      ? `<div class="empty-state web-empty success"><div class="e-icon">✅</div><strong>Everything is up to date</strong><span>All ${hiddenCount} found order(s) are already applied. Scan again to check for newer receipts.</span></div>`
+      : `<div class="empty-state web-empty"><div class="e-icon">📬</div><strong>No orders found for this book</strong><span>Make sure Google Sheets is connected, then scan Gmail for recent Big Cartel receipts.</span><button class="btn ink sm" onclick="fetchOrders()">Scan Gmail</button></div>`;
     list.innerHTML = msg;
     $('apply-all-btn').disabled = true;
     return;
@@ -2844,26 +2844,26 @@ function renderOrders() {
       ? `<a href="https://mail.google.com/mail/u/0/#all/${o.id}" target="_blank" class="btn sm" style="font-size:10px;opacity:.7;">📧 View</a>`
       : '';
     return `<div class="order-card${done ? ' done' : ''}">
-      <div class="order-row">
-        <div>
+      <div class="order-row order-card-top">
+        <div class="order-identity">
           <div class="order-num">${escapeHtml(o.orderNum)}</div>
-          <div class="order-meta">${escapeHtml(o.date)} · ${escapeHtml(o.customer) || '—'} · <span style="opacity:.6;">${escapeHtml(o.email)}</span></div>
+          <div class="order-meta">${escapeHtml(o.date)} · ${escapeHtml(o.customer) || '—'} · <span>${escapeHtml(o.email)}</span></div>
           ${addrLine}
         </div>
         <span class="pill ${done ? 'gray' : 'gold'}">${done ? 'Applied' : 'New'}</span>
       </div>
-      <div class="order-row" style="margin-top:8px;gap:6px;">
-        <span style="font-size:12px;color:var(--text3);">${bookLabel}qty ${o.qty} · ${fmt(o.price || listPrice, listCur)}${priceWarn}</span>
-        <div style="display:flex;gap:6px;align-items:center;">
+      <div class="order-row order-card-bottom">
+        <span class="order-summary">${bookLabel}<span>Qty ${o.qty}</span><span>${fmt(o.price || listPrice, listCur)}</span>${priceWarn}</span>
+        <div class="order-actions">
           ${viewEmailBtn}
-          ${!done ? `<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>` : '<span style="font-size:11px;color:var(--text3);">Done</span>'}
+          ${!done ? `<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>` : '<span class="order-done">Done</span>'}
         </div>
       </div>
     </div>`;
   }).join('');
 
   if (hiddenCount > 0) {
-    list.innerHTML += `<div style="text-align:center;font-size:11px;color:var(--text3);padding:10px 0;">${hiddenCount} already-applied order(s) hidden.</div>`;
+    list.innerHTML += `<div class="orders-hidden-note">${hiddenCount} already-applied order(s) hidden.</div>`;
   }
 
   $('apply-all-btn').disabled = !visible.some(o => !appliedIds.has(o.id) && !appliedIds.has(o.orderNum));
