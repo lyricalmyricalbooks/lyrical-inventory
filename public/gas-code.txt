@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v9)
+/* Lyricalmyrical Inventory — Unified Backend (v10)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
  *  2. Sheets sync with:
@@ -24,6 +24,11 @@
  *     instead of the script owner's Gmail. Configure it in Script Properties
  *     (see configureMail_). With no provider configured it falls back to
  *     MailApp unchanged. Bump flags v8-and-older deploys as outdated.
+ *  8. v10: adds a trailing "Invoice" column so consignment Sale rows carry the
+ *     invoice number that bills them (blank on every other row). ensureSheet_
+ *     now rewrites a managed sheet's header row in place when it drifts, so the
+ *     new column self-labels on the next sync. Bump flags v9-and-older as
+ *     outdated so the publisher redeploys to gain the column.
  */
 
 const HEADERS = [
@@ -39,7 +44,8 @@ const HEADERS = [
   'Total/Amount',
   'CAD Equivalent',
   'Status',
-  'Notes'
+  'Notes',
+  'Invoice'       // consignment sales: the invoice that bills them (blank otherwise)
 ];
 
 const COL = HEADERS.reduce((m, h, i) => (m[h] = i + 1, m), {});
@@ -59,9 +65,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v9',
-    scriptVersion: 'v9',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true },
+    service: 'lyrical-sheets-webhook-v10',
+    scriptVersion: 'v10',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -442,6 +448,7 @@ function processSheetEntry_(ss, sheetName, data) {
   row[COL['CAD Equivalent'] - 1] = cad;
   row[COL.Status - 1]          = data.status ?? 'OK';
   row[COL.Notes - 1]           = data.notes ?? '';
+  row[COL.Invoice - 1]         = data.invoiceNum ?? '';
 
   sheet.appendRow(row);
 }
@@ -450,9 +457,14 @@ function ensureSheet_(ss, name) {
   let sheet = ss.getSheetByName(name);
   if (sheet) {
     const firstRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-    const looksOld = !firstRow || firstRow[0] !== '_eventId';
-    if (looksOld) {
+    if (!firstRow || firstRow[0] !== '_eventId') {
+      // Unmanaged / pre-v1 layout: push our header row on top of existing data.
       sheet.insertRowBefore(1);
+      sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    } else if (firstRow.length < HEADERS.length || HEADERS.some((h, i) => firstRow[i] !== h)) {
+      // Managed sheet whose header drifted from this release (e.g. a column was
+      // appended). Rewrite the header row in place so the new column is labelled.
+      // Columns are only ever appended, so existing data rows stay aligned.
       sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
     }
     formatSheet_(sheet);
@@ -496,6 +508,7 @@ function formatSheet_(sheet) {
   sheet.setColumnWidth(COL['CAD Equivalent'], 135);
   sheet.setColumnWidth(COL.Status, 95);
   sheet.setColumnWidth(COL.Notes, 320);
+  sheet.setColumnWidth(COL.Invoice, 130);
 
   // ── BODY DEFAULTS ───────────────────────────────────────
   const body = sheet.getRange(2, 1, maxRow - 1, lastCol);
@@ -509,6 +522,7 @@ function formatSheet_(sheet) {
   sheet.getRange(2, COL.Date, maxRow - 1, 1).setNumberFormat('yyyy-mm-dd').setHorizontalAlignment('center');
   sheet.getRange(2, COL.Type, maxRow - 1, 1).setHorizontalAlignment('center').setFontWeight('bold');
   sheet.getRange(2, COL['Event/Num'], maxRow - 1, 1).setHorizontalAlignment('center').setFontFamily('Roboto Mono');
+  sheet.getRange(2, COL.Invoice, maxRow - 1, 1).setHorizontalAlignment('center').setFontFamily('Roboto Mono');
   sheet.getRange(2, COL.Qty, maxRow - 1, 1).setNumberFormat('0').setHorizontalAlignment('center');
   sheet.getRange(2, COL.Currency, maxRow - 1, 1).setHorizontalAlignment('center').setFontWeight('bold');
   sheet.getRange(2, COL['Price/Rate'], maxRow - 1, 1).setNumberFormat('#,##0.00').setHorizontalAlignment('right');

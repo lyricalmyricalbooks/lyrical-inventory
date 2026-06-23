@@ -657,7 +657,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v9';
+const EXPECTED_SCRIPT_VERSION = 'v10';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -2641,6 +2641,9 @@ function renderConsignHistRow(e, after) {
 
 function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
+  // Refresh consignment Sale ↔ invoice cross-links so a renamed/relinked invoice
+  // shows its current number on the History badges (and heals legacy mirrors).
+  reconcileConsignmentInvoiceLinks(s);
 
   const pbSales = window.authorSubmissions[activeBook]?.sales || {};
   const pendingSales = Object.keys(pbSales).map(k => {
@@ -5977,14 +5980,32 @@ function confirmReturn(){
 // ── Invoice ↔ Ledger ↔ History consistency helpers ───────────────────────
 // Single source of truth for keeping the three views cross-referenced. All
 // operate on an in-book state `s = getState()`, so multi-book is automatic.
-// The fields these touch (invoiceId/invoiceNum/paidState/ledgerDivergedAt) are
-// LOCAL-ONLY — they are never added to any syncToSheets payload.
+// invoiceId/paidState/ledgerDivergedAt stay LOCAL-ONLY. invoiceNum is the one
+// exception: it is mirrored to the Google Sheet's "Invoice" column on every
+// consignment row sync (see consignmentSyncPayload) so the sheet tracks renames.
 
-// The s.hist mirror row for a ledger Sale: matched by the shared sheetsId they
-// were created with. Returns null when there's no resolvable mirror.
+// The s.hist mirror row for a ledger Sale. The mirror and its ledger entry are
+// minted sharing one sheetsId (see confirmSale), so that's the primary join.
+// BUT legacy rows created before sheetsId existed were later backfilled with
+// INDEPENDENT ids (backfillSheetsIds() mints a fresh one per record), which
+// orphans the mirror from its ledger sale. Fall back to the mirror's stable
+// shape — store + date + qty + due amount — so the join survives that split.
+// Returns null when there's no resolvable mirror.
 function histMirrorForLedger(s, e){
-  if(!e || !e.sheetsId) return null;
-  return (s.hist||[]).find(h => h.consignmentLink && h.sheetsId === e.sheetsId) || null;
+  if(!e) return null;
+  const hist = s.hist || [];
+  if(e.sheetsId){
+    const byId = hist.find(h => h.consignmentLink && h.sheetsId === e.sheetsId);
+    if(byId) return byId;
+  }
+  if(e.type !== 'Sale') return null;
+  return hist.find(h =>
+    h.consignmentLink &&
+    h.notes === e.storeName &&
+    h.date === e.date &&
+    (h.qty||0) === (e.qty||0) &&
+    Math.abs((h.price||0)*(h.qty||0) - (e.amountDue||0)) < 0.01
+  ) || null;
 }
 
 // The only writer of the invoice back-pointers: sets (or clears, when inv===null)
@@ -5995,7 +6016,54 @@ function stampLedgerInvoiceLink(s, ledgerId, inv){
   e.invoiceId  = inv ? inv.id  : null;
   e.invoiceNum = inv ? inv.num : null;
   const h = histMirrorForLedger(s, e);
-  if(h){ h.invoiceId = inv ? inv.id : null; h.invoiceNum = inv ? inv.num : null; }
+  if(h){
+    // Heal a legacy split sheetsId so future lookups stay O(1) and robust. The
+    // consignment mirror is never synced to Sheets on its own (the ledger row is
+    // canonical), so realigning its id has no sheet-side effect.
+    if(e.sheetsId && h.sheetsId !== e.sheetsId) h.sheetsId = e.sheetsId;
+    h.invoiceId = inv ? inv.id : null;
+    h.invoiceNum = inv ? inv.num : null;
+  }
+}
+
+// Re-derive every consignment Sale mirror's invoice fields from the canonical
+// ledger entry + the live invoice, healing legacy split sheetsIds along the way.
+// This makes an invoice rename reflect in the History tab and Tax Center even
+// for rows whose mirror link was previously broken — without forcing a re-save.
+// Idempotent and cheap; safe to call at the top of a render.
+function reconcileConsignmentInvoiceLinks(s){
+  if(!s || !Array.isArray(s.ledger)) return;
+  const invoices = s.invoices || [];
+  for(const e of s.ledger){
+    if(e.type !== 'Sale') continue;
+    // Keep the ledger's own denormalized number current with the live invoice
+    // (renamed after the link was stamped → e.invoiceNum would be stale).
+    if(e.invoiceId){
+      const inv = invoices.find(i => i.id === e.invoiceId);
+      if(inv) e.invoiceNum = inv.num;
+      else { e.invoiceId = null; e.invoiceNum = null; } // invoice was deleted
+    }
+    const h = histMirrorForLedger(s, e);
+    if(!h) continue;
+    if(e.sheetsId && h.sheetsId !== e.sheetsId) h.sheetsId = e.sheetsId;
+    h.invoiceId  = e.invoiceId  || null;
+    h.invoiceNum = e.invoiceNum || null;
+  }
+}
+
+// Build the Google Sheets payload for a consignment ledger row. Centralised so
+// the invoice number (and every other field) syncs identically from confirmSale,
+// edits, voids, invoice renames and the full resync.
+function consignmentSyncPayload(book, e){
+  return {
+    type:'consignment', book:book.title,
+    date:e.date, store:e.storeName, event:e.type,
+    qty:e.qty, rate:e.rate, amountDue:e.amountDue||0,
+    notes:e.notes||'', status:e.status||'OK',
+    invoiceNum: e.invoiceNum || '',
+    sheetsId:e.sheetsId,
+    currency:getBookCurrencyCode(book)
+  };
 }
 
 // Canonical "mark this sale paid": guards pending/non-voided, reduces the store's
@@ -6560,6 +6628,18 @@ function saveInvoice(status){
         showToast(`⚠ A sale was already on invoice ${other.num} — re-billing on ${payload.num}`, 'warn', 4000);
     }
     stampLedgerInvoiceLink(s, id, payload);
+  }
+
+  // Push the now-current invoice number onto every consignment row this save
+  // touched (newly linked, re-numbered, or just-unlinked) so the Google Sheet's
+  // Invoice column tracks the change. The mirror is canonicalised in the ledger,
+  // so one upsert per affected ledger Sale keeps the sheet honest.
+  if (sheetsUrl){
+    const affected = new Set([...oldLedgerIds, ...newLedgerIds]);
+    for (const id of affected){
+      const le = (s.ledger||[]).find(x => x.id === id);
+      if (le && le.sheetsId && !le.voided) syncToSheets(consignmentSyncPayload(book, le));
+    }
   }
 
   saveState(activeBook);
@@ -7539,14 +7619,7 @@ function saveEntryEdit() {
       if (e.voided) {
         syncLedgerVoid(e, true);
       } else {
-        syncToSheets({
-          type: 'consignment', book: book.title,
-          date: e.date, store: e.storeName, event: e.type,
-          qty: e.qty, rate: e.rate, amountDue: e.amountDue || 0,
-          notes: e.notes || '', status: e.status || 'OK',
-          sheetsId: e.sheetsId,
-          currency: getBookCurrencyCode(book)
-        });
+        syncToSheets(consignmentSyncPayload(book, e));
       }
     }
   }
@@ -7566,14 +7639,7 @@ function syncLedgerVoid(e, isVoided) {
       sheetsId: e.sheetsId
     });
   } else {
-    syncToSheets({
-      type: 'consignment', book: getBook().title,
-      date: e.date, store: e.storeName, event: e.type,
-      qty: e.qty, rate: e.rate, amountDue: e.amountDue || 0,
-      notes: e.notes || '', status: e.status || 'OK',
-      sheetsId: e.sheetsId,
-      currency: getBookCurrencyCode(getBook())
-    });
+    syncToSheets(consignmentSyncPayload(getBook(), e));
   }
 }
 
@@ -8488,6 +8554,7 @@ async function pushAllToSheets(opts = {}) {
         type:'consignment', book:book.title, date:e.date, store:e.storeName,
         event:e.type, qty:e.qty, rate:e.rate, amountDue:totalNative,
         notes:e.notes||'', status: e.status || 'OK',
+        invoiceNum: e.invoiceNum || '',
         sheetsId: e.sheetsId || '',
         currency: ledgerCur,
         convertedTotal: cadEquiv
@@ -10601,10 +10668,13 @@ function renderTaxCenter() {
     const s = states[bid] || defaultState(BOOKS[bid]);
     const b = BOOKS[bid];
     const cur = getBookCurrencyCode(b);
-    
+    // Keep consignment Sale mirrors pointed at their live invoice number so a
+    // rename reflects in this ledger's Receipt/Ref column.
+    reconcileConsignmentInvoiceLinks(s);
+
     // Determine conversion to CAD for sales
     const hRate = _fxRateCache[`${cur}_CAD`] || 1;
-    
+
     // Add sales to ledger
     (s.hist || []).filter(h => !h.artistPending || h.voided).forEach(h => {
         const hYear = h.date ? h.date.substring(0, 4) : '';
@@ -10621,6 +10691,7 @@ function renderTaxCenter() {
             desc: `${b.title} (Qty: ${h.qty || 1})`,
             cat: 'Income',
             ref: h.num,
+            invoiceNum: h.consignmentLink ? (h.invoiceNum || '') : '',
             origCurrency: cur,
             origAmount: amt,
             baseAmount: baseAmt,
@@ -10840,7 +10911,8 @@ function renderTaxCenter() {
         const links = _localReceiptCell(item) || (legacyReceipt ? _localReceiptCell({ receipt: legacyReceipt }) : '');
         const refCell = [
           links,
-          displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : ''
+          displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : '',
+          item.invoiceNum ? `<span style="font-size:11px;color:var(--gold);">🧾 ${escapeHtml(item.invoiceNum)}</span>` : ''
         ].filter(Boolean).join('<br>');
 
         // Show original amount in its native currency; show CAD equivalent separately
@@ -11274,7 +11346,8 @@ function showCategoryDetail(catName) {
     const links = _localReceiptCell(item) || (legacyReceipt ? _localReceiptCell({ receipt: legacyReceipt }) : '');
     const refCell = [
       links,
-      displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : ''
+      displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : '',
+      item.invoiceNum ? `<span style="font-size:11px;color:var(--gold);">🧾 ${escapeHtml(item.invoiceNum)}</span>` : ''
     ].filter(Boolean).join('<br>');
     const origSym = getSym(item.origCurrency || 'CAD');
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
@@ -11712,7 +11785,7 @@ function downloadTaxLedgerCSV() {
             cell(r.type || ''),
             cell(r.desc || ''),
             cell(r.cat || ''),
-            cell(r.ref || ''),
+            cell([r.ref || '', r.invoiceNum ? `Invoice ${r.invoiceNum}` : ''].filter(Boolean).join(' · ')),
             cell(r.origCurrency || ''),
             cell(Number(r.origAmount || 0).toFixed(2)),
             cell(signedBase.toFixed(2)),
