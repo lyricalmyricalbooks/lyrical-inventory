@@ -527,20 +527,32 @@
 
 <!-- WEBSITE -->
 <div class="tab-panel" id="tab-website" style="display:none;">
-  <div class="book-context" id="book-context-web">
-    <div class="book-context-dot"></div>
-    <div><div class="book-context-title" id="bc-title-web">—</div><div class="book-context-meta">Website orders via Gmail scan</div></div>
-  </div>
-  <div class="row-between">
-    <div class="section-hed">Big Cartel orders</div>
-    <div style="display:flex;gap:8px;">
-      <button class="btn" id="backfill-shipping-btn" onclick="backfillShipping()" title="Re-scan Gmail and fill in missing shipping addresses on already-applied orders">Backfill shipping info</button>
-      <button class="btn ink" id="scan-btn" onclick="fetchOrders()">Scan Gmail</button>
+  <div class="web-orders-shell">
+    <div class="web-orders-hero">
+      <div class="web-orders-copy">
+        <div class="eyebrow">Website fulfillment</div>
+        <h2>Big Cartel orders</h2>
+        <p>Pull Gmail receipts into a focused review queue, confirm customer details, then apply new orders to inventory in one click.</p>
+        <div class="web-order-steps" aria-label="Website order workflow">
+          <span><b>1</b> Scan Gmail</span>
+          <span><b>2</b> Review matches</span>
+          <span><b>3</b> Apply stock</span>
+        </div>
+      </div>
+      <div class="web-orders-actions">
+        <button class="btn" id="backfill-shipping-btn" onclick="backfillShipping()" title="Re-scan Gmail and fill in missing shipping addresses on already-applied orders">Backfill shipping info</button>
+        <button class="btn ink" id="scan-btn" onclick="fetchOrders()">Scan Gmail</button>
+      </div>
     </div>
+    <div class="web-orders-status" aria-label="Order scan status">
+      <div class="web-stat"><span class="web-stat-label">Source</span><strong>Gmail</strong></div>
+      <div class="web-stat"><span class="web-stat-label">Channel</span><strong>Big Cartel</strong></div>
+      <div class="web-stat"><span class="web-stat-label">Action</span><strong>Inventory update</strong></div>
+    </div>
+    <div id="orders-list" class="orders-list"><div class="empty-state web-empty"><div class="e-icon">📬</div><strong>Ready to scan for new orders</strong><span>Press “Scan Gmail” to pull in recent Big Cartel receipts for this book.</span><button class="btn ink sm" onclick="fetchOrders()">Scan Gmail</button></div></div>
+    <button class="btn gold apply-all-cta" id="apply-all-btn" onclick="applyAll()" disabled>Apply all new orders</button>
+    <div class="log-console" id="log-web"></div>
   </div>
-  <div id="orders-list"><div class="empty-state"><div class="e-icon">📬</div>Press "Scan Gmail" to pull in new orders.</div></div>
-  <button class="btn gold" id="apply-all-btn" onclick="applyAll()" disabled style="width:100%;margin-top:4px;">Apply all new orders</button>
-  <div class="log-console" id="log-web"></div>
 </div>
 
 <!-- PAYMENTS / STRIPE RECONCILIATION -->
