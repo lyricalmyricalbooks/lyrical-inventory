@@ -1552,20 +1552,41 @@ function renderChannelAnalytics() {
   }
   if (maxRev === 0) maxRev = 1;
   const top = chans[0];
-  const chartRows = chans.map(x => {
+  const activeChans = chans.filter(x => (x.revenue || 0) > 0).length;
+  const avgOrder = grandTxn ? grandRev / grandTxn : 0;
+  const avgUnit = grandU ? grandRev / grandU : 0;
+  const topShare = top && grandRev > 0 ? top.revenue / grandRev * 100 : 0;
+  const heroColor = top ? channelColor(top.chan) : 'var(--gold2)';
+  const chartRows = chans.map((x, idx) => {
     const share = grandRev>0 ? x.revenue/grandRev*100 : 0;
     const col = channelColor(x.chan);
     const avgTxn = x.txns ? x.revenue/x.txns : 0;
     const revUnit = x.units ? x.revenue/x.units : 0;
-    return `<div class="ch-bar-row">
-      <div class="ch-bar-head"><span class="ch-dot" style="background:${col}"></span><span class="ch-bar-name">${escapeHtml(chanLabel(x.chan))}</span><span class="ch-bar-val">${fmt(x.revenue,cur)} <em>${share.toFixed(0)}%</em></span></div>
-      <div class="ch-bar-track"><div class="ch-bar-fill" style="width:${x.revenue/maxRev*100}%;background:${col}"></div></div>
-      <div class="ch-bar-meta">${x.txns} txn · ${x.units} u${x.txns?` · ${fmt(avgTxn,cur)}/txn`:''}${x.units?` · ${fmt(revUnit,cur)}/u`:''}</div>
+    return `<div class="ch-bar-row" style="--ch:${col}">
+      <div class="ch-rank">${idx + 1}</div>
+      <div class="ch-bar-main">
+        <div class="ch-bar-head"><span class="ch-dot" style="background:${col}"></span><span class="ch-bar-name">${escapeHtml(chanLabel(x.chan))}</span><span class="ch-bar-val">${fmt(x.revenue,cur)} <em>${share.toFixed(0)}%</em></span></div>
+        <div class="ch-bar-track" role="img" aria-label="${escapeHtml(chanLabel(x.chan))} generated ${share.toFixed(0)}% of ${escapeHtml(cur)} revenue"><div class="ch-bar-fill" style="width:${x.revenue/maxRev*100}%;background:${col}"></div></div>
+        <div class="ch-bar-meta"><span>${x.txns} txn</span><span>${x.units} units</span>${x.txns?`<span>${fmt(avgTxn,cur)}/txn</span>`:''}${x.units?`<span>${fmt(revUnit,cur)}/unit</span>`:''}</div>
+      </div>
     </div>`;
   }).join('');
   const chart = `<div class="ch-panel">
-    <div class="ch-panel-head"><span>Channel performance</span><span class="ch-panel-sub">${fmt(grandRev,cur)} · ${grandTxn} txn · ${grandU} u${top?` · Top <strong>${escapeHtml(chanLabel(top.chan))}</strong>`:''}</span></div>
-    ${chartRows}
+    <div class="ch-hero" style="--ch:${heroColor}">
+      <div>
+        <div class="ch-eyebrow">Channel performance</div>
+        <div class="ch-hero-title">${top ? `${escapeHtml(chanLabel(top.chan))} leads at ${topShare.toFixed(0)}%` : 'No leading channel yet'}</div>
+        <div class="ch-hero-sub">${fmt(grandRev,cur)} total · ${grandTxn} transactions · ${grandU} units</div>
+      </div>
+      <div class="ch-hero-badge">${top ? `Top channel<br><strong>${fmt(top.revenue,cur)}</strong>` : 'No sales'}</div>
+    </div>
+    <div class="ch-metrics">
+      <div class="ch-metric"><span>Total revenue</span><strong>${fmt(grandRev,cur)}</strong></div>
+      <div class="ch-metric"><span>Avg / txn</span><strong>${fmt(avgOrder,cur)}</strong></div>
+      <div class="ch-metric"><span>Avg / unit</span><strong>${fmt(avgUnit,cur)}</strong></div>
+      <div class="ch-metric"><span>Active channels</span><strong>${activeChans}/${chans.length}</strong></div>
+    </div>
+    <div class="ch-bars">${chartRows}</div>
   </div>`;
 
   // Per-book cards — one stacked channel-mix bar per book + colour-keyed legend
