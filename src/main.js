@@ -6717,12 +6717,7 @@ function renderInvoicePaperHTML(inv){
     settings.bank ? 'Bank transfer' : null,
   ].filter(Boolean).join(' · ') || 'See payment instructions below';
 
-  // Cross-reference line: how many consignment ledger sales this invoice settles,
-  // plus a non-destructive "ledger changed since invoiced" note (decision #2).
-  const settledCount = (inv.items||[]).filter(it => it._ledgerId).length;
-  const settlesLine = settledCount
-    ? `<div class="inv-meta-sub" style="margin-top:6px;">Settles ${settledCount} consignment ledger sale${settledCount===1?'':'s'}</div>`
-    : '';
+  const settlesLine = '';
   const divergedNote = inv.ledgerDivergedAt
     ? `<div class="inv-meta-sub" style="margin-top:6px;color:#a13a1b;font-weight:600;">⚠ ledger changed since invoiced — reopen to re-import amounts</div>`
     : '';
