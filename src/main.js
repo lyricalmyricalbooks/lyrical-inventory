@@ -2725,7 +2725,12 @@ function renderHist() {
         const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
         const isGrat = h.gratuity || h.chan === 'Gratuity';
         const isPending = h.artistPending;
-        const chanCell = isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : escapeHtml(h.chan);
+        // Consignment Sale mirror: surface its paid/pending state and an invoice
+        // badge so History cross-references the ledger + invoice (absent → '').
+        const consignExtra = h.consignmentLink
+          ? `${h.paidState==='paid'?' <span class="pill green" style="font-size:10px;">Paid</span>':(!h.voided?' <span class="pill amber" style="font-size:10px;">Pending</span>':'')}${invoiceBadgeHTML(h.invoiceId, h.invoiceNum)}`
+          : '';
+        const chanCell = (isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : escapeHtml(h.chan)) + consignExtra;
         const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price,cur);
         const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty*h.price,cur)}</span>` : fmt(h.qty*h.price,cur);
         const rowStyle = isGrat ? ' style="background:var(--cream2);font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
@@ -5968,10 +5973,72 @@ function confirmReturn(){
   syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Return',qty,rate:st.rate,amountDue:0,notes:cond,status:good?'restocked':'written off',sheetsId,currency:getBookCurrencyCode(book)});
   showToast(good?`✓ ${qty} books returned to stock`:`✓ ${qty} books written off`);
 }
+// ── Invoice ↔ Ledger ↔ History consistency helpers ───────────────────────
+// Single source of truth for keeping the three views cross-referenced. All
+// operate on an in-book state `s = getState()`, so multi-book is automatic.
+// The fields these touch (invoiceId/invoiceNum/paidState/ledgerDivergedAt) are
+// LOCAL-ONLY — they are never added to any syncToSheets payload.
+
+// The s.hist mirror row for a ledger Sale: matched by the shared sheetsId they
+// were created with. Returns null when there's no resolvable mirror.
+function histMirrorForLedger(s, e){
+  if(!e || !e.sheetsId) return null;
+  return (s.hist||[]).find(h => h.consignmentLink && h.sheetsId === e.sheetsId) || null;
+}
+
+// The only writer of the invoice back-pointers: sets (or clears, when inv===null)
+// invoiceId/invoiceNum on a ledger entry AND its hist mirror in lockstep.
+function stampLedgerInvoiceLink(s, ledgerId, inv){
+  const e = (s.ledger||[]).find(x => x.id === ledgerId);
+  if(!e) return;
+  e.invoiceId  = inv ? inv.id  : null;
+  e.invoiceNum = inv ? inv.num : null;
+  const h = histMirrorForLedger(s, e);
+  if(h){ h.invoiceId = inv ? inv.id : null; h.invoiceNum = inv ? inv.num : null; }
+}
+
+// Canonical "mark this sale paid": guards pending/non-voided, reduces the store's
+// owed, flips ledger + hist mirror state. Returns true if it actually changed.
+function settleLedgerSalePaid(s, e){
+  if(!e || e.status !== 'pending' || e.voided) return false;
+  const st = (s.stores||[]).find(x => x.id === e.storeId);
+  if(st) st.amountOwed = Math.max(0, (st.amountOwed||0) - (e.amountDue||0));
+  e.status = 'paid'; e.paid = 'paid';
+  const h = histMirrorForLedger(s, e);
+  if(h) h.paidState = 'paid';
+  return true;
+}
+
+// Decision #1: when the last unpaid linked sale of an invoice becomes paid via
+// the ledger, auto-flip the invoice to PAID. Only flips draft/sent invoices; skips
+// cancelled/already-paid and invoices with zero resolvable (non-voided) sales.
+function maybeAutoPayInvoiceForLedger(s, e){
+  if(!e || !e.invoiceId) return;
+  const inv = (s.invoices||[]).find(i => i.id === e.invoiceId);
+  if(!inv || (inv.status !== 'draft' && inv.status !== 'sent')) return;
+  // Resolve the invoice's linked, non-voided ledger sales.
+  const linked = (inv.items||[])
+    .map(it => it._ledgerId ? (s.ledger||[]).find(x => x.id === it._ledgerId) : null)
+    .filter(x => x && !x.voided);
+  if(!linked.length) return;                         // nothing resolvable → skip
+  if(linked.some(x => x.status !== 'paid')) return;  // not all paid yet → wait
+  inv.status = 'paid'; inv.paidAt = Date.now(); inv.paidMethod = 'Ledger';
+}
+
+// A small clickable badge linking a ledger/history row back to its invoice; '' when
+// unlinked. Reused by the ledger and history renderers. viewInvoice is global.
+function invoiceBadgeHTML(invoiceId, invoiceNum){
+  if(!invoiceId || !invoiceNum) return '';
+  return `<button class="pill gray" style="font-size:10px;cursor:pointer;margin-left:6px;" onclick="viewInvoice('${invoiceId}')">🧾 ${escapeHtml(invoiceNum)}</button>`;
+}
+
 function markPaid(lid){
   const s=getState(),book=getBook(),e=s.ledger.find(x=>x.id===lid);if(!e)return;
-  const st=storeById(e.storeId);if(st)st.amountOwed=Math.max(0,st.amountOwed-e.amountDue);
-  e.paid='paid';e.status='paid';renderLedger();renderStores();updateDash();saveState(activeBook);
+  // Canonical settle (reduces owed, flips ledger + hist mirror); then auto-flip
+  // the invoice to paid if this was its last unpaid linked sale (decision #1).
+  settleLedgerSalePaid(s, e);
+  maybeAutoPayInvoiceForLedger(s, e);
+  renderLedger();renderStores();renderInvoices();renderHist();updateDash();saveState(activeBook);
   showToast(`✓ Payment of ${fmt(e.amountDue,book.currency)} marked as received`);
 }
 function renderLedger(){
@@ -5991,7 +6058,9 @@ function renderLedger(){
   b.innerHTML=[...indexed].reverse().map(({e,i})=>{
     const voided = e.voided?' voided':'';
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
-    return`<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type==='Sale'?e.rate+'%':'—'}</td><td class="r" style="font-weight:600;">${e.amountDue>0?fmt(e.amountDue,cur):'—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes)||'—'}</td><td>${pill(e)}${e.status==='pending'&&!e.voided?` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>`:''}</td></tr>`;
+    // Cross-link Sale rows back to the invoice that bills them (absent id → '').
+    const invBadge = e.type==='Sale' ? invoiceBadgeHTML(e.invoiceId, e.invoiceNum) : '';
+    return`<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type==='Sale'?e.rate+'%':'—'}</td><td class="r" style="font-weight:600;">${e.amountDue>0?fmt(e.amountDue,cur):'—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes)||'—'}</td><td>${pill(e)}${e.status==='pending'&&!e.voided?` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>`:''}${invBadge}</td></tr>`;
   }).join('');
 }
 
@@ -6441,11 +6510,15 @@ function saveInvoice(status){
   };
 
   let oldStripeLinkId = null;
+  // Capture the ledger ids this invoice billed BEFORE we overwrite it, so we can
+  // clear back-links that were dropped from the line items during an edit.
+  let oldLedgerIds = [];
   if (invoiceCtx.editingId){
     const idx = s.invoices.findIndex(i => i.id === invoiceCtx.editingId);
     if (idx >= 0) {
       // preserve paid metadata if existing
       const old = s.invoices[idx];
+      oldLedgerIds = (old.items||[]).map(it => it._ledgerId).filter(Boolean);
       payload.paidAt = old.paidAt || null;
       payload.paidMethod = old.paidMethod || null;
       // preserve Stripe link only if amount/currency unchanged
@@ -6469,9 +6542,30 @@ function saveInvoice(status){
     if (mt) s.invoiceSeq = Math.max(s.invoiceSeq || 0, parseInt(mt[1],10));
   }
 
+  // ── Stamp ledger ↔ invoice back-links (covers create AND edit re-pointing).
+  // Clear links for ledger ids that were dropped from this invoice on edit…
+  const newLedgerIds = (payload.items||[]).map(it => it._ledgerId).filter(Boolean);
+  for (const oldId of oldLedgerIds){
+    if (!newLedgerIds.includes(oldId)) stampLedgerInvoiceLink(s, oldId, null);
+  }
+  // …then point each current line item's ledger sale at this invoice. Decision #3:
+  // if a sale is already on a DIFFERENT live invoice, warn but proceed (last writer
+  // wins — the ledger tracks the most-recent invoice link).
+  for (const id of newLedgerIds){
+    const le = (s.ledger||[]).find(x => x.id === id);
+    if (le && le.invoiceId && le.invoiceId !== payload.id){
+      const other = (s.invoices||[]).find(i => i.id === le.invoiceId);
+      if (other && other.status !== 'cancelled')
+        showToast(`⚠ A sale was already on invoice ${other.num} — re-billing on ${payload.num}`, 'warn', 4000);
+    }
+    stampLedgerInvoiceLink(s, id, payload);
+  }
+
   saveState(activeBook);
   closeM('invoice-edit');
   renderInvoices();
+  renderLedger();
+  renderHist();
   showToast(status === 'draft' ? '✓ Draft saved' : '✓ Invoice saved');
 
   // Stripe Payment Link: auto-create on finalize (or regenerate after edit)
@@ -6540,10 +6634,17 @@ async function deleteInvoice(){
   const inv = (s.invoices||[]).find(i => i.id === invoiceCtx.editingId);
   if (!inv) return;
   if (!(await confirmDialog(`Delete invoice ${inv.num}? This cannot be undone.`, { okLabel: 'Delete invoice', danger: true }))) return;
+  // Clear the back-links on every ledger sale this invoice billed, so the ledger
+  // and history no longer point at a deleted invoice.
+  for (const it of (inv.items||[])){
+    if (it._ledgerId) stampLedgerInvoiceLink(s, it._ledgerId, null);
+  }
   s.invoices = s.invoices.filter(i => i.id !== invoiceCtx.editingId);
   saveState(activeBook);
   closeM('invoice-edit');
   renderInvoices();
+  renderLedger();
+  renderHist();
   showToast('✓ Invoice deleted');
 }
 
@@ -6616,6 +6717,16 @@ function renderInvoicePaperHTML(inv){
     settings.bank ? 'Bank transfer' : null,
   ].filter(Boolean).join(' · ') || 'See payment instructions below';
 
+  // Cross-reference line: how many consignment ledger sales this invoice settles,
+  // plus a non-destructive "ledger changed since invoiced" note (decision #2).
+  const settledCount = (inv.items||[]).filter(it => it._ledgerId).length;
+  const settlesLine = settledCount
+    ? `<div class="inv-meta-sub" style="margin-top:6px;">Settles ${settledCount} consignment ledger sale${settledCount===1?'':'s'}</div>`
+    : '';
+  const divergedNote = inv.ledgerDivergedAt
+    ? `<div class="inv-meta-sub" style="margin-top:6px;color:#a13a1b;font-weight:600;">⚠ ledger changed since invoiced — reopen to re-import amounts</div>`
+    : '';
+
   const dyn = isDynamicStripeLink(inv);
   const testBadge = (dyn && inv.stripe.livemode === false) ? `<span style="display:inline-block;margin-left:8px;background:#fde6e0;color:#a13a1b;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:3px 8px;border-radius:99px;">Test mode</span>` : '';
   const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#0e0c0a;color:#f0c060;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:99px;margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge?' ':''}${testBadge}</div>` : '';
@@ -6669,6 +6780,8 @@ function renderInvoicePaperHTML(inv){
         <label>Amount due</label>
         <strong style="color:${statusCls==='paid'?'#1d7a4a':'#0e0c0a'};font-size:18px;">${fmt(inv.total||0, cur)}</strong>
         <div class="inv-meta-sub">${(inv.items||[]).reduce((a,i)=>a+(i.qty||0),0)} item${(inv.items||[]).reduce((a,i)=>a+(i.qty||0),0)===1?'':'s'}</div>
+        ${settlesLine}
+        ${divergedNote}
       </div>
     </section>
 
@@ -6716,22 +6829,19 @@ async function markInvoicePaidFromView(){
                 : (book.stripeLink ? 'Stripe' : 'Other');
   // best-effort: deactivate the Stripe Payment Link so it can't be paid twice
   if (inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
-  // settle any linked pending ledger entries
+  // settle any linked pending ledger entries via the canonical helper, so the
+  // ledger row, store owed, and hist mirror paidState all flip together.
   for (const it of (inv.items||[])){
     if (it._ledgerId){
       const e = s.ledger.find(x => x.id === it._ledgerId);
-      if (e && e.status === 'pending' && !e.voided){
-        const st = (s.stores||[]).find(x => x.id === e.storeId);
-        if (st) st.amountOwed = Math.max(0, (st.amountOwed||0) - (e.amountDue||0));
-        e.status = 'paid';
-        e.paid = 'paid';
-      }
+      if (e) settleLedgerSalePaid(s, e);
     }
   }
   saveState(activeBook);
   renderInvoices();
   renderStores();
   renderLedger();
+  renderHist();
   updateDash();
   viewInvoice(currentViewInvoiceId);
   showToast(`✓ ${inv.num} marked paid`);
@@ -7140,6 +7250,14 @@ function saveEntryEdit() {
         st.sold += (newQty - e.qty);
         e.amountDue = newDue;
       }
+      // Decision #2: editing a billed sale must NOT rewrite the invoice. Keep the
+      // link, flag the invoice as diverged (its view shows a "ledger changed since
+      // invoiced" note), and tell the user which invoice this sale sits on.
+      if (e.invoiceId){
+        const inv = (s.invoices||[]).find(i => i.id === e.invoiceId);
+        if (inv) inv.ledgerDivergedAt = Date.now();
+        showToast(`This sale is on invoice ${e.invoiceNum||''} — reopen it to re-import the new amount.`, 'warn', 4500);
+      }
     }
     e.qty = newQty;
     e.rate = newRate;
@@ -7382,6 +7500,10 @@ function voidEntry() {
       if (e.type === 'Sale' && st) { st.sold = Math.max(0,st.sold-e.qty); st.outstanding += e.qty; s.sold = Math.max(0,s.sold-e.qty); s.revenue = Math.max(0,s.revenue-e.amountDue); if(e.paid==='pending')st.amountOwed = Math.max(0,st.amountOwed-e.amountDue); if(s.chStats['Consignment']){s.chStats['Consignment'].txns=Math.max(0,s.chStats['Consignment'].txns-1);s.chStats['Consignment'].units=Math.max(0,s.chStats['Consignment'].units-e.qty);s.chStats['Consignment'].revenue=Math.max(0,s.chStats['Consignment'].revenue-e.amountDue);} }
       if (e.type === 'Return' && st) { st.returned = Math.max(0,st.returned-e.qty); st.outstanding += e.qty; if(e.status==='restocked') s.stock = Math.max(0,s.stock-e.qty); }
       e.voided = true;
+      // Decision #4: keep invoiceId/invoiceNum across the void (so unvoid restores
+      // the link) and never auto-un-pay the invoice. maybeAutoPayInvoiceForLedger
+      // already excludes voided sales from its "all paid?" check.
+      if (e.type === 'Sale' && e.invoiceNum) showToast(`Sale was on invoice ${e.invoiceNum}`, 'warn', 4000);
       syncLedgerVoid(e, true);
       showToast('Consignment entry voided — effects reversed (Sheets row delete queued)', 'warn');
     } else {
