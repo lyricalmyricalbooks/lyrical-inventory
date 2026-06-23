@@ -9846,6 +9846,40 @@ let _tcLedgerSearch = '';
 let _tcLedgerType = 'all'; // 'all' | 'sales' | 'expenses'
 let _tcLedgerSearchTimer = null;
 
+// Persist the ledger view (year + search + type) so a tax session survives a
+// reload or PWA relaunch. Restored once, lazily, on the first Tax Center render.
+const TC_LEDGER_PREFS_KEY = 'lm-tc-ledger-prefs';
+let _tcPrefsRestored = false;
+function _tcSaveLedgerPrefs() {
+  const yearEl = $('tc-year');
+  try {
+    localStorage.setItem(TC_LEDGER_PREFS_KEY, JSON.stringify({
+      search: _tcLedgerSearch,
+      type: _tcLedgerType,
+      year: yearEl ? yearEl.value : 'all',
+    }));
+  } catch (e) { /* ignore quota / private-mode errors */ }
+}
+function _tcRestoreLedgerPrefs() {
+  if (_tcPrefsRestored) return;
+  _tcPrefsRestored = true;
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem(TC_LEDGER_PREFS_KEY) || '{}') || {}; } catch (e) { p = {}; }
+  if (typeof p.search === 'string') {
+    _tcLedgerSearch = p.search;
+    const el = $('tc-ledger-search'); if (el) el.value = p.search;
+  }
+  if (p.type === 'sales' || p.type === 'expenses' || p.type === 'all') {
+    _tcLedgerType = p.type;
+    const el = $('tc-ledger-type'); if (el) el.value = p.type;
+  }
+  if (typeof p.year === 'string') {
+    const el = $('tc-year');
+    // Only restore a year the dropdown actually offers.
+    if (el && Array.from(el.options).some(o => o.value === p.year)) el.value = p.year;
+  }
+}
+
 function setTcLedgerPage(n) {
   _tcLedgerPage = n;
   renderTaxCenter();
@@ -9855,13 +9889,22 @@ function setTcLedgerPage(n) {
 function tcLedgerSearchInput(v) {
   _tcLedgerSearch = v || '';
   clearTimeout(_tcLedgerSearchTimer);
-  _tcLedgerSearchTimer = setTimeout(() => { _tcLedgerPage = 0; renderTaxCenter(); }, 200);
+  _tcLedgerSearchTimer = setTimeout(() => { _tcLedgerPage = 0; _tcSaveLedgerPrefs(); renderTaxCenter(); }, 200);
 }
 
 // Sales-only / Expenses-only toggle for the Master Ledger.
 function tcLedgerTypeFilter(v) {
   _tcLedgerType = (v === 'sales' || v === 'expenses') ? v : 'all';
   _tcLedgerPage = 0;
+  _tcSaveLedgerPrefs();
+  renderTaxCenter();
+}
+
+// Year dropdown change — reset to page 1 (the inline handler used to set a stray
+// global instead of the module's _tcLedgerPage) and persist the choice.
+function tcLedgerYearChange() {
+  _tcLedgerPage = 0;
+  _tcSaveLedgerPrefs();
   renderTaxCenter();
 }
 
@@ -9882,6 +9925,8 @@ function _tcApplyLedgerFilter(rows) {
 
 function renderTaxCenter() {
   if (isAuthor()) return;
+  // Restore the saved ledger view (year + search + type) before reading the year.
+  _tcRestoreLedgerPrefs();
   // Initialize AI key input UI
   if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
   if($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
@@ -12261,7 +12306,11 @@ window.downloadFullTaxSeasonExport = function() {
   
   BOOK_LIST.forEach(book => {
       const s = states[book.id] || defaultState(book);
-      
+      // Sales + royalty are recorded in the book's native currency; convert to the
+      // export's base (CAD) so they're comparable with the CAD expense figures.
+      const cur = getBookCurrencyCode(book);
+      const hRate = _fxRateCache[`${cur}_CAD`] || 1;
+
       // ⚡ Bolt Optimization: Loop Fusion - Compute sold and revenue in a single pass without intermediate array allocation
       let sold = 0;
       let revenue = 0;
@@ -12292,8 +12341,12 @@ window.downloadFullTaxSeasonExport = function() {
           shares = (typeof filterArtistEarningsByYear === 'function') ? filterArtistEarningsByYear(book.id, parseInt(year)) : 0;
       }
       
-      const net = revenue - expTotal - shares;
-      csv += `${esc(book.title)},${revenue.toFixed(2)},${net.toFixed(2)},${sold}\n`;
+      // expTotal is already CAD (uses each expense's stored baseAmount); convert
+      // the native-currency revenue + royalty before subtracting so net is all-CAD.
+      const revenueCAD = revenue * hRate;
+      const sharesCAD = shares * hRate;
+      const net = revenueCAD - expTotal - sharesCAD;
+      csv += `${esc(book.title)},${revenueCAD.toFixed(2)},${net.toFixed(2)},${sold}\n`;
   });
   
   // Section 2: All Expenses & Payouts
@@ -12303,7 +12356,9 @@ window.downloadFullTaxSeasonExport = function() {
   // 2a. Book-level expenses & payouts
   BOOK_LIST.forEach(book => {
       const s = states[book.id] || defaultState(book);
-      
+      const cur = getBookCurrencyCode(book);
+      const hRate = _fxRateCache[`${cur}_CAD`] || 1;
+
       // Book Expenses
       (s.expenses || []).filter(e => {
           if (e.voided) return false;
@@ -12318,8 +12373,10 @@ window.downloadFullTaxSeasonExport = function() {
           if (isAllTime) return true;
           return t.date && t.date.startsWith(year);
       }).forEach(t => {
-          // Use .total for payouts as per state structure
-          csv += `${t.date},${esc(book.title)},"Artist Payout","Transfer to Artist",${(parseFloat(t.total || t.amount || 0)).toFixed(2)},""\n`;
+          // Use .total for payouts as per state structure; payout totals are in the
+          // book's native currency — convert to CAD to match the column header.
+          const payoutCAD = (parseFloat(t.total || t.amount || 0)) * hRate;
+          csv += `${t.date},${esc(book.title)},"Artist Payout","Transfer to Artist",${payoutCAD.toFixed(2)},""\n`;
       });
   });
   
@@ -13983,7 +14040,7 @@ Object.assign(window, {
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
-  tcLedgerSearchInput, tcLedgerTypeFilter,
+  tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
