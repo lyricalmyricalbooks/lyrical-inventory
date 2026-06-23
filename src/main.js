@@ -9842,10 +9842,42 @@ function changeExpenseCategory(itemId, newCat) {
 
 const TC_LEDGER_PAGE_SIZE = 25;
 let _tcLedgerPage = 0;
+let _tcLedgerSearch = '';
+let _tcLedgerType = 'all'; // 'all' | 'sales' | 'expenses'
+let _tcLedgerSearchTimer = null;
 
 function setTcLedgerPage(n) {
   _tcLedgerPage = n;
   renderTaxCenter();
+}
+
+// Debounced free-text search over the Master Ledger (description / ref / category / type).
+function tcLedgerSearchInput(v) {
+  _tcLedgerSearch = v || '';
+  clearTimeout(_tcLedgerSearchTimer);
+  _tcLedgerSearchTimer = setTimeout(() => { _tcLedgerPage = 0; renderTaxCenter(); }, 200);
+}
+
+// Sales-only / Expenses-only toggle for the Master Ledger.
+function tcLedgerTypeFilter(v) {
+  _tcLedgerType = (v === 'sales' || v === 'expenses') ? v : 'all';
+  _tcLedgerPage = 0;
+  renderTaxCenter();
+}
+
+// Apply the active search + type filter to the full (year-filtered) ledger array.
+function _tcApplyLedgerFilter(rows) {
+  let out = rows;
+  if (_tcLedgerType === 'sales')        out = out.filter(r => r.isIncome);
+  else if (_tcLedgerType === 'expenses') out = out.filter(r => !r.isIncome);
+  const q = _tcLedgerSearch.trim().toLowerCase();
+  if (q) {
+    out = out.filter(r => {
+      const hay = `${r.date || ''} ${r.type || ''} ${r.desc || ''} ${r.cat || ''} ${r.ref || ''} ${r.origCurrency || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+  return out;
 }
 
 function renderTaxCenter() {
@@ -10116,12 +10148,18 @@ function renderTaxCenter() {
     return dateA > dateB ? -1 : dateA < dateB ? 1 : 0;
   });
 
+  // Apply the search + type filter; everything below (pagination, totals footer,
+  // CSV export) operates on this filtered view. Stash it so the CSV export covers
+  // the WHOLE filtered year — not just the visible page.
+  const filteredLedger = _tcApplyLedgerFilter(allLedger);
+  window._tcLedgerExport = { rows: filteredLedger, baseCurrency };
+
   // Clamp page to valid range
-  const totalPages = Math.max(1, Math.ceil(allLedger.length / TC_LEDGER_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredLedger.length / TC_LEDGER_PAGE_SIZE));
   if (_tcLedgerPage >= totalPages) _tcLedgerPage = totalPages - 1;
   if (_tcLedgerPage < 0) _tcLedgerPage = 0;
   const pageStart = _tcLedgerPage * TC_LEDGER_PAGE_SIZE;
-  const pageLedger = allLedger.slice(pageStart, pageStart + TC_LEDGER_PAGE_SIZE);
+  const pageLedger = filteredLedger.slice(pageStart, pageStart + TC_LEDGER_PAGE_SIZE);
 
   const ledTbody = $('tc-ledger-body');
   if(ledTbody) {
@@ -10174,7 +10212,36 @@ function renderTaxCenter() {
             <td class="r" style="font-weight:600;">${cadDisplay}</td>
             <td class="r">${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}</td>
         </tr>`;
-      }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">No data for selected period</td></tr>`;
+      }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</td></tr>`;
+  }
+
+  // Filtered totals footer — reacts to the year + search + type filter.
+  const footEl = $('tc-ledger-foot');
+  if (footEl) {
+    if (!filteredLedger.length) {
+      footEl.innerHTML = '';
+    } else {
+      let fIncome = 0, fExpense = 0;
+      for (const r of filteredLedger) {
+        if (r.isIncome) fIncome += r.baseAmount || 0;
+        else fExpense += r.baseAmount || 0;
+      }
+      const fNet = fIncome - fExpense;
+      const netColor = fNet >= 0 ? 'var(--green)' : 'var(--red)';
+      footEl.innerHTML = `
+        <tr>
+          <td colspan="8" style="padding:10px 12px;background:var(--cream2);border-top:2px solid var(--gold-line);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;">
+              <span style="color:var(--text3);">${filteredLedger.length} ${filteredLedger.length === 1 ? 'entry' : 'entries'}${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? ' (filtered)' : ''}</span>
+              <div style="display:flex;gap:18px;flex-wrap:wrap;">
+                <span>Income <strong style="color:var(--green);">+${fmt(fIncome, baseCurrency)}</strong></span>
+                <span>Expenses <strong style="color:var(--red);">-${fmt(fExpense, baseCurrency)}</strong></span>
+                <span>Net <strong style="color:${netColor};">${fmt(fNet, baseCurrency)}</strong></span>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+    }
   }
 
   // Pagination controls
@@ -10183,8 +10250,8 @@ function renderTaxCenter() {
     if (totalPages <= 1) {
       pgWrap.innerHTML = '';
     } else {
-      const from = allLedger.length ? pageStart + 1 : 0;
-      const to = Math.min(pageStart + TC_LEDGER_PAGE_SIZE, allLedger.length);
+      const from = filteredLedger.length ? pageStart + 1 : 0;
+      const to = Math.min(pageStart + TC_LEDGER_PAGE_SIZE, filteredLedger.length);
       const btnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--cream2);color:var(--text);';
       const activeBtnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gold);background:var(--gold);color:var(--ink);font-weight:600;';
       // Show at most 7 page buttons around current page
@@ -10200,7 +10267,7 @@ function renderTaxCenter() {
       if (endBtn < totalPages - 1) btns += `<span style="color:var(--text3);padding:0 4px;">…</span><button style="${btnStyle}" onclick="setTcLedgerPage(${totalPages - 1})">${totalPages}</button>`;
       pgWrap.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
-          <span style="font-size:12px;color:var(--text3);">Showing ${from}–${to} of ${allLedger.length} entries</span>
+          <span style="font-size:12px;color:var(--text3);">Showing ${from}–${to} of ${filteredLedger.length} entries</span>
           <div style="display:flex;gap:4px;align-items:center;">
             <button style="${btnStyle}" onclick="setTcLedgerPage(${_tcLedgerPage - 1})" ${_tcLedgerPage === 0 ? 'disabled' : ''}>‹ Prev</button>
             ${btns}
@@ -10774,25 +10841,37 @@ async function removeRecurring(idx) {
 }
 
 function downloadTaxLedgerCSV() {
-    const rows = [];
-    rows.push(['Date','Type','Description','Category','Orig Amount','Base Amount']);
-    const ledTbody = $('tc-ledger-body');
-    if (!ledTbody) return;
-    ledTbody.querySelectorAll('tr').forEach(tr => {
-        const tds = tr.querySelectorAll('td');
-        if(tds.length === 7) {
-           rows.push([
-               `"${tds[0].innerText}"`,
-               `"${tds[1].innerText}"`,
-               `"${tds[2].innerText}"`,
-               `"${tds[3].innerText}"`,
-               `"${tds[5].innerText.replace('⚠️', '').trim()}"`,
-               `"${tds[6].innerText}"`
-           ]);
-        }
-    });
-    const csvStr = rows.map(r=>r.join(',')).join('\n');
-    const blob = new Blob([csvStr],{type:'text/csv;charset=utf-8;'});
+    // Build straight from the filtered ledger data (stashed by renderTaxCenter),
+    // NOT the paginated DOM — so the export covers the entire filtered year, all
+    // columns. renderTaxCenter() always runs when the Tax Center is visible, but
+    // call it once here as a safety net if the stash is missing.
+    if (!window._tcLedgerExport) renderTaxCenter();
+    const exportData = window._tcLedgerExport || { rows: [], baseCurrency: 'CAD' };
+    const { rows: data, baseCurrency } = exportData;
+
+    if (!data.length) { showToast('Nothing to export for this filter'); return; }
+
+    // RFC-4180 escaping: wrap in quotes and double any embedded quotes.
+    const cell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+
+    const rows = [['Date','Type','Description','Category','Receipt/Ref','Orig Currency','Amount (Orig)',`Amount (${baseCurrency})`].map(cell)];
+    for (const r of data) {
+        // Sign the base-currency column so totals sum correctly in a spreadsheet.
+        const signedBase = (r.isIncome ? 1 : -1) * Number(r.baseAmount || 0);
+        rows.push([
+            cell(r.date || ''),
+            cell(r.type || ''),
+            cell(r.desc || ''),
+            cell(r.cat || ''),
+            cell(r.ref || ''),
+            cell(r.origCurrency || ''),
+            cell(Number(r.origAmount || 0).toFixed(2)),
+            cell(signedBase.toFixed(2)),
+        ]);
+    }
+
+    const csvStr = rows.map(r => r.join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csvStr], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -13904,6 +13983,7 @@ Object.assign(window, {
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
+  tcLedgerSearchInput, tcLedgerTypeFilter,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,

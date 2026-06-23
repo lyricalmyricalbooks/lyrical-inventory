@@ -1240,9 +1240,18 @@
       <button class="btn gold" onclick="downloadFullTaxSeasonExport()">📦 Tax Season Export</button>
     </div>
   </div>
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+    <input id="tc-ledger-search" type="search" placeholder="Search description, ref, category…" oninput="tcLedgerSearchInput(this.value)" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--gold-line);border-radius:8px;background:var(--cream2);color:var(--text);font-size:13px;">
+    <select id="tc-ledger-type" class="btn tag" onchange="tcLedgerTypeFilter(this.value)" style="background:var(--cream2);border:1px solid var(--gold-line);color:var(--text);cursor:pointer;">
+      <option value="all">All types</option>
+      <option value="sales">Sales only</option>
+      <option value="expenses">Expenses only</option>
+    </select>
+  </div>
   <div class="tbl-wrap"><table class="tbl">
     <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Tax Category</th><th>Receipt/Ref</th><th class="r">Amount (Orig)</th><th class="r">Amount (CAD)</th><th class="r">Actions</th></tr></thead>
     <tbody id="tc-ledger-body"></tbody>
+    <tfoot id="tc-ledger-foot"></tfoot>
   </table></div>
   <div id="tc-ledger-pagination"></div>
 </div>
