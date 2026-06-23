@@ -6729,6 +6729,9 @@ function renderInvoicePaperHTML(inv){
     ? `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> via Stripe Checkout.`
     : `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> securely, or scan the QR with your phone.`;
 
+  const payFallback = payUrl ? `
+    <p class="inv-pay-fallback">Pay online: <a href="${payUrl}" target="_blank" rel="noopener">${escapeHTML(payUrl)}</a></p>` : '';
+
   const payBlock = payUrl ? `
     <section class="inv-pay" style="--book-accent:${accent};">
       <div class="inv-pay-info">
@@ -6739,7 +6742,8 @@ function renderInvoicePaperHTML(inv){
         <div class="pay-methods">${payMethodsLabel}</div>
       </div>
       <div class="inv-qr"></div>
-    </section>` : '';
+    </section>
+    ${payFallback}` : '';
 
   const bankBlock = settings.bank ? `
     <div class="inv-notes-block">
@@ -7074,7 +7078,6 @@ function collectInvoicePaperCss(){
 // (clickable button + scannable QR + plain-text URL) that survives PDF export and
 // email-client styling — so the link is never dropped when the invoice is sent.
 function buildStandaloneInvoiceHTML(inv){
-  const payUrl = effectivePaymentLink(inv);
   let bodyInner = renderInvoicePaperHTML(inv);
 
   // Capture the QR that was rendered into the live preview as an <img> so it
@@ -7088,10 +7091,6 @@ function buildStandaloneInvoiceHTML(inv){
       );
     } catch(e){}
   }
-
-  // Plain-text clickable URL fallback — stays visible even if an email client
-  // strips the styled button.
-  const payFallback = payUrl ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#444;margin:14px 2px 0;word-break:break-all;">Pay online: <a href="${payUrl}" style="color:#0a7d4b;">${escapeHTML(payUrl)}</a></p>` : '';
 
   // Only the font stylesheets/preconnects are carried over from the page; the
   // rest of the document is our own clean, print-safe CSS.
@@ -7118,7 +7117,7 @@ function buildStandaloneInvoiceHTML(inv){
   `;
 
   const head = `<meta charset="utf-8"><title>Invoice ${escapeHTML(inv.num || '')}</title>${fontLinks}<style>${css}</style>`;
-  const body = `<body><div class="invoice-paper">${bodyInner}${payFallback}</div></body>`;
+  const body = `<body><div class="invoice-paper">${bodyInner}</div></body>`;
   return `<!doctype html><html><head>${head}</head>${body}</html>`;
 }
 
