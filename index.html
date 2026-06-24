@@ -845,48 +845,62 @@
     <div style="font-size:11px;color:rgba(255,255,255,.25);margin-top:8px;">When the publisher approves a reimbursement, they'll use this link to pay you.</div>
   </div>
 
-  <div class="section-hed" style="margin-bottom:1.25rem;">Log an expense</div>
+  <div class="section-hed" style="margin-bottom:1.1rem;">Log an expense</div>
   <div class="card">
-    <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label for="exp-desc">Description</label><input type="text" id="exp-desc" placeholder="e.g. Padded envelopes x20"></div>
-      <div class="form-group"><label for="exp-cat">Category</label>
-        <select id="exp-cat">
-          <option>Shipping supplies</option>
-          <option>Postage</option>
-          <option>Printing</option>
-          <option>Photography</option>
-          <option>Design</option>
-          <option>Marketing</option>
-          <option>Travel</option>
-          <option>Other</option>
-        </select>
-      </div>
-    </div>
-    <div class="g4">
-      <div class="form-group">
-        <label>Amount <span id="exp-fx-inline-result" style="display:none;color:var(--gold);font-weight:600;margin-left:8px;"></span></label>
-        <div class="price-inline">
-          <select id="exp-cur" onchange="onExpenseCurrencyChange()">
-            <option value="CAD">CAD</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
-            <option value="AUD">AUD</option>
-          </select>
-          <input type="number" inputmode="decimal" id="exp-amount" step="0.01" min="0" placeholder="0.00" oninput="calcExpenseFx()">
+    <div class="expense-grid">
+      <div class="expense-fields">
+        <div class="form-group"><label for="exp-desc">Description</label><input type="text" id="exp-desc" placeholder="e.g. Padded envelopes x20"></div>
+        <div class="g2">
+          <div class="form-group"><label for="exp-cat">Category</label>
+            <select id="exp-cat">
+              <option>Shipping supplies</option>
+              <option>Postage</option>
+              <option>Printing</option>
+              <option>Photography</option>
+              <option>Design</option>
+              <option>Marketing</option>
+              <option>Travel</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="form-group"><label for="exp-date">Date</label><input type="date" id="exp-date"></div>
+        </div>
+        <div class="g2">
+          <div class="form-group amount-field">
+            <label>Amount <span id="exp-fx-inline-result" style="display:none;color:var(--gold);font-weight:600;margin-left:8px;"></span></label>
+            <div class="price-inline">
+              <select id="exp-cur" onchange="onExpenseCurrencyChange()">
+                <option value="CAD">CAD</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="AUD">AUD</option>
+              </select>
+              <input type="number" inputmode="decimal" id="exp-amount" step="0.01" min="0" placeholder="0.00" oninput="calcExpenseFx()">
+            </div>
+          </div>
+          <div class="form-group" id="pub-exp-ref-group"><label for="exp-ref">Receipt / ref</label><input type="text" id="exp-ref" placeholder="optional"></div>
         </div>
       </div>
-      <div class="form-group"><label for="exp-date">Date</label><input type="date" id="exp-date"></div>
-      <div class="form-group" id="pub-exp-ref-group"><label for="exp-ref">Receipt / ref</label><input type="text" id="exp-ref" placeholder="optional"></div>
-      <div class="form-group" id="exp-file-group"><label>Upload file (optional)</label>
-        <div style="display:flex;gap:4px;">
-          <input type="file" id="exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px; flex: 1;">
-          <button class="btn gold" style="padding: 0 8px; font-size:12px; margin-top: 6px; display:none;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn">✨ AI Scan</button>
+      <div class="receipt-panel" id="exp-file-group">
+        <div class="panel-label">Receipt <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text4);">(optional)</span></div>
+        <label class="dropzone" id="exp-dropzone" ondragover="expFileDragOver(event)" ondragleave="expFileDragLeave(event)" ondrop="expFileDrop(event)">
+          <div class="dz-icon">🧾</div>
+          <div class="dz-title">Add a receipt</div>
+          <div class="dz-sub">Drop an image or PDF here, or <span class="dz-link">browse</span></div>
+          <input type="file" id="exp-file" accept="image/*,.pdf" hidden onchange="expFileChosen()">
+        </label>
+        <div class="dz-file" id="exp-file-chip">
+          <div class="dz-thumb">📄</div>
+          <div class="dz-fname" id="exp-file-name"></div>
+          <button class="dz-remove" type="button" title="Remove file" onclick="expFileClear(event)">×</button>
         </div>
+        <button class="btn gold" style="font-size:12px;display:none;align-self:flex-start;" onclick="scanProjectReceiptWithAI()" id="exp-ai-btn">✨ AI Scan</button>
       </div>
     </div>
-    <div style="margin-top:12px;">
-      <button class="btn gold" style="width:100%;height:38px;" onclick="submitExpense()" id="submit-exp-btn">Log expense</button>
+    <div class="card-actions">
+      <div class="field-note">Logged to this project's ledger. Reimbursable expenses can be claimed from the publisher later.</div>
+      <button class="btn gold lg" onclick="submitExpense()" id="submit-exp-btn">Log expense</button>
     </div>
   </div>
   <div class="log-console" id="log-expenses"></div>

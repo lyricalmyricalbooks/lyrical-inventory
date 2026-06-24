@@ -482,6 +482,24 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .switch input:checked + .track{background:var(--gold);border-color:var(--gold);}
 .switch input:checked + .track::before{transform:translateX(18px);}
 
+/* EXPENSE FORM — fields beside a receipt drop panel */
+.expense-grid{display:grid;grid-template-columns:1fr 290px;gap:22px;align-items:start;}
+.expense-fields{display:flex;flex-direction:column;gap:14px;}
+.amount-field input[type=number]{font-size:15px;font-weight:600;font-family:'DM Mono',monospace;}
+.receipt-panel{display:flex;flex-direction:column;gap:10px;}
+.panel-label{font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);}
+.dropzone{position:relative;border:1.5px dashed var(--gold-line);border-radius:var(--r2);background:var(--gold-bg);padding:22px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:148px;justify-content:center;}
+.dropzone:hover,.dropzone.drag{border-color:var(--gold);background:rgba(200,145,58,.16);}
+.dz-icon{font-size:28px;line-height:1;}
+.dz-title{font-size:13px;font-weight:600;color:var(--text);}
+.dz-sub{font-size:11px;color:var(--text3);line-height:1.5;}
+.dz-link{color:var(--gold);font-weight:700;text-decoration:underline;}
+.dz-file{display:none;align-items:center;gap:10px;padding:10px 12px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r2);}
+.dz-thumb{width:34px;height:34px;border-radius:6px;background:var(--gold-bg);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.dz-fname{flex:1;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dz-remove{background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:2px 4px;}
+.dz-remove:hover{color:var(--red);}
+
 /* LOG */
 .log-console{background:var(--ink);border-radius:var(--r2);padding:10px 14px;font-size:11px;font-family:'DM Mono',monospace;max-height:90px;overflow-y:auto;line-height:2;display:none;margin-top:1rem;border:1px solid rgba(255,255,255,.05);}
 .log-line{display:block;}
@@ -818,7 +836,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .card, .store-card, .stock-block, .sheets-setup{padding:1rem;}
 
   /* Grids collapse */
-  .kpi-grid,.kpi-grid-primary,.g2,.g3,.g4,.order-grid{grid-template-columns:1fr !important;}
+  .kpi-grid,.kpi-grid-primary,.g2,.g3,.g4,.order-grid,.expense-grid{grid-template-columns:1fr !important;}
   .store-kpis{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
   .price-inline{grid-template-columns:1fr;}
   /* Footer action bar stacks; primary button goes full-width */
