@@ -63,14 +63,50 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.action === 'getEmailContent') {
     return getEmailContent_(e);
   }
+  if (e && e.parameter && e.parameter.action === 'getBookData') {
+    return getBookData_(e);
+  }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v10',
-    scriptVersion: 'v10',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true },
+    service: 'lyrical-sheets-webhook-v11',
+    scriptVersion: 'v11',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
+
+function getBookData_(e) {
+  try {
+    const bookTitle = e.parameter.book;
+    if (!bookTitle) return jsonOut_({ error: 'Book parameter required' });
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) return jsonOut_({ error: 'Spreadsheet not active' });
+    
+    const rawName = bookTitle.trim();
+    let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
+    if (!sheetName) sheetName = 'Overview';
+    
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return jsonOut_({ book: bookTitle, rows: [] });
+    
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return jsonOut_({ book: bookTitle, rows: [] });
+    
+    const values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+    const rows = values.map(r => {
+      const obj = {};
+      HEADERS.forEach((h, idx) => {
+        obj[h] = r[idx];
+      });
+      return obj;
+    });
+    
+    return jsonOut_({ book: bookTitle, rows });
+  } catch (err) {
+    return jsonOut_({ error: String(err) });
+  }
+}
+
 
 function scanGmail_(e) {
   const daysBack = parseInt(e.parameter.daysBack || 30);

@@ -658,7 +658,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v10';
+const EXPECTED_SCRIPT_VERSION = 'v11';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -5158,6 +5158,21 @@ function handleImportFile(event) {
 
       if (!_importRows.length) { showToast('Could not parse any valid rows', 'warn'); return; }
 
+      // Reset modal layout for spreadsheet import
+      const modalTitle = $('import-modal-title');
+      if (modalTitle) modalTitle.textContent = 'Import order history';
+      const warnBox = $('import-warning-box');
+      if (warnBox) {
+        warnBox.style.background = '';
+        warnBox.style.borderLeftColor = '';
+        warnBox.style.color = '';
+        warnBox.innerHTML = `⚠ This will <strong>add</strong> these rows to the current book's history. It will not overwrite existing data. Stock and revenue will be recalculated.`;
+      }
+      const confirmBtn = $('import-confirm-btn');
+      if (confirmBtn) {
+        confirmBtn.setAttribute('onclick', 'confirmImport()');
+      }
+
       // Build preview
       $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in sheet <em>"${sheetName}"</em> — review below then confirm.`;
       $('import-count').textContent = _importRows.length;
@@ -7876,6 +7891,386 @@ async function resetBookData(){
   states[activeBook]=defaultState(book);lastSavedHashes[activeBook]='';
   renderAll();saveState(activeBook);showToast('✓ Book data reset. Sheet backup untouched.','warn',4000);
 }
+
+let _sheetsRestoreData = null;
+
+function parseAndValidateDate(rawDate) {
+  if (!rawDate) return today();
+  if (rawDate instanceof Date) {
+    return !isNaN(rawDate.getTime()) ? rawDate.toISOString().split('T')[0] : today();
+  }
+  let dStr = String(rawDate).trim();
+  if (!dStr) return today();
+  
+  if (dStr.includes('T')) {
+    dStr = dStr.split('T')[0];
+  }
+  
+  const d = new Date(dStr);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split('T')[0];
+  }
+  return today();
+}
+
+async function restoreBookDataFromSheets() {
+  if (!sheetsUrl) {
+    showToast('Connect Google Sheets first in the Sheets tab.', 'warn');
+    return;
+  }
+  const book = getBook();
+
+  const syncBtn = $('d-restore-sheets-btn');
+  let originalBtnHtml = '';
+  if (syncBtn) {
+    originalBtnHtml = syncBtn.innerHTML;
+    syncBtn.disabled = true;
+    syncBtn.innerHTML = '<span class="spinner"></span>Syncing…';
+  }
+
+  showToast('Fetching data from Google Sheets...', 'ok', 10000);
+  try {
+    const url = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=getBookData&book=' + encodeURIComponent(book.title);
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    const data = await res.json().catch(() => null);
+    if (!data) {
+      throw new Error('Invalid JSON response from Google Sheets');
+    }
+    if (data.service && !data.rows) {
+      if (syncBtn) { syncBtn.disabled = false; syncBtn.innerHTML = originalBtnHtml; }
+      await confirmDialog(
+        'Outdated Google Apps Script detected. To restore data from Google Sheets, you must redeploy your Apps Script.\n\n' +
+        '1. Go to the Sheets tab.\n' +
+        '2. Copy the latest code.\n' +
+        '3. Create a NEW deployment in Google Sheets.\n' +
+        '4. Paste the new Web App URL under the Sheets tab and try again.',
+        { title: 'Update Apps Script Required', okLabel: 'OK' }
+      );
+      return;
+    }
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    const rows = data.rows || [];
+    if (!rows.length) {
+      showToast('No records found in Google Sheet for this book', 'warn');
+      if (syncBtn) { syncBtn.disabled = false; syncBtn.innerHTML = originalBtnHtml; }
+      return;
+    }
+
+    // Save parsed data globally for the confirm call
+    _sheetsRestoreData = { book, rows };
+
+    // Detect duplicate event IDs inside the spreadsheet rows
+    const seenIds = new Set();
+    const duplicateIds = new Set();
+    rows.forEach(r => {
+      const id = r._eventId || r['Event/Num'];
+      if (id && id !== '—') {
+        if (seenIds.has(id)) {
+          duplicateIds.add(id);
+        } else {
+          seenIds.add(id);
+        }
+      }
+    });
+
+    // Update Modal Elements for Sheets Restore Preview
+    const modalTitle = $('import-modal-title');
+    if (modalTitle) modalTitle.textContent = `Restore "${book.title}" from Google Sheets`;
+
+    const summary = $('import-summary');
+    if (summary) {
+      let summaryText = `Found <strong>${rows.length} records</strong> (sales and consignment events) in sheet — review below then confirm.`;
+      if (duplicateIds.size > 0) {
+        summaryText += `<br><span style="color:var(--amber);font-weight:600;">⚠ Note: ${duplicateIds.size} duplicate event/order IDs detected in the spreadsheet (marked below). Only the last entry for each ID will be imported.</span>`;
+      }
+      summary.innerHTML = summaryText;
+    }
+
+    const warnBox = $('import-warning-box');
+    if (warnBox) {
+      warnBox.style.background = 'var(--red-bg)';
+      warnBox.style.borderLeftColor = 'var(--red)';
+      warnBox.style.color = 'var(--red)';
+      warnBox.innerHTML = `⚠ Warning: Confirming this restore will <strong>OVERWRITE</strong> your entire local database state (sales, history, consignment ledger) for this book with the backup from Google Sheets.`;
+    }
+
+    const confirmBtn = $('import-confirm-btn');
+    if (confirmBtn) {
+      confirmBtn.setAttribute('onclick', 'confirmRestoreBookDataFromSheets()');
+      confirmBtn.innerHTML = `Restore database (${rows.length} rows)`;
+    }
+
+    // Build preview table rows
+    $('import-preview-body').innerHTML = rows.map(r => {
+      const type = r.Type || 'order';
+      const eventNum = r['Event/Num'] || '—';
+      const date = parseAndValidateDate(r.Date);
+      const chan = r['Store/Chan'] || '—';
+      const qty = parseInt(r.Qty) || 0;
+      const price = parseFloat(r['Price/Rate']) || 0;
+      const total = parseFloat(r['Total/Amount']) || 0;
+      const notes = r.Notes || '—';
+      const status = r.Status || 'OK';
+
+      const isDuplicate = duplicateIds.has(r._eventId || r['Event/Num']);
+
+      let badge = type === 'order'
+        ? '<span class="pill green" style="font-size:10px;">Direct</span>'
+        : `<span class="pill ${status === 'pending' ? 'amber' : 'blue'}" style="font-size:10px;">Consign: ${r['Event/Num']}</span>`;
+
+      if (isDuplicate) {
+        badge += ' <span class="pill red" style="font-size:10px;margin-left:4px;" title="Duplicate record found in the sheet. Only the last occurrence will be kept.">⚠️ Duplicate</span>';
+      }
+
+      return `
+        <tr style="${isDuplicate ? 'background:rgba(255,107,107,0.05);' : ''}">
+          <td class="mono">${escapeHtml(eventNum)}</td>
+          <td style="font-size:12px;color:var(--text3);">${fmtD(date)}</td>
+          <td>${escapeHtml(chan)}</td>
+          <td class="r">${qty}</td>
+          <td class="r">${book.currency}${price.toFixed(2)}</td>
+          <td class="r" style="font-weight:600;">${book.currency}${total.toFixed(2)}</td>
+          <td style="font-size:11px;color:var(--text3);">${escapeHtml(notes)}</td>
+          <td>${badge}</td>
+        </tr>`;
+    }).join('');
+
+    openM('import');
+  } catch (err) {
+    console.error('Sheets restore failed:', err);
+    showToast('Restore failed: ' + err.message, 'err');
+  } finally {
+    if (syncBtn) {
+      syncBtn.disabled = false;
+      syncBtn.innerHTML = originalBtnHtml;
+    }
+  }
+}
+
+async function confirmRestoreBookDataFromSheets() {
+  if (!_sheetsRestoreData || !_sheetsRestoreData.rows) return;
+  const { book, rows } = _sheetsRestoreData;
+  const s = getState();
+
+  showToast('Restoring database...', 'ok', 10000);
+  try {
+    // Keep existing stores metadata (contact info, etc.) but reset counters
+    const existingStores = [...(s.stores || [])];
+    existingStores.forEach(st => {
+      st.sent = 0;
+      st.sold = 0;
+      st.returned = 0;
+      st.outstanding = 0;
+      st.amountOwed = 0;
+    });
+
+    const newHist = [];
+    const newLedger = [];
+    const newStores = [...existingStores];
+    const newDoneIds = [];
+
+    // Helper to find or create a store by name
+    function getOrCreateStore(storeName, rowRate) {
+      let st = newStores.find(x => x.name.toLowerCase() === storeName.toLowerCase());
+      if (!st) {
+        st = {
+          id: Date.now() + Math.floor(Math.random() * 1000000),
+          name: storeName,
+          contact: '', email: '', phone: '', address: '', city: '', region: '', postal: '', country: '', website: '', terms: '',
+          rate: parseFloat(rowRate) || 40,
+          notes: '',
+          sent: 0,
+          sold: 0,
+          returned: 0,
+          outstanding: 0,
+          amountOwed: 0
+        };
+        newStores.push(st);
+      }
+      return st;
+    }
+
+    // De-duplicate sheet rows: process in reverse and keep only the last write for each event ID
+    const deduplicatedRows = [];
+    const seenIds = new Set();
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const row = rows[i];
+      const id = row._eventId || row['Event/Num'];
+      if (id && id !== '—') {
+        if (seenIds.has(id)) {
+          continue; // skip older occurrence
+        }
+        seenIds.add(id);
+      }
+      deduplicatedRows.unshift(row);
+    }
+
+    // Process sheet rows (they are in chronological order)
+    deduplicatedRows.forEach((row, index) => {
+      const sheetsId = row._eventId || '';
+      const date = parseAndValidateDate(row.Date);
+      const type = row.Type;
+      const qty = parseInt(row.Qty) || 0;
+      const notes = row.Notes || '';
+      const status = row.Status || 'OK';
+      const invoiceNum = row.Invoice || '';
+
+      if (sheetsId) {
+        newDoneIds.push(sheetsId);
+      }
+
+      if (type === 'order') {
+        const num = row['Event/Num'] || 'IMP-' + Date.now();
+        const chan = row['Store/Chan'] || 'Website';
+        const price = parseFloat(row['Price/Rate']) || 0;
+
+        let payment = null;
+        const nativeCur = getBookCurrencyCode(book);
+        const rowCur = normalizeCurrencyCode(row.Currency || nativeCur, 'CAD');
+        if (rowCur !== nativeCur) {
+          const totalAmount = parseFloat(row['Total/Amount']) || (qty * price);
+          const cadEquiv = parseFloat(row['CAD Equivalent']) || totalAmount;
+          payment = {
+            currency: rowCur,
+            amount: totalAmount,
+            rate: totalAmount > 0 ? (cadEquiv / totalAmount) : null,
+            convertedTotal: cadEquiv
+          };
+        } else {
+          payment = {
+            currency: nativeCur,
+            amount: qty * price,
+            rate: null,
+            convertedTotal: qty * price
+          };
+        }
+
+        newHist.unshift({
+          num,
+          chan,
+          qty,
+          price,
+          after: 0,
+          notes,
+          date,
+          payment,
+          enteredBy: 'Publisher',
+          sheetsId
+        });
+      } else if (type === 'consignment') {
+        const event = row['Event/Num']; // 'Shipment', 'Sale', 'Return'
+        const storeName = row['Store/Chan'];
+        const rate = parseFloat(row['Price/Rate']) || 0;
+        const amountDue = parseFloat(row['Total/Amount']) || 0;
+        const st = getOrCreateStore(storeName, rate);
+
+        const ledgerId = Date.now() + index;
+
+        newLedger.push({
+          id: ledgerId,
+          storeId: st.id,
+          storeName: st.name,
+          type: event,
+          date,
+          qty,
+          rate,
+          amountDue,
+          paid: (event === 'Sale') ? (status === 'pending' ? 'pending' : 'paid') : 'n/a',
+          notes,
+          status,
+          sheetsId,
+          invoiceNum
+        });
+
+        if (event === 'Sale') {
+          newHist.unshift({
+            num: 'CS-' + ledgerId,
+            chan: 'Consignment',
+            qty,
+            price: qty > 0 ? (amountDue / qty) : 0,
+            after: 0,
+            notes: st.name,
+            date,
+            sheetsId,
+            consignmentLink: true,
+            invoiceNum
+          });
+        }
+      }
+    });
+
+    // Link ledger entries to existing invoices if matching invoice number is found
+    newLedger.forEach(e => {
+      if (e.type === 'Sale' && e.invoiceNum) {
+        const inv = (s.invoices || []).find(i => String(i.num).toLowerCase() === String(e.invoiceNum).toLowerCase());
+        if (inv) {
+          e.invoiceId = inv.id;
+        }
+      }
+    });
+
+    s.hist = newHist;
+    s.ledger = newLedger;
+    s.stores = newStores;
+    s.doneIds = newDoneIds;
+
+    // Recalculate book units sold and revenue
+    s.sold = 0;
+    s.revenue = 0;
+    s.chStats = {};
+
+    newHist.forEach(h => {
+      if (h.voided || h.consignmentLink) return;
+      s.sold += (h.qty || 0);
+      s.revenue += (h.qty || 0) * (h.price || 0);
+      const chan = h.chan || 'Manual';
+      if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
+      s.chStats[chan].txns++;
+      s.chStats[chan].units += (h.qty || 0);
+      s.chStats[chan].revenue += (h.qty || 0) * (h.price || 0);
+    });
+
+    newLedger.forEach(e => {
+      if (e.voided || e.type !== 'Sale') return;
+      s.sold += (e.qty || 0);
+      s.revenue += (e.amountDue || 0);
+    });
+
+    // Recalculate store amountOwed
+    newStores.forEach(st => {
+      st.amountOwed = 0;
+    });
+    newLedger.forEach(e => {
+      if (e.voided || e.type !== 'Sale' || !e.storeId) return;
+      const st = newStores.find(x => x.id === e.storeId);
+      if (st && e.status === 'pending') {
+        st.amountOwed += (e.amountDue || 0);
+      }
+    });
+
+    s.stock = deriveOnHand(s, book);
+    recomputeAfters(s, book);
+    reconcileConsignmentInvoiceLinks(s);
+
+    await saveState(activeBook);
+    renderAll();
+    updateDash();
+    closeM('import');
+
+    showToast(`✓ Restored ${newHist.filter(h => !h.consignmentLink).length} sales and ${newLedger.length} consignment events from Google Sheets!`);
+    _sheetsRestoreData = null;
+  } catch (err) {
+    console.error('Sheets restore confirmation failed:', err);
+    showToast('Restore failed: ' + err.message, 'err');
+  }
+}
+window.confirmRestoreBookDataFromSheets = confirmRestoreBookDataFromSheets;
 
 // ── MODAL HELPERS
 // Snapshot of a modal's field values, taken when it opens — used by the
@@ -14944,7 +15339,7 @@ Object.assign(window, {
   submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale,
   exportConsignmentLedgerCSV, openBulkSend, bulkApplyQty, bulkQtyChanged, bulkCheckChanged, updateBulkSendSummary, confirmBulkSend,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
-  resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
+  restoreBookDataFromSheets, resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
