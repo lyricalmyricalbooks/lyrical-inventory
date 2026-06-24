@@ -5797,7 +5797,8 @@ window.updateGratuitySourceHint = function() {
   const hint = $('g-source-remaining');
   if (hint) {
     const warnPub = pubLeft < 0, warnAuth = authLeft < 0;
-    hint.innerHTML = `Publisher: <strong${warnPub?' style="color:var(--danger,#c8693a)"':''}>${pubLeft}</strong> of ${pubAlloc} left · Author: <strong${warnAuth?' style="color:var(--danger,#c8693a)"':''}>${authLeft}</strong> of ${authAlloc} left`;
+    const warnStyle = ' style="color:var(--red)"';
+    hint.innerHTML = `<span class="pile-chip"><span class="dot pub"></span>Publisher <strong${warnPub?warnStyle:''}>${pubLeft} of ${pubAlloc}</strong></span><span class="pile-chip"><span class="dot auth"></span>Author <strong${warnAuth?warnStyle:''}>${authLeft} of ${authAlloc}</strong></span>`;
   }
 };
 

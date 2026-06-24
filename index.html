@@ -665,9 +665,9 @@
     <div class="book-context-dot"></div>
     <div><div class="book-context-title" id="bc-title-man">—</div><div class="book-context-meta">Manual order entry</div></div>
   </div>
-  <div class="section-hed" style="margin-bottom:1.25rem;">Log an order</div>
+  <div class="section-hed" style="margin-bottom:1.1rem;">Log an order</div>
   <div class="card">
-    <div class="g4" style="margin-bottom:12px;">
+    <div class="order-grid">
       <div class="form-group"><label for="m-num">Order #</label><input type="text" id="m-num" placeholder="optional"></div>
       <div class="form-group"><label for="m-qty">Qty</label><input type="number" inputmode="numeric" id="m-qty" value="1" min="1" oninput="phint()"></div>
       <div class="form-group">
@@ -689,6 +689,7 @@
           </select>
           <input type="number" inputmode="decimal" id="m-price" value="40.00" step="0.01" oninput="phint()">
         </div>
+        <div class="field-note">Paid in a different currency? Today's exchange rate is applied automatically.</div>
         <div id="m-manual-rate-row" style="display:none;margin-top:8px;">
           <label style="font-size:11px;color:var(--red);margin-bottom:4px;display:block;">Live rate unavailable — enter exchange rate manually:</label>
           <div style="display:flex;gap:8px;align-items:center;">
@@ -698,70 +699,65 @@
           </div>
         </div>
       </div>
-      <div class="form-group"><label>&nbsp;</label><button class="btn gold" style="width:100%;height:44px;font-size:14px;" onclick="submitManual(event)">＋ Add order</button></div>
     </div>
-    <!-- Channel and Notes -->
-    <div class="g2">
+    <!-- Channel and Payment type -->
+    <div class="g2" style="margin-top:14px;">
       <div class="form-group"><label for="m-chan">Channel</label><select id="m-chan"><option>Website</option><option>In Person</option><option>Book Fair</option><option>Other</option></select></div>
-      <div class="form-group"><label for="m-notes">Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
-    </div>
-    <div class="g2" style="margin-top:12px;">
-      <div class="form-group">
-        <label for="m-payment-type">Payment Type <span style="color:var(--red);font-size:11px;">required</span></label>
+      <div class="form-group needs-attention">
+        <label for="m-payment-type">Payment type <span class="req-badge">Required</span></label>
         <select id="m-payment-type" required>
           <option value="">— Select payment type —</option>
           <option value="Payment directly to artist">Payment directly to artist</option>
           <option value="Payment directly to publisher">Payment directly to publisher</option>
         </select>
       </div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end;">
-        <div style="font-size:11px;color:var(--text3);line-height:1.45;">If the paid currency is different from the book currency, we will automatically apply today's exchange rate.</div>
-      </div>
     </div>
+    <div class="form-group" style="margin-top:14px;"><label for="m-notes">Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
     <div class="hint-text" id="m-hint"></div>
+    <div class="card-actions">
+      <div class="field-note">Stock is reduced and revenue recorded when you add the order.</div>
+      <button class="btn gold lg" onclick="submitManual(event)">＋ Add order</button>
+    </div>
   </div>
   <div class="log-console" id="log-manual"></div>
 
   <div class="divider" style="margin-top:1.5rem;"></div>
-  <div class="section-hed" style="margin-bottom:.4rem;margin-top:1.5rem;">Log a gratuity <span style="font-size:12px;font-weight:400;font-family:'DM Mono',monospace;color:var(--text3);">(gifted / complimentary)</span></div>
-  <p style="font-size:12px;color:var(--text3);margin-bottom:1.25rem;line-height:1.6;">Gratuity books reduce stock but are <strong>not</strong> counted as revenue or sold units.</p>
+  <div class="section-hed" style="margin-bottom:.2rem;margin-top:1.5rem;">Log a gratuity <span class="muted-note">(gifted / complimentary)</span></div>
+  <p class="lead-note">Gratuity books reduce stock but are <strong>not</strong> counted as revenue or sold units.</p>
   <div class="card" style="border-left:3px solid var(--gold-line);">
-    <div class="g4" style="margin-bottom:12px;">
+    <div class="g3">
       <div class="form-group"><label for="g-ref">Recipient / Ref</label><input type="text" id="g-ref" placeholder="e.g. reviewer, press"></div>
       <div class="form-group"><label for="g-qty">Qty</label><input type="number" inputmode="numeric" id="g-qty" value="1" min="1" oninput="updateGratuityExpenseHint()"></div>
       <div class="form-group"><label for="g-date">Date</label><input type="date" id="g-date"></div>
-      <div class="form-group"><label>&nbsp;</label><button class="btn ink" style="width:100%;height:38px;" onclick="submitGratuity(event)">Log gratuity</button></div>
     </div>
-    <div class="g2" style="margin-bottom:12px;">
+    <div class="g2" style="margin-top:14px;">
       <div class="form-group">
         <label for="g-source">Gratuity pile</label>
         <select id="g-source" onchange="updateGratuitySourceHint()">
           <option value="publisher">Publisher's pile</option>
           <option value="author">Author's pile</option>
         </select>
+        <div id="g-source-remaining" class="pile-stats"></div>
       </div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:center;">
-        <span id="g-source-remaining" style="font-size:11px;color:var(--text3);line-height:1.4;margin-top:14px;">—</span>
-      </div>
-    </div>
-    <div class="g2">
       <div class="form-group"><label for="g-notes">Notes</label><input type="text" id="g-notes" placeholder="e.g. press copy, author gift, launch event"></div>
-      <div class="form-group" id="g-expense-wrap" style="display:flex; flex-direction: column; justify-content:center;">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:18px;user-select:none;">
-          <input type="checkbox" id="g-expense-cb" onchange="toggleGratuityExpense()" style="width:16px;height:16px;accent-color:var(--gold);">
-          <span style="font-size:13px;color:var(--cream);">Expense this gratuity</span>
-        </label>
-      </div>
     </div>
-    <div id="g-expense-fields" class="g3" style="display:none; margin-top:12px; padding-top:12px; border-top:1px dashed rgba(255,255,255,.1);">
+    <label class="toggle-row" id="g-expense-wrap">
+      <span class="switch"><input type="checkbox" id="g-expense-cb" onchange="toggleGratuityExpense()"><span class="track"></span></span>
+      <span><span class="toggle-title">Expense this gratuity</span><span class="field-note" style="display:block;margin-top:2px;">Add the cost of these copies to this project's ledger.</span></span>
+    </label>
+    <div id="g-expense-fields" class="g3" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);">
       <div class="form-group">
-        <label for="g-exp-val">Expense Value (per book)</label>
+        <label for="g-exp-val">Expense value (per book)</label>
         <input type="number" inputmode="decimal" id="g-exp-val" step="0.01" placeholder="0.00" oninput="updateGratuityExpenseHint()">
       </div>
       <div class="form-group" style="display:flex; flex-direction:column; justify-content:center;">
-        <span style="font-size:11px;color:var(--text3);line-height:1.4;margin-top:14px;">Will add a <strong id="g-exp-total" style="color:var(--gold);">0.00</strong> expense to this project's ledger.</span>
+        <span class="field-note">Will add a <strong id="g-exp-total" style="color:var(--gold);">0.00</strong> expense to this project's ledger.</span>
       </div>
       <div class="form-group"></div>
+    </div>
+    <div class="card-actions">
+      <div class="field-note">Reduces stock from the selected pile — not counted as a sale.</div>
+      <button class="btn ink lg" onclick="submitGratuity(event)">Log gratuity</button>
     </div>
   </div>
   <div class="log-console" id="log-gratuity"></div>
