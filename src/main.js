@@ -756,6 +756,9 @@ function setSyncState(status, msg) {
   const dot=$('sync-dot'), label=$('sync-label'), time=$('sync-time');
   dot.className='sync-dot'+(status==='syncing'?' syncing':status==='error'?' error':'');
   label.innerHTML=msg; time.textContent=new Date().toLocaleTimeString();
+  // Short status word shown in the header pill (the full label lives in the menu).
+  const pill=$('sync-pill-text');
+  if(pill) pill.textContent = status==='syncing'?'Saving…':status==='error'?'Sync error':'Live';
 }
 
 // ── FIREBASE (per-book)
