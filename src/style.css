@@ -25,17 +25,39 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .app{position:relative;z-index:1;}
 
 /* HEADER */
-.app-header{background:var(--ink);padding:0 2rem;display:flex;align-items:stretch;justify-content:space-between;gap:1.5rem;border-bottom:1px solid rgba(200,145,58,.2);position:sticky;top:0;z-index:100;padding-top:max(env(safe-area-inset-top), 0px);}
-.header-brand{display:flex;flex-direction:column;justify-content:center;padding:1.1rem 0;gap:4px;}
+.app-header{background:var(--ink);padding:10px 1.6rem;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid rgba(200,145,58,.2);position:sticky;top:0;z-index:100;padding-top:max(env(safe-area-inset-top), 10px);}
+.header-brand{display:flex;flex-direction:column;justify-content:center;gap:3px;padding-right:14px;border-right:1px solid rgba(255,255,255,.08);}
 .header-wordmark{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--cream);letter-spacing:.01em;line-height:1;}
 .header-tag{font-size:9px;font-weight:600;color:var(--gold2);letter-spacing:.22em;text-transform:uppercase;}
-.header-right{display:flex;align-items:stretch;}
-.header-stat{display:flex;flex-direction:column;justify-content:center;text-align:right;padding:.75rem 0 .75rem 1.75rem;border-left:1px solid rgba(255,255,255,.06);}
-.hs-val{font-family:'DM Mono',monospace;font-size:19px;font-weight:500;color:var(--gold3);line-height:1;}
+.header-right{display:flex;align-items:center;gap:7px;margin-left:auto;}
+.header-stat{display:flex;flex-direction:column;align-items:flex-end;text-align:right;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:var(--r2);padding:5px 11px;}
+.hs-val{font-family:'DM Mono',monospace;font-size:16px;font-weight:500;color:var(--gold3);line-height:1;}
 .hs-label{font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.14em;text-transform:uppercase;margin-top:4px;}
 
 /* GLOBAL ACTIONS */
-.header-actions{display:flex;align-items:center;gap:8px;padding:0 1rem;}
+.header-actions{display:flex;align-items:center;gap:8px;}
+
+/* Book switcher relocated into the header (row 1) — pill, not a band */
+.app-header #book-switcher-wrap{background:transparent;border-bottom:none;display:flex;align-items:center;gap:8px;position:relative;}
+.app-header .book-switcher{padding:0 !important;background:transparent;border-bottom:none;gap:8px !important;}
+
+/* Sync status pill — opens the account menu */
+.status-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.72);font-family:'DM Mono',monospace;font-size:11px;border-radius:99px;padding:6px 12px;cursor:pointer;white-space:nowrap;transition:border-color .16s,background .16s;}
+.status-pill:hover{border-color:var(--gold);}
+.status-pill .sync-dot{flex-shrink:0;}
+.status-pill .hm-caret{opacity:.45;margin-left:1px;}
+.header-menu.open > .status-pill{color:var(--gold3);}
+
+/* Account dropdown panel (sync detail + refresh + logout) */
+.account-panel{min-width:262px;}
+.acct-status{padding:7px 9px 3px;}
+.acct-status .sync-label{flex:none;font-size:11px;color:rgba(255,255,255,.75);line-height:1.5;}
+.acct-status .sync-label b{color:var(--cream);}
+.acct-status-row{display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap;}
+.acct-status .sync-time{color:rgba(255,255,255,.4);font-size:10px;}
+.acct-status .author-watermark{display:block;margin-top:7px;font-size:10px;color:var(--gold2);font-family:'DM Mono',monospace;}
+.header-menu-sep{height:1px;background:rgba(255,255,255,.08);margin:6px 4px;}
+.header-menu-item.danger-item .hmi-label,.header-menu-item.danger-item .hmi-ico{color:#f8a4a4;}
 .header-action-btn{
   background:rgba(255,255,255,.06);
   border:1px solid rgba(255,255,255,.12);
@@ -786,9 +808,10 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .sync-time{display:none;}
   .sheets-badge{font-size:9px;padding:2px 7px;}
 
-  /* Book switcher */
+  /* Book switcher (now inside the header) stacks full-width on its own row */
+  .app-header #book-switcher-wrap{width:100%;order:2;}
   .book-switcher{
-    padding:.55rem 1rem !important;
+    padding:0 !important;
     overflow:visible;
     gap:8px !important;
     flex-wrap:wrap;

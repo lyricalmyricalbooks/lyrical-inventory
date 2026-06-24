@@ -177,6 +177,28 @@
     <div class="header-wordmark">Lyricalmyrical Books</div>
     <div class="header-tag" id="hdr-sub">Inventory App · connecting…</div>
   </div>
+
+  <!-- BOOK SWITCHER (publisher only) — relocated into the header row -->
+  <div id="book-switcher-wrap">
+    <div class="book-switcher" id="book-switcher" style="position:relative;">
+      <div id="book-dropdown" style="position:relative;display:inline-block;">
+        <button id="book-dropdown-btn" onclick="toggleBookDropdown()" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);color:var(--cream);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;outline:none;min-width:170px;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div id="book-dropdown-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);flex-shrink:0;"></div>
+            <span id="book-dropdown-label">All books</span>
+          </div>
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style="flex-shrink:0;opacity:.4;"><path d="M0 0l5 6 5-6z" fill="white"/></svg>
+        </button>
+        <div id="book-dropdown-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,.1);border-radius:var(--r2);box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:999;overflow:hidden;">
+          <!-- Options injected by JS -->
+        </div>
+      </div>
+    </div>
+    <button id="role-toggle-btn" class="btn sm" onclick="toggleCurrentBookView()" style="display:none;font-size:10px;padding:4px 10px;background:transparent;color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.18);">
+      Author view
+    </button>
+  </div>
+
   <div class="header-actions" id="global-actions" style="display:none; align-items:center;">
     <button class="header-action-btn primary" onclick="switchTab('pos')" id="global-pos-btn" title="Sell books at an event">🛒 Event POS</button>
     <button class="header-action-btn" onclick="switchTab('taxcenter')" id="global-taxcenter-btn" title="Expenses &amp; tax season">⚖️ Tax Centre</button>
@@ -230,6 +252,29 @@
     <div class="header-stat"><div class="hs-val" id="h-stock">—</div><div class="hs-label">On hand</div></div>
     <div class="header-stat"><div class="hs-val" id="h-revenue">—</div><div class="hs-label">Revenue</div></div>
     <div class="header-stat"><div class="hs-val" id="h-consigned">—</div><div class="hs-label">Consigned</div></div>
+
+    <!-- Sync status pill + account menu (absorbs the old sync bar) -->
+    <div class="header-menu" id="hmenu-account">
+      <button type="button" class="header-menu-trigger status-pill" onclick="toggleHeaderMenu('account')" aria-haspopup="true" aria-expanded="false" title="Sync status &amp; account">
+        <span class="sync-dot syncing" id="sync-dot"></span>
+        <span id="sync-pill-text">Connecting…</span>
+        <svg class="hm-caret" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M0 0l5 6 5-6z" fill="currentColor"/></svg>
+      </button>
+      <div class="header-menu-panel account-panel">
+        <div class="acct-status">
+          <div class="sync-label" id="sync-label"><b>Firestore</b> · connecting…</div>
+          <div class="acct-status-row">
+            <span class="sync-time" id="sync-time"></span>
+            <span class="sheets-badge off" id="sheets-badge">📊 Sheets: not set up</span>
+            <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:'DM Mono',monospace;font-size:10px;color:var(--gold2);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
+          </div>
+          <span class="author-watermark" id="author-watermark" style="display:none;"></span>
+        </div>
+        <div class="header-menu-sep"></div>
+        <button class="header-menu-item" onclick="forceSync()"><span class="hmi-ico">↺</span><span class="hmi-txt"><span class="hmi-label">Refresh sync</span><span class="hmi-sub">Pull the latest from Firestore</span></span></button>
+        <button class="header-menu-item danger-item" onclick="logout()"><span class="hmi-ico">⏻</span><span class="hmi-txt"><span class="hmi-label">Log out</span><span class="hmi-sub">End this session</span></span></button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -244,38 +289,6 @@
   <button type="button" class="pab-dismiss" id="pab-dismiss" title="Snooze until next change" aria-label="Dismiss">×</button>
 </div>
 
-<div class="sync-bar">
-  <div class="sync-dot syncing" id="sync-dot"></div>
-  <div class="sync-label" id="sync-label"><b>Firestore</b> · connecting…</div>
-  <div class="sync-time" id="sync-time"></div>
-  <span class="sheets-badge off" id="sheets-badge">📊 Sheets: not set up</span>
-  <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:'DM Mono',monospace;font-size:10px;color:var(--gold2);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
-  <span class="author-watermark" id="author-watermark" style="display:none;"></span>
-  <button class="btn sm" style="font-size:10px;padding:3px 9px;background:transparent;color:rgba(255,255,255,.35);border-color:rgba(255,255,255,.1);" onclick="forceSync()">↺ Refresh</button>
-  <button class="btn sm" style="font-size:10px;padding:3px 9px;background:transparent;color:rgba(255,100,100,.35);border-color:rgba(255,100,100,.1);margin-left:auto;" onclick="logout()">Logout</button>
-</div>
-
-<!-- BOOK SWITCHER (publisher only) -->
-<div id="book-switcher-wrap" style="position:relative;">
-<div class="book-switcher" id="book-switcher" style="padding:.55rem 2rem;align-items:center;gap:12px;position:relative;">
-  <span style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.3);">Viewing</span>
-  <div id="book-dropdown" style="position:relative;display:inline-block;">
-    <button id="book-dropdown-btn" onclick="toggleBookDropdown()" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);color:var(--cream);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;outline:none;min-width:240px;justify-content:space-between;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div id="book-dropdown-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);flex-shrink:0;"></div>
-        <span id="book-dropdown-label">All books</span>
-      </div>
-      <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style="flex-shrink:0;opacity:.4;"><path d="M0 0l5 6 5-6z" fill="white"/></svg>
-    </button>
-    <div id="book-dropdown-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,.1);border-radius:var(--r2);box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:999;overflow:hidden;">
-      <!-- Options injected by JS -->
-    </div>
-  </div>
-</div>
-<button id="role-toggle-btn" class="btn sm" onclick="toggleCurrentBookView()" style="display:none;font-size:10px;padding:4px 10px;background:transparent;color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.18);position:absolute;right:2rem;top:50%;transform:translateY(-50%);z-index:91;">
-  Author view
-</button>
-</div>
 </div>
 
 <!-- TABS (per-book) -->
