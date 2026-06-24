@@ -9867,7 +9867,7 @@ async function applyBackupData(data) {
 async function restoreSystemBackup(id) {
   const backup = systemBackups.find(b => b.id === id);
   if (!backup) return;
-  if (!(await confirmDialog('Restore this system backup? This will OVERWRITE your current database and reload the app.', { title: 'Restore backup', okLabel: 'Restore', danger: true }))) return;
+  if (!(await confirmDialog('Restore this system backup? This will OVERWRITE your current database and reload the app. A safety backup of the current state is saved first, so you can undo it.', { title: 'Restore backup', okLabel: 'Restore', danger: true }))) return;
   try {
     // New backups keep the snapshot in its own doc; older ones inlined it.
     const snapshot = backup.snapshot || await window._fbLoadBackupSnapshot(id);
@@ -9875,8 +9875,12 @@ async function restoreSystemBackup(id) {
       showToast('Backup data could not be found', 'err');
       return;
     }
+    // Safety net — snapshot the CURRENT state before overwriting everything.
+    let safetyOk = false;
+    try { safetyOk = await createSystemBackup('manual'); }
+    catch (e) { console.error('Pre-restore safety backup failed', e); }
     await applyBackupData(snapshot);
-    showToast('✓ System backup restored! Reloading...');
+    showToast(`✓ System backup restored${safetyOk ? ' (safety backup saved)' : ''}! Reloading...`);
     setTimeout(() => location.reload(), 1500);
   } catch (e) {
     console.error('System restore failed', e);
@@ -9892,6 +9896,22 @@ async function restoreSystemBackup(id) {
 // -link settings) and leaves every other book and all global settings exactly
 // as they are right now.
 let _bookRestoreCtx = null;
+
+// Compact stats for a book state — used by both the picker and the
+// before/after diff in the restore confirmation.
+function _restoreBookStats(st) {
+  st = st || {};
+  return {
+    sales: (st.hist || []).filter(h => !h.voided).length,
+    ledger: (st.ledger || []).length,
+    stock: st.stock,
+    hasData: !!((st.hist && st.hist.length) || (st.ledger && st.ledger.length) || (st.sold > 0))
+  };
+}
+
+function _restoreStatLine(s) {
+  return `${s.sales} sale${s.sales === 1 ? '' : 's'} · ${s.ledger} consignment record${s.ledger === 1 ? '' : 's'} · stock ${s.stock ?? '—'}`;
+}
 
 async function restoreBookFromBackup(id) {
   const backup = systemBackups.find(b => b.id === id);
@@ -9923,23 +9943,36 @@ function renderBookRestorePicker() {
     host.innerHTML = '<div class="empty-state">This snapshot has no books.</div>';
     return;
   }
-  host.innerHTML = ids.map(bid => {
+
+  // Rank for sorting: a book missing from the live catalog is the likely
+  // recovery target → top. Then books that actually carry data. Empty /
+  // no-activity books sink to the bottom and are greyed out, so the one you
+  // lost stands out at a glance.
+  const meta = {};
+  ids.forEach(bid => {
+    const s = _restoreBookStats(snapshot.states?.[bid]);
+    const missing = !BOOKS[bid];
+    meta[bid] = { s, missing, rank: missing ? 0 : (s.hasData ? 1 : 2) };
+  });
+  const sorted = [...ids].sort((a, b) => meta[a].rank - meta[b].rank || meta[b].s.sales - meta[a].s.sales);
+
+  host.innerHTML = sorted.map(bid => {
     const book = snapshot.BOOKS[bid] || {};
-    const st = snapshot.states?.[bid] || {};
-    const sales = (st.hist || []).filter(h => !h.voided).length;
-    const ledger = (st.ledger || []).length;
-    const stock = st.stock ?? '—';
-    const exists = !!BOOKS[bid];
-    const badge = exists
-      ? '<span class="pill amber" style="font-size:10px;">In catalog · will be overwritten</span>'
-      : '<span class="pill green" style="font-size:10px;">Missing · will be re-added</span>';
+    const { s, missing, rank } = meta[bid];
+    const empty = rank === 2;
+    const badge = missing
+      ? '<span class="pill green" style="font-size:10px;">Missing · will be re-added</span>'
+      : '<span class="pill amber" style="font-size:10px;">In catalog · will be overwritten</span>';
+    const stat = empty
+      ? '<span style="color:var(--text3);">No recorded activity in this snapshot</span>'
+      : `<strong style="color:var(--cream);">${escapeHtml(_restoreStatLine(s))}</strong>`;
     return `
-      <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r2);background:rgba(255,255,255,.03);">
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r2);background:rgba(255,255,255,.03);${empty ? 'opacity:.5;' : ''}">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent || 'var(--gold3)'};flex-shrink:0;"></div>
         <div style="flex:1;min-width:0;">
           <div style="font-weight:700;font-size:13px;color:var(--cream);">${escapeHtml(book.title || bid)}</div>
-          <div style="font-size:11px;color:var(--text3);">${escapeHtml(book.author || '—')} · ${sales} sale${sales === 1 ? '' : 's'} · ${ledger} consignment record${ledger === 1 ? '' : 's'} · stock ${stock}</div>
-          <div style="margin-top:4px;">${badge}</div>
+          <div style="font-size:12px;margin-top:2px;">${stat}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px;">${escapeHtml(book.author || '—')} · ${badge}</div>
         </div>
         <button class="btn gold sm" onclick="applyBookRestore('${bid}')">Restore</button>
       </div>`;
@@ -9954,12 +9987,29 @@ async function applyBookRestore(bid) {
 
   const title = book.title || bid;
   const exists = !!BOOKS[bid];
+
+  // Before/after diff so you can't silently restore from a too-new snapshot
+  // that's already missing the data you're trying to get back.
+  const backupStats = _restoreBookStats(snapshot.states?.[bid]);
+  const currentLine = exists
+    ? _restoreStatLine(_restoreBookStats(states[bid]))
+    : 'not in catalog — this book was deleted';
   if (!(await confirmDialog(
-    `Restore only "${title}"?\n\nThis ${exists ? 'OVERWRITES' : 're-adds'} this one book's catalog entry, inventory, history and consignment ledger from the backup.\n\nEvery other book and all your settings stay exactly as they are now.`,
+    `Restore only "${title}"?\n\n` +
+    `This backup brings back:\n  • ${_restoreStatLine(backupStats)}\n\n` +
+    `Currently in the app:\n  • ${currentLine}\n\n` +
+    `This ${exists ? 'OVERWRITES' : 're-adds'} this one book's catalog entry, inventory, history and consignment ledger from the backup. A safety backup of the current state is saved first, so you can undo it.\n\n` +
+    `Every other book and all your settings stay exactly as they are now.`,
     { title: 'Restore one book', okLabel: exists ? 'Overwrite this book' : 'Re-add this book', danger: true }
   ))) return;
 
   try {
+    // 0. Safety net — snapshot the CURRENT state before we overwrite anything,
+    //    so a wrong pick (or restoring from a too-new backup) is never fatal.
+    let safetyOk = false;
+    try { safetyOk = await createSystemBackup('manual'); }
+    catch (e) { console.error('Pre-restore safety backup failed', e); }
+
     // 1. Catalog entry — restore just this book, leaving the rest of BOOKS as-is.
     BOOKS[bid] = JSON.parse(JSON.stringify(book));
     BOOK_LIST = Object.values(BOOKS);
@@ -9989,7 +10039,7 @@ async function applyBookRestore(bid) {
     }
 
     closeM('restore-book');
-    showToast(`✓ "${title}" restored! Reloading…`);
+    showToast(`✓ "${title}" restored${safetyOk ? ' (safety backup saved)' : ''}! Reloading…`);
     setTimeout(() => location.reload(), 1500);
   } catch (e) {
     console.error('Single-book restore failed', e);
