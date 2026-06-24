@@ -9762,7 +9762,10 @@ function renderSystemBackups() {
       <td>${new Date(b.createdAt).toLocaleString()}</td>
       <td>${b.type === 'manual' ? 'Manual' : 'Auto daily'}</td>
       <td class="r">${b.bookCount ?? Object.keys(b.snapshot?.BOOKS || {}).length}</td>
-      <td class="r"><button class="btn sm" onclick="restoreSystemBackup('${b.id}')">Restore</button></td>
+      <td class="r" style="white-space:nowrap;">
+        <button class="btn sm" onclick="restoreBookFromBackup('${b.id}')" title="Restore just one book from this snapshot — leaves your other books untouched">Restore 1 book</button>
+        <button class="btn sm" onclick="restoreSystemBackup('${b.id}')" title="Restore the ENTIRE database from this snapshot — overwrites everything">Restore all</button>
+      </td>
     </tr>
   `).join('');
 
@@ -9878,6 +9881,119 @@ async function restoreSystemBackup(id) {
   } catch (e) {
     console.error('System restore failed', e);
     showToast('Error restoring system backup', 'err');
+  }
+}
+
+// ── SELECTIVE (single-book) restore from a system backup ───────────────────
+// restoreSystemBackup() above OVERWRITES the ENTIRE database. When only one
+// book's data was lost, that's far too blunt — it would clobber every other
+// book too. This flow restores JUST the chosen book (its catalog entry plus
+// inventory, history and consignment ledger, and its production-cost / payment
+// -link settings) and leaves every other book and all global settings exactly
+// as they are right now.
+let _bookRestoreCtx = null;
+
+async function restoreBookFromBackup(id) {
+  const backup = systemBackups.find(b => b.id === id);
+  if (!backup) return;
+  let snapshot;
+  try {
+    // New backups keep the snapshot in its own doc; older ones inlined it.
+    snapshot = backup.snapshot || await window._fbLoadBackupSnapshot(id);
+  } catch (e) {
+    console.error('Backup snapshot load failed', e);
+  }
+  if (!snapshot || !snapshot.BOOKS) {
+    showToast('Backup data could not be found', 'err');
+    return;
+  }
+  _bookRestoreCtx = { id, snapshot };
+  const sub = $('restore-book-subtitle');
+  if (sub) sub.innerHTML = `From snapshot taken <strong>${new Date(backup.createdAt).toLocaleString()}</strong>`;
+  renderBookRestorePicker();
+  openM('restore-book');
+}
+
+function renderBookRestorePicker() {
+  const host = $('restore-book-list');
+  if (!host || !_bookRestoreCtx) return;
+  const { snapshot } = _bookRestoreCtx;
+  const ids = Object.keys(snapshot.BOOKS);
+  if (!ids.length) {
+    host.innerHTML = '<div class="empty-state">This snapshot has no books.</div>';
+    return;
+  }
+  host.innerHTML = ids.map(bid => {
+    const book = snapshot.BOOKS[bid] || {};
+    const st = snapshot.states?.[bid] || {};
+    const sales = (st.hist || []).filter(h => !h.voided).length;
+    const ledger = (st.ledger || []).length;
+    const stock = st.stock ?? '—';
+    const exists = !!BOOKS[bid];
+    const badge = exists
+      ? '<span class="pill amber" style="font-size:10px;">In catalog · will be overwritten</span>'
+      : '<span class="pill green" style="font-size:10px;">Missing · will be re-added</span>';
+    return `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r2);background:rgba(255,255,255,.03);">
+        <div style="width:8px;height:8px;border-radius:50%;background:${book.accent || 'var(--gold3)'};flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:13px;color:var(--cream);">${escapeHtml(book.title || bid)}</div>
+          <div style="font-size:11px;color:var(--text3);">${escapeHtml(book.author || '—')} · ${sales} sale${sales === 1 ? '' : 's'} · ${ledger} consignment record${ledger === 1 ? '' : 's'} · stock ${stock}</div>
+          <div style="margin-top:4px;">${badge}</div>
+        </div>
+        <button class="btn gold sm" onclick="applyBookRestore('${bid}')">Restore</button>
+      </div>`;
+  }).join('');
+}
+
+async function applyBookRestore(bid) {
+  if (!_bookRestoreCtx) return;
+  const { snapshot } = _bookRestoreCtx;
+  const book = snapshot.BOOKS?.[bid];
+  if (!book) { showToast('That book is not in this backup', 'err'); return; }
+
+  const title = book.title || bid;
+  const exists = !!BOOKS[bid];
+  if (!(await confirmDialog(
+    `Restore only "${title}"?\n\nThis ${exists ? 'OVERWRITES' : 're-adds'} this one book's catalog entry, inventory, history and consignment ledger from the backup.\n\nEvery other book and all your settings stay exactly as they are now.`,
+    { title: 'Restore one book', okLabel: exists ? 'Overwrite this book' : 'Re-add this book', danger: true }
+  ))) return;
+
+  try {
+    // 1. Catalog entry — restore just this book, leaving the rest of BOOKS as-is.
+    BOOKS[bid] = JSON.parse(JSON.stringify(book));
+    BOOK_LIST = Object.values(BOOKS);
+    // If this id was a tombstoned default, un-delete it so the restore sticks
+    // (otherwise loadCatalog would filter the default back out next reload).
+    deletedDefaultIds = deletedDefaultIds.filter(x => x !== bid);
+    await saveCatalogWithDeletions();
+
+    // 2. Per-book state (inventory, history, ledger, …).
+    const st = snapshot.states?.[bid] || defaultState(book);
+    states[bid] = JSON.parse(JSON.stringify(st));
+    await window._fbSave(bid, JSON.stringify(states[bid]));
+
+    // 3. This book's entries in the global per-book settings maps, so its
+    //    production cost / payment link come back too — other books untouched.
+    if (snapshot.productionCosts && bid in snapshot.productionCosts) {
+      const pc = JSON.parse(localStorage.getItem('lm-production-costs') || '{}');
+      pc[bid] = snapshot.productionCosts[bid];
+      localStorage.setItem('lm-production-costs', JSON.stringify(pc));
+      try { await window._fbSaveSettings('productionCosts', pc); } catch (_) {}
+    }
+    if (snapshot.paymentLinks && bid in snapshot.paymentLinks) {
+      const pl = JSON.parse(localStorage.getItem('lm-payment-links') || '{}');
+      pl[bid] = snapshot.paymentLinks[bid];
+      localStorage.setItem('lm-payment-links', JSON.stringify(pl));
+      try { await window._fbSaveSettings('paymentLinks', pl); } catch (_) {}
+    }
+
+    closeM('restore-book');
+    showToast(`✓ "${title}" restored! Reloading…`);
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    console.error('Single-book restore failed', e);
+    showToast('Error restoring book', 'err');
   }
 }
 
@@ -15354,7 +15470,7 @@ Object.assign(window, {
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
-  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, handleBackupImportFile,
+  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, handleBackupImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
