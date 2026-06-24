@@ -3810,6 +3810,7 @@ async function submitExpense(){
   updateDash();
   $('exp-desc').value='';$('exp-amount').value='';$('exp-ref').value='';$('exp-date').value=today();
   if(fileInput) fileInput.value = '';
+  if (typeof window.expFileChosen === 'function') window.expFileChosen();
 }
 
 function voidExpense(id){
@@ -3820,6 +3821,35 @@ function voidExpense(id){
   saveState(activeBook);
   showToast('Expense removed','warn');
 }
+
+// ── Receipt dropzone (expense form) — styled file chip + drag-and-drop.
+// Reflects the chosen file into a chip and toggles the dropzone prompt. The
+// underlying #exp-file input stays the single source of truth that
+// submitExpense / scanProjectReceiptWithAI read from.
+window.expFileChosen = function() {
+  const input = $('exp-file'), chip = $('exp-file-chip'), nameEl = $('exp-file-name'), dz = $('exp-dropzone');
+  const hasFile = input && input.files && input.files.length > 0;
+  if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
+  if (chip) chip.style.display = hasFile ? 'flex' : 'none';
+  if (dz) dz.style.display = hasFile ? 'none' : 'flex';
+};
+window.expFileClear = function(ev) {
+  if (ev) ev.preventDefault();
+  const input = $('exp-file');
+  if (input) input.value = '';
+  window.expFileChosen();
+};
+window.expFileDragOver = function(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.add('drag'); };
+window.expFileDragLeave = function(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag'); };
+window.expFileDrop = function(ev) {
+  ev.preventDefault();
+  const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag');
+  const input = $('exp-file');
+  if (input && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
+    try { input.files = ev.dataTransfer.files; } catch (e) { /* older browsers: ignore */ }
+    window.expFileChosen();
+  }
+};
 
 async function scanProjectReceiptWithAI() {
     const fileInput = $('exp-file');
