@@ -10108,13 +10108,49 @@ async function applyBookRestore(bid) {
   }
 }
 
+// Single-book restore from a LOCAL backup file (the JSON snapshots the user
+// downloads to their computer). Same format as system backups, so it reuses
+// the same picker + applyBookRestore — just sources the snapshot from a file.
+async function handleBookRestoreImportFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = ''; // let the same file be re-picked later
+
+  const info = $('import-one-info');
+  if (info) info.textContent = `Reading ${file.name}…`;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const data = JSON.parse(event.target.result);
+      if (!data.BOOKS || typeof data.BOOKS !== 'object' || !Object.keys(data.BOOKS).length) {
+        throw new Error('Invalid backup format: no books found');
+      }
+      _bookRestoreCtx = { id: null, snapshot: data, source: 'file' };
+      const sub = $('restore-book-subtitle');
+      if (sub) {
+        const when = data.timestamp ? new Date(data.timestamp).toLocaleString() : 'unknown date';
+        sub.innerHTML = `From file <strong>${escapeHtml(file.name)}</strong> · saved ${escapeHtml(when)}`;
+      }
+      if (info) info.textContent = `Loaded ${Object.keys(data.BOOKS).length} book(s) from ${file.name}`;
+      renderBookRestorePicker();
+      openM('restore-book');
+    } catch (err) {
+      console.error('Single-book file import failed', err);
+      showToast('Error: Invalid backup file', 'err');
+      if (info) info.textContent = 'Import failed (invalid file)';
+    }
+  };
+  reader.readAsText(file);
+}
+
 async function handleBackupImportFile(e) {
   const file = e.target.files[0];
   if (!file) return;
-  
+
   const info = $('import-info');
   if (info) info.textContent = `Reading ${file.name}...`;
-  
+
   const reader = new FileReader();
   reader.onload = async (event) => {
     try {
@@ -15581,7 +15617,7 @@ Object.assign(window, {
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
-  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile,
+  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
