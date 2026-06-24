@@ -562,6 +562,15 @@ function triggerCardAnimations() {
 
 const today = () => new Date().toISOString().split('T')[0];
 
+// LOCAL calendar day (YYYY-MM-DD) for a timestamp — unlike today()'s UTC date,
+// this matches the dates the user sees (toLocaleString), so "one backup per
+// day" lines up with their calendar instead of rolling over at UTC midnight.
+const localDayFromTs = (ts) => {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const localDayKey = () => localDayFromTs(Date.now());
+
 // ── PER-BOOK STATE
 // states[bookId] = { stock, sold, revenue, chStats, hist, stores, ledger, doneIds }
 let states = {};
@@ -9771,9 +9780,9 @@ function renderSystemBackups() {
 
   if(totalPages > 1){
     html+=`<tr><td colspan="4" style="text-align:center;padding:1rem;background:rgba(0,0,0,.15);">
-      <button class="btn sm" onclick="_sysBackupPage=Math.max(0,_sysBackupPage-1);renderSystemBackups()" ${_sysBackupPage===0?'disabled':''}>← Prev</button>
+      <button class="btn sm" onclick="gotoSysBackupPage(-1)" ${_sysBackupPage===0?'disabled':''}>← Prev</button>
       <span style="margin:0 15px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">Page ${_sysBackupPage+1} of ${totalPages}</span>
-      <button class="btn sm" onclick="_sysBackupPage=Math.min(${totalPages-1},_sysBackupPage+1);renderSystemBackups()" ${_sysBackupPage===totalPages-1?'disabled':''}>Next →</button>
+      <button class="btn sm" onclick="gotoSysBackupPage(1)" ${_sysBackupPage===totalPages-1?'disabled':''}>Next →</button>
     </td></tr>`;
   }
   body.innerHTML = html;
@@ -9782,9 +9791,19 @@ function renderSystemBackups() {
   if (status) status.textContent = `Latest system backup: ${new Date(latest.createdAt).toLocaleString()}`;
 }
 
+// Pagination handler. Inline onclick runs in global scope, so it can't see the
+// module-scoped _sysBackupPage / renderSystemBackups — this exported shim does.
+function gotoSysBackupPage(delta) {
+  _sysBackupPage = Math.max(0, _sysBackupPage + delta);
+  renderSystemBackups(); // re-clamps the upper bound against totalPages
+}
+
 async function createSystemBackup(type = 'auto') {
-  const dayKey = today();
-  if (type === 'auto' && systemBackups.some(b => b.dayKey === dayKey)) return false;
+  const dayKey = localDayKey();
+  // Dedup against each existing backup's LOCAL creation day, so a backup made
+  // in the evening (past UTC midnight) doesn't create a second row for the same
+  // calendar day. Derive from createdAt so legacy UTC-keyed entries dedup too.
+  if (type === 'auto' && systemBackups.some(b => b.createdAt && localDayFromTs(b.createdAt) === dayKey)) return false;
 
   const id = `sb-${Date.now()}`;
   const snapshot = buildBackupPayload();
@@ -9825,6 +9844,31 @@ async function ensureDailySystemBackup() {
   await loadSystemBackups();
   const created = await createSystemBackup('auto');
   if (created) showToast('✓ Daily system backup created');
+}
+
+// The app is a PWA/POS that's often left open for days, so triggering the daily
+// backup only once on load means days with no fresh load get skipped. Re-check
+// when the tab regains focus and on a timer (throttled so we don't hammer
+// Firestore), so a backup lands on every day the app is actually used.
+let _lastDailyBackupCheck = 0;
+const DAILY_BACKUP_CHECK_MS = 30 * 60 * 1000; // 30 min between checks
+async function maybeRunDailyBackup(force = false) {
+  if (!isPublisherSession() || isAuthor()) return;
+  const now = Date.now();
+  if (!force && now - _lastDailyBackupCheck < DAILY_BACKUP_CHECK_MS) return;
+  _lastDailyBackupCheck = now;
+  await ensureDailySystemBackup();
+}
+
+let _dailyBackupWatcherStarted = false;
+function startDailyBackupWatcher() {
+  if (_dailyBackupWatcherStarted) return;
+  _dailyBackupWatcherStarted = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') maybeRunDailyBackup();
+  });
+  window.addEventListener('focus', () => maybeRunDailyBackup());
+  setInterval(() => maybeRunDailyBackup(), DAILY_BACKUP_CHECK_MS);
 }
 
 async function createSystemBackupNow() {
@@ -11040,7 +11084,7 @@ async function boot(forcedBook) {
     } else {
       // Publisher
       activeBook = 'all';
-      loadAllBooks().then(() => ensureDailySystemBackup());
+      loadAllBooks().then(() => { maybeRunDailyBackup(true); startDailyBackupWatcher(); });
       updateRoleToggleButton();
       syncRoleUI();
     }
@@ -15520,7 +15564,7 @@ Object.assign(window, {
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
-  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, handleBackupImportFile,
+  renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
