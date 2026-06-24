@@ -1539,28 +1539,36 @@ function updateAllOverview() {
   }
   $('all-con-body').innerHTML = conRows.length ? conRows.join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
 
-  renderCustomersStat();
   renderGlobalPendingAlert();
 }
 
-// Compact, clickable buyers/mailing-list snapshot on the all-books overview.
-function renderCustomersStat() {
-  const host = $('all-customers-stat');
+// Polished audience snapshot for the Customers tab.
+function renderCustomersStat(allCustomers) {
+  const host = $('customer-audience-summary');
   if (!host) return;
-  const buyers = buildCustomerList();
+  const buyers = allCustomers || buildCustomerList();
   const repeat = buyers.filter(r => r.orders >= 2).length;
   const onList = mailingSubsArray().filter(s => !_isCustomerSuppressed(s.email)).length;
-  if (!buyers.length && !onList) { host.innerHTML = ''; return; }
-  const stat = (label, val) => `<div><div style="font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:2px;">${label}</div><div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--gold2);">${val}</div></div>`;
-  host.innerHTML = `<div class="card" style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;justify-content:space-between;margin-bottom:1.5rem;">
-    <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:center;">
-      <div style="font-size:20px;">👥</div>
-      ${stat('Buyers on file', buyers.length)}
-      ${stat('Repeat buyers', repeat)}
-      ${stat('On mailing list', onList)}
+  const unsubscribed = buyers.filter(r => _isCustomerSuppressed(r.email)).length;
+  const mailable = Math.max(0, onList - unsubscribed);
+  const conversion = buyers.length ? Math.round((onList / buyers.length) * 100) : 0;
+  const stat = (label, val, hint, tone = '') => `<div class="audience-stat ${tone}"><span>${label}</span><strong>${val}</strong><em>${hint}</em></div>`;
+  host.innerHTML = `<section class="audience-summary-card" aria-label="Audience snapshot">
+    <div class="audience-summary-copy">
+      <div class="audience-summary-icon">👥</div>
+      <div>
+        <div class="audience-kicker">Audience snapshot</div>
+        <h3>Know who bought, who came back, and who is ready to email.</h3>
+        <p>${buyers.length ? `${buyers.length} buyer${buyers.length === 1 ? '' : 's'} found across your sales channels.` : 'No buyers found yet — import sales, log POS orders, or pull Stripe payments to start building this list.'} ${conversion ? `${conversion}% are already on your mailing list.` : 'Add buyers to your mailing list when you are ready to send updates.'}</p>
+      </div>
     </div>
-    <button class="btn gold sm" onclick="switchTab('customers')">Open mailing list →</button>
-  </div>`;
+    <div class="audience-stat-grid">
+      ${stat('Buyers on file', buyers.length, 'deduped by email', 'focus')}
+      ${stat('Repeat buyers', repeat, '2+ orders')}
+      ${stat('On mailing list', onList, `${mailable} currently mailable`)}
+      ${stat('Unsubscribed', unsubscribed, 'excluded from exports')}
+    </div>
+  </section>`;
 }
 
 // ── CHANNEL ANALYTICS RENDERING
@@ -15194,6 +15202,7 @@ function renderCustomers() {
   const all = buildCustomerList();
   _mailingAutoSync(all);
   renderMailingList();
+  renderCustomersStat(all);
   const list = _custApplyFilter(all);
   const suppressedShown = list.filter(r => _isCustomerSuppressed(r.email)).length;
 
