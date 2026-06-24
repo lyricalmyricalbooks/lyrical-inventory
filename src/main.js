@@ -1081,7 +1081,7 @@ async function loadAllBooks() {
   await loadTaxCenter();
   startEmailInboxWatcher();
   setSyncState('ok','<b>Firestore</b> · connected · live sync on');
-  $('hdr-sub').textContent = 'Inventory App · Synced '+new Date().toLocaleTimeString();
+  updateSubheader(new Date().toLocaleTimeString());
   renderCurrent();
 }
 
@@ -1189,8 +1189,25 @@ function updateRoleToggleButton() {
   btn.textContent = inAuthorPreview ? 'Publisher view' : 'Author view';
 }
 
+let lastSyncedTime = new Date().toLocaleTimeString();
+
+function updateSubheader(time) {
+  if (time) lastSyncedTime = time;
+  const sub = $('hdr-sub');
+  if (!sub) return;
+  
+  if (isAuthor()) {
+    const book = getBook();
+    const title = book ? book.title : '';
+    sub.textContent = title + ' · Author View · Synced ' + lastSyncedTime;
+  } else {
+    sub.textContent = 'Inventory App · Synced ' + lastSyncedTime + ' · Updated ' + __GIT_COMMIT_DATE__;
+  }
+}
+
 function syncRoleUI() {
   const authorNow = isAuthor();
+  updateSubheader();
   const websiteTabBtn = $('website-tab-btn');
   const financialsTabBtn = $('financials-tab-btn');
   const taxcenterTabBtn = $('global-taxcenter-btn');
@@ -11034,7 +11051,7 @@ async function boot(forcedBook) {
       $('tab-dashboard').classList.add('active');
       loadBook(forcedBook).then(()=>{
         setSyncState('ok','<b>Firestore</b> · connected');
-        $('hdr-sub').textContent=book.title+' · Author View · Synced '+new Date().toLocaleTimeString();
+        updateSubheader(new Date().toLocaleTimeString());
         renderAll();updateHeader();updateRoleToggleButton();syncRoleUI();
       });
     } else {

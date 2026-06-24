@@ -18,6 +18,7 @@ export default [
         // Firebase compat-mode globals injected by /__/firebase scripts.
         firebase: 'readonly',
         Stripe: 'readonly',
+        __GIT_COMMIT_DATE__: 'readonly',
       },
     },
     rules: {

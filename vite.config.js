@@ -3,9 +3,17 @@ import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+let commitDate = '';
+try {
+  commitDate = execSync('git log -1 --format=%cd --date=format:"%Y-%m-%d %H:%M:%S"').toString().trim();
+} catch (e) {
+  commitDate = 'Unknown';
+}
 
 function syncAppsScriptPlugin() {
   const codeGsPath = path.resolve(__dirname, 'apps-script/Code.gs');
@@ -49,6 +57,9 @@ function syncAppsScriptPlugin() {
 
 export default defineConfig({
   base: './',
+  define: {
+    __GIT_COMMIT_DATE__: JSON.stringify(commitDate),
+  },
   plugins: [
     syncAppsScriptPlugin(),
     VitePWA({
