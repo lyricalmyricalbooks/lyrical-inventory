@@ -1738,9 +1738,19 @@
         <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--text2);display:flex;align-items:center;justify-content:center;font-size:18px;">📤</div>
         <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--cream);">Restore from Backup</h3>
       </div>
-      <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.5rem;">Upload a previously downloaded JSON snapshot to restore your data. <strong style="color:#ff6b6b;">Warning: This will overwrite your current database.</strong></p>
+      <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Upload a previously downloaded JSON snapshot from your computer to restore your data.</p>
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <label for="import-file" class="btn sm" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);">Choose File</label>
+        <div style="font-size:12px;font-weight:700;color:var(--cream);">Restore one book</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;">Pick the file, then choose a single book. Every other book and all your settings stay untouched. A safety backup is saved first.</div>
+        <label for="import-one-book-file" class="btn sm gold" style="width:100%;text-align:center;cursor:pointer;">Restore one book from file…</label>
+        <input type="file" id="import-one-book-file" accept=".json" style="display:none;" onchange="handleBookRestoreImportFile(event)">
+        <div id="import-one-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
+
+        <div style="border-top:1px solid rgba(255,255,255,.08);margin:8px 0 4px;"></div>
+
+        <div style="font-size:12px;font-weight:700;color:var(--cream);">Restore everything</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:#ff6b6b;">Warning: overwrites your entire database</strong> with the file's contents.</div>
+        <label for="import-file" class="btn sm" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);">Choose file &amp; overwrite all</label>
         <input type="file" id="import-file" accept=".json" style="display:none;" onchange="handleBackupImportFile(event)">
         <div id="import-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
       </div>
