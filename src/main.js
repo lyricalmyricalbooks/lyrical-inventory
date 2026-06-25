@@ -3077,7 +3077,7 @@ function renderHist() {
         // Consignment Sale mirror: surface its paid/pending state and an invoice
         // badge so History cross-references the ledger + invoice (absent → '').
         const consignExtra = h.consignmentLink
-          ? `${h.paidState==='paid'?' <span class="pill green" style="font-size:10px;">Paid</span>':(!h.voided?' <span class="pill amber" style="font-size:10px;">Pending</span>':'')}${invoiceBadgeHTML(h.invoiceId, h.invoiceNum)}`
+          ? `${h.paidState==='paid'?' <span class="pill green" style="font-size:10px;">Paid</span>':(!h.voided?` <button class="pill amber" style="font-size:10px;cursor:pointer;border:none;outline:none;" onclick="markHistoryConsignmentPaid('${h.num}')" title="Click to mark as paid">Pending</button>`:'')}${invoiceBadgeHTML(h.invoiceId, h.invoiceNum)}`
           : '';
         const chanCell = (isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : escapeHtml(h.chan)) + consignExtra;
         const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price,cur);
@@ -6421,8 +6421,37 @@ function markPaid(lid){
   // the invoice to paid if this was its last unpaid linked sale (decision #1).
   settleLedgerSalePaid(s, e);
   maybeAutoPayInvoiceForLedger(s, e);
+  if (sheetsUrl && e.sheetsId) {
+    try { syncToSheets(consignmentSyncPayload(book, e)); } catch (err) { console.error(err); }
+  }
   renderLedger();renderStores();renderInvoices();renderHist();updateDash();saveState(activeBook);
   showToast(`✓ Payment of ${fmt(e.amountDue,book.currency)} marked as received`);
+}
+
+async function markHistoryConsignmentPaid(num) {
+  const s = getState();
+  const book = getBook();
+  const h = s.hist.find(x => x.num === num);
+  if (!h) return;
+  let e = null;
+  if (h.sheetsId) {
+    e = s.ledger.find(x => x.type === 'Sale' && x.sheetsId === h.sheetsId);
+  }
+  if (!e) {
+    e = s.ledger.find(x =>
+      x.type === 'Sale' &&
+      x.storeName === h.notes &&
+      x.date === h.date &&
+      (x.qty || 0) === (h.qty || 0) &&
+      Math.abs((x.amountDue || 0) - (h.price * h.qty)) < 0.01
+    );
+  }
+  if (!e) {
+    showToast('Could not find corresponding consignment entry in ledger', 'err');
+    return;
+  }
+  if (!(await confirmDialog(`Mark consignment sale "${num}" (${fmt(e.amountDue, book.currency)}) as paid?`, { title: 'Mark Consignment Paid', okLabel: 'Mark paid' }))) return;
+  markPaid(e.id);
 }
 function renderLedger(){
   const s=getState(),book=getBook(),cur=book.currency,b=$('ledger-body');
@@ -16183,7 +16212,7 @@ Object.assign(window, {
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
-  submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
+  submitExpense, voidExpense, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
