@@ -856,6 +856,11 @@ function setSyncState(status, msg) {
   // Short status word shown in the header pill (the full label lives in the menu).
   const pill=$('sync-pill-text');
   if(pill) pill.textContent = status==='syncing'?'Saving…':status==='error'?'Sync error':'Live';
+  // Mirror the live state into the publisher app-shell sidebar footer account
+  // (desktop shell only; ids are guarded so authors/mobile are unaffected).
+  const sideDot=$('side-sync-dot'), sideText=$('side-sync-text');
+  if(sideDot) sideDot.className='sync-dot'+(status==='syncing'?' syncing':status==='error'?' error':'');
+  if(sideText) sideText.textContent = status==='syncing'?'Saving…':status==='error'?'Sync error':'Live';
 }
 
 // ── FIREBASE (per-book)
@@ -1285,6 +1290,35 @@ function closeHeaderMenus() {
   }
 }
 
+// ── PUBLISHER APP-SHELL: sidebar footer account menu (opens UPWARD).
+// Self-contained so it never entangles with the header menu logic above.
+let _sideAcctOutsideHandler = null;
+function closeSideAccount() {
+  const foot = document.getElementById('side-acct');
+  if (foot) foot.classList.remove('open');
+  document.getElementById('side-acct-trigger')?.setAttribute('aria-expanded', 'false');
+  if (_sideAcctOutsideHandler) {
+    document.removeEventListener('click', _sideAcctOutsideHandler, true);
+    _sideAcctOutsideHandler = null;
+  }
+}
+function toggleSideAccount(ev) {
+  if (ev) ev.stopPropagation();
+  const foot = document.getElementById('side-acct');
+  if (!foot) return;
+  const wasOpen = foot.classList.contains('open');
+  closeSideAccount();
+  if (!wasOpen) {
+    foot.classList.add('open');
+    document.getElementById('side-acct-trigger')?.setAttribute('aria-expanded', 'true');
+    // Defer the outside-click listener so it doesn't fire on the opening click.
+    setTimeout(() => {
+      _sideAcctOutsideHandler = (e) => { if (!foot.contains(e.target)) closeSideAccount(); };
+      document.addEventListener('click', _sideAcctOutsideHandler, true);
+    }, 0);
+  }
+}
+
 function updateRoleToggleButton() {
   const btn = $('role-toggle-btn');
   if (!btn) return;
@@ -1502,8 +1536,10 @@ function switchTab(name) {
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
   const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','customers','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
 
-  // Selecting a destination closes any open header category menu.
+  // Selecting a destination closes any open header category menu (and the
+  // sidebar footer account menu, if open).
   closeHeaderMenus();
+  closeSideAccount();
 
   document.querySelectorAll('.tab-btn, .header-action-btn, .header-menu-item, .snav').forEach((b) => {
     // We match by checking onclick text to be safe if order ever changes
@@ -1513,6 +1549,10 @@ function switchTab(name) {
       b.classList.remove('active');
     }
   });
+
+  // Keep the active sidebar item visible if the rail overflows on short screens
+  // (no-op when the sidebar/active item is absent — e.g. authors / mobile).
+  document.querySelector('#pub-sidebar .snav.active')?.scrollIntoView({ block: 'nearest' });
 
   // Reflect the destination as the slim top-bar page title (publisher app-shell).
   const shellTitle = $('shell-page-title');
@@ -8622,6 +8662,8 @@ function updateSheetsBadge(){
   });
   const openLink=$('sheets-open-link');if(openLink){if(sheetsSpreadsheetUrl){openLink.href=sheetsSpreadsheetUrl;openLink.style.display='';}else openLink.style.display='none';}
   const cardLink=$('open-sheet-link');if(cardLink){if(sheetsSpreadsheetUrl){cardLink.href=sheetsSpreadsheetUrl;cardLink.style.display='';}else cardLink.style.display='none';}
+  // Sidebar footer "Open Google Sheet" (publisher app-shell) — mirror sheets-open-link.
+  const sideLink=$('side-sheets-open');if(sideLink){if(sheetsSpreadsheetUrl){sideLink.href=sheetsSpreadsheetUrl;sideLink.style.display='';}else sideLink.style.display='none';}
 }
 function normalizeAppsScriptUrl(rawUrl){
   const cleaned=(rawUrl||'').trim();
@@ -11357,7 +11399,7 @@ function showApp(role, bookId) {
     }
     const openLink=$('sheets-open-link'); if(openLink)openLink.style.display='none !important';
     const style=document.createElement('style');
-    style.textContent='#sheets-open-link{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-ai-btn{display:none!important;}';
+    style.textContent='#sheets-open-link{display:none!important;}#side-sheets-open{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-ai-btn{display:none!important;}';
     document.head.appendChild(style);
   } else {
     // Publisher — show import button and financials tab
@@ -15885,7 +15927,7 @@ Object.assign(window, {
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   generateBookStripeLink,
-  logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, switchBook, forceSync, recalcOnHand, dismissStockDrift,
+  logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport,
   toggleCurrentBookView,
