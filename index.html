@@ -174,9 +174,13 @@
 
 <header class="app-header">
   <div class="header-brand">
-    <div class="header-wordmark">Lyricalmyrical Books</div>
-    <div class="header-tag" id="hdr-sub">Inventory App · connecting…</div>
+    <div class="header-mark">L</div>
+    <div class="header-brand-text">
+      <div class="header-wordmark">Lyricalmyrical Books</div>
+      <div class="header-tag" id="hdr-sub">Inventory App · connecting…</div>
+    </div>
   </div>
+  <div class="hsep"></div>
 
   <!-- BOOK SWITCHER (publisher only) — relocated into the header row -->
   <div id="book-switcher-wrap">
@@ -198,6 +202,7 @@
       Author view
     </button>
   </div>
+  <div class="hsep"></div>
 
   <div class="header-actions" id="global-actions" style="display:none; align-items:center;">
     <button class="header-action-btn primary" onclick="switchTab('pos')" id="global-pos-btn" title="Sell books at an event">🛒 Event POS</button>
@@ -249,16 +254,17 @@
     </div>
   </div>
   <div class="header-right">
-    <div class="header-stat"><div class="hs-val" id="h-stock">—</div><div class="hs-label">On hand</div></div>
-    <div class="header-stat"><div class="hs-val" id="h-revenue">—</div><div class="hs-label">Revenue</div></div>
-    <div class="header-stat"><div class="hs-val" id="h-consigned">—</div><div class="hs-label">Consigned</div></div>
+    <div class="kpi-cluster">
+      <div class="header-stat"><div class="hs-val" id="h-stock">—</div><div class="hs-label">On hand</div></div>
+      <div class="header-stat"><div class="hs-val" id="h-revenue">—</div><div class="hs-label">Revenue</div></div>
+      <div class="header-stat"><div class="hs-val" id="h-consigned">—</div><div class="hs-label">Consigned</div></div>
+    </div>
+    <div class="hsep"></div>
 
-    <!-- Sync status pill + account menu (absorbs the old sync bar) -->
+    <!-- Account avatar + sync status (corner dot reflects sync state) -->
     <div class="header-menu" id="hmenu-account">
-      <button type="button" class="header-menu-trigger status-pill" onclick="toggleHeaderMenu('account')" aria-haspopup="true" aria-expanded="false" title="Sync status &amp; account">
-        <span class="sync-dot syncing" id="sync-dot"></span>
-        <span id="sync-pill-text">Connecting…</span>
-        <svg class="hm-caret" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M0 0l5 6 5-6z" fill="currentColor"/></svg>
+      <button type="button" class="header-menu-trigger acct-trigger" onclick="toggleHeaderMenu('account')" aria-haspopup="true" aria-expanded="false" title="Account &amp; sync status">
+        <span class="acct-avatar">LM<span class="acct-dot"><span class="sync-dot syncing" id="sync-dot"></span></span></span>
       </button>
       <div class="header-menu-panel account-panel">
         <div class="acct-status">
