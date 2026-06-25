@@ -850,17 +850,27 @@ function notify(msg, type = 'warn') {
 
 // ── SYNC UI
 function setSyncState(status, msg) {
+  // saveState() reports the offline/queued case as status 'ok' with a "queued
+  // (offline)" message; collapsing that to "Live" would falsely read as fully
+  // synced — dangerous in the publisher shell where #side-sync-text is the only
+  // visible status. Detect it and surface "Offline" + an amber (syncing) dot.
+  const offline = (status==='ok') && (/queued|offline/i.test(msg||'') ||
+    (typeof navigator!=='undefined' && navigator.onLine===false));
+  // Derive the short word + dot class ONCE so header and sidebar can't drift.
+  const word = status==='syncing' ? 'Saving…' : status==='error' ? 'Sync error' : offline ? 'Offline' : 'Live';
+  const dotCls = 'sync-dot'+(status==='syncing'||offline ? ' syncing' : status==='error' ? ' error' : '');
+
   const dot=$('sync-dot'), label=$('sync-label'), time=$('sync-time');
-  dot.className='sync-dot'+(status==='syncing'?' syncing':status==='error'?' error':'');
+  dot.className=dotCls;
   label.innerHTML=msg; time.textContent=new Date().toLocaleTimeString();
   // Short status word shown in the header pill (the full label lives in the menu).
   const pill=$('sync-pill-text');
-  if(pill) pill.textContent = status==='syncing'?'Saving…':status==='error'?'Sync error':'Live';
+  if(pill) pill.textContent = word;
   // Mirror the live state into the publisher app-shell sidebar footer account
   // (desktop shell only; ids are guarded so authors/mobile are unaffected).
   const sideDot=$('side-sync-dot'), sideText=$('side-sync-text');
-  if(sideDot) sideDot.className='sync-dot'+(status==='syncing'?' syncing':status==='error'?' error':'');
-  if(sideText) sideText.textContent = status==='syncing'?'Saving…':status==='error'?'Sync error':'Live';
+  if(sideDot) sideDot.className=dotCls;
+  if(sideText) sideText.textContent = word;
 }
 
 // ── FIREBASE (per-book)
