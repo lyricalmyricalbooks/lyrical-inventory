@@ -1201,20 +1201,18 @@ function updateRoleToggleButton() {
   btn.textContent = inAuthorPreview ? 'Publisher view' : 'Author view';
 }
 
-let lastSyncedTime = new Date().toLocaleTimeString();
-
-function updateSubheader(time) {
-  if (time) lastSyncedTime = time;
+function updateSubheader() {
   const sub = $('hdr-sub');
-  if (!sub) return;
-  
-  if (isAuthor()) {
-    const book = getBook();
-    const title = book ? book.title : '';
-    sub.textContent = title + ' · Author View · Synced ' + lastSyncedTime;
-  } else {
-    sub.textContent = 'Inventory App · Synced ' + lastSyncedTime + ' · Updated ' + __GIT_COMMIT_DATE__;
+  if (sub) {
+    if (isAuthor()) {
+      const book = getBook();
+      sub.textContent = book && book.title ? book.title : 'Inventory';
+    } else {
+      sub.textContent = 'Inventory';
+    }
   }
+  const upd = $('tab-updated');
+  if (upd) upd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
 }
 
 function syncRoleUI() {
