@@ -15078,6 +15078,8 @@ async function reconcileSync() {
     const mem = getReconMemory();
     mem.lastSync = new Date().toISOString();
     saveReconMemory(mem);
+    _reconSession = { logged: 0, dismissed: 0 };
+    const krow = document.getElementById('recon-keyrow'); if (krow) delete krow.dataset.editing;
     if (statusEl) statusEl.innerHTML = `<span style="color:var(--green);">✓ Pulled ${payments.length} payment${payments.length === 1 ? '' : 's'} from Stripe.</span>`;
     renderReconcile();
   } catch (e) {
@@ -15099,24 +15101,181 @@ async function reconcileSync() {
   }
 }
 
-function _reconBookOptions(selectedId) {
-  return BOOK_LIST.map(b =>
+// Worklist view state — kept on the module (not rebuilt each render) so the
+// search box keeps focus and the active chip/sort stay put while you work down
+// a long list. Session counters reset on every fresh sync.
+let _reconFilter = { q: '', cur: 'all', type: 'all', sort: 'date-desc', group: false };
+let _reconSession = { logged: 0, dismissed: 0 };
+
+function _reconBookOptions(selectedId, includeBlank) {
+  // includeBlank seeds a "— Choose book —" first option so an unmatched payment
+  // can't be logged against the first book by a stray click. Selected when no
+  // SKU match is known, which also leaves the Record button disabled.
+  const blank = includeBlank ? `<option value=""${selectedId ? '' : ' selected'}>— Choose book —</option>` : '';
+  return blank + BOOK_LIST.map(b =>
     `<option value="${escapeHtml(b.id)}"${b.id === selectedId ? ' selected' : ''}>${escapeHtml(b.title)} · ${b.currency}${b.listPrice}</option>`
   ).join('');
+}
+
+// Collapse the key field to a tidy "saved" chip once a key exists anywhere; the
+// publisher only ever pastes it once (Tax Centre / Invoices / here all share it).
+function reconRenderKeyRow(forceEdit) {
+  const row = document.getElementById('recon-keyrow');
+  if (!row) return;
+  const saved = (TAX_CENTER?.settings?.stripeKey || getInvoiceSettings().stripeKey || '').trim();
+  if (saved && !forceEdit && !row.dataset.editing) {
+    row.innerHTML = `<span style="font-size:12px;color:var(--text2);">🔒 Stripe key saved <span style="font-family:'DM Mono',monospace;color:var(--text3);">••••${escapeHtml(saved.slice(-4))}</span></span>
+      <button class="btn tag sm" onclick="reconEditKey()">Change</button>`;
+  } else {
+    row.innerHTML = `<input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off" value="${escapeHtml(saved)}">`;
+  }
+}
+function reconEditKey() {
+  const row = document.getElementById('recon-keyrow');
+  if (row) row.dataset.editing = '1';
+  reconRenderKeyRow(true);
+  document.getElementById('recon-key')?.focus();
+}
+
+// ── Filter / sort plumbing
+function reconOnFilter() {
+  _reconFilter.q = (document.getElementById('recon-search')?.value || '').trim().toLowerCase();
+  _reconFilter.type = document.getElementById('recon-type')?.value || 'all';
+  _reconFilter.sort = document.getElementById('recon-sort')?.value || 'date-desc';
+  _reconFilter.group = !!document.getElementById('recon-group')?.checked;
+  renderReconcile();
+}
+function reconSetCurrency(cur) { _reconFilter.cur = cur; renderReconcile(); }
+function reconClearFilters() {
+  _reconFilter.q = ''; _reconFilter.cur = 'all'; _reconFilter.type = 'all';
+  const s = document.getElementById('recon-search'); if (s) s.value = '';
+  const t = document.getElementById('recon-type'); if (t) t.value = 'all';
+  renderReconcile();
+}
+// "Pickable" = needs a book picked & logged (vs. open-invoice / apply-order).
+function _reconIsPickable(c) {
+  return !(c.kind === 'invoice') && !(c.kind === 'bigcartel' && c.scanned);
+}
+function _reconMatchesFilter(p, c) {
+  if (_reconFilter.cur !== 'all' && p.currency !== _reconFilter.cur) return false;
+  if (_reconFilter.type !== 'all') {
+    const t = c.kind === 'invoice' ? 'invoice' : c.kind === 'bigcartel' ? 'bigcartel' : 'direct';
+    if (t !== _reconFilter.type) return false;
+  }
+  if (_reconFilter.q) {
+    const hay = [p.customer, p.email, p.description, p.currency, String(p.amount),
+      _stripeFmtMoney(p.amount, p.currency), c.ref || ''].join(' ').toLowerCase();
+    if (!hay.includes(_reconFilter.q)) return false;
+  }
+  return true;
+}
+const _RECON_SORTERS = {
+  'date-desc': (a, b) => b.p.created - a.p.created,
+  'date-asc':  (a, b) => a.p.created - b.p.created,
+  'amt-desc':  (a, b) => b.p.amount - a.p.amount,
+  'amt-asc':   (a, b) => a.p.amount - b.p.amount,
+};
+
+// ── Card fragments shared by single + grouped rendering
+function _reconAmountBadge(p) {
+  return `<span style="font-family:'DM Mono',monospace;font-weight:600;font-size:16px;">${_stripeFmtMoney(p.amount, p.currency)}</span>`;
+}
+function _reconMeta(p) {
+  const who = [p.customer, p.email].filter(Boolean).join(' · ') || '—';
+  const desc = p.description ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
+  return `<div style="font-size:12px;color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}`;
+}
+
+// One needs-review card.
+function _reconNeedCard(p, c) {
+  const idSafe = p.id.replace(/[^A-Za-z0-9_]/g, '');
+  const disputed = p.disputed ? ` <span class="pill" style="font-size:10px;background:#fbe9e7;color:#b3261e;">⚠ Disputed</span>` : '';
+
+  // Invoice not yet marked paid → send her to the proper invoice flow.
+  if (c.kind === 'invoice') {
+    const goBtn = c.bookId
+      ? `<button class="btn gold sm" onclick="reconcileOpenInvoice('${idSafe}')">Open invoice ${escapeHtml(c.ref)} →</button>`
+      : `<span style="font-size:11px;color:var(--amber);">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
+    return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+      <div class="row-between" style="align-items:flex-start;">
+        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:10px;background:#e8eef9;color:#27508f;">Invoice</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">${goBtn}
+          <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale">Dismiss</button></div>
+      </div></div>`;
+  }
+
+  // Big Cartel order that was scanned but not yet applied → one-click apply.
+  if (c.kind === 'bigcartel' && c.scanned) {
+    return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+      <div class="row-between" style="align-items:flex-start;">
+        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          <button class="btn gold sm" onclick="reconcileApplyBigCartel('${idSafe}')">Apply order</button>
+          <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')">Dismiss</button></div>
+      </div></div>`;
+  }
+
+  // Direct sale (bare pi_…) or Big Cartel order we never scanned → pick a book.
+  const kindPill = c.kind === 'bigcartel'
+    ? `<span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel ${escapeHtml(c.ref)}</span>`
+    : `<span class="pill gold" style="font-size:10px;">Direct sale</span>`;
+  const suggest = c.bookId ? `<span style="font-size:10px;color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
+  const recDisabled = c.bookId ? '' : ' disabled';
+  return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+    <div class="row-between" style="align-items:flex-start;">
+      <div><div>${_reconAmountBadge(p)} ${kindPill}${suggest}${disputed}</div>${_reconMeta(p)}</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
+      <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+        <label style="font-size:10px;">Book</label>
+        <select id="recon-book-${idSafe}" onchange="document.getElementById('recon-rec-${idSafe}').disabled=!this.value">${_reconBookOptions(c.bookId, !c.bookId)}</select>
+      </div>
+      <div class="form-group" style="margin:0;width:70px;">
+        <label style="font-size:10px;">Qty</label>
+        <input type="number" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
+      </div>
+      <button class="btn gold sm" id="recon-rec-${idSafe}" style="height:38px;"${recDisabled} onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
+      <button class="btn tag sm" style="height:38px;" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
+    </div></div>`;
+}
+
+// A grouped card standing in for N identical pickable payments.
+function _reconGroupCard(items, gi) {
+  const p = items[0].p, c = items[0].c, n = items.length;
+  const kindPill = c.kind === 'bigcartel'
+    ? `<span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel</span>`
+    : `<span class="pill gold" style="font-size:10px;">Direct sale</span>`;
+  const suggest = c.bookId ? `<span style="font-size:10px;color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
+  const total = _stripeFmtMoney(items.reduce((s, it) => s + it.p.amount, 0), p.currency);
+  const desc = p.description ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
+  const recDisabled = c.bookId ? '' : ' disabled';
+  return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+    <div class="row-between" style="align-items:flex-start;">
+      <div><div>${_reconAmountBadge(p)} <span style="font-size:12px;color:var(--text2);font-weight:600;">× ${n}</span> ${kindPill}${suggest}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:3px;">${n} identical payments · ${escapeHtml(total)} total</div>${desc}</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
+      <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+        <label style="font-size:10px;">Book (applies to all ${n})</label>
+        <select id="recon-gbook-${gi}" onchange="document.getElementById('recon-grec-${gi}').disabled=!this.value">${_reconBookOptions(c.bookId, !c.bookId)}</select>
+      </div>
+      <div class="form-group" style="margin:0;width:80px;">
+        <label style="font-size:10px;">Qty each</label>
+        <input type="number" id="recon-gqty-${gi}" value="1" min="1" style="width:100%;">
+      </div>
+      <button class="btn gold sm" id="recon-grec-${gi}" style="height:38px;"${recDisabled} onclick="reconRecordGroup(${gi})">Record all ${n}</button>
+      <button class="btn tag sm" style="height:38px;" onclick="reconDismissGroup(${gi})">Dismiss all ${n}</button>
+    </div></div>`;
 }
 
 function renderReconcile() {
   const needsEl = document.getElementById('recon-needs');
   const matchedEl = document.getElementById('recon-matched');
   const summaryEl = document.getElementById('recon-summary');
-  const keyField = document.getElementById('recon-key');
+  const toolbarEl = document.getElementById('recon-toolbar');
   if (!needsEl) return;
 
-  // Prefill the saved key (read-only convenience; the field is mostly a fallback).
-  if (keyField && !keyField.value) {
-    const k = TAX_CENTER?.settings?.stripeKey || getInvoiceSettings().stripeKey || '';
-    if (k) keyField.value = k;
-  }
+  reconRenderKeyRow();
 
   const mem = getReconMemory();
   const lastSyncEl = document.getElementById('recon-last-sync');
@@ -15126,7 +15285,8 @@ function renderReconcile() {
   if (!payments.length) {
     needsEl.innerHTML = '<div class="empty-state"><div class="e-icon">💳</div>Press <strong>Sync from Stripe</strong> to pull your payments and see which ones still need logging.</div>';
     matchedEl.innerHTML = '';
-    if (summaryEl) summaryEl.textContent = '';
+    if (summaryEl) summaryEl.innerHTML = '';
+    if (toolbarEl) toolbarEl.style.display = 'none';
     return;
   }
 
@@ -15143,73 +15303,64 @@ function renderReconcile() {
     needs.push({ p, c });
   }
 
-  // Summary
+  // Currency filter chips (built from everything still needing review).
+  const chipsEl = document.getElementById('recon-cur-chips');
+  if (chipsEl) {
+    const curCounts = {};
+    needs.forEach(({ p }) => { curCounts[p.currency] = (curCounts[p.currency] || 0) + 1; });
+    const curs = Object.keys(curCounts).sort();
+    const chip = (val, label) => `<button class="recon-chip${_reconFilter.cur === val ? ' active' : ''}" onclick="reconSetCurrency('${val}')">${label}</button>`;
+    let chips = chip('all', `All · ${needs.length}`);
+    curs.forEach(cur => { chips += chip(cur, `${cur} · ${curCounts[cur]}`); });
+    chipsEl.innerHTML = curs.length > 1 ? chips : '';   // one currency → no need for chips
+  }
+  if (toolbarEl) toolbarEl.style.display = needs.length ? 'flex' : 'none';
+
+  // Apply search / currency / type filters, then sort.
+  const shown = needs.filter(({ p, c }) => _reconMatchesFilter(p, c));
+  shown.sort(_RECON_SORTERS[_reconFilter.sort] || _RECON_SORTERS['date-desc']);
+  window._reconShownIds = shown.map(({ p }) => p.id);
+
+  // Summary + reconciled-progress bar.
   if (summaryEl) {
     const reviewMoney = {};
     needs.forEach(({ p }) => { reviewMoney[p.currency] = (reviewMoney[p.currency] || 0) + p.amount; });
     const moneyStr = Object.entries(reviewMoney).map(([cur, amt]) => _stripeFmtMoney(amt, cur)).join(' · ') || '—';
-    summaryEl.innerHTML = `<strong style="color:var(--gold);">${needs.length}</strong> need review (${moneyStr}) · <strong>${matched.length}</strong> reconciled · ${payments.length} total`;
+    const filtering = shown.length !== needs.length;
+    const sess = (_reconSession.logged || _reconSession.dismissed)
+      ? ` · <span style="color:var(--green);">${_reconSession.logged} logged · ${_reconSession.dismissed} dismissed this session</span>` : '';
+    const pct = payments.length ? Math.round((matched.length / payments.length) * 100) : 0;
+    summaryEl.innerHTML = `<strong style="color:var(--gold);">${needs.length}</strong> need review (${moneyStr})${filtering ? ` · <span style="color:var(--text3);">showing ${shown.length}</span>` : ''} · <strong>${matched.length}</strong> reconciled · ${payments.length} total${sess}
+      <div class="recon-progress" title="${pct}% of payments reconciled"><i style="width:${pct}%;"></i></div>`;
   }
 
   // ── Needs review worklist
   if (!needs.length) {
     needsEl.innerHTML = '<div class="empty-state"><div class="e-icon">✅</div>Every Stripe payment is accounted for. Nothing to review.</div>';
+  } else if (!shown.length) {
+    needsEl.innerHTML = `<div class="empty-state"><div class="e-icon">🔍</div>No payments match your filters. <button class="btn tag sm" onclick="reconClearFilters()">Clear filters</button></div>`;
+  } else if (_reconFilter.group) {
+    // Collapse identical "pickable" payments into one row; everything else stays individual.
+    const groups = new Map();
+    const singles = [];
+    window._reconGroupMap = {};
+    shown.forEach(it => {
+      if (!_reconIsPickable(it.c)) { singles.push(it); return; }
+      const sig = [it.p.currency, it.p.amount, (it.p.description || '').trim(), it.c.kind, it.c.ref || '', it.c.bookId || ''].join('|');
+      if (!groups.has(sig)) groups.set(sig, []);
+      groups.get(sig).push(it);
+    });
+    let html = '', gi = 0;
+    [...groups.values()].sort((a, b) => b.length - a.length).forEach(items => {
+      if (items.length === 1) { html += _reconNeedCard(items[0].p, items[0].c); return; }
+      window._reconGroupMap[gi] = items.map(it => it.p.id);
+      html += _reconGroupCard(items, gi);
+      gi++;
+    });
+    singles.forEach(it => { html += _reconNeedCard(it.p, it.c); });
+    needsEl.innerHTML = html;
   } else {
-    needsEl.innerHTML = needs.map(({ p, c }) => {
-      const idSafe = p.id.replace(/[^A-Za-z0-9_]/g, '');
-      const who = [p.customer, p.email].filter(Boolean).join(' · ') || '—';
-      const desc = p.description ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
-      const amountBadge = `<span style="font-family:'DM Mono',monospace;font-weight:600;font-size:16px;">${_stripeFmtMoney(p.amount, p.currency)}</span>`;
-
-      // Invoice not yet marked paid → send her to the proper invoice flow.
-      if (c.kind === 'invoice') {
-        const goBtn = c.bookId
-          ? `<button class="btn gold sm" onclick="reconcileOpenInvoice('${idSafe}')">Open invoice ${escapeHtml(c.ref)} →</button>`
-          : `<span style="font-size:11px;color:var(--amber);">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
-        return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
-          <div class="row-between" style="align-items:flex-start;">
-            <div><div>${amountBadge} <span class="pill" style="font-size:10px;background:#e8eef9;color:#27508f;">Invoice</span></div>
-              <div style="font-size:12px;color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}</div>
-            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">${goBtn}
-              <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale">Dismiss</button></div>
-          </div></div>`;
-      }
-
-      // Big Cartel order that was scanned but not yet applied → one-click apply.
-      if (c.kind === 'bigcartel' && c.scanned) {
-        return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
-          <div class="row-between" style="align-items:flex-start;">
-            <div><div>${amountBadge} <span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel ${escapeHtml(c.ref)}</span></div>
-              <div style="font-size:12px;color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}</div>
-            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-              <button class="btn gold sm" onclick="reconcileApplyBigCartel('${idSafe}')">Apply order</button>
-              <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')">Dismiss</button></div>
-          </div></div>`;
-      }
-
-      // Direct sale (bare pi_…) or Big Cartel order we never scanned → pick a book.
-      const kindPill = c.kind === 'bigcartel'
-        ? `<span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel ${escapeHtml(c.ref)}</span>`
-        : `<span class="pill gold" style="font-size:10px;">Direct sale</span>`;
-      const suggest = c.bookId ? `<span style="font-size:10px;color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
-      return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
-        <div class="row-between" style="align-items:flex-start;">
-          <div><div>${amountBadge} ${kindPill}${suggest}</div>
-            <div style="font-size:12px;color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}</div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
-          <div class="form-group" style="margin:0;flex:1;min-width:160px;">
-            <label style="font-size:10px;">Book</label>
-            <select id="recon-book-${idSafe}">${_reconBookOptions(c.bookId)}</select>
-          </div>
-          <div class="form-group" style="margin:0;width:70px;">
-            <label style="font-size:10px;">Qty</label>
-            <input type="number" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
-          </div>
-          <button class="btn gold sm" style="height:38px;" onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
-          <button class="btn tag sm" style="height:38px;" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
-        </div></div>`;
-    }).join('');
+    needsEl.innerHTML = shown.map(({ p, c }) => _reconNeedCard(p, c)).join('');
   }
 
   // ── Reconciled (collapsed detail)
@@ -15232,28 +15383,34 @@ function _reconFindPayment(idSafe) {
   return (window._reconPayments || []).find(p => p.id.replace(/[^A-Za-z0-9_]/g, '') === idSafe);
 }
 
+// Shared price/payment derivation so the single + bulk record paths stay in lockstep.
+function _reconApplyPaymentToBook(p, bookId, qty) {
+  const bk = BOOKS[bookId];
+  if (!bk) throw new Error('Unknown book');
+  const bookCur = normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD');
+  // When the paid currency matches the book currency, the per-unit price is the
+  // real paid amount; otherwise keep the book's list price and attach the paid
+  // cash as a payment record so FX is preserved (same shape as recordOrder).
+  const price = (p.currency === bookCur) ? Math.round((p.amount / qty) * 100) / 100 : (bk.listPrice || 0);
+  const payment = { currency: p.currency, amount: p.amount, ref: p.id };
+  _reconApplySaleToBook(bookId, qty, price, payment, p.id, 'Stripe direct', { date: p.date, email: p.email });
+}
+
 function reconcileRecordSale(idSafe) {
   const p = _reconFindPayment(idSafe);
   if (!p) return;
   const bookId = document.getElementById('recon-book-' + idSafe)?.value;
   const qty = Math.max(1, parseInt(document.getElementById('recon-qty-' + idSafe)?.value, 10) || 1);
   if (!bookId || !BOOKS[bookId]) { showToast('Pick a book first', 'warn'); return; }
-  const bk = BOOKS[bookId];
-  const bookCur = normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD');
-  const payCur = p.currency;
-  // When the paid currency matches the book currency, the per-unit price is the
-  // real paid amount; otherwise keep the book's list price and attach the paid
-  // cash as a payment record so FX is preserved (same shape as recordOrder).
-  const price = (payCur === bookCur) ? Math.round((p.amount / qty) * 100) / 100 : (bk.listPrice || 0);
-  const payment = { currency: payCur, amount: p.amount, ref: p.id };
   try {
-    _reconApplySaleToBook(bookId, qty, price, payment, p.id, 'Stripe direct', { date: p.date, email: p.email });
+    _reconApplyPaymentToBook(p, bookId, qty);
   } catch (e) { showToast('Could not record: ' + (e.message || e), 'err'); return; }
   const mem = getReconMemory();
   mem.recorded[p.id] = { bookId, num: '', at: Date.now() };
   saveReconMemory(mem);
+  _reconSession.logged++;
   if (bookId === activeBook) updateDash();
-  showToast(`✓ Logged ${qty}× ${bk.title} → stock ${states[bookId].stock}`);
+  showToast(`✓ Logged ${qty}× ${BOOKS[bookId].title} → stock ${states[bookId].stock}`);
   renderReconcile();
 }
 
@@ -15266,6 +15423,7 @@ function reconcileApplyBigCartel(idSafe) {
     const mem = getReconMemory();
     mem.recorded[p.id] = { bookId: c.scanned.bookId || '', num: c.ref, at: Date.now() };
     saveReconMemory(mem);
+    _reconSession.logged++;
     renderReconcile();
   } else {
     showToast('Order not found in scan — record it manually below', 'warn');
@@ -15288,6 +15446,54 @@ function reconcileDismiss(idSafe) {
   const mem = getReconMemory();
   mem.dismissed[p.id] = true;
   saveReconMemory(mem);
+  _reconSession.dismissed++;
+  renderReconcile();
+}
+
+// Bulk: record every payment in a "Group identical" row against one book.
+function reconRecordGroup(gi) {
+  const ids = (window._reconGroupMap || {})[gi];
+  if (!ids || !ids.length) return;
+  const bookId = document.getElementById('recon-gbook-' + gi)?.value;
+  const qty = Math.max(1, parseInt(document.getElementById('recon-gqty-' + gi)?.value, 10) || 1);
+  if (!bookId || !BOOKS[bookId]) { showToast('Pick a book first', 'warn'); return; }
+  const mem = getReconMemory();
+  let n = 0;
+  ids.forEach(id => {
+    const p = (window._reconPayments || []).find(x => x.id === id);
+    if (!p || mem.recorded[id] || mem.dismissed[id]) return;
+    try {
+      _reconApplyPaymentToBook(p, bookId, qty);
+      mem.recorded[id] = { bookId, num: '', at: Date.now() };
+      _reconSession.logged++; n++;
+    } catch (e) { /* skip the bad one, keep going */ }
+  });
+  saveReconMemory(mem);
+  if (bookId === activeBook) updateDash();
+  if (n) showToast(`✓ Logged ${n}× sale${n === 1 ? '' : 's'} → ${BOOKS[bookId].title}`);
+  renderReconcile();
+}
+
+// Bulk: dismiss every payment in a "Group identical" row.
+function reconDismissGroup(gi) {
+  const ids = (window._reconGroupMap || {})[gi];
+  if (!ids || !ids.length) return;
+  const mem = getReconMemory();
+  ids.forEach(id => { if (!mem.dismissed[id] && !mem.recorded[id]) { mem.dismissed[id] = true; _reconSession.dismissed++; } });
+  saveReconMemory(mem);
+  renderReconcile();
+}
+
+// Bulk: dismiss everything currently visible (after filters). Guard-railed.
+function reconDismissAllShown() {
+  const ids = window._reconShownIds || [];
+  if (!ids.length) return;
+  if (!confirm(`Dismiss all ${ids.length} shown payment${ids.length === 1 ? '' : 's'} as "not inventory"? You can undo any of them from Reconciled below.`)) return;
+  const mem = getReconMemory();
+  let n = 0;
+  ids.forEach(id => { if (!mem.dismissed[id] && !mem.recorded[id]) { mem.dismissed[id] = true; _reconSession.dismissed++; n++; } });
+  saveReconMemory(mem);
+  showToast(`Dismissed ${n} payment${n === 1 ? '' : 's'}`);
   renderReconcile();
 }
 
@@ -15953,6 +16159,7 @@ Object.assign(window, {
   toggleMailingAutoAdd, emailCustomerSegment, emailMailingList, copyMailingListEmails, exportMailingListCSV,
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
+  reconOnFilter, reconSetCurrency, reconClearFilters, reconEditKey, reconRecordGroup, reconDismissGroup, reconDismissAllShown,
   generateBookStripeLink,
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
