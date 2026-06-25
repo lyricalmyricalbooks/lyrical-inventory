@@ -1202,15 +1202,23 @@ function updateRoleToggleButton() {
 }
 
 function updateSubheader() {
+  // Brand tag stays a clean, constant "INVENTORY" in every view.
   const sub = $('hdr-sub');
-  if (sub) {
+  if (sub) sub.textContent = 'Inventory';
+
+  // Author/book context lives on the tab bar so the brand block stays one line.
+  const auth = $('tab-author');
+  if (auth) {
     if (isAuthor()) {
       const book = getBook();
-      sub.textContent = book && book.title ? book.title : 'Inventory';
+      auth.textContent = (book && book.title ? book.title : 'Author') + ' · Author view';
+      auth.classList.add('on');
     } else {
-      sub.textContent = 'Inventory';
+      auth.classList.remove('on');
+      auth.textContent = '';
     }
   }
+
   const upd = $('tab-updated');
   if (upd) upd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
 }
