@@ -1541,154 +1541,182 @@
   </div>
 </div>
 
-<!-- GOOGLE SHEETS -->
 <div class="tab-panel" id="tab-sheets" style="display:none;">
   <div class="row-between">
     <div class="section-hed">Settings</div>
     <span class="sheets-badge off" id="sheets-badge2">Not connected</span>
   </div>
 
-  <!-- Dynamic Profit Sharing Settings Card -->
-  <!-- PROFIT SHARING SETTINGS (publisher only) -->
-  <div class="card" id="profit-sharing-settings-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line); display:none;">
-    <div style="margin-bottom:1.1rem;">
-      <div style="display:flex;align-items:center;gap:9px;margin-bottom:5px;">
-        <span style="font-size:19px;line-height:1;">🎚️</span>
-        <div style="font-family:'Playfair Display',serif;font-size:17px;">Dynamic Profit Sharing</div>
-      </div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.6;max-width:760px;">Define payout tiers based on <b>production cost recovery</b>. Artists earn a lower % while costs are being recovered, and a higher % once break-even is reached. Tiers trigger at cumulative gross revenue thresholds — not units sold.</div>
-    </div>
-
-    <!-- Book selector (full-width, labelled) -->
-    <div class="form-group" id="ps-book-selector-container" style="max-width:360px;margin-bottom:1.25rem;">
-      <!-- populated by JS -->
-    </div>
-
-    <!-- Tier editor / empty states -->
-    <div id="profit-tier-list" style="margin-bottom:0;">
-      <!-- tiers populated here -->
-    </div>
-
-    <!-- Live earnings preview -->
-    <div id="ps-summary"></div>
-
-    <!-- Actions (revealed once a book is selected) -->
-    <div id="ps-actions" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-top:1.25rem;padding-top:1.1rem;border-top:1px dashed var(--border);">
-       <button class="btn sm" onclick="addProfitTier()">+ Add Tier</button>
-       <button class="btn gold" onclick="saveProfitTiers()">Save Profit Tiers</button>
-       <span id="ps-save-indicator" class="save-indicator">Syncing...</span>
-     </div>
+  <!-- Settings Page Sub-navigation -->
+  <div class="settings-sub-nav">
+    <button class="settings-sub-tab active" id="btn-subtab-profit" onclick="switchSettingsSubTab('profit')">⚖️ Profit Tiers</button>
+    <button class="settings-sub-tab" id="btn-subtab-catalog" onclick="switchSettingsSubTab('catalog')">📚 Book Catalog</button>
+    <button class="settings-sub-tab" id="btn-subtab-sync" onclick="switchSettingsSubTab('sync')">📊 Sheets Connection</button>
   </div>
 
-  <!-- BOOK CATALOG SETTINGS -->
-  <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
-      <div>
-        <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Book Catalog</div>
-        <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage the books available in your library. Changes here update the switcher and dashboards.</div>
-      </div>
-      <button class="btn gold" onclick="openAddBookModal()">+ Add new book</button>
-    </div>
-    <div id="catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
-  </div>
-
-
-
-  <div class="sheets-setup" id="sheets-setup-card">
-    <div style="margin-bottom:1.5rem;">
-      <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:8px;">Connect Google Sheets</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.7;">Uses a Google Apps Script webhook — paste your Web App URL once and every order syncs automatically. One connection covers all books.</div>
-    </div>
-
-    <!-- Connection Inputs at the Top -->
-    <div style="background:rgba(200,145,58,.05); border:1px solid rgba(200,145,58,.15); padding:1.25rem; border-radius:var(--r2); display:flex; flex-direction:column; gap:12px; margin-bottom:1.5rem;">
-      <div class="form-group" style="margin:0;">
-        <label for="sheets-url-input" style="font-size:9px; font-weight:700; color:var(--text2);">Web App URL *</label>
-        <input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec">
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label for="sheets-spreadsheet-input" style="font-size:9px; font-weight:700; color:var(--text2);">Google Sheet URL (for the Open link)</label>
-        <input type="url" id="sheets-spreadsheet-input" placeholder="https://docs.google.com/spreadsheets/d/…">
-      </div>
-      <div style="margin-top:4px;">
-        <button class="btn gold" onclick="connectSheets()" style="width:100%;">Connect Google Sheets</button>
-      </div>
-    </div>
-
-    <!-- Collapsible Setup Instructions -->
-    <details class="sheets-instructions-details" style="border:1px solid var(--border); border-radius:var(--r2); padding:14px; background:rgba(0,0,0,.02);">
-      <summary style="cursor:pointer; font-weight:700; font-size:13px; color:var(--text2); display:flex; align-items:center; justify-content:space-between; list-style:none;">
-        <span style="display:flex; align-items:center; gap:8px;">📋 <span>Setup Instructions &amp; Google Apps Script Code</span></span>
-        <span style="font-size:10px; color:var(--text3); font-weight:400;">Click to toggle</span>
-      </summary>
-      <div style="margin-top:14px; display:flex; flex-direction:column; gap:18px; border-top:1px dashed var(--border); padding-top:14px;">
-        <div style="display:flex;gap:14px;align-items:flex-start;">
-          <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
-          <div>
-            <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Create a Google Sheet → Extensions → Apps Script</div>
-            <div style="font-size:12px;color:var(--text3);">Go to <a href="https://sheets.new" target="_blank" style="color:var(--gold);">sheets.new</a>, then Extensions → Apps Script.</div>
-          </div>
+  <!-- 1. PROFIT SHARING SECTION -->
+  <div id="settings-sec-profit" class="settings-section">
+    <!-- PROFIT SHARING SETTINGS (publisher only) -->
+    <div class="card" id="profit-sharing-settings-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line); display:none;">
+      <div style="margin-bottom:1.1rem;">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:5px;">
+          <span style="font-size:19px;line-height:1;">🎚️</span>
+          <div style="font-family:'Playfair Display',serif;font-size:17px;">Dynamic Profit Sharing</div>
         </div>
-        <div style="display:flex;gap:14px;align-items:flex-start;">
-          <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
-          <div style="flex:1;">
-            <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
-            <div style="font-size:11.5px;color:var(--red-bg);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;line-height:1.4;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
-            <div style="position:relative;">
-              <pre id="gas-code" style="background:var(--ink);color:#a8d8a8;font-family:'DM Mono',monospace;font-size:11px;padding:16px;border-radius:var(--r2);overflow-x:auto;line-height:1.75;white-space:pre-wrap;">Loading the latest backend code…</pre>
-              <button class="btn sm" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.15);" onclick="copyGasCode()">Copy</button>
-            </div>
-            <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This v3 script writes normalized event + payment currency fields to one "Events" tab and de-duplicates retries using event IDs.</div>
-            <details style="margin-top:12px;font-size:12px;color:var(--text3);line-height:1.6;border-top:1px dashed var(--border);padding-top:10px;">
-              <summary style="cursor:pointer;font-weight:700;color:var(--text2);">Optional: send "Email artist for payment" from the app, not your Gmail</summary>
-              <div style="margin-top:8px;">
-                By default this email sends from the Google account that owns the script (your Gmail). To make it come from a neutral address instead, sign up for a transactional email provider — <b>Resend, Brevo, SendGrid, Mailgun,</b> or <b>Postmark</b> — and verify a sender address. Then in the Apps Script editor open <b>Project Settings → Script properties</b> and add:
-                <ul style="margin:8px 0 0 18px;padding:0;">
-                  <li><code>MAIL_PROVIDER</code> — one of <code>resend</code>, <code>brevo</code>, <code>sendgrid</code>, <code>mailgun</code>, <code>postmark</code></li>
-                  <li><code>MAIL_API_KEY</code> — your provider's API key (stays on Google's servers, never in this app)</li>
-                  <li><code>MAIL_FROM</code> — the verified sender, e.g. <code>noreply@yourdomain</code></li>
-                  <li><code>MAIL_FROM_NAME</code> — display name (optional, e.g. <code>Lyrical Inventory</code>)</li>
-                  <li><code>MAIL_REPLY_TO</code> — where replies should go (optional; leave blank to keep your address hidden)</li>
-                </ul>
-                <div style="margin-top:6px;">Mailgun also needs <code>MAIL_DOMAIN</code> (and <code>MAIL_REGION=eu</code> for the EU region). Redeploy after saving. If these aren't set, the email still sends from your Gmail as before.</div>
-              </div>
-            </details>
-          </div>
-        </div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.6;max-width:760px;">Define payout tiers based on <b>production cost recovery</b>. Artists earn a lower % while costs are being recovered, and a higher % once break-even is reached. Tiers trigger at cumulative gross revenue thresholds — not units sold.</div>
       </div>
-    </details>
+
+      <!-- Book selector (full-width, labelled) -->
+      <div class="form-group" id="ps-book-selector-container" style="max-width:360px;margin-bottom:1.25rem;">
+        <!-- populated by JS -->
+      </div>
+
+      <!-- Tier editor / empty states -->
+      <div id="profit-tier-list" style="margin-bottom:0;">
+        <!-- tiers populated here -->
+      </div>
+
+      <!-- Live earnings preview -->
+      <div id="ps-summary"></div>
+
+      <!-- Actions (revealed once a book is selected) -->
+      <div id="ps-actions" style="display:none;gap:10px;align-items:center;flex-wrap:wrap;margin-top:1.25rem;padding-top:1.1rem;border-top:1px dashed var(--border);">
+         <button class="btn sm" onclick="addProfitTier()">+ Add Tier</button>
+         <button class="btn gold" onclick="saveProfitTiers()">Save Profit Tiers</button>
+         <span id="ps-save-indicator" class="save-indicator">Syncing...</span>
+       </div>
+    </div>
   </div>
-  <div id="sheets-connected-card" style="display:none;">
-    <div class="sheets-setup connected" style="margin-bottom:1.5rem;">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+
+  <!-- 2. BOOK CATALOG SECTION -->
+  <div id="settings-sec-catalog" class="settings-section" style="display:none;">
+    <!-- BOOK CATALOG SETTINGS -->
+    <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
         <div>
-          <div style="font-weight:700;font-size:14px;color:var(--green);margin-bottom:4px;">✓ Google Sheets connected — all books sync here</div>
-          <div style="font-size:12px;color:var(--text3);word-break:break-all;" id="sheets-url-display"></div>
-          <div id="sheets-version-warning" style="display:none;font-size:12px;color:var(--amber);margin-top:6px;font-weight:600;line-height:1.4;">
-            ⚠ Outdated script version detected (running <span id="sheets-deployed-version"></span>, expected <span id="sheets-expected-version">v9</span>). Please copy the latest code below and deploy a new version.
-          </div>
+          <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Book Catalog</div>
+          <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage the books available in your library. Changes here update the switcher and dashboards.</div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <a id="open-sheet-link" href="#" target="_blank" class="btn gold" style="text-decoration:none;display:none;">↗ Open sheet</a>
-          <button class="btn sm" onclick="testSheets()">Test connection</button>
-          <button class="btn sm" id="test-notify-btn" onclick="sendTestNotification()" title="Send yourself a test approval-notification email to confirm alerts work end-to-end">✉ Send test notification</button>
-          <button class="btn sm" id="verify-url-btn" onclick="verifyUrl()" style="font-size:10px;">↗ Verify URL</button>
-          <button class="btn sm danger-btn" onclick="disconnectSheets()">Disconnect</button>
+        <button class="btn gold" onclick="openAddBookModal()">+ Add new book</button>
+      </div>
+      <div id="catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+    </div>
+  </div>
+
+  <!-- 3. GOOGLE SHEETS CONNECTION SECTION -->
+  <div id="settings-sec-sync" class="settings-section" style="display:none;">
+    <div class="sheets-setup" id="sheets-setup-card">
+      <div style="margin-bottom:1.5rem;">
+        <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:8px;">Connect Google Sheets</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.7;">Uses a Google Apps Script webhook — paste your Web App URL once and every order syncs automatically. One connection covers all books.</div>
+      </div>
+
+      <!-- Connection Inputs at the Top -->
+      <div style="background:rgba(200,145,58,.05); border:1px solid rgba(200,145,58,.15); padding:1.25rem; border-radius:var(--r2); display:flex; flex-direction:column; gap:12px; margin-bottom:1.5rem;">
+        <div class="form-group" style="margin:0;">
+          <label for="sheets-url-input" style="font-size:9px; font-weight:700; color:var(--text2);">Web App URL *</label>
+          <input type="url" id="sheets-url-input" placeholder="https://script.google.com/macros/s/…/exec">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label for="sheets-spreadsheet-input" style="font-size:9px; font-weight:700; color:var(--text2);">Google Sheet URL (for the Open link)</label>
+          <input type="url" id="sheets-spreadsheet-input" placeholder="https://docs.google.com/spreadsheets/d/…">
+        </div>
+        <div style="margin-top:4px;">
+          <button class="btn gold" onclick="connectSheets()" style="width:100%;">Connect Google Sheets</button>
         </div>
       </div>
-      
-      <!-- FULL SYNC SECTION -->
-      <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid rgba(42,99,72,.1);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <div>
-            <div style="font-weight:700;font-size:13px;color:var(--text2);">Sync all existing records</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px;">Populate your sheet with all historical data from every book.</div>
+
+      <!-- Collapsible Setup Instructions -->
+      <details class="sheets-instructions-details" style="border:1px solid var(--border); border-radius:var(--r2); padding:14px; background:rgba(0,0,0,.02);">
+        <summary style="cursor:pointer; font-weight:700; font-size:13px; color:var(--text2); display:flex; align-items:center; justify-content:space-between; list-style:none;">
+          <span style="display:flex; align-items:center; gap:8px;">📋 <span>Setup Instructions &amp; Google Apps Script Code</span></span>
+          <span style="font-size:10px; color:var(--text3); font-weight:400;">Click to toggle</span>
+        </summary>
+        <div style="margin-top:14px; display:flex; flex-direction:column; gap:18px; border-top:1px dashed var(--border); padding-top:14px;">
+          <div style="display:flex;gap:14px;align-items:flex-start;">
+            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+            <div>
+              <div style="font-weight:700;font-size:13px;margin-bottom:4px;">Create a Google Sheet → Extensions → Apps Script</div>
+              <div style="font-size:12px;color:var(--text3);">Go to <a href="https://sheets.new" target="_blank" style="color:var(--gold);">sheets.new</a>, then Extensions → Apps Script.</div>
+            </div>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn ink sm" id="push-all-btn" onclick="pushAllToSheets()">Sync all data</button>
-            <button class="btn sm" id="backfill-btn" onclick="backfillAndResync()" title="Stamp stable IDs on legacy records and re-sync so future edits/voids match cleanly">Repair legacy rows</button>
+          <div style="display:flex;gap:14px;align-items:flex-start;">
+            <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+            <div style="flex:1;">
+              <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
+              <div style="font-size:11.5px;color:var(--red-bg);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;line-height:1.4;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
+              <div class="gas-code-container">
+                <div class="gas-code-header">
+                  <span class="gas-code-lang">Google Apps Script</span>
+                  <button class="btn sm" style="background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.15);" onclick="copyGasCode()">Copy Code</button>
+                </div>
+                <pre id="gas-code" class="gas-code-pre">Loading the latest backend code…</pre>
+              </div>
+              <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This v3 script writes normalized event + payment currency fields to one "Events" tab and de-duplicates retries using event IDs.</div>
+              <details style="margin-top:12px;font-size:12px;color:var(--text3);line-height:1.6;border-top:1px dashed var(--border);padding-top:10px;">
+                <summary style="cursor:pointer;font-weight:700;color:var(--text2);">Optional: send "Email artist for payment" from the app, not your Gmail</summary>
+                <div style="margin-top:8px;">
+                  By default this email sends from the Google account that owns the script (your Gmail). To make it come from a neutral address instead, sign up for a transactional email provider — <b>Resend, Brevo, SendGrid, Mailgun,</b> or <b>Postmark</b> — and verify a sender address. Then in the Apps Script editor open <b>Project Settings → Script properties</b> and add:
+                  <ul style="margin:8px 0 0 18px;padding:0;">
+                    <li><code>MAIL_PROVIDER</code> — one of <code>resend</code>, <code>brevo</code>, <code>sendgrid</code>, <code>mailgun</code>, <code>postmark</code></li>
+                    <li><code>MAIL_API_KEY</code> — your provider's API key (stays on Google's servers, never in this app)</li>
+                    <li><code>MAIL_FROM</code> — the verified sender, e.g. <code>noreply@yourdomain</code></li>
+                    <li><code>MAIL_FROM_NAME</code> — display name (optional, e.g. <code>Lyrical Inventory</code>)</li>
+                    <li><code>MAIL_REPLY_TO</code> — where replies should go (optional; leave blank to keep your address hidden)</li>
+                  </ul>
+                  <div style="margin-top:6px;">Mailgun also needs <code>MAIL_DOMAIN</code> (and <code>MAIL_REGION=eu</code> for the EU region). Redeploy after saving. If these aren't set, the email still sends from your Gmail as before.</div>
+                </div>
+              </details>
+            </div>
           </div>
         </div>
+      </details>
+    </div>
+    <div id="sheets-connected-card" style="display:none;">
+      <div class="sheets-setup connected" style="margin-bottom:1.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="font-weight:700;font-size:14px;color:var(--green);margin-bottom:4px;">✓ Google Sheets connected — all books sync here</div>
+            <div style="font-size:12px;color:var(--text3);word-break:break-all;" id="sheets-url-display"></div>
+            <div id="sheets-version-warning" style="display:none;font-size:12px;color:var(--amber);margin-top:6px;font-weight:600;line-height:1.4;">
+              ⚠ Outdated script version detected (running <span id="sheets-deployed-version"></span>, expected <span id="sheets-expected-version">v9</span>). Please copy the latest code below and deploy a new version.
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <a id="open-sheet-link" href="#" target="_blank" class="btn gold" style="text-decoration:none;display:none;">↗ Open sheet</a>
+            <button class="btn sm" onclick="testSheets()">Test connection</button>
+            <button class="btn sm" id="test-notify-btn" onclick="sendTestNotification()" title="Send yourself a test approval-notification email to confirm alerts work end-to-end">✉ Send test notification</button>
+            <button class="btn sm" id="verify-url-btn" onclick="verifyUrl()" style="font-size:10px;">↗ Verify URL</button>
+            <button class="btn sm danger-btn" onclick="disconnectSheets()">Disconnect</button>
+          </div>
+        </div>
+        
+        <!-- FULL SYNC SECTION -->
+        <div style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid rgba(42,99,72,.1);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div>
+              <div style="font-weight:700;font-size:13px;color:var(--text2);">Sync all existing records</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;">Populate your sheet with all historical data from every book.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn ink sm" id="push-all-btn" onclick="pushAllToSheets()">Sync all data</button>
+              <button class="btn sm" id="backfill-btn" onclick="backfillAndResync()" title="Stamp stable IDs on legacy records and re-sync so future edits/voids match cleanly">Repair legacy rows</button>
+            </div>
+          </div>
+          <div class="sync-progress-bar" id="sync-progress-bar"><div class="sync-progress-fill" id="sync-progress-fill"></div></div>
+          <div class="sync-stats" id="sync-stats">Ready to sync</div>
+        </div>
+      </div>
+    </div>
+    <div class="sect">Sync log</div>
+    <div class="tbl-wrap">
+      <table class="sheets-log-tbl">
+        <thead><tr><th>Time</th><th>Book</th><th>Type</th><th>Summary</th><th>Status</th></tr></thead>
+        <tbody id="sheets-log-body"><tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:12px;">No sync events yet.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>>
         <div class="sync-progress-bar" id="sync-progress-bar"><div class="sync-progress-fill" id="sync-progress-fill"></div></div>
         <div class="sync-stats" id="sync-stats">Ready to sync</div>
       </div>

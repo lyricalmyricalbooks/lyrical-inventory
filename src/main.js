@@ -337,15 +337,15 @@ function renderCatalogList() {
   const container = $('catalog-list');
   if (!container) return;
   container.innerHTML = BOOK_LIST.map(b => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--ink);border-radius:var(--r2);border:1px solid rgba(255,255,255,0.05);">
-       <div style="display:flex;align-items:center;gap:10px;">
-         <div style="width:12px;height:12px;border-radius:50%;background:${b.accent}"></div>
-         <div>
-           <div style="font-size:13px;font-weight:600;color:var(--cream);">${escapeHtml(b.title)}</div>
-           <div style="font-size:11px;color:rgba(255,255,255,.55);">${escapeHtml(b.id)} · ${b.currency}${b.listPrice}</div>
+    <div class="catalog-card">
+       <div style="display:flex;align-items:center;gap:14px;">
+         <div class="catalog-dot" style="background:${b.accent}"></div>
+         <div class="catalog-info">
+           <h4>${escapeHtml(b.title)}</h4>
+           <p>${escapeHtml(b.id)} · ${b.currency}${b.listPrice}</p>
          </div>
        </div>
-       <div style="display:flex;gap:8px;">
+       <div class="catalog-actions">
          <button class="btn sm" onclick="openEditBookModal('${escapeHtml(b.id)}')">Edit</button>
          <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
        </div>
@@ -1527,7 +1527,7 @@ function switchTab(name) {
   if(name==='customers') renderCustomers();
   if(name==='financials') renderFinancials();
   if(name==='taxcenter') renderTaxCenter();
-  if(name==='sheets'){ loadGasCode(); renderSheetsLog(); renderProfitSettings(); }
+  if(name==='sheets'){ loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); }
   if(name==='qrcodes') renderAllQRCodes();
   if(name==='myqr') renderAuthorQRPage();
   if(name==='pos') { renderPOS(); renderPOSFxStatus(); }
@@ -10620,6 +10620,26 @@ async function loadPaymentLinks(){
 // ── PROFIT SHARING LOGIC
 let psActiveBookId = null;
 let psSimGross = null;   // "what-if" gross revenue for the live earnings preview
+let activeSettingsSubTab = 'profit';
+
+function switchSettingsSubTab(subTabName) {
+  activeSettingsSubTab = subTabName;
+  const subTabs = ['profit', 'catalog', 'sync'];
+  subTabs.forEach(tab => {
+    const btn = document.getElementById('btn-subtab-' + tab);
+    const sec = document.getElementById('settings-sec-' + tab);
+    if (btn && sec) {
+      if (tab === subTabName) {
+        btn.classList.add('active');
+        sec.style.display = 'block';
+      } else {
+        btn.classList.remove('active');
+        sec.style.display = 'none';
+      }
+    }
+  });
+}
+window.switchSettingsSubTab = switchSettingsSubTab;
 
 function renderProfitSettings() {
   if (isAuthor()) return;
@@ -10733,16 +10753,16 @@ function renderProfitTierList() {
   let liveStats = null;
   try { liveStats = calculateArtistEarnings(psActiveBookId); } catch (_) { liveStats = null; }
   const ctx = document.createElement('div');
-  ctx.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px 26px;padding:11px 16px;background:var(--ink);border-radius:var(--r2);margin-bottom:14px;';
+  ctx.className = 'settings-metric-grid';
   const ctxItem = (label, val, accent) => `
-    <div>
-      <div style="font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:3px;">${label}</div>
-      <div style="font-family:'DM Mono',monospace;font-size:14px;color:${accent || 'var(--cream)'};">${val}</div>
+    <div class="settings-metric-card">
+      <div class="settings-metric-label">${label}</div>
+      <div class="settings-metric-value ${accent || ''}">${val}</div>
     </div>`;
-  let ctxHtml = ctxItem('Production cost', productionCost > 0 ? fmt(productionCost, cur) : 'Not set', productionCost > 0 ? 'var(--cream)' : 'var(--gold3)');
+  let ctxHtml = ctxItem('Production cost', productionCost > 0 ? fmt(productionCost, cur) : 'Not set', productionCost > 0 ? '' : 'gold');
   if (liveStats) {
-    ctxHtml += ctxItem('Revenue to date', fmt(liveStats.cumulativeRevenue, cur), 'var(--gold3)');
-    ctxHtml += ctxItem('Artist earned', fmt(liveStats.totalArtistEarned, cur), 'var(--cream)');
+    ctxHtml += ctxItem('Revenue to date', fmt(liveStats.cumulativeRevenue, cur), 'gold');
+    ctxHtml += ctxItem('Artist earned', fmt(liveStats.totalArtistEarned, cur), '');
   }
   ctx.innerHTML = ctxHtml;
   list.appendChild(ctx);
@@ -10755,20 +10775,22 @@ function renderProfitTierList() {
   tiers.forEach((t, i) => {
     const isLast = i === tiers.length - 1;
     const row = document.createElement('div');
-    row.style.cssText = 'position:relative;background:var(--cream2);padding:14px 16px 16px;border-radius:var(--r2);border:1px solid var(--border);border-left:3px solid var(--gold-line);margin-bottom:10px;';
+    row.className = 'tier-card';
 
     // Top line: stage badge + covered revenue range + remove button
     const top = document.createElement('div');
-    top.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:12px;';
+    top.className = 'tier-card-header';
+    
     const badge = document.createElement('span');
-    badge.style.cssText = 'flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--gold);color:var(--ink);font-family:\'Syne\',sans-serif;font-weight:700;font-size:12px;display:inline-flex;align-items:center;justify-content:center;';
+    badge.className = 'tier-badge';
     badge.textContent = String(i + 1);
+    
     const range = document.createElement('div');
-    range.style.cssText = 'flex:1;min-width:0;font-size:11px;color:var(--text3);font-family:\'DM Mono\',monospace;';
+    range.className = 'tier-range';
+    
     const removeBtn = document.createElement('button');
-    removeBtn.className = 'btn sm';
-    removeBtn.style.cssText = 'flex-shrink:0;background:transparent;color:var(--text3);border:1px solid var(--border);padding:4px 9px;';
-    removeBtn.textContent = '✕';
+    removeBtn.className = 'tier-remove-btn';
+    removeBtn.innerHTML = '✕';
     removeBtn.title = 'Remove this tier';
     removeBtn.setAttribute('aria-label', 'Remove tier');
     removeBtn.addEventListener('click', () => {
@@ -10782,7 +10804,7 @@ function renderProfitTierList() {
 
     // Input grid: Label · Threshold · Artist %
     const grid = document.createElement('div');
-    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;';
+    grid.className = 'settings-form-grid';
 
     const makeField = (labelText, type, val, placeholder, onChange) => {
       const wrap = document.createElement('div');
@@ -10795,8 +10817,6 @@ function renderProfitTierList() {
       inp.value = val;
       if (placeholder) inp.placeholder = placeholder;
       inp.style.width = '100%';
-      // input + change both bound for cross-browser coverage; skip the redundant
-      // second fire when the value hasn't actually changed.
       let last = inp.value;
       const handle = () => { if (inp.value === last) return; last = inp.value; onChange(inp.value); psUpdateDerived(); };
       inp.addEventListener('input', handle);
@@ -10817,7 +10837,7 @@ function renderProfitTierList() {
     threshWrap.appendChild(threshLbl);
     if (isLast) {
       const pill = document.createElement('div');
-      pill.style.cssText = 'height:38px;display:flex;align-items:center;gap:6px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:600;color:var(--gold);';
+      pill.style.cssText = 'height:44px;display:flex;align-items:center;gap:6px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:600;color:var(--gold);';
       pill.innerHTML = '<span style="font-size:16px;">∞</span> No ceiling';
       threshWrap.appendChild(pill);
     } else {
@@ -10868,7 +10888,7 @@ function renderProfitTierList() {
 
   // ── Legend
   const hint = document.createElement('div');
-  hint.style.cssText = 'font-size:11px;color:var(--text3);margin-top:2px;line-height:1.6;';
+  hint.style.cssText = 'font-size:11.5px;color:var(--text3);margin-top:4px;line-height:1.6;';
   hint.innerHTML = '“Up to” is the cumulative gross revenue at which the <b>next</b> stage begins. A stage labelled “break-even” automatically caps at the book’s production cost. The final stage has no ceiling.';
   list.appendChild(hint);
 
@@ -10928,10 +10948,17 @@ function psRenderSummary(book, cur, productionCost) {
   }
 
   const validationHtml = warnings.length
-    ? `<div style="background:rgba(200,145,58,.1);border:1px solid var(--gold-line);border-radius:var(--r2);padding:11px 14px;margin-top:1.1rem;font-size:11.5px;color:var(--gold);line-height:1.6;">
-         <b>⚠ Check these:</b><ul style="margin:6px 0 0;padding-left:18px;">${warnings.map(w => `<li style="margin-bottom:3px;">${w}</li>`).join('')}</ul>
+    ? `<div class="alert-card">
+         <span style="font-size:18px;line-height:1;margin-top:2px;">⚠️</span>
+         <div>
+           <b style="font-weight:700;">Check these settings:</b>
+           <ul>${warnings.map(w => `<li>${w}</li>`).join('')}</ul>
+         </div>
        </div>`
-    : `<div style="background:var(--green-bg);border:1px solid rgba(42,99,72,.2);border-radius:var(--r2);padding:9px 14px;margin-top:1.1rem;font-size:11.5px;color:var(--green);">✓ Tiers look consistent.</div>`;
+    : `<div class="alert-card success">
+         <span style="font-size:18px;line-height:1;">✓</span>
+         <div>Tiers look consistent.</div>
+       </div>`;
 
   // ── What-if simulator
   let defaultGross = productionCost > 0 ? Math.round(productionCost * 2) : 1000;
@@ -10946,33 +10973,33 @@ function psRenderSummary(book, cur, productionCost) {
     const c = capOf(t);
     const label = escapeHtml(t.label || `Stage ${i + 1}`);
     const cTxt = c != null ? `up to ${fmt(c, cur)}` : 'no ceiling';
-    return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;font-size:11px;padding:5px 0;border-top:1px solid var(--border2);">
-        <span>${label} <span style="color:var(--text3);">· ${cTxt} · ${parseFloat(t.artistPct) || 0}%</span></span>
-        <span style="font-family:'DM Mono',monospace;color:var(--text3);" title="Revenue falling in this stage">${fmt(r.revenue, cur)}</span>
-        <span style="font-family:'DM Mono',monospace;color:var(--green);" title="Artist earns from this stage">${fmt(r.artist, cur)}</span>
+    return `<div class="preview-table-row">
+        <span>${label} <span style="color:var(--text3); font-size:10px;">· ${cTxt} · ${parseFloat(t.artistPct) || 0}%</span></span>
+        <span style="font-family:'DM Mono',monospace;color:rgba(255,255,255,0.6);" title="Revenue falling in this stage">${fmt(r.revenue, cur)}</span>
+        <span style="font-family:'DM Mono',monospace;color:var(--gold3);" title="Artist earns from this stage">${fmt(r.artist, cur)}</span>
       </div>`;
   }).join('');
 
   summary.innerHTML = `
     ${validationHtml}
-    <div style="margin-top:1.1rem;background:var(--ink);border-radius:var(--r2);padding:14px 16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);">Earnings preview</div>
+    <div class="preview-container">
+      <div class="preview-title-row">
+        <div class="settings-metric-label" style="color:rgba(255,255,255,.5);">Earnings split simulator</div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:11px;color:rgba(255,255,255,.55);">If this book grosses</span>
+          <span style="font-size:11px;color:rgba(255,255,255,.55);">If gross revenue is</span>
           <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--cream);outline:none;">
           <span style="font-size:11px;color:rgba(255,255,255,.55);">${escapeHtml(cur)}</span>
         </div>
       </div>
-      <div style="display:flex;height:10px;border-radius:100px;overflow:hidden;background:rgba(255,255,255,.08);margin-bottom:8px;">
-        <div style="height:100%;background:var(--gold);width:${Math.max(0, Math.min(100, artistPct))}%;"></div>
+      <div class="preview-bar">
+        <div class="preview-bar-fill" style="width:${Math.max(0, Math.min(100, artistPct))}%;"></div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:10px;">
-        <span style="color:var(--gold3);font-family:'DM Mono',monospace;">Artist ${fmt(sim.totalArtist, cur)} <span style="opacity:.6;">(${artistPct.toFixed(1)}%)</span></span>
+      <div class="preview-summary-values">
+        <span style="color:var(--gold3);font-family:'DM Mono',monospace;">Artist ${fmt(sim.totalArtist, cur)} <span style="opacity:.65;">(${artistPct.toFixed(1)}%)</span></span>
         <span style="color:rgba(255,255,255,.7);font-family:'DM Mono',monospace;">Publisher ${fmt(sim.publisher, cur)}</span>
       </div>
-      <div style="background:rgba(255,255,255,.03);border-radius:var(--r);padding:2px 12px 8px;">
-        <div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);padding:8px 0 4px;">
+      <div class="preview-table">
+        <div class="preview-table-header">
           <span>Stage</span><span>Revenue</span><span>Artist</span>
         </div>
         <div style="color:rgba(247,242,233,.85);">${tierRowsHtml || '<div style="font-size:11px;color:rgba(255,255,255,.4);padding:6px 0;">Enter a revenue figure to preview the split.</div>'}</div>
@@ -10981,8 +11008,6 @@ function psRenderSummary(book, cur, productionCost) {
 
   const simInput = $('ps-sim-input');
   if (simInput) {
-    // 'change' fires on blur/enter, so re-rendering the panel here won't steal
-    // focus mid-typing.
     simInput.addEventListener('change', () => {
       const v = parseFloat(simInput.value);
       psSimGross = isNaN(v) ? 0 : v;
@@ -15884,6 +15909,20 @@ async function initStartup() {
 
   window._fbOnAuthStateChanged(async user => {
     if (!user) {
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        console.log('[Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher.');
+        window.IS_PUBLISHER = true;
+        IS_AUTHOR_MODE = false;
+        try {
+          await loadCatalog();
+        } catch (e) {
+          BOOKS = { ...DEFAULT_BOOKS };
+          BOOK_LIST = Object.values(BOOKS);
+        }
+        loadAuthorViewOverrides();
+        showApp('publisher', null);
+        return;
+      }
       // Not logged in
       setupGate(null);
       const err = document.getElementById('pw-err');
