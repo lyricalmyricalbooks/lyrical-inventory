@@ -199,20 +199,61 @@ function closeAddBookModal() {
   resetBookForm();
 }
 
+function isValidPaymentLink(str) {
+  if (!str) return true; // Optional/cleared is fine
+  // Email regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // URL validation
+  let isUrl = false;
+  try {
+    const url = new URL(str);
+    isUrl = url.protocol === 'http:' || url.protocol === 'https:';
+  } catch (_) {
+    isUrl = false;
+  }
+  return emailRegex.test(str) || isUrl;
+}
+
+function updateUnsavedIndicator() {
+  const ind = $('add-book-unsaved-indicator');
+  if (!ind) return;
+  const isChanged = _modalSnapshots['add-book'] !== undefined && _modalFieldSig('add-book') !== _modalSnapshots['add-book'];
+  if (isChanged) {
+    ind.classList.add('show');
+  } else {
+    ind.classList.remove('show');
+  }
+}
+window.updateUnsavedIndicator = updateUnsavedIndicator;
+
 async function saveBookFromModal() {
+  // Validate fields and automatically switch to the correct tab if validation fails
+  const isValid = validateFields([
+    { id: 'nb-id', test: val => val.trim().length > 0, msg: 'Book ID is required' },
+    { id: 'nb-title', test: val => val.trim().length > 0, msg: 'Title is required' },
+    { id: 'nb-payment-link', test: val => isValidPaymentLink(val.trim()), msg: 'Must be a valid URL or email address' }
+  ]);
+
+  if (!isValid) {
+    if ($('nb-payment-link').closest('.form-group').classList.contains('invalid')) {
+      switchBookModalTab('costs');
+    } else if ($('nb-id').closest('.form-group').classList.contains('invalid') || $('nb-title').closest('.form-group').classList.contains('invalid')) {
+      switchBookModalTab('general');
+    }
+    return;
+  }
+
   // Book id doubles as a database key and is used in URLs/handlers, so
   // restrict it to a safe slug (lowercase letters, digits, dashes).
   const rawId = $('nb-id').value.trim();
   const id = rawId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  const title = $('nb-title').value.trim();
-  if (!id || !title) { showToast('A valid ID (letters/numbers) and Title are required', 'warn'); return; }
   
   await syncCatalog();
   
   const currentBook = BOOKS[editingBookId] || BOOKS[id] || {};
   const book = {
     id,
-    title,
+    title: $('nb-title').value.trim(),
     author: $('nb-author').value.trim(),
     isbn: $('nb-isbn').value.trim() || '—',
     maxPrint: parseInt($('nb-max').value) || 100,
@@ -273,6 +314,9 @@ async function saveBookFromModal() {
   localStorage.setItem('lm-payment-links', JSON.stringify(payLinks));
 
   await saveCatalogWithDeletions();
+  
+  if ($('add-book-unsaved-indicator')) $('add-book-unsaved-indicator').classList.remove('show');
+  
   showToast(editingBookId ? '✓ Book updated' : '✓ Book added to catalog');
   closeAddBookModal();
   buildBookSwitcher();
@@ -12770,6 +12814,18 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('input', (e) => {
     const t = e.target;
     if (t && t.closest && t.closest('.form-group.invalid')) clearFieldError(t);
+    // If the input is inside #m-add-book overlay, update the unsaved changes indicator.
+    if (t && t.closest && t.closest('#m-add-book')) {
+      updateUnsavedIndicator();
+    }
+  });
+
+  // Listen for changes (like select dropdowns or color input) inside #m-add-book
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t && t.closest && t.closest('#m-add-book')) {
+      updateUnsavedIndicator();
+    }
   });
 });
 
