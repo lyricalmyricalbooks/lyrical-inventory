@@ -1893,6 +1893,13 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .pub-shell #global-actions{display:none;}
   .pub-shell #tab-bar{display:none;}
 
+  /* The sidebar already carries the brand, so drop the redundant header
+     wordmark and the two separators that flanked it/the hidden nav — the
+     top bar now leads with the page title. (The separator before the
+     account avatar lives inside .header-right, so it is preserved.) */
+  .pub-shell .header-brand{display:none;}
+  .pub-shell .app-header > .hsep{display:none;}
+
   /* Page title in the top bar */
   .pub-shell #shell-page-title{
     display:inline-block;
