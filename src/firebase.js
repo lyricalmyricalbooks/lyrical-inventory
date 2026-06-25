@@ -214,8 +214,28 @@ window._fbLoad = async (bookId) => {
          }
       });
       
-      if (!hasData) return null;
-      
+      if (!hasData) {
+        // Transparent fallback: this book is flagged for Firestore but NONE of
+        // its per-part docs exist there — almost always because it was never
+        // migrated and its data still lives in the Realtime Database. Returning
+        // null here would surface as an empty book (lost sales, payouts, ledger)
+        // and could overwrite the real data on the next save. So read the RTDB
+        // copy instead — mirroring the settings/catalog fallback.
+        console.warn(`[FB] book ${bookId} has no Firestore data, reading from RTDB`);
+        const rt = await get(ref(db, `lyrical/books/${bookId}`));
+        if (!rt.exists()) return null; // genuinely empty book — let caller seed defaults
+        const rtData = rt.val().data;
+        // Self-heal: copy the RTDB state into Firestore NOW. Without this the
+        // live watcher (_fbWatch) attached right after load would read the still
+        // -empty Firestore docs, stitch an empty state, and immediately clobber
+        // the data we just recovered. _fbSave slices + writes the parts (this
+        // book is flagged Firestore, so it targets Firestore) and refreshes the
+        // part hashes, so the watcher's first snapshot carries real data.
+        try { await window._fbSave(bookId, rtData); }
+        catch (e) { console.error(`[FB] RTDB→Firestore self-heal failed for ${bookId}`, e); }
+        return rtData;
+      }
+
       const stitched = {
         ...parts.metadata,
         hist: parts.hist,
