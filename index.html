@@ -185,40 +185,55 @@
   </div>
 
   <nav class="pub-nav" aria-label="Books">
-    <button type="button" class="snav" onclick="switchTab('dashboard')"><span class="snav-ic">▦</span><span class="snav-label">Dashboard</span></button>
-    <button type="button" class="snav" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
-    <button type="button" class="snav" onclick="switchTab('manual')"><span class="snav-ic">✎</span><span class="snav-label">Manual entry</span></button>
-    <button type="button" class="snav" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span></button>
-    <button type="button" class="snav" onclick="switchTab('history')"><span class="snav-ic">🕘</span><span class="snav-label">History</span></button>
-    <button type="button" class="snav" onclick="switchTab('expenses')"><span class="snav-ic">🧾</span><span class="snav-label">Expenses</span></button>
+    <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic">▦</span><span class="snav-label">Dashboard</span></button>
+    <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
+    <button type="button" class="snav" title="Manual entry" onclick="switchTab('manual')"><span class="snav-ic">✎</span><span class="snav-label">Manual entry</span></button>
+    <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span></button>
+    <button type="button" class="snav" title="History" onclick="switchTab('history')"><span class="snav-ic">🕘</span><span class="snav-label">History</span></button>
+    <button type="button" class="snav" title="Expenses" onclick="switchTab('expenses')"><span class="snav-ic">🧾</span><span class="snav-label">Expenses</span></button>
   </nav>
 
   <div class="o3-grouplabel">Tools</div>
   <nav class="pub-nav" aria-label="Tools">
-    <button type="button" class="snav" onclick="switchTab('pos')"><span class="snav-ic">🛒</span><span class="snav-label">Event POS</span></button>
-    <button type="button" class="snav" onclick="switchTab('taxcenter')"><span class="snav-ic">⚖️</span><span class="snav-label">Tax Centre</span></button>
+    <button type="button" class="snav" title="Event POS" onclick="switchTab('pos')"><span class="snav-ic">🛒</span><span class="snav-label">Event POS</span></button>
+    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic">⚖️</span><span class="snav-label">Tax Centre</span></button>
 
     <div class="o3-subgrouplabel">Money</div>
-    <button type="button" class="snav" onclick="switchTab('reconcile')"><span class="snav-ic">💳</span><span class="snav-label">Payments</span></button>
-    <button type="button" class="snav" onclick="switchTab('qrcodes')"><span class="snav-ic">📱</span><span class="snav-label">QR Codes</span></button>
+    <button type="button" class="snav" title="Payments" onclick="switchTab('reconcile')"><span class="snav-ic">💳</span><span class="snav-label">Payments</span></button>
+    <button type="button" class="snav" title="QR Codes" onclick="switchTab('qrcodes')"><span class="snav-ic">📱</span><span class="snav-label">QR Codes</span></button>
 
     <div class="o3-subgrouplabel">Audience</div>
-    <button type="button" class="snav" onclick="switchTab('customers')"><span class="snav-ic">👥</span><span class="snav-label">Customers</span></button>
-    <button type="button" class="snav" onclick="switchTab('opencall')"><span class="snav-ic">📣</span><span class="snav-label">Open Call</span></button>
+    <button type="button" class="snav" title="Customers" onclick="switchTab('customers')"><span class="snav-ic">👥</span><span class="snav-label">Customers</span></button>
+    <button type="button" class="snav" title="Open Call" onclick="switchTab('opencall')"><span class="snav-ic">📣</span><span class="snav-label">Open Call</span></button>
 
     <div class="o3-subgrouplabel">Data</div>
-    <button type="button" class="snav" onclick="switchTab('sheets')"><span class="snav-ic">⚙️</span><span class="snav-label">Sheets</span></button>
-    <button type="button" class="snav" onclick="switchTab('backups')"><span class="snav-ic">💾</span><span class="snav-label">Backups</span></button>
+    <button type="button" class="snav" title="Sheets" onclick="switchTab('sheets')"><span class="snav-ic">⚙️</span><span class="snav-label">Sheets</span></button>
+    <button type="button" class="snav" title="Backups" onclick="switchTab('backups')"><span class="snav-ic">💾</span><span class="snav-label">Backups</span></button>
   </nav>
 
   <div class="pub-side-spacer"></div>
 
-  <!-- Decorative footer only — NO sensitive sync/account IDs live here. -->
-  <div class="pub-side-foot" aria-hidden="true">
-    <span class="pub-side-avatar">LM</span>
-    <div class="pub-side-who">
-      <b>Lyricalmyrical</b>
-      <span class="pub-side-live"><span class="pub-side-dot"></span>Live</span>
+  <!-- Functional account footer (desktop shell only). Mirrors the header
+       #hmenu-account: live sync status (#side-sync-dot / #side-sync-text,
+       updated by setSyncState) plus an account menu opening UPWARD. New
+       side-* ids avoid any collision with the header's #sync-*/#hmenu-account.
+       The header account is hidden in shell mode so it isn't shown twice. -->
+  <div class="pub-side-foot" id="side-acct">
+    <button type="button" class="pub-side-trigger" id="side-acct-trigger"
+            title="Account &amp; sync status" aria-haspopup="true" aria-expanded="false"
+            onclick="toggleSideAccount(event)">
+      <span class="pub-side-avatar">LM</span>
+      <span class="pub-side-who">
+        <b>Lyricalmyrical</b>
+        <span class="pub-side-live"><span class="sync-dot syncing" id="side-sync-dot"></span><span id="side-sync-text">Connecting…</span></span>
+      </span>
+      <span class="pub-side-caret" aria-hidden="true">⌃</span>
+    </button>
+    <div class="pub-side-menu" id="side-acct-menu" role="menu">
+      <a class="pub-side-item" id="side-sheets-open" href="#" target="_blank" role="menuitem" style="display:none;"><span class="pub-side-ico">↗</span>Open Google Sheet</a>
+      <button type="button" class="pub-side-item" role="menuitem" onclick="forceSync()"><span class="pub-side-ico">↺</span>Refresh sync</button>
+      <div class="pub-side-msep"></div>
+      <button type="button" class="pub-side-item danger" role="menuitem" onclick="logout()"><span class="pub-side-ico">⏻</span>Log out</button>
     </div>
   </div>
 </aside>

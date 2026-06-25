@@ -1862,24 +1862,65 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
     text-align:left;cursor:pointer;transition:background .15s,color .15s;
   }
   .pub-shell .snav:hover{background:rgba(255,255,255,.06);color:var(--cream);}
-  .pub-shell .snav.active{background:var(--gold-bg);color:var(--gold3);}
+  /* Active item: per-book accent (vars set on :root, cascade here). The label
+     stays light (gold3) for contrast on the dark rail; the book accent drives
+     the background tint and a left marker bar. Falls back to the gold theme
+     when no book is active (vars unset). */
+  .pub-shell .snav.active{
+    background:var(--book-accent-bg,var(--gold-bg));
+    color:var(--gold3);
+    position:relative;
+  }
+  .pub-shell .snav.active::before{
+    content:'';position:absolute;left:0;top:6px;bottom:6px;width:3px;
+    border-radius:0 3px 3px 0;background:var(--book-accent,var(--gold2));
+  }
+  .pub-shell .snav.active .snav-ic{color:var(--book-accent,var(--gold3));}
   .pub-shell .snav .snav-ic{width:18px;text-align:center;font-size:14px;flex-shrink:0;}
 
   .pub-shell .pub-side-spacer{flex:1;min-height:14px;}
-  .pub-shell .pub-side-foot{
-    display:flex;align-items:center;gap:10px;
-    padding:9px 8px;margin-top:6px;border-top:1px solid rgba(255,255,255,.08);
+  /* Functional account footer + upward-opening menu (replaces the old
+     decorative footer). Kept self-contained; no header-menu coupling. */
+  .pub-shell .pub-side-foot{position:relative;margin-top:6px;border-top:1px solid rgba(255,255,255,.08);}
+  .pub-shell .pub-side-trigger{
+    display:flex;align-items:center;gap:10px;width:100%;
+    padding:9px 8px;border:none;background:transparent;cursor:pointer;
+    border-radius:var(--r2);text-align:left;
+    transition:background .15s;
   }
+  .pub-shell .pub-side-trigger:hover{background:rgba(255,255,255,.05);}
   .pub-shell .pub-side-avatar{
     width:32px;height:32px;border-radius:50%;flex-shrink:0;
     background:linear-gradient(135deg,var(--ink3),var(--ink4));
     color:var(--gold3);font-family:'Syne',sans-serif;font-weight:800;font-size:11px;
     display:flex;align-items:center;justify-content:center;
   }
-  .pub-shell .pub-side-who{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .pub-shell .pub-side-who{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;}
   .pub-shell .pub-side-who b{font-size:12px;color:var(--cream);font-weight:600;}
   .pub-shell .pub-side-live{font-size:9.5px;color:#7bd99a;font-family:'DM Mono',monospace;display:flex;align-items:center;gap:5px;}
-  .pub-shell .pub-side-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0;}
+  /* The sidebar dot is a .sync-dot (coloured by setSyncState); size it for the rail. */
+  .pub-shell .pub-side-live .sync-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+  .pub-shell .pub-side-caret{color:rgba(255,255,255,.4);font-size:12px;flex-shrink:0;transition:transform .15s;}
+  .pub-shell .pub-side-foot.open .pub-side-caret{transform:rotate(180deg);}
+
+  .pub-shell .pub-side-menu{
+    display:none;position:absolute;left:0;right:0;bottom:calc(100% + 8px);
+    background:var(--ink2,#1c1917);border:1px solid rgba(255,255,255,.12);
+    border-radius:var(--r2);box-shadow:0 18px 50px rgba(0,0,0,.55);
+    padding:6px;z-index:300;
+  }
+  .pub-shell .pub-side-foot.open .pub-side-menu{display:block;}
+  .pub-shell .pub-side-item{
+    display:flex;align-items:center;gap:11px;width:100%;
+    padding:9px 10px;border:none;border-radius:var(--r);
+    background:transparent;color:var(--cream);text-decoration:none;
+    font-family:'Syne',sans-serif;font-size:12.5px;font-weight:600;
+    text-align:left;cursor:pointer;
+  }
+  .pub-shell .pub-side-item:hover{background:rgba(255,255,255,.08);}
+  .pub-shell .pub-side-item.danger{color:#f8a4a4;}
+  .pub-shell .pub-side-ico{width:18px;text-align:center;opacity:.8;flex-shrink:0;}
+  .pub-shell .pub-side-msep{height:1px;background:rgba(255,255,255,.08);margin:6px 4px;}
 
   /* ---- Offset the whole right-hand column past the fixed sidebar ----
      Pad #pw-app itself (the shared parent of the header, banner, tab bar AND
@@ -1900,10 +1941,57 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .pub-shell .header-brand{display:none;}
   .pub-shell .app-header > .hsep{display:none;}
 
+  /* The account/sync control now lives in the sidebar footer in desktop shell
+     mode, so hide the header copy to avoid showing it twice. This is INSIDE
+     min-width:861px, so mobile publishers (<861px) and authors (no .pub-shell)
+     keep the header account untouched. */
+  .pub-shell #hmenu-account{display:none;}
+
   /* Page title in the top bar */
   .pub-shell #shell-page-title{
     display:inline-block;
     font-family:'Playfair Display',serif;font-size:16px;color:var(--cream);
     white-space:nowrap;
+  }
+
+  /* ============================================================
+     MID-WIDTH ICON RAIL (861–1100px): collapse the 212px sidebar
+     to a ~64px icon-only rail. Nested inside the desktop shell so
+     both queries are satisfied here; where the same selector is set
+     twice (e.g. #pub-sidebar width, .pub-shell padding-left) these
+     rules win on LATER SOURCE ORDER (specificity is equal — media
+     conditions add none). Above 1100px the full sidebar returns.
+     ============================================================ */
+  @media(max-width:1100px){
+    .pub-shell #pub-sidebar{width:64px;align-items:center;}
+    .pub-shell{padding-left:64px;}
+
+    /* Hide all text; show icons / avatars only, centred. */
+    .pub-shell .snav-label,
+    .pub-shell .pub-wordmark,
+    .pub-shell .pub-tag,
+    .pub-shell .o3-grouplabel,
+    .pub-shell .o3-subgrouplabel,
+    .pub-shell .pub-side-who,
+    .pub-shell .pub-side-caret{display:none;}
+
+    /* Centre the brand mark and nav icons. */
+    .pub-shell .pub-brand{justify-content:center;padding:6px 0 14px;}
+    .pub-shell .snav{justify-content:center;gap:0;padding:9px 0;}
+    /* Keep the active left-marker bar from crowding the centred icon. */
+    .pub-shell .snav.active::before{top:8px;bottom:8px;}
+
+    /* Account footer collapses to just the avatar; the menu still opens. */
+    .pub-shell .pub-side-trigger{justify-content:center;gap:0;padding:9px 0;}
+    /* The 64px rail is too narrow for the menu AND the sidebar's overflow-y:auto
+       forces overflow-x to clip — an absolutely-positioned 208px menu anchored
+       inside the rail would be cut off / spawn a horizontal scrollbar. Pin it
+       with position:fixed (relative to the viewport, escaping the sidebar's
+       clip) just outside the 64px rail, and lift z-index above the sidebar
+       (z-index:200) so it sits over page content. */
+    .pub-shell .pub-side-menu{
+      position:fixed;left:64px;right:auto;bottom:14px;
+      width:208px;z-index:400;
+    }
   }
 }
