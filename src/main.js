@@ -2934,6 +2934,7 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   s.chStats[chan].txns++; s.chStats[chan].units+=qty; s.chStats[chan].revenue+=qty*price;
   const sheetsId = makeEventId();
   s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment,enteredBy,sheetsId});
+  recomputeAfters(s, book);
   renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
@@ -5506,6 +5507,7 @@ function confirmImport() {
     imported++;
   });
 
+  recomputeAfters(s, book);
   saveState(activeBook);
   renderHist();
   updateDash();
@@ -5728,6 +5730,7 @@ function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
   s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),artistPending:true,directToArtist:true,payment,sheetsId});
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
   s.artistTransfers.push({id:Date.now(),num,chan,qty,price,total:qty*price,notes:notes||'',date:today(),payment,sheetsId});
+  recomputeAfters(s, book);
   renderHist();updateDash();saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
@@ -6101,6 +6104,7 @@ async function submitGratuity(ev){
       });
     }
 
+    recomputeAfters(s, book);
     renderHist();
     if(expenseIt) renderExpenses();
     updateDash();saveState(activeBook);
@@ -6347,6 +6351,7 @@ function confirmSale(){
   const sheetsId = makeEventId();
   s.hist.unshift({num,chan:'Consignment',qty,price:pub/qty,after:s.stock,notes:st.name,date,sheetsId,consignmentLink:true});
   s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Sale',date,qty,rate:st.rate,amountDue:pub,paid,notes,status:paid,sheetsId});
+  recomputeAfters(s, book);
   closeM('record-sale');renderStores();renderLedger();renderHist();updateDash();saveState(activeBook);
   syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Sale',qty,rate:st.rate,amountDue:pub,notes,status:paid,sheetsId,currency:getBookCurrencyCode(book)});
   showToast(`✓ Sale recorded — ${fmt(pub,cur)} due to you`);
@@ -7941,6 +7946,7 @@ function saveEntryEdit() {
     }
   }
 
+  recomputeAfters(s, book);
   closeM('edit-entry');
   renderAll(); updateDash(); saveState(activeBook);
   showToast('✓ Entry updated');

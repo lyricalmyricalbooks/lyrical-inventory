@@ -105,6 +105,16 @@ export function buildOrderTimeline(s, book) {
 // consignment sale consumes at most one direct duplicate across both passes.
 export function deduplicateDirectConsignmentSales(s) {
   if (!s || !Array.isArray(s.hist)) return;
+
+  // Sync consignmentLink with the selected channel name
+  s.hist.forEach(h => {
+    if (h.chan === 'Consignment') {
+      h.consignmentLink = true;
+    } else if (h.consignmentLink) {
+      delete h.consignmentLink;
+    }
+  });
+
   const consignmentSales = s.hist.filter(h => h.consignmentLink && !h.voided);
   if (consignmentSales.length === 0) return;
 
