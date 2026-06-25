@@ -19,7 +19,7 @@ import {
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 import { OC_STAGES, ocNextAction, newContributor, parseContributorRows } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
 
@@ -8025,6 +8025,12 @@ function reconcileStores(s) {
 }
 
 function recomputeAfters(s, book) {
+  const bk = book || (typeof getBook === 'function' ? getBook() : null);
+  deduplicateDirectConsignmentSales(s);
+  recalculateBookStatsFromHistory(s);
+  if (bk && Number.isFinite(bk.maxPrint)) {
+    s.stock = deriveOnHand(s, bk);
+  }
   reconcileConsignmentChannel(s);
   reconcileStores(s);
   // Stock After mirrors the History view: a single running balance over the
@@ -8032,7 +8038,6 @@ function recomputeAfters(s, book) {
   // down to the records-true on-hand. Computing it here too keeps each entry's
   // stored `after` — the value synced to the Google Sheet — agreeing with the
   // app instead of anchoring to a header count that may have drifted.
-  const bk = book || (typeof getBook === 'function' ? getBook() : null);
   const timeline = buildOrderTimeline(s, bk);
   for (const r of timeline) {
     if (r.type === 'hist') r.h.after = r._after;

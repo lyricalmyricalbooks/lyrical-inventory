@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown } from '../src/lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales } from '../src/lib/inventory.js';
 
 const book = (maxPrint = 100) => ({ maxPrint });
 const sale = (qty, extra = {}) => ({ qty, ...extra });
@@ -176,5 +176,46 @@ describe('inventoryBreakdown', () => {
     expect(bd.directSold).toBe(15);
     expect(bd.gratuities).toBe(0);
     expect(bd.unaccounted).toBe(-5);    // surfaced rather than hidden
+  });
+});
+
+describe('deduplicateDirectConsignmentSales', () => {
+  it('does nothing when there are no consignment sales', () => {
+    const s = state({
+      hist: [
+        { qty: 10, price: 39, date: '2026-06-25', chan: 'Direct' },
+        { qty: 5, price: 39, date: '2026-06-25', chan: 'Website' }
+      ]
+    });
+    deduplicateDirectConsignmentSales(s);
+    expect(s.hist).toHaveLength(2);
+  });
+
+  it('filters out matching direct sales that are duplicate of consignment sales', () => {
+    const s = state({
+      hist: [
+        { qty: 10, price: 39, date: '2026-06-25', chan: 'Consignment', consignmentLink: true },
+        { qty: 10, price: 39, date: '2026-06-25', chan: '' }, // duplicate direct sale
+        { qty: 5, price: 39, date: '2026-06-25', chan: 'Direct' } // non-duplicate direct sale
+      ]
+    });
+    deduplicateDirectConsignmentSales(s);
+    expect(s.hist).toHaveLength(2);
+    expect(s.hist.map(h => h.qty)).toEqual([10, 5]);
+    expect(s.hist.map(h => h.chan)).toEqual(['Consignment', 'Direct']);
+  });
+
+  it('filters only one duplicate direct sale for each consignment sale', () => {
+    const s = state({
+      hist: [
+        { qty: 10, price: 39, date: '2026-06-25', chan: 'Consignment', consignmentLink: true },
+        { qty: 10, price: 39, date: '2026-06-25', chan: '' }, // duplicate 1
+        { qty: 10, price: 39, date: '2026-06-25', chan: '' }  // duplicate 2 - should be kept (or treated as a separate direct sale)
+      ]
+    });
+    deduplicateDirectConsignmentSales(s);
+    expect(s.hist).toHaveLength(2);
+    expect(s.hist.filter(h => h.consignmentLink)).toHaveLength(1);
+    expect(s.hist.filter(h => !h.consignmentLink)).toHaveLength(1);
   });
 });

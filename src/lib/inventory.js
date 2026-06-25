@@ -96,3 +96,55 @@ export function buildOrderTimeline(s, book) {
   return timeline;
 }
 
+// Deduplicate direct/unnamed sales that are actually duplicates of consignment sales.
+export function deduplicateDirectConsignmentSales(s) {
+  if (!s || !Array.isArray(s.hist)) return;
+  const consignmentSales = s.hist.filter(h => h.consignmentLink && !h.voided);
+  if (consignmentSales.length === 0) return;
+
+  const toRemove = new Set();
+  for (const c of consignmentSales) {
+    const dIdx = s.hist.findIndex((h, idx) => {
+      if (h.consignmentLink || h.gratuity || h.voided) return false;
+      if (toRemove.has(idx)) return false;
+      const chan = (h.chan && h.chan.trim()) ? h.chan : 'Direct';
+      if (chan !== 'Direct') return false;
+      
+      const qtyMatch = h.qty === c.qty;
+      const dateMatch = h.date === c.date;
+      const priceMatch = Math.abs((h.price || 0) - (c.price || 0)) < 0.01;
+      
+      return qtyMatch && dateMatch && priceMatch;
+    });
+
+    if (dIdx !== -1) {
+      toRemove.add(dIdx);
+    }
+  }
+
+  if (toRemove.size > 0) {
+    s.hist = s.hist.filter((_, idx) => !toRemove.has(idx));
+  }
+}
+
+// Recalculate book stats (sold, revenue, chStats) purely from the current s.hist.
+export function recalculateBookStatsFromHistory(s) {
+  s.sold = 0;
+  s.revenue = 0;
+  s.chStats = {};
+
+  (s.hist || []).forEach(h => {
+    if (h.voided) return;
+    
+    const chan = h.chan || 'Manual';
+    if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
+    s.chStats[chan].txns++;
+    s.chStats[chan].units += (h.qty || 0);
+    s.chStats[chan].revenue += (h.qty || 0) * (h.price || 0);
+
+    if (h.gratuity) return;
+    s.sold += (h.qty || 0);
+    s.revenue += (h.qty || 0) * (h.price || 0);
+  });
+}
+
