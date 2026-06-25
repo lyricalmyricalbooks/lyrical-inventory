@@ -97,26 +97,50 @@ export function buildOrderTimeline(s, book) {
 }
 
 // Deduplicate direct/unnamed sales that are actually duplicates of consignment sales.
+// The manual mirror of a consignment sale is often logged on a DIFFERENT date than the
+// consignment sale itself, so qty+price is the reliable signal for a duplicate and the
+// exact date is only a first-pass preference. We run two passes so existing same-date
+// behavior is unchanged: pass 1 prefers an exact same-date match, and pass 2 falls back
+// to a qty+price match on any date for consignment sales still without a partner. Each
+// consignment sale consumes at most one direct duplicate across both passes.
 export function deduplicateDirectConsignmentSales(s) {
   if (!s || !Array.isArray(s.hist)) return;
   const consignmentSales = s.hist.filter(h => h.consignmentLink && !h.voided);
   if (consignmentSales.length === 0) return;
 
   const toRemove = new Set();
-  for (const c of consignmentSales) {
-    const dIdx = s.hist.findIndex((h, idx) => {
-      if (h.consignmentLink || h.gratuity || h.voided) return false;
-      if (toRemove.has(idx)) return false;
-      const chan = (h.chan && h.chan.trim()) ? h.chan : 'Direct';
-      if (chan !== 'Direct') return false;
-      
-      const qtyMatch = h.qty === c.qty;
-      const dateMatch = h.date === c.date;
-      const priceMatch = Math.abs((h.price || 0) - (c.price || 0)) < 0.01;
-      
-      return qtyMatch && dateMatch && priceMatch;
-    });
 
+  // Returns the index of a not-yet-removed unlabeled/Direct duplicate of consignment
+  // sale `c`, matching qty AND price. When `requireDate` is true, the date must also
+  // match exactly.
+  const findDuplicate = (c, requireDate) => s.hist.findIndex((h, idx) => {
+    if (h.consignmentLink || h.gratuity || h.voided) return false;
+    if (toRemove.has(idx)) return false;
+    const chan = (h.chan && h.chan.trim()) ? h.chan : 'Direct';
+    if (chan !== 'Direct') return false;
+
+    const qtyMatch = h.qty === c.qty;
+    const priceMatch = Math.abs((h.price || 0) - (c.price || 0)) < 0.01;
+    const dateMatch = !requireDate || h.date === c.date;
+
+    return qtyMatch && priceMatch && dateMatch;
+  });
+
+  // Pass 1: prefer an exact same-date duplicate (unchanged behavior).
+  const unmatched = [];
+  for (const c of consignmentSales) {
+    const dIdx = findDuplicate(c, true);
+    if (dIdx !== -1) {
+      toRemove.add(dIdx);
+    } else {
+      unmatched.push(c);
+    }
+  }
+
+  // Pass 2: for consignment sales still without a partner, fall back to a qty+price
+  // match on any date — the manual mirror is frequently logged on a different day.
+  for (const c of unmatched) {
+    const dIdx = findDuplicate(c, false);
     if (dIdx !== -1) {
       toRemove.add(dIdx);
     }
