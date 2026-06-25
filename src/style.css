@@ -1983,8 +1983,15 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 
     /* Account footer collapses to just the avatar; the menu still opens. */
     .pub-shell .pub-side-trigger{justify-content:center;gap:0;padding:9px 0;}
-    /* The 64px rail is too narrow for the menu, so anchor it from the left
-       edge and let it overflow to the right at a usable width. */
-    .pub-shell .pub-side-menu{left:8px;right:auto;width:208px;}
+    /* The 64px rail is too narrow for the menu AND the sidebar's overflow-y:auto
+       forces overflow-x to clip — an absolutely-positioned 208px menu anchored
+       inside the rail would be cut off / spawn a horizontal scrollbar. Pin it
+       with position:fixed (relative to the viewport, escaping the sidebar's
+       clip) just outside the 64px rail, and lift z-index above the sidebar
+       (z-index:200) so it sits over page content. */
+    .pub-shell .pub-side-menu{
+      position:fixed;left:64px;right:auto;bottom:14px;
+      width:208px;z-index:400;
+    }
   }
 }

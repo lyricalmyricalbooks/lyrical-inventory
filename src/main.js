@@ -1293,6 +1293,7 @@ function closeHeaderMenus() {
 // ── PUBLISHER APP-SHELL: sidebar footer account menu (opens UPWARD).
 // Self-contained so it never entangles with the header menu logic above.
 let _sideAcctOutsideHandler = null;
+let _sideAcctKeyHandler = null;
 function closeSideAccount() {
   const foot = document.getElementById('side-acct');
   if (foot) foot.classList.remove('open');
@@ -1300,6 +1301,10 @@ function closeSideAccount() {
   if (_sideAcctOutsideHandler) {
     document.removeEventListener('click', _sideAcctOutsideHandler, true);
     _sideAcctOutsideHandler = null;
+  }
+  if (_sideAcctKeyHandler) {
+    document.removeEventListener('keydown', _sideAcctKeyHandler, true);
+    _sideAcctKeyHandler = null;
   }
 }
 function toggleSideAccount(ev) {
@@ -1316,6 +1321,17 @@ function toggleSideAccount(ev) {
       _sideAcctOutsideHandler = (e) => { if (!foot.contains(e.target)) closeSideAccount(); };
       document.addEventListener('click', _sideAcctOutsideHandler, true);
     }, 0);
+    // Esc closes the menu and returns focus to its trigger. Listener is bound
+    // only while open and torn down by closeSideAccount(), so it never leaks
+    // or competes with the global modal Esc handler when the menu is shut.
+    _sideAcctKeyHandler = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closeSideAccount();
+        document.getElementById('side-acct-trigger')?.focus();
+      }
+    };
+    document.addEventListener('keydown', _sideAcctKeyHandler, true);
   }
 }
 
