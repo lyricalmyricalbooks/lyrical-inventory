@@ -218,4 +218,28 @@ describe('deduplicateDirectConsignmentSales', () => {
     expect(s.hist.filter(h => h.consignmentLink)).toHaveLength(1);
     expect(s.hist.filter(h => !h.consignmentLink)).toHaveLength(1);
   });
+
+  it('removes an unlabeled duplicate logged on a different date than the consignment sale', () => {
+    const s = state({
+      hist: [
+        { qty: 10, price: 39, date: '2026-06-20', chan: 'Consignment', consignmentLink: true },
+        { qty: 10, price: 39, date: '2026-06-25', chan: '' } // manual mirror logged on a different date
+      ]
+    });
+    deduplicateDirectConsignmentSales(s);
+    expect(s.hist).toHaveLength(1);
+    expect(s.hist[0].consignmentLink).toBe(true);
+  });
+
+  it('does not remove a genuinely different unlabeled sale on a different date', () => {
+    const s = state({
+      hist: [
+        { qty: 10, price: 39, date: '2026-06-20', chan: 'Consignment', consignmentLink: true },
+        { qty: 5, price: 39, date: '2026-06-25', chan: '' }, // different qty - not a duplicate
+        { qty: 10, price: 25, date: '2026-06-27', chan: '' } // different price - not a duplicate
+      ]
+    });
+    deduplicateDirectConsignmentSales(s);
+    expect(s.hist).toHaveLength(3);
+  });
 });
