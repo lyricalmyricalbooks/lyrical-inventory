@@ -2299,7 +2299,7 @@ function updateDash() {
   else if(s.stock<=book.threshold*2){al.className='stock-alert warn';al.textContent='Getting low — '+s.stock+' units remaining.';}
   else{al.className='stock-alert ok';al.textContent='Stock is healthy.';}
   const ckeys=Object.keys(s.chStats||{});
-  $('ch-body').innerHTML=ckeys.length?ckeys.map(k=>{const cs=s.chStats[k];return`<tr><td style="font-weight:600;">${k}</td><td class="r">${cs.txns}</td><td class="r">${cs.units}</td><td class="r">${fmt(cs.revenue,cur)}</td></tr>`;}).join(''):'<tr><td colspan="4"><div class="empty-state" style="padding:1rem;">No sales yet.</div></td></tr>';
+  $('ch-body').innerHTML=ckeys.length?ckeys.map(k=>{const cs=s.chStats[k];return`<tr><td style="font-weight:600;">${escapeHtml(chanLabel(k))}</td><td class="r">${cs.txns}</td><td class="r">${cs.units}</td><td class="r">${fmt(cs.revenue,cur)}</td></tr>`;}).join(''):'<tr><td colspan="4"><div class="empty-state" style="padding:1rem;">No sales yet.</div></td></tr>';
   $('dash-con-body').innerHTML=s.stores.length?s.stores.map(st=>`<tr><td style="font-weight:600;">${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding>0?'<span class="pill amber">Active</span>':'<span class="pill gray">Settled</span>'}</td></tr>`).join(''):'<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
   // Show danger zone only for publisher — explicitly hide for authors so it
   // doesn't linger when switching from publisher into an author view.
