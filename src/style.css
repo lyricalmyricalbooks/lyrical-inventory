@@ -1921,6 +1921,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .pub-shell .pub-side-item.danger{color:#f8a4a4;}
   .pub-shell .pub-side-ico{width:18px;text-align:center;opacity:.8;flex-shrink:0;}
   .pub-shell .pub-side-msep{height:1px;background:rgba(255,255,255,.08);margin:6px 4px;}
+  /* App last-updated stamp at the very bottom of the sidebar (publisher only). */
+  .pub-shell .pub-side-updated{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.06em;color:rgba(255,255,255,.28);text-align:center;padding:8px 4px 2px;}
 
   /* ---- Offset the whole right-hand column past the fixed sidebar ----
      Pad #pw-app itself (the shared parent of the header, banner, tab bar AND
@@ -1973,7 +1975,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
     .pub-shell .o3-grouplabel,
     .pub-shell .o3-subgrouplabel,
     .pub-shell .pub-side-who,
-    .pub-shell .pub-side-caret{display:none;}
+    .pub-shell .pub-side-caret,
+    .pub-shell .pub-side-updated{display:none;}
 
     /* Centre the brand mark and nav icons. */
     .pub-shell .pub-brand{justify-content:center;padding:6px 0 14px;}

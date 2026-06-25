@@ -1378,6 +1378,9 @@ function updateSubheader() {
 
   const upd = $('tab-updated');
   if (upd) upd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
+  // Publisher app-shell hides the tab bar, so mirror the stamp into the sidebar.
+  const pubUpd = $('pub-updated');
+  if (pubUpd) pubUpd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
 }
 
 // The header can't hold the brand, book switcher, action menus AND the KPI
