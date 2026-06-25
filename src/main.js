@@ -1410,7 +1410,7 @@ function updateHeader() {
       totalCon += s.stores.reduce((b,st)=>b+st.outstanding,0);
     });
     animateCountValue('h-stock', totalStock);
-    animateCountValue('h-revenue', '~'+totalRev.toFixed(0));
+    animateCountValue('h-revenue', '~' + Math.round(totalRev).toLocaleString());
     animateCountValue('h-consigned', totalCon);
   } else {
     const s = getState(), book = getBook();
