@@ -1998,3 +1998,27 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
     }
   }
 }
+
+/* ── Stripe reconcile worklist toolbar ───────────────────────────────────── */
+.recon-toolbar{position:sticky;top:0;z-index:6;display:flex;flex-wrap:wrap;gap:8px;
+  align-items:center;padding:10px 12px;margin-bottom:12px;background:var(--cream);
+  border:1px solid var(--border);border-radius:var(--r2);box-shadow:var(--shadow);}
+.recon-search{flex:1;min-width:200px;padding:8px 12px;font-size:13px;
+  font-family:'Syne',sans-serif;border:1px solid var(--border);border-radius:var(--r2);
+  background:var(--cream2);color:var(--text);outline:none;transition:border-color .15s,box-shadow .15s;}
+.recon-search:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(200,145,58,.12);}
+.recon-mini{padding:7px 10px;font-size:12px;font-family:'Syne',sans-serif;
+  border:1px solid var(--border);border-radius:var(--r2);background:var(--cream2);
+  color:var(--text);cursor:pointer;outline:none;}
+.recon-mini:focus{border-color:var(--gold);}
+.recon-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.recon-chip{padding:6px 11px;font-size:11px;font-weight:600;letter-spacing:.03em;
+  border-radius:100px;border:1px solid var(--border);background:var(--cream2);
+  color:var(--text2);cursor:pointer;transition:all .12s;white-space:nowrap;}
+.recon-chip:hover{background:var(--cream3);}
+.recon-chip.active{background:var(--ink);color:var(--cream);border-color:var(--ink);}
+.recon-toggle{display:inline-flex;align-items:center;gap:5px;font-size:11px;
+  color:var(--text2);font-weight:600;letter-spacing:.03em;cursor:pointer;user-select:none;}
+.recon-toggle input{margin:0;accent-color:var(--gold);}
+.recon-progress{height:5px;border-radius:100px;background:var(--cream3);overflow:hidden;margin:8px 0 0;max-width:420px;}
+.recon-progress > i{display:block;height:100%;background:var(--gold);border-radius:100px;transition:width .3s ease;}
