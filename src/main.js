@@ -1223,9 +1223,39 @@ function updateSubheader() {
   if (upd) upd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
 }
 
+// The header can't hold the brand, book switcher, action menus AND the KPI
+// stats on one line at laptop widths, so on desktop the stat strip lives on
+// the (mostly empty) tab bar instead. On mobile the header is intentionally
+// stacked, so the stats stay in their full-width header row.
+function placeKpiStrip() {
+  const kpi = document.querySelector('.kpi-cluster');
+  if (!kpi) return;
+  const tabBar = $('tab-bar');
+  const headerRight = document.querySelector('.header-right');
+  const hsep = $('kpi-hsep');
+  const desktop = window.matchMedia('(min-width:769px)').matches;
+  if (desktop && tabBar) {
+    if (kpi.parentElement !== tabBar) tabBar.insertBefore(kpi, $('tab-author'));
+    if (hsep) hsep.style.display = 'none';
+  } else if (headerRight) {
+    if (kpi.parentElement !== headerRight) headerRight.insertBefore(kpi, hsep);
+    if (hsep) hsep.style.display = '';
+  }
+}
+
+let _kpiResizeBound = false;
+function bindKpiResize() {
+  if (_kpiResizeBound) return;
+  _kpiResizeBound = true;
+  let t;
+  window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(placeKpiStrip, 150); });
+}
+
 function syncRoleUI() {
   const authorNow = isAuthor();
   updateSubheader();
+  placeKpiStrip();
+  bindKpiResize();
   const websiteTabBtn = $('website-tab-btn');
   const financialsTabBtn = $('financials-tab-btn');
   const taxcenterTabBtn = $('global-taxcenter-btn');

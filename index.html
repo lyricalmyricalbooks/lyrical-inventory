@@ -186,7 +186,7 @@
   <div id="book-switcher-wrap">
     <div class="book-switcher" id="book-switcher" style="position:relative;">
       <div id="book-dropdown" style="position:relative;display:inline-block;">
-        <button id="book-dropdown-btn" onclick="toggleBookDropdown()" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);color:var(--cream);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;outline:none;min-width:170px;justify-content:space-between;">
+        <button id="book-dropdown-btn" onclick="toggleBookDropdown()" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);color:var(--cream);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;outline:none;min-width:150px;justify-content:space-between;">
           <div style="display:flex;align-items:center;gap:8px;">
             <div id="book-dropdown-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);flex-shrink:0;"></div>
             <span id="book-dropdown-label">All books</span>
@@ -202,7 +202,7 @@
       Author view
     </button>
   </div>
-  <div class="hsep"></div>
+  <div class="header-grow" aria-hidden="true"></div>
 
   <div class="header-actions" id="global-actions" style="display:none; align-items:center;">
     <button class="header-action-btn primary" onclick="switchTab('pos')" id="global-pos-btn" title="Sell books at an event">🛒 Event POS</button>
@@ -259,7 +259,7 @@
       <div class="header-stat"><div class="hs-val" id="h-revenue">—</div><div class="hs-label">Revenue</div></div>
       <div class="header-stat"><div class="hs-val" id="h-consigned">—</div><div class="hs-label">Consigned</div></div>
     </div>
-    <div class="hsep"></div>
+    <div class="hsep" id="kpi-hsep"></div>
 
     <!-- Account avatar + sync status (corner dot reflects sync state) -->
     <div class="header-menu" id="hmenu-account">

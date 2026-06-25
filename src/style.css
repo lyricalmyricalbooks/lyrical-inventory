@@ -25,7 +25,10 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .app{position:relative;z-index:1;}
 
 /* HEADER */
-.app-header{background:var(--ink);padding:10px 1.6rem;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid rgba(200,145,58,.2);position:sticky;top:0;z-index:100;padding-top:max(env(safe-area-inset-top), 10px);}
+.app-header{background:var(--ink);padding:10px 1.6rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid rgba(200,145,58,.2);position:sticky;top:0;z-index:100;padding-top:max(env(safe-area-inset-top), 10px);}
+/* Flexible spacer: one clean gap between the brand/book cluster on the left
+   and the actions + KPI + account cluster on the right (no stranded blank row). */
+.header-grow{flex:1 1 0;min-width:10px;align-self:stretch;}
 .header-brand{display:flex;flex-direction:row;align-items:center;gap:11px;}
 .header-mark{width:32px;height:32px;border-radius:9px;background:linear-gradient(150deg,var(--gold2),var(--gold));display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-weight:700;font-size:16px;color:var(--ink);flex-shrink:0;box-shadow:0 2px 8px rgba(200,145,58,.35);}
 .header-brand-text{display:flex;flex-direction:column;gap:3px;}
@@ -33,10 +36,10 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .header-tag{font-size:9px;font-weight:600;color:var(--gold2);letter-spacing:.22em;text-transform:uppercase;}
 /* Vertical zone separator */
 .hsep{width:1px;height:30px;background:rgba(255,255,255,.09);flex-shrink:0;}
-.header-right{display:flex;align-items:center;gap:10px;margin-left:auto;}
+.header-right{display:flex;align-items:center;gap:10px;}
 /* KPI cluster — grouped, bordered, with internal dividers */
 .kpi-cluster{display:flex;align-items:center;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:var(--r2);padding:2px 3px;}
-.header-stat{display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding:5px 13px;border-right:1px solid rgba(255,255,255,.08);}
+.header-stat{display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding:5px 11px;border-right:1px solid rgba(255,255,255,.08);}
 .header-stat:last-child{border-right:none;}
 .hs-val{font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--gold3);line-height:1;}
 .hs-label{font-size:8px;font-weight:700;color:rgba(255,255,255,.34);letter-spacing:.12em;text-transform:uppercase;margin-top:4px;}
@@ -51,7 +54,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .acct-dot .sync-dot{width:8px;height:8px;}
 
 /* GLOBAL ACTIONS */
-.header-actions{display:flex;align-items:center;gap:8px;}
+.header-actions{display:flex;align-items:center;gap:6px;}
 
 /* Book switcher relocated into the header (row 1) — pill, not a band */
 .app-header #book-switcher-wrap{background:transparent;border-bottom:none;display:flex;align-items:center;gap:8px;position:relative;}
@@ -84,12 +87,12 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   font-weight:700;
   letter-spacing:.08em;
   text-transform:uppercase;
-  padding:8px 14px;
+  padding:7px 11px;
   cursor:pointer;
   transition:all .18s;
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:7px;
   white-space:nowrap;
 }
 .header-action-btn:hover{
@@ -365,6 +368,11 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .tab-author{display:none;align-self:center;white-space:nowrap;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--gold2);flex-shrink:0;}
 .tab-author.on{display:inline-flex;margin-left:auto;}
 .tab-author.on + .tab-updated{margin-left:0;padding-left:.85rem;}
+/* KPI stat strip relocated onto the tab bar at desktop widths (see placeKpiStrip) */
+.tab-bar > .kpi-cluster{align-self:center;margin:4px 0 4px auto;flex-shrink:0;}
+.tab-bar > .kpi-cluster ~ .tab-author.on,
+.tab-bar > .kpi-cluster ~ .tab-updated{margin-left:0;}
+.tab-bar > .kpi-cluster ~ .tab-updated{padding-left:1.1rem;}
 
 /* PANELS */
 .tab-panel{display:none;padding:2rem;max-width:1200px;margin:0 auto;padding-bottom:calc(2rem + env(safe-area-inset-bottom));}
@@ -772,6 +780,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
     flex-wrap:wrap;
     padding-bottom:.5rem;
   }
+  .header-grow{display:none;}
   .header-brand{padding:.7rem 0 .15rem;flex:1;min-width:0;}
   .header-wordmark{font-size:16px;}
   .header-tag{font-size:8px;letter-spacing:.18em;}
