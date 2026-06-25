@@ -170,6 +170,59 @@
 </div>
 
 <div id="pw-app" style="display:none;">
+
+<!-- PUBLISHER APP-SHELL SIDEBAR — only shown when #pw-app has .pub-shell
+     (publisher session, not in author view; reverts below 861px). All styling
+     is scoped under .pub-shell so authors / logged-out / mobile are unaffected.
+     Nav buttons reuse switchTab() + the .snav active-sync (see switchTab). -->
+<aside id="pub-sidebar" aria-label="Primary navigation">
+  <div class="pub-brand">
+    <div class="header-mark">L</div>
+    <div class="pub-brand-text">
+      <div class="pub-wordmark">Lyricalmyrical</div>
+      <div class="pub-tag">Inventory</div>
+    </div>
+  </div>
+
+  <nav class="pub-nav" aria-label="Books">
+    <button type="button" class="snav" onclick="switchTab('dashboard')"><span class="snav-ic">▦</span><span class="snav-label">Dashboard</span></button>
+    <button type="button" class="snav" onclick="switchTab('website')"><span class="snav-ic">🛍</span><span class="snav-label">Website orders</span></button>
+    <button type="button" class="snav" onclick="switchTab('manual')"><span class="snav-ic">✎</span><span class="snav-label">Manual entry</span></button>
+    <button type="button" class="snav" onclick="switchTab('consignment')"><span class="snav-ic">🏪</span><span class="snav-label">Consignment</span></button>
+    <button type="button" class="snav" onclick="switchTab('history')"><span class="snav-ic">🕘</span><span class="snav-label">History</span></button>
+    <button type="button" class="snav" onclick="switchTab('expenses')"><span class="snav-ic">🧾</span><span class="snav-label">Expenses</span></button>
+  </nav>
+
+  <div class="o3-grouplabel">Tools</div>
+  <nav class="pub-nav" aria-label="Tools">
+    <button type="button" class="snav" onclick="switchTab('pos')"><span class="snav-ic">🛒</span><span class="snav-label">Event POS</span></button>
+    <button type="button" class="snav" onclick="switchTab('taxcenter')"><span class="snav-ic">⚖️</span><span class="snav-label">Tax Centre</span></button>
+
+    <div class="o3-subgrouplabel">Money</div>
+    <button type="button" class="snav" onclick="switchTab('reconcile')"><span class="snav-ic">💳</span><span class="snav-label">Payments</span></button>
+    <button type="button" class="snav" onclick="switchTab('qrcodes')"><span class="snav-ic">📱</span><span class="snav-label">QR Codes</span></button>
+
+    <div class="o3-subgrouplabel">Audience</div>
+    <button type="button" class="snav" onclick="switchTab('customers')"><span class="snav-ic">👥</span><span class="snav-label">Customers</span></button>
+    <button type="button" class="snav" onclick="switchTab('opencall')"><span class="snav-ic">📣</span><span class="snav-label">Open Call</span></button>
+
+    <div class="o3-subgrouplabel">Data</div>
+    <button type="button" class="snav" onclick="switchTab('sheets')"><span class="snav-ic">⚙️</span><span class="snav-label">Sheets</span></button>
+    <button type="button" class="snav" onclick="switchTab('backups')"><span class="snav-ic">💾</span><span class="snav-label">Backups</span></button>
+  </nav>
+
+  <div class="pub-side-spacer"></div>
+
+  <!-- Decorative footer only — NO sensitive sync/account IDs live here. -->
+  <div class="pub-side-foot" aria-hidden="true">
+    <span class="pub-side-avatar">LM</span>
+    <div class="pub-side-who">
+      <b>Lyricalmyrical</b>
+      <span class="pub-side-live"><span class="pub-side-dot"></span>Live</span>
+    </div>
+  </div>
+</aside>
+
 <div class="app" id="main-app">
 
 <header class="app-header">
@@ -181,6 +234,10 @@
     </div>
   </div>
   <div class="hsep"></div>
+
+  <!-- Shell page title — only visible in the publisher app-shell (.pub-shell);
+       text set by switchTab() from SHELL_TAB_LABELS. -->
+  <span id="shell-page-title" aria-hidden="true"></span>
 
   <!-- BOOK SWITCHER (publisher only) — relocated into the header row -->
   <div id="book-switcher-wrap">

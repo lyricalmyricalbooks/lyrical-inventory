@@ -1350,6 +1350,11 @@ function bindKpiResize() {
 
 function syncRoleUI() {
   const authorNow = isAuthor();
+  // Publisher app-shell (left sidebar): on only for a publisher session that is
+  // NOT currently in author view. Scopes all sidebar CSS; authors/logged-out
+  // see the unchanged header + tab bar. (Desktop only — CSS reverts < 861px.)
+  const pwApp = document.getElementById('pw-app');
+  if (pwApp) pwApp.classList.toggle('pub-shell', !authorNow && isPublisherSession());
   updateSubheader();
   placeKpiStrip();
   bindKpiResize();
@@ -1447,6 +1452,10 @@ function switchBook(bookId) {
     const overview = $('tab-all-overview');
     if (overview) { overview.classList.add('active'); overview.style.display = 'block'; }
     $('tab-bar').style.display = 'none';
+    // All-books overview isn't a sidebar destination; clear active nav + title.
+    document.querySelectorAll('.snav.active').forEach(b => b.classList.remove('active'));
+    const shellTitle = $('shell-page-title');
+    if (shellTitle) shellTitle.textContent = 'All books';
     updateAllOverview();
     updateHeader();
   } else {
@@ -1475,6 +1484,14 @@ window.drillToChannel = function(bookId, chan) {
 window.clearHistChanFilter = function() { histChanFilter = null; renderHist(); };
 
 // ── TABS
+// Friendly destination labels for the publisher app-shell top bar (#shell-page-title).
+const SHELL_TAB_LABELS = {
+  dashboard:'Dashboard', website:'Website orders', manual:'Manual entry',
+  consignment:'Consignment', history:'History', expenses:'Expenses',
+  pos:'Event POS', taxcenter:'Tax Centre', reconcile:'Payments', qrcodes:'QR Codes',
+  customers:'Customers', opencall:'Open Call', sheets:'Sheets', backups:'Backups',
+  financials:'Financials', myqr:'My QR Code'
+};
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
   if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall')) name = 'dashboard';
@@ -1488,7 +1505,7 @@ function switchTab(name) {
   // Selecting a destination closes any open header category menu.
   closeHeaderMenus();
 
-  document.querySelectorAll('.tab-btn, .header-action-btn, .header-menu-item').forEach((b) => {
+  document.querySelectorAll('.tab-btn, .header-action-btn, .header-menu-item, .snav').forEach((b) => {
     // We match by checking onclick text to be safe if order ever changes
     if (b.getAttribute('onclick')?.includes(`'${name}'`)) {
       b.classList.add('active');
@@ -1496,6 +1513,10 @@ function switchTab(name) {
       b.classList.remove('active');
     }
   });
+
+  // Reflect the destination as the slim top-bar page title (publisher app-shell).
+  const shellTitle = $('shell-page-title');
+  if (shellTitle) shellTitle.textContent = SHELL_TAB_LABELS[name] || '';
 
   // Reflect the active destination on the parent category trigger so a grouped
   // tool (e.g. Payments under Money) still lights its menu button.
