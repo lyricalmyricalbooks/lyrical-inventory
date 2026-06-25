@@ -1819,3 +1819,84 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   background: rgba(255, 255, 255, 0.3);
 }
 
+
+/* ============================================================
+   PUBLISHER APP-SHELL (Header Option 3 — left sidebar)
+   PUBLISHER ONLY. Activated by `.pub-shell` on #pw-app (set in
+   syncRoleUI). Every rule below is scoped under .pub-shell, so
+   authors, the logged-out gate, and mobile are untouched. The
+   desktop shell layout lives in @media(min-width:861px); below
+   that we keep the existing header + tab bar.
+   ============================================================ */
+
+/* Sidebar is hidden by default everywhere; the shell media query reveals it. */
+#pub-sidebar{display:none;}
+#shell-page-title{display:none;}
+
+@media(min-width:861px){
+  /* ---- Sidebar ---- */
+  .pub-shell #pub-sidebar{
+    display:flex;flex-direction:column;gap:4px;
+    position:fixed;left:0;top:0;bottom:0;width:212px;z-index:200;
+    background:var(--ink);border-right:1px solid rgba(255,255,255,.08);
+    padding:14px 12px;overflow-y:auto;
+    padding-top:max(env(safe-area-inset-top), 14px);
+  }
+  .pub-shell #pub-sidebar::-webkit-scrollbar{width:8px;}
+  .pub-shell #pub-sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:8px;}
+
+  .pub-shell .pub-brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px;}
+  .pub-shell .pub-brand-text{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .pub-shell .pub-wordmark{font-family:'Playfair Display',serif;font-weight:700;color:var(--cream);line-height:1.05;font-size:16px;}
+  .pub-shell .pub-tag{font-size:8.5px;font-weight:600;color:var(--gold2);letter-spacing:.2em;text-transform:uppercase;}
+
+  .pub-shell .pub-nav{display:flex;flex-direction:column;gap:2px;}
+  .pub-shell .o3-grouplabel{font-size:8.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.28);padding:12px 10px 6px;}
+  .pub-shell .o3-subgrouplabel{font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.2);padding:8px 10px 3px;}
+
+  .pub-shell .snav{
+    display:flex;align-items:center;gap:11px;width:100%;
+    padding:9px 11px;border:none;border-radius:var(--r2);
+    background:transparent;color:rgba(247,242,233,.78);
+    font-family:'Syne',sans-serif;font-size:12.5px;font-weight:600;
+    text-align:left;cursor:pointer;transition:background .15s,color .15s;
+  }
+  .pub-shell .snav:hover{background:rgba(255,255,255,.06);color:var(--cream);}
+  .pub-shell .snav.active{background:var(--gold-bg);color:var(--gold3);}
+  .pub-shell .snav .snav-ic{width:18px;text-align:center;font-size:14px;flex-shrink:0;}
+
+  .pub-shell .pub-side-spacer{flex:1;min-height:14px;}
+  .pub-shell .pub-side-foot{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 8px;margin-top:6px;border-top:1px solid rgba(255,255,255,.08);
+  }
+  .pub-shell .pub-side-avatar{
+    width:32px;height:32px;border-radius:50%;flex-shrink:0;
+    background:linear-gradient(135deg,var(--ink3),var(--ink4));
+    color:var(--gold3);font-family:'Syne',sans-serif;font-weight:800;font-size:11px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .pub-shell .pub-side-who{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .pub-shell .pub-side-who b{font-size:12px;color:var(--cream);font-weight:600;}
+  .pub-shell .pub-side-live{font-size:9.5px;color:#7bd99a;font-family:'DM Mono',monospace;display:flex;align-items:center;gap:5px;}
+  .pub-shell .pub-side-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0;}
+
+  /* ---- Offset the whole right-hand column past the fixed sidebar ----
+     Pad #pw-app itself (the shared parent of the header, banner, tab bar AND
+     the centred .tab-panel boxes). One rule shifts every non-fixed child right
+     by 212px uniformly: the sticky header still sticks, the centred
+     max-width:1200px panels stay centred within the remaining width, and the
+     fixed sidebar (position:fixed) ignores this padding and stays at left:0. */
+  .pub-shell{padding-left:212px;}
+
+  /* ---- Slim top bar: hide the in-header primary nav + old tab bar ---- */
+  .pub-shell #global-actions{display:none;}
+  .pub-shell #tab-bar{display:none;}
+
+  /* Page title in the top bar */
+  .pub-shell #shell-page-title{
+    display:inline-block;
+    font-family:'Playfair Display',serif;font-size:16px;color:var(--cream);
+    white-space:nowrap;
+  }
+}
