@@ -1379,10 +1379,19 @@ window.clearHistChanFilter = function() { histChanFilter = null; renderHist(); }
 
 // ── TABS
 function switchTab(name) {
+  const headerTitles = {
+    dashboard: 'Dashboard', website: 'Website orders', manual: 'Manual entry',
+    consignment: 'Consignment', history: 'History', expenses: 'Expenses',
+    opencall: 'Open Call', reconcile: 'Payments', customers: 'Audience',
+    financials: 'Financials', taxcenter: 'Tax Centre', sheets: 'Sheets',
+    backups: 'Backups', qrcodes: 'QR Codes', myqr: 'My QR Code', pos: 'Event POS'
+  };
   // publisher-only tabs redirect authors to dashboard
   if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
+  const headerTitle = $('header-title');
+  if (headerTitle) headerTitle.textContent = headerTitles[name] || 'Dashboard';
   
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
