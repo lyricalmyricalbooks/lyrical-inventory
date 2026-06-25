@@ -38,8 +38,8 @@ export function computeCashFlowMetrics(sources, yearFilter) {
     const cur = getBookCurrencyCode(b);
     const hRate = fxRateCache[`${cur}_CAD`] || 1;
 
-    // Sales — skip pending-to-artist rows (unless voided, which counts as 0).
-    (s.hist || []).filter((h) => !h.artistPending || h.voided).forEach((h) => {
+    // Sales — skip pending-to-artist rows (unless voided, which counts as 0) and gratuities.
+    (s.hist || []).filter((h) => (!h.artistPending || h.voided) && !h.gratuity).forEach((h) => {
       if (!inYear(h.date, yearFilter)) return;
       const qty = h.qty || 1;
       const unitPrice = h.price ?? h.unitPrice ?? 0;

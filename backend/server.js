@@ -159,9 +159,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Backend listening on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(PORT, () => {
+    console.log(`Backend listening on http://localhost:${PORT}`);
+  });
+}
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);

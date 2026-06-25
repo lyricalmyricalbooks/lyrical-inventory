@@ -66,7 +66,7 @@ describe('deriveOnHand', () => {
 
   it('falls back to stored stock when maxPrint is not a finite baseline', () => {
     const s = state({ stock: 42, hist: [sale(2)] });
-    expect(deriveOnHand(s, {})).toBe(40);
+    expect(deriveOnHand(s, {})).toBe(42);
   });
 });
 

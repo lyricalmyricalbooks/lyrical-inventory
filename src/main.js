@@ -7966,16 +7966,14 @@ function syncLedgerVoid(e, isVoided) {
 // "Sold 6" while the channel still reads 0. Rebuilding from the ledger makes
 // the figure self-healing on every load and after any void/unvoid.
 function reconcileConsignmentChannel(s) {
-  if (!s || !Array.isArray(s.ledger)) return;
+  if (!s || !Array.isArray(s.hist)) return;
 
-  // ⚡ Bolt Optimization: Loop Fusion
-  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
   let txns = 0, units = 0, revenue = 0;
-  for (const e of s.ledger) {
-    if (e.type === 'Sale' && !e.voided) {
+  for (const h of s.hist) {
+    if (h.consignmentLink && !h.voided) {
       txns++;
-      units += (e.qty || 0);
-      revenue += (e.amountDue || 0);
+      units += (h.qty || 0);
+      revenue += (h.qty || 0) * (h.price || 0);
     }
   }
 
@@ -7985,7 +7983,7 @@ function reconcileConsignmentChannel(s) {
   } else if (s.chStats && s.chStats['Consignment']) {
     // No live consignment sales on record — drop a stale all-zero line so it
     // doesn't linger as a confusing "Consignment  0  0  $0.00" row. A non-zero
-    // legacy figure is left alone (there's nothing in the ledger to rebuild it).
+    // legacy figure is left alone.
     const c = s.chStats['Consignment'];
     if (!(c.txns || c.units || c.revenue)) delete s.chStats['Consignment'];
   }
@@ -8115,8 +8113,10 @@ function voidEntry() {
     if (!h.voided) {
       // VOID: reverse effects
       s.stock += h.qty;
-      s.sold = Math.max(0, s.sold - h.qty);
-      s.revenue = Math.max(0, s.revenue - h.qty * h.price);
+      if (!h.gratuity) {
+        s.sold = Math.max(0, s.sold - h.qty);
+        s.revenue = Math.max(0, s.revenue - h.qty * h.price);
+      }
       if (s.chStats[h.chan]) {
         s.chStats[h.chan].txns = Math.max(0, s.chStats[h.chan].txns - 1);
         s.chStats[h.chan].units = Math.max(0, s.chStats[h.chan].units - h.qty);
@@ -8130,8 +8130,10 @@ function voidEntry() {
     } else {
       // UNVOID: re-apply effects
       s.stock = Math.max(0, s.stock - h.qty);
-      s.sold += h.qty;
-      s.revenue += h.qty * h.price;
+      if (!h.gratuity) {
+        s.sold += h.qty;
+        s.revenue += h.qty * h.price;
+      }
       if (!s.chStats[h.chan]) s.chStats[h.chan] = {txns:0,units:0,revenue:0};
       s.chStats[h.chan].txns++;
       s.chStats[h.chan].units += h.qty;
@@ -8515,20 +8517,17 @@ async function confirmRestoreBookDataFromSheets() {
     s.chStats = {};
 
     newHist.forEach(h => {
-      if (h.voided || h.consignmentLink) return;
-      s.sold += (h.qty || 0);
-      s.revenue += (h.qty || 0) * (h.price || 0);
+      if (h.voided) return;
+      
       const chan = h.chan || 'Manual';
       if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
       s.chStats[chan].txns++;
       s.chStats[chan].units += (h.qty || 0);
       s.chStats[chan].revenue += (h.qty || 0) * (h.price || 0);
-    });
 
-    newLedger.forEach(e => {
-      if (e.voided || e.type !== 'Sale') return;
-      s.sold += (e.qty || 0);
-      s.revenue += (e.amountDue || 0);
+      if (h.gratuity) return;
+      s.sold += (h.qty || 0);
+      s.revenue += (h.qty || 0) * (h.price || 0);
     });
 
     // Recalculate store amountOwed

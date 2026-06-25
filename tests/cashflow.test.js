@@ -19,6 +19,7 @@ const states = {
       { id: 's2', date: '2024-11-01', price: 10, qty: 1 },          // 10 CAD (prior year)
       { id: 's3', date: '2025-06-01', price: 15, qty: 1, voided: true }, // voided -> 0
       { id: 's4', date: '2025-07-01', price: 5, qty: 1, artistPending: true }, // skipped
+      { id: 's6', date: '2025-08-01', price: 0, qty: 1, gratuity: true }, // gratuity -> skipped
     ],
     expenses: [
       { id: 'e1', date: '2025-02-01', amount: 8, currency: 'CAD', baseAmount: 8 },

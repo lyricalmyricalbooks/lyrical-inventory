@@ -7,7 +7,10 @@
 // left inventory as a Shipment, so counting them again would double-subtract.
 // (There is no "restock" action in the app, so maxPrint is the only baseline.)
 export function deriveOnHand(s, book) {
-  let stock = (book && Number.isFinite(book.maxPrint)) ? book.maxPrint : ((s && s.stock) || 0);
+  if (!book || !Number.isFinite(book.maxPrint)) {
+    return (s && s.stock) || 0;
+  }
+  let stock = book.maxPrint;
   for (const h of ((s && s.hist) || [])) {
     if (h.voided || h.consignmentLink) continue;
     stock -= (h.qty || 0);
