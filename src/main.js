@@ -116,6 +116,28 @@ async function syncCatalog() {
   await loadCatalog();
   await loadPaymentLinks();
   await loadProductionCosts();
+  if (window.IS_PUBLISHER) {
+    try {
+      await saveCatalogWithDeletions();
+    } catch (_) {}
+  }
+}
+
+function switchBookModalTab(tabName) {
+  const tabs = ['general', 'sales', 'costs'];
+  tabs.forEach(t => {
+    const btn = $('book-modal-tab-' + t);
+    const panel = $('book-panel-' + t);
+    if (btn && panel) {
+      if (t === tabName) {
+        btn.classList.add('active');
+        panel.style.display = '';
+      } else {
+        btn.classList.remove('active');
+        panel.style.display = 'none';
+      }
+    }
+  });
 }
 
 function resetBookForm() {
@@ -137,6 +159,8 @@ function resetBookForm() {
   if ($('nb-pub-grat')) $('nb-pub-grat').value = '0';
   if ($('nb-author-grat')) $('nb-author-grat').value = '0';
   $('nb-paylink').value = '';
+  if ($('nb-payment-link')) $('nb-payment-link').value = 'https://paypal.me/lyricalmyricalbooks';
+  switchBookModalTab('general');
 }
 
 function openAddBookModal() {
@@ -165,6 +189,8 @@ function openEditBookModal(id) {
   if ($('nb-pub-grat')) $('nb-pub-grat').value = book.pubGratuity ?? 0;
   if ($('nb-author-grat')) $('nb-author-grat').value = book.authorGratuity ?? 0;
   $('nb-paylink').value = book.stripeLink || '';
+  if ($('nb-payment-link')) $('nb-payment-link').value = book.paymentLink || 'https://paypal.me/lyricalmyricalbooks';
+  switchBookModalTab('general');
   openM('add-book');
 }
 
@@ -196,7 +222,7 @@ async function saveBookFromModal() {
     productionCost: parseFloat($('nb-prod').value) || 0,
     pubGratuity: parseInt($('nb-pub-grat')?.value) || 0,
     authorGratuity: parseInt($('nb-author-grat')?.value) || 0,
-    paymentLink: currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
+    paymentLink: $('nb-payment-link') ? $('nb-payment-link').value.trim() || 'https://paypal.me/lyricalmyricalbooks' : currentBook.paymentLink || 'https://paypal.me/lyricalmyricalbooks',
     stripeLink: $('nb-paylink').value.trim() || currentBook.stripeLink || '',
     accent: $('nb-accent').value,
     accentBg: hexToRgba($('nb-accent').value, 0.1),
@@ -204,6 +230,19 @@ async function saveBookFromModal() {
     authorEmail: ($('nb-pw').value || '').toLowerCase().trim() || currentBook.authorEmail || '',
     profitTiers: currentBook.profitTiers || []
   };
+  
+  // Keep the first break-even tier aligned when it still represents production-cost recovery.
+  const previousCost = currentBook.productionCost || 0;
+  const val = book.productionCost;
+  if (Array.isArray(book.profitTiers) && book.profitTiers.length > 0) {
+    const firstTier = book.profitTiers[0];
+    const tierLabel = (firstTier?.label || '').toLowerCase();
+    const shouldSyncThreshold =
+      firstTier?.revenueUpTo !== null &&
+      (Math.abs((firstTier.revenueUpTo || 0) - previousCost) < 0.0001 || tierLabel.includes('break-even'));
+
+    if (shouldSyncThreshold) firstTier.revenueUpTo = val;
+  }
   
   if (editingBookId && editingBookId !== id) {
     delete BOOKS[editingBookId];
@@ -220,6 +259,19 @@ async function saveBookFromModal() {
     const i = deletedDefaultIds.indexOf(id);
     if (i !== -1) deletedDefaultIds.splice(i, 1);
   }
+  
+  // Compile and sync productionCosts & paymentLinks to Firebase/localStorage for backward compatibility
+  const prodCosts = {};
+  const payLinks = {};
+  BOOK_LIST.forEach(b => {
+    prodCosts[b.id] = b.productionCost || 0;
+    payLinks[b.id] = b.paymentLink || '';
+  });
+  try { await window._fbSaveSettings('productionCosts', prodCosts); } catch (_) {}
+  localStorage.setItem('lm-production-costs', JSON.stringify(prodCosts));
+  try { await window._fbSaveSettings('paymentLinks', payLinks); } catch (_) {}
+  localStorage.setItem('lm-payment-links', JSON.stringify(payLinks));
+
   await saveCatalogWithDeletions();
   showToast(editingBookId ? '✓ Book updated' : '✓ Book added to catalog');
   closeAddBookModal();
@@ -294,6 +346,7 @@ window.openAddBookModal = openAddBookModal;
 window.openEditBookModal = openEditBookModal;
 window.closeAddBookModal = closeAddBookModal;
 window.deleteBook = deleteBook;
+window.switchBookModalTab = switchBookModalTab;
 
 // ── PAYMENT QR GENERATOR (publisher only)
 let currentQR = null;
@@ -1430,7 +1483,7 @@ function switchTab(name) {
   if(name==='customers') renderCustomers();
   if(name==='financials') renderFinancials();
   if(name==='taxcenter') renderTaxCenter();
-  if(name==='sheets'){ loadGasCode(); renderSheetsLog(); renderPaymentLinkFields(); renderProductionCostFields(); renderProfitSettings(); }
+  if(name==='sheets'){ loadGasCode(); renderSheetsLog(); renderProfitSettings(); }
   if(name==='qrcodes') renderAllQRCodes();
   if(name==='myqr') renderAuthorQRPage();
   if(name==='pos') { renderPOS(); renderPOSFxStatus(); }

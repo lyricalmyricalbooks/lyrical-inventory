@@ -1548,18 +1548,7 @@
     <span class="sheets-badge off" id="sheets-badge2">Not connected</span>
   </div>
 
-  <!-- BOOK SETTINGS: production costs (publisher only) -->
-  <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
-      <div>
-        <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Break-even targets</div>
-        <div style="font-size:12px;color:var(--text3);line-height:1.6;">Set the total production cost for each book. The break-even tracker will appear on each book's dashboard (publisher view only).</div>
-      </div>
-    </div>
-    <div id="production-cost-fields" style="display:flex;flex-direction:column;gap:12px;"></div>
-    <button class="btn gold" style="margin-top:14px;" onclick="saveProductionCosts()">Save targets</button>
-  </div>
-
+  <!-- Dynamic Profit Sharing Settings Card -->
   <!-- PROFIT SHARING SETTINGS (publisher only) -->
   <div class="card" id="profit-sharing-settings-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line); display:none;">
     <div style="margin-bottom:1.1rem;">
@@ -1588,19 +1577,7 @@
        <button class="btn sm" onclick="addProfitTier()">+ Add Tier</button>
        <button class="btn gold" onclick="saveProfitTiers()">Save Profit Tiers</button>
        <span id="ps-save-indicator" class="save-indicator">Syncing...</span>
-    </div>
-  </div>
-
-  <!-- PAYMENT LINK SETTINGS -->
-  <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
-      <div>
-        <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Artist payment links</div>
-        <div style="font-size:12px;color:var(--text3);line-height:1.6;">When an artist owes the publisher money, this link appears in their dashboard so they can pay directly. Use a PayPal.me, Interac e-transfer email, Stripe, or any payment URL.</div>
-      </div>
-    </div>
-    <div id="payment-link-fields" style="display:flex;flex-direction:column;gap:12px;"></div>
-    <button class="btn gold" style="margin-top:14px;" onclick="savePaymentLinks()">Save payment links</button>
+     </div>
   </div>
 
   <!-- BOOK CATALOG SETTINGS -->
@@ -2157,43 +2134,71 @@
 </div>
 
 <!-- ADD BOOK MODAL -->
-<div class="overlay" id="m-add-book" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
+<div class="overlay" id="m-add-book" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:550px;">
   <div class="modal-title" role="dialog" aria-modal="true" id="add-book-modal-title">Add new book</div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="nb-id">Book ID (URL safe) *</label><input id="nb-id" placeholder="e.g. photobook-2026"></div><div class="form-group"><label for="nb-title">Title *</label><input id="nb-title" placeholder="e.g. My Awesome Book"></div></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="nb-author">Author</label><input id="nb-author" placeholder="Author name"></div><div class="form-group"><label for="nb-isbn">ISBN</label><input id="nb-isbn" placeholder="—"></div></div>
-  <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label for="nb-max">Print Run</label><input id="nb-max" type="number" inputmode="numeric" value="100"></div>
-    <div class="form-group"><label for="nb-price">List Price</label><input id="nb-price" type="number" inputmode="numeric" value="40"></div>
+  
+  <!-- Sub-Tabs for Book Modal -->
+  <div class="modal-tabs" role="dialog" aria-modal="true" style="display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;gap:8px;">
+    <button type="button" class="modal-tab-btn active" id="book-modal-tab-general" onclick="switchBookModalTab('general')">Metadata</button>
+    <button type="button" class="modal-tab-btn" id="book-modal-tab-sales" onclick="switchBookModalTab('sales')">Sales & Pricing</button>
+    <button type="button" class="modal-tab-btn" id="book-modal-tab-costs" onclick="switchBookModalTab('costs')">Costs & Payouts</button>
   </div>
-  <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group">
-      <label for="nb-cur">Currency</label>
-      <select id="nb-cur">
-        <option value="€">Euro (€)</option>
-        <option value="CA$">Canadian Dollar (CA$)</option>
-      </select>
+
+  <!-- Panel 1: Metadata -->
+  <div id="book-panel-general">
+    <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="nb-id">Book ID (URL safe) *</label><input id="nb-id" placeholder="e.g. photobook-2026"></div><div class="form-group"><label for="nb-title">Title *</label><input id="nb-title" placeholder="e.g. My Awesome Book"></div></div>
+    <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="nb-author">Author</label><input id="nb-author" placeholder="Author name"></div><div class="form-group"><label for="nb-isbn">ISBN</label><input id="nb-isbn" placeholder="—"></div></div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="nb-accent">Accent Color</label><input id="nb-accent" type="color" value="#c8913a"></div>
+      <div class="form-group"><label for="nb-thresh">Low Stock Threshold</label><input id="nb-thresh" type="number" inputmode="numeric" value="10"></div>
     </div>
-    <div class="form-group"><label for="nb-thresh">Low Stock Threshold</label><input id="nb-thresh" type="number" inputmode="numeric" value="10"></div>
+    <div class="form-group" style="margin-bottom:12px;"><label for="nb-pw">Author Google Email</label><input type="email" id="nb-pw" placeholder="Used for author sign-in access"></div>
   </div>
-  <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label for="nb-accent">Accent Color</label><input id="nb-accent" type="color" value="#c8913a"></div>
-    <div class="form-group"><label for="nb-pw">Author Google Email</label><input type="email" id="nb-pw" placeholder="Used for author sign-in access"></div>
-  </div>
-  <div class="form-group"><label for="nb-prod">Initial Production Cost</label><input id="nb-prod" type="number" inputmode="numeric" value="0"></div>
-  <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label for="nb-pub-grat">Publisher gratuity copies</label><input id="nb-pub-grat" type="number" inputmode="numeric" min="0" value="0"></div>
-    <div class="form-group"><label for="nb-author-grat">Author gratuity copies</label><input id="nb-author-grat" type="number" inputmode="numeric" min="0" value="0"></div>
-  </div>
-  <div class="form-group" style="margin-top:4px;">
-    <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for QR codes)</span></label>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;">
-      <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
+
+  <!-- Panel 2: Sales & Pricing -->
+  <div id="book-panel-sales" style="display:none;">
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="nb-cur">Currency</label>
+        <select id="nb-cur">
+          <option value="€">Euro (€)</option>
+          <option value="CA$">Canadian Dollar (CA$)</option>
+        </select>
+      </div>
+      <div class="form-group"><label for="nb-max">Print Run</label><input id="nb-max" type="number" inputmode="numeric" value="100"></div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
-      Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a>, or click <strong>Generate SKU link</strong> to create one tagged with this book's SKU — so direct sales auto-match in the Payments tab. The QR code points to this link.
+    <div class="form-group" style="margin-bottom:12px;"><label for="nb-price">List Price</label><input id="nb-price" type="number" inputmode="numeric" value="40"></div>
+    <div class="form-group" style="margin-top:4px;">
+      <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for QR codes)</span></label>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;">
+        <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+        Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a>, or click <strong>Generate SKU link</strong> to create one tagged with this book's SKU.
+      </div>
     </div>
   </div>
+
+  <!-- Panel 3: Costs & Payouts -->
+  <div id="book-panel-costs" style="display:none;">
+    <div class="form-group" style="margin-bottom:12px;">
+      <label for="nb-prod">Initial Production Cost (Break-even target)</label>
+      <input id="nb-prod" type="number" inputmode="numeric" value="0">
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label for="nb-payment-link">Publisher Payment Link (For Artist Dues)</label>
+      <input type="url" id="nb-payment-link" placeholder="https://paypal.me/… or email@interac.ca">
+      <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
+        When the artist owes the publisher money (e.g. negative balance), this link appears in their dashboard so they can settle up directly.
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="nb-pub-grat">Publisher gratuity copies</label><input id="nb-pub-grat" type="number" inputmode="numeric" min="0" value="0"></div>
+      <div class="form-group"><label for="nb-author-grat">Author gratuity copies</label><input id="nb-author-grat" type="number" inputmode="numeric" min="0" value="0"></div>
+    </div>
+  </div>
+
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
 </div></div>
 
