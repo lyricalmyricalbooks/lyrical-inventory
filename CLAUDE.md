@@ -1,50 +1,85 @@
 # CLAUDE.md — lyrical-inventory
 
 ## Your job after every change
-After completing any code enhancement, end your turn with a short
-"Next moves" list: 5 genuinely high-value suggestions for improving the
-app, ranked best-first.
+After completing any code enhancement, end your turn with a short "Next moves" list: 5 genuinely high-value suggestions for improving the app, ranked best-first.
 Each suggestion is one or two lines:
-
-- **What** — a concrete, specific action (not "add tests" — say which test and why).
-- **Why** — the payoff: a sale not lost, a faster screen, a bug avoided.
+- **What** — a concrete, specific action (e.g. "Debounce the catalog search box" instead of "improve performance").
+- **Why** — the payoff (e.g. a sale not lost, a faster screen, a bug avoided).
 - **Effort** — quick / medium / larger.
 
 Then offer to do the top one right away.
 
 ### What makes a suggestion good here
-- Tied to what just changed. First ask yourself: did this edit open an edge case,
-  threaten offline sync, or leave an obvious next step? Lead with that.
+- Tied to what just changed. First ask yourself: did this edit open an edge case, threaten offline sync, or leave an obvious next step? Lead with that.
 - High-leverage, not generic. Skip boilerplate best-practice filler.
-- Specific. Name the file, function, or screen. "Debounce the catalog search box"
-  beats "improve performance."
+- Specific. Name the file, function, or screen.
 - Honest. If nothing is genuinely worth doing, say "nothing pressing" and stop.
-  Never pad the list to hit a number.
 - No repeats. Don't re-pitch anything already declined this session.
 
 ### Constraints every suggestion must respect
-(Kept short so suggestions stay usable — never propose breaking these.)
-
-- Vanilla JS — no framework, no build step, no bundler.
-- Firebase Firestore backend; static hosting on GitHub Pages — no server, no secret
-  keys in client code.
-- PWA; offline POS must keep working and sync later.
+> [!IMPORTANT]
+> - **Vanilla JS:** No framework, no build step, no bundler.
+> - **Serverless Backend:** Firebase Firestore database and static hosting on GitHub Pages. No server or secret keys in client code.
+> - **Offline Resilience:** Must work fully offline (PWA) and synchronize local queue states later.
 
 ### Angles worth scanning each time
-Bug / edge case the change introduced · the next logical feature · offline & sync
-robustness · Firestore data integrity · the speed of a slow screen · keeping catalog
-and ledger consistent.
+Bug / edge case the change introduced · the next logical feature · offline & sync robustness · Firestore data integrity · the speed of a slow screen · keeping catalog and ledger consistent.
 
 ## Pull Requests
-- When asked for "a new pull request", "new PR", or similar: **create it immediately** from the current branch
-- Do NOT investigate merge status, git history, or ask clarifying questions
-- Action: Push branch with `git push -u origin <branch>` then create PR via GitHub MCP
-- Use a descriptive PR title based on the feature/fix being implemented
-- **After a PR is merged, start the next change on a brand-new branch and open a new PR** — never push more commits onto a merged PR's branch to revive or extend it. One merged PR = done; the next piece of work gets its own branch and its own PR.
+- When asked for "a new pull request", "new PR", or similar: **create it immediately** from the current branch.
+- Do NOT investigate merge status, git history, or ask clarifying questions.
+- Action: Push branch with `git push -u origin <branch>` then create PR via GitHub MCP.
+- Use a descriptive PR title based on the feature/fix being implemented.
+- **After a PR is merged, start the next change on a brand-new branch and open a new PR** — never push commits onto a merged branch to revive it.
 
 ## General Principles
-- Prefer action over investigation when intent is clear
-- If the user asks for something, assume they know what they want
-- Only ask clarifying questions if the request is genuinely ambiguous
-- **Always update the externalized Apps Script copy** whenever `apps-script/Code.gs` is modified: copy it **verbatim** (no HTML-escaping) to `public/gas-code.txt`. The "Connect your Google Sheet" tab (`index.html`'s `<pre id="gas-code">`) lazy-fetches this file via `loadGasCode()` in `src/main.js` the first time the tab opens and assigns it with `textContent`, so no escaping is needed. The Vite `syncAppsScriptPlugin` also regenerates `public/gas-code.txt` from `Code.gs` on every build/dev change, but commit the updated copy so static deploys stay in sync. Do **not** re-embed the source inline in `index.html` — that block was removed to keep ~50 KB off every page load.
+- Prefer action over investigation when intent is clear.
+- If the user asks for something, assume they know what they want.
+- Only ask clarifying questions if the request is genuinely ambiguous.
 
+> [!WARNING]
+> **Always update the externalized Apps Script copy** whenever [Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs) is modified: copy it **verbatim** (no HTML-escaping) to [gas-code.txt](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/public/gas-code.txt). The "Connect your Google Sheet" tab in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html) lazy-fetches this file via `loadGasCode()` in [main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js) the first time the tab opens. Do **not** re-embed the source inline in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html).
+
+## App Overview & Architecture
+
+Lyrical Inventory is a Progressive Web App (PWA) designed for Lyricalmyrical Books to manage book catalogs, sales inventory, consignment partners, invoices, expenses, and event checkouts (POS).
+
+### Architecture & Data Flow Diagram
+
+```mermaid
+graph TD
+    subgraph Client ["Client Browser (PWA)"]
+        UI["UI Panel (index.html)"]
+        JS["App Logic (main.js)"]
+        IDB[("IndexedDB (Handles)")]
+        LS[("LocalStorage (Config)")]
+    end
+
+    subgraph Cloud ["Cloud Database & Sync"]
+        FS[("Firestore Database")]
+        GS[("Google Sheets")]
+        Script["Apps Script Webhook (Code.gs)"]
+    end
+
+    UI <--> JS
+    JS <--> IDB
+    JS <--> LS
+    JS <-->|Firebase SDK| FS
+    JS -->|HTTP Webhook| Script
+    Script <--> GS
+```
+
+### Key Modules & Capabilities
+
+| Module | Purpose | Key Details |
+| :--- | :--- | :--- |
+| **Catalog & Stock** | Book inventory management | Tracks list price, native currency, print runs, and stock statuses (`on-hand`, `consigned`, `sold`, etc.) |
+| **Consignment** | Store partnership ledger | Handles store commissions, shipments, returns, sales, invoice drafts, and artist payout settlements |
+| **POS Checkout** | Live book fairs & checkouts | Event-ready checkout panel supporting multi-currency totals, FX rate conversion, and Stripe QR codes |
+| **Order History** | Timeline & stock auditing | Filterable, paginated transaction lists matching direct sales against ledger records |
+| **Tax & Expenses** | Cash flow & operations | Tracks operating costs, business trips, subscription schedules, and receipt OCR scans via Gemini API |
+
+### Technical Stack
+- **Frontend:** Vanilla HTML5 ([index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html)), CSS3 ([style.css](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/style.css)), and Vanilla JS ES Modules ([main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js)).
+- **Backend:** Google Firebase (Firestore and Auth).
+- **Integrations:** Google Sheets Webhook via Apps Script, Shippo API, and Stripe API.
