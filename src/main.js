@@ -2,11 +2,9 @@ import './style.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import {
-  CURRENCY_SYMBOL_TO_CODE,
   getSym,
   normalizeCurrencyCode,
   fmt,
-  fmtNum,
   fmtD,
   getBookCurrencyCode,
   paymentSummary,
@@ -23,7 +21,7 @@ import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirect
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
 
-const updateSW = registerSW({ onNeedRefresh() {} });
+const _updateSW = registerSW({ onNeedRefresh() {} });
 
 // ═══════════════════════════════════════════════════════
 //  BOOK CATALOGUE
@@ -393,7 +391,7 @@ window.deleteBook = deleteBook;
 window.switchBookModalTab = switchBookModalTab;
 
 // ── PAYMENT QR GENERATOR (publisher only)
-let currentQR = null;
+let _currentQR = null;
 
 function openPaymentQRModal() {
   if (!activeBook || activeBook === 'all' || isAuthor()) return;
@@ -407,7 +405,7 @@ function openPaymentQRModal() {
   canvasContainer.innerHTML = '';
   
   if (typeof QRCode !== 'undefined') {
-    currentQR = new QRCode(canvasContainer, {
+    _currentQR = new QRCode(canvasContainer, {
       text: url,
       width: 256,
       height: 256,
@@ -598,7 +596,7 @@ window.downloadAuthorQR = function() {
 //    (no param)             → publisher gate, sees all books
 // ═══════════════════════════════════════════════════════
 const urlParams = new URLSearchParams(location.search);
-const URL_BOOK = urlParams.get('book');    // e.g. 'hound'
+const _URL_BOOK = urlParams.get('book');    // e.g. 'hound'
 let IS_AUTHOR_MODE = false;
 let ACTIVE_BOOK_FORCED = null;
 let AUTHOR_VIEW_BY_BOOK = {};
@@ -1111,7 +1109,7 @@ async function saveTaxCenter() {
 function processRecurringExpenses() {
   if (isAuthor() || !TAX_CENTER.recurring || TAX_CENTER.recurring.length === 0) return;
   const now = new Date();
-  const currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const _currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   
   let modified = false;
   TAX_CENTER.recurring.forEach(sub => {
@@ -1651,9 +1649,9 @@ function updateAllOverview() {
   list.innerHTML = BOOK_LIST.map(book => {
     const s = states[book.id] || defaultState(book);
     // ⚡ Bolt Optimization: Calculate consigned and owed in a single loop
-    let consigned = 0, owed = 0;
+    let _consigned = 0, owed = 0;
     for (let i = 0; i < s.stores.length; i++) {
-      consigned += s.stores[i].outstanding || 0;
+      _consigned += s.stores[i].outstanding || 0;
       owed += s.stores[i].amountOwed || 0;
     }
     const pct = Math.max(0, s.stock / book.maxPrint * 100);
@@ -3131,7 +3129,7 @@ function getAllAppliedIds() {
 }
 
 function renderOrders() {
-  const s = getState(), book = getBook(), cur = book.currency;
+  const book = getBook(), cur = book.currency;
   const list = $('orders-list');
   // Filter to current book; show all if bookId not set
   const rel = orders.filter(o => o.hasBook && (!o.bookId || o.bookId === activeBook));
@@ -3195,7 +3193,6 @@ function renderOrders() {
 }
 
 function applyOne(id, { deferRender = false } = {}) {
-  const s = getState(), book = getBook();
   const o = orders.find(x => x.id === id);
   if (!o) return;
   const _checkedIds = getAllAppliedIds();
@@ -3691,7 +3688,7 @@ function calcExpenseFx() {
   resultSpan.textContent = `≈ ${fmt(converted, book.currency)}`;
   resultSpan.style.color = 'var(--gold)';
 }
-function toggleShippingPanel(){}  // no-op, kept for safety
+function _toggleShippingPanel(){}  // no-op, kept for safety
 
 let _labelOrderIndex = null;
 
@@ -3745,7 +3742,6 @@ function toggleShipped() {
 
 function printShippingLabel() {
   const h = getState().hist[_labelOrderIndex];
-  const book = getBook();
 
   // Save address to history entry so it's remembered next time
   h.shipName     = $('sl-name').value.trim();
@@ -4963,7 +4959,7 @@ Rules:
       parsed = m ? JSON.parse(m[0]) : { receipts: [] };
     }
 
-    const fallbackCat = $('email-receipt-default-cat')?.value || 'Other';
+    const _fallbackCat = $('email-receipt-default-cat')?.value || 'Other';
     const checkedCbs = _activeEmailImportTab === 'gmail' ? Array.from(document.querySelectorAll('.gmail-email-cb:checked')) : [];
     const drafts = (parsed.receipts || []).map(r => {
       const msgId = String(r.emailId || '').trim() || (checkedCbs.length === 1 ? checkedCbs[0].getAttribute('data-msg-id') : '');
@@ -5533,7 +5529,7 @@ function updateManualForm() {
   if (gExpWrap) gExpWrap.style.display = isAuthor() ? 'none' : 'flex';
 
   phint();
-  if (typeof updateGratuitySourceHint === 'function') updateGratuitySourceHint();
+  if (typeof window.updateGratuitySourceHint === 'function') window.updateGratuitySourceHint();
 }
 
 function phint(){
@@ -6116,7 +6112,7 @@ async function submitGratuity(ev){
       $('g-expense-cb').checked=false;
       window.toggleGratuityExpense();
     }
-    if (typeof updateGratuitySourceHint==='function') updateGratuitySourceHint();
+    if (typeof window.updateGratuitySourceHint==='function') window.updateGratuitySourceHint();
     showToast('✓ Gratuity logged' + (expenseIt && expVal > 0 ? ' and expensed' : ''));
   });
 }
@@ -7762,7 +7758,7 @@ function openEditHist(idx) {
       settleZone.style.display = 'none';
     }
   }
-  const voidZone = $('edit-void-zone');
+  const _voidZone = $('edit-void-zone');
   if (h.voided) {
     $('edit-void-btn').textContent = 'Unvoid this entry';
     $('edit-void-body').textContent = 'This entry is currently voided. Unvoiding will re-apply its stock and revenue effects.';
@@ -10617,7 +10613,7 @@ function exportAllToCSV() {
 }
 
 // ── PAYMENT LINKS
-function renderProductionCostFields(){
+function _renderProductionCostFields(){
   const container=$('production-cost-fields');
   if(!container)return;
   container.innerHTML=BOOK_LIST.map(book=>`
@@ -10682,7 +10678,7 @@ async function loadProductionCosts(){
   }catch(_){}
 }
 
-function renderPaymentLinkFields(){
+function _renderPaymentLinkFields(){
   const container=$('payment-link-fields');
   if(!container)return;
   container.innerHTML=BOOK_LIST.map(book=>`
@@ -11959,7 +11955,6 @@ function renderTaxCenter() {
 
         let descCell = item.desc || '';
         if (item.sourceType === 'businessExpense') {
-          const tripText = (item.trip || '').replace(/"/g,'&quot;');
           const tripPill = item.trip
             ? `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Edit trip">✈ ${item.trip}</span>`
             : `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;color:var(--text3);border:1px dashed var(--border);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Assign to a trip">+ trip</span>`;
@@ -12247,24 +12242,24 @@ async function removeLedgerEntry(type, bid, id) {
   if (!(await confirmDialog('Are you sure you want to permanently delete this entry from the ledger?', { okLabel: 'Delete entry', danger: true }))) return;
   
   if (type === 'businessExpense') {
-    TAX_CENTER.businessExpenses = (TAX_CENTER.businessExpenses || []).filter(e => e.id != id);
+    TAX_CENTER.businessExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e.id) !== String(id));
     saveTaxCenter(); 
   } else if (type === 'bookExpense') {
     const s = states[bid];
     if (s && s.expenses) {
-      s.expenses = s.expenses.filter(e => e.id != id);
+      s.expenses = s.expenses.filter(e => String(e.id) !== String(id));
       saveState(bid);
     }
   } else if (type === 'artistPayout') {
     const s = states[bid];
     if (s && s.artistTransfers) {
-      s.artistTransfers = s.artistTransfers.filter(t => t.id != id);
+      s.artistTransfers = s.artistTransfers.filter(t => String(t.id) !== String(id));
       saveState(bid);
     }
   } else if (type === 'sale') {
       const s = states[bid];
       if (s && s.hist) {
-          s.hist = s.hist.filter(h => h.id != id);
+          s.hist = s.hist.filter(h => String(h.id) !== String(id));
           saveState(bid);
       }
   }
@@ -13591,7 +13586,7 @@ window.posConfirmSale = async function() {
   posCart = {};
   posPriceOverrides = {};
   renderPOS();
-  if (typeof renderAllOverview === 'function') renderAllOverview();
+  if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
   updateHeader();
   showToast('✓ Sale complete', 'ok');
 };
@@ -16191,7 +16186,7 @@ Object.assign(window, {
   submitExpense, voidExpense, markPaid, removeStore, addProfitTier, removeProfitTier, 
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
-  chooseBackupFolder, exportToJSON, exportAllToCSV, downloadFullTaxSeasonExport,
+  chooseBackupFolder, exportToJSON, exportAllToCSV,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcYearChange, tcClearLedgerFilters,
@@ -16212,7 +16207,6 @@ Object.assign(window, {
 });
 
 // ── STARTUP ROUTING
-let authStateHandled = false;
 async function initStartup() {
   // Master Publisher Email
   const publisherEmail = 'lyricalmyrical@gmail.com'; 
