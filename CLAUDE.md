@@ -2,7 +2,7 @@
 
 ## Your job after every change
 After completing any code enhancement, end your turn with a short
-"Next moves" list: 2–4 genuinely high-value suggestions for improving the
+"Next moves" list: 5 genuinely high-value suggestions for improving the
 app, ranked best-first.
 Each suggestion is one or two lines:
 
