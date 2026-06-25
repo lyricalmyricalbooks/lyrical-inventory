@@ -26,10 +26,11 @@ export function deriveOnHand(s, book) {
 // explain (e.g. maxPrint was edited after sales began).
 export function inventoryBreakdown(s, book) {
   const printed = (book && Number.isFinite(book.maxPrint)) ? book.maxPrint : ((s && s.stock) || 0);
-  let directSold = 0, consignSold = 0;
+  let directSold = 0, consignSold = 0, gratuities = 0;
   for (const h of ((s && s.hist) || [])) {
     if (h.voided) continue;
-    if (h.consignmentLink) consignSold += (h.qty || 0); // sold through a store
+    if (h.gratuity) gratuities += (h.qty || 0);
+    else if (h.consignmentLink) consignSold += (h.qty || 0); // sold through a store
     else directSold += (h.qty || 0);                    // website / manual / etc.
   }
   let shipped = 0, restocked = 0, writtenOff = 0;
@@ -43,8 +44,8 @@ export function inventoryBreakdown(s, book) {
   }
   const onConsignment = Math.max(0, shipped - consignSold - restocked - writtenOff);
   const onHand = deriveOnHand(s, book);
-  const accounted = onHand + directSold + consignSold + onConsignment + writtenOff;
-  return { printed, onHand, directSold, consignSold, onConsignment, writtenOff, unaccounted: printed - accounted };
+  const accounted = onHand + directSold + consignSold + gratuities + onConsignment + writtenOff;
+  return { printed, onHand, directSold, consignSold, gratuities, onConsignment, writtenOff, unaccounted: printed - accounted };
 }
 
 // Stock change a single timeline row applies to on-hand. Negative = books left

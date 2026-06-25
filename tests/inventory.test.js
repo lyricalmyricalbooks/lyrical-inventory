@@ -144,11 +144,29 @@ describe('inventoryBreakdown', () => {
       onHand: 69,        // 100 − 15 direct − 20 shipped + 4 restocked
       directSold: 15,
       consignSold: 6,
+      gratuities: 0,
       onConsignment: 8,  // 20 shipped − 6 sold at store − 4 restocked − 2 written off
       writtenOff: 2,
-      unaccounted: 0,    // 69 + 15 + 6 + 8 + 2 = 100
+      unaccounted: 0,    // 69 + 15 + 6 + 0 + 8 + 2 = 100
     });
     expect(bd.onHand).toBe(deriveOnHand(s, book(100)));
+  });
+
+  it('accounts for gratuities separately from direct sales', () => {
+    const s = state({
+      hist: [sale(10), sale(3, { gratuity: true })],
+    });
+    const bd = inventoryBreakdown(s, book(100));
+    expect(bd).toEqual({
+      printed: 100,
+      onHand: 87,
+      directSold: 10,
+      consignSold: 0,
+      gratuities: 3,
+      onConsignment: 0,
+      writtenOff: 0,
+      unaccounted: 0,
+    });
   });
 
   it('flags an unaccounted gap when the baseline cannot explain the records', () => {
@@ -156,6 +174,7 @@ describe('inventoryBreakdown', () => {
     const bd = inventoryBreakdown(s, book(10)); // can't sell 15 of 10 printed
     expect(bd.onHand).toBe(0);          // clamped
     expect(bd.directSold).toBe(15);
+    expect(bd.gratuities).toBe(0);
     expect(bd.unaccounted).toBe(-5);    // surfaced rather than hidden
   });
 });

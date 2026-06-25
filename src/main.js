@@ -3034,6 +3034,7 @@ function renderHist() {
       const parts = [`${bd.onHand} on hand`];
       if (bd.directSold) parts.push(`${bd.directSold} direct sales`);
       if (bd.consignSold) parts.push(`${bd.consignSold} sold at stores`);
+      if (bd.gratuities) parts.push(`${bd.gratuities} gratuities`);
       if (bd.onConsignment) parts.push(`${bd.onConsignment} on consignment`);
       if (bd.writtenOff) parts.push(`${bd.writtenOff} written off`);
       const warn = bd.unaccounted
