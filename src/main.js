@@ -9749,14 +9749,30 @@ function checkDailyBackup() {
 }
 
 function buildBackupPayload() {
+  // Every field added here MUST be restored in applyBackupData(). A snapshot is
+  // only "full" if it carries every piece of durable business data the app
+  // persists — not just the catalog and per-book states. v2.6 added POS-only
+  // books, the mailing/unsubscribe lists, invoice settings, and integration
+  // config. (Receipt image blobs live in Firebase Storage, referenced by URL
+  // inside states/TAX_CENTER — they cannot be inlined into a JSON snapshot.)
   return {
-    version: '2.5',
+    version: '2.6',
     timestamp: new Date().toISOString(),
     BOOKS: BOOKS,
+    posExtra: posExtraBooks,                          // POS-only books + their sold/revenue tally (not in BOOKS)
     states: states,
     TAX_CENTER: TAX_CENTER,
     productionCosts: JSON.parse(localStorage.getItem('lm-production-costs') || '{}'),
-    paymentLinks: JSON.parse(localStorage.getItem('lm-payment-links') || '{}')
+    paymentLinks: JSON.parse(localStorage.getItem('lm-payment-links') || '{}'),
+    mailingList: MAILING_LIST,                         // curated subscriber list
+    customerSuppress: Array.from(_customerSuppress),   // unsubscribe / opt-out emails (compliance)
+    invoiceSettings: getInvoiceSettings(),             // invoice template, bank details, Stripe key
+    integrations: {                                    // Sheets / notify endpoint (localStorage-only config)
+      notifyUrl: localStorage.getItem('lm-notify-url') || '',
+      sheetsUrl: localStorage.getItem('lm-sheets-url') || '',
+      sheetsSpreadsheetUrl: localStorage.getItem('lm-sheets-spreadsheet-url') || '',
+      sheetsSecret: localStorage.getItem('lm-sheets-secret') || ''
+    }
   };
 }
 
@@ -9935,6 +9951,15 @@ async function createSystemBackupNow() {
 }
 
 async function applyBackupData(data) {
+  // 0. POS-only books — restore BEFORE the catalog save below, because
+  //    saveCatalogWithDeletions() serializes posExtraBooks into the catalog doc
+  //    under _posExtra. Guarded: restoring an older (pre-2.6) snapshot that
+  //    never carried POS books leaves the current ones untouched rather than
+  //    silently wiping real sales data.
+  if (data.posExtra && typeof data.posExtra === 'object') {
+    posExtraBooks = data.posExtra;
+  }
+
   // 1. Restore Catalog
   BOOKS = data.BOOKS;
   BOOK_LIST = Object.values(BOOKS);
@@ -9962,6 +9987,40 @@ async function applyBackupData(data) {
   if (data.paymentLinks) {
     await window._fbSaveSettings('paymentLinks', data.paymentLinks);
     localStorage.setItem('lm-payment-links', JSON.stringify(data.paymentLinks));
+  }
+
+  // 5. Customer/marketing data (v2.6+). Each is guarded so older snapshots
+  //    restore cleanly. Reuse the feature's own persist helpers so both the
+  //    Firestore doc and the localStorage mirror are written in their expected
+  //    shapes. The caller reloads right after, re-hydrating in-memory state.
+  if (data.mailingList && typeof data.mailingList === 'object') {
+    MAILING_LIST = {
+      subs: (data.mailingList.subs && typeof data.mailingList.subs === 'object') ? data.mailingList.subs : {},
+      autoAdd: !!data.mailingList.autoAdd
+    };
+    await _persistMailingList();
+  }
+  // Accept both the v2.6 array shape and the {emails:[...]} settings shape.
+  const supp = Array.isArray(data.customerSuppress)
+    ? data.customerSuppress
+    : (data.customerSuppress && Array.isArray(data.customerSuppress.emails) ? data.customerSuppress.emails : null);
+  if (supp) {
+    _customerSuppress = new Set(supp.map(_custEmailKey));
+    await _persistCustomerSuppression();
+  }
+
+  // 6. Invoice template + integration config (v2.6+).
+  if (data.invoiceSettings && typeof data.invoiceSettings === 'object') {
+    saveInvoiceSettingsObj(data.invoiceSettings);
+  }
+  if (data.integrations && typeof data.integrations === 'object') {
+    const ig = data.integrations;
+    const setOrClear = (key, val) => { if (val) localStorage.setItem(key, val); else localStorage.removeItem(key); };
+    setOrClear('lm-notify-url', ig.notifyUrl);
+    setOrClear('lm-sheets-url', ig.sheetsUrl);
+    setOrClear('lm-sheets-spreadsheet-url', ig.sheetsSpreadsheetUrl);
+    setOrClear('lm-sheets-secret', ig.sheetsSecret);
+    try { await window._fbSaveSettings('notifyEndpoint', { url: ig.notifyUrl || '' }); } catch (_) {}
   }
 }
 
