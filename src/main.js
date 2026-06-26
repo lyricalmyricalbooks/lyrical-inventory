@@ -2829,7 +2829,10 @@ function renderOpenCall() {
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
         <input id="oc-name" placeholder="Artist name" style="flex:1;min-width:140px;">
-        <input id="oc-email" placeholder="Email" type="email" style="flex:1;min-width:160px;">
+        <div style="flex:1;min-width:160px;display:flex;flex-direction:column;gap:4px;">
+          <input id="oc-email" placeholder="Email" type="email" style="width:100%;" oninput="checkOcEmailTypo(this.value)">
+          <div id="oc-add-email-correction" class="email-suggest-correction" style="display:none;" onclick="applyOcEmailCorrection()"></div>
+        </div>
         <input id="oc-photo" placeholder="Photo file (optional)" style="flex:1;min-width:140px;">
         <button class="btn gold" onclick="ocAdd()">Add</button>
       </div>
@@ -2841,17 +2844,48 @@ function renderOpenCall() {
       `<button class="pill ${c[st.key] ? 'green' : 'gray'}" style="cursor:pointer;border:none;" onclick="ocToggle('${c.id}','${st.key}')">${c[st.key] ? '✓ ' : ''}${st.label}</button>`
     ).join(' ');
     const next = ocNextAction(c);
+
+    // Mailing list integration badges and actions
+    let mailStatusHtml = '';
+    let mailActionsHtml = '';
+    if (c.email) {
+      const sup = _isCustomerSuppressed(c.email);
+      const onList = mailingListHas(c.email);
+
+      if (sup) {
+        mailStatusHtml = ` <span class="pill gray" style="font-size:10px;background:rgba(239,68,68,0.1);color:var(--red);border:1px solid rgba(239,68,68,0.2);">unsubscribed</span>`;
+        mailActionsHtml = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Allow emailing this contributor again">Re-subscribe</button>`;
+      } else {
+        if (onList) {
+          mailStatusHtml = ` <span class="pill green" style="font-size:10px;background:rgba(16,185,129,0.1);color:var(--green);border:1px solid rgba(16,185,129,0.2);">✓ Subscribed</span>`;
+        } else {
+          mailStatusHtml = ` <span class="pill gray" style="font-size:10px;background:rgba(255,255,255,0.05);color:var(--text3);border:1px solid rgba(255,255,255,0.1);">not on list</span>`;
+          mailActionsHtml = `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(c.email)}')" title="Add to mailing list">＋ Add to List</button>`;
+        }
+        mailActionsHtml += ` <button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Unsubscribe this contributor">Unsubscribe</button>`;
+      }
+    }
+
+    const emailCell = c.email
+      ? ( _isCustomerSuppressed(c.email)
+          ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(c.email)}</span>`
+          : `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>` )
+      : '<span>no email</span>';
+
     return `
       <div class="card">
         <div class="row-between" style="flex-wrap:wrap;gap:8px;">
           <div>
-            <div style="font-weight:700;">${escapeHtml(c.name || '—')}</div>
+            <div style="font-weight:700;">${escapeHtml(c.name || '—')}${mailStatusHtml}</div>
             <div style="font-size:12px;color:var(--text2);">
-              ${c.email ? `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>` : '<span>no email</span>'}
+              ${emailCell}
               ${c.photo ? ` · ${escapeHtml(c.photo)}` : ''}
             </div>
           </div>
-          <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')">Remove</button>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            ${mailActionsHtml}
+            <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')">Remove</button>
+          </div>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${pills}</div>
         ${next ? `<div style="font-size:11px;color:var(--amber);margin-top:8px;font-weight:600;">Next: ${next}</div>`
@@ -15946,7 +15980,7 @@ async function toggleCustomerSuppress(encEmail) {
   const key = _custEmailKey(decodeURIComponent(encEmail));
   if (!key) return;
   if (_customerSuppress.has(key)) _customerSuppress.delete(key); else _customerSuppress.add(key);
-  renderCustomers();
+  renderCustomers(); renderOpenCall();
   await _persistCustomerSuppression();
 }
 function setCustomerBookFilter(v) { _customerBookFilter = v || ''; renderCustomers(); }
@@ -16000,7 +16034,7 @@ async function addManualSubscriber() {
   if (emailEl) emailEl.value = '';
   if (nameEl) nameEl.value = '';
   await _persistMailingList();
-  renderMailingList(); renderCustomers();
+  renderMailingList(); renderCustomers(); renderOpenCall();
   showToast(isNew ? '✓ Added to mailing list' : 'Already on the list — name updated');
 }
 
@@ -16010,7 +16044,7 @@ async function addBuyerToMailingList(encEmail) {
   const rec = buildCustomerList().find(r => _custEmailKey(r.email) === _custEmailKey(email));
   const isNew = _mailingUpsert(email, rec?.name || '', 'Buyer');
   if (isNew) await _persistMailingList();
-  renderMailingList(); renderCustomers();
+  renderMailingList(); renderCustomers(); renderOpenCall();
   showToast(isNew ? '✓ Added to mailing list' : 'Already on your list');
 }
 
@@ -16019,7 +16053,7 @@ async function removeFromMailingList(encEmail) {
   if (!MAILING_LIST.subs[key]) return;
   delete MAILING_LIST.subs[key];
   await _persistMailingList();
-  renderMailingList(); renderCustomers();
+  renderMailingList(); renderCustomers(); renderOpenCall();
 }
 
 // Merge every non-suppressed discovered buyer into the list. Returns count added.
@@ -16035,7 +16069,7 @@ function _mailingMergeBuyers(list) {
 async function addAllBuyersToMailingList() {
   const added = _mailingMergeBuyers();
   if (added) await _persistMailingList();
-  renderMailingList(); renderCustomers();
+  renderMailingList(); renderCustomers(); renderOpenCall();
   showToast(added ? `✓ Added ${added} buyer${added === 1 ? '' : 's'} to your mailing list` : 'All buyers are already on your list');
 }
 
@@ -16044,7 +16078,7 @@ async function toggleMailingAutoAdd(cb) {
   let added = 0;
   if (MAILING_LIST.autoAdd) added = _mailingMergeBuyers();
   await _persistMailingList();
-  renderMailingList(); renderCustomers();
+  renderMailingList(); renderCustomers(); renderOpenCall();
   showToast(MAILING_LIST.autoAdd
     ? `Auto-add on — new buyers join automatically${added ? ` (added ${added} now)` : ''}`
     : 'Auto-add off');
@@ -16339,6 +16373,34 @@ function applyMailingEmailCorrection() {
     emailEl.value = _lastMailingCorrection;
     _lastMailingCorrection = '';
     const suggestEl = $('ml-add-email-correction');
+    if (suggestEl) suggestEl.style.display = 'none';
+    showToast('Email corrected!');
+  }
+}
+
+let _lastOcCorrection = '';
+
+function checkOcEmailTypo(val) {
+  const suggestEl = $('oc-add-email-correction');
+  if (!suggestEl) return;
+  const correction = suggestEmailTypo(val);
+  if (correction) {
+    _lastOcCorrection = correction;
+    suggestEl.style.display = 'inline-block';
+    suggestEl.className = 'email-suggest-correction';
+    suggestEl.innerHTML = `Did you mean <strong style="text-decoration:underline;">${escapeHtml(correction)}</strong>?`;
+  } else {
+    _lastOcCorrection = '';
+    suggestEl.style.display = 'none';
+  }
+}
+
+function applyOcEmailCorrection() {
+  const emailEl = $('oc-email');
+  if (emailEl && _lastOcCorrection) {
+    emailEl.value = _lastOcCorrection;
+    _lastOcCorrection = '';
+    const suggestEl = $('oc-add-email-correction');
     if (suggestEl) suggestEl.style.display = 'none';
     showToast('Email corrected!');
   }
@@ -16936,7 +16998,7 @@ Object.assign(window, {
   generateBookStripeLink,
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
-  renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport,
+  renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
