@@ -11694,6 +11694,7 @@ async function boot(forcedBook) {
   await loadWebsitePaymentMethods();
   await loadCustomerSuppression();
   await loadMailingList();
+  await loadCampaigns();
   renderCatalogList();
   renderProfitSettings();
   if(sheetsUrl) showSheetsConnected();
@@ -16246,8 +16247,33 @@ function _custSpendStr(spend) {
 function _custApplyFilter(list) {
   let out = list;
   if (_customerBookFilter) out = out.filter(r => r.bookIds.has(_customerBookFilter));
+  if (_customerChannelFilter) {
+    out = out.filter(r => {
+      if (_customerChannelFilter === 'Stripe') return r.sources.has('Stripe');
+      return r.channels.has(_customerChannelFilter);
+    });
+  }
+  if (_customerSpendFilter) {
+    const min = Number(_customerSpendFilter);
+    out = out.filter(r => {
+      let sum = 0;
+      Object.keys(r.spend || {}).forEach(c => {
+        const amt = r.spend[c] || 0;
+        if (c === 'USD') sum += amt * 1.35;
+        else if (c === 'EUR') sum += amt * 1.48;
+        else if (c === 'GBP') sum += amt * 1.75;
+        else sum += amt;
+      });
+      return sum >= min;
+    });
+  }
+  if (_customerOrdersFilter === 'repeat') {
+    out = out.filter(r => r.orders >= 2);
+  } else if (_customerOrdersFilter === 'single') {
+    out = out.filter(r => r.orders === 1);
+  }
   const q = _customerFilter.trim().toLowerCase();
-  if (q) out = out.filter(r => r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q));
+  if (q) out = out.filter(r => (r.name || '').toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q));
   return out;
 }
 
@@ -16265,14 +16291,125 @@ function _custSyncBookFilterOptions() {
   sel.value = _customerBookFilter;
 }
 
+// ── Advanced Customer Filters state and setters
+let _customerChannelFilter = '';
+let _customerSpendFilter = '';
+let _customerOrdersFilter = '';
+
+function setCustomerChannelFilter(v) { _customerChannelFilter = v || ''; renderCustomers(); }
+function setCustomerSpendFilter(v) { _customerSpendFilter = v || ''; renderCustomers(); }
+function setCustomerOrdersFilter(v) { _customerOrdersFilter = v || ''; renderCustomers(); }
+
+// ── Email Typo Correction
+let _lastMailingCorrection = '';
+
+function checkMailingEmailTypo(val) {
+  const suggestEl = $('ml-add-email-correction');
+  if (!suggestEl) return;
+  const correction = suggestEmailTypo(val);
+  if (correction) {
+    _lastMailingCorrection = correction;
+    suggestEl.style.display = 'inline-block';
+    suggestEl.className = 'email-suggest-correction';
+    suggestEl.innerHTML = `Did you mean <strong style="text-decoration:underline;">${escapeHtml(correction)}</strong>?`;
+  } else {
+    _lastMailingCorrection = '';
+    suggestEl.style.display = 'none';
+  }
+}
+
+function suggestEmailTypo(email) {
+  const m = email.trim().toLowerCase().match(/^([^@]+)@([^@]+)$/);
+  if (!m) return null;
+  const user = m[1];
+  const domain = m[2];
+  const common = {
+    'gamil.com': 'gmail.com', 'gmail.co': 'gmail.com', 'gmail.con': 'gmail.com', 'gmail.cm': 'gmail.com',
+    'yahoo.co': 'yahoo.com', 'yahoo.cm': 'yahoo.com',
+    'hotmail.co': 'hotmail.com', 'hotmail.cm': 'hotmail.com',
+    'outlook.co': 'outlook.com', 'outlook.cm': 'outlook.com'
+  };
+  if (common[domain]) return user + '@' + common[domain];
+  return null;
+}
+
+function applyMailingEmailCorrection() {
+  const emailEl = $('ml-add-email');
+  if (emailEl && _lastMailingCorrection) {
+    emailEl.value = _lastMailingCorrection;
+    _lastMailingCorrection = '';
+    const suggestEl = $('ml-add-email-correction');
+    if (suggestEl) suggestEl.style.display = 'none';
+    showToast('Email corrected!');
+  }
+}
+
+// ── In-App Email Campaigns (Newsletters)
+const CAMPAIGNS_KEY = 'lm-campaigns';
+let CAMPAIGNS = [];
+let activeCustomersSubTab = 'audience';
+
+async function loadCampaigns() {
+  let data = null;
+  try { data = await window._fbLoadSettings('campaigns'); } catch (_) {}
+  if (!data) { try { data = JSON.parse(localStorage.getItem(CAMPAIGNS_KEY) || '[]'); } catch (_) {} }
+  if (Array.isArray(data)) {
+    CAMPAIGNS = data;
+  } else {
+    CAMPAIGNS = [];
+  }
+}
+
+async function _persistCampaigns() {
+  try { await window._fbSaveSettings('campaigns', CAMPAIGNS); } catch (_) {}
+  try { localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(CAMPAIGNS)); } catch (_) {}
+}
+
+function switchCustomersSubTab(subTabName) {
+  activeCustomersSubTab = subTabName;
+  const subTabs = ['audience', 'mailing', 'campaign'];
+  subTabs.forEach(tab => {
+    const btn = document.getElementById('btn-custtab-' + tab);
+    const sec = document.getElementById('cust-sec-' + tab);
+    if (btn && sec) {
+      if (tab === subTabName) {
+        btn.classList.add('active');
+        sec.style.display = 'block';
+      } else {
+        btn.classList.remove('active');
+        sec.style.display = 'none';
+      }
+    }
+  });
+
+  if (subTabName === 'audience') {
+    renderCustomersAudience();
+  } else if (subTabName === 'mailing') {
+    renderMailingList();
+  } else if (subTabName === 'campaign') {
+    renderCampaigns();
+  }
+}
+
 function renderCustomers() {
+  switchCustomersSubTab(activeCustomersSubTab);
+}
+
+function renderCustomersAudience() {
   const body = $('cust-body');
   if (!body) return;
   _custSyncBookFilterOptions();
+
+  const chanSel = $('cust-channel-filter');
+  if (chanSel) chanSel.value = _customerChannelFilter;
+  const spendSel = $('cust-spend-filter');
+  if (spendSel) spendSel.value = _customerSpendFilter;
+  const ordersSel = $('cust-orders-filter');
+  if (ordersSel) ordersSel.value = _customerOrdersFilter;
+
   const all = buildCustomerList();
-  _mailingAutoSync(all);
-  renderMailingList();
   renderCustomersStat(all);
+  _mailingAutoSync(all);
   const list = _custApplyFilter(all);
   const suppressedShown = list.filter(r => _isCustomerSuppressed(r.email)).length;
 
@@ -16281,7 +16418,7 @@ function renderCustomers() {
     const srcSet = new Set();
     all.forEach(r => r.sources.forEach(s => srcSet.add(s)));
     const srcStr = Array.from(srcSet).sort().join(', ') || '—';
-    const filtered = _customerFilter.trim() || _customerBookFilter;
+    const filtered = _customerFilter.trim() || _customerBookFilter || _customerChannelFilter || _customerSpendFilter || _customerOrdersFilter;
     summary.textContent = `${all.length} customer${all.length === 1 ? '' : 's'} with email`
       + (filtered ? ` · ${list.length} shown` : '')
       + (suppressedShown ? ` · ${suppressedShown} unsubscribed (excluded from export)` : '')
@@ -16314,7 +16451,392 @@ function renderCustomers() {
         <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${listBtn}${supBtn}</div></td>
       </tr>`;
       }).join('')
-    : `<tr><td colspan="9"><div class="empty-state" style="padding:1.5rem;">${(_customerFilter.trim() || _customerBookFilter) ? 'No customers match this filter.' : 'No customers found yet. Apply some website orders, log in-person sales with an email, or pull buyers from Stripe.'}</div></td></tr>`;
+    : `<tr><td colspan="9"><div class="empty-state" style="padding:1.5rem;">${(_customerFilter.trim() || _customerBookFilter || _customerChannelFilter || _customerSpendFilter || _customerOrdersFilter) ? 'No customers match this filter.' : 'No customers found yet. Apply some website orders, log in-person sales with an email, or pull buyers from Stripe.'}</div></td></tr>`;
+}
+
+function openCampaignWizard() {
+  $('c-draft-id').value = '';
+  $('c-subject').value = '';
+  $('c-segment').value = 'all-curated';
+  $('c-replyto').value = 'lyricalmyricalbooks@gmail.com';
+  $('c-body').value = '';
+  $('campaign-wizard-title').textContent = 'Create New Email Campaign';
+  $('campaign-wizard-card').style.display = 'block';
+  updateCampaignPreview();
+  window.scrollTo({ top: $('campaign-wizard-card').offsetTop - 20, behavior: 'smooth' });
+}
+
+function closeCampaignWizard() {
+  $('campaign-wizard-card').style.display = 'none';
+}
+
+function insertTemplateTag(tag) {
+  const textarea = $('c-body');
+  if (!textarea) return;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  textarea.value = text.substring(0, start) + tag + text.substring(end);
+  textarea.focus();
+  textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+  updateCampaignPreview();
+}
+
+function updateCampaignPreview() {
+  const subject = $('c-subject').value || '(No Subject)';
+  const bodyVal = $('c-body').value || '';
+  const previewPane = $('c-preview-pane');
+  if (!previewPane) return;
+
+  const formattedBody = bodyVal
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>')
+    .replace(/\{\{name\}\}/g, '<strong>John Doe</strong>')
+    .replace(/\{\{email\}\}/g, '<strong>john.doe@example.com</strong>');
+
+  previewPane.innerHTML = `
+    <div style="font-family: 'Outfit', 'Plus Jakarta Sans', 'Inter', sans-serif; background: #faf9f6; padding: 20px; border-radius: 8px;">
+      <div style="background: white; border: 1px solid var(--border); border-radius: 8px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+        <div style="font-size: 13px; color: #888; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 16px;">
+          <strong>Subject:</strong> ${escapeHtml(subject)}
+        </div>
+        <div style="font-size: 15px; color: #333; line-height: 1.6; min-height: 150px; white-space: pre-line;">
+          ${formattedBody}
+        </div>
+        <div style="font-size: 11px; color: #999; border-top: 1px dashed #eee; margin-top: 24px; padding-top: 12px; line-height: 1.4;">
+          You are receiving this email because you are a valued customer of Lyricalmyrical Books.<br>
+          <a href="#" style="color: var(--gold2); text-decoration: underline;">Unsubscribe</a> from this list.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function onCampaignSegmentChange() {
+  // Option to trigger recount of matching subscribers
+}
+
+function getSegmentRecipients(segmentName) {
+  const allDiscovered = buildCustomerList();
+  const curated = mailingSubsArray().filter(s => !_isCustomerSuppressed(s.email));
+  
+  if (segmentName === 'all-curated') {
+    return curated;
+  }
+  if (segmentName === 'repeat') {
+    return allDiscovered.filter(r => r.orders >= 2 && !_isCustomerSuppressed(r.email));
+  }
+  if (segmentName === 'high-spend') {
+    return allDiscovered.filter(r => {
+      let sum = 0;
+      Object.keys(r.spend || {}).forEach(c => {
+        const amt = r.spend[c] || 0;
+        if (c === 'USD') sum += amt * 1.35;
+        else if (c === 'EUR') sum += amt * 1.48;
+        else if (c === 'GBP') sum += amt * 1.75;
+        else sum += amt;
+      });
+      return sum >= 50 && !_isCustomerSuppressed(r.email);
+    });
+  }
+  if (segmentName === 'all-discovered') {
+    return allDiscovered.filter(r => !_isCustomerSuppressed(r.email));
+  }
+  return [];
+}
+
+async function saveCampaignDraft() {
+  const subject = $('c-subject').value.trim();
+  const body = $('c-body').value.trim();
+  const segment = $('c-segment').value;
+  const replyTo = $('c-replyto').value.trim();
+  const id = $('c-draft-id').value || 'c-' + Date.now();
+
+  if (!subject) { showToast('Subject line is required to save draft', 'warn'); return; }
+
+  const idx = CAMPAIGNS.findIndex(c => c.id === id);
+  const camp = {
+    id,
+    subject,
+    body,
+    segment,
+    replyTo,
+    status: 'draft',
+    createdAt: today(),
+    stats: null
+  };
+
+  if (idx >= 0) {
+    CAMPAIGNS[idx] = camp;
+  } else {
+    CAMPAIGNS.unshift(camp);
+  }
+
+  await _persistCampaigns();
+  renderCampaigns();
+  closeCampaignWizard();
+  showToast('✓ Campaign draft saved');
+}
+
+async function editCampaignDraft(id) {
+  const camp = CAMPAIGNS.find(c => c.id === id);
+  if (!camp) return;
+
+  $('c-draft-id').value = camp.id;
+  $('c-subject').value = camp.subject;
+  $('c-segment').value = camp.segment;
+  $('c-replyto').value = camp.replyTo || 'lyricalmyricalbooks@gmail.com';
+  $('c-body').value = camp.body;
+  
+  $('campaign-wizard-title').textContent = 'Edit Campaign Draft';
+  $('campaign-wizard-card').style.display = 'block';
+  updateCampaignPreview();
+  window.scrollTo({ top: $('campaign-wizard-card').offsetTop - 20, behavior: 'smooth' });
+}
+
+async function deleteCampaign(id) {
+  const ok = await confirmDialog('Are you sure you want to delete this campaign?', { danger: true });
+  if (!ok) return;
+
+  CAMPAIGNS = CAMPAIGNS.filter(c => c.id !== id);
+  await _persistCampaigns();
+  renderCampaigns();
+  showToast('Campaign deleted');
+}
+
+async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
+  const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (isDev) {
+    const res = await fetch('/api/campaign/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (localStorage.getItem('lm-auth-token') || '')
+      },
+      body: JSON.stringify({ to, subject, body, replyTo })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+  } else {
+    if (!sheetsUrl) throw new Error('Google Sheets/Webhook not connected. Please connect your sheet first.');
+    const payload = {
+      version: 2,
+      action: 'sendcampaignemail',
+      payload: { to, subject, body, replyTo }
+    };
+    const res = await fetch(sheetsUrl, {
+      method: 'POST',
+      mode: 'cors',
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Sheets connection failed');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  }
+}
+
+async function sendTestEmailCampaign() {
+  const subject = $('c-subject').value.trim();
+  const body = $('c-body').value.trim();
+  const replyTo = $('c-replyto').value.trim();
+  const testEmail = $('c-test-email').value.trim();
+
+  if (!subject) { showToast('Subject line is required', 'warn'); return; }
+  if (!testEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(testEmail)) { showToast('Enter a valid test email address', 'warn'); return; }
+
+  showToast('Sending test email...');
+  try {
+    const personalizedBody = body
+      .replace(/\{\{name\}\}/g, 'Test Recipient')
+      .replace(/\{\{email\}\}/g, testEmail);
+
+    await sendSingleEmailViaBackend(testEmail, '[TEST] ' + subject, personalizedBody, replyTo);
+    showToast('✓ Test email sent successfully!');
+  } catch (e) {
+    showToast('Send failed: ' + e.message, 'err');
+  }
+}
+
+let _campaignSendingActive = false;
+let _campaignSendingIndex = 0;
+let _campaignSendingRecipients = [];
+let _campaignSuccessCount = 0;
+let _campaignFailCount = 0;
+
+function cancelCampaignSending() {
+  _campaignSendingActive = false;
+  $('c-send-log-console').innerHTML += '<div style="color:var(--red);">[CANCELLED] Sending process aborted by user.</div>';
+  $('c-send-cancel-btn').disabled = true;
+}
+
+async function sendCampaignLaunch() {
+  const subject = $('c-subject').value.trim();
+  const body = $('c-body').value.trim();
+  const segment = $('c-segment').value;
+  const replyTo = $('c-replyto').value.trim();
+  const draftId = $('c-draft-id').value;
+
+  if (!subject) { showToast('Subject line is required', 'warn'); return; }
+
+  const recs = getSegmentRecipients(segment);
+  if (!recs.length) { showToast('Selected segment has no recipients', 'warn'); return; }
+
+  const ok = await confirmDialog(`Are you sure you want to send this campaign to ${recs.length} recipient(s)?`);
+  if (!ok) return;
+
+  $('c-send-overlay').classList.add('active');
+  $('c-send-progress-fill').style.width = '0%';
+  $('c-send-progress-text').textContent = `Sending 0 of ${recs.length} emails...`;
+  $('c-send-log-console').innerHTML = `<div>[START] Launching campaign to ${recs.length} recipients.</div>`;
+  $('c-send-cancel-btn').disabled = false;
+
+  _campaignSendingActive = true;
+  _campaignSendingIndex = 0;
+  _campaignSendingRecipients = recs;
+  _campaignSuccessCount = 0;
+  _campaignFailCount = 0;
+
+  closeCampaignWizard();
+
+  setTimeout(() => sendNextCampaignEmail(subject, body, replyTo, draftId), 100);
+}
+
+async function sendNextCampaignEmail(subject, body, replyTo, draftId) {
+  if (!_campaignSendingActive) {
+    finishCampaignSend(subject, body, replyTo, draftId, true);
+    return;
+  }
+
+  if (_campaignSendingIndex >= _campaignSendingRecipients.length) {
+    finishCampaignSend(subject, body, replyTo, draftId, false);
+    return;
+  }
+
+  const rec = _campaignSendingRecipients[_campaignSendingIndex];
+  const to = rec.email;
+  const name = rec.name || 'Customer';
+
+  $('c-send-progress-text').textContent = `Sending ${_campaignSendingIndex + 1} of ${_campaignSendingRecipients.length} emails...`;
+  const pct = Math.round((_campaignSendingIndex / _campaignSendingRecipients.length) * 100);
+  $('c-send-progress-fill').style.width = pct + '%';
+
+  try {
+    const personalizedBody = body
+      .replace(/\{\{name\}\}/g, name)
+      .replace(/\{\{email\}\}/g, to);
+
+    await sendSingleEmailViaBackend(to, subject, personalizedBody, replyTo);
+    _campaignSuccessCount++;
+    $('c-send-log-console').innerHTML += `<div style="color:#a9ffaf;">✓ Sent to ${to} (${name})</div>`;
+  } catch (e) {
+    _campaignFailCount++;
+    $('c-send-log-console').innerHTML += `<div style="color:#f87171;">✕ Failed for ${to}: ${e.message}</div>`;
+  }
+
+  const consoleEl = $('c-send-log-console');
+  if (consoleEl) consoleEl.scrollTop = consoleEl.scrollHeight;
+
+  _campaignSendingIndex++;
+  setTimeout(() => sendNextCampaignEmail(subject, body, replyTo, draftId), 150);
+}
+
+async function finishCampaignSend(subject, body, replyTo, draftId, wasAborted) {
+  _campaignSendingActive = false;
+  $('c-send-progress-fill').style.width = '100%';
+  $('c-send-progress-text').textContent = wasAborted ? 'Sending Aborted' : 'Campaign Completed!';
+  
+  $('c-send-log-console').innerHTML += `
+    <div style="font-weight:bold;margin-top:8px;">[FINISHED] Success: ${_campaignSuccessCount} · Failed: ${_campaignFailCount}</div>
+  `;
+  
+  const btn = $('c-send-cancel-btn');
+  btn.textContent = '✕ Close Window';
+  btn.disabled = false;
+  btn.onclick = () => {
+    $('c-send-overlay').classList.remove('active');
+    btn.onclick = cancelCampaignSending;
+    btn.textContent = '✕ Abort Send';
+  };
+
+  CAMPAIGNS = CAMPAIGNS.filter(c => c.id !== draftId);
+
+  const sentCampaign = {
+    id: 'c-sent-' + Date.now(),
+    subject,
+    body,
+    segment: $('c-segment').value,
+    replyTo,
+    status: 'sent',
+    createdAt: today(),
+    sentAt: today() + ' ' + new Date().toTimeString().slice(0, 5),
+    stats: {
+      total: _campaignSendingRecipients.length,
+      success: _campaignSuccessCount,
+      failed: _campaignFailCount
+    }
+  };
+
+  CAMPAIGNS.unshift(sentCampaign);
+  await _persistCampaigns();
+  renderCampaigns();
+  showToast(wasAborted ? 'Campaign send aborted' : '✓ Campaign sent successfully!');
+}
+
+async function renderCampaigns() {
+  const draftsList = $('campaign-drafts-list');
+  const sentList = $('campaign-sent-list');
+  if (!draftsList || !sentList) return;
+
+  const drafts = CAMPAIGNS.filter(c => c.status === 'draft');
+  const sent = CAMPAIGNS.filter(c => c.status === 'sent');
+
+  draftsList.innerHTML = drafts.length
+    ? drafts.map(c => `
+      <div class="campaign-row">
+        <div class="campaign-info">
+          <div class="campaign-title-row">
+            <span class="campaign-subject">${escapeHtml(c.subject)}</span>
+            <span class="pill amber" style="font-size:9px;">Draft</span>
+          </div>
+          <div class="campaign-meta-info">Created: ${fmtD(c.createdAt)} · Target: ${escapeHtml(c.segment)}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn sm" onclick="editCampaignDraft('${c.id}')">Edit</button>
+          <button class="btn sm" onclick="deleteCampaign('${c.id}')">Delete</button>
+        </div>
+      </div>
+    `).join('')
+    : '<div class="empty-state" style="padding:1rem;">No saved drafts. Click "Create Campaign" to compose one.</div>';
+
+  sentList.innerHTML = sent.length
+    ? sent.map(c => `
+      <div class="campaign-row">
+        <div class="campaign-info">
+          <div class="campaign-title-row">
+            <span class="campaign-subject">${escapeHtml(c.subject)}</span>
+            <span class="pill green" style="font-size:9px;">Sent</span>
+          </div>
+          <div class="campaign-meta-info">Sent: ${c.sentAt || fmtD(c.createdAt)} · Segment: ${escapeHtml(c.segment)}</div>
+        </div>
+        <div class="campaign-kpis">
+          <div class="campaign-kpi-item">
+            <span>Sent</span>
+            <strong>${c.stats ? c.stats.success : 0}</strong>
+          </div>
+          ${c.stats && c.stats.failed ? `
+          <div class="campaign-kpi-item">
+            <span style="color:var(--red);">Failed</span>
+            <strong style="color:var(--red);">${c.stats.failed}</strong>
+          </div>` : ''}
+          <button class="btn sm" onclick="deleteCampaign('${c.id}')" title="Delete from history" style="margin-left:8px;">✕</button>
+        </div>
+      </div>
+    `).join('')
+    : '<div class="empty-state" style="padding:1rem;">No sent campaigns yet.</div>';
 }
 
 function filterCustomers(v) { _customerFilter = v || ''; renderCustomers(); }
@@ -16405,6 +16927,9 @@ Object.assign(window, {
   toggleCustomerSuppress, setCustomerBookFilter, customerPullDeeper,
   addManualSubscriber, addBuyerToMailingList, removeFromMailingList, addAllBuyersToMailingList,
   toggleMailingAutoAdd, emailCustomerSegment, emailMailingList, copyMailingListEmails, exportMailingListCSV,
+  setCustomerChannelFilter, setCustomerSpendFilter, setCustomerOrdersFilter, checkMailingEmailTypo, applyMailingEmailCorrection,
+  switchCustomersSubTab, openCampaignWizard, closeCampaignWizard, insertTemplateTag, updateCampaignPreview,
+  onCampaignSegmentChange, saveCampaignDraft, editCampaignDraft, deleteCampaign, sendTestEmailCampaign, sendCampaignLaunch, cancelCampaignSending,
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   reconOnFilter, reconSetCurrency, reconClearFilters, reconEditKey, reconRecordGroup, reconDismissGroup, reconDismissAllShown,

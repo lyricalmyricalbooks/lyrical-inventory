@@ -8,7 +8,8 @@ test('server requires CORS_ORIGIN in production', () => {
         ...process.env,
         NODE_ENV: 'production',
         ADMIN_PASSWORD: 'test',
-        TOKEN_SECRET: 'test'
+        TOKEN_SECRET: 'test',
+        IGNORE_ENV_FILE: 'true'
       }
     }, (error, stdout, stderr) => {
       expect(error).not.toBeNull();

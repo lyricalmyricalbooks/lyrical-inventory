@@ -747,73 +747,215 @@
 
 <!-- CUSTOMERS / MAILING LIST (publisher only, all books) -->
 <div class="tab-panel" id="tab-customers" style="display:none;">
-  <div class="section-hed">Customers &amp; mailing list</div>
+  <div class="section-hed">Audience Management</div>
   <div style="font-size:12px;color:var(--text3);max-width:620px;line-height:1.6;margin-bottom:1.25rem;">
-    Build a mailing list from every buyer we can find — website orders, in-person &amp; POS sales, and Stripe payments, de-duplicated by email. Curate the list below, add anyone by hand, and let new buyers join automatically. Anyone marked <em>unsubscribed</em> is kept out of every copy, export, and email.
+    Build, segment, and communicate with your audience. Collect buyer emails across all sales channels, run marketing campaigns, and keep track of customer interactions.
   </div>
 
-  <div id="customer-audience-summary"></div>
+  <!-- Customers Page Sub-navigation -->
+  <div class="settings-sub-nav" style="margin-bottom:1.5rem;">
+    <button class="settings-sub-tab active" id="btn-custtab-audience" onclick="switchCustomersSubTab('audience')">👥 Audience &amp; Customers</button>
+    <button class="settings-sub-tab" id="btn-custtab-mailing" onclick="switchCustomersSubTab('mailing')">✉️ Mailing List</button>
+    <button class="settings-sub-tab" id="btn-custtab-campaign" onclick="switchCustomersSubTab('campaign')">📣 Email Campaigns</button>
+  </div>
 
-  <!-- CURATED MAILING LIST -->
-  <div class="card" style="border-left:3px solid var(--gold-line);margin-bottom:1.75rem;">
-    <div class="row-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
+  <!-- 1. AUDIENCE & CUSTOMERS PANEL -->
+  <div id="cust-sec-audience" class="customers-section">
+    <!-- DISCOVERED BUYERS -->
+    <div class="row-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:1rem;">
       <div>
-        <div style="font-family:'Playfair Display',serif;font-size:17px;">Mailing list</div>
-        <div id="ml-count" style="font-size:12px;color:var(--text3);margin-top:2px;">0 subscribers</div>
+        <div style="font-family:'Playfair Display',serif;font-size:17px;font-weight:700;">All Discovered Buyers</div>
+        <div style="font-size:12px;color:var(--text3);max-width:560px;line-height:1.5;margin-top:2px;">Everyone who has purchased from you across your channels (Website, POS, Stripe, Consignment).</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-        <button class="btn" onclick="copyMailingListEmails()">📋 Copy emails</button>
-        <button class="btn" onclick="exportMailingListCSV()">⬇ Export CSV</button>
-        <button class="btn gold" onclick="emailMailingList()" title="Open Gmail with your whole list pre-filled as BCC">✉ Email these</button>
+        <button class="btn ink" id="cust-stripe-btn" onclick="customerPullStripe()" title="Pull buyer names &amp; emails from your Stripe payments (needs internet + your saved Stripe key)">↻ Pull buyers from Stripe</button>
+        <button class="btn" id="cust-stripe-more-btn" onclick="customerPullDeeper()" style="display:none;" title="Reach further back through your Stripe history">↓ Load older</button>
       </div>
     </div>
 
-    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin:14px 0 10px;">
-      <div class="form-group" style="margin:0;flex:1;min-width:140px;"><label for="ml-add-name">Name</label><input type="text" id="ml-add-name" placeholder="optional"></div>
-      <div class="form-group" style="margin:0;flex:1.4;min-width:200px;"><label for="ml-add-email">Email</label><input type="email" id="ml-add-email" placeholder="reader@example.com" onkeydown="if(event.key==='Enter')addManualSubscriber()"></div>
-      <button class="btn gold" style="height:40px;" onclick="addManualSubscriber()">＋ Add</button>
+    <!-- Filters Panel -->
+    <div class="cust-filter-grid">
+      <div class="form-group" style="margin:0;">
+        <label for="cust-search">Search Text</label>
+        <input type="search" id="cust-search" oninput="filterCustomers(this.value)" placeholder="Search name or email…">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label for="cust-book-filter">Book Purchased</label>
+        <select id="cust-book-filter" onchange="setCustomerBookFilter(this.value)"><option value="">All books</option></select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label for="cust-channel-filter">Sales Channel</label>
+        <select id="cust-channel-filter" onchange="setCustomerChannelFilter(this.value)">
+          <option value="">All channels</option>
+          <option value="Website">Website</option>
+          <option value="In Person">In Person</option>
+          <option value="Book Fair">Book Fair</option>
+          <option value="Consignment">Consignment</option>
+          <option value="Stripe">Stripe (direct card)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label for="cust-spend-filter">Total Spend</label>
+        <select id="cust-spend-filter" onchange="setCustomerSpendFilter(this.value)">
+          <option value="">Any amount</option>
+          <option value="25">&gt; $25.00</option>
+          <option value="50">&gt; $50.00</option>
+          <option value="100">&gt; $100.00</option>
+          <option value="250">&gt; $250.00</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label for="cust-orders-filter">Order Count</label>
+        <select id="cust-orders-filter" onchange="setCustomerOrdersFilter(this.value)">
+          <option value="">All buyers</option>
+          <option value="repeat">Repeat buyers (2+ orders)</option>
+          <option value="single">Single order</option>
+        </select>
+      </div>
     </div>
 
-    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:1px dashed var(--border);">
-      <button class="btn ink" onclick="addAllBuyersToMailingList()" title="Add every buyer we found (below) to your mailing list">↓ Add all buyers</button>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;color:var(--text2);">
-        <input type="checkbox" id="ml-autoadd" onchange="toggleMailingAutoAdd(this)" style="width:16px;height:16px;accent-color:var(--gold);">
-        Auto-add new buyers as they appear
-      </label>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button class="btn" onclick="copyCustomerEmails()">📋 Copy segment</button>
+        <button class="btn" onclick="exportCustomersCSV()">⬇ Export segment</button>
+        <button class="btn gold" onclick="emailCustomerSegment()" title="Open Gmail with the filtered segment pre-filled as BCC">✉ Email segment</button>
+      </div>
+      <span id="cust-summary" style="font-size:12px;color:var(--text3);font-weight:500;"></span>
     </div>
 
-    <div class="tbl-wrap" style="margin-top:14px;"><table class="tbl">
-      <thead><tr><th>Name</th><th>Email</th><th>Added</th><th>Source</th><th>Action</th></tr></thead>
-      <tbody id="ml-body"></tbody>
+    <div id="cust-stripe-status" style="font-size:11px;color:var(--text3);margin-bottom:10px;min-height:14px;line-height:1.5;"></div>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Name</th><th>Email</th><th class="r">Orders</th><th class="r">Units</th><th>Books</th><th>Spend</th><th>Last order</th><th>Source</th><th>Action</th></tr></thead>
+      <tbody id="cust-body"></tbody>
     </table></div>
   </div>
 
-  <!-- DISCOVERED BUYERS -->
-  <div class="row-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
-    <div>
-      <div class="section-hed">All buyers we found</div>
-      <div style="font-size:12px;color:var(--text3);max-width:560px;line-height:1.6;">Everyone who has bought from you. Filter to one title for a targeted launch, then add to your list or email the segment directly.</div>
+  <!-- 2. MAILING LIST PANEL -->
+  <div id="cust-sec-mailing" class="customers-section" style="display:none;">
+    <div id="customer-audience-summary" style="margin-bottom:1.5rem;"></div>
+
+    <!-- CURATED MAILING LIST -->
+    <div class="card" style="border-left:3px solid var(--gold-line);margin-bottom:1.75rem;">
+      <div class="row-between" style="align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-family:'Playfair Display',serif;font-size:17px;font-weight:700;">Curated Mailing List</div>
+          <div id="ml-count" style="font-size:12px;color:var(--text3);margin-top:2px;">0 subscribers</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn" onclick="copyMailingListEmails()">📋 Copy emails</button>
+          <button class="btn" onclick="exportMailingListCSV()">⬇ Export CSV</button>
+          <button class="btn gold" onclick="emailMailingList()" title="Open Gmail with your whole list pre-filled as BCC">✉ Email these</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin:14px 0 10px;">
+        <div class="form-group" style="margin:0;flex:1;min-width:140px;"><label for="ml-add-name">Name</label><input type="text" id="ml-add-name" placeholder="e.g. John Doe"></div>
+        <div class="form-group" style="margin:0;flex:1.4;min-width:200px;">
+          <label for="ml-add-email">Email</label>
+          <input type="email" id="ml-add-email" placeholder="reader@example.com" onkeydown="if(event.key==='Enter')addManualSubscriber()" oninput="checkMailingEmailTypo(this.value)">
+          <div id="ml-add-email-correction" style="display:none;" onclick="applyMailingEmailCorrection()"></div>
+        </div>
+        <button class="btn gold" style="height:40px;" onclick="addManualSubscriber()">＋ Add</button>
+      </div>
+
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:1px dashed var(--border);">
+        <button class="btn ink" onclick="addAllBuyersToMailingList()" title="Add every buyer we found to your mailing list">↓ Add all buyers</button>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:12px;color:var(--text2);">
+          <input type="checkbox" id="ml-autoadd" onchange="toggleMailingAutoAdd(this)" style="width:16px;height:16px;accent-color:var(--gold);">
+          Auto-add new buyers as they appear
+        </label>
+      </div>
+
+      <div class="tbl-wrap" style="margin-top:14px;"><table class="tbl">
+        <thead><tr><th>Name</th><th>Email</th><th>Added</th><th>Source</th><th>Action</th></tr></thead>
+        <tbody id="ml-body"></tbody>
+      </table></div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-      <button class="btn ink" id="cust-stripe-btn" onclick="customerPullStripe()" title="Pull buyer names &amp; emails from your Stripe payments (needs internet + your saved Stripe key)">↻ Pull buyers from Stripe</button>
-      <button class="btn" id="cust-stripe-more-btn" onclick="customerPullDeeper()" style="display:none;" title="Reach further back through your Stripe history">↓ Load older</button>
+  </div>
+
+  <!-- 3. EMAIL CAMPAIGNS PANEL -->
+  <div id="cust-sec-campaign" class="customers-section" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;">Campaigns &amp; Newsletters</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px;">Design and broadcast custom email newsletters to your segments.</div>
+      </div>
+      <button class="btn gold lg" onclick="openCampaignWizard()">＋ Create Campaign</button>
+    </div>
+
+    <!-- CAMPAIGN WIZARD (Initially hidden) -->
+    <div class="card" id="campaign-wizard-card" style="border-left:3px solid var(--gold);margin-bottom:1.75rem;display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;">
+        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;" id="campaign-wizard-title">New Email Campaign</div>
+        <button class="btn sm" onclick="closeCampaignWizard()">✕ Cancel</button>
+      </div>
+
+      <input type="hidden" id="c-draft-id">
+
+      <div class="g3" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label for="c-subject">Subject Line <span class="req-badge">Required</span></label>
+          <input type="text" id="c-subject" placeholder="e.g. Exciting updates from Lyricalmyrical Books!" oninput="updateCampaignPreview()">
+        </div>
+        <div class="form-group">
+          <label for="c-segment">Target Segment</label>
+          <select id="c-segment" onchange="onCampaignSegmentChange()">
+            <option value="all-curated">All Curated Subscribers</option>
+            <option value="repeat">Repeat Buyers (2+ orders)</option>
+            <option value="high-spend">High-value Buyers (&gt; $50 spent)</option>
+            <option value="all-discovered">All Discovered Buyers</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="c-replyto">Reply-To Email</label>
+          <input type="email" id="c-replyto" placeholder="lyricalmyricalbooks@gmail.com">
+        </div>
+      </div>
+
+      <div class="composer-container">
+        <!-- Editor Column -->
+        <div>
+          <div class="form-group" style="margin:0;">
+            <label for="c-body">Message Body (HTML or Plain Text)</label>
+            <textarea id="c-body" rows="14" placeholder="Dear {{name}},&#10;&#10;We are thrilled to announce..." style="width:100%;font-family:'DM Mono',monospace;font-size:13px;line-height:1.5;padding:10px;" oninput="updateCampaignPreview()"></textarea>
+            <div class="helper-btn-group">
+              <button class="helper-tag-btn" onclick="insertTemplateTag('{{name}}')" title="Inserts recipient's full name (or 'Customer' if blank)">＋ {{name}}</button>
+              <button class="helper-tag-btn" onclick="insertTemplateTag('{{email}}')" title="Inserts recipient's email address">＋ {{email}}</button>
+            </div>
+            <div class="field-note" style="margin-top:6px;">Use <code>&lt;br&gt;</code> for line breaks if sending HTML emails, or write plain text. Double enter creates line breaks automatically in the preview.</div>
+          </div>
+        </div>
+
+        <!-- Preview Column -->
+        <div>
+          <div class="composer-preview-header">Live Preview (Recipient View)</div>
+          <div class="composer-preview-pane" id="c-preview-pane"></div>
+        </div>
+      </div>
+
+      <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px dashed var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="email" id="c-test-email" placeholder="test-recipient@example.com" style="width:200px;">
+          <button class="btn" onclick="sendTestEmailCampaign()">Send Test Email</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="saveCampaignDraft()">Save Draft</button>
+          <button class="btn gold" id="c-btn-send" onclick="sendCampaignLaunch()">🚀 Send Campaign</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CAMPAIGNS LISTS -->
+    <div class="card" style="margin-bottom:1.5rem;">
+      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;margin-bottom:10px;border-bottom:1px dashed var(--border);padding-bottom:6px;">Campaign Drafts</div>
+      <div id="campaign-drafts-list" class="campaign-card-list"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;margin-bottom:10px;border-bottom:1px dashed var(--border);padding-bottom:6px;">Sent Campaign History</div>
+      <div id="campaign-sent-list" class="campaign-card-list"></div>
     </div>
   </div>
-  <div style="display:flex;gap:10px;align-items:center;margin:14px 0 8px;flex-wrap:wrap;">
-    <input type="search" id="cust-search" oninput="filterCustomers(this.value)" placeholder="Search name or email…" style="flex:1;min-width:200px;max-width:340px;">
-    <select id="cust-book-filter" onchange="setCustomerBookFilter(this.value)" title="Show only buyers of one title — for a targeted launch email" style="max-width:240px;"><option value="">All books</option></select>
-    <span id="cust-summary" style="font-size:12px;color:var(--text3);"></span>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-    <button class="btn" onclick="copyCustomerEmails()">📋 Copy segment</button>
-    <button class="btn" onclick="exportCustomersCSV()">⬇ Export segment</button>
-    <button class="btn gold" onclick="emailCustomerSegment()" title="Open Gmail with the filtered segment pre-filled as BCC">✉ Email segment</button>
-  </div>
-  <div id="cust-stripe-status" style="font-size:11px;color:var(--text3);margin-bottom:10px;min-height:14px;line-height:1.5;"></div>
-  <div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th>Name</th><th>Email</th><th class="r">Orders</th><th class="r">Units</th><th>Books</th><th>Spend</th><th>Last order</th><th>Source</th><th>Action</th></tr></thead>
-    <tbody id="cust-body"></tbody>
-  </table></div>
 </div>
 
 <!-- MANUAL -->
@@ -2530,6 +2672,20 @@
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button type="button" class="btn" onclick="closeM('restore-book')">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- Campaign Email Sending Progress Overlay -->
+<div class="send-overlay" id="c-send-overlay">
+  <div class="send-modal">
+    <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Sending Campaign</div>
+    <div id="c-send-progress-text" style="font-size:13px;color:var(--text2);">Preparing email delivery...</div>
+    <div class="send-progress-track">
+      <div class="send-progress-fill" id="c-send-progress-fill"></div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Please keep Lyrical Inventory open until sending finishes.</div>
+    <button class="btn sm" id="c-send-cancel-btn" onclick="cancelCampaignSending()">✕ Abort Send</button>
+    <div class="send-log-console" id="c-send-log-console"></div>
   </div>
 </div>
 

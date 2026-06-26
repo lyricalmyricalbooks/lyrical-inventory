@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-loadEnv(path.join(__dirname, '.env'));
+if (!process.env.IGNORE_ENV_FILE) {
+  loadEnv(path.join(__dirname, '.env'));
+}
 
 const PORT = Number(process.env.BACKEND_PORT || process.env.PORT || 8787);
 
@@ -150,6 +152,20 @@ const server = http.createServer(async (req, res) => {
         persist();
         return sendJson(res, 200, { ok: true });
       }
+    }
+
+    if (url.pathname === '/api/campaign/send' && req.method === 'POST') {
+      const body = await readJson(req, res);
+      if (!body) return;
+      const { to, subject, body: emailBody, replyTo } = body;
+      console.log(`[MOCK MAIL] Sending campaign email:
+      To: ${to}
+      Subject: ${subject}
+      Reply-To: ${replyTo || 'default'}
+      Body: ${(emailBody || '').substring(0, 100)}...`);
+      
+      appendAudit(user.email, 'campaign.send_single', { to, subject });
+      return sendJson(res, 200, { ok: true, emailed: true, via: 'mock-backend' });
     }
 
     sendJson(res, 404, { error: 'Not Found' });

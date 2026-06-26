@@ -394,6 +394,28 @@ function doPost(e) {
       }
     }
 
+    // ── Email a campaign recipient ──
+    if (action === 'sendcampaignemail') {
+      const d = payload.payload || {};
+      try {
+        const clean_ = (s) => String(s == null ? '' : s).replace(/[\x00-\x1F\x7F]+/g, ' ').trim();
+        const cleanBody_ = (s) => String(s == null ? '' : s).replace(/\r/g, '').replace(/[\x00-\x09\x0B-\x1F\x7F]+/g, ' ');
+        const to = clean_(d.to);
+        if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+          return jsonOut_({ error: 'invalid recipient' });
+        }
+        const subject = clean_(d.subject) || 'Newsletter';
+        const body = cleanBody_(d.body) || '';
+        const replyTo = clean_(d.replyTo);
+        const opts = { to: to, subject: subject, body: body };
+        if (replyTo) opts.replyTo = replyTo;
+        const sent = sendMail_(opts);
+        return jsonOut_({ ok: true, emailed: true, via: sent.provider });
+      } catch (err) {
+        return jsonOut_({ error: 'mail failed: ' + String(err) });
+      }
+    }
+
     // ── Reset / rebuild: clear every managed sheet so the client can resend a
     // clean copy. Removes duplicate rows, stale VOID rows, and legacy rows with
     // a blank CAD Equivalent in one pass. The app remains the source of truth. ──
