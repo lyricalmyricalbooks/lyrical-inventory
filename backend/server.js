@@ -406,6 +406,8 @@ function normalizeBook(raw) {
     seoDescription: str(raw.seoDescription),
     featured: Boolean(raw.featured),
     photos: Array.isArray(raw.photos) ? raw.photos.slice(0, 10) : [],
+    acceptedMethods: Array.isArray(raw.acceptedMethods) ? raw.acceptedMethods : ['stripe', 'paypal', 'interac', 'cash_card'],
+    useGlobalMethods: raw.useGlobalMethods !== undefined ? Boolean(raw.useGlobalMethods) : true,
     createdAt: raw.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

@@ -34,6 +34,8 @@ const _updateSW = registerSW({ onNeedRefresh() {} });
 let BOOKS = {};
 let BOOK_LIST = []; // always mirrors Object.values(BOOKS) — updated at every BOOKS mutation
 let editingBookId = null;
+let WEBSITE_PAYMENT_METHODS = ['stripe', 'paypal', 'interac', 'cash_card'];
+let pmSelectedBookId = '';
 // IDs of DEFAULT_BOOKS that the user has explicitly removed. Persisted in the
 // catalog Firebase doc so the merge below doesn't resurrect them on next load.
 let deletedDefaultIds = [];
@@ -114,6 +116,7 @@ async function syncCatalog() {
   await loadCatalog();
   await loadPaymentLinks();
   await loadProductionCosts();
+  await loadWebsitePaymentMethods();
   if (window.IS_PUBLISHER) {
     try {
       await saveCatalogWithDeletions();
@@ -267,7 +270,9 @@ async function saveBookFromModal() {
     accentBg: hexToRgba($('nb-accent').value, 0.1),
     urlParam: currentBook.urlParam || id,
     authorEmail: ($('nb-pw').value || '').toLowerCase().trim() || currentBook.authorEmail || '',
-    profitTiers: currentBook.profitTiers || []
+    profitTiers: currentBook.profitTiers || [],
+    acceptedMethods: currentBook.acceptedMethods || ['stripe', 'paypal', 'interac', 'cash_card'],
+    useGlobalMethods: currentBook.useGlobalMethods ?? true
   };
   
   // Keep the first break-even tier aligned when it still represents production-cost recovery.
@@ -396,7 +401,7 @@ let _currentQR = null;
 function openPaymentQRModal() {
   if (!activeBook || activeBook === 'all' || isAuthor()) return;
   const book = BOOKS[activeBook];
-  const url = book.stripeLink || book.paymentLink || 'https://paypal.me/lyricalmyricalbooks';
+  const url = getEffectiveBookPaymentLink(book) || 'https://paypal.me/lyricalmyricalbooks';
   
   $('qr-book-title').textContent = book.title;
   $('qr-payment-link').value = url;
@@ -452,7 +457,7 @@ function renderAllQRCodes() {
   grid.innerHTML = '';
 
   BOOK_LIST.forEach(book => {
-    const url = book.stripeLink || book.paymentLink || '';
+    const url = getEffectiveBookPaymentLink(book);
     const card = document.createElement('div');
     card.style.cssText = `background:var(--ink2);border:1px solid rgba(255,255,255,.08);border-radius:var(--r3);padding:1.5rem;display:flex;flex-direction:column;align-items:center;gap:1rem;`;
 
@@ -522,7 +527,7 @@ let _authorQRInstance = null;
 function renderAuthorQRPage() {
   const book = BOOKS[activeBook];
   if (!book) return;
-  const url = book.stripeLink || book.paymentLink || '';
+  const url = getEffectiveBookPaymentLink(book);
 
   // Populate header
   const titleEl = $('myqr-book-title');
@@ -7122,11 +7127,34 @@ function viewInvoice(id){
 
 function effectivePaymentLink(inv){
   const book = BOOKS[activeBook] || getBook();
-  // Dynamic Stripe link (exact amount) always wins
-  if (inv.stripe && inv.stripe.url) return inv.stripe.url;
-  let url = inv.paymentLink || book.stripeLink || book.paymentLink || '';
+  const acceptedMethods = getAcceptedPaymentMethodsForBook(book.id);
+  
+  if (inv.stripe && inv.stripe.url && acceptedMethods.includes('stripe')) return inv.stripe.url;
+  
+  let url = '';
+  if (inv.paymentLink) {
+    const isStripe = /buy\.stripe\.com/i.test(inv.paymentLink);
+    const isPaypal = /paypal/i.test(inv.paymentLink);
+    const isInterac = /^[^\s@]+@[^\s@]+$/.test(inv.paymentLink);
+    if ((isStripe && acceptedMethods.includes('stripe')) ||
+        (isPaypal && acceptedMethods.includes('paypal')) ||
+        (isInterac && acceptedMethods.includes('interac'))) {
+      url = inv.paymentLink;
+    }
+  }
+  
+  if (!url) {
+    if (acceptedMethods.includes('stripe') && book.stripeLink) {
+      url = book.stripeLink;
+    } else if (acceptedMethods.includes('paypal') && book.paymentLink && /paypal/i.test(book.paymentLink)) {
+      url = book.paymentLink;
+    } else if (acceptedMethods.includes('interac') && book.paymentLink && /^[^\s@]+@[^\s@]+$/.test(book.paymentLink)) {
+      url = book.paymentLink;
+    }
+  }
+  
   if (!url) return '';
-  // Best-effort: append client_reference_id for Stripe Payment Links so the payment is tagged
+  
   try {
     if (/buy\.stripe\.com/i.test(url)) {
       const u = new URL(url);
@@ -7158,10 +7186,11 @@ function renderInvoicePaperHTML(inv){
     <td class="r"><strong>${fmt((it.qty||0)*(it.unitPrice||0), cur)}</strong></td>
   </tr>`).join('');
 
+  const acceptedMethods = getAcceptedPaymentMethodsForBook(book.id);
   const payMethodsLabel = [
-    payUrl && /buy\.stripe\.com/i.test(payUrl) ? 'Stripe' : null,
-    payUrl && /paypal/i.test(payUrl) ? 'PayPal' : null,
-    payUrl && /^[^\s@]+@[^\s@]+$/.test(payUrl) ? 'Interac e-Transfer' : null,
+    acceptedMethods.includes('stripe') && payUrl && /buy\.stripe\.com/i.test(payUrl) ? 'Stripe' : null,
+    acceptedMethods.includes('paypal') && payUrl && /paypal/i.test(payUrl) ? 'PayPal' : null,
+    acceptedMethods.includes('interac') && payUrl && /^[^\s@]+@[^\s@]+$/.test(payUrl) ? 'Interac e-Transfer' : null,
     settings.bank ? 'Bank transfer' : null,
   ].filter(Boolean).join(' · ') || 'See payment instructions below';
 
@@ -10745,6 +10774,186 @@ async function loadPaymentLinks(){
   }catch(_){}
 }
 
+async function loadWebsitePaymentMethods() {
+  try {
+    const stored = await window._fbLoadSettings('websitePaymentMethods');
+    if (stored && Array.isArray(stored)) {
+      WEBSITE_PAYMENT_METHODS = stored;
+    } else {
+      WEBSITE_PAYMENT_METHODS = ['stripe', 'paypal', 'interac', 'cash_card'];
+    }
+  } catch (e) {
+    console.warn('Failed to load website payment methods', e);
+  }
+}
+
+async function saveWebsitePaymentMethods() {
+  if (isAuthor()) return;
+  try {
+    await window._fbSaveSettings('websitePaymentMethods', WEBSITE_PAYMENT_METHODS);
+  } catch (e) {
+    console.error('Failed to save website payment methods', e);
+  }
+}
+
+function getAcceptedPaymentMethodsForBook(bookId) {
+  const book = BOOKS[bookId];
+  if (!book) return WEBSITE_PAYMENT_METHODS;
+  if (book.useGlobalMethods ?? true) {
+    return WEBSITE_PAYMENT_METHODS;
+  }
+  return book.acceptedMethods || ['stripe', 'paypal', 'interac', 'cash_card'];
+}
+
+function getEffectiveBookPaymentLink(book) {
+  if (!book) return '';
+  const acceptedMethods = getAcceptedPaymentMethodsForBook(book.id);
+  
+  let url = '';
+  if (acceptedMethods.includes('stripe') && book.stripeLink) {
+    url = book.stripeLink;
+  } else if (acceptedMethods.includes('paypal') && book.paymentLink && /paypal/i.test(book.paymentLink)) {
+    url = book.paymentLink;
+  } else if (acceptedMethods.includes('interac') && book.paymentLink && /^[^\s@]+@[^\s@]+$/.test(book.paymentLink)) {
+    url = book.paymentLink;
+  }
+  
+  return url || book.stripeLink || book.paymentLink || '';
+}
+
+function renderPaymentConfig() {
+  // Global Website list
+  const globalList = $('pm-global-list');
+  if (globalList) {
+    const methods = [
+      { id: 'stripe', title: 'Stripe Checkout', desc: 'Accept credit card payments via Stripe links.' },
+      { id: 'paypal', title: 'PayPal', desc: 'Accept PayPal payments.' },
+      { id: 'interac', title: 'Interac e-Transfer', desc: 'Accept email bank transfers.' },
+      { id: 'cash_card', title: 'Cash/Card (local)', desc: 'Accept physical cash/cards for manual checkouts.' }
+    ];
+    
+    globalList.innerHTML = methods.map(m => {
+      const checked = WEBSITE_PAYMENT_METHODS.includes(m.id) ? 'checked' : '';
+      return `
+        <label class="pm-toggle-row">
+          <div class="pm-toggle-label">
+            <span class="pm-toggle-title">${m.title}</span>
+            <span class="pm-toggle-desc">${m.desc}</span>
+          </div>
+          <span class="pm-switch">
+            <input type="checkbox" class="pm-global-checkbox" value="${m.id}" ${checked} onchange="window.updateGlobalPaymentMethod('${m.id}', this.checked)">
+            <span class="pm-track"></span>
+          </span>
+        </label>
+      `;
+    }).join('');
+  }
+
+  // Populate book selector dropdown
+  const bookSelect = $('pm-book-select');
+  if (bookSelect) {
+    const currentVal = bookSelect.value || pmSelectedBookId || (BOOK_LIST[0]?.id || '');
+    bookSelect.innerHTML = BOOK_LIST.map(b => `<option value="${b.id}">${escapeHtml(b.title)}</option>`).join('');
+    bookSelect.value = currentVal;
+    pmSelectedBookId = currentVal;
+  }
+
+  renderBookPaymentConfig();
+}
+
+window.updateGlobalPaymentMethod = function(id, checked) {
+  if (checked) {
+    if (!WEBSITE_PAYMENT_METHODS.includes(id)) WEBSITE_PAYMENT_METHODS.push(id);
+  } else {
+    WEBSITE_PAYMENT_METHODS = WEBSITE_PAYMENT_METHODS.filter(m => m !== id);
+  }
+  // Sync the UI if any books are using global settings
+  renderBookPaymentConfig();
+};
+
+function renderBookPaymentConfig() {
+  const bookId = $('pm-book-select')?.value;
+  if (!bookId) return;
+  pmSelectedBookId = bookId;
+  const book = BOOKS[bookId];
+  if (!book) return;
+
+  const useGlobal = book.useGlobalMethods ?? true;
+  const globalCb = $('pm-book-use-global');
+  if (globalCb) globalCb.checked = useGlobal;
+
+  const bookList = $('pm-book-list');
+  if (bookList) {
+    const methods = [
+      { id: 'stripe', title: 'Stripe Checkout', desc: 'Accept credit card payments via Stripe links.' },
+      { id: 'paypal', title: 'PayPal', desc: 'Accept PayPal payments.' },
+      { id: 'interac', title: 'Interac e-Transfer', desc: 'Accept email bank transfers.' },
+      { id: 'cash_card', title: 'Cash/Card (local)', desc: 'Accept physical cash/cards for manual checkouts.' }
+    ];
+
+    const activeMethods = useGlobal ? WEBSITE_PAYMENT_METHODS : (book.acceptedMethods || ['stripe', 'paypal', 'interac', 'cash_card']);
+
+    bookList.innerHTML = methods.map(m => {
+      const checked = activeMethods.includes(m.id) ? 'checked' : '';
+      const disabled = useGlobal ? 'disabled' : '';
+      return `
+        <label class="pm-toggle-row ${useGlobal ? 'disabled' : ''}">
+          <div class="pm-toggle-label">
+            <span class="pm-toggle-title">${m.title}</span>
+            <span class="pm-toggle-desc">${m.desc}</span>
+          </div>
+          <span class="pm-switch">
+            <input type="checkbox" class="pm-book-checkbox" value="${m.id}" ${checked} ${disabled}>
+            <span class="pm-track"></span>
+          </span>
+        </label>
+      `;
+    }).join('');
+  }
+}
+
+window.toggleBookUseGlobal = function() {
+  const bookId = pmSelectedBookId;
+  if (!bookId || !BOOKS[bookId]) return;
+  const useGlobal = $('pm-book-use-global').checked;
+  BOOKS[bookId].useGlobalMethods = useGlobal;
+  renderBookPaymentConfig();
+};
+
+window.savePaymentConfig = async function() {
+  if (isAuthor()) return;
+  
+  const bookId = pmSelectedBookId;
+  if (bookId && BOOKS[bookId]) {
+    const book = BOOKS[bookId];
+    book.useGlobalMethods = $('pm-book-use-global').checked;
+    if (!book.useGlobalMethods) {
+      const bookCheckboxes = document.querySelectorAll('.pm-book-checkbox');
+      const selected = [];
+      bookCheckboxes.forEach(cb => {
+        if (cb.checked) selected.push(cb.value);
+      });
+      book.acceptedMethods = selected;
+    }
+  }
+
+  // Save global website settings
+  const globalCheckboxes = document.querySelectorAll('.pm-global-checkbox');
+  const globalSelected = [];
+  globalCheckboxes.forEach(cb => {
+    if (cb.checked) globalSelected.push(cb.value);
+  });
+  WEBSITE_PAYMENT_METHODS = globalSelected;
+
+  await saveWebsitePaymentMethods();
+  await saveCatalogWithDeletions();
+  
+  showToast('✓ Payment methods saved successfully');
+  renderPaymentConfig();
+};
+
+window.renderBookPaymentConfig = renderBookPaymentConfig;
+
 // ── PROFIT SHARING LOGIC
 let psActiveBookId = null;
 let psSimGross = null;   // "what-if" gross revenue for the live earnings preview
@@ -11482,6 +11691,7 @@ async function boot(forcedBook) {
   buildBookSwitcher();
   await loadPaymentLinks();
   await loadProductionCosts();
+  await loadWebsitePaymentMethods();
   await loadCustomerSuppression();
   await loadMailingList();
   renderCatalogList();
@@ -15313,6 +15523,7 @@ function renderReconcile() {
   if (!needsEl) return;
 
   reconRenderKeyRow();
+  renderPaymentConfig();
 
   const mem = getReconMemory();
   const lastSyncEl = document.getElementById('recon-last-sync');

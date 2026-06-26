@@ -68,6 +68,8 @@ describe('normalizeBook', () => {
       seoDescription: 'A classic novel by F. Scott Fitzgerald.',
       featured: true,
       photos: ['photo1.jpg', 'photo2.jpg'],
+      acceptedMethods: ['stripe', 'paypal', 'interac', 'cash_card'],
+      useGlobalMethods: true,
       createdAt: '2023-01-01T00:00:00Z'
     });
 
@@ -103,7 +105,9 @@ describe('normalizeBook', () => {
       seoTitle: '',
       seoDescription: '',
       featured: false,
-      photos: []
+      photos: [],
+      acceptedMethods: ['stripe', 'paypal', 'interac', 'cash_card'],
+      useGlobalMethods: true
     });
 
     // createdAt and updatedAt should be generated

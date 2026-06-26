@@ -700,6 +700,49 @@
   <div id="recon-summary" style="font-size:13px;color:var(--text2);margin-bottom:14px;"></div>
   <div id="recon-needs"><div class="empty-state"><div class="e-icon">💳</div>Press <strong>Sync from Stripe</strong> to pull your payments.</div></div>
   <div id="recon-matched"></div>
+
+  <!-- Accepted Payment Methods (AGENTS.md compliant UX/UI) -->
+  <div class="divider" style="margin-top:2.5rem; margin-bottom:1.5rem;"></div>
+  <div id="payment-methods-config-container">
+    <div class="row-between" style="margin-bottom:1rem;">
+      <div class="section-hed">Accepted Payment Methods</div>
+    </div>
+    <p class="lead-note">Configure which payment methods are accepted globally for your website (lyricalmyricalbooks.com) and override them for individual books. This controls options displayed on invoices and QR payment pages.</p>
+    <div class="card payment-methods-card">
+      <div class="payment-methods-grid">
+        <!-- Global Website Settings -->
+        <div class="payment-methods-col">
+          <h4 class="payment-methods-title">Website Settings (lyricalmyricalbooks.com)</h4>
+          <div class="payment-methods-list" id="pm-global-list">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+        <!-- Book-Level Settings -->
+        <div class="payment-methods-col">
+          <h4 class="payment-methods-title">Individual Book Override</h4>
+          <div class="form-group" style="margin-bottom:14px;">
+            <label for="pm-book-select">Select a book</label>
+            <select id="pm-book-select" onchange="renderBookPaymentConfig()"></select>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+            <label class="pm-toggle-row" id="pm-book-use-global-wrap">
+              <div class="pm-toggle-label">
+                <span class="pm-toggle-title">Use Website settings</span>
+                <span class="pm-toggle-desc">Inherit accepted payment methods from the website.</span>
+              </div>
+              <span class="pm-switch"><input type="checkbox" id="pm-book-use-global" onchange="toggleBookUseGlobal()"><span class="pm-track"></span></span>
+            </label>
+            <div id="pm-book-list" style="display:flex; flex-direction:column; gap:10px; margin-top:4px;">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-actions" style="margin-top:1.5rem; padding-top:1rem; border-top:1px dashed var(--border); display:flex; justify-content:flex-end;">
+        <button class="btn gold lg" onclick="savePaymentConfig()">Save Payment Methods</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- CUSTOMERS / MAILING LIST (publisher only, all books) -->
