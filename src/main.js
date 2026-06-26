@@ -2762,14 +2762,12 @@ function scheduleRender() {
 let ocImportOpen = false;
 
 function ocList() {
-  const s = getState();
-  if (!Array.isArray(s.openCall)) s.openCall = [];
-  return s.openCall;
+  const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!activeProj) return [];
+  if (!Array.isArray(activeProj.contributors)) activeProj.contributors = [];
+  return activeProj.contributors;
 }
 
-// Open Call is a publisher-only workflow. This guards every entry point
-// (render + mutations) so an author session can't view or change it even
-// if a handler is reached outside the (hidden) tab.
 function ocBlockedForAuthor_() {
   return isAuthor();
 }
@@ -2780,22 +2778,71 @@ function renderOpenCall() {
 
   if (ocBlockedForAuthor_()) { body.innerHTML = ''; return; }
 
-  if (!activeBook || activeBook === 'all') {
-    const t = $('bc-title-oc'); if (t) t.textContent = 'No book selected';
-    body.innerHTML = `<div class="card" style="text-align:center;color:var(--text2);">Select a single book above to track its open-call contributors.</div>`;
-    return;
+  const bc = $('book-context-oc');
+  if (bc) bc.style.display = 'none';
+
+  if (!OPENCALL_DATA.activeProjectId || !OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId]) {
+    const keys = Object.keys(OPENCALL_DATA.projects);
+    if (keys.length > 0) {
+      OPENCALL_DATA.activeProjectId = keys[0];
+    } else {
+      OPENCALL_DATA.projects['default'] = {
+        id: 'default',
+        title: 'General Open Call',
+        createdAt: today(),
+        contributors: []
+      };
+      OPENCALL_DATA.activeProjectId = 'default';
+    }
   }
 
-  const book = getBook();
-  const t = $('bc-title-oc'); if (t) t.textContent = book.title || activeBook;
+  const listRaw = ocList();
+  
+  let list = listRaw;
+  if (ocSearchQuery.trim()) {
+    const q = ocSearchQuery.toLowerCase().trim();
+    list = list.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.photo || '').toLowerCase().includes(q)
+    );
+  }
+  if (ocFilterStage) {
+    list = list.filter(c => {
+      const next = OC_STAGES.find(st => !c[st.key]);
+      return next && next.key === ocFilterStage;
+    });
+  }
 
-  const list = ocList();
-  const total = list.length;
-  const done = list.filter(c => OC_STAGES.every(st => c[st.key])).length;
+  const total = listRaw.length;
+  const done = listRaw.filter(c => OC_STAGES.every(st => c[st.key])).length;
 
-  // Per-stage progress chips.
+  const projectOptions = Object.keys(OPENCALL_DATA.projects).map(id => {
+    const proj = OPENCALL_DATA.projects[id];
+    return `<option value="${id}" ${id === OPENCALL_DATA.activeProjectId ? 'selected' : ''}>${escapeHtml(proj.title)}</option>`;
+  }).join('');
+
+  const projectSwitcher = `
+    <div class="card" style="border-left:3px solid var(--gold);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:1.5rem;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:18px;">📣</span>
+        <div>
+          <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;">Open Call Portal</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">Track and manage contributor pipelines globally.</div>
+        </div>
+        <select id="oc-project-select" onchange="ocSwitchProject(this.value)" style="margin-left:8px;padding:6px 12px;max-width:240px;cursor:pointer;">
+          ${projectOptions}
+        </select>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn sm gold" onclick="ocCreateProject()">＋ New Project</button>
+        <button class="btn sm" onclick="ocRenameProject()">✎ Rename</button>
+        <button class="btn sm" onclick="ocDeleteProject()" style="color:var(--red);">✕ Delete</button>
+      </div>
+    </div>`;
+
   const stageCounts = OC_STAGES.map(st => {
-    const n = list.filter(c => c[st.key]).length;
+    const n = listRaw.filter(c => c[st.key]).length;
     return `<span class="pill ${n === total && total ? 'green' : 'gray'}" title="${st.label}">${st.label}: ${n}/${total}</span>`;
   }).join(' ');
 
@@ -2806,6 +2853,20 @@ function renderOpenCall() {
         <button class="btn sm" onclick="ocCopyEmails()" ${total ? '' : 'disabled'}>Copy all emails</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${total ? stageCounts : '<span style="color:var(--text2);font-size:12px;">No contributors yet.</span>'}</div>
+    </div>`;
+
+  const searchFilterBar = `
+    <div style="display:flex;gap:10px;align-items:center;margin:0 0 1rem;flex-wrap:wrap;">
+      <input type="search" id="oc-search" placeholder="Search artist name, email, or photo…" value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" style="flex:1;min-width:200px;max-width:340px;">
+      <select id="oc-filter-stage" onchange="ocFilterByStage(this.value)" style="max-width:240px;">
+        <option value="">All pending stages</option>
+        <option value="selectionSent" ${ocFilterStage === 'selectionSent' ? 'selected' : ''}>Awaiting Selection notice</option>
+        <option value="creditReceived" ${ocFilterStage === 'creditReceived' ? 'selected' : ''}>Awaiting Credit name reply</option>
+        <option value="cmykSent" ${ocFilterStage === 'cmykSent' ? 'selected' : ''}>Awaiting CMYK request</option>
+        <option value="filesReceived" ${ocFilterStage === 'filesReceived' ? 'selected' : ''}>Awaiting high-res files</option>
+        <option value="preorderSent" ${ocFilterStage === 'preorderSent' ? 'selected' : ''}>Awaiting Pre-order invite</option>
+      </select>
+      <span style="font-size:12px;color:var(--text3);">${total} contributor${total === 1 ? '' : 's'}${ (ocSearchQuery.trim() || ocFilterStage) ? ` · ${list.length} shown` : ''}</span>
     </div>`;
 
   const importPanel = ocImportOpen ? `
@@ -2866,6 +2927,18 @@ function renderOpenCall() {
       }
     }
 
+    // Direct pipeline email triggers
+    let pipelineEmailBtnHtml = '';
+    if (c.email && !_isCustomerSuppressed(c.email)) {
+      if (!c.selectionSent) {
+        pipelineEmailBtnHtml = `<button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}', 'selectionSent')" title="Compose Selection congratulatory email">✉ Send Selection Notice</button>`;
+      } else if (c.creditReceived && !c.cmykSent) {
+        pipelineEmailBtnHtml = `<button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}', 'cmykSent')" title="Compose CMYK artwork request email">✉ Request Files</button>`;
+      } else if (c.cmykSent && c.filesReceived && !c.preorderSent) {
+        pipelineEmailBtnHtml = `<button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}', 'preorderSent')" title="Compose Pre-order launch email with contributor info">✉ Send Pre-order Info</button>`;
+      }
+    }
+
     const emailCell = c.email
       ? ( _isCustomerSuppressed(c.email)
           ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(c.email)}</span>`
@@ -2883,6 +2956,7 @@ function renderOpenCall() {
             </div>
           </div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            ${pipelineEmailBtnHtml}
             ${mailActionsHtml}
             <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')">Remove</button>
           </div>
@@ -2893,17 +2967,23 @@ function renderOpenCall() {
       </div>`;
   }).join('');
 
-  body.innerHTML = summary + addForm + cards;
+  body.innerHTML = projectSwitcher + summary + searchFilterBar + addForm + cards;
 }
 
-function ocAdd() {
+async function ocAdd() {
   if (ocBlockedForAuthor_()) return;
   const name = ($('oc-name')?.value || '').trim();
   const email = ($('oc-email')?.value || '').trim();
   const photo = ($('oc-photo')?.value || '').trim();
   if (!name && !email) { showToast('Enter a name or email', 'warn'); return; }
+  
   ocList().push(newContributor({ name, email, photo, createdAt: today() }));
-  saveState(activeBook);
+  
+  if ($('oc-name')) $('oc-name').value = '';
+  if ($('oc-email')) $('oc-email').value = '';
+  if ($('oc-photo')) $('oc-photo').value = '';
+  
+  await _persistOpenCalls();
   renderOpenCall();
   showToast('Contributor added');
 }
@@ -2914,7 +2994,7 @@ function ocToggleImport() {
   renderOpenCall();
 }
 
-function ocRunImport() {
+async function ocRunImport() {
   if (ocBlockedForAuthor_()) return;
   const raw = ($('oc-import-text')?.value || '').trim();
   if (!raw) { showToast('Paste some rows first', 'warn'); return; }
@@ -2923,18 +3003,19 @@ function ocRunImport() {
 
   if (!added) { showToast(skipped ? 'All rows already imported' : 'Nothing to import', 'warn'); return; }
   contributors.forEach(c => { c.createdAt = today(); list.push(c); });
-  saveState(activeBook);
+  
+  await _persistOpenCalls();
   ocImportOpen = false;
   renderOpenCall();
   showToast(`Imported ${added}${skipped ? ` · ${skipped} duplicate${skipped > 1 ? 's' : ''} skipped` : ''}`);
 }
 
-function ocToggle(id, key) {
+async function ocToggle(id, key) {
   if (ocBlockedForAuthor_()) return;
   const c = ocList().find(x => x.id === id);
   if (!c) return;
   c[key] = !c[key];
-  saveState(activeBook);
+  await _persistOpenCalls();
   renderOpenCall();
 }
 
@@ -2947,7 +3028,7 @@ async function ocDelete(id) {
   const list = ocList();
   const i = list.findIndex(x => x.id === id);
   if (i !== -1) list.splice(i, 1);
-  saveState(activeBook);
+  await _persistOpenCalls();
   renderOpenCall();
 }
 
@@ -2960,6 +3041,9 @@ function ocCopyEmails() {
   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => showToast('Copy failed', 'err'));
   else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); }
 }
+
+function ocSearch(v) { ocSearchQuery = v || ''; renderOpenCall(); }
+function ocFilterByStage(v) { ocFilterStage = v || ''; renderOpenCall(); }
 
 // ── ORDER RECORDING
 function recordOrder(num, chan, qty, price, notes, payment = null) {
@@ -11729,6 +11813,7 @@ async function boot(forcedBook) {
   await loadCustomerSuppression();
   await loadMailingList();
   await loadCampaigns();
+  await loadOpenCalls();
   renderCatalogList();
   renderProfitSettings();
   if(sheetsUrl) showSheetsConnected();
@@ -16427,6 +16512,173 @@ async function _persistCampaigns() {
   try { localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(CAMPAIGNS)); } catch (_) {}
 }
 
+// ── Decoupled Open Call Portal
+const OPENCALL_KEY = 'lm-opencalls';
+let OPENCALL_DATA = {
+  projects: {},
+  activeProjectId: ''
+};
+let ocSearchQuery = '';
+let ocFilterStage = '';
+
+async function loadOpenCalls() {
+  let data = null;
+  try { data = await window._fbLoadSettings('openCalls'); } catch (_) {}
+  if (!data) { try { data = JSON.parse(localStorage.getItem(OPENCALL_KEY)); } catch (_) {} }
+  if (data && typeof data === 'object' && data.projects) {
+    OPENCALL_DATA = data;
+  } else {
+    OPENCALL_DATA = {
+      projects: {
+        'default': {
+          id: 'default',
+          title: 'General Open Call',
+          createdAt: today(),
+          contributors: []
+        }
+      },
+      activeProjectId: 'default'
+    };
+  }
+  await migrateLegacyOpenCalls();
+}
+
+async function _persistOpenCalls() {
+  try { await window._fbSaveSettings('openCalls', OPENCALL_DATA); } catch (_) {}
+  try { localStorage.setItem(OPENCALL_KEY, JSON.stringify(OPENCALL_DATA)); } catch (_) {}
+}
+
+async function migrateLegacyOpenCalls() {
+  let migrated = false;
+  for (const bid of Object.keys(BOOKS)) {
+    const book = BOOKS[bid];
+    try {
+      const json = await window._fbLoad(bid);
+      if (json) {
+        const stateObj = JSON.parse(json);
+        if (stateObj && Array.isArray(stateObj.openCall) && stateObj.openCall.length > 0) {
+          const projId = 'oc-migrated-' + bid;
+          if (!OPENCALL_DATA.projects[projId]) {
+            OPENCALL_DATA.projects[projId] = {
+              id: projId,
+              title: (book.title || bid) + ' Open Call',
+              createdAt: today(),
+              contributors: stateObj.openCall
+            };
+            if (OPENCALL_DATA.activeProjectId === 'default' && OPENCALL_DATA.projects['default'].contributors.length === 0) {
+              OPENCALL_DATA.activeProjectId = projId;
+            }
+            migrated = true;
+          }
+          stateObj.openCall = [];
+          await window._fbSave(bid, JSON.stringify(stateObj));
+        }
+      }
+    } catch (_) {}
+  }
+  if (migrated) {
+    if (OPENCALL_DATA.projects['default'] && OPENCALL_DATA.projects['default'].contributors.length === 0 && Object.keys(OPENCALL_DATA.projects).length > 1) {
+      delete OPENCALL_DATA.projects['default'];
+    }
+    await _persistOpenCalls();
+  }
+}
+
+// Project Actions
+async function ocCreateProject() {
+  const title = prompt('Enter a title for the new Open Call project:');
+  if (!title || !title.trim()) return;
+  const id = 'oc-proj-' + Date.now().toString(36);
+  OPENCALL_DATA.projects[id] = {
+    id: id,
+    title: title.trim(),
+    createdAt: today(),
+    contributors: []
+  };
+  OPENCALL_DATA.activeProjectId = id;
+  await _persistOpenCalls();
+  renderOpenCall();
+  showToast('✓ Project created!');
+}
+
+async function ocRenameProject() {
+  const current = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!current) return;
+  const title = prompt('Enter new project title:', current.title);
+  if (!title || !title.trim() || title.trim() === current.title) return;
+  current.title = title.trim();
+  await _persistOpenCalls();
+  renderOpenCall();
+  showToast('✓ Project renamed!');
+}
+
+async function ocDeleteProject() {
+  const currentId = OPENCALL_DATA.activeProjectId;
+  const current = OPENCALL_DATA.projects[currentId];
+  if (!current) return;
+  const ok = await confirmDialog(`Are you sure you want to delete project "${current.title}" and all its contributors?`, { danger: true, okLabel: 'Delete' });
+  if (!ok) return;
+  
+  delete OPENCALL_DATA.projects[currentId];
+  
+  const remaining = Object.keys(OPENCALL_DATA.projects);
+  if (remaining.length === 0) {
+    OPENCALL_DATA.projects['default'] = {
+      id: 'default',
+      title: 'General Open Call',
+      createdAt: today(),
+      contributors: []
+    };
+    OPENCALL_DATA.activeProjectId = 'default';
+  } else {
+    OPENCALL_DATA.activeProjectId = remaining[0];
+  }
+  await _persistOpenCalls();
+  renderOpenCall();
+  showToast('Project deleted');
+}
+
+function ocSwitchProject(id) {
+  if (!OPENCALL_DATA.projects[id]) return;
+  OPENCALL_DATA.activeProjectId = id;
+  renderOpenCall();
+}
+
+// Preset Compose Actions
+function ocComposeStageEmail(cId, stageKey) {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const c = proj.contributors.find(x => x.id === cId);
+  if (!c || !c.email) return;
+
+  let subject = '';
+  let body = '';
+  
+  if (stageKey === 'selectionSent') {
+    subject = `[Selected] Lyricalmyrical Collective Open Call`;
+    body = `Hi ${c.name || 'Artist'},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`;
+  } else if (stageKey === 'cmykSent') {
+    subject = `[Files Requested] Lyricalmyrical Open Call - ${proj.title}`;
+    body = `Hi ${c.name || 'Artist'},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`;
+  } else if (stageKey === 'preorderSent') {
+    subject = `[Pre-orders Open] Lyricalmyrical Collective Project - ${proj.title}`;
+    body = `Hi ${c.name || 'Artist'},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`;
+  } else {
+    subject = `Regarding Open Call - ${proj.title}`;
+    body = `Hi ${c.name || 'Artist'},\n\n...`;
+  }
+
+  switchTab('customers');
+  switchCustomersSubTab('campaign');
+  
+  openCampaignWizard({
+    email: c.email,
+    subject: subject,
+    body: body,
+    title: `Compose Pipeline Email (${c.email})`
+  });
+}
+
 function switchCustomersSubTab(subTabName) {
   activeCustomersSubTab = subTabName;
   const subTabs = ['audience', 'mailing', 'campaign'];
@@ -16516,13 +16768,42 @@ function renderCustomersAudience() {
     : `<tr><td colspan="9"><div class="empty-state" style="padding:1.5rem;">${(_customerFilter.trim() || _customerBookFilter || _customerChannelFilter || _customerSpendFilter || _customerOrdersFilter) ? 'No customers match this filter.' : 'No customers found yet. Apply some website orders, log in-person sales with an email, or pull buyers from Stripe.'}</div></td></tr>`;
 }
 
-function openCampaignWizard() {
-  $('c-draft-id').value = '';
-  $('c-subject').value = '';
-  $('c-segment').value = 'all-curated';
-  $('c-replyto').value = 'lyricalmyricalbooks@gmail.com';
-  $('c-body').value = '';
-  $('campaign-wizard-title').textContent = 'Create New Email Campaign';
+function openCampaignWizard(presets = null) {
+  if (presets) {
+    $('c-draft-id').value = presets.draftId || '';
+    $('c-subject').value = presets.subject || '';
+    if (presets.email) {
+      const segmentSel = $('c-segment');
+      if (segmentSel) {
+        const prevTemp = segmentSel.querySelector('option[data-temp="true"]');
+        if (prevTemp) prevTemp.remove();
+        
+        const tempOpt = document.createElement('option');
+        tempOpt.value = 'single-target:' + presets.email;
+        tempOpt.textContent = `Single Recipient (${presets.email})`;
+        tempOpt.setAttribute('data-temp', 'true');
+        segmentSel.appendChild(tempOpt);
+        segmentSel.value = tempOpt.value;
+      }
+    } else {
+      $('c-segment').value = presets.segment || 'all-curated';
+    }
+    $('c-replyto').value = presets.replyTo || 'lyricalmyricalbooks@gmail.com';
+    $('c-body').value = presets.body || '';
+    $('campaign-wizard-title').textContent = presets.title || 'Create New Email Campaign';
+  } else {
+    $('c-draft-id').value = '';
+    $('c-subject').value = '';
+    const segmentSel = $('c-segment');
+    if (segmentSel) {
+      const prevTemp = segmentSel.querySelector('option[data-temp="true"]');
+      if (prevTemp) prevTemp.remove();
+      segmentSel.value = 'all-curated';
+    }
+    $('c-replyto').value = 'lyricalmyricalbooks@gmail.com';
+    $('c-body').value = '';
+    $('campaign-wizard-title').textContent = 'Create New Email Campaign';
+  }
   $('campaign-wizard-card').style.display = 'block';
   updateCampaignPreview();
   window.scrollTo({ top: $('campaign-wizard-card').offsetTop - 20, behavior: 'smooth' });
@@ -16584,6 +16865,12 @@ function onCampaignSegmentChange() {
 function getSegmentRecipients(segmentName) {
   const allDiscovered = buildCustomerList();
   const curated = mailingSubsArray().filter(s => !_isCustomerSuppressed(s.email));
+  
+  if (segmentName.startsWith('single-target:')) {
+    const email = segmentName.split(':')[1];
+    const existing = curated.find(s => s.email === email) || allDiscovered.find(c => c.email === email);
+    return [{ name: existing?.name || '', email: email }];
+  }
   
   if (segmentName === 'all-curated') {
     return curated;
@@ -16999,6 +17286,7 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
+  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
