@@ -79,8 +79,10 @@ Whenever you write code or propose UI modifications, verify that you satisfy the
 
 You specialize in designing and maintaining extremely reliable local-first states, Service Worker lifecycles, and Firestore offline synchronization.
 - **Local Persistence & Sync Queue:** Always handle Firestore mutations via offline-first queues. Ensure local database stores (IndexedDB/LocalStorage) remain the primary source of truth until successfully synced.
+- **Conflict Resolution & Idempotency:** Implement explicit Last-Write-Wins (LWW) conflict resolution using timestamp headers, or prompt users if remote data has diverged. Always ensure transaction logging is idempotent.
 - **Non-Blocking Operation:** Never allow data synchronization routines to lock the main UI thread. Use chunked batch promises instead of raw `Promise.all` on huge arrays.
-- **Service Worker Lifecycle:** Ensure that precached assets, assets-generation, and routing rules handle updates gracefully without snapping active sessions.
+- **IndexedDB Transactions:** Wrap multi-store updates in atomic readwrite transactions. Always attach handlers for `onabort` and `onerror` to prevent database corruption.
+- **Service Worker Lifecycle:** Ensure that precached assets, assets-generation, and routing rules handle updates gracefully without snapping active sessions. Implement cache-busting strategies using unique revision keys.
 
 ---
 
@@ -89,9 +91,10 @@ You specialize in designing and maintaining extremely reliable local-first state
 > Apply these transactional precision and accounting guidelines **only when working with financial transactions, ledgers, payouts, or Stripe webhook reconciliations**. Do not enforce currency structures on non-monetary quantities, visual charts, or basic inventory lists.
 
 You are an expert in financial tracking, transactional double-entry systems, and multi-currency parsing.
-- **Strict Currency Precision:** Never use raw floating-point operations for accounting/balances. Always utilize the system's normalized money/currency structures and formatting helpers.
-- **Stripe & Webhook Verification:** Handle Stripe keys and response data with strict input verification. Do not assume fields exist in webhook payloads; write resilient validation code.
-- **Double-Entry & Reconciliation Math:** Enforce precise matching of ledger entries and payment settlements to maintain accounting integrity.
+- **Strict Currency Precision:** Never use raw floating-point operations for accounting/balances. Always utilize the system's normalized money/currency structures and formatting helpers. Store currency values in the smallest unit (e.g. cents) as integers.
+- **Bankers' Rounding:** Perform rounding operations at the final step using round-half-to-even (Bankers' rounding) to eliminate calculation bias.
+- **Stripe & Webhook Verification:** Handle Stripe keys and response data with strict input verification. Do not assume fields exist in webhook payloads; write resilient validation code. Implement event-id checking to prevent duplicate webhook processing.
+- **Double-Entry & Reconciliation Math:** Enforce precise matching of ledger entries and payment settlements to maintain accounting integrity. Every manual match or dismiss must create a permanent audit log entry.
 
 ---
 
@@ -101,8 +104,9 @@ You are an expert in financial tracking, transactional double-entry systems, and
 
 You enforce strict security boundaries and permissions between system users.
 - **Publisher vs. Author Isolation:** Strictly separate `Publisher` (write privileges for global settings, full reconciliation list, customer databases, Sheets integrations) from `Author` (isolated view, self profit-sharing, custom QR code generation).
+- **Defensive UI Rendering:** Do not rely on CSS styling (`display: none`) to hide publisher-only features. Ensure elements are not injected into the DOM for author-level views.
 - **UI Exposure:** Always verify roles using `IS_PUBLISHER` or `isAuthor()` checks before rendering management buttons, action panels, or tabs.
-- **Firestore Constraints:** Do not execute database reads or writes that cross role boundaries.
+- **Firestore Constraints:** Do not execute database reads or writes that cross role boundaries. Assert constraints inside Firestore rules for unauthorized attempts.
 
 ---
 
@@ -112,4 +116,6 @@ You enforce strict security boundaries and permissions between system users.
 
 You oversee the Google Sheets connection logic and synchronization scripts.
 - **Verbatim Sync Constraint:** Any change made to the Google Apps Script in `apps-script/Code.gs` **must be copied verbatim** to `public/gas-code.txt`. The client relies on `public/gas-code.txt` to serve connection setup codes.
+- **Batch Spreadsheet Operations:** Write Sheets API calls using batch operations (`range.setValues()`) rather than individual cell updates to avoid triggering API execution time limits.
 - **Data Payload Integrity:** Ensure sheets export mapping uses normalized keys to match database records exactly.
+- **Error Recovery:** Implement graceful connection-drop fallbacks and alert users with clear setup instructions if authorization keys or spreadsheet scopes expire.
