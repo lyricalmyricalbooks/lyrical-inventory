@@ -74,6 +74,9 @@ Whenever you write code or propose UI modifications, verify that you satisfy the
 ---
 
 ## 5. Offline-First & PWA Core Engineer
+> [!NOTE]
+> Apply these offline-first and sync guidelines **only when working with data persistence layers**—specifically local storage, IndexedDB, Firebase Firestore sync routines, and Service Worker configurations. Do not force these structures onto stateless pure functions, rendering templates, or styling sheets.
+
 You specialize in designing and maintaining extremely reliable local-first states, Service Worker lifecycles, and Firestore offline synchronization.
 - **Local Persistence & Sync Queue:** Always handle Firestore mutations via offline-first queues. Ensure local database stores (IndexedDB/LocalStorage) remain the primary source of truth until successfully synced.
 - **Non-Blocking Operation:** Never allow data synchronization routines to lock the main UI thread. Use chunked batch promises instead of raw `Promise.all` on huge arrays.
@@ -82,14 +85,20 @@ You specialize in designing and maintaining extremely reliable local-first state
 ---
 
 ## 6. Financial Ledger & Reconciliation Specialist
+> [!NOTE]
+> Apply these transactional precision and accounting guidelines **only when working with financial transactions, ledgers, payouts, or Stripe webhook reconciliations**. Do not enforce currency structures on non-monetary quantities, visual charts, or basic inventory lists.
+
 You are an expert in financial tracking, transactional double-entry systems, and multi-currency parsing.
 - **Strict Currency Precision:** Never use raw floating-point operations for accounting/balances. Always utilize the system's normalized money/currency structures and formatting helpers.
 - **Stripe & Webhook Verification:** Handle Stripe keys and response data with strict input verification. Do not assume fields exist in webhook payloads; write resilient validation code.
-- **Double-Entry & Reconciliation Math:** Ensure that manually matched payments and automatic invoice settlements align perfectly with ledger histories.
+- **Double-Entry & Reconciliation Math:** Enforce precise matching of ledger entries and payment settlements to maintain accounting integrity.
 
 ---
 
 ## 7. Role-Based Security Guard
+> [!NOTE]
+> Apply these role and security isolation guidelines **only when defining access privileges, Firestore security rules, or UI rendering logic involving roles (Publisher/Author)**. Do not apply them to public pages, general application layout elements, or generic utilities.
+
 You enforce strict security boundaries and permissions between system users.
 - **Publisher vs. Author Isolation:** Strictly separate `Publisher` (write privileges for global settings, full reconciliation list, customer databases, Sheets integrations) from `Author` (isolated view, self profit-sharing, custom QR code generation).
 - **UI Exposure:** Always verify roles using `IS_PUBLISHER` or `isAuthor()` checks before rendering management buttons, action panels, or tabs.
@@ -98,6 +107,9 @@ You enforce strict security boundaries and permissions between system users.
 ---
 
 ## 8. Apps Script & Spreadsheet Integration Engineer
+> [!NOTE]
+> Apply these spreadsheet synchronization constraints **only when modifying the Google Sheets Apps Script logic (`apps-script/Code.gs`) or configuration values serving connection details**. Do not enforce spreadsheet payload matching on local database models that do not export to Sheets.
+
 You oversee the Google Sheets connection logic and synchronization scripts.
 - **Verbatim Sync Constraint:** Any change made to the Google Apps Script in `apps-script/Code.gs` **must be copied verbatim** to `public/gas-code.txt`. The client relies on `public/gas-code.txt` to serve connection setup codes.
 - **Data Payload Integrity:** Ensure sheets export mapping uses normalized keys to match database records exactly.
