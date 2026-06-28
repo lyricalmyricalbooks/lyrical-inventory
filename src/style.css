@@ -2402,12 +2402,136 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .oc-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 .oc-main {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+}
+
+/* Premium Form Input Styling inside Open Call */
+.oc-layout input[type="text"],
+.oc-layout input[type="search"],
+.oc-layout input[type="email"],
+.oc-layout select,
+.oc-layout textarea {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--cream2);
+  border: 1px solid var(--cream4);
+  border-radius: 6px;
+  padding: 10px 14px;
+  width: 100%;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 1px 2px rgba(14, 12, 10, 0.03);
+}
+
+.oc-layout input:hover,
+.oc-layout select:hover,
+.oc-layout textarea:hover {
+  border-color: var(--gold);
+  background: var(--cream);
+}
+
+.oc-layout input:focus,
+.oc-layout select:focus,
+.oc-layout textarea:focus {
+  border-color: var(--gold);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(200, 145, 58, 0.18), inset 0 1px 2px rgba(14, 12, 10, 0.02);
+}
+
+/* Specific select dropdown arrow styling */
+.oc-layout select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a5500' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 36px;
+}
+
+/* Premium Email Links */
+.oc-layout a[href^="mailto:"] {
+  color: var(--gold);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(200, 145, 58, 0.4);
+  transition: all 0.15s ease;
+}
+.oc-layout a[href^="mailto:"]:hover {
+  color: var(--gold2);
+  border-bottom-color: var(--gold2);
+  text-shadow: 0 0 1px rgba(229, 169, 63, 0.1);
+}
+
+/* Premium Buttons within Open Call */
+.oc-layout .btn {
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 6px;
+  padding: 10px 16px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  border: 1px solid var(--cream4);
+  background: var(--cream2);
+  color: var(--text2);
+}
+.oc-layout .btn:hover {
+  background: var(--cream3);
+  border-color: var(--text3);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+.oc-layout .btn:active {
+  transform: translateY(0);
+}
+.oc-layout .btn.gold {
+  background: linear-gradient(135deg, var(--gold2), var(--gold));
+  border: 1px solid var(--gold);
+  color: var(--ink);
+  box-shadow: 0 2px 6px rgba(200, 145, 58, 0.15);
+}
+.oc-layout .btn.gold:hover {
+  background: linear-gradient(135deg, var(--gold3), var(--gold2));
+  border-color: var(--gold2);
+  box-shadow: 0 4px 12px rgba(200, 145, 58, 0.25);
+  color: var(--ink);
+}
+.oc-layout .btn.sm {
+  padding: 6px 12px;
+  font-size: 11px;
+}
+.oc-layout .btn.danger-btn {
+  color: var(--red);
+  border-color: rgba(149, 32, 32, 0.2);
+  background: rgba(149, 32, 32, 0.03);
+}
+.oc-layout .btn.danger-btn:hover {
+  background: var(--red-bg);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* Card Improvements */
+.oc-layout .card, .oc-main > .card, .oc-sidebar > .card {
+  background: #fff;
+  border: 1px solid var(--cream3);
+  border-radius: var(--r3);
+  box-shadow: 0 4px 20px rgba(14, 12, 10, 0.03), 0 1px 3px rgba(14, 12, 10, 0.02);
+  padding: 20px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.oc-layout .card:hover {
+  box-shadow: 0 8px 30px rgba(14, 12, 10, 0.06), 0 2px 6px rgba(14, 12, 10, 0.03);
 }
 
 /* Step Progress Tracker */
@@ -2415,27 +2539,29 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 15px;
+  margin: 25px 0 15px;
   position: relative;
-  padding: 0 10px;
+  padding: 0 15px;
 }
 .oc-step-line {
   position: absolute;
-  top: 11px;
-  left: 24px;
-  right: 24px;
-  height: 2px;
-  background: var(--border2);
+  top: 14px;
+  left: 32px;
+  right: 32px;
+  height: 3px;
+  background: var(--cream3);
+  border-radius: 2px;
   z-index: 1;
 }
 .oc-step-line-fill {
   position: absolute;
-  top: 11px;
-  left: 24px;
-  height: 2px;
+  top: 14px;
+  left: 32px;
+  height: 3px;
   background: linear-gradient(90deg, var(--gold), var(--gold2));
+  border-radius: 2px;
   z-index: 2;
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .oc-step {
   display: flex;
@@ -2445,37 +2571,49 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   cursor: pointer;
 }
 .oc-step-circle {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: var(--card-bg, #fff);
-  border: 2px solid var(--border2);
+  background: #fff;
+  border: 2px solid var(--cream4);
   color: var(--text3);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(14, 12, 10, 0.02);
+}
+.oc-step:hover .oc-step-circle {
+  border-color: var(--gold);
+  color: var(--gold);
+  transform: scale(1.08);
 }
 .oc-step.done .oc-step-circle {
-  background: var(--gold);
+  background: linear-gradient(135deg, var(--gold2), var(--gold));
   border-color: var(--gold);
   color: var(--ink);
+  box-shadow: 0 3px 8px rgba(200, 145, 58, 0.25);
 }
 .oc-step.active .oc-step-circle {
   border-color: var(--gold);
-  color: var(--gold2);
-  box-shadow: 0 0 8px rgba(200, 145, 58, 0.3);
+  color: var(--gold);
+  background: var(--cream);
+  box-shadow: 0 0 12px rgba(200, 145, 58, 0.35);
 }
 .oc-step-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text3);
-  margin-top: 6px;
+  margin-top: 8px;
   font-weight: 500;
   transition: color 0.3s;
 }
-.oc-step.active .oc-step-label, .oc-step.done .oc-step-label {
+.oc-step.active .oc-step-label {
+  color: var(--gold);
+  font-weight: 700;
+}
+.oc-step.done .oc-step-label {
   color: var(--text);
   font-weight: 600;
 }
@@ -2483,13 +2621,13 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 /* Formatting Toolbar */
 .oc-tmpl-toolbar {
   display: flex;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border);
+  gap: 2px;
+  background: var(--cream2);
+  border: 1px solid var(--cream4);
   border-bottom: none;
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
-  padding: 4px 6px;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  padding: 6px;
   flex-wrap: wrap;
 }
 .oc-toolbar-btn {
@@ -2498,35 +2636,56 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   color: var(--text2);
   font-size: 11px;
   font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 3px;
+  padding: 4px 10px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
 }
 .oc-toolbar-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--cream3);
   color: var(--text);
-  border-color: var(--border2);
+}
+
+/* Email Template Editor Textarea Connection */
+.oc-layout textarea#oc-tmpl-body {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* Live Preview Email Box */
+.oc-preview-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid var(--cream3);
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 280px;
+  overflow-y: auto;
+  box-shadow: 0 2px 10px rgba(14, 12, 10, 0.015);
 }
 
 /* CSV Drag & Drop Zone */
 .oc-upload-zone {
-  border: 2px dashed var(--border2);
+  border: 2px dashed var(--cream4);
   border-radius: var(--r2);
-  padding: 20px;
+  padding: 24px;
   text-align: center;
-  background: rgba(255, 255, 255, 0.01);
+  background: var(--cream2);
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .oc-upload-zone:hover {
-  border-color: var(--gold2);
-  background: rgba(200, 145, 58, 0.03);
+  border-color: var(--gold);
+  background: var(--cream);
+  box-shadow: inset 0 1px 4px rgba(200, 145, 58, 0.05);
 }
 .oc-upload-zone p {
-  margin: 0 0 4px 0;
-  font-size: 12px;
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text2);
 }
 .oc-upload-zone span {

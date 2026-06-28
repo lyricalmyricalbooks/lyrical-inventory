@@ -3179,10 +3179,10 @@ function renderOpenCall() {
         </div>
         
         <!-- Live Preview Column -->
-        <div style="display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;padding:12px;max-height:260px;overflow-y:auto;">
-          <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:4px;margin-bottom:4px;font-weight:700;">Live Preview (Sample)</div>
-          <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:var(--text);" id="oc-preview-subject">—</div>
-          <div style="font-size:11px;color:var(--text2);line-height:1.5;font-family:inherit;" id="oc-preview-body">—</div>
+        <div class="oc-preview-box">
+          <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);border-bottom:1px solid var(--cream3);padding-bottom:6px;margin-bottom:8px;font-weight:700;">Live Preview (Sample)</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--text);" id="oc-preview-subject">—</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6;font-family:inherit;" id="oc-preview-body">—</div>
         </div>
       </div>
     </div>` : '';
