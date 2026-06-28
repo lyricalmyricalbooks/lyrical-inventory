@@ -2386,3 +2386,96 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .flash-green {
   animation: flashGreen 2s ease-out;
 }
+
+/* Open Call Premium Layout */
+.oc-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 950px) {
+  .oc-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.oc-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.oc-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Step Progress Tracker */
+.oc-step-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 15px;
+  position: relative;
+  padding: 0 10px;
+}
+.oc-step-line {
+  position: absolute;
+  top: 11px;
+  left: 24px;
+  right: 24px;
+  height: 2px;
+  background: var(--border2);
+  z-index: 1;
+}
+.oc-step-line-fill {
+  position: absolute;
+  top: 11px;
+  left: 24px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--gold), var(--gold2));
+  z-index: 2;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.oc-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 3;
+  cursor: pointer;
+}
+.oc-step-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--card-bg, #fff);
+  border: 2px solid var(--border2);
+  color: var(--text3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.oc-step.done .oc-step-circle {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+.oc-step.active .oc-step-circle {
+  border-color: var(--gold);
+  color: var(--gold2);
+  box-shadow: 0 0 8px rgba(200, 145, 58, 0.3);
+}
+.oc-step-label {
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 6px;
+  font-weight: 500;
+  transition: color 0.3s;
+}
+.oc-step.active .oc-step-label, .oc-step.done .oc-step-label {
+  color: var(--text);
+  font-weight: 600;
+}

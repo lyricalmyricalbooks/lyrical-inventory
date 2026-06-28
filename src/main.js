@@ -2767,6 +2767,8 @@ function scheduleRender() {
 // and works offline through the same saveState path as everything else.
 // Stage definitions and row parsing live in ./lib/opencall.js (unit-tested).
 let ocImportOpen = false;
+let ocSortBy = 'dateDesc';
+let activeTmplTab = 'selectionSent';
 
 function ocList() {
   const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
@@ -2777,6 +2779,216 @@ function ocList() {
 
 function ocBlockedForAuthor_() {
   return isAuthor();
+}
+
+function ocSetSort(val) {
+  ocSortBy = val;
+  renderOpenCall();
+}
+
+function ocSetTmplTab(val) {
+  activeTmplTab = val;
+  renderOpenCall();
+  ocUpdateTmplPreview();
+}
+
+function ocUpdateTmplPreview() {
+  const sub = $('oc-tmpl-subject')?.value || '';
+  const body = $('oc-tmpl-body')?.value || '';
+  
+  const sampleName = 'Alex Mercer';
+  const samplePhoto = 'alex_mercer_artwork.jpg';
+  
+  const resolvedSub = sub.replace(/\{\{name\}\}/g, sampleName).replace(/\{\{photo\}\}/g, samplePhoto);
+  const resolvedBody = body.replace(/\{\{name\}\}/g, sampleName).replace(/\{\{photo\}\}/g, samplePhoto);
+  
+  const subEl = $('oc-preview-subject');
+  const bodyEl = $('oc-preview-body');
+  if (subEl) subEl.textContent = resolvedSub;
+  if (bodyEl) {
+    bodyEl.innerHTML = escapeHtml(resolvedBody).replace(/\n/g, '<br>');
+  }
+}
+
+let _ocBulkSelectedRecipients = [];
+
+function openOcBulkModal() {
+  let modal = $('oc-bulk-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'oc-bulk-modal';
+    modal.style.position = 'fixed';
+    modal.style.inset = '0';
+    modal.style.background = 'rgba(0, 0, 0, 0.75)';
+    modal.style.backdropFilter = 'blur(8px)';
+    modal.style.display = 'none';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = '10000';
+    document.body.appendChild(modal);
+  }
+  
+  modal.style.display = 'flex';
+  renderOcBulkModalContent();
+}
+
+function closeOcBulkModal() {
+  const modal = $('oc-bulk-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function renderOcBulkModalContent() {
+  const modal = $('oc-bulk-modal');
+  if (!modal) return;
+  
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  
+  const stage = $('oc-bulk-stage')?.value || 'selectionSent';
+  
+  // Get eligible contributors
+  let eligible = [];
+  if (stage === 'selectionSent') {
+    eligible = proj.contributors.filter(c => c.email && !c.selectionSent);
+  } else if (stage === 'cmykSent') {
+    eligible = proj.contributors.filter(c => c.email && c.creditReceived && !c.cmykSent);
+  } else if (stage === 'preorderSent') {
+    eligible = proj.contributors.filter(c => c.email && c.cmykSent && c.filesReceived && !c.preorderSent);
+  }
+  
+  const listHtml = eligible.length > 0 ? eligible.map(c => `
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:4px 0;">
+      <input type="checkbox" class="oc-bulk-recipient-check" value="${c.id}" checked style="margin:0;">
+      <span><strong>${escapeHtml(c.name || 'Unnamed')}</strong> (${escapeHtml(c.email)})</span>
+    </label>
+  `).join('') : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">No eligible contributors found for this stage.</div>';
+  
+  const tmpl = proj.templates ? proj.templates[stage] : null;
+  const previewSub = tmpl ? tmpl.subject : '';
+  const previewBody = tmpl ? tmpl.body : '';
+  
+  modal.innerHTML = `
+    <div class="card" style="width:90%;max-width:600px;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 40px rgba(0,0,0,0.3);position:relative;" onclick="event.stopPropagation()">
+      <button onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;">✕</button>
+      
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:15px;">✉ Send Bulk Pipeline Emails</div>
+      
+      <div style="margin-bottom:15px;">
+        <label style="font-size:12px;color:var(--text3);font-weight:600;display:block;margin-bottom:6px;">Select Pipeline Stage</label>
+        <select id="oc-bulk-stage" onchange="onOcBulkStageChange(this.value)" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);">
+          <option value="selectionSent" ${stage === 'selectionSent' ? 'selected' : ''}>Stage 1 — Selection Notice</option>
+          <option value="cmykSent" ${stage === 'cmykSent' ? 'selected' : ''}>Stage 2 — Request Files (CMYK)</option>
+          <option value="preorderSent" ${stage === 'preorderSent' ? 'selected' : ''}>Stage 3 — Pre-order Launch Info</option>
+        </select>
+      </div>
+      
+      <div style="margin-bottom:15px;">
+        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:6px;">Recipients Eligible for this Stage:</div>
+        <div id="oc-bulk-recipients" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:10px;background:var(--input-bg);display:flex;flex-direction:column;gap:4px;">
+          ${listHtml}
+        </div>
+      </div>
+      
+      <!-- Template Preview -->
+      <div style="margin-bottom:20px;border-top:1px solid var(--border);padding-top:15px;">
+        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Template Preview (Sample)</div>
+        <div style="font-size:12px;color:var(--text2);padding:10px;background:rgba(255,255,255,0.02);border-radius:4px;border:1px solid var(--border);max-height:120px;overflow-y:auto;">
+          <div style="font-weight:700;margin-bottom:4px;">Subject: ${escapeHtml(previewSub)}</div>
+          <div style="white-space:pre-wrap;font-size:11px;line-height:1.4;margin-top:6px;">${escapeHtml(previewBody)}</div>
+        </div>
+      </div>
+
+      <!-- Progress Bar (Initially Hidden) -->
+      <div id="oc-bulk-progress-container" style="display:none;margin-bottom:20px;">
+        <div class="row-between" style="font-size:12px;color:var(--text2);margin-bottom:4px;">
+          <span id="oc-bulk-progress-text">Sending emails...</span>
+          <strong id="oc-bulk-progress-pct">0%</strong>
+        </div>
+        <div style="width:100%;background:rgba(255,255,255,0.05);height:8px;border-radius:4px;overflow:hidden;border:1px solid var(--border);">
+          <div id="oc-bulk-progress-fill" style="width:0%;background:linear-gradient(90deg, var(--gold), var(--gold2));height:100%;transition:width 0.2s ease;"></div>
+        </div>
+        <div id="oc-bulk-console" style="font-family:'DM Mono',monospace;font-size:11px;background:#1e1e1e;color:#a9ffaf;padding:10px;border-radius:4px;max-height:100px;overflow-y:auto;margin-top:10px;border:1px solid #333;">
+        </div>
+      </div>
+      
+      <div style="display:flex;justify-content:flex-end;gap:10px;" id="oc-bulk-actions">
+        <button class="btn" onclick="closeOcBulkModal()">Cancel</button>
+        <button class="btn gold" id="oc-bulk-send-btn" onclick="sendOcBulkEmails()" ${eligible.length > 0 ? '' : 'disabled'}>Send Emails</button>
+      </div>
+    </div>`;
+}
+
+function onOcBulkStageChange(val) {
+  renderOcBulkModalContent();
+}
+
+async function sendOcBulkEmails() {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  
+  const stage = $('oc-bulk-stage').value;
+  const tmpl = proj.templates ? proj.templates[stage] : null;
+  if (!tmpl) {
+    showToast('Template not found for this stage', 'err');
+    return;
+  }
+  
+  // Get checked recipients
+  const checks = document.querySelectorAll('.oc-bulk-recipient-check:checked');
+  const selectedIds = Array.from(checks).map(cb => cb.value);
+  
+  if (selectedIds.length === 0) {
+    showToast('No recipients selected', 'warn');
+    return;
+  }
+  
+  const selectedRecs = proj.contributors.filter(c => selectedIds.includes(c.id));
+  
+  // Show progress UI
+  $('oc-bulk-progress-container').style.display = 'block';
+  $('oc-bulk-actions').style.display = 'none';
+  
+  const consoleEl = $('oc-bulk-console');
+  consoleEl.innerHTML = '';
+  
+  let successCount = 0;
+  let failCount = 0;
+  
+  for (let i = 0; i < selectedRecs.length; i++) {
+    const c = selectedRecs[i];
+    $('oc-bulk-progress-text').textContent = `Sending to ${c.name || c.email}...`;
+    
+    const subject = tmpl.subject.replace(/\{\{name\}\}/g, c.name || 'Artist').replace(/\{\{photo\}\}/g, c.photo || '');
+    const body = tmpl.body.replace(/\{\{name\}\}/g, c.name || 'Artist').replace(/\{\{photo\}\}/g, c.photo || '');
+    
+    try {
+      await sendSingleEmailViaBackend(c.email, subject, body, '');
+      c[stage] = true;
+      successCount++;
+      consoleEl.innerHTML += `<div style="color:#a9ffaf;">✓ Sent to ${c.email} (${c.name || 'Artist'})</div>`;
+    } catch (err) {
+      failCount++;
+      consoleEl.innerHTML += `<div style="color:#f87171;">✕ Failed for ${c.email}: ${err.message}</div>`;
+    }
+    
+    // Update progress
+    const pct = Math.round((i + 1) / selectedRecs.length * 100);
+    $('oc-bulk-progress-pct').textContent = pct + '%';
+    $('oc-bulk-progress-fill').style.width = pct + '%';
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+  
+  // Finish
+  $('oc-bulk-progress-text').textContent = `Completed! Success: ${successCount} · Failed: ${failCount}`;
+  
+  await _persistOpenCalls();
+  renderOpenCall();
+  
+  // Change actions to a "Done" button
+  $('oc-bulk-actions').style.display = 'flex';
+  $('oc-bulk-actions').innerHTML = `<button class="btn gold" onclick="closeOcBulkModal()">Done</button>`;
 }
 
 function renderOpenCall() {
@@ -2806,6 +3018,17 @@ function renderOpenCall() {
   const listRaw = ocList();
   
   let list = listRaw;
+  
+  // Filtering (including Completed view)
+  if (ocFilterStage === 'complete') {
+    list = list.filter(c => OC_STAGES.every(st => c[st.key]));
+  } else if (ocFilterStage) {
+    list = list.filter(c => {
+      const next = OC_STAGES.find(st => !c[st.key]);
+      return next && next.key === ocFilterStage;
+    });
+  }
+  
   if (ocSearchQuery.trim()) {
     const q = ocSearchQuery.toLowerCase().trim();
     list = list.filter(c =>
@@ -2814,12 +3037,23 @@ function renderOpenCall() {
       (c.photo || '').toLowerCase().includes(q)
     );
   }
-  if (ocFilterStage) {
-    list = list.filter(c => {
-      const next = OC_STAGES.find(st => !c[st.key]);
-      return next && next.key === ocFilterStage;
-    });
-  }
+
+  // Sorting (Suggestion 1)
+  list.sort((a, b) => {
+    if (ocSortBy === 'nameAsc') {
+      return (a.name || '').localeCompare(b.name || '');
+    } else if (ocSortBy === 'nameDesc') {
+      return (b.name || '').localeCompare(a.name || '');
+    } else if (ocSortBy === 'dateAsc') {
+      return (a.createdAt || '').localeCompare(b.createdAt || '');
+    } else if (ocSortBy === 'dateDesc') {
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    } else if (ocSortBy === 'progressDesc' || ocSortBy === 'progressAsc') {
+      const getProgress = (c) => OC_STAGES.filter(st => c[st.key]).length;
+      return ocSortBy === 'progressDesc' ? getProgress(b) - getProgress(a) : getProgress(a) - getProgress(b);
+    }
+    return 0;
+  });
 
   const total = listRaw.length;
   const done = listRaw.filter(c => OC_STAGES.every(st => c[st.key])).length;
@@ -2830,27 +3064,26 @@ function renderOpenCall() {
   }).join('');
 
   const projectSwitcher = `
-    <div class="card" style="border-left:3px solid var(--gold);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:1.5rem;">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span style="font-size:18px;">📣</span>
-        <div>
-          <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;">Open Call Portal</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px;">Track and manage contributor pipelines globally.</div>
+    <div class="card" style="border-left:3px solid var(--gold);margin-bottom:0;padding:15px;">
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:16px;">📣</span>
+          <span style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;">Open Call Portal</span>
         </div>
-        <select id="oc-project-select" onchange="ocSwitchProject(this.value)" style="margin-left:8px;padding:6px 12px;max-width:240px;cursor:pointer;">
+        <select id="oc-project-select" onchange="ocSwitchProject(this.value)" style="width:100%;padding:6px 10px;cursor:pointer;margin:0;">
           ${projectOptions}
         </select>
-      </div>
-      <div style="display:flex;gap:6px;">
-        <button class="btn sm gold" onclick="ocCreateProject()">＋ New Project</button>
-        <button class="btn sm" onclick="ocRenameProject()">✎ Rename</button>
-        <button class="btn sm" onclick="ocDeleteProject()" style="color:var(--red);">✕ Delete</button>
+        <div style="display:flex;gap:4px;margin-top:4px;width:100%;">
+          <button class="btn sm gold" onclick="ocCreateProject()" style="flex:1;padding:4px 0;">＋ New</button>
+          <button class="btn sm" onclick="ocRenameProject()" style="flex:1;padding:4px 0;">✎ Rename</button>
+          <button class="btn sm" onclick="ocDeleteProject()" style="color:var(--red);flex:1;padding:4px 0;">✕ Delete</button>
+        </div>
       </div>
     </div>`;
 
   const stageCounts = OC_STAGES.map(st => {
     const n = listRaw.filter(c => c[st.key]).length;
-    return `<span class="pill ${n === total && total ? 'green' : 'gray'}" title="${st.label}">${st.label}: ${n}/${total}</span>`;
+    return `<span class="pill ${n === total && total ? 'green' : 'gray'}" title="${st.label}" style="font-size:10px;padding:3px 8px;">${st.label}: ${n}/${total}</span>`;
   }).join(' ');
 
   const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
@@ -2873,21 +3106,21 @@ function renderOpenCall() {
     </div>` : '';
 
   const summary = `
-    <div class="card">
-      <div class="row-between" style="flex-wrap:wrap;gap:10px;">
-        <div class="section-hed">Contributors · ${total}${total ? ` · ${done} complete` : ''}</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <select id="oc-scan-days" style="padding:4px 8px;font-size:12px;width:auto;margin:0;">
+    <div class="card" style="margin-bottom:0;padding:15px;">
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div class="section-hed" style="font-size:13px;">Contributors · ${total}</div>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">
+          <select id="oc-scan-days" style="padding:4px 8px;font-size:12px;width:100%;margin:0;">
             <option value="30">Last 30 days</option>
             <option value="60">Last 60 days</option>
             <option value="120" selected>Last 120 days</option>
           </select>
-          <button class="btn sm gold" id="oc-scan-btn" onclick="ocScanReplies()" ${total ? '' : 'disabled'}>📥 Scan Gmail Replies</button>
-          <button class="btn sm" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'}>Export CSV</button>
-          <button class="btn sm" onclick="ocCopyEmails()" ${total ? '' : 'disabled'}>Copy all emails</button>
+          <button class="btn sm gold" id="oc-scan-btn" onclick="ocScanReplies()" ${total ? '' : 'disabled'} style="width:100%;">📥 Scan Gmail Replies</button>
+          <button class="btn sm" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'} style="width:100%;">Export CSV</button>
+          <button class="btn sm" onclick="ocCopyEmails()" ${total ? '' : 'disabled'} style="width:100%;">Copy all emails</button>
         </div>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${total ? stageCounts : '<span style="color:var(--text2);font-size:12px;">No contributors yet.</span>'}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;">${total ? stageCounts : '<span style="color:var(--text2);font-size:11px;">No contributors yet.</span>'}</div>
       ${progressBarHtml}
       ${lastScannedHtml}
     </div>`;
@@ -2910,49 +3143,72 @@ function renderOpenCall() {
     };
   }
 
-  // Templates Editor Panel
+  // Templates Editor Panel (Suggestion 4)
   const templatesEditor = activeProj ? `
-    <details class="card" style="margin-top:1rem;cursor:pointer;">
-      <summary style="font-weight:700;font-family:'Playfair Display',serif;font-size:14px;color:var(--gold2);">✎ Edit Email Templates</summary>
-      <div style="margin-top:12px;cursor:default;" onclick="event.stopPropagation()">
-        <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Customize the subject and body for each of the three pipeline stages. Use <code>{{name}}</code> and <code>{{photo}}</code> as placeholders.</div>
-        
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          <div style="border-left:2px solid var(--gold);padding-left:10px;">
-            <div style="font-weight:600;font-size:12px;margin-bottom:4px;">Stage 1 — Selection Notice</div>
-            <input id="oc-tmpl-sub-selection" placeholder="Subject" value="${escapeHtml(activeProj.templates.selectionSent.subject)}" style="width:100%;font-size:12px;margin-bottom:4px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">
-            <textarea id="oc-tmpl-body-selection" rows="3" style="width:100%;font-size:11px;font-family:inherit;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">${escapeHtml(activeProj.templates.selectionSent.body)}</textarea>
+    <div class="card" style="margin-top:0;padding:20px;">
+      <div class="row-between" style="border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:15px;flex-wrap:wrap;gap:8px;">
+        <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--gold2);">✉ Email Template Designer</div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn sm ${activeTmplTab === 'selectionSent' ? 'gold' : ''}" onclick="ocSetTmplTab('selectionSent')">Selection</button>
+          <button class="btn sm ${activeTmplTab === 'cmykSent' ? 'gold' : ''}" onclick="ocSetTmplTab('cmykSent')">Request Files</button>
+          <button class="btn sm ${activeTmplTab === 'preorderSent' ? 'gold' : ''}" onclick="ocSetTmplTab('preorderSent')">Pre-order</button>
+        </div>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+        <!-- Editor Column -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div>
+            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Subject Line</label>
+            <input id="oc-tmpl-subject" value="${escapeHtml(activeProj.templates[activeTmplTab].subject)}" oninput="ocUpdateTmplPreview()" style="width:100%;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:4px;margin:0;">
           </div>
-          
-          <div style="border-left:2px solid var(--gold);padding-left:10px;">
-            <div style="font-weight:600;font-size:12px;margin-bottom:4px;">Stage 2 — Request Files</div>
-            <input id="oc-tmpl-sub-cmyk" placeholder="Subject" value="${escapeHtml(activeProj.templates.cmykSent.subject)}" style="width:100%;font-size:12px;margin-bottom:4px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">
-            <textarea id="oc-tmpl-body-cmyk" rows="3" style="width:100%;font-size:11px;font-family:inherit;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">${escapeHtml(activeProj.templates.cmykSent.body)}</textarea>
+          <div>
+            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body (supports {{name}}, {{photo}})</label>
+            <textarea id="oc-tmpl-body" rows="8" oninput="ocUpdateTmplPreview()" style="width:100%;font-size:11px;font-family:'DM Mono',monospace;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:4px;line-height:1.5;margin:0;">${escapeHtml(activeProj.templates[activeTmplTab].body)}</textarea>
           </div>
-          
-          <div style="border-left:2px solid var(--gold);padding-left:10px;">
-            <div style="font-weight:600;font-size:12px;margin-bottom:4px;">Stage 3 — Pre-order Info</div>
-            <input id="oc-tmpl-sub-preorder" placeholder="Subject" value="${escapeHtml(activeProj.templates.preorderSent.subject)}" style="width:100%;font-size:12px;margin-bottom:4px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">
-            <textarea id="oc-tmpl-body-preorder" rows="3" style="width:100%;font-size:11px;font-family:inherit;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">${escapeHtml(activeProj.templates.preorderSent.body)}</textarea>
+          <div style="display:flex;justify-content:flex-end;">
+            <button class="btn sm gold" onclick="ocSaveTemplates()">Save Template</button>
           </div>
         </div>
         
-        <button class="btn sm gold" onclick="ocSaveTemplates()" style="margin-top:12px;">Save Templates</button>
+        <!-- Live Preview Column -->
+        <div style="display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;padding:12px;max-height:260px;overflow-y:auto;">
+          <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:4px;margin-bottom:4px;font-weight:700;">Live Preview (Sample)</div>
+          <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:var(--text);" id="oc-preview-subject">—</div>
+          <div style="font-size:11px;color:var(--text2);white-space:pre-wrap;line-height:1.5;font-family:inherit;" id="oc-preview-body">—</div>
+        </div>
       </div>
-    </details>` : '';
+    </div>` : '';
 
   const searchFilterBar = `
-    <div style="display:flex;gap:10px;align-items:center;margin:0 0 1rem;flex-wrap:wrap;">
-      <input type="search" id="oc-search" placeholder="Search artist name, email, or photo…" value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" style="flex:1;min-width:200px;max-width:340px;">
-      <select id="oc-filter-stage" onchange="ocFilterByStage(this.value)" style="max-width:240px;">
-        <option value="">All pending stages</option>
-        <option value="selectionSent" ${ocFilterStage === 'selectionSent' ? 'selected' : ''}>Awaiting Selection notice</option>
-        <option value="creditReceived" ${ocFilterStage === 'creditReceived' ? 'selected' : ''}>Awaiting Credit name reply</option>
-        <option value="cmykSent" ${ocFilterStage === 'cmykSent' ? 'selected' : ''}>Awaiting CMYK request</option>
-        <option value="filesReceived" ${ocFilterStage === 'filesReceived' ? 'selected' : ''}>Awaiting high-res files</option>
-        <option value="preorderSent" ${ocFilterStage === 'preorderSent' ? 'selected' : ''}>Awaiting Pre-order invite</option>
-      </select>
-      <span style="font-size:12px;color:var(--text3);">${total} contributor${total === 1 ? '' : 's'}${ (ocSearchQuery.trim() || ocFilterStage) ? ` · ${list.length} shown` : ''}</span>
+    <div class="card" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex:1;">
+          <input type="search" id="oc-search" placeholder="Search artist, email..." value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" style="flex:1;min-width:180px;max-width:300px;margin:0;">
+          
+          <select id="oc-filter-stage" onchange="ocFilterByStage(this.value)" style="max-width:180px;margin:0;cursor:pointer;">
+            <option value="">All pending stages</option>
+            <option value="selectionSent" ${ocFilterStage === 'selectionSent' ? 'selected' : ''}>Awaiting Selection</option>
+            <option value="creditReceived" ${ocFilterStage === 'creditReceived' ? 'selected' : ''}>Awaiting Credit</option>
+            <option value="cmykSent" ${ocFilterStage === 'cmykSent' ? 'selected' : ''}>Awaiting CMYK</option>
+            <option value="filesReceived" ${ocFilterStage === 'filesReceived' ? 'selected' : ''}>Awaiting Files</option>
+            <option value="preorderSent" ${ocFilterStage === 'preorderSent' ? 'selected' : ''}>Awaiting Pre-order</option>
+            <option value="complete" ${ocFilterStage === 'complete' ? 'selected' : ''}>✓ Completed</option>
+          </select>
+          
+          <select id="oc-sort-by" onchange="ocSetSort(this.value)" style="max-width:180px;margin:0;cursor:pointer;">
+            <option value="dateDesc" ${ocSortBy === 'dateDesc' ? 'selected' : ''}>Newest First</option>
+            <option value="dateAsc" ${ocSortBy === 'dateAsc' ? 'selected' : ''}>Oldest First</option>
+            <option value="nameAsc" ${ocSortBy === 'nameAsc' ? 'selected' : ''}>Name A-Z</option>
+            <option value="nameDesc" ${ocSortBy === 'nameDesc' ? 'selected' : ''}>Name Z-A</option>
+            <option value="progressDesc" ${ocSortBy === 'progressDesc' ? 'selected' : ''}>Progress (High to Low)</option>
+            <option value="progressAsc" ${ocSortBy === 'progressAsc' ? 'selected' : ''}>Progress (Low to High)</option>
+          </select>
+        </div>
+        
+        <button class="btn gold" onclick="openOcBulkModal()" ${total ? '' : 'disabled'}>✉ Bulk Email</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);">${total} contributor${total === 1 ? '' : 's'} total · ${list.length} shown</div>
     </div>`;
 
   const importPanel = ocImportOpen ? `
@@ -2961,7 +3217,7 @@ function renderOpenCall() {
           Paste rows from the spreadsheet — one contributor per line, columns separated by tab or comma:
           <strong>Name, Email, Photo file</strong>. A header row is skipped automatically; existing emails are not duplicated.
         </div>
-        <textarea id="oc-import-text" rows="6" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg" style="width:100%;font-family:'DM Mono',monospace;font-size:12px;"></textarea>
+        <textarea id="oc-import-text" rows="6" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg" style="width:100%;font-family:'DM Mono',monospace;font-size:12px;margin:0;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:8px 12px;"></textarea>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn gold" onclick="ocRunImport()">Import rows</button>
           <button class="btn" onclick="ocToggleImport()">Cancel</button>
@@ -2969,27 +3225,24 @@ function renderOpenCall() {
       </div>` : '';
 
   const addForm = `
-    <div class="card">
-      <div class="row-between" style="flex-wrap:wrap;gap:8px;">
-        <div class="section-hed" style="margin-bottom:10px;">Add contributor</div>
+    <div class="card" style="margin-bottom:0;padding:15px;">
+      <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div class="section-hed" style="font-size:13px;">Add contributor</div>
         <button class="btn sm" onclick="ocToggleImport()">${ocImportOpen ? 'Close import' : '⬇ Paste / import list'}</button>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-        <input id="oc-name" placeholder="Artist name" style="flex:1;min-width:140px;">
-        <div style="flex:1;min-width:160px;display:flex;flex-direction:column;gap:4px;">
-          <input id="oc-email" placeholder="Email" type="email" style="width:100%;" oninput="checkOcEmailTypo(this.value)">
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <input id="oc-name" placeholder="Artist name" style="width:100%;margin:0;font-size:12px;">
+        <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
+          <input id="oc-email" placeholder="Email" type="email" style="width:100%;margin:0;font-size:12px;" oninput="checkOcEmailTypo(this.value)">
           <div id="oc-add-email-correction" class="email-suggest-correction" style="display:none;" onclick="applyOcEmailCorrection()"></div>
         </div>
-        <input id="oc-photo" placeholder="Photo file (optional)" style="flex:1;min-width:140px;">
-        <button class="btn gold" onclick="ocAdd()">Add</button>
+        <input id="oc-photo" placeholder="Photo file (optional)" style="width:100%;margin:0;font-size:12px;">
+        <button class="btn gold" onclick="ocAdd()" style="width:100%;">Add Contributor</button>
       </div>
       ${importPanel}
     </div>`;
 
   const cards = list.map(c => {
-    const pills = OC_STAGES.map(st =>
-      `<button class="pill ${c[st.key] ? 'green' : 'gray'}" style="cursor:pointer;border:none;" onclick="ocToggle('${c.id}','${st.key}')">${c[st.key] ? '✓ ' : ''}${st.label}</button>`
-    ).join(' ');
     const next = ocNextAction(c);
 
     // Mailing list integration badges and actions
@@ -3043,6 +3296,45 @@ function renderOpenCall() {
       gmailLinksHtml = ' · ' + links.join(' / ');
     }
 
+    // Pipeline Step Tracker Visualizer (Interactive)
+    let progressPercent = 0;
+    if (c.preorderSent) progressPercent = 100;
+    else if (c.filesReceived) progressPercent = 75;
+    else if (c.cmykSent) progressPercent = 50;
+    else if (c.creditReceived) progressPercent = 25;
+    else if (c.selectionSent) progressPercent = 0;
+
+    const isNextStep = (contributor, key) => {
+      if (key === 'selectionSent' && !contributor.selectionSent) return true;
+      if (key === 'creditReceived' && contributor.selectionSent && !contributor.creditReceived) return true;
+      if (key === 'cmykSent' && contributor.creditReceived && !contributor.cmykSent) return true;
+      if (key === 'filesReceived' && contributor.cmykSent && !contributor.filesReceived) return true;
+      if (key === 'preorderSent' && contributor.filesReceived && !contributor.preorderSent) return true;
+      return false;
+    };
+
+    const stepHtml = (key, num, label) => {
+      const doneVal = c[key];
+      const activeVal = !doneVal && isNextStep(c, key);
+      const cls = doneVal ? 'done' : activeVal ? 'active' : '';
+      return `
+        <div class="oc-step ${cls}" onclick="ocToggle('${c.id}','${key}')" title="Click to toggle ${label} stage">
+          <div class="oc-step-circle">${doneVal ? '✓' : num}</div>
+          <div class="oc-step-label">${label}</div>
+        </div>`;
+    };
+
+    const pipelineVisualizer = `
+      <div class="oc-step-container">
+        <div class="oc-step-line"></div>
+        <div class="oc-step-line-fill" style="width: ${progressPercent}%;"></div>
+        ${stepHtml('selectionSent', '1', 'Selection')}
+        ${stepHtml('creditReceived', '2', 'Credit')}
+        ${stepHtml('cmykSent', '3', 'CMYK')}
+        ${stepHtml('filesReceived', '4', 'Files')}
+        ${stepHtml('preorderSent', '5', 'Pre-order')}
+      </div>`;
+
     return `
       <div class="card" id="oc-card-${c.id}">
         <div class="row-between" style="flex-wrap:wrap;gap:8px;">
@@ -3061,13 +3353,36 @@ function renderOpenCall() {
             <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')">Remove</button>
           </div>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${pills}</div>
-        ${next ? `<div style="font-size:11px;color:var(--amber);margin-top:8px;font-weight:600;">Next: ${next}</div>`
-               : `<div style="font-size:11px;color:var(--green);margin-top:8px;font-weight:600;">✓ All stages complete</div>`}
+        ${pipelineVisualizer}
+        ${next ? `<div style="font-size:11px;color:var(--amber);margin-top:12px;font-weight:600;">Next: ${next}</div>`
+               : `<div style="font-size:11px;color:var(--green);margin-top:12px;font-weight:600;">✓ All stages complete</div>`}
       </div>`;
   }).join('');
 
-  body.innerHTML = projectSwitcher + summary + templatesEditor + searchFilterBar + addForm + cards;
+  const sidebarHtml = `
+    <div class="oc-sidebar">
+      ${projectSwitcher}
+      ${summary}
+      ${addForm}
+    </div>`;
+
+  const mainHtml = `
+    <div class="oc-main">
+      ${templatesEditor}
+      ${searchFilterBar}
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${cards || `<div class="card" style="text-align:center;padding:40px;color:var(--text3);font-style:italic;">No contributors match the current filters.</div>`}
+      </div>
+    </div>`;
+
+  body.innerHTML = `
+    <div class="oc-layout">
+      ${sidebarHtml}
+      ${mainHtml}
+    </div>`;
+
+  // Initialize Template Preview
+  setTimeout(ocUpdateTmplPreview, 100);
 
   // Auto-trigger background scan if lastScanned is null or > 1 hour ago (Next Move #5)
   const now = Date.now();
@@ -3076,6 +3391,7 @@ function renderOpenCall() {
   if (sheetsUrl && total > 0 && (now - lastScannedTime > oneHour)) {
     setTimeout(() => ocScanReplies({ background: true }), 1000);
   }
+}
 }
 
 async function ocAdd() {
@@ -17791,7 +18107,7 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
-  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV,
+  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
