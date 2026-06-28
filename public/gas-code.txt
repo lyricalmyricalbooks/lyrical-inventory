@@ -416,6 +416,53 @@ function doPost(e) {
       }
     }
 
+    // ── Scan Gmail for Open Call replies ──
+    if (action === 'scanopencallreplies') {
+      const d = payload.payload || {};
+      const contributors = d.contributors || [];
+      const daysBack = parseInt(d.daysBack || 120, 10);
+      const updates = [];
+      
+      for (let i = 0; i < contributors.length; i++) {
+        const c = contributors[i];
+        const email = String(c.email || '').trim();
+        if (!email) continue;
+        
+        const update = { email: email };
+        let hasUpdate = false;
+        
+        // Credit name: any reply from the artist after a selection email went out.
+        if (c.selectionSent && !c.creditReceived) {
+          try {
+            const threads = GmailApp.search('from:' + email + ' newer_than:' + daysBack + 'd', 0, 1);
+            if (threads.length > 0) {
+              update.creditReceived = true;
+              update.creditThreadId = threads[0].getId();
+              hasUpdate = true;
+            }
+          } catch (_) {}
+        }
+        
+        // High-res files: a reply WITH an attachment from the artist.
+        if (c.cmykSent && !c.filesReceived) {
+          try {
+            const threads = GmailApp.search('from:' + email + ' has:attachment newer_than:' + daysBack + 'd', 0, 1);
+            if (threads.length > 0) {
+              update.filesReceived = true;
+              update.filesThreadId = threads[0].getId();
+              hasUpdate = true;
+            }
+          } catch (_) {}
+        }
+        
+        if (hasUpdate) {
+          updates.push(update);
+        }
+      }
+      
+      return jsonOut_({ ok: true, updates: updates });
+    }
+
     // ── Reset / rebuild: clear every managed sheet so the client can resend a
     // clean copy. Removes duplicate rows, stale VOID rows, and legacy rows with
     // a blank CAD Equivalent in one pass. The app remains the source of truth. ──

@@ -662,6 +662,13 @@ function triggerCardAnimations() {
 
 const today = () => new Date().toISOString().split('T')[0];
 
+const formatDateTime = (isoString) => {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString() + ' ' + d.toTimeString().slice(0, 5);
+};
+
 // LOCAL calendar day (YYYY-MM-DD) for a timestamp — unlike today()'s UTC date,
 // this matches the dates the user sees (toLocaleString), so "one backup per
 // day" lines up with their calendar instead of rolling over at UTC midnight.
@@ -2846,14 +2853,93 @@ function renderOpenCall() {
     return `<span class="pill ${n === total && total ? 'green' : 'gray'}" title="${st.label}">${st.label}: ${n}/${total}</span>`;
   }).join(' ');
 
+  const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  const lastScannedVal = activeProj ? activeProj.lastScanned : null;
+  const lastScannedHtml = lastScannedVal 
+    ? `<div style="font-size:11px;color:var(--text3);margin-top:10px;border-top:1px dashed var(--border);padding-top:6px;">Last scanned: ${formatDateTime(lastScannedVal)}</div>` 
+    : '';
+
+  // Project Progress Bar (Next Move #2)
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const progressBarHtml = total ? `
+    <div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:8px;">
+      <div class="row-between" style="font-size:11px;color:var(--text3);margin-bottom:4px;">
+        <span>Project Progress</span>
+        <strong>${pct}% (${done}/${total} complete)</strong>
+      </div>
+      <div style="width:100%;background:rgba(255,255,255,0.05);height:6px;border-radius:3px;overflow:hidden;border:1px solid var(--border);">
+        <div style="width:${pct}%;background:linear-gradient(90deg, var(--gold), var(--gold2));height:100%;transition:width 0.5s ease;border-radius:3px;"></div>
+      </div>
+    </div>` : '';
+
   const summary = `
     <div class="card">
       <div class="row-between" style="flex-wrap:wrap;gap:10px;">
         <div class="section-hed">Contributors · ${total}${total ? ` · ${done} complete` : ''}</div>
-        <button class="btn sm" onclick="ocCopyEmails()" ${total ? '' : 'disabled'}>Copy all emails</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="oc-scan-days" style="padding:4px 8px;font-size:12px;width:auto;margin:0;">
+            <option value="30">Last 30 days</option>
+            <option value="60">Last 60 days</option>
+            <option value="120" selected>Last 120 days</option>
+          </select>
+          <button class="btn sm gold" id="oc-scan-btn" onclick="ocScanReplies()" ${total ? '' : 'disabled'}>📥 Scan Gmail Replies</button>
+          <button class="btn sm" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'}>Export CSV</button>
+          <button class="btn sm" onclick="ocCopyEmails()" ${total ? '' : 'disabled'}>Copy all emails</button>
+        </div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${total ? stageCounts : '<span style="color:var(--text2);font-size:12px;">No contributors yet.</span>'}</div>
+      ${progressBarHtml}
+      ${lastScannedHtml}
     </div>`;
+
+  // Initialize templates if not present (Next Move #4)
+  if (activeProj && !activeProj.templates) {
+    activeProj.templates = {
+      selectionSent: {
+        subject: `[Selected] Lyricalmyrical Collective Open Call`,
+        body: `Hi {{name}},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`
+      },
+      cmykSent: {
+        subject: `[Files Requested] Lyricalmyrical Open Call - ${activeProj.title}`,
+        body: `Hi {{name}},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`
+      },
+      preorderSent: {
+        subject: `[Pre-orders Open] Lyricalmyrical Collective Project - ${activeProj.title}`,
+        body: `Hi {{name}},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`
+      }
+    };
+  }
+
+  // Templates Editor Panel
+  const templatesEditor = activeProj ? `
+    <details class="card" style="margin-top:1rem;cursor:pointer;">
+      <summary style="font-weight:700;font-family:'Playfair Display',serif;font-size:14px;color:var(--gold2);">✎ Edit Email Templates</summary>
+      <div style="margin-top:12px;cursor:default;" onclick="event.stopPropagation()">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Customize the subject and body for each of the three pipeline stages. Use <code>{{name}}</code> and <code>{{photo}}</code> as placeholders.</div>
+        
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="border-left:2px solid var(--gold);padding-left:10px;">
+            <div style="font-weight:600;font-size:12px;margin-bottom:4px;">Stage 1 — Selection Notice</div>
+            <input id="oc-tmpl-sub-selection" placeholder="Subject" value="${escapeHtml(activeProj.templates.selectionSent.subject)}" style="width:100%;font-size:12px;margin-bottom:4px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">
+            <textarea id="oc-tmpl-body-selection" rows="3" style="width:100%;font-size:11px;font-family:inherit;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">${escapeHtml(activeProj.templates.selectionSent.body)}</textarea>
+          </div>
+          
+          <div style="border-left:2px solid var(--gold);padding-left:10px;">
+            <div style="font-weight:600;font-size:12px;margin-bottom:4px;">Stage 2 — Request Files</div>
+            <input id="oc-tmpl-sub-cmyk" placeholder="Subject" value="${escapeHtml(activeProj.templates.cmykSent.subject)}" style="width:100%;font-size:12px;margin-bottom:4px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">
+            <textarea id="oc-tmpl-body-cmyk" rows="3" style="width:100%;font-size:11px;font-family:inherit;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">${escapeHtml(activeProj.templates.cmykSent.body)}</textarea>
+          </div>
+          
+          <div style="border-left:2px solid var(--gold);padding-left:10px;">
+            <div style="font-weight:600;font-size:12px;margin-bottom:4px;">Stage 3 — Pre-order Info</div>
+            <input id="oc-tmpl-sub-preorder" placeholder="Subject" value="${escapeHtml(activeProj.templates.preorderSent.subject)}" style="width:100%;font-size:12px;margin-bottom:4px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">
+            <textarea id="oc-tmpl-body-preorder" rows="3" style="width:100%;font-size:11px;font-family:inherit;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;">${escapeHtml(activeProj.templates.preorderSent.body)}</textarea>
+          </div>
+        </div>
+        
+        <button class="btn sm gold" onclick="ocSaveTemplates()" style="margin-top:12px;">Save Templates</button>
+      </div>
+    </details>` : '';
 
   const searchFilterBar = `
     <div style="display:flex;gap:10px;align-items:center;margin:0 0 1rem;flex-wrap:wrap;">
@@ -2945,19 +3031,33 @@ function renderOpenCall() {
           : `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>` )
       : '<span>no email</span>';
 
+    let gmailLinksHtml = '';
+    if (c.email && (c.creditThreadId || c.filesThreadId)) {
+      const links = [];
+      if (c.creditThreadId) {
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" style="font-size:11px;color:var(--gold2);text-decoration:none;" title="View credit name reply in Gmail">✉ View Credit Reply</a>`);
+      }
+      if (c.filesThreadId) {
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" style="font-size:11px;color:var(--gold2);text-decoration:none;" title="View files reply in Gmail">✉ View Files Reply</a>`);
+      }
+      gmailLinksHtml = ' · ' + links.join(' / ');
+    }
+
     return `
-      <div class="card">
+      <div class="card" id="oc-card-${c.id}">
         <div class="row-between" style="flex-wrap:wrap;gap:8px;">
           <div>
             <div style="font-weight:700;">${escapeHtml(c.name || '—')}${mailStatusHtml}</div>
             <div style="font-size:12px;color:var(--text2);">
               ${emailCell}
               ${c.photo ? ` · ${escapeHtml(c.photo)}` : ''}
+              ${gmailLinksHtml}
             </div>
           </div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             ${pipelineEmailBtnHtml}
             ${mailActionsHtml}
+            <button class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">↻ Scan</button>
             <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')">Remove</button>
           </div>
         </div>
@@ -2967,7 +3067,15 @@ function renderOpenCall() {
       </div>`;
   }).join('');
 
-  body.innerHTML = projectSwitcher + summary + searchFilterBar + addForm + cards;
+  body.innerHTML = projectSwitcher + summary + templatesEditor + searchFilterBar + addForm + cards;
+
+  // Auto-trigger background scan if lastScanned is null or > 1 hour ago (Next Move #5)
+  const now = Date.now();
+  const oneHour = 60 * 60 * 1000;
+  const lastScannedTime = lastScannedVal ? new Date(lastScannedVal).getTime() : 0;
+  if (sheetsUrl && total > 0 && (now - lastScannedTime > oneHour)) {
+    setTimeout(() => ocScanReplies({ background: true }), 1000);
+  }
 }
 
 async function ocAdd() {
@@ -16654,18 +16762,26 @@ function ocComposeStageEmail(cId, stageKey) {
   let subject = '';
   let body = '';
   
-  if (stageKey === 'selectionSent') {
-    subject = `[Selected] Lyricalmyrical Collective Open Call`;
-    body = `Hi ${c.name || 'Artist'},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`;
-  } else if (stageKey === 'cmykSent') {
-    subject = `[Files Requested] Lyricalmyrical Open Call - ${proj.title}`;
-    body = `Hi ${c.name || 'Artist'},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`;
-  } else if (stageKey === 'preorderSent') {
-    subject = `[Pre-orders Open] Lyricalmyrical Collective Project - ${proj.title}`;
-    body = `Hi ${c.name || 'Artist'},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`;
+  const tmpl = (proj.templates && proj.templates[stageKey]) || null;
+  if (tmpl) {
+    subject = tmpl.subject;
+    body = tmpl.body
+      .replace(/\{\{name\}\}/g, c.name || 'Artist')
+      .replace(/\{\{photo\}\}/g, c.photo || '');
   } else {
-    subject = `Regarding Open Call - ${proj.title}`;
-    body = `Hi ${c.name || 'Artist'},\n\n...`;
+    if (stageKey === 'selectionSent') {
+      subject = `[Selected] Lyricalmyrical Collective Open Call`;
+      body = `Hi ${c.name || 'Artist'},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`;
+    } else if (stageKey === 'cmykSent') {
+      subject = `[Files Requested] Lyricalmyrical Open Call - ${proj.title}`;
+      body = `Hi ${c.name || 'Artist'},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`;
+    } else if (stageKey === 'preorderSent') {
+      subject = `[Pre-orders Open] Lyricalmyrical Collective Project - ${proj.title}`;
+      body = `Hi ${c.name || 'Artist'},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`;
+    } else {
+      subject = `Regarding Open Call - ${proj.title}`;
+      body = `Hi ${c.name || 'Artist'},\n\n...`;
+    }
   }
 
   switchTab('customers');
@@ -16677,6 +16793,271 @@ function ocComposeStageEmail(cId, stageKey) {
     body: body,
     title: `Compose Pipeline Email (${c.email})`
   });
+}
+
+async function ocScanReplies(options = {}) {
+  if (!sheetsUrl) {
+    if (!options.background) showToast('Connect your Google Sheet first to scan replies', 'warn');
+    return;
+  }
+  
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj || !proj.contributors.length) {
+    if (!options.background) showToast('No contributors in this project to scan', 'warn');
+    return;
+  }
+  
+  const btn = $('oc-scan-btn');
+  const prevText = btn ? btn.textContent : '';
+  if (!options.background && btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Scanning…';
+  }
+  
+  const daysBack = parseInt($('oc-scan-days')?.value || 120, 10);
+  
+  try {
+    const payload = {
+      version: 2,
+      action: 'scanopencallreplies',
+      payload: {
+        daysBack: daysBack,
+        contributors: proj.contributors.map(c => ({
+          email: c.email,
+          selectionSent: !!c.selectionSent,
+          creditReceived: !!c.creditReceived,
+          cmykSent: !!c.cmykSent,
+          filesReceived: !!c.filesReceived
+        }))
+      }
+    };
+    
+    const res = await fetch(sheetsUrl, {
+      method: 'POST',
+      mode: 'cors',
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    
+    const updates = data.updates || [];
+    let updatedCount = 0;
+    const summaryDetails = [];
+    
+    if (updates.length > 0) {
+      updates.forEach(up => {
+        const c = proj.contributors.find(x => x.email && x.email.toLowerCase() === up.email.toLowerCase());
+        if (c) {
+          const details = [];
+          if (up.creditReceived !== undefined && c.creditReceived !== up.creditReceived) {
+            c.creditReceived = up.creditReceived;
+            c.creditThreadId = up.creditThreadId;
+            details.push('Credit name received');
+            updatedCount++;
+          }
+          if (up.filesReceived !== undefined && c.filesReceived !== up.filesReceived) {
+            c.filesReceived = up.filesReceived;
+            c.filesThreadId = up.filesThreadId;
+            details.push('High-res files received');
+            updatedCount++;
+          }
+          if (details.length > 0) {
+            summaryDetails.push(`${c.name || c.email}: ${details.join(' & ')}`);
+          }
+        }
+      });
+    }
+    
+    // Always update lastScanned timestamp on successful scan
+    proj.lastScanned = new Date().toISOString();
+    await _persistOpenCalls();
+    renderOpenCall();
+    
+    if (updatedCount > 0) {
+      // Trigger green flash animation on updated cards (Next Move #1)
+      updates.forEach(up => {
+        const c = proj.contributors.find(x => x.email && x.email.toLowerCase() === up.email.toLowerCase());
+        if (c) {
+          const cardEl = $(`oc-card-${c.id}`);
+          if (cardEl) {
+            cardEl.classList.add('flash-green');
+            setTimeout(() => cardEl.classList.remove('flash-green'), 2000);
+          }
+        }
+      });
+
+      if (options.background) {
+        showToast(`✓ Background scan updated ${updatedCount} status(es)`);
+      } else {
+        const summaryText = `Gmail scan completed successfully!\n\nUpdated ${updatedCount} status(es):\n` + summaryDetails.map(line => `• ${line}`).join('\n');
+        await confirmDialog(summaryText);
+      }
+    } else {
+      if (!options.background) {
+        showToast('Scan complete: no new replies found');
+      }
+    }
+  } catch (e) {
+    console.error('Failed to scan open call replies:', e);
+    if (!options.background) showToast(`⚠ Scan failed: ${e.message}`, 'err');
+  } finally {
+    if (!options.background && btn) {
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  }
+}
+
+async function ocScanRepliesSingle(cId) {
+  if (!sheetsUrl) {
+    showToast('Connect your Google Sheet first to scan replies', 'warn');
+    return;
+  }
+  
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const c = proj.contributors.find(x => x.id === cId);
+  if (!c || !c.email) {
+    showToast('Contributor email not found', 'warn');
+    return;
+  }
+  
+  const btn = $(`oc-scan-single-${cId}`);
+  const prevText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+  }
+  
+  const daysBack = parseInt($('oc-scan-days')?.value || 120, 10);
+  
+  try {
+    const payload = {
+      version: 2,
+      action: 'scanopencallreplies',
+      payload: {
+        daysBack: daysBack,
+        contributors: [{
+          email: c.email,
+          selectionSent: !!c.selectionSent,
+          creditReceived: !!c.creditReceived,
+          cmykSent: !!c.cmykSent,
+          filesReceived: !!c.filesReceived
+        }]
+      }
+    };
+    
+    const res = await fetch(sheetsUrl, {
+      method: 'POST',
+      mode: 'cors',
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    
+    const updates = data.updates || [];
+    let updated = false;
+    let detailMsg = '';
+    
+    if (updates.length > 0) {
+      const up = updates[0];
+      const details = [];
+      if (up.creditReceived !== undefined && c.creditReceived !== up.creditReceived) {
+        c.creditReceived = up.creditReceived;
+        c.creditThreadId = up.creditThreadId;
+        details.push('Credit name received');
+        updated = true;
+      }
+      if (up.filesReceived !== undefined && c.filesReceived !== up.filesReceived) {
+        c.filesReceived = up.filesReceived;
+        c.filesThreadId = up.filesThreadId;
+        details.push('High-res files received');
+        updated = true;
+      }
+      
+      if (updated) {
+        detailMsg = details.join(' & ');
+        await _persistOpenCalls();
+        renderOpenCall();
+        
+        // Trigger green flash animation on updated card (Next Move #1)
+        const cardEl = $(`oc-card-${c.id}`);
+        if (cardEl) {
+          cardEl.classList.add('flash-green');
+          setTimeout(() => cardEl.classList.remove('flash-green'), 2000);
+        }
+        
+        showToast(`✓ Updated ${c.name || c.email}: ${detailMsg}`);
+      } else {
+        showToast(`No new replies found for ${c.name || c.email}`);
+      }
+    } else {
+      showToast(`No new replies found for ${c.name || c.email}`);
+    }
+  } catch (e) {
+    console.error('Failed to scan single open call reply:', e);
+    showToast(`⚠ Scan failed: ${e.message}`, 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  }
+}
+
+async function ocSaveTemplates() {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  
+  proj.templates = {
+    selectionSent: {
+      subject: ($('oc-tmpl-sub-selection')?.value || '').trim(),
+      body: $('oc-tmpl-body-selection')?.value || ''
+    },
+    cmykSent: {
+      subject: ($('oc-tmpl-sub-cmyk')?.value || '').trim(),
+      body: $('oc-tmpl-body-cmyk')?.value || ''
+    },
+    preorderSent: {
+      subject: ($('oc-tmpl-sub-preorder')?.value || '').trim(),
+      body: $('oc-tmpl-body-preorder')?.value || ''
+    }
+  };
+  
+  await _persistOpenCalls();
+  showToast('✓ Templates saved successfully!');
+}
+
+function exportOpenCallCSV() {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj || !proj.contributors.length) {
+    showToast('Nothing to export in this project', 'warn');
+    return;
+  }
+  const rows = [['Name', 'Email', 'Photo', 'Selection Sent', 'Credit Received', 'CMYK Sent', 'Files Received', 'Pre-order Sent', 'Created At']];
+  proj.contributors.forEach(c => rows.push([
+    c.name || '',
+    c.email || '',
+    c.photo || '',
+    c.selectionSent ? 'Yes' : 'No',
+    c.creditReceived ? 'Yes' : 'No',
+    c.cmykSent ? 'Yes' : 'No',
+    c.filesReceived ? 'Yes' : 'No',
+    c.preorderSent ? 'Yes' : 'No',
+    c.createdAt || ''
+  ]));
+  const csv = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `opencall-${proj.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${today()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+  showToast(`✓ Exported ${proj.contributors.length} contributor${proj.contributors.length === 1 ? '' : 's'}`);
 }
 
 function switchCustomersSubTab(subTabName) {
@@ -16806,11 +17187,56 @@ function openCampaignWizard(presets = null) {
   }
   $('campaign-wizard-card').style.display = 'block';
   updateCampaignPreview();
+  updateCampaignModeStatus();
   window.scrollTo({ top: $('campaign-wizard-card').offsetTop - 20, behavior: 'smooth' });
 }
 
 function closeCampaignWizard() {
   $('campaign-wizard-card').style.display = 'none';
+}
+
+function updateCampaignModeStatus() {
+  const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const forceMock = $('c-force-mock')?.checked;
+  const dot = $('c-mode-indicator-dot');
+  const text = $('c-mode-indicator-text');
+  const row = document.querySelector('.campaign-mode-row');
+  
+  if (!dot || !text) return;
+  
+  if (forceMock) {
+    dot.style.backgroundColor = 'var(--amber)';
+    text.innerHTML = 'Simulation Mode: Emails will be simulated and logged locally';
+    if (row) {
+      row.style.background = 'var(--amber-bg)';
+      row.style.borderColor = 'rgba(122,85,0,0.2)';
+    }
+  } else if (isDev && !sheetsUrl) {
+    dot.style.backgroundColor = 'var(--amber)';
+    text.innerHTML = 'Mock Mode: No Google Sheet connected. Emails will be logged locally';
+    if (row) {
+      row.style.background = 'var(--amber-bg)';
+      row.style.borderColor = 'rgba(122,85,0,0.2)';
+    }
+  } else if (!sheetsUrl) {
+    dot.style.backgroundColor = 'var(--red)';
+    text.innerHTML = 'Warning: No Google Sheet connected. Sending will fail';
+    if (row) {
+      row.style.background = 'var(--red-bg)';
+      row.style.borderColor = 'rgba(149,32,32,0.2)';
+    }
+  } else {
+    dot.style.backgroundColor = 'var(--green)';
+    text.innerHTML = `Live Mode: Emails will send via connected Google Sheet (${new URL(sheetsUrl).hostname})`;
+    if (row) {
+      row.style.background = 'var(--green-bg)';
+      row.style.borderColor = 'rgba(42,99,72,0.2)';
+    }
+  }
+}
+
+function onForceMockChange() {
+  updateCampaignModeStatus();
 }
 
 function insertTemplateTag(tag) {
@@ -16958,14 +17384,15 @@ async function deleteCampaign(id) {
 
 async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
   const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-  if (isDev) {
+  const forceMock = $('c-force-mock')?.checked;
+  if (forceMock || (isDev && !sheetsUrl)) {
     const res = await fetch('/api/campaign/send', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + (localStorage.getItem('lm-auth-token') || '')
       },
-      body: JSON.stringify({ to, subject, body, replyTo })
+      body: JSON.stringify({ to, subject, body, replyTo, simulated: true })
     });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
@@ -17034,6 +17461,18 @@ async function sendCampaignLaunch() {
   const recs = getSegmentRecipients(segment);
   if (!recs.length) { showToast('Selected segment has no recipients', 'warn'); return; }
 
+  const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  const invalidRecs = recs.filter(r => !r.email || !emailRegex.test(r.email.trim()));
+  
+  if (invalidRecs.length > 0) {
+    const invalidList = invalidRecs.map(r => `${r.name || 'Unnamed'} (${r.email || 'no email'})`).join(', ');
+    const proceed = await confirmDialog(
+      `Warning: ${invalidRecs.length} recipient(s) have invalid email addresses and will fail:\n\n${invalidList.substring(0, 300)}${invalidList.length > 300 ? '...' : ''}\n\nDo you want to proceed anyway?`,
+      { danger: true }
+    );
+    if (!proceed) return;
+  }
+
   const ok = await confirmDialog(`Are you sure you want to send this campaign to ${recs.length} recipient(s)?`);
   if (!ok) return;
 
@@ -17074,6 +17513,10 @@ async function sendNextCampaignEmail(subject, body, replyTo, draftId) {
   $('c-send-progress-fill').style.width = pct + '%';
 
   try {
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (!to || !emailRegex.test(to.trim())) {
+      throw new Error('Invalid email address format');
+    }
     const personalizedBody = body
       .replace(/\{\{name\}\}/g, name)
       .replace(/\{\{email\}\}/g, to);
@@ -17083,7 +17526,7 @@ async function sendNextCampaignEmail(subject, body, replyTo, draftId) {
     $('c-send-log-console').innerHTML += `<div style="color:#a9ffaf;">✓ Sent to ${to} (${name})</div>`;
   } catch (e) {
     _campaignFailCount++;
-    $('c-send-log-console').innerHTML += `<div style="color:#f87171;">✕ Failed for ${to}: ${e.message}</div>`;
+    $('c-send-log-console').innerHTML += `<div style="color:#f87171;" class="campaign-log-fail" data-index="${_campaignSendingIndex}">✕ Failed for ${to}: ${e.message} <button class="btn sm" onclick="retryCampaignEmail(${_campaignSendingIndex})" style="padding:2px 6px;font-size:10px;margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button></div>`;
   }
 
   const consoleEl = $('c-send-log-console');
@@ -17099,7 +17542,7 @@ async function finishCampaignSend(subject, body, replyTo, draftId, wasAborted) {
   $('c-send-progress-text').textContent = wasAborted ? 'Sending Aborted' : 'Campaign Completed!';
   
   $('c-send-log-console').innerHTML += `
-    <div style="font-weight:bold;margin-top:8px;">[FINISHED] Success: ${_campaignSuccessCount} · Failed: ${_campaignFailCount}</div>
+    <div style="font-weight:bold;margin-top:8px;" id="c-send-finished-summary">[FINISHED] Success: ${_campaignSuccessCount} · Failed: ${_campaignFailCount}</div>
   `;
   
   const btn = $('c-send-cancel-btn');
@@ -17133,6 +17576,68 @@ async function finishCampaignSend(subject, body, replyTo, draftId, wasAborted) {
   await _persistCampaigns();
   renderCampaigns();
   showToast(wasAborted ? 'Campaign send aborted' : '✓ Campaign sent successfully!');
+}
+
+async function retryCampaignEmail(idx) {
+  const rec = _campaignSendingRecipients[idx];
+  if (!rec) return;
+  
+  const to = rec.email;
+  const name = rec.name || 'Customer';
+  const subject = $('c-subject').value.trim();
+  const body = $('c-body').value.trim();
+  const replyTo = $('c-replyto').value.trim();
+  
+  const consoleEl = $('c-send-log-console');
+  if (!consoleEl) return;
+  const failLines = consoleEl.querySelectorAll('.campaign-log-fail');
+  let targetLine = null;
+  for (const line of failLines) {
+    if (parseInt(line.getAttribute('data-index')) === idx) {
+      targetLine = line;
+      break;
+    }
+  }
+  
+  if (targetLine) {
+    targetLine.style.color = 'var(--text3)';
+    targetLine.innerHTML = `⏳ Retrying for ${to}...`;
+  }
+  
+  try {
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (!to || !emailRegex.test(to.trim())) {
+      throw new Error('Invalid email address format');
+    }
+    const personalizedBody = body
+      .replace(/\{\{name\}\}/g, name)
+      .replace(/\{\{email\}\}/g, to);
+
+    await sendSingleEmailViaBackend(to, subject, personalizedBody, replyTo);
+    
+    _campaignSuccessCount++;
+    _campaignFailCount--;
+    
+    if (targetLine) {
+      targetLine.style.color = '#a9ffaf';
+      targetLine.className = '';
+      targetLine.innerHTML = `✓ Sent to ${to} (${name}) (Retried)`;
+    }
+    
+    updateCampaignSendFinishedSummary();
+  } catch (e) {
+    if (targetLine) {
+      targetLine.style.color = '#f87171';
+      targetLine.innerHTML = `✕ Failed for ${to}: ${e.message} <button class="btn sm" onclick="retryCampaignEmail(${idx})" style="padding:2px 6px;font-size:10px;margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button>`;
+    }
+  }
+}
+
+function updateCampaignSendFinishedSummary() {
+  const summaryEl = $('c-send-finished-summary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `[FINISHED] Success: ${_campaignSuccessCount} · Failed: ${_campaignFailCount}`;
+  }
 }
 
 async function renderCampaigns() {
@@ -17278,7 +17783,7 @@ Object.assign(window, {
   toggleMailingAutoAdd, emailCustomerSegment, emailMailingList, copyMailingListEmails, exportMailingListCSV,
   setCustomerChannelFilter, setCustomerSpendFilter, setCustomerOrdersFilter, checkMailingEmailTypo, applyMailingEmailCorrection,
   switchCustomersSubTab, openCampaignWizard, closeCampaignWizard, insertTemplateTag, updateCampaignPreview,
-  onCampaignSegmentChange, saveCampaignDraft, editCampaignDraft, deleteCampaign, sendTestEmailCampaign, sendCampaignLaunch, cancelCampaignSending,
+  onCampaignSegmentChange, saveCampaignDraft, editCampaignDraft, deleteCampaign, sendTestEmailCampaign, sendCampaignLaunch, cancelCampaignSending, onForceMockChange, updateCampaignModeStatus, retryCampaignEmail,
   fetchStripeFeesByYear, downloadStripeFeesAuditCSV, clearStoredStripeKey, insertStripeFeesIntoLedger, reconcileStripeAgainstSales,
   reconcileSync, renderReconcile, reconcileRecordSale, reconcileApplyBigCartel, reconcileOpenInvoice, reconcileDismiss, reconcileUndo,
   reconOnFilter, reconSetCurrency, reconClearFilters, reconEditKey, reconRecordGroup, reconDismissGroup, reconDismissAllShown,
@@ -17286,7 +17791,7 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
-  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage,
+  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,

@@ -157,12 +157,40 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/campaign/send' && req.method === 'POST') {
       const body = await readJson(req, res);
       if (!body) return;
-      const { to, subject, body: emailBody, replyTo } = body;
+      const { to, subject, body: emailBody, replyTo, simulated } = body;
       console.log(`[MOCK MAIL] Sending campaign email:
       To: ${to}
       Subject: ${subject}
       Reply-To: ${replyTo || 'default'}
       Body: ${(emailBody || '').substring(0, 100)}...`);
+      
+      // Save mocked emails to a local file for inspection (Next Move #3)
+      try {
+        const mailDir = path.join(__dirname, 'data');
+        if (!fs.existsSync(mailDir)) {
+          fs.mkdirSync(mailDir, { recursive: true });
+        }
+        const filePath = path.join(mailDir, 'mock-emails.json');
+        let existing = [];
+        if (fs.existsSync(filePath)) {
+          try {
+            existing = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          } catch (e) {
+            existing = [];
+          }
+        }
+        existing.push({
+          timestamp: new Date().toISOString(),
+          to,
+          subject,
+          replyTo,
+          body: emailBody,
+          simulated: !!simulated
+        });
+        fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf8');
+      } catch (err) {
+        console.error('Failed to save mock email locally:', err);
+      }
       
       appendAudit(user.email, 'campaign.send_single', { to, subject });
       return sendJson(res, 200, { ok: true, emailed: true, via: 'mock-backend' });
