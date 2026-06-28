@@ -2798,9 +2798,15 @@ function ocUpdateTmplPreview() {
   
   const sampleName = 'Alex Mercer';
   const samplePhoto = 'alex_mercer_artwork.jpg';
+  const sampleCreditName = 'Alex Mercer';
   
-  const resolvedSub = sub.replace(/\{\{name\}\}/g, sampleName).replace(/\{\{photo\}\}/g, samplePhoto);
-  const resolvedBody = body.replace(/\{\{name\}\}/g, sampleName).replace(/\{\{photo\}\}/g, samplePhoto);
+  const personalize = (str) => str
+    .replace(/\{\{name\}\}/g, sampleName)
+    .replace(/\{\{photo\}\}/g, samplePhoto)
+    .replace(/\{\{creditName\}\}/g, sampleCreditName);
+  
+  const resolvedSub = personalize(sub);
+  const resolvedBody = personalize(body);
   
   const subEl = $('oc-preview-subject');
   const bodyEl = $('oc-preview-body');
@@ -2811,6 +2817,8 @@ function ocUpdateTmplPreview() {
 }
 
 let _ocBulkSelectedRecipients = [];
+let _ocBulkSendingActive = false;
+let _ocBulkFailedIds = []; // ids of contributors that failed in the last send
 
 function openOcBulkModal() {
   let modal = $('oc-bulk-modal');
@@ -2839,7 +2847,7 @@ function closeOcBulkModal() {
   }
 }
 
-function renderOcBulkModalContent() {
+function renderOcBulkModalContent(retryMode = false) {
   const modal = $('oc-bulk-modal');
   if (!modal) return;
   
@@ -2847,93 +2855,194 @@ function renderOcBulkModalContent() {
   if (!proj) return;
   
   const stage = $('oc-bulk-stage')?.value || 'selectionSent';
+  const resendMode = $('oc-bulk-resend-toggle')?.checked || false;
   
-  // Get eligible contributors
+  // Get eligible contributors — resend mode shows already-sent ones too
   let eligible = [];
-  if (stage === 'selectionSent') {
-    eligible = proj.contributors.filter(c => c.email && !c.selectionSent);
+  if (retryMode && _ocBulkFailedIds.length > 0) {
+    eligible = proj.contributors.filter(c => c.email && _ocBulkFailedIds.includes(c.id));
+  } else if (stage === 'selectionSent') {
+    eligible = resendMode
+      ? proj.contributors.filter(c => c.email && c.selectionSent)
+      : proj.contributors.filter(c => c.email && !c.selectionSent);
   } else if (stage === 'cmykSent') {
-    eligible = proj.contributors.filter(c => c.email && c.creditReceived && !c.cmykSent);
+    eligible = resendMode
+      ? proj.contributors.filter(c => c.email && c.cmykSent)
+      : proj.contributors.filter(c => c.email && c.creditReceived && !c.cmykSent);
   } else if (stage === 'preorderSent') {
-    eligible = proj.contributors.filter(c => c.email && c.cmykSent && c.filesReceived && !c.preorderSent);
+    eligible = resendMode
+      ? proj.contributors.filter(c => c.email && c.preorderSent)
+      : proj.contributors.filter(c => c.email && c.cmykSent && c.filesReceived && !c.preorderSent);
   }
+
+  const stageLabels = { selectionSent: 'Selection Notice', cmykSent: 'Request Files (CMYK)', preorderSent: 'Pre-order Launch' };
   
-  const listHtml = eligible.length > 0 ? eligible.map(c => `
-    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:4px 0;">
-      <input type="checkbox" class="oc-bulk-recipient-check" value="${c.id}" checked style="margin:0;">
-      <span><strong>${escapeHtml(c.name || 'Unnamed')}</strong> (${escapeHtml(c.email)})</span>
-    </label>
-  `).join('') : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">No eligible contributors found for this stage.</div>';
+  const listHtml = eligible.length > 0
+    ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
+        <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:4px;cursor:pointer;" onclick="ocBulkSelectAll(true)">Select All</button>
+        <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:4px;cursor:pointer;" onclick="ocBulkSelectAll(false)">Deselect All</button>
+        <span style="font-size:10px;color:var(--text3);margin-left:auto;align-self:center;" id="oc-bulk-recipient-count">${eligible.length} recipient${eligible.length !== 1 ? 's' : ''}</span>
+      </div>` +
+      eligible.map(c => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:4px 0;border-radius:4px;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+          <input type="checkbox" class="oc-bulk-recipient-check" value="${c.id}" checked style="margin:0;cursor:pointer;" onchange="ocBulkUpdateCount()">
+          <span><strong>${escapeHtml(c.name || 'Unnamed')}</strong> <span style="color:var(--text3);">(${escapeHtml(c.email)})</span></span>
+        </label>
+      `).join('')
+    : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">No eligible contributors found for this stage.</div>';
   
   const tmpl = proj.templates ? proj.templates[stage] : null;
-  const previewSub = tmpl ? tmpl.subject : '';
-  const previewBody = tmpl ? tmpl.body : '';
+  const previewSub = tmpl ? tmpl.subject.replace(/\{\{name\}\}/g, 'Alex Mercer').replace(/\{\{photo\}\}/g, 'alex_artwork.jpg').replace(/\{\{creditName\}\}/g, 'Alex Mercer') : '(no template saved)';
+  const previewBody = tmpl ? tmpl.body.replace(/\{\{name\}\}/g, 'Alex Mercer').replace(/\{\{photo\}\}/g, 'alex_artwork.jpg').replace(/\{\{creditName\}\}/g, 'Alex Mercer') : '';
   
   modal.innerHTML = `
-    <div class="card" style="width:90%;max-width:600px;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 40px rgba(0,0,0,0.3);position:relative;" onclick="event.stopPropagation()">
-      <button onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;">✕</button>
+    <div class="card" style="width:94%;max-width:660px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
+      <button onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
       
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:15px;">✉ Send Bulk Pipeline Emails</div>
-      
-      <div style="margin-bottom:15px;">
-        <label style="font-size:12px;color:var(--text3);font-weight:600;display:block;margin-bottom:6px;">Select Pipeline Stage</label>
-        <select id="oc-bulk-stage" onchange="onOcBulkStageChange(this.value)" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);">
-          <option value="selectionSent" ${stage === 'selectionSent' ? 'selected' : ''}>Stage 1 — Selection Notice</option>
-          <option value="cmykSent" ${stage === 'cmykSent' ? 'selected' : ''}>Stage 2 — Request Files (CMYK)</option>
-          <option value="preorderSent" ${stage === 'preorderSent' ? 'selected' : ''}>Stage 3 — Pre-order Launch Info</option>
-        </select>
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:4px;">✉ Send Bulk Pipeline Emails</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Personalize and send stage emails to selected contributors.</div>
+
+      <!-- Stage + Re-send Row -->
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin-bottom:14px;">
+        <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Pipeline Stage</label>
+          <select id="oc-bulk-stage" onchange="onOcBulkStageChange(this.value)" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;">
+            <option value="selectionSent" ${stage === 'selectionSent' ? 'selected' : ''}>Stage 1 — Selection Notice</option>
+            <option value="cmykSent" ${stage === 'cmykSent' ? 'selected' : ''}>Stage 2 — Request Files (CMYK)</option>
+            <option value="preorderSent" ${stage === 'preorderSent' ? 'selected' : ''}>Stage 3 — Pre-order Launch Info</option>
+          </select>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;white-space:nowrap;padding-bottom:4px;" title="Also show contributors who already received this stage email">
+          <input type="checkbox" id="oc-bulk-resend-toggle" onchange="renderOcBulkModalContent()" style="cursor:pointer;">
+          Re-send mode
+        </label>
       </div>
-      
-      <div style="margin-bottom:15px;">
-        <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:6px;">Recipients Eligible for this Stage:</div>
-        <div id="oc-bulk-recipients" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:10px;background:var(--input-bg);display:flex;flex-direction:column;gap:4px;">
+
+      <!-- Recipients -->
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Recipients</div>
+        <div id="oc-bulk-recipients" style="max-height:170px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:10px;background:var(--input-bg);display:flex;flex-direction:column;gap:2px;">
           ${listHtml}
         </div>
       </div>
-      
-      <!-- Template Preview -->
-      <div style="margin-bottom:20px;border-top:1px solid var(--border);padding-top:15px;">
-        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Template Preview (Sample)</div>
-        <div style="font-size:12px;color:var(--text2);padding:10px;background:rgba(255,255,255,0.02);border-radius:4px;border:1px solid var(--border);max-height:120px;overflow-y:auto;">
-          <div style="font-weight:700;margin-bottom:4px;">Subject: ${escapeHtml(previewSub)}</div>
-          <div style="white-space:pre-wrap;font-size:11px;line-height:1.4;margin-top:6px;">${escapeHtml(previewBody)}</div>
+
+      <!-- Reply-To & Delay Row -->
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin-bottom:14px;">
+        <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Reply-To (optional)</label>
+          <input id="oc-bulk-replyto" type="email" placeholder="e.g. hello@lyricalmyricalbooks.com" style="width:100%;padding:8px 12px;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Delay</label>
+          <select id="oc-bulk-delay" style="padding:8px 10px;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;">
+            <option value="0">No delay</option>
+            <option value="1000" selected>1s between sends</option>
+            <option value="2000">2s between sends</option>
+            <option value="5000">5s between sends</option>
+          </select>
         </div>
       </div>
 
+      <!-- Template Preview -->
+      <div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:var(--text3);padding:8px 12px;background:rgba(255,255,255,0.03);border-bottom:1px solid var(--border);">Template Preview (sample data)</div>
+        <div style="padding:12px;max-height:120px;overflow-y:auto;">
+          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Subject: ${escapeHtml(previewSub)}</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.6;white-space:pre-wrap;">${escapeHtml(previewBody)}</div>
+        </div>
+        <div style="padding:8px 12px;border-top:1px solid var(--border);background:rgba(255,255,255,0.02);">
+          <span style="font-size:10px;color:var(--text3);">Tokens: <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{name}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{photo}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{creditName}}</code> — replace with per-contributor data</span>
+        </div>
+      </div>
+
+      <!-- Test Email -->
+      <div style="margin-bottom:16px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px dashed var(--border);border-radius:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Test Send</span>
+        <input id="oc-bulk-test-email" type="email" placeholder="your@email.com" style="flex:1;min-width:140px;padding:6px 10px;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:5px;">
+        <button class="btn sm" onclick="sendOcBulkTestEmail()" ${tmpl ? '' : 'disabled'} title="Send the template to yourself using sample data">📨 Send Test</button>
+      </div>
+
       <!-- Progress Bar (Initially Hidden) -->
-      <div id="oc-bulk-progress-container" style="display:none;margin-bottom:20px;">
-        <div class="row-between" style="font-size:12px;color:var(--text2);margin-bottom:4px;">
+      <div id="oc-bulk-progress-container" style="display:none;margin-bottom:16px;">
+        <div class="row-between" style="font-size:12px;color:var(--text2);margin-bottom:6px;">
           <span id="oc-bulk-progress-text">Sending emails...</span>
           <strong id="oc-bulk-progress-pct">0%</strong>
         </div>
-        <div style="width:100%;background:rgba(255,255,255,0.05);height:8px;border-radius:4px;overflow:hidden;border:1px solid var(--border);">
-          <div id="oc-bulk-progress-fill" style="width:0%;background:linear-gradient(90deg, var(--gold), var(--gold2));height:100%;transition:width 0.2s ease;"></div>
+        <div style="width:100%;background:rgba(255,255,255,0.06);height:8px;border-radius:4px;overflow:hidden;border:1px solid var(--border);">
+          <div id="oc-bulk-progress-fill" style="width:0%;background:linear-gradient(90deg, var(--gold), var(--gold2));height:100%;transition:width 0.3s ease;"></div>
         </div>
-        <div id="oc-bulk-console" style="font-family:'DM Mono',monospace;font-size:11px;background:#1e1e1e;color:#a9ffaf;padding:10px;border-radius:4px;max-height:100px;overflow-y:auto;margin-top:10px;border:1px solid #333;">
-        </div>
+        <div id="oc-bulk-console" style="font-family:'DM Mono',monospace;font-size:11px;background:#111;color:#a9ffaf;padding:10px;border-radius:6px;max-height:120px;overflow-y:auto;margin-top:10px;border:1px solid #2a2a2a;line-height:1.5;"></div>
       </div>
       
-      <div style="display:flex;justify-content:flex-end;gap:10px;" id="oc-bulk-actions">
+      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;" id="oc-bulk-actions">
         <button class="btn" onclick="closeOcBulkModal()">Cancel</button>
-        <button class="btn gold" id="oc-bulk-send-btn" onclick="sendOcBulkEmails()" ${eligible.length > 0 ? '' : 'disabled'}>Send Emails</button>
+        <button class="btn gold" id="oc-bulk-send-btn" onclick="sendOcBulkEmails(false)" ${eligible.length > 0 ? '' : 'disabled'}>✉ Send ${eligible.length > 0 ? eligible.length + ' Email' + (eligible.length !== 1 ? 's' : '') : 'Emails'}</button>
       </div>
     </div>`;
+}
+
+function ocBulkSelectAll(checked) {
+  document.querySelectorAll('.oc-bulk-recipient-check').forEach(cb => { cb.checked = checked; });
+  ocBulkUpdateCount();
+}
+
+function ocBulkUpdateCount() {
+  const total = document.querySelectorAll('.oc-bulk-recipient-check').length;
+  const checked = document.querySelectorAll('.oc-bulk-recipient-check:checked').length;
+  const el = $('oc-bulk-recipient-count');
+  if (el) el.textContent = `${checked} of ${total} selected`;
+  const sendBtn = $('oc-bulk-send-btn');
+  if (sendBtn) {
+    sendBtn.disabled = checked === 0;
+    sendBtn.textContent = `✉ Send ${checked} Email${checked !== 1 ? 's' : ''}`;
+  }
+}
+
+async function sendOcBulkTestEmail() {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const stage = $('oc-bulk-stage')?.value || 'selectionSent';
+  const tmpl = proj.templates?.[stage];
+  if (!tmpl) { showToast('No template found for this stage', 'warn'); return; }
+  const testEmail = $('oc-bulk-test-email')?.value?.trim();
+  if (!testEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(testEmail)) {
+    showToast('Enter a valid test email address', 'warn'); return;
+  }
+  const replyTo = $('oc-bulk-replyto')?.value?.trim() || '';
+  const subject = '[TEST] ' + tmpl.subject
+    .replace(/\{\{name\}\}/g, 'Alex Mercer')
+    .replace(/\{\{photo\}\}/g, 'alex_artwork.jpg')
+    .replace(/\{\{creditName\}\}/g, 'Alex Mercer');
+  const body = tmpl.body
+    .replace(/\{\{name\}\}/g, 'Alex Mercer')
+    .replace(/\{\{photo\}\}/g, 'alex_artwork.jpg')
+    .replace(/\{\{creditName\}\}/g, 'Alex Mercer');
+  try {
+    showToast('Sending test email...');
+    await sendSingleEmailViaBackend(testEmail, subject, body, replyTo);
+    showToast('✓ Test email sent to ' + testEmail);
+  } catch (e) {
+    showToast('Test send failed: ' + e.message, 'err');
+  }
 }
 
 function onOcBulkStageChange(val) {
   renderOcBulkModalContent();
 }
 
-async function sendOcBulkEmails() {
+async function sendOcBulkEmails(retryFailedOnly = false) {
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
   
   const stage = $('oc-bulk-stage').value;
   const tmpl = proj.templates ? proj.templates[stage] : null;
   if (!tmpl) {
-    showToast('Template not found for this stage', 'err');
+    showToast('Template not found for this stage. Save a template first.', 'err');
     return;
   }
+  
+  const replyTo = $('oc-bulk-replyto')?.value?.trim() || '';
+  const delayMs = parseInt($('oc-bulk-delay')?.value || '1000', 10);
   
   // Get checked recipients
   const checks = document.querySelectorAll('.oc-bulk-recipient-check:checked');
@@ -2948,47 +3057,83 @@ async function sendOcBulkEmails() {
   
   // Show progress UI
   $('oc-bulk-progress-container').style.display = 'block';
-  $('oc-bulk-actions').style.display = 'none';
+  $('oc-bulk-actions').innerHTML = `
+    <button class="btn" id="oc-bulk-cancel-btn" onclick="cancelOcBulkSend()" style="background:rgba(239,68,68,0.1);color:var(--red);border-color:rgba(239,68,68,0.3);">✕ Cancel</button>
+  `;
   
   const consoleEl = $('oc-bulk-console');
-  consoleEl.innerHTML = '';
+  consoleEl.innerHTML = `<div style="color:#6b8cff;margin-bottom:4px;">Starting bulk send · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''} · ${delayMs > 0 ? delayMs/1000 + 's delay' : 'no delay'}${replyTo ? ' · reply-to: ' + replyTo : ''}</div>`;
   
+  _ocBulkSendingActive = true;
+  _ocBulkFailedIds = [];
   let successCount = 0;
   let failCount = 0;
   
   for (let i = 0; i < selectedRecs.length; i++) {
-    const c = selectedRecs[i];
-    $('oc-bulk-progress-text').textContent = `Sending to ${c.name || c.email}...`;
-    
-    const subject = tmpl.subject.replace(/\{\{name\}\}/g, c.name || 'Artist').replace(/\{\{photo\}\}/g, c.photo || '');
-    const body = tmpl.body.replace(/\{\{name\}\}/g, c.name || 'Artist').replace(/\{\{photo\}\}/g, c.photo || '');
-    
-    try {
-      await sendSingleEmailViaBackend(c.email, subject, body, '');
-      c[stage] = true;
-      successCount++;
-      consoleEl.innerHTML += `<div style="color:#a9ffaf;">✓ Sent to ${c.email} (${c.name || 'Artist'})</div>`;
-    } catch (err) {
-      failCount++;
-      consoleEl.innerHTML += `<div style="color:#f87171;">✕ Failed for ${c.email}: ${err.message}</div>`;
+    if (!_ocBulkSendingActive) {
+      consoleEl.innerHTML += `<div style="color:#fbbf24;">[CANCELLED] Stopped after ${i} of ${selectedRecs.length}.</div>`;
+      break;
     }
     
-    // Update progress
+    const c = selectedRecs[i];
+    $('oc-bulk-progress-text').textContent = `Sending ${i + 1}/${selectedRecs.length} — ${c.name || c.email}...`;
+    
+    const personalize = (str) => str
+      .replace(/\{\{name\}\}/g, c.name || 'Artist')
+      .replace(/\{\{photo\}\}/g, c.photo || '')
+      .replace(/\{\{creditName\}\}/g, c.creditName || c.name || 'Artist');
+    
+    const subject = personalize(tmpl.subject);
+    const body = personalize(tmpl.body);
+    
+    try {
+      await sendSingleEmailViaBackend(c.email, subject, body, replyTo);
+      c[stage] = true;
+      successCount++;
+      consoleEl.innerHTML += `<div style="color:#a9ffaf;">✓ [${i+1}/${selectedRecs.length}] ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})</div>`;
+    } catch (err) {
+      failCount++;
+      _ocBulkFailedIds.push(c.id);
+      consoleEl.innerHTML += `<div style="color:#f87171;">✕ [${i+1}/${selectedRecs.length}] ${escapeHtml(c.email)}: ${escapeHtml(err.message)}</div>`;
+    }
+    
+    // Update progress bar
     const pct = Math.round((i + 1) / selectedRecs.length * 100);
     $('oc-bulk-progress-pct').textContent = pct + '%';
     $('oc-bulk-progress-fill').style.width = pct + '%';
     consoleEl.scrollTop = consoleEl.scrollHeight;
+    
+    // Delay between sends (except after the last one)
+    if (delayMs > 0 && i < selectedRecs.length - 1 && _ocBulkSendingActive) {
+      await new Promise(res => setTimeout(res, delayMs));
+    }
   }
   
-  // Finish
-  $('oc-bulk-progress-text').textContent = `Completed! Success: ${successCount} · Failed: ${failCount}`;
+  _ocBulkSendingActive = false;
+  
+  // Finish summary
+  const cancelled = !_ocBulkSendingActive && (successCount + failCount) < selectedRecs.length;
+  $('oc-bulk-progress-text').textContent = `Done · ✓ ${successCount} sent · ${failCount > 0 ? '✕ ' + failCount + ' failed' : '0 failed'}`;
+  consoleEl.innerHTML += `<div style="color:#6b8cff;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Finished · ${successCount} succeeded · ${failCount} failed</div>`;
+  consoleEl.scrollTop = consoleEl.scrollHeight;
   
   await _persistOpenCalls();
   renderOpenCall();
   
-  // Change actions to a "Done" button
-  $('oc-bulk-actions').style.display = 'flex';
-  $('oc-bulk-actions').innerHTML = `<button class="btn gold" onclick="closeOcBulkModal()">Done</button>`;
+  // Show done actions — with retry button if there were failures
+  const retryBtn = _ocBulkFailedIds.length > 0
+    ? `<button class="btn" onclick="sendOcBulkEmails(true)" style="background:rgba(239,68,68,0.08);color:var(--red);border-color:rgba(239,68,68,0.25);">↩ Retry ${_ocBulkFailedIds.length} Failed</button>`
+    : '';
+  $('oc-bulk-actions').innerHTML = `
+    ${retryBtn}
+    <button class="btn gold" onclick="closeOcBulkModal()">Done</button>
+  `;
+}
+
+function cancelOcBulkSend() {
+  _ocBulkSendingActive = false;
+  const cancelBtn = $('oc-bulk-cancel-btn');
+  if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.textContent = 'Cancelling...'; }
 }
 
 function renderOpenCall() {
@@ -3165,8 +3310,9 @@ function renderOpenCall() {
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('bold')" title="Bold"><b>B</b></button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('italic')" title="Italic"><i>I</i></button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('link')" title="Link">Link</button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('name')" title="Insert {{name}}">{{name}}</button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('photo')" title="Insert {{photo}}">{{photo}}</button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('name')" title="Insert {{name}} — contributor's name">{{name}}</button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('photo')" title="Insert {{photo}} — photo filename">{{photo}}</button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('creditName')" title="Insert {{creditName}} — credit index name">{{creditName}}</button>
             </div>
             <textarea id="oc-tmpl-body" rows="8" oninput="ocUpdateTmplPreview()">${escapeHtml(activeProj.templates[activeTmplTab].body)}</textarea>
           </div>
@@ -17253,6 +17399,8 @@ function insertFormattingTag(tag) {
     replacement = `{{name}}`;
   } else if (tag === 'photo') {
     replacement = `{{photo}}`;
+  } else if (tag === 'creditName') {
+    replacement = `{{creditName}}`;
   }
   
   textarea.value = text.substring(0, start) + replacement + text.substring(end);
@@ -17667,24 +17815,23 @@ async function ocScanRepliesSingle(cId) {
 async function ocSaveTemplates() {
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
-  
-  proj.templates = {
-    selectionSent: {
-      subject: ($('oc-tmpl-sub-selection')?.value || '').trim(),
-      body: $('oc-tmpl-body-selection')?.value || ''
-    },
-    cmykSent: {
-      subject: ($('oc-tmpl-sub-cmyk')?.value || '').trim(),
-      body: $('oc-tmpl-body-cmyk')?.value || ''
-    },
-    preorderSent: {
-      subject: ($('oc-tmpl-sub-preorder')?.value || '').trim(),
-      body: $('oc-tmpl-body-preorder')?.value || ''
-    }
-  };
+  if (!proj.templates) proj.templates = {};
+
+  // The template editor renders a single active tab with ids:
+  //   oc-tmpl-subject  (input)   and   oc-tmpl-body  (textarea)
+  // We save only the currently visible tab.
+  const subject = ($('oc-tmpl-subject')?.value || '').trim();
+  const body = $('oc-tmpl-body')?.value || '';
+
+  if (!subject && !body) {
+    showToast('Nothing to save — template is empty', 'warn');
+    return;
+  }
+
+  proj.templates[activeTmplTab] = { subject, body };
   
   await _persistOpenCalls();
-  showToast('✓ Templates saved successfully!');
+  showToast(`✓ ${activeTmplTab === 'selectionSent' ? 'Selection' : activeTmplTab === 'cmykSent' ? 'Request Files' : 'Pre-order'} template saved!`);
 }
 
 function exportOpenCallCSV() {
@@ -18446,7 +18593,7 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
-  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
+  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
