@@ -18293,8 +18293,11 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
   const resendKey = localStorage.getItem('lm-resend-api-key') || '';
   const resendFrom = localStorage.getItem('lm-resend-from') || '';
 
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const baseUrl = isLocal ? 'http://localhost:8787' : '';
+
   if (useResend && resendKey && resendFrom) {
-    const res = await fetch('/api/campaign/send', {
+    const res = await fetch(baseUrl + '/api/campaign/send', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -18321,7 +18324,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
   const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const forceMock = $('c-force-mock')?.checked;
   if (forceMock || (isDev && !sheetsUrl)) {
-    const res = await fetch('/api/campaign/send', {
+    const res = await fetch(baseUrl + '/api/campaign/send', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -50,6 +50,97 @@ const server = http.createServer(async (req, res) => {
     if (route === 'GET /health') return sendJson(res, 200, { ok: true, uptime: process.uptime() });
     if (route === 'POST /api/auth/login') return handleLogin(req, res);
 
+    if (url.pathname === '/api/campaign/send' && req.method === 'POST') {
+      const body = await readJson(req, res);
+      if (!body) return;
+      const { to, subject, body: emailBody, replyTo, simulated } = body;
+
+      const resendKey = req.headers['x-resend-api-key'] || process.env.RESEND_API_KEY;
+      const resendFrom = req.headers['x-resend-from'] || process.env.RESEND_FROM;
+
+      // Try to get user if token is present, but don't reject if not
+      let user = null;
+      try {
+        const auth = req.headers.authorization || '';
+        if (auth.startsWith('Bearer ')) {
+          const token = auth.slice('Bearer '.length);
+          user = verifyToken(token);
+        }
+      } catch (_) {}
+
+      if (resendKey && resendFrom && !simulated) {
+        try {
+          const payload = {
+            from: resendFrom,
+            to: [to],
+            subject: subject,
+            text: emailBody
+          };
+          if (replyTo) payload.reply_to = replyTo;
+
+          const resendRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${resendKey}`
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (!resendRes.ok) {
+            const errText = await resendRes.text();
+            throw new Error(`Resend API error: ${errText}`);
+          }
+
+          const resendData = await resendRes.json();
+          appendAudit(user ? user.email : 'anonymous', 'campaign.send_single_resend', { to, subject });
+          return sendJson(res, 200, { ok: true, emailed: true, via: 'resend', id: resendData.id });
+        } catch (err) {
+          console.error('Resend delivery failed:', err);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Resend delivery failed: ${err.message}` }));
+          return;
+        }
+      }
+
+      console.log(`[MOCK MAIL] Sending campaign email:
+      To: ${to}
+      Subject: ${subject}
+      Reply-To: ${replyTo || 'default'}
+      Body: ${(emailBody || '').substring(0, 100)}...`);
+      
+      // Save mocked emails to a local file for inspection (Next Move #3)
+      try {
+        const mailDir = path.join(__dirname, 'data');
+        if (!fs.existsSync(mailDir)) {
+          fs.mkdirSync(mailDir, { recursive: true });
+        }
+        const filePath = path.join(mailDir, 'mock-emails.json');
+        let existing = [];
+        if (fs.existsSync(filePath)) {
+          try {
+            existing = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          } catch (e) {
+            existing = [];
+          }
+        }
+        existing.push({
+          timestamp: new Date().toISOString(),
+          to,
+          subject,
+          replyTo,
+          body: emailBody,
+          simulated: !!simulated
+        });
+        fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf8');
+      } catch (err) {
+        console.error('Failed to save mock email locally:', err);
+      }
+      
+      appendAudit(user ? user.email : 'anonymous', 'campaign.send_single', { to, subject });
+      return sendJson(res, 200, { ok: true, emailed: true, via: 'mock-backend' });
+    }
+
     const user = requireAuth(req, res);
     if (!user) return;
 
@@ -152,87 +243,6 @@ const server = http.createServer(async (req, res) => {
         persist();
         return sendJson(res, 200, { ok: true });
       }
-    }
-
-    if (url.pathname === '/api/campaign/send' && req.method === 'POST') {
-      const body = await readJson(req, res);
-      if (!body) return;
-      const { to, subject, body: emailBody, replyTo, simulated } = body;
-
-      const resendKey = req.headers['x-resend-api-key'] || process.env.RESEND_API_KEY;
-      const resendFrom = req.headers['x-resend-from'] || process.env.RESEND_FROM;
-
-      if (resendKey && resendFrom && !simulated) {
-        try {
-          const payload = {
-            from: resendFrom,
-            to: [to],
-            subject: subject,
-            text: emailBody
-          };
-          if (replyTo) payload.reply_to = replyTo;
-
-          const resendRes = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${resendKey}`
-            },
-            body: JSON.stringify(payload)
-          });
-
-          if (!resendRes.ok) {
-            const errText = await resendRes.text();
-            throw new Error(`Resend API error: ${errText}`);
-          }
-
-          const resendData = await resendRes.json();
-          appendAudit(user.email, 'campaign.send_single_resend', { to, subject });
-          return sendJson(res, 200, { ok: true, emailed: true, via: 'resend', id: resendData.id });
-        } catch (err) {
-          console.error('Resend delivery failed:', err);
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `Resend delivery failed: ${err.message}` }));
-          return;
-        }
-      }
-
-      console.log(`[MOCK MAIL] Sending campaign email:
-      To: ${to}
-      Subject: ${subject}
-      Reply-To: ${replyTo || 'default'}
-      Body: ${(emailBody || '').substring(0, 100)}...`);
-      
-      // Save mocked emails to a local file for inspection (Next Move #3)
-      try {
-        const mailDir = path.join(__dirname, 'data');
-        if (!fs.existsSync(mailDir)) {
-          fs.mkdirSync(mailDir, { recursive: true });
-        }
-        const filePath = path.join(mailDir, 'mock-emails.json');
-        let existing = [];
-        if (fs.existsSync(filePath)) {
-          try {
-            existing = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-          } catch (e) {
-            existing = [];
-          }
-        }
-        existing.push({
-          timestamp: new Date().toISOString(),
-          to,
-          subject,
-          replyTo,
-          body: emailBody,
-          simulated: !!simulated
-        });
-        fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf8');
-      } catch (err) {
-        console.error('Failed to save mock email locally:', err);
-      }
-      
-      appendAudit(user.email, 'campaign.send_single', { to, subject });
-      return sendJson(res, 200, { ok: true, emailed: true, via: 'mock-backend' });
     }
 
     sendJson(res, 404, { error: 'Not Found' });
