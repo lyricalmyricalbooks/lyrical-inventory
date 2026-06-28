@@ -3406,7 +3406,6 @@ function renderOpenCall() {
     setTimeout(() => ocScanReplies({ background: true }), 1000);
   }
 }
-}
 
 async function ocAdd() {
   if (ocBlockedForAuthor_()) return;
