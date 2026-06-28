@@ -2709,3 +2709,547 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   margin-left: auto;
   line-height: 1;
 }
+
+/* ═══════════════════════════════════════════════
+   OPEN CALL PORTAL — PREMIUM DESIGN SYSTEM v3
+   ═══════════════════════════════════════════════ */
+
+/* Keyframe Animations */
+@keyframes ocSlideUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ocFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes ocShimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+@keyframes ocPulseGold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(200, 145, 58, 0); }
+  50%       { box-shadow: 0 0 0 6px rgba(200, 145, 58, 0.15); }
+}
+
+/* Project Switcher Card */
+.oc-project-card {
+  padding: 18px 18px 16px;
+  border-left: 3px solid var(--gold);
+  position: relative;
+  overflow: hidden;
+}
+.oc-project-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(200, 145, 58, 0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+.oc-project-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.oc-project-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.oc-project-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.oc-project-select {
+  margin-bottom: 12px !important;
+}
+.oc-project-actions {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+.oc-project-actions .btn {
+  flex: 1;
+}
+
+/* Summary Card */
+.oc-summary-card {
+  padding: 18px;
+}
+.oc-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+  margin-bottom: 12px;
+}
+.oc-scan-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.oc-stage-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cream3);
+}
+.oc-stage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: var(--cream2);
+  border: 1px solid var(--cream4);
+  color: var(--text3);
+  font-weight: 500;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.oc-stage-pill strong {
+  color: var(--text2);
+  font-weight: 700;
+}
+.oc-stage-pill.done {
+  background: rgba(42, 99, 72, 0.08);
+  border-color: rgba(42, 99, 72, 0.2);
+  color: var(--green);
+}
+.oc-stage-pill.done strong {
+  color: var(--green);
+}
+.oc-empty-note {
+  font-size: 12px;
+  color: var(--text3);
+  font-style: italic;
+}
+
+/* Progress Bar */
+.oc-progress-wrap {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cream3);
+}
+.oc-progress-label {
+  font-size: 11px;
+  color: var(--text3);
+  margin-bottom: 6px;
+}
+.oc-progress-label strong {
+  color: var(--text2);
+}
+.oc-progress-track {
+  width: 100%;
+  height: 7px;
+  background: var(--cream3);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.oc-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--gold2));
+  border-radius: 99px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.oc-last-scanned {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text4);
+  padding-top: 8px;
+  border-top: 1px dashed var(--cream4);
+}
+
+/* Contributor Cards */
+.oc-main > div:last-child > .card,
+#opencall-body .card {
+  animation: ocSlideUp 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.oc-contributor-card {
+  padding: 18px 20px;
+  transition: box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.2s;
+}
+.oc-contributor-card:hover {
+  box-shadow: 0 8px 28px rgba(14, 12, 10, 0.08), 0 2px 6px rgba(14, 12, 10, 0.04);
+  transform: translateY(-1px);
+  border-color: var(--cream4);
+}
+
+/* Contributor Name */
+.oc-contributor-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Next Action Banner */
+.oc-next-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 7px 12px;
+  background: linear-gradient(90deg, rgba(122, 85, 0, 0.06), rgba(122, 85, 0, 0.02));
+  border: 1px solid rgba(122, 85, 0, 0.15);
+  border-left: 3px solid var(--amber);
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--amber);
+}
+.oc-next-action::before {
+  content: '→';
+  font-weight: 700;
+  opacity: 0.7;
+}
+.oc-all-complete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 7px 12px;
+  background: rgba(42, 99, 72, 0.06);
+  border: 1px solid rgba(42, 99, 72, 0.15);
+  border-left: 3px solid var(--green);
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--green);
+}
+
+/* Photo Chips */
+.oc-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  min-height: 26px;
+}
+.oc-photo-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.oc-photo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-line);
+  border-radius: 100px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--gold);
+  animation: ocFadeIn 0.2s ease;
+  transition: all 0.2s;
+}
+.oc-photo-chip:hover {
+  background: rgba(200, 145, 58, 0.14);
+}
+.oc-photo-chip-remove {
+  cursor: pointer;
+  font-weight: 800;
+  opacity: 0.5;
+  line-height: 1;
+  font-size: 12px;
+  transition: opacity 0.15s;
+  margin-left: 1px;
+}
+.oc-photo-chip-remove:hover {
+  opacity: 1;
+  color: var(--red);
+}
+.oc-add-photo-trigger {
+  cursor: pointer;
+  font-size: 10.5px;
+  padding: 3px 9px;
+  border: 1px dashed var(--gold);
+  color: var(--gold);
+  border-radius: 100px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  transition: all 0.2s;
+  line-height: 1.6;
+}
+.oc-add-photo-trigger:hover {
+  background: var(--gold-bg);
+  border-style: solid;
+}
+.oc-add-photo-input {
+  display: none;
+  width: 140px !important;
+  font-size: 10.5px !important;
+  padding: 3px 8px !important;
+  height: 24px !important;
+  border-radius: 4px !important;
+  border: 1px solid var(--cream4) !important;
+  background: var(--cream2) !important;
+  animation: ocFadeIn 0.15s ease;
+}
+
+/* Template Designer Tabs */
+.oc-tmpl-tabs {
+  display: flex;
+  gap: 4px;
+}
+.oc-tmpl-tab {
+  padding: 6px 14px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--cream4);
+  background: var(--cream2);
+  color: var(--text3);
+}
+.oc-tmpl-tab:hover {
+  background: var(--cream3);
+  color: var(--text);
+  border-color: var(--cream4);
+}
+.oc-tmpl-tab.active {
+  background: linear-gradient(135deg, var(--gold2), var(--gold));
+  border-color: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 2px 8px rgba(200, 145, 58, 0.2);
+}
+
+/* Template textarea inherits connected toolbar */
+.oc-layout textarea#oc-tmpl-body {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-top: none;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  resize: vertical;
+  min-height: 180px;
+}
+
+/* Toolbar */
+.oc-tmpl-toolbar {
+  display: flex;
+  gap: 2px;
+  background: var(--cream2);
+  border: 1px solid var(--cream4);
+  border-bottom: none;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  padding: 6px 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.oc-tmpl-toolbar-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--cream4);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+.oc-toolbar-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text2);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.oc-toolbar-btn:hover {
+  background: var(--cream3);
+  color: var(--gold);
+  border-color: var(--cream4);
+}
+
+/* Live Preview */
+.oc-preview-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: #fefefe;
+  border: 1px solid var(--cream3);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(14, 12, 10, 0.04), 0 1px 3px rgba(14, 12, 10, 0.02);
+}
+.oc-preview-header {
+  background: var(--cream2);
+  border-bottom: 1px solid var(--cream3);
+  padding: 8px 14px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.oc-preview-header::before {
+  content: '';
+  display: flex;
+  gap: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold2);
+  opacity: 0.6;
+}
+.oc-preview-body {
+  padding: 16px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* Search/Filter Bar */
+.oc-filter-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.oc-filter-count {
+  font-size: 11px;
+  color: var(--text4);
+  padding-top: 4px;
+}
+
+/* Empty State */
+.oc-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 56px 24px;
+  gap: 10px;
+}
+.oc-empty-icon {
+  font-size: 40px;
+  opacity: 0.35;
+}
+.oc-empty-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.oc-empty-body {
+  font-size: 13px;
+  color: var(--text3);
+  max-width: 300px;
+  line-height: 1.6;
+}
+
+/* Add Contributor Form */
+.oc-add-form-card {
+  padding: 20px;
+}
+.oc-add-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Import Panel */
+.oc-import-panel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cream3);
+  animation: ocSlideUp 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.oc-import-hint {
+  font-size: 11.5px;
+  color: var(--text3);
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.oc-import-hint strong {
+  color: var(--text2);
+}
+
+/* Upload Zone */
+.oc-upload-zone {
+  border: 2px dashed var(--cream4);
+  border-radius: 10px;
+  padding: 24px 16px;
+  text-align: center;
+  background: var(--cream2);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-top: 12px;
+}
+.oc-upload-zone:hover {
+  border-color: var(--gold);
+  background: var(--cream);
+  box-shadow: 0 0 0 4px rgba(200, 145, 58, 0.06);
+}
+.oc-upload-zone.dragging {
+  border-color: var(--gold2);
+  background: var(--cream);
+  box-shadow: 0 0 0 6px rgba(200, 145, 58, 0.1);
+  transform: scale(1.01);
+}
+.oc-upload-icon {
+  font-size: 24px;
+  margin-bottom: 6px;
+  opacity: 0.5;
+}
+.oc-upload-zone p {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+}
+.oc-upload-zone span {
+  font-size: 11px;
+  color: var(--text4);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .oc-layout {
+    grid-template-columns: 1fr;
+  }
+  .oc-project-actions {
+    gap: 4px;
+  }
+  .oc-stage-counts {
+    gap: 4px;
+  }
+}
+@media (max-width: 560px) {
+  .oc-contributor-card {
+    padding: 14px;
+  }
+}

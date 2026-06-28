@@ -3064,68 +3064,65 @@ function renderOpenCall() {
   }).join('');
 
   const projectSwitcher = `
-    <div class="card" style="border-left:3px solid var(--gold);margin-bottom:0;padding:15px;">
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;">📣</span>
-          <span style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;">Open Call Portal</span>
-        </div>
-        <select id="oc-project-select" onchange="ocSwitchProject(this.value)" style="width:100%;padding:6px 10px;cursor:pointer;margin:0;">
-          ${projectOptions}
-        </select>
-        <div style="display:flex;gap:4px;margin-top:4px;width:100%;">
-          <button class="btn sm gold" onclick="ocCreateProject()" style="flex:1;padding:4px 0;">＋ New</button>
-          <button class="btn sm" onclick="ocRenameProject()" style="flex:1;padding:4px 0;">✎ Rename</button>
-          <button class="btn sm" onclick="ocDeleteProject()" style="color:var(--red);flex:1;padding:4px 0;">✕ Delete</button>
-        </div>
+    <div class="card oc-project-card">
+      <div class="oc-project-header">
+        <span class="oc-project-icon">📣</span>
+        <span class="oc-project-name">Open Call Portal</span>
+      </div>
+      <select id="oc-project-select" class="oc-project-select" onchange="ocSwitchProject(this.value)">
+        ${projectOptions}
+      </select>
+      <div class="oc-project-actions">
+        <button class="btn sm gold" onclick="ocCreateProject()">＋ New</button>
+        <button class="btn sm" onclick="ocRenameProject()">✎ Rename</button>
+        <button class="btn sm danger-btn" onclick="ocDeleteProject()">✕ Delete</button>
       </div>
     </div>`;
 
   const stageCounts = OC_STAGES.map(st => {
     const n = listRaw.filter(c => c[st.key]).length;
-    return `<span class="pill ${n === total && total ? 'green' : 'gray'}" title="${st.label}" style="font-size:10px;padding:3px 8px;">${st.label}: ${n}/${total}</span>`;
-  }).join(' ');
+    const isDone = n === total && total > 0;
+    return `<span class="oc-stage-pill ${isDone ? 'done' : ''}" title="${st.label}">${st.label}: <strong>${n}/${total}</strong></span>`;
+  }).join('');
 
   const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   const lastScannedVal = activeProj ? activeProj.lastScanned : null;
   const lastScannedHtml = lastScannedVal 
-    ? `<div style="font-size:11px;color:var(--text3);margin-top:10px;border-top:1px dashed var(--border);padding-top:6px;">Last scanned: ${formatDateTime(lastScannedVal)}</div>` 
+    ? `<div class="oc-last-scanned">Last scanned: ${formatDateTime(lastScannedVal)}</div>` 
     : '';
 
-  // Project Progress Bar (Next Move #2)
+  // Project Progress Bar
   const pct = total ? Math.round((done / total) * 100) : 0;
   const progressBarHtml = total ? `
-    <div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:8px;">
-      <div class="row-between" style="font-size:11px;color:var(--text3);margin-bottom:4px;">
+    <div class="oc-progress-wrap">
+      <div class="row-between oc-progress-label">
         <span>Project Progress</span>
         <strong>${pct}% (${done}/${total} complete)</strong>
       </div>
-      <div style="width:100%;background:rgba(255,255,255,0.05);height:6px;border-radius:3px;overflow:hidden;border:1px solid var(--border);">
-        <div style="width:${pct}%;background:linear-gradient(90deg, var(--gold), var(--gold2));height:100%;transition:width 0.5s ease;border-radius:3px;"></div>
+      <div class="oc-progress-track">
+        <div class="oc-progress-fill" style="width:${pct}%;"></div>
       </div>
     </div>` : '';
 
   const summary = `
-    <div class="card" style="margin-bottom:0;padding:15px;">
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <div class="section-hed" style="font-size:13px;">Contributors · ${total}</div>
-        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">
-          <select id="oc-scan-days" style="padding:4px 8px;font-size:12px;width:100%;margin:0;">
-            <option value="30">Last 30 days</option>
-            <option value="60">Last 60 days</option>
-            <option value="120" selected>Last 120 days</option>
-          </select>
-          <button class="btn sm gold" id="oc-scan-btn" onclick="ocScanReplies()" ${total ? '' : 'disabled'} style="width:100%;">📥 Scan Gmail Replies</button>
-          <button class="btn sm" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'} style="width:100%;">Export CSV</button>
-          <button class="btn sm" onclick="ocCopyEmails()" ${total ? '' : 'disabled'} style="width:100%;">Copy all emails</button>
-        </div>
+    <div class="card oc-summary-card">
+      <div class="oc-section-title">Contributors · ${total}</div>
+      <div class="oc-scan-controls">
+        <select id="oc-scan-days">
+          <option value="30">Last 30 days</option>
+          <option value="60">Last 60 days</option>
+          <option value="120" selected>Last 120 days</option>
+        </select>
+        <button class="btn sm gold" id="oc-scan-btn" onclick="ocScanReplies()" ${total ? '' : 'disabled'}>📥 Scan Gmail Replies</button>
+        <button class="btn sm" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'}>Export CSV</button>
+        <button class="btn sm" onclick="ocCopyEmails()" ${total ? '' : 'disabled'}>Copy emails</button>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;">${total ? stageCounts : '<span style="color:var(--text2);font-size:11px;">No contributors yet.</span>'}</div>
+      <div class="oc-stage-counts">${total ? stageCounts : '<span class="oc-empty-note">No contributors yet.</span>'}</div>
       ${progressBarHtml}
       ${lastScannedHtml}
     </div>`;
 
-  // Initialize templates if not present (Next Move #4)
+  // Initialize templates if not present
   if (activeProj && !activeProj.templates) {
     activeProj.templates = {
       selectionSent: {
@@ -3143,7 +3140,7 @@ function renderOpenCall() {
     };
   }
 
-  // Templates Editor Panel (Suggestion 4)
+  // Templates Editor Panel
   const templatesEditor = activeProj ? `
     <div class="card" style="margin-top:0;padding:20px;">
       <div class="row-between" style="border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:15px;flex-wrap:wrap;gap:8px;">
@@ -3160,7 +3157,7 @@ function renderOpenCall() {
         <div style="display:flex;flex-direction:column;gap:10px;">
           <div>
             <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Subject Line</label>
-            <input id="oc-tmpl-subject" value="${escapeHtml(activeProj.templates[activeTmplTab].subject)}" oninput="ocUpdateTmplPreview()" style="width:100%;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:4px;margin:0;">
+            <input id="oc-tmpl-subject" value="${escapeHtml(activeProj.templates[activeTmplTab].subject)}" oninput="ocUpdateTmplPreview()" placeholder="Subject Line">
           </div>
           <div>
             <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body (Markdown supported)</label>
@@ -3171,7 +3168,7 @@ function renderOpenCall() {
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('name')" title="Insert {{name}}">{{name}}</button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('photo')" title="Insert {{photo}}">{{photo}}</button>
             </div>
-            <textarea id="oc-tmpl-body" rows="8" oninput="ocUpdateTmplPreview()" style="width:100%;font-size:11px;font-family:'DM Mono',monospace;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-top:none;border-top-left-radius:0;border-top-right-radius:0;padding:8px 12px;line-height:1.5;margin:0;">${escapeHtml(activeProj.templates[activeTmplTab].body)}</textarea>
+            <textarea id="oc-tmpl-body" rows="8" oninput="ocUpdateTmplPreview()">${escapeHtml(activeProj.templates[activeTmplTab].body)}</textarea>
           </div>
           <div style="display:flex;justify-content:flex-end;">
             <button class="btn sm gold" onclick="ocSaveTemplates()">Save Template</button>
@@ -3191,9 +3188,9 @@ function renderOpenCall() {
     <div class="card" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:12px;">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex:1;">
-          <input type="search" id="oc-search" placeholder="Search artist, email..." value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" style="flex:1;min-width:180px;max-width:300px;margin:0;">
+          <input type="search" id="oc-search" placeholder="Search artist, email..." value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" style="max-width:300px;">
           
-          <select id="oc-filter-stage" onchange="ocFilterByStage(this.value)" style="max-width:180px;margin:0;cursor:pointer;">
+          <select id="oc-filter-stage" onchange="ocFilterByStage(this.value)" style="max-width:200px;">
             <option value="">All pending stages</option>
             <option value="selectionSent" ${ocFilterStage === 'selectionSent' ? 'selected' : ''}>Awaiting Selection</option>
             <option value="creditReceived" ${ocFilterStage === 'creditReceived' ? 'selected' : ''}>Awaiting Credit</option>
@@ -3203,7 +3200,7 @@ function renderOpenCall() {
             <option value="complete" ${ocFilterStage === 'complete' ? 'selected' : ''}>✓ Completed</option>
           </select>
           
-          <select id="oc-sort-by" onchange="ocSetSort(this.value)" style="max-width:180px;margin:0;cursor:pointer;">
+          <select id="oc-sort-by" onchange="ocSetSort(this.value)" style="max-width:200px;">
             <option value="dateDesc" ${ocSortBy === 'dateDesc' ? 'selected' : ''}>Newest First</option>
             <option value="dateAsc" ${ocSortBy === 'dateAsc' ? 'selected' : ''}>Oldest First</option>
             <option value="nameAsc" ${ocSortBy === 'nameAsc' ? 'selected' : ''}>Name A-Z</option>
@@ -3224,7 +3221,7 @@ function renderOpenCall() {
           Paste rows from the spreadsheet — one contributor per line, columns separated by tab or comma:
           <strong>Name, Email, Photo file</strong>. A header row is skipped automatically; existing emails are not duplicated.
         </div>
-        <textarea id="oc-import-text" rows="4" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg" style="width:100%;font-family:'DM Mono',monospace;font-size:11px;margin:0;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:8px 12px;"></textarea>
+        <textarea id="oc-import-text" rows="4" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg" style="font-family:'DM Mono',monospace;"></textarea>
         
         <div class="oc-upload-zone" onclick="triggerOcCsvUpload()" ondragover="handleOcCsvDragOver(event)" ondragleave="handleOcCsvDragLeave(event)" ondrop="handleOcCsvDrop(event)">
           <p>Drag & Drop a <strong>.csv</strong> file here, or click to upload</p>
@@ -3247,24 +3244,24 @@ function renderOpenCall() {
 
   const addForm = `
     <div class="card" style="margin-bottom:0;padding:15px;">
-      <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-        <div class="section-hed" style="font-size:13px;">Add contributor</div>
+      <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+        <div class="oc-section-title">Add contributor</div>
         <button class="btn sm" onclick="ocToggleImport()">${ocImportOpen ? 'Close import' : '⬇ Paste / import list'}</button>
       </div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <input id="oc-name" placeholder="Artist name" style="width:100%;margin:0;font-size:12px;">
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <input id="oc-name" placeholder="Artist name">
         <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
-          <input id="oc-email" placeholder="Email" type="email" style="width:100%;margin:0;font-size:12px;" oninput="checkOcEmailTypo(this.value)">
+          <input id="oc-email" placeholder="Email" type="email" oninput="checkOcEmailTypo(this.value)">
           <div id="oc-add-email-correction" class="email-suggest-correction" style="display:none;" onclick="applyOcEmailCorrection()"></div>
         </div>
         <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
-          <div style="display:flex;gap:4px;width:100%;">
-            <input id="oc-photo" placeholder="Photo file name (Enter to add)" style="width:100%;margin:0;font-size:12px;flex:1;" onkeydown="handleOcPhotoKeydown(event)">
-            <button class="btn sm gold" onclick="addOcPhotoChip()" style="padding:0 12px;height:36px;margin:0;">＋</button>
+          <div style="display:flex;gap:6px;width:100%;">
+            <input id="oc-photo" placeholder="Photo file name (Enter to add)" style="flex:1;" onkeydown="handleOcPhotoKeydown(event)">
+            <button class="btn sm gold" onclick="addOcPhotoChip()" style="padding:0 12px;height:38px;margin:0;">＋</button>
           </div>
           <div id="oc-photo-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">${chipsHtml}</div>
         </div>
-        <button class="btn gold" onclick="ocAdd()" style="width:100%;">Add Contributor</button>
+        <button class="btn gold" onclick="ocAdd()">Add Contributor</button>
       </div>
       ${importPanel}
     </div>`;
@@ -3379,17 +3376,17 @@ function renderOpenCall() {
       </div>`;
 
     return `
-      <div class="card" id="oc-card-${c.id}">
-        <div class="row-between" style="flex-wrap:wrap;gap:8px;">
-          <div>
-            <div style="font-weight:700;">${escapeHtml(c.name || '—')}${mailStatusHtml}</div>
-            <div style="font-size:12px;color:var(--text2);">
+      <div class="card oc-contributor-card" id="oc-card-${c.id}">
+        <div class="row-between" style="flex-wrap:wrap;gap:10px;">
+          <div style="min-width:0;">
+            <div class="oc-contributor-name">${escapeHtml(c.name || '—')}${mailStatusHtml}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px;">
               ${emailCell}
               ${gmailLinksHtml}
             </div>
             ${photosHtml}
           </div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex-shrink:0;">
             ${pipelineEmailBtnHtml}
             ${mailActionsHtml}
             <button class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">↻ Scan</button>
@@ -3397,8 +3394,9 @@ function renderOpenCall() {
           </div>
         </div>
         ${pipelineVisualizer}
-        ${next ? `<div style="font-size:11px;color:var(--amber);margin-top:12px;font-weight:600;">Next: ${next}</div>`
-               : `<div style="font-size:11px;color:var(--green);margin-top:12px;font-weight:600;">✓ All stages complete</div>`}
+        ${next
+          ? `<div class="oc-next-action">${next}</div>`
+          : `<div class="oc-all-complete">✓ All stages complete</div>`}
       </div>`;
   }).join('');
 
@@ -3413,8 +3411,17 @@ function renderOpenCall() {
     <div class="oc-main">
       ${templatesEditor}
       ${searchFilterBar}
-      <div style="display:flex;flex-direction:column;gap:12px;">
-        ${cards || `<div class="card" style="text-align:center;padding:40px;color:var(--text3);font-style:italic;">No contributors match the current filters.</div>`}
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        ${cards || `
+          <div class="card oc-empty-state">
+            <div class="oc-empty-icon">🎨</div>
+            <div class="oc-empty-title">${ocSearchQuery || ocFilterStage ? 'No matches found' : 'No contributors yet'}</div>
+            <div class="oc-empty-body">${ocSearchQuery || ocFilterStage
+              ? 'Try adjusting your search or filter to find contributors.'
+              : 'Add your first contributor using the form on the left, or import a list from a spreadsheet.'}
+            </div>
+            ${(!ocSearchQuery && !ocFilterStage) ? `<button class="btn gold" onclick="document.getElementById('oc-name')?.focus()" style="margin-top:4px;">＋ Add First Contributor</button>` : ''}
+          </div>`}
       </div>
     </div>`;
 
