@@ -2806,7 +2806,7 @@ function ocUpdateTmplPreview() {
   const bodyEl = $('oc-preview-body');
   if (subEl) subEl.textContent = resolvedSub;
   if (bodyEl) {
-    bodyEl.innerHTML = escapeHtml(resolvedBody).replace(/\n/g, '<br>');
+    bodyEl.innerHTML = parseMarkdownToHtml(resolvedBody);
   }
 }
 
@@ -3163,8 +3163,15 @@ function renderOpenCall() {
             <input id="oc-tmpl-subject" value="${escapeHtml(activeProj.templates[activeTmplTab].subject)}" oninput="ocUpdateTmplPreview()" style="width:100%;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:4px;margin:0;">
           </div>
           <div>
-            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body (supports {{name}}, {{photo}})</label>
-            <textarea id="oc-tmpl-body" rows="8" oninput="ocUpdateTmplPreview()" style="width:100%;font-size:11px;font-family:'DM Mono',monospace;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:4px;line-height:1.5;margin:0;">${escapeHtml(activeProj.templates[activeTmplTab].body)}</textarea>
+            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body (Markdown supported)</label>
+            <div class="oc-tmpl-toolbar">
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('bold')" title="Bold"><b>B</b></button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('italic')" title="Italic"><i>I</i></button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('link')" title="Link">Link</button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('name')" title="Insert {{name}}">{{name}}</button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('photo')" title="Insert {{photo}}">{{photo}}</button>
+            </div>
+            <textarea id="oc-tmpl-body" rows="8" oninput="ocUpdateTmplPreview()" style="width:100%;font-size:11px;font-family:'DM Mono',monospace;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-top:none;border-top-left-radius:0;border-top-right-radius:0;padding:8px 12px;line-height:1.5;margin:0;">${escapeHtml(activeProj.templates[activeTmplTab].body)}</textarea>
           </div>
           <div style="display:flex;justify-content:flex-end;">
             <button class="btn sm gold" onclick="ocSaveTemplates()">Save Template</button>
@@ -3175,7 +3182,7 @@ function renderOpenCall() {
         <div style="display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;padding:12px;max-height:260px;overflow-y:auto;">
           <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:4px;margin-bottom:4px;font-weight:700;">Live Preview (Sample)</div>
           <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:var(--text);" id="oc-preview-subject">—</div>
-          <div style="font-size:11px;color:var(--text2);white-space:pre-wrap;line-height:1.5;font-family:inherit;" id="oc-preview-body">—</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.5;font-family:inherit;" id="oc-preview-body">—</div>
         </div>
       </div>
     </div>` : '';
@@ -3217,9 +3224,16 @@ function renderOpenCall() {
           Paste rows from the spreadsheet — one contributor per line, columns separated by tab or comma:
           <strong>Name, Email, Photo file</strong>. A header row is skipped automatically; existing emails are not duplicated.
         </div>
-        <textarea id="oc-import-text" rows="6" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg" style="width:100%;font-family:'DM Mono',monospace;font-size:12px;margin:0;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:8px 12px;"></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn gold" onclick="ocRunImport()">Import rows</button>
+        <textarea id="oc-import-text" rows="4" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg" style="width:100%;font-family:'DM Mono',monospace;font-size:11px;margin:0;background:var(--input-bg);color:var(--text);border:1px solid var(--border);padding:8px 12px;"></textarea>
+        
+        <div class="oc-upload-zone" onclick="triggerOcCsvUpload()" ondragover="handleOcCsvDragOver(event)" ondragleave="handleOcCsvDragLeave(event)" ondrop="handleOcCsvDrop(event)">
+          <p>Drag & Drop a <strong>.csv</strong> file here, or click to upload</p>
+          <span>Format: Name, Email, Photo (optional)</span>
+          <input type="file" id="oc-csv-file-input" accept=".csv" style="display:none;" onchange="handleOcCsvUpload(this)">
+        </div>
+        
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn gold" onclick="ocRunImport()">Import pasted rows</button>
           <button class="btn" onclick="ocToggleImport()">Cancel</button>
         </div>
       </div>` : '';
@@ -16965,11 +16979,13 @@ async function loadOpenCalls() {
     };
   }
   await migrateLegacyOpenCalls();
+  updateOpenCallBadges();
 }
 
 async function _persistOpenCalls() {
   try { await window._fbSaveSettings('openCalls', OPENCALL_DATA); } catch (_) {}
   try { localStorage.setItem(OPENCALL_KEY, JSON.stringify(OPENCALL_DATA)); } catch (_) {}
+  updateOpenCallBadges();
 }
 
 async function migrateLegacyOpenCalls() {
@@ -17066,6 +17082,193 @@ function ocSwitchProject(id) {
   if (!OPENCALL_DATA.projects[id]) return;
   OPENCALL_DATA.activeProjectId = id;
   renderOpenCall();
+}
+
+function parseMarkdownToHtml(text) {
+  let html = escapeHtml(text);
+  // bold **text** or __text__
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
+  // italic *text* or _text_
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  html = html.replace(/_(.*?)_/g, '<em>$1</em>');
+  // links [label](url)
+  html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:var(--gold2);text-decoration:underline;">$1</a>');
+  // line breaks
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+function insertFormattingTag(tag) {
+  const textarea = $('oc-tmpl-body');
+  if (!textarea) return;
+  
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  const selectedText = text.substring(start, end);
+  
+  let replacement = '';
+  if (tag === 'bold') {
+    replacement = `**${selectedText || 'bold text'}**`;
+  } else if (tag === 'italic') {
+    replacement = `*${selectedText || 'italic text'}*`;
+  } else if (tag === 'link') {
+    replacement = `[${selectedText || 'link label'}](https://)`;
+  } else if (tag === 'name') {
+    replacement = `{{name}}`;
+  } else if (tag === 'photo') {
+    replacement = `{{photo}}`;
+  }
+  
+  textarea.value = text.substring(0, start) + replacement + text.substring(end);
+  textarea.focus();
+  textarea.selectionStart = start + replacement.length;
+  textarea.selectionEnd = start + replacement.length;
+  
+  ocUpdateTmplPreview();
+}
+
+function updateOpenCallBadges() {
+  let count = 0;
+  if (OPENCALL_DATA && OPENCALL_DATA.projects) {
+    Object.values(OPENCALL_DATA.projects).forEach(proj => {
+      if (proj && Array.isArray(proj.contributors)) {
+        proj.contributors.forEach(c => {
+          if (c.email && !_isCustomerSuppressed(c.email)) {
+            if (c.creditReceived && !c.cmykSent) count++;
+            else if (c.filesReceived && !c.preorderSent) count++;
+          }
+        });
+      }
+    });
+  }
+  
+  const badgeEl = $('oc-nav-badge');
+  if (badgeEl) {
+    if (count > 0) {
+      badgeEl.textContent = count;
+      badgeEl.style.display = 'inline-flex';
+    } else {
+      badgeEl.style.display = 'none';
+    }
+  }
+  
+  const hdrBadgeEl = $('oc-hdr-badge');
+  if (hdrBadgeEl) {
+    if (count > 0) {
+      hdrBadgeEl.textContent = count;
+      hdrBadgeEl.style.display = 'inline-flex';
+    } else {
+      hdrBadgeEl.style.display = 'none';
+    }
+  }
+}
+
+function handleOcCsvFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const text = e.target.result;
+    const lines = text.split(/\r?\n/);
+    let imported = 0;
+    const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+    if (!proj) return;
+    
+    const parseCSVLine = (line) => {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const cols = parseCSVLine(line);
+      if (cols.length < 2) continue;
+      
+      if (i === 0 && cols.some(c => c.toLowerCase().includes('email') || c.toLowerCase().includes('name'))) {
+        continue;
+      }
+      
+      const name = cols[0];
+      const email = cols[1];
+      const photo = cols[2] || '';
+      
+      if (!email) continue;
+      
+      const exists = proj.contributors.some(c => c.email && c.email.toLowerCase() === email.toLowerCase());
+      if (!exists) {
+        proj.contributors.push({
+          id: 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 5),
+          name: name,
+          email: email,
+          photo: photo,
+          createdAt: today()
+        });
+        imported++;
+      }
+    }
+    
+    if (imported > 0) {
+      await _persistOpenCalls();
+      renderOpenCall();
+      showToast(`✓ Successfully imported ${imported} contributor(s) from CSV`);
+    } else {
+      showToast('No new contributors imported', 'warn');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function triggerOcCsvUpload() {
+  $('oc-csv-file-input')?.click();
+}
+
+function handleOcCsvUpload(input) {
+  const file = input.files?.[0];
+  if (file) handleOcCsvFile(file);
+}
+
+function handleOcCsvDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.style.borderColor = 'var(--gold)';
+  e.currentTarget.style.background = 'rgba(200, 145, 58, 0.06)';
+}
+
+function handleOcCsvDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.style.borderColor = 'var(--border2)';
+  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)';
+}
+
+function handleOcCsvDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.style.borderColor = 'var(--border2)';
+  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)';
+  
+  const file = e.dataTransfer?.files?.[0];
+  if (file && file.name.toLowerCase().endsWith('.csv')) {
+    handleOcCsvFile(file);
+  } else {
+    showToast('Please upload a valid CSV file', 'warn');
+  }
 }
 
 // Preset Compose Actions
@@ -18107,7 +18310,7 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
-  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails,
+  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,

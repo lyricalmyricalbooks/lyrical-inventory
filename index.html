@@ -204,7 +204,7 @@
 
     <div class="o3-subgrouplabel">Audience</div>
     <button type="button" class="snav" title="Customers" onclick="switchTab('customers')"><span class="snav-ic">👥</span><span class="snav-label">Customers</span></button>
-    <button type="button" class="snav" title="Open Call" onclick="switchTab('opencall')"><span class="snav-ic">📣</span><span class="snav-label">Open Call</span></button>
+    <button type="button" class="snav" title="Open Call" onclick="switchTab('opencall')"><span class="snav-ic">📣</span><span class="snav-label">Open Call</span><span class="nav-badge" id="oc-nav-badge" style="display:none;margin-left:8px;">0</span></button>
 
     <div class="o3-subgrouplabel">Data</div>
     <button type="button" class="snav" title="Sheets" onclick="switchTab('sheets')"><span class="snav-ic">⚙️</span><span class="snav-label">Sheets</span></button>
@@ -308,7 +308,7 @@
           <span class="hmi-ico">👥</span><span class="hmi-txt"><span class="hmi-label">Customers</span><span class="hmi-sub">Buyers &amp; mailing list</span></span>
         </button>
         <button class="header-menu-item" onclick="switchTab('opencall')" id="opencall-tab-btn">
-          <span class="hmi-ico">📣</span><span class="hmi-txt"><span class="hmi-label">Open Call</span><span class="hmi-sub">Contributor submissions</span></span>
+          <span class="hmi-ico">📣</span><span class="hmi-txt"><span class="hmi-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;">Open Call <span class="nav-badge" id="oc-hdr-badge" style="display:none;">0</span></span><span class="hmi-sub">Contributor submissions</span></span>
         </button>
       </div>
     </div>
