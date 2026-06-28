@@ -3547,10 +3547,33 @@ function renderOpenCall() {
       </div>`;
   }).join('');
 
+  const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
+  const resendConfigCard = `
+    <div class="card oc-resend-card" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span>⚡ Resend API Email</span>
+        <input type="checkbox" id="oc-use-resend" onchange="ocToggleResend(this.checked)" ${useResend ? 'checked' : ''} style="cursor:pointer;margin:0;">
+      </div>
+      <div id="oc-resend-fields" style="display:${useResend ? 'flex' : 'none'};flex-direction:column;gap:8px;">
+        <div>
+          <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Resend API Key</label>
+          <input id="oc-resend-key" type="password" placeholder="re_..." value="${escapeHtml(localStorage.getItem('lm-resend-api-key') || '')}" oninput="ocSaveResendConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Sender Email (Verified)</label>
+          <input id="oc-resend-from" type="email" placeholder="e.g. hello@yourdomain.com" value="${escapeHtml(localStorage.getItem('lm-resend-from') || '')}" oninput="ocSaveResendConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        </div>
+        <div style="font-size:10px;color:var(--text3);line-height:1.3;">
+          Sends via local Node.js backend instead of Google Sheets. Key is saved locally in your browser.
+        </div>
+      </div>
+    </div>`;
+
   const sidebarHtml = `
     <div class="oc-sidebar">
       ${projectSwitcher}
       ${summary}
+      ${resendConfigCard}
       ${addForm}
     </div>`;
 
@@ -3591,6 +3614,17 @@ function renderOpenCall() {
 }
 
 let _ocNewContributorPhotos = [];
+
+function ocToggleResend(checked) {
+  localStorage.setItem('lm-oc-use-resend', checked ? 'true' : 'false');
+  const el = $('oc-resend-fields');
+  if (el) el.style.display = checked ? 'flex' : 'none';
+}
+
+function ocSaveResendConfig() {
+  localStorage.setItem('lm-resend-api-key', $('oc-resend-key')?.value?.trim() || '');
+  localStorage.setItem('lm-resend-from', $('oc-resend-from')?.value?.trim() || '');
+}
 
 function handleOcPhotoKeydown(e) {
   if (e.key === 'Enter') {
@@ -18255,6 +18289,35 @@ async function deleteCampaign(id) {
 }
 
 async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
+  const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
+  const resendKey = localStorage.getItem('lm-resend-api-key') || '';
+  const resendFrom = localStorage.getItem('lm-resend-from') || '';
+
+  if (useResend && resendKey && resendFrom) {
+    const res = await fetch('/api/campaign/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (localStorage.getItem('lm-auth-token') || ''),
+        'X-Resend-Api-Key': resendKey,
+        'X-Resend-From': resendFrom
+      },
+      body: JSON.stringify({ to, subject, body, replyTo, simulated: false })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      let errMsg = 'Send failed';
+      try {
+        const errJson = JSON.parse(errText);
+        errMsg = errJson.error || errMsg;
+      } catch (_) {
+        errMsg = errText || errMsg;
+      }
+      throw new Error(errMsg);
+    }
+    return await res.json();
+  }
+
   const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const forceMock = $('c-force-mock')?.checked;
   if (forceMock || (isDev && !sheetsUrl)) {
@@ -18663,7 +18726,7 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
-  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
+  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,

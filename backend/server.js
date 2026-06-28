@@ -158,6 +158,45 @@ const server = http.createServer(async (req, res) => {
       const body = await readJson(req, res);
       if (!body) return;
       const { to, subject, body: emailBody, replyTo, simulated } = body;
+
+      const resendKey = req.headers['x-resend-api-key'] || process.env.RESEND_API_KEY;
+      const resendFrom = req.headers['x-resend-from'] || process.env.RESEND_FROM;
+
+      if (resendKey && resendFrom && !simulated) {
+        try {
+          const payload = {
+            from: resendFrom,
+            to: [to],
+            subject: subject,
+            text: emailBody
+          };
+          if (replyTo) payload.reply_to = replyTo;
+
+          const resendRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${resendKey}`
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (!resendRes.ok) {
+            const errText = await resendRes.text();
+            throw new Error(`Resend API error: ${errText}`);
+          }
+
+          const resendData = await resendRes.json();
+          appendAudit(user.email, 'campaign.send_single_resend', { to, subject });
+          return sendJson(res, 200, { ok: true, emailed: true, via: 'resend', id: resendData.id });
+        } catch (err) {
+          console.error('Resend delivery failed:', err);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Resend delivery failed: ${err.message}` }));
+          return;
+        }
+      }
+
       console.log(`[MOCK MAIL] Sending campaign email:
       To: ${to}
       Subject: ${subject}
