@@ -3458,10 +3458,10 @@ function renderOpenCall() {
     if (c.email && (c.creditThreadId || c.filesThreadId)) {
       const links = [];
       if (c.creditThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" style="font-size:11px;color:var(--gold2);text-decoration:none;" title="View credit name reply in Gmail">✉ View Credit Reply</a>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" style="font-size:11px;color:var(--gold2);text-decoration:none;" title="View credit name reply in Gmail">✉ View Credit Reply</a> <span onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" style="font-size:11px;color:var(--gold);cursor:pointer;margin-left:4px;user-select:none;font-weight:600;" title="Preview email thread inline">👁 Preview</span>`);
       }
       if (c.filesThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" style="font-size:11px;color:var(--gold2);text-decoration:none;" title="View files reply in Gmail">✉ View Files Reply</a>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" style="font-size:11px;color:var(--gold2);text-decoration:none;" title="View files reply in Gmail">✉ View Files Reply</a> <span onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" style="font-size:11px;color:var(--gold);cursor:pointer;margin-left:4px;user-select:none;font-weight:600;" title="Preview email thread inline">👁 Preview</span>`);
       }
       gmailLinksHtml = ' · ' + links.join(' / ');
     }
@@ -3543,6 +3543,7 @@ function renderOpenCall() {
         ${next
           ? `<div class="oc-next-action">${next}</div>`
           : `<div class="oc-all-complete">✓ All stages complete</div>`}
+        <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
       </div>`;
   }).join('');
 
@@ -17812,6 +17813,75 @@ async function ocScanRepliesSingle(cId) {
   }
 }
 
+async function ocToggleInlineThread(cId, threadId, title) {
+  const container = $(`oc-inline-thread-${cId}`);
+  if (!container) return;
+
+  if (container.style.display === 'block' && container.dataset.currentThreadId === threadId) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+  container.dataset.currentThreadId = threadId;
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;color:var(--text3);font-style:italic;padding:8px 0;">
+      <span class="spinner"></span> Loading ${title}...
+    </div>`;
+
+  if (!sheetsUrl) {
+    container.innerHTML = `<div style="color:var(--red);padding:4px 0;">Connect Google Sheets first to preview Gmail threads.</div>`;
+    return;
+  }
+
+  try {
+    const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=getThreadContent&threadId=' + threadId;
+    const res = await fetch(destUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    if (!data.messages || data.messages.length === 0) {
+      container.innerHTML = `<div style="color:var(--text3);font-style:italic;padding:4px 0;">No messages found in this thread.</div>`;
+      return;
+    }
+
+    const msgsHtml = data.messages.map((msg, idx) => {
+      const isMe = msg.from.toLowerCase().includes('lyricalmyrical') || msg.from.toLowerCase().includes('me');
+      const dateStr = formatDateTime(msg.date);
+      return `
+        <div style="margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:8px;${idx === data.messages.length - 1 ? 'border-bottom:none;margin-bottom:0;padding-bottom:0;' : ''}">
+          <div class="row-between" style="font-size:11px;color:var(--text3);margin-bottom:4px;">
+            <strong style="${isMe ? 'color:var(--gold2);' : ''}">${escapeHtml(msg.from)}</strong>
+            <span>${dateStr}</span>
+          </div>
+          <div style="white-space:pre-wrap;line-height:1.5;color:var(--text2);font-family:inherit;background:rgba(255,255,255,0.01);padding:6px;border-radius:4px;border:1px solid rgba(255,255,255,0.02);">${escapeHtml(msg.body)}</div>
+          ${msg.attachments && msg.attachments.length > 0 ? `
+            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+              ${msg.attachments.map(att => `
+                <span class="pill gray" style="font-size:10px;padding:2px 6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text2);" title="${escapeHtml(att.mime)}">
+                  📎 ${escapeHtml(att.name)} (${Math.round(att.size / 1024)} KB)
+                </span>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>`;
+    }).join('');
+
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:10px;">
+        <strong style="color:var(--gold2);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;">✉ ${title} Preview</strong>
+        <button class="btn sm" onclick="document.getElementById('oc-inline-thread-${cId}').style.display='none'" style="padding:0 8px;height:20px;font-size:10px;margin:0;">Hide</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${msgsHtml}
+      </div>`;
+  } catch (err) {
+    console.error('Failed to fetch Gmail thread:', err);
+    container.innerHTML = `<div style="color:var(--red);padding:4px 0;">✕ Error: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
 async function ocSaveTemplates() {
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
@@ -18593,7 +18663,7 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
-  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
+  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,

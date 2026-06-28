@@ -63,6 +63,9 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.action === 'getEmailContent') {
     return getEmailContent_(e);
   }
+  if (e && e.parameter && e.parameter.action === 'getThreadContent') {
+    return getThreadContent_(e);
+  }
   if (e && e.parameter && e.parameter.action === 'getBookData') {
     return getBookData_(e);
   }
@@ -300,6 +303,54 @@ function getEmailContent_(e) {
     });
   } catch (err) {
     return jsonOut_({ error: 'Failed to fetch email: ' + String(err) });
+  }
+}
+
+function getThreadContent_(e) {
+  const threadId = e.parameter.threadId;
+  if (!threadId) {
+    return jsonOut_({ error: 'Thread ID is required' });
+  }
+
+  try {
+    const thread = GmailApp.getThreadById(threadId);
+    if (!thread) {
+      return jsonOut_({ error: 'Thread not found' });
+    }
+
+    const messages = thread.getMessages();
+    const msgsData = messages.map(msg => {
+      let body = '';
+      try {
+        body = msg.getPlainBody() || msg.getBody() || '';
+      } catch (_) {
+        body = '(Could not retrieve message body)';
+      }
+      
+      const attachments = msg.getAttachments({ includeInlineImages: false });
+      const fileParts = attachments.map(att => ({
+        name: att.getName(),
+        mime: att.getContentType(),
+        size: att.getSize()
+      }));
+
+      return {
+        id: msg.getId(),
+        subject: msg.getSubject() || '(No Subject)',
+        from: msg.getFrom() || 'Unknown Sender',
+        date: msg.getDate().toISOString(),
+        body: body,
+        attachments: fileParts
+      };
+    });
+
+    return jsonOut_({
+      ok: true,
+      threadId: threadId,
+      messages: msgsData
+    });
+  } catch (err) {
+    return jsonOut_({ error: 'Failed to fetch thread: ' + String(err) });
   }
 }
 
