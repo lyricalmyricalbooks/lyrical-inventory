@@ -3238,6 +3238,13 @@ function renderOpenCall() {
         </div>
       </div>` : '';
 
+  const chipsHtml = _ocNewContributorPhotos.map((p, idx) => `
+    <span class="pill gold" style="font-size:10px;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--gold-bg);border:1px solid var(--gold-line);color:var(--gold);animation: cardSlideUpIn 0.2s ease;">
+      📷 ${escapeHtml(p)}
+      <span onclick="removeOcPhotoChip(${idx})" style="cursor:pointer;font-weight:bold;opacity:0.6;margin-left:2px;">✕</span>
+    </span>
+  `).join('');
+
   const addForm = `
     <div class="card" style="margin-bottom:0;padding:15px;">
       <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:10px;">
@@ -3250,7 +3257,13 @@ function renderOpenCall() {
           <input id="oc-email" placeholder="Email" type="email" style="width:100%;margin:0;font-size:12px;" oninput="checkOcEmailTypo(this.value)">
           <div id="oc-add-email-correction" class="email-suggest-correction" style="display:none;" onclick="applyOcEmailCorrection()"></div>
         </div>
-        <input id="oc-photo" placeholder="Photo file (optional)" style="width:100%;margin:0;font-size:12px;">
+        <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;gap:4px;width:100%;">
+            <input id="oc-photo" placeholder="Photo file name (Enter to add)" style="width:100%;margin:0;font-size:12px;flex:1;" onkeydown="handleOcPhotoKeydown(event)">
+            <button class="btn sm gold" onclick="addOcPhotoChip()" style="padding:0 12px;height:36px;margin:0;">＋</button>
+          </div>
+          <div id="oc-photo-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">${chipsHtml}</div>
+        </div>
         <button class="btn gold" onclick="ocAdd()" style="width:100%;">Add Contributor</button>
       </div>
       ${importPanel}
@@ -3310,6 +3323,22 @@ function renderOpenCall() {
       gmailLinksHtml = ' · ' + links.join(' / ');
     }
 
+    // Interactive photos list on card
+    const photosArr = c.photos || (c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : []);
+    const photosHtml = `
+      <div style="display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap;min-height:24px;">
+        <span style="font-size:11px;color:var(--text3);font-weight:600;">📷 Photos:</span>
+        ${photosArr.map((p, idx) => `
+          <span class="pill gold" style="font-size:10px;padding:2px 6px;display:inline-flex;align-items:center;gap:4px;background:var(--gold-bg);border:1px solid var(--gold-line);color:var(--gold);transition:all 0.2s;">
+            ${escapeHtml(p)}
+            <span onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" style="cursor:pointer;font-weight:bold;opacity:0.6;margin-left:2px;" title="Remove photo">✕</span>
+          </span>
+        `).join('')}
+        
+        <span id="oc-add-photo-btn-${c.id}" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();" style="cursor:pointer;font-size:10px;padding:2px 6px;border:1px dashed var(--gold);color:var(--gold);border-radius:100px;display:inline-flex;align-items:center;font-weight:600;transition:all 0.2s;">＋ Add</span>
+        <input id="oc-add-photo-input-${c.id}" type="text" placeholder="photo_file.jpg (Enter)" style="display:none;width:120px;font-size:10px;padding:2px 6px;margin:0;height:22px;border-radius:4px;border:1px solid var(--cream4);background:var(--cream2);color:var(--text);" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
+      </div>`;
+
     // Pipeline Step Tracker Visualizer (Interactive)
     let progressPercent = 0;
     if (c.preorderSent) progressPercent = 100;
@@ -3356,9 +3385,9 @@ function renderOpenCall() {
             <div style="font-weight:700;">${escapeHtml(c.name || '—')}${mailStatusHtml}</div>
             <div style="font-size:12px;color:var(--text2);">
               ${emailCell}
-              ${c.photo ? ` · ${escapeHtml(c.photo)}` : ''}
               ${gmailLinksHtml}
             </div>
+            ${photosHtml}
           </div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             ${pipelineEmailBtnHtml}
@@ -3407,18 +3436,117 @@ function renderOpenCall() {
   }
 }
 
+let _ocNewContributorPhotos = [];
+
+function handleOcPhotoKeydown(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addOcPhotoChip();
+  }
+}
+
+function addOcPhotoChip() {
+  const input = $('oc-photo');
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) return;
+  
+  const items = val.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean);
+  items.forEach(item => {
+    if (!_ocNewContributorPhotos.includes(item)) {
+      _ocNewContributorPhotos.push(item);
+    }
+  });
+  
+  input.value = '';
+  renderOcPhotoChips();
+}
+
+function removeOcPhotoChip(idx) {
+  _ocNewContributorPhotos.splice(idx, 1);
+  renderOcPhotoChips();
+}
+
+function renderOcPhotoChips() {
+  const container = $('oc-photo-chips');
+  if (!container) return;
+  container.innerHTML = _ocNewContributorPhotos.map((p, idx) => `
+    <span class="pill gold" style="font-size:10px;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--gold-bg);border:1px solid var(--gold-line);color:var(--gold);animation: cardSlideUpIn 0.2s ease;">
+      📷 ${escapeHtml(p)}
+      <span onclick="removeOcPhotoChip(${idx})" style="cursor:pointer;font-weight:bold;opacity:0.6;margin-left:2px;">✕</span>
+    </span>
+  `).join('');
+}
+
+async function ocAddPhotoToContributor(cId, photoName) {
+  if (!photoName || !photoName.trim()) return;
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const c = proj.contributors.find(x => x.id === cId);
+  if (!c) return;
+  
+  if (!c.photos) {
+    c.photos = c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
+  }
+  
+  const items = photoName.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean);
+  let added = false;
+  items.forEach(item => {
+    if (!c.photos.includes(item)) {
+      c.photos.push(item);
+      added = true;
+    }
+  });
+  
+  if (added) {
+    c.photo = c.photos.join(', ');
+    await _persistOpenCalls();
+    renderOpenCall();
+    showToast('Photo added');
+  }
+}
+
+async function ocRemovePhotoFromContributor(cId, photoIdx) {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const c = proj.contributors.find(x => x.id === cId);
+  if (!c) return;
+  
+  if (!c.photos) {
+    c.photos = c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
+  }
+  
+  c.photos.splice(photoIdx, 1);
+  c.photo = c.photos.join(', ');
+  await _persistOpenCalls();
+  renderOpenCall();
+  showToast('Photo removed');
+}
+
 async function ocAdd() {
   if (ocBlockedForAuthor_()) return;
   const name = ($('oc-name')?.value || '').trim();
   const email = ($('oc-email')?.value || '').trim();
-  const photo = ($('oc-photo')?.value || '').trim();
   if (!name && !email) { showToast('Enter a name or email', 'warn'); return; }
   
-  ocList().push(newContributor({ name, email, photo, createdAt: today() }));
+  const leftoverPhoto = ($('oc-photo')?.value || '').trim();
+  let photos = [..._ocNewContributorPhotos];
+  if (leftoverPhoto) {
+    const items = leftoverPhoto.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean);
+    items.forEach(item => {
+      if (!photos.includes(item)) photos.push(item);
+    });
+  }
+  
+  const photoString = photos.join(', ');
+  
+  ocList().push(newContributor({ name, email, photo: photoString, photos, createdAt: today() }));
   
   if ($('oc-name')) $('oc-name').value = '';
   if ($('oc-email')) $('oc-email').value = '';
   if ($('oc-photo')) $('oc-photo').value = '';
+  
+  _ocNewContributorPhotos = [];
   
   await _persistOpenCalls();
   renderOpenCall();
@@ -17282,7 +17410,9 @@ function ocComposeStageEmail(cId, stageKey) {
   
   const tmpl = (proj.templates && proj.templates[stageKey]) || null;
   if (tmpl) {
-    subject = tmpl.subject;
+    subject = tmpl.subject
+      .replace(/\{\{name\}\}/g, c.name || 'Artist')
+      .replace(/\{\{photo\}\}/g, c.photo || '');
     body = tmpl.body
       .replace(/\{\{name\}\}/g, c.name || 'Artist')
       .replace(/\{\{photo\}\}/g, c.photo || '');
@@ -18309,7 +18439,7 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
-  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop,
+  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,

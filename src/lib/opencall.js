@@ -18,12 +18,19 @@ export function ocNextAction(contributor) {
 }
 
 // A fresh contributor with every stage flag cleared.
-export function newContributor({ name = '', email = '', photo = '', createdAt = '' } = {}) {
+export function newContributor({ name = '', email = '', photo = '', photos = [], createdAt = '' } = {}) {
   const flags = {};
   OC_STAGES.forEach(st => { flags[st.key] = false; });
+  
+  let finalPhotos = [...photos];
+  if (finalPhotos.length === 0 && photo) {
+    finalPhotos = photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean);
+  }
+  const finalPhoto = photo || finalPhotos.join(', ');
+
   return {
     id: 'oc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-    name, email, photo, createdAt, ...flags,
+    name, email, photo: finalPhoto, photos: finalPhotos, createdAt, ...flags,
   };
 }
 
@@ -38,7 +45,8 @@ export function parseContributorRows(raw, existingEmails = []) {
 
   (raw || '').split(/\r?\n/).forEach(line => {
     if (!line.trim()) return;
-    const cols = line.split(/\t|,/).map(p => p.trim());
+    const isTab = line.includes('\t');
+    const cols = isTab ? line.split('\t').map(p => p.trim()) : line.split(',').map(p => p.trim());
     const [name = '', email = '', photo = ''] = cols;
     // Header row: "Artist Name" alone, or a "name … email" header pair.
     if (/^artist\s*name$/i.test(name) || (/^name$/i.test(name) && /e-?mail/i.test(email))) return;
@@ -46,7 +54,10 @@ export function parseContributorRows(raw, existingEmails = []) {
     const key = email.toLowerCase();
     if (key && seen.has(key)) { skipped++; return; }
     if (key) seen.add(key);
-    contributors.push(newContributor({ name, email, photo }));
+    
+    // Support multiple photos in the photo column (separated by comma or semicolon)
+    const photos = photo ? photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
+    contributors.push(newContributor({ name, email, photo, photos }));
     added++;
   });
 
