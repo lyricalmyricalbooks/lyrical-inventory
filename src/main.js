@@ -2915,7 +2915,7 @@ function renderOcBulkModalContent(retryMode = false) {
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Personalize and send stage emails to selected contributors.</div>
 
       <!-- Stage + Re-send Row -->
-      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin-bottom:14px;">
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:end;margin-bottom:14px;">
         <div>
           <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Pipeline Stage</label>
           <select id="oc-bulk-stage" onchange="onOcBulkStageChange(this.value)" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;">
@@ -2927,6 +2927,10 @@ function renderOcBulkModalContent(retryMode = false) {
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;white-space:nowrap;padding-bottom:4px;" title="Also show contributors who already received this stage email">
           <input type="checkbox" id="oc-bulk-resend-toggle" onchange="renderOcBulkModalContent()" style="cursor:pointer;">
           Re-send mode
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;white-space:nowrap;padding-bottom:4px;" title="Simulate sending without actually delivering any emails">
+          <input type="checkbox" id="oc-bulk-simulate-toggle" style="cursor:pointer;">
+          Simulate (Dry Run)
         </label>
       </div>
 
@@ -3064,6 +3068,7 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
   
   const replyTo = $('oc-bulk-replyto')?.value?.trim() || '';
   const delayMs = parseInt($('oc-bulk-delay')?.value || '1000', 10);
+  const simulate = $('oc-bulk-simulate-toggle')?.checked || false;
   
   // Get checked recipients
   const checks = document.querySelectorAll('.oc-bulk-recipient-check:checked');
@@ -3083,7 +3088,9 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
   `;
   
   const consoleEl = $('oc-bulk-console');
-  consoleEl.innerHTML = `<div style="color:#6b8cff;margin-bottom:4px;">Starting bulk send · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''} · ${delayMs > 0 ? delayMs/1000 + 's delay' : 'no delay'}${replyTo ? ' · reply-to: ' + replyTo : ''}</div>`;
+  consoleEl.innerHTML = simulate
+    ? `<div style="color:#fbbf24;margin-bottom:4px;">[SIMULATION] Starting dry run · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''}</div>`
+    : `<div style="color:#6b8cff;margin-bottom:4px;">Starting bulk send · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''} · ${delayMs > 0 ? delayMs/1000 + 's delay' : 'no delay'}${replyTo ? ' · reply-to: ' + replyTo : ''}</div>`;
   
   _ocBulkSendingActive = true;
   _ocBulkFailedIds = [];
@@ -3097,7 +3104,9 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
     }
     
     const c = selectedRecs[i];
-    $('oc-bulk-progress-text').textContent = `Sending ${i + 1}/${selectedRecs.length} — ${c.name || c.email}...`;
+    $('oc-bulk-progress-text').textContent = simulate
+      ? `Simulating ${i + 1}/${selectedRecs.length} — ${c.name || c.email}...`
+      : `Sending ${i + 1}/${selectedRecs.length} — ${c.name || c.email}...`;
     
     const dl = $('oc-bulk-deadline')?.value || '';
     const personalize = (str) => str
@@ -3111,10 +3120,19 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
     const body = personalize(tmpl.body);
     
     try {
-      await sendSingleEmailViaBackend(c.email, subject, body, replyTo);
-      c[stage] = true;
-      successCount++;
-      consoleEl.innerHTML += `<div style="color:#a9ffaf;">✓ [${i+1}/${selectedRecs.length}] ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})</div>`;
+      if (simulate) {
+        consoleEl.innerHTML += `<div style="color:#a9ffaf;border-left:2px solid #a9ffaf;padding-left:8px;margin:8px 0 12px 0;text-align:left;line-height:1.5;background:rgba(255,255,255,0.02);padding:8px;border-radius:4px;">
+          <strong>[SIMULATION] To:</strong> ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})<br>
+          <strong>Subject:</strong> ${escapeHtml(subject)}<br>
+          <div style="color:var(--text3);margin-top:4px;white-space:pre-wrap;font-family:monospace;font-size:11px;background:rgba(0,0,0,0.2);padding:6px;border-radius:3px;">${escapeHtml(body.substring(0, 150))}${body.length > 150 ? '...' : ''}</div>
+        </div>`;
+        successCount++;
+      } else {
+        await sendSingleEmailViaBackend(c.email, subject, body, replyTo);
+        c[stage] = true;
+        successCount++;
+        consoleEl.innerHTML += `<div style="color:#a9ffaf;">✓ [${i+1}/${selectedRecs.length}] ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})</div>`;
+      }
     } catch (err) {
       failCount++;
       _ocBulkFailedIds.push(c.id);
@@ -3128,23 +3146,33 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
     consoleEl.scrollTop = consoleEl.scrollHeight;
     
     // Delay between sends (except after the last one)
-    if (delayMs > 0 && i < selectedRecs.length - 1 && _ocBulkSendingActive) {
-      await new Promise(res => setTimeout(res, delayMs));
+    const actualDelay = simulate ? 100 : delayMs;
+    if (actualDelay > 0 && i < selectedRecs.length - 1 && _ocBulkSendingActive) {
+      await new Promise(res => setTimeout(res, actualDelay));
     }
   }
   
   _ocBulkSendingActive = false;
   
   // Finish summary
-  $('oc-bulk-progress-text').textContent = `Done · ✓ ${successCount} sent · ${failCount > 0 ? '✕ ' + failCount + ' failed' : '0 failed'}`;
-  consoleEl.innerHTML += `<div style="color:#6b8cff;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Finished · ${successCount} succeeded · ${failCount} failed</div>`;
+  $('oc-bulk-progress-text').textContent = simulate
+    ? `Simulation Done · ✓ ${successCount} simulated · 0 failed`
+    : `Done · ✓ ${successCount} sent · ${failCount > 0 ? '✕ ' + failCount + ' failed' : '0 failed'}`;
+  
+  if (simulate) {
+    consoleEl.innerHTML += `<div style="color:#fbbf24;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Simulation Finished · ${successCount} emails simulated. No emails were sent.</div>`;
+  } else {
+    consoleEl.innerHTML += `<div style="color:#6b8cff;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Finished · ${successCount} succeeded · ${failCount} failed</div>`;
+  }
   consoleEl.scrollTop = consoleEl.scrollHeight;
   
-  await _persistOpenCalls();
-  renderOpenCall();
+  if (!simulate) {
+    await _persistOpenCalls();
+    renderOpenCall();
+  }
   
-  // Show done actions — with retry button if there were failures
-  const retryBtn = _ocBulkFailedIds.length > 0
+  // Show done actions — with retry button if there were failures (and not in simulation)
+  const retryBtn = (_ocBulkFailedIds.length > 0 && !simulate)
     ? `<button class="btn" onclick="sendOcBulkEmails(true)" style="background:rgba(239,68,68,0.08);color:var(--red);border-color:rgba(239,68,68,0.25);">↩ Retry ${_ocBulkFailedIds.length} Failed</button>`
     : '';
   $('oc-bulk-actions').innerHTML = `
