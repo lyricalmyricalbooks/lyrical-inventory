@@ -3420,13 +3420,15 @@ function renderOpenCall() {
       <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
         <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">
           Paste rows from the spreadsheet — one contributor per line, columns separated by tab or comma:
-          <strong>Name, Email, Photo file</strong>. A header row is skipped automatically; existing emails are not duplicated.
+          <strong>Name, Email, Photo file, Credit Name, Notes</strong>. A header row is skipped automatically; existing emails are not duplicated.
+          <br>
+          <a href="/opencall-template.csv" download="opencall-template.csv" style="color:var(--gold2);text-decoration:underline;display:inline-block;margin-top:4px;font-weight:600;">📥 Download Excel / CSV Template</a>
         </div>
-        <textarea id="oc-import-text" rows="4" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg" style="font-family:'DM Mono',monospace;"></textarea>
+        <textarea id="oc-import-text" rows="4" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg, Jeremy Ackman, Selected" style="font-family:'DM Mono',monospace;"></textarea>
         
         <div class="oc-upload-zone" onclick="triggerOcCsvUpload()" ondragover="handleOcCsvDragOver(event)" ondragleave="handleOcCsvDragLeave(event)" ondrop="handleOcCsvDrop(event)">
           <p>Drag & Drop a <strong>.csv</strong> file here, or click to upload</p>
-          <span>Format: Name, Email, Photo (optional)</span>
+          <span>Format: Name, Email, Photo (optional), Credit Name (optional), Notes (optional)</span>
           <input type="file" id="oc-csv-file-input" accept=".csv" style="display:none;" onchange="handleOcCsvUpload(this)">
         </div>
         
