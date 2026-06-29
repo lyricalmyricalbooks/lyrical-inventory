@@ -3364,16 +3364,16 @@ function renderOpenCall() {
           <div>
             <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body (Visual Rich Editor)</label>
             <div class="oc-tmpl-toolbar">
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('bold')" title="Bold"><b>B</b></button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('italic')" title="Italic"><i>I</i></button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('link')" title="Link">Link</button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('highlight')" title="Highlight text" style="background:#fef08a;color:#000;">Highlight</button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('color')" title="Color text (Gold)" style="color:#c5a880;">Color</button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('name')" title="Insert {{name}} — contributor's name">{{name}}</button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('photo')" title="Insert {{photo}} — photo filename">{{photo}}</button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('creditName')" title="Insert {{creditName}} — credit index name">{{creditName}}</button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('project')" title="Insert {{project}} — project title">{{project}}</button>
-              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('date')" title="Insert {{date}} — deadline date">{{date}}</button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('bold')" title="Bold"><b>B</b></button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('italic')" title="Italic"><i>I</i></button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('link')" title="Link">Link</button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('highlight')" title="Highlight text" style="background:#fef08a;color:#000;">Highlight</button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('color')" title="Color text (Gold)" style="color:#c5a880;">Color</button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('name')" title="Insert {{name}} — contributor's name">{{name}}</button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('photo')" title="Insert {{photo}} — photo filename">{{photo}}</button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('creditName')" title="Insert {{creditName}} — credit index name">{{creditName}}</button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('project')" title="Insert {{project}} — project title">{{project}}</button>
+              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('date')" title="Insert {{date}} — deadline date">{{date}}</button>
             </div>
             <div id="oc-tmpl-body" contenteditable="true" oninput="ocUpdateTmplPreview()" style="width:100%;min-height:180px;max-height:280px;padding:12px;font-size:13px;background:var(--input-bg, #1a1a1a);color:var(--text, #fff);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;overflow-y:auto;text-align:left;outline:none;white-space:pre-wrap;font-family:inherit;line-height:1.6;">${initialHtml}</div>
           </div>
