@@ -66,6 +66,9 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.action === 'getThreadContent') {
     return getThreadContent_(e);
   }
+  if (e && e.parameter && e.parameter.action === 'getAttachment') {
+    return getAttachment_(e);
+  }
   if (e && e.parameter && e.parameter.action === 'getBookData') {
     return getBookData_(e);
   }
@@ -354,6 +357,36 @@ function getThreadContent_(e) {
   }
 }
 
+function getAttachment_(e) {
+  const messageId = e.parameter.messageId;
+  const name = e.parameter.name;
+  if (!messageId || !name) {
+    return jsonOut_({ error: 'messageId and name are required' });
+  }
+
+  try {
+    const msg = GmailApp.getMessageById(messageId);
+    if (!msg) {
+      return jsonOut_({ error: 'Message not found' });
+    }
+
+    const attachments = msg.getAttachments({ includeInlineImages: false });
+    const att = attachments.find(a => a.getName() === name);
+    if (!att) {
+      return jsonOut_({ error: 'Attachment not found' });
+    }
+
+    return jsonOut_({
+      ok: true,
+      name: att.getName(),
+      mime: att.getContentType(),
+      base64: Utilities.base64Encode(att.getBytes())
+    });
+  } catch (err) {
+    return jsonOut_({ error: 'Failed to fetch attachment: ' + String(err) });
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // doPost: sync (add) + void/delete by eventId
 // ─────────────────────────────────────────────────────────────
@@ -489,6 +522,17 @@ function doPost(e) {
             if (threads.length > 0) {
               update.creditReceived = true;
               update.creditThreadId = threads[0].getId();
+              
+              // Try parsing credit name from messages in the thread
+              const msgs = threads[0].getMessages();
+              for (let j = msgs.length - 1; j >= 0; j--) {
+                const body = msgs[j].getPlainBody() || '';
+                const match = body.match(/(?:credit\s*name\s*(?:is|should\s*be)?|exact\s*name\s*(?:for\s*my\s*credit\s*)?(?:is|should\s*be)?|credit\s*(?:as|for))\s*[:=-]?\s*["']?([^\n\r"']{2,60})["']?/i);
+                if (match && match[1]) {
+                  update.creditName = match[1].trim();
+                  break;
+                }
+              }
               hasUpdate = true;
             }
           } catch (_) {}

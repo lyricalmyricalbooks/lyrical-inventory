@@ -18,7 +18,7 @@ export function ocNextAction(contributor) {
 }
 
 // A fresh contributor with every stage flag cleared.
-export function newContributor({ name = '', email = '', photo = '', photos = [], createdAt = '' } = {}) {
+export function newContributor({ name = '', email = '', photo = '', photos = [], createdAt = '', creditName = '', notes = '' } = {}) {
   const flags = {};
   OC_STAGES.forEach(st => { flags[st.key] = false; });
   
@@ -30,7 +30,7 @@ export function newContributor({ name = '', email = '', photo = '', photos = [],
 
   return {
     id: 'oc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-    name, email, photo: finalPhoto, photos: finalPhotos, createdAt, ...flags,
+    name, email, photo: finalPhoto, photos: finalPhotos, createdAt, creditName, notes, ...flags,
   };
 }
 

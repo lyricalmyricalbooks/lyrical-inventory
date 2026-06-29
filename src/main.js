@@ -2799,11 +2799,14 @@ function ocUpdateTmplPreview() {
   const sampleName = 'Alex Mercer';
   const samplePhoto = 'alex_mercer_artwork.jpg';
   const sampleCreditName = 'Alex Mercer';
+  const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   
   const personalize = (str) => str
     .replace(/\{\{name\}\}/g, sampleName)
     .replace(/\{\{photo\}\}/g, samplePhoto)
-    .replace(/\{\{creditName\}\}/g, sampleCreditName);
+    .replace(/\{\{creditName\}\}/g, sampleCreditName)
+    .replace(/\{\{project\}\}/g, activeProj ? activeProj.title : '')
+    .replace(/\{\{date\}\}/g, 'July 15th'); // sample date
   
   const resolvedSub = personalize(sub);
   const resolvedBody = personalize(body);
@@ -2892,8 +2895,19 @@ function renderOcBulkModalContent(retryMode = false) {
     : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">No eligible contributors found for this stage.</div>';
   
   const tmpl = proj.templates ? proj.templates[stage] : null;
-  const previewSub = tmpl ? tmpl.subject.replace(/\{\{name\}\}/g, 'Alex Mercer').replace(/\{\{photo\}\}/g, 'alex_artwork.jpg').replace(/\{\{creditName\}\}/g, 'Alex Mercer') : '(no template saved)';
-  const previewBody = tmpl ? tmpl.body.replace(/\{\{name\}\}/g, 'Alex Mercer').replace(/\{\{photo\}\}/g, 'alex_artwork.jpg').replace(/\{\{creditName\}\}/g, 'Alex Mercer') : '';
+  const dl = localStorage.getItem('lm-oc-last-deadline') || 'July 15th';
+  const previewSub = tmpl ? tmpl.subject
+    .replace(/\{\{name\}\}/g, 'Alex Mercer')
+    .replace(/\{\.photo\}\}/g, 'alex_artwork.jpg')
+    .replace(/\{\{creditName\}\}/g, 'Alex Mercer')
+    .replace(/\{\{project\}\}/g, proj.title)
+    .replace(/\{\{date\}\}/g, dl) : '(no template saved)';
+  const previewBody = tmpl ? tmpl.body
+    .replace(/\{\{name\}\}/g, 'Alex Mercer')
+    .replace(/\{\{photo\}\}/g, 'alex_artwork.jpg')
+    .replace(/\{\{creditName\}\}/g, 'Alex Mercer')
+    .replace(/\{\{project\}\}/g, proj.title)
+    .replace(/\{\{date\}\}/g, dl) : '';
   
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:660px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
@@ -2926,15 +2940,19 @@ function renderOcBulkModalContent(retryMode = false) {
         </div>
       </div>
 
-      <!-- Reply-To & Delay Row -->
-      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin-bottom:14px;">
+      <!-- Reply-To, Delay & Deadline Row -->
+      <div style="display:grid;grid-template-columns:1fr 120px 140px;gap:12px;align-items:end;margin-bottom:14px;">
         <div>
           <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Reply-To (optional)</label>
           <input id="oc-bulk-replyto" type="email" placeholder="e.g. hello@lyricalmyricalbooks.com" style="width:100%;padding:8px 12px;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;">
         </div>
         <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Deadline ({{date}})</label>
+          <input id="oc-bulk-deadline" type="text" placeholder="e.g. July 15th" value="${escapeHtml(dl)}" oninput="localStorage.setItem('lm-oc-last-deadline', this.value); ocUpdateBulkPreview();" style="width:100%;padding:8px 12px;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;">
+        </div>
+        <div>
           <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em;">Delay</label>
-          <select id="oc-bulk-delay" style="padding:8px 10px;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;">
+          <select id="oc-bulk-delay" style="width:100%;padding:8px 10px;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;">
             <option value="0">No delay</option>
             <option value="1000" selected>1s between sends</option>
             <option value="2000">2s between sends</option>
@@ -2947,11 +2965,11 @@ function renderOcBulkModalContent(retryMode = false) {
       <div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:var(--text3);padding:8px 12px;background:rgba(255,255,255,0.03);border-bottom:1px solid var(--border);">Template Preview (sample data)</div>
         <div style="padding:12px;max-height:120px;overflow-y:auto;">
-          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Subject: ${escapeHtml(previewSub)}</div>
-          <div style="font-size:11px;color:var(--text2);line-height:1.6;white-space:pre-wrap;">${escapeHtml(previewBody)}</div>
+          <div id="oc-bulk-preview-sub-container" style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Subject: ${escapeHtml(previewSub)}</div>
+          <div id="oc-bulk-preview-body-container" style="font-size:11px;color:var(--text2);line-height:1.6;white-space:pre-wrap;">${escapeHtml(previewBody)}</div>
         </div>
         <div style="padding:8px 12px;border-top:1px solid var(--border);background:rgba(255,255,255,0.02);">
-          <span style="font-size:10px;color:var(--text3);">Tokens: <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{name}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{photo}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{creditName}}</code> — replace with per-contributor data</span>
+          <span style="font-size:10px;color:var(--text3);">Tokens: <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{name}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{photo}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{creditName}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{project}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{date}}</code> — replace with per-contributor data</span>
         </div>
       </div>
 
@@ -3009,14 +3027,19 @@ async function sendOcBulkTestEmail() {
     showToast('Enter a valid test email address', 'warn'); return;
   }
   const replyTo = $('oc-bulk-replyto')?.value?.trim() || '';
+  const dl = $('oc-bulk-deadline')?.value || '';
   const subject = '[TEST] ' + tmpl.subject
     .replace(/\{\{name\}\}/g, 'Alex Mercer')
     .replace(/\{\{photo\}\}/g, 'alex_artwork.jpg')
-    .replace(/\{\{creditName\}\}/g, 'Alex Mercer');
+    .replace(/\{\{creditName\}\}/g, 'Alex Mercer')
+    .replace(/\{\{project\}\}/g, proj.title)
+    .replace(/\{\{date\}\}/g, dl);
   const body = tmpl.body
     .replace(/\{\{name\}\}/g, 'Alex Mercer')
     .replace(/\{\{photo\}\}/g, 'alex_artwork.jpg')
-    .replace(/\{\{creditName\}\}/g, 'Alex Mercer');
+    .replace(/\{\{creditName\}\}/g, 'Alex Mercer')
+    .replace(/\{\{project\}\}/g, proj.title)
+    .replace(/\{\{date\}\}/g, dl);
   try {
     showToast('Sending test email...');
     await sendSingleEmailViaBackend(testEmail, subject, body, replyTo);
@@ -3078,10 +3101,13 @@ async function sendOcBulkEmails(retryFailedOnly = false) {
     const c = selectedRecs[i];
     $('oc-bulk-progress-text').textContent = `Sending ${i + 1}/${selectedRecs.length} — ${c.name || c.email}...`;
     
+    const dl = $('oc-bulk-deadline')?.value || '';
     const personalize = (str) => str
       .replace(/\{\{name\}\}/g, c.name || 'Artist')
       .replace(/\{\{photo\}\}/g, c.photo || '')
-      .replace(/\{\{creditName\}\}/g, c.creditName || c.name || 'Artist');
+      .replace(/\{\{creditName\}\}/g, c.creditName || c.name || 'Artist')
+      .replace(/\{\{project\}\}/g, proj.title)
+      .replace(/\{\{date\}\}/g, dl);
     
     const subject = personalize(tmpl.subject);
     const body = personalize(tmpl.body);
@@ -3313,6 +3339,8 @@ function renderOpenCall() {
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('name')" title="Insert {{name}} — contributor's name">{{name}}</button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('photo')" title="Insert {{photo}} — photo filename">{{photo}}</button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('creditName')" title="Insert {{creditName}} — credit index name">{{creditName}}</button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('project')" title="Insert {{project}} — project title">{{project}}</button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('date')" title="Insert {{date}} — deadline date">{{date}}</button>
             </div>
             <textarea id="oc-tmpl-body" rows="8" oninput="ocUpdateTmplPreview()">${escapeHtml(activeProj.templates[activeTmplTab].body)}</textarea>
           </div>
@@ -3448,6 +3476,10 @@ function renderOpenCall() {
       }
     }
 
+    const creditNameHtml = c.creditName
+      ? `<span style="color:var(--gold2);font-size:11px;font-weight:600;margin-left:6px;" title="Print Credit Name">Index: "${escapeHtml(c.creditName)}"</span>`
+      : '';
+
     const emailCell = c.email
       ? ( _isCustomerSuppressed(c.email)
           ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(c.email)}</span>`
@@ -3521,11 +3553,15 @@ function renderOpenCall() {
         ${stepHtml('preorderSent', '5', 'Pre-order')}
       </div>`;
 
+    const notesHtml = c.notes
+      ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(200, 145, 58, 0.05);border-left:3px solid var(--gold);border-radius:4px;font-size:11px;color:var(--text2);line-height:1.4;"><strong>Note:</strong> ${escapeHtml(c.notes)}</div>`
+      : '';
+
     return `
       <div class="card oc-contributor-card" id="oc-card-${c.id}">
         <div class="row-between" style="flex-wrap:wrap;gap:10px;">
           <div style="min-width:0;">
-            <div class="oc-contributor-name">${escapeHtml(c.name || '—')}${mailStatusHtml}</div>
+            <div class="oc-contributor-name">${escapeHtml(c.name || '—')}${creditNameHtml}${mailStatusHtml}</div>
             <div style="font-size:12px;color:var(--text2);margin-top:2px;">
               ${emailCell}
               ${gmailLinksHtml}
@@ -3536,9 +3572,11 @@ function renderOpenCall() {
             ${pipelineEmailBtnHtml}
             ${mailActionsHtml}
             <button class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">↻ Scan</button>
+            <button class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
             <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')">Remove</button>
           </div>
         </div>
+        ${notesHtml}
         ${pipelineVisualizer}
         ${next
           ? `<div class="oc-next-action">${next}</div>`
@@ -17280,6 +17318,14 @@ async function loadOpenCalls() {
   if (!data) { try { data = JSON.parse(localStorage.getItem(OPENCALL_KEY)); } catch (_) {} }
   if (data && typeof data === 'object' && data.projects) {
     OPENCALL_DATA = data;
+    Object.values(OPENCALL_DATA.projects).forEach(proj => {
+      if (proj && Array.isArray(proj.contributors)) {
+        proj.contributors.forEach(c => {
+          if (c.creditName === undefined) c.creditName = '';
+          if (c.notes === undefined) c.notes = '';
+        });
+      }
+    });
   } else {
     OPENCALL_DATA = {
       projects: {
@@ -17436,6 +17482,10 @@ function insertFormattingTag(tag) {
     replacement = `{{photo}}`;
   } else if (tag === 'creditName') {
     replacement = `{{creditName}}`;
+  } else if (tag === 'project') {
+    replacement = `{{project}}`;
+  } else if (tag === 'date') {
+    replacement = `{{date}}`;
   }
   
   textarea.value = text.substring(0, start) + replacement + text.substring(end);
@@ -17534,7 +17584,9 @@ function handleOcCsvFile(file) {
           name: name,
           email: email,
           photo: photo,
-          createdAt: today()
+          createdAt: today(),
+          creditName: '',
+          notes: ''
         });
         imported++;
       }
@@ -17600,12 +17652,22 @@ function ocComposeStageEmail(cId, stageKey) {
   
   const tmpl = (proj.templates && proj.templates[stageKey]) || null;
   if (tmpl) {
-    subject = tmpl.subject
+    let dl = '';
+    if (tmpl.subject.includes('{{date}}') || tmpl.body.includes('{{date}}')) {
+      dl = prompt('Enter a deadline date for this email (e.g. July 15th):', localStorage.getItem('lm-oc-last-deadline') || 'July 15th');
+      if (dl === null) return; // Cancelled
+      if (dl) localStorage.setItem('lm-oc-last-deadline', dl);
+    }
+    
+    const personalize = (str) => str
       .replace(/\{\{name\}\}/g, c.name || 'Artist')
-      .replace(/\{\{photo\}\}/g, c.photo || '');
-    body = tmpl.body
-      .replace(/\{\{name\}\}/g, c.name || 'Artist')
-      .replace(/\{\{photo\}\}/g, c.photo || '');
+      .replace(/\{\{photo\}\}/g, c.photo || '')
+      .replace(/\{\{creditName\}\}/g, c.creditName || c.name || 'Artist')
+      .replace(/\{\{project\}\}/g, proj.title)
+      .replace(/\{\{date\}\}/g, dl || 'July 15th');
+
+    subject = personalize(tmpl.subject);
+    body = personalize(tmpl.body);
   } else {
     if (stageKey === 'selectionSent') {
       subject = `[Selected] Lyricalmyrical Collective Open Call`;
@@ -17692,7 +17754,12 @@ async function ocScanReplies(options = {}) {
           if (up.creditReceived !== undefined && c.creditReceived !== up.creditReceived) {
             c.creditReceived = up.creditReceived;
             c.creditThreadId = up.creditThreadId;
-            details.push('Credit name received');
+            let detailStr = 'Credit name received';
+            if (up.creditName) {
+              c.creditName = up.creditName;
+              detailStr += ` ("${up.creditName}")`;
+            }
+            details.push(detailStr);
             updatedCount++;
           }
           if (up.filesReceived !== undefined && c.filesReceived !== up.filesReceived) {
@@ -17807,7 +17874,12 @@ async function ocScanRepliesSingle(cId) {
       if (up.creditReceived !== undefined && c.creditReceived !== up.creditReceived) {
         c.creditReceived = up.creditReceived;
         c.creditThreadId = up.creditThreadId;
-        details.push('Credit name received');
+        let detailStr = 'Credit name received';
+        if (up.creditName) {
+          c.creditName = up.creditName;
+          detailStr += ` ("${up.creditName}")`;
+        }
+        details.push(detailStr);
         updated = true;
       }
       if (up.filesReceived !== undefined && c.filesReceived !== up.filesReceived) {
@@ -17893,9 +17965,9 @@ async function ocToggleInlineThread(cId, threadId, title) {
           ${msg.attachments && msg.attachments.length > 0 ? `
             <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
               ${msg.attachments.map(att => `
-                <span class="pill gray" style="font-size:10px;padding:2px 6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text2);" title="${escapeHtml(att.mime)}">
+                <button type="button" class="pill gray" style="font-size:10px;padding:2px 6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:4px;" onclick="downloadOcAttachment('${msg.id}', '${escapeHtml(att.name)}', this)" title="Click to download attachment">
                   📎 ${escapeHtml(att.name)} (${Math.round(att.size / 1024)} KB)
-                </span>
+                </button>
               `).join('')}
             </div>
           ` : ''}
@@ -17914,6 +17986,180 @@ async function ocToggleInlineThread(cId, threadId, title) {
     console.error('Failed to fetch Gmail thread:', err);
     container.innerHTML = `<div style="color:var(--red);padding:4px 0;">✕ Error: ${escapeHtml(err.message)}</div>`;
   }
+}
+
+function openOcEditModal(cId) {
+  let modal = $('oc-edit-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'oc-edit-modal';
+    modal.style.position = 'fixed';
+    modal.style.inset = '0';
+    modal.style.background = 'rgba(0, 0, 0, 0.75)';
+    modal.style.backdropFilter = 'blur(8px)';
+    modal.style.display = 'none';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = '10000';
+    document.body.appendChild(modal);
+  }
+  
+  modal.style.display = 'flex';
+  renderOcEditModalContent(cId);
+}
+
+function closeOcEditModal() {
+  const modal = $('oc-edit-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderOcEditModalContent(cId) {
+  const modal = $('oc-edit-modal');
+  if (!modal) return;
+  
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const c = proj.contributors.find(x => x.id === cId);
+  if (!c) return;
+  
+  modal.innerHTML = `
+    <div class="card" style="width:94%;max-width:500px;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
+      <button onclick="closeOcEditModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:4px;">✎ Edit Contributor</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Update artist details and internal notes.</div>
+      
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+        <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Artist Name</label>
+          <input id="oc-edit-name" type="text" value="${escapeHtml(c.name || '')}" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;">
+        </div>
+        
+        <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Email Address</label>
+          <input id="oc-edit-email" type="email" value="${escapeHtml(c.email || '')}" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;">
+        </div>
+        
+        <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Credit Name (For credits index)</label>
+          <input id="oc-edit-creditname" type="text" value="${escapeHtml(c.creditName || '')}" placeholder="e.g. ${escapeHtml(c.name || '')}" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;">
+        </div>
+        
+        <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Photos (comma-separated list)</label>
+          <input id="oc-edit-photos" type="text" value="${escapeHtml((c.photos || []).join(', '))}" placeholder="e.g. photo1.jpg, photo2.jpg" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;">
+        </div>
+        
+        <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Internal Notes</label>
+          <textarea id="oc-edit-notes" rows="3" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;font-family:inherit;resize:vertical;">${escapeHtml(c.notes || '')}</textarea>
+        </div>
+      </div>
+      
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="btn" onclick="closeOcEditModal()">Cancel</button>
+        <button class="btn gold" onclick="saveOcContributor('${c.id}')">Save Changes</button>
+      </div>
+    </div>`;
+}
+
+async function saveOcContributor(cId) {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const c = proj.contributors.find(x => x.id === cId);
+  if (!c) return;
+  
+  const name = ($('oc-edit-name')?.value || '').trim();
+  const email = ($('oc-edit-email')?.value || '').trim();
+  const creditName = ($('oc-edit-creditname')?.value || '').trim();
+  const notes = ($('oc-edit-notes')?.value || '').trim();
+  const photosStr = ($('oc-edit-photos')?.value || '').trim();
+  
+  c.name = name;
+  c.email = email;
+  c.creditName = creditName;
+  c.notes = notes;
+  
+  c.photos = photosStr ? photosStr.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
+  c.photo = c.photos.join(', ');
+  
+  await _persistOpenCalls();
+  closeOcEditModal();
+  renderOpenCall();
+  showToast('✓ Contributor updated');
+}
+
+async function downloadOcAttachment(messageId, name, btnEl) {
+  if (!sheetsUrl) {
+    showToast('Connect Google Sheets first to download attachments', 'warn');
+    return;
+  }
+
+  const prevHtml = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.innerHTML = '<span class="spinner" style="width:10px;height:10px;margin-right:4px;"></span> Downloading...';
+
+  try {
+    const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=getAttachment&messageId=' + encodeURIComponent(messageId) + '&name=' + encodeURIComponent(name);
+    const res = await fetch(destUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    if (!data.base64) throw new Error('No file content received');
+
+    // Convert base64 to Blob and trigger download
+    const byteCharacters = atob(data.base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: data.mime || 'application/octet-stream' });
+
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+
+    showToast(`✓ Downloaded: ${name}`);
+  } catch (err) {
+    console.error('Attachment download failed:', err);
+    showToast(`⚠ Download failed: ${err.message}`, 'err');
+  } finally {
+    btnEl.disabled = false;
+    btnEl.innerHTML = prevHtml;
+  }
+}
+
+function ocUpdateBulkPreview() {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const stage = $('oc-bulk-stage')?.value || 'selectionSent';
+  const tmpl = proj.templates?.[stage];
+  if (!tmpl) return;
+  
+  const dl = $('oc-bulk-deadline')?.value || '';
+  const sub = tmpl.subject
+    .replace(/\{\{name\}\}/g, 'Alex Mercer')
+    .replace(/\{\{photo\}\}/g, 'alex_artwork.jpg')
+    .replace(/\{\{creditName\}\}/g, 'Alex Mercer')
+    .replace(/\{\{project\}\}/g, proj.title)
+    .replace(/\{\{date\}\}/g, dl);
+  const body = tmpl.body
+    .replace(/\{\{name\}\}/g, 'Alex Mercer')
+    .replace(/\{\{photo\}\}/g, 'alex_artwork.jpg')
+    .replace(/\{\{creditName\}\}/g, 'Alex Mercer')
+    .replace(/\{\{project\}\}/g, proj.title)
+    .replace(/\{\{date\}\}/g, dl);
+  
+  const subEl = $('oc-bulk-preview-sub-container');
+  const bodyEl = $('oc-bulk-preview-body-container');
+  if (subEl) subEl.textContent = 'Subject: ' + sub;
+  if (bodyEl) bodyEl.textContent = body;
 }
 
 async function ocSaveTemplates() {

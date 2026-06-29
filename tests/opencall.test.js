@@ -7,6 +7,8 @@ describe('newContributor', () => {
     OC_STAGES.forEach(st => expect(c[st.key]).toBe(false));
     expect(c.name).toBe('Ada');
     expect(c.email).toBe('ada@x.com');
+    expect(c.creditName).toBe('');
+    expect(c.notes).toBe('');
     expect(c.id).toMatch(/^oc_/);
   });
 
