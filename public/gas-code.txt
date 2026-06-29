@@ -490,8 +490,10 @@ function doPost(e) {
         }
         const subject = clean_(d.subject) || 'Newsletter';
         const body = cleanBody_(d.body) || '';
+        const htmlBody = cleanBody_(d.htmlBody) || '';
         const replyTo = clean_(d.replyTo);
         const opts = { to: to, subject: subject, body: body };
+        if (htmlBody) opts.htmlBody = htmlBody;
         if (replyTo) opts.replyTo = replyTo;
         const sent = sendMail_(opts);
         return jsonOut_({ ok: true, emailed: true, via: sent.provider });
@@ -1459,12 +1461,14 @@ function sendMail_(opts) {
   const to = String(opts.to || '').trim();
   const subject = String(opts.subject || '');
   const body = String(opts.body || '');
+  const htmlBody = String(opts.htmlBody || '').trim();
 
   // No provider configured → preserve the original MailApp behavior. This still
   // sends from the script owner's Gmail; only the display name is app-branded.
   if (!provider || !apiKey || !fromEmail) {
     const mailOpts = { to: to, subject: subject, body: body, name: fromName };
     if (replyTo) mailOpts.replyTo = replyTo;
+    if (htmlBody) mailOpts.htmlBody = htmlBody;
     MailApp.sendEmail(mailOpts);
     return { provider: 'mailapp' };
   }
@@ -1475,6 +1479,7 @@ function sendMail_(opts) {
   if (provider === 'resend') {
     url = 'https://api.resend.com/emails';
     const payload = { from: fromHeader, to: [to], subject: subject, text: body };
+    if (htmlBody) payload.html = htmlBody;
     if (replyTo) payload.reply_to = replyTo;
     params = {
       method: 'post', contentType: 'application/json',
@@ -1488,6 +1493,7 @@ function sendMail_(opts) {
       sender: { name: fromName, email: fromEmail },
       to: [{ email: to }], subject: subject, textContent: body
     };
+    if (htmlBody) payload.htmlContent = htmlBody;
     if (replyTo) payload.replyTo = { email: replyTo };
     params = {
       method: 'post', contentType: 'application/json',
@@ -1503,6 +1509,9 @@ function sendMail_(opts) {
       subject: subject,
       content: [{ type: 'text/plain', value: body }]
     };
+    if (htmlBody) {
+      payload.content.push({ type: 'text/html', value: htmlBody });
+    }
     if (replyTo) payload.reply_to = { email: replyTo };
     params = {
       method: 'post', contentType: 'application/json',
@@ -1517,6 +1526,7 @@ function sendMail_(opts) {
       ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net';
     url = base + '/v3/' + domain + '/messages';
     const form = { from: fromHeader, to: to, subject: subject, text: body };
+    if (htmlBody) form.html = htmlBody;
     if (replyTo) form['h:Reply-To'] = replyTo;
     params = {
       method: 'post',
@@ -1530,6 +1540,7 @@ function sendMail_(opts) {
       From: fromHeader, To: to, Subject: subject,
       TextBody: body, MessageStream: 'outbound'
     };
+    if (htmlBody) payload.HtmlBody = htmlBody;
     if (replyTo) payload.ReplyTo = replyTo;
     params = {
       method: 'post', contentType: 'application/json',

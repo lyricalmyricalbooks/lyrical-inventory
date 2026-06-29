@@ -3336,6 +3336,8 @@ function renderOpenCall() {
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('bold')" title="Bold"><b>B</b></button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('italic')" title="Italic"><i>I</i></button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('link')" title="Link">Link</button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('highlight')" title="Highlight text" style="background:#fef08a;color:#000;">Highlight</button>
+              <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('color')" title="Color text (Gold)" style="color:#c5a880;">Color</button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('name')" title="Insert {{name}} — contributor's name">{{name}}</button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('photo')" title="Insert {{photo}} — photo filename">{{photo}}</button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('creditName')" title="Insert {{creditName}} — credit index name">{{creditName}}</button>
@@ -17447,6 +17449,23 @@ function ocSwitchProject(id) {
 
 function parseMarkdownToHtml(text) {
   let html = escapeHtml(text);
+  
+  // Restore safe HTML tags that might have been escaped
+  // 1. Restore <mark style="..."> and </mark>
+  html = html.replace(/&lt;mark style=&quot;(.*?)&quot;&gt;/gi, '<mark style="$1">');
+  html = html.replace(/&lt;mark&gt;/gi, '<mark>');
+  html = html.replace(/&lt;\/mark&gt;/gi, '</mark>');
+  
+  // 2. Restore <span style="..."> and </span>
+  html = html.replace(/&lt;span style=&quot;(.*?)&quot;&gt;/gi, '<span style="$1">');
+  html = html.replace(/&lt;span&gt;/gi, '<span>');
+  html = html.replace(/&lt;\/span&gt;/gi, '</span>');
+  
+  // 3. Restore other basic tags if they typed them
+  html = html.replace(/&lt;strong&gt;/gi, '<strong>').replace(/&lt;\/strong&gt;/gi, '</strong>');
+  html = html.replace(/&lt;em&gt;/gi, '<em>').replace(/&lt;\/em&gt;/gi, '</em>');
+  html = html.replace(/&lt;br&gt;/gi, '<br>');
+
   // bold **text** or __text__
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
@@ -17486,6 +17505,10 @@ function insertFormattingTag(tag) {
     replacement = `{{project}}`;
   } else if (tag === 'date') {
     replacement = `{{date}}`;
+  } else if (tag === 'highlight') {
+    replacement = `<mark style="background-color:#fef08a;color:#000000;padding:2px 4px;border-radius:4px;">${selectedText || 'highlighted text'}</mark>`;
+  } else if (tag === 'color') {
+    replacement = `<span style="color:#c5a880;">${selectedText || 'colored text'}</span>`;
   }
   
   textarea.value = text.substring(0, start) + replacement + text.substring(end);
@@ -18541,6 +18564,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
 
   const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const baseUrl = isLocal ? 'http://localhost:8787' : '';
+  const htmlBody = parseMarkdownToHtml(body);
 
   if (useResend && resendKey && resendFrom) {
     const res = await fetch(baseUrl + '/api/campaign/send', {
@@ -18551,7 +18575,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
         'X-Resend-Api-Key': resendKey,
         'X-Resend-From': resendFrom
       },
-      body: JSON.stringify({ to, subject, body, replyTo, simulated: false })
+      body: JSON.stringify({ to, subject, body, htmlBody, replyTo, simulated: false })
     });
     if (!res.ok) {
       const errText = await res.text();
@@ -18576,7 +18600,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + (localStorage.getItem('lm-auth-token') || '')
       },
-      body: JSON.stringify({ to, subject, body, replyTo, simulated: true })
+      body: JSON.stringify({ to, subject, body, htmlBody, replyTo, simulated: true })
     });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
@@ -18585,7 +18609,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
     const payload = {
       version: 2,
       action: 'sendcampaignemail',
-      payload: { to, subject, body, replyTo }
+      payload: { to, subject, body, htmlBody, replyTo }
     };
     const res = await fetch(sheetsUrl, {
       method: 'POST',

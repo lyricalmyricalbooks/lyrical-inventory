@@ -53,7 +53,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/campaign/send' && req.method === 'POST') {
       const body = await readJson(req, res);
       if (!body) return;
-      const { to, subject, body: emailBody, replyTo, simulated } = body;
+      const { to, subject, body: emailBody, htmlBody, replyTo, simulated } = body;
 
       const resendKey = req.headers['x-resend-api-key'] || process.env.RESEND_API_KEY;
       const resendFrom = req.headers['x-resend-from'] || process.env.RESEND_FROM;
@@ -76,6 +76,7 @@ const server = http.createServer(async (req, res) => {
             subject: subject,
             text: emailBody
           };
+          if (htmlBody) payload.html = htmlBody;
           if (replyTo) payload.reply_to = replyTo;
 
           const resendRes = await fetch('https://api.resend.com/emails', {
@@ -130,6 +131,7 @@ const server = http.createServer(async (req, res) => {
           subject,
           replyTo,
           body: emailBody,
+          htmlBody,
           simulated: !!simulated
         });
         fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf8');
