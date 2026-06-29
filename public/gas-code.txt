@@ -74,8 +74,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v11',
-    scriptVersion: 'v11',
+    service: 'lyrical-sheets-webhook-v12',
+    scriptVersion: 'v12',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
