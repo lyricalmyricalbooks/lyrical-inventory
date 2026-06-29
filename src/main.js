@@ -17871,13 +17871,114 @@ function ocComposeStageEmail(cId, stageKey) {
     }
   }
 
+  openOcEmailPreviewModal(cId, stageKey, subject, body, c);
+}
+
+function openOcEmailPreviewModal(cId, stageKey, subject, body, c) {
+  window._ocPreviewSubject = subject;
+  window._ocPreviewBody = body;
+
+  $('oc-email-preview-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'oc-email-preview-modal';
+  modal.className = 'modal-backdrop';
+  modal.style.display = 'flex';
+  modal.style.alignItems = 'center';
+  modal.style.justifyContent = 'center';
+  modal.style.position = 'fixed';
+  modal.style.inset = '0';
+  modal.style.background = 'rgba(0,0,0,0.6)';
+  modal.style.backdropFilter = 'blur(4px)';
+  modal.style.zIndex = '1000';
+
+  modal.innerHTML = `
+    <div class="card" style="max-width:650px;width:90%;margin:0 auto;display:flex;flex-direction:column;box-shadow:var(--shadow2);border:1px solid var(--border);">
+      <div class="row-between" style="border-bottom:1px solid var(--border);padding:14px 20px;background:var(--cream2);">
+        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--gold2);">✉ Review Email to ${escapeHtml(c.name)}</div>
+        <button class="btn sm" onclick="closeOcEmailPreviewModal()" style="padding:4px 8px;font-size:12px;">✕</button>
+      </div>
+      
+      <div style="padding:20px;display:flex;flex-direction:column;gap:12px;max-height:60vh;overflow-y:auto;">
+        <div style="background:var(--cream2);border:1px solid var(--border);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:13px;text-align:left;">
+          <div><strong>To:</strong> ${escapeHtml(c.name)} &lt;${escapeHtml(c.email)}&gt;</div>
+          <div style="border-top:1px solid var(--border);padding-top:6px;word-break:break-all;"><strong>Subject:</strong> ${escapeHtml(subject)}</div>
+        </div>
+        
+        <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;text-align:left;">Email Body Preview</div>
+        <div style="background:#ffffff;color:#000000;border:1px solid var(--border);border-radius:6px;padding:20px;min-height:180px;overflow-y:auto;font-family:'Inter',sans-serif;font-size:14px;line-height:1.6;text-align:left;box-shadow:inset 0 1px 3px rgba(0,0,0,0.05);">
+          ${body}
+        </div>
+      </div>
+      
+      <div class="row-between" style="border-top:1px solid var(--border);padding:14px 20px;background:var(--cream2);justify-content:flex-end;gap:8px;">
+        <button class="btn" onclick="closeOcEmailPreviewModal()">Cancel</button>
+        <button class="btn" onclick="ocPreviewModalEditInWizard('${cId}', '${stageKey}')">Edit in Wizard</button>
+        <button id="oc-preview-send-btn" class="btn gold" onclick="ocPreviewModalSend('${cId}', '${stageKey}')" style="font-weight:700;">Send Email</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+function closeOcEmailPreviewModal() {
+  $('oc-email-preview-modal')?.remove();
+}
+
+async function ocPreviewModalSend(cId, stageKey) {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const c = proj.contributors.find(x => x.id === cId);
+  if (!c || !c.email) return;
+
+  const subject = window._ocPreviewSubject;
+  const htmlBody = window._ocPreviewBody;
+  const plainBody = htmlBody.replace(/<[^>]*>/g, '');
+  const replyTo = localStorage.getItem('lm-oc-replyto') || '';
+
+  const sendBtn = $('oc-preview-send-btn');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<span class="spinner" style="width:10px;height:10px;margin-right:4px;"></span>Sending...';
+  }
+
+  try {
+    await sendSingleEmailViaBackend(c.email, subject, plainBody, replyTo, htmlBody);
+    c[stageKey] = true;
+    await _persistOpenCalls();
+    closeOcEmailPreviewModal();
+    renderOpenCall();
+    showToast(`✓ Email sent successfully to ${c.name}!`);
+  } catch (err) {
+    console.error('Failed to send stage email:', err);
+    showToast(`✕ Failed to send email: ${err.message}`, 'err');
+  } finally {
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send Email';
+    }
+  }
+}
+
+function ocPreviewModalEditInWizard(cId, _stageKey) {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const c = proj.contributors.find(x => x.id === cId);
+  if (!c || !c.email) return;
+
+  const subject = window._ocPreviewSubject;
+  const htmlBody = window._ocPreviewBody;
+
+  closeOcEmailPreviewModal();
+
   switchTab('customers');
   switchCustomersSubTab('campaign');
   
   openCampaignWizard({
     email: c.email,
     subject: subject,
-    body: body,
+    body: htmlBody,
     title: `Compose Pipeline Email (${c.email})`
   });
 }
@@ -19166,6 +19267,7 @@ Object.assign(window, {
   ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
   openOcEditModal, saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview,
   ocToggleColorPalette, ocApplyColor,
+  openOcEmailPreviewModal, closeOcEmailPreviewModal, ocPreviewModalSend, ocPreviewModalEditInWizard,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
