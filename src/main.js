@@ -3411,7 +3411,10 @@ function renderOpenCall() {
           </select>
         </div>
         
-        <button class="btn gold" onclick="openOcBulkModal()" ${total ? '' : 'disabled'}>✉ Bulk Email</button>
+        <div style="display:flex;gap:6px;">
+          <button class="btn gold" onclick="openOcBulkModal()" ${total ? '' : 'disabled'}>✉ Bulk Email</button>
+          <button class="btn" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'} title="Export all contributors to CSV">📤 Export CSV</button>
+        </div>
       </div>
       <div style="font-size:11px;color:var(--text3);">${total} contributor${total === 1 ? '' : 's'} total · ${list.length} shown</div>
     </div>`;
@@ -18242,11 +18245,13 @@ function exportOpenCallCSV() {
     showToast('Nothing to export in this project', 'warn');
     return;
   }
-  const rows = [['Name', 'Email', 'Photo', 'Selection Sent', 'Credit Received', 'CMYK Sent', 'Files Received', 'Pre-order Sent', 'Created At']];
+  const rows = [['Name', 'Email', 'Photo', 'Credit Name', 'Notes', 'Selection Sent', 'Credit Received', 'CMYK Sent', 'Files Received', 'Pre-order Sent', 'Created At']];
   proj.contributors.forEach(c => rows.push([
     c.name || '',
     c.email || '',
     c.photo || '',
+    c.creditName || '',
+    c.notes || '',
     c.selectionSent ? 'Yes' : 'No',
     c.creditReceived ? 'Yes' : 'No',
     c.cmykSent ? 'Yes' : 'No',
