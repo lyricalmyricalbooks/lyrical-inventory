@@ -37,6 +37,9 @@ Bug / edge case the change introduced · the next logical feature · offline & s
 - If the user asks for something, assume they know what they want.
 - Only ask clarifying questions if the request is genuinely ambiguous.
 
+## Customizations & Style Guidelines
+- **Strict Guidelines:** Always adhere to the premium UX/UI, offline-first sync, financial ledger precision, role-based security, and spreadsheet integration rules defined in [.agents/AGENTS.md](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/.agents/AGENTS.md).
+
 > [!WARNING]
 > **Always update the externalized Apps Script copy** whenever [Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs) is modified: copy it **verbatim** (no HTML-escaping) to [gas-code.txt](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/public/gas-code.txt). The "Connect your Google Sheet" tab in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html) lazy-fetches this file via `loadGasCode()` in [main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js) the first time the tab opens. Do **not** re-embed the source inline in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html).
 
