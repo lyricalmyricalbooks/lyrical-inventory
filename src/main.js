@@ -2809,7 +2809,8 @@ function ocUpdateTmplPreview() {
     .replace(/\{\{date\}\}/g, 'July 15th'); // sample date
   
   const resolvedSub = personalize(sub);
-  const resolvedBody = personalize(body);
+  const serializedBody = serializeEditorHtml(body);
+  const resolvedBody = personalize(serializedBody);
   
   const subEl = $('oc-preview-subject');
   const bodyEl = $('oc-preview-body');
@@ -3340,7 +3341,8 @@ function renderOpenCall() {
   let initialHtml = '';
   if (activeProj && activeProj.templates && activeProj.templates[activeTmplTab]) {
     const rawBody = activeProj.templates[activeTmplTab].body || '';
-    initialHtml = (rawBody.includes('<') || !rawBody) ? rawBody : parseMarkdownToHtml(rawBody);
+    const cleanHtml = (rawBody.includes('<') || !rawBody) ? rawBody : parseMarkdownToHtml(rawBody);
+    initialHtml = deserializeHtmlToEditor(cleanHtml);
   }
 
   const templatesEditor = activeProj ? `
@@ -3356,37 +3358,72 @@ function renderOpenCall() {
       
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
         <!-- Editor Column -->
-        <div style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;flex-direction:column;gap:12px;">
           <div>
             <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Subject Line</label>
-            <input id="oc-tmpl-subject" value="${escapeHtml(activeProj.templates[activeTmplTab].subject)}" oninput="ocUpdateTmplPreview()" placeholder="Subject Line">
+            <input id="oc-tmpl-subject" value="${escapeHtml(activeProj.templates[activeTmplTab].subject)}" oninput="ocUpdateTmplPreview()" placeholder="Subject Line" style="font-size:13.5px;padding:10px 12px;width:100%;box-sizing:border-box;">
           </div>
           <div>
-            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body (Visual Rich Editor)</label>
-            <div class="oc-tmpl-toolbar">
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('bold')" title="Bold"><b>B</b></button>
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('italic')" title="Italic"><i>I</i></button>
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('link')" title="Link">Link</button>
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('highlight')" title="Highlight text" style="background:#fef08a;color:#000;">Highlight</button>
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('color')" title="Color text (Gold)" style="color:#c5a880;">Color</button>
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('name')" title="Insert {{name}} — contributor's name">{{name}}</button>
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('photo')" title="Insert {{photo}} — photo filename">{{photo}}</button>
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('creditName')" title="Insert {{creditName}} — credit index name">{{creditName}}</button>
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('project')" title="Insert {{project}} — project title">{{project}}</button>
-              <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('date')" title="Insert {{date}} — deadline date">{{date}}</button>
+            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body</label>
+            <div class="oc-editor-container">
+              <div id="oc-tmpl-body" class="oc-rich-editor" contenteditable="true" oninput="ocUpdateTmplPreview()">${initialHtml}</div>
+              <div class="oc-editor-toolbar">
+                <div class="oc-toolbar-group">
+                  <button class="btn sm gold" onclick="ocSaveTemplates()" style="height:32px;padding:0 14px;font-weight:700;letter-spacing:0.02em;">Save</button>
+                  <div class="oc-toolbar-divider"></div>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('bold')" title="Bold (Ctrl+B)"><b>B</b></button>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('italic')" title="Italic (Ctrl+I)"><i>I</i></button>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('underline')" title="Underline (Ctrl+U)"><u>U</u></button>
+                  <div class="oc-dropdown-container">
+                    <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="ocToggleColorPalette('fore')" title="Text Color" style="font-weight:bold;color:#c5a880;">A</button>
+                    <div id="oc-forecolor-palette" class="oc-color-palette">
+                      <div class="oc-color-swatch" style="background:#0e0c0a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#0e0c0a')"></div>
+                      <div class="oc-color-swatch" style="background:#c8913a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#c8913a')"></div>
+                      <div class="oc-color-swatch" style="background:#e52e2e;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#e52e2e')"></div>
+                      <div class="oc-color-swatch" style="background:#1e40af;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#1e40af')"></div>
+                      <div class="oc-color-swatch" style="background:#047857;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#047857')"></div>
+                      <div class="oc-color-swatch" style="background:#78350f;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#78350f')"></div>
+                      <div class="oc-color-swatch" style="background:#6b21a8;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#6b21a8')"></div>
+                      <div class="oc-color-swatch" style="background:#4b5563;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#4b5563')"></div>
+                      <div class="oc-color-swatch" style="background:#9ca3af;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#9ca3af')"></div>
+                      <div class="oc-color-swatch" style="background:#ffffff;border:1px solid #ccc;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#ffffff')"></div>
+                    </div>
+                  </div>
+                  <div class="oc-dropdown-container">
+                    <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="ocToggleColorPalette('back')" title="Highlight Color" style="background:#fef08a;color:#000;border-radius:4px;width:24px;height:24px;font-size:11px;margin:4px;">H</button>
+                    <div id="oc-backcolor-palette" class="oc-color-palette">
+                      <div class="oc-color-swatch" style="background:#fef08a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fef08a')"></div>
+                      <div class="oc-color-swatch" style="background:#bdf5bd;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#bdf5bd')"></div>
+                      <div class="oc-color-swatch" style="background:#bfdbfe;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#bfdbfe')"></div>
+                      <div class="oc-color-swatch" style="background:#fbcfe8;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fbcfe8')"></div>
+                      <div class="oc-color-swatch" style="background:#fed7aa;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fed7aa')"></div>
+                      <div class="oc-color-swatch" style="background:#ddd6fe;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#ddd6fe')"></div>
+                      <div class="oc-color-swatch" style="background:#c8913a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#c8913a')"></div>
+                      <div class="oc-color-swatch" style="background:#e52e2e;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#e52e2e')"></div>
+                      <div class="oc-color-swatch" style="background:#e5ddd0;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#e5ddd0')"></div>
+                      <div class="oc-color-swatch" style="background:transparent;border:1px dashed #ccc;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', 'transparent')"></div>
+                    </div>
+                  </div>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('link')" title="Insert Link">🔗</button>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('clear')" title="Clear Formatting">Tx</button>
+                </div>
+                <div class="oc-toolbar-group" style="gap:5px;">
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('name')" title="Insert Name Pill">name</button>
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('photo')" title="Insert Photo Pill">photo</button>
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('creditName')" title="Insert Credit Index Pill">creditName</button>
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('project')" title="Insert Project Title Pill">project</button>
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('date')" title="Insert Deadline Pill">date</button>
+                </div>
+              </div>
             </div>
-            <div id="oc-tmpl-body" contenteditable="true" oninput="ocUpdateTmplPreview()" style="width:100%;min-height:180px;max-height:280px;padding:12px;font-size:13px;background:var(--input-bg, #1a1a1a);color:var(--text, #fff);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;overflow-y:auto;text-align:left;outline:none;white-space:pre-wrap;font-family:inherit;line-height:1.6;">${initialHtml}</div>
-          </div>
-          <div style="display:flex;justify-content:flex-end;">
-            <button class="btn sm gold" onclick="ocSaveTemplates()">Save Template</button>
           </div>
         </div>
         
         <!-- Live Preview Column -->
-        <div class="oc-preview-box">
+        <div class="oc-preview-box" style="align-self:stretch;display:flex;flex-direction:column;">
           <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);border-bottom:1px solid var(--cream3);padding-bottom:6px;margin-bottom:8px;font-weight:700;">Live Preview (Sample)</div>
-          <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--text);" id="oc-preview-subject">—</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.6;font-family:inherit;" id="oc-preview-body">—</div>
+          <div style="font-size:13.5px;font-weight:700;margin-bottom:8px;color:var(--text);" id="oc-preview-subject">—</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.6;font-family:inherit;flex:1;overflow-y:auto;" id="oc-preview-body">—</div>
         </div>
       </div>
     </div>` : '';
@@ -17537,10 +17574,14 @@ function insertFormattingTag(tag) {
     document.execCommand('bold', false, null);
   } else if (tag === 'italic') {
     document.execCommand('italic', false, null);
+  } else if (tag === 'underline') {
+    document.execCommand('underline', false, null);
   } else if (tag === 'link') {
     const url = prompt('Enter URL:', 'https://');
     if (!url) return;
     document.execCommand('createLink', false, url);
+  } else if (tag === 'clear') {
+    document.execCommand('removeFormat', false, null);
   } else if (tag === 'highlight') {
     const mark = document.createElement('mark');
     mark.style.backgroundColor = '#fef08a';
@@ -17565,14 +17606,77 @@ function insertFormattingTag(tag) {
     selection.removeAllRanges();
     selection.addRange(range);
   } else {
-    const node = document.createTextNode(`{{${tag}}}`);
+    const badge = document.createElement('span');
+    badge.className = 'oc-token-badge';
+    badge.setAttribute('contenteditable', 'false');
+    badge.setAttribute('data-token', tag);
+    badge.textContent = `{{${tag}}}`;
+    
     range.deleteContents();
-    range.insertNode(node);
-    range.setStartAfter(node);
+    range.insertNode(badge);
+    range.setStartAfter(badge);
     range.collapse(true);
     selection.removeAllRanges();
     selection.addRange(range);
   }
+  
+  ocUpdateTmplPreview();
+}
+
+function serializeEditorHtml(html) {
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  const badges = tempDiv.querySelectorAll('.oc-token-badge');
+  badges.forEach(badge => {
+    const token = badge.getAttribute('data-token');
+    badge.replaceWith(`{{${token}}}`);
+  });
+  return tempDiv.innerHTML;
+}
+
+function deserializeHtmlToEditor(html) {
+  let res = html;
+  const tokens = ['name', 'photo', 'creditName', 'project', 'date'];
+  tokens.forEach(t => {
+    const regex = new RegExp(`\\{\\{${t}\\}\\}`, 'g');
+    res = res.replace(regex, `<span class="oc-token-badge" contenteditable="false" data-token="${t}">{{${t}}}</span>`);
+  });
+  return res;
+}
+
+function ocToggleColorPalette(type) {
+  const isFore = type === 'fore';
+  const el = isFore ? $('oc-forecolor-palette') : $('oc-backcolor-palette');
+  const otherEl = isFore ? $('oc-backcolor-palette') : $('oc-forecolor-palette');
+  
+  if (otherEl) otherEl.classList.remove('open');
+  if (el) el.classList.toggle('open');
+  
+  const closePalette = (e) => {
+    if (el && !el.contains(e.target) && !e.target.closest('.oc-dropdown-container')) {
+      el.classList.remove('open');
+      document.removeEventListener('click', closePalette);
+    }
+  };
+  if (el && el.classList.contains('open')) {
+    setTimeout(() => document.addEventListener('click', closePalette), 10);
+  }
+}
+
+function ocApplyColor(type, val) {
+  const editor = $('oc-tmpl-body');
+  if (!editor) return;
+  
+  editor.focus();
+  
+  if (type === 'fore') {
+    document.execCommand('foreColor', false, val);
+  } else {
+    document.execCommand('backColor', false, val);
+  }
+  
+  const el = type === 'fore' ? $('oc-forecolor-palette') : $('oc-backcolor-palette');
+  if (el) el.classList.remove('open');
   
   ocUpdateTmplPreview();
 }
@@ -18252,13 +18356,14 @@ async function ocSaveTemplates() {
 
   const subject = ($('oc-tmpl-subject')?.value || '').trim();
   const body = $('oc-tmpl-body')?.innerHTML || '';
+  const serializedBody = serializeEditorHtml(body);
 
   if (!subject && !body) {
     showToast('Nothing to save — template is empty', 'warn');
     return;
   }
 
-  proj.templates[activeTmplTab] = { subject, body };
+  proj.templates[activeTmplTab] = { subject, body: serializedBody };
   
   await _persistOpenCalls();
   showToast(`✓ ${activeTmplTab === 'selectionSent' ? 'Selection' : activeTmplTab === 'cmykSent' ? 'Request Files' : 'Pre-order'} template saved!`);
@@ -19060,6 +19165,7 @@ Object.assign(window, {
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
   ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
   openOcEditModal, saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview,
+  ocToggleColorPalette, ocApplyColor,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,

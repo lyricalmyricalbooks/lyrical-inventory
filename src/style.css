@@ -3253,3 +3253,177 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
     padding: 14px;
   }
 }
+
+/* ==========================================
+   GMAIL-STYLE RICH EMAIL TEMPLATE DESIGNER
+   ========================================== */
+.oc-rich-editor {
+  width: 100%;
+  min-height: 220px;
+  max-height: 350px;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--input-bg, #ffffff);
+  color: var(--text, #0e0c0a);
+  border: 1px solid var(--border, rgba(14,12,10,.15));
+  border-radius: 8px 8px 0 0; /* rounded top only, bottom is flush with toolbar */
+  box-sizing: border-box;
+  overflow-y: auto;
+  text-align: left;
+  outline: none;
+  white-space: pre-wrap;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.oc-rich-editor:focus {
+  border-color: var(--gold);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05), 0 0 0 3px rgba(200, 145, 58, 0.15);
+}
+
+/* Gmail-style unified bottom toolbar container */
+.oc-editor-container {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 2px 8px -1px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border);
+}
+
+.oc-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--cream2, #f5efe4);
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.oc-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.oc-toolbar-btn {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text2, #4a4540);
+  font-size: 14px;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.oc-toolbar-btn:hover {
+  background: rgba(14, 12, 10, 0.06);
+  color: var(--text);
+}
+
+.oc-toolbar-btn:active, .oc-toolbar-btn.active {
+  background: rgba(14, 12, 10, 0.12);
+  color: var(--gold);
+}
+
+/* Vertical divider in toolbar */
+.oc-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+/* Token pill badges */
+.oc-token-badge {
+  background: var(--gold-bg, rgba(200, 145, 58, 0.12));
+  color: var(--gold, #c8913a);
+  border: 1px solid var(--gold-line, rgba(200, 145, 58, 0.3));
+  border-radius: 12px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 3px;
+  user-select: none;
+  font-family: 'DM Mono', monospace;
+  cursor: default;
+  vertical-align: middle;
+  box-shadow: 0 1px 2px rgba(200, 145, 58, 0.05);
+}
+
+/* Token buttons in toolbar */
+.oc-token-btn {
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-line);
+  color: var(--gold);
+  border-radius: 100px;
+  padding: 4px 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'DM Mono', monospace;
+}
+
+.oc-token-btn:hover {
+  background: rgba(200, 145, 58, 0.22);
+  border-color: var(--gold);
+  transform: translateY(-1px);
+}
+
+/* Dropdown color picker styles */
+.oc-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.oc-color-palette {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: var(--ink2, #1c1917);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  box-shadow: var(--shadow2);
+  z-index: 300;
+  display: none; /* hidden by default */
+  min-width: 130px;
+}
+
+.oc-color-palette.open {
+  display: grid;
+  animation: hmPop 0.15s ease;
+}
+
+.oc-color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: transform 0.12s;
+}
+
+.oc-color-swatch:hover {
+  transform: scale(1.2);
+  border-color: #fff;
+}
+
