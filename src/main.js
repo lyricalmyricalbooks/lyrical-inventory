@@ -13833,6 +13833,8 @@ async function importShippoShippingFromApi() {
       //   still appear and can be imported.
       const json = await fetchShippoTransactionsPageAPI(token, page);
       const rows = json.results || [];
+      const validTx = [];
+
       for (const tx of rows) {
         const status = String(tx?.status || '').toUpperCase();
         if (!tx || status === 'REFUNDED' || status === 'ERROR' || status === 'INVALID') { skipped++; continue; }
@@ -13844,12 +13846,31 @@ async function importShippoShippingFromApi() {
         // so re-running weeks later only adds labels not already in the ledger.
         if (fetchedIds.has(txId) || importedIds.has(txId) || existingRefs.has(ref)) { alreadyImported++; continue; }
 
-        const expense = await processShippoTxToExpense(tx, token, txId, ref, imported);
-        if (!expense) { skipped++; continue; }
-
+        // Optimistically add to sets to prevent duplicates within the same page
         existingRefs.add(ref);
         importedIds.add(txId);
         fetchedIds.add(txId);
+
+        validTx.push({ tx, txId, ref });
+      }
+
+      // Process expenses in parallel
+      const expenses = await Promise.all(validTx.map(({ tx, txId, ref }, index) => {
+        return processShippoTxToExpense(tx, token, txId, ref, imported + index);
+      }));
+
+      for (let i = 0; i < validTx.length; i++) {
+        const { txId, ref } = validTx[i];
+        const expense = expenses[i];
+
+        if (!expense) {
+          // Revert optimistic add if expense processing failed
+          existingRefs.delete(ref);
+          importedIds.delete(txId);
+          fetchedIds.delete(txId);
+          skipped++;
+          continue;
+        }
 
         pendingExpenses.push(expense);
         imported++;
