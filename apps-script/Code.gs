@@ -492,6 +492,18 @@ function doPost(e) {
         const body = cleanBody_(d.body) || '';
         const htmlBody = cleanBody_(d.htmlBody) || '';
         const replyTo = clean_(d.replyTo);
+        const threadId = clean_(d.threadId);
+
+        if (threadId) {
+          const thread = GmailApp.getThreadById(threadId);
+          if (thread) {
+            const opts = { htmlBody: htmlBody };
+            if (replyTo) opts.replyTo = replyTo;
+            thread.reply(body, opts);
+            return jsonOut_({ ok: true, emailed: true, via: 'gmail-thread-reply', threadId: threadId });
+          }
+        }
+
         const opts = { to: to, subject: subject, body: body };
         if (htmlBody) opts.htmlBody = htmlBody;
         if (replyTo) opts.replyTo = replyTo;

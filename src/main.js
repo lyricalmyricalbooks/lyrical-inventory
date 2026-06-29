@@ -17880,6 +17880,8 @@ function openOcEmailPreviewModal(cId, stageKey, subject, body, c) {
 
   $('oc-email-preview-modal')?.remove();
 
+  const availableThreadId = c.gmailThreadId || (stageKey === 'cmykSent' ? c.creditThreadId : stageKey === 'preorderSent' ? c.filesThreadId : null);
+
   const modal = document.createElement('div');
   modal.id = 'oc-email-preview-modal';
   modal.className = 'modal-backdrop';
@@ -17909,6 +17911,21 @@ function openOcEmailPreviewModal(cId, stageKey, subject, body, c) {
         <div style="background:#ffffff;color:#000000;border:1px solid var(--border);border-radius:6px;padding:20px;min-height:180px;overflow-y:auto;font-family:'Inter',sans-serif;font-size:14px;line-height:1.6;text-align:left;box-shadow:inset 0 1px 3px rgba(0,0,0,0.05);">
           ${body}
         </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;text-align:left;border-top:1px solid var(--border);padding-top:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="oc-preview-reply-thread" ${availableThreadId ? 'checked' : ''} onchange="document.getElementById('oc-preview-thread-input-container').style.display = this.checked ? 'block' : 'none'" style="cursor:pointer;margin:0;">
+            <label for="oc-preview-reply-thread" style="font-size:13px;color:var(--text2);cursor:pointer;user-select:none;font-weight:600;">
+              Reply to an email thread instead of starting a new email
+            </label>
+          </div>
+          <div id="oc-preview-thread-input-container" style="display:${availableThreadId ? 'block' : 'none'};margin-left:22px;">
+            <input id="oc-preview-thread-id" type="text" placeholder="Gmail Thread ID (e.g. 18f8c4a9d7e3b2a1)" value="${availableThreadId || ''}" style="width:100%;max-width:300px;padding:6px 10px;font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;box-sizing:border-box;font-family:monospace;">
+            <span style="font-size:10px;color:var(--text3);display:block;margin-top:2px;">
+              Replies to this thread via GmailApp (requires Google Sheets/Webhook connection).
+            </span>
+          </div>
+        </div>
       </div>
       
       <div class="row-between" style="border-top:1px solid var(--border);padding:14px 20px;background:var(--cream2);justify-content:flex-end;gap:8px;">
@@ -17937,6 +17954,9 @@ async function ocPreviewModalSend(cId, stageKey) {
   const plainBody = htmlBody.replace(/<[^>]*>/g, '');
   const replyTo = localStorage.getItem('lm-oc-replyto') || '';
 
+  const replyThread = $('oc-preview-reply-thread')?.checked || false;
+  const threadId = replyThread ? ($('oc-preview-thread-id')?.value || '').trim() : null;
+
   const sendBtn = $('oc-preview-send-btn');
   if (sendBtn) {
     sendBtn.disabled = true;
@@ -17944,8 +17964,12 @@ async function ocPreviewModalSend(cId, stageKey) {
   }
 
   try {
-    await sendSingleEmailViaBackend(c.email, subject, plainBody, replyTo, htmlBody);
+    await sendSingleEmailViaBackend(c.email, subject, plainBody, replyTo, htmlBody, threadId);
     c[stageKey] = true;
+    if (threadId) {
+      if (stageKey === 'cmykSent') c.creditThreadId = threadId;
+      if (stageKey === 'preorderSent') c.filesThreadId = threadId;
+    }
     await _persistOpenCalls();
     closeOcEmailPreviewModal();
     renderOpenCall();
@@ -18342,6 +18366,11 @@ function renderOcEditModalContent(cId) {
           <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Internal Notes</label>
           <textarea id="oc-edit-notes" rows="3" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;font-family:inherit;resize:vertical;">${escapeHtml(c.notes || '')}</textarea>
         </div>
+        
+        <div>
+          <label style="font-size:11px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Gmail Thread ID (For replying/tracking)</label>
+          <input id="oc-edit-threadid" type="text" value="${escapeHtml(c.gmailThreadId || '')}" placeholder="e.g. 18f8c4a9d7e3b2a1" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;font-family:monospace;">
+        </div>
       </div>
       
       <div style="display:flex;justify-content:flex-end;gap:8px;">
@@ -18361,12 +18390,14 @@ async function saveOcContributor(cId) {
   const email = ($('oc-edit-email')?.value || '').trim();
   const creditName = ($('oc-edit-creditname')?.value || '').trim();
   const notes = ($('oc-edit-notes')?.value || '').trim();
+  const gmailThreadId = ($('oc-edit-threadid')?.value || '').trim();
   const photosStr = ($('oc-edit-photos')?.value || '').trim();
   
   c.name = name;
   c.email = email;
   c.creditName = creditName;
   c.notes = notes;
+  c.gmailThreadId = gmailThreadId;
   
   c.photos = photosStr ? photosStr.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
   c.photo = c.photos.join(', ');
