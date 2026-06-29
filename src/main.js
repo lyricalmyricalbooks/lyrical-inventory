@@ -3468,7 +3468,7 @@ function renderOpenCall() {
           Paste rows from the spreadsheet — one contributor per line, columns separated by tab or comma:
           <strong>Name, Email, Photo file, Credit Name, Notes</strong>. A header row is skipped automatically; existing emails are not duplicated.
           <br>
-          <a href="/opencall-template.csv" download="opencall-template.csv" style="color:var(--gold2);text-decoration:underline;display:inline-block;margin-top:4px;font-weight:600;">📥 Download Excel / CSV Template</a>
+          <a href="opencall-template.csv" download="opencall-template.csv" style="color:var(--gold2);text-decoration:underline;display:inline-block;margin-top:4px;font-weight:600;">📥 Download Excel / CSV Template</a>
         </div>
         <textarea id="oc-import-text" rows="4" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg, Jeremy Ackman, Selected" style="font-family:'DM Mono',monospace;"></textarea>
         
