@@ -2794,7 +2794,7 @@ function ocSetTmplTab(val) {
 
 function ocUpdateTmplPreview() {
   const sub = $('oc-tmpl-subject')?.value || '';
-  const body = $('oc-tmpl-body')?.value || '';
+  const body = $('oc-tmpl-body')?.innerHTML || '';
   
   const sampleName = 'Alex Mercer';
   const samplePhoto = 'alex_mercer_artwork.jpg';
@@ -2815,7 +2815,7 @@ function ocUpdateTmplPreview() {
   const bodyEl = $('oc-preview-body');
   if (subEl) subEl.textContent = resolvedSub;
   if (bodyEl) {
-    bodyEl.innerHTML = parseMarkdownToHtml(resolvedBody);
+    bodyEl.innerHTML = resolvedBody;
   }
 }
 
@@ -2968,7 +2968,7 @@ function renderOcBulkModalContent(retryMode = false) {
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:var(--text3);padding:8px 12px;background:rgba(255,255,255,0.03);border-bottom:1px solid var(--border);">Template Preview (sample data)</div>
         <div style="padding:12px;max-height:120px;overflow-y:auto;">
           <div id="oc-bulk-preview-sub-container" style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Subject: ${escapeHtml(previewSub)}</div>
-          <div id="oc-bulk-preview-body-container" style="font-size:11px;color:var(--text2);line-height:1.6;white-space:pre-wrap;">${escapeHtml(previewBody)}</div>
+          <div id="oc-bulk-preview-body-container" style="font-size:11px;color:var(--text2);line-height:1.6;white-space:pre-wrap;">${previewBody}</div>
         </div>
         <div style="padding:8px 12px;border-top:1px solid var(--border);background:rgba(255,255,255,0.02);">
           <span style="font-size:10px;color:var(--text3);">Tokens: <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{name}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{photo}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{creditName}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{project}}</code> <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;font-size:10px;">{{date}}</code> — replace with per-contributor data</span>
@@ -3337,6 +3337,12 @@ function renderOpenCall() {
   }
 
   // Templates Editor Panel
+  let initialHtml = '';
+  if (activeProj && activeProj.templates && activeProj.templates[activeTmplTab]) {
+    const rawBody = activeProj.templates[activeTmplTab].body || '';
+    initialHtml = (rawBody.includes('<') || !rawBody) ? rawBody : parseMarkdownToHtml(rawBody);
+  }
+
   const templatesEditor = activeProj ? `
     <div class="card" style="margin-top:0;padding:20px;">
       <div class="row-between" style="border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:15px;flex-wrap:wrap;gap:8px;">
@@ -3356,7 +3362,7 @@ function renderOpenCall() {
             <input id="oc-tmpl-subject" value="${escapeHtml(activeProj.templates[activeTmplTab].subject)}" oninput="ocUpdateTmplPreview()" placeholder="Subject Line">
           </div>
           <div>
-            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body (Markdown supported)</label>
+            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body (Visual Rich Editor)</label>
             <div class="oc-tmpl-toolbar">
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('bold')" title="Bold"><b>B</b></button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('italic')" title="Italic"><i>I</i></button>
@@ -3369,7 +3375,7 @@ function renderOpenCall() {
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('project')" title="Insert {{project}} — project title">{{project}}</button>
               <button type="button" class="oc-toolbar-btn" onclick="insertFormattingTag('date')" title="Insert {{date}} — deadline date">{{date}}</button>
             </div>
-            <textarea id="oc-tmpl-body" rows="8" oninput="ocUpdateTmplPreview()">${escapeHtml(activeProj.templates[activeTmplTab].body)}</textarea>
+            <div id="oc-tmpl-body" contenteditable="true" oninput="ocUpdateTmplPreview()" style="width:100%;min-height:180px;max-height:280px;padding:12px;font-size:13px;background:var(--input-bg, #1a1a1a);color:var(--text, #fff);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;overflow-y:auto;text-align:left;outline:none;white-space:pre-wrap;font-family:inherit;line-height:1.6;">${initialHtml}</div>
           </div>
           <div style="display:flex;justify-content:flex-end;">
             <button class="btn sm gold" onclick="ocSaveTemplates()">Save Template</button>
@@ -17510,41 +17516,63 @@ function parseMarkdownToHtml(text) {
 }
 
 function insertFormattingTag(tag) {
-  const textarea = $('oc-tmpl-body');
-  if (!textarea) return;
+  const editor = $('oc-tmpl-body');
+  if (!editor) return;
   
-  const start = textarea.selectionStart;
-  const end = textarea.selectionEnd;
-  const text = textarea.value;
-  const selectedText = text.substring(start, end);
+  editor.focus();
   
-  let replacement = '';
-  if (tag === 'bold') {
-    replacement = `**${selectedText || 'bold text'}**`;
-  } else if (tag === 'italic') {
-    replacement = `*${selectedText || 'italic text'}*`;
-  } else if (tag === 'link') {
-    replacement = `[${selectedText || 'link label'}](https://)`;
-  } else if (tag === 'name') {
-    replacement = `{{name}}`;
-  } else if (tag === 'photo') {
-    replacement = `{{photo}}`;
-  } else if (tag === 'creditName') {
-    replacement = `{{creditName}}`;
-  } else if (tag === 'project') {
-    replacement = `{{project}}`;
-  } else if (tag === 'date') {
-    replacement = `{{date}}`;
-  } else if (tag === 'highlight') {
-    replacement = `<mark style="background-color:#fef08a;color:#000000;padding:2px 4px;border-radius:4px;">${selectedText || 'highlighted text'}</mark>`;
-  } else if (tag === 'color') {
-    replacement = `<span style="color:#c5a880;">${selectedText || 'colored text'}</span>`;
+  const selection = window.getSelection();
+  let range;
+  if (selection.rangeCount > 0) {
+    range = selection.getRangeAt(0);
+  } else {
+    range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
   }
   
-  textarea.value = text.substring(0, start) + replacement + text.substring(end);
-  textarea.focus();
-  textarea.selectionStart = start + replacement.length;
-  textarea.selectionEnd = start + replacement.length;
+  const selectedText = selection.toString();
+  
+  if (tag === 'bold') {
+    document.execCommand('bold', false, null);
+  } else if (tag === 'italic') {
+    document.execCommand('italic', false, null);
+  } else if (tag === 'link') {
+    const url = prompt('Enter URL:', 'https://');
+    if (!url) return;
+    document.execCommand('createLink', false, url);
+  } else if (tag === 'highlight') {
+    const mark = document.createElement('mark');
+    mark.style.backgroundColor = '#fef08a';
+    mark.style.color = '#000000';
+    mark.style.padding = '2px 4px';
+    mark.style.borderRadius = '4px';
+    mark.textContent = selectedText || 'highlighted text';
+    range.deleteContents();
+    range.insertNode(mark);
+    range.setStartAfter(mark);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } else if (tag === 'color') {
+    const span = document.createElement('span');
+    span.style.color = '#c5a880';
+    span.textContent = selectedText || 'colored text';
+    range.deleteContents();
+    range.insertNode(span);
+    range.setStartAfter(span);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } else {
+    const node = document.createTextNode(`{{${tag}}}`);
+    range.deleteContents();
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
   
   ocUpdateTmplPreview();
 }
@@ -18222,11 +18250,8 @@ async function ocSaveTemplates() {
   if (!proj) return;
   if (!proj.templates) proj.templates = {};
 
-  // The template editor renders a single active tab with ids:
-  //   oc-tmpl-subject  (input)   and   oc-tmpl-body  (textarea)
-  // We save only the currently visible tab.
   const subject = ($('oc-tmpl-subject')?.value || '').trim();
-  const body = $('oc-tmpl-body')?.value || '';
+  const body = $('oc-tmpl-body')?.innerHTML || '';
 
   if (!subject && !body) {
     showToast('Nothing to save — template is empty', 'warn');
