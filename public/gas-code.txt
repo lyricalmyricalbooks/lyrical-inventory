@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v10)
+/* Lyricalmyrical Inventory — Unified Backend (v12)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
  *  2. Sheets sync with:
@@ -29,6 +29,8 @@
  *     now rewrites a managed sheet's header row in place when it drifts, so the
  *     new column self-labels on the next sync. Bump flags v9-and-older as
  *     outdated so the publisher redeploys to gain the column.
+ *  9. v11: Gmail-style rich text Template Designer support.
+ *  10. v12: Adds threadId support to reply to existing email threads instead of starting new ones.
  */
 
 const HEADERS = [
