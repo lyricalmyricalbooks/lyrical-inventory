@@ -2898,7 +2898,7 @@ function renderOcBulkModalContent(retryMode = false) {
   const dl = localStorage.getItem('lm-oc-last-deadline') || 'July 15th';
   const previewSub = tmpl ? tmpl.subject
     .replace(/\{\{name\}\}/g, 'Alex Mercer')
-    .replace(/\{\.photo\}\}/g, 'alex_artwork.jpg')
+    .replace(/\{\{photo\}\}/g, 'alex_artwork.jpg')
     .replace(/\{\{creditName\}\}/g, 'Alex Mercer')
     .replace(/\{\{project\}\}/g, proj.title)
     .replace(/\{\{date\}\}/g, dl) : '(no template saved)';
