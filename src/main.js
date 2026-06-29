@@ -2877,8 +2877,6 @@ function renderOcBulkModalContent(retryMode = false) {
       ? proj.contributors.filter(c => c.email && c.preorderSent)
       : proj.contributors.filter(c => c.email && c.cmykSent && c.filesReceived && !c.preorderSent);
   }
-
-  const stageLabels = { selectionSent: 'Selection Notice', cmykSent: 'Request Files (CMYK)', preorderSent: 'Pre-order Launch' };
   
   const listHtml = eligible.length > 0
     ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
@@ -3049,11 +3047,11 @@ async function sendOcBulkTestEmail() {
   }
 }
 
-function onOcBulkStageChange(val) {
+function onOcBulkStageChange(_val) {
   renderOcBulkModalContent();
 }
 
-async function sendOcBulkEmails(retryFailedOnly = false) {
+async function sendOcBulkEmails(_retryFailedOnly = false) {
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
   
@@ -3138,7 +3136,6 @@ async function sendOcBulkEmails(retryFailedOnly = false) {
   _ocBulkSendingActive = false;
   
   // Finish summary
-  const cancelled = !_ocBulkSendingActive && (successCount + failCount) < selectedRecs.length;
   $('oc-bulk-progress-text').textContent = `Done · ✓ ${successCount} sent · ${failCount > 0 ? '✕ ' + failCount + ' failed' : '0 failed'}`;
   consoleEl.innerHTML += `<div style="color:#6b8cff;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Finished · ${successCount} succeeded · ${failCount} failed</div>`;
   consoleEl.scrollTop = consoleEl.scrollHeight;
@@ -19000,6 +18997,7 @@ Object.assign(window, {
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
   ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
+  openOcEditModal, saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
