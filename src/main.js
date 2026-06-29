@@ -18822,14 +18822,23 @@ async function deleteCampaign(id) {
   showToast('Campaign deleted');
 }
 
-async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
+async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = null) {
   const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
   const resendKey = localStorage.getItem('lm-resend-api-key') || '';
   const resendFrom = localStorage.getItem('lm-resend-from') || '';
 
   const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-  const baseUrl = isLocal ? 'http://localhost:8787' : '';
-  const htmlBody = parseMarkdownToHtml(body);
+  const baseUrl = (useResend || isLocal) ? 'http://localhost:8787' : '';
+
+  let finalHtmlBody = htmlBody;
+  let finalPlainBody = body;
+
+  if (body.includes('<') && !htmlBody) {
+    finalHtmlBody = body;
+    finalPlainBody = body.replace(/<[^>]*>/g, '');
+  } else if (!finalHtmlBody) {
+    finalHtmlBody = parseMarkdownToHtml(body);
+  }
 
   if (useResend && resendKey && resendFrom) {
     const res = await fetch(baseUrl + '/api/campaign/send', {
@@ -18840,7 +18849,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
         'X-Resend-Api-Key': resendKey,
         'X-Resend-From': resendFrom
       },
-      body: JSON.stringify({ to, subject, body, htmlBody, replyTo, simulated: false })
+      body: JSON.stringify({ to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, simulated: false })
     });
     if (!res.ok) {
       const errText = await res.text();
@@ -18856,16 +18865,15 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
     return await res.json();
   }
 
-  const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const forceMock = $('c-force-mock')?.checked;
-  if (forceMock || (isDev && !sheetsUrl)) {
+  if (forceMock || (isLocal && !sheetsUrl)) {
     const res = await fetch(baseUrl + '/api/campaign/send', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + (localStorage.getItem('lm-auth-token') || '')
       },
-      body: JSON.stringify({ to, subject, body, htmlBody, replyTo, simulated: true })
+      body: JSON.stringify({ to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, simulated: true })
     });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
@@ -18874,7 +18882,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo) {
     const payload = {
       version: 2,
       action: 'sendcampaignemail',
-      payload: { to, subject, body, htmlBody, replyTo }
+      payload: { to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo }
     };
     const res = await fetch(sheetsUrl, {
       method: 'POST',
