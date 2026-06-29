@@ -4461,7 +4461,7 @@ async function backfillShipping() {
     }
   }
 
-  for (const bookId of touchedBooks) saveState(bookId);
+  await Promise.all(Array.from(touchedBooks).map(bookId => saveState(bookId)));
   renderHist();
 
   if (updated > 0) {
