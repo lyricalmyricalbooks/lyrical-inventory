@@ -3677,7 +3677,7 @@ function renderOpenCall() {
           <input id="oc-resend-from" type="email" placeholder="e.g. hello@yourdomain.com" value="${escapeHtml(localStorage.getItem('lm-resend-from') || '')}" oninput="ocSaveResendConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
         </div>
         <div style="font-size:10px;color:var(--text3);line-height:1.3;">
-          Sends via local Node.js backend instead of Google Sheets. Key is saved locally in your browser.
+          Local development only: sends through the Node backend at localhost:8787. On the live site, configure Resend in Google Apps Script properties and keep your key off the browser.
         </div>
       </div>
     </div>`;
@@ -18828,7 +18828,8 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
   const resendFrom = localStorage.getItem('lm-resend-from') || '';
 
   const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-  const baseUrl = (useResend || isLocal) ? 'http://localhost:8787' : '';
+  const canUseLocalBackend = isLocal && (useResend || !sheetsUrl);
+  const baseUrl = canUseLocalBackend ? 'http://localhost:8787' : '';
 
   let finalHtmlBody = htmlBody;
   let finalPlainBody = body;
@@ -18840,7 +18841,11 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
     finalHtmlBody = parseMarkdownToHtml(body);
   }
 
-  if (useResend && resendKey && resendFrom) {
+  if (useResend && resendKey && resendFrom && !isLocal) {
+    console.warn('Browser-stored Resend keys can only be used with the local backend. Falling back to the connected Google Apps Script sender.');
+  }
+
+  if (useResend && resendKey && resendFrom && isLocal) {
     const res = await fetch(baseUrl + '/api/campaign/send', {
       method: 'POST',
       headers: {
@@ -18866,7 +18871,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
   }
 
   const forceMock = $('c-force-mock')?.checked;
-  if (forceMock || (isLocal && !sheetsUrl)) {
+  if (forceMock || (canUseLocalBackend && !sheetsUrl)) {
     const res = await fetch(baseUrl + '/api/campaign/send', {
       method: 'POST',
       headers: {
