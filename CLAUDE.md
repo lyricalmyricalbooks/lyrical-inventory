@@ -1,5 +1,20 @@
 # CLAUDE.md — lyrical-inventory
 
+## Quick Commands
+- **Dev (All):** `npm run dev:all` (Starts Vite frontend + Node.js backend)
+- **Dev (Frontend):** `npm run dev`
+- **Dev (Backend):** `npm run dev:backend` (Runs `backend/server.js`)
+- **Lint:** `npm run lint` (ESLint checks)
+- **Test:** `npm run test` (Vitest run once) or `npm run test:watch` (Vitest watch mode)
+- **Build:** `npm run build` (Vite build production bundle)
+
+## Core Entry Points
+- **Frontend UI:** [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html)
+- **Frontend Logic:** [src/main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js)
+- **Styles:** [src/style.css](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/style.css)
+- **Local Backend:** [backend/server.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/backend/server.js)
+- **Apps Script:** [apps-script/Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs)
+
 ## Your job after every change
 After completing any code enhancement, end your turn with a short "Next moves" list: 5 genuinely high-value suggestions for improving the app, ranked best-first.
 Each suggestion is one or two lines:
