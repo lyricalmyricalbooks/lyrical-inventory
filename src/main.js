@@ -17622,6 +17622,8 @@ function handleOcCsvFile(file) {
       const name = cols[0];
       const email = cols[1];
       const photo = cols[2] || '';
+      const creditName = cols[3] || '';
+      const notes = cols[4] || '';
       
       if (!email) continue;
       
@@ -17633,8 +17635,8 @@ function handleOcCsvFile(file) {
           email: email,
           photo: photo,
           createdAt: today(),
-          creditName: '',
-          notes: ''
+          creditName: creditName,
+          notes: notes
         });
         imported++;
       }
