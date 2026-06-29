@@ -18884,7 +18884,7 @@ async function deleteCampaign(id) {
   showToast('Campaign deleted');
 }
 
-async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = null) {
+async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = null, threadId = null) {
   const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
   const resendKey = localStorage.getItem('lm-resend-api-key') || '';
   const resendFrom = localStorage.getItem('lm-resend-from') || '';
@@ -18916,7 +18916,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
         'X-Resend-Api-Key': resendKey,
         'X-Resend-From': resendFrom
       },
-      body: JSON.stringify({ to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, simulated: false })
+      body: JSON.stringify({ to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, simulated: false, threadId })
     });
     if (!res.ok) {
       const errText = await res.text();
@@ -18940,7 +18940,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + (localStorage.getItem('lm-auth-token') || '')
       },
-      body: JSON.stringify({ to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, simulated: true })
+      body: JSON.stringify({ to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, simulated: true, threadId })
     });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
@@ -18949,7 +18949,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
     const payload = {
       version: 2,
       action: 'sendcampaignemail',
-      payload: { to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo }
+      payload: { to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, threadId }
     };
     const res = await fetch(sheetsUrl, {
       method: 'POST',
