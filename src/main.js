@@ -11172,7 +11172,7 @@ async function createSystemBackup(type = 'auto') {
   if (systemBackups.length > SYSTEM_BACKUP_LIMIT) {
     const dropped = systemBackups.slice(SYSTEM_BACKUP_LIMIT);
     systemBackups = systemBackups.slice(0, SYSTEM_BACKUP_LIMIT);
-    for (const d of dropped) { if (d.id) await window._fbDeleteBackupSnapshot(d.id); }
+    await Promise.all(dropped.filter(d => d.id).map(d => window._fbDeleteBackupSnapshot(d.id)));
   }
 
   await saveSystemBackups();
