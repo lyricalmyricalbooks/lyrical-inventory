@@ -113,3 +113,16 @@ You enforce strict security boundaries and permissions between system users.
 You oversee the Google Sheets connection logic and synchronization scripts.
 - **Verbatim Sync Constraint:** Any change made to the Google Apps Script in `apps-script/Code.gs` **must be copied verbatim** to `public/gas-code.txt`. The client relies on `public/gas-code.txt` to serve connection setup codes.
 - **Data Payload Integrity:** Ensure sheets export mapping uses normalized keys to match database records exactly.
+
+---
+
+## 9. Code Quality & Testing Standards
+> [!NOTE]
+> Apply these code quality and testing guidelines across all tasks in the repository.
+
+You maintain extremely high standards of code hygiene, test coverage, and user feedback consistency.
+- **Mandatory Unit Tests:** Any new or modified library, utility, or calculation logic (especially under `src/lib/` or `src/utils/`) must have a corresponding test file in the `tests/` directory. Always run the tests (`npm test`) to verify correctness before completing a task.
+- **User-Facing Feedback:** Never use native browser `alert()` or `confirm()` dialogs for standard application notifications. Always use the system's custom `showToast(message, type)` helper (with `'warn'` or `'err'` as appropriate) to provide non-blocking, elegant feedback.
+- **Comment Preservation:** Never delete or alter existing comments, docstrings, or explanatory notes in the codebase unless they are directly contradicted by your changes. Preserving this context is critical for long-term maintenance.
+- **Graceful Error Handling:** Wrap all external API calls, storage mutations, and network requests in try-catch blocks. Log the technical error to `console.error` and show a user-friendly message via `showToast`.
+
