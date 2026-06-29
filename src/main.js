@@ -5377,15 +5377,25 @@ async function localizeInboxReceiptFiles(item) {
     : (item.receipt && /^https?:/i.test(item.receipt) ? [item.receipt] : []);
   if (!urls.length) return '';
 
-  let firstLocal = '';
-  for (const url of urls) {
+  const downloadedFiles = await Promise.all(urls.map(async (url) => {
     try {
       const res = await fetch(url);
-      if (!res.ok) continue;
+      if (!res.ok) return null;
       const blob = await res.blob();
       // Filename from the Storage object path: …/o/receipts%2Femail-imports%2F<id>%2F<name>?…
       let name = decodeURIComponent((url.split('/o/')[1] || '').split('?')[0] || '').split('/').pop();
       name = (name || 'receipt').replace(/[^a-zA-Z0-9.\-_]/g, '') || 'receipt';
+      return { url, blob, name };
+    } catch (_) {
+      return null;
+    }
+  }));
+
+  let firstLocal = '';
+  for (const dl of downloadedFiles) {
+    if (!dl) continue;
+    const { url, blob, name } = dl;
+    try {
       const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
       const local = await saveReceiptToLocalFile(file, 'email-imports');
       if (local) {
