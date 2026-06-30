@@ -774,7 +774,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v13';
+const EXPECTED_SCRIPT_VERSION = 'v14';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -3602,12 +3602,19 @@ function renderOpenCall() {
       : '<span>no email</span>';
 
     let gmailLinksHtml = '';
-    if (c.email && (c.creditThreadId || c.filesThreadId)) {
+    if (c.email && (c.gmailThreadId || c.creditThreadId || c.filesThreadId)) {
       const links = [];
-      if (c.creditThreadId) {
+      // Canonical thread: the conversation every stage email replies into
+      // (captured at stage-1 send, or imported from the submission email).
+      if (c.gmailThreadId) {
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.gmailThreadId}" target="_blank" title="View this contributor's email thread in Gmail">✉ View Thread</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.gmailThreadId}', 'Email Thread')" title="Preview email thread inline">👁 Preview</span>`);
+      }
+      // Reply threads, shown only when they're a different conversation than the
+      // canonical one (after promotion they usually coincide).
+      if (c.creditThreadId && c.creditThreadId !== c.gmailThreadId) {
         links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" title="View credit name reply in Gmail">✉ View Credit Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" title="Preview email thread inline">👁 Preview</span>`);
       }
-      if (c.filesThreadId) {
+      if (c.filesThreadId && c.filesThreadId !== c.gmailThreadId) {
         links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" title="View files reply in Gmail">✉ View Files Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" title="Preview email thread inline">👁 Preview</span>`);
       }
       gmailLinksHtml = `<span class="oc-gmail-links"> · ${links.join(' / ')}</span>`;
