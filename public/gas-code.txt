@@ -46,6 +46,11 @@
  *      notice from mailer-daemon/postmaster naming a contributor flags them
  *      undeliverable, so "bounced" is distinguishable from "no reply yet".
  *      Bump flags v14-and-older as outdated so the publisher redeploys.
+ *  14. v16: sendcampaignemail can send as a verified Gmail "send as" alias
+ *      (fromAlias/fromName) for valid SPF/DKIM on a custom domain while still
+ *      threading. New getmailsenderinfo action returns the available aliases
+ *      and the remaining daily send quota (powers the bulk-send quota guard).
+ *      Bump flags v15-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -91,9 +96,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v15',
-    scriptVersion: 'v15',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true },
+    service: 'lyrical-sheets-webhook-v16',
+    scriptVersion: 'v16',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -512,11 +517,27 @@ function doPost(e) {
         const threadId = clean_(d.threadId);
         const captureThread = d.captureThread === true || d.captureThread === 'true';
 
+        // Optional custom "send as" identity. fromAlias is only honored when it
+        // is a verified Gmail alias on this account (Gmail Settings → Accounts →
+        // "Send mail as") — otherwise Gmail rejects it, so we fall back to the
+        // default sender silently. Using your own domain alias keeps SPF/DKIM
+        // valid (fewer bounces / spam) while still sending through Gmail, so
+        // replies keep threading. fromName sets the display name.
+        const fromName = clean_(d.fromName);
+        let fromAlias = clean_(d.fromAlias);
+        if (fromAlias) {
+          let aliases = [];
+          try { aliases = GmailApp.getAliases() || []; } catch (_) {}
+          if (aliases.indexOf(fromAlias) === -1) fromAlias = '';
+        }
+
         if (threadId) {
           const thread = GmailApp.getThreadById(threadId);
           if (thread) {
             const opts = { htmlBody: htmlBody };
             if (replyTo) opts.replyTo = replyTo;
+            if (fromAlias) opts.from = fromAlias;
+            if (fromName) opts.name = fromName;
             thread.reply(body, opts);
             return jsonOut_({ ok: true, emailed: true, via: 'gmail-thread-reply', threadId: threadId });
           }
@@ -525,13 +546,15 @@ function doPost(e) {
         // No existing thread to reply into. When the caller asks us to remember
         // the new thread (e.g. an Open Call stage-1 selection email, so every
         // later stage can reply into this same thread), send via GmailApp so we
-        // can capture and return the created thread's id. This sends from the
-        // script owner's Gmail — required, since transactional providers via
-        // sendMail_ create no Gmail thread we could reply into later.
+        // can capture and return the created thread's id. This sends through
+        // Gmail (optionally as a verified alias) — required, since transactional
+        // providers via sendMail_ create no Gmail thread we could reply into.
         if (captureThread) {
           const draftOpts = {};
           if (htmlBody) draftOpts.htmlBody = htmlBody;
           if (replyTo) draftOpts.replyTo = replyTo;
+          if (fromAlias) draftOpts.from = fromAlias;
+          if (fromName) draftOpts.name = fromName;
           const sentMsg = GmailApp.createDraft(to, subject, body, draftOpts).send();
           const newThreadId = sentMsg.getThread().getId();
           return jsonOut_({ ok: true, emailed: true, via: 'gmail-new-thread', threadId: newThreadId });
@@ -545,6 +568,17 @@ function doPost(e) {
       } catch (err) {
         return jsonOut_({ error: 'mail failed: ' + String(err) });
       }
+    }
+
+    // ── Mail sender info: verified Gmail "send as" aliases + remaining daily
+    // send quota. Powers the Open Call sender picker (custom-domain alias for
+    // valid SPF/DKIM) and the bulk-send quota guard. ──
+    if (action === 'getmailsenderinfo') {
+      let primary = '', aliases = [], remainingQuota = null;
+      try { primary = Session.getEffectiveUser().getEmail() || ''; } catch (_) {}
+      try { aliases = GmailApp.getAliases() || []; } catch (_) {}
+      try { remainingQuota = MailApp.getRemainingDailyQuota(); } catch (_) {}
+      return jsonOut_({ ok: true, primary: primary, aliases: aliases, remainingQuota: remainingQuota });
     }
 
     // ── Scan Gmail for Open Call replies ──

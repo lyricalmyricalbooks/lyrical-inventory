@@ -774,7 +774,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v15';
+const EXPECTED_SCRIPT_VERSION = 'v16';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -3129,6 +3129,19 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
       const more = issues.length > 10 ? `\n…and ${issues.length - 10} more` : '';
       msg += `\n\n⚠ ${issues.length} recipient${issues.length === 1 ? '' : 's'} ${issues.length === 1 ? 'has' : 'have'} blank template fields — those spots will be empty:\n${lines}${more}`;
     }
+
+    // Gmail enforces a daily send cap; if this batch exceeds what's left, the
+    // overflow would silently fail mid-run. Warn up front. Best-effort — if the
+    // quota can't be fetched (offline), don't block the send.
+    if (sheetsUrl) {
+      try {
+        const info = await ocFetchMailSenderInfo();
+        const remaining = info.remainingQuota;
+        if (typeof remaining === 'number' && n > remaining) {
+          msg += `\n\n⚠ Gmail can send only ${remaining} more email${remaining === 1 ? '' : 's'} today — the last ${n - remaining} would fail. Send the rest tomorrow.`;
+        }
+      } catch (_) { /* quota unavailable — proceed without the guard */ }
+    }
     const proceed = await confirmDialog(msg, {
       title: issues.length ? 'Confirm send — blank fields' : 'Confirm send',
       okLabel: `Send ${n} email${n === 1 ? '' : 's'}`,
@@ -3920,10 +3933,33 @@ function renderOpenCall() {
       </div>
     </div>`;
 
+  const ocFromAlias = localStorage.getItem('lm-oc-fromalias') || '';
+  const ocFromName = localStorage.getItem('lm-oc-fromname') || '';
+  let ocAliasCache = [];
+  try { ocAliasCache = JSON.parse(localStorage.getItem('lm-oc-alias-cache') || '[]'); } catch (_) { ocAliasCache = []; }
+  const senderConfigCard = `
+    <div class="card" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);">✉ Open Call Sender</div>
+      <div>
+        <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Send emails as</label>
+        <input id="oc-from-alias" list="oc-alias-options" placeholder="default: your Gmail" value="${escapeHtml(ocFromAlias)}" oninput="ocSaveSenderConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        <datalist id="oc-alias-options">${ocAliasCache.map(a => `<option value="${escapeHtml(a)}"></option>`).join('')}</datalist>
+      </div>
+      <div>
+        <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Display name (optional)</label>
+        <input id="oc-from-name" placeholder="e.g. Lyricalmyrical Books" value="${escapeHtml(ocFromName)}" oninput="ocSaveSenderConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+      </div>
+      <button class="btn sm" onclick="ocLoadSenderAliases()" ${sheetsUrl ? '' : 'disabled'}>↻ Load my Gmail aliases</button>
+      <div style="font-size:10px;color:var(--text3);line-height:1.3;">
+        Must be a verified Gmail “Send mail as” alias (Gmail → Settings → Accounts). Sending from your own domain keeps SPF/DKIM valid — fewer emails bounce or land in spam — and replies still thread. Leave blank to send from your Gmail.
+      </div>
+    </div>`;
+
   const sidebarHtml = `
     <div class="oc-sidebar">
       ${projectSwitcher}
       ${summary}
+      ${senderConfigCard}
       ${resendConfigCard}
       ${addForm}
     </div>`;
@@ -3998,6 +4034,50 @@ function ocToggleResend(checked) {
 function ocSaveResendConfig() {
   localStorage.setItem('lm-resend-api-key', $('oc-resend-key')?.value?.trim() || '');
   localStorage.setItem('lm-resend-from', $('oc-resend-from')?.value?.trim() || '');
+}
+
+// Open Call sender ("send as") config — a verified Gmail alias + display name,
+// applied to every stage email for valid SPF/DKIM on a custom domain.
+function ocSaveSenderConfig() {
+  localStorage.setItem('lm-oc-fromalias', $('oc-from-alias')?.value?.trim() || '');
+  localStorage.setItem('lm-oc-fromname', $('oc-from-name')?.value?.trim() || '');
+}
+
+// Fetch the account's verified "send as" aliases + remaining daily send quota.
+// Shared by the sender picker (#9) and the bulk-send quota guard (#10).
+async function ocFetchMailSenderInfo() {
+  if (!sheetsUrl) throw new Error('Google Sheet not connected');
+  const res = await fetch(sheetsUrl, {
+    method: 'POST', mode: 'cors',
+    body: JSON.stringify({ version: 2, action: 'getmailsenderinfo', payload: {} })
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+async function ocLoadSenderAliases() {
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first', 'warn'); return; }
+  const btn = $('oc-from-alias') ? document.querySelector('button[onclick="ocLoadSenderAliases()"]') : null;
+  const prev = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Loading…'; }
+  try {
+    const info = await ocFetchMailSenderInfo();
+    const aliases = Array.isArray(info.aliases) ? info.aliases : [];
+    localStorage.setItem('lm-oc-alias-cache', JSON.stringify(aliases));
+    const dl = $('oc-alias-options');
+    if (dl) dl.innerHTML = aliases.map(a => `<option value="${escapeHtml(a)}"></option>`).join('');
+    if (aliases.length) {
+      showToast(`✓ Loaded ${aliases.length} alias${aliases.length === 1 ? '' : 'es'}. Default sender: ${info.primary || 'your Gmail'}`);
+    } else {
+      showToast(`No verified "Send as" aliases found — emails send from ${info.primary || 'your Gmail'}`);
+    }
+  } catch (e) {
+    showToast(`Could not load aliases: ${e.message}`, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+  }
 }
 
 function handleOcPhotoKeydown(e) {
@@ -19360,6 +19440,12 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
   const resendKey = localStorage.getItem('lm-resend-api-key') || '';
   const resendFrom = localStorage.getItem('lm-resend-from') || '';
 
+  // Configured "send as" identity (a verified Gmail alias + display name) for
+  // valid SPF/DKIM on a custom domain. Applied server-side only when the alias
+  // is actually verified, so an empty/stale value is harmless.
+  const fromAlias = localStorage.getItem('lm-oc-fromalias') || '';
+  const fromName = localStorage.getItem('lm-oc-fromname') || '';
+
   const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // Replying into — or capturing — a Gmail thread only works through the Apps
   // Script Gmail webhook; a transactional provider (Resend) can't touch the
@@ -19424,7 +19510,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
     const payload = {
       version: 2,
       action: 'sendcampaignemail',
-      payload: { to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, threadId, captureThread }
+      payload: { to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, threadId, captureThread, fromAlias, fromName }
     };
     const res = await fetch(sheetsUrl, {
       method: 'POST',
@@ -19814,7 +19900,7 @@ Object.assign(window, {
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
-  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
+  ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, ocSaveSenderConfig, ocLoadSenderAliases, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
   openOcBulkRemoveModal, closeOcBulkRemoveModal, ocBulkRemoveSelectAll, ocBulkRemoveUpdateCount, ocBulkRemoveFilter, executeOcBulkRemove,
   openOcEditModal, saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview, ocClearUndeliverable,
   ocToggleColorPalette, ocApplyColor,
