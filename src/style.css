@@ -3236,6 +3236,270 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   color: var(--text4);
 }
 
+/* ───────────────────────────────────────────────
+   Section Hero — Playfair title + at-a-glance stats
+   ─────────────────────────────────────────────── */
+.oc-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+  padding: 4px 2px 16px;
+  border-bottom: 1px solid var(--cream3);
+  animation: ocFadeIn 0.3s ease both;
+}
+.oc-hero-text {
+  min-width: 0;
+}
+.oc-hero-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.oc-hero-title .header-mark {
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+}
+.oc-hero-subtitle {
+  font-size: 13px;
+  color: var(--text3);
+  margin-top: 7px;
+  line-height: 1.5;
+  max-width: 52ch;
+}
+.oc-hero-stats {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.oc-hero-stat {
+  text-align: center;
+  background: #fff;
+  border: 1px solid var(--cream3);
+  border-radius: var(--r2);
+  padding: 10px 16px;
+  min-width: 74px;
+  box-shadow: 0 2px 10px rgba(14, 12, 10, 0.03);
+}
+.oc-hero-stat-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1;
+}
+.oc-hero-stat-label {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+  font-weight: 700;
+  margin-top: 5px;
+}
+
+/* ───────────────────────────────────────────────
+   Contributor Card v3 — avatar, clean header, tidy
+   primary CTA vs. quiet utility action cluster
+   ─────────────────────────────────────────────── */
+.oc-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.oc-card-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 240px;
+}
+.oc-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--gold2), var(--gold));
+  color: var(--ink);
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 10px rgba(200, 145, 58, 0.28), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s;
+  user-select: none;
+}
+.oc-contributor-card:hover .oc-avatar {
+  transform: scale(1.05);
+  box-shadow: 0 5px 14px rgba(200, 145, 58, 0.36), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+}
+.oc-card-meta {
+  min-width: 0;
+  flex: 1;
+}
+.oc-credit-index {
+  color: var(--gold2);
+  font-size: 11px;
+  font-weight: 600;
+}
+.oc-email-row {
+  font-size: 12.5px;
+  color: var(--text2);
+  margin-top: 4px;
+  word-break: break-word;
+  line-height: 1.5;
+}
+.oc-gmail-links {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.oc-gmail-links a {
+  font-size: 11px;
+  color: var(--gold2);
+  text-decoration: none;
+  font-weight: 600;
+}
+.oc-gmail-links a:hover { text-decoration: underline; }
+.oc-thread-preview {
+  font-size: 11px;
+  color: var(--gold);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+}
+.oc-thread-preview:hover { color: var(--gold2); }
+
+/* Action area: prominent primary CTA + demoted utility cluster */
+.oc-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.oc-card-primary-cta .btn {
+  box-shadow: 0 3px 10px rgba(200, 145, 58, 0.22);
+}
+.oc-util-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 3px;
+  background: var(--cream2);
+  border: 1px solid var(--cream3);
+  border-radius: 100px;
+}
+/* Quieter icon-style utility buttons grouped in a pill rail */
+.oc-layout .oc-util-actions .btn {
+  padding: 0 10px;
+  height: 30px;
+  min-width: 30px;
+  font-size: 11px;
+  border-radius: 100px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text3);
+  letter-spacing: 0;
+  box-shadow: none;
+}
+.oc-layout .oc-util-actions .btn:hover {
+  background: #fff;
+  border-color: var(--cream4);
+  color: var(--gold);
+  transform: none;
+  box-shadow: 0 1px 4px rgba(14, 12, 10, 0.06);
+}
+.oc-layout .oc-util-actions .btn.gold {
+  background: var(--gold-bg);
+  border-color: var(--gold-line);
+  color: var(--gold);
+}
+.oc-layout .oc-util-actions .btn.gold:hover {
+  background: rgba(200, 145, 58, 0.18);
+  color: var(--gold2);
+}
+.oc-layout .oc-util-actions .btn.danger-btn {
+  color: var(--red);
+  background: transparent;
+}
+.oc-layout .oc-util-actions .btn.danger-btn:hover {
+  background: var(--red-bg);
+  border-color: rgba(149, 32, 32, 0.25);
+  color: var(--red);
+}
+
+/* Mailing-list status badges, aligned on the name row */
+.oc-mail-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.oc-mail-badge.on {
+  background: rgba(42, 99, 72, 0.1);
+  color: var(--green);
+  border: 1px solid rgba(42, 99, 72, 0.2);
+}
+.oc-mail-badge.off {
+  background: var(--cream2);
+  color: var(--text3);
+  border: 1px solid var(--cream4);
+}
+.oc-mail-badge.sup {
+  background: rgba(149, 32, 32, 0.08);
+  color: var(--red);
+  border: 1px solid rgba(149, 32, 32, 0.18);
+}
+
+/* Status strip wrapping the stepper + next-action banner */
+.oc-status-strip {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cream3);
+}
+.oc-status-strip .oc-step-container {
+  margin: 6px 0 0;
+}
+
+/* Notes block */
+.oc-note {
+  margin-top: 12px;
+  padding: 9px 12px;
+  background: var(--gold-bg);
+  border-left: 3px solid var(--gold);
+  border-radius: 0 6px 6px 0;
+  font-size: 11.5px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+.oc-note strong { color: var(--gold2); }
+
+/* Add-form photo chip row (shares chip styling with cards) */
+.oc-addform-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .oc-layout {
@@ -3247,11 +3511,27 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .oc-stage-counts {
     gap: 4px;
   }
+  .oc-hero-title { font-size: 22px; }
+  .oc-hero-stats { width: 100%; }
+  .oc-hero-stat { flex: 1; }
 }
 @media (max-width: 560px) {
   .oc-contributor-card {
-    padding: 14px;
+    padding: 16px 14px;
   }
+  /* Stack the action cluster below identity, give touch-sized targets */
+  .oc-card-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .oc-card-primary-cta { width: 100%; }
+  .oc-card-primary-cta .btn { width: 100%; }
+  .oc-util-actions { width: 100%; justify-content: space-between; }
+  .oc-layout .oc-util-actions .btn { height: 38px; min-width: 38px; flex: 1; }
+  .oc-hero-title { font-size: 20px; }
+  /* 44px touch targets for primary controls on phones */
+  .oc-layout .btn { min-height: 40px; }
+  .oc-layout .btn.sm { min-height: 36px; }
 }
 
 /* ==========================================
