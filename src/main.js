@@ -774,7 +774,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v12';
+const EXPECTED_SCRIPT_VERSION = 'v13';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -2824,6 +2824,18 @@ let _ocBulkSelectedRecipients = [];
 let _ocBulkSendingActive = false;
 let _ocBulkFailedIds = []; // ids of contributors that failed in the last send
 
+// The Gmail thread a stage email for `c` should reply into, or null to start a
+// new one. `gmailThreadId` (captured when the first email went out, or imported
+// from the artist's submission) is the canonical conversation; the per-reply
+// threads are kept as fallbacks for older contributors that predate capture.
+function ocThreadForStage(c, stageKey) {
+  return c.gmailThreadId
+    || (stageKey === 'cmykSent' ? c.creditThreadId
+      : stageKey === 'preorderSent' ? c.filesThreadId
+      : null)
+    || null;
+}
+
 function openOcBulkModal() {
   let modal = $('oc-bulk-modal');
   if (!modal) {
@@ -3129,8 +3141,13 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
         </div>`;
         successCount++;
       } else {
-        await sendSingleEmailViaBackend(c.email, subject, body, replyTo);
+        const threadId = ocThreadForStage(c, stage);
+        const resp = await sendSingleEmailViaBackend(c.email, subject, body, replyTo, null, threadId, !threadId);
         c[stage] = true;
+        // Remember the thread this send used (a captured new one for stage 1, or
+        // the existing conversation) so the next stage replies into the same place.
+        const usedThreadId = (resp && resp.threadId) ? resp.threadId : threadId;
+        if (usedThreadId) c.gmailThreadId = usedThreadId;
         successCount++;
         consoleEl.innerHTML += `<div style="color:#a9ffaf;">✓ [${i+1}/${selectedRecs.length}] ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})</div>`;
       }
@@ -3310,6 +3327,7 @@ function renderOpenCall() {
           <option value="60">Last 60 days</option>
           <option value="120" selected>Last 120 days</option>
         </select>
+        <button class="btn sm gold" id="oc-import-gmail-btn" onclick="openOcImportGmailModal()" title="Find artists' submission emails in Gmail and import them as contributors — capturing their submission thread so every stage email replies into it">📨 Import from Gmail</button>
         <button class="btn sm gold" id="oc-scan-btn" onclick="ocScanReplies()" ${total ? '' : 'disabled'}>📥 Scan Gmail Replies</button>
         <button class="btn sm" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'}>Export CSV</button>
         <button class="btn sm" onclick="ocCopyEmails()" ${total ? '' : 'disabled'}>Copy emails</button>
@@ -17987,6 +18005,9 @@ async function ocPreviewModalSend(cId, stageKey) {
 
   const replyThread = $('oc-preview-reply-thread')?.checked || false;
   const threadId = replyThread ? ($('oc-preview-thread-id')?.value || '').trim() : null;
+  // Not replying into an existing thread = we're starting a new one; ask the
+  // backend to remember it so every later stage replies into the same thread.
+  const captureThread = !threadId;
 
   const sendBtn = $('oc-preview-send-btn');
   if (sendBtn) {
@@ -17995,12 +18016,12 @@ async function ocPreviewModalSend(cId, stageKey) {
   }
 
   try {
-    await sendSingleEmailViaBackend(c.email, subject, plainBody, replyTo, htmlBody, threadId);
+    const resp = await sendSingleEmailViaBackend(c.email, subject, plainBody, replyTo, htmlBody, threadId, captureThread);
     c[stageKey] = true;
-    if (threadId) {
-      if (stageKey === 'cmykSent') c.creditThreadId = threadId;
-      if (stageKey === 'preorderSent') c.filesThreadId = threadId;
-    }
+    // Promote whichever thread this email used to the contributor's canonical
+    // thread, so every subsequent stage email lands in the same conversation.
+    const usedThreadId = (resp && resp.threadId) ? resp.threadId : threadId;
+    if (usedThreadId) c.gmailThreadId = usedThreadId;
     await _persistOpenCalls();
     closeOcEmailPreviewModal();
     renderOpenCall();
@@ -18155,6 +18176,171 @@ async function ocScanReplies(options = {}) {
       btn.disabled = false;
       btn.textContent = prevText;
     }
+  }
+}
+
+// ── Open Call: import submissions from Gmail (intake) ─────────────────────
+// Finds the artists' original "here are my photos" emails and turns each into a
+// contributor — name, email, photo filenames, and the submission thread id, so
+// every later stage email replies into that same thread.
+let _ocSubmissionResults = [];
+
+function openOcImportGmailModal() {
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first to import from Gmail', 'warn'); return; }
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) { showToast('No active open call project', 'warn'); return; }
+
+  _ocSubmissionResults = [];
+  let modal = $('oc-import-gmail-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'oc-import-gmail-modal';
+    modal.style.position = 'fixed';
+    modal.style.inset = '0';
+    modal.style.background = 'rgba(0,0,0,0.75)';
+    modal.style.backdropFilter = 'blur(8px)';
+    modal.style.display = 'none';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = '10000';
+    modal.onclick = closeOcImportGmailModal;
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  renderOcImportGmailModal();
+}
+
+function closeOcImportGmailModal() {
+  const modal = $('oc-import-gmail-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderOcImportGmailModal() {
+  const modal = $('oc-import-gmail-modal');
+  if (!modal) return;
+  const lastQuery = localStorage.getItem('lm-oc-submission-query') || 'subject:(open call)';
+  const lastDays = localStorage.getItem('lm-oc-submission-days') || '120';
+
+  const resultsHtml = _ocSubmissionResults.length > 0
+    ? `<div style="display:flex;gap:6px;margin:10px 0 6px;">
+         <button type="button" class="btn sm" onclick="ocImportGmailSelectAll(true)">Select All</button>
+         <button type="button" class="btn sm" onclick="ocImportGmailSelectAll(false)">Deselect All</button>
+         <span style="font-size:11px;color:var(--text3);margin-left:auto;align-self:center;">${_ocSubmissionResults.length} found</span>
+       </div>` +
+      _ocSubmissionResults.map((s, idx) => {
+        const n = (s.photos || []).length;
+        const list = n ? ': ' + escapeHtml(s.photos.slice(0, 5).join(', ')) + (n > 5 ? ' …' : '') : '';
+        return `
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:6px 4px;border-bottom:1px solid var(--border);">
+          <input type="checkbox" class="oc-sub-check" value="${idx}" checked style="margin-top:2px;cursor:pointer;">
+          <span style="flex:1;">
+            <strong>${escapeHtml(s.name || '—')}</strong> <span style="color:var(--text3);">&lt;${escapeHtml(s.email)}&gt;</span><br>
+            <span style="color:var(--text3);font-size:11px;">${n} attachment${n === 1 ? '' : 's'}${list}</span>
+          </span>
+        </label>`;
+      }).join('')
+    : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">Run a search to find submission emails. New contributors are matched by sender; anyone already in this project is skipped.</div>';
+
+  modal.innerHTML = `
+    <div class="card" style="width:94%;max-width:620px;max-height:90vh;overflow-y:auto;padding:24px;position:relative;" onclick="event.stopPropagation()">
+      <button onclick="closeOcImportGmailModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;">✕</button>
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:4px;">📨 Import Submissions from Gmail</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Find the artists' original submission emails and add them as contributors — each one's thread is captured so every stage email replies into it.</div>
+
+      <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;display:block;margin-bottom:4px;">Gmail search</label>
+      <input id="oc-sub-query" value="${escapeHtml(lastQuery)}" placeholder='e.g. label:open-call  or  subject:"open call submission"' style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;padding:9px 11px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+        <select id="oc-sub-days" style="font-size:12px;">
+          <option value="30" ${lastDays === '30' ? 'selected' : ''}>Last 30 days</option>
+          <option value="60" ${lastDays === '60' ? 'selected' : ''}>Last 60 days</option>
+          <option value="120" ${lastDays === '120' ? 'selected' : ''}>Last 120 days</option>
+          <option value="365" ${lastDays === '365' ? 'selected' : ''}>Last 12 months</option>
+        </select>
+        <button class="btn sm gold" id="oc-sub-search-btn" onclick="ocImportGmailSearch()">🔍 Search Gmail</button>
+      </div>
+
+      <div id="oc-sub-results" style="margin-top:12px;max-height:38vh;overflow-y:auto;">${resultsHtml}</div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
+        <button class="btn" onclick="closeOcImportGmailModal()">Close</button>
+        <button class="btn gold" id="oc-sub-import-btn" onclick="ocImportGmailConfirm()" ${_ocSubmissionResults.length ? '' : 'disabled'}>Import Selected</button>
+      </div>
+    </div>`;
+}
+
+async function ocImportGmailSearch() {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const query = ($('oc-sub-query')?.value || '').trim();
+  if (!query) { showToast('Enter a Gmail search first', 'warn'); return; }
+  const daysBack = parseInt($('oc-sub-days')?.value || '120', 10);
+  localStorage.setItem('lm-oc-submission-query', query);
+  localStorage.setItem('lm-oc-submission-days', String(daysBack));
+
+  const btn = $('oc-sub-search-btn');
+  const prev = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Searching…'; }
+  try {
+    const payload = {
+      version: 2,
+      action: 'scanopencallsubmissions',
+      payload: {
+        query,
+        daysBack,
+        existingEmails: proj.contributors.map(c => c.email).filter(Boolean)
+      }
+    };
+    const res = await fetch(sheetsUrl, { method: 'POST', mode: 'cors', body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    _ocSubmissionResults = data.submissions || [];
+    renderOcImportGmailModal();
+    if (_ocSubmissionResults.length === 0) showToast('No new submissions matched that search');
+  } catch (e) {
+    showToast(`⚠ Search failed: ${e.message}`, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+  }
+}
+
+function ocImportGmailSelectAll(checked) {
+  document.querySelectorAll('.oc-sub-check').forEach(cb => { cb.checked = checked; });
+}
+
+async function ocImportGmailConfirm() {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const picked = Array.from(document.querySelectorAll('.oc-sub-check:checked'))
+    .map(cb => _ocSubmissionResults[parseInt(cb.value, 10)])
+    .filter(Boolean);
+  if (picked.length === 0) { showToast('No submissions selected', 'warn'); return; }
+
+  const existing = new Set(proj.contributors.map(c => (c.email || '').toLowerCase()).filter(Boolean));
+  let added = 0;
+  picked.forEach(s => {
+    const key = (s.email || '').toLowerCase();
+    if (!key || existing.has(key)) return;   // never duplicate an existing contributor
+    existing.add(key);
+    const c = newContributor({
+      name: s.name || '',
+      email: s.email || '',
+      photos: Array.isArray(s.photos) ? s.photos : [],
+      createdAt: today(),
+      notes: s.subject ? ('Imported from Gmail — ' + s.subject) : 'Imported from Gmail'
+    });
+    if (s.threadId) c.gmailThreadId = s.threadId;   // canonical thread for every stage
+    proj.contributors.push(c);
+    added++;
+  });
+
+  await _persistOpenCalls();
+  closeOcImportGmailModal();
+  renderOpenCall();
+  if (added > 0) {
+    await confirmDialog(`Imported ${added} submission${added === 1 ? '' : 's'} from Gmail.\n\nEach contributor's submission thread was captured, so every stage email will reply into that same conversation.`, { title: 'Import complete', okLabel: 'Great', cancelLabel: 'Close' });
+  } else {
+    showToast('Nothing imported — those contributors already exist');
   }
 }
 
@@ -18884,12 +19070,16 @@ async function deleteCampaign(id) {
   showToast('Campaign deleted');
 }
 
-async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = null, threadId = null) {
+async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = null, threadId = null, captureThread = false) {
   const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
   const resendKey = localStorage.getItem('lm-resend-api-key') || '';
   const resendFrom = localStorage.getItem('lm-resend-from') || '';
 
   const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  // Replying into — or capturing — a Gmail thread only works through the Apps
+  // Script Gmail webhook; a transactional provider (Resend) can't touch the
+  // owner's Gmail threads. So when threading is involved, never route via Resend.
+  const needsGmailThread = !!threadId || captureThread;
   const canUseLocalBackend = isLocal && (useResend || !sheetsUrl);
   const baseUrl = canUseLocalBackend ? 'http://localhost:8787' : '';
 
@@ -18907,7 +19097,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
     console.warn('Browser-stored Resend keys can only be used with the local backend. Falling back to the connected Google Apps Script sender.');
   }
 
-  if (useResend && resendKey && resendFrom && isLocal) {
+  if (useResend && resendKey && resendFrom && isLocal && !needsGmailThread) {
     const res = await fetch(baseUrl + '/api/campaign/send', {
       method: 'POST',
       headers: {
@@ -18940,7 +19130,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + (localStorage.getItem('lm-auth-token') || '')
       },
-      body: JSON.stringify({ to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, simulated: true, threadId })
+      body: JSON.stringify({ to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, simulated: true, threadId, captureThread })
     });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
@@ -18949,7 +19139,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
     const payload = {
       version: 2,
       action: 'sendcampaignemail',
-      payload: { to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, threadId }
+      payload: { to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, threadId, captureThread }
     };
     const res = await fetch(sheetsUrl, {
       method: 'POST',
@@ -19343,6 +19533,7 @@ Object.assign(window, {
   openOcEditModal, saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview,
   ocToggleColorPalette, ocApplyColor,
   openOcEmailPreviewModal, closeOcEmailPreviewModal, ocPreviewModalSend, ocPreviewModalEditInWizard,
+  openOcImportGmailModal, closeOcImportGmailModal, ocImportGmailSearch, ocImportGmailSelectAll, ocImportGmailConfirm,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
