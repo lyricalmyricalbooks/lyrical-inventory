@@ -31,6 +31,13 @@
  *     outdated so the publisher redeploys to gain the column.
  *  9. v11: Gmail-style rich text Template Designer support.
  *  10. v12: Adds threadId support to reply to existing email threads instead of starting new ones.
+ *  11. v13: Open Call thread capture + intake. sendcampaignemail can now send a
+ *      fresh email via GmailApp and return the new thread's id (captureThread),
+ *      so stage-1 selection emails are remembered and every later stage replies
+ *      into the same thread. Adds 'scanopencallsubmissions' to turn artists'
+ *      original submission emails into contributors (name, email, photo
+ *      filenames, and the submission thread id). Bump flags v12-and-older as
+ *      outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -76,9 +83,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v12',
-    scriptVersion: 'v12',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true },
+    service: 'lyrical-sheets-webhook-v13',
+    scriptVersion: 'v13',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -495,6 +502,7 @@ function doPost(e) {
         const htmlBody = cleanBody_(d.htmlBody) || '';
         const replyTo = clean_(d.replyTo);
         const threadId = clean_(d.threadId);
+        const captureThread = d.captureThread === true || d.captureThread === 'true';
 
         if (threadId) {
           const thread = GmailApp.getThreadById(threadId);
@@ -504,6 +512,21 @@ function doPost(e) {
             thread.reply(body, opts);
             return jsonOut_({ ok: true, emailed: true, via: 'gmail-thread-reply', threadId: threadId });
           }
+        }
+
+        // No existing thread to reply into. When the caller asks us to remember
+        // the new thread (e.g. an Open Call stage-1 selection email, so every
+        // later stage can reply into this same thread), send via GmailApp so we
+        // can capture and return the created thread's id. This sends from the
+        // script owner's Gmail — required, since transactional providers via
+        // sendMail_ create no Gmail thread we could reply into later.
+        if (captureThread) {
+          const draftOpts = {};
+          if (htmlBody) draftOpts.htmlBody = htmlBody;
+          if (replyTo) draftOpts.replyTo = replyTo;
+          const sentMsg = GmailApp.createDraft(to, subject, body, draftOpts).send();
+          const newThreadId = sentMsg.getThread().getId();
+          return jsonOut_({ ok: true, emailed: true, via: 'gmail-new-thread', threadId: newThreadId });
         }
 
         const opts = { to: to, subject: subject, body: body };
@@ -570,8 +593,85 @@ function doPost(e) {
           updates.push(update);
         }
       }
-      
+
       return jsonOut_({ ok: true, updates: updates });
+    }
+
+    // ── Scan Gmail for Open Call SUBMISSION emails (intake) ──
+    // Turns the artists' original "here are my 5 photos" emails into ready-made
+    // contributors: sender name + email, the photo attachment filenames, and —
+    // crucially — the submission thread's id, so every later stage email replies
+    // into that same thread. The client supplies a Gmail search `query` it
+    // controls (a label, subject filter, or recipient alias); the scan is always
+    // bounded by `daysBack` so it can never sweep the whole mailbox.
+    if (action === 'scanopencallsubmissions') {
+      const d = payload.payload || {};
+      const query = String(d.query || '').trim();
+      if (!query) return jsonOut_({ error: 'A Gmail search query is required (e.g. label:open-call or a subject filter).' });
+      const daysBack = parseInt(d.daysBack || 120, 10);
+      const maxThreads = Math.min(parseInt(d.maxThreads || 50, 10), 200);
+
+      const existing = {};
+      (d.existingEmails || []).forEach(em => {
+        const k = String(em || '').toLowerCase().trim();
+        if (k) existing[k] = true;
+      });
+
+      let ownerEmail = '';
+      try { ownerEmail = String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (_) {}
+
+      let threads = [];
+      try {
+        threads = GmailApp.search(query + ' newer_than:' + daysBack + 'd', 0, maxThreads);
+      } catch (err) {
+        return jsonOut_({ error: 'Gmail search failed: ' + String(err) });
+      }
+
+      const submissions = [];
+      const seen = {};
+
+      for (let i = 0; i < threads.length; i++) {
+        let name = '', email = '', subject = '', threadId = '';
+        const photos = [];
+        try {
+          const msgs = threads[i].getMessages();
+          if (!msgs.length) continue;
+          threadId = threads[i].getId();
+          // The artist's original email is the first message in the thread.
+          const firstMsg = msgs[0];
+          subject = firstMsg.getSubject() || '';
+          const from = firstMsg.getFrom() || '';
+          const m = from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+          if (m) { name = (m[1] || '').trim(); email = (m[2] || '').trim(); }
+          else { email = from.replace(/[<>]/g, '').trim(); }
+
+          // Collect every (non-inline) attachment filename across the thread.
+          for (let j = 0; j < msgs.length; j++) {
+            const atts = msgs[j].getAttachments({ includeInlineImages: false });
+            for (let k = 0; k < atts.length; k++) {
+              const nm = atts[k].getName();
+              if (nm) photos.push(nm);
+            }
+          }
+        } catch (_) { continue; }
+
+        const key = email.toLowerCase();
+        if (!email || !key) continue;
+        if (key === ownerEmail) continue;   // skip the publisher's own messages
+        if (existing[key]) continue;        // already a contributor
+        if (seen[key]) continue;            // de-dupe within this scan
+        seen[key] = true;
+
+        submissions.push({
+          name: name || email.split('@')[0],
+          email: email,
+          threadId: threadId,
+          subject: subject,
+          photos: photos
+        });
+      }
+
+      return jsonOut_({ ok: true, submissions: submissions });
     }
 
     // ── Reset / rebuild: clear every managed sheet so the client can resend a
