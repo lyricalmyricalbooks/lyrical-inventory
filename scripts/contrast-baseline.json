@@ -1,0 +1,128 @@
+{
+  "_comment": [
+    "Pre-existing colour pairings that fail strict WCAG AA (4.5:1 normal / 3:1 large)",
+    "but are this app's established secondary/meta-text design language, used",
+    "consistently across many screens (var(--text3) muted labels, var(--gold)",
+    "accent labels/links, low-opacity rgba() captions on dark cards, etc).",
+    "Recorded here so npm run lint:contrast / tests/contrast.test.js gate on NEW",
+    "regressions instead of failing on every pre-existing screen. \"count\" is how",
+    "many places in index.html use this exact resolved colour pairing as of the",
+    "last regeneration — informational only, not enforced.",
+    "Regenerate after an intentional palette change with:",
+    "  node scripts/check-contrast.mjs --write-baseline"
+  ],
+  "accepted": [
+    {
+      "key": "#e5a93f::#f0e3cf",
+      "textColor": "var(--gold2)",
+      "bgColor": "rgba(200,145,58,.15)",
+      "ratio": 1.65,
+      "count": 1
+    },
+    {
+      "key": "#e5a93f::#f2e8d8",
+      "textColor": "var(--gold2)",
+      "bgColor": "(inherited)",
+      "ratio": 1.72,
+      "count": 1
+    },
+    {
+      "key": "#4a4947::#0e0c0a",
+      "textColor": "rgba(255,255,255,.25)",
+      "bgColor": "(inherited)",
+      "ratio": 2.17,
+      "count": 1
+    },
+    {
+      "key": "#c8913a::#efe9dc",
+      "textColor": "var(--gold)",
+      "bgColor": "(inherited)",
+      "ratio": 2.29,
+      "count": 2
+    },
+    {
+      "key": "#c8913a::#f2e8d8",
+      "textColor": "var(--gold)",
+      "bgColor": "var(--gold-bg)",
+      "ratio": 2.29,
+      "count": 2
+    },
+    {
+      "key": "#c8913a::#f4ebd7",
+      "textColor": "var(--gold)",
+      "bgColor": "(inherited)",
+      "ratio": 2.34,
+      "count": 1
+    },
+    {
+      "key": "#c8913a::#f7f2e9",
+      "textColor": "var(--gold)",
+      "bgColor": "(inherited)",
+      "ratio": 2.49,
+      "count": 4
+    },
+    {
+      "key": "#565554::#0e0c0a",
+      "textColor": "rgba(255,255,255,.3)",
+      "bgColor": "(inherited)",
+      "ratio": 2.62,
+      "count": 1
+    },
+    {
+      "key": "#c8913a::#fafafa",
+      "textColor": "var(--gold)",
+      "bgColor": "(inherited)",
+      "ratio": 2.66,
+      "count": 2
+    },
+    {
+      "key": "#c8913a::#ffffff",
+      "textColor": "var(--gold)",
+      "bgColor": "(inherited)",
+      "ratio": 2.78,
+      "count": 4
+    },
+    {
+      "key": "#8a8078::#e5ddd0",
+      "textColor": "var(--text3)",
+      "bgColor": "var(--cream3)",
+      "ratio": 2.87,
+      "count": 1
+    },
+    {
+      "key": "#8a8078::#efe9dc",
+      "textColor": "var(--text3)",
+      "bgColor": "var(--cream2)",
+      "ratio": 3.19,
+      "count": 1
+    },
+    {
+      "key": "#8a8078::#f5f0e7",
+      "textColor": "var(--text3)",
+      "bgColor": "(inherited)",
+      "ratio": 3.39,
+      "count": 1
+    },
+    {
+      "key": "#8a8078::#f7f2e9",
+      "textColor": "var(--text3)",
+      "bgColor": "(inherited)",
+      "ratio": 3.46,
+      "count": 55
+    },
+    {
+      "key": "#8a8078::#fafafa",
+      "textColor": "var(--text3)",
+      "bgColor": "(inherited)",
+      "ratio": 3.7,
+      "count": 4
+    },
+    {
+      "key": "#8a8078::#ffffff",
+      "textColor": "var(--text3)",
+      "bgColor": "(inherited)",
+      "ratio": 3.86,
+      "count": 22
+    }
+  ]
+}
