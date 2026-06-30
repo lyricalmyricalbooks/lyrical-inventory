@@ -16,7 +16,7 @@ import {
 } from './lib/money.js';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
-import { OC_STAGES, ocNextAction, newContributor, parseContributorRows } from './lib/opencall.js';
+import { OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
@@ -774,7 +774,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v14';
+const EXPECTED_SCRIPT_VERSION = 'v15';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -3106,7 +3106,30 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
   }
   
   const selectedRecs = proj.contributors.filter(c => selectedIds.includes(c.id));
-  
+
+  // Pre-send merge-field guard: catch recipients whose template references a
+  // token that resolves to nothing (e.g. {{photo}} for someone with no photo
+  // on file) before the blank email goes out. Skipped in simulation — the dry
+  // run is itself a preview.
+  if (!simulate) {
+    const dl = $('oc-bulk-deadline')?.value || '';
+    const tmplText = (tmpl.subject || '') + '\n' + (tmpl.body || '');
+    const issues = [];
+    selectedRecs.forEach(c => {
+      const missing = findUnfilledMergeFields(tmplText, c, { project: proj.title, date: dl });
+      if (missing.length) issues.push({ who: c.name || c.email, missing });
+    });
+    if (issues.length) {
+      const lines = issues.slice(0, 12).map(x => `• ${x.who} — ${x.missing.join(', ')}`).join('\n');
+      const more = issues.length > 12 ? `\n…and ${issues.length - 12} more` : '';
+      const proceed = await confirmDialog(
+        `${issues.length} recipient${issues.length === 1 ? '' : 's'} ${issues.length === 1 ? 'has' : 'have'} template fields with no data — the email would go out with ${issues.length === 1 ? 'that field' : 'those fields'} blank:\n\n${lines}${more}\n\nSend anyway?`,
+        { title: 'Missing merge fields', okLabel: 'Send anyway', cancelLabel: 'Go back & fix', danger: true }
+      );
+      if (!proceed) return;
+    }
+  }
+
   // Show progress UI
   $('oc-bulk-progress-container').style.display = 'block';
   $('oc-bulk-actions').innerHTML = `
@@ -3576,6 +3599,14 @@ function renderOpenCall() {
           mailActionsHtml = `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(c.email)}')" title="Add to mailing list">＋ List</button>`;
         }
         mailActionsHtml += ` <button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Unsubscribe this contributor">Unsubscribe</button>`;
+      }
+
+      // Bounce flag (set by the reply scan when a delivery-failure notice names
+      // this address). Show it prominently and let the publisher clear it after
+      // fixing the address, so "bounced" never hides behind "no reply yet".
+      if (c.undeliverable) {
+        mailStatusHtml = `<span class="oc-mail-badge sup" title="A delivery-failure notice was found for this address. Check the email, fix it if needed, then clear this flag and re-send.">⚠ Undeliverable</span> ` + mailStatusHtml;
+        mailActionsHtml += ` <button class="btn sm" onclick="ocClearUndeliverable('${c.id}')" title="Clear the bounce flag (e.g. after correcting the address)">Clear bounce</button>`;
       }
     }
 
@@ -18161,17 +18192,18 @@ async function ocScanReplies(options = {}) {
           selectionSent: !!c.selectionSent,
           creditReceived: !!c.creditReceived,
           cmykSent: !!c.cmykSent,
-          filesReceived: !!c.filesReceived
+          filesReceived: !!c.filesReceived,
+          undeliverable: !!c.undeliverable
         }))
       }
     };
-    
+
     const res = await fetch(sheetsUrl, {
       method: 'POST',
       mode: 'cors',
       body: JSON.stringify(payload)
     });
-    
+
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -18200,6 +18232,12 @@ async function ocScanReplies(options = {}) {
             c.filesReceived = up.filesReceived;
             c.filesThreadId = up.filesThreadId;
             details.push('High-res files received');
+            updatedCount++;
+          }
+          if (up.undeliverable && !c.undeliverable) {
+            c.undeliverable = true;
+            if (up.bounceThreadId) c.bounceThreadId = up.bounceThreadId;
+            details.push('⚠ Email bounced (undeliverable)');
             updatedCount++;
           }
           if (details.length > 0) {
@@ -18448,7 +18486,8 @@ async function ocScanRepliesSingle(cId) {
           selectionSent: !!c.selectionSent,
           creditReceived: !!c.creditReceived,
           cmykSent: !!c.cmykSent,
-          filesReceived: !!c.filesReceived
+          filesReceived: !!c.filesReceived,
+          undeliverable: !!c.undeliverable
         }]
       }
     };
@@ -18485,6 +18524,12 @@ async function ocScanRepliesSingle(cId) {
         c.filesReceived = up.filesReceived;
         c.filesThreadId = up.filesThreadId;
         details.push('High-res files received');
+        updated = true;
+      }
+      if (up.undeliverable && !c.undeliverable) {
+        c.undeliverable = true;
+        if (up.bounceThreadId) c.bounceThreadId = up.bounceThreadId;
+        details.push('⚠ Email bounced (undeliverable)');
         updated = true;
       }
       
@@ -18665,6 +18710,18 @@ function renderOcEditModalContent(cId) {
         <button class="btn gold" onclick="saveOcContributor('${c.id}')">Save Changes</button>
       </div>
     </div>`;
+}
+
+async function ocClearUndeliverable(cId) {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  const c = proj.contributors.find(x => x.id === cId);
+  if (!c) return;
+  c.undeliverable = false;
+  delete c.bounceThreadId;
+  await _persistOpenCalls();
+  renderOpenCall();
+  showToast('✓ Bounce flag cleared');
 }
 
 async function saveOcContributor(cId) {
@@ -19600,7 +19657,7 @@ Object.assign(window, {
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
   ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
-  openOcEditModal, saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview,
+  openOcEditModal, saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview, ocClearUndeliverable,
   ocToggleColorPalette, ocApplyColor,
   openOcEmailPreviewModal, closeOcEmailPreviewModal, ocPreviewModalSend, ocPreviewModalEditInWizard,
   openOcImportGmailModal, closeOcImportGmailModal, ocImportGmailSearch, ocImportGmailSelectAll, ocImportGmailConfirm,

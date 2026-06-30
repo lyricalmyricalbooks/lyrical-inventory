@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { OC_STAGES, ocNextAction, newContributor, parseContributorRows } from '../src/lib/opencall.js';
+import { OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields } from '../src/lib/opencall.js';
 
 describe('newContributor', () => {
   it('starts with every stage flag false', () => {
@@ -80,5 +80,50 @@ describe('parseContributorRows', () => {
 
     const undefinedResult = parseContributorRows(undefined);
     expect(undefinedResult).toEqual({ contributors: [], added: 0, skipped: 0 });
+  });
+});
+
+describe('findUnfilledMergeFields', () => {
+  const tmpl = 'Hi {{name}}, your photo "{{photo}}" is in {{project}}. Credit: {{creditName}}. Deadline {{date}}.';
+
+  it('returns nothing when every referenced field has data', () => {
+    const c = { name: 'Ada', photo: 'ada.jpg', creditName: 'Ada Lovelace' };
+    expect(findUnfilledMergeFields(tmpl, c, { project: 'Book', date: 'July 15' })).toEqual([]);
+  });
+
+  it('flags a referenced field that resolves empty', () => {
+    const c = { name: 'Ada', photo: '', creditName: 'Ada Lovelace' };
+    expect(findUnfilledMergeFields(tmpl, c, { project: 'Book', date: 'July 15' })).toEqual(['photo']);
+  });
+
+  it('flags the deadline when context is missing it', () => {
+    const c = { name: 'Ada', photo: 'ada.jpg', creditName: 'Ada' };
+    expect(findUnfilledMergeFields(tmpl, c, { project: 'Book' })).toEqual(['date']);
+  });
+
+  it('falls back creditName to the contributor name like the sender does', () => {
+    const c = { name: 'Ada', photo: 'ada.jpg', creditName: '' };
+    expect(findUnfilledMergeFields(tmpl, c, { project: 'Book', date: 'July 15' })).toEqual([]);
+  });
+
+  it('flags creditName only when both creditName and name are blank', () => {
+    const c = { name: '', photo: 'x.jpg', creditName: '' };
+    // name token is also unfilled here; both reported in field order
+    expect(findUnfilledMergeFields(tmpl, c, { project: 'Book', date: 'July 15' })).toEqual(['name', 'creditName']);
+  });
+
+  it('ignores tokens the template does not reference', () => {
+    const c = { name: 'Ada' };
+    expect(findUnfilledMergeFields('Hello {{name}}', c, {})).toEqual([]);
+  });
+
+  it('treats whitespace-only values as empty', () => {
+    const c = { name: 'Ada', photo: '   ', creditName: 'Ada' };
+    expect(findUnfilledMergeFields(tmpl, c, { project: 'Book', date: 'July 15' })).toEqual(['photo']);
+  });
+
+  it('handles empty/blank template and missing args safely', () => {
+    expect(findUnfilledMergeFields('', {}, {})).toEqual([]);
+    expect(findUnfilledMergeFields(null)).toEqual([]);
   });
 });

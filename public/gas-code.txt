@@ -42,6 +42,10 @@
  *      thread that actually carries photo attachments, so a stray follow-up
  *      email can't become an artist's canonical thread. Bump flags v13-and-
  *      older as outdated so the publisher redeploys.
+ *  13. v15: scanopencallreplies also detects bounces — a delivery-failure
+ *      notice from mailer-daemon/postmaster naming a contributor flags them
+ *      undeliverable, so "bounced" is distinguishable from "no reply yet".
+ *      Bump flags v14-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -87,9 +91,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v14',
-    scriptVersion: 'v14',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true },
+    service: 'lyrical-sheets-webhook-v15',
+    scriptVersion: 'v15',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -592,7 +596,23 @@ function doPost(e) {
             }
           } catch (_) {}
         }
-        
+
+        // Bounce / bad address: a delivery-failure notice from the mail system
+        // that names this recipient. Only worth checking once we've actually
+        // emailed them (selectionSent) and not already flagged. Lets the client
+        // tell "bounced" apart from "just hasn't replied".
+        if (c.selectionSent && !c.undeliverable) {
+          try {
+            const q = 'from:(mailer-daemon OR postmaster) newer_than:' + daysBack + 'd "' + email + '"';
+            const bounces = GmailApp.search(q, 0, 1);
+            if (bounces.length > 0) {
+              update.undeliverable = true;
+              update.bounceThreadId = bounces[0].getId();
+              hasUpdate = true;
+            }
+          } catch (_) {}
+        }
+
         if (hasUpdate) {
           updates.push(update);
         }
