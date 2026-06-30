@@ -3107,10 +3107,11 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
   
   const selectedRecs = proj.contributors.filter(c => selectedIds.includes(c.id));
 
-  // Pre-send merge-field guard: catch recipients whose template references a
-  // token that resolves to nothing (e.g. {{photo}} for someone with no photo
-  // on file) before the blank email goes out. Skipped in simulation — the dry
-  // run is itself a preview.
+  // Safety gate: a real (non-simulated) send goes to real inboxes and can't be
+  // unsent, so always confirm first — recipient count + stage — and fold in any
+  // blank merge-field warning so it's one decision, not a mid-send surprise.
+  // The dialog is danger-styled so the safe (Cancel) button takes focus, and
+  // the Simulate dry-run skips this entirely since it delivers nothing.
   if (!simulate) {
     const dl = $('oc-bulk-deadline')?.value || '';
     const tmplText = (tmpl.subject || '') + '\n' + (tmpl.body || '');
@@ -3119,15 +3120,22 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
       const missing = findUnfilledMergeFields(tmplText, c, { project: proj.title, date: dl });
       if (missing.length) issues.push({ who: c.name || c.email, missing });
     });
+
+    const stageLabel = $('oc-bulk-stage')?.selectedOptions?.[0]?.text || stage;
+    const n = selectedRecs.length;
+    let msg = `Send ${n} real email${n === 1 ? '' : 's'} now for “${stageLabel}”?\n\nThey go to real inboxes and can't be unsent. Turn on “Simulate (Dry Run)” first if you only want to preview.`;
     if (issues.length) {
-      const lines = issues.slice(0, 12).map(x => `• ${x.who} — ${x.missing.join(', ')}`).join('\n');
-      const more = issues.length > 12 ? `\n…and ${issues.length - 12} more` : '';
-      const proceed = await confirmDialog(
-        `${issues.length} recipient${issues.length === 1 ? '' : 's'} ${issues.length === 1 ? 'has' : 'have'} template fields with no data — the email would go out with ${issues.length === 1 ? 'that field' : 'those fields'} blank:\n\n${lines}${more}\n\nSend anyway?`,
-        { title: 'Missing merge fields', okLabel: 'Send anyway', cancelLabel: 'Go back & fix', danger: true }
-      );
-      if (!proceed) return;
+      const lines = issues.slice(0, 10).map(x => `• ${x.who} — ${x.missing.join(', ')}`).join('\n');
+      const more = issues.length > 10 ? `\n…and ${issues.length - 10} more` : '';
+      msg += `\n\n⚠ ${issues.length} recipient${issues.length === 1 ? '' : 's'} ${issues.length === 1 ? 'has' : 'have'} blank template fields — those spots will be empty:\n${lines}${more}`;
     }
+    const proceed = await confirmDialog(msg, {
+      title: issues.length ? 'Confirm send — blank fields' : 'Confirm send',
+      okLabel: `Send ${n} email${n === 1 ? '' : 's'}`,
+      cancelLabel: 'Cancel',
+      danger: true
+    });
+    if (!proceed) return;
   }
 
   // Show progress UI
@@ -18239,6 +18247,15 @@ async function ocPreviewModalSend(cId, stageKey) {
   if (!proj) return;
   const c = proj.contributors.find(x => x.id === cId);
   if (!c || !c.email) return;
+
+  // Safety gate: confirm the real send so a stray click on "Send Email" can't
+  // fire a live message. Danger-styled so Cancel is focused.
+  const stageLabelMap = { selectionSent: 'Selection Notice', cmykSent: 'Request Files', preorderSent: 'Pre-order Info' };
+  const okToSend = await confirmDialog(
+    `Send this ${stageLabelMap[stageKey] || 'pipeline'} email to ${c.name || c.email} <${c.email}> now?\n\nIt goes to a real inbox and can't be unsent.`,
+    { title: 'Confirm send', okLabel: 'Send email', cancelLabel: 'Cancel', danger: true }
+  );
+  if (!okToSend) return;
 
   const subject = window._ocPreviewSubject;
   const htmlBody = window._ocPreviewBody;
