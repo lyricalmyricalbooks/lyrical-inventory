@@ -3188,6 +3188,15 @@ function cancelOcBulkSend() {
   if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.textContent = 'Cancelling...'; }
 }
 
+// Derive 1–2 uppercase initials from a contributor name for the avatar.
+// Falls back to a neutral glyph when the name is empty.
+function ocInitials(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '◦';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function renderOpenCall() {
   const body = $('opencall-body');
   if (!body) return;
@@ -3463,8 +3472,8 @@ function renderOpenCall() {
     </div>`;
 
   const importPanel = ocImportOpen ? `
-      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">
+      <div class="oc-import-panel">
+        <div class="oc-import-hint">
           Paste rows from the spreadsheet — one contributor per line, columns separated by tab or comma:
           <strong>Name, Email, Photo file, Credit Name, Notes</strong>. A header row is skipped automatically; existing emails are not duplicated.
           <br>
@@ -3485,16 +3494,16 @@ function renderOpenCall() {
       </div>` : '';
 
   const chipsHtml = _ocNewContributorPhotos.map((p, idx) => `
-    <span class="pill gold" style="font-size:10px;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--gold-bg);border:1px solid var(--gold-line);color:var(--gold);animation: cardSlideUpIn 0.2s ease;">
+    <span class="oc-photo-chip">
       📷 ${escapeHtml(p)}
-      <span onclick="removeOcPhotoChip(${idx})" style="cursor:pointer;font-weight:bold;opacity:0.6;margin-left:2px;">✕</span>
+      <span class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo">✕</span>
     </span>
   `).join('');
 
   const addForm = `
-    <div class="card" style="margin-bottom:0;padding:15px;">
-      <div class="row-between" style="flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-        <div class="oc-section-title">Add contributor</div>
+    <div class="card oc-add-form-card" style="margin-bottom:0;">
+      <div class="oc-add-form-header">
+        <div class="oc-section-title" style="margin-bottom:0;">Add contributor</div>
         <button class="btn sm" onclick="ocToggleImport()">${ocImportOpen ? 'Close import' : '⬇ Paste / import list'}</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px;">
@@ -3508,7 +3517,7 @@ function renderOpenCall() {
             <input id="oc-photo" placeholder="Photo file name (Enter to add)" style="flex:1;" onkeydown="handleOcPhotoKeydown(event)">
             <button class="btn sm gold" onclick="addOcPhotoChip()" style="padding:0 12px;height:38px;margin:0;">＋</button>
           </div>
-          <div id="oc-photo-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">${chipsHtml}</div>
+          <div id="oc-photo-chips" class="oc-addform-chips">${chipsHtml}</div>
         </div>
         <button class="btn gold" onclick="ocAdd()">Add Contributor</button>
       </div>
@@ -3526,14 +3535,14 @@ function renderOpenCall() {
       const onList = mailingListHas(c.email);
 
       if (sup) {
-        mailStatusHtml = ` <span class="pill gray" style="font-size:10px;background:rgba(239,68,68,0.1);color:var(--red);border:1px solid rgba(239,68,68,0.2);">unsubscribed</span>`;
+        mailStatusHtml = `<span class="oc-mail-badge sup">unsubscribed</span>`;
         mailActionsHtml = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Allow emailing this contributor again">Re-subscribe</button>`;
       } else {
         if (onList) {
-          mailStatusHtml = ` <span class="pill green" style="font-size:10px;background:rgba(16,185,129,0.1);color:var(--green);border:1px solid rgba(16,185,129,0.2);">✓ Subscribed</span>`;
+          mailStatusHtml = `<span class="oc-mail-badge on">✓ Subscribed</span>`;
         } else {
-          mailStatusHtml = ` <span class="pill gray" style="font-size:10px;background:rgba(255,255,255,0.05);color:var(--text3);border:1px solid rgba(255,255,255,0.1);">not on list</span>`;
-          mailActionsHtml = `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(c.email)}')" title="Add to mailing list">＋ Add to List</button>`;
+          mailStatusHtml = `<span class="oc-mail-badge off">not on list</span>`;
+          mailActionsHtml = `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(c.email)}')" title="Add to mailing list">＋ List</button>`;
         }
         mailActionsHtml += ` <button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Unsubscribe this contributor">Unsubscribe</button>`;
       }
@@ -3552,7 +3561,7 @@ function renderOpenCall() {
     }
 
     const creditNameHtml = c.creditName
-      ? `<span style="color:var(--gold2);font-size:11px;font-weight:600;margin-left:6px;" title="Print Credit Name">Index: "${escapeHtml(c.creditName)}"</span>`
+      ? `<span class="oc-credit-index" title="Print Credit Name">Index: "${escapeHtml(c.creditName)}"</span>`
       : '';
 
     const emailCell = c.email
@@ -3565,28 +3574,28 @@ function renderOpenCall() {
     if (c.email && (c.creditThreadId || c.filesThreadId)) {
       const links = [];
       if (c.creditThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" style="font-size:11px;color:var(--gold2);text-decoration:none;" title="View credit name reply in Gmail">✉ View Credit Reply</a> <span onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" style="font-size:11px;color:var(--gold);cursor:pointer;margin-left:4px;user-select:none;font-weight:600;" title="Preview email thread inline">👁 Preview</span>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" title="View credit name reply in Gmail">✉ View Credit Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" title="Preview email thread inline">👁 Preview</span>`);
       }
       if (c.filesThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" style="font-size:11px;color:var(--gold2);text-decoration:none;" title="View files reply in Gmail">✉ View Files Reply</a> <span onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" style="font-size:11px;color:var(--gold);cursor:pointer;margin-left:4px;user-select:none;font-weight:600;" title="Preview email thread inline">👁 Preview</span>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" title="View files reply in Gmail">✉ View Files Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" title="Preview email thread inline">👁 Preview</span>`);
       }
-      gmailLinksHtml = ' · ' + links.join(' / ');
+      gmailLinksHtml = `<span class="oc-gmail-links"> · ${links.join(' / ')}</span>`;
     }
 
-    // Interactive photos list on card
+    // Interactive photos list on card (uses the v3 photo-row design system)
     const photosArr = c.photos || (c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : []);
     const photosHtml = `
-      <div style="display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap;min-height:24px;">
-        <span style="font-size:11px;color:var(--text3);font-weight:600;">📷 Photos:</span>
+      <div class="oc-photo-row">
+        <span class="oc-photo-label">📷 Photos:</span>
         ${photosArr.map((p, idx) => `
-          <span class="pill gold" style="font-size:10px;padding:2px 6px;display:inline-flex;align-items:center;gap:4px;background:var(--gold-bg);border:1px solid var(--gold-line);color:var(--gold);transition:all 0.2s;">
+          <span class="oc-photo-chip">
             ${escapeHtml(p)}
-            <span onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" style="cursor:pointer;font-weight:bold;opacity:0.6;margin-left:2px;" title="Remove photo">✕</span>
+            <span class="oc-photo-chip-remove" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" title="Remove photo">✕</span>
           </span>
         `).join('')}
-        
-        <span id="oc-add-photo-btn-${c.id}" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();" style="cursor:pointer;font-size:10px;padding:2px 6px;border:1px dashed var(--gold);color:var(--gold);border-radius:100px;display:inline-flex;align-items:center;font-weight:600;transition:all 0.2s;">＋ Add</span>
-        <input id="oc-add-photo-input-${c.id}" type="text" placeholder="photo_file.jpg (Enter)" style="display:none;width:120px;font-size:10px;padding:2px 6px;margin:0;height:22px;border-radius:4px;border:1px solid var(--cream4);background:var(--cream2);color:var(--text);" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
+
+        <span id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</span>
+        <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
       </div>`;
 
     // Pipeline Step Tracker Visualizer (Interactive)
@@ -3629,33 +3638,44 @@ function renderOpenCall() {
       </div>`;
 
     const notesHtml = c.notes
-      ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(200, 145, 58, 0.05);border-left:3px solid var(--gold);border-radius:4px;font-size:11px;color:var(--text2);line-height:1.4;"><strong>Note:</strong> ${escapeHtml(c.notes)}</div>`
+      ? `<div class="oc-note"><strong>Note:</strong> ${escapeHtml(c.notes)}</div>`
+      : '';
+
+    const primaryCtaHtml = pipelineEmailBtnHtml
+      ? `<div class="oc-card-primary-cta">${pipelineEmailBtnHtml}</div>`
       : '';
 
     return `
       <div class="card oc-contributor-card" id="oc-card-${c.id}">
-        <div class="row-between" style="flex-wrap:wrap;gap:10px;">
-          <div style="min-width:0;">
-            <div class="oc-contributor-name">${escapeHtml(c.name || '—')}${creditNameHtml}${mailStatusHtml}</div>
-            <div style="font-size:12px;color:var(--text2);margin-top:2px;">
-              ${emailCell}
-              ${gmailLinksHtml}
+        <div class="oc-card-head">
+          <div class="oc-card-identity">
+            <div class="oc-avatar" aria-hidden="true">${escapeHtml(ocInitials(c.name))}</div>
+            <div class="oc-card-meta">
+              <div class="oc-contributor-name">${escapeHtml(c.name || '—')}${creditNameHtml}${mailStatusHtml}</div>
+              <div class="oc-email-row">
+                ${emailCell}
+                ${gmailLinksHtml}
+              </div>
+              ${photosHtml}
             </div>
-            ${photosHtml}
           </div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex-shrink:0;">
-            ${pipelineEmailBtnHtml}
-            ${mailActionsHtml}
-            <button class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">↻ Scan</button>
-            <button class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
-            <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')">Remove</button>
+          <div class="oc-card-actions">
+            ${primaryCtaHtml}
+            <div class="oc-util-actions">
+              ${mailActionsHtml}
+              <button class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">↻ Scan</button>
+              <button class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
+              <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">✕ Remove</button>
+            </div>
           </div>
         </div>
         ${notesHtml}
-        ${pipelineVisualizer}
-        ${next
-          ? `<div class="oc-next-action">${next}</div>`
-          : `<div class="oc-all-complete">✓ All stages complete</div>`}
+        <div class="oc-status-strip">
+          ${pipelineVisualizer}
+          ${next
+            ? `<div class="oc-next-action">${next}</div>`
+            : `<div class="oc-all-complete">✓ All stages complete</div>`}
+        </div>
         <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
       </div>`;
   }).join('');
@@ -3690,8 +3710,31 @@ function renderOpenCall() {
       ${addForm}
     </div>`;
 
+  // Section hero — Playfair title, one-line subtitle, at-a-glance stats.
+  // Kept subtle so it doesn't duplicate the full summary card in the sidebar.
+  const heroStatsHtml = total ? `
+        <div class="oc-hero-stats">
+          <div class="oc-hero-stat">
+            <div class="oc-hero-stat-num">${total}</div>
+            <div class="oc-hero-stat-label">Contributors</div>
+          </div>
+          <div class="oc-hero-stat">
+            <div class="oc-hero-stat-num">${pct}%</div>
+            <div class="oc-hero-stat-label">Complete</div>
+          </div>
+        </div>` : '';
+  const heroHtml = `
+    <div class="oc-hero">
+      <div class="oc-hero-text">
+        <div class="oc-hero-title"><span class="header-mark">✦</span>Open Call</div>
+        <div class="oc-hero-subtitle">Guide selected contributors from first notice through pre-order — one premium pipeline.</div>
+      </div>
+      ${heroStatsHtml}
+    </div>`;
+
   const mainHtml = `
     <div class="oc-main">
+      ${heroHtml}
       ${templatesEditor}
       ${searchFilterBar}
       <div style="display:flex;flex-direction:column;gap:14px;">
@@ -3772,9 +3815,9 @@ function renderOcPhotoChips() {
   const container = $('oc-photo-chips');
   if (!container) return;
   container.innerHTML = _ocNewContributorPhotos.map((p, idx) => `
-    <span class="pill gold" style="font-size:10px;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--gold-bg);border:1px solid var(--gold-line);color:var(--gold);animation: cardSlideUpIn 0.2s ease;">
+    <span class="oc-photo-chip">
       📷 ${escapeHtml(p)}
-      <span onclick="removeOcPhotoChip(${idx})" style="cursor:pointer;font-weight:bold;opacity:0.6;margin-left:2px;">✕</span>
+      <span class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo">✕</span>
     </span>
   `).join('');
 }
