@@ -38,6 +38,10 @@
  *      original submission emails into contributors (name, email, photo
  *      filenames, and the submission thread id). Bump flags v12-and-older as
  *      outdated so the publisher redeploys.
+ *  12. v14: scanopencallsubmissions de-dupes repeat senders by preferring the
+ *      thread that actually carries photo attachments, so a stray follow-up
+ *      email can't become an artist's canonical thread. Bump flags v13-and-
+ *      older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -83,8 +87,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v13',
-    scriptVersion: 'v13',
+    service: 'lyrical-sheets-webhook-v14',
+    scriptVersion: 'v14',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -659,16 +663,26 @@ function doPost(e) {
         if (!email || !key) continue;
         if (key === ownerEmail) continue;   // skip the publisher's own messages
         if (existing[key]) continue;        // already a contributor
-        if (seen[key]) continue;            // de-dupe within this scan
-        seen[key] = true;
 
-        submissions.push({
+        const candidate = {
           name: name || email.split('@')[0],
           email: email,
           threadId: threadId,
           subject: subject,
           photos: photos
-        });
+        };
+
+        // De-dupe within this scan by sender. If the same artist appears in more
+        // than one thread (e.g. a submission plus a later "just checking in"
+        // reply), keep whichever thread actually carries photos — that's the
+        // real submission — so we never make a photo-less follow-up the
+        // canonical thread.
+        if (seen[key] === undefined) {
+          seen[key] = submissions.length;
+          submissions.push(candidate);
+        } else if (candidate.photos.length > submissions[seen[key]].photos.length) {
+          submissions[seen[key]] = candidate;
+        }
       }
 
       return jsonOut_({ ok: true, submissions: submissions });
