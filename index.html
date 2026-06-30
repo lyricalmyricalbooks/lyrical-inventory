@@ -392,7 +392,7 @@
 
     <!-- QR Code -->
     <div style="display:flex;justify-content:center;margin-bottom:1.5rem;">
-      <div style="background:white;padding:20px;border-radius:var(--r2);display:inline-block;">
+      <div style="background:white;padding:20px;border-radius:var(--r2);display:inline-block;border:1px solid var(--border);box-shadow:var(--shadow2);">
         <div id="author-qr-canvas"></div>
       </div>
     </div>
@@ -1693,7 +1693,7 @@
       </div>
 
       <div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Itemized subtotal</div>
-      <div id="pos-subtotal-lines" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--cream);margin-bottom:12px;">—</div>
+      <div id="pos-subtotal-lines" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text);margin-bottom:12px;">—</div>
 
       <div class="form-group" style="margin-bottom:10px;">
         <label for="pos-payment-method">Payment Method</label>
@@ -2007,7 +2007,7 @@
     </div>
   </div>
 </div>
-<div class="tab-panel" id="tab-backups" style="color:var(--cream);">
+<div class="tab-panel" id="tab-backups" style="color:var(--cream);/* contrast-ok: default text colour for the dark ink cards inside this panel */">
   <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.25rem;border-radius:var(--r3);margin-bottom:1rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
@@ -2028,8 +2028,8 @@
   <div id="backup-reminder" style="display:none;background:rgba(212,175,55,.1);border:1px solid var(--gold3);border-radius:var(--r2);padding:1.25rem;margin-bottom:1.5rem;align-items:center;gap:16px;">
     <div style="font-size:24px;">📥</div>
     <div style="flex:1;">
-      <div style="font-weight:700;font-size:14px;color:var(--gold3);margin-bottom:4px;">Daily Backup Recommended</div>
-      <div style="font-size:12px;color:rgba(255,255,255,.82);line-height:1.5;">It's been over 24 hours since your last local JSON backup. Download a fresh snapshot to keep your data safe on your computer.</div>
+      <div style="font-weight:700;font-size:14px;color:var(--gold);margin-bottom:4px;">Daily Backup Recommended</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.5;">It's been over 24 hours since your last local JSON backup. Download a fresh snapshot to keep your data safe on your computer.</div>
     </div>
     <button class="btn gold sm" onclick="exportToJSON(event)">Download now</button>
   </div>
@@ -2514,7 +2514,7 @@
 <div class="overlay" id="m-payment-qr" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
   <div class="modal-title" role="dialog" aria-modal="true">Payment QR Code</div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.6;">
-    Scan this code to pay for <strong id="qr-book-title" style="color:var(--cream);"></strong>.
+    Scan this code to pay for <strong id="qr-book-title" style="color:var(--text);"></strong>.
   </div>
   <div style="display:flex;justify-content:center;margin-bottom:1.5rem;background:white;padding:1.5rem;border-radius:var(--r2);width:max-content;margin-left:auto;margin-right:auto;">
     <div id="payment-qr-canvas"></div>
@@ -2588,7 +2588,7 @@
 <!-- POS ADJUST PRICE / DISCOUNT MODAL -->
 <div class="overlay" id="m-pos-price" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:420px;">
   <div class="modal-title" role="dialog" aria-modal="true">Adjust price</div>
-  <div style="font-size:13px;color:var(--cream);font-weight:600;margin-bottom:2px;" id="pp-title"></div>
+  <div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:2px;" id="pp-title"></div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">List price: <span id="pp-list"></span></div>
 
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
@@ -2607,7 +2607,7 @@
     </div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px;">In the book's own currency — the cart converts it for you.</div>
   </div>
-  <div id="pp-preview" style="font-size:13px;color:var(--cream);min-height:18px;margin-bottom:10px;"></div>
+  <div id="pp-preview" style="font-size:13px;color:var(--text);min-height:18px;margin-bottom:10px;"></div>
 
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" id="pp-reset-btn" onclick="posResetPrice()">Reset to list</button>
@@ -2647,8 +2647,8 @@
     </table>
   </div>
   <div class="g2">
-    <div style="font-size:12px;color:var(--text3);">Payment method<br><strong id="pos-confirm-payment" style="color:var(--cream);font-size:13px;"></strong></div>
-    <div style="font-size:12px;color:var(--text3);">Timestamp<br><strong id="pos-confirm-timestamp" style="color:var(--cream);font-size:13px;"></strong></div>
+    <div style="font-size:12px;color:var(--text3);">Payment method<br><strong id="pos-confirm-payment" style="color:var(--text);font-size:13px;"></strong></div>
+    <div style="font-size:12px;color:var(--text3);">Timestamp<br><strong id="pos-confirm-timestamp" style="color:var(--text);font-size:13px;"></strong></div>
   </div>
   <div style="margin-top:1rem;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);display:flex;justify-content:space-between;align-items:center;">
     <span style="font-size:12px;color:var(--text3);">Total charged</span>
