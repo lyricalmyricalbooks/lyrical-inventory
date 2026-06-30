@@ -3250,6 +3250,146 @@ function ocInitials(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function openOcBulkRemoveModal() {
+  let modal = $('oc-bulk-remove-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'oc-bulk-remove-modal';
+    modal.style.position = 'fixed';
+    modal.style.inset = '0';
+    modal.style.background = 'rgba(0, 0, 0, 0.75)';
+    modal.style.backdropFilter = 'blur(8px)';
+    modal.style.display = 'none';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = '10000';
+    document.body.appendChild(modal);
+  }
+  
+  modal.style.display = 'flex';
+  renderOcBulkRemoveModalContent();
+}
+
+function closeOcBulkRemoveModal() {
+  const modal = $('oc-bulk-remove-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function renderOcBulkRemoveModalContent() {
+  const modal = $('oc-bulk-remove-modal');
+  if (!modal) return;
+  
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  
+  const eligible = proj.contributors || [];
+  
+  const listHtml = eligible.length > 0
+    ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
+        <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:4px;cursor:pointer;" onclick="ocBulkRemoveSelectAll(true)">Select All</button>
+        <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:4px;cursor:pointer;" onclick="ocBulkRemoveSelectAll(false)">Deselect All</button>
+        <span style="font-size:10px;color:var(--text3);margin-left:auto;align-self:center;" id="oc-bulk-remove-count">0 selected</span>
+      </div>
+      <div id="oc-bulk-remove-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:10px;background:var(--input-bg);display:flex;flex-direction:column;gap:2px;">
+      ` +
+      eligible.map(c => `
+        <label class="oc-bulk-remove-item" data-name="${escapeHtml((c.name || '').toLowerCase())}" data-email="${escapeHtml((c.email || '').toLowerCase())}" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:4px 0;border-radius:4px;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
+          <input type="checkbox" class="oc-bulk-remove-check" value="${c.id}" style="margin:0;cursor:pointer;" onchange="ocBulkRemoveUpdateCount()">
+          <span><strong>${escapeHtml(c.name || 'Unnamed')}</strong> <span style="color:var(--text3);">(${escapeHtml(c.email || 'no email')})</span></span>
+        </label>
+      `).join('') + `</div>`
+    : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">No contributors found in this project.</div>';
+
+  modal.innerHTML = `
+    <div class="card" style="width:94%;max-width:500px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
+      <button onclick="closeOcBulkRemoveModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--red);margin-bottom:4px;">✕ Bulk Remove Contributors</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Select contributors to remove from the "${escapeHtml(proj.title)}" open call.</div>
+
+      <!-- Search Box inside Modal -->
+      ${eligible.length > 0 ? `
+      <div style="margin-bottom:12px;">
+        <input type="search" id="oc-bulk-remove-search" placeholder="Filter list by name or email..." oninput="ocBulkRemoveFilter(this.value)" style="width:100%;padding:8px 12px;font-size:13px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;box-sizing:border-box;">
+      </div>
+      ` : ''}
+
+      <!-- Recipients/Contributors List -->
+      <div style="margin-bottom:20px;">
+        ${listHtml}
+      </div>
+      
+      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+        <button class="btn" onclick="closeOcBulkRemoveModal()">Cancel</button>
+        <button class="btn danger-btn" id="oc-bulk-remove-btn-submit" onclick="executeOcBulkRemove()" disabled>✕ Remove Selected</button>
+      </div>
+    </div>`;
+  
+  if (eligible.length > 0) {
+    ocBulkRemoveUpdateCount();
+  }
+}
+
+function ocBulkRemoveSelectAll(checked) {
+  document.querySelectorAll('.oc-bulk-remove-item').forEach(item => {
+    if (item.style.display !== 'none') {
+      const cb = item.querySelector('.oc-bulk-remove-check');
+      if (cb) cb.checked = checked;
+    }
+  });
+  ocBulkRemoveUpdateCount();
+}
+
+function ocBulkRemoveUpdateCount() {
+  const total = document.querySelectorAll('.oc-bulk-remove-check').length;
+  const checked = document.querySelectorAll('.oc-bulk-remove-check:checked').length;
+  const el = $('oc-bulk-remove-count');
+  if (el) el.textContent = `${checked} of ${total} selected`;
+  const removeBtn = $('oc-bulk-remove-btn-submit');
+  if (removeBtn) {
+    removeBtn.disabled = checked === 0;
+    removeBtn.textContent = `✕ Remove Selected (${checked})`;
+  }
+}
+
+function ocBulkRemoveFilter(query) {
+  const q = query.toLowerCase().trim();
+  document.querySelectorAll('.oc-bulk-remove-item').forEach(item => {
+    const name = item.getAttribute('data-name') || '';
+    const email = item.getAttribute('data-email') || '';
+    if (name.includes(q) || email.includes(q)) {
+      item.style.display = 'flex';
+    } else {
+      item.style.display = 'none';
+    }
+  });
+}
+
+async function executeOcBulkRemove() {
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  
+  const checks = document.querySelectorAll('.oc-bulk-remove-check:checked');
+  const selectedIds = Array.from(checks).map(cb => cb.value);
+  
+  if (selectedIds.length === 0) {
+    showToast('No contributors selected', 'warn');
+    return;
+  }
+  
+  const ok = await confirmDialog(`Are you sure you want to remove ${selectedIds.length} contributor${selectedIds.length !== 1 ? 's' : ''}? This action cannot be undone.`, { danger: true, okLabel: 'Remove' });
+  if (!ok) return;
+  
+  proj.contributors = proj.contributors.filter(c => !selectedIds.includes(c.id));
+  
+  await _persistOpenCalls();
+  closeOcBulkRemoveModal();
+  renderOpenCall();
+  showToast(`Successfully removed ${selectedIds.length} contributor${selectedIds.length !== 1 ? 's' : ''}`);
+}
+
 function renderOpenCall() {
   const body = $('opencall-body');
   if (!body) return;
@@ -3519,6 +3659,7 @@ function renderOpenCall() {
         
         <div style="display:flex;gap:6px;">
           <button class="btn gold" onclick="openOcBulkModal()" ${total ? '' : 'disabled'}>✉ Bulk Email</button>
+          <button class="btn danger-btn" onclick="openOcBulkRemoveModal()" ${total ? '' : 'disabled'} title="Bulk remove contributors">✕ Bulk Remove</button>
           <button class="btn" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'} title="Export all contributors to CSV">📤 Export CSV</button>
         </div>
       </div>
@@ -19657,6 +19798,7 @@ Object.assign(window, {
   showMoreHist, showAllHist,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
   ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
+  openOcBulkRemoveModal, closeOcBulkRemoveModal, ocBulkRemoveSelectAll, ocBulkRemoveUpdateCount, ocBulkRemoveFilter, executeOcBulkRemove,
   openOcEditModal, saveOcContributor, downloadOcAttachment, ocUpdateBulkPreview, ocClearUndeliverable,
   ocToggleColorPalette, ocApplyColor,
   openOcEmailPreviewModal, closeOcEmailPreviewModal, ocPreviewModalSend, ocPreviewModalEditInWizard,
