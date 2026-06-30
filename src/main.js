@@ -2837,11 +2837,23 @@ function openOcBulkModal() {
     modal.style.alignItems = 'center';
     modal.style.justifyContent = 'center';
     modal.style.zIndex = '10000';
+    // Click the dimmed backdrop (outside the card, which stops propagation) to
+    // dismiss — the inner card's stopPropagation always intended this.
+    modal.addEventListener('click', closeOcBulkModal);
     document.body.appendChild(modal);
   }
-  
+
   modal.style.display = 'flex';
+  document.addEventListener('keydown', ocBulkModalEscHandler);
   renderOcBulkModalContent();
+}
+
+// Escape closes the bulk modal — but never mid-send, so an in-flight batch
+// isn't abandoned by a stray keypress.
+function ocBulkModalEscHandler(e) {
+  if (e.key !== 'Escape') return;
+  if ($('oc-bulk-progress-container')?.style.display === 'block') return;
+  closeOcBulkModal();
 }
 
 function closeOcBulkModal() {
@@ -2849,6 +2861,7 @@ function closeOcBulkModal() {
   if (modal) {
     modal.style.display = 'none';
   }
+  document.removeEventListener('keydown', ocBulkModalEscHandler);
 }
 
 function renderOcBulkModalContent(retryMode = false) {
@@ -3926,6 +3939,13 @@ async function ocToggle(id, key) {
   c[key] = !c[key];
   await _persistOpenCalls();
   renderOpenCall();
+  // Immediate, non-blocking confirmation so a stage tick is never silent.
+  const stageLabel = OC_STAGES.find(st => st.key === key)?.label || 'Stage';
+  const who = c.name || c.email || 'contributor';
+  showToast(
+    c[key] ? `${stageLabel} ✓ marked done for ${who}` : `${stageLabel} cleared for ${who}`,
+    c[key] ? 'ok' : 'warn'
+  );
 }
 
 async function ocDelete(id) {
