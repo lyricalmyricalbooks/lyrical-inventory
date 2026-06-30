@@ -63,3 +63,30 @@ export function parseContributorRows(raw, existingEmails = []) {
 
   return { contributors, added, skipped };
 }
+
+// Merge fields a stage template can reference, in the order they're shown to
+// the user. Each maps to how the value is resolved for a contributor.
+export const OC_MERGE_FIELDS = ['name', 'photo', 'creditName', 'project', 'date'];
+
+// Which merge fields in `template` would resolve to an empty string for this
+// contributor — i.e. the email would go out with that spot blank (the classic
+// 'your photo "" has been selected' bug). `context` supplies the non-contributor
+// values (project title, deadline). `creditName` falls back to the contributor
+// name, mirroring the sender. Returns the offending field names, in OC_MERGE_FIELDS
+// order; an empty array means every referenced token has data.
+export function findUnfilledMergeFields(template, contributor = {}, context = {}) {
+  const text = String(template || '');
+  const c = contributor || {};
+  const ctx = context || {};
+  const resolved = {
+    name: c.name || '',
+    photo: c.photo || '',
+    creditName: c.creditName || c.name || '',
+    project: ctx.project || '',
+    date: ctx.date || '',
+  };
+  return OC_MERGE_FIELDS.filter(field => {
+    const token = '{{' + field + '}}';
+    return text.includes(token) && !String(resolved[field]).trim();
+  });
+}
