@@ -34,30 +34,86 @@ export function newContributor({ name = '', email = '', photo = '', photos = [],
   };
 }
 
-// Parse pasted spreadsheet rows ("Name, Email, Photo", tab- or comma-
-// separated) into new contributors. Skips a header row, blank lines, and
-// any email already present in `existingEmails` (case-insensitive).
+// Split raw spreadsheet text (pasted rows or a .csv file's contents) into
+// records of trimmed fields. Understands what Excel actually produces:
+// quoted fields with commas inside ("Ackman, Jeremy"), doubled quotes for a
+// literal quote (""), newlines inside a quoted Notes field, a UTF-8 BOM, and
+// CRLF line endings. Tab-separated rows (Excel copy-paste) are detected per
+// record so a comma inside an unquoted name can't split it.
+function splitDelimitedRecords(raw) {
+  const text = String(raw == null ? '' : raw).replace(/^\uFEFF/, '');
+
+  // Pass 1: cut into logical records at newlines that are outside quotes,
+  // so a multi-line quoted Notes cell stays inside its record.
+  const records = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') { inQuotes = !inQuotes; cur += ch; }
+    else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      records.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  records.push(cur);
+
+  // Pass 2: split each record into fields — tab-delimited when the record
+  // contains a tab (Excel paste), comma otherwise — honoring quotes so a
+  // quoted field can carry the delimiter, and unescaping doubled quotes.
+  const splitFields = (rec, delim) => {
+    const fields = [];
+    let field = '';
+    let q = false;
+    for (let i = 0; i < rec.length; i++) {
+      const ch = rec[i];
+      if (q) {
+        if (ch === '"') {
+          if (rec[i + 1] === '"') { field += '"'; i++; }
+          else q = false;
+        } else field += ch;
+      } else if (ch === '"' && field.trim() === '') {
+        q = true;
+        field = ''; // drop any stray spaces before the opening quote
+      } else if (ch === delim) {
+        fields.push(field.trim());
+        field = '';
+      } else field += ch;
+    }
+    fields.push(field.trim());
+    return fields;
+  };
+
+  return records
+    .map(rec => splitFields(rec, rec.includes('\t') ? '\t' : ','))
+    .filter(fields => fields.some(f => f !== ''));
+}
+
+// Parse pasted spreadsheet rows or CSV file contents — "Name, Email, Photo,
+// Credit Name, Notes", tab- or comma-separated, Excel quoting supported —
+// into new contributors. Skips header rows, blank lines, and any email
+// already present in `existingEmails` (case-insensitive).
 // Returns { contributors, added, skipped }.
 export function parseContributorRows(raw, existingEmails = []) {
   const seen = new Set(existingEmails.map(e => (e || '').toLowerCase()).filter(Boolean));
   const contributors = [];
   let added = 0, skipped = 0;
 
-  (raw || '').split(/\r?\n/).forEach(line => {
-    if (!line.trim()) return;
-    const isTab = line.includes('\t');
-    const cols = isTab ? line.split('\t').map(p => p.trim()) : line.split(',').map(p => p.trim());
-    const [name = '', email = '', photo = ''] = cols;
-    // Header row: "Artist Name" alone, or a "name … email" header pair.
-    if (/^artist\s*name$/i.test(name) || (/^name$/i.test(name) && /e-?mail/i.test(email))) return;
+  splitDelimitedRecords(raw).forEach(cols => {
+    const [name = '', email = '', photo = '', creditName = '', notes = ''] = cols;
+    // Header row: "Artist Name" alone, or any name/email-labelled pair whose
+    // email cell isn't an actual address ("Name, Email", "Full Name, E-mail").
+    if (/^artist\s*name$/i.test(name)) return;
+    if (!email.includes('@') && (/^name$/i.test(name) || /e-?mail/i.test(email))) return;
     if (!name && !email) return;
     const key = email.toLowerCase();
     if (key && seen.has(key)) { skipped++; return; }
     if (key) seen.add(key);
-    
+
     // Support multiple photos in the photo column (separated by comma or semicolon)
     const photos = photo ? photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
-    contributors.push(newContributor({ name, email, photo, photos }));
+    contributors.push(newContributor({ name, email, photo, photos, creditName, notes }));
     added++;
   });
 

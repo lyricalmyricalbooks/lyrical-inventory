@@ -3730,9 +3730,9 @@ function renderOpenCall() {
         <textarea id="oc-import-text" rows="4" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg, Jeremy Ackman, Selected" style="font-family:'DM Mono',monospace;"></textarea>
         
         <div class="oc-upload-zone" onclick="triggerOcCsvUpload()" ondragover="handleOcCsvDragOver(event)" ondragleave="handleOcCsvDragLeave(event)" ondrop="handleOcCsvDrop(event)">
-          <p>Drag & Drop a <strong>.csv</strong> file here, or click to upload</p>
-          <span>Format: Name, Email, Photo (optional), Credit Name (optional), Notes (optional)</span>
-          <input type="file" id="oc-csv-file-input" accept=".csv" style="display:none;" onchange="handleOcCsvUpload(this)">
+          <p>Drag & Drop a <strong>.csv or Excel (.xlsx)</strong> file here, or click to upload</p>
+          <span>Columns: Name, Email, Photo (separate several with ;), Credit Name, Notes — you'll see a preview before anything is imported</span>
+          <input type="file" id="oc-csv-file-input" accept=".csv,.xlsx,.xls" style="display:none;" onchange="handleOcCsvUpload(this)">
         </div>
         
         <div style="display:flex;gap:8px;margin-top:12px;">
@@ -18190,6 +18190,13 @@ async function loadOpenCalls() {
         proj.contributors.forEach(c => {
           if (c.creditName === undefined) c.creditName = '';
           if (c.notes === undefined) c.notes = '';
+          // Heal records created by the old CSV-file import, which skipped
+          // newContributor(): give them real stage booleans and a photos array
+          // so pipeline toggles and photo chips work on them.
+          OC_STAGES.forEach(st => { if (typeof c[st.key] !== 'boolean') c[st.key] = !!c[st.key]; });
+          if (!Array.isArray(c.photos)) {
+            c.photos = c.photo ? String(c.photo).split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
+          }
         });
       }
       ocEnsureQueues_(proj);
@@ -18522,77 +18529,63 @@ function updateOpenCallBadges() {
   }
 }
 
+// Apply a parsed file import: preview what's about to happen (count, dupes,
+// first few names) → confirm → add. Routes through the same parser and
+// newContributor() the paste path uses, so file uploads get identical
+// behavior: all 5 columns honored, stage flags initialized, photos split.
+async function ocApplyParsedImport_(parsed, sourceLabel) {
+  const { contributors, added, skipped } = parsed;
+  if (!added) {
+    showToast(skipped
+      ? `All ${skipped} row${skipped === 1 ? ' is' : 's are'} already in this project — nothing to import`
+      : `No importable rows found in ${sourceLabel}`, 'warn');
+    return;
+  }
+  const names = contributors.slice(0, 8).map(c =>
+    `• ${c.name || c.email}${c.creditName && c.creditName !== c.name ? ` — credit “${c.creditName}”` : ''}`);
+  const more = added > 8 ? `\n…and ${added - 8} more` : '';
+  const ok = await confirmDialog(
+    `Import ${added} contributor${added === 1 ? '' : 's'} from ${sourceLabel}?` +
+    `${skipped ? `\n${skipped} duplicate${skipped === 1 ? '' : 's'} will be skipped.` : ''}\n\n${names.join('\n')}${more}`,
+    { title: 'Confirm import', okLabel: `Import ${added}`, cancelLabel: 'Cancel' }
+  );
+  if (!ok) return;
+  const list = ocList();
+  contributors.forEach(c => { c.createdAt = today(); list.push(c); });
+  await _persistOpenCalls();
+  ocImportOpen = false;
+  renderOpenCall();
+  showToast(`✓ Imported ${added}${skipped ? ` · ${skipped} duplicate${skipped === 1 ? '' : 's'} skipped` : ''}`);
+}
+
 function handleOcCsvFile(file) {
-  if (!file) return;
+  if (!file || ocBlockedForAuthor_()) return;
+  const fname = (file.name || '').toLowerCase();
+  const isExcel = /\.(xlsx|xls)$/.test(fname);
   const reader = new FileReader();
   reader.onload = async function(e) {
-    const text = e.target.result;
-    const lines = text.split(/\r?\n/);
-    let imported = 0;
-    const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
-    if (!proj) return;
-    
-    const parseCSVLine = (line) => {
-      const result = [];
-      let current = '';
-      let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-          result.push(current.trim());
-          current = '';
-        } else {
-          current += char;
+    try {
+      let text;
+      if (isExcel) {
+        // Same SheetJS global the sales-import path uses (loaded in index.html).
+        if (typeof XLSX === 'undefined') {
+          showToast('Excel support needs an internet connection to load — save the file as .csv and retry', 'err');
+          return;
         }
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+        text = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
+      } else {
+        text = e.target.result;
       }
-      result.push(current.trim());
-      return result;
-    };
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      const cols = parseCSVLine(line);
-      if (cols.length < 2) continue;
-      
-      if (i === 0 && cols.some(c => c.toLowerCase().includes('email') || c.toLowerCase().includes('name'))) {
-        continue;
-      }
-      
-      const name = cols[0];
-      const email = cols[1];
-      const photo = cols[2] || '';
-      const creditName = cols[3] || '';
-      const notes = cols[4] || '';
-      
-      if (!email) continue;
-      
-      const exists = proj.contributors.some(c => c.email && c.email.toLowerCase() === email.toLowerCase());
-      if (!exists) {
-        proj.contributors.push({
-          id: 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 5),
-          name: name,
-          email: email,
-          photo: photo,
-          createdAt: today(),
-          creditName: creditName,
-          notes: notes
-        });
-        imported++;
-      }
-    }
-    
-    if (imported > 0) {
-      await _persistOpenCalls();
-      renderOpenCall();
-      showToast(`✓ Successfully imported ${imported} contributor(s) from CSV`);
-    } else {
-      showToast('No new contributors imported', 'warn');
+      const parsed = parseContributorRows(text, ocList().map(c => c.email));
+      await ocApplyParsedImport_(parsed, file.name || 'the file');
+    } catch (err) {
+      console.error('Contributor file import failed:', err);
+      showToast(`⚠ Could not read ${file.name || 'the file'}: ${err.message}`, 'err');
     }
   };
-  reader.readAsText(file);
+  if (isExcel) reader.readAsArrayBuffer(file);
+  else reader.readAsText(file);
 }
 
 function triggerOcCsvUpload() {
@@ -18602,6 +18595,7 @@ function triggerOcCsvUpload() {
 function handleOcCsvUpload(input) {
   const file = input.files?.[0];
   if (file) handleOcCsvFile(file);
+  input.value = ''; // allow re-selecting the same file after a cancel
 }
 
 function handleOcCsvDragOver(e) {
@@ -18625,10 +18619,10 @@ function handleOcCsvDrop(e) {
   e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)';
   
   const file = e.dataTransfer?.files?.[0];
-  if (file && file.name.toLowerCase().endsWith('.csv')) {
+  if (file && /\.(csv|xlsx|xls)$/.test(file.name.toLowerCase())) {
     handleOcCsvFile(file);
   } else {
-    showToast('Please upload a valid CSV file', 'warn');
+    showToast('Please upload a .csv or Excel (.xlsx) file', 'warn');
   }
 }
 
