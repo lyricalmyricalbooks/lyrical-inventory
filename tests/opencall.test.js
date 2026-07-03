@@ -3,6 +3,7 @@ import {
   OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields,
   ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
   ocNextSendStage, ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate,
+  ocChosenPhoto, ocWaitingDays,
 } from '../src/lib/opencall.js';
 
 describe('newContributor', () => {
@@ -342,5 +343,56 @@ describe('ocMergeTemplate', () => {
   it('falls back to Artist and empty strings safely', () => {
     expect(ocMergeTemplate('Hi {{name}}, {{photo}}{{project}}', {}, {})).toBe('Hi Artist, ');
     expect(ocMergeTemplate(null)).toBe('');
+  });
+
+  it('uses the starred picks for {{photo}} when the owner curated', () => {
+    const c = { name: 'Ada', photo: 'a.jpg, b.jpg, c.jpg', photos: ['a.jpg', 'b.jpg', 'c.jpg'], selectedPhotos: ['b.jpg'] };
+    expect(ocMergeTemplate('Your photo {{photo}} won', c)).toBe('Your photo b.jpg won');
+  });
+});
+
+describe('ocChosenPhoto', () => {
+  it('prefers starred picks over the full photo list', () => {
+    const c = { photo: 'a.jpg, b.jpg', photos: ['a.jpg', 'b.jpg'], selectedPhotos: ['b.jpg'] };
+    expect(ocChosenPhoto(c)).toBe('b.jpg');
+  });
+
+  it('joins multiple picks in pick order', () => {
+    const c = { photos: ['a.jpg', 'b.jpg', 'c.jpg'], selectedPhotos: ['c.jpg', 'a.jpg'] };
+    expect(ocChosenPhoto(c)).toBe('c.jpg, a.jpg');
+  });
+
+  it('falls back to the photo string, then the photos array, when nothing is picked', () => {
+    expect(ocChosenPhoto({ photo: 'a.jpg, b.jpg', selectedPhotos: [] })).toBe('a.jpg, b.jpg');
+    expect(ocChosenPhoto({ photos: ['x.jpg'] })).toBe('x.jpg');
+    expect(ocChosenPhoto({})).toBe('');
+    expect(ocChosenPhoto(null)).toBe('');
+  });
+
+  it('feeds the blank-field guard, so a curated contributor never warns on {{photo}}', () => {
+    const c = { name: 'Ada', photo: '', photos: [], selectedPhotos: ['win.jpg'] };
+    expect(findUnfilledMergeFields('{{photo}}', c, {})).toEqual([]);
+  });
+});
+
+describe('ocWaitingDays', () => {
+  const DAY = 86400000;
+
+  it('counts whole days since lastStageAt', () => {
+    const now = Date.parse('2026-07-03T12:00:00Z');
+    expect(ocWaitingDays({ lastStageAt: '2026-06-21T12:00:00Z' }, now)).toBe(12);
+    expect(ocWaitingDays({ lastStageAt: new Date(now - 3 * DAY).toISOString() }, now)).toBe(3);
+  });
+
+  it('falls back to createdAt for records that predate tracking', () => {
+    const now = Date.parse('2026-07-03T12:00:00Z');
+    expect(ocWaitingDays({ createdAt: '2026-07-01' }, now)).toBe(2);
+  });
+
+  it('returns null with no usable date and never goes negative', () => {
+    expect(ocWaitingDays({}, Date.now())).toBeNull();
+    expect(ocWaitingDays({ lastStageAt: 'not-a-date' }, Date.now())).toBeNull();
+    const now = Date.now();
+    expect(ocWaitingDays({ lastStageAt: new Date(now + DAY).toISOString() }, now)).toBe(0);
   });
 });

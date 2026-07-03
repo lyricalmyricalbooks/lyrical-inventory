@@ -2899,6 +2899,173 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   font-weight: 700;
 }
 
+/* Pipeline funnel — one segment per stage, click to filter the list */
+.oc-funnel-card {
+  padding: 14px 16px;
+}
+.oc-funnel {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.oc-funnel-seg {
+  flex: 1 1 100px;
+  min-width: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px 12px;
+  background: transparent;
+  border: 1px solid var(--cream3);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.oc-funnel-seg:hover {
+  border-color: var(--gold-line);
+  transform: translateY(-1px);
+}
+.oc-funnel-seg.active {
+  border-color: var(--gold);
+  background: var(--gold-bg);
+  box-shadow: 0 2px 10px rgba(200, 145, 58, 0.15);
+}
+.oc-funnel-seg.empty .oc-funnel-num {
+  color: var(--text4);
+}
+.oc-funnel-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+.oc-funnel-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text3);
+  white-space: nowrap;
+}
+.oc-funnel-bar {
+  width: 100%;
+  height: 4px;
+  margin-top: 6px;
+  background: var(--cream3);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.oc-funnel-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--gold2));
+  border-radius: 99px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.oc-funnel-seg.complete .oc-funnel-bar > span {
+  background: var(--green);
+}
+
+/* Collapsible workspace cards (template designer, sender/API config) */
+.oc-collapse-head {
+  cursor: pointer;
+  user-select: none;
+}
+.oc-collapse-chevron {
+  font-size: 12px;
+  color: var(--text3);
+  transition: transform 0.15s;
+}
+.oc-collapse-status {
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text3);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hero stats: the queue counts are buttons in disguise */
+.oc-hero-stat.action {
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.oc-hero-stat.action:hover {
+  transform: translateY(-1px);
+}
+.oc-hero-stat.alert .oc-hero-stat-num {
+  color: var(--gold2);
+}
+.oc-hero-stat.ready .oc-hero-stat-num {
+  color: var(--green);
+}
+.oc-hero-stat.dim {
+  opacity: 0.55;
+}
+
+/* Photo curation: star the chosen file(s) */
+.oc-photo-pick {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text4);
+  margin-right: 2px;
+  transition: color 0.12s, transform 0.12s;
+}
+.oc-photo-pick:hover {
+  color: var(--gold);
+  transform: scale(1.2);
+}
+.oc-photo-pick.on {
+  color: var(--gold);
+}
+.oc-photo-chip.picked {
+  border-color: var(--gold);
+  background: var(--gold-bg);
+  font-weight: 600;
+}
+.oc-pick-count {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--gold);
+  white-space: nowrap;
+}
+.oc-pick-hint {
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+/* Aging + thread-health chips on cards */
+.oc-wait-chip {
+  display: inline-block;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text2);
+  background: var(--cream3);
+  border-radius: 99px;
+  padding: 1px 8px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.oc-thread-warn {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--red);
+  background: var(--red-bg);
+  border-radius: 99px;
+  padding: 1px 8px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
 /* Review inbox + Ready-to-send outbox (approval queues) */
 .oc-queue-card {
   padding: 16px 20px;
