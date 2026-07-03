@@ -85,6 +85,66 @@ describe('parseContributorRows', () => {
     const undefinedResult = parseContributorRows(undefined);
     expect(undefinedResult).toEqual({ contributors: [], added: 0, skipped: 0 });
   });
+
+  it('captures Credit Name and Notes (columns 4 and 5)', () => {
+    const { contributors } = parseContributorRows('Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg, J. Ackman, Selected');
+    expect(contributors[0]).toMatchObject({
+      name: 'Jeremy Ackman', email: 'ackmanj@gmail.com', photo: 'Jeremy_ackman_5.jpg',
+      creditName: 'J. Ackman', notes: 'Selected',
+    });
+  });
+
+  it('captures Credit Name and Notes from tab-separated rows too', () => {
+    const { contributors } = parseContributorRows('Ada\tada@x.com\tada.jpg\tAda L.\tVIP');
+    expect(contributors[0]).toMatchObject({ creditName: 'Ada L.', notes: 'VIP' });
+  });
+
+  it('honors quoted fields with commas inside (Excel-style CSV)', () => {
+    const raw = '"Ackman, Jeremy",ackmanj@gmail.com,photo.jpg,"Ackman, J.","Selected, files pending"';
+    const { contributors, added } = parseContributorRows(raw);
+    expect(added).toBe(1);
+    expect(contributors[0]).toMatchObject({
+      name: 'Ackman, Jeremy', creditName: 'Ackman, J.', notes: 'Selected, files pending',
+    });
+  });
+
+  it('unescapes doubled quotes inside a quoted field', () => {
+    const { contributors } = parseContributorRows('Ada,ada@x.com,a.jpg,Ada,"said ""hi"" today"');
+    expect(contributors[0].notes).toBe('said "hi" today');
+  });
+
+  it('keeps a newline inside a quoted Notes field in one record', () => {
+    const raw = 'Ada,ada@x.com,a.jpg,Ada,"line one\nline two"\nGrace,grace@x.com';
+    const { contributors, added } = parseContributorRows(raw);
+    expect(added).toBe(2);
+    expect(contributors[0].notes).toBe('line one\nline two');
+    expect(contributors[1].name).toBe('Grace');
+  });
+
+  it('strips a UTF-8 BOM and handles CRLF line endings (Excel export)', () => {
+    const raw = '﻿Name,Email,Photo,Credit Name,Notes\r\nAda,ada@x.com,a.jpg,Ada L.,VIP\r\n';
+    const { contributors, added } = parseContributorRows(raw);
+    expect(added).toBe(1);
+    expect(contributors[0].name).toBe('Ada');
+    expect(contributors[0].creditName).toBe('Ada L.');
+  });
+
+  it('skips the shipped template header row ("Name,Email,Photo,Credit Name,Notes")', () => {
+    const { added, contributors } = parseContributorRows('Name,Email,Photo,Credit Name,Notes\nAda,ada@x.com');
+    expect(added).toBe(1);
+    expect(contributors[0].name).toBe('Ada');
+  });
+
+  it('does not mistake a real contributor for a header row', () => {
+    // email cell contains an address → never treated as a header
+    const { added } = parseContributorRows('Name, name@x.com');
+    expect(added).toBe(1);
+  });
+
+  it('splits semicolon-separated photos from a quoted photo cell', () => {
+    const { contributors } = parseContributorRows('Ada,ada@x.com,"a.jpg; b.jpg"');
+    expect(contributors[0].photos).toEqual(['a.jpg', 'b.jpg']);
+  });
 });
 
 describe('findUnfilledMergeFields', () => {
