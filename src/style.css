@@ -2867,6 +2867,130 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   border-top: 1px dashed var(--cream4);
 }
 
+/* Server-side scheduled scan control */
+.oc-sched-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--cream4);
+  font-size: 11.5px;
+  color: var(--text3);
+}
+.oc-sched-label {
+  font-weight: 700;
+  color: var(--text2);
+}
+.oc-sched-digest {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: var(--text3);
+}
+.oc-sched-digest input {
+  margin: 0;
+  cursor: pointer;
+}
+.oc-sched-status {
+  color: var(--green);
+  font-weight: 700;
+}
+
+/* Review inbox + Ready-to-send outbox (approval queues) */
+.oc-queue-card {
+  padding: 16px 20px;
+}
+.oc-inbox-card {
+  border-left: 3px solid var(--gold);
+}
+.oc-outbox-card {
+  border-left: 3px solid var(--green);
+}
+.oc-queue-note {
+  font-size: 11.5px;
+  color: var(--text3);
+  margin: 8px 0 4px;
+  text-align: left;
+}
+.oc-queue-status {
+  margin-left: 8px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.oc-queue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-top: 1px solid var(--cream3);
+  text-align: left;
+}
+.oc-queue-row-main {
+  flex: 1 1 260px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+.oc-queue-row-main strong {
+  color: var(--text);
+}
+.oc-queue-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.oc-queue-thread-link {
+  font-size: 11.5px;
+  color: var(--gold);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.oc-queue-stage {
+  display: inline-block;
+  border: 1px solid var(--gold-line);
+  color: var(--gold);
+  border-radius: 100px;
+  padding: 2px 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+.oc-queue-subject {
+  font-size: 12px;
+  color: var(--text3);
+  margin-top: 3px;
+  word-break: break-word;
+}
+.oc-queue-warn {
+  font-size: 11px;
+  color: var(--red);
+  font-weight: 700;
+  margin-left: 6px;
+}
+.oc-inbox-credit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text3);
+}
+.oc-inbox-credit input {
+  flex: 1;
+  max-width: 260px;
+  padding: 5px 9px;
+  font-size: 12.5px;
+  color: var(--text);
+  border: 1px solid var(--cream4);
+  border-radius: 5px;
+  background: var(--input-bg, #ffffff);
+}
+
 /* Contributor Cards */
 .oc-main > div:last-child > .card,
 #opencall-body .card {

@@ -16,7 +16,11 @@ import {
 } from './lib/money.js';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
-import { OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields } from './lib/opencall.js';
+import {
+  OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields,
+  ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
+  ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate,
+} from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
@@ -2781,6 +2785,25 @@ function ocBlockedForAuthor_() {
   return isAuthor();
 }
 
+// Review-inbox + outbox queues live on each project; older saved data predates
+// them, so always ensure the fields before touching them.
+function ocEnsureQueues_(proj) {
+  if (!proj) return;
+  if (!Array.isArray(proj.inbox)) proj.inbox = [];
+  if (!proj.inboxDismissed || typeof proj.inboxDismissed !== 'object') proj.inboxDismissed = {};
+  if (!Array.isArray(proj.outbox)) proj.outbox = [];
+  if (!proj.outboxDismissed || typeof proj.outboxDismissed !== 'object') proj.outboxDismissed = {};
+}
+
+// Queue the contributor's next stage email in the "Ready to send" outbox
+// (no-op if nothing is ready, already queued, or previously removed).
+function ocQueueNextStep_(proj, c) {
+  ocEnsureQueues_(proj);
+  const additions = ocOutboxAdditions(c, proj.outbox, proj.outboxDismissed);
+  if (additions.length) proj.outbox.push(...additions);
+  return additions.length;
+}
+
 function ocSetSort(val) {
   ocSortBy = val;
   renderOpenCall();
@@ -3179,15 +3202,8 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
       : `Sending ${i + 1}/${selectedRecs.length} — ${c.name || c.email}...`;
     
     const dl = $('oc-bulk-deadline')?.value || '';
-    const personalize = (str) => str
-      .replace(/\{\{name\}\}/g, c.name || 'Artist')
-      .replace(/\{\{photo\}\}/g, c.photo || '')
-      .replace(/\{\{creditName\}\}/g, c.creditName || c.name || 'Artist')
-      .replace(/\{\{project\}\}/g, proj.title)
-      .replace(/\{\{date\}\}/g, dl);
-    
-    const subject = personalize(tmpl.subject);
-    const body = personalize(tmpl.body);
+    const subject = ocMergeTemplate(tmpl.subject, c, { project: proj.title, date: dl });
+    const body = ocMergeTemplate(tmpl.body, c, { project: proj.title, date: dl });
     
     try {
       if (simulate) {
@@ -3524,6 +3540,21 @@ function renderOpenCall() {
       </div>
     </div>` : '';
 
+  // Server-side auto-scan control. The Apps Script runs the reply scan on a
+  // timer even when this app is closed; findings land in the Review inbox.
+  const sched = _ocScheduleCache();
+  const scheduleRowHtml = `
+    <div class="oc-sched-row" title="Runs the Gmail reply scan on Google's servers on a timer — findings wait in “Review scan results”, and the digest emails you a summary. Works even when this app is closed. Requires the latest Apps Script deployed.">
+      <span class="oc-sched-label">⏱ Auto-scan (server)</span>
+      <select id="oc-sched-interval" onchange="ocSetServerSchedule()" ${sheetsUrl ? '' : 'disabled'}>
+        <option value="0" ${!sched.enabled ? 'selected' : ''}>Off</option>
+        <option value="30" ${sched.enabled && sched.minutes === 30 ? 'selected' : ''}>Every 30 min</option>
+        <option value="60" ${sched.enabled && sched.minutes === 60 ? 'selected' : ''}>Every hour</option>
+      </select>
+      <label class="oc-sched-digest"><input type="checkbox" id="oc-sched-digest" ${sched.digest ? 'checked' : ''} ${sheetsUrl ? '' : 'disabled'} onchange="ocSetServerSchedule()"> Email digest</label>
+      <span id="oc-sched-status" class="oc-sched-status">${sched.enabled ? '● on' : ''}</span>
+    </div>`;
+
   const summary = `
     <div class="card oc-summary-card">
       <div class="oc-section-title">Contributors · ${total}</div>
@@ -3540,6 +3571,7 @@ function renderOpenCall() {
       </div>
       <div class="oc-stage-counts">${total ? stageCounts : '<span class="oc-empty-note">No contributors yet.</span>'}</div>
       ${progressBarHtml}
+      ${scheduleRowHtml}
       ${lastScannedHtml}
     </div>`;
 
@@ -3986,9 +4018,79 @@ function renderOpenCall() {
       ${heroStatsHtml}
     </div>`;
 
+  // ── Review inbox: scan findings awaiting the owner's approval ──
+  if (activeProj) ocEnsureQueues_(activeProj);
+  const inboxItems = activeProj ? activeProj.inbox.filter(p => activeProj.contributors.some(c => c.id === p.contributorId)) : [];
+  const inboxTypeLabels = { creditReceived: '✍️ Credit-name reply detected', filesReceived: '📎 High-res files attachment detected', undeliverable: '⚠ Email bounced (undeliverable)' };
+  const inboxRows = inboxItems.map(p => {
+    const c = activeProj.contributors.find(x => x.id === p.contributorId);
+    const threadLink = p.threadId
+      ? `<a class="oc-queue-thread-link" href="https://mail.google.com/mail/u/0/#all/${encodeURIComponent(p.threadId)}" target="_blank" rel="noopener" title="Open the detected email in Gmail">✉ View email ↗</a>`
+      : '';
+    const creditInput = p.type === 'creditReceived'
+      ? `<label class="oc-inbox-credit">Credit name to save: <input id="oc-inbox-credit-${p.id}" type="text" value="${escapeHtml(p.creditName || c.creditName || c.name || '')}" placeholder="Exact name for the credits"></label>`
+      : '';
+    return `
+      <div class="oc-queue-row">
+        <div class="oc-queue-row-main">
+          <div><strong>${escapeHtml(c.name || c.email)}</strong> — ${inboxTypeLabels[p.type] || p.type} ${threadLink}</div>
+          ${creditInput}
+        </div>
+        <div class="oc-queue-row-actions">
+          <button class="btn sm gold" onclick="ocApproveProposal('${p.id}')">✓ Approve</button>
+          <button class="btn sm" onclick="ocDismissProposal('${p.id}')">✕ Dismiss</button>
+        </div>
+      </div>`;
+  }).join('');
+  const inboxHtml = inboxItems.length ? `
+    <div class="card oc-queue-card oc-inbox-card">
+      <div class="row-between" style="flex-wrap:wrap;gap:8px;">
+        <div class="oc-section-title" style="margin:0;">📥 Review scan results · ${inboxItems.length}</div>
+        <button class="btn sm gold" onclick="ocApproveAllProposals()">✓ Approve all</button>
+      </div>
+      <div class="oc-queue-note">Gmail scans propose updates here — nothing changes on a contributor until you approve it.</div>
+      ${inboxRows}
+    </div>` : '';
+
+  // ── Ready-to-send outbox: next-stage emails queued for one approved batch ──
+  const outboxItems = activeProj ? activeProj.outbox.filter(e => activeProj.contributors.some(c => c.id === e.contributorId)) : [];
+  const outboxStageLabels = { cmykSent: 'Request Files', preorderSent: 'Pre-order' };
+  const outboxDl = localStorage.getItem('lm-oc-last-deadline') || '';
+  const outboxRows = outboxItems.map(e => {
+    const c = activeProj.contributors.find(x => x.id === e.contributorId);
+    const tmpl = activeProj.templates ? activeProj.templates[e.stageKey] : null;
+    const subjectPreview = tmpl ? ocMergeTemplate(tmpl.subject, c, { project: activeProj.title, date: outboxDl }) : '(no template saved for this stage)';
+    const missing = tmpl ? findUnfilledMergeFields((tmpl.subject || '') + '\n' + (tmpl.body || ''), c, { project: activeProj.title, date: outboxDl }) : [];
+    const warn = (!tmpl || missing.length)
+      ? `<span class="oc-queue-warn" title="${!tmpl ? 'Save a template for this stage first' : 'Blank template fields: ' + missing.join(', ')}">⚠ ${!tmpl ? 'no template' : 'blank: ' + missing.join(', ')}</span>`
+      : '';
+    return `
+      <div class="oc-queue-row">
+        <div class="oc-queue-row-main">
+          <div><strong>${escapeHtml(c.name || c.email)}</strong> <span class="oc-queue-stage">${outboxStageLabels[e.stageKey] || e.stageKey}</span> ${warn}</div>
+          <div class="oc-queue-subject">${escapeHtml(subjectPreview)}</div>
+        </div>
+        <div class="oc-queue-row-actions">
+          <button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}','${e.stageKey}')">✎ Review & send</button>
+          <button class="btn sm" onclick="ocOutboxRemove('${e.id}')">✕ Remove</button>
+        </div>
+      </div>`;
+  }).join('');
+  const outboxHtml = outboxItems.length ? `
+    <div class="card oc-queue-card oc-outbox-card">
+      <div class="row-between" style="flex-wrap:wrap;gap:8px;">
+        <div class="oc-section-title" style="margin:0;">📤 Ready to send · ${outboxItems.length}</div>
+        <button class="btn sm gold" id="oc-outbox-sendall-btn" onclick="ocOutboxSendAll()">▶ Send all (${outboxItems.length})</button>
+      </div>
+      <div class="oc-queue-note">Queued automatically when a reply comes in — each uses its stage template and replies into the contributor's thread. Nothing sends until you confirm.<span id="oc-outbox-status" class="oc-queue-status"></span></div>
+      ${outboxRows}
+    </div>` : '';
+
   const mainHtml = `
     <div class="oc-main">
       ${heroHtml}
+      ${inboxHtml}
+      ${outboxHtml}
       ${templatesEditor}
       ${searchFilterBar}
       <div style="display:flex;flex-direction:column;gap:14px;">
@@ -4014,12 +4116,22 @@ function renderOpenCall() {
   // Initialize Template Preview
   setTimeout(ocUpdateTmplPreview, 100);
 
-  // Auto-trigger background scan if lastScanned is null or > 1 hour ago (Next Move #5)
+  // Auto-trigger background scan if lastScanned is stale (Next Move #5).
+  // With the server-side schedule on, findings pile up while the app is
+  // closed, so scan more eagerly (10 min) to surface them in the inbox.
   const now = Date.now();
-  const oneHour = 60 * 60 * 1000;
+  const scanStaleMs = sched.enabled ? 10 * 60 * 1000 : 60 * 60 * 1000;
   const lastScannedTime = lastScannedVal ? new Date(lastScannedVal).getTime() : 0;
-  if (sheetsUrl && total > 0 && (now - lastScannedTime > oneHour)) {
+  if (sheetsUrl && total > 0 && (now - lastScannedTime > scanStaleMs)) {
     setTimeout(() => ocScanReplies({ background: true }), 1000);
+  }
+
+  // Once per session, ask the backend whether the scheduled scan is actually
+  // armed (the trigger lives in Apps Script — another device may have changed
+  // it) and refresh the control if our cached view was stale.
+  if (sheetsUrl && !window._ocSchedStatusFetched) {
+    window._ocSchedStatusFetched = true;
+    ocRefreshScheduleStatus_();
   }
 }
 
@@ -4055,6 +4167,112 @@ async function ocFetchMailSenderInfo() {
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data;
+}
+
+// ── Server-side scheduled scan (Apps Script time trigger) ──────────────────
+// The trigger + digest config live in the Apps Script; this cache is only the
+// last state we saw, so the control renders instantly and the background-scan
+// cadence knows whether server findings might be waiting.
+
+function _ocScheduleCache() {
+  try { return JSON.parse(localStorage.getItem('lm-oc-schedule-cache')) || {}; } catch (_) { return {}; }
+}
+
+function _ocScheduleCacheSet(data) {
+  const cfg = { enabled: !!data.enabled, minutes: parseInt(data.minutes, 10) || 30, digest: !!data.digest };
+  localStorage.setItem('lm-oc-schedule-cache', JSON.stringify(cfg));
+  return cfg;
+}
+
+async function _ocScheduleRequest(op, extra = {}) {
+  const res = await fetch(sheetsUrl, {
+    method: 'POST', mode: 'cors',
+    body: JSON.stringify({ version: 2, action: 'ocschedule', payload: { op, ...extra } })
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// A compact stage snapshot of every contributor (all projects) so the server
+// scan knows who to watch and which stages are still open. No notes/photos —
+// just what the scan needs.
+function ocSnapshotContributors_() {
+  const out = [];
+  Object.values(OPENCALL_DATA.projects || {}).forEach(proj => {
+    (proj && Array.isArray(proj.contributors) ? proj.contributors : []).forEach(c => {
+      if (!c.email) return;
+      out.push({
+        email: c.email,
+        name: c.name || '',
+        selectionSent: !!c.selectionSent,
+        creditReceived: !!c.creditReceived,
+        cmykSent: !!c.cmykSent,
+        filesReceived: !!c.filesReceived,
+        undeliverable: !!c.undeliverable
+      });
+    });
+  });
+  return out;
+}
+
+async function ocPushSnapshot_() {
+  const res = await fetch(sheetsUrl, {
+    method: 'POST', mode: 'cors',
+    body: JSON.stringify({ version: 2, action: 'syncopencallsnapshot', payload: { contributors: ocSnapshotContributors_() } })
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// Keep the server's snapshot loosely in sync: debounced, fire-and-forget, and
+// only when the schedule is actually on — a failed push just means the next
+// server scan works from slightly older stage flags.
+let _ocSnapshotTimer = null;
+function ocScheduleSnapshotPush_() {
+  if (!sheetsUrl || !navigator.onLine || !_ocScheduleCache().enabled) return;
+  clearTimeout(_ocSnapshotTimer);
+  _ocSnapshotTimer = setTimeout(() => {
+    ocPushSnapshot_().catch(e => console.warn('Open call snapshot push failed (next change retries):', e));
+  }, 4000);
+}
+
+async function ocSetServerSchedule() {
+  if (ocBlockedForAuthor_()) return;
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first', 'warn'); return; }
+  const minutes = parseInt($('oc-sched-interval')?.value || '0', 10);
+  const digest = $('oc-sched-digest')?.checked || false;
+  const statusEl = $('oc-sched-status');
+  if (statusEl) statusEl.textContent = '…';
+  try {
+    // Fresh snapshot first, so the very first server run scans the right people.
+    if (minutes > 0) await ocPushSnapshot_();
+    const data = await _ocScheduleRequest('set', { enabled: minutes > 0, minutes: minutes || 30, digest });
+    const cfg = _ocScheduleCacheSet(data);
+    if (statusEl) statusEl.textContent = cfg.enabled ? '● on' : '';
+    showToast(cfg.enabled
+      ? `✓ Server auto-scan every ${cfg.minutes} min${cfg.digest ? ' + email digest' : ''} — findings will wait in “Review scan results”`
+      : 'Server auto-scan turned off');
+  } catch (e) {
+    console.error('Failed to update the scheduled scan:', e);
+    if (statusEl) statusEl.textContent = '';
+    showToast(`⚠ Could not update the schedule: ${e.message}. Make sure the latest Apps Script (v17) is deployed.`, 'err');
+    renderOpenCall(); // snap the control back to the real cached state
+  }
+}
+
+async function ocRefreshScheduleStatus_() {
+  try {
+    const before = JSON.stringify(_ocScheduleCache());
+    const data = await _ocScheduleRequest('status');
+    const after = JSON.stringify(_ocScheduleCacheSet(data));
+    // Only re-render when the server disagreed with the cache (e.g. the
+    // schedule was changed from another device or the trigger was removed).
+    if (before !== after && $('oc-sched-interval')) renderOpenCall();
+  } catch (_) { /* old script deployed or offline — control just shows the cache */ }
 }
 
 async function ocLoadSenderAliases() {
@@ -4222,13 +4440,22 @@ async function ocToggle(id, key) {
   const c = ocList().find(x => x.id === id);
   if (!c) return;
   c[key] = !c[key];
+  // A receive-stage ticked on means the next email is ready — queue it in the
+  // "Ready to send" outbox so it can go out in one approved batch.
+  let queued = 0;
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (proj && c[key] && (key === 'creditReceived' || key === 'filesReceived')) {
+    queued = ocQueueNextStep_(proj, c);
+  }
   await _persistOpenCalls();
   renderOpenCall();
   // Immediate, non-blocking confirmation so a stage tick is never silent.
   const stageLabel = OC_STAGES.find(st => st.key === key)?.label || 'Stage';
   const who = c.name || c.email || 'contributor';
   showToast(
-    c[key] ? `${stageLabel} ✓ marked done for ${who}` : `${stageLabel} cleared for ${who}`,
+    c[key]
+      ? `${stageLabel} ✓ marked done for ${who}${queued ? ' · next email queued in “Ready to send”' : ''}`
+      : `${stageLabel} cleared for ${who}`,
     c[key] ? 'ok' : 'warn'
   );
 }
@@ -4244,6 +4471,192 @@ async function ocDelete(id) {
   if (i !== -1) list.splice(i, 1);
   await _persistOpenCalls();
   renderOpenCall();
+}
+
+// ── Review inbox: approve / dismiss scan proposals ────────────────────────
+
+// The proposed credit name is editable right in the inbox row (the server's
+// regex is a heuristic); read the box so the approved value is what's visible.
+function ocReadProposalCreditEdit_(p) {
+  if (p.type !== 'creditReceived') return;
+  const edited = $(`oc-inbox-credit-${p.id}`)?.value;
+  if (edited !== undefined) p.creditName = edited.trim();
+}
+
+function ocFlashCard_(cId) {
+  const cardEl = $(`oc-card-${cId}`);
+  if (cardEl) {
+    cardEl.classList.add('flash-green');
+    setTimeout(() => cardEl.classList.remove('flash-green'), 2000);
+  }
+}
+
+async function ocApproveProposal(pid) {
+  if (ocBlockedForAuthor_()) return;
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  ocEnsureQueues_(proj);
+  const p = proj.inbox.find(x => x.id === pid);
+  if (!p) return;
+  const c = proj.contributors.find(x => x.id === p.contributorId);
+  proj.inbox = proj.inbox.filter(x => x.id !== pid);
+  if (!c) { await _persistOpenCalls(); renderOpenCall(); return; }
+  ocReadProposalCreditEdit_(p);
+  const summary = ocApplyProposal(c, p);
+  const queued = ocQueueNextStep_(proj, c);
+  await _persistOpenCalls();
+  renderOpenCall();
+  ocFlashCard_(c.id);
+  showToast(`✓ ${c.name || c.email}: ${summary}${queued ? ' · next email queued in “Ready to send”' : ''}`);
+}
+
+async function ocDismissProposal(pid) {
+  if (ocBlockedForAuthor_()) return;
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  ocEnsureQueues_(proj);
+  const p = proj.inbox.find(x => x.id === pid);
+  if (!p) return;
+  // Remember the dismissal so the same detection is never re-proposed.
+  proj.inboxDismissed[ocProposalKey(p)] = new Date().toISOString();
+  proj.inbox = proj.inbox.filter(x => x.id !== pid);
+  await _persistOpenCalls();
+  renderOpenCall();
+  showToast('Dismissed — this detection won’t be proposed again', 'warn');
+}
+
+async function ocApproveAllProposals() {
+  if (ocBlockedForAuthor_()) return;
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  ocEnsureQueues_(proj);
+  if (!proj.inbox.length) return;
+  let applied = 0;
+  let queued = 0;
+  proj.inbox.forEach(p => {
+    const c = proj.contributors.find(x => x.id === p.contributorId);
+    if (!c) return;
+    ocReadProposalCreditEdit_(p);
+    ocApplyProposal(c, p);
+    applied++;
+    queued += ocQueueNextStep_(proj, c);
+  });
+  proj.inbox = [];
+  await _persistOpenCalls();
+  renderOpenCall();
+  showToast(`✓ Approved ${applied} update${applied === 1 ? '' : 's'}${queued ? ` · ${queued} email${queued === 1 ? '' : 's'} queued in “Ready to send”` : ''}`);
+}
+
+// ── Ready-to-send outbox ───────────────────────────────────────────────────
+
+async function ocOutboxRemove(eid) {
+  if (ocBlockedForAuthor_()) return;
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  ocEnsureQueues_(proj);
+  const e = proj.outbox.find(x => x.id === eid);
+  if (!e) return;
+  proj.outboxDismissed[ocOutboxKey(e)] = new Date().toISOString();
+  proj.outbox = proj.outbox.filter(x => x.id !== eid);
+  await _persistOpenCalls();
+  renderOpenCall();
+  showToast('Removed — this stage won’t re-queue for that contributor', 'warn');
+}
+
+let _ocOutboxSendingActive = false;
+
+async function ocOutboxSendAll() {
+  if (ocBlockedForAuthor_()) return;
+  if (_ocOutboxSendingActive) return;
+  const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (!proj) return;
+  ocEnsureQueues_(proj);
+  const entries = [...proj.outbox];
+  if (!entries.length) return;
+
+  // Resolve every entry up front; rows with blank merge fields or no saved
+  // template are held back rather than sent half-filled.
+  const dl = localStorage.getItem('lm-oc-last-deadline') || '';
+  const ctx = { project: proj.title, date: dl };
+  const jobs = [];
+  const held = [];
+  entries.forEach(e => {
+    const c = proj.contributors.find(x => x.id === e.contributorId);
+    const tmpl = proj.templates ? proj.templates[e.stageKey] : null;
+    if (!c || !c.email) return;
+    if (!tmpl) { held.push({ c, why: 'no template saved for this stage' }); return; }
+    const missing = findUnfilledMergeFields((tmpl.subject || '') + '\n' + (tmpl.body || ''), c, ctx);
+    if (missing.length) { held.push({ c, why: 'blank fields: ' + missing.join(', ') }); return; }
+    jobs.push({ e, c, tmpl });
+  });
+
+  if (!jobs.length) {
+    showToast(held.length ? `Nothing sendable — ${held[0].c.name || held[0].c.email}: ${held[0].why}` : 'Outbox is empty', 'warn');
+    return;
+  }
+
+  // Same safety gate as the bulk sender: explicit confirm, blank-field
+  // hold-backs called out, and the Gmail daily-quota guard.
+  let msg = `Send ${jobs.length} queued email${jobs.length === 1 ? '' : 's'} now?\n\nEach uses its stage template and replies into the contributor's existing thread. They go to real inboxes and can't be unsent.`;
+  if (held.length) {
+    const lines = held.slice(0, 5).map(h => `• ${h.c.name || h.c.email} — ${h.why}`).join('\n');
+    msg += `\n\n⚠ ${held.length} will be held back:\n${lines}${held.length > 5 ? '\n…' : ''}\nUse each row's “Review & send” to fix and send those individually.`;
+  }
+  if (sheetsUrl) {
+    try {
+      const info = await ocFetchMailSenderInfo();
+      const remaining = info.remainingQuota;
+      if (typeof remaining === 'number' && jobs.length > remaining) {
+        msg += `\n\n⚠ Gmail can send only ${remaining} more email${remaining === 1 ? '' : 's'} today — the last ${jobs.length - remaining} would fail. Send the rest tomorrow.`;
+      }
+    } catch (_) { /* quota unavailable — proceed without the guard */ }
+  }
+  const proceed = await confirmDialog(msg, {
+    title: 'Confirm send — outbox',
+    okLabel: `Send ${jobs.length} email${jobs.length === 1 ? '' : 's'}`,
+    cancelLabel: 'Cancel',
+    danger: true
+  });
+  if (!proceed) return;
+
+  _ocOutboxSendingActive = true;
+  const btn = $('oc-outbox-sendall-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Sending…'; }
+  const statusEl = $('oc-outbox-status');
+  const replyTo = localStorage.getItem('lm-oc-replyto') || '';
+  let sent = 0;
+  let failed = 0;
+  try {
+    for (let i = 0; i < jobs.length; i++) {
+      const { e, c, tmpl } = jobs[i];
+      if (statusEl) statusEl.textContent = `Sending ${i + 1}/${jobs.length} — ${c.name || c.email}…`;
+      const subject = ocMergeTemplate(tmpl.subject, c, ctx);
+      const body = ocMergeTemplate(tmpl.body, c, ctx);
+      try {
+        const threadId = ocThreadForStage(c, e.stageKey);
+        const resp = await sendSingleEmailViaBackend(c.email, subject, body, replyTo, null, threadId, !threadId);
+        c[e.stageKey] = true;
+        const usedThreadId = (resp && resp.threadId) ? resp.threadId : threadId;
+        if (usedThreadId) c.gmailThreadId = usedThreadId;
+        proj.outbox = proj.outbox.filter(x => x.id !== e.id);
+        sent++;
+      } catch (err) {
+        console.error('Outbox send failed:', err);
+        failed++; // entry stays queued for retry
+      }
+      if (i < jobs.length - 1) await new Promise(r => setTimeout(r, 1000));
+    }
+  } finally {
+    _ocOutboxSendingActive = false;
+  }
+  await _persistOpenCalls();
+  renderOpenCall();
+  showToast(
+    failed
+      ? `Outbox: ✓ ${sent} sent · ✕ ${failed} failed (kept in the queue — retry with “Send all”)`
+      : `✓ Outbox: all ${sent} email${sent === 1 ? '' : 's'} sent`,
+    failed ? 'warn' : 'ok'
+  );
 }
 
 function ocCopyEmails() {
@@ -17779,6 +18192,7 @@ async function loadOpenCalls() {
           if (c.notes === undefined) c.notes = '';
         });
       }
+      ocEnsureQueues_(proj);
     });
   } else {
     OPENCALL_DATA = {
@@ -17798,9 +18212,19 @@ async function loadOpenCalls() {
 }
 
 async function _persistOpenCalls() {
+  // Single choke point: whatever changed, queues never keep stale entries
+  // (deleted contributors, stages ticked some other way, bounced addresses).
+  Object.values(OPENCALL_DATA.projects || {}).forEach(proj => {
+    if (!proj || !Array.isArray(proj.contributors)) return;
+    ocEnsureQueues_(proj);
+    const pruned = ocPruneQueues(proj.contributors, proj.inbox, proj.outbox);
+    proj.inbox = pruned.inbox;
+    proj.outbox = pruned.outbox;
+  });
   try { await window._fbSaveSettings('openCalls', OPENCALL_DATA); } catch (_) {}
   try { localStorage.setItem(OPENCALL_KEY, JSON.stringify(OPENCALL_DATA)); } catch (_) {}
   updateOpenCallBadges();
+  ocScheduleSnapshotPush_();
 }
 
 async function migrateLegacyOpenCalls() {
@@ -18072,6 +18496,8 @@ function updateOpenCallBadges() {
           }
         });
       }
+      // Scan findings waiting for approval are also "waiting on you".
+      if (proj && Array.isArray(proj.inbox)) count += proj.inbox.length;
     });
   }
   
@@ -18225,15 +18651,8 @@ function ocComposeStageEmail(cId, stageKey) {
       if (dl) localStorage.setItem('lm-oc-last-deadline', dl);
     }
     
-    const personalize = (str) => str
-      .replace(/\{\{name\}\}/g, c.name || 'Artist')
-      .replace(/\{\{photo\}\}/g, c.photo || '')
-      .replace(/\{\{creditName\}\}/g, c.creditName || c.name || 'Artist')
-      .replace(/\{\{project\}\}/g, proj.title)
-      .replace(/\{\{date\}\}/g, dl || 'July 15th');
-
-    subject = personalize(tmpl.subject);
-    body = personalize(tmpl.body);
+    subject = ocMergeTemplate(tmpl.subject, c, { project: proj.title, date: dl || 'July 15th' });
+    body = ocMergeTemplate(tmpl.body, c, { project: proj.title, date: dl || 'July 15th' });
   } else {
     if (stageKey === 'selectionSent') {
       subject = `[Selected] Lyricalmyrical Collective Open Call`;
@@ -18447,67 +18866,31 @@ async function ocScanReplies(options = {}) {
     if (data.error) throw new Error(data.error);
     
     const updates = data.updates || [];
-    let updatedCount = 0;
-    const summaryDetails = [];
-    
-    if (updates.length > 0) {
-      updates.forEach(up => {
-        const c = proj.contributors.find(x => x.email && x.email.toLowerCase() === up.email.toLowerCase());
-        if (c) {
-          const details = [];
-          if (up.creditReceived !== undefined && c.creditReceived !== up.creditReceived) {
-            c.creditReceived = up.creditReceived;
-            c.creditThreadId = up.creditThreadId;
-            let detailStr = 'Credit name received';
-            if (up.creditName) {
-              c.creditName = up.creditName;
-              detailStr += ` ("${up.creditName}")`;
-            }
-            details.push(detailStr);
-            updatedCount++;
-          }
-          if (up.filesReceived !== undefined && c.filesReceived !== up.filesReceived) {
-            c.filesReceived = up.filesReceived;
-            c.filesThreadId = up.filesThreadId;
-            details.push('High-res files received');
-            updatedCount++;
-          }
-          if (up.undeliverable && !c.undeliverable) {
-            c.undeliverable = true;
-            if (up.bounceThreadId) c.bounceThreadId = up.bounceThreadId;
-            details.push('⚠ Email bounced (undeliverable)');
-            updatedCount++;
-          }
-          if (details.length > 0) {
-            summaryDetails.push(`${c.name || c.email}: ${details.join(' & ')}`);
-          }
-        }
-      });
-    }
-    
+
+    // Findings are no longer applied silently — they become proposals in the
+    // Review inbox, and stage flags only flip when the owner approves them.
+    ocEnsureQueues_(proj);
+    const proposals = ocProposalsFromScan(updates, proj.contributors, proj.inbox, proj.inboxDismissed);
+    proj.inbox.push(...proposals);
+
     // Always update lastScanned timestamp on successful scan
     proj.lastScanned = new Date().toISOString();
     await _persistOpenCalls();
     renderOpenCall();
-    
-    if (updatedCount > 0) {
-      // Trigger green flash animation on updated cards (Next Move #1)
-      updates.forEach(up => {
-        const c = proj.contributors.find(x => x.email && x.email.toLowerCase() === up.email.toLowerCase());
-        if (c) {
-          const cardEl = $(`oc-card-${c.id}`);
-          if (cardEl) {
-            cardEl.classList.add('flash-green');
-            setTimeout(() => cardEl.classList.remove('flash-green'), 2000);
-          }
-        }
-      });
 
+    if (proposals.length > 0) {
+      const n = proposals.length;
       if (options.background) {
-        showToast(`✓ Background scan updated ${updatedCount} status(es)`);
+        showToast(`📥 Scan found ${n} update${n === 1 ? '' : 's'} — review & approve in Open Call`);
       } else {
-        const summaryText = `Gmail scan completed successfully!\n\nUpdated ${updatedCount} status(es):\n` + summaryDetails.map(line => `• ${line}`).join('\n');
-        await confirmDialog(summaryText);
+        const summaryDetails = proposals.map(p => {
+          const c = proj.contributors.find(x => x.id === p.contributorId);
+          return `• ${c ? (c.name || c.email) : '?'}: ${ocProposalSummary(p)}`;
+        });
+        await confirmDialog(
+          `Gmail scan found ${n} update${n === 1 ? '' : 's'}.\n\nNothing has been applied yet — approve ${n === 1 ? 'it' : 'them'} in “Review scan results”:\n` +
+          summaryDetails.join('\n')
+        );
       }
     } else {
       if (!options.background) {
@@ -18741,52 +19124,16 @@ async function ocScanRepliesSingle(cId) {
     if (data.error) throw new Error(data.error);
     
     const updates = data.updates || [];
-    let updated = false;
-    let detailMsg = '';
-    
-    if (updates.length > 0) {
-      const up = updates[0];
-      const details = [];
-      if (up.creditReceived !== undefined && c.creditReceived !== up.creditReceived) {
-        c.creditReceived = up.creditReceived;
-        c.creditThreadId = up.creditThreadId;
-        let detailStr = 'Credit name received';
-        if (up.creditName) {
-          c.creditName = up.creditName;
-          detailStr += ` ("${up.creditName}")`;
-        }
-        details.push(detailStr);
-        updated = true;
-      }
-      if (up.filesReceived !== undefined && c.filesReceived !== up.filesReceived) {
-        c.filesReceived = up.filesReceived;
-        c.filesThreadId = up.filesThreadId;
-        details.push('High-res files received');
-        updated = true;
-      }
-      if (up.undeliverable && !c.undeliverable) {
-        c.undeliverable = true;
-        if (up.bounceThreadId) c.bounceThreadId = up.bounceThreadId;
-        details.push('⚠ Email bounced (undeliverable)');
-        updated = true;
-      }
-      
-      if (updated) {
-        detailMsg = details.join(' & ');
-        await _persistOpenCalls();
-        renderOpenCall();
-        
-        // Trigger green flash animation on updated card (Next Move #1)
-        const cardEl = $(`oc-card-${c.id}`);
-        if (cardEl) {
-          cardEl.classList.add('flash-green');
-          setTimeout(() => cardEl.classList.remove('flash-green'), 2000);
-        }
-        
-        showToast(`✓ Updated ${c.name || c.email}: ${detailMsg}`);
-      } else {
-        showToast(`No new replies found for ${c.name || c.email}`);
-      }
+
+    // Same approval flow as the bulk scan: findings land in the Review inbox
+    // instead of flipping the contributor's stage flags directly.
+    ocEnsureQueues_(proj);
+    const proposals = ocProposalsFromScan(updates, [c], proj.inbox, proj.inboxDismissed);
+    if (proposals.length > 0) {
+      proj.inbox.push(...proposals);
+      await _persistOpenCalls();
+      renderOpenCall();
+      showToast(`📥 ${c.name || c.email}: ${proposals.map(ocProposalSummary).join(' & ')} — approve in “Review scan results”`);
     } else {
       showToast(`No new replies found for ${c.name || c.email}`);
     }
@@ -19906,6 +20253,7 @@ Object.assign(window, {
   ocToggleColorPalette, ocApplyColor,
   openOcEmailPreviewModal, closeOcEmailPreviewModal, ocPreviewModalSend, ocPreviewModalEditInWizard,
   openOcImportGmailModal, closeOcImportGmailModal, ocImportGmailSearch, ocImportGmailSelectAll, ocImportGmailConfirm,
+  ocApproveProposal, ocDismissProposal, ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocSetServerSchedule,
   toggleCurrentBookView,
   fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,

@@ -51,6 +51,15 @@
  *      threading. New getmailsenderinfo action returns the available aliases
  *      and the remaining daily send quota (powers the bulk-send quota guard).
  *      Bump flags v15-and-older as outdated so the publisher redeploys.
+ *  15. v17: Open Call server-side scheduled scan. 'syncopencallsnapshot'
+ *      stores a compact contributor snapshot in a hidden _OpenCallSync tab;
+ *      'ocschedule' installs/removes a time-driven trigger that runs
+ *      ocScheduledScan() every 30/60 min, scanning Gmail against the snapshot
+ *      and appending new findings to a hidden _OpenCallFindings tab (with an
+ *      optional email digest to the owner). Nothing is auto-applied: the app
+ *      re-detects the same findings on its next client scan and queues them
+ *      in its approval inbox. Bump flags v16-and-older as outdated so the
+ *      publisher redeploys.
  */
 
 const HEADERS = [
@@ -96,9 +105,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v16',
-    scriptVersion: 'v16',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true },
+    service: 'lyrical-sheets-webhook-v17',
+    scriptVersion: 'v17',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -587,72 +596,102 @@ function doPost(e) {
       const contributors = d.contributors || [];
       const daysBack = parseInt(d.daysBack || 120, 10);
       const updates = [];
-      
+
       for (let i = 0; i < contributors.length; i++) {
-        const c = contributors[i];
-        const email = String(c.email || '').trim();
-        if (!email) continue;
-        
-        const update = { email: email };
-        let hasUpdate = false;
-        
-        // Credit name: any reply from the artist after a selection email went out.
-        if (c.selectionSent && !c.creditReceived) {
-          try {
-            const threads = GmailApp.search('from:' + email + ' newer_than:' + daysBack + 'd', 0, 1);
-            if (threads.length > 0) {
-              update.creditReceived = true;
-              update.creditThreadId = threads[0].getId();
-              
-              // Try parsing credit name from messages in the thread
-              const msgs = threads[0].getMessages();
-              for (let j = msgs.length - 1; j >= 0; j--) {
-                const body = msgs[j].getPlainBody() || '';
-                const match = body.match(/(?:credit\s*name\s*(?:is|should\s*be)?|exact\s*name\s*(?:for\s*my\s*credit\s*)?(?:is|should\s*be)?|credit\s*(?:as|for))\s*[:=-]?\s*["']?([^\n\r"']{2,60})["']?/i);
-                if (match && match[1]) {
-                  update.creditName = match[1].trim();
-                  break;
-                }
-              }
-              hasUpdate = true;
-            }
-          } catch (_) {}
-        }
-        
-        // High-res files: a reply WITH an attachment from the artist.
-        if (c.cmykSent && !c.filesReceived) {
-          try {
-            const threads = GmailApp.search('from:' + email + ' has:attachment newer_than:' + daysBack + 'd', 0, 1);
-            if (threads.length > 0) {
-              update.filesReceived = true;
-              update.filesThreadId = threads[0].getId();
-              hasUpdate = true;
-            }
-          } catch (_) {}
-        }
-
-        // Bounce / bad address: a delivery-failure notice from the mail system
-        // that names this recipient. Only worth checking once we've actually
-        // emailed them (selectionSent) and not already flagged. Lets the client
-        // tell "bounced" apart from "just hasn't replied".
-        if (c.selectionSent && !c.undeliverable) {
-          try {
-            const q = 'from:(mailer-daemon OR postmaster) newer_than:' + daysBack + 'd "' + email + '"';
-            const bounces = GmailApp.search(q, 0, 1);
-            if (bounces.length > 0) {
-              update.undeliverable = true;
-              update.bounceThreadId = bounces[0].getId();
-              hasUpdate = true;
-            }
-          } catch (_) {}
-        }
-
-        if (hasUpdate) {
-          updates.push(update);
-        }
+        const update = ocScanContributor_(contributors[i], daysBack);
+        if (update) updates.push(update);
       }
 
       return jsonOut_({ ok: true, updates: updates });
+    }
+
+    // ── Store the Open Call contributor snapshot for the scheduled scan ──
+    // A compact copy of every contributor's stage flags lives in a hidden
+    // sheet tab so ocScheduledScan() (a time-driven trigger) knows who to
+    // watch while the app is closed. Also prunes findings the app has since
+    // applied, so the digest memory can't grow unbounded.
+    if (action === 'syncopencallsnapshot') {
+      const d = payload.payload || {};
+      const list = Array.isArray(d.contributors) ? d.contributors.slice(0, 1000) : [];
+      const sh = ocSyncSheet_(true);
+      if (!sh) return jsonOut_({ error: 'Spreadsheet not active' });
+
+      const rows = [['Email', 'Name', 'selectionSent', 'creditReceived', 'cmykSent', 'filesReceived', 'undeliverable']];
+      const present = {};
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i] || {};
+        const email = String(c.email || '').trim();
+        if (!email) continue;
+        present[email.toLowerCase()] = c;
+        rows.push([
+          email, String(c.name || ''),
+          c.selectionSent === true, c.creditReceived === true, c.cmykSent === true,
+          c.filesReceived === true, c.undeliverable === true
+        ]);
+      }
+      sh.clearContents();
+      sh.getRange(1, 1, rows.length, 7).setValues(rows);
+
+      const fs = ocFindingsSheet_(false);
+      if (fs && fs.getLastRow() > 1) {
+        const fRows = fs.getRange(2, 1, fs.getLastRow() - 1, 5).getValues();
+        const keep = [];
+        for (let r = 0; r < fRows.length; r++) {
+          const c2 = present[String(fRows[r][0]).toLowerCase()];
+          if (!c2) continue; // contributor removed → drop the finding
+          const type = String(fRows[r][1]);
+          const applied = (type === 'credit' && c2.creditReceived === true)
+            || (type === 'files' && c2.filesReceived === true)
+            || (type === 'bounce' && c2.undeliverable === true);
+          if (!applied) keep.push(fRows[r]);
+        }
+        fs.clearContents();
+        fs.getRange(1, 1, 1, 5).setValues([['Email', 'Type', 'CreditName', 'ThreadId', 'DetectedAt']]);
+        if (keep.length) fs.getRange(2, 1, keep.length, 5).setValues(keep);
+      }
+
+      return jsonOut_({ ok: true, count: rows.length - 1 });
+    }
+
+    // ── Manage the scheduled Open Call scan (time-driven trigger) ──
+    // op:'status' reports whether the ocScheduledScan trigger is armed;
+    // op:'set' (enabled, minutes 30|60, digest) replaces it. Works because
+    // the web app executes as the sheet owner.
+    if (action === 'ocschedule') {
+      const d = payload.payload || {};
+      const op = String(d.op || 'status');
+      const props = PropertiesService.getScriptProperties();
+
+      if (op === 'set') {
+        const trigs = ScriptApp.getProjectTriggers();
+        for (let i = 0; i < trigs.length; i++) {
+          if (trigs[i].getHandlerFunction() === 'ocScheduledScan') ScriptApp.deleteTrigger(trigs[i]);
+        }
+        const enabled = d.enabled === true || d.enabled === 'true';
+        let minutes = parseInt(d.minutes || 30, 10);
+        if (minutes !== 30 && minutes !== 60) minutes = 30;
+        const digest = d.digest === true || d.digest === 'true';
+        if (enabled) {
+          if (minutes === 60) ScriptApp.newTrigger('ocScheduledScan').timeBased().everyHours(1).create();
+          else ScriptApp.newTrigger('ocScheduledScan').timeBased().everyMinutes(30).create();
+        }
+        props.setProperty('OC_SCHEDULE', JSON.stringify({ enabled: enabled, minutes: minutes, digest: digest }));
+        return jsonOut_({ ok: true, enabled: enabled, minutes: minutes, digest: digest });
+      }
+
+      // status — the installed trigger is the source of truth for `enabled`.
+      const cfg = ocScheduleConfig_();
+      let armed = false;
+      try {
+        const trigs2 = ScriptApp.getProjectTriggers();
+        for (let j = 0; j < trigs2.length; j++) {
+          if (trigs2[j].getHandlerFunction() === 'ocScheduledScan') armed = true;
+        }
+      } catch (_) {}
+      return jsonOut_({
+        ok: true, enabled: armed, minutes: cfg.minutes || 30, digest: !!cfg.digest,
+        lastRun: props.getProperty('OC_LAST_SCHED_SCAN') || ''
+      });
     }
 
     // ── Scan Gmail for Open Call SUBMISSION emails (intake) ──
@@ -1762,4 +1801,199 @@ function configureMail_() {
     if (cfg[k] !== '') props.setProperty(k, String(cfg[k]));
   });
   Logger.log('Mail config saved for provider: ' + (cfg.MAIL_PROVIDER || '(unchanged)'));
+}
+
+// ─────────────────────────────────────────────────────────────
+// Open Call: shared scan core + scheduled server-side scan (v17)
+// ─────────────────────────────────────────────────────────────
+
+const OC_SYNC_SHEET = '_OpenCallSync';
+const OC_FINDINGS_SHEET = '_OpenCallFindings';
+
+// Stage flags arrive as booleans from the client but as sheet cell values
+// from the snapshot tab — normalize both.
+function ocFlagTruthy_(v) {
+  return v === true || v === 'true' || v === 'TRUE' || v === 1;
+}
+
+// Scan Gmail for one contributor's reply / files / bounce signals, given the
+// stage flags the caller knows. Returns an update object or null. Shared by
+// the scanopencallreplies action and ocScheduledScan().
+function ocScanContributor_(c, daysBack) {
+  if (!c) return null;
+  const email = String(c.email || '').trim();
+  if (!email) return null;
+
+  const update = { email: email };
+  let hasUpdate = false;
+
+  // Credit name: any reply from the artist after a selection email went out.
+  if (ocFlagTruthy_(c.selectionSent) && !ocFlagTruthy_(c.creditReceived)) {
+    try {
+      const threads = GmailApp.search('from:' + email + ' newer_than:' + daysBack + 'd', 0, 1);
+      if (threads.length > 0) {
+        update.creditReceived = true;
+        update.creditThreadId = threads[0].getId();
+
+        // Try parsing credit name from messages in the thread
+        const msgs = threads[0].getMessages();
+        for (let j = msgs.length - 1; j >= 0; j--) {
+          const body = msgs[j].getPlainBody() || '';
+          const match = body.match(/(?:credit\s*name\s*(?:is|should\s*be)?|exact\s*name\s*(?:for\s*my\s*credit\s*)?(?:is|should\s*be)?|credit\s*(?:as|for))\s*[:=-]?\s*["']?([^\n\r"']{2,60})["']?/i);
+          if (match && match[1]) {
+            update.creditName = match[1].trim();
+            break;
+          }
+        }
+        hasUpdate = true;
+      }
+    } catch (_) {}
+  }
+
+  // High-res files: a reply WITH an attachment from the artist.
+  if (ocFlagTruthy_(c.cmykSent) && !ocFlagTruthy_(c.filesReceived)) {
+    try {
+      const threads = GmailApp.search('from:' + email + ' has:attachment newer_than:' + daysBack + 'd', 0, 1);
+      if (threads.length > 0) {
+        update.filesReceived = true;
+        update.filesThreadId = threads[0].getId();
+        hasUpdate = true;
+      }
+    } catch (_) {}
+  }
+
+  // Bounce / bad address: a delivery-failure notice from the mail system
+  // that names this recipient. Only worth checking once we've actually
+  // emailed them (selectionSent) and not already flagged. Lets the client
+  // tell "bounced" apart from "just hasn't replied".
+  if (ocFlagTruthy_(c.selectionSent) && !ocFlagTruthy_(c.undeliverable)) {
+    try {
+      const q = 'from:(mailer-daemon OR postmaster) newer_than:' + daysBack + 'd "' + email + '"';
+      const bounces = GmailApp.search(q, 0, 1);
+      if (bounces.length > 0) {
+        update.undeliverable = true;
+        update.bounceThreadId = bounces[0].getId();
+        hasUpdate = true;
+      }
+    } catch (_) {}
+  }
+
+  return hasUpdate ? update : null;
+}
+
+function ocHiddenSheet_(name, create) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) return null;
+  let sh = ss.getSheetByName(name);
+  if (!sh && create) {
+    sh = ss.insertSheet(name);
+    try { sh.hideSheet(); } catch (_) {}
+  }
+  return sh;
+}
+
+function ocSyncSheet_(create) {
+  return ocHiddenSheet_(OC_SYNC_SHEET, create);
+}
+
+function ocFindingsSheet_(create) {
+  const sh = ocHiddenSheet_(OC_FINDINGS_SHEET, create);
+  if (sh && sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, 5).setValues([['Email', 'Type', 'CreditName', 'ThreadId', 'DetectedAt']]);
+  }
+  return sh;
+}
+
+function ocScheduleConfig_() {
+  try {
+    return JSON.parse(PropertiesService.getScriptProperties().getProperty('OC_SCHEDULE') || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+// Trigger target: scan Gmail against the stored contributor snapshot while
+// the app is closed. New findings are appended to the hidden findings tab
+// (dedup memory, so the digest never nags twice about the same detection) and
+// optionally emailed to the owner. Nothing is applied to any contributor —
+// the app's next client scan re-detects the same signals and queues them in
+// its approval inbox.
+function ocScheduledScan() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return; // a previous run is still going — skip
+  try {
+    const snap = ocSyncSheet_(false);
+    if (!snap || snap.getLastRow() < 2) return; // nothing snapshotted yet
+
+    const rows = snap.getDataRange().getValues();
+    const findings = ocFindingsSheet_(true);
+    const known = {};
+    if (findings.getLastRow() > 1) {
+      const fRows = findings.getRange(2, 1, findings.getLastRow() - 1, 5).getValues();
+      for (let i = 0; i < fRows.length; i++) {
+        known[String(fRows[i][0]).toLowerCase() + '|' + fRows[i][1]] = true;
+      }
+    }
+
+    const nameByEmail = {};
+    const fresh = [];
+    const now = new Date().toISOString();
+    for (let r = 1; r < rows.length; r++) {
+      const email = String(rows[r][0] || '').trim();
+      if (!email) continue;
+      nameByEmail[email.toLowerCase()] = String(rows[r][1] || '');
+      const up = ocScanContributor_({
+        email: email,
+        selectionSent: rows[r][2], creditReceived: rows[r][3], cmykSent: rows[r][4],
+        filesReceived: rows[r][5], undeliverable: rows[r][6]
+      }, 120);
+      if (!up) continue;
+      const key = email.toLowerCase();
+      if (up.creditReceived && !known[key + '|credit']) {
+        fresh.push([email, 'credit', up.creditName || '', up.creditThreadId || '', now]);
+        known[key + '|credit'] = true;
+      }
+      if (up.filesReceived && !known[key + '|files']) {
+        fresh.push([email, 'files', '', up.filesThreadId || '', now]);
+        known[key + '|files'] = true;
+      }
+      if (up.undeliverable && !known[key + '|bounce']) {
+        fresh.push([email, 'bounce', '', up.bounceThreadId || '', now]);
+        known[key + '|bounce'] = true;
+      }
+    }
+
+    if (fresh.length) {
+      findings.getRange(findings.getLastRow() + 1, 1, fresh.length, 5).setValues(fresh);
+      if (ocScheduleConfig_().digest) ocSendDigest_(fresh, nameByEmail);
+    }
+    PropertiesService.getScriptProperties().setProperty('OC_LAST_SCHED_SCAN', now);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Owner-only summary of what the scheduled scan just found. Best-effort:
+// skipped when the daily quota is nearly spent, and never blocks the scan.
+function ocSendDigest_(freshRows, nameByEmail) {
+  try {
+    if (MailApp.getRemainingDailyQuota() < 2) return;
+    const me = Session.getEffectiveUser().getEmail();
+    if (!me) return;
+    const labels = { credit: 'Credit-name reply', files: 'High-res files received', bounce: 'Email bounced (undeliverable)' };
+    const lines = [];
+    for (let i = 0; i < freshRows.length; i++) {
+      const email = String(freshRows[i][0]);
+      const who = nameByEmail[email.toLowerCase()] || email;
+      const label = labels[String(freshRows[i][1])] || String(freshRows[i][1]);
+      const credit = String(freshRows[i][2] || '');
+      lines.push('• ' + who + ' <' + email + '> — ' + label + (credit ? ' ("' + credit + '")' : ''));
+    }
+    MailApp.sendEmail({
+      to: me,
+      subject: 'Open Call: ' + freshRows.length + ' update' + (freshRows.length === 1 ? '' : 's') + ' to review',
+      body: 'The scheduled Gmail scan found:\n\n' + lines.join('\n') +
+        '\n\nNothing has been applied automatically. Open Lyrical Inventory → Open Call → "Review scan results" to approve or dismiss each one.'
+    });
+  } catch (_) {}
 }

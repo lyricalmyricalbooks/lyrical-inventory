@@ -68,6 +68,156 @@ export function parseContributorRows(raw, existingEmails = []) {
 // the user. Each maps to how the value is resolved for a contributor.
 export const OC_MERGE_FIELDS = ['name', 'photo', 'creditName', 'project', 'date'];
 
+// ── Approval inbox ─────────────────────────────────────────────────────────
+// Gmail scans no longer flip stage flags directly: each finding becomes a
+// *proposal* the owner approves or dismisses in the Review inbox. A proposal's
+// `type` is 'creditReceived', 'filesReceived', or 'undeliverable'.
+
+// Stable identity for dedupe: the same detection (same contributor, same kind,
+// same Gmail thread) must never be proposed twice — including after a dismiss.
+export function ocProposalKey(p) {
+  return `${p.contributorId}:${p.type}:${p.threadId || ''}`;
+}
+
+// Human line for toasts and the scan summary dialog.
+export function ocProposalSummary(p) {
+  if (!p) return '';
+  if (p.type === 'creditReceived') {
+    return 'Credit-name reply detected' + (p.creditName ? ` (proposed: “${p.creditName}”)` : '');
+  }
+  if (p.type === 'filesReceived') return 'High-res files attachment detected';
+  if (p.type === 'undeliverable') return 'Email bounced (undeliverable)';
+  return '';
+}
+
+// Turn raw scan updates (the webhook's shape: { email, creditReceived?,
+// creditName?, creditThreadId?, filesReceived?, filesThreadId?, undeliverable?,
+// bounceThreadId? }) into proposals. Skips updates for unknown emails, stages
+// the contributor already has, proposals already pending, and detections the
+// owner previously dismissed.
+export function ocProposalsFromScan(updates, contributors, pending = [], dismissed = {}) {
+  const byEmail = new Map();
+  (contributors || []).forEach(c => {
+    if (c && c.email) byEmail.set(String(c.email).toLowerCase(), c);
+  });
+  const seen = new Set((pending || []).map(ocProposalKey));
+  const out = [];
+  (updates || []).forEach(up => {
+    if (!up) return;
+    const c = byEmail.get(String(up.email || '').toLowerCase());
+    if (!c) return;
+    const add = (type, threadId, extra) => {
+      const p = {
+        id: 'ocp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        contributorId: c.id,
+        type,
+        threadId: threadId || '',
+        detectedAt: new Date().toISOString(),
+        ...extra,
+      };
+      const key = ocProposalKey(p);
+      if (seen.has(key) || (dismissed && dismissed[key])) return;
+      seen.add(key);
+      out.push(p);
+    };
+    if (up.creditReceived && !c.creditReceived) add('creditReceived', up.creditThreadId, { creditName: String(up.creditName || '').trim() });
+    if (up.filesReceived && !c.filesReceived) add('filesReceived', up.filesThreadId, {});
+    if (up.undeliverable && !c.undeliverable) add('undeliverable', up.bounceThreadId, {});
+  });
+  return out;
+}
+
+// Apply an approved proposal to its contributor (mutates). Returns the summary
+// line for the confirmation toast, or '' for an unknown type.
+export function ocApplyProposal(contributor, proposal) {
+  if (!contributor || !proposal) return '';
+  if (proposal.type === 'creditReceived') {
+    contributor.creditReceived = true;
+    if (proposal.threadId) contributor.creditThreadId = proposal.threadId;
+    if (proposal.creditName) contributor.creditName = proposal.creditName;
+    return 'Credit name received' + (proposal.creditName ? ` (“${proposal.creditName}”)` : '');
+  }
+  if (proposal.type === 'filesReceived') {
+    contributor.filesReceived = true;
+    if (proposal.threadId) contributor.filesThreadId = proposal.threadId;
+    return 'High-res files received';
+  }
+  if (proposal.type === 'undeliverable') {
+    contributor.undeliverable = true;
+    if (proposal.threadId) contributor.bounceThreadId = proposal.threadId;
+    return 'Marked undeliverable (bounced)';
+  }
+  return '';
+}
+
+// ── Next-step outbox ───────────────────────────────────────────────────────
+// The moment a receive-stage ticks, the next send-stage email is queued in the
+// "Ready to send" outbox — mirrors the gating pipelineEmailBtnHtml uses.
+
+// The send-stage this contributor is ready for, or null.
+export function ocNextSendStage(c) {
+  if (!c) return null;
+  if (c.creditReceived && !c.cmykSent) return 'cmykSent';
+  if (c.filesReceived && !c.preorderSent) return 'preorderSent';
+  return null;
+}
+
+export function ocOutboxKey(e) {
+  return `${e.contributorId}:${e.stageKey}`;
+}
+
+// Outbox entries to queue for this contributor right now (0 or 1). Skips
+// contributors with no email or a bounced address, stages already queued, and
+// stages the owner removed from the outbox before.
+export function ocOutboxAdditions(contributor, existing = [], dismissed = {}) {
+  if (!contributor || !contributor.email || contributor.undeliverable) return [];
+  const stageKey = ocNextSendStage(contributor);
+  if (!stageKey) return [];
+  const entry = {
+    id: 'oce_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    contributorId: contributor.id,
+    stageKey,
+    createdAt: new Date().toISOString(),
+  };
+  const key = ocOutboxKey(entry);
+  if ((existing || []).some(e => ocOutboxKey(e) === key)) return [];
+  if (dismissed && dismissed[key]) return [];
+  return [entry];
+}
+
+// Drop queue entries that no longer make sense: proposals whose stage got
+// ticked some other way, and outbox entries whose contributor was deleted,
+// bounced, already got the email, or lost the prerequisite stage.
+export function ocPruneQueues(contributors, inbox, outbox) {
+  const byId = new Map((contributors || []).map(c => [c.id, c]));
+  const prunedInbox = (inbox || []).filter(p => {
+    const c = byId.get(p.contributorId);
+    if (!c) return false;
+    if (p.type === 'creditReceived') return !c.creditReceived;
+    if (p.type === 'filesReceived') return !c.filesReceived;
+    if (p.type === 'undeliverable') return !c.undeliverable;
+    return false;
+  });
+  const prunedOutbox = (outbox || []).filter(e => {
+    const c = byId.get(e.contributorId);
+    return !!c && !c.undeliverable && ocNextSendStage(c) === e.stageKey;
+  });
+  return { inbox: prunedInbox, outbox: prunedOutbox };
+}
+
+// Resolve {{token}} merge fields the way every sender does — creditName falls
+// back to the contributor's name, name falls back to 'Artist'.
+export function ocMergeTemplate(str, contributor = {}, context = {}) {
+  const c = contributor || {};
+  const ctx = context || {};
+  return String(str == null ? '' : str)
+    .replace(/\{\{name\}\}/g, c.name || 'Artist')
+    .replace(/\{\{photo\}\}/g, c.photo || '')
+    .replace(/\{\{creditName\}\}/g, c.creditName || c.name || 'Artist')
+    .replace(/\{\{project\}\}/g, ctx.project || '')
+    .replace(/\{\{date\}\}/g, ctx.date || '');
+}
+
 // Which merge fields in `template` would resolve to an empty string for this
 // contributor — i.e. the email would go out with that spot blank (the classic
 // 'your photo "" has been selected' bug). `context` supplies the non-contributor
