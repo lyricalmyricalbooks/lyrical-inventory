@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields } from '../src/lib/opencall.js';
+import {
+  OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields,
+  ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
+  ocNextSendStage, ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate,
+} from '../src/lib/opencall.js';
 
 describe('newContributor', () => {
   it('starts with every stage flag false', () => {
@@ -125,5 +129,158 @@ describe('findUnfilledMergeFields', () => {
   it('handles empty/blank template and missing args safely', () => {
     expect(findUnfilledMergeFields('', {}, {})).toEqual([]);
     expect(findUnfilledMergeFields(null)).toEqual([]);
+  });
+});
+
+describe('ocProposalsFromScan', () => {
+  const ada = () => ({ ...newContributor({ name: 'Ada', email: 'ada@x.com' }), id: 'c1' });
+
+  it('turns a credit reply into a pending proposal instead of applying it', () => {
+    const c = ada();
+    c.selectionSent = true;
+    const updates = [{ email: 'ada@x.com', creditReceived: true, creditName: 'Ada L.', creditThreadId: 't1' }];
+    const props = ocProposalsFromScan(updates, [c]);
+    expect(props).toHaveLength(1);
+    expect(props[0]).toMatchObject({ contributorId: 'c1', type: 'creditReceived', creditName: 'Ada L.', threadId: 't1' });
+    // nothing applied to the contributor yet
+    expect(c.creditReceived).toBe(false);
+    expect(c.creditName).toBe('');
+  });
+
+  it('emits separate proposals for files and bounce findings', () => {
+    const c = ada();
+    const updates = [{ email: 'ADA@x.com', filesReceived: true, filesThreadId: 't2', undeliverable: true, bounceThreadId: 't3' }];
+    const props = ocProposalsFromScan(updates, [c]);
+    expect(props.map(p => p.type)).toEqual(['filesReceived', 'undeliverable']);
+    expect(props[0].threadId).toBe('t2');
+    expect(props[1].threadId).toBe('t3');
+  });
+
+  it('skips stages the contributor already has and unknown emails', () => {
+    const c = ada();
+    c.creditReceived = true;
+    const updates = [
+      { email: 'ada@x.com', creditReceived: true, creditThreadId: 't1' },
+      { email: 'nobody@x.com', filesReceived: true },
+    ];
+    expect(ocProposalsFromScan(updates, [c])).toEqual([]);
+  });
+
+  it('dedupes against pending proposals and dismissed keys', () => {
+    const c = ada();
+    const up = { email: 'ada@x.com', filesReceived: true, filesThreadId: 't2' };
+    const first = ocProposalsFromScan([up], [c]);
+    expect(first).toHaveLength(1);
+    // same detection again while the first is still pending → nothing new
+    expect(ocProposalsFromScan([up], [c], first)).toEqual([]);
+    // dismissed → never re-proposed
+    const dismissed = { [ocProposalKey(first[0])]: '2026-07-03' };
+    expect(ocProposalsFromScan([up], [c], [], dismissed)).toEqual([]);
+  });
+});
+
+describe('ocApplyProposal', () => {
+  it('applies a credit proposal with thread and name', () => {
+    const c = newContributor({ name: 'Ada', email: 'ada@x.com' });
+    const summary = ocApplyProposal(c, { type: 'creditReceived', threadId: 't1', creditName: 'Ada L.' });
+    expect(c.creditReceived).toBe(true);
+    expect(c.creditThreadId).toBe('t1');
+    expect(c.creditName).toBe('Ada L.');
+    expect(summary).toContain('Credit name received');
+  });
+
+  it('keeps an existing credit name when the proposal has none', () => {
+    const c = newContributor({ name: 'Ada', creditName: 'Ada Lovelace' });
+    ocApplyProposal(c, { type: 'creditReceived', creditName: '' });
+    expect(c.creditName).toBe('Ada Lovelace');
+  });
+
+  it('applies files and bounce proposals', () => {
+    const c = newContributor({ email: 'ada@x.com' });
+    ocApplyProposal(c, { type: 'filesReceived', threadId: 't2' });
+    ocApplyProposal(c, { type: 'undeliverable', threadId: 't3' });
+    expect(c.filesReceived).toBe(true);
+    expect(c.filesThreadId).toBe('t2');
+    expect(c.undeliverable).toBe(true);
+    expect(c.bounceThreadId).toBe('t3');
+  });
+
+  it('summarizes each proposal type', () => {
+    expect(ocProposalSummary({ type: 'creditReceived', creditName: 'X' })).toContain('“X”');
+    expect(ocProposalSummary({ type: 'filesReceived' })).toContain('files');
+    expect(ocProposalSummary({ type: 'undeliverable' })).toContain('bounced');
+  });
+});
+
+describe('ocNextSendStage / ocOutboxAdditions', () => {
+  it('is null for a fresh contributor and a completed one', () => {
+    const c = newContributor({ email: 'a@x.com' });
+    expect(ocNextSendStage(c)).toBeNull();
+    OC_STAGES.forEach(st => { c[st.key] = true; });
+    expect(ocNextSendStage(c)).toBeNull();
+  });
+
+  it('queues the CMYK email once the credit name arrives, then pre-order after files', () => {
+    const c = newContributor({ email: 'a@x.com' });
+    c.selectionSent = true;
+    c.creditReceived = true;
+    expect(ocNextSendStage(c)).toBe('cmykSent');
+    c.cmykSent = true;
+    c.filesReceived = true;
+    expect(ocNextSendStage(c)).toBe('preorderSent');
+    const adds = ocOutboxAdditions(c);
+    expect(adds).toHaveLength(1);
+    expect(adds[0]).toMatchObject({ contributorId: c.id, stageKey: 'preorderSent' });
+  });
+
+  it('skips bounced addresses, missing emails, duplicates, and removed entries', () => {
+    const c = newContributor({ email: 'a@x.com' });
+    c.creditReceived = true;
+    expect(ocOutboxAdditions({ ...c, email: '' })).toEqual([]);
+    expect(ocOutboxAdditions({ ...c, undeliverable: true })).toEqual([]);
+    const [entry] = ocOutboxAdditions(c);
+    expect(ocOutboxAdditions(c, [entry])).toEqual([]);
+    expect(ocOutboxAdditions(c, [], { [ocOutboxKey(entry)]: '2026-07-03' })).toEqual([]);
+  });
+});
+
+describe('ocPruneQueues', () => {
+  it('drops proposals whose stage got ticked another way and orphans', () => {
+    const c = newContributor({ email: 'a@x.com' });
+    c.id = 'c1';
+    c.creditReceived = true;
+    const inbox = [
+      { id: 'p1', contributorId: 'c1', type: 'creditReceived' },
+      { id: 'p2', contributorId: 'c1', type: 'filesReceived' },
+      { id: 'p3', contributorId: 'gone', type: 'filesReceived' },
+    ];
+    const { inbox: kept } = ocPruneQueues([c], inbox, []);
+    expect(kept.map(p => p.id)).toEqual(['p2']);
+  });
+
+  it('drops outbox entries once sent, bounced, or no longer next', () => {
+    const c = newContributor({ email: 'a@x.com' });
+    c.id = 'c1';
+    c.creditReceived = true;
+    const entry = { id: 'e1', contributorId: 'c1', stageKey: 'cmykSent' };
+    expect(ocPruneQueues([c], [], [entry]).outbox).toHaveLength(1);
+    c.cmykSent = true; // sent → drop
+    expect(ocPruneQueues([c], [], [entry]).outbox).toEqual([]);
+    c.cmykSent = false;
+    c.undeliverable = true; // bounced → drop
+    expect(ocPruneQueues([c], [], [entry]).outbox).toEqual([]);
+  });
+});
+
+describe('ocMergeTemplate', () => {
+  it('fills every token, with the same fallbacks the senders use', () => {
+    const c = { name: 'Ada', photo: 'ada.jpg', creditName: '' };
+    const out = ocMergeTemplate('{{name}} / {{photo}} / {{creditName}} / {{project}} / {{date}}', c, { project: 'Book', date: 'July 15' });
+    expect(out).toBe('Ada / ada.jpg / Ada / Book / July 15');
+  });
+
+  it('falls back to Artist and empty strings safely', () => {
+    expect(ocMergeTemplate('Hi {{name}}, {{photo}}{{project}}', {}, {})).toBe('Hi Artist, ');
+    expect(ocMergeTemplate(null)).toBe('');
   });
 });
