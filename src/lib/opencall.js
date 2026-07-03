@@ -124,6 +124,27 @@ export function parseContributorRows(raw, existingEmails = []) {
 // the user. Each maps to how the value is resolved for a contributor.
 export const OC_MERGE_FIELDS = ['name', 'photo', 'creditName', 'project', 'date'];
 
+// The photo value emails should reference: the owner's starred picks when any
+// exist (artists submit ~5 photos; only the chosen ones belong in the
+// selection email), otherwise everything on file — matching the old behavior
+// for contributors that were never curated.
+export function ocChosenPhoto(contributor) {
+  const c = contributor || {};
+  const picks = Array.isArray(c.selectedPhotos) ? c.selectedPhotos.filter(Boolean) : [];
+  if (picks.length) return picks.join(', ');
+  return c.photo || (Array.isArray(c.photos) ? c.photos.join(', ') : '');
+}
+
+// Whole days since the contributor's last stage change (falling back to
+// createdAt for records that predate tracking). null when no usable date.
+// Powers the "waiting Nd" aging chip on cards.
+export function ocWaitingDays(contributor, now = Date.now()) {
+  const c = contributor || {};
+  const t = Date.parse(c.lastStageAt || c.createdAt || '');
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, Math.floor((now - t) / 86400000));
+}
+
 // ── Approval inbox ─────────────────────────────────────────────────────────
 // Gmail scans no longer flip stage flags directly: each finding becomes a
 // *proposal* the owner approves or dismisses in the Review inbox. A proposal's
@@ -268,7 +289,7 @@ export function ocMergeTemplate(str, contributor = {}, context = {}) {
   const ctx = context || {};
   return String(str == null ? '' : str)
     .replace(/\{\{name\}\}/g, c.name || 'Artist')
-    .replace(/\{\{photo\}\}/g, c.photo || '')
+    .replace(/\{\{photo\}\}/g, ocChosenPhoto(c))
     .replace(/\{\{creditName\}\}/g, c.creditName || c.name || 'Artist')
     .replace(/\{\{project\}\}/g, ctx.project || '')
     .replace(/\{\{date\}\}/g, ctx.date || '');
@@ -286,7 +307,7 @@ export function findUnfilledMergeFields(template, contributor = {}, context = {}
   const ctx = context || {};
   const resolved = {
     name: c.name || '',
-    photo: c.photo || '',
+    photo: ocChosenPhoto(c),
     creditName: c.creditName || c.name || '',
     project: ctx.project || '',
     date: ctx.date || '',
