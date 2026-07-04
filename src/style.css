@@ -3998,3 +3998,23 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   border-color: #fff;
 }
 
+/* ==========================================
+   WEB ANALYTICS DASHBOARD
+   ========================================== */
+.analytics-iframe-container {
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3);
+  background: var(--ink2, #1a1715);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r2);
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.analytics-iframe-container iframe {
+  width: 100%;
+  height: 700px;
+  border: none;
+  display: block;
+}
+
+

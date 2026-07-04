@@ -1436,6 +1436,7 @@ function syncRoleUI() {
   updateSubheader();
   placeKpiStrip();
   bindKpiResize();
+
   const websiteTabBtn = $('website-tab-btn');
   const financialsTabBtn = $('financials-tab-btn');
   const taxcenterTabBtn = $('global-taxcenter-btn');
@@ -1447,6 +1448,9 @@ function syncRoleUI() {
   const myqrTabBtn = $('myqr-tab-btn');
   const reconcileTabBtn = $('reconcile-tab-btn');
   const opencallTabBtn = $('opencall-tab-btn');
+  const webanalyticsTabBtn = $('webanalytics-tab-btn');
+  const sidebarWebanalyticsBtn = $('sidebar-webanalytics-btn');
+
   if (reconcileTabBtn) reconcileTabBtn.style.display = authorNow ? 'none' : '';
   if (opencallTabBtn) opencallTabBtn.style.display = authorNow ? 'none' : '';
   if (websiteTabBtn) websiteTabBtn.style.display = authorNow ? 'none' : '';
@@ -1457,6 +1461,8 @@ function syncRoleUI() {
   if (backupsTabBtn) backupsTabBtn.style.display = authorNow ? 'none' : '';
   if (qrBtn) qrBtn.style.display = authorNow ? 'none' : '';
   if (qrcodesTabBtn) qrcodesTabBtn.style.display = authorNow ? 'none' : '';
+  if (webanalyticsTabBtn) webanalyticsTabBtn.style.display = authorNow ? 'none' : '';
+  if (sidebarWebanalyticsBtn) sidebarWebanalyticsBtn.style.display = authorNow ? 'none' : '';
   // myqr tab is AUTHOR-only
   if (myqrTabBtn) myqrTabBtn.style.display = authorNow ? '' : 'none';
 
@@ -1475,7 +1481,8 @@ function syncRoleUI() {
     || $('tab-sheets')?.classList.contains('active')
     || $('tab-backups')?.classList.contains('active')
     || $('tab-qrcodes')?.classList.contains('active')
-    || $('tab-reconcile')?.classList.contains('active');
+    || $('tab-reconcile')?.classList.contains('active')
+    || $('tab-webanalytics')?.classList.contains('active');
   if (authorNow && publisherOnlyActive) switchTab('dashboard');
 
   // When switching BACK to publisher view — redirect away from author-only myqr tab
@@ -1568,17 +1575,17 @@ const SHELL_TAB_LABELS = {
   consignment:'Consignment', history:'History', expenses:'Expenses',
   pos:'Event POS', taxcenter:'Tax Centre', reconcile:'Payments', qrcodes:'QR Codes',
   customers:'Customers', opencall:'Open Call', sheets:'Sheets', backups:'Backups',
-  financials:'Financials', myqr:'My QR Code'
+  financials:'Financials', myqr:'My QR Code', webanalytics:'Web Analytics'
 };
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
   
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
-  const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','customers','financials','taxcenter','sheets','backups','qrcodes','myqr','pos'];
+  const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','customers','financials','taxcenter','sheets','backups','qrcodes','myqr','pos','webanalytics'];
 
   // Selecting a destination closes any open header category menu (and the
   // sidebar footer account menu, if open).
@@ -1636,6 +1643,7 @@ function switchTab(name) {
   if(name==='qrcodes') renderAllQRCodes();
   if(name==='myqr') renderAuthorQRPage();
   if(name==='pos') { renderPOS(); renderPOSFxStatus(); }
+  if(name==='webanalytics') renderWebAnalytics();
 }
 
 function updateHeader() {
@@ -20453,6 +20461,13 @@ async function initStartup() {
       if (ep && ep.url) { notifyUrl = ep.url; localStorage.setItem('lm-notify-url', ep.url); }
     } catch (_) {}
 
+    try {
+      const ac = await window._fbLoadSettings('analyticsConfig');
+      if (ac && ac.url) {
+        localStorage.setItem('lm-analytics-url', ac.url);
+      }
+    } catch (_) {}
+
     // NOW that we have a valid token, we pull the protected catalog.
     await loadCatalog(); 
     loadAuthorViewOverrides();
@@ -20503,6 +20518,94 @@ function setupGate(errMsg) {
     desc.innerHTML = errMsg ? `<span style="color:var(--red);font-weight:600;">${errMsg}</span>` : '';
   }
 }
+
+// ── WEB ANALYTICS ───────────────────────────────────────────────────────
+function renderWebAnalytics() {
+  const url = localStorage.getItem('lm-analytics-url') || '';
+  const statusBadge = $('webanalytics-status-badge');
+  const connectedView = $('webanalytics-connected-view');
+  const setupView = $('webanalytics-setup-view');
+  const iframe = $('webanalytics-iframe');
+  const domainLabel = $('webanalytics-domain-label');
+  const urlInput = $('webanalytics-url-input');
+
+  if (url) {
+    // Show Connected View
+    if (statusBadge) {
+      statusBadge.textContent = 'Connected';
+      statusBadge.className = 'sheets-badge';
+      statusBadge.style.background = '#e0f5ea';
+      statusBadge.style.color = '#1d7a4a';
+    }
+    if (setupView) setupView.style.display = 'none';
+    if (connectedView) connectedView.style.display = 'block';
+    
+    // Extract domain from URL for aesthetics
+    try {
+      const parsed = new URL(url);
+      if (domainLabel) domainLabel.textContent = parsed.hostname;
+    } catch (_) {
+      if (domainLabel) domainLabel.textContent = 'External Dashboard';
+    }
+
+    if (iframe && iframe.src !== url) {
+      iframe.src = url;
+    }
+  } else {
+    // Show Setup View
+    if (statusBadge) {
+      statusBadge.textContent = 'Not Connected';
+      statusBadge.className = 'sheets-badge off';
+      statusBadge.style.background = '';
+      statusBadge.style.color = '';
+    }
+    if (connectedView) connectedView.style.display = 'none';
+    if (setupView) setupView.style.display = 'block';
+    if (iframe) iframe.src = '';
+    if (urlInput) urlInput.value = '';
+  }
+}
+
+window.saveAnalyticsUrl = async function() {
+  const urlInput = $('webanalytics-url-input');
+  if (!urlInput) return;
+  const url = urlInput.value.trim();
+  if (!url) {
+    showToast('Please enter a valid URL', 'warn');
+    return;
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    showToast('URL must start with http:// or https://', 'warn');
+    return;
+  }
+
+  showToast('Connecting...');
+  try {
+    localStorage.setItem('lm-analytics-url', url);
+    if (typeof window._fbSaveSettings === 'function') {
+      await window._fbSaveSettings('analyticsConfig', { url });
+    }
+    showToast('✓ Web Analytics connected');
+    renderWebAnalytics();
+  } catch (e) {
+    console.error('Failed to save Web Analytics settings', e);
+    showToast('Failed to save settings to cloud', 'err');
+  }
+};
+
+window.disconnectAnalytics = async function() {
+  try {
+    localStorage.removeItem('lm-analytics-url');
+    if (typeof window._fbSaveSettings === 'function') {
+      await window._fbSaveSettings('analyticsConfig', { url: '' });
+    }
+    showToast('✓ Web Analytics disconnected');
+    renderWebAnalytics();
+  } catch (e) {
+    console.error('Failed to clear Web Analytics settings', e);
+    showToast('Failed to disconnect in cloud', 'err');
+  }
+};
 
 // Global IS_PUBLISHER override for UI hooks
 window.IS_PUBLISHER = false;

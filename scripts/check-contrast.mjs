@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * check-contrast.mjs — static guard against low-contrast text in index.html.
  *
