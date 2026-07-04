@@ -20528,6 +20528,7 @@ function renderWebAnalytics() {
   const iframe = $('webanalytics-iframe');
   const domainLabel = $('webanalytics-domain-label');
   const urlInput = $('webanalytics-url-input');
+  const externalLink = $('webanalytics-external-link');
 
   if (url) {
     // Show Connected View
@@ -20551,6 +20552,9 @@ function renderWebAnalytics() {
     if (iframe && iframe.src !== url) {
       iframe.src = url;
     }
+    if (externalLink) {
+      externalLink.href = url;
+    }
   } else {
     // Show Setup View
     if (statusBadge) {
@@ -20563,8 +20567,23 @@ function renderWebAnalytics() {
     if (setupView) setupView.style.display = 'block';
     if (iframe) iframe.src = '';
     if (urlInput) urlInput.value = '';
+    if (externalLink) externalLink.href = '#';
   }
 }
+
+window.toggleAnalyticsHeight = function() {
+  const iframe = $('webanalytics-iframe');
+  const btn = $('webanalytics-height-btn');
+  if (!iframe || !btn) return;
+  
+  if (iframe.style.height === '1200px') {
+    iframe.style.height = '700px';
+    btn.textContent = '↕ Expand';
+  } else {
+    iframe.style.height = '1200px';
+    btn.textContent = '↕ Collapse';
+  }
+};
 
 window.saveAnalyticsUrl = async function() {
   const urlInput = $('webanalytics-url-input');

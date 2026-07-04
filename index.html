@@ -1849,7 +1849,11 @@
           <span style="font-weight:600; font-size:13px; color:var(--text);">Live Traffic Dashboard Connected</span>
           <span id="webanalytics-domain-label" style="font-size:11px; color:var(--text2); font-family:'DM Mono',monospace; background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:4px; margin-left:8px;">lyricalmyricalbooks.com</span>
         </div>
-        <button class="btn sm danger-btn" onclick="disconnectAnalytics()">Disconnect</button>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <a id="webanalytics-external-link" href="#" target="_blank" class="btn sm" style="text-decoration:none;">↗ Open Dashboard</a>
+          <button class="btn sm" onclick="toggleAnalyticsHeight()" id="webanalytics-height-btn">↕ Expand</button>
+          <button class="btn sm danger-btn" onclick="disconnectAnalytics()">Disconnect</button>
+        </div>
       </div>
     </div>
     
