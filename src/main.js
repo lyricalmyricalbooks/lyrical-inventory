@@ -1599,7 +1599,14 @@ window.selectProfileTab = selectProfileTab;
 
 // ── SEED MOCK TEST DATA FOR LEGIT TEST PROFILE ──
 async function seedMockTestData() {
-  if (activeBook !== 'test1') return;
+  const testBook = BOOK_LIST.find(b => b.id === 'test1' || b.title.toLowerCase().trim() === 'test1');
+  if (!testBook) {
+    showToast('⚠ Test book "test1" not found in catalog', 'err');
+    return;
+  }
+  const testBookId = testBook.id;
+
+  if (activeBook !== testBookId) return;
 
   if (!(await confirmDialog(
     `Reset and seed the Test Profile (test1) with rich, realistic sample data?\n\n` +
@@ -1609,7 +1616,7 @@ async function seedMockTestData() {
   ))) return;
 
   // 1. Reconfigure book properties in catalog
-  const book = BOOKS['test1'];
+  const book = BOOKS[testBookId];
   if (!book) {
     showToast('⚠ Test book "test1" not found in catalog', 'err');
     return;
@@ -1795,18 +1802,18 @@ async function seedMockTestData() {
     }
   ];
 
-  states['test1'] = testState;
+  states[testBookId] = testState;
 
   // Recompute statistics
-  recomputeAfters(states['test1'], book);
+  recomputeAfters(states[testBookId], book);
   
   // Intentionally set stock to 15 (instead of derived 9) to showcase stock drift banner!
-  states['test1'].stock = 15;
+  states[testBookId].stock = 15;
 
-  await saveState('test1');
+  await saveState(testBookId);
 
   showToast('✓ Test profile seeded successfully!');
-  switchBook('test1'); // Force redraw
+  switchBook(testBookId); // Force redraw
 }
 window.seedMockTestData = seedMockTestData;
 
@@ -1869,7 +1876,7 @@ function switchBook(bookId) {
 
   const seedBtn = $('d-seed-test-btn');
   if (seedBtn) {
-    seedBtn.style.display = (bookId === 'test1') ? 'inline-flex' : 'none';
+    seedBtn.style.display = (testBook && bookId === testBook.id) ? 'inline-flex' : 'none';
   }
 
   updateRoleToggleButton();
