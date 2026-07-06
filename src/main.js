@@ -10770,7 +10770,9 @@ async function connectSheets(){
       return;
     }
   }
-  sheetsUrl=normalizedUrl;localStorage.setItem('lm-sheets-url',normalizedUrl);
+  sheetsUrl=normalizedUrl;
+  localStorage.setItem('lm-sheets-url',normalizedUrl);
+  localStorage.setItem('lm-last-sheets-url',normalizedUrl);
   // Share the endpoint so artist sessions on other devices can send the
   // approval-needed email when they submit a payment/expense.
   notifyUrl=normalizedUrl;localStorage.setItem('lm-notify-url',normalizedUrl);
@@ -10778,6 +10780,7 @@ async function connectSheets(){
   if(spreadUrl){
     sheetsSpreadsheetUrl=spreadUrl;
     localStorage.setItem('lm-sheets-spreadsheet-url',spreadUrl);
+    localStorage.setItem('lm-last-spreadsheet-url',spreadUrl);
   }else{
     sheetsSpreadsheetUrl='';
     localStorage.removeItem('lm-sheets-spreadsheet-url');
@@ -10787,6 +10790,13 @@ async function connectSheets(){
 }
 async function disconnectSheets(){
   if(!(await confirmDialog('Disconnect Google Sheets?', { okLabel: 'Disconnect', danger: true })))return;
+  
+  // Keep the inputs populated on the setup card so they don't have to reinput them
+  const setupUrlInput = $('sheets-url-input');
+  if (setupUrlInput) setupUrlInput.value = sheetsUrl;
+  const setupSpreadsheetInput = $('sheets-spreadsheet-input');
+  if (setupSpreadsheetInput) setupSpreadsheetInput.value = sheetsSpreadsheetUrl;
+
   sheetsUrl='';sheetsSpreadsheetUrl='';notifyUrl='';
   localStorage.removeItem('lm-sheets-url');
   localStorage.removeItem('lm-sheets-spreadsheet-url');
@@ -10804,6 +10814,11 @@ function showSheetsConnected(){
   $('sheets-setup-card').style.display='none';
   $('sheets-connected-card').style.display='';
   $('sheets-url-display').textContent=sheetsUrl;
+  
+  // Make sure the inline update input is updated as well
+  const updateInput = $('sheets-url-update-input');
+  if (updateInput) updateInput.value = sheetsUrl;
+
   updateSheetsBadge();
   checkSheetsVersion();
 }
@@ -10833,6 +10848,79 @@ async function checkSheetsVersion() {
     console.warn('Failed to verify sheets script version:', e);
   }
 }
+
+function toggleSheetsUrlEdit(show) {
+  const container = $('sheets-url-update-container');
+  const btn = $('sheets-url-edit-btn');
+  const input = $('sheets-url-update-input');
+  if (container) container.style.display = show ? 'flex' : 'none';
+  if (btn) btn.style.display = show ? 'none' : 'inline-block';
+  if (show && input) {
+    input.value = sheetsUrl || '';
+    input.focus();
+    input.select();
+  }
+}
+window.toggleSheetsUrlEdit = toggleSheetsUrlEdit;
+
+async function saveUpdatedSheetsUrl() {
+  const rawUrl = $('sheets-url-update-input').value.trim();
+  const normalizedUrl = normalizeAppsScriptUrl(rawUrl);
+  if (!normalizedUrl) {
+    showToast('Paste a deployed Web App URL (…/macros/s/<id>/exec)', 'warn');
+    return;
+  }
+  if (rawUrl.includes('/dev')) {
+    showToast('Using /exec endpoint for public sync (recommended).', 'warn', 3000);
+  }
+  
+  const saveBtn = document.querySelector('#sheets-url-update-container button.gold');
+  let oldBtnText = 'Save';
+  if (saveBtn) {
+    oldBtnText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+  }
+
+  try {
+    const info = await probeSheetsConnection(normalizedUrl);
+    showToast(`✓ Connection verified: ${info.sheetName || 'Active'}`);
+  } catch (e) {
+    if ((e && e.message && e.message.includes('fetch')) || !navigator.onLine) {
+      showToast('⚠ Connection unverified (CORS). Link saved anyway — try a test row.', 'warn', 5000);
+    } else {
+      showToast(`Connection error: ${e.message || 'Unknown'}`, 'err', 4000);
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = oldBtnText;
+      }
+      return;
+    }
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = oldBtnText;
+    }
+  }
+
+  sheetsUrl = normalizedUrl;
+  localStorage.setItem('lm-sheets-url', normalizedUrl);
+  localStorage.setItem('lm-last-sheets-url', normalizedUrl);
+  
+  const setupUrlInput = $('sheets-url-input');
+  if (setupUrlInput) setupUrlInput.value = normalizedUrl;
+
+  notifyUrl = normalizedUrl;
+  localStorage.setItem('lm-notify-url', normalizedUrl);
+  try {
+    await window._fbSaveSettings('notifyEndpoint', { url: normalizedUrl });
+  } catch (_) {}
+
+  showSheetsConnected();
+  toggleSheetsUrlEdit(false);
+  showToast('✓ Google Sheets URL updated and verified!');
+}
+window.saveUpdatedSheetsUrl = saveUpdatedSheetsUrl;
 function testSheets(){
   if(!sheetsUrl)return;
   const btn=document.querySelector('[onclick="testSheets()"]');
@@ -12255,6 +12343,8 @@ async function applyBackupData(data) {
     setOrClear('lm-sheets-url', ig.sheetsUrl);
     setOrClear('lm-sheets-spreadsheet-url', ig.sheetsSpreadsheetUrl);
     setOrClear('lm-sheets-secret', ig.sheetsSecret);
+    if (ig.sheetsSpreadsheetUrl) localStorage.setItem('lm-last-spreadsheet-url', ig.sheetsSpreadsheetUrl);
+    if (ig.sheetsUrl) localStorage.setItem('lm-last-sheets-url', ig.sheetsUrl);
     try { await window._fbSaveSettings('notifyEndpoint', { url: ig.notifyUrl || '' }); } catch (_) {}
   }
 }
@@ -13649,6 +13739,16 @@ async function boot(forcedBook) {
   await loadOpenCalls();
   renderCatalogList();
   renderProfitSettings();
+
+  const setupUrlInput = $('sheets-url-input');
+  if (setupUrlInput) {
+    setupUrlInput.value = sheetsUrl || localStorage.getItem('lm-last-sheets-url') || '';
+  }
+  const setupSpreadsheetInput = $('sheets-spreadsheet-input');
+  if (setupSpreadsheetInput) {
+    setupSpreadsheetInput.value = sheetsSpreadsheetUrl || localStorage.getItem('lm-last-spreadsheet-url') || '';
+  }
+
   if(sheetsUrl) showSheetsConnected();
   updateSheetsBadge();
   updateLastBackupDisplay();
