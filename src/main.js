@@ -1522,6 +1522,15 @@ function syncRoleUI() {
 
   // Invoices section: publisher-only inside the Consignment tab
   if (typeof renderInvoices === 'function') renderInvoices();
+
+  // Update badge visibility when changing views (publisher view vs author preview)
+  const badge = $('pub-update-badge');
+  if (badge) {
+    const lastSeen = localStorage.getItem('lm-last-seen-version');
+    const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
+    const hasUnseenUpdate = lastSeen && lastSeen !== currentVersion;
+    badge.style.display = (hasUnseenUpdate && !authorNow && isPublisherSession()) ? 'inline-flex' : 'none';
+  }
 }
 
 function toggleCurrentBookView() {
@@ -20508,6 +20517,46 @@ Object.assign(window, {
   regenerateStripeLinkFromView, onInvoiceCurrencyChange,
 });
 
+// ── APP UPDATE NOTIFICATION FOR PUBLISHER ──
+function checkAppUpdate() {
+  if (!window.IS_PUBLISHER || isAuthor()) return;
+
+  const lastSeen = localStorage.getItem('lm-last-seen-version');
+  const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
+
+  if (!lastSeen) {
+    // First load: initialize version, don't show updated indicators
+    localStorage.setItem('lm-last-seen-version', currentVersion);
+    return;
+  }
+
+  if (lastSeen !== currentVersion) {
+    // App was updated! Show badge and toast.
+    const badge = $('pub-update-badge');
+    if (badge) {
+      badge.style.display = 'inline-flex';
+    }
+    showToast(`✨ App successfully updated to ${currentVersion}!`, 'ok', 6000);
+  }
+}
+
+function dismissAppUpdate(event) {
+  if (event) event.stopPropagation();
+  const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
+  localStorage.setItem('lm-last-seen-version', currentVersion);
+  
+  const badge = $('pub-update-badge');
+  if (badge) {
+    badge.style.opacity = '0';
+    setTimeout(() => {
+      badge.style.display = 'none';
+      badge.style.opacity = '';
+    }, 200);
+  }
+  showToast('✓ Update notification dismissed');
+}
+window.dismissAppUpdate = dismissAppUpdate;
+
 // ── STARTUP ROUTING
 async function initStartup() {
   // Master Publisher Email
@@ -20527,6 +20576,7 @@ async function initStartup() {
         }
         loadAuthorViewOverrides();
         showApp('publisher', null);
+        checkAppUpdate();
         return;
       }
       // Not logged in
@@ -20569,6 +20619,7 @@ async function initStartup() {
       // even if the catalog isn't edited this session.
       if (typeof window._fbSaveBookOwners === 'function') window._fbSaveBookOwners(ownersFromBooks());
       showApp('publisher', null);
+      checkAppUpdate();
       return;
     }
 

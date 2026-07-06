@@ -239,7 +239,10 @@
   </div>
   <!-- App "last updated" stamp — publisher shell only (the tab-bar copy is
        hidden here). Text set by updateSubheader() from __GIT_COMMIT_DATE__. -->
-  <div class="pub-side-updated" id="pub-updated" title="App last updated"></div>
+  <div class="pub-side-updated-container">
+    <div class="pub-side-updated" id="pub-updated" title="App last updated" style="padding: 0; margin-bottom: 2px;"></div>
+    <span class="pub-update-badge" id="pub-update-badge" style="display: none;" onclick="dismissAppUpdate(event)" title="Click to dismiss update notification">New Update</span>
+  </div>
 </aside>
 
 <div class="app" id="main-app">
