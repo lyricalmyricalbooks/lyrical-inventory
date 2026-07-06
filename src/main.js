@@ -1989,9 +1989,11 @@ function updateHeader() {
 
 // ── ALL BOOKS OVERVIEW
 function updateAllOverview() {
+  const allBooksVisible = BOOK_LIST.filter(b => b.id !== 'test1' && b.title.toLowerCase().trim() !== 'test1');
+
   // Book strips
   const list = $('all-books-list');
-  list.innerHTML = BOOK_LIST.map(book => {
+  list.innerHTML = allBooksVisible.map(book => {
     const s = states[book.id] || defaultState(book);
     // ⚡ Bolt Optimization: Calculate consigned and owed in a single loop
     let _consigned = 0, owed = 0;
@@ -2072,7 +2074,7 @@ function updateAllOverview() {
   // the view can render visually (stacked bars + per-currency toggle) instead of
   // one dense, hard-to-scan table.
   const byCur = {}; // currency -> { books:[...], channelTotals:{chan:{txns,units,revenue,books:Set}} }
-  BOOK_LIST.forEach(book => {
+  allBooksVisible.forEach(book => {
     const s = states[book.id] || defaultState(book);
     const entries = Object.entries(s.chStats||{});
     if (!entries.length) return;
@@ -2105,7 +2107,7 @@ function updateAllOverview() {
   // Combined consignment table
   const conRows = [];
   const conTotals = { accounts: 0, active: 0, settled: 0, sent: 0, sold: 0, outstanding: 0 };
-  BOOK_LIST.forEach(book => {
+  allBooksVisible.forEach(book => {
     const s = states[book.id] || defaultState(book);
     s.stores.forEach(st => {
       const isActive = st.outstanding > 0;
