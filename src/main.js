@@ -1597,6 +1597,219 @@ function selectProfileTab(type) {
 }
 window.selectProfileTab = selectProfileTab;
 
+// ── SEED MOCK TEST DATA FOR LEGIT TEST PROFILE ──
+async function seedMockTestData() {
+  if (activeBook !== 'test1') return;
+
+  if (!(await confirmDialog(
+    `Reset and seed the Test Profile (test1) with rich, realistic sample data?\n\n` +
+    `• This will overwrite any existing sales, consignment, and expenses for "test1".\n` +
+    `• It will configure a production cost of €300, 2 consignment stores, multiple sales channels, pending/received artist expenses, and a stock drift warning.`,
+    { title: 'Seed Mock Test Data', okLabel: 'Seed Data' }
+  ))) return;
+
+  // 1. Reconfigure book properties in catalog
+  const book = BOOKS['test1'];
+  if (!book) {
+    showToast('⚠ Test book "test1" not found in catalog', 'err');
+    return;
+  }
+  
+  book.maxPrint = 15;
+  book.listPrice = 17;
+  book.currency = '€';
+  book.threshold = 5;
+  book.productionCost = 300;
+  book.author = 'Test Author';
+  book.isbn = '978-3-16-148410-0';
+  book.accent = '#10b981'; // Green
+  book.accentBg = 'rgba(16, 185, 129, 0.1)';
+  book.paymentLink = 'https://paypal.me/testauthor';
+  book.authorPaymentLink = 'https://paypal.me/testauthor';
+  book.authorPassword = 'test1password';
+
+  await saveCatalogWithDeletions();
+
+  // 2. Build mock state
+  const testState = defaultState(book);
+  testState.stock = 15; // Set starting stock on hand in database (we'll intentionally drift this from derived count of 9)
+  
+  // Consignment stores
+  testState.stores = [
+    {
+      id: 101,
+      name: 'Library Store',
+      contact: 'Jane Smith',
+      email: 'library@test.com',
+      phone: '123-456-7890',
+      address: '123 Main St',
+      city: 'London',
+      region: 'Greater London',
+      postal: 'EC1A 1BB',
+      country: 'UK',
+      website: 'librarystore.com',
+      terms: 'Net 30',
+      rate: 40,
+      notes: 'Main consignment partner',
+      sent: 5,
+      sold: 2,
+      returned: 0,
+      outstanding: 3,
+      amountOwed: 20.4
+    },
+    {
+      id: 102,
+      name: 'Bookish Cafe',
+      contact: 'Bob Jones',
+      email: 'cafe@test.com',
+      phone: '789-012-3456',
+      address: '456 High St',
+      city: 'Paris',
+      region: 'Île-de-France',
+      postal: '75001',
+      country: 'France',
+      website: 'bookishcafe.fr',
+      terms: 'Net 30',
+      rate: 45,
+      notes: 'Boutique coffee shop',
+      sent: 3,
+      sold: 3,
+      returned: 0,
+      outstanding: 0,
+      amountOwed: 0
+    }
+  ];
+
+  // Ledger entries (shipments & returns)
+  testState.ledger = [
+    {
+      id: 1001,
+      storeId: 101,
+      storeName: 'Library Store',
+      type: 'Shipment',
+      date: '2026-07-02',
+      qty: 5,
+      rate: 40,
+      amountDue: 0,
+      paid: 'n/a',
+      notes: 'Initial consignment stock',
+      status: 'sent',
+      sheetsId: 'evt_led_1'
+    },
+    {
+      id: 1002,
+      storeId: 102,
+      storeName: 'Bookish Cafe',
+      type: 'Shipment',
+      date: '2026-07-03',
+      qty: 3,
+      rate: 45,
+      amountDue: 0,
+      paid: 'n/a',
+      notes: 'Cafe window display copies',
+      status: 'sent',
+      sheetsId: 'evt_led_2'
+    }
+  ];
+
+  // Sales history (direct sales, consignment sales)
+  testState.hist = [
+    {
+      num: 1,
+      chan: 'Direct',
+      qty: 1,
+      price: 17,
+      after: 14,
+      notes: 'Cash sale to local supporter',
+      date: '2026-07-04',
+      payment: 'Cash',
+      enteredBy: 'publisher',
+      sheetsId: 'evt_hist_1'
+    },
+    {
+      num: 2,
+      chan: 'Consignment',
+      qty: 2,
+      price: 17,
+      after: 12,
+      notes: 'Library Store sales batch',
+      date: '2026-07-05',
+      sheetsId: 'evt_hist_2',
+      consignmentLink: true
+    },
+    {
+      num: 3,
+      chan: 'Retail',
+      qty: 3,
+      price: 17,
+      after: 9,
+      notes: 'Bookish Cafe buyout settlement',
+      date: '2026-07-06',
+      sheetsId: 'evt_hist_3',
+      consignmentLink: true
+    }
+  ];
+
+  // Expenses (pending & received artist reimbursements)
+  testState.expenses = [
+    {
+      id: 201,
+      desc: 'Printing proof copies (paperback)',
+      cat: 'Production',
+      amount: 80,
+      currency: '€',
+      origAmount: 80,
+      origCurrency: '€',
+      baseAmount: 80,
+      date: '2026-07-04',
+      ref: 'PR-001',
+      received: false,
+      gratuity: false
+    },
+    {
+      id: 202,
+      desc: 'Promotional flyers & posters',
+      cat: 'Marketing',
+      amount: 35,
+      currency: '€',
+      origAmount: 35,
+      origCurrency: '€',
+      baseAmount: 35,
+      date: '2026-07-03',
+      ref: 'FL-001',
+      received: true,
+      gratuity: false
+    }
+  ];
+
+  // Artist transfers due
+  testState.artistTransfers = [
+    {
+      num: 4,
+      date: '2026-07-06',
+      amount: 17,
+      notes: 'Direct sale collected by author',
+      email: 'test@artist.com',
+      key: 'transfer_1',
+      status: 'pending'
+    }
+  ];
+
+  states['test1'] = testState;
+
+  // Recompute statistics
+  recomputeAfters(states['test1'], book);
+  
+  // Intentionally set stock to 15 (instead of derived 9) to showcase stock drift banner!
+  states['test1'].stock = 15;
+
+  await saveState('test1');
+
+  showToast('✓ Test profile seeded successfully!');
+  switchBook('test1'); // Force redraw
+}
+window.seedMockTestData = seedMockTestData;
+
 function switchBook(bookId) {
   // Author sessions are locked to a single book; never switch them.
   if (isAuthor() && bookId !== activeBook) return;
@@ -1652,6 +1865,11 @@ function switchBook(bookId) {
     if (bookId !== (testBook ? testBook.id : '')) {
       window.lastActiveBookId = bookId;
     }
+  }
+
+  const seedBtn = $('d-seed-test-btn');
+  if (seedBtn) {
+    seedBtn.style.display = (bookId === 'test1') ? 'inline-flex' : 'none';
   }
 
   updateRoleToggleButton();
