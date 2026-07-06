@@ -11112,8 +11112,15 @@ async function _processQueue(){
   }
 }
 
+function sheetPayloadWithBookAccent(payload){
+  if (!payload || payload.bookColor || !payload.book) return payload;
+  const book = Object.values(BOOKS || {}).find(b => b && b.title === payload.book);
+  return book && book.accent ? { ...payload, bookColor: book.accent } : payload;
+}
+
 function syncToSheets(payload){
   if(!sheetsUrl)return;
+  payload = sheetPayloadWithBookAccent(payload);
   const action = payload.action;
   const typeLabel = action === 'reset' ? 'Rebuild'
     : payload.type==='order' ? 'Order' : 'Consignment';
@@ -11140,9 +11147,10 @@ function syncToSheets(payload){
 
 function syncBatchToSheets(rows, label = 'Bulk sync'){
   if(!sheetsUrl || !Array.isArray(rows) || !rows.length)return;
+  const rowsWithAccents = rows.map(row => sheetPayloadWithBookAccent(row));
   _sheetsQueue.push({
     id: 'batch-' + makeEventId(),
-    payload: { action: 'batch', rows },
+    payload: { action: 'batch', rows: rowsWithAccents },
     summary: `${label} · ${rows.length} records`,
     book:'All books',
     type:'Batch',

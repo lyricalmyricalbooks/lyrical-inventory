@@ -858,6 +858,7 @@ function processSheetsRow_(ss, data, eventId) {
 
 function processSheetEntry_(ss, sheetName, data) {
   const sheet = ensureSheet_(ss, sheetName);
+  applyBookTabColor_(sheet, data.bookColor);
 
   const currency = normalizeCcy_(data.currency || data.paymentCurrency);
   const total = numOrBlank_(data.amountDue ?? data.total);
@@ -893,6 +894,13 @@ function processSheetEntry_(ss, sheetName, data) {
   row[COL.Invoice - 1]         = data.invoiceNum ?? '';
 
   sheet.appendRow(row);
+}
+
+function applyBookTabColor_(sheet, color) {
+  if (!color || !/^#[0-9a-f]{6}$/i.test(String(color).trim())) return;
+  try {
+    sheet.setTabColor(String(color).trim());
+  } catch (_) {}
 }
 
 function ensureSheet_(ss, name) {
