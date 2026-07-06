@@ -277,6 +277,13 @@
         </div>
       </div>
     </div>
+
+    <!-- PROFILE TOGGLE TABS (publisher only) -->
+    <div class="profile-toggle-group" id="profile-toggle-group" style="display:none;">
+      <button id="profile-tab-active" class="profile-tab active" onclick="selectProfileTab('active')">Active Book</button>
+      <button id="profile-tab-test" class="profile-tab" onclick="selectProfileTab('test')">Test Profile</button>
+    </div>
+
     <button id="role-toggle-btn" class="btn sm" onclick="toggleCurrentBookView()" style="display:none;font-size:10px;padding:4px 10px;background:transparent;color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.18);">
       Author view
     </button>

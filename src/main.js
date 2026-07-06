@@ -1531,6 +1531,12 @@ function syncRoleUI() {
     const hasUnseenUpdate = lastSeen && lastSeen !== currentVersion;
     badge.style.display = (hasUnseenUpdate && !authorNow && isPublisherSession()) ? 'inline-flex' : 'none';
   }
+
+  // Update Profile/Test tabs visibility when changing views
+  const profileToggle = $('profile-toggle-group');
+  if (profileToggle) {
+    profileToggle.style.display = (isPublisherSession() && !authorNow) ? 'inline-flex' : 'none';
+  }
 }
 
 function toggleCurrentBookView() {
@@ -1546,6 +1552,50 @@ function toggleCurrentBookView() {
       : `Publisher view restored for ${BOOKS[activeBook].title}`
   );
 }
+
+// ── ACTIVE BOOK / TEST PROFILE TOGGLE TABS CONTROLLER ──
+window.lastActiveBookId = 'all';
+
+function updateProfileTabs(type) {
+  const activeTab = $('profile-tab-active');
+  const testTab = $('profile-tab-test');
+  if (!activeTab || !testTab) return;
+
+  if (type === 'test') {
+    activeTab.classList.remove('active');
+    testTab.classList.add('active', 'test-active');
+  } else {
+    testTab.classList.remove('active', 'test-active');
+    activeTab.classList.add('active');
+  }
+}
+
+function selectProfileTab(type) {
+  if (!isPublisherSession() || isAuthor()) return;
+
+  const testBook = BOOK_LIST.find(b => b.id === 'test1' || b.title.toLowerCase().trim() === 'test1');
+
+  if (type === 'test') {
+    if (testBook) {
+      if (activeBook !== testBook.id) {
+        window.lastActiveBookId = activeBook;
+      }
+      switchBook(testBook.id);
+      updateProfileTabs('test');
+    } else {
+      showToast('Test profile (book named "test1") not found in catalog', 'warn');
+    }
+  } else {
+    const restoreId = window.lastActiveBookId || 'all';
+    if (testBook && restoreId === testBook.id) {
+      switchBook('all');
+    } else {
+      switchBook(restoreId);
+    }
+    updateProfileTabs('active');
+  }
+}
+window.selectProfileTab = selectProfileTab;
 
 function switchBook(bookId) {
   // Author sessions are locked to a single book; never switch them.
@@ -1593,6 +1643,17 @@ function switchBook(bookId) {
     switchTab('dashboard');
     updateHeader();
   }
+  // Sync the Active Book / Test Profile tabs
+  const testBook = BOOK_LIST.find(b => b.id === 'test1' || b.title.toLowerCase().trim() === 'test1');
+  if (testBook && bookId === testBook.id) {
+    updateProfileTabs('test');
+  } else {
+    updateProfileTabs('active');
+    if (bookId !== (testBook ? testBook.id : '')) {
+      window.lastActiveBookId = bookId;
+    }
+  }
+
   updateRoleToggleButton();
   syncRoleUI();
   triggerCardAnimations();

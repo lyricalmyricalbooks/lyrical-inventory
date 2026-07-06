@@ -4062,4 +4062,53 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   }
 }
 
+/* ==========================================
+   ACTIVE BOOK / TEST PROFILE TOGGLE TABS
+   ========================================== */
+.profile-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r2);
+  padding: 2px;
+  gap: 2px;
+  user-select: none;
+}
+
+.profile-tab {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  padding: 5px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.profile-tab:hover {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.profile-tab.active {
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.profile-tab.active.test-active {
+  background: linear-gradient(135deg, #a78bfa, #8b5cf6); /* Indigo/Violet gradient */
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+}
+
 
