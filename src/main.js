@@ -11167,7 +11167,7 @@ function syncBatchToSheets(rows, label = 'Bulk sync'){
 let _isBulkSync = false;
 let _bulkTotal = 0;
 let _bulkDone = 0;
-const SHEETS_BULK_BATCH_SIZE = 40;
+const SHEETS_BULK_BATCH_SIZE = 200;
 
 // Cache the backend's advertised capabilities for this session so the rebuild
 // flow can tell whether the deployed Apps Script understands the 'reset'

@@ -789,14 +789,157 @@ function doPost(e) {
     if (action === 'batch') {
       const rows = (payload.payload && payload.payload.rows) || payload.rows || [];
       if (!Array.isArray(rows)) return jsonOut_({ error: 'rows must be an array' });
-      let added = 0, deleted = 0, voided = 0, replaced = 0;
-      for (let i = 0; i < rows.length; i++) {
-        const result = processSheetsRow_(ss, rows[i] || {}, '');
-        added += result.added || 0;
-        deleted += result.deleted || 0;
-        voided += result.voided || 0;
-        replaced += result.replaced || 0;
+
+      const sheets = ss.getSheets();
+      const sheetMap = {};
+      const existingRowLocations = {}; // eventId -> Array of { sheetName, rowIndex }
+
+      for (let i = 0; i < sheets.length; i++) {
+        const sheet = sheets[i];
+        const name = sheet.getName();
+        sheetMap[name] = sheet;
+        const lastRow = sheet.getLastRow();
+        if (lastRow < 2) continue;
+        if (sheet.getLastColumn() < 1) continue;
+        const firstVal = sheet.getRange(1, 1).getValue();
+        if (firstVal === '_eventId') {
+          const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+          for (let r = 0; r < ids.length; r++) {
+            const id = String(ids[r][0]);
+            if (id) {
+              if (!existingRowLocations[id]) {
+                existingRowLocations[id] = [];
+              }
+              existingRowLocations[id].push({ sheetName: name, rowIndex: r + 2 });
+            }
+          }
+        }
       }
+
+      let added = 0, deleted = 0, voided = 0, replaced = 0;
+      const rowsToDeleteBySheet = {}; // sheetName -> Array of rowIndices
+      const rowsToAppendBySheet = {}; // sheetName -> Array of row arrays
+
+      for (let i = 0; i < rows.length; i++) {
+        const item = rows[i] || {};
+        const rowAction = String(item.action || 'add').toLowerCase();
+        const stableId = item.sheetsId || '';
+
+        // 1. Check if it's a deletion/void
+        if (rowAction === 'void' || rowAction === 'delete') {
+          if (stableId) {
+            const locations = existingRowLocations[stableId];
+            if (locations) {
+              for (let l = 0; l < locations.length; l++) {
+                const loc = locations[l];
+                if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
+                rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
+                deleted++;
+              }
+            }
+          }
+          continue;
+        }
+
+        if (/VOID|CANCEL/i.test(String(item.status || ''))) {
+          voided++;
+          if (stableId) {
+            const locations = existingRowLocations[stableId];
+            if (locations) {
+              for (let l = 0; l < locations.length; l++) {
+                const loc = locations[l];
+                if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
+                rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
+                deleted++;
+              }
+            }
+          }
+          continue;
+        }
+
+        // 2. It's an add/edit (upsert)
+        if (stableId) {
+          const locations = existingRowLocations[stableId];
+          if (locations) {
+            for (let l = 0; l < locations.length; l++) {
+              const loc = locations[l];
+              if (!rowsToDeleteBySheet[loc.sheetName]) rowsToDeleteBySheet[loc.sheetName] = [];
+              rowsToDeleteBySheet[loc.sheetName].push(loc.rowIndex);
+              replaced++;
+            }
+          }
+        }
+
+        // Build row array
+        item._eventId = stableId;
+        const currency = normalizeCcy_(item.currency || item.paymentCurrency);
+        const total = numOrBlank_(item.amountDue ?? item.total);
+
+        let cad = '';
+        if (currency === 'CAD' && total !== '') {
+          cad = total;
+        } else if (item.convertedTotal !== undefined && item.convertedTotal !== '' && item.convertedTotal !== null) {
+          cad = numOrBlank_(item.convertedTotal);
+        } else if (item.paymentRate && total !== '') {
+          cad = Math.round(total * parseFloat(item.paymentRate) * 100) / 100;
+        } else if (currency && total !== '') {
+          cad = convertToCAD_(total, currency);
+        }
+
+        const row = new Array(HEADERS.length).fill('');
+        row[COL._eventId - 1]        = item._eventId || '';
+        row[COL.Date - 1]            = item.date ?? '';
+        row[COL.Book - 1]            = item.book ?? '';
+        row[COL.Type - 1]            = item.type ?? '';
+        row[COL['Event/Num'] - 1]    = item.event ?? item.num ?? '';
+        row[COL['Store/Chan'] - 1]   = item.store ?? item.chan ?? '';
+        row[COL.Qty - 1]             = numOrBlank_(item.qty);
+        row[COL.Currency - 1]        = currency;
+        row[COL['Price/Rate'] - 1]   = numOrBlank_(item.rate ?? item.price);
+        row[COL['Total/Amount'] - 1] = total;
+        row[COL['CAD Equivalent'] - 1] = cad;
+        row[COL.Status - 1]          = item.status ?? 'OK';
+        row[COL.Notes - 1]           = item.notes ?? '';
+        row[COL.Invoice - 1]         = item.invoiceNum ?? '';
+
+        const rawName = item.book ? String(item.book).trim() : 'Overview';
+        let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
+        if (!sheetName) sheetName = 'Overview';
+
+        if (!rowsToAppendBySheet[sheetName]) rowsToAppendBySheet[sheetName] = [];
+        rowsToAppendBySheet[sheetName].push(row);
+
+        if (sheetName !== 'Overview') {
+          if (!rowsToAppendBySheet['Overview']) rowsToAppendBySheet['Overview'] = [];
+          rowsToAppendBySheet['Overview'].push(row);
+        }
+
+        added++;
+      }
+
+      // Execute Deletions
+      const deleteSheets = Object.keys(rowsToDeleteBySheet);
+      for (let s = 0; s < deleteSheets.length; s++) {
+        const sheetName = deleteSheets[s];
+        const sheet = sheetMap[sheetName];
+        if (sheet) {
+          const indices = rowsToDeleteBySheet[sheetName].sort((a, b) => b - a);
+          for (let r = 0; r < indices.length; r++) {
+            sheet.deleteRow(indices[r]);
+          }
+        }
+      }
+
+      // Execute Appends
+      const appendSheets = Object.keys(rowsToAppendBySheet);
+      for (let s = 0; s < appendSheets.length; s++) {
+        const sheetName = appendSheets[s];
+        const sheet = ensureSheet_(ss, sheetName);
+        const newRows = rowsToAppendBySheet[sheetName];
+        const lastRow = sheet.getLastRow();
+        sheet.getRange(lastRow + 1, 1, newRows.length, HEADERS.length).setValues(newRows);
+      }
+
       refreshOverviewSummary_(ss);
       return jsonOut_({ ok: true, count: rows.length, added, deleted, voided, replaced });
     }
@@ -907,17 +1050,22 @@ function ensureSheet_(ss, name) {
   let sheet = ss.getSheetByName(name);
   if (sheet) {
     const firstRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+    let drifted = false;
     if (!firstRow || firstRow[0] !== '_eventId') {
       // Unmanaged / pre-v1 layout: push our header row on top of existing data.
       sheet.insertRowBefore(1);
       sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+      drifted = true;
     } else if (firstRow.length < HEADERS.length || HEADERS.some((h, i) => firstRow[i] !== h)) {
       // Managed sheet whose header drifted from this release (e.g. a column was
       // appended). Rewrite the header row in place so the new column is labelled.
       // Columns are only ever appended, so existing data rows stay aligned.
       sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+      drifted = true;
     }
-    formatSheet_(sheet);
+    if (drifted) {
+      formatSheet_(sheet);
+    }
     return sheet;
   }
   sheet = ss.insertSheet(name);
