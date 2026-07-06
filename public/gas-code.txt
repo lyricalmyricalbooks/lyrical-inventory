@@ -60,6 +60,14 @@
  *      re-detects the same findings on its next client scan and queues them
  *      in its approval inbox. Bump flags v16-and-older as outdated so the
  *      publisher redeploys.
+ *  16. v18: Bulk Sheets sync batches rows into chunked POSTs and refreshes the
+ *      Overview summary once per batch instead of once per row. This removes
+ *      hundreds of Apps Script round-trips during Sync all data / Repair legacy
+ *      rows. Bump flags v17-and-older as outdated so the publisher redeploys.
+ *  17. v19: Batch sync groups rows by sheet and writes each group with setValues
+ *      instead of appendRow, avoiding repeated formatting/setup and cutting Apps
+ *      Script calls further during large rebuilds. Bump flags v18-and-older as
+ *      outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -105,9 +113,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v17',
-    scriptVersion: 'v17',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true },
+    service: 'lyrical-sheets-webhook-v19',
+    scriptVersion: 'v19',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -781,6 +789,15 @@ function doPost(e) {
       return jsonOut_({ ok: true, submissions: submissions });
     }
 
+    // ── Batch Sheets sync: process many add/delete rows in one Web App call ──
+    if (action === 'batch') {
+      const rows = (payload.payload && payload.payload.rows) || payload.rows || [];
+      if (!Array.isArray(rows)) return jsonOut_({ error: 'rows must be an array' });
+      const result = processSheetsBatch_(ss, rows);
+      refreshOverviewSummary_(ss);
+      return jsonOut_(Object.assign({ ok: true, count: rows.length }, result));
+    }
+
     // ── Reset / rebuild: clear every managed sheet so the client can resend a
     // clean copy. Removes duplicate rows, stale VOID rows, and legacy rows with
     // a blank CAD Equivalent in one pass. The app remains the source of truth. ──
@@ -790,45 +807,9 @@ function doPost(e) {
       return jsonOut_({ ok: true, cleared });
     }
 
-    // ── Void / delete: remove rows matching sheetsId (preferred) or eventId ──
-    if (action === 'void' || action === 'delete') {
-      const deleteId = (payload.payload && payload.payload.sheetsId) || eventId;
-      if (!deleteId) return jsonOut_({ error: 'sheetsId or eventId required for void' });
-      const removed = removeByEventId_(ss, deleteId);
-      refreshOverviewSummary_(ss);
-      return jsonOut_({ ok: true, removed });
-    }
-
-    // ── Add / Edit (upsert) ──
-    // The client sends a stable sheetsId on the payload (set when the record
-    // was first created). We prefer that over the queue-level eventId so that
-    // edits and voids can match the original row.
-    const data = payload.payload || {};
-    const stableId = data.sheetsId || eventId || '';
-    data._eventId = stableId;
-
-    // A voided/cancelled record must never persist as a row — remove any match
-    // and stop, so the sheet only ever holds live entries. This is the backend
-    // safety net behind the client's explicit delete on void.
-    if (/VOID|CANCEL/i.test(String(data.status || ''))) {
-      const removedVoid = stableId ? removeByEventId_(ss, stableId) : 0;
-      refreshOverviewSummary_(ss);
-      return jsonOut_({ ok: true, voided: true, removed: removedVoid });
-    }
-
-    let replaced = 0;
-    if (stableId) replaced = removeByEventId_(ss, stableId);
-
-    const rawName = data.book ? String(data.book).trim() : 'Overview';
-    let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
-    if (!sheetName) sheetName = 'Overview';
-
-    processSheetEntry_(ss, sheetName, data);
-    if (sheetName !== 'Overview') {
-      processSheetEntry_(ss, 'Overview', data);
-    }
+    const result = processSheetsRow_(ss, payload.payload || {}, eventId);
     refreshOverviewSummary_(ss);
-    return jsonOut_({ ok: true, replaced });
+    return jsonOut_(Object.assign({ ok: true }, result));
   } catch (err) {
     return jsonOut_({ error: String(err) });
   }
@@ -837,9 +818,83 @@ function doPost(e) {
 // ─────────────────────────────────────────────────────────────
 // Sheet helpers
 // ─────────────────────────────────────────────────────────────
-function processSheetEntry_(ss, sheetName, data) {
-  const sheet = ensureSheet_(ss, sheetName);
 
+function processSheetsBatch_(ss, rows) {
+  const groupedRows = {};
+  let added = 0, deleted = 0, voided = 0, replaced = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const result = processSheetsRow_(ss, rows[i] || {}, '', { deferAppend: true, groupedRows: groupedRows });
+    added += result.added || 0;
+    deleted += result.deleted || 0;
+    voided += result.voided || 0;
+    replaced += result.replaced || 0;
+  }
+
+  const names = Object.keys(groupedRows);
+  for (let i = 0; i < names.length; i++) {
+    appendRowsToSheet_(ss, names[i], groupedRows[names[i]]);
+  }
+
+  return { added, deleted, voided, replaced, batches: names.length };
+}
+
+function processSheetsRow_(ss, data, eventId, opts) {
+  opts = opts || {};
+  const rowAction = String(data.action || 'add').toLowerCase();
+
+  // ── Void / delete: remove rows matching sheetsId (preferred) or eventId ──
+  if (rowAction === 'void' || rowAction === 'delete') {
+    const deleteId = data.sheetsId || eventId;
+    if (!deleteId) throw new Error('sheetsId or eventId required for void');
+    const removed = removeByEventId_(ss, deleteId);
+    return { deleted: removed, removed };
+  }
+
+  // ── Add / Edit (upsert) ──
+  const stableId = data.sheetsId || eventId || '';
+  data._eventId = stableId;
+
+  if (/VOID|CANCEL/i.test(String(data.status || ''))) {
+    const removedVoid = stableId ? removeByEventId_(ss, stableId) : 0;
+    return { voided: 1, deleted: removedVoid, removed: removedVoid };
+  }
+
+  let replaced = 0;
+  if (stableId) replaced = removeByEventId_(ss, stableId);
+
+  const rawName = data.book ? String(data.book).trim() : 'Overview';
+  let sheetName = rawName.replace(/[:*?/\[\]\\]/g, '').substring(0, 95);
+  if (!sheetName) sheetName = 'Overview';
+
+  if (opts.deferAppend && opts.groupedRows) {
+    queueSheetRow_(opts.groupedRows, sheetName, data);
+    if (sheetName !== 'Overview') queueSheetRow_(opts.groupedRows, 'Overview', data);
+  } else {
+    processSheetEntry_(ss, sheetName, data);
+    if (sheetName !== 'Overview') {
+      processSheetEntry_(ss, 'Overview', data);
+    }
+  }
+  return { added: 1, replaced };
+}
+
+function queueSheetRow_(groupedRows, sheetName, data) {
+  if (!groupedRows[sheetName]) groupedRows[sheetName] = [];
+  groupedRows[sheetName].push(buildSheetRow_(data));
+}
+
+function processSheetEntry_(ss, sheetName, data) {
+  appendRowsToSheet_(ss, sheetName, [buildSheetRow_(data)]);
+}
+
+function appendRowsToSheet_(ss, sheetName, rows) {
+  if (!rows.length) return;
+  const sheet = ensureSheet_(ss, sheetName);
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, HEADERS.length).setValues(rows);
+}
+
+function buildSheetRow_(data) {
   const currency = normalizeCcy_(data.currency || data.paymentCurrency);
   const total = numOrBlank_(data.amountDue ?? data.total);
 
@@ -872,8 +927,7 @@ function processSheetEntry_(ss, sheetName, data) {
   row[COL.Status - 1]          = data.status ?? 'OK';
   row[COL.Notes - 1]           = data.notes ?? '';
   row[COL.Invoice - 1]         = data.invoiceNum ?? '';
-
-  sheet.appendRow(row);
+  return row;
 }
 
 function ensureSheet_(ss, name) {

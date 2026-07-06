@@ -811,7 +811,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v16';
+const EXPECTED_SCRIPT_VERSION = 'v19';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -11069,6 +11069,7 @@ async function _processQueue(){
     });
     const replaced = resp && typeof resp.replaced === 'number' ? resp.replaced : 0;
     const removed  = resp && typeof resp.removed  === 'number' ? resp.removed  : 0;
+    const count = item.count || 1;
     let suffix = '';
     if (item.payload && (item.payload.action === 'delete' || item.payload.action === 'void')) {
       suffix = removed ? ` · removed ${removed}` : ' · row not found';
@@ -11078,7 +11079,7 @@ async function _processQueue(){
     addSheetsLog(item.book,item.type,item.summary+suffix,'ok');
     _sheetsQueue.shift();
     persistSheetsQueue();
-    updateBulkProgress();
+    updateBulkProgress(count);
   }catch(e){
     item.attempts=(item.attempts||0)+1;
     item.lastError=(e&&e.message)||'network error';
@@ -11088,7 +11089,7 @@ async function _processQueue(){
       addSheetsLog(item.book,item.type,item.summary+' [max retries reached]','err');
       _sheetsQueue.shift();
       persistSheetsQueue();
-      updateBulkProgress();
+      updateBulkProgress(item.count || 1);
     }else{
       addSheetsLog(item.book,item.type,item.summary+` [retry ${item.attempts}/${MAX_SHEETS_RETRIES}]`,'retry');
     }
@@ -11127,9 +11128,28 @@ function syncToSheets(payload){
   _processQueue();
 }
 
+function syncBatchToSheets(rows, label = 'Bulk sync'){
+  if(!sheetsUrl || !Array.isArray(rows) || !rows.length)return;
+  _sheetsQueue.push({
+    id: 'batch-' + makeEventId(),
+    payload: { action: 'batch', rows },
+    summary: `${label} · ${rows.length} records`,
+    book:'All books',
+    type:'Batch',
+    count: rows.length,
+    attempts:0,
+    nextTryAt:Date.now()
+  });
+  persistSheetsQueue();
+  addSheetsLog('All books','Batch',`${label} · ${rows.length} records`,'queued');
+  _processQueue();
+}
+
+
 let _isBulkSync = false;
 let _bulkTotal = 0;
 let _bulkDone = 0;
+const SHEETS_BULK_BATCH_SIZE = 100;
 
 // Cache the backend's advertised capabilities for this session so the rebuild
 // flow can tell whether the deployed Apps Script understands the 'reset'
@@ -11199,9 +11219,10 @@ async function pushAllToSheets(opts = {}) {
 
   // A true rebuild needs the backend to clear managed sheets first. Only ask for
   // that when the deployed script advertises support.
+  const caps = await fetchSheetsCapabilities();
+  const canBatch = !!caps.batchSync;
   let willReset = false;
   if (rebuild) {
-    const caps = await fetchSheetsCapabilities();
     willReset = !!caps.reset;
     if (!willReset) {
       showToast('Redeploy your Apps Script to enable a full rebuild — resyncing in place for now', 'warn', 5000);
@@ -11261,13 +11282,21 @@ async function pushAllToSheets(opts = {}) {
   }
 
   if (stats) stats.textContent = `Queueing ${_bulkTotal} records...`;
-  for(const row of queue) syncToSheets(row);
-  if (btn) btn.textContent = 'Syncing...';
+  if (canBatch) {
+    for (const row of control) syncToSheets(row);
+    const dataRows = deletions.concat(toSync);
+    for (let i = 0; i < dataRows.length; i += SHEETS_BULK_BATCH_SIZE) {
+      syncBatchToSheets(dataRows.slice(i, i + SHEETS_BULK_BATCH_SIZE), rebuild ? 'Rebuild batch' : 'Sync batch');
+    }
+  } else {
+    for(const row of queue) syncToSheets(row);
+  }
+  if (btn) btn.textContent = canBatch ? 'Syncing batches...' : 'Syncing...';
 }
 
-function updateBulkProgress() {
+function updateBulkProgress(done = 1) {
   if(!_isBulkSync) return;
-  _bulkDone++;
+  _bulkDone += done;
   const pct = Math.min(100, (_bulkDone / _bulkTotal) * 100);
   const fill = $('sync-progress-fill');
   const stats = $('sync-stats');
