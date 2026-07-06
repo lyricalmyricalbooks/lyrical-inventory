@@ -29,7 +29,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 /* Flexible spacer: one clean gap between the brand/book cluster on the left
    and the actions + KPI + account cluster on the right (no stranded blank row). */
 .header-grow{flex:1 1 0;min-width:10px;align-self:stretch;}
-.header-brand{display:flex;flex-direction:row;align-items:center;gap:11px;}
+.header-brand{display:flex;flex-direction:row;align-items:center;gap:11px;cursor:pointer;transition:opacity 0.2s ease;}
+.header-brand:hover{opacity:0.85;}
 .header-mark{width:32px;height:32px;border-radius:9px;background:linear-gradient(150deg,var(--gold2),var(--gold));display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-weight:700;font-size:16px;color:var(--ink);flex-shrink:0;box-shadow:0 2px 8px rgba(200,145,58,.35);}
 .header-brand-text{display:flex;flex-direction:column;gap:3px;}
 .header-wordmark{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--cream);letter-spacing:.01em;line-height:1;}
@@ -1845,7 +1846,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   .pub-shell #pub-sidebar::-webkit-scrollbar{width:8px;}
   .pub-shell #pub-sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:8px;}
 
-  .pub-shell .pub-brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px;}
+  .pub-shell .pub-brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px;cursor:pointer;transition:opacity 0.2s ease;}
+  .pub-shell .pub-brand:hover{opacity:0.85;}
   .pub-shell .pub-brand-text{display:flex;flex-direction:column;gap:3px;min-width:0;}
   .pub-shell .pub-wordmark{font-family:'Playfair Display',serif;font-weight:700;color:var(--cream);line-height:1.05;font-size:16px;}
   .pub-shell .pub-tag{font-size:8.5px;font-weight:600;color:var(--gold2);letter-spacing:.2em;text-transform:uppercase;}
