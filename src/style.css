@@ -4111,4 +4111,59 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
 }
 
+/* ==========================================
+   DYNAMIC BOOK ACCENT DASHBOARD OVERRIDES
+   ========================================== */
+
+/* Active tab button colors */
+.tab-btn.active {
+  color: var(--book-accent, var(--gold3)) !important;
+  border-bottom-color: var(--book-accent, var(--gold2)) !important;
+}
+
+@media (max-width: 768px) {
+  .tab-btn.active {
+    background: var(--book-accent, var(--gold)) !important;
+    color: var(--ink) !important;
+    border-color: var(--book-accent, var(--gold)) !important;
+  }
+}
+
+/* Gold buttons inside the book tabs panels (like Dashboard, etc.) */
+.tab-panel .btn.gold {
+  background: var(--book-accent, var(--gold)) !important;
+  border-color: var(--book-accent, var(--gold)) !important;
+  color: var(--ink) !important;
+  transition: all .2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.tab-panel .btn.gold:hover {
+  filter: brightness(1.08) !important;
+  box-shadow: 0 4px 12px var(--book-accent-bg) !important;
+  color: var(--ink) !important;
+}
+
+/* KPI value colors */
+.tab-panel .kpi-value.gold {
+  color: var(--book-accent, var(--gold3)) !important;
+}
+
+/* KPI top border gradient glow */
+.tab-panel .kpi::before {
+  background: linear-gradient(90deg, transparent, var(--book-accent, var(--gold)), transparent) !important;
+}
+
+/* Section horizontal lines */
+.tab-panel .sect::after {
+  background: var(--book-accent, var(--border)) !important;
+  opacity: 0.25 !important;
+}
+
+/* Healthy stock alert */
+.tab-panel .stock-alert.ok {
+  background: var(--book-accent-bg, rgba(42,99,72,.25)) !important;
+  color: var(--book-accent, #6ee7a8) !important;
+  border-left-color: var(--book-accent, #4ade80) !important;
+}
+
 

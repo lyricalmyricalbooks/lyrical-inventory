@@ -2417,7 +2417,7 @@ function updateDash() {
   $('d-low').className='kpi-value'+(s.stock<=book.threshold?' danger':'');
   const pct=Math.max(0,s.stock/book.maxPrint*100);
   $('d-bar').style.width=pct+'%';
-  $('d-bar').style.background=s.stock<=book.threshold?'#f87171':s.stock<=book.threshold*2?'#fb923c':book.accent;
+  $('d-bar').style.background=s.stock<=book.threshold?'#f87171':book.accent;
   $('d-bar-label').textContent=s.stock+' / '+book.maxPrint+' units on hand';
   const al=$('d-alert');
   if(s.stock<=book.threshold){al.className='stock-alert danger';al.textContent='⚠ Below threshold ('+book.threshold+') — reorder now.';}
@@ -2503,7 +2503,7 @@ function updateDash() {
     $('d-be-title').textContent = broken ? 'Project has broken even' : 'Not yet broken even';
     $('d-be-sub').textContent = `Production cost: ${fmt(cost,cur)} · Revenue to date: ${fmt(recognizedRev,cur)}`;
     $('d-be-bar').style.width = pctBe+'%';
-    $('d-be-bar').style.background = broken ? '#4ade80' : pctBe>=70 ? '#fb923c' : 'var(--gold2)';
+    $('d-be-bar').style.background = broken ? '#4ade80' : pctBe>=70 ? '#fb923c' : (book.accent || 'var(--gold2)');
     $('d-be-bar-label').textContent = `${fmt(recognizedRev,cur)} recovered (${pctBe.toFixed(1)}%)`;
     $('d-be-bar-right').textContent = broken ? 'Break-even reached ✓' : `${fmt(remaining,cur)} remaining`;
     const al=$('d-be-alert');
