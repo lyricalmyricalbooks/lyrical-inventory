@@ -344,7 +344,14 @@ async function saveBookFromModal() {
 function renderCatalogList() {
   const container = $('catalog-list');
   if (!container) return;
-  container.innerHTML = BOOK_LIST.map(b => `
+
+  const testContainer = $('test-catalog-list');
+  
+  // Find test books (e.g. title or id contains "test")
+  const testBooks = BOOK_LIST.filter(b => b.id.toLowerCase().includes('test') || b.title.toLowerCase().includes('test'));
+  const regularBooks = BOOK_LIST.filter(b => !b.id.toLowerCase().includes('test') && !b.title.toLowerCase().includes('test'));
+
+  container.innerHTML = regularBooks.map(b => `
     <div class="catalog-card">
        <div style="display:flex;align-items:center;gap:14px;">
          <div class="catalog-dot" style="background:${b.accent}"></div>
@@ -358,7 +365,32 @@ function renderCatalogList() {
          <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
        </div>
     </div>`).join('');
+
+  if (testContainer) {
+    if (testBooks.length === 0) {
+      testContainer.innerHTML = `
+        <div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:var(--r2);">
+          No test books found.
+        </div>`;
+    } else {
+      testContainer.innerHTML = testBooks.map(b => `
+        <div class="catalog-card">
+           <div style="display:flex;align-items:center;gap:14px;">
+             <div class="catalog-dot" style="background:${b.accent}"></div>
+             <div class="catalog-info">
+               <h4>${escapeHtml(b.title)}</h4>
+               <p>${escapeHtml(b.id)} · ${b.currency}${b.listPrice}</p>
+             </div>
+           </div>
+           <div class="catalog-actions">
+             <button class="btn sm" onclick="openEditBookModal('${escapeHtml(b.id)}')">Edit</button>
+             <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
+           </div>
+        </div>`).join('');
+    }
+  }
 }
+
 
 async function deleteBook(id) {
   await syncCatalog();
