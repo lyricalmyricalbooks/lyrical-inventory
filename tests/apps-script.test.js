@@ -36,6 +36,24 @@ describe('Apps Script Integration', () => {
     expect(match[1]).not.toContain('function doPost');
   });
 
+  it('client expected script version matches Code.gs', () => {
+    const codeContent = fs.readFileSync(codeGsPath, 'utf8');
+    const mainContent = fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8');
+
+    const scriptVersion = codeContent.match(/scriptVersion:\s*'([^']+)'/)?.[1];
+    const expectedVersion = mainContent.match(/EXPECTED_SCRIPT_VERSION\s*=\s*'([^']+)'/)?.[1];
+
+    expect(scriptVersion).toBeTruthy();
+    expect(expectedVersion).toBe(scriptVersion);
+  });
+
+  it('batch sync capability is advertised by Code.gs', () => {
+    const codeContent = fs.readFileSync(codeGsPath, 'utf8');
+    expect(codeContent).toContain('batchSync: true');
+    expect(codeContent).toContain("if (action === 'batch')");
+    expect(codeContent).toContain('processSheetsBatch_');
+  });
+
   describe('numOrBlank_ (Utility Function)', () => {
     let numOrBlank_;
 
