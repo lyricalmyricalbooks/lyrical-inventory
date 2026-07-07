@@ -14441,7 +14441,7 @@ function renderTaxCenter() {
       ledTbody.innerHTML = pageLedger.map(item => {
         // Build receipt/ref cell — receipt links AND the reference number
         // together; a ref must never hide the saved receipt files.
-        let displayRef = item.ref || '';
+        let displayRef = item.ref != null ? String(item.ref) : '';
         let legacyReceipt = '';
         // Legacy cleanup: if ref contains a local link, extract it
         if (displayRef && displayRef.includes('local://')) {
@@ -14876,7 +14876,7 @@ function showCategoryDetail(catName) {
   const rows = sorted.map(item => {
     // Receipt links AND the reference number together — a ref must never
     // hide the saved receipt files.
-    let displayRef = item.ref || '';
+    let displayRef = item.ref != null ? String(item.ref) : '';
     let legacyReceipt = '';
     if (displayRef && displayRef.includes('local://')) {
       const match = displayRef.match(/href="([^"]+)"/);
