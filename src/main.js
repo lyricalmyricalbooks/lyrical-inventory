@@ -11974,9 +11974,10 @@ function retakeReceiptPhoto() {
 
 async function useReceiptPhoto() {
   if (!_receiptCamBlob) { showToast('⚠ No photo captured', 'warn'); return; }
-  const fileInput = $('tc-exp-file');
+  const isEditing = $('m-edit-expense') && $('m-edit-expense').style.display !== 'none';
+  const fileInput = isEditing ? $('edit-exp-file') : $('tc-exp-file');
   if (!fileInput) { showToast('⚠ Receipt field not available', 'err'); return; }
-  const preview = $('tc-exp-file-preview');
+  const preview = isEditing ? $('edit-exp-file-preview') : $('tc-exp-file-preview');
   const stamp = new Date().toISOString().replace(/[:T]/g, '-').split('.')[0];
   const file = new File([_receiptCamBlob], `webcam-receipt-${stamp}.jpg`, { type: 'image/jpeg' });
 
@@ -12009,7 +12010,10 @@ async function useReceiptPhoto() {
     const btn = $('receipt-cam-use-btn');
     if (btn) { btn.disabled = true; btn.textContent = '💾 Saving…'; }
     try {
-      const localUrl = await saveReceiptToLocalFile(file, 'General');
+      const subfolder = (isEditing && _editingExpense?.type === 'bookExpense' && BOOKS[_editingExpense?.bid])
+        ? BOOKS[_editingExpense.bid].title
+        : 'General';
+      const localUrl = await saveReceiptToLocalFile(file, subfolder.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
       if (localUrl) {
         _pendingWebcamReceipt = { name: file.name, size: file.size, url: localUrl };
         if (preview) {
@@ -14486,7 +14490,7 @@ function renderTaxCenter() {
             <td style="font-size:12px;">${refCell}</td>
             <td class="r" style="font-size:12px;">${origDisplay}</td>
             <td class="r" style="font-weight:600;">${cadDisplay}</td>
-            <td class="r">${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}</td>
+            <td class="r">${(item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense') ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>` : ''}${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}</td>
         </tr>`;
       }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</td></tr>`;
   }
@@ -14810,6 +14814,194 @@ function saveTripAssignment() {
   showToast(newTrip ? `✓ Assigned to ${newTrip}` : '✓ Removed from trip');
 }
 
+let _editingExpense = null;
+
+function renderEditExpenseReceipts() {
+  const container = $('edit-exp-receipts-preview');
+  if (!container || !_editingExpense) return;
+  if (!_editingExpense.files.length) {
+    container.innerHTML = '<span style="color:var(--text3);font-size:11px;">No receipts attached</span>';
+    return;
+  }
+  
+  container.innerHTML = _editingExpense.files.map((r, idx) => {
+    let name = 'Receipt';
+    let viewLink = '';
+    if (typeof r === 'string' && r.startsWith('local://')) {
+      const fn = r.replace('local://', '');
+      const base = fn.split('/').pop();
+      name = base;
+      viewLink = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn.replace(/'/g, "\\'")}')" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(base)}</a>`;
+    } else {
+      name = String(r).split('/').pop() || 'Remote Receipt';
+      viewLink = `<a href="${r}" target="_blank" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(name)}</a>`;
+    }
+    return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid rgba(255,255,255,0.1);">
+      <span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;">📄 ${viewLink}</span>
+      <button class="btn tx" onclick="removeEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--red);">Remove</button>
+    </div>`;
+  }).join('');
+}
+
+function removeEditExpenseReceipt(idx) {
+  if (!_editingExpense) return;
+  _editingExpense.files.splice(idx, 1);
+  renderEditExpenseReceipts();
+}
+
+function openEditExpense(type, bid, id) {
+  let exp = null;
+  if (type === 'businessExpense') {
+    exp = (TAX_CENTER.businessExpenses || []).find(e => String(e.id) === String(id));
+  } else if (type === 'bookExpense') {
+    const s = states[bid];
+    if (s && s.expenses) {
+      exp = s.expenses.find(e => String(e.id) === String(id));
+    }
+  }
+  if (!exp) {
+    showToast('⚠ Expense entry not found', 'err');
+    return;
+  }
+
+  // Populate dynamic category dropdown
+  const catSelect = $('edit-exp-cat');
+  if (catSelect) {
+    catSelect.innerHTML = TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g,'&quot;')}">${c}</option>`).join('');
+    if (exp.cat && !TC_CATEGORIES.includes(exp.cat)) {
+      catSelect.innerHTML += `<option value="${exp.cat.replace(/"/g,'&quot;')}">${exp.cat}</option>`;
+    }
+    catSelect.value = exp.cat || 'Other';
+  }
+
+  _editingExpense = {
+    type,
+    bid,
+    id,
+    files: Array.isArray(exp.receiptFiles) ? [...exp.receiptFiles] : (exp.receipt ? [exp.receipt] : [])
+  };
+
+  $('edit-exp-desc').value = exp.desc || '';
+  $('edit-exp-cur').value = exp.origCurrency || exp.currency || 'CAD';
+  $('edit-exp-amount').value = exp.origAmount != null ? exp.origAmount : (exp.amount || 0);
+  $('edit-exp-date').value = exp.date || today();
+  $('edit-exp-trip').value = exp.trip || '';
+  $('edit-exp-file').value = '';
+  if ($('edit-exp-file-preview')) $('edit-exp-file-preview').textContent = '';
+
+  renderEditExpenseReceipts();
+  openM('edit-expense');
+}
+
+async function saveExpenseEdit() {
+  if (!_editingExpense) return;
+  const { type, bid, id } = _editingExpense;
+  
+  const desc = ($('edit-exp-desc').value || '').trim();
+  const cat = $('edit-exp-cat').value;
+  const currency = $('edit-exp-cur').value || 'CAD';
+  const amount = parseFloat($('edit-exp-amount').value) || 0;
+  const date = $('edit-exp-date').value || today();
+  const trip = ($('edit-exp-trip').value || '').trim();
+
+  if(!desc){ showToast('⚠ Please enter a description','warn'); $('edit-exp-desc').focus(); return; }
+  if(!amount){ showToast('⚠ Please enter an amount','warn'); $('edit-exp-amount').focus(); return; }
+
+  const submitBtn = $('m-edit-expense').querySelector('.modal-footer .gold');
+  const oldText = submitBtn.textContent;
+  submitBtn.textContent = 'Saving...'; submitBtn.disabled = true;
+
+  try {
+    const fileInput = $('edit-exp-file');
+    let newReceiptUrl = '';
+    if (fileInput && fileInput.files.length > 0) {
+      const file = fileInput.files[0];
+      if (_pendingWebcamReceipt && _pendingWebcamReceipt.name === file.name && _pendingWebcamReceipt.size === file.size) {
+        newReceiptUrl = _pendingWebcamReceipt.url;
+      } else {
+        const subfolder = type === 'bookExpense' && BOOKS[bid] ? BOOKS[bid].title : 'General';
+        const localUrl = await saveReceiptToLocalFile(file, subfolder.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
+        if (localUrl) newReceiptUrl = localUrl;
+      }
+    }
+
+    if (newReceiptUrl) {
+      _editingExpense.files.push(newReceiptUrl);
+    }
+
+    // Recalculate converted CAD total
+    const fxRate = _fxRateCache[`${currency}_CAD`] || 1;
+    const baseAmount = amount * fxRate;
+
+    // Find and update item
+    let exp = null;
+    if (type === 'businessExpense') {
+      exp = (TAX_CENTER.businessExpenses || []).find(e => String(e.id) === String(id));
+      if (exp) {
+        exp.desc = desc;
+        exp.cat = cat;
+        exp.currency = currency;
+        exp.origCurrency = currency;
+        exp.amount = amount;
+        exp.origAmount = amount;
+        exp.fxRate = fxRate;
+        exp.baseAmount = baseAmount;
+        exp.date = date;
+        exp.trip = trip;
+        exp.receiptFiles = [..._editingExpense.files];
+        exp.receipt = _editingExpense.files[0] || '';
+        await saveTaxCenter();
+      }
+    } else if (type === 'bookExpense') {
+      const s = states[bid];
+      if (s && s.expenses) {
+        exp = s.expenses.find(e => String(e.id) === String(id));
+        if (exp) {
+          exp.desc = desc;
+          exp.cat = cat;
+          exp.currency = currency;
+          exp.origCurrency = currency;
+          exp.amount = amount;
+          exp.origAmount = amount;
+          exp.baseAmount = baseAmount;
+          exp.date = date;
+          exp.receiptFiles = [..._editingExpense.files];
+          exp.receipt = _editingExpense.files[0] || '';
+          await saveState(bid);
+        }
+      }
+    }
+
+    // If active modals (trip detail, category detail) are open, re-render them too
+    const tripModal = $('m-tc-trip-detail');
+    const catModal = $('m-tc-cat-detail');
+    if (tripModal && tripModal.style.display !== 'none' && _tcOpenTripName) {
+      await loadTaxCenter();
+      renderTaxCenter();
+      showTripDetail(_tcOpenTripName);
+    } else if (catModal && catModal.style.display !== 'none') {
+      const activeCatName = $('tc-cat-detail-title').textContent;
+      if (activeCatName) {
+        await loadTaxCenter();
+        renderTaxCenter();
+        showCategoryDetail(activeCatName);
+      }
+    } else {
+      renderTaxCenter();
+    }
+
+    closeM('edit-expense');
+    showToast('✓ Expense updated successfully');
+  } catch (e) {
+    console.error('Error saving expense edit', e);
+    showToast('⚠ Error saving changes', 'err');
+  } finally {
+    submitBtn.textContent = oldText; submitBtn.disabled = false;
+    _editingExpense = null;
+    _pendingWebcamReceipt = null;
+  }
+}
+
 function showTripDetail(tripName) {
   const detail = window._tcTripDetail;
   if (!detail || !detail.byName[tripName]) return;
@@ -14835,7 +15027,11 @@ function showTripDetail(tripName) {
         <td style="font-size:12px;">${refCell}</td>
         <td class="r" style="font-size:12px;">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
-        <td><button class="btn" style="font-size:10px;padding:3px 8px;" onclick="openEditTrip('${item.id}')" title="Move to a different trip">Move</button></td>
+        <td style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
+          <button class="btn" style="font-size:10px;padding:3px 8px;" onclick="openEditTrip('${item.id}')" title="Move to a different trip">Move</button>
+          <button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('businessExpense', '', '${item.id}')" title="Edit entry">✏️</button>
+          <button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('businessExpense', '', '${item.id}')" title="Delete entry">🗑️</button>
+        </td>
       </tr>`;
   }).join('');
 
@@ -14897,6 +15093,9 @@ function showCategoryDetail(catName) {
           ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g,'&quot;')}"${c===item.cat?' selected':''}>${c}</option>`).join('')}
         </select>`
       : '<span style="font-size:11px;color:var(--text3);">—</span>';
+    const showEdit = (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense');
+    const editBtn = showEdit ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>` : '';
+    const deleteBtn = item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : '';
     return `
       <tr style="color:var(--red);">
         <td style="font-size:12px;">${item.date || '—'}</td>
@@ -14906,6 +15105,7 @@ function showCategoryDetail(catName) {
         <td class="r" style="font-size:12px;">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
         <td>${moveCell}</td>
+        <td class="r">${editBtn}${deleteBtn}</td>
       </tr>`;
   }).join('');
 
@@ -20796,6 +20996,7 @@ Object.assign(window, {
   switchEmailImportTab, searchGmailEmails, applyGmailPresetQuery, toggleEmailPreview, toggleEmailRowSelection, toggleAllGmailSelections,
   showCategoryDetail, changeExpenseCategory,
   showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt,
+  openEditExpense, removeEditExpenseReceipt, saveExpenseEdit,
   // Invoices
   renderInvoices, openCreateInvoice, viewInvoice,
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
