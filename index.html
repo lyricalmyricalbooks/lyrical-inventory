@@ -1560,56 +1560,79 @@
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:1.5rem;">
-    <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:0.5rem;">📦 Shippo Import</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">
-      Live API sync from Shippo transactions — imports non-refunded shipping rates straight into your Shipping &amp; Postage ledger.
+  <div class="card" style="margin-bottom:1.5rem; padding: 1.5rem;">
+    <div style="font-family:'Playfair Display',serif;font-size:20px;margin-bottom:0.25rem;">🔌 Integrations &amp; API Configuration</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem;">
+      Connect and sync external services to automate expense scanning, shipping logs, and processing fee reconciliation.
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <input type="password" id="tc-shippo-key" placeholder="shippo_live_..." style="flex:1;min-width:220px;font-size:12px;" autocomplete="off">
-      <button class="btn gold outline" id="tc-shippo-btn" style="height:34px;padding:0 12px;white-space:nowrap;" onclick="importShippoShippingFromApi()">Import from Shippo API</button>
-    </div>
-    <div id="tc-shippo-status" style="font-size:11px;color:var(--text3);margin-top:6px;">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
-  </div>
+    
+    <div style="display:flex;flex-direction:column;gap:1.5rem;">
+      
+      <!-- Gemini API Section -->
+      <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div>
+          <strong style="font-size:13px;color:var(--text1);">♊ Gemini AI Assistant</strong>
+          <div style="font-size:11px;color:var(--text3);">Used to analyze and automatically categorize receipt photos during upload.</div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-group" style="flex:2;min-width:240px;margin-bottom:0;">
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Gemini API Key</label>
+            <input type="password" id="tc-api-key" placeholder="AI Studio key (AI_KEY)..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+          </div>
+          <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0;">
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Base Currency</label>
+            <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled style="width:100%;font-size:12px;height:35px;background:rgba(255,255,255,0.03);">
+              <option value="CAD">CAD (Default)</option>
+            </select>
+          </div>
+          <button id="tc-save-config-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
+        </div>
+      </div>
 
-  <div class="card" style="margin-bottom:1.5rem;">
-    <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:0.5rem;">💳 Stripe Processing Fees by Year</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">
-      Paste a <strong>restricted</strong> Stripe key with <em>Balance transactions: Read</em> permission.
-      Saved to your Tax Center settings so you don't have to re-enter it.
-      <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener" style="color:var(--gold);">Create one in Stripe →</a>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-      <input type="password" id="stripe-fees-key" placeholder="rk_live_... or sk_live_..." style="flex:1;" autocomplete="off">
-      <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn">Fetch fees</button>
-    </div>
-    <div id="stripe-fees-status" style="font-size:12px;color:var(--text3);margin-bottom:8px;min-height:16px;"></div>
-    <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
-    <div id="stripe-fees-results-wrap" style="display:none;"></div>
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <select id="stripe-fees-year" style="display:none;height:34px;font-size:12px;"><option value="all">All years</option></select>
-      <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;">➕ Insert fees into ledger</button>
-      <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;">⚖ Reconcile against recorded sales</button>
-      <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;">⬇ Download audit CSV (every transaction)</button>
-      <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;">🗑 Forget saved key</button>
-    </div>
-  </div>
+      <!-- Shippo API Section -->
+      <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div>
+          <strong style="font-size:13px;color:var(--text1);">📦 Shippo Live Import</strong>
+          <div style="font-size:11px;color:var(--text3);">Syncs non-refunded transaction rates straight into your Shipping &amp; Postage ledger.</div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-group" style="flex:1;min-width:240px;margin-bottom:0;">
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Shippo Live API Key</label>
+            <input type="password" id="tc-shippo-key" placeholder="shippo_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+          </div>
+          <button class="btn gold outline" id="tc-shippo-btn" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="importShippoShippingFromApi()">Import Shippo Shipping</button>
+        </div>
+        <div id="tc-shippo-status" style="font-size:11px;color:var(--text3);">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
+      </div>
 
-  <div class="card" style="margin-bottom:1.5rem;background:var(--bg2);">
-    <div class="section-hed" style="margin-bottom:0.5rem;font-size:14px;">Tax Center Config</div>
-    <div class="g2">
-        <div class="form-group">
-          <label>Gemini API Key (For AI Scan)</label>
-          <div class="row-g1">
-            <input type="password" id="tc-api-key" placeholder="AI Studio key..." style="flex:1;">
-            <button id="tc-save-config-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save API Config</button>
+      <!-- Stripe API Section -->
+      <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
+        <div>
+          <strong style="font-size:13px;color:var(--text1);">💳 Stripe Processing Fees</strong>
+          <div style="font-size:11px;color:var(--text3);">
+            Fetch annual balance transactions processing fees. 
+             <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener" style="color:var(--gold);">Create restricted key in Stripe →</a>
           </div>
         </div>
-        <div class="form-group"><label for="tc-base-cur">Base Currency</label>
-        <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled>
-            <option value="CAD">CAD (Default)</option>
-        </select>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-group" style="flex:1;min-width:240px;margin-bottom:0;">
+            <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Restricted Stripe API Key</label>
+            <input type="password" id="stripe-fees-key" placeholder="rk_live_... or sk_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+          </div>
+          <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn" style="height:35px;padding:0 16px;font-size:12px;">Fetch Stripe Fees</button>
         </div>
+        <div id="stripe-fees-status" style="font-size:11px;color:var(--text3);min-height:16px;"></div>
+        <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
+        <div id="stripe-fees-results-wrap" style="display:none;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
+          <select id="stripe-fees-year" style="display:none;height:34px;font-size:12px;background:rgba(255,255,255,0.03);"><option value="all">All years</option></select>
+          <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;font-size:11px;height:34px;padding:0 12px;">➕ Insert fees into ledger</button>
+          <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⚖ Reconcile against sales</button>
+          <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⬇ Download audit CSV</button>
+          <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;font-size:11px;height:34px;padding:0 12px;">Forget key</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
