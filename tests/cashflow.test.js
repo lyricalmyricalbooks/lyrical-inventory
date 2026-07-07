@@ -89,6 +89,29 @@ describe('computeCashFlowMetrics', () => {
     });
     expect(computeCashFlowMetrics({ books: { x: {} }, states: {}, taxCenter: {}, fxRateCache: {} }, 'all').grossSales).toBe(0);
   });
+
+  it('excludes the test1 profile book from metrics', () => {
+    const customBooks = {
+      ...books,
+      test1: { id: 'test1', title: 'test1', currency: 'CA$' },
+      otherTest: { id: 't_other', title: '  test1  ', currency: 'CA$' }
+    };
+    const customStates = {
+      ...states,
+      test1: {
+        hist: [{ id: 's_test', date: '2025-03-01', price: 20, qty: 2 }],
+        expenses: [{ id: 'e_test', date: '2025-02-01', amount: 8, currency: 'CAD', baseAmount: 8 }]
+      },
+      otherTest: {
+        hist: [{ id: 's_test2', date: '2025-03-01', price: 10, qty: 1 }]
+      }
+    };
+    const customSources = { books: customBooks, states: customStates, taxCenter, fxRateCache };
+    const m = computeCashFlowMetrics(customSources, '2025');
+    // It should be exactly the same as without test1 and otherTest (grossSales = 170, operatingExpenses = 71)
+    expect(m.grossSales).toBeCloseTo(170, 5);
+    expect(m.operatingExpenses).toBeCloseTo(71, 5);
+  });
 });
 
 describe('cashFlowDelta', () => {

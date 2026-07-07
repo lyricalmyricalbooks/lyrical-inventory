@@ -14206,6 +14206,7 @@ function renderTaxCenter() {
   let allLedger = [];
   
   Object.keys(BOOKS).forEach(bid => {
+    if (bid === 'test1' || BOOKS[bid]?.title?.toLowerCase()?.trim() === 'test1') return;
     const s = states[bid] || defaultState(BOOKS[bid]);
     const b = BOOKS[bid];
     const cur = getBookCurrencyCode(b);
