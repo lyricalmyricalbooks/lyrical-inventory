@@ -2069,6 +2069,59 @@
         </div>
       </details>
     </div>
+
+    <!-- MOCK SPREADSHEET SIMULATOR (TEST PROFILE) -->
+    <div class="sheets-setup" id="sheets-simulated-card" style="display:none; background:var(--ink2); border:1px solid var(--border); padding:1.5rem; border-radius:var(--r3); margin-bottom:1.5rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:700; color:var(--gold2);">📊 Google Sheets Sandbox Simulator</div>
+            <span style="background:linear-gradient(135deg, #10b981, #059669); color:white; font-size:9px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; letter-spacing:0.05em; display:inline-block;">Test Mode Active</span>
+          </div>
+          <div style="font-size:12px; color:rgba(255,255,255,0.7); margin-top:4px; line-height:1.5;">
+            Simulating synchronization in real-time. Transactions logged in the Test Profile are captured here in-memory.
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn sm gold" id="sim-push-all-btn" onclick="pushAllToSheets()">Sync all data</button>
+          <button class="btn sm" id="sim-backfill-btn" onclick="backfillAndResync()">Repair legacy rows</button>
+          <button class="btn sm danger-btn" onclick="clearSimulatedSheet()" title="Wipe simulated spreadsheet data" style="background:#ca1e1e; border-color:#ca1e1e; color:white;">Clear Sheet</button>
+        </div>
+      </div>
+
+      <!-- Simulated Google Sheet Container -->
+      <div class="mock-sheets-viewport">
+        <!-- Sheet Toolbar / Info Bar -->
+        <div style="background:#1d1d26; border-bottom:1px solid rgba(255,255,255,0.08); padding:6px 12px; display:flex; align-items:center; justify-content:space-between; font-size:11px; color:rgba(255,255,255,0.6);">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-weight:600; color:#34d399;">● Connected (Simulated)</span>
+            <span style="opacity:0.5;">|</span>
+            <span>File: <strong style="color:rgba(255,255,255,0.95);">Lyricalmyrical Inventory (Simulated)</strong></span>
+          </div>
+          <div style="font-style:italic;" id="sim-sheet-row-count">0 rows synced</div>
+        </div>
+
+        <!-- The actual grid -->
+        <div class="mock-sheets-grid" id="sim-sheet-grid-scroll">
+          <table>
+            <thead>
+              <tr id="sim-sheet-headers">
+                <!-- Headers will be injected dynamically -->
+              </tr>
+            </thead>
+            <tbody id="sim-sheet-rows">
+              <!-- Rows will be injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Sheet Tabs Selector at the Bottom -->
+        <div style="background:#1d1d26; border-top:1px solid rgba(255,255,255,0.08); padding:4px; display:flex; align-items:center; gap:2px; font-size:11px;" id="sim-sheet-tabs">
+          <!-- Tabs will be injected dynamically -->
+        </div>
+      </div>
+    </div>
+
     <div id="sheets-connected-card" style="display:none;">
       <div class="sheets-setup connected" style="margin-bottom:1.5rem;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
