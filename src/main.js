@@ -10222,6 +10222,9 @@ function saveEntryEdit() {
   recomputeAfters(s, book);
   closeM('edit-entry');
   renderAll(); updateDash(); saveState(activeBook);
+  if ($('tab-taxcenter') && $('tab-taxcenter').classList.contains('active')) {
+    renderTaxCenter();
+  }
   showToast('✓ Entry updated');
 }
 
@@ -14247,7 +14250,7 @@ function renderTaxCenter() {
             isIncome: true,
             sourceType: 'sale',
             sourceId: bid,
-            itemId: h.id
+            itemId: h.id || h.num
         });
     });
     
@@ -14312,7 +14315,7 @@ function renderTaxCenter() {
             isIncome: false,
             sourceType: 'artistPayout',
             sourceId: bid,
-            itemId: t.id
+            itemId: t.id || t.num
         });
     });
   });
@@ -14490,7 +14493,19 @@ function renderTaxCenter() {
             <td style="font-size:12px;">${refCell}</td>
             <td class="r" style="font-size:12px;">${origDisplay}</td>
             <td class="r" style="font-weight:600;">${cadDisplay}</td>
-            <td class="r">${(item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense') ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>` : ''}${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}</td>
+            <td class="r">
+              ${(item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense')
+                ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+                : (item.sourceType === 'sale'
+                  ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditSale('${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+                  : (item.sourceType === 'artistPayout'
+                    ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+                    : ''
+                  )
+                )
+              }
+              ${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}
+            </td>
         </tr>`;
       }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</td></tr>`;
   }
@@ -14773,13 +14788,13 @@ async function removeLedgerEntry(type, bid, id) {
   } else if (type === 'artistPayout') {
     const s = states[bid];
     if (s && s.artistTransfers) {
-      s.artistTransfers = s.artistTransfers.filter(t => String(t.id) !== String(id));
+      s.artistTransfers = s.artistTransfers.filter(t => String(t.id || t.num) !== String(id));
       saveState(bid);
     }
   } else if (type === 'sale') {
       const s = states[bid];
       if (s && s.hist) {
-          s.hist = s.hist.filter(h => String(h.id) !== String(id));
+          s.hist = s.hist.filter(h => String(h.id || h.num) !== String(id));
           saveState(bid);
       }
   }
@@ -14848,6 +14863,47 @@ function removeEditExpenseReceipt(idx) {
   _editingExpense.files.splice(idx, 1);
   renderEditExpenseReceipts();
 }
+
+function openEditSale(bid, itemId) {
+  switchBook(bid);
+  const s = states[bid];
+  if (!s || !Array.isArray(s.hist)) return;
+  const idx = s.hist.findIndex(h => String(h.id || h.num) === String(itemId));
+  if (idx !== -1) {
+    const h = s.hist[idx];
+    if (h.consignmentLink) {
+      const lIdx = s.ledger.findIndex(e => e.sheetsId === h.sheetsId || (e.date === h.date && e.storeName === h.notes && e.qty === h.qty));
+      if (lIdx !== -1) {
+        openEditLedger(lIdx);
+        return;
+      }
+    }
+    openEditHist(idx);
+  } else {
+    showToast('⚠ Sale record not found', 'err');
+  }
+}
+
+async function openEditArtistPayout(bid, itemId) {
+  const s = states[bid];
+  if (!s || !Array.isArray(s.artistTransfers)) return;
+  const t = s.artistTransfers.find(x => String(x.id || x.num) === String(itemId));
+  if (!t) {
+    showToast('⚠ Payout record not found', 'err');
+    return;
+  }
+  
+  const proceed = await confirmDialog(
+    `Artist payouts are automatically generated from recorded sales.\n\n` +
+    `To edit the details of this payout (like amount or qty), you should edit the corresponding sale entry (#${t.num}).\n\n` +
+    `Would you like to open the edit screen for sale #${t.num} now?`,
+    { okLabel: 'Edit corresponding sale', cancelLabel: 'Cancel', title: 'Edit Artist Payout' }
+  );
+  if (proceed) {
+    openEditSale(bid, t.num);
+  }
+}
+
 
 function openEditExpense(type, bid, id) {
   let exp = null;
@@ -20996,7 +21052,7 @@ Object.assign(window, {
   switchEmailImportTab, searchGmailEmails, applyGmailPresetQuery, toggleEmailPreview, toggleEmailRowSelection, toggleAllGmailSelections,
   showCategoryDetail, changeExpenseCategory,
   showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt,
-  openEditExpense, removeEditExpenseReceipt, saveExpenseEdit,
+  openEditExpense, removeEditExpenseReceipt, saveExpenseEdit, openEditSale, openEditArtistPayout,
   // Invoices
   renderInvoices, openCreateInvoice, viewInvoice,
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
