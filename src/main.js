@@ -53,6 +53,21 @@ let deletedDefaultIds = [];
 let posExtraBooks = {};
 let editingPosBookId = null;
 
+function isTestBook(b) {
+  if (!b) return false;
+  const idLower = (b.id || '').toLowerCase();
+  const titleLower = (b.title || '').toLowerCase().trim();
+  return idLower === 'test1' || idLower === 'testpage' || idLower.includes('test') ||
+         titleLower === 'test1' || titleLower === 'testpage' || titleLower === 'test page';
+}
+
+function isTestBookId(bid) {
+  if (!bid) return false;
+  if (bid === 'test1' || bid.toLowerCase() === 'testpage' || bid.toLowerCase().includes('test')) return true;
+  if (BOOKS[bid]) return isTestBook(BOOKS[bid]);
+  return false;
+}
+
 // Build the rules-readable ownership map from the live catalog. Keyed by book
 // id → owning author's (lowercased) Google email; books with no author are left
 // out so they stay publisher-only.
@@ -1573,7 +1588,7 @@ function updateProfileTabs(type) {
 function selectProfileTab(type) {
   if (!isPublisherSession() || isAuthor()) return;
 
-  const testBook = BOOK_LIST.find(b => b.id === 'test1' || b.title.toLowerCase().trim() === 'test1');
+  const testBook = BOOK_LIST.find(isTestBook);
 
   if (type === 'test') {
     if (testBook) {
@@ -1583,7 +1598,7 @@ function selectProfileTab(type) {
       switchBook(testBook.id);
       updateProfileTabs('test');
     } else {
-      showToast('Test profile (book named "test1") not found in catalog', 'warn');
+      showToast('Test profile book not found in catalog', 'warn');
     }
   } else {
     const restoreId = window.lastActiveBookId || 'all';
@@ -1599,9 +1614,9 @@ window.selectProfileTab = selectProfileTab;
 
 // ── SEED MOCK TEST DATA FOR LEGIT TEST PROFILE ──
 async function seedMockTestData() {
-  const testBook = BOOK_LIST.find(b => b.id === 'test1' || b.title.toLowerCase().trim() === 'test1');
+  const testBook = BOOK_LIST.find(isTestBook);
   if (!testBook) {
-    showToast('⚠ Test book "test1" not found in catalog', 'err');
+    showToast('⚠ Test book not found in catalog', 'err');
     return;
   }
   const testBookId = testBook.id;
@@ -1609,8 +1624,8 @@ async function seedMockTestData() {
   if (activeBook !== testBookId) return;
 
   if (!(await confirmDialog(
-    `Reset and seed the Test Profile (test1) with rich, realistic sample data?\n\n` +
-    `• This will overwrite any existing sales, consignment, and expenses for "test1".\n` +
+    `Reset and seed the Test Profile with rich, realistic sample data?\n\n` +
+    `• This will overwrite any existing sales, consignment, and expenses for this book.\n` +
     `• It will configure a production cost of €300, 2 consignment stores, multiple sales channels, pending/received artist expenses, and a stock drift warning.`,
     { title: 'Seed Mock Test Data', okLabel: 'Seed Data' }
   ))) return;
@@ -1618,7 +1633,7 @@ async function seedMockTestData() {
   // 1. Reconfigure book properties in catalog
   const book = BOOKS[testBookId];
   if (!book) {
-    showToast('⚠ Test book "test1" not found in catalog', 'err');
+    showToast('⚠ Test book not found in catalog', 'err');
     return;
   }
   
@@ -1864,7 +1879,7 @@ function switchBook(bookId) {
     updateHeader();
   }
   // Sync the Active Book / Test Profile tabs
-  const testBook = BOOK_LIST.find(b => b.id === 'test1' || b.title.toLowerCase().trim() === 'test1');
+  const testBook = BOOK_LIST.find(isTestBook);
   if (testBook && bookId === testBook.id) {
     updateProfileTabs('test');
     if (!window._realSheetsUrlSaved) {
@@ -2013,7 +2028,7 @@ function updateHeader() {
 
 // ── ALL BOOKS OVERVIEW
 function updateAllOverview() {
-  const allBooksVisible = BOOK_LIST.filter(b => !b.id.toLowerCase().includes('test') && !b.title.toLowerCase().includes('test'));
+  const allBooksVisible = BOOK_LIST.filter(b => !isTestBook(b));
 
   // Book strips
   const list = $('all-books-list');
@@ -11175,7 +11190,7 @@ async function checkSheetsVersion() {
   const versionEl = $('sheets-deployed-version');
   const expectedEl = $('sheets-expected-version');
   if (expectedEl) expectedEl.textContent = EXPECTED_SCRIPT_VERSION;
-  const isTest = activeBook === 'test1' || (BOOKS[activeBook] && BOOKS[activeBook].title?.toLowerCase()?.trim() === 'test1');
+  const isTest = isTestBookId(activeBook);
   if (isTest) {
     if (warningEl) warningEl.style.display = 'none';
     if (versionEl) versionEl.textContent = EXPECTED_SCRIPT_VERSION;
@@ -11449,7 +11464,7 @@ function clearSimulatedSheet() {
 }
 
 function updateSheetsTabUI() {
-  const isTest = activeBook === 'test1' || (BOOKS[activeBook] && BOOKS[activeBook].title?.toLowerCase()?.trim() === 'test1');
+  const isTest = isTestBookId(activeBook);
   const simCard = $('sheets-simulated-card');
   const setupCard = $('sheets-setup-card');
   const connectedCard = $('sheets-connected-card');
@@ -11565,7 +11580,7 @@ window.backfillAndResync = backfillAndResync;
 function retryDelayMs(attempt){ return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0,attempt-1))); }
 
 async function postToSheets(body, urlOverride){
-  const isTest = activeBook === 'test1' || (BOOKS[activeBook] && BOOKS[activeBook].title?.toLowerCase()?.trim() === 'test1');
+  const isTest = isTestBookId(activeBook);
   if (isTest) {
     return simulatePostToSheets(body);
   }
@@ -11823,7 +11838,7 @@ const SHEETS_BULK_BATCH_SIZE = 200;
 // for a blank data row, so we only send it when support is confirmed.
 let _sheetsCaps = null;
 async function fetchSheetsCapabilities() {
-  const isTest = activeBook === 'test1' || (BOOKS[activeBook] && BOOKS[activeBook].title?.toLowerCase()?.trim() === 'test1');
+  const isTest = isTestBookId(activeBook);
   if (isTest) {
     return { reset: true, batchSync: true };
   }
