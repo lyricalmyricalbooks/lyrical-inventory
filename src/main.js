@@ -2286,7 +2286,7 @@ function renderChannelAnalytics() {
       <div class="ch-rank">${idx + 1}</div>
       <div class="ch-bar-main">
         <div class="ch-bar-head"><span class="ch-dot" style="background:${col}"></span><span class="ch-bar-name">${escapeHtml(chanLabel(x.chan))}</span><span class="ch-bar-val">${fmt(x.revenue,cur)} <em>${share.toFixed(0)}%</em></span></div>
-        <div class="ch-bar-track" role="img" aria-label="${escapeHtml(chanLabel(x.chan))} generated ${share.toFixed(0)}% of ${escapeHtml(cur)} revenue"><div class="ch-bar-fill" style="width:${x.revenue/maxRev*100}%;background:${col}"></div></div>
+        <div class="ch-bar-track" role="img" aria-label="${escapeHtml(chanLabel(x.chan))} generated ${share.toFixed(0)}% of ${escapeHtml(cur)} revenue"><div class="ch-bar-fill" style="width:${x.revenue/maxRev*100}%;background:linear-gradient(90deg, ${lightenColor(col, 0.25)}, ${col});"></div></div>
         <div class="ch-bar-meta"><span>${x.txns} txn</span><span>${x.units} units</span>${x.txns?`<span>${fmt(avgTxn,cur)}/txn</span>`:''}${x.units?`<span>${fmt(revUnit,cur)}/unit</span>`:''}</div>
       </div>
     </div>`;
@@ -15132,10 +15132,10 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
     const x1 = gx + barGap;
     const x2 = x1 + barW + barGap;
     if (b.income > 0) {
-      bars += `<rect x="${x1.toFixed(1)}" y="${(baseY - incH).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" rx="2" fill="var(--green)"><title>${_tcSvgEsc(b.label)} income: ${_tcSvgEsc(fmt(b.income, baseCurrency))}</title></rect>`;
+      bars += `<rect x="${x1.toFixed(1)}" y="${(baseY - incH).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" rx="2" fill="url(#income-grad)"><title>${_tcSvgEsc(b.label)} income: ${_tcSvgEsc(fmt(b.income, baseCurrency))}</title></rect>`;
     }
     if (b.expense > 0) {
-      bars += `<rect x="${x2.toFixed(1)}" y="${(baseY - expH).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" rx="2" fill="var(--red)"><title>${_tcSvgEsc(b.label)} expenses: ${_tcSvgEsc(fmt(b.expense, baseCurrency))}</title></rect>`;
+      bars += `<rect x="${x2.toFixed(1)}" y="${(baseY - expH).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" rx="2" fill="url(#expense-grad)"><title>${_tcSvgEsc(b.label)} expenses: ${_tcSvgEsc(fmt(b.expense, baseCurrency))}</title></rect>`;
     }
     labels += `<text x="${(gx + groupW / 2).toFixed(1)}" y="${(H - 8).toFixed(1)}" text-anchor="middle" class="cf-chart-axis">${_tcSvgEsc(b.label)}</text>`;
   });
@@ -15145,11 +15145,21 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
     <div class="cf-chart-head">
       <span class="cf-chart-title">${_tcSvgEsc(title)}</span>
       <span class="cf-legend">
-        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:var(--green);"></span>Income</span>
-        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:var(--red);"></span>Expenses</span>
+        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:linear-gradient(135deg, var(--green-light), var(--green));"></span>Income</span>
+        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:linear-gradient(135deg, var(--red-light), var(--red));"></span>Expenses</span>
       </span>
     </div>
     <svg class="cf-chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${_tcSvgEsc(title)}">
+      <defs>
+        <linearGradient id="income-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="var(--green-light, #3ba75c)"/>
+          <stop offset="100%" stop-color="var(--green, #1e5631)"/>
+        </linearGradient>
+        <linearGradient id="expense-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="var(--red-light, #e05e4d)"/>
+          <stop offset="100%" stop-color="var(--red, #a63a2b)"/>
+        </linearGradient>
+      </defs>
       <line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" class="cf-chart-base"/>
       ${bars}
       ${labels}
