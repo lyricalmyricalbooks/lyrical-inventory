@@ -1480,11 +1480,40 @@ function updateSubheader() {
     }
   }
 
+  const isPub = window.IS_PUBLISHER && !isAuthor();
+
   const upd = $('tab-updated');
-  if (upd) upd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
+  if (upd) {
+    upd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
+    if (isPub) {
+      upd.style.cursor = 'pointer';
+      upd.style.textDecoration = 'underline dotted';
+      upd.title = 'Click to see what changed';
+      upd.onclick = (e) => showWhatsNew(e);
+    } else {
+      upd.style.cursor = '';
+      upd.style.textDecoration = '';
+      upd.title = '';
+      upd.onclick = null;
+    }
+  }
+
   // Publisher app-shell hides the tab bar, so mirror the stamp into the sidebar.
   const pubUpd = $('pub-updated');
-  if (pubUpd) pubUpd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
+  if (pubUpd) {
+    pubUpd.textContent = 'updated ' + __GIT_COMMIT_DATE__;
+    if (isPub) {
+      pubUpd.style.cursor = 'pointer';
+      pubUpd.style.textDecoration = 'underline dotted';
+      pubUpd.title = 'Click to see what changed';
+      pubUpd.onclick = (e) => showWhatsNew(e);
+    } else {
+      pubUpd.style.cursor = '';
+      pubUpd.style.textDecoration = '';
+      pubUpd.title = '';
+      pubUpd.onclick = null;
+    }
+  }
 }
 
 // The header can't hold the brand, book switcher, action menus AND the KPI
@@ -21559,6 +21588,7 @@ async function fetchRecentChanges() {
 }
 
 async function showWhatsNew(event) {
+  if (!window.IS_PUBLISHER || isAuthor()) return;
   if (event) event.stopPropagation();
   openM('whats-new');
   
