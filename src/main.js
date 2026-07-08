@@ -2076,6 +2076,14 @@ function updateAllOverview() {
     const expTotal = (s.expenses||[]).reduce((a,e)=>a+(e.amount||0),0);
 
     return `<div class="book-strip" style="--accent-color: ${book.accent}; --accent-color-bg: ${book.accentBg}; --accent-color-light: ${lightenColor(book.accent, 0.25)}; --accent-text: ${getContrastSafeText(book.accent)}; --accent-contrast: ${getContrastColor(book.accent)};">
+      <div class="book-cover-3d" aria-hidden="true">
+        <div class="book-cover-spine"></div>
+        <div class="book-cover-front">
+          <div class="book-cover-deco">
+            <span class="book-cover-logo">${escapeHtml(book.title.charAt(0))}</span>
+          </div>
+        </div>
+      </div>
       <div class="book-strip-info">
         <div class="book-strip-title">${escapeHtml(book.title)}</div>
         <div class="book-strip-meta">

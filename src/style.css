@@ -245,6 +245,62 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .book-strip:hover::before {
   width: 6px;
 }
+.book-cover-3d {
+  width: 40px;
+  height: 56px;
+  position: relative;
+  perspective: 150px;
+  transform-style: preserve-3d;
+  flex-shrink: 0;
+  border-radius: 2px 4px 4px 2px;
+  box-shadow: 0 4px 12px var(--accent-color-bg, rgba(14, 12, 10, 0.15));
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s;
+  transform: rotateY(-18deg) rotateX(3deg);
+  background: var(--accent-color);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.book-strip:hover .book-cover-3d {
+  transform: rotateY(-8deg) rotateX(1deg) scale(1.06);
+  box-shadow: 0 10px 20px var(--accent-color-bg, rgba(14, 12, 10, 0.25));
+}
+.book-cover-spine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  background: linear-gradient(90deg, rgba(0,0,0,0.2) 0%, rgba(255,255,255,0.15) 50%, rgba(0,0,0,0.25) 100%);
+  border-right: 1px solid rgba(0,0,0,0.12);
+  z-index: 2;
+}
+.book-cover-front {
+  position: absolute;
+  inset: 0 0 0 5px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 4px;
+  z-index: 1;
+  background: var(--accent-color);
+  box-shadow: inset -2px 0 3px rgba(255,255,255,0.08), inset 0 2px 3px rgba(255,255,255,0.1);
+}
+.book-cover-deco {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 1px;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.book-cover-logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-contrast, #fff);
+  opacity: 0.85;
+}
 .book-strip-accent {
   display: none; /* replaced by ::before and 3D cover */
 }
