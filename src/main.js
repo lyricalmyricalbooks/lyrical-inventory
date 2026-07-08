@@ -14,6 +14,8 @@ import {
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   isDirectToArtistSale,
   getContrastColor,
+  lightenColor,
+  getContrastSafeText,
 } from './lib/money.js';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
@@ -187,6 +189,7 @@ function resetBookForm() {
 
 function openAddBookModal() {
   resetBookForm();
+  updateModalAccentPreview($('nb-accent'));
   openM('add-book');
 }
 
@@ -213,6 +216,7 @@ function openEditBookModal(id) {
   $('nb-paylink').value = book.stripeLink || '';
   if ($('nb-payment-link')) $('nb-payment-link').value = book.paymentLink || 'https://paypal.me/lyricalmyricalbooks';
   switchBookModalTab('general');
+  updateModalAccentPreview($('nb-accent'));
   openM('add-book');
 }
 
@@ -1870,6 +1874,9 @@ function switchBook(bookId) {
     if (shellTitle) shellTitle.textContent = 'All books';
     document.documentElement.style.setProperty('--book-accent', 'var(--gold2)');
     document.documentElement.style.setProperty('--book-accent-bg', 'var(--gold-bg)');
+    document.documentElement.style.setProperty('--book-accent-light', 'var(--gold3)');
+    document.documentElement.style.setProperty('--book-accent-text', 'var(--gold-text)');
+    document.documentElement.style.setProperty('--book-accent-contrast', 'var(--ink)');
     updateAllOverview();
     updateHeader();
   } else {
@@ -1878,6 +1885,9 @@ function switchBook(bookId) {
     // Set CSS accent
     document.documentElement.style.setProperty('--book-accent', book.accent);
     document.documentElement.style.setProperty('--book-accent-bg', book.accentBg);
+    document.documentElement.style.setProperty('--book-accent-light', lightenColor(book.accent, 0.25));
+    document.documentElement.style.setProperty('--book-accent-text', getContrastSafeText(book.accent));
+    document.documentElement.style.setProperty('--book-accent-contrast', getContrastColor(book.accent));
     switchTab('dashboard');
     updateHeader();
   }
@@ -2059,13 +2069,13 @@ function updateAllOverview() {
           </span>
         </div>
         <div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;">
-          <div class="bar-fill" style="width:${bePct}%;background:${broken ? 'var(--green)' : 'var(--gold2)'};"></div>
+          <div class="bar-fill" style="width:${bePct}%;${broken ? 'background:var(--green);' : ''}"></div>
         </div>
       </div>` : '';
 
     const expTotal = (s.expenses||[]).reduce((a,e)=>a+(e.amount||0),0);
 
-    return `<div class="book-strip" style="--accent-color: ${book.accent}; --accent-color-bg: ${book.accentBg}; --accent-text: ${getContrastColor(book.accent)};">
+    return `<div class="book-strip" style="--accent-color: ${book.accent}; --accent-color-bg: ${book.accentBg}; --accent-color-light: ${lightenColor(book.accent, 0.25)}; --accent-text: ${getContrastSafeText(book.accent)}; --accent-contrast: ${getContrastColor(book.accent)};">
       <div class="book-strip-info">
         <div class="book-strip-title">${escapeHtml(book.title)}</div>
         <div class="book-strip-meta">
@@ -2079,7 +2089,7 @@ function updateAllOverview() {
             <span class="progress-pct">${s.stock} / ${book.maxPrint} (${pct.toFixed(0)}%)</span>
           </div>
           <div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;">
-            <div class="bar-fill" style="width:${pct}%;background:${book.accent};"></div>
+            <div class="bar-fill" style="width:${pct}%;"></div>
           </div>
         </div>
         ${beBar}
@@ -2907,7 +2917,7 @@ function getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur) {
           <span style="font-size:11px; color:var(--gold2); font-family:'DM Mono',monospace;">${fmt(revenueLeft, cur)} ${label}</span>
         </div>
         <div class="bar-track" style="height:5px; margin-bottom:0;">
-          <div class="bar-fill" style="width:${pct}%; background:var(--gold2); height:5px; border-radius:100px;"></div>
+          <div class="bar-fill" style="width:${pct}%; height:5px; border-radius:100px;"></div>
         </div>
         <div style="font-size:10px;color:rgba(255,255,255,.62);margin-top:6px;">${fmt(stats.cumulativeRevenue, cur)} of ${fmt(target, cur)} to reach ${enterTier ? enterTier.label : 'next tier'}</div>
       </div>
@@ -17248,6 +17258,7 @@ window.openPosBookModal = function(id) {
   const removeBtn = $('pb-remove-btn');
   if (removeBtn) removeBtn.style.display = book ? '' : 'none';
   renderPosBookModalQR();
+  updateModalAccentPreview($('pb-accent'));
   openM('pos-book');
 };
 
@@ -21687,6 +21698,30 @@ window.disconnectAnalytics = async function() {
 window.IS_PUBLISHER = false;
 window.isPublisherSession = () => window.IS_PUBLISHER;
 window.isAuthor = () => IS_AUTHOR_MODE || (window.IS_PUBLISHER && activeBook && activeBook !== 'all' && AUTHOR_VIEW_BY_BOOK[activeBook]);
+
+function updateModalAccentPreview(inputEl) {
+  if (!inputEl) return;
+  const color = inputEl.value;
+  const colorBg = hexToRgba(color, 0.1);
+  const modal = inputEl.closest('.modal');
+  if (modal) {
+    modal.style.setProperty('--local-accent', color);
+    modal.style.setProperty('--local-accent-bg', colorBg);
+    modal.style.setProperty('--local-accent-text', getContrastSafeText(color));
+    modal.style.setProperty('--local-accent-contrast', getContrastColor(color));
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const nbAccent = document.getElementById('nb-accent');
+  if (nbAccent) {
+    nbAccent.addEventListener('input', () => updateModalAccentPreview(nbAccent));
+  }
+  const pbAccent = document.getElementById('pb-accent');
+  if (pbAccent) {
+    pbAccent.addEventListener('input', () => updateModalAccentPreview(pbAccent));
+  }
+});
 
 if (window._fbReady) { initStartup(); }
 else { document.addEventListener('firebase-ready', initStartup); }

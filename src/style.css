@@ -1,7 +1,7 @@
 :root {
   --ink:#0e0c0a; --ink2:#1c1917; --ink3:#2a2723; --ink4:#3d3a35;
   --cream:#f7f2e9; --cream2:#efe9dc; --cream3:#e5ddd0; --cream4:#d9d0c2;
-  --gold:#c8913a; --gold2:#e5a93f; --gold3:#f0c060;
+  --gold:#c8913a; --gold2:#e5a93f; --gold3:#f0c060; --gold-text:#8a5815;
   --gold-bg:rgba(200,145,58,.1); --gold-line:rgba(200,145,58,.25);
   --text:#0e0c0a; --text2:#4a4540; --text3:#8a8078; --text4:#b8b0a5;
   --green:#2a6348; --green-bg:#d4eddf;
@@ -18,6 +18,9 @@
   /* Per-book accent - overridden by JS */
   --book-accent: var(--gold2);
   --book-accent-bg: var(--gold-bg);
+  --book-accent-light: var(--gold3);
+  --book-accent-text: var(--gold-text);
+  --book-accent-contrast: var(--ink);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--cream);font-family:'Syne',sans-serif;color:var(--text);min-height:100vh;}
@@ -226,7 +229,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 }
 .book-strip:hover {
   border-color: var(--accent-color, var(--gold));
-  box-shadow: 0 10px 24px rgba(14, 12, 10, 0.08), 0 2px 4px rgba(14, 12, 10, 0.02);
+  box-shadow: 0 10px 24px var(--accent-color-bg, rgba(14, 12, 10, 0.08)), 0 2px 4px rgba(14, 12, 10, 0.02);
   transform: translateY(-2px);
 }
 .book-strip::before {
@@ -480,7 +483,12 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .stock-title{font-family:'Playfair Display',serif;font-size:18px;color:var(--cream);margin-bottom:2px;}
 .stock-author{font-size:11px;color:rgba(255,255,255,.58);letter-spacing:.05em;margin-bottom:1.25rem;}
 .bar-track{background:rgba(255,255,255,.07);border-radius:100px;height:5px;margin-bottom:10px;overflow:hidden;}
-.bar-fill{height:5px;border-radius:100px;transition:width .7s cubic-bezier(.16,1,.3,1),background .4s;}
+.bar-fill {
+  height: 5px;
+  border-radius: 100px;
+  background: linear-gradient(90deg, var(--accent-color-light, var(--book-accent-light, var(--gold3))), var(--accent-color, var(--book-accent, var(--gold2))));
+  transition: width .7s cubic-bezier(.16,1,.3,1), background .4s;
+}
 .bar-meta{display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.65);font-weight:500;}
 .stock-alert{margin-top:1.1rem;padding:9px 14px;border-radius:var(--r);font-size:12px;font-weight:500;border-left:3px solid;}
 .stock-alert.ok{background:rgba(42,99,72,.25);color:#6ee7a8;border-left-color:#4ade80;}
@@ -494,7 +502,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .pill.red{background:var(--red-bg);color:var(--red);}
 .pill.gray{background:var(--cream3);color:var(--text3);}
 .pill.blue{background:var(--blue-bg);color:var(--blue);}
-.pill.gold{background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);}
+.pill.gold{background:var(--gold-bg);color:var(--gold-text);border:1px solid var(--gold-line);}
 
 /* BUTTONS */
 .btn{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:8px 16px;border-radius:var(--r2);border:1px solid var(--border);background:var(--cream2);color:var(--text);cursor:pointer;transition:all .14s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;touch-action:manipulation;}
@@ -4155,7 +4163,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 @media (max-width: 768px) {
   .tab-btn.active {
     background: var(--book-accent, var(--gold)) !important;
-    color: var(--ink) !important;
+    color: var(--book-accent-contrast, var(--ink)) !important;
     border-color: var(--book-accent, var(--gold)) !important;
   }
 }
@@ -4164,14 +4172,19 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .tab-panel .btn.gold {
   background: var(--book-accent, var(--gold)) !important;
   border-color: var(--book-accent, var(--gold)) !important;
-  color: var(--ink) !important;
-  transition: all .2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  color: var(--book-accent-contrast, var(--ink)) !important;
+  transition: all .25s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .tab-panel .btn.gold:hover {
+  transform: scale(1.03) translateY(-1px);
   filter: brightness(1.08) !important;
-  box-shadow: 0 4px 12px var(--book-accent-bg) !important;
-  color: var(--ink) !important;
+  box-shadow: 0 6px 16px var(--book-accent-bg, rgba(14, 12, 10, 0.12)), 0 2px 4px rgba(14, 12, 10, 0.04) !important;
+  color: var(--book-accent-contrast, var(--ink)) !important;
+}
+
+.tab-panel .btn.gold:active {
+  transform: scale(0.98) translateY(0);
 }
 
 /* KPI value colors */
@@ -4193,8 +4206,56 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 /* Healthy stock alert */
 .tab-panel .stock-alert.ok {
   background: var(--book-accent-bg, rgba(42,99,72,.25)) !important;
-  color: var(--book-accent, #6ee7a8) !important;
+  color: var(--book-accent-text, #6ee7a8) !important;
   border-left-color: var(--book-accent, #4ade80) !important;
+}
+
+/* Custom styled pills in tab panel matching dynamic book accent */
+.tab-panel .pill.gold {
+  background: var(--book-accent-bg, var(--gold-bg)) !important;
+  color: var(--book-accent-text, var(--gold-text)) !important;
+  border: 1px solid var(--book-accent-bg, var(--gold-line)) !important;
+}
+
+/* KPI and Card hover scales and dynamic color shadows */
+.tab-panel .kpi {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s !important;
+}
+.tab-panel .kpi:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 24px var(--book-accent-bg, rgba(0, 0, 0, .2)) !important;
+}
+
+.tab-panel .card {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s, box-shadow 0.25s !important;
+}
+.tab-panel .card:hover {
+  border-color: var(--book-accent, var(--border)) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px var(--book-accent-bg, rgba(14, 12, 10, 0.06)) !important;
+}
+
+/* Real-time Accent Picker Preview style overrides inside modals */
+.modal {
+  --local-accent: var(--book-accent, var(--gold));
+  --local-accent-bg: var(--book-accent-bg, var(--gold-bg));
+  --local-accent-text: var(--book-accent-text, var(--gold-text));
+  --local-accent-contrast: var(--book-accent-contrast, var(--ink));
+}
+.modal-tab-btn.active {
+  background: var(--local-accent) !important;
+  color: var(--local-accent-contrast) !important;
+  border-color: var(--local-accent) !important;
+}
+.modal .btn.gold {
+  background: var(--local-accent) !important;
+  border-color: var(--local-accent) !important;
+  color: var(--local-accent-contrast) !important;
+}
+.modal .btn.gold:hover {
+  filter: brightness(1.08) !important;
+  box-shadow: 0 4px 12px var(--local-accent-bg) !important;
+  color: var(--local-accent-contrast) !important;
 }
 
 /* ==========================================

@@ -15,6 +15,9 @@ import {
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   isDirectToArtistSale,
   getContrastColor,
+  lightenColor,
+  darkenColor,
+  getContrastSafeText,
 } from '../src/lib/money.js';
 
 
@@ -303,4 +306,46 @@ describe('getContrastColor', () => {
     expect(getContrastColor('#invalid')).toBe('var(--ink)');
   });
 });
+
+describe('lightenColor', () => {
+  it('lightens a hex color by a percentage', () => {
+    expect(lightenColor('#000000', 0.5)).toBe('#7f7f7f');
+    expect(lightenColor('#ffffff', 0.5)).toBe('#ffffff');
+  });
+
+  it('handles invalid colors gracefully', () => {
+    expect(lightenColor('', 0.5)).toBe('var(--gold3)');
+    expect(lightenColor(null, 0.5)).toBe('var(--gold3)');
+  });
+});
+
+describe('darkenColor', () => {
+  it('darkens a hex color by a percentage', () => {
+    expect(darkenColor('#ffffff', 0.5)).toBe('#7f7f7f');
+    expect(darkenColor('#000000', 0.5)).toBe('#000000');
+  });
+
+  it('handles invalid colors gracefully', () => {
+    expect(darkenColor('', 0.5)).toBe('var(--ink)');
+    expect(darkenColor(null, 0.5)).toBe('var(--ink)');
+  });
+});
+
+describe('getContrastSafeText', () => {
+  it('returns a darkened color for light accents', () => {
+    const result = getContrastSafeText('#c8913a');
+    expect(result).not.toBe('#c8913a');
+    expect(result.startsWith('#')).toBe(true);
+  });
+
+  it('returns the same color for dark accents', () => {
+    expect(getContrastSafeText('#3a7cc8')).toBe('#3a7cc8');
+  });
+
+  it('handles edge cases gracefully', () => {
+    expect(getContrastSafeText('')).toBe('var(--ink)');
+    expect(getContrastSafeText(null)).toBe('var(--ink)');
+  });
+});
+
 

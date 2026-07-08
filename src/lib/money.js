@@ -143,3 +143,56 @@ export function getContrastColor(hex) {
   return luminance > 0.5 ? 'var(--ink)' : '#ffffff';
 }
 
+export function lightenColor(hex, percent) {
+  if (!hex) return 'var(--gold3)';
+  const color = hex.charAt(0) === '#' ? hex.substring(1) : hex;
+  if (color.length !== 6) return 'var(--gold3)';
+  let r = parseInt(color.substring(0, 2), 16);
+  let g = parseInt(color.substring(2, 4), 16);
+  let b = parseInt(color.substring(4, 6), 16);
+
+  r = Math.min(255, Math.floor(r + (255 - r) * percent));
+  g = Math.min(255, Math.floor(g + (255 - g) * percent));
+  b = Math.min(255, Math.floor(b + (255 - b) * percent));
+
+  const rHex = r.toString(16).padStart(2, '0');
+  const gHex = g.toString(16).padStart(2, '0');
+  const bHex = b.toString(16).padStart(2, '0');
+  return `#${rHex}${gHex}${bHex}`;
+}
+
+export function darkenColor(hex, percent) {
+  if (!hex) return 'var(--ink)';
+  const color = hex.charAt(0) === '#' ? hex.substring(1) : hex;
+  if (color.length !== 6) return 'var(--ink)';
+  let r = parseInt(color.substring(0, 2), 16);
+  let g = parseInt(color.substring(2, 4), 16);
+  let b = parseInt(color.substring(4, 6), 16);
+
+  r = Math.max(0, Math.floor(r * (1 - percent)));
+  g = Math.max(0, Math.floor(g * (1 - percent)));
+  b = Math.max(0, Math.floor(b * (1 - percent)));
+
+  const rHex = r.toString(16).padStart(2, '0');
+  const gHex = g.toString(16).padStart(2, '0');
+  const bHex = b.toString(16).padStart(2, '0');
+  return `#${rHex}${gHex}${bHex}`;
+}
+
+export function getContrastSafeText(hex) {
+  if (!hex) return 'var(--ink)';
+  const color = hex.charAt(0) === '#' ? hex.substring(1) : hex;
+  if (color.length !== 6) return 'var(--ink)';
+  const r = parseInt(color.substring(0, 2), 16);
+  const g = parseInt(color.substring(2, 4), 16);
+  const b = parseInt(color.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+  if (luminance > 0.5) {
+    return darkenColor(hex, 0.35);
+  } else {
+    return hex;
+  }
+}
+
+
