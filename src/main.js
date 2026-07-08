@@ -15264,8 +15264,22 @@ function _tcRenderSelectedCashFlowBucket() {
   const rows = _tcCashFlowBucketRows(key).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const expenseRows = rows.filter((r) => !r.isIncome);
   const incomeRows = rows.filter((r) => r.isIncome);
+  const activeType = data.detailType === 'income' || data.detailType === 'expenses' ? data.detailType : 'all';
+  const visibleRows = activeType === 'income'
+    ? incomeRows
+    : activeType === 'expenses'
+      ? expenseRows
+      : rows;
   const total = (items) => items.reduce((sum, item) => sum + (Number(item.baseAmount) || 0), 0);
   const fmtSigned = (item) => `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount || 0, data.baseCurrency || 'CAD')}`;
+  const typeButton = (type, label, count) => `
+    <button
+      class="cf-detail-filter ${activeType === type ? 'is-active' : ''}"
+      type="button"
+      aria-pressed="${activeType === type ? 'true' : 'false'}"
+      onclick="tcSetCashFlowDetailType('${type}')">
+      ${_tcSvgEsc(label)} <span>${count}</span>
+    </button>`;
   const rowHtml = (item) => `
     <tr>
       <td>${_tcSvgEsc(item.date || '—')}</td>
@@ -15288,9 +15302,14 @@ function _tcRenderSelectedCashFlowBucket() {
         <span><b>Expenses</b>${_tcSvgEsc(fmt(total(expenseRows), data.baseCurrency || 'CAD'))}</span>
         <span><b>Net</b>${_tcSvgEsc(fmt((bucket.income || 0) - (bucket.expense || 0), data.baseCurrency || 'CAD'))}</span>
       </div>
+      <div class="cf-detail-filters" aria-label="Filter selected period transactions">
+        ${typeButton('all', 'All', rows.length)}
+        ${typeButton('income', 'Income only', incomeRows.length)}
+        ${typeButton('expenses', 'Expenses only', expenseRows.length)}
+      </div>
       <table class="cf-detail-table">
         <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="r">Amount</th></tr></thead>
-        <tbody>${rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="4">No transactions in this period.</td></tr>'}</tbody>
+        <tbody>${visibleRows.length ? visibleRows.map(rowHtml).join('') : '<tr><td colspan="4">No transactions match this filter.</td></tr>'}</tbody>
       </table>
     </div>`;
 }
@@ -15298,12 +15317,20 @@ function _tcRenderSelectedCashFlowBucket() {
 function tcSelectCashFlowBucket(key) {
   if (!window._tcCashFlowChartDetail) return;
   window._tcCashFlowChartDetail.selectedKey = key;
+  window._tcCashFlowChartDetail.detailType = 'all';
+  _tcRenderSelectedCashFlowBucket();
+}
+
+function tcSetCashFlowDetailType(type) {
+  if (!window._tcCashFlowChartDetail) return;
+  window._tcCashFlowChartDetail.detailType = type === 'income' || type === 'expenses' ? type : 'all';
   _tcRenderSelectedCashFlowBucket();
 }
 
 function tcClearCashFlowBucket() {
   if (!window._tcCashFlowChartDetail) return;
   window._tcCashFlowChartDetail.selectedKey = '';
+  window._tcCashFlowChartDetail.detailType = 'all';
   _tcRenderSelectedCashFlowBucket();
 }
 
@@ -15332,6 +15359,7 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
     selectedYear,
     baseCurrency,
     selectedKey: window._tcCashFlowChartDetail?.selectedKey || '',
+    detailType: window._tcCashFlowChartDetail?.detailType || 'all',
   };
   if (!buckets.some((b) => b.key === window._tcCashFlowChartDetail.selectedKey)) {
     window._tcCashFlowChartDetail.selectedKey = '';
@@ -21719,7 +21747,7 @@ Object.assign(window, {
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
   switchEmailImportTab, searchGmailEmails, applyGmailPresetQuery, toggleEmailPreview, toggleEmailRowSelection, toggleAllGmailSelections,
-  showCategoryDetail, changeExpenseCategory, tcSelectCashFlowBucket, tcClearCashFlowBucket,
+  showCategoryDetail, changeExpenseCategory, tcSelectCashFlowBucket, tcSetCashFlowDetailType, tcClearCashFlowBucket,
   showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt,
   openEditExpense, removeEditExpenseReceipt, saveExpenseEdit, openEditSale, openEditArtistPayout,
   // Invoices
