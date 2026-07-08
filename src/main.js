@@ -15175,7 +15175,91 @@ function _tcRenderCashFlowSummary(ctx) {
 
   // ---- Monthly / yearly mini bar chart (inline SVG) -----------------------
   const chartEl = $('tc-cf-chart');
-  if (chartEl) chartEl.innerHTML = _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency);
+  if (chartEl) {
+    chartEl.innerHTML = _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency);
+    _tcRenderSelectedCashFlowBucket();
+  }
+}
+
+
+function _tcCashFlowBucketRows(key) {
+  const data = window._tcCashFlowChartDetail || {};
+  const monthly = data.selectedYear !== 'all' && data.selectedYear;
+  return (data.ledger || []).filter((item) => {
+    if (item.sourceType === 'artistPayout') return false;
+    const date = item.date || '';
+    const itemKey = monthly ? date.substring(0, 7) : date.substring(0, 4);
+    return itemKey === key;
+  });
+}
+
+function _tcRenderSelectedCashFlowBucket() {
+  const data = window._tcCashFlowChartDetail || {};
+  const detailEl = $('tc-cf-chart-detail');
+  if (!detailEl) return;
+  const buckets = data.buckets || [];
+  const key = data.selectedKey || '';
+  const bucket = buckets.find((b) => b.key === key);
+  if (!bucket) {
+    detailEl.innerHTML = '<div class="cf-chart-hint">Click a month or year to see its income and expense breakdown.</div>';
+    return;
+  }
+
+  const rows = _tcCashFlowBucketRows(key).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const expenseRows = rows.filter((r) => !r.isIncome);
+  const incomeRows = rows.filter((r) => r.isIncome);
+  const selectedType = data.selectedType === 'income' || data.selectedType === 'expense' ? data.selectedType : 'all';
+  const visibleRows = selectedType === 'income' ? incomeRows : selectedType === 'expense' ? expenseRows : rows;
+  const total = (items) => items.reduce((sum, item) => sum + (Number(item.baseAmount) || 0), 0);
+  const fmtSigned = (item) => `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount || 0, data.baseCurrency || 'CAD')}`;
+  const rowHtml = (item) => `
+    <tr>
+      <td>${_tcSvgEsc(item.date || '—')}</td>
+      <td>${_tcSvgEsc(item.desc || item.type || 'Transaction')}</td>
+      <td>${_tcSvgEsc(item.cat || (item.isIncome ? 'Income' : 'Expense'))}</td>
+      <td class="r ${item.isIncome ? 'cf-detail-income' : 'cf-detail-expense'}">${_tcSvgEsc(fmtSigned(item))}</td>
+    </tr>`;
+  const label = data.selectedYear === 'all' ? bucket.label : `${bucket.label} ${data.selectedYear}`;
+  detailEl.innerHTML = `
+    <div class="cf-detail-card">
+      <div class="cf-detail-head">
+        <div>
+          <div class="cf-detail-kicker">Selected period</div>
+          <strong>${_tcSvgEsc(label)}</strong>
+        </div>
+        <button class="btn tiny ghost" type="button" onclick="tcClearCashFlowBucket()">Clear</button>
+      </div>
+      <div class="cf-detail-totals">
+        <button class="cf-detail-total ${selectedType === 'income' ? 'active' : ''}" type="button" onclick="tcSetCashFlowBucketType('income')"><b>Income</b>${_tcSvgEsc(fmt(total(incomeRows), data.baseCurrency || 'CAD'))}</button>
+        <button class="cf-detail-total ${selectedType === 'expense' ? 'active' : ''}" type="button" onclick="tcSetCashFlowBucketType('expense')"><b>Expenses</b>${_tcSvgEsc(fmt(total(expenseRows), data.baseCurrency || 'CAD'))}</button>
+        <button class="cf-detail-total ${selectedType === 'all' ? 'active' : ''}" type="button" onclick="tcSetCashFlowBucketType('all')"><b>Net / All</b>${_tcSvgEsc(fmt((bucket.income || 0) - (bucket.expense || 0), data.baseCurrency || 'CAD'))}</button>
+      </div>
+      <div class="cf-detail-filter-note">Showing ${selectedType === 'income' ? 'income only' : selectedType === 'expense' ? 'expenses only' : 'income and expenses'} for ${_tcSvgEsc(label)}.</div>
+      <table class="cf-detail-table">
+        <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="r">Amount</th></tr></thead>
+        <tbody>${visibleRows.length ? visibleRows.map(rowHtml).join('') : '<tr><td colspan="4">No transactions match this filter.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
+
+function tcSelectCashFlowBucket(key, type = 'all') {
+  if (!window._tcCashFlowChartDetail) return;
+  window._tcCashFlowChartDetail.selectedKey = key;
+  window._tcCashFlowChartDetail.selectedType = type === 'income' || type === 'expense' ? type : 'all';
+  _tcRenderSelectedCashFlowBucket();
+}
+
+function tcClearCashFlowBucket() {
+  if (!window._tcCashFlowChartDetail) return;
+  window._tcCashFlowChartDetail.selectedKey = '';
+  window._tcCashFlowChartDetail.selectedType = 'all';
+  _tcRenderSelectedCashFlowBucket();
+}
+
+function tcSetCashFlowBucketType(type) {
+  if (!window._tcCashFlowChartDetail) return;
+  window._tcCashFlowChartDetail.selectedType = type === 'income' || type === 'expense' ? type : 'all';
+  _tcRenderSelectedCashFlowBucket();
 }
 
 // Build a responsive inline-SVG paired-bar chart (green income / red expenses)
@@ -15197,6 +15281,18 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
   const barGap = Math.min(4, groupW * 0.08);
   const barW = Math.max(2, (groupW - barGap * 3) / 2);
 
+  window._tcCashFlowChartDetail = {
+    ledger: allLedger || [],
+    buckets,
+    selectedYear,
+    baseCurrency,
+    selectedKey: window._tcCashFlowChartDetail?.selectedKey || '',
+    selectedType: window._tcCashFlowChartDetail?.selectedType || 'all',
+  };
+  if (!buckets.some((b) => b.key === window._tcCashFlowChartDetail.selectedKey)) {
+    window._tcCashFlowChartDetail.selectedKey = '';
+  }
+
   let bars = '';
   let labels = '';
   buckets.forEach((b, i) => {
@@ -15206,10 +15302,10 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
     const x1 = gx + barGap;
     const x2 = x1 + barW + barGap;
     if (b.income > 0) {
-      bars += `<rect x="${x1.toFixed(1)}" y="${(baseY - incH).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" rx="2" fill="url(#income-grad)"><title>${_tcSvgEsc(b.label)} income: ${_tcSvgEsc(fmt(b.income, baseCurrency))}</title></rect>`;
+      bars += `<rect class="cf-chart-bar" tabindex="0" role="button" aria-label="View ${_tcSvgEsc(b.label)} cash flow details" onclick="tcSelectCashFlowBucket('${_tcSvgEsc(b.key)}','income')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${_tcSvgEsc(b.key)}','income')}" x="${x1.toFixed(1)}" y="${(baseY - incH).toFixed(1)}" width="${barW.toFixed(1)}" height="${incH.toFixed(1)}" rx="2" fill="url(#income-grad)"><title>${_tcSvgEsc(b.label)} income: ${_tcSvgEsc(fmt(b.income, baseCurrency))}</title></rect>`;
     }
     if (b.expense > 0) {
-      bars += `<rect x="${x2.toFixed(1)}" y="${(baseY - expH).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" rx="2" fill="url(#expense-grad)"><title>${_tcSvgEsc(b.label)} expenses: ${_tcSvgEsc(fmt(b.expense, baseCurrency))}</title></rect>`;
+      bars += `<rect class="cf-chart-bar" tabindex="0" role="button" aria-label="View ${_tcSvgEsc(b.label)} cash flow details" onclick="tcSelectCashFlowBucket('${_tcSvgEsc(b.key)}','expense')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${_tcSvgEsc(b.key)}','expense')}" x="${x2.toFixed(1)}" y="${(baseY - expH).toFixed(1)}" width="${barW.toFixed(1)}" height="${expH.toFixed(1)}" rx="2" fill="url(#expense-grad)"><title>${_tcSvgEsc(b.label)} expenses: ${_tcSvgEsc(fmt(b.expense, baseCurrency))}</title></rect>`;
     }
     labels += `<text x="${(gx + groupW / 2).toFixed(1)}" y="${(H - 8).toFixed(1)}" text-anchor="middle" class="cf-chart-axis">${_tcSvgEsc(b.label)}</text>`;
   });
@@ -15237,7 +15333,8 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
       <line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" class="cf-chart-base"/>
       ${bars}
       ${labels}
-    </svg>`;
+    </svg>
+    <div id="tc-cf-chart-detail" class="cf-chart-detail" aria-live="polite"></div>`;
 }
 
 async function removeLedgerEntry(type, bid, id) {
@@ -21518,7 +21615,7 @@ Object.assign(window, {
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
   switchEmailImportTab, searchGmailEmails, applyGmailPresetQuery, toggleEmailPreview, toggleEmailRowSelection, toggleAllGmailSelections,
-  showCategoryDetail, changeExpenseCategory,
+  showCategoryDetail, changeExpenseCategory, tcSelectCashFlowBucket, tcClearCashFlowBucket, tcSetCashFlowBucketType,
   showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt,
   openEditExpense, removeEditExpenseReceipt, saveExpenseEdit, openEditSale, openEditArtistPayout,
   // Invoices
