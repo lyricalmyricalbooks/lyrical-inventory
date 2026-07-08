@@ -2751,11 +2751,46 @@ function updateDash() {
     $('d-be-bar-label').textContent = `${fmt(recognizedRev,cur)} recovered (${pctBe.toFixed(1)}%)`;
     $('d-be-bar-right').textContent = broken ? 'Break-even reached ✓' : `${fmt(remaining,cur)} remaining`;
     const al=$('d-be-alert');
-    if(broken){al.className='stock-alert ok';al.textContent='✓ Production costs fully recovered — everything earned from here is profit.';}
-    else if(pctBe>=70){al.className='stock-alert warn';al.textContent=`Almost there — ${fmt(remaining,cur)} more to recover production costs.`;}
-    else{al.className='stock-alert warn';al.style.borderLeftColor='rgba(200,145,58,.5)';al.style.background='rgba(200,145,58,.08)';al.style.color='var(--gold2)';al.textContent=`${pctBe.toFixed(1)}% of production costs recovered. ${fmt(remaining,cur)} still to go.`;}
-    const unitsNeeded = remaining > 0 ? Math.ceil(remaining / (book.listPrice || 1)) : 0;
-    if(!broken) al.textContent += ` (~${unitsNeeded} more unit${unitsNeeded!==1?'s':''} at list price)`;
+    if(broken){
+      al.className='stock-alert ok';
+      al.textContent='✓ Production costs fully recovered — everything earned from here is profit.';
+    } else {
+      const unitsNeeded = remaining > 0 ? Math.ceil(remaining / (book.listPrice || 1)) : 0;
+      const isClose = pctBe >= 70;
+      
+      al.className = 'stock-alert warn';
+      
+      if (isClose) {
+        al.style.borderLeftColor = '#fb923c';
+        al.style.background = 'rgba(251, 146, 60, 0.08)';
+        al.style.color = '#fb923c';
+      } else {
+        al.style.borderLeftColor = 'rgba(200, 145, 58, 0.5)';
+        al.style.background = 'rgba(200, 145, 58, 0.08)';
+        al.style.color = 'var(--gold2)';
+      }
+      
+      const themeColor = isClose ? '#fb923c' : 'var(--gold3)';
+      const themeBg = isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
+      const themeBorder = isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
+      
+      al.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:13px; opacity:0.85;">⚠️</span>
+            <span style="font-weight:600; font-family:'Syne', sans-serif;">${isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;">
+              🎯 ${fmt(remaining, cur)} remaining
+            </span>
+            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;">
+              📚 ~${unitsNeeded} unit${unitsNeeded !== 1 ? 's' : ''} needed
+            </span>
+          </div>
+        </div>
+      `;
+    }
   } else {
     $('d-breakeven-kpi').style.display='none';
     $('d-breakeven-block').style.display='none';
