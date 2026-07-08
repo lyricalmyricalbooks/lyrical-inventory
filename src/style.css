@@ -1400,10 +1400,29 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .cf-chart-svg{width:100%;height:200px;display:block;}
 .cf-chart-base{stroke:var(--border);stroke-width:1;}
 .cf-chart-axis{font-family:'DM Mono',monospace;font-size:11px;fill:var(--text3);}
+.cf-chart-bar{cursor:pointer;transition:opacity .15s ease,filter .15s ease;outline:none;}
+.cf-chart-bar:hover,.cf-chart-bar:focus{opacity:.82;filter:drop-shadow(0 2px 4px rgba(14,12,10,.18));}
+.cf-chart-bar:focus-visible{stroke:var(--gold);stroke-width:2;}
+.cf-chart-detail{margin-top:10px;}
+.cf-chart-hint{font-size:12px;color:var(--text3);background:var(--cream);border:1px dashed var(--border);border-radius:var(--r2);padding:10px 12px;}
+.cf-detail-card{background:var(--cream);border:1px solid var(--border);border-radius:var(--r2);padding:12px;box-shadow:0 1px 0 rgba(14,12,10,.03);}
+.cf-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;}
+.cf-detail-head strong{display:block;font-family:'Playfair Display',serif;font-size:20px;color:var(--text);}
+.cf-detail-kicker{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);margin-bottom:2px;}
+.cf-detail-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px;}
+.cf-detail-totals span{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--border2);border-radius:10px;background:rgba(255,255,255,.45);padding:8px 10px;font-family:'DM Mono',monospace;font-size:12px;color:var(--text);}
+.cf-detail-totals b{font-family:'Syne',sans-serif;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);}
+.cf-detail-table{width:100%;border-collapse:collapse;font-size:12px;}
+.cf-detail-table th{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);text-align:left;border-bottom:1px solid var(--border);padding:7px 6px;}
+.cf-detail-table td{border-bottom:1px solid var(--border2);padding:7px 6px;color:var(--text2);}
+.cf-detail-table tr:last-child td{border-bottom:0;}
+.cf-detail-income{color:var(--green)!important;font-weight:700;}
+.cf-detail-expense{color:var(--red)!important;font-weight:700;}
 
 @media (max-width:760px){
   .cf-stats{grid-template-columns:1fr;}
   .cf-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .cf-detail-totals{grid-template-columns:1fr;}
   .cf-chip-vs{display:none;}
 }
 
