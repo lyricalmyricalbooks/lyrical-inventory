@@ -33,7 +33,7 @@ export function computeCashFlowMetrics(sources, yearFilter) {
   let unitsSold = 0;
 
   Object.keys(books).forEach((bid) => {
-    if (bid === 'test1' || books[bid]?.title?.toLowerCase()?.trim() === 'test1') return;
+    if (bid.toLowerCase().includes('test') || books[bid]?.title?.toLowerCase()?.includes('test')) return;
     const s = states[bid] || {};
     const b = books[bid] || {};
     const cur = getBookCurrencyCode(b);

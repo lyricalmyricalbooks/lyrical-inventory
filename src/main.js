@@ -2013,7 +2013,7 @@ function updateHeader() {
 
 // ── ALL BOOKS OVERVIEW
 function updateAllOverview() {
-  const allBooksVisible = BOOK_LIST.filter(b => b.id !== 'test1' && b.title.toLowerCase().trim() !== 'test1');
+  const allBooksVisible = BOOK_LIST.filter(b => !b.id.toLowerCase().includes('test') && !b.title.toLowerCase().includes('test'));
 
   // Book strips
   const list = $('all-books-list');
@@ -14568,7 +14568,7 @@ function renderTaxCenter() {
   let allLedger = [];
   
   Object.keys(BOOKS).forEach(bid => {
-    if (bid === 'test1' || BOOKS[bid]?.title?.toLowerCase()?.trim() === 'test1') return;
+    if (bid.toLowerCase().includes('test') || BOOKS[bid]?.title?.toLowerCase()?.includes('test')) return;
     const s = states[bid] || defaultState(BOOKS[bid]);
     const b = BOOKS[bid];
     const cur = getBookCurrencyCode(b);
