@@ -2127,7 +2127,7 @@ function updateAllOverview() {
     const bePct = cost > 0 ? Math.min(100, recognizedRev / cost * 100) : null;
     
     const beBar = (!isAuthor() && bePct !== null) ? `
-      <div class="book-progress-wrapper">
+      <div class="book-progress-wrapper" title="${broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, book.currency)} of ${fmt(cost, book.currency)} recovered (${bePct.toFixed(0)}%)`}">
         <div class="book-progress-header">
           <span>Break-even</span>
           <span class="progress-pct" style="color:${broken ? 'var(--green)' : 'var(--text3)'}; font-weight:700;">
@@ -2157,7 +2157,7 @@ function updateAllOverview() {
           <span>&nbsp;·&nbsp; 🏷 ${book.currency}${book.listPrice}</span>
           <span>&nbsp;·&nbsp; 🖨 ${book.maxPrint} printed</span>
         </div>
-        <div class="book-progress-wrapper">
+        <div class="book-progress-wrapper" title="${s.stock} units on hand of ${book.maxPrint} total printed (${pct.toFixed(0)}%)">
           <div class="book-progress-header">
             <span>Stock on hand</span>
             <span class="progress-pct">${s.stock} / ${book.maxPrint} (${pct.toFixed(0)}%)</span>
@@ -2852,6 +2852,10 @@ function updateDash() {
     $('d-be-bar').style.background = broken ? '#4ade80' : pctBe>=70 ? '#fb923c' : (book.accent || 'var(--gold2)');
     $('d-be-bar-label').textContent = `${fmt(recognizedRev,cur)} recovered (${pctBe.toFixed(1)}%)`;
     $('d-be-bar-right').textContent = broken ? 'Break-even reached ✓' : `${fmt(remaining,cur)} remaining`;
+    const trackEl = $('d-be-bar-track');
+    if (trackEl) {
+      trackEl.title = broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev,cur)} of ${fmt(cost,cur)} recovered (${pctBe.toFixed(1)}%)`;
+    }
     const al=$('d-be-alert');
     if(broken){
       al.className='stock-alert ok';
@@ -8559,7 +8563,9 @@ window.backfillGratuityExpenses = function() {
   }
 }
 
+
 function storeById(id){return getState().stores.find(s=>s.id===id);}
+
 function addStore(){
   if(!validateFields([
     {id:'ns-name',test:v=>v.trim().length>0,msg:'Store name is required'},
@@ -8574,7 +8580,24 @@ function renderStores(){
   if(!s.stores.length){el.innerHTML='<div class="empty-state"><div class="e-icon">🏪</div>No stores yet. Add your first consignment account.<div style="margin-top:12px;"><button class="btn gold" onclick="openM(\'add-store\')">+ Add store</button></div></div>';return;}
   el.innerHTML=s.stores.map(st=>{
     const sp=st.outstanding===0&&st.sent>0?'<span class="pill gray">Settled</span>':st.amountOwed>0?'<span class="pill amber">Payment due</span>':'<span class="pill green">Active</span>';
-    return`<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city,st.contact,st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div><div class="sk-v ${st.outstanding>0?'warn':''}">${st.outstanding}</div></div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed>0?'warn':''}">${st.amountOwed>0?fmt(st.amountOwed,cur):'—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding?'disabled':''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding?'disabled':''}>Return</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div></div>`;
+
+    // ── #3: Double-entry ledger balance check ───────────────────────────────
+    const ledger = s.ledger || [];
+    const ledgerSent     = ledger.filter(e => e.storeId===st.id && e.type==='Shipment' && !e.voided).reduce((a,e)=>a+(e.qty||0),0);
+    const ledgerSold     = ledger.filter(e => e.storeId===st.id && e.type==='Sale'     && !e.voided).reduce((a,e)=>a+(e.qty||0),0);
+    const ledgerReturned = ledger.filter(e => e.storeId===st.id && e.type==='Return'   && !e.voided).reduce((a,e)=>a+(e.qty||0),0);
+    const calculatedOutstanding = ledgerSent - ledgerSold - ledgerReturned;
+    const isUnbalanced = (ledgerSent>0||st.sent>0) && (
+      st.sent !== ledgerSent ||
+      st.sold !== ledgerSold ||
+      st.outstanding !== calculatedOutstanding
+    );
+    const unbalancedBadge = isUnbalanced
+      ? `<span title="Ledger mismatch: cached outstanding=${st.outstanding}, calculated=${calculatedOutstanding}" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#c0392b;border-radius:6px;padding:3px 8px;margin-left:8px;cursor:help;">⚠ Unbalanced</span>`
+      : '';
+    const outstandingCell = `<div class="sk-v ${st.outstanding>0?'warn':''}" style="display:flex;align-items:center;gap:4px;">${st.outstanding}${unbalancedBadge}</div>`;
+
+    return`<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city,st.contact,st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed>0?'warn':''}">${st.amountOwed>0?fmt(st.amountOwed,cur):'—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding?'disabled':''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding?'disabled':''}>Return</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div></div>`;
   }).join('');
 }
 async function removeStore(id){
@@ -9170,6 +9193,39 @@ function nextInvoiceNumber(){
 
 function onInvoiceStoreChange(){
   // No automatic refill — user might be editing. Just keep selection.
+  // ── #9: Autocomplete billing details preview ────────────────────────────
+  const storeId = Number($('inv-store').value);
+  const preview = $('inv-store-preview');
+  if (!preview) return;
+  if (!storeId) { preview.style.display = 'none'; preview.innerHTML = ''; return; }
+  const st = (getState().stores||[]).find(s => s.id === storeId);
+  if (!st) { preview.style.display = 'none'; return; }
+
+  // Auto-populate Terms if empty
+  const termsEl = $('inv-terms');
+  if (termsEl && !termsEl.value.trim() && st.terms) {
+    termsEl.value = st.terms;
+  }
+
+  // Build preview lines
+  const lines = [
+    st.contact  ? `<strong>Contact:</strong> ${escapeHtml(st.contact)}` : '',
+    st.email    ? `<strong>Email:</strong> ${escapeHtml(st.email)}` : '',
+    st.phone    ? `<strong>Phone:</strong> ${escapeHtml(st.phone)}` : '',
+    st.address  ? `<strong>Address:</strong> ${escapeHtml(st.address)}` : '',
+    [st.city, st.region, st.postal].filter(Boolean).length
+      ? `<strong>City:</strong> ${escapeHtml([st.city, st.region, st.postal].filter(Boolean).join(', '))}` : '',
+    st.country  ? `<strong>Country:</strong> ${escapeHtml(st.country)}` : '',
+    typeof st.rate === 'number' ? `<strong>Commission rate:</strong> ${st.rate}%` : '',
+    st.terms    ? `<strong>Default terms:</strong> ${escapeHtml(st.terms)}` : '',
+  ].filter(Boolean);
+
+  if (lines.length) {
+    preview.innerHTML = lines.join('<br>');
+    preview.style.display = 'block';
+  } else {
+    preview.style.display = 'none';
+  }
 }
 
 function getInvoiceCurrency(){
@@ -16322,6 +16378,55 @@ function buildPOSCartRows() {
   return items;
 }
 
+// ── #2: POS keyboard search state ─────────────────────────────────────
+let posSearchQuery = '';
+window.posSearchFilter = function(val) {
+  posSearchQuery = (val || '').toLowerCase().trim();
+  renderPOS();
+};
+
+// ── #2: POS keyboard shortcuts ─────────────────────────────────────────
+// /         → focus POS search input
+// Escape    → clear and blur POS search
+// Ctrl+Enter → trigger checkout
+document.addEventListener('keydown', function(e) {
+  // Only apply shortcuts when on the POS tab
+  const posPanel = $('tab-pos');
+  if (!posPanel || posPanel.style.display === 'none') return;
+  // Don't intercept when focused inside a modal or form input
+  const tag = (document.activeElement || {}).tagName || '';
+  const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  const inModal = document.activeElement && document.activeElement.closest('.modal, .overlay');
+
+  const searchEl = $('pos-search-input');
+
+  // / → focus search (only when not already in an input)
+  if (e.key === '/' && !inInput && !inModal) {
+    e.preventDefault();
+    if (searchEl) { searchEl.focus(); searchEl.select(); }
+    return;
+  }
+
+  // Escape → clear search (only when search box is focused or has a query)
+  if (e.key === 'Escape' && !inModal) {
+    if (searchEl && (document.activeElement === searchEl || posSearchQuery)) {
+      e.preventDefault();
+      searchEl.value = '';
+      posSearchQuery = '';
+      searchEl.blur();
+      renderPOS();
+    }
+    return;
+  }
+
+  // Ctrl+Enter / Cmd+Enter → checkout
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !inModal) {
+    e.preventDefault();
+    if (typeof window.posCheckout === 'function') window.posCheckout();
+    return;
+  }
+});
+
 function renderPOS() {
   const grid = $('pos-grid');
   if(!grid) return;
@@ -16351,7 +16456,16 @@ function renderPOS() {
 
   const booksToRender = posBooksMap();
   const allowPosOnly = !(isAuthor() && activeBook !== 'all');
-  grid.innerHTML = Object.values(booksToRender).map((book) => {
+  // ── #2: Filter books by search query ───────────────────────────────────
+  const booksArr = Object.values(booksToRender).filter(b =>
+    !posSearchQuery ||
+    (b.title||'').toLowerCase().includes(posSearchQuery) ||
+    (b.author||'').toLowerCase().includes(posSearchQuery)
+  );
+  if (!booksArr.length && posSearchQuery) {
+    grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--text3);font-size:13px;">No books match <strong style="color:var(--cream);">&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<br><span style="font-size:11px;">Press <kbd style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:4px;">Esc</kbd> to clear.</span></div>`;
+  } else {
+  grid.innerHTML = booksArr.map((book) => {
     const qty = posCart[book.id] || 0;
     const sourceCode = currencyToCode(book.currency);
     const converted = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
@@ -16390,13 +16504,15 @@ function renderPOS() {
         </div>
       </div>
     `;
-  }).join('') + (allowPosOnly ? `
+  }).join('') + (allowPosOnly && !posSearchQuery ? `
       <button type="button" class="card pos-card" onclick="openPosBookModal()" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:1.1rem;border:1.5px dashed var(--gold-line);background:transparent;cursor:pointer;color:var(--gold);min-height:120px;">
         <div style="font-size:28px;line-height:1;">＋</div>
         <div style="font-size:13px;font-weight:600;">Add POS-only book</div>
         <div style="font-size:11px;color:var(--text3);text-align:center;">Guest / consignment titles. Stays out of your catalog & ledger.</div>
       </button>
     ` : '');
+  } // end search-filter else
+
 
   if (cartItemsEl) {
     cartItemsEl.innerHTML = cartRows.length ? cartRows.map((row) => {

@@ -627,7 +627,7 @@
         </div>
         <span class="pill" id="d-be-pill" style="background:rgba(200,145,58,.15);color:var(--gold2);">—</span>
       </div>
-      <div class="bar-track"><div class="bar-fill" id="d-be-bar" style="width:0%;background:var(--gold2);"></div></div>
+      <div class="bar-track" id="d-be-bar-track"><div class="bar-fill" id="d-be-bar" style="width:0%;background:var(--gold2);"></div></div>
       <div class="bar-meta"><span id="d-be-bar-label">—</span><span id="d-be-bar-right">—</span></div>
       <div class="stock-alert" id="d-be-alert" style="margin-top:1.1rem;">—</div>
     </div>
@@ -1714,8 +1714,11 @@
   </div>
 
   <div class="pos-layout" style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:1rem;align-items:flex-start;">
-    <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;">
-      <!-- Populated by JS -->
+    <div style="display:flex; flex-direction:column; gap:12px; flex:1; min-width:0;">
+      <input type="search" id="pos-search-input" placeholder="Search books in POS (press / to focus, Esc to clear)..." oninput="posSearchFilter(this.value)" style="width:100%; padding:9px 13px; border:1px solid var(--border); border-radius:var(--r2); background:var(--cream); color:var(--text); font-size:13px; outline:none; font-family:'Syne',sans-serif;">
+      <div id="pos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;">
+        <!-- Populated by JS -->
+      </div>
     </div>
 
     <div class="card pos-cart-panel" style="position:sticky;top:88px;padding:1rem;">
@@ -2445,6 +2448,7 @@
   <div class="g2" style="margin-bottom:12px;">
     <div class="form-group"><label for="inv-store">Bill to (store)</label>
       <select id="inv-store" onchange="onInvoiceStoreChange()"><option value="">— Select store —</option></select>
+      <div id="inv-store-preview" style="font-size: 11px; color: var(--text3); margin-top: 6px; padding: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; display: none; line-height: 1.55;"></div>
     </div>
     <div class="form-group"><label for="inv-num">Invoice number</label><input id="inv-num" type="text" placeholder="auto"></div>
   </div>
