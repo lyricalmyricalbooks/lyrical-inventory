@@ -4390,5 +4390,73 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   font-weight: 700;
 }
 
+/* PWA Update Banner Prompt */
+.pwa-prompt {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--ink);
+  color: var(--cream);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r3);
+  padding: 14px 18px;
+  box-shadow: var(--shadow2);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 10000;
+  max-width: 320px;
+  animation: pwa-slide-up-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (max-width: 480px) {
+  .pwa-prompt {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    max-width: none;
+  }
+}
+.pwa-prompt-content {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.pwa-prompt-icon {
+  font-size: 20px;
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+.pwa-prompt-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pwa-prompt-text strong {
+  font-family: 'Playfair Display', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold3);
+}
+.pwa-prompt-text span {
+  font-size: 11px;
+  color: var(--text4);
+  line-height: 1.4;
+}
+.pwa-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@keyframes pwa-slide-up-in {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 
 

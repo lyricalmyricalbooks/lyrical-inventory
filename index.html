@@ -128,6 +128,16 @@
 </head>
 <body>
 
+<!-- APP LAUNCH SPLASH SCREEN (Covers the split-second auth connection flash) -->
+<div id="splash-screen" style="position: fixed; inset: 0; background: var(--ink); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.4s ease;">
+  <div class="pw-logo" style="transform: scale(0.9); margin-bottom: 24px;" aria-hidden="true">
+    <div>Lyrical</div>
+    <div>Myrical</div>
+    <div class="pw-logo-outline">Books</div>
+  </div>
+  <div style="font-family:'Syne',sans-serif; font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--gold3); animation: pulse-glow 2s infinite ease-in-out;">Connecting to database…</div>
+</div>
+
 <!-- PASSWORD GATE (publisher only — hidden in author mode) -->
 <div id="pw-gate">
   <div class="pw-scan" aria-hidden="true"></div>
@@ -2881,6 +2891,32 @@
     <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px;">
       <button type="button" class="btn gold" onclick="closeM('whats-new')">Dismiss</button>
     </div>
+  </div>
+</div>
+
+<!-- FULLSCREEN UPDATING TRANSITION SCREEN -->
+<div id="updating-screen" style="position: fixed; inset: 0; background: var(--ink); z-index: 20000; display: none; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease;">
+  <div class="pw-logo" style="transform: scale(0.9); margin-bottom: 24px;" aria-hidden="true">
+    <div>Lyrical</div>
+    <div>Myrical</div>
+    <div class="pw-logo-outline">Books</div>
+  </div>
+  <div style="font-family:'Syne',sans-serif; font-size:12px; text-transform:uppercase; letter-spacing:0.18em; color:var(--gold3); animation: pulse-glow 2s infinite ease-in-out; margin-bottom: 8px;">Updating Lyrical Inventory…</div>
+  <div style="font-size:11px; color:var(--text4);">This will take just a moment.</div>
+</div>
+
+<!-- PWA UPDATE PROMPT BANNER -->
+<div id="pwa-update-prompt" class="pwa-prompt" style="display:none;">
+  <div class="pwa-prompt-content">
+    <div class="pwa-prompt-icon">✨</div>
+    <div class="pwa-prompt-text">
+      <strong>New version available</strong>
+      <span>Update to get the latest features and fixes.</span>
+    </div>
+  </div>
+  <div class="pwa-prompt-actions">
+    <button class="btn sm" onclick="dismissPwaUpdate()">Later</button>
+    <button class="btn sm gold" onclick="triggerPwaUpdate()">Update Now</button>
   </div>
 </div>
 

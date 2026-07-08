@@ -63,7 +63,7 @@ export default defineConfig({
   plugins: [
     syncAppsScriptPlugin(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       // gas-code.txt is lazy-fetched by the "Connect your Google Sheet" tab;
       // precaching it (a background fetch after load, not render-blocking) keeps
       // that tab working offline without bloating the initial HTML parse.

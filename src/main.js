@@ -29,7 +29,44 @@ import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirect
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
 
-const _updateSW = registerSW({ onNeedRefresh() {} });
+let updateSWFunc = null;
+
+const _updateSW = registerSW({
+  onNeedRefresh() {
+    updateSWFunc = () => {
+      const upScreen = document.getElementById('updating-screen');
+      if (upScreen) {
+        upScreen.style.display = 'flex';
+        upScreen.offsetHeight; // force reflow
+        upScreen.style.opacity = '1';
+      }
+      setTimeout(() => {
+        _updateSW(true);
+      }, 300);
+    };
+    
+    const pwaPrompt = document.getElementById('pwa-update-prompt');
+    if (pwaPrompt) {
+      pwaPrompt.style.display = 'flex';
+    }
+  },
+  onOfflineReady() {
+    showToast('✓ App is ready to work offline', 'ok');
+  }
+});
+
+window.triggerPwaUpdate = function() {
+  if (typeof updateSWFunc === 'function') {
+    updateSWFunc();
+  }
+};
+
+window.dismissPwaUpdate = function() {
+  const pwaPrompt = document.getElementById('pwa-update-prompt');
+  if (pwaPrompt) {
+    pwaPrompt.style.display = 'none';
+  }
+};
 
 // ═══════════════════════════════════════════════════════
 //  BOOK CATALOGUE
@@ -21579,85 +21616,102 @@ async function initStartup() {
   const publisherEmail = 'lyricalmyrical@gmail.com'; 
 
   window._fbOnAuthStateChanged(async user => {
-    if (!user) {
-      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-        console.log('[Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher.');
-        window.IS_PUBLISHER = true;
-        IS_AUTHOR_MODE = false;
-        try {
-          await loadCatalog();
-        } catch (e) {
-          BOOKS = { ...DEFAULT_BOOKS };
-          BOOK_LIST = Object.values(BOOKS);
+    const dismissSplash = () => {
+      const splash = document.getElementById('splash-screen');
+      if (splash) {
+        splash.style.opacity = '0';
+        setTimeout(() => splash.style.display = 'none', 400);
+      }
+    };
+    try {
+      if (!user) {
+        if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+          console.log('[Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher.');
+          window.IS_PUBLISHER = true;
+          IS_AUTHOR_MODE = false;
+          try {
+            await loadCatalog();
+          } catch (e) {
+            BOOKS = { ...DEFAULT_BOOKS };
+            BOOK_LIST = Object.values(BOOKS);
+          }
+          loadAuthorViewOverrides();
+          showApp('publisher', null);
+          checkAppUpdate();
+          dismissSplash();
+          return;
         }
-        loadAuthorViewOverrides();
-        showApp('publisher', null);
-        checkAppUpdate();
+        // Not logged in
+        setupGate(null);
+        const err = document.getElementById('pw-err');
+        if (err) err.textContent = '';
+        dismissSplash();
         return;
       }
-      // Not logged in
-      setupGate(null);
+      
+      // Load shared Firestore mode flags FIRST — before any data reads.
+      // This ensures all devices agree on which database to use.
+      await window._fbLoadModeFlags();
+  
+      // Pull the shared notification endpoint so artist sessions — which never ran
+      // the Sheet setup locally — still have a URL to POST the approval-needed
+      // email to when they submit. Publisher writes it; everyone can read it.
+      try {
+        const ep = await window._fbLoadSettings('notifyEndpoint');
+        if (ep && ep.url) { notifyUrl = ep.url; localStorage.setItem('lm-notify-url', ep.url); }
+      } catch (_) {}
+  
+      try {
+        const ac = await window._fbLoadSettings('analyticsConfig');
+        if (ac && ac.url) {
+          localStorage.setItem('lm-analytics-url', ac.url);
+        }
+      } catch (_) {}
+  
+      // NOW that we have a valid token, we pull the protected catalog.
+      await loadCatalog(); 
+      loadAuthorViewOverrides();
+  
+      // Check access
+      const uEmail = user.email.toLowerCase().trim();
+      if (uEmail === publisherEmail || uEmail === 'lyricalmyricalbooks@gmail.com') {
+        window.IS_PUBLISHER = true;
+        IS_AUTHOR_MODE = false;
+        // Seed/refresh the rules-readable ownership map now we're authenticated as
+        // publisher, so authors' per-book writes resolve under the tightened rules
+        // even if the catalog isn't edited this session.
+        if (typeof window._fbSaveBookOwners === 'function') window._fbSaveBookOwners(ownersFromBooks());
+        showApp('publisher', null);
+        checkAppUpdate();
+        dismissSplash();
+        return;
+      }
+  
+      // Artist Check
+      const matchedBookId = Object.keys(BOOKS).find(id => {
+        const dbEmail = (BOOKS[id].authorEmail || '').toLowerCase().trim();
+        return dbEmail === uEmail;
+      });
+  
+      if (matchedBookId) {
+        window.IS_PUBLISHER = false;
+        IS_AUTHOR_MODE = true;
+        ACTIVE_BOOK_FORCED = matchedBookId;
+        showApp('author', matchedBookId);
+        dismissSplash();
+        return;
+      }
+      
+      // No match
+      window._fbSignOut();
+      setupGate(`Your Google account (${user.email}) is not authorized for any books.`);
       const err = document.getElementById('pw-err');
       if (err) err.textContent = '';
-      return;
+      dismissSplash();
+    } catch (e) {
+      console.error('Error during initStartup auth state change:', e);
+      dismissSplash();
     }
-    
-    // Load shared Firestore mode flags FIRST — before any data reads.
-    // This ensures all devices agree on which database to use.
-    await window._fbLoadModeFlags();
-
-    // Pull the shared notification endpoint so artist sessions — which never ran
-    // the Sheet setup locally — still have a URL to POST the approval-needed
-    // email to when they submit. Publisher writes it; everyone can read it.
-    try {
-      const ep = await window._fbLoadSettings('notifyEndpoint');
-      if (ep && ep.url) { notifyUrl = ep.url; localStorage.setItem('lm-notify-url', ep.url); }
-    } catch (_) {}
-
-    try {
-      const ac = await window._fbLoadSettings('analyticsConfig');
-      if (ac && ac.url) {
-        localStorage.setItem('lm-analytics-url', ac.url);
-      }
-    } catch (_) {}
-
-    // NOW that we have a valid token, we pull the protected catalog.
-    await loadCatalog(); 
-    loadAuthorViewOverrides();
-
-    // Check access
-    const uEmail = user.email.toLowerCase().trim();
-    if (uEmail === publisherEmail || uEmail === 'lyricalmyricalbooks@gmail.com') {
-      window.IS_PUBLISHER = true;
-      IS_AUTHOR_MODE = false;
-      // Seed/refresh the rules-readable ownership map now we're authenticated as
-      // publisher, so authors' per-book writes resolve under the tightened rules
-      // even if the catalog isn't edited this session.
-      if (typeof window._fbSaveBookOwners === 'function') window._fbSaveBookOwners(ownersFromBooks());
-      showApp('publisher', null);
-      checkAppUpdate();
-      return;
-    }
-
-    // Artist Check
-    const matchedBookId = Object.keys(BOOKS).find(id => {
-      const dbEmail = (BOOKS[id].authorEmail || '').toLowerCase().trim();
-      return dbEmail === uEmail;
-    });
-
-    if (matchedBookId) {
-      window.IS_PUBLISHER = false;
-      IS_AUTHOR_MODE = true;
-      ACTIVE_BOOK_FORCED = matchedBookId;
-      showApp('author', matchedBookId);
-      return;
-    }
-    
-    // No match
-    window._fbSignOut();
-    setupGate(`Your Google account (${user.email}) is not authorized for any books.`);
-    const err = document.getElementById('pw-err');
-    if (err) err.textContent = '';
   });
 }
 
