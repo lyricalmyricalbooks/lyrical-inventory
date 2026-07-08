@@ -687,12 +687,15 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .sync-stats{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:4px;display:none;}
 
 /* MODALS */
-.overlay{position:fixed;inset:0;background:rgba(14,12,10,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn .2s ease;}
-.modal{background:var(--cream);border-radius:var(--r3);border:1px solid var(--border);padding:var(--space-6);width:100%;max-width:500px;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn .2s ease;}
-@keyframes modalIn{from{opacity:0;transform:scale(.97) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.overlay{position:fixed;inset:0;background:rgba(14,12,10,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);}
+.modal{background:var(--cream);border-radius:var(--r3);border:1px solid var(--border);padding:var(--space-6);width:100%;max-width:500px;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);}
+@keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes overlayIn{from{opacity:0}to{opacity:1}}
-@keyframes modalOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.97) translateY(8px)}}
+@keyframes modalOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.95) translateY(12px)}}
 @keyframes overlayOut{from{opacity:1}to{opacity:0}}
+@keyframes pwa-spin {
+  to { transform: rotate(360deg); }
+}
 /* Exit animation — closeM() adds .closing, then hides on animationend. */
 .overlay.closing{animation:overlayOut .18s ease forwards;}
 .overlay.closing .modal{animation:modalOut .18s ease forwards;}
