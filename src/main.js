@@ -21505,6 +21505,74 @@ function dismissAppUpdate(event) {
 }
 window.dismissAppUpdate = dismissAppUpdate;
 
+async function fetchRecentChanges() {
+  try {
+    const res = await fetch('https://api.github.com/repos/lyricalmyricalbooks/lyrical-inventory/commits?per_page=5');
+    if (!res.ok) throw new Error('GitHub API request failed');
+    const commits = await res.json();
+    return commits.map(c => ({
+      message: c.commit.message,
+      date: c.commit.author.date,
+      sha: c.sha.substring(0, 7)
+    }));
+  } catch (e) {
+    console.error('Failed to fetch changes from GitHub', e);
+    return null;
+  }
+}
+
+async function showWhatsNew(event) {
+  if (event) event.stopPropagation();
+  openM('whats-new');
+  
+  const container = $('whats-new-list');
+  if (!container) return;
+  
+  container.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:20px 0;">Loading recent changes...</div>';
+  
+  // Update last seen version when they click/view the updates
+  const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
+  localStorage.setItem('lm-last-seen-version', currentVersion);
+  
+  const badge = $('pub-update-badge');
+  if (badge) {
+    badge.style.opacity = '0';
+    setTimeout(() => {
+      badge.style.display = 'none';
+      badge.style.opacity = '';
+    }, 200);
+  }
+
+  const changes = await fetchRecentChanges();
+  if (!changes || !changes.length) {
+    container.innerHTML = `
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;padding:10px 0;">
+        Could not load live changes from GitHub. Below is the static version history:
+        <ul style="margin:12px 0 0 20px;padding:0;display:flex;flex-direction:column;gap:8px;">
+          <li><strong>v3.1.0</strong>: Added 3D book cover overview badges and ambient dynamic color shadows.</li>
+          <li><strong>v3.0.0</strong>: Premium editorial color theme, dynamic contrast safety validations, Sage/Terracotta financial indicators, and SVG gradients.</li>
+          <li><strong>v2.8.0</strong>: Real-time modal accent color picker previews.</li>
+          <li><strong>v2.5.0</strong>: Google Sheets Apps Script webhook sync integration.</li>
+        </ul>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = changes.map(c => {
+    const dateStr = new Date(c.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+    const cleanMsg = escapeHtml(c.message);
+    return `
+      <div style="padding:10px;border-radius:6px;background:var(--cream);border:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold-text);font-weight:600;">sha: ${c.sha}</span>
+          <span style="font-size:10px;color:var(--text3);">${dateStr}</span>
+        </div>
+        <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.45;font-family:'Syne',sans-serif;font-weight:500;">${cleanMsg}</div>
+      </div>`;
+  }).join('');
+}
+window.showWhatsNew = showWhatsNew;
+
 // ── STARTUP ROUTING
 async function initStartup() {
   // Master Publisher Email
