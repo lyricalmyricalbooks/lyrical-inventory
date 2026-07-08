@@ -14,7 +14,9 @@ import {
   hexToRgba,
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   isDirectToArtistSale,
+  getContrastColor,
 } from '../src/lib/money.js';
+
 
 describe('getSym', () => {
   it('returns the known symbol for a 3-letter code', () => {
@@ -273,3 +275,32 @@ describe('isDirectToArtistSale', () => {
     expect(isDirectToArtistSale(null)).toBe(false);
   });
 });
+
+describe('getContrastColor', () => {
+  it('returns var(--ink) for light/bright backgrounds', () => {
+    // Pure white
+    expect(getContrastColor('#ffffff')).toBe('var(--ink)');
+    // Gold/Orange (from altrove/collective accent: #c8913a)
+    expect(getContrastColor('#c8913a')).toBe('var(--ink)');
+    // Bright yellow/gold
+    expect(getContrastColor('#f0c060')).toBe('var(--ink)');
+  });
+
+  it('returns #ffffff for dark backgrounds', () => {
+    // Pure black
+    expect(getContrastColor('#000000')).toBe('#ffffff');
+    // Blue (from hound accent: #3a7cc8)
+    expect(getContrastColor('#3a7cc8')).toBe('#ffffff');
+    // Green (from sistema accent: #2a7a5c)
+    expect(getContrastColor('#2a7a5c')).toBe('#ffffff');
+    // Brown (from archaeology accent: #7a5c3a)
+    expect(getContrastColor('#7a5c3a')).toBe('#ffffff');
+  });
+
+  it('handles edge cases gracefully', () => {
+    expect(getContrastColor('')).toBe('var(--ink)');
+    expect(getContrastColor(null)).toBe('var(--ink)');
+    expect(getContrastColor('#invalid')).toBe('var(--ink)');
+  });
+});
+

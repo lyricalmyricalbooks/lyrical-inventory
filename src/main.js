@@ -13,6 +13,7 @@ import {
   hexToRgba,
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   isDirectToArtistSale,
+  getContrastColor,
 } from './lib/money.js';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
@@ -1867,6 +1868,8 @@ function switchBook(bookId) {
     document.querySelectorAll('.snav.active').forEach(b => b.classList.remove('active'));
     const shellTitle = $('shell-page-title');
     if (shellTitle) shellTitle.textContent = 'All books';
+    document.documentElement.style.setProperty('--book-accent', 'var(--gold2)');
+    document.documentElement.style.setProperty('--book-accent-bg', 'var(--gold-bg)');
     updateAllOverview();
     updateHeader();
   } else {
@@ -2062,7 +2065,7 @@ function updateAllOverview() {
 
     const expTotal = (s.expenses||[]).reduce((a,e)=>a+(e.amount||0),0);
 
-    return `<div class="book-strip" style="--accent-color: ${book.accent}">
+    return `<div class="book-strip" style="--accent-color: ${book.accent}; --accent-color-bg: ${book.accentBg}; --accent-text: ${getContrastColor(book.accent)};">
       <div class="book-strip-info">
         <div class="book-strip-title">${escapeHtml(book.title)}</div>
         <div class="book-strip-meta">
