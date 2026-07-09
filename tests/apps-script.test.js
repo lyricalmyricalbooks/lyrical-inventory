@@ -74,4 +74,44 @@ describe('Apps Script Integration', () => {
       expect(numOrBlank_({})).toBe('');
     });
   });
+
+  describe('extractBigCartelShippingPaid_ (Big Cartel scanner)', () => {
+    function loadShippingExtractor() {
+      const codeContent = fs.readFileSync(codeGsPath, 'utf8');
+      const moneyMatch = codeContent.match(/function parseBigCartelMoney_\(value\) \{[\s\S]+?\n\}/);
+      const shippingMatch = codeContent.match(/function extractBigCartelShippingPaid_\(body, subtotal\) \{[\s\S]+?\n\}/);
+      expect(moneyMatch).not.toBeNull();
+      expect(shippingMatch).not.toBeNull();
+      return new Function('body', 'subtotal', moneyMatch[0] + '\n' + shippingMatch[0] + '\nreturn extractBigCartelShippingPaid_(body, subtotal);');
+    }
+
+    it('calculates screenshot-style method shipping from subtotal, tax, and total', () => {
+      const extractShipping = loadShippingExtractor();
+      const body = `Subtotal
+$43.00
+Tax
+$0.00
+Standard (with tracking) - Approx. delivery 3-5 days
+$5.00
+Total
+$48.00`;
+
+      expect(extractShipping(body, 43)).toBe(5);
+    });
+
+    it('still supports explicit shipping labels', () => {
+      const extractShipping = loadShippingExtractor();
+      const body = `Subtotal
+$43.00
+Shipping
+$7.50
+Tax
+$0.00
+Total
+$50.50`;
+
+      expect(extractShipping(body, 43)).toBe(7.5);
+    });
+  });
+
 });
