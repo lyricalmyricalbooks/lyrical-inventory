@@ -166,6 +166,8 @@ function scanGmail_(e) {
         || body.match(/(#[A-Z0-9]+-\d+)/i);
       const dateMatch = body.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4})/i);
       const subtotalMatch = body.match(/(?:\n|\r|^|\s)Subtotal[\s\n]*\$?\s*([0-9.,]+)/i);
+      const subtotal = subtotalMatch ? parseFloat(subtotalMatch[1].replace(/,/g, '')) : 0;
+      const shippingPaid = extractBigCartelShippingPaid_(body, subtotal);
 
       let shipName='', shipAddr1='', shipCity='', shipProvince='', shipPostal='', shipCountry='', shipEmail='';
       const shipBlock = body.match(/Shipping address\s*\n+([\s\S]*?)(?:\n\s*\n|\n\s*Contact)/i);
@@ -196,7 +198,8 @@ function scanGmail_(e) {
           id: msg.getId(),
           orderNum: orderNumMatch[1].trim(),
           date: dateMatch ? dateMatch[1].trim() : msg.getDate().toISOString().split('T')[0],
-          price: subtotalMatch ? parseFloat(subtotalMatch[1].replace(/,/g, '')) : 0,
+          price: subtotal,
+          shippingPaid: shippingPaid,
           customer: shipName,
           email: shipEmail,
           shipName, shipAddr1, shipCity, shipProvince, shipPostal, shipCountry,
@@ -206,6 +209,33 @@ function scanGmail_(e) {
     }
   }
   return jsonOut_({ ok: true, orders });
+}
+
+function parseBigCartelMoney_(value) {
+  const n = parseFloat(String(value || '').replace(/,/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
+function extractBigCartelShippingPaid_(body, subtotal) {
+  const text = String(body || '');
+
+  // Some Big Cartel emails label the row literally as Shipping/Postage, but
+  // others use the shipping method name, e.g. "Standard (with tracking) -
+  // Approx. delivery 3-5 days". Try the explicit labels first.
+  const explicit = text.match(/(?:^|\r?\n)\s*(?:Shipping|Shipping and handling|Postage)\s*(?:\r?\n|:)\s*\$?\s*([0-9.,]+)/i);
+  if (explicit) return parseBigCartelMoney_(explicit[1]);
+
+  // Screenshot-style Big Cartel receipts show Subtotal, Tax, a named shipping
+  // method, then Total. The method label is store-configurable, so calculate
+  // the customer shipping purchase from the totals instead of depending on the
+  // label text.
+  const totalMatch = text.match(/(?:^|\r?\n)\s*Total\s*(?:\r?\n|:)\s*\$?\s*([0-9.,]+)/i);
+  if (!totalMatch) return 0;
+  const taxMatch = text.match(/(?:^|\r?\n)\s*Tax\s*(?:\r?\n|:)\s*\$?\s*([0-9.,]+)/i);
+  const total = parseBigCartelMoney_(totalMatch[1]);
+  const tax = taxMatch ? parseBigCartelMoney_(taxMatch[1]) : 0;
+  const shipping = Math.round((total - (Number(subtotal) || 0) - tax) * 100) / 100;
+  return shipping > 0 ? shipping : 0;
 }
 
 function listReceiptEmails_(e) {
