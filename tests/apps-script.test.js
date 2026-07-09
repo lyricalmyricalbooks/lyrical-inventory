@@ -78,11 +78,9 @@ describe('Apps Script Integration', () => {
   describe('extractBigCartelShippingPaid_ (Big Cartel scanner)', () => {
     function loadShippingExtractor() {
       const codeContent = fs.readFileSync(codeGsPath, 'utf8');
-      const moneyMatch = codeContent.match(/function parseBigCartelMoney_\(value\) \{[\s\S]+?\n\}/);
-      const shippingMatch = codeContent.match(/function extractBigCartelShippingPaid_\(body, subtotal\) \{[\s\S]+?\n\}/);
-      expect(moneyMatch).not.toBeNull();
-      expect(shippingMatch).not.toBeNull();
-      return new Function('body', 'subtotal', moneyMatch[0] + '\n' + shippingMatch[0] + '\nreturn extractBigCartelShippingPaid_(body, subtotal);');
+      const helpersMatch = codeContent.match(/function normalizeBigCartelReceiptText_\(body\) \{[\s\S]+?\nfunction extractBigCartelShippingPaid_\(body, subtotal\) \{[\s\S]+?\n\}/);
+      expect(helpersMatch).not.toBeNull();
+      return new Function('body', 'subtotal', helpersMatch[0] + '\nreturn extractBigCartelShippingPaid_(body, subtotal);');
     }
 
     it('calculates screenshot-style method shipping from subtotal, tax, and total', () => {
@@ -112,6 +110,56 @@ $50.50`;
 
       expect(extractShipping(body, 43)).toBe(7.5);
     });
+
+    it('captures CA$ prefixed named-method shipping from totals', () => {
+      const extractShipping = loadShippingExtractor();
+      const body = `Subtotal
+CA$65.00
+Tax
+CA$0.00
+Tracked packet
+CA$12.00
+Total
+CA$77.00`;
+
+      expect(extractShipping(body, 65)).toBe(12);
+    });
+
+    it('captures CA$ prefixed explicit shipping labels', () => {
+      const extractShipping = loadShippingExtractor();
+      const body = `Subtotal
+CA$65.00
+Shipping
+CA$9.95
+Tax
+CA$0.00
+Total
+CA$74.95`;
+
+      expect(extractShipping(body, 65)).toBe(9.95);
+    });
+
+    it('captures CA$ same-line subtotal, tax, and total rows', () => {
+      const extractShipping = loadShippingExtractor();
+      const body = `Subtotal CA$65.00
+Tax CA$0.00
+Tracked packet CA$12.00
+Total CA$77.00`;
+
+      expect(extractShipping(body, 65)).toBe(12);
+    });
+
+    it('captures total-paid labels when Big Cartel does not emit a bare Total row', () => {
+      const extractShipping = loadShippingExtractor();
+      const body = `Subtotal CA$65.00
+Sales tax CA$0.00
+Tracked packet CA$12.00
+Total paid CA$77.00`;
+
+      expect(extractShipping(body, 65)).toBe(12);
+    });
+
+
   });
 
 });

@@ -169,8 +169,7 @@ function scanGmail_(e) {
       const orderNumMatch = body.match(/Order number[\s\S]{0,100}?(#[A-Z0-9-]+)/i)
         || body.match(/(#[A-Z0-9]+-\d+)/i);
       const dateMatch = body.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4})/i);
-      const subtotalMatch = body.match(/(?:\n|\r|^|\s)Subtotal[\s\n]*\$?\s*([0-9.,]+)/i);
-      const subtotal = subtotalMatch ? parseFloat(subtotalMatch[1].replace(/,/g, '')) : 0;
+      const subtotal = extractBigCartelLabeledMoney_(body, ['Subtotal']) || 0;
       const shippingPaid = extractBigCartelShippingPaid_(body, subtotal);
 
       let shipName='', shipAddr1='', shipCity='', shipProvince='', shipPostal='', shipCountry='', shipEmail='';
@@ -215,29 +214,66 @@ function scanGmail_(e) {
   return jsonOut_({ ok: true, orders });
 }
 
+function normalizeBigCartelReceiptText_(body) {
+  return String(body || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>|<\/div>|<\/tr>|<\/li>|<\/h[1-6]>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/[\u00a0\u202f]/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .trim();
+}
+
+function bigCartelMoneyPattern_() {
+  return '(?:[A-Z]{1,3}\\s*\\$|\\$|[A-Z]{3})?\\s*-?[0-9][0-9,]*(?:\\.[0-9]+)?';
+}
+
 function parseBigCartelMoney_(value) {
-  const n = parseFloat(String(value || '').replace(/,/g, ''));
+  const match = String(value || '').replace(/[\u00a0\u202f]/g, ' ').match(/-?[0-9][0-9,]*(?:\.[0-9]+)?/);
+  if (!match) return 0;
+  const n = parseFloat(match[0].replace(/,/g, ''));
   return isNaN(n) ? 0 : n;
 }
 
+function extractBigCartelLabeledMoney_(body, labels) {
+  const text = normalizeBigCartelReceiptText_(body);
+  const money = bigCartelMoneyPattern_();
+  for (const label of labels) {
+    const escaped = String(label).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    const sameLine = new RegExp('(?:^|\\n)\\s*' + escaped + '\\s*(?:[:\\-–—])?\\s*(' + money + ')(?=\\s*(?:\\n|$))', 'i');
+    const sameLineMatch = text.match(sameLine);
+    if (sameLineMatch) return parseBigCartelMoney_(sameLineMatch[1]);
+
+    const nextLine = new RegExp('(?:^|\\n)\\s*' + escaped + '\\s*(?:\\n|$)(?:.*\\n){0,2}?\\s*(' + money + ')(?=\\s*(?:\\n|$))', 'i');
+    const nextLineMatch = text.match(nextLine);
+    if (nextLineMatch) return parseBigCartelMoney_(nextLineMatch[1]);
+  }
+  return 0;
+}
+
 function extractBigCartelShippingPaid_(body, subtotal) {
-  const text = String(body || '');
+  const text = normalizeBigCartelReceiptText_(body);
 
   // Some Big Cartel emails label the row literally as Shipping/Postage, but
   // others use the shipping method name, e.g. "Standard (with tracking) -
   // Approx. delivery 3-5 days". Try the explicit labels first.
-  const explicit = text.match(/(?:^|\r?\n)\s*(?:Shipping|Shipping and handling|Postage)\s*(?:\r?\n|:)\s*\$?\s*([0-9.,]+)/i);
-  if (explicit) return parseBigCartelMoney_(explicit[1]);
+  const explicit = extractBigCartelLabeledMoney_(text, [
+    'Shipping', 'Shipping and handling', 'Shipping & handling', 'Shipping paid',
+    'Postage', 'Delivery', 'Delivery charge'
+  ]);
+  if (explicit) return explicit;
 
   // Screenshot-style Big Cartel receipts show Subtotal, Tax, a named shipping
   // method, then Total. The method label is store-configurable, so calculate
   // the customer shipping purchase from the totals instead of depending on the
-  // label text.
-  const totalMatch = text.match(/(?:^|\r?\n)\s*Total\s*(?:\r?\n|:)\s*\$?\s*([0-9.,]+)/i);
-  if (!totalMatch) return 0;
-  const taxMatch = text.match(/(?:^|\r?\n)\s*Tax\s*(?:\r?\n|:)\s*\$?\s*([0-9.,]+)/i);
-  const total = parseBigCartelMoney_(totalMatch[1]);
-  const tax = taxMatch ? parseBigCartelMoney_(taxMatch[1]) : 0;
+  // label text. Match total labels broadly because some notifications render
+  // them as "Order total", "Total paid", or "Amount paid".
+  const total = extractBigCartelLabeledMoney_(text, ['Total', 'Order total', 'Total paid', 'Amount paid']);
+  if (!total) return 0;
+  const tax = extractBigCartelLabeledMoney_(text, ['Tax', 'Taxes', 'Sales tax']) || 0;
   const shipping = Math.round((total - (Number(subtotal) || 0) - tax) * 100) / 100;
   return shipping > 0 ? shipping : 0;
 }

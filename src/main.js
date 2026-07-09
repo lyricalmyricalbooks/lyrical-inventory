@@ -6,6 +6,7 @@ import {
   normalizeCurrencyCode,
   fmt,
   fmtD,
+  parseCurrencyAmount,
   getBookCurrencyCode,
   paymentSummary,
   buildPaymentMeta,
@@ -28,6 +29,7 @@ import {
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
+import { extractBigCartelShippingPaidFromText } from './lib/bigcartel.js';
 
 let updateSWFunc = null;
 
@@ -5585,7 +5587,7 @@ function renderOrders() {
     const priceWarn = priceMismatch
       ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
       : '';
-    const shippingPaid = Number(o.shippingPaid || 0);
+    const shippingPaid = parseCurrencyAmount(o.shippingPaid || 0);
     const shippingBadge = shippingPaid > 0
       ? `<span title="Customer shipping purchase">Shipping ${fmt(shippingPaid, listCur)}</span>`
       : '';
@@ -5785,7 +5787,10 @@ async function fetchOrders() {
     }
     
     const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
-    const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
+    const scannedPrice = parseCurrencyAmount(o.price ?? o.unitPrice ?? o.amount ?? 0);
+    const price = scannedPrice || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
+    const scannedShippingPaid = parseCurrencyAmount(o.shippingPaid ?? o.shipping ?? o.shippingAmount ?? 0);
+    const shippingPaid = scannedShippingPaid || extractBigCartelShippingPaidFromText(o.body || '', price * qty);
     
     const rawDate = o.date || o.timestamp || o.time || o.orderDate || '';
     let normalizedDate = '';
@@ -5804,7 +5809,7 @@ async function fetchOrders() {
       orderNum,
       qty,
       price,
-      shippingPaid: parseFloat(o.shippingPaid ?? o.shipping ?? o.shippingAmount ?? 0) || 0,
+      shippingPaid,
       date: normalizedDate || today()
     };
   }).filter(o => o.orderNum);

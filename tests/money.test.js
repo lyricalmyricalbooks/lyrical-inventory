@@ -6,6 +6,7 @@ import {
   normalizeCurrencyCode,
   fmt,
   fmtNum,
+  parseCurrencyAmount,
   fmtD,
   getBookCurrencyCode,
   paymentSummary,
@@ -89,6 +90,21 @@ describe('fmtNum', () => {
     expect(fmtNum(1.5)).toBe('1.50');
     expect(fmtNum(0)).toBe('0.00');
     expect(fmtNum(1000)).toBe('1000.00');
+  });
+});
+
+
+describe('parseCurrencyAmount', () => {
+  it('normalizes prefixed and suffixed currency amounts', () => {
+    expect(parseCurrencyAmount('CA$12.00')).toBe(12);
+    expect(parseCurrencyAmount('US$1,234.56')).toBe(1234.56);
+    expect(parseCurrencyAmount('12.50 CAD')).toBe(12.5);
+  });
+
+  it('returns zero for empty or non-money values', () => {
+    expect(parseCurrencyAmount('')).toBe(0);
+    expect(parseCurrencyAmount('not money')).toBe(0);
+    expect(parseCurrencyAmount(Number.NaN)).toBe(0);
   });
 });
 

@@ -41,6 +41,16 @@ export const fmt = (n, cur = '€') =>
 
 export const fmtNum = (n) => Number(n).toFixed(2);
 
+
+export function parseCurrencyAmount(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const normalized = String(value || '').replace(/[\u00a0\u202f]/g, ' ');
+  const match = normalized.match(/-?[0-9][0-9,]*(?:\.[0-9]+)?/);
+  if (!match) return 0;
+  const n = Number(match[0].replace(/,/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
 // Round a currency amount to whole cents, killing binary floating-point drift
 // (e.g. 0.1 + 0.2 = 0.30000000000000004). Use this around any running total of
 // money so accumulated error can't grow as the number of transactions grows.
