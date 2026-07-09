@@ -112,6 +112,35 @@ $50.50`;
 
       expect(extractShipping(body, 43)).toBe(7.5);
     });
+
+    it('captures CA$ prefixed named-method shipping from totals', () => {
+      const extractShipping = loadShippingExtractor();
+      const body = `Subtotal
+CA$65.00
+Tax
+CA$0.00
+Tracked packet
+CA$12.00
+Total
+CA$77.00`;
+
+      expect(extractShipping(body, 65)).toBe(12);
+    });
+
+    it('captures CA$ prefixed explicit shipping labels', () => {
+      const extractShipping = loadShippingExtractor();
+      const body = `Subtotal
+CA$65.00
+Shipping
+CA$9.95
+Tax
+CA$0.00
+Total
+CA$74.95`;
+
+      expect(extractShipping(body, 65)).toBe(9.95);
+    });
+
   });
 
 });
