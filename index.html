@@ -251,8 +251,8 @@
   <!-- App "last updated" stamp — publisher shell only (the tab-bar copy is
        hidden here). Text set by updateSubheader() from __GIT_COMMIT_DATE__. -->
   <div class="pub-side-updated-container">
-    <div class="pub-side-updated" id="pub-updated" style="padding: 0; margin-bottom: 2px;"></div>
-    <span class="pub-update-badge" id="pub-update-badge" style="display: none; cursor: pointer;" onclick="showWhatsNew(event)" title="Click to see what changed">New Update</span>
+    <button type="button" class="pub-side-updated" id="pub-updated" onclick="showWhatsNew(event)" aria-label="View app update notes"></button>
+    <button type="button" class="pub-update-badge" id="pub-update-badge" hidden onclick="showWhatsNew(event)" title="Click to see what changed" aria-label="View new app update notes">New Update</button>
   </div>
 </aside>
 
@@ -3133,19 +3133,19 @@
 </div>
 
 <!-- FULLSCREEN UPDATING TRANSITION SCREEN -->
-<div id="updating-screen" style="position: fixed; inset: 0; background: var(--ink); z-index: 20000; display: none; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease;">
-  <div class="pw-logo" style="transform: scale(0.9); margin-bottom: 24px;" aria-hidden="true">
+<div id="updating-screen" class="updating-screen" aria-live="polite" aria-hidden="true">
+  <div class="pw-logo updating-screen-logo" aria-hidden="true">
     <div>Lyrical</div>
     <div>Myrical</div>
     <div class="pw-logo-outline">Books</div>
   </div>
-  <div style="font-family:'Syne',sans-serif; font-size:12px; text-transform:uppercase; letter-spacing:0.18em; color:var(--gold3); animation: pulse-glow 2s infinite ease-in-out; margin-bottom: 8px;">Updating Lyrical Inventory…</div>
-  <div style="font-size:11px; color:var(--text4); margin-bottom: 20px;">This will take just a moment.</div>
-  <div style="width: 28px; height: 28px; border: 3px solid rgba(200, 145, 58, 0.15); border-top-color: var(--gold); border-radius: 50%; animation: pwa-spin 1s linear infinite;"></div>
+  <div class="updating-screen-title">Updating Lyrical Inventory…</div>
+  <div class="updating-screen-copy">Polishing the latest version. This will take just a moment.</div>
+  <div class="updating-screen-orbit" aria-hidden="true"></div>
 </div>
 
 <!-- PWA UPDATE PROMPT BANNER -->
-<div id="pwa-update-prompt" class="pwa-prompt" style="display:none;">
+<div id="pwa-update-prompt" class="pwa-prompt" role="button" tabindex="0" aria-label="Update Lyrical Inventory to the latest version">
   <div class="pwa-prompt-content">
     <div class="pwa-prompt-icon">✨</div>
     <div class="pwa-prompt-text">
@@ -3154,8 +3154,8 @@
     </div>
   </div>
   <div class="pwa-prompt-actions">
-    <button class="btn sm" onclick="dismissPwaUpdate()">Later</button>
-    <button class="btn sm gold" onclick="triggerPwaUpdate()">Update Now</button>
+    <button type="button" class="btn sm" onclick="dismissPwaUpdate(event)">Later</button>
+    <button type="button" class="btn sm gold" onclick="triggerPwaUpdate()">Update Now</button>
   </div>
 </div>
 
