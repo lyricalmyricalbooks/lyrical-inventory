@@ -22192,17 +22192,37 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- SHIPPO SHIPPING CALCULATOR AND QUANTITY SCALING ---
 let shippoBaseSpecs = { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
 
+const SHIPPO_COUNTRY_CODES = {
+  canada: 'CA', ca: 'CA', can: 'CA',
+  'united states': 'US', 'united states of america': 'US', usa: 'US', us: 'US',
+  'united kingdom': 'GB', uk: 'GB', gb: 'GB', 'great britain': 'GB', england: 'GB',
+  italy: 'IT', it: 'IT', italia: 'IT',
+  germany: 'DE', de: 'DE', deutschland: 'DE',
+  france: 'FR', fr: 'FR',
+  australia: 'AU', au: 'AU',
+  austria: 'AT', at: 'AT',
+  belgium: 'BE', be: 'BE',
+  denmark: 'DK', dk: 'DK',
+  finland: 'FI', fi: 'FI',
+  ireland: 'IE', ie: 'IE',
+  japan: 'JP', jp: 'JP',
+  mexico: 'MX', mx: 'MX',
+  netherlands: 'NL', holland: 'NL', nl: 'NL',
+  'new zealand': 'NZ', nz: 'NZ',
+  norway: 'NO', no: 'NO',
+  portugal: 'PT', pt: 'PT',
+  spain: 'ES', es: 'ES', españa: 'ES',
+  sweden: 'SE', se: 'SE',
+  switzerland: 'CH', ch: 'CH', suisse: 'CH'
+};
+
 function normalizeCountryCode(code) {
   if (!code) return 'US';
-  const c = code.trim().toLowerCase();
-  if (c === 'canada' || c === 'ca' || c === 'can') return 'CA';
-  if (c === 'united states' || c === 'usa' || c === 'us' || c === 'united states of america') return 'US';
-  if (c === 'united kingdom' || c === 'uk' || c === 'gb' || c === 'great britain') return 'GB';
-  if (c === 'italy' || c === 'it' || c === 'italia') return 'IT';
-  if (c === 'germany' || c === 'de' || c === 'deutschland') return 'DE';
-  if (c === 'france' || c === 'fr') return 'FR';
-  if (c === 'australia' || c === 'au') return 'AU';
-  return code.toUpperCase().slice(0, 2);
+  const raw = String(code).trim();
+  const normalized = SHIPPO_COUNTRY_CODES[raw.toLowerCase()];
+  if (normalized) return normalized;
+  if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
+  return '';
 }
 
 function getAllStores() {
@@ -22282,6 +22302,7 @@ function initShippingTab() {
   const savedOrigin = {
     name: localStorage.getItem('lm-shippo-origin-name') || '',
     company: localStorage.getItem('lm-shippo-origin-company') || '',
+    phone: localStorage.getItem('lm-shippo-origin-phone') || '',
     street1: localStorage.getItem('lm-shippo-origin-street1') || '',
     street2: localStorage.getItem('lm-shippo-origin-street2') || '',
     city: localStorage.getItem('lm-shippo-origin-city') || '',
@@ -22292,6 +22313,7 @@ function initShippingTab() {
 
   $('sf-name').value = savedOrigin.name || '';
   $('sf-company').value = savedOrigin.company || '';
+  $('sf-phone').value = savedOrigin.phone || '';
   $('sf-street1').value = savedOrigin.street1 || '';
   $('sf-street2').value = savedOrigin.street2 || '';
   $('sf-city').value = savedOrigin.city || '';
@@ -22316,6 +22338,7 @@ function initShippingTab() {
         const addrObj = {
           name: st.contact || st.name,
           company: st.name,
+          phone: st.phone || '',
           street1: st.address || '',
           street2: '',
           city: st.city || '',
@@ -22344,6 +22367,7 @@ function initShippingTab() {
         const addrObj = {
           name: h.shipName,
           company: '',
+          phone: h.shipPhone || h.phone || '',
           street1: h.shipAddr1,
           street2: h.shipAddr2 || '',
           city: h.shipCity,
@@ -22458,6 +22482,7 @@ function onShippoPreFillDestChange() {
     const addr = JSON.parse(select.value);
     $('st-name').value = addr.name || '';
     $('st-company').value = addr.company || '';
+    $('st-phone').value = addr.phone || '';
     $('st-street1').value = addr.street1 || '';
     $('st-street2').value = addr.street2 || '';
     $('st-city').value = addr.city || '';
@@ -22490,6 +22515,10 @@ function onShippoBookPresetChange() {
   $('sp-dim-unit').value = specs.dim_unit;
   $('sp-weight').value = specs.weight;
   $('sp-weight-unit').value = specs.weight_unit;
+  const customsValue = $('sp-customs-value');
+  if (customsValue) customsValue.value = Math.max(1, parseFloat(book.listPrice || book.price || customsValue.value || 25)).toFixed(2);
+  const customsDescription = $('sp-customs-description');
+  if (customsDescription) customsDescription.value = `${book.title || 'Printed books'} - printed books`.slice(0, 80);
   
   // Update base specifications cache
   shippoBaseSpecs = {
@@ -22651,21 +22680,25 @@ async function calculateShippoRates() {
   // Gather values
   const sfName = $('sf-name').value.trim();
   const sfCompany = $('sf-company').value.trim();
+  const sfPhone = $('sf-phone').value.trim();
   const sfStreet1 = $('sf-street1').value.trim();
   const sfStreet2 = $('sf-street2').value.trim();
   const sfCity = $('sf-city').value.trim();
   const sfState = $('sf-state').value.trim();
   const sfZip = $('sf-zip').value.trim();
   const sfCountry = $('sf-country').value;
+  const sfCountryCode = normalizeCountryCode(sfCountry);
 
   const stName = $('st-name').value.trim();
   const stCompany = $('st-company').value.trim();
+  const stPhone = $('st-phone').value.trim();
   const stStreet1 = $('st-street1').value.trim();
   const stStreet2 = $('st-street2').value.trim();
   const stCity = $('st-city').value.trim();
   const stState = $('st-state').value.trim();
   const stZip = $('st-zip').value.trim();
   const stCountry = $('st-country').value;
+  const stCountryCode = normalizeCountryCode(stCountry);
 
   const spLength = parseFloat($('sp-length').value) || 0;
   const spWidth = parseFloat($('sp-width').value) || 0;
@@ -22687,17 +22720,28 @@ async function calculateShippoRates() {
     showToast('⚠️ Parcel dimensions and weight must be positive numbers', 'warn');
     return;
   }
+  if (!sfCountryCode || !stCountryCode) {
+    showToast('⚠️ Choose a supported origin and destination country before rating', 'warn');
+    return;
+  }
+
+  const isInternational = isInternationalShipment(sfCountryCode, stCountryCode);
+  if (isInternational && (!sfPhone || !stPhone)) {
+    showToast('⚠️ International Shippo rates need sender and recipient phone numbers for customs/carrier rating', 'warn');
+    return;
+  }
 
   // Save Origin default if checked
   if ($('ship-save-origin').checked) {
     localStorage.setItem('lm-shippo-origin-name', sfName);
     localStorage.setItem('lm-shippo-origin-company', sfCompany);
+    localStorage.setItem('lm-shippo-origin-phone', sfPhone);
     localStorage.setItem('lm-shippo-origin-street1', sfStreet1);
     localStorage.setItem('lm-shippo-origin-street2', sfStreet2);
     localStorage.setItem('lm-shippo-origin-city', sfCity);
     localStorage.setItem('lm-shippo-origin-state', sfState);
     localStorage.setItem('lm-shippo-origin-zip', sfZip);
-    localStorage.setItem('lm-shippo-origin-country', sfCountry);
+    localStorage.setItem('lm-shippo-origin-country', sfCountryCode);
   }
 
   const placeholder = $('ship-results-placeholder');
@@ -22714,22 +22758,24 @@ async function calculateShippoRates() {
       address_from: {
         name: sfName,
         company: sfCompany,
+        phone: sfPhone,
         street1: sfStreet1,
         street2: sfStreet2,
         city: sfCity,
         state: sfState,
         zip: sfZip,
-        country: sfCountry
+        country: sfCountryCode
       },
       address_to: {
         name: stName,
         company: stCompany,
+        phone: stPhone,
         street1: stStreet1,
         street2: stStreet2,
         city: stCity,
         state: stState,
         zip: stZip,
-        country: stCountry
+        country: stCountryCode
       },
       parcels: [{
         length: spLength,
@@ -22741,6 +22787,10 @@ async function calculateShippoRates() {
       }],
       async: false
     };
+
+    if (isInternational) {
+      payload.customs_declaration = buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit });
+    }
 
     const resp = await fetch('https://api.goshippo.com/shipments/', {
       method: 'POST',

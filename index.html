@@ -1754,6 +1754,7 @@
           </div>
           <div class="form-group" style="margin-bottom:8px;"><label>Sender Name</label><input type="text" id="sf-name" placeholder="Lyricalmyrical Books"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="sf-company" placeholder="Optional"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:10px;color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="sf-phone" placeholder="+1 416 555 0123"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="sf-street1" placeholder="123 Bookish Way"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Apt/Suite</label><input type="text" id="sf-street2" placeholder="Optional"></div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -1772,6 +1773,20 @@
                 <option value="DE">Germany</option>
                 <option value="FR">France</option>
                 <option value="AU">Australia</option>
+                <option value="AT">Austria</option>
+                <option value="BE">Belgium</option>
+                <option value="DK">Denmark</option>
+                <option value="FI">Finland</option>
+                <option value="IE">Ireland</option>
+                <option value="JP">Japan</option>
+                <option value="MX">Mexico</option>
+                <option value="NL">Netherlands</option>
+                <option value="NZ">New Zealand</option>
+                <option value="NO">Norway</option>
+                <option value="PT">Portugal</option>
+                <option value="ES">Spain</option>
+                <option value="SE">Sweden</option>
+                <option value="CH">Switzerland</option>
               </select>
             </div>
           </div>
@@ -1782,6 +1797,7 @@
           <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Destination (To)</div>
           <div class="form-group" style="margin-bottom:8px;"><label>Recipient Name</label><input type="text" id="st-name" placeholder="John Doe"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="st-company" placeholder="Optional"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:10px;color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="st-phone" placeholder="+1 604 555 0123"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="st-street1" placeholder="456 Reading Ave"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Apt/Suite</label><input type="text" id="st-street2" placeholder="Optional"></div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -1800,6 +1816,20 @@
                 <option value="DE">Germany</option>
                 <option value="FR">France</option>
                 <option value="AU">Australia</option>
+                <option value="AT">Austria</option>
+                <option value="BE">Belgium</option>
+                <option value="DK">Denmark</option>
+                <option value="FI">Finland</option>
+                <option value="IE">Ireland</option>
+                <option value="JP">Japan</option>
+                <option value="MX">Mexico</option>
+                <option value="NL">Netherlands</option>
+                <option value="NZ">New Zealand</option>
+                <option value="NO">Norway</option>
+                <option value="PT">Portugal</option>
+                <option value="ES">Spain</option>
+                <option value="SE">Sweden</option>
+                <option value="CH">Switzerland</option>
               </select>
             </div>
           </div>
@@ -1842,6 +1872,24 @@
               <option value="g">Grams (g)</option>
             </select>
           </div>
+        </div>
+
+        <div class="shipping-predictor-settings" style="margin-bottom:12px;">
+          <div class="form-group">
+            <label>Customs description</label>
+            <input type="text" id="sp-customs-description" value="Printed books" placeholder="Printed books">
+          </div>
+          <div class="form-group">
+            <label>Customs value (CAD)</label>
+            <input type="number" id="sp-customs-value" value="25" step="0.01" min="0.01">
+          </div>
+          <div class="form-group">
+            <label>HS tariff code</label>
+            <input type="text" id="sp-customs-hs" value="490199" placeholder="490199">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.55;margin:-4px 0 12px;">
+          International Shippo rates include this customs declaration automatically. If Canada Post still does not appear, connect or enable your Canada Post carrier account in Shippo.
         </div>
 
         <div class="shipping-predictor-settings">
