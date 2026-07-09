@@ -31,23 +31,49 @@ import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoic
 
 let updateSWFunc = null;
 
+function revealUpdatingScreen() {
+  const upScreen = document.getElementById('updating-screen');
+  if (!upScreen) return;
+  upScreen.setAttribute('aria-hidden', 'false');
+  upScreen.classList.add('is-visible');
+}
+
+function hideUpdatePrompt() {
+  const pwaPrompt = document.getElementById('pwa-update-prompt');
+  if (!pwaPrompt) return;
+  pwaPrompt.classList.remove('is-visible');
+}
+
+function bindUpdatePromptInteractions() {
+  const pwaPrompt = document.getElementById('pwa-update-prompt');
+  if (!pwaPrompt || pwaPrompt.dataset.bound === 'true') return;
+  pwaPrompt.dataset.bound = 'true';
+  pwaPrompt.addEventListener('click', (event) => {
+    if (event.target.closest('button')) return;
+    window.triggerPwaUpdate();
+  });
+  pwaPrompt.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (event.target.closest('button')) return;
+    event.preventDefault();
+    window.triggerPwaUpdate();
+  });
+}
+
 const _updateSW = registerSW({
   onNeedRefresh() {
     updateSWFunc = () => {
-      const upScreen = document.getElementById('updating-screen');
-      if (upScreen) {
-        upScreen.style.display = 'flex';
-        upScreen.offsetHeight; // force reflow
-        upScreen.style.opacity = '1';
-      }
+      hideUpdatePrompt();
+      revealUpdatingScreen();
       setTimeout(() => {
         _updateSW(true);
-      }, 300);
+      }, 520);
     };
-    
+
     const pwaPrompt = document.getElementById('pwa-update-prompt');
     if (pwaPrompt) {
-      pwaPrompt.style.display = 'flex';
+      bindUpdatePromptInteractions();
+      pwaPrompt.classList.add('is-visible');
     }
   },
   onOfflineReady() {
@@ -61,11 +87,9 @@ window.triggerPwaUpdate = function() {
   }
 };
 
-window.dismissPwaUpdate = function() {
-  const pwaPrompt = document.getElementById('pwa-update-prompt');
-  if (pwaPrompt) {
-    pwaPrompt.style.display = 'none';
-  }
+window.dismissPwaUpdate = function(event) {
+  if (event) event.stopPropagation();
+  hideUpdatePrompt();
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1635,7 +1659,15 @@ function syncRoleUI() {
     const lastSeen = localStorage.getItem('lm-last-seen-version');
     const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
     const hasUnseenUpdate = lastSeen && lastSeen !== currentVersion;
-    badge.style.display = (hasUnseenUpdate && !authorNow && isPublisherSession()) ? 'inline-flex' : 'none';
+    const showBadge = hasUnseenUpdate && !authorNow && isPublisherSession();
+    badge.hidden = !showBadge;
+    badge.classList.toggle('is-visible', showBadge);
+  }
+  const stamp = $('pub-updated');
+  if (stamp) {
+    const lastSeen = localStorage.getItem('lm-last-seen-version');
+    const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
+    stamp.classList.toggle('has-unseen-update', Boolean(lastSeen && lastSeen !== currentVersion && !authorNow && isPublisherSession()));
   }
 
   // Update Profile/Test tabs visibility when changing views
@@ -21844,8 +21876,11 @@ function checkAppUpdate() {
     // App was updated! Show badge and toast.
     const badge = $('pub-update-badge');
     if (badge) {
-      badge.style.display = 'inline-flex';
+      badge.hidden = false;
+      badge.classList.add('is-visible');
     }
+    const stamp = $('pub-updated');
+    if (stamp) stamp.classList.add('has-unseen-update');
     showToast(`✨ App successfully updated to ${currentVersion}!`, 'ok', 6000);
   }
 }
@@ -21857,12 +21892,11 @@ function dismissAppUpdate(event) {
   
   const badge = $('pub-update-badge');
   if (badge) {
-    badge.style.opacity = '0';
-    setTimeout(() => {
-      badge.style.display = 'none';
-      badge.style.opacity = '';
-    }, 200);
+    badge.classList.remove('is-visible');
+    window.setTimeout(() => { badge.hidden = true; }, 260);
   }
+  const stamp = $('pub-updated');
+  if (stamp) stamp.classList.remove('has-unseen-update');
   showToast('✓ Update notification dismissed');
 }
 window.dismissAppUpdate = dismissAppUpdate;
@@ -21899,12 +21933,11 @@ async function showWhatsNew(event) {
   
   const badge = $('pub-update-badge');
   if (badge) {
-    badge.style.opacity = '0';
-    setTimeout(() => {
-      badge.style.display = 'none';
-      badge.style.opacity = '';
-    }, 200);
+    badge.classList.remove('is-visible');
+    window.setTimeout(() => { badge.hidden = true; }, 260);
   }
+  const stamp = $('pub-updated');
+  if (stamp) stamp.classList.remove('has-unseen-update');
 
   const changes = await fetchRecentChanges();
   if (!changes || !changes.length) {
