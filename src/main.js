@@ -22548,6 +22548,53 @@ function renderShippingChargePrediction(rates) {
   card.style.display = 'block';
 }
 
+function collectShippoMessages(value, prefix = '') {
+  const messages = [];
+  if (!value) return messages;
+  if (typeof value === 'string') return [prefix ? `${prefix}: ${value}` : value];
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      const label = prefix && typeof item !== 'string' ? `${prefix} ${index + 1}` : prefix;
+      messages.push(...collectShippoMessages(item, label));
+    });
+    return messages;
+  }
+  if (typeof value === 'object') {
+    const direct = value.text || value.message || value.detail || value.error;
+    if (direct && typeof direct !== 'object') {
+      const source = value.source || value.carrier || value.provider || value.code || prefix;
+      messages.push(source ? `${source}: ${direct}` : String(direct));
+    }
+    Object.entries(value).forEach(([key, item]) => {
+      if (['text', 'message', 'detail', 'error', 'source', 'carrier', 'provider', 'code'].includes(key)) return;
+      messages.push(...collectShippoMessages(item, prefix ? `${prefix}.${key}` : key));
+    });
+  }
+  return messages;
+}
+
+function renderShippoDiagnostics(data, fallbackMessage) {
+  const messages = Array.from(new Set([
+    ...collectShippoMessages(data?.messages, 'message'),
+    ...collectShippoMessages(data?.object_messages, 'message'),
+    ...collectShippoMessages(data?.address_from?.messages, 'origin'),
+    ...collectShippoMessages(data?.address_to?.messages, 'destination'),
+    ...collectShippoMessages(data?.parcels?.map(p => p?.messages), 'parcel')
+  ].filter(Boolean)));
+
+  const details = messages.length
+    ? `<ul style="margin:12px 0 0; padding-left:18px; text-align:left; line-height:1.55;">${messages.slice(0, 8).map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`
+    : `<div style="margin-top:12px; font-size:12px; line-height:1.55;">${escapeHtml(fallbackMessage)}</div>`;
+
+  return `
+    <div style="text-align:center; padding:3rem 1rem; color:var(--text3);">
+      <div style="font-size:32px; margin-bottom:12px;">⚠️</div>
+      <div>No rates were returned by Shippo.</div>
+      ${details}
+      <div style="margin-top:12px; font-size:12px; line-height:1.55; color:var(--text3);">The API key was accepted because Shippo created a shipment response; this usually points to address validation, unsupported origin/destination service, package specs, or missing/enabled carrier accounts rather than a bad key.</div>
+    </div>`;
+}
+
 async function calculateShippoRates() {
   const shippoKey = TAX_CENTER.settings?.shippoKey || '';
   if (!shippoKey) {
@@ -22688,10 +22735,7 @@ async function calculateShippoRates() {
 
     if (rates.length === 0) {
       if (list) {
-        list.innerHTML = `<div style="text-align:center; padding:3rem 1rem; color:var(--text3);">
-          <div style="font-size:32px; margin-bottom:12px;">⚠️</div>
-          <div>No rates were returned by Shippo. Verify that the address locations are serviceable and package weight is correct.</div>
-        </div>`;
+        list.innerHTML = renderShippoDiagnostics(data, 'Verify that the address locations are serviceable, package weight is correct, and at least one carrier account can rate this route.');
         list.style.display = 'flex';
       }
       return;
