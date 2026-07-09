@@ -22458,6 +22458,96 @@ function onShippoBookPresetChange() {
   showToast(`✓ Package preset loaded: ${book.title}`);
 }
 
+
+function isCanadaPostRate(rate) {
+  const provider = String(rate?.provider || '').toLowerCase();
+  return provider.includes('canada post') || provider.includes('canadapost') || provider.includes('postes canada');
+}
+
+function moneyAmount(rate) {
+  const amount = parseFloat(rate?.amount);
+  return Number.isFinite(amount) ? amount : Infinity;
+}
+
+function roundShippingCharge(amount) {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return Math.ceil(amount) - 0.01;
+}
+
+function buildShippingChargePrediction(rates) {
+  const usableRates = (rates || []).filter(r => Number.isFinite(moneyAmount(r))).sort((a, b) => moneyAmount(a) - moneyAmount(b));
+  if (!usableRates.length) return null;
+
+  const canadaPostRates = usableRates.filter(isCanadaPostRate);
+  const benchmarkMode = $('sp-benchmark')?.value || 'canada_post';
+  const handling = Math.max(0, parseFloat($('sp-handling')?.value) || 0);
+  const margin = Math.max(0, parseFloat($('sp-margin')?.value) || 0);
+  let benchmarkRate = usableRates[0];
+  let benchmarkLabel = 'Cheapest returned rate';
+
+  if (benchmarkMode === 'canada_post' && canadaPostRates.length) {
+    benchmarkRate = canadaPostRates[0];
+    benchmarkLabel = 'Cheapest Canada Post rate';
+  } else if (benchmarkMode === 'median') {
+    benchmarkRate = usableRates[Math.floor(usableRates.length / 2)];
+    benchmarkLabel = 'Median returned rate';
+  }
+
+  const baseAmount = moneyAmount(benchmarkRate);
+  const subtotal = baseAmount + handling;
+  const recommended = roundShippingCharge(subtotal * (1 + margin));
+  const cheapest = usableRates[0];
+  const fastest = usableRates
+    .filter(r => r.estimated_days !== null && r.estimated_days !== undefined)
+    .sort((a, b) => parseInt(a.estimated_days) - parseInt(b.estimated_days))[0] || null;
+
+  return {
+    recommended,
+    currency: benchmarkRate.currency || 'CAD',
+    benchmarkRate,
+    benchmarkLabel,
+    handling,
+    margin,
+    canadaPostCount: canadaPostRates.length,
+    cheapest,
+    fastest
+  };
+}
+
+function renderShippingChargePrediction(rates) {
+  const card = $('ship-prediction-card');
+  if (!card) return;
+  const prediction = buildShippingChargePrediction(rates);
+  if (!prediction) {
+    card.style.display = 'none';
+    card.innerHTML = '';
+    return;
+  }
+
+  const benchmark = prediction.benchmarkRate;
+  const fastest = prediction.fastest;
+  const canadaPostNote = prediction.canadaPostCount
+    ? `${prediction.canadaPostCount} Canada Post option${prediction.canadaPostCount === 1 ? '' : 's'} returned by Shippo.`
+    : 'No Canada Post rate returned; prediction used your selected fallback.';
+
+  card.innerHTML = `
+    <div class="shipping-prediction-topline">
+      <div>
+        <div class="shipping-prediction-label">Recommended website charge</div>
+        <div class="shipping-prediction-price">${prediction.recommended.toFixed(2)} ${escapeHtml(prediction.currency)}</div>
+      </div>
+      <span class="rate-badge cheapest">Prediction</span>
+    </div>
+    <div class="shipping-prediction-grid">
+      <div><strong>${escapeHtml(prediction.benchmarkLabel)}</strong><span>${escapeHtml(benchmark.provider || 'Carrier')} · ${escapeHtml(benchmark.servicelevel?.name || 'Service')} · ${moneyAmount(benchmark).toFixed(2)} ${escapeHtml(benchmark.currency || prediction.currency)}</span></div>
+      <div><strong>Buffer</strong><span>${prediction.handling.toFixed(2)} CAD handling + ${(prediction.margin * 100).toFixed(0)}% margin</span></div>
+      <div><strong>Fastest option</strong><span>${fastest ? `${escapeHtml(fastest.provider || 'Carrier')} · ${fastest.estimated_days || '?'} day${parseInt(fastest.estimated_days) === 1 ? '' : 's'}` : 'No transit estimate returned'}</span></div>
+    </div>
+    <div class="shipping-prediction-note">${escapeHtml(canadaPostNote)} Use this as a pricing recommendation before publishing customer-facing flat rates.</div>
+  `;
+  card.style.display = 'block';
+}
+
 async function calculateShippoRates() {
   const shippoKey = TAX_CENTER.settings?.shippoKey || '';
   if (!shippoKey) {
@@ -22524,6 +22614,7 @@ async function calculateShippoRates() {
   if (placeholder) placeholder.style.display = 'none';
   if (loading) loading.style.display = 'flex';
   if (list) list.style.display = 'none';
+  renderShippingChargePrediction([]);
 
   try {
     const payload = {
@@ -22606,6 +22697,8 @@ async function calculateShippoRates() {
       return;
     }
 
+    renderShippingChargePrediction(rates);
+
     // Sort rates by amount ascending to find the cheapest
     const sortedByPrice = [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
     const cheapestId = sortedByPrice[0]?.object_id;
@@ -22627,6 +22720,7 @@ async function calculateShippoRates() {
         let badgesHtml = '';
         if (isCheapest) badgesHtml += '<span class="rate-badge cheapest">Cheapest</span>';
         if (isFastest) badgesHtml += '<span class="rate-badge fastest">Fastest</span>';
+        if (isCanadaPostRate(r)) badgesHtml += '<span class="rate-badge canada-post">Canada Post</span>';
 
         const transitDays = r.estimated_days 
           ? `${r.estimated_days} ${parseInt(r.estimated_days) === 1 ? 'day' : 'days'}`
