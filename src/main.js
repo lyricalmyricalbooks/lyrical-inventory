@@ -22656,6 +22656,43 @@ function renderShippingChargePrediction(rates) {
   card.style.display = 'block';
 }
 
+function isInternationalShipment(fromCountry, toCountry) {
+  return normalizeCountryCode(fromCountry) !== normalizeCountryCode(toCountry);
+}
+
+function readShippoCustomsValue(id, fallback) {
+  const value = $(id)?.value;
+  return String(value || fallback).trim();
+}
+
+function buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit }) {
+  const quantity = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
+  const description = readShippoCustomsValue('sp-customs-description', 'Printed books');
+  const valueAmount = Math.max(0.01, parseFloat(readShippoCustomsValue('sp-customs-value', '25')) || 25);
+  const hsCode = readShippoCustomsValue('sp-customs-hs', '490199');
+  const originCountry = normalizeCountryCode(sfCountryCode) || 'CA';
+
+  return {
+    certify: true,
+    certify_signer: sfName,
+    contents_type: 'MERCHANDISE',
+    contents_explanation: 'Printed books',
+    non_delivery_option: 'RETURN',
+    incoterm: 'DDU',
+    eel_pfc: 'NOEEI_30_37_a',
+    items: [{
+      description,
+      quantity,
+      net_weight: Math.max(0.01, spWeight).toFixed(2),
+      mass_unit: spWeightUnit,
+      value_amount: valueAmount.toFixed(2),
+      value_currency: 'CAD',
+      origin_country: originCountry,
+      tariff_number: hsCode
+    }]
+  };
+}
+
 function collectShippoMessages(value, prefix = '') {
   const messages = [];
   if (!value) return messages;

@@ -1,0 +1,49 @@
+import { describe, it, expect } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+describe('main.js window binding verification', () => {
+  const mainJsPath = path.resolve(__dirname, '../src/main.js');
+
+  it('declares every variable/function bound to window in exposeLegacyInlineHandlers', () => {
+    expect(fs.existsSync(mainJsPath)).toBe(true);
+    const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+
+    // Find the exposeLegacyInlineHandlers block
+    const blockMatch = mainContent.match(/function exposeLegacyInlineHandlers\(\)\s*\{([\s\S]+?)\n\}/);
+    expect(blockMatch).not.toBeNull();
+
+    // Extract inside Object.assign(window, { ... })
+    const assignMatch = blockMatch[1].match(/Object\.assign\(window,\s*\{([\s\S]+?)\}\)/);
+    expect(assignMatch).not.toBeNull();
+
+    const exposedNames = assignMatch[1]
+      .split(',')
+      .map(name => name.trim())
+      .filter(name => name.length > 0 && !name.startsWith('//'));
+
+    expect(exposedNames.length).toBeGreaterThan(100);
+
+    const missingDefinitions = [];
+
+    exposedNames.forEach(name => {
+      // Create regexes to locate definition
+      const regexPatterns = [
+        new RegExp(`function\\s+${name}\\b`),
+        new RegExp(`(?:const|let|var)\\s+${name}\\b`),
+        new RegExp(`\\b${name}\\s*=`)
+      ];
+
+      const isDefined = regexPatterns.some(regex => regex.test(mainContent));
+      if (!isDefined) {
+        missingDefinitions.push(name);
+      }
+    });
+
+    expect(missingDefinitions).toEqual([]);
+  });
+});
