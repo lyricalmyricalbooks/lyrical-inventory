@@ -4600,3 +4600,73 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 }
 
 
+.shipping-predictor-settings {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.shipping-prediction-card {
+  background: linear-gradient(135deg, rgba(200,145,58,.14), rgba(30,86,49,.08));
+  border: 1px solid var(--gold-line);
+  border-radius: var(--r2);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.shipping-prediction-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.shipping-prediction-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 4px;
+}
+.shipping-prediction-price {
+  font-family: 'DM Mono', monospace;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--green);
+  line-height: 1;
+}
+.shipping-prediction-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.shipping-prediction-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text3);
+}
+.shipping-prediction-grid strong {
+  font-size: 11px;
+  color: var(--text);
+}
+.shipping-prediction-note {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(200,145,58,.22);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.rate-badge.canada-post {
+  background: var(--red-bg);
+  color: var(--red);
+}
+@media(max-width: 760px) {
+  .shipping-predictor-settings {
+    grid-template-columns: 1fr;
+  }
+}

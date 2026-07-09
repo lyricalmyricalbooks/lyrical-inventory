@@ -218,6 +218,7 @@
     <button type="button" class="snav" id="sidebar-webanalytics-btn" title="Web Analytics" onclick="switchTab('webanalytics')"><span class="snav-ic">📈</span><span class="snav-label">Web Analytics</span></button>
 
     <div class="o3-subgrouplabel">Data</div>
+    <button type="button" class="snav" title="Shipping Specs" onclick="switchTab('shipping')"><span class="snav-ic">📦</span><span class="snav-label">Shipping Specs</span></button>
     <button type="button" class="snav" title="Sheets" onclick="switchTab('sheets')"><span class="snav-ic">⚙️</span><span class="snav-label">Sheets</span></button>
     <button type="button" class="snav" title="Backups" onclick="switchTab('backups')"><span class="snav-ic">💾</span><span class="snav-label">Backups</span></button>
   </nav>
@@ -1697,8 +1698,8 @@
 
 <!-- SHIPPING RATES CALCULATOR -->
 <div class="tab-panel" id="tab-shipping" style="display:none;">
-  <div class="section-hed" style="margin-bottom:0.5rem;">📦 Shippo Shipping Calculator</div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem;">Calculate and compare real-time shipping rates using the Shippo API. Autocomplete origin and destination addresses, select package presets, and view options.</div>
+  <div class="section-hed" style="margin-bottom:0.5rem;">📦 Shipping Specs & Rate Predictor</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem;">Store package specs, compare live Shippo rates, highlight Canada Post options, and predict what to charge customers for website shipping.</div>
 
   <!-- API Key Status Row -->
   <div class="card" style="margin-bottom:1.5rem; padding: 1rem 1.4rem;">
@@ -1843,8 +1844,33 @@
           </div>
         </div>
 
+        <div class="shipping-predictor-settings">
+          <div class="form-group">
+            <label>Packaging / handling buffer (CAD)</label>
+            <input type="number" id="sp-handling" value="2.50" step="0.25" min="0">
+          </div>
+          <div class="form-group">
+            <label>Safety margin</label>
+            <select id="sp-margin">
+              <option value="0.10">10% — recommended</option>
+              <option value="0.00">0% — exact rate</option>
+              <option value="0.05">5%</option>
+              <option value="0.15">15%</option>
+              <option value="0.20">20%</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Preferred benchmark</label>
+            <select id="sp-benchmark">
+              <option value="canada_post">Canada Post if available</option>
+              <option value="cheapest">Cheapest carrier</option>
+              <option value="median">Median of all returned rates</option>
+            </select>
+          </div>
+        </div>
+
         <button class="btn gold" style="width:100%; margin-top:1.5rem; height:46px; font-size:14px;" onclick="calculateShippoRates()">
-          ⚡ Calculate Shipping Rates
+          ⚡ Calculate Rates & Predict Customer Charge
         </button>
       </div>
     </div>
@@ -1852,6 +1878,8 @@
     <!-- Results Side -->
     <div class="shipping-results-container">
       <div class="card" style="min-height:300px; height:100%; display:flex; flex-direction:column;">
+        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Customer Charge Prediction</div>
+        <div id="ship-prediction-card" class="shipping-prediction-card" style="display:none;"></div>
         <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Carrier Rates Comparison</div>
         <div id="ship-results-placeholder" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:2rem; color:var(--text3);">
           <div style="font-size:32px; margin-bottom:12px;">📦</div>
