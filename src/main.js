@@ -886,7 +886,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v18';
+const EXPECTED_SCRIPT_VERSION = 'v19';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -5553,6 +5553,10 @@ function renderOrders() {
     const priceWarn = priceMismatch
       ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
       : '';
+    const shippingPaid = Number(o.shippingPaid || 0);
+    const shippingBadge = shippingPaid > 0
+      ? `<span title="Customer shipping purchase">Shipping ${fmt(shippingPaid, listCur)}</span>`
+      : '';
     const bookLabel = o.bookId && BOOKS[o.bookId]
       ? `<span style="font-size:10px;background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:100px;padding:2px 8px;margin-right:6px;">${escapeHtml(BOOKS[o.bookId].title)}</span>`
       : '';
@@ -5569,7 +5573,7 @@ function renderOrders() {
         <span class="pill ${done ? 'gray' : 'gold'}">${done ? 'Applied' : 'New'}</span>
       </div>
       <div class="order-row order-card-bottom">
-        <span class="order-summary">${bookLabel}<span>Qty ${o.qty}</span><span>${fmt(o.price || listPrice, listCur)}</span>${priceWarn}</span>
+        <span class="order-summary">${bookLabel}<span>Qty ${o.qty}</span><span>${fmt(o.price || listPrice, listCur)}</span>${shippingBadge}${priceWarn}</span>
         <div class="order-actions">
           ${viewEmailBtn}
           ${!done ? `<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>` : '<span class="order-done">Done</span>'}
@@ -5610,7 +5614,8 @@ function applyOne(id, { deferRender = false } = {}) {
     shipName: o.shipName || o.customer || '', shipEmail: o.email || '',
     shipAddr1: o.shipAddr1 || '', shipAddr2: o.shipAddr2 || '',
     shipCity: o.shipCity || '', shipProvince: o.shipProvince || '',
-    shipPostal: o.shipPostal || '', shipCountry: o.shipCountry || 'Canada'
+    shipPostal: o.shipPostal || '', shipCountry: o.shipCountry || 'Canada',
+    shippingPaid: Number(o.shippingPaid || 0) || 0
   };
   // Deterministic id derived from the Big Cartel order number so the same
   // import on a different device produces the same id (no duplicate rows).
@@ -5626,6 +5631,9 @@ function applyOne(id, { deferRender = false } = {}) {
   mem.lastScan = new Date().toISOString();
   saveScanMemory(mem);
   syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel', sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBk) });
+  if (entry.shippingPaid > 0) {
+    syncToSheets(shippingPurchaseRowPayload(targetBk, getBookCurrencyCode(targetBk), entry));
+  }
   addLog('log-web', `✓ ${o.orderNum} (${targetBk.title}): -${o.qty} → ${targetState.stock} remaining`, 'ok');
   if (targetState.stock <= targetBk.threshold) addLog('log-web', `⚠ ${targetBk.title} below threshold!`, 'warn');
   saveState(targetBook);
@@ -5764,6 +5772,7 @@ async function fetchOrders() {
       orderNum,
       qty,
       price,
+      shippingPaid: parseFloat(o.shippingPaid ?? o.shipping ?? o.shippingAmount ?? 0) || 0,
       date: normalizedDate || today()
     };
   }).filter(o => o.orderNum);
@@ -10595,6 +10604,14 @@ function syncHistoryVoidDeletion(h, isVoided) {
       book: getBook().title,
       sheetsId: h.sheetsId
     });
+    if ((Number(h.shippingPaid || 0) || 0) > 0) {
+      syncToSheets({
+        action: 'delete',
+        type: 'shipping',
+        book: getBook().title,
+        sheetsId: h.sheetsId + '-shipping'
+      });
+    }
     return;
   }
   // Unvoid: re-sync the full entry (upsert will replace the row)
@@ -10622,6 +10639,9 @@ function syncHistoryVoidDeletion(h, isVoided) {
     enteredBy: h.enteredBy || '',
     status: 'OK'
   });
+  if ((Number(h.shippingPaid || 0) || 0) > 0) {
+    syncToSheets(shippingPurchaseRowPayload(book, nativeCur, h));
+  }
 }
 
 function voidEntry() {
@@ -12040,6 +12060,28 @@ function orderRowPayload(book, nativeCur, h) {
   };
 }
 
+function shippingPurchaseRowPayload(book, nativeCur, h) {
+  const amount = Number(h.shippingPaid || 0) || 0;
+  return {
+    type:'shipping',
+    book:book.title,
+    date:h.date,
+    num:h.num,
+    chan:'Website shipping',
+    qty:'',
+    price:'',
+    total:amount,
+    stockAfter:h.after,
+    notes:`Customer shipping paid${h.num ? ` on ${h.num}` : ''}`,
+    sheetsId: (h.sheetsId || `ship-${String(h.num || '').replace(/^#/, '').replace(/[^A-Za-z0-9-]/g, '')}`) + '-shipping',
+    currency: nativeCur,
+    paymentCurrency: nativeCur,
+    paymentAmount: amount,
+    convertedTotal: cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative: amount }),
+    status: 'OK'
+  };
+}
+
 // Push every live record to Sheets.
 //   • rebuild:true  → clear the managed sheets first (removes duplicates, stale
 //     VOID rows and blank-CAD legacy rows), then re-add a clean copy. Requires a
@@ -12092,10 +12134,14 @@ async function pushAllToSheets(opts = {}) {
       if (h.voided) {
         // A reset empties the sheet, so only the in-place path needs an explicit
         // delete to clear a previously-synced row.
-        if (!willReset && h.sheetsId) deletions.push({ action:'delete', type:'order', book:book.title, sheetsId:h.sheetsId });
+        if (!willReset && h.sheetsId) {
+          deletions.push({ action:'delete', type:'order', book:book.title, sheetsId:h.sheetsId });
+          if ((Number(h.shippingPaid || 0) || 0) > 0) deletions.push({ action:'delete', type:'shipping', book:book.title, sheetsId:h.sheetsId + '-shipping' });
+        }
         return;
       }
       toSync.push(orderRowPayload(book, nativeCur, h));
+      if ((Number(h.shippingPaid || 0) || 0) > 0) toSync.push(shippingPurchaseRowPayload(book, nativeCur, h));
     });
     (s.ledger || []).forEach(e => {
       const ledgerCur = normalizeCurrencyCode(book.currency, 'CAD');
@@ -12220,7 +12266,7 @@ async function loadGasCode(){
   if(_gasCodeLoaded) return;
   const el=$('gas-code'); if(!el) return;
   try{
-    const res=await fetch(`${import.meta.env.BASE_URL}gas-code.txt`, {cache:'no-cache'});
+    const res=await fetch(`${import.meta.env.BASE_URL}gas-code.txt?v=${encodeURIComponent(EXPECTED_SCRIPT_VERSION)}`, {cache:'no-store'});
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     el.textContent=await res.text();
     _gasCodeLoaded=true;
