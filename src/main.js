@@ -21918,9 +21918,18 @@ async function fetchRecentChanges() {
 }
 
 async function showWhatsNew(event) {
-  if (!window.IS_PUBLISHER || isAuthor()) return;
+  console.log('[showWhatsNew] Invoked. IS_PUBLISHER:', window.IS_PUBLISHER, 'isAuthor():', isAuthor());
+  if (!window.IS_PUBLISHER || isAuthor()) {
+    showToast(`⚠️ Role verification failed (Publisher: ${!!window.IS_PUBLISHER}, Author: ${isAuthor()})`, 'warn');
+    return;
+  }
   if (event) event.stopPropagation();
-  openM('whats-new');
+  try {
+    openM('whats-new');
+  } catch (err) {
+    showToast(`❌ Failed to open Whats New: ${err.message}`, 'err');
+    console.error('Failed to open Whats New modal:', err);
+  }
   
   const container = $('whats-new-list');
   if (!container) return;
@@ -21939,33 +21948,38 @@ async function showWhatsNew(event) {
   const stamp = $('pub-updated');
   if (stamp) stamp.classList.remove('has-unseen-update');
 
-  const changes = await fetchRecentChanges();
-  if (!changes || !changes.length) {
-    container.innerHTML = `
-      <div style="font-size:12px;color:var(--text2);line-height:1.6;padding:10px 0;">
-        Could not load live changes from GitHub. Below is the static version history:
-        <ul style="margin:12px 0 0 20px;padding:0;display:flex;flex-direction:column;gap:8px;">
-          <li><strong>v3.1.0</strong>: Added 3D book cover overview badges and ambient dynamic color shadows.</li>
-          <li><strong>v3.0.0</strong>: Premium editorial color theme, dynamic contrast safety validations, Sage/Terracotta financial indicators, and SVG gradients.</li>
-          <li><strong>v2.8.0</strong>: Real-time modal accent color picker previews.</li>
-          <li><strong>v2.5.0</strong>: Google Sheets Apps Script webhook sync integration.</li>
-        </ul>
-      </div>`;
-    return;
-  }
+  try {
+    const changes = await fetchRecentChanges();
+    if (!changes || !changes.length) {
+      container.innerHTML = `
+        <div style="font-size:12px;color:var(--text2);line-height:1.6;padding:10px 0;">
+          Could not load live changes from GitHub. Below is the static version history:
+          <ul style="margin:12px 0 0 20px;padding:0;display:flex;flex-direction:column;gap:8px;">
+            <li><strong>v3.1.0</strong>: Added 3D book cover overview badges and ambient dynamic color shadows.</li>
+            <li><strong>v3.0.0</strong>: Premium editorial color theme, dynamic contrast safety validations, Sage/Terracotta financial indicators, and SVG gradients.</li>
+            <li><strong>v2.8.0</strong>: Real-time modal accent color picker previews.</li>
+            <li><strong>v2.5.0</strong>: Google Sheets Apps Script webhook sync integration.</li>
+          </ul>
+        </div>`;
+      return;
+    }
 
-  container.innerHTML = changes.map(c => {
-    const dateStr = new Date(c.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-    const cleanMsg = escapeHtml(c.message);
-    return `
-      <div style="padding:10px;border-radius:6px;background:var(--cream);border:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold-text);font-weight:600;">sha: ${c.sha}</span>
-          <span style="font-size:10px;color:var(--text3);">${dateStr}</span>
-        </div>
-        <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.45;font-family:'Syne',sans-serif;font-weight:500;">${cleanMsg}</div>
-      </div>`;
-  }).join('');
+    container.innerHTML = changes.map(c => {
+      const dateStr = new Date(c.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+      const cleanMsg = escapeHtml(c.message);
+      return `
+        <div style="padding:10px;border-radius:6px;background:var(--cream);border:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold-text);font-weight:600;">sha: ${c.sha}</span>
+            <span style="font-size:10px;color:var(--text3);">${dateStr}</span>
+          </div>
+          <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.45;font-family:'Syne',sans-serif;font-weight:500;">${cleanMsg}</div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    showToast(`❌ Error displaying changes: ${err.message}`, 'err');
+    console.error('Error in showWhatsNew mapping:', err);
+  }
 }
 window.showWhatsNew = showWhatsNew;
 
