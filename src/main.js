@@ -910,7 +910,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v18';
+const EXPECTED_SCRIPT_VERSION = 'v19';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -12298,7 +12298,7 @@ async function loadGasCode(){
   if(_gasCodeLoaded) return;
   const el=$('gas-code'); if(!el) return;
   try{
-    const res=await fetch(`${import.meta.env.BASE_URL}gas-code.txt`, {cache:'no-cache'});
+    const res=await fetch(`${import.meta.env.BASE_URL}gas-code.txt?v=${encodeURIComponent(EXPECTED_SCRIPT_VERSION)}`, {cache:'no-store'});
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     el.textContent=await res.text();
     _gasCodeLoaded=true;

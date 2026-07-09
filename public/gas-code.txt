@@ -1,6 +1,6 @@
-/* Lyricalmyrical Inventory — Unified Backend (v12)
+/* Lyricalmyrical Inventory — Unified Backend (v19)
  * Features:
- *  1. Gmail scanner for Big Cartel order emails (unchanged behavior)
+ *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
  *     - Per-book tabs + unified "Overview" tab
  *     - Void/delete by eventId (removes the matching row); any VOID/CANCEL
@@ -64,6 +64,10 @@
  *      Overview summary once per batch instead of once per row. This removes
  *      hundreds of Apps Script round-trips during Sync all data / Repair legacy
  *      rows. Bump flags v17-and-older as outdated so the publisher redeploys.
+ *  17. v19: Big Cartel Gmail scanning captures customer-paid shipping/postage
+ *      from explicit Shipping/Postage rows or named shipping methods by using
+ *      Total - Subtotal - Tax. Bump flags v18-and-older as outdated so the
+ *      publisher redeploys before scanning website orders.
  */
 
 const HEADERS = [
@@ -109,9 +113,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v18',
-    scriptVersion: 'v18',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true },
+    service: 'lyrical-sheets-webhook-v19',
+    scriptVersion: 'v19',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
