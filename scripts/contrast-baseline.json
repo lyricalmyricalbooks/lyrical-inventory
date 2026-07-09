@@ -111,6 +111,13 @@
       "count": 55
     },
     {
+      "key": "#8a8078::#f7f2ea",
+      "textColor": "var(--text3)",
+      "bgColor": "rgba(255,255,255,0.03)",
+      "ratio": 3.47,
+      "count": 1
+    },
+    {
       "key": "#8a8078::#fafafa",
       "textColor": "var(--text3)",
       "bgColor": "(inherited)",

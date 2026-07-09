@@ -403,6 +403,7 @@
   <button class="tab-btn" onclick="switchTab('expenses')">Expenses</button>
   <button class="tab-btn" id="webanalytics-tab-btn" onclick="switchTab('webanalytics')">Web Analytics</button>
   <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;">📲 My QR Code</button>
+  <button class="tab-btn" id="shipping-tab-btn" onclick="switchTab('shipping')">📦 Shipping Rates</button>
   <span class="tab-author" id="tab-author"></span>
   <span class="tab-updated" id="tab-updated"></span>
 </nav>
@@ -1694,6 +1695,185 @@
   <div id="tc-ledger-pagination"></div>
 </div>
 
+<!-- SHIPPING RATES CALCULATOR -->
+<div class="tab-panel" id="tab-shipping" style="display:none;">
+  <div class="section-hed" style="margin-bottom:0.5rem;">📦 Shippo Shipping Calculator</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem;">Calculate and compare real-time shipping rates using the Shippo API. Autocomplete origin and destination addresses, select package presets, and view options.</div>
+
+  <!-- API Key Status Row -->
+  <div class="card" style="margin-bottom:1.5rem; padding: 1rem 1.4rem;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div id="ship-key-indicator" style="width:10px; height:10px; border-radius:50%; background:var(--red);"></div>
+        <span style="font-size:13px; font-weight:600; color:var(--text2);" id="ship-key-status-text">Shippo API Key Required</span>
+      </div>
+      <div id="ship-key-setup-group" style="display:flex; gap:8px; align-items:center;">
+        <input type="password" id="ship-api-key-input" placeholder="shippo_live_..." style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--cream); width:280px; font-family:'DM Mono',monospace; outline:none;">
+        <button class="btn gold sm" onclick="saveShippoApiKey()">Save Key</button>
+      </div>
+      <div id="ship-key-active-group" style="display:none; gap:8px; align-items:center;">
+        <span style="font-size:11px; font-family:'DM Mono',monospace; color:var(--text3);" id="ship-key-masked">••••••••••••••••</span>
+        <button class="btn sm" onclick="editShippoApiKey()">Change Key</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="shipping-grid">
+    <!-- Form Side -->
+    <div class="shipping-form-container">
+      <!-- Prefill presets -->
+      <div class="card" style="margin-bottom:1.25rem;">
+        <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">Quick Pre-fills</div>
+        <div class="g2">
+          <div class="form-group">
+            <label>Load Destination From</label>
+            <select id="ship-prefill-dest" onchange="onShippoPreFillDestChange()">
+              <option value="">— Select an address —</option>
+              <optgroup label="Consignment Stores" id="ship-prefill-stores-group"></optgroup>
+              <optgroup label="Recent Orders" id="ship-prefill-orders-group"></optgroup>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Load Package From</label>
+            <select id="ship-preset-book" onchange="onShippoBookPresetChange()">
+              <option value="">— Select book preset —</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="g2" style="align-items: start; margin-bottom: 1.25rem;">
+        <!-- Origin Card -->
+        <div class="card" style="margin-bottom:0; height:100%;">
+          <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+            <span>Origin (From)</span>
+            <label style="display:inline-flex; align-items:center; gap:4px; font-size:10px; cursor:pointer; text-transform:none; letter-spacing:0; margin-bottom:0; color:var(--text3);">
+              <input type="checkbox" id="ship-save-origin" checked style="width:auto; margin:0;"> Save default
+            </label>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Sender Name</label><input type="text" id="sf-name" placeholder="Lyricalmyrical Books"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="sf-company" placeholder="Optional"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="sf-street1" placeholder="123 Bookish Way"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Apt/Suite</label><input type="text" id="sf-street2" placeholder="Optional"></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="form-group" style="margin-bottom:8px;"><label>City</label><input type="text" id="sf-city" placeholder="Toronto"></div>
+            <div class="form-group" style="margin-bottom:8px;"><label>Prov / State</label><input type="text" id="sf-state" placeholder="ON"></div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="form-group" style="margin-bottom:8px;"><label>Postal / Zip</label><input type="text" id="sf-zip" placeholder="M4B 1B3"></div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label>Country</label>
+              <select id="sf-country">
+                <option value="CA">Canada</option>
+                <option value="US">United States</option>
+                <option value="GB">United Kingdom</option>
+                <option value="IT">Italy</option>
+                <option value="DE">Germany</option>
+                <option value="FR">France</option>
+                <option value="AU">Australia</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Destination Card -->
+        <div class="card" style="margin-bottom:0; height:100%;">
+          <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Destination (To)</div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Recipient Name</label><input type="text" id="st-name" placeholder="John Doe"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="st-company" placeholder="Optional"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Street Address</label><input type="text" id="st-street1" placeholder="456 Reading Ave"></div>
+          <div class="form-group" style="margin-bottom:8px;"><label>Apt/Suite</label><input type="text" id="st-street2" placeholder="Optional"></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="form-group" style="margin-bottom:8px;"><label>City</label><input type="text" id="st-city" placeholder="New York"></div>
+            <div class="form-group" style="margin-bottom:8px;"><label>State / Prov</label><input type="text" id="st-state" placeholder="NY"></div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="form-group" style="margin-bottom:8px;"><label>Zip / Postal</label><input type="text" id="st-zip" placeholder="10001"></div>
+            <div class="form-group" style="margin-bottom:8px;">
+              <label>Country</label>
+              <select id="st-country">
+                <option value="US">United States</option>
+                <option value="CA">Canada</option>
+                <option value="GB">United Kingdom</option>
+                <option value="IT">Italy</option>
+                <option value="DE">Germany</option>
+                <option value="FR">France</option>
+                <option value="AU">Australia</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parcel Specs Card -->
+      <div class="card" style="margin-top:1.25rem;">
+        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+          <span>Parcel Specifications</span>
+          <span style="font-size:10px; font-weight:400; text-transform:none; color:var(--text3);">Auto-scales height &amp; weight with quantity</span>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
+          <div class="form-group"><label>Length</label><input type="number" id="sp-length" value="10" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
+          <div class="form-group"><label>Width</label><input type="number" id="sp-width" value="8" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
+          <div class="form-group"><label>Height</label><input type="number" id="sp-height" value="1" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
+          <div class="form-group">
+            <label>Dim. Unit</label>
+            <select id="sp-dim-unit" onchange="updateShippoBaseSpecsFromInputs()">
+              <option value="in">Inches (in)</option>
+              <option value="cm">Centimeters (cm)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1.2fr 1fr; gap:12px; margin-top:12px;">
+          <div class="form-group">
+            <label>Quantity (Copies)</label>
+            <input type="number" id="sp-qty" value="1" min="1" oninput="onShippoQuantityChange()">
+          </div>
+          <div class="form-group">
+            <label>Total Weight</label>
+            <input type="number" id="sp-weight" value="1.2" step="0.01" oninput="updateShippoBaseSpecsFromInputs()">
+          </div>
+          <div class="form-group">
+            <label>Weight Unit</label>
+            <select id="sp-weight-unit" onchange="updateShippoBaseSpecsFromInputs()">
+              <option value="lb">Pounds (lb)</option>
+              <option value="oz">Ounces (oz)</option>
+              <option value="kg">Kilograms (kg)</option>
+              <option value="g">Grams (g)</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn gold" style="width:100%; margin-top:1.5rem; height:46px; font-size:14px;" onclick="calculateShippoRates()">
+          ⚡ Calculate Shipping Rates
+        </button>
+      </div>
+    </div>
+
+    <!-- Results Side -->
+    <div class="shipping-results-container">
+      <div class="card" style="min-height:300px; height:100%; display:flex; flex-direction:column;">
+        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Carrier Rates Comparison</div>
+        <div id="ship-results-placeholder" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:2rem; color:var(--text3);">
+          <div style="font-size:32px; margin-bottom:12px;">📦</div>
+          <div>Enter origin, destination, and package specs, then click <strong>Calculate Shipping Rates</strong>.</div>
+        </div>
+        
+        <!-- Loading State -->
+        <div id="ship-results-loading" style="display:none; flex:1; flex-direction:column; gap:12px; padding:12px 0;">
+          <div class="skeleton-line" style="height:60px; border-radius:var(--r2);"></div>
+          <div class="skeleton-line" style="height:60px; border-radius:var(--r2);"></div>
+          <div class="skeleton-line" style="height:60px; border-radius:var(--r2);"></div>
+        </div>
+
+        <!-- Real Results container -->
+        <div id="ship-results-list" style="display:none; flex:1; flex-direction:column; gap:10px; overflow-y:auto; max-height:600px;">
+          <!-- Injected via JavaScript -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- EVENT POS -->
 <div class="tab-panel" id="tab-pos" style="display:none;">
   <div class="row-between" style="margin-bottom:1.25rem;align-items:flex-start;gap:12px;">
@@ -2704,9 +2884,35 @@
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
         <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;">
         <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
-      </div>
       <div style="font-size:11px;color:var(--text3);line-height:1.5;">
         Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a>, or click <strong>Generate SKU link</strong> to create one tagged with this book's SKU.
+      </div>
+    </div>
+
+    <!-- Default Shipping Specs (for Shippo Calculator) -->
+    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-top:16px; margin-bottom:8px; border-top:1px solid var(--border); padding-top:12px;">Default Shipping Specs (for Shippo Calculator)</div>
+    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:12px;">
+      <div class="form-group"><label>Length</label><input id="nb-ship-length" type="number" placeholder="Length" step="0.1"></div>
+      <div class="form-group"><label>Width</label><input id="nb-ship-width" type="number" placeholder="Width" step="0.1"></div>
+      <div class="form-group"><label>Height</label><input id="nb-ship-height" type="number" placeholder="Height" step="0.1"></div>
+      <div class="form-group">
+        <label>Dim. Unit</label>
+        <select id="nb-ship-dim-unit">
+          <option value="in">Inches (in)</option>
+          <option value="cm">Centimeters (cm)</option>
+        </select>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label>Weight</label><input id="nb-ship-weight" type="number" placeholder="Weight" step="0.01"></div>
+      <div class="form-group">
+        <label>Weight Unit</label>
+        <select id="nb-ship-weight-unit">
+          <option value="lb">Pounds (lb)</option>
+          <option value="oz">Ounces (oz)</option>
+          <option value="kg">Kilograms (kg)</option>
+          <option value="g">Grams (g)</option>
+        </select>
       </div>
     </div>
   </div>

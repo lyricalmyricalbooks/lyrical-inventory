@@ -4486,4 +4486,117 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   }
 }
 
+/* SHIPPING CALCULATOR TABS */
+.shipping-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+  margin-top: 1rem;
+}
+@media(max-width: 900px) {
+  .shipping-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.shipping-form-container {
+  display: flex;
+  flex-direction: column;
+}
+.shipping-results-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.rate-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 12px 16px;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.rate-card:hover {
+  border-color: var(--gold);
+  transform: translateY(-1px);
+}
+.rate-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rate-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border2);
+  padding: 4px;
+  flex-shrink: 0;
+}
+.rate-logo img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.rate-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rate-carrier {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+.rate-service {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.rate-transit {
+  font-size: 11px;
+  color: var(--text3);
+}
+.rate-price-area {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.rate-price {
+  font-family: 'DM Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--green);
+}
+.rate-badges {
+  display: flex;
+  gap: 4px;
+}
+.rate-badge {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.rate-badge.cheapest {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.rate-badge.fastest {
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+
 

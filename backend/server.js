@@ -504,6 +504,12 @@ function normalizeBook(raw) {
     photos: Array.isArray(raw.photos) ? raw.photos.slice(0, 10) : [],
     acceptedMethods: Array.isArray(raw.acceptedMethods) ? raw.acceptedMethods : ['stripe', 'paypal', 'interac', 'cash_card'],
     useGlobalMethods: raw.useGlobalMethods !== undefined ? Boolean(raw.useGlobalMethods) : true,
+    shipLength: raw.shipLength !== undefined && raw.shipLength !== null ? num(raw.shipLength) : null,
+    shipWidth: raw.shipWidth !== undefined && raw.shipWidth !== null ? num(raw.shipWidth) : null,
+    shipHeight: raw.shipHeight !== undefined && raw.shipHeight !== null ? num(raw.shipHeight) : null,
+    shipDimUnit: str(raw.shipDimUnit || 'in'),
+    shipWeight: raw.shipWeight !== undefined && raw.shipWeight !== null ? num(raw.shipWeight) : null,
+    shipWeightUnit: str(raw.shipWeightUnit || 'lb'),
     createdAt: raw.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

@@ -221,6 +221,12 @@ function resetBookForm() {
   if ($('nb-author-grat')) $('nb-author-grat').value = '0';
   $('nb-paylink').value = '';
   if ($('nb-payment-link')) $('nb-payment-link').value = 'https://paypal.me/lyricalmyricalbooks';
+  $('nb-ship-length').value = '';
+  $('nb-ship-width').value = '';
+  $('nb-ship-height').value = '';
+  $('nb-ship-dim-unit').value = 'in';
+  $('nb-ship-weight').value = '';
+  $('nb-ship-weight-unit').value = 'lb';
   switchBookModalTab('general');
 }
 
@@ -252,6 +258,12 @@ function openEditBookModal(id) {
   if ($('nb-author-grat')) $('nb-author-grat').value = book.authorGratuity ?? 0;
   $('nb-paylink').value = book.stripeLink || '';
   if ($('nb-payment-link')) $('nb-payment-link').value = book.paymentLink || 'https://paypal.me/lyricalmyricalbooks';
+  $('nb-ship-length').value = book.shipLength ?? '';
+  $('nb-ship-width').value = book.shipWidth ?? '';
+  $('nb-ship-height').value = book.shipHeight ?? '';
+  $('nb-ship-dim-unit').value = book.shipDimUnit || 'in';
+  $('nb-ship-weight').value = book.shipWeight ?? '';
+  $('nb-ship-weight-unit').value = book.shipWeightUnit || 'lb';
   switchBookModalTab('general');
   updateModalAccentPreview($('nb-accent'));
   openM('add-book');
@@ -334,7 +346,13 @@ async function saveBookFromModal() {
     authorEmail: ($('nb-pw').value || '').toLowerCase().trim() || currentBook.authorEmail || '',
     profitTiers: currentBook.profitTiers || [],
     acceptedMethods: currentBook.acceptedMethods || ['stripe', 'paypal', 'interac', 'cash_card'],
-    useGlobalMethods: currentBook.useGlobalMethods ?? true
+    useGlobalMethods: currentBook.useGlobalMethods ?? true,
+    shipLength: parseFloat($('nb-ship-length').value) || null,
+    shipWidth: parseFloat($('nb-ship-width').value) || null,
+    shipHeight: parseFloat($('nb-ship-height').value) || null,
+    shipDimUnit: $('nb-ship-dim-unit').value || 'in',
+    shipWeight: parseFloat($('nb-ship-weight').value) || null,
+    shipWeightUnit: $('nb-ship-weight-unit').value || 'lb'
   };
   
   // Keep the first break-even tier aligned when it still represents production-cost recovery.
@@ -1568,6 +1586,7 @@ function syncRoleUI() {
   const opencallTabBtn = $('opencall-tab-btn');
   const webanalyticsTabBtn = $('webanalytics-tab-btn');
   const sidebarWebanalyticsBtn = $('sidebar-webanalytics-btn');
+  const shippingTabBtn = $('shipping-tab-btn');
 
   if (reconcileTabBtn) reconcileTabBtn.style.display = authorNow ? 'none' : '';
   if (opencallTabBtn) opencallTabBtn.style.display = authorNow ? 'none' : '';
@@ -1581,6 +1600,7 @@ function syncRoleUI() {
   if (qrcodesTabBtn) qrcodesTabBtn.style.display = authorNow ? 'none' : '';
   if (webanalyticsTabBtn) webanalyticsTabBtn.style.display = authorNow ? 'none' : '';
   if (sidebarWebanalyticsBtn) sidebarWebanalyticsBtn.style.display = authorNow ? 'none' : '';
+  if (shippingTabBtn) shippingTabBtn.style.display = authorNow ? 'none' : '';
   // myqr tab is AUTHOR-only
   if (myqrTabBtn) myqrTabBtn.style.display = authorNow ? '' : 'none';
 
@@ -2013,17 +2033,17 @@ const SHELL_TAB_LABELS = {
   consignment:'Consignment', history:'History', expenses:'Expenses',
   pos:'Event POS', taxcenter:'Tax Centre', reconcile:'Payments', qrcodes:'QR Codes',
   customers:'Customers', opencall:'Open Call', sheets:'Sheets', backups:'Backups',
-  financials:'Financials', myqr:'My QR Code', webanalytics:'Web Analytics'
+  financials:'Financials', myqr:'My QR Code', webanalytics:'Web Analytics', shipping:'Shipping'
 };
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
   
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
-  // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos
-  const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','customers','financials','taxcenter','sheets','backups','qrcodes','myqr','pos','webanalytics'];
+  // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos, webanalytics, shipping
+  const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','customers','financials','taxcenter','sheets','backups','qrcodes','myqr','pos','webanalytics','shipping'];
 
   // Selecting a destination closes any open header category menu (and the
   // sidebar footer account menu, if open).
@@ -2082,6 +2102,7 @@ function switchTab(name) {
   if(name==='myqr') renderAuthorQRPage();
   if(name==='pos') { renderPOS(); renderPOSFxStatus(); }
   if(name==='webanalytics') renderWebAnalytics();
+  if(name==='shipping') { initShippingTab(); }
 }
 
 function updateHeader() {
@@ -22121,6 +22142,565 @@ document.addEventListener('DOMContentLoaded', () => {
     pbAccent.addEventListener('input', () => updateModalAccentPreview(pbAccent));
   }
 });
+
+// --- SHIPPO SHIPPING CALCULATOR AND QUANTITY SCALING ---
+let shippoBaseSpecs = { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+
+function normalizeCountryCode(code) {
+  if (!code) return 'US';
+  const c = code.trim().toLowerCase();
+  if (c === 'canada' || c === 'ca' || c === 'can') return 'CA';
+  if (c === 'united states' || c === 'usa' || c === 'us' || c === 'united states of america') return 'US';
+  if (c === 'united kingdom' || c === 'uk' || c === 'gb' || c === 'great britain') return 'GB';
+  if (c === 'italy' || c === 'it' || c === 'italia') return 'IT';
+  if (c === 'germany' || c === 'de' || c === 'deutschland') return 'DE';
+  if (c === 'france' || c === 'fr') return 'FR';
+  if (c === 'australia' || c === 'au') return 'AU';
+  return code.toUpperCase().slice(0, 2);
+}
+
+function getAllStores() {
+  const stores = [];
+  const seenIds = new Set();
+  Object.values(states).forEach(s => {
+    if (s && Array.isArray(s.stores)) {
+      s.stores.forEach(st => {
+        if (!seenIds.has(st.id)) {
+          seenIds.add(st.id);
+          stores.push(st);
+        }
+      });
+    }
+  });
+  return stores;
+}
+
+function getBookPresetSpecs(book) {
+  if (!book) return { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+  
+  // Prioritize custom specifications saved on the book
+  if (book.shipLength && book.shipWidth && book.shipHeight && book.shipWeight) {
+    return {
+      length: book.shipLength,
+      width: book.shipWidth,
+      height: book.shipHeight,
+      dim_unit: book.shipDimUnit || 'in',
+      weight: book.shipWeight,
+      weight_unit: book.shipWeightUnit || 'lb'
+    };
+  }
+
+  const title = (book.title || '').toLowerCase();
+  
+  if (title.includes('altrove')) {
+    return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.1, weight_unit: 'lb' };
+  } else if (title.includes('hound')) {
+    return { length: 12, width: 9, height: 1.2, dim_unit: 'in', weight: 2.2, weight_unit: 'lb' };
+  } else if (title.includes('archaeology')) {
+    return { length: 9, width: 7, height: 0.6, dim_unit: 'in', weight: 0.9, weight_unit: 'lb' };
+  } else if (title.includes('sistema')) {
+    return { length: 8, width: 6, height: 0.5, dim_unit: 'in', weight: 0.7, weight_unit: 'lb' };
+  } else if (title.includes('nobody')) {
+    return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.0, weight_unit: 'lb' };
+  } else if (title.includes('collective')) {
+    return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+  }
+  return { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+}
+
+function initShippingTab() {
+  const shippoKey = TAX_CENTER.settings?.shippoKey || '';
+  const indicator = $('ship-key-indicator');
+  const statusText = $('ship-key-status-text');
+  const setupGroup = $('ship-key-setup-group');
+  const activeGroup = $('ship-key-active-group');
+  const maskedEl = $('ship-key-masked');
+
+  if (shippoKey) {
+    if (indicator) indicator.style.background = 'var(--green)';
+    if (statusText) statusText.textContent = 'Shippo API Key Configured';
+    if (setupGroup) setupGroup.style.display = 'none';
+    if (activeGroup) activeGroup.style.display = 'flex';
+    if (maskedEl) {
+      const visible = shippoKey.length > 8 ? shippoKey.slice(0, 4) + '...' + shippoKey.slice(-4) : '••••••••';
+      maskedEl.textContent = visible;
+    }
+  } else {
+    if (indicator) indicator.style.background = 'var(--red)';
+    if (statusText) statusText.textContent = 'Shippo API Key Required';
+    if (setupGroup) setupGroup.style.display = 'flex';
+    if (activeGroup) activeGroup.style.display = 'none';
+  }
+
+  // Load Saved Origin from localStorage
+  const savedOrigin = {
+    name: localStorage.getItem('lm-shippo-origin-name') || '',
+    company: localStorage.getItem('lm-shippo-origin-company') || '',
+    street1: localStorage.getItem('lm-shippo-origin-street1') || '',
+    street2: localStorage.getItem('lm-shippo-origin-street2') || '',
+    city: localStorage.getItem('lm-shippo-origin-city') || '',
+    state: localStorage.getItem('lm-shippo-origin-state') || '',
+    zip: localStorage.getItem('lm-shippo-origin-zip') || '',
+    country: localStorage.getItem('lm-shippo-origin-country') || 'CA'
+  };
+
+  $('sf-name').value = savedOrigin.name || '';
+  $('sf-company').value = savedOrigin.company || '';
+  $('sf-street1').value = savedOrigin.street1 || '';
+  $('sf-street2').value = savedOrigin.street2 || '';
+  $('sf-city').value = savedOrigin.city || '';
+  $('sf-state').value = savedOrigin.state || '';
+  $('sf-zip').value = savedOrigin.zip || '';
+  $('sf-country').value = savedOrigin.country || 'CA';
+
+  // Populate pre-fill dropdowns
+  const storesGroup = $('ship-prefill-stores-group');
+  const ordersGroup = $('ship-prefill-orders-group');
+
+  if (storesGroup) {
+    storesGroup.innerHTML = '';
+    const stores = getAllStores();
+    if (stores.length === 0) {
+      const opt = document.createElement('option');
+      opt.disabled = true;
+      opt.textContent = 'No consignment stores found';
+      storesGroup.appendChild(opt);
+    } else {
+      stores.forEach(st => {
+        const addrObj = {
+          name: st.contact || st.name,
+          company: st.name,
+          street1: st.address || '',
+          street2: '',
+          city: st.city || '',
+          state: st.region || '',
+          zip: st.postal || '',
+          country: normalizeCountryCode(st.country || 'CA')
+        };
+        const opt = document.createElement('option');
+        opt.value = JSON.stringify(addrObj);
+        opt.textContent = `${st.name} (${st.city || ''}, ${st.country || ''})`;
+        storesGroup.appendChild(opt);
+      });
+    }
+  }
+
+  if (ordersGroup) {
+    ordersGroup.innerHTML = '';
+    const orders = getRecentShippingOrders();
+    if (orders.length === 0) {
+      const opt = document.createElement('option');
+      opt.disabled = true;
+      opt.textContent = 'No recent website orders found';
+      ordersGroup.appendChild(opt);
+    } else {
+      orders.slice(0, 20).forEach(h => {
+        const addrObj = {
+          name: h.shipName,
+          company: '',
+          street1: h.shipAddr1,
+          street2: h.shipAddr2 || '',
+          city: h.shipCity,
+          state: h.shipProvince,
+          zip: h.shipPostal,
+          country: normalizeCountryCode(h.shipCountry || 'CA')
+        };
+        const opt = document.createElement('option');
+        opt.value = JSON.stringify(addrObj);
+        opt.textContent = `${h.shipName} (${h.shipCity || ''}, ${h.shipCountry || ''}) - ${h.date || ''}`;
+        ordersGroup.appendChild(opt);
+      });
+    }
+  }
+
+  // Populate book preset dropdown
+  const presetSelect = $('ship-preset-book');
+  if (presetSelect) {
+    presetSelect.innerHTML = '<option value="">— Select book preset —</option>';
+    BOOK_LIST.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      opt.textContent = b.title;
+      presetSelect.appendChild(opt);
+    });
+  }
+
+  // Reset quantity and load base specifications from current inputs
+  const qtyInput = $('sp-qty');
+  if (qtyInput) qtyInput.value = '1';
+  shippoBaseSpecs = {
+    length: parseFloat($('sp-length').value) || 10,
+    width: parseFloat($('sp-width').value) || 8,
+    height: parseFloat($('sp-height').value) || 1,
+    dim_unit: $('sp-dim-unit').value || 'in',
+    weight: parseFloat($('sp-weight').value) || 1.2,
+    weight_unit: $('sp-weight-unit').value || 'lb'
+  };
+}
+
+function getRecentShippingOrders() {
+  const orders = [];
+  const seen = new Set();
+  Object.values(states).forEach(s => {
+    if (s && Array.isArray(s.hist)) {
+      s.hist.forEach(h => {
+        if (h && h.shipName && h.shipAddr1 && !h.voided) {
+          const key = `${h.shipName.trim()}|${h.shipAddr1.trim()}`.toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            orders.push(h);
+          }
+        }
+      });
+    }
+  });
+  orders.sort((a, b) => {
+    const da = a.date ? new Date(a.date) : new Date(0);
+    const db = b.date ? new Date(b.date) : new Date(0);
+    return db - da;
+  });
+  return orders;
+}
+
+function saveShippoApiKey() {
+  const keyInput = $('ship-api-key-input');
+  if (!keyInput) return;
+  const token = keyInput.value.trim();
+  if (!token) {
+    showToast('⚠️ Enter a valid Shippo token', 'warn');
+    return;
+  }
+  
+  if (!TAX_CENTER.settings) {
+    TAX_CENTER.settings = { baseCurrency: 'CAD', geminiKey: '' };
+  }
+  TAX_CENTER.settings.shippoKey = token;
+  
+  saveTaxCenter()
+    .then(() => {
+      showToast('✓ Shippo API key saved');
+      keyInput.value = '';
+      initShippingTab();
+      // Sync to Tax Center UI if present
+      const tcKeyEl = $('tc-shippo-key');
+      if (tcKeyEl) tcKeyEl.value = token;
+    })
+    .catch(e => {
+      console.error(e);
+      showToast('❌ Failed to save API key', 'err');
+    });
+}
+
+function editShippoApiKey() {
+  const setupGroup = $('ship-key-setup-group');
+  const activeGroup = $('ship-key-active-group');
+  const keyInput = $('ship-api-key-input');
+  
+  if (setupGroup) setupGroup.style.display = 'flex';
+  if (activeGroup) activeGroup.style.display = 'none';
+  if (keyInput) {
+    keyInput.value = TAX_CENTER.settings?.shippoKey || '';
+    keyInput.focus();
+  }
+}
+
+function onShippoPreFillDestChange() {
+  const select = $('ship-prefill-dest');
+  if (!select || !select.value) return;
+  
+  try {
+    const addr = JSON.parse(select.value);
+    $('st-name').value = addr.name || '';
+    $('st-company').value = addr.company || '';
+    $('st-street1').value = addr.street1 || '';
+    $('st-street2').value = addr.street2 || '';
+    $('st-city').value = addr.city || '';
+    $('st-state').value = addr.state || '';
+    $('st-zip').value = addr.zip || '';
+    $('st-country').value = addr.country || 'US';
+    showToast('✓ Destination populated');
+  } catch (e) {
+    console.error('Failed to parse pre-fill address', e);
+  }
+}
+
+function onShippoBookPresetChange() {
+  const select = $('ship-preset-book');
+  if (!select || !select.value) return;
+  
+  const book = BOOKS[select.value];
+  if (!book) return;
+  
+  const specs = getBookPresetSpecs(book);
+  
+  // Set quantity back to 1
+  const qtyInput = $('sp-qty');
+  if (qtyInput) qtyInput.value = '1';
+  
+  // Update inputs
+  $('sp-length').value = specs.length;
+  $('sp-width').value = specs.width;
+  $('sp-height').value = specs.height;
+  $('sp-dim-unit').value = specs.dim_unit;
+  $('sp-weight').value = specs.weight;
+  $('sp-weight-unit').value = specs.weight_unit;
+  
+  // Update base specifications cache
+  shippoBaseSpecs = {
+    length: specs.length,
+    width: specs.width,
+    height: specs.height,
+    dim_unit: specs.dim_unit,
+    weight: specs.weight,
+    weight_unit: specs.weight_unit
+  };
+  
+  showToast(`✓ Package preset loaded: ${book.title}`);
+}
+
+async function calculateShippoRates() {
+  const shippoKey = TAX_CENTER.settings?.shippoKey || '';
+  if (!shippoKey) {
+    showToast('⚠️ Please configure your Shippo API Key first', 'warn');
+    return;
+  }
+
+  // Gather values
+  const sfName = $('sf-name').value.trim();
+  const sfCompany = $('sf-company').value.trim();
+  const sfStreet1 = $('sf-street1').value.trim();
+  const sfStreet2 = $('sf-street2').value.trim();
+  const sfCity = $('sf-city').value.trim();
+  const sfState = $('sf-state').value.trim();
+  const sfZip = $('sf-zip').value.trim();
+  const sfCountry = $('sf-country').value;
+
+  const stName = $('st-name').value.trim();
+  const stCompany = $('st-company').value.trim();
+  const stStreet1 = $('st-street1').value.trim();
+  const stStreet2 = $('st-street2').value.trim();
+  const stCity = $('st-city').value.trim();
+  const stState = $('st-state').value.trim();
+  const stZip = $('st-zip').value.trim();
+  const stCountry = $('st-country').value;
+
+  const spLength = parseFloat($('sp-length').value) || 0;
+  const spWidth = parseFloat($('sp-width').value) || 0;
+  const spHeight = parseFloat($('sp-height').value) || 0;
+  const spDimUnit = $('sp-dim-unit').value;
+  const spWeight = parseFloat($('sp-weight').value) || 0;
+  const spWeightUnit = $('sp-weight-unit').value;
+
+  // Validation
+  if (!sfName || !sfStreet1 || !sfCity || !sfZip) {
+    showToast('⚠️ Origin address (Sender Name, Street, City, Zip) is required', 'warn');
+    return;
+  }
+  if (!stName || !stStreet1 || !stCity || !stZip) {
+    showToast('⚠️ Destination address (Recipient Name, Street, City, Zip) is required', 'warn');
+    return;
+  }
+  if (spLength <= 0 || spWidth <= 0 || spHeight <= 0 || spWeight <= 0) {
+    showToast('⚠️ Parcel dimensions and weight must be positive numbers', 'warn');
+    return;
+  }
+
+  // Save Origin default if checked
+  if ($('ship-save-origin').checked) {
+    localStorage.setItem('lm-shippo-origin-name', sfName);
+    localStorage.setItem('lm-shippo-origin-company', sfCompany);
+    localStorage.setItem('lm-shippo-origin-street1', sfStreet1);
+    localStorage.setItem('lm-shippo-origin-street2', sfStreet2);
+    localStorage.setItem('lm-shippo-origin-city', sfCity);
+    localStorage.setItem('lm-shippo-origin-state', sfState);
+    localStorage.setItem('lm-shippo-origin-zip', sfZip);
+    localStorage.setItem('lm-shippo-origin-country', sfCountry);
+  }
+
+  const placeholder = $('ship-results-placeholder');
+  const loading = $('ship-results-loading');
+  const list = $('ship-results-list');
+
+  if (placeholder) placeholder.style.display = 'none';
+  if (loading) loading.style.display = 'flex';
+  if (list) list.style.display = 'none';
+
+  try {
+    const payload = {
+      address_from: {
+        name: sfName,
+        company: sfCompany,
+        street1: sfStreet1,
+        street2: sfStreet2,
+        city: sfCity,
+        state: sfState,
+        zip: sfZip,
+        country: sfCountry
+      },
+      address_to: {
+        name: stName,
+        company: stCompany,
+        street1: stStreet1,
+        street2: stStreet2,
+        city: stCity,
+        state: stState,
+        zip: stZip,
+        country: stCountry
+      },
+      parcels: [{
+        length: spLength,
+        width: spWidth,
+        height: spHeight,
+        distance_unit: spDimUnit,
+        weight: spWeight,
+        mass_unit: spWeightUnit
+      }],
+      async: false
+    };
+
+    const resp = await fetch('https://api.goshippo.com/shipments/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `ShippoToken ${shippoKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (loading) loading.style.display = 'none';
+
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => null);
+      let errMsg = `Shippo API Error ${resp.status}`;
+      if (errData) {
+        if (typeof errData === 'string') {
+          errMsg += `: ${errData}`;
+        } else if (Array.isArray(errData)) {
+          errMsg += `: ${errData.join(', ')}`;
+        } else {
+          const errors = [];
+          for (const [key, val] of Object.entries(errData)) {
+            errors.push(`${key}: ${Array.isArray(val) ? val.join(', ') : JSON.stringify(val)}`);
+          }
+          errMsg += `<br><span style="font-size:12px; font-weight:normal; display:block; margin-top:8px;">${errors.join('<br>')}</span>`;
+        }
+      }
+      if (list) {
+        list.innerHTML = `<div class="card" style="border-color:var(--red); background:var(--red-bg); padding:1rem; color:var(--red); font-size:13px; font-weight:600; line-height:1.45;">${errMsg}</div>`;
+        list.style.display = 'flex';
+      }
+      return;
+    }
+
+    const data = await resp.json();
+    const rates = data.rates || [];
+
+    if (rates.length === 0) {
+      if (list) {
+        list.innerHTML = `<div style="text-align:center; padding:3rem 1rem; color:var(--text3);">
+          <div style="font-size:32px; margin-bottom:12px;">⚠️</div>
+          <div>No rates were returned by Shippo. Verify that the address locations are serviceable and package weight is correct.</div>
+        </div>`;
+        list.style.display = 'flex';
+      }
+      return;
+    }
+
+    // Sort rates by amount ascending to find the cheapest
+    const sortedByPrice = [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
+    const cheapestId = sortedByPrice[0]?.object_id;
+
+    // Filter rates with estimated days to find the fastest
+    const ratesWithDays = rates.filter(r => r.estimated_days !== null && r.estimated_days !== undefined);
+    let fastestId = null;
+    if (ratesWithDays.length > 0) {
+      const sortedByDays = [...ratesWithDays].sort((a, b) => parseInt(a.estimated_days) - parseInt(b.estimated_days));
+      fastestId = sortedByDays[0]?.object_id;
+    }
+
+    if (list) {
+      list.innerHTML = sortedByPrice.map(r => {
+        const logoUrl = r.provider_image_75 || '';
+        const isCheapest = r.object_id === cheapestId;
+        const isFastest = r.object_id === fastestId && !isCheapest;
+        
+        let badgesHtml = '';
+        if (isCheapest) badgesHtml += '<span class="rate-badge cheapest">Cheapest</span>';
+        if (isFastest) badgesHtml += '<span class="rate-badge fastest">Fastest</span>';
+
+        const transitDays = r.estimated_days 
+          ? `${r.estimated_days} ${parseInt(r.estimated_days) === 1 ? 'day' : 'days'}`
+          : '';
+        const transitInfo = [transitDays, r.duration_terms].filter(Boolean).join(' · ');
+
+        return `
+          <div class="rate-card">
+            <div class="rate-info">
+              <div class="rate-logo">
+                ${logoUrl ? `<img src="${logoUrl}" alt="${r.provider}">` : `<span style="font-size:9px; font-weight:700;">${r.provider.slice(0,3)}</span>`}
+              </div>
+              <div class="rate-details">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="rate-carrier">${escapeHtml(r.provider)}</span>
+                  <div class="rate-badges">${badgesHtml}</div>
+                </div>
+                <div class="rate-service">${escapeHtml(r.servicelevel.name)}</div>
+                ${transitInfo ? `<div class="rate-transit">${escapeHtml(transitInfo)}</div>` : ''}
+              </div>
+            </div>
+            <div class="rate-price-area">
+              <div class="rate-price">${parseFloat(r.amount).toFixed(2)} ${escapeHtml(r.currency)}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      list.style.display = 'flex';
+    }
+
+  } catch (err) {
+    console.error(err);
+    if (loading) loading.style.display = 'none';
+    if (list) {
+      list.innerHTML = `<div class="card" style="border-color:var(--red); background:var(--red-bg); padding:1rem; color:var(--red); font-weight:600; font-size:13px;">❌ Error fetching rates: ${escapeHtml(err.message)}</div>`;
+      list.style.display = 'flex';
+    }
+  }
+}
+
+function updateShippoBaseSpecsFromInputs() {
+  shippoBaseSpecs.length = parseFloat($('sp-length').value) || 0;
+  shippoBaseSpecs.width = parseFloat($('sp-width').value) || 0;
+  shippoBaseSpecs.dim_unit = $('sp-dim-unit').value;
+  shippoBaseSpecs.weight_unit = $('sp-weight-unit').value;
+
+  const qty = Math.max(1, parseInt($('sp-qty').value) || 1);
+  const currentHeight = parseFloat($('sp-height').value) || 0;
+  const currentWeight = parseFloat($('sp-weight').value) || 0;
+
+  shippoBaseSpecs.height = currentHeight / qty;
+  shippoBaseSpecs.weight = currentWeight / qty;
+}
+
+function onShippoQuantityChange() {
+  const qty = Math.max(1, parseInt($('sp-qty').value) || 1);
+  const scaledHeight = shippoBaseSpecs.height * qty;
+  const scaledWeight = shippoBaseSpecs.weight * qty;
+
+  $('sp-height').value = parseFloat(scaledHeight.toFixed(2));
+  $('sp-weight').value = parseFloat(scaledWeight.toFixed(2));
+  
+  showToast(`✓ Scaled specs for ${qty} ${qty === 1 ? 'copy' : 'copies'}`);
+}
+
+// Bind to window to allow HTML onclick access
+window.initShippingTab = initShippingTab;
+window.saveShippoApiKey = saveShippoApiKey;
+window.editShippoApiKey = editShippoApiKey;
+window.onShippoPreFillDestChange = onShippoPreFillDestChange;
+window.onShippoBookPresetChange = onShippoBookPresetChange;
+window.calculateShippoRates = calculateShippoRates;
+window.updateShippoBaseSpecsFromInputs = updateShippoBaseSpecsFromInputs;
+window.onShippoQuantityChange = onShippoQuantityChange;
 
 if (window._fbReady) { initStartup(); }
 else { document.addEventListener('firebase-ready', initStartup); }
