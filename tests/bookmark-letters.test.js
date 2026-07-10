@@ -1,6 +1,5 @@
 import fs from 'fs';
-import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, expect, it } from 'vitest';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,6 +14,6 @@ describe('All Books cover marks', () => {
     const overviewEnd = mainContent.indexOf('// Combined channel analytics', overviewStart);
     const overviewMarkup = mainContent.slice(overviewStart, overviewEnd);
 
-    assert.equal(overviewMarkup.includes('book-cover-logo'), false);
+    expect(overviewMarkup.includes('book-cover-logo')).toBe(false);
   });
 });

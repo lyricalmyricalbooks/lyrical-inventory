@@ -56,6 +56,14 @@ export function reconcileShippingExpense(expense = {}, orders = []) {
 }
 
 export function enrichShippoExpense(expense, transaction = {}, shipment = {}, shippoOrder = {}, orders = []) {
+  const {
+    shippingOrderNumber: _shippingOrderNumber,
+    shippingSuggestedOrderNumber: _shippingSuggestedOrderNumber,
+    shippingCandidateOrderNumbers: _shippingCandidateOrderNumbers,
+    shippingMatchMethod: _shippingMatchMethod,
+    shippingMatchStatus: _shippingMatchStatus,
+    ...accountingFields
+  } = expense;
   const metadataOrderNumber = extractShippingOrderNumber(
     transaction.metadata,
     shipment.metadata,
@@ -73,7 +81,7 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
     date: expense.date,
   };
   return {
-    ...expense,
+    ...accountingFields,
     shippoTransactionId: String(transaction.object_id || '').trim(),
     shippoShipmentId: String(shipment.object_id || (typeof transaction.shipment === 'string' ? transaction.shipment : '') || '').trim(),
     shippoOrderId: String(shippoOrder.object_id || (typeof transaction.order === 'string' ? transaction.order : '') || '').trim(),
@@ -82,6 +90,62 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
     recipientPostal: source.recipientPostal,
     ...reconcileShippingExpense(source, orders),
   };
+}
+
+export function stageShippoExpenseEnrichment(
+  expense,
+  transaction = {},
+  shipment = {},
+  shippoOrder = {},
+  orders = [],
+  contextLoaded = true,
+) {
+  if (!expense || !contextLoaded) return null;
+  return { target: expense, enriched: enrichShippoExpense(expense, transaction, shipment, shippoOrder, orders) };
+}
+
+export function applyShippoExpenseEnrichments(staged = []) {
+  staged.forEach(entry => {
+    if (!entry?.target || !entry?.enriched) return;
+    [
+      'shippingOrderNumber',
+      'shippingSuggestedOrderNumber',
+      'shippingCandidateOrderNumbers',
+      'shippingMatchMethod',
+      'shippingMatchStatus',
+    ].forEach(key => delete entry.target[key]);
+    Object.assign(entry.target, entry.enriched);
+  });
+}
+
+const SHIPPING_LINK_KEYS = [
+  'shippingOrderNumber',
+  'shippingSuggestedOrderNumber',
+  'shippingCandidateOrderNumbers',
+  'shippingMatchMethod',
+  'shippingMatchStatus',
+];
+
+export async function persistManualShippingLink(expense, orderNumber, persist) {
+  const prior = new Map(SHIPPING_LINK_KEYS.map(key => [
+    key,
+    { present: Object.prototype.hasOwnProperty.call(expense, key), value: expense[key] },
+  ]));
+  expense.shippingOrderNumber = normalizeShippingOrderNumber(orderNumber);
+  expense.shippingMatchMethod = 'manual';
+  expense.shippingMatchStatus = 'matched';
+  delete expense.shippingSuggestedOrderNumber;
+  delete expense.shippingCandidateOrderNumbers;
+  try {
+    return await persist();
+  } catch (error) {
+    SHIPPING_LINK_KEYS.forEach(key => {
+      const snapshot = prior.get(key);
+      if (snapshot.present) expense[key] = snapshot.value;
+      else delete expense[key];
+    });
+    throw error;
+  }
 }
 
 export function linkedShippingSummary(order = {}, expenses = [], orderRateToBase = 1) {

@@ -55,5 +55,31 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('enrichShippoExpense(');
     expect(mainContent).toContain('orderNumber: h.num');
     expect(mainContent).toContain('payload.metadata = `order_number:${selectedOrderNumber}`');
+    expect(mainContent).toContain('select.dataset.orderNumber');
+    expect(mainContent).toContain('selectedOrderNumber.slice(0, 100)');
+    expect(mainContent).toContain("select.dataset.orderNumber = ''");
+  });
+
+  it('includes a linked order number in Tax Center shipping expense exports', () => {
+    expect(mainContent).toContain('e.shippingOrderNumber ? `${e.ref || \'\'} · ${e.shippingOrderNumber}` : e.ref || \'\'');
+  });
+
+  it('adds customer-paid shipping to the Tax Center income ledger', () => {
+    expect(mainContent).toContain("type: 'Shipping income'");
+    expect(mainContent).toContain("sourceType: 'shippingIncome'");
+    expect(mainContent).toContain('Number(h.shippingPaid)');
+  });
+
+  it('keeps Shippo references out of visible worklist copy', () => {
+    expect(mainContent).toContain('aria-label="Order for postage expense"');
+    expect(mainContent).not.toContain('<span class="sr-only"> for ${escapeHtml(expense.ref)}</span>');
+  });
+
+  it('enriches existing Shippo expenses instead of duplicating them', () => {
+    expect(mainContent).toContain("const existingExpense = existingExpensesByRef.get(ref)");
+    expect(mainContent).toContain('stagedExistingEnrichments.push(staged)');
+    expect(mainContent).toContain('applyShippoExpenseEnrichments(stagedExistingEnrichments)');
+    expect(mainContent).toContain('fetchShippoContext(token, tx)');
+    expect(mainContent).toContain('enrichShippoExpense(');
   });
 });

@@ -4,6 +4,9 @@ import {
   extractShippingOrderNumber,
   reconcileShippingExpense,
   enrichShippoExpense,
+  stageShippoExpenseEnrichment,
+  applyShippoExpenseEnrichments,
+  persistManualShippingLink,
   linkedShippingSummary,
 } from '../src/lib/shipping-reconciliation.js';
 
@@ -67,6 +70,130 @@ describe('shipping reconciliation', () => {
       ref: 'shippo:tx1', amount: 9.35, baseAmount: 9.35,
       shippoTransactionId: 'tx1', shippoShipmentId: 'shp1',
       shippingOrderNumber: '#GPWT-916083', shippingMatchStatus: 'matched',
+    });
+  });
+
+  it('stages existing-expense enrichment without live mutation until persistence is accepted', () => {
+    const existing = { ref: 'shippo:tx1', shippingMatchStatus: 'unmatched', recipientName: 'Prior Name' };
+    const staged = stageShippoExpenseEnrichment(
+      existing,
+      { object_id: 'tx1', metadata: 'order_number:#GPWT-916083' },
+      { object_id: 'shp1', address_to: { name: 'Dave Hebb' } },
+      {},
+      orders,
+      true,
+    );
+
+    expect(existing).toMatchObject({ shippingMatchStatus: 'unmatched', recipientName: 'Prior Name' });
+    applyShippoExpenseEnrichments([staged]);
+    expect(existing).toMatchObject({
+      shippingOrderNumber: '#GPWT-916083',
+      shippingMatchMethod: 'metadata',
+      shippingMatchStatus: 'matched',
+      recipientName: 'Dave Hebb',
+    });
+  });
+
+  it('preserves coherent prior reconciliation data when Shippo context lookup fails', () => {
+    const existing = {
+      ref: 'shippo:tx1',
+      recipientName: 'Prior Name',
+      shippingSuggestedOrderNumber: '#GPWT-916083',
+      shippingMatchMethod: 'recipient',
+      shippingMatchStatus: 'suggested',
+    };
+
+    const staged = stageShippoExpenseEnrichment(existing, { object_id: 'tx1' }, {}, {}, orders, false);
+
+    expect(staged).toBeNull();
+    expect(existing).toEqual({
+      ref: 'shippo:tx1',
+      recipientName: 'Prior Name',
+      shippingSuggestedOrderNumber: '#GPWT-916083',
+      shippingMatchMethod: 'recipient',
+      shippingMatchStatus: 'suggested',
+    });
+  });
+
+  it('clears stale reconciliation suggestions after a successful unmatched enrichment', () => {
+    const result = enrichShippoExpense(
+      {
+        ref: 'shippo:tx1',
+        shippingSuggestedOrderNumber: '#GPWT-916083',
+        shippingCandidateOrderNumbers: ['#GPWT-916083'],
+        shippingMatchMethod: 'recipient',
+        shippingMatchStatus: 'suggested',
+      },
+      { object_id: 'tx1' },
+      { object_id: 'shp1', address_to: { name: 'Someone Else', zip: 'X0X0X0' } },
+      {},
+      orders,
+    );
+
+    expect(result.shippingMatchStatus).toBe('unmatched');
+    expect(result).not.toHaveProperty('shippingSuggestedOrderNumber');
+    expect(result).not.toHaveProperty('shippingCandidateOrderNumbers');
+  });
+
+  it('removes stale reconciliation keys when staged enrichment is applied to the persisted target', () => {
+    const existing = {
+      ref: 'shippo:tx1',
+      shippingOrderNumber: '#OLD-100000',
+      shippingSuggestedOrderNumber: '#GPWT-916083',
+      shippingCandidateOrderNumbers: ['#GPWT-916083', '#KEVI-640529'],
+      shippingMatchMethod: 'recipient',
+      shippingMatchStatus: 'ambiguous',
+    };
+    const staged = stageShippoExpenseEnrichment(
+      existing,
+      { object_id: 'tx1' },
+      { object_id: 'shp1', address_to: { name: 'Someone Else', zip: 'X0X0X0' } },
+      {},
+      orders,
+      true,
+    );
+
+    applyShippoExpenseEnrichments([staged]);
+
+    expect(existing).toMatchObject({ shippingMatchMethod: '', shippingMatchStatus: 'unmatched' });
+    expect(existing).not.toHaveProperty('shippingOrderNumber');
+    expect(existing).not.toHaveProperty('shippingSuggestedOrderNumber');
+    expect(existing).not.toHaveProperty('shippingCandidateOrderNumbers');
+  });
+
+  it('rolls back manual link fields when persistence fails and only resolves after success', async () => {
+    const expense = {
+      ref: 'shippo:tx1',
+      shippingSuggestedOrderNumber: '#GPWT-916083',
+      shippingCandidateOrderNumbers: ['#GPWT-916083', '#KEVI-640529'],
+      shippingMatchMethod: 'recipient',
+      shippingMatchStatus: 'suggested',
+    };
+    const failure = new Error('offline');
+
+    await expect(persistManualShippingLink(expense, '#KEVI-640529', async () => {
+      expect(expense).toMatchObject({
+        shippingOrderNumber: '#KEVI-640529',
+        shippingMatchMethod: 'manual',
+        shippingMatchStatus: 'matched',
+      });
+      throw failure;
+    })).rejects.toBe(failure);
+
+    expect(expense).toEqual({
+      ref: 'shippo:tx1',
+      shippingSuggestedOrderNumber: '#GPWT-916083',
+      shippingCandidateOrderNumbers: ['#GPWT-916083', '#KEVI-640529'],
+      shippingMatchMethod: 'recipient',
+      shippingMatchStatus: 'suggested',
+    });
+
+    await expect(persistManualShippingLink(expense, '#KEVI-640529', async () => 'saved')).resolves.toBe('saved');
+    expect(expense).toEqual({
+      ref: 'shippo:tx1',
+      shippingOrderNumber: '#KEVI-640529',
+      shippingMatchMethod: 'manual',
+      shippingMatchStatus: 'matched',
     });
   });
 

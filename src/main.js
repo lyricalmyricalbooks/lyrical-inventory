@@ -29,7 +29,14 @@ import {
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
-import { enrichShippoExpense, linkedShippingSummary, normalizeShippingOrderNumber } from './lib/shipping-reconciliation.js';
+import {
+  applyShippoExpenseEnrichments,
+  enrichShippoExpense,
+  linkedShippingSummary,
+  normalizeShippingOrderNumber,
+  persistManualShippingLink,
+  stageShippoExpenseEnrichment,
+} from './lib/shipping-reconciliation.js';
 
 let updateSWFunc = null;
 
@@ -1247,12 +1254,15 @@ async function loadTaxCenter() {
   }
 }
 
-async function saveTaxCenter() {
+async function saveTaxCenter({ rethrow = false } = {}) {
   if (isAuthor()) return;
   try {
     await window._fbSaveSettings('taxCenter', TAX_CENTER);
+    return true;
   } catch (e) {
     console.error(e);
+    if (rethrow) throw e;
+    return false;
   }
 }
 
@@ -5549,9 +5559,13 @@ function renderHist() {
           ? ` <span class="pill" style="font-size:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;">✓ Shipped${h.shippedDate ? ' ' + fmtD(h.shippedDate) : ''}</span>`
           : '';
         const paymentInfo = paymentSummary(h.payment, book);
-        const notesCell = paymentInfo
-          ? `${escapeHtml(h.notes) || '—'}<br><span style="font-size:11px;color:var(--text4);">${escapeHtml(paymentInfo)}</span>`
-          : (escapeHtml(h.notes) || '—');
+        const shippingInfo = isWebsite ? renderOrderShippingSummary(h, cur) : '';
+        const notesText = escapeHtml(h.notes) || '—';
+        const notesCell = [
+          notesText,
+          paymentInfo ? `<span style="font-size:11px;color:var(--text4);">${escapeHtml(paymentInfo)}</span>` : '',
+          shippingInfo,
+        ].filter(Boolean).join('<br>');
         const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
         const enteredByPill = enteredBy === 'Artist'
           ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
@@ -14892,6 +14906,29 @@ function renderTaxCenter() {
             sourceId: bid,
             itemId: h.id || h.num
         });
+
+        const shippingIncome = h.voided ? 0 : (Number(h.shippingPaid) || 0);
+        if (shippingIncome > 0) {
+          const shippingBase = roundCents(shippingIncome * hRate);
+          totalGrossSales = roundCents(totalGrossSales + shippingBase);
+          allLedger.push({
+            date: h.date,
+            type: 'Shipping income',
+            desc: `Customer shipping paid (${b.title})`,
+            cat: 'Income',
+            ref: h.num,
+            origCurrency: cur,
+            origAmount: shippingIncome,
+            baseAmount: shippingBase,
+            qty: 0,
+            voided: false,
+            hasRateError: !hRate,
+            isIncome: true,
+            sourceType: 'shippingIncome',
+            sourceId: bid,
+            itemId: `${h.id || h.num}-shipping-income`,
+          });
+        }
     });
     
     // Add book specific expenses
@@ -14922,7 +14959,7 @@ function renderTaxCenter() {
             type: 'Expense',
             desc: e.desc + ` (${b.title})`,
             cat: e.cat || 'Project Expense',
-            ref: e.ref || '',
+            ref: e.shippingOrderNumber ? `${e.ref} · ${e.shippingOrderNumber}` : e.ref || '',
             receipt: e.receipt || '',
             origCurrency: displayOrigCur,
             origAmount: displayOrigAmt,
@@ -14966,7 +15003,11 @@ function renderTaxCenter() {
 
       const eCur = e.currency || 'CAD';
       // Use stored baseAmount when available to avoid re-conversion
-      const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+      const eBase = e.baseAmount != null
+        ? e.baseAmount
+        : e.fxMissing
+          ? 0
+          : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
       
       totalOperatingExpenses += eBase;
       
@@ -14981,7 +15022,7 @@ function renderTaxCenter() {
             origCurrency: eCur,
             origAmount: e.amount || 0,
             baseAmount: eBase,
-            hasRateError: false,
+            hasRateError: !!e.fxMissing,
             isIncome: false,
             sourceType: 'businessExpense',
             itemId: e.id,
@@ -15248,6 +15289,7 @@ function renderTaxCenter() {
       el.value = selectedYear;
     }
   });
+  renderShippingReconciliationWorklist();
 }
 
 // Escape a value for safe interpolation into an SVG/HTML attribute or text node.
@@ -16063,7 +16105,86 @@ async function fetchShippoTransactionsPageAPI(token, page) {
   return resp.json();
 }
 
-async function processShippoTxToExpense(tx, token, txId, ref, importedCount) {
+async function fetchShippoObject(token, resource, id) {
+  if (!id) return {};
+  const resp = await fetch(`https://api.goshippo.com/${resource}/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' },
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Shippo ${resource} lookup ${resp.status}${text ? `: ${text.slice(0, 140)}` : ''}`);
+  }
+  return resp.json();
+}
+
+async function fetchShippoContext(token, tx) {
+  let shipment = tx.shipment && typeof tx.shipment === 'object' ? tx.shipment : {};
+  const shipmentId = typeof tx.shipment === 'string' ? tx.shipment : shipment.object_id;
+  if (shipmentId && !shipment.address_to) shipment = await fetchShippoObject(token, 'shipments', shipmentId);
+
+  let shippoOrder = tx.order && typeof tx.order === 'object' ? tx.order : {};
+  const orderId = typeof tx.order === 'string' ? tx.order : (shippoOrder.object_id || shipment.order);
+  if (orderId && !shippoOrder.order_number) shippoOrder = await fetchShippoObject(token, 'orders', orderId);
+  return { shipment, shippoOrder };
+}
+
+function renderShippingReconciliationWorklist() {
+  const list = $('shipping-reconciliation-list');
+  const count = $('shipping-reconciliation-count');
+  if (!list || !count || isAuthor()) return;
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
+    String(expense?.ref || '').startsWith('shippo:') && expense.shippingMatchStatus !== 'matched'
+  );
+  const knownOrders = getShippingReconciliationOrders();
+  count.textContent = `${expenses.length} to review`;
+  if (!expenses.length) {
+    list.innerHTML = '<div class="shipping-reconciliation-empty">All imported postage is linked to an order.</div>';
+    return;
+  }
+
+  list.innerHTML = expenses.map(expense => {
+    const domId = String(expense.ref).replace(/[^A-Za-z0-9_-]/g, '-');
+    const suggested = normalizeShippingOrderNumber(expense.shippingSuggestedOrderNumber);
+    const options = knownOrders.map(order => {
+      const number = normalizeShippingOrderNumber(order.num || order.orderNum);
+      return `<option value="${escapeHtml(number)}"${number === suggested ? ' selected' : ''}>${escapeHtml(number)} · ${escapeHtml(order.shipName || order.customer || 'Customer')}</option>`;
+    }).join('');
+    const context = [expense.recipientName, expense.recipientPostal, expense.trackingUrl ? 'Tracking saved' : ''].filter(Boolean).join(' · ');
+    return `<div class="shipping-reconciliation-row">
+      <div class="shipping-reconciliation-copy">
+        <strong>${fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
+        <span>${escapeHtml(expense.date || 'Date unavailable')} · ${escapeHtml(context || 'Recipient unavailable')}</span>
+        <small>${escapeHtml(expense.shippingMatchStatus || 'unmatched')}</small>
+      </div>
+      <label for="${domId}">Order</label>
+      <select id="${domId}" aria-label="Order for postage expense"><option value="">Select an order</option>${options}</select>
+      <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)">Link postage</button>
+    </div>`;
+  }).join('');
+}
+
+async function linkShippingExpense(ref) {
+  const expense = (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
+  if (!expense) { showToast('Shipping expense was not found', 'err'); return; }
+  const domId = String(expense.ref).replace(/[^A-Za-z0-9_-]/g, '-');
+  const number = normalizeShippingOrderNumber($(domId)?.value);
+  if (!number) { showToast('Choose an order before linking postage', 'warn'); return; }
+  try {
+    await persistManualShippingLink(expense, number, () => saveTaxCenter({ rethrow: true }));
+  } catch (error) {
+    console.error('Shipping link save failed', error);
+    renderShippingReconciliationWorklist();
+    showToast('Could not save the shipping link. Please try again.', 'err');
+    return;
+  }
+  renderShippingReconciliationWorklist();
+  renderOrders();
+  renderHist();
+  renderTaxCenter();
+  showToast(`Postage linked to ${number}`);
+}
+
+async function processShippoTxToExpense(tx, token, txId, ref, importedCount, context, knownOrders) {
   const { amount, currency } = await getShippoTxCost(tx, token);
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
@@ -16072,16 +16193,18 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount) {
 
   let fxRate = currency === 'CAD' ? 1 : 0;
   if (currency !== 'CAD') {
-    try { const h = await fetchHistoricalRate(currency, 'CAD', date); fxRate = h?.rate || 0; } catch (_) { /* fall through */ }
-    if (!fxRate) { try { const r = await fetchLiveRate(currency, 'CAD'); fxRate = r?.rate || 0; } catch (_) { /* fall through */ } }
+    try { const historical = await fetchHistoricalRate(currency, 'CAD', date); fxRate = historical?.rate || 0; } catch (_) { /* continue */ }
+    if (!fxRate) {
+      try { const live = await fetchLiveRate(currency, 'CAD'); fxRate = live?.rate || 0; } catch (_) { /* continue */ }
+    }
     if (!fxRate) fxRate = _fxRateCache[`${currency}_CAD`] || 0;
   }
-  if (!fxRate) fxRate = 1; // last resort so the cost is still recorded
+  const fxMissing = !fxRate;
 
   const labelUrl = tx.label_url || '';
   const localReceipt = labelUrl ? await saveShippoLabelLocally(labelUrl, txId) : null;
 
-  return {
+  const expense = {
     id: Date.now() + importedCount + 1,
     desc: `Shippo shipping label${tx.tracking_number ? ` #${tx.tracking_number}` : ''}`,
     cat: 'Shipping & Postage',
@@ -16089,14 +16212,16 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount) {
     amount,
     origCurrency: currency,
     origAmount: amount,
-    fxRate,
-    baseAmount: amount * fxRate,
+    fxRate: fxMissing ? null : fxRate,
+    baseAmount: fxMissing ? null : roundCents(amount * fxRate),
+    fxMissing,
     date,
     ref,
     receipt: localReceipt || labelUrl,
     trackingUrl: tx.tracking_url_provider || '',
-    trip: ''
+    trip: '',
   };
+  return enrichShippoExpense(expense, tx, context.shipment, context.shippoOrder, knownOrders);
 }
 
 async function importShippoShippingFromApi() {
@@ -16116,16 +16241,18 @@ async function importShippoShippingFromApi() {
   if (statusEl) statusEl.textContent = 'Fetching Shippo transactions…';
 
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-  const existingRefs = new Set((TAX_CENTER.businessExpenses || [])
-    .filter(e => e && e.ref && String(e.ref).startsWith('shippo:'))
-    .map(e => String(e.ref)));
-  // Source of truth is current expense refs, so deleted/edited rows don't get permanently blocked
-  // by stale saved object IDs from prior runs.
-  const importedIds = new Set(Array.from(existingRefs)
-    .map(ref => String(ref).replace(/^shippo:/, ''))
+  const existingExpensesByRef = new Map((TAX_CENTER.businessExpenses || [])
+    .filter(expense => String(expense?.ref || '').startsWith('shippo:'))
+    .map(expense => [String(expense.ref), expense]));
+  const importedIds = new Set(Array.from(existingExpensesByRef.keys())
+    .map(ref => ref.replace(/^shippo:/, ''))
     .filter(Boolean));
   const fetchedIds = new Set();
   const pendingExpenses = [];
+  const stagedExistingEnrichments = [];
+  const knownOrders = getShippingReconciliationOrders();
+  let enrichedCount = 0;
+  let contextFailureCount = 0;
 
   let imported = 0;
   let skipped = 0;
@@ -16143,46 +16270,56 @@ async function importShippoShippingFromApi() {
       //   still appear and can be imported.
       const json = await fetchShippoTransactionsPageAPI(token, page);
       const rows = json.results || [];
-      const validTx = [];
-
       for (const tx of rows) {
         const status = String(tx?.status || '').toUpperCase();
         if (!tx || status === 'REFUNDED' || status === 'ERROR' || status === 'INVALID') { skipped++; continue; }
         const txId = String(tx.object_id || '').trim();
         if (!txId) { skipped++; continue; } // require stable ID so repeat imports are idempotent
         const ref = `shippo:${txId}`;
-        // Dedupe before the (possibly networked) cost lookup so re-syncs stay cheap.
-        // Keyed on Shippo's stable object_id (persisted as ref:"shippo:<id>"),
-        // so re-running weeks later only adds labels not already in the ledger.
-        if (fetchedIds.has(txId) || importedIds.has(txId) || existingRefs.has(ref)) { alreadyImported++; continue; }
-
-        // Optimistically add to sets to prevent duplicates within the same page
-        existingRefs.add(ref);
-        importedIds.add(txId);
+        if (fetchedIds.has(txId)) { alreadyImported++; continue; }
         fetchedIds.add(txId);
 
-        validTx.push({ tx, txId, ref });
-      }
+        const existingExpense = existingExpensesByRef.get(ref);
+        const needsEnrichment = !existingExpense || existingExpense.shippingMatchStatus !== 'matched';
+        if (existingExpense && !needsEnrichment) {
+          alreadyImported++;
+          continue;
+        }
 
-      // Process expenses in parallel
-      const expenses = await Promise.all(validTx.map(({ tx, txId, ref }, index) => {
-        return processShippoTxToExpense(tx, token, txId, ref, imported + index);
-      }));
+        let context = { shipment: {}, shippoOrder: {} };
+        let contextLoaded = true;
+        try {
+          context = await fetchShippoContext(token, tx);
+        } catch (error) {
+          console.warn(`Shippo context lookup failed for ${txId}`, error);
+          contextFailureCount++;
+          contextLoaded = false;
+        }
 
-      for (let i = 0; i < validTx.length; i++) {
-        const { txId, ref } = validTx[i];
-        const expense = expenses[i];
+        if (existingExpense) {
+          const staged = stageShippoExpenseEnrichment(
+            existingExpense, tx, context.shipment, context.shippoOrder, knownOrders, contextLoaded,
+          );
+          if (staged) {
+            stagedExistingEnrichments.push(staged);
+            enrichedCount++;
+          }
+          alreadyImported++;
+          continue;
+        }
+
+        const expense = await processShippoTxToExpense(
+          tx, token, txId, ref, imported, context, knownOrders,
+        );
 
         if (!expense) {
-          // Revert optimistic add if expense processing failed
-          existingRefs.delete(ref);
-          importedIds.delete(txId);
-          fetchedIds.delete(txId);
           skipped++;
           continue;
         }
 
         pendingExpenses.push(expense);
+        existingExpensesByRef.set(ref, expense);
+        importedIds.add(txId);
         imported++;
         if (expense.currency === 'USD') totalUsd += expense.amount;
       }
@@ -16213,29 +16350,42 @@ async function importShippoShippingFromApi() {
         { title: 'Import Shippo shipping costs', okLabel: 'Add to ledger' }
       );
       if (!accept) {
+        if (stagedExistingEnrichments.length) {
+          applyShippoExpenseEnrichments(stagedExistingEnrichments);
+          TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
+          TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
+          await saveTaxCenter();
+          renderTaxCenter();
+        }
         if (statusEl) statusEl.textContent = `Found ${imported} new Shippo transactions (${totalCad.toFixed(2)} CAD). Import cancelled before ledger insertion.`;
-        showToast('Shippo import cancelled before insertion', 'warn');
+        showToast(
+          enrichedCount
+            ? `New Shippo expense import cancelled; ${enrichedCount} existing expense${enrichedCount === 1 ? '' : 's'} reconciled`
+            : 'Shippo import cancelled before insertion',
+          enrichedCount ? 'ok' : 'warn',
+        );
         return;
       }
     }
 
-    if (pendingExpenses.length > 0) {
-      TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
-    }
-
+    applyShippoExpenseEnrichments(stagedExistingEnrichments);
+    if (pendingExpenses.length > 0) TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
     TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
     TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
     await saveTaxCenter();
     renderTaxCenter();
     const dupNote = alreadyImported ? ` ${alreadyImported} already imported.` : '';
+    const enrichNote = enrichedCount ? ` ${enrichedCount} existing expense${enrichedCount === 1 ? '' : 's'} reconciled.` : '';
+    const contextNote = contextFailureCount ? ` ${contextFailureCount} label${contextFailureCount === 1 ? '' : 's'} still need review because Shippo details could not load.` : '';
+    const reconciliationNote = `${enrichNote}${contextNote}`;
     if (statusEl) statusEl.textContent = imported
-      ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}`
-      : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}`;
+      ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}${reconciliationNote}`
+      : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${reconciliationNote}`;
     showToast(
-      imported
-        ? `✓ Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
-        : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import'),
-      imported ? 'ok' : 'warn'
+      (imported
+        ? `Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
+        : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import')) + reconciliationNote,
+      imported || enrichedCount ? 'ok' : 'warn',
     );
   } catch (e) {
     console.error(e);
@@ -22454,6 +22604,7 @@ function initShippingTab() {
     } else {
       orders.slice(0, 20).forEach(h => {
         const addrObj = {
+          orderNumber: h.num,
           name: h.shipName,
           company: '',
           phone: h.shipPhone || h.phone || '',
@@ -22569,6 +22720,7 @@ function onShippoPreFillDestChange() {
   
   try {
     const addr = JSON.parse(select.value);
+    select.dataset.orderNumber = normalizeShippingOrderNumber(addr.orderNumber);
     $('st-name').value = addr.name || '';
     $('st-company').value = addr.company || '';
     $('st-phone').value = addr.phone || '';
@@ -22914,6 +23066,9 @@ async function calculateShippoRates() {
       async: false
     };
 
+    const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber);
+    if (selectedOrderNumber) payload.metadata = `order_number:${selectedOrderNumber}`;
+
     if (isInternational) {
       payload.customs_declaration = buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit });
     }
@@ -23168,7 +23323,9 @@ function exposeLegacyInlineHandlers() {
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,
     renameTripPrompt, showCategoryDetail, saveTaxCenterSettings, scanReceiptWithAI,
     getShippoTxCost, saveShippoLabelLocally, fetchShippoTransactionsPageAPI,
-    processShippoTxToExpense, importShippoShippingFromApi, submitTaxExpense, addRecurring,
+    fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
+    processShippoTxToExpense, renderShippingReconciliationWorklist, linkShippingExpense,
+    importShippoShippingFromApi, submitTaxExpense, addRecurring,
     removeRecurring, downloadTaxLedgerCSV, posBooksMap, posResolveBook, isPosOnlyBook,
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,
     codeToSymbol, posFormat, convertCurrency, getPOSCurrencies, buildPOSCartRows, renderPOS,
