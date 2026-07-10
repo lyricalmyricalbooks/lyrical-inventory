@@ -228,12 +228,12 @@ function extractBigCartelFinancials_(body, qty) {
   const totalPaid = money('Total');
   const taxPaid = money('Tax');
   const codeMatch = text.match(/LMBCOLLECTIVE/i);
-  const discountMatch = text.match(/Discount[^\\n]*\\n\\s*-?((?:[A-Z]{1,3}\\$|\\$)?\\s*[0-9][0-9,]*(?:\\.[0-9]+)?)/i);
+  const discountMatch = text.match(/Discount[^\n]*\n\s*-?((?:[A-Z]{1,3}\$|\$)?\s*[0-9][0-9,]*(?:\.[0-9]+)?)/i);
   const discountAmount = discountMatch ? parseBigCartelMoney_(discountMatch[1]) : (codeMatch ? Math.round(subtotal * 0.5 * 100) / 100 : 0);
   const discountSource = discountMatch ? 'receipt' : (codeMatch ? 'code-rule' : 'none');
   const merchandisePaid = Math.round((subtotal - discountAmount) * 100) / 100;
   const shippingPaid = Math.round((totalPaid - subtotal + discountAmount - taxPaid) * 100) / 100;
-  const methodMatch = text.match(/(?:^|\\n)\\s*([^\\n$]+?)\\s*\\n\\s*(?:[A-Z]{1,3}\\$|\\$)\\s*[0-9]/i);
+  const methodMatch = text.match(/(?:^|\n)\s*([^\n$]+?)\s*\n\s*(?:[A-Z]{1,3}\$|\$)\s*[0-9]/i);
   return { subtotal, discountCode: codeMatch ? 'LMBCOLLECTIVE' : '', discountAmount, merchandisePaid, shippingMethod: methodMatch ? methodMatch[1].trim() : '', shippingPaid, taxPaid, totalPaid, discountSource, price: qty ? merchandisePaid / qty : merchandisePaid };
 }
 
