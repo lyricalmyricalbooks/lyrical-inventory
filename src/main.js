@@ -29,7 +29,13 @@ import {
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
-import { enrichShippoExpense, linkedShippingSummary, normalizeShippingOrderNumber } from './lib/shipping-reconciliation.js';
+import {
+  applyShippoExpenseEnrichments,
+  enrichShippoExpense,
+  linkedShippingSummary,
+  normalizeShippingOrderNumber,
+  stageShippoExpenseEnrichment,
+} from './lib/shipping-reconciliation.js';
 
 let updateSWFunc = null;
 
@@ -16178,6 +16184,7 @@ async function importShippoShippingFromApi() {
     .filter(Boolean));
   const fetchedIds = new Set();
   const pendingExpenses = [];
+  const stagedExistingEnrichments = [];
   const knownOrders = getShippingReconciliationOrders();
   let enrichedCount = 0;
   let contextFailureCount = 0;
@@ -16215,17 +16222,23 @@ async function importShippoShippingFromApi() {
         }
 
         let context = { shipment: {}, shippoOrder: {} };
+        let contextLoaded = true;
         try {
           context = await fetchShippoContext(token, tx);
         } catch (error) {
           console.warn(`Shippo context lookup failed for ${txId}`, error);
           contextFailureCount++;
+          contextLoaded = false;
         }
 
         if (existingExpense) {
-          const enriched = enrichShippoExpense(existingExpense, tx, context.shipment, context.shippoOrder, knownOrders);
-          Object.assign(existingExpense, enriched);
-          enrichedCount++;
+          const staged = stageShippoExpenseEnrichment(
+            existingExpense, tx, context.shipment, context.shippoOrder, knownOrders, contextLoaded,
+          );
+          if (staged) {
+            stagedExistingEnrichments.push(staged);
+            enrichedCount++;
+          }
           alreadyImported++;
           continue;
         }
@@ -16272,12 +16285,25 @@ async function importShippoShippingFromApi() {
         { title: 'Import Shippo shipping costs', okLabel: 'Add to ledger' }
       );
       if (!accept) {
+        if (stagedExistingEnrichments.length) {
+          applyShippoExpenseEnrichments(stagedExistingEnrichments);
+          TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
+          TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
+          await saveTaxCenter();
+          renderTaxCenter();
+        }
         if (statusEl) statusEl.textContent = `Found ${imported} new Shippo transactions (${totalCad.toFixed(2)} CAD). Import cancelled before ledger insertion.`;
-        showToast('Shippo import cancelled before insertion', 'warn');
+        showToast(
+          enrichedCount
+            ? `New Shippo expense import cancelled; ${enrichedCount} existing expense${enrichedCount === 1 ? '' : 's'} reconciled`
+            : 'Shippo import cancelled before insertion',
+          enrichedCount ? 'ok' : 'warn',
+        );
         return;
       }
     }
 
+    applyShippoExpenseEnrichments(stagedExistingEnrichments);
     if (pendingExpenses.length > 0) TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
     TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
     TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();

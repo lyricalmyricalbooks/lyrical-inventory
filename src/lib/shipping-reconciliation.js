@@ -56,6 +56,14 @@ export function reconcileShippingExpense(expense = {}, orders = []) {
 }
 
 export function enrichShippoExpense(expense, transaction = {}, shipment = {}, shippoOrder = {}, orders = []) {
+  const {
+    shippingOrderNumber: _shippingOrderNumber,
+    shippingSuggestedOrderNumber: _shippingSuggestedOrderNumber,
+    shippingCandidateOrderNumbers: _shippingCandidateOrderNumbers,
+    shippingMatchMethod: _shippingMatchMethod,
+    shippingMatchStatus: _shippingMatchStatus,
+    ...accountingFields
+  } = expense;
   const metadataOrderNumber = extractShippingOrderNumber(
     transaction.metadata,
     shipment.metadata,
@@ -73,7 +81,7 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
     date: expense.date,
   };
   return {
-    ...expense,
+    ...accountingFields,
     shippoTransactionId: String(transaction.object_id || '').trim(),
     shippoShipmentId: String(shipment.object_id || (typeof transaction.shipment === 'string' ? transaction.shipment : '') || '').trim(),
     shippoOrderId: String(shippoOrder.object_id || (typeof transaction.order === 'string' ? transaction.order : '') || '').trim(),
@@ -82,6 +90,24 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
     recipientPostal: source.recipientPostal,
     ...reconcileShippingExpense(source, orders),
   };
+}
+
+export function stageShippoExpenseEnrichment(
+  expense,
+  transaction = {},
+  shipment = {},
+  shippoOrder = {},
+  orders = [],
+  contextLoaded = true,
+) {
+  if (!expense || !contextLoaded) return null;
+  return { target: expense, enriched: enrichShippoExpense(expense, transaction, shipment, shippoOrder, orders) };
+}
+
+export function applyShippoExpenseEnrichments(staged = []) {
+  staged.forEach(entry => {
+    if (entry?.target && entry?.enriched) Object.assign(entry.target, entry.enriched);
+  });
 }
 
 export function linkedShippingSummary(order = {}, expenses = [], orderRateToBase = 1) {

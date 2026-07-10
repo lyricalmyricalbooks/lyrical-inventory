@@ -65,7 +65,8 @@ describe('main.js window binding verification', () => {
 
   it('enriches existing Shippo expenses instead of duplicating them', () => {
     expect(mainContent).toContain("const existingExpense = existingExpensesByRef.get(ref)");
-    expect(mainContent).toContain('Object.assign(existingExpense, enriched)');
+    expect(mainContent).toContain('stagedExistingEnrichments.push(staged)');
+    expect(mainContent).toContain('applyShippoExpenseEnrichments(stagedExistingEnrichments)');
     expect(mainContent).toContain('fetchShippoContext(token, tx)');
     expect(mainContent).toContain('enrichShippoExpense(');
   });
