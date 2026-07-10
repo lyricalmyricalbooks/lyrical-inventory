@@ -14959,7 +14959,7 @@ function renderTaxCenter() {
             type: 'Expense',
             desc: e.desc + ` (${b.title})`,
             cat: e.cat || 'Project Expense',
-            ref: e.shippingOrderNumber ? `${e.ref} · ${e.shippingOrderNumber}` : e.ref || '',
+            ref: e.shippingOrderNumber ? `${e.ref || ''} · ${e.shippingOrderNumber}` : e.ref || '',
             receipt: e.receipt || '',
             origCurrency: displayOrigCur,
             origAmount: displayOrigAmt,
@@ -22716,7 +22716,11 @@ function editShippoApiKey() {
 
 function onShippoPreFillDestChange() {
   const select = $('ship-prefill-dest');
-  if (!select || !select.value) return;
+  if (!select) return;
+  if (!select.value) {
+    select.dataset.orderNumber = '';
+    return;
+  }
   
   try {
     const addr = JSON.parse(select.value);
@@ -23067,7 +23071,7 @@ async function calculateShippoRates() {
     };
 
     const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber);
-    if (selectedOrderNumber) payload.metadata = `order_number:${selectedOrderNumber}`;
+    if (selectedOrderNumber) payload.metadata = `order_number:${selectedOrderNumber.slice(0, 100)}`;
 
     if (isInternational) {
       payload.customs_declaration = buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit });
