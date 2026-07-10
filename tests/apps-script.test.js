@@ -76,6 +76,23 @@ describe('Apps Script Integration', () => {
   });
 
   describe('extractBigCartelShippingPaid_ (Big Cartel scanner)', () => {
+    it('extracts discounted receipt financials', () => {
+      const code = fs.readFileSync(codeGsPath, 'utf8');
+      const match = code.match(/function extractBigCartelFinancials_\(body, qty\) \{[\s\S]+?\n\}/);
+      const money = code.match(/function parseBigCartelMoney_\(value\) \{[\s\S]+?\n\}/);
+      expect(match).not.toBeNull();
+      const extract = new Function('body', 'qty', money[0] + '\n' + match[0] + '\nreturn extractBigCartelFinancials_(body, qty);');
+      expect(extract(`Subtotal\nCA$65.00\nDiscount (LMBCOLLECTIVE)\n-CA$32.50\nInternational standard - 7 - 14 business days\nCA$32.00\nTax\nCA$0.00\nTotal\nCA$64.50`, 1)).toMatchObject({ subtotal: 65, discountCode: 'LMBCOLLECTIVE', discountAmount: 32.5, merchandisePaid: 32.5, shippingPaid: 32, taxPaid: 0, totalPaid: 64.5, discountSource: 'receipt', price: 32.5 });
+    });
+
+    it('applies the collective 50% rule when discount amount is missing', () => {
+      const code = fs.readFileSync(codeGsPath, 'utf8');
+      const match = code.match(/function extractBigCartelFinancials_\(body, qty\) \{[\s\S]+?\n\}/);
+      const money = code.match(/function parseBigCartelMoney_\(value\) \{[\s\S]+?\n\}/);
+      const extract = new Function('body', 'qty', money[0] + '\n' + match[0] + '\nreturn extractBigCartelFinancials_(body, qty);');
+      expect(extract('Subtotal\nCA$65.00\nDiscount code: LMBCOLLECTIVE\nTotal\nCA$64.50', 1)).toMatchObject({ discountAmount: 32.5, merchandisePaid: 32.5, discountSource: 'code-rule' });
+    });
+
     function loadShippingExtractor() {
       const codeContent = fs.readFileSync(codeGsPath, 'utf8');
       const moneyMatch = codeContent.match(/function parseBigCartelMoney_\(value\) \{[\s\S]+?\n\}/);
