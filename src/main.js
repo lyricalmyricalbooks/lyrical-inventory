@@ -5946,7 +5946,9 @@ async function backfillShipping() {
     if (!st || !Array.isArray(st.hist)) continue;
     for (const h of st.hist) {
       if (h.chan !== 'Website' || h.voided) continue;
-      const incomplete = !h.shipName || !h.shipAddr1 || !h.shipCity || !h.shipPostal;
+      const incompleteAddress = !h.shipName || !h.shipAddr1 || !h.shipCity || !h.shipPostal;
+      const incompleteFinancials = !Number(h.shippingPaid || 0) || !Number(h.totalPaid || 0);
+      const incomplete = incompleteAddress || incompleteFinancials;
       if (!incomplete) continue;
       const match = lookup.get(norm(h.num));
       if (!match) { stillMissing++; continue; }
@@ -5954,6 +5956,19 @@ async function backfillShipping() {
       for (const f of fields) {
         const incoming = (match[f] || (f === 'shipName' ? match.customer : '') || (f === 'shipEmail' ? match.email : '') || '').trim();
         if (incoming && !h[f]) { h[f] = incoming; changed = true; }
+      }
+      const financialFields = ['subtotal', 'discountCode', 'discountAmount', 'discountSource',
+        'merchandisePaid', 'shippingMethod', 'shippingPaid', 'taxPaid', 'totalPaid'];
+      for (const f of financialFields) {
+        if (match[f] === undefined || match[f] === null) continue;
+        const incoming = f === 'discountCode' || f === 'discountSource' || f === 'shippingMethod'
+          ? String(match[f] || '')
+          : Number(match[f]) || 0;
+        if (h[f] !== incoming) { h[f] = incoming; changed = true; }
+      }
+      if (match.merchandisePaid !== undefined && Number(h.qty) > 0) {
+        const netPrice = Math.round((Number(match.merchandisePaid) / Number(h.qty)) * 100) / 100;
+        if (h.price !== netPrice) { h.price = netPrice; changed = true; }
       }
       if (changed) {
         updated++;
@@ -16339,7 +16354,6 @@ async function importShippoShippingFromApi() {
         imported++;
         if (expense.currency === 'USD') totalUsd += expense.amount;
       }
-
       hasMore = Boolean(json.next);
       page += 1;
       if (statusEl) statusEl.textContent = `Fetched ${imported + skipped} transactions…`; 

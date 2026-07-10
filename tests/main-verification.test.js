@@ -82,4 +82,11 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('fetchShippoContext(token, tx)');
     expect(mainContent).toContain('enrichShippoExpense(');
   });
+
+  it('backfills parsed receipt financials onto applied website history', () => {
+    expect(mainContent).toContain("const financialFields = ['subtotal', 'discountCode', 'discountAmount'");
+    expect(mainContent).toContain('h.shippingPaid');
+    expect(mainContent).toContain('h.totalPaid');
+    expect(mainContent).toContain('const netPrice = Math.round((Number(match.merchandisePaid) / Number(h.qty)) * 100) / 100');
+  });
 });
