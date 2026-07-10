@@ -56,10 +56,12 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('orderNumber: h.num');
     expect(mainContent).toContain('payload.metadata = `order_number:${selectedOrderNumber}`');
     expect(mainContent).toContain('select.dataset.orderNumber');
+    expect(mainContent).toContain('selectedOrderNumber.slice(0, 100)');
+    expect(mainContent).toContain("select.dataset.orderNumber = ''");
   });
 
   it('includes a linked order number in Tax Center shipping expense exports', () => {
-    expect(mainContent).toContain('e.shippingOrderNumber ? `${e.ref} · ${e.shippingOrderNumber}` : e.ref');
+    expect(mainContent).toContain('e.shippingOrderNumber ? `${e.ref || \'\'} · ${e.shippingOrderNumber}` : e.ref || \'\'');
   });
 
   it('adds customer-paid shipping to the Tax Center income ledger', () => {
