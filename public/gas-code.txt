@@ -171,7 +171,7 @@ function scanGmail_(e) {
       const dateMatch = body.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4})/i);
       const subtotalMatch = body.match(/(?:\n|\r|^|\s)Subtotal[\s\n]*(?:[A-Z]{1,3}\$|\$)?\s*([0-9.,]+)/i);
       const subtotal = subtotalMatch ? parseBigCartelMoney_(subtotalMatch[1]) : 0;
-      const shippingPaid = extractBigCartelShippingPaid_(body, subtotal);
+      const financials = extractBigCartelFinancials_(body, 1);
 
       let shipName='', shipAddr1='', shipCity='', shipProvince='', shipPostal='', shipCountry='', shipEmail='';
       const shipBlock = body.match(/Shipping address\s*\n+([\s\S]*?)(?:\n\s*\n|\n\s*Contact)/i);
@@ -202,8 +202,7 @@ function scanGmail_(e) {
           id: msg.getId(),
           orderNum: orderNumMatch[1].trim(),
           date: dateMatch ? dateMatch[1].trim() : msg.getDate().toISOString().split('T')[0],
-          price: subtotal,
-          shippingPaid: shippingPaid,
+          ...financials,
           customer: shipName,
           email: shipEmail,
           shipName, shipAddr1, shipCity, shipProvince, shipPostal, shipCountry,
@@ -220,6 +219,22 @@ function parseBigCartelMoney_(value) {
   if (!match) return 0;
   const n = parseFloat(match[1].replace(/,/g, ''));
   return isNaN(n) ? 0 : n;
+}
+
+function extractBigCartelFinancials_(body, qty) {
+  const text = String(body || '');
+  const money = (label) => { const m = text.match(new RegExp('(?:^|\\n)\\s*' + label + '[^\\n]*\\n\\s*((?:[A-Z]{1,3}\\$|\\$)?\\s*[0-9][0-9,]*(?:\\.[0-9]+)?)', 'i')); return m ? parseBigCartelMoney_(m[1]) : 0; };
+  const subtotal = money('Subtotal');
+  const totalPaid = money('Total');
+  const taxPaid = money('Tax');
+  const codeMatch = text.match(/LMBCOLLECTIVE/i);
+  const discountMatch = text.match(/Discount[^\\n]*\\n\\s*-?((?:[A-Z]{1,3}\\$|\\$)?\\s*[0-9][0-9,]*(?:\\.[0-9]+)?)/i);
+  const discountAmount = discountMatch ? parseBigCartelMoney_(discountMatch[1]) : (codeMatch ? Math.round(subtotal * 0.5 * 100) / 100 : 0);
+  const discountSource = discountMatch ? 'receipt' : (codeMatch ? 'code-rule' : 'none');
+  const merchandisePaid = Math.round((subtotal - discountAmount) * 100) / 100;
+  const shippingPaid = Math.round((totalPaid - subtotal + discountAmount - taxPaid) * 100) / 100;
+  const methodMatch = text.match(/(?:^|\\n)\\s*([^\\n$]+?)\\s*\\n\\s*(?:[A-Z]{1,3}\\$|\\$)\\s*[0-9]/i);
+  return { subtotal, discountCode: codeMatch ? 'LMBCOLLECTIVE' : '', discountAmount, merchandisePaid, shippingMethod: methodMatch ? methodMatch[1].trim() : '', shippingPaid, taxPaid, totalPaid, discountSource, price: qty ? merchandisePaid / qty : merchandisePaid };
 }
 
 function extractBigCartelShippingPaid_(body, subtotal) {

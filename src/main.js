@@ -5689,7 +5689,15 @@ function applyOne(id, { deferRender = false } = {}) {
     shipAddr1: o.shipAddr1 || '', shipAddr2: o.shipAddr2 || '',
     shipCity: o.shipCity || '', shipProvince: o.shipProvince || '',
     shipPostal: o.shipPostal || '', shipCountry: o.shipCountry || 'Canada',
-    shippingPaid: Number(o.shippingPaid || 0) || 0
+    shippingPaid: Number(o.shippingPaid || 0) || 0,
+    subtotal: Number(o.subtotal || 0) || 0,
+    discountCode: o.discountCode || '',
+    discountAmount: Number(o.discountAmount || 0) || 0,
+    merchandisePaid: Number(o.merchandisePaid || price * o.qty) || 0,
+    shippingMethod: o.shippingMethod || '',
+    taxPaid: Number(o.taxPaid || 0) || 0,
+    totalPaid: Number(o.totalPaid || 0) || 0,
+    discountSource: o.discountSource || ''
   };
   // Deterministic id derived from the Big Cartel order number so the same
   // import on a different device produces the same id (no duplicate rows).
@@ -5847,6 +5855,14 @@ async function fetchOrders() {
       qty,
       price,
       shippingPaid: parseFloat(o.shippingPaid ?? o.shipping ?? o.shippingAmount ?? 0) || 0,
+      subtotal: parseFloat(o.subtotal ?? 0) || 0,
+      discountCode: o.discountCode || '',
+      discountAmount: parseFloat(o.discountAmount ?? 0) || 0,
+      merchandisePaid: parseFloat(o.merchandisePaid ?? price * qty) || 0,
+      shippingMethod: o.shippingMethod || '',
+      taxPaid: parseFloat(o.taxPaid ?? 0) || 0,
+      totalPaid: parseFloat(o.totalPaid ?? 0) || 0,
+      discountSource: o.discountSource || '',
       date: normalizedDate || today()
     };
   }).filter(o => o.orderNum);
