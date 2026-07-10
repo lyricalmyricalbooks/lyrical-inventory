@@ -14959,7 +14959,7 @@ function renderTaxCenter() {
             type: 'Expense',
             desc: e.desc + ` (${b.title})`,
             cat: e.cat || 'Project Expense',
-            ref: e.ref || '',
+            ref: e.shippingOrderNumber ? `${e.ref} · ${e.shippingOrderNumber}` : e.ref || '',
             receipt: e.receipt || '',
             origCurrency: displayOrigCur,
             origAmount: displayOrigAmt,
@@ -22604,6 +22604,7 @@ function initShippingTab() {
     } else {
       orders.slice(0, 20).forEach(h => {
         const addrObj = {
+          orderNumber: h.num,
           name: h.shipName,
           company: '',
           phone: h.shipPhone || h.phone || '',
@@ -22719,6 +22720,7 @@ function onShippoPreFillDestChange() {
   
   try {
     const addr = JSON.parse(select.value);
+    select.dataset.orderNumber = normalizeShippingOrderNumber(addr.orderNumber);
     $('st-name').value = addr.name || '';
     $('st-company').value = addr.company || '';
     $('st-phone').value = addr.phone || '';
@@ -23063,6 +23065,9 @@ async function calculateShippoRates() {
       }],
       async: false
     };
+
+    const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber);
+    if (selectedOrderNumber) payload.metadata = `order_number:${selectedOrderNumber}`;
 
     if (isInternational) {
       payload.customs_declaration = buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit });
