@@ -63,6 +63,11 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('Number(h.shippingPaid)');
   });
 
+  it('keeps Shippo references out of visible worklist copy', () => {
+    expect(mainContent).toContain('aria-label="Order for postage expense"');
+    expect(mainContent).not.toContain('<span class="sr-only"> for ${escapeHtml(expense.ref)}</span>');
+  });
+
   it('enriches existing Shippo expenses instead of duplicating them', () => {
     expect(mainContent).toContain("const existingExpense = existingExpensesByRef.get(ref)");
     expect(mainContent).toContain('stagedExistingEnrichments.push(staged)');

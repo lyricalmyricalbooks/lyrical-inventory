@@ -34,6 +34,7 @@ import {
   enrichShippoExpense,
   linkedShippingSummary,
   normalizeShippingOrderNumber,
+  persistManualShippingLink,
   stageShippoExpenseEnrichment,
 } from './lib/shipping-reconciliation.js';
 
@@ -1253,12 +1254,15 @@ async function loadTaxCenter() {
   }
 }
 
-async function saveTaxCenter() {
+async function saveTaxCenter({ rethrow = false } = {}) {
   if (isAuthor()) return;
   try {
     await window._fbSaveSettings('taxCenter', TAX_CENTER);
+    return true;
   } catch (e) {
     console.error(e);
+    if (rethrow) throw e;
+    return false;
   }
 }
 
@@ -16152,8 +16156,8 @@ function renderShippingReconciliationWorklist() {
         <span>${escapeHtml(expense.date || 'Date unavailable')} · ${escapeHtml(context || 'Recipient unavailable')}</span>
         <small>${escapeHtml(expense.shippingMatchStatus || 'unmatched')}</small>
       </div>
-      <label for="${domId}">Order<span class="sr-only"> for ${escapeHtml(expense.ref)}</span></label>
-      <select id="${domId}"><option value="">Select an order</option>${options}</select>
+      <label for="${domId}">Order</label>
+      <select id="${domId}" aria-label="Order for postage expense"><option value="">Select an order</option>${options}</select>
       <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)">Link postage</button>
     </div>`;
   }).join('');
@@ -16165,12 +16169,14 @@ async function linkShippingExpense(ref) {
   const domId = String(expense.ref).replace(/[^A-Za-z0-9_-]/g, '-');
   const number = normalizeShippingOrderNumber($(domId)?.value);
   if (!number) { showToast('Choose an order before linking postage', 'warn'); return; }
-  expense.shippingOrderNumber = number;
-  expense.shippingMatchMethod = 'manual';
-  expense.shippingMatchStatus = 'matched';
-  delete expense.shippingSuggestedOrderNumber;
-  delete expense.shippingCandidateOrderNumbers;
-  await saveTaxCenter();
+  try {
+    await persistManualShippingLink(expense, number, () => saveTaxCenter({ rethrow: true }));
+  } catch (error) {
+    console.error('Shipping link save failed', error);
+    renderShippingReconciliationWorklist();
+    showToast('Could not save the shipping link. Please try again.', 'err');
+    return;
+  }
   renderShippingReconciliationWorklist();
   renderOrders();
   renderHist();

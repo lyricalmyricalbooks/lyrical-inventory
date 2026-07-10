@@ -118,6 +118,36 @@ export function applyShippoExpenseEnrichments(staged = []) {
   });
 }
 
+const SHIPPING_LINK_KEYS = [
+  'shippingOrderNumber',
+  'shippingSuggestedOrderNumber',
+  'shippingCandidateOrderNumbers',
+  'shippingMatchMethod',
+  'shippingMatchStatus',
+];
+
+export async function persistManualShippingLink(expense, orderNumber, persist) {
+  const prior = new Map(SHIPPING_LINK_KEYS.map(key => [
+    key,
+    { present: Object.prototype.hasOwnProperty.call(expense, key), value: expense[key] },
+  ]));
+  expense.shippingOrderNumber = normalizeShippingOrderNumber(orderNumber);
+  expense.shippingMatchMethod = 'manual';
+  expense.shippingMatchStatus = 'matched';
+  delete expense.shippingSuggestedOrderNumber;
+  delete expense.shippingCandidateOrderNumbers;
+  try {
+    return await persist();
+  } catch (error) {
+    SHIPPING_LINK_KEYS.forEach(key => {
+      const snapshot = prior.get(key);
+      if (snapshot.present) expense[key] = snapshot.value;
+      else delete expense[key];
+    });
+    throw error;
+  }
+}
+
 export function linkedShippingSummary(order = {}, expenses = [], orderRateToBase = 1) {
   const orderNumber = normalizeShippingOrderNumber(order.num || order.orderNum);
   const linked = orderNumber ? expenses.filter(expense =>

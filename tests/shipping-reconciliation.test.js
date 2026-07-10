@@ -6,6 +6,7 @@ import {
   enrichShippoExpense,
   stageShippoExpenseEnrichment,
   applyShippoExpenseEnrichments,
+  persistManualShippingLink,
   linkedShippingSummary,
 } from '../src/lib/shipping-reconciliation.js';
 
@@ -158,6 +159,42 @@ describe('shipping reconciliation', () => {
     expect(existing).not.toHaveProperty('shippingOrderNumber');
     expect(existing).not.toHaveProperty('shippingSuggestedOrderNumber');
     expect(existing).not.toHaveProperty('shippingCandidateOrderNumbers');
+  });
+
+  it('rolls back manual link fields when persistence fails and only resolves after success', async () => {
+    const expense = {
+      ref: 'shippo:tx1',
+      shippingSuggestedOrderNumber: '#GPWT-916083',
+      shippingCandidateOrderNumbers: ['#GPWT-916083', '#KEVI-640529'],
+      shippingMatchMethod: 'recipient',
+      shippingMatchStatus: 'suggested',
+    };
+    const failure = new Error('offline');
+
+    await expect(persistManualShippingLink(expense, '#KEVI-640529', async () => {
+      expect(expense).toMatchObject({
+        shippingOrderNumber: '#KEVI-640529',
+        shippingMatchMethod: 'manual',
+        shippingMatchStatus: 'matched',
+      });
+      throw failure;
+    })).rejects.toBe(failure);
+
+    expect(expense).toEqual({
+      ref: 'shippo:tx1',
+      shippingSuggestedOrderNumber: '#GPWT-916083',
+      shippingCandidateOrderNumbers: ['#GPWT-916083', '#KEVI-640529'],
+      shippingMatchMethod: 'recipient',
+      shippingMatchStatus: 'suggested',
+    });
+
+    await expect(persistManualShippingLink(expense, '#KEVI-640529', async () => 'saved')).resolves.toBe('saved');
+    expect(expense).toEqual({
+      ref: 'shippo:tx1',
+      shippingOrderNumber: '#KEVI-640529',
+      shippingMatchMethod: 'manual',
+      shippingMatchStatus: 'matched',
+    });
   });
 
   it('sums multiple linked labels and rounds the base-currency margin', () => {
