@@ -5650,7 +5650,7 @@ function renderOrders() {
         <span class="order-summary">${bookLabel}<span>Qty ${o.qty}</span><span>${fmt(o.price || listPrice, listCur)}</span>${shippingBadge}${priceWarn}</span>
         <div class="order-actions">
           ${viewEmailBtn}
-          ${!done ? `<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>` : '<span class="order-done">Done</span>'}
+          ${!done ? `<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>` : `<button class="btn sm" onclick="reapplyOne('${o.id}')" title="Update this applied order with the latest receipt totals">Reapply</button>`}
         </div>
       </div>
     </div>`;
@@ -5661,6 +5661,44 @@ function renderOrders() {
   }
 
   $('apply-all-btn').disabled = !visible.some(o => !appliedIds.has(o.id) && !appliedIds.has(o.orderNum));
+}
+
+// Update an already-applied website order in place after a receipt backfill.
+// This deliberately does not decrement stock or increment sold units again.
+function reapplyOne(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  const targetBook = o.bookId && BOOKS[o.bookId] ? o.bookId : activeBook;
+  const state = states[targetBook];
+  const book = BOOKS[targetBook];
+  if (!state || !book) { showToast('Cannot find book for this order', 'err'); return; }
+  const history = (state.hist || []).find(h => h.num === o.orderNum && h.chan === 'Website');
+  if (!history) { showToast('Applied order history not found', 'warn'); return; }
+  const oldRevenue = (Number(history.qty) || 0) * (Number(history.price) || 0);
+  const newPrice = Number(o.price) || Number(history.price) || Number(book.listPrice) || 0;
+  const newQty = Number(history.qty) || Number(o.qty) || 1;
+  const delta = newQty * newPrice - oldRevenue;
+  state.revenue = (Number(state.revenue) || 0) + delta;
+  if (!state.chStats.Website) state.chStats.Website = { txns: 0, units: 0, revenue: 0 };
+  state.chStats.Website.revenue = (Number(state.chStats.Website.revenue) || 0) + delta;
+  Object.assign(history, {
+    price: newPrice,
+    subtotal: Number(o.subtotal || 0) || 0,
+    discountCode: o.discountCode || '',
+    discountAmount: Number(o.discountAmount || 0) || 0,
+    discountSource: o.discountSource || '',
+    merchandisePaid: Number(o.merchandisePaid || 0) || newQty * newPrice,
+    shippingMethod: o.shippingMethod || '',
+    shippingPaid: Number(o.shippingPaid || 0) || 0,
+    taxPaid: Number(o.taxPaid || 0) || 0,
+    totalPaid: Number(o.totalPaid || 0) || 0
+  });
+  saveState(targetBook);
+  syncToSheets({ type: 'order', book: book.title, date: history.date, num: history.num, chan: 'Website', qty: history.qty, price: history.price, total: history.qty * history.price, stockAfter: history.after, notes: 'Big Cartel', sheetsId: history.sheetsId, currency: getBookCurrencyCode(book) });
+  if (history.shippingPaid > 0) syncToSheets(shippingPurchaseRowPayload(book, getBookCurrencyCode(book), history));
+  renderOrders();
+  updateDash();
+  showToast(`✓ ${o.orderNum} updated with receipt totals`, 'ok');
 }
 
 function applyOne(id, { deferRender = false } = {}) {
@@ -23282,7 +23320,7 @@ function exposeLegacyInlineHandlers() {
     ocReadProposalCreditEdit_, ocFlashCard_, ocApproveProposal, ocDismissProposal,
     ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocCopyEmails, ocSearch,
     ocFilterByStage, recordOrder, showMoreHist, showAllHist, renderConsignHistRow, renderHist,
-    getScanMemory, saveScanMemory, getAllAppliedIds, renderOrders, applyOne, applyAll, fetchOrders,
+    getScanMemory, saveScanMemory, getAllAppliedIds, renderOrders, applyOne, reapplyOne, applyAll, fetchOrders,
     backfillShipping, fetchLiveRate, fetchHistoricalRate, onManualCurrencyChange, calcFx,
     calcManualFxRate, onExpenseCurrencyChange, calcExpenseFx, _toggleShippingPanel, openLabelModal,
     updateShippedStatusUI, toggleShipped, printShippingLabel, saveArtistPaymentLink,

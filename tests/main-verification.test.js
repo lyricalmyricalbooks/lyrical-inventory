@@ -89,4 +89,10 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('h.totalPaid');
     expect(mainContent).toContain('const netPrice = Math.round((Number(match.merchandisePaid) / Number(h.qty)) * 100) / 100');
   });
+
+  it('offers a safe reapply path for already-applied website orders', () => {
+    expect(mainContent).toContain('function reapplyOne');
+    expect(mainContent).toContain('onclick="reapplyOne');
+    expect(mainContent).toContain('does not decrement stock');
+  });
 });
