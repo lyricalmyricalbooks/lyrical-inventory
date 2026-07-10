@@ -24,7 +24,7 @@ import {
   OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields,
   ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
   ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate,
-  ocWaitingDays,
+  ocWaitingDays, ocAttentionSummary,
 } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
@@ -4114,8 +4114,11 @@ function renderOpenCall() {
 
   const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (activeProj) ocEnsureQueues_(activeProj);
-  const inboxCount = activeProj ? activeProj.inbox.length : 0;
-  const outboxCount = activeProj ? activeProj.outbox.length : 0;
+  const validInboxItems = activeProj ? activeProj.inbox.filter(p => activeProj.contributors.some(c => c.id === p.contributorId)) : [];
+  const validOutboxItems = activeProj ? activeProj.outbox.filter(e => activeProj.contributors.some(c => c.id === e.contributorId)) : [];
+  const attention = ocAttentionSummary(listRaw, validInboxItems, validOutboxItems);
+  const inboxCount = attention.reviewCount;
+  const outboxCount = attention.readyCount;
   const lastScannedVal = activeProj ? activeProj.lastScanned : null;
   const lastScannedHtml = lastScannedVal 
     ? `<div class="oc-last-scanned">Last scanned: ${formatDateTime(lastScannedVal)}</div>` 
@@ -4496,10 +4499,10 @@ function renderOpenCall() {
       const activeVal = !doneVal && isNextStep(c, key);
       const cls = doneVal ? 'done' : activeVal ? 'active' : '';
       return `
-        <div class="oc-step ${cls}" onclick="ocToggle('${c.id}','${key}')" title="Click to toggle ${label} stage">
+        <button type="button" class="oc-step ${cls}" onclick="ocToggle('${c.id}','${key}')" title="Click to toggle ${label} stage">
           <div class="oc-step-circle">${doneVal ? '✓' : num}</div>
           <div class="oc-step-label">${label}</div>
-        </div>`;
+        </button>`;
     };
 
     const pipelineVisualizer = `
@@ -4520,32 +4523,45 @@ function renderOpenCall() {
     const primaryCtaHtml = pipelineEmailBtnHtml
       ? `<div class="oc-card-primary-cta">${pipelineEmailBtnHtml}</div>`
       : '';
+    const completedStages = OC_STAGES.filter(st => c[st.key]).length;
+    const waitingDays = ocWaitingDays(c);
+    const currentStatusHtml = next
+      ? `${escapeHtml(next)}${waitingDays !== null && waitingDays >= 2 ? ` <span class="oc-wait-chip" title="No movement for ${waitingDays} day${waitingDays === 1 ? '' : 's'} — measured from the last stage change">${waitingDays}d</span>` : ''}`
+      : 'All stages complete';
 
     return `
-      <div class="card oc-contributor-card" id="oc-card-${c.id}">
-        <div class="oc-card-head">
+      <article class="card oc-contributor-card oc-work-item" id="oc-card-${c.id}">
+        <header class="oc-card-head oc-work-item-header">
           <div class="oc-card-identity">
             <div class="oc-avatar" aria-hidden="true">${escapeHtml(ocInitials(c.name))}</div>
             <div class="oc-card-meta">
               <div class="oc-contributor-name">${escapeHtml(c.name || '—')}${creditNameHtml}${mailStatusHtml}</div>
               <div class="oc-email-row">
                 ${emailCell}
-                ${gmailLinksHtml}
               </div>
-              ${photosHtml}
+              <div class="oc-work-item-current-status">${currentStatusHtml}</div>
             </div>
           </div>
           <div class="oc-card-actions">
             ${primaryCtaHtml}
-            <div class="oc-util-actions">
+            <div class="oc-util-actions" hidden>
               ${mailActionsHtml}
               <button class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">↻ Scan</button>
               <button class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
               <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">✕ Remove</button>
             </div>
           </div>
+        </header>
+        <div class="oc-work-item-progress" aria-label="${completedStages} of ${OC_STAGES.length} stages complete">
+          <span>${completedStages} of ${OC_STAGES.length} stages complete</span>
+          <span>${progressPercent}%</span>
         </div>
-        ${notesHtml}
+        <details class="oc-work-item-details">
+          <summary>Contributor details</summary>
+          <div class="oc-work-item-details-body">
+            ${photosHtml}
+            <div class="oc-email-row">${gmailLinksHtml}</div>
+            ${notesHtml}
         <div class="oc-status-strip">
           ${pipelineVisualizer}
           ${next
@@ -4555,8 +4571,16 @@ function renderOpenCall() {
               })()}</div>`
             : `<div class="oc-all-complete">✓ All stages complete</div>`}
         </div>
-        <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
-      </div>`;
+            <div class="oc-util-actions">
+              ${mailActionsHtml}
+              <button class="btn sm" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">Scan</button>
+              <button class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">Edit</button>
+              <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">Remove</button>
+            </div>
+            <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
+          </div>
+        </details>
+      </article>`;
   }).join('');
 
   const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
@@ -4628,7 +4652,7 @@ function renderOpenCall() {
 
   // Section hero — Playfair title, one-line subtitle, and *actionable* stats:
   // the two queue counts jump straight to their cards when clicked.
-  const heroStatsHtml = total ? `
+  const _legacyHeroStatsHtml = total ? `
         <div class="oc-hero-stats">
           <div class="oc-hero-stat">
             <div class="oc-hero-stat-num">${total}</div>
@@ -4647,13 +4671,37 @@ function renderOpenCall() {
             <div class="oc-hero-stat-label">Complete</div>
           </div>
         </div>` : '';
+  const primaryAttention = attention.reviewCount ? 'review'
+    : attention.waitingCount ? 'waiting'
+      : attention.readyCount ? 'ready' : '';
+  const attentionCard = ({ key, count, label, detail, target }) => `
+    <button type="button" class="oc-attention-card ${count ? 'has-work' : 'clear'} ${primaryAttention === key ? 'is-primary' : ''}"
+      onclick="document.querySelector('${target}')?.scrollIntoView({behavior:'smooth',block:'start'})"
+      aria-label="${escapeHtml(label)}: ${count}. ${escapeHtml(detail)}">
+      <span class="oc-attention-number">${count}</span>
+      <span class="oc-attention-label">${escapeHtml(label)}</span>
+      <span class="oc-attention-detail">${escapeHtml(detail)}</span>
+    </button>`;
   const heroHtml = `
+    <section class="oc-command-header" aria-labelledby="oc-command-title">
+      <div class="oc-hero-text">
+        <h2 class="oc-hero-title" id="oc-command-title">Open Call</h2>
+        <p class="oc-hero-subtitle">Guide selected contributors from first notice through pre-order.</p>
+      </div>
+      <div class="oc-attention-rail" aria-label="Attention needed">
+        ${attentionCard({ key: 'review', count: attention.reviewCount, label: 'To review', detail: attention.reviewCount ? 'Scan findings need your approval.' : 'No scan findings waiting.', target: '.oc-inbox-card' })}
+        ${attentionCard({ key: 'waiting', count: attention.waitingCount, label: 'Waiting', detail: attention.waitingCount ? `${attention.oldestWaitingDays} days is the oldest wait.` : 'No contributors are stalled.', target: '#oc-contributor-list' })}
+        ${attentionCard({ key: 'ready', count: attention.readyCount, label: 'Ready to send', detail: attention.readyCount ? 'Queued emails are ready for review.' : 'No emails are queued.', target: '.oc-outbox-card' })}
+      </div>
+    </section>`;
+
+  const _legacyHeroHtml = `
     <div class="oc-hero">
       <div class="oc-hero-text">
         <div class="oc-hero-title"><span class="header-mark">✦</span>Open Call</div>
         <div class="oc-hero-subtitle">Guide selected contributors from first notice through pre-order — one premium pipeline.</div>
       </div>
-      ${heroStatsHtml}
+      ${_legacyHeroStatsHtml}
     </div>`;
 
   // ── Pipeline funnel: who's waiting at each step, one click to filter ──
@@ -4668,7 +4716,7 @@ function renderOpenCall() {
       return nx && nx.key === st.key;
     }).length,
   }));
-  const funnelSeg = (key, label, n, idx) => `
+  const _legacyFunnelSeg = (key, label, n, idx) => `
         <button class="oc-funnel-seg ${ocFilterStage === key ? 'active' : ''} ${n ? '' : 'empty'} ${key === 'complete' ? 'complete' : ''}"
           onclick="ocFilterByStage('${ocFilterStage === key ? '' : key}')"
           title="${key === 'complete' ? 'Artists with every stage done' : `Artists whose next step is “${label}”`} — click to ${ocFilterStage === key ? 'clear the filter' : 'filter the list'}">
@@ -4676,7 +4724,21 @@ function renderOpenCall() {
           <span class="oc-funnel-label">${idx}${label}</span>
           <span class="oc-funnel-bar"><span style="width:${total ? Math.max(n ? 6 : 0, Math.round(n / total * 100)) : 0}%"></span></span>
         </button>`;
+  const funnelSeg = (key, label, n, idx) => `
+    <button type="button" class="oc-funnel-seg ${ocFilterStage === key ? 'active' : ''}"
+      aria-pressed="${ocFilterStage === key}"
+      onclick="ocFilterByStage('${ocFilterStage === key ? '' : key}')">
+      <span class="oc-funnel-num">${n}</span>
+      <span class="oc-funnel-label">${idx} · ${escapeHtml(label)}</span>
+      <span class="oc-funnel-state">${n ? `${n} waiting` : 'Clear'}</span>
+    </button>`;
   const funnelHtml = total ? `
+    <nav class="oc-pipeline" aria-label="Filter contributors by next pipeline stage">
+      ${funnelCounts.map((f, i) => funnelSeg(f.key, f.label, f.n, i + 1)).join('')}
+      ${funnelSeg('complete', 'Complete', done, 'Complete')}
+      ${ocFilterStage ? `<button type="button" class="btn sm" onclick="ocFilterByStage('')">Clear filter</button>` : ''}
+    </nav>` : '';
+  const _legacyFunnelHtml = total ? `
     <div class="card oc-funnel-card">
       <div class="oc-funnel">
         ${funnelCounts.map((f, i) => funnelSeg(f.key, f.label, f.n, `${i + 1} · `)).join('')}
@@ -4752,15 +4814,26 @@ function renderOpenCall() {
       ${outboxRows}
     </div>` : '';
 
+  const campaignToolsOpen = ocUiOpen_('campaign-tools', false);
+  const campaignToolsHtml = `
+    <section class="oc-campaign-tools ${campaignToolsOpen ? 'open' : ''}">
+      <button type="button" class="oc-campaign-tools-toggle" aria-expanded="${campaignToolsOpen}"
+        onclick="ocToggleSection('campaign-tools')">Campaign tools <span>${campaignToolsOpen ? 'Hide' : 'Show'}</span></button>
+      <div class="oc-campaign-tools-body" ${campaignToolsOpen ? '' : 'hidden'}>
+        ${templatesEditor}${searchFilterBar}
+      </div>
+    </section>`;
+
   const mainHtml = `
     <div class="oc-main">
       ${heroHtml}
-      ${inboxHtml}
-      ${outboxHtml}
+      <section class="oc-priority-queues" aria-label="Priority queues">
+        ${inboxHtml}
+        ${outboxHtml}
+      </section>
       ${funnelHtml}
-      ${templatesEditor}
-      ${searchFilterBar}
-      <div style="display:flex;flex-direction:column;gap:14px;">
+      ${campaignToolsHtml}
+      <div id="oc-contributor-list" style="display:flex;flex-direction:column;gap:14px;">
         ${cards || `
           <div class="card oc-empty-state">
             <div class="oc-empty-icon">🎨</div>
