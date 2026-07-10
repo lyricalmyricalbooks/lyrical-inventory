@@ -3,7 +3,7 @@ import {
   OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields,
   ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
   ocNextSendStage, ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate,
-  ocChosenPhoto, ocWaitingDays,
+  ocChosenPhoto, ocWaitingDays, ocAttentionSummary,
 } from '../src/lib/opencall.js';
 
 describe('newContributor', () => {
@@ -394,5 +394,21 @@ describe('ocWaitingDays', () => {
     expect(ocWaitingDays({ lastStageAt: 'not-a-date' }, Date.now())).toBeNull();
     const now = Date.now();
     expect(ocWaitingDays({ lastStageAt: new Date(now + DAY).toISOString() }, now)).toBe(0);
+  });
+});
+
+describe('ocAttentionSummary', () => {
+  it('summarizes review, send, and stalled-contributor attention items', () => {
+    const stalled = newContributor({ name: 'Ada' });
+    stalled.lastStageAt = '2026-07-01';
+    const fresh = newContributor({ name: 'Grace' });
+    fresh.lastStageAt = '2026-07-09';
+    const summary = ocAttentionSummary(
+      [stalled, fresh],
+      [{ id: 'inbox-1' }, { id: 'inbox-2' }],
+      [{ id: 'outbox-1' }],
+      new Date('2026-07-10T12:00:00Z').getTime(),
+    );
+    expect(summary).toEqual({ reviewCount: 2, readyCount: 1, waitingCount: 1, oldestWaitingDays: 9 });
   });
 });
