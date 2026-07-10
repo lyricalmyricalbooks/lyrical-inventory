@@ -145,6 +145,19 @@ export function ocWaitingDays(contributor, now = Date.now()) {
   return Math.max(0, Math.floor((now - t) / 86400000));
 }
 
+export function ocAttentionSummary(contributors = [], inbox = [], outbox = [], now = Date.now()) {
+  const waitingDays = (contributors || [])
+    .filter(c => !OC_STAGES.every(stage => c[stage.key]))
+    .map(c => ocWaitingDays(c, now));
+  const stalledDays = waitingDays.filter(days => days >= 4);
+  return {
+    reviewCount: (inbox || []).length,
+    readyCount: (outbox || []).length,
+    waitingCount: stalledDays.length,
+    oldestWaitingDays: stalledDays.length ? Math.max(...stalledDays) : 0,
+  };
+}
+
 // ── Approval inbox ─────────────────────────────────────────────────────────
 // Gmail scans no longer flip stage flags directly: each finding becomes a
 // *proposal* the owner approves or dismisses in the Review inbox. A proposal's

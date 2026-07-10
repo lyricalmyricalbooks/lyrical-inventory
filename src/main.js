@@ -24,7 +24,7 @@ import {
   OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields,
   ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
   ocOutboxKey, ocOutboxAdditions, ocPruneQueues, ocMergeTemplate,
-  ocWaitingDays,
+  ocWaitingDays, ocAttentionSummary,
 } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
@@ -4124,8 +4124,9 @@ function renderOpenCall() {
 
   const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (activeProj) ocEnsureQueues_(activeProj);
-  const inboxCount = activeProj ? activeProj.inbox.length : 0;
-  const outboxCount = activeProj ? activeProj.outbox.length : 0;
+  const validInboxItems = activeProj ? activeProj.inbox.filter(p => activeProj.contributors.some(c => c.id === p.contributorId)) : [];
+  const validOutboxItems = activeProj ? activeProj.outbox.filter(e => activeProj.contributors.some(c => c.id === e.contributorId)) : [];
+  const attention = ocAttentionSummary(listRaw, validInboxItems, validOutboxItems);
   const lastScannedVal = activeProj ? activeProj.lastScanned : null;
   const lastScannedHtml = lastScannedVal 
     ? `<div class="oc-last-scanned">Last scanned: ${formatDateTime(lastScannedVal)}</div>` 
@@ -4352,7 +4353,7 @@ function renderOpenCall() {
   const chipsHtml = _ocNewContributorPhotos.map((p, idx) => `
     <span class="oc-photo-chip">
       📷 ${escapeHtml(p)}
-      <span class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo">✕</span>
+      <button type="button" class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</button>
     </span>
   `).join('');
 
@@ -4440,15 +4441,15 @@ function renderOpenCall() {
       // Canonical thread: the conversation every stage email replies into
       // (captured at stage-1 send, or imported from the submission email).
       if (c.gmailThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.gmailThreadId}" target="_blank" title="View this contributor's email thread in Gmail">✉ View Thread</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.gmailThreadId}', 'Email Thread')" title="Preview email thread inline">👁 Preview</span>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.gmailThreadId}" target="_blank" title="View this contributor's email thread in Gmail">✉ View Thread</a> <button type="button" class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.gmailThreadId}', 'Email Thread')" title="Preview email thread inline" aria-label="Preview email thread inline">👁 Preview</button>`);
       }
       // Reply threads, shown only when they're a different conversation than the
       // canonical one (after promotion they usually coincide).
       if (c.creditThreadId && c.creditThreadId !== c.gmailThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" title="View credit name reply in Gmail">✉ View Credit Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" title="Preview email thread inline">👁 Preview</span>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" title="View credit name reply in Gmail">✉ View Credit Reply</a> <button type="button" class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" title="Preview email thread inline" aria-label="Preview credit reply inline">👁 Preview</button>`);
       }
       if (c.filesThreadId && c.filesThreadId !== c.gmailThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" title="View files reply in Gmail">✉ View Files Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" title="Preview email thread inline">👁 Preview</span>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" title="View files reply in Gmail">✉ View Files Reply</a> <button type="button" class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" title="Preview email thread inline" aria-label="Preview files reply inline">👁 Preview</button>`);
       }
       gmailLinksHtml = `<span class="oc-gmail-links"> · ${links.join(' / ')}</span>`;
     } else if (c.email && c.selectionSent) {
@@ -4474,23 +4475,19 @@ function renderOpenCall() {
           const isPicked = picks.includes(p);
           return `
           <span class="oc-photo-chip ${isPicked ? 'picked' : ''}">
-            <span class="oc-photo-pick ${isPicked ? 'on' : ''}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" title="${isPicked ? 'Unpick this photo' : 'Pick this photo as a chosen one — emails will reference it'}">${isPicked ? '★' : '☆'}</span>
+            <button type="button" class="oc-photo-pick ${isPicked ? 'on' : ''}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" title="${isPicked ? 'Unpick this photo' : 'Pick this photo as a chosen one — emails will reference it'}" aria-label="${isPicked ? 'Unpick' : 'Pick'} ${escapeHtml(p)}">${isPicked ? '★' : '☆'}</button>
             ${escapeHtml(p)}
-            <span class="oc-photo-chip-remove" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" title="Remove photo">✕</span>
+            <button type="button" class="oc-photo-chip-remove" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</button>
           </span>`;
         }).join('')}
         ${pickStatus}
-        <span id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</span>
+        <button type="button" id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</button>
         <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
       </div>`;
 
     // Pipeline Step Tracker Visualizer (Interactive)
-    let progressPercent = 0;
-    if (c.preorderSent) progressPercent = 100;
-    else if (c.filesReceived) progressPercent = 75;
-    else if (c.cmykSent) progressPercent = 50;
-    else if (c.creditReceived) progressPercent = 25;
-    else if (c.selectionSent) progressPercent = 0;
+    const completedStages = OC_STAGES.filter(st => c[st.key]).length;
+    const progressPercent = Math.round((completedStages / OC_STAGES.length) * 100);
 
     const isNextStep = (contributor, key) => {
       if (key === 'selectionSent' && !contributor.selectionSent) return true;
@@ -4506,10 +4503,10 @@ function renderOpenCall() {
       const activeVal = !doneVal && isNextStep(c, key);
       const cls = doneVal ? 'done' : activeVal ? 'active' : '';
       return `
-        <div class="oc-step ${cls}" onclick="ocToggle('${c.id}','${key}')" title="Click to toggle ${label} stage">
+        <button type="button" class="oc-step ${cls}" onclick="ocToggle('${c.id}','${key}')" title="Click to toggle ${label} stage">
           <div class="oc-step-circle">${doneVal ? '✓' : num}</div>
           <div class="oc-step-label">${label}</div>
-        </div>`;
+        </button>`;
     };
 
     const pipelineVisualizer = `
@@ -4530,256 +4527,26 @@ function renderOpenCall() {
     const primaryCtaHtml = pipelineEmailBtnHtml
       ? `<div class="oc-card-primary-cta">${pipelineEmailBtnHtml}</div>`
       : '';
+    const waitingDays = ocWaitingDays(c);
+    const currentStatusHtml = next
+      ? `${escapeHtml(next)}${waitingDays !== null && waitingDays >= 2 ? ` <span class="oc-wait-chip" title="No movement for ${waitingDays} day${waitingDays === 1 ? '' : 's'} — measured from the last stage change">${waitingDays}d</span>` : ''}`
+      : 'All stages complete';
 
     return `
-      <div class="card oc-contributor-card" id="oc-card-${c.id}">
-        <div class="oc-card-head">
+      <article class="card oc-contributor-card oc-work-item" id="oc-card-${c.id}">
+        <header class="oc-card-head oc-work-item-header">
           <div class="oc-card-identity">
             <div class="oc-avatar" aria-hidden="true">${escapeHtml(ocInitials(c.name))}</div>
             <div class="oc-card-meta">
               <div class="oc-contributor-name">${escapeHtml(c.name || '—')}${creditNameHtml}${mailStatusHtml}</div>
               <div class="oc-email-row">
                 ${emailCell}
-                ${gmailLinksHtml}
               </div>
-              ${photosHtml}
+              <div class="oc-work-item-current-status">${currentStatusHtml}</div>
             </div>
           </div>
           <div class="oc-card-actions">
             ${primaryCtaHtml}
-            <div class="oc-util-actions">
-              ${mailActionsHtml}
-              <button class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">↻ Scan</button>
-              <button class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
-              <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">✕ Remove</button>
-            </div>
-          </div>
-        </div>
-        ${notesHtml}
-        <div class="oc-status-strip">
-          ${pipelineVisualizer}
-          ${next
-            ? `<div class="oc-next-action">${next}${(() => {
-                const wd = ocWaitingDays(c);
-                return wd !== null && wd >= 2 ? ` <span class="oc-wait-chip" title="No movement for ${wd} day${wd === 1 ? '' : 's'} — measured from the last stage change">⏳ ${wd}d</span>` : '';
-              })()}</div>`
-            : `<div class="oc-all-complete">✓ All stages complete</div>`}
-        </div>
-        <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
-      </div>`;
-  }).join('');
-
-  const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
-  const resendOpen = ocUiOpen_('resend', false);
-  const resendConfigCard = `
-    <div class="card oc-resend-card oc-collapse-card ${resendOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
-      <div class="oc-collapse-head" onclick="ocToggleSection('resend')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);display:flex;justify-content:space-between;align-items:center;">
-        <span>⚡ Resend API Email</span>
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span class="oc-collapse-status">${useResend ? 'on' : 'off'}</span>
-          <input type="checkbox" id="oc-use-resend" onclick="event.stopPropagation()" onchange="ocToggleResend(this.checked)" ${useResend ? 'checked' : ''} style="cursor:pointer;margin:0;">
-          <span class="oc-collapse-chevron">${resendOpen ? '▾' : '▸'}</span>
-        </span>
-      </div>
-      <div id="oc-resend-fields" style="display:${resendOpen && useResend ? 'flex' : 'none'};flex-direction:column;gap:8px;">
-        <div>
-          <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Resend API Key</label>
-          <input id="oc-resend-key" type="password" placeholder="re_..." value="${escapeHtml(localStorage.getItem('lm-resend-api-key') || '')}" oninput="ocSaveResendConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-        </div>
-        <div>
-          <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Sender Email (Verified)</label>
-          <input id="oc-resend-from" type="email" placeholder="e.g. hello@yourdomain.com" value="${escapeHtml(localStorage.getItem('lm-resend-from') || '')}" oninput="ocSaveResendConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-        </div>
-        <div style="font-size:10px;color:var(--text3);line-height:1.3;">
-          Local development only: sends through the Node backend at localhost:8787. On the live site, configure Resend in Google Apps Script properties and keep your key off the browser.
-        </div>
-      </div>
-    </div>`;
-
-  const ocFromAlias = localStorage.getItem('lm-oc-fromalias') || '';
-  const ocFromName = localStorage.getItem('lm-oc-fromname') || '';
-  let ocAliasCache = [];
-  try { ocAliasCache = JSON.parse(localStorage.getItem('lm-oc-alias-cache') || '[]'); } catch (_) { ocAliasCache = []; }
-  const senderOpen = ocUiOpen_('sender', false);
-  const senderConfigCard = `
-    <div class="card oc-collapse-card ${senderOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
-      <div class="oc-collapse-head" onclick="ocToggleSection('sender')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);display:flex;justify-content:space-between;align-items:center;">
-        <span>✉ Open Call Sender</span>
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span class="oc-collapse-status">${escapeHtml(ocFromAlias || 'your Gmail')}</span>
-          <span class="oc-collapse-chevron">${senderOpen ? '▾' : '▸'}</span>
-        </span>
-      </div>
-      <div class="oc-collapse-body" style="display:${senderOpen ? 'flex' : 'none'};flex-direction:column;gap:8px;">
-      <div>
-        <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Send emails as</label>
-        <input id="oc-from-alias" list="oc-alias-options" placeholder="default: your Gmail" value="${escapeHtml(ocFromAlias)}" oninput="ocSaveSenderConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-        <datalist id="oc-alias-options">${ocAliasCache.map(a => `<option value="${escapeHtml(a)}"></option>`).join('')}</datalist>
-      </div>
-      <div>
-        <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Display name (optional)</label>
-        <input id="oc-from-name" placeholder="e.g. Lyricalmyrical Books" value="${escapeHtml(ocFromName)}" oninput="ocSaveSenderConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-      </div>
-      <button class="btn sm" onclick="ocLoadSenderAliases()" ${sheetsUrl ? '' : 'disabled'}>↻ Load my Gmail aliases</button>
-      <div style="font-size:10px;color:var(--text3);line-height:1.3;">
-        Must be a verified Gmail “Send mail as” alias (Gmail → Settings → Accounts). Sending from your own domain keeps SPF/DKIM valid — fewer emails bounce or land in spam — and replies still thread. Leave blank to send from your Gmail.
-      </div>
-      </div>
-    </div>`;
-
-  const sidebarHtml = `
-    <div class="oc-sidebar">
-      ${projectSwitcher}
-      ${summary}
-      ${senderConfigCard}
-      ${resendConfigCard}
-      ${addForm}
-    </div>`;
-
-  // Section hero — Playfair title, one-line subtitle, and *actionable* stats:
-  // the two queue counts jump straight to their cards when clicked.
-  const heroStatsHtml = total ? `
-        <div class="oc-hero-stats">
-          <div class="oc-hero-stat">
-            <div class="oc-hero-stat-num">${total}</div>
-            <div class="oc-hero-stat-label">Contributors</div>
-          </div>
-          <div class="oc-hero-stat ${inboxCount ? 'alert action' : 'dim'}" ${inboxCount ? `onclick="document.querySelector('.oc-inbox-card')?.scrollIntoView({behavior:'smooth'})" title="Scan findings waiting for your approval — click to review"` : 'title="No scan findings waiting"'}>
-            <div class="oc-hero-stat-num">${inboxCount}</div>
-            <div class="oc-hero-stat-label">To review</div>
-          </div>
-          <div class="oc-hero-stat ${outboxCount ? 'ready action' : 'dim'}" ${outboxCount ? `onclick="document.querySelector('.oc-outbox-card')?.scrollIntoView({behavior:'smooth'})" title="Next-stage emails queued — click to send"` : 'title="No emails queued"'}>
-            <div class="oc-hero-stat-num">${outboxCount}</div>
-            <div class="oc-hero-stat-label">Ready to send</div>
-          </div>
-          <div class="oc-hero-stat">
-            <div class="oc-hero-stat-num">${pct}%</div>
-            <div class="oc-hero-stat-label">Complete</div>
-          </div>
-        </div>` : '';
-  const heroHtml = `
-    <div class="oc-hero">
-      <div class="oc-hero-text">
-        <div class="oc-hero-title"><span class="header-mark">✦</span>Open Call</div>
-        <div class="oc-hero-subtitle">Guide selected contributors from first notice through pre-order — one premium pipeline.</div>
-      </div>
-      ${heroStatsHtml}
-    </div>`;
-
-  // ── Pipeline funnel: who's waiting at each step, one click to filter ──
-  // Segment semantics match the stage filter: "next step is X". Clicking a
-  // segment filters the list; clicking it again clears the filter.
-  const funnelShortLabels = { selectionSent: 'Selection', creditReceived: 'Credit', cmykSent: 'CMYK', filesReceived: 'Files', preorderSent: 'Pre-order' };
-  const funnelCounts = OC_STAGES.map(st => ({
-    key: st.key,
-    label: funnelShortLabels[st.key] || st.label,
-    n: listRaw.filter(c => {
-      const nx = OC_STAGES.find(s => !c[s.key]);
-      return nx && nx.key === st.key;
-    }).length,
-  }));
-  const funnelSeg = (key, label, n, idx) => `
-        <button class="oc-funnel-seg ${ocFilterStage === key ? 'active' : ''} ${n ? '' : 'empty'} ${key === 'complete' ? 'complete' : ''}"
-          onclick="ocFilterByStage('${ocFilterStage === key ? '' : key}')"
-          title="${key === 'complete' ? 'Artists with every stage done' : `Artists whose next step is “${label}”`} — click to ${ocFilterStage === key ? 'clear the filter' : 'filter the list'}">
-          <span class="oc-funnel-num">${n}</span>
-          <span class="oc-funnel-label">${idx}${label}</span>
-          <span class="oc-funnel-bar"><span style="width:${total ? Math.max(n ? 6 : 0, Math.round(n / total * 100)) : 0}%"></span></span>
-        </button>`;
-  const funnelHtml = total ? `
-    <div class="card oc-funnel-card">
-      <div class="oc-funnel">
-        ${funnelCounts.map((f, i) => funnelSeg(f.key, f.label, f.n, `${i + 1} · `)).join('')}
-        ${funnelSeg('complete', 'Complete', done, '✓ ')}
-      </div>
-    </div>` : '';
-
-  // ── Review inbox: scan findings awaiting the owner's approval ──
-  if (activeProj) ocEnsureQueues_(activeProj);
-  const inboxItems = activeProj ? activeProj.inbox.filter(p => activeProj.contributors.some(c => c.id === p.contributorId)) : [];
-  const inboxTypeLabels = { creditReceived: '✍️ Credit-name reply detected', filesReceived: '📎 High-res files attachment detected', undeliverable: '⚠ Email bounced (undeliverable)' };
-  const inboxRows = inboxItems.map(p => {
-    const c = activeProj.contributors.find(x => x.id === p.contributorId);
-    const threadLink = p.threadId
-      ? `<a class="oc-queue-thread-link" href="https://mail.google.com/mail/u/0/#all/${encodeURIComponent(p.threadId)}" target="_blank" rel="noopener" title="Open the detected email in Gmail">✉ View email ↗</a>`
-      : '';
-    const creditInput = p.type === 'creditReceived'
-      ? `<label class="oc-inbox-credit">Credit name to save: <input id="oc-inbox-credit-${p.id}" type="text" value="${escapeHtml(p.creditName || c.creditName || c.name || '')}" placeholder="Exact name for the credits"></label>`
-      : '';
-    return `
-      <div class="oc-queue-row">
-        <div class="oc-queue-row-main">
-          <div><strong>${escapeHtml(c.name || c.email)}</strong> — ${inboxTypeLabels[p.type] || p.type} ${threadLink}</div>
-          ${creditInput}
-        </div>
-        <div class="oc-queue-row-actions">
-          <button class="btn sm gold" onclick="ocApproveProposal('${p.id}')">✓ Approve</button>
-          <button class="btn sm" onclick="ocDismissProposal('${p.id}')">✕ Dismiss</button>
-        </div>
-      </div>`;
-  }).join('');
-  const inboxHtml = inboxItems.length ? `
-    <div class="card oc-queue-card oc-inbox-card">
-      <div class="row-between" style="flex-wrap:wrap;gap:8px;">
-        <div class="oc-section-title" style="margin:0;">📥 Review scan results · ${inboxItems.length}</div>
-        <button class="btn sm gold" onclick="ocApproveAllProposals()">✓ Approve all</button>
-      </div>
-      <div class="oc-queue-note">Gmail scans propose updates here — nothing changes on a contributor until you approve it.</div>
-      ${inboxRows}
-    </div>` : '';
-
-  // ── Ready-to-send outbox: next-stage emails queued for one approved batch ──
-  const outboxItems = activeProj ? activeProj.outbox.filter(e => activeProj.contributors.some(c => c.id === e.contributorId)) : [];
-  const outboxStageLabels = { cmykSent: 'Request Files', preorderSent: 'Pre-order' };
-  const outboxDl = localStorage.getItem('lm-oc-last-deadline') || '';
-  const outboxRows = outboxItems.map(e => {
-    const c = activeProj.contributors.find(x => x.id === e.contributorId);
-    const tmpl = activeProj.templates ? activeProj.templates[e.stageKey] : null;
-    const subjectPreview = tmpl ? ocMergeTemplate(tmpl.subject, c, { project: activeProj.title, date: outboxDl }) : '(no template saved for this stage)';
-    const missing = tmpl ? findUnfilledMergeFields((tmpl.subject || '') + '\n' + (tmpl.body || ''), c, { project: activeProj.title, date: outboxDl }) : [];
-    const warn = (!tmpl || missing.length)
-      ? `<span class="oc-queue-warn" title="${!tmpl ? 'Save a template for this stage first' : 'Blank template fields: ' + missing.join(', ')}">⚠ ${!tmpl ? 'no template' : 'blank: ' + missing.join(', ')}</span>`
-      : '';
-    return `
-      <div class="oc-queue-row">
-        <div class="oc-queue-row-main">
-          <div><strong>${escapeHtml(c.name || c.email)}</strong> <span class="oc-queue-stage">${outboxStageLabels[e.stageKey] || e.stageKey}</span> ${warn}</div>
-          <div class="oc-queue-subject">${escapeHtml(subjectPreview)}</div>
-        </div>
-        <div class="oc-queue-row-actions">
-          <button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}','${e.stageKey}')">✎ Review & send</button>
-          <button class="btn sm" onclick="ocOutboxRemove('${e.id}')">✕ Remove</button>
-        </div>
-      </div>`;
-  }).join('');
-  const outboxHtml = outboxItems.length ? `
-    <div class="card oc-queue-card oc-outbox-card">
-      <div class="row-between" style="flex-wrap:wrap;gap:8px;">
-        <div class="oc-section-title" style="margin:0;">📤 Ready to send · ${outboxItems.length}</div>
-        <button class="btn sm gold" id="oc-outbox-sendall-btn" onclick="ocOutboxSendAll()">▶ Send all (${outboxItems.length})</button>
-      </div>
-      <div class="oc-queue-note">Queued automatically when a reply comes in — each uses its stage template and replies into the contributor's thread. Nothing sends until you confirm.<span id="oc-outbox-status" class="oc-queue-status"></span></div>
-      ${outboxRows}
-    </div>` : '';
-
-  const mainHtml = `
-    <div class="oc-main">
-      ${heroHtml}
-      ${inboxHtml}
-      ${outboxHtml}
-      ${funnelHtml}
-      ${templatesEditor}
-      ${searchFilterBar}
-      <div style="display:flex;flex-direction:column;gap:14px;">
-        ${cards || `
-          <div class="card oc-empty-state">
-            <div class="oc-empty-icon">🎨</div>
-            <div class="oc-empty-title">${ocSearchQuery || ocFilterStage ? 'No matches found' : 'No contributors yet'}</div>
-            <div class="oc-empty-body">${ocSearchQuery || ocFilterStage
-              ? 'Try adjusting your search or filter to find contributors.'
-              : 'Add your first contributor using the form on the left, or import a list from a spreadsheet.'}
-            </div>
-            ${(!ocSearchQuery && !ocFilterStage) ? `<button class="btn gold" onclick="document.getElementById('oc-name')?.focus()" style="margin-top:4px;">＋ Add First Contributor</button>` : ''}
           </div>`}
       </div>
     </div>`;
@@ -5012,7 +4779,7 @@ function renderOcPhotoChips() {
   container.innerHTML = _ocNewContributorPhotos.map((p, idx) => `
     <span class="oc-photo-chip">
       📷 ${escapeHtml(p)}
-      <span class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo">✕</span>
+      <button type="button" class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</button>
     </span>
   `).join('');
 }
