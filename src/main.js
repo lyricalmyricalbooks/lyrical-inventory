@@ -4117,8 +4117,6 @@ function renderOpenCall() {
   const validInboxItems = activeProj ? activeProj.inbox.filter(p => activeProj.contributors.some(c => c.id === p.contributorId)) : [];
   const validOutboxItems = activeProj ? activeProj.outbox.filter(e => activeProj.contributors.some(c => c.id === e.contributorId)) : [];
   const attention = ocAttentionSummary(listRaw, validInboxItems, validOutboxItems);
-  const inboxCount = attention.reviewCount;
-  const outboxCount = attention.readyCount;
   const lastScannedVal = activeProj ? activeProj.lastScanned : null;
   const lastScannedHtml = lastScannedVal 
     ? `<div class="oc-last-scanned">Last scanned: ${formatDateTime(lastScannedVal)}</div>` 
@@ -4345,7 +4343,7 @@ function renderOpenCall() {
   const chipsHtml = _ocNewContributorPhotos.map((p, idx) => `
     <span class="oc-photo-chip">
       📷 ${escapeHtml(p)}
-      <span class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo">✕</span>
+      <button type="button" class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</button>
     </span>
   `).join('');
 
@@ -4433,15 +4431,15 @@ function renderOpenCall() {
       // Canonical thread: the conversation every stage email replies into
       // (captured at stage-1 send, or imported from the submission email).
       if (c.gmailThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.gmailThreadId}" target="_blank" title="View this contributor's email thread in Gmail">✉ View Thread</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.gmailThreadId}', 'Email Thread')" title="Preview email thread inline">👁 Preview</span>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.gmailThreadId}" target="_blank" title="View this contributor's email thread in Gmail">✉ View Thread</a> <button type="button" class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.gmailThreadId}', 'Email Thread')" title="Preview email thread inline" aria-label="Preview email thread inline">👁 Preview</button>`);
       }
       // Reply threads, shown only when they're a different conversation than the
       // canonical one (after promotion they usually coincide).
       if (c.creditThreadId && c.creditThreadId !== c.gmailThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" title="View credit name reply in Gmail">✉ View Credit Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" title="Preview email thread inline">👁 Preview</span>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" title="View credit name reply in Gmail">✉ View Credit Reply</a> <button type="button" class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" title="Preview email thread inline" aria-label="Preview credit reply inline">👁 Preview</button>`);
       }
       if (c.filesThreadId && c.filesThreadId !== c.gmailThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" title="View files reply in Gmail">✉ View Files Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" title="Preview email thread inline">👁 Preview</span>`);
+        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" title="View files reply in Gmail">✉ View Files Reply</a> <button type="button" class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" title="Preview email thread inline" aria-label="Preview files reply inline">👁 Preview</button>`);
       }
       gmailLinksHtml = `<span class="oc-gmail-links"> · ${links.join(' / ')}</span>`;
     } else if (c.email && c.selectionSent) {
@@ -4467,23 +4465,19 @@ function renderOpenCall() {
           const isPicked = picks.includes(p);
           return `
           <span class="oc-photo-chip ${isPicked ? 'picked' : ''}">
-            <span class="oc-photo-pick ${isPicked ? 'on' : ''}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" title="${isPicked ? 'Unpick this photo' : 'Pick this photo as a chosen one — emails will reference it'}">${isPicked ? '★' : '☆'}</span>
+            <button type="button" class="oc-photo-pick ${isPicked ? 'on' : ''}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" title="${isPicked ? 'Unpick this photo' : 'Pick this photo as a chosen one — emails will reference it'}" aria-label="${isPicked ? 'Unpick' : 'Pick'} ${escapeHtml(p)}">${isPicked ? '★' : '☆'}</button>
             ${escapeHtml(p)}
-            <span class="oc-photo-chip-remove" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" title="Remove photo">✕</span>
+            <button type="button" class="oc-photo-chip-remove" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</button>
           </span>`;
         }).join('')}
         ${pickStatus}
-        <span id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</span>
+        <button type="button" id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</button>
         <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
       </div>`;
 
     // Pipeline Step Tracker Visualizer (Interactive)
-    let progressPercent = 0;
-    if (c.preorderSent) progressPercent = 100;
-    else if (c.filesReceived) progressPercent = 75;
-    else if (c.cmykSent) progressPercent = 50;
-    else if (c.creditReceived) progressPercent = 25;
-    else if (c.selectionSent) progressPercent = 0;
+    const completedStages = OC_STAGES.filter(st => c[st.key]).length;
+    const progressPercent = Math.round((completedStages / OC_STAGES.length) * 100);
 
     const isNextStep = (contributor, key) => {
       if (key === 'selectionSent' && !contributor.selectionSent) return true;
@@ -4523,7 +4517,6 @@ function renderOpenCall() {
     const primaryCtaHtml = pipelineEmailBtnHtml
       ? `<div class="oc-card-primary-cta">${pipelineEmailBtnHtml}</div>`
       : '';
-    const completedStages = OC_STAGES.filter(st => c[st.key]).length;
     const waitingDays = ocWaitingDays(c);
     const currentStatusHtml = next
       ? `${escapeHtml(next)}${waitingDays !== null && waitingDays >= 2 ? ` <span class="oc-wait-chip" title="No movement for ${waitingDays} day${waitingDays === 1 ? '' : 's'} — measured from the last stage change">${waitingDays}d</span>` : ''}`
@@ -4652,25 +4645,6 @@ function renderOpenCall() {
 
   // Section hero — Playfair title, one-line subtitle, and *actionable* stats:
   // the two queue counts jump straight to their cards when clicked.
-  const _legacyHeroStatsHtml = total ? `
-        <div class="oc-hero-stats">
-          <div class="oc-hero-stat">
-            <div class="oc-hero-stat-num">${total}</div>
-            <div class="oc-hero-stat-label">Contributors</div>
-          </div>
-          <div class="oc-hero-stat ${inboxCount ? 'alert action' : 'dim'}" ${inboxCount ? `onclick="document.querySelector('.oc-inbox-card')?.scrollIntoView({behavior:'smooth'})" title="Scan findings waiting for your approval — click to review"` : 'title="No scan findings waiting"'}>
-            <div class="oc-hero-stat-num">${inboxCount}</div>
-            <div class="oc-hero-stat-label">To review</div>
-          </div>
-          <div class="oc-hero-stat ${outboxCount ? 'ready action' : 'dim'}" ${outboxCount ? `onclick="document.querySelector('.oc-outbox-card')?.scrollIntoView({behavior:'smooth'})" title="Next-stage emails queued — click to send"` : 'title="No emails queued"'}>
-            <div class="oc-hero-stat-num">${outboxCount}</div>
-            <div class="oc-hero-stat-label">Ready to send</div>
-          </div>
-          <div class="oc-hero-stat">
-            <div class="oc-hero-stat-num">${pct}%</div>
-            <div class="oc-hero-stat-label">Complete</div>
-          </div>
-        </div>` : '';
   const primaryAttention = attention.reviewCount ? 'review'
     : attention.waitingCount ? 'waiting'
       : attention.readyCount ? 'ready' : '';
@@ -4695,18 +4669,6 @@ function renderOpenCall() {
       </div>
     </section>`;
 
-  const _legacyHeroHtml = `
-    <div class="oc-hero">
-      <div class="oc-hero-text">
-        <div class="oc-hero-title"><span class="header-mark">✦</span>Open Call</div>
-        <div class="oc-hero-subtitle">Guide selected contributors from first notice through pre-order — one premium pipeline.</div>
-      </div>
-      ${_legacyHeroStatsHtml}
-    </div>`;
-
-  // ── Pipeline funnel: who's waiting at each step, one click to filter ──
-  // Segment semantics match the stage filter: "next step is X". Clicking a
-  // segment filters the list; clicking it again clears the filter.
   const funnelShortLabels = { selectionSent: 'Selection', creditReceived: 'Credit', cmykSent: 'CMYK', filesReceived: 'Files', preorderSent: 'Pre-order' };
   const funnelCounts = OC_STAGES.map(st => ({
     key: st.key,
@@ -4716,14 +4678,9 @@ function renderOpenCall() {
       return nx && nx.key === st.key;
     }).length,
   }));
-  const _legacyFunnelSeg = (key, label, n, idx) => `
-        <button class="oc-funnel-seg ${ocFilterStage === key ? 'active' : ''} ${n ? '' : 'empty'} ${key === 'complete' ? 'complete' : ''}"
-          onclick="ocFilterByStage('${ocFilterStage === key ? '' : key}')"
-          title="${key === 'complete' ? 'Artists with every stage done' : `Artists whose next step is “${label}”`} — click to ${ocFilterStage === key ? 'clear the filter' : 'filter the list'}">
-          <span class="oc-funnel-num">${n}</span>
-          <span class="oc-funnel-label">${idx}${label}</span>
-          <span class="oc-funnel-bar"><span style="width:${total ? Math.max(n ? 6 : 0, Math.round(n / total * 100)) : 0}%"></span></span>
-        </button>`;
+
+  // ── Review inbox: scan findings awaiting the owner's approval ──
+  if (activeProj) ocEnsureQueues_(activeProj);
   const funnelSeg = (key, label, n, idx) => `
     <button type="button" class="oc-funnel-seg ${ocFilterStage === key ? 'active' : ''}"
       aria-pressed="${ocFilterStage === key}"
@@ -4738,16 +4695,7 @@ function renderOpenCall() {
       ${funnelSeg('complete', 'Complete', done, 'Complete')}
       ${ocFilterStage ? `<button type="button" class="btn sm" onclick="ocFilterByStage('')">Clear filter</button>` : ''}
     </nav>` : '';
-  const _legacyFunnelHtml = total ? `
-    <div class="card oc-funnel-card">
-      <div class="oc-funnel">
-        ${funnelCounts.map((f, i) => funnelSeg(f.key, f.label, f.n, `${i + 1} · `)).join('')}
-        ${funnelSeg('complete', 'Complete', done, '✓ ')}
-      </div>
-    </div>` : '';
 
-  // ── Review inbox: scan findings awaiting the owner's approval ──
-  if (activeProj) ocEnsureQueues_(activeProj);
   const inboxItems = activeProj ? activeProj.inbox.filter(p => activeProj.contributors.some(c => c.id === p.contributorId)) : [];
   const inboxTypeLabels = { creditReceived: '✍️ Credit-name reply detected', filesReceived: '📎 High-res files attachment detected', undeliverable: '⚠ Email bounced (undeliverable)' };
   const inboxRows = inboxItems.map(p => {
@@ -5075,7 +5023,7 @@ function renderOcPhotoChips() {
   container.innerHTML = _ocNewContributorPhotos.map((p, idx) => `
     <span class="oc-photo-chip">
       📷 ${escapeHtml(p)}
-      <span class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo">✕</span>
+      <button type="button" class="oc-photo-chip-remove" onclick="removeOcPhotoChip(${idx})" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</button>
     </span>
   `).join('');
 }
