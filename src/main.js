@@ -16090,7 +16090,30 @@ async function fetchShippoTransactionsPageAPI(token, page) {
   return resp.json();
 }
 
-async function processShippoTxToExpense(tx, token, txId, ref, importedCount) {
+async function fetchShippoObject(token, resource, id) {
+  if (!id) return {};
+  const resp = await fetch(`https://api.goshippo.com/${resource}/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' },
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Shippo ${resource} lookup ${resp.status}${text ? `: ${text.slice(0, 140)}` : ''}`);
+  }
+  return resp.json();
+}
+
+async function fetchShippoContext(token, tx) {
+  let shipment = tx.shipment && typeof tx.shipment === 'object' ? tx.shipment : {};
+  const shipmentId = typeof tx.shipment === 'string' ? tx.shipment : shipment.object_id;
+  if (shipmentId && !shipment.address_to) shipment = await fetchShippoObject(token, 'shipments', shipmentId);
+
+  let shippoOrder = tx.order && typeof tx.order === 'object' ? tx.order : {};
+  const orderId = typeof tx.order === 'string' ? tx.order : (shippoOrder.object_id || shipment.order);
+  if (orderId && !shippoOrder.order_number) shippoOrder = await fetchShippoObject(token, 'orders', orderId);
+  return { shipment, shippoOrder };
+}
+
+async function processShippoTxToExpense(tx, token, txId, ref, importedCount, context, knownOrders) {
   const { amount, currency } = await getShippoTxCost(tx, token);
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
@@ -16099,16 +16122,18 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount) {
 
   let fxRate = currency === 'CAD' ? 1 : 0;
   if (currency !== 'CAD') {
-    try { const h = await fetchHistoricalRate(currency, 'CAD', date); fxRate = h?.rate || 0; } catch (_) { /* fall through */ }
-    if (!fxRate) { try { const r = await fetchLiveRate(currency, 'CAD'); fxRate = r?.rate || 0; } catch (_) { /* fall through */ } }
+    try { const historical = await fetchHistoricalRate(currency, 'CAD', date); fxRate = historical?.rate || 0; } catch (_) { /* continue */ }
+    if (!fxRate) {
+      try { const live = await fetchLiveRate(currency, 'CAD'); fxRate = live?.rate || 0; } catch (_) { /* continue */ }
+    }
     if (!fxRate) fxRate = _fxRateCache[`${currency}_CAD`] || 0;
   }
-  if (!fxRate) fxRate = 1; // last resort so the cost is still recorded
+  const fxMissing = !fxRate;
 
   const labelUrl = tx.label_url || '';
   const localReceipt = labelUrl ? await saveShippoLabelLocally(labelUrl, txId) : null;
 
-  return {
+  const expense = {
     id: Date.now() + importedCount + 1,
     desc: `Shippo shipping label${tx.tracking_number ? ` #${tx.tracking_number}` : ''}`,
     cat: 'Shipping & Postage',
@@ -16116,14 +16141,16 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount) {
     amount,
     origCurrency: currency,
     origAmount: amount,
-    fxRate,
-    baseAmount: amount * fxRate,
+    fxRate: fxMissing ? null : fxRate,
+    baseAmount: fxMissing ? null : roundCents(amount * fxRate),
+    fxMissing,
     date,
     ref,
     receipt: localReceipt || labelUrl,
     trackingUrl: tx.tracking_url_provider || '',
-    trip: ''
+    trip: '',
   };
+  return enrichShippoExpense(expense, tx, context.shipment, context.shippoOrder, knownOrders);
 }
 
 async function importShippoShippingFromApi() {
@@ -16143,16 +16170,17 @@ async function importShippoShippingFromApi() {
   if (statusEl) statusEl.textContent = 'Fetching Shippo transactions…';
 
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-  const existingRefs = new Set((TAX_CENTER.businessExpenses || [])
-    .filter(e => e && e.ref && String(e.ref).startsWith('shippo:'))
-    .map(e => String(e.ref)));
-  // Source of truth is current expense refs, so deleted/edited rows don't get permanently blocked
-  // by stale saved object IDs from prior runs.
-  const importedIds = new Set(Array.from(existingRefs)
-    .map(ref => String(ref).replace(/^shippo:/, ''))
+  const existingExpensesByRef = new Map((TAX_CENTER.businessExpenses || [])
+    .filter(expense => String(expense?.ref || '').startsWith('shippo:'))
+    .map(expense => [String(expense.ref), expense]));
+  const importedIds = new Set(Array.from(existingExpensesByRef.keys())
+    .map(ref => ref.replace(/^shippo:/, ''))
     .filter(Boolean));
   const fetchedIds = new Set();
   const pendingExpenses = [];
+  const knownOrders = getShippingReconciliationOrders();
+  let enrichedCount = 0;
+  let contextFailureCount = 0;
 
   let imported = 0;
   let skipped = 0;
@@ -16170,46 +16198,50 @@ async function importShippoShippingFromApi() {
       //   still appear and can be imported.
       const json = await fetchShippoTransactionsPageAPI(token, page);
       const rows = json.results || [];
-      const validTx = [];
-
       for (const tx of rows) {
         const status = String(tx?.status || '').toUpperCase();
         if (!tx || status === 'REFUNDED' || status === 'ERROR' || status === 'INVALID') { skipped++; continue; }
         const txId = String(tx.object_id || '').trim();
         if (!txId) { skipped++; continue; } // require stable ID so repeat imports are idempotent
         const ref = `shippo:${txId}`;
-        // Dedupe before the (possibly networked) cost lookup so re-syncs stay cheap.
-        // Keyed on Shippo's stable object_id (persisted as ref:"shippo:<id>"),
-        // so re-running weeks later only adds labels not already in the ledger.
-        if (fetchedIds.has(txId) || importedIds.has(txId) || existingRefs.has(ref)) { alreadyImported++; continue; }
-
-        // Optimistically add to sets to prevent duplicates within the same page
-        existingRefs.add(ref);
-        importedIds.add(txId);
+        if (fetchedIds.has(txId)) { alreadyImported++; continue; }
         fetchedIds.add(txId);
 
-        validTx.push({ tx, txId, ref });
-      }
+        const existingExpense = existingExpensesByRef.get(ref);
+        const needsEnrichment = !existingExpense || existingExpense.shippingMatchStatus !== 'matched';
+        if (existingExpense && !needsEnrichment) {
+          alreadyImported++;
+          continue;
+        }
 
-      // Process expenses in parallel
-      const expenses = await Promise.all(validTx.map(({ tx, txId, ref }, index) => {
-        return processShippoTxToExpense(tx, token, txId, ref, imported + index);
-      }));
+        let context = { shipment: {}, shippoOrder: {} };
+        try {
+          context = await fetchShippoContext(token, tx);
+        } catch (error) {
+          console.warn(`Shippo context lookup failed for ${txId}`, error);
+          contextFailureCount++;
+        }
 
-      for (let i = 0; i < validTx.length; i++) {
-        const { txId, ref } = validTx[i];
-        const expense = expenses[i];
+        if (existingExpense) {
+          const enriched = enrichShippoExpense(existingExpense, tx, context.shipment, context.shippoOrder, knownOrders);
+          Object.assign(existingExpense, enriched);
+          enrichedCount++;
+          alreadyImported++;
+          continue;
+        }
+
+        const expense = await processShippoTxToExpense(
+          tx, token, txId, ref, imported, context, knownOrders,
+        );
 
         if (!expense) {
-          // Revert optimistic add if expense processing failed
-          existingRefs.delete(ref);
-          importedIds.delete(txId);
-          fetchedIds.delete(txId);
           skipped++;
           continue;
         }
 
         pendingExpenses.push(expense);
+        existingExpensesByRef.set(ref, expense);
+        importedIds.add(txId);
         imported++;
         if (expense.currency === 'USD') totalUsd += expense.amount;
       }
@@ -16246,23 +16278,23 @@ async function importShippoShippingFromApi() {
       }
     }
 
-    if (pendingExpenses.length > 0) {
-      TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
-    }
-
+    if (pendingExpenses.length > 0) TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
     TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
     TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
     await saveTaxCenter();
     renderTaxCenter();
     const dupNote = alreadyImported ? ` ${alreadyImported} already imported.` : '';
+    const enrichNote = enrichedCount ? ` ${enrichedCount} existing expense${enrichedCount === 1 ? '' : 's'} reconciled.` : '';
+    const contextNote = contextFailureCount ? ` ${contextFailureCount} label${contextFailureCount === 1 ? '' : 's'} still need review because Shippo details could not load.` : '';
+    const reconciliationNote = `${enrichNote}${contextNote}`;
     if (statusEl) statusEl.textContent = imported
-      ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}`
-      : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}`;
+      ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}${reconciliationNote}`
+      : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${reconciliationNote}`;
     showToast(
-      imported
-        ? `✓ Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
-        : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import'),
-      imported ? 'ok' : 'warn'
+      (imported
+        ? `Imported ${imported} new Shippo expense${imported === 1 ? '' : 's'}`
+        : (alreadyImported ? `No new Shippo expenses (${alreadyImported} already imported)` : 'No new Shippo expenses to import')) + reconciliationNote,
+      imported || enrichedCount ? 'ok' : 'warn',
     );
   } catch (e) {
     console.error(e);
@@ -23195,6 +23227,7 @@ function exposeLegacyInlineHandlers() {
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,
     renameTripPrompt, showCategoryDetail, saveTaxCenterSettings, scanReceiptWithAI,
     getShippoTxCost, saveShippoLabelLocally, fetchShippoTransactionsPageAPI,
+    fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
     processShippoTxToExpense, importShippoShippingFromApi, submitTaxExpense, addRecurring,
     removeRecurring, downloadTaxLedgerCSV, posBooksMap, posResolveBook, isPosOnlyBook,
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,

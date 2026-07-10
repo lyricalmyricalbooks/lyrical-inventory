@@ -62,4 +62,11 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain("sourceType: 'shippingIncome'");
     expect(mainContent).toContain('Number(h.shippingPaid)');
   });
+
+  it('enriches existing Shippo expenses instead of duplicating them', () => {
+    expect(mainContent).toContain("const existingExpense = existingExpensesByRef.get(ref)");
+    expect(mainContent).toContain('Object.assign(existingExpense, enriched)');
+    expect(mainContent).toContain('fetchShippoContext(token, tx)');
+    expect(mainContent).toContain('enrichShippoExpense(');
+  });
 });
