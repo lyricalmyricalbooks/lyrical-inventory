@@ -15,9 +15,9 @@ const fxRateCache = { CAD_CAD: 1, USD_CAD: 1.3 };
 const states = {
   b1: {
     hist: [
-      { id: 's1', date: '2025-03-01', price: 20, qty: 2 },          // 40 CAD
+      { id: 's1', date: '2025-03-01', price: 20, qty: 2, shippingPaid: 12 }, // 40 CAD + 12 shipping
       { id: 's2', date: '2024-11-01', price: 10, qty: 1 },          // 10 CAD (prior year)
-      { id: 's3', date: '2025-06-01', price: 15, qty: 1, voided: true }, // voided -> 0
+      { id: 's3', date: '2025-06-01', price: 15, qty: 1, shippingPaid: 4, voided: true }, // voided -> 0
       { id: 's4', date: '2025-07-01', price: 5, qty: 1, artistPending: true }, // skipped
       { id: 's6', date: '2025-08-01', price: 0, qty: 1, gratuity: true }, // gratuity -> skipped
     ],
@@ -54,8 +54,8 @@ const sources = { books, states, taxCenter, fxRateCache };
 describe('computeCashFlowMetrics', () => {
   it('aggregates 2025 metrics with FX conversion, excluding payouts from opex', () => {
     const m = computeCashFlowMetrics(sources, '2025');
-    // Gross: 40 (s1) + 0 (s3 voided) + 130 (s5) = 170
-    expect(m.grossSales).toBeCloseTo(170, 5);
+    // Gross: 52 (s1 merchandise + shipping) + 0 (s3 voided) + 130 (s5) = 182
+    expect(m.grossSales).toBeCloseTo(182, 5);
     // Operating expenses: 8 (e1) + 13 (e3) + 50 (be1) = 71  (NO payouts)
     expect(m.operatingExpenses).toBeCloseTo(71, 5);
     // Artist payouts tracked separately: 12 (t1 only, t2 unpaid)
@@ -76,8 +76,8 @@ describe('computeCashFlowMetrics', () => {
 
   it('sums everything for "all"', () => {
     const m = computeCashFlowMetrics(sources, 'all');
-    // 40 + 10 + 0 + 130 = 180
-    expect(m.grossSales).toBeCloseTo(180, 5);
+    // 52 + 10 + 0 + 130 = 192
+    expect(m.grossSales).toBeCloseTo(192, 5);
     // 8 + 4 + 13 + 50 + 5 = 80
     expect(m.operatingExpenses).toBeCloseTo(80, 5);
     expect(m.artistPayouts).toBeCloseTo(12, 5);
@@ -108,9 +108,38 @@ describe('computeCashFlowMetrics', () => {
     };
     const customSources = { books: customBooks, states: customStates, taxCenter, fxRateCache };
     const m = computeCashFlowMetrics(customSources, '2025');
-    // It should be exactly the same as without test1 and otherTest (grossSales = 170, operatingExpenses = 71)
-    expect(m.grossSales).toBeCloseTo(170, 5);
+    // It should be exactly the same as without test1 and otherTest (grossSales = 182, operatingExpenses = 71)
+    expect(m.grossSales).toBeCloseTo(182, 5);
     expect(m.operatingExpenses).toBeCloseTo(71, 5);
+  });
+
+  it('counts customer-paid shipping once and excludes it when the order is voided', () => {
+    const custom = {
+      books: { b1: books.b1 },
+      states: {
+        b1: {
+          hist: [
+            { date: '2025-01-01', price: 65, qty: 1, shippingPaid: 12 },
+            { date: '2025-01-02', price: 65, qty: 1, shippingPaid: 20, voided: true },
+          ],
+        },
+      },
+      taxCenter: {},
+      fxRateCache,
+    };
+    expect(computeCashFlowMetrics(custom, '2025').grossSales).toBe(77);
+  });
+
+  it('does not assume CAD parity for an expense whose FX conversion failed', () => {
+    const custom = {
+      books: {},
+      states: {},
+      taxCenter: {
+        businessExpenses: [{ date: '2025-01-01', amount: 10, currency: 'USD', baseAmount: null, fxMissing: true }],
+      },
+      fxRateCache: {},
+    };
+    expect(computeCashFlowMetrics(custom, '2025').operatingExpenses).toBe(0);
   });
 });
 

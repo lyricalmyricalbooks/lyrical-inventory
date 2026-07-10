@@ -8,10 +8,10 @@ const __dirname = path.dirname(__filename);
 
 describe('main.js window binding verification', () => {
   const mainJsPath = path.resolve(__dirname, '../src/main.js');
+  const mainContent = fs.readFileSync(mainJsPath, 'utf8');
 
   it('declares every variable/function bound to window in exposeLegacyInlineHandlers', () => {
     expect(fs.existsSync(mainJsPath)).toBe(true);
-    const mainContent = fs.readFileSync(mainJsPath, 'utf8');
 
     // Find the exposeLegacyInlineHandlers block
     const blockMatch = mainContent.match(/function exposeLegacyInlineHandlers\(\)\s*\{([\s\S]+?)\n\}/);
@@ -45,5 +45,15 @@ describe('main.js window binding verification', () => {
     });
 
     expect(missingDefinitions).toEqual([]);
+  });
+
+  it('wires shipping income, reconciliation, and Shippo order metadata', () => {
+    expect(mainContent).toContain("type: 'Shipping income'");
+    expect(mainContent).toContain('function renderOrderShippingSummary');
+    expect(mainContent).toContain('function renderShippingReconciliationWorklist');
+    expect(mainContent).toContain('async function linkShippingExpense');
+    expect(mainContent).toContain('enrichShippoExpense(');
+    expect(mainContent).toContain('orderNumber: h.num');
+    expect(mainContent).toContain('payload.metadata = `order_number:${selectedOrderNumber}`');
   });
 });
