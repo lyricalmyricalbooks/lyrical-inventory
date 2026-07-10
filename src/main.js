@@ -5555,9 +5555,13 @@ function renderHist() {
           ? ` <span class="pill" style="font-size:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;">✓ Shipped${h.shippedDate ? ' ' + fmtD(h.shippedDate) : ''}</span>`
           : '';
         const paymentInfo = paymentSummary(h.payment, book);
-        const notesCell = paymentInfo
-          ? `${escapeHtml(h.notes) || '—'}<br><span style="font-size:11px;color:var(--text4);">${escapeHtml(paymentInfo)}</span>`
-          : (escapeHtml(h.notes) || '—');
+        const shippingInfo = isWebsite ? renderOrderShippingSummary(h, cur) : '';
+        const notesText = escapeHtml(h.notes) || '—';
+        const notesCell = [
+          notesText,
+          paymentInfo ? `<span style="font-size:11px;color:var(--text4);">${escapeHtml(paymentInfo)}</span>` : '',
+          shippingInfo,
+        ].filter(Boolean).join('<br>');
         const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
         const enteredByPill = enteredBy === 'Artist'
           ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
@@ -15281,6 +15285,7 @@ function renderTaxCenter() {
       el.value = selectedYear;
     }
   });
+  renderShippingReconciliationWorklist();
 }
 
 // Escape a value for safe interpolation into an SVG/HTML attribute or text node.
@@ -16117,6 +16122,60 @@ async function fetchShippoContext(token, tx) {
   const orderId = typeof tx.order === 'string' ? tx.order : (shippoOrder.object_id || shipment.order);
   if (orderId && !shippoOrder.order_number) shippoOrder = await fetchShippoObject(token, 'orders', orderId);
   return { shipment, shippoOrder };
+}
+
+function renderShippingReconciliationWorklist() {
+  const list = $('shipping-reconciliation-list');
+  const count = $('shipping-reconciliation-count');
+  if (!list || !count || isAuthor()) return;
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
+    String(expense?.ref || '').startsWith('shippo:') && expense.shippingMatchStatus !== 'matched'
+  );
+  const knownOrders = getShippingReconciliationOrders();
+  count.textContent = `${expenses.length} to review`;
+  if (!expenses.length) {
+    list.innerHTML = '<div class="shipping-reconciliation-empty">All imported postage is linked to an order.</div>';
+    return;
+  }
+
+  list.innerHTML = expenses.map(expense => {
+    const domId = String(expense.ref).replace(/[^A-Za-z0-9_-]/g, '-');
+    const suggested = normalizeShippingOrderNumber(expense.shippingSuggestedOrderNumber);
+    const options = knownOrders.map(order => {
+      const number = normalizeShippingOrderNumber(order.num || order.orderNum);
+      return `<option value="${escapeHtml(number)}"${number === suggested ? ' selected' : ''}>${escapeHtml(number)} · ${escapeHtml(order.shipName || order.customer || 'Customer')}</option>`;
+    }).join('');
+    const context = [expense.recipientName, expense.recipientPostal, expense.trackingUrl ? 'Tracking saved' : ''].filter(Boolean).join(' · ');
+    return `<div class="shipping-reconciliation-row">
+      <div class="shipping-reconciliation-copy">
+        <strong>${fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
+        <span>${escapeHtml(expense.date || 'Date unavailable')} · ${escapeHtml(context || 'Recipient unavailable')}</span>
+        <small>${escapeHtml(expense.shippingMatchStatus || 'unmatched')}</small>
+      </div>
+      <label for="${domId}">Order<span class="sr-only"> for ${escapeHtml(expense.ref)}</span></label>
+      <select id="${domId}"><option value="">Select an order</option>${options}</select>
+      <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)">Link postage</button>
+    </div>`;
+  }).join('');
+}
+
+async function linkShippingExpense(ref) {
+  const expense = (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
+  if (!expense) { showToast('Shipping expense was not found', 'err'); return; }
+  const domId = String(expense.ref).replace(/[^A-Za-z0-9_-]/g, '-');
+  const number = normalizeShippingOrderNumber($(domId)?.value);
+  if (!number) { showToast('Choose an order before linking postage', 'warn'); return; }
+  expense.shippingOrderNumber = number;
+  expense.shippingMatchMethod = 'manual';
+  expense.shippingMatchStatus = 'matched';
+  delete expense.shippingSuggestedOrderNumber;
+  delete expense.shippingCandidateOrderNumbers;
+  await saveTaxCenter();
+  renderShippingReconciliationWorklist();
+  renderOrders();
+  renderHist();
+  renderTaxCenter();
+  showToast(`Postage linked to ${number}`);
 }
 
 async function processShippoTxToExpense(tx, token, txId, ref, importedCount, context, knownOrders) {
@@ -23254,7 +23313,8 @@ function exposeLegacyInlineHandlers() {
     renameTripPrompt, showCategoryDetail, saveTaxCenterSettings, scanReceiptWithAI,
     getShippoTxCost, saveShippoLabelLocally, fetchShippoTransactionsPageAPI,
     fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
-    processShippoTxToExpense, importShippoShippingFromApi, submitTaxExpense, addRecurring,
+    processShippoTxToExpense, renderShippingReconciliationWorklist, linkShippingExpense,
+    importShippoShippingFromApi, submitTaxExpense, addRecurring,
     removeRecurring, downloadTaxLedgerCSV, posBooksMap, posResolveBook, isPosOnlyBook,
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,
     codeToSymbol, posFormat, convertCurrency, getPOSCurrencies, buildPOSCartRows, renderPOS,
