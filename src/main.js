@@ -23320,7 +23320,7 @@ function exposeLegacyInlineHandlers() {
     ocReadProposalCreditEdit_, ocFlashCard_, ocApproveProposal, ocDismissProposal,
     ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocCopyEmails, ocSearch,
     ocFilterByStage, recordOrder, showMoreHist, showAllHist, renderConsignHistRow, renderHist,
-    getScanMemory, saveScanMemory, getAllAppliedIds, renderOrders, applyOne, applyAll, fetchOrders,
+    getScanMemory, saveScanMemory, getAllAppliedIds, renderOrders, applyOne, reapplyOne, applyAll, fetchOrders,
     backfillShipping, fetchLiveRate, fetchHistoricalRate, onManualCurrencyChange, calcFx,
     calcManualFxRate, onExpenseCurrencyChange, calcExpenseFx, _toggleShippingPanel, openLabelModal,
     updateShippedStatusUI, toggleShipped, printShippingLabel, saveArtistPaymentLink,
