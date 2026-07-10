@@ -6,7 +6,7 @@
 // same filters (voided / artistPending sales, paid artist transfers, stored
 // baseAmount preference) — so the numbers can never drift from the ledger.
 
-import { getBookCurrencyCode } from './money.js';
+import { getBookCurrencyCode, roundCents } from './money.js';
 
 const yearOf = (d) => (d ? String(d).substring(0, 4) : '');
 const monthOf = (d) => (d ? String(d).substring(0, 7) : '');
@@ -44,8 +44,9 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       if (!inYear(h.date, yearFilter)) return;
       const qty = h.qty || 1;
       const unitPrice = h.price ?? h.unitPrice ?? 0;
-      const amt = h.voided ? 0 : unitPrice * qty;
-      grossSales += amt * hRate;
+      const merchandise = h.voided ? 0 : unitPrice * qty;
+      const customerShipping = h.voided ? 0 : (Number(h.shippingPaid) || 0);
+      grossSales = roundCents(grossSales + ((merchandise + customerShipping) * hRate));
       txnCount += 1;
       if (!h.voided) unitsSold += qty;
     });
@@ -75,7 +76,11 @@ export function computeCashFlowMetrics(sources, yearFilter) {
   (taxCenter.businessExpenses || []).forEach((e) => {
     if (!inYear(e.date, yearFilter)) return;
     const eCur = e.currency || 'CAD';
-    const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (fxRateCache[`${eCur}_CAD`] || 1);
+    const eBase = e.baseAmount != null
+      ? e.baseAmount
+      : e.fxMissing
+        ? 0
+        : (e.amount || 0) * (fxRateCache[`${eCur}_CAD`] || 1);
     operatingExpenses += eBase;
   });
 

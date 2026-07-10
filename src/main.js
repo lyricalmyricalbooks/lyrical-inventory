@@ -16,6 +16,7 @@ import {
   getContrastColor,
   lightenColor,
   getContrastSafeText,
+  roundCents,
 } from './lib/money.js';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
@@ -28,6 +29,7 @@ import {
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { computeCashFlowMetrics, cashFlowDelta, buildCashFlowBuckets } from './lib/cashflow.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
+import { enrichShippoExpense, linkedShippingSummary, normalizeShippingOrderNumber } from './lib/shipping-reconciliation.js';
 
 let updateSWFunc = null;
 
@@ -5408,6 +5410,37 @@ function renderConsignHistRow(e, after) {
   return `<tr class="${voided}" style="background:var(--cream2);"><td class="mono" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r">${e.voided ? '' : qtyCell}</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill gray" style="font-size:10px;">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
 }
 
+function shippingRateToBase(currency) {
+  const code = normalizeCurrencyCode(currency, 'CAD');
+  return code === 'CAD' ? 1 : (_fxRateCache[`${code}_CAD`] || 0);
+}
+
+function getShippingReconciliationOrders() {
+  const byNumber = new Map();
+  Object.values(states).forEach(state => (state?.hist || []).forEach(history => {
+    const number = normalizeShippingOrderNumber(history.num);
+    if (number && history.chan === 'Website' && !history.voided) byNumber.set(number, history);
+  }));
+  (orders || []).forEach(order => {
+    const number = normalizeShippingOrderNumber(order.orderNum || order.num);
+    if (number && !byNumber.has(number)) byNumber.set(number, { ...order, num: number });
+  });
+  return Array.from(byNumber.values());
+}
+
+function renderOrderShippingSummary(order, currency) {
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => String(expense?.ref || '').startsWith('shippo:'));
+  const summary = linkedShippingSummary(order, expenses, shippingRateToBase(currency));
+  const customer = `<span class="shipping-money customer">Customer paid ${fmt(summary.customerPaid, currency)}</span>`;
+  if (summary.postageBase == null) {
+    const label = summary.linkedCount ? 'Postage linked · FX rate needed' : 'Postage not linked';
+    return `<span class="shipping-summary">${customer}<span class="shipping-money unlinked">${label}</span></span>`;
+  }
+  const marginClass = summary.marginBase > 0 ? 'positive' : summary.marginBase < 0 ? 'negative' : 'neutral';
+  const sign = summary.marginBase > 0 ? '+' : '';
+  return `<span class="shipping-summary">${customer}<span class="shipping-money postage">Postage cost ${fmt(summary.postageBase, 'CAD')}</span><span class="shipping-money margin ${marginClass}">Shipping margin ${sign}${fmt(summary.marginBase, 'CAD')}</span></span>`;
+}
+
 function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
   // Refresh consignment Sale ↔ invoice cross-links so a renamed/relinked invoice
@@ -5585,10 +5618,7 @@ function renderOrders() {
     const priceWarn = priceMismatch
       ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
       : '';
-    const shippingPaid = Number(o.shippingPaid || 0);
-    const shippingBadge = shippingPaid > 0
-      ? `<span title="Customer shipping purchase">Shipping ${fmt(shippingPaid, listCur)}</span>`
-      : '';
+    const shippingBadge = renderOrderShippingSummary(o, listCur);
     const bookLabel = o.bookId && BOOKS[o.bookId]
       ? `<span style="font-size:10px;background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:100px;padding:2px 8px;margin-right:6px;">${escapeHtml(BOOKS[o.bookId].title)}</span>`
       : '';

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'fs';
 import { escapeHtml } from '../src/lib/html.js';
+
+const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 describe('escapeHtml', () => {
   it('escapes the five HTML-significant characters', () => {
@@ -44,5 +47,10 @@ describe('escapeHtml', () => {
   it('escapes every occurrence, not just the first', () => {
     expect(escapeHtml('<<>>')).toBe('&lt;&lt;&gt;&gt;');
     expect(escapeHtml('a & b & c')).toBe('a &amp; b &amp; c');
+  });
+
+  it('contains the Shippo order reconciliation worklist', () => {
+    expect(html).toContain('id="shipping-reconciliation-list"');
+    expect(html).toContain('Shipping reconciliation');
   });
 });
