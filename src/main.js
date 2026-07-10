@@ -2198,9 +2198,7 @@ function updateAllOverview() {
       <div class="book-cover-3d" aria-hidden="true">
         <div class="book-cover-spine"></div>
         <div class="book-cover-front">
-          <div class="book-cover-deco">
-            <span class="book-cover-logo">${escapeHtml(book.title.charAt(0))}</span>
-          </div>
+          <div class="book-cover-deco"></div>
         </div>
       </div>
       <div class="book-strip-info">
