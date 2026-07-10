@@ -1477,6 +1477,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .shipping-reconciliation{margin-top:var(--space-3);padding:var(--space-4);border:1px solid var(--border);border-radius:var(--r2);background:rgba(255,255,255,.04);}
 .shipping-reconciliation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);margin-bottom:var(--space-3);}
 .shipping-reconciliation-head p{margin:.25rem 0 0;font-size:11px;line-height:1.5;color:var(--text3);}
+.shipping-reconciliation-actions{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;justify-content:flex-end;}
 .shipping-reconciliation-row{display:grid;grid-template-columns:minmax(190px,1fr) auto minmax(220px,1fr) auto;align-items:center;gap:var(--space-3);padding:var(--space-3) 0;border-top:1px solid var(--border2);}
 .shipping-reconciliation-copy{display:flex;flex-direction:column;gap:.2rem;min-width:0;}
 .shipping-reconciliation-copy span,.shipping-reconciliation-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text3);}

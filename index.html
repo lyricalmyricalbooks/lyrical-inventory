@@ -1621,7 +1621,11 @@
               <strong id="shipping-reconciliation-title">Shipping reconciliation</strong>
               <p>Link paid postage to its website order. Suggested matches always need your confirmation.</p>
             </div>
-            <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
+            <div class="shipping-reconciliation-actions">
+              <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
+              <button class="btn sm" type="button" id="shipping-reconciliation-clear" onclick="clearShippingReconciliationList()">Clear list</button>
+              <button class="btn sm" type="button" id="shipping-reconciliation-close" aria-controls="shipping-reconciliation-list" aria-expanded="true" onclick="toggleShippingReconciliation()">Close</button>
+            </div>
           </div>
           <div id="shipping-reconciliation-list" aria-live="polite"></div>
         </section>

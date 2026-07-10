@@ -52,5 +52,7 @@ describe('escapeHtml', () => {
   it('contains the Shippo order reconciliation worklist', () => {
     expect(html).toContain('id="shipping-reconciliation-list"');
     expect(html).toContain('Shipping reconciliation');
+    expect(html).toContain('id="shipping-reconciliation-close"');
+    expect(html).toContain('id="shipping-reconciliation-clear"');
   });
 });
