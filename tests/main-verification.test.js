@@ -56,4 +56,10 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('orderNumber: h.num');
     expect(mainContent).toContain('payload.metadata = `order_number:${selectedOrderNumber}`');
   });
+
+  it('adds customer-paid shipping to the Tax Center income ledger', () => {
+    expect(mainContent).toContain("type: 'Shipping income'");
+    expect(mainContent).toContain("sourceType: 'shippingIncome'");
+    expect(mainContent).toContain('Number(h.shippingPaid)');
+  });
 });

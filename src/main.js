@@ -14892,6 +14892,29 @@ function renderTaxCenter() {
             sourceId: bid,
             itemId: h.id || h.num
         });
+
+        const shippingIncome = h.voided ? 0 : (Number(h.shippingPaid) || 0);
+        if (shippingIncome > 0) {
+          const shippingBase = roundCents(shippingIncome * hRate);
+          totalGrossSales = roundCents(totalGrossSales + shippingBase);
+          allLedger.push({
+            date: h.date,
+            type: 'Shipping income',
+            desc: `Customer shipping paid (${b.title})`,
+            cat: 'Income',
+            ref: h.num,
+            origCurrency: cur,
+            origAmount: shippingIncome,
+            baseAmount: shippingBase,
+            qty: 0,
+            voided: false,
+            hasRateError: !hRate,
+            isIncome: true,
+            sourceType: 'shippingIncome',
+            sourceId: bid,
+            itemId: `${h.id || h.num}-shipping-income`,
+          });
+        }
     });
     
     // Add book specific expenses
@@ -14966,7 +14989,11 @@ function renderTaxCenter() {
 
       const eCur = e.currency || 'CAD';
       // Use stored baseAmount when available to avoid re-conversion
-      const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+      const eBase = e.baseAmount != null
+        ? e.baseAmount
+        : e.fxMissing
+          ? 0
+          : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
       
       totalOperatingExpenses += eBase;
       
@@ -14981,7 +15008,7 @@ function renderTaxCenter() {
             origCurrency: eCur,
             origAmount: e.amount || 0,
             baseAmount: eBase,
-            hasRateError: false,
+            hasRateError: !!e.fxMissing,
             isIncome: false,
             sourceType: 'businessExpense',
             itemId: e.id,
