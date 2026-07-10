@@ -61,6 +61,9 @@ describe('Shippo Customs & Country Helpers', () => {
       expect(normalizeCountryCode('united kingdom')).toBe('GB');
       expect(normalizeCountryCode('GB')).toBe('GB');
       expect(normalizeCountryCode('MX')).toBe('MX');
+      expect(normalizeCountryCode('Ukraine')).toBe('UA');
+      expect(normalizeCountryCode('ukraine')).toBe('UA');
+      expect(normalizeCountryCode('Poland')).toBe('PL');
     });
 
     it('returns two letter codes unmodified if they match regex', () => {

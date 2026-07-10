@@ -22277,18 +22277,32 @@ const SHIPPO_COUNTRY_CODES = {
   australia: 'AU', au: 'AU',
   austria: 'AT', at: 'AT',
   belgium: 'BE', be: 'BE',
+  brazil: 'BR', br: 'BR',
+  china: 'CN', cn: 'CN',
+  'czech republic': 'CZ', cz: 'CZ',
   denmark: 'DK', dk: 'DK',
   finland: 'FI', fi: 'FI',
+  greece: 'GR', gr: 'GR',
+  hungary: 'HU', hu: 'HU',
+  iceland: 'IS', is: 'IS',
+  india: 'IN', in: 'IN',
   ireland: 'IE', ie: 'IE',
+  israel: 'IL', il: 'IL',
   japan: 'JP', jp: 'JP',
   mexico: 'MX', mx: 'MX',
   netherlands: 'NL', holland: 'NL', nl: 'NL',
   'new zealand': 'NZ', nz: 'NZ',
   norway: 'NO', no: 'NO',
+  poland: 'PL', pl: 'PL',
   portugal: 'PT', pt: 'PT',
+  singapore: 'SG', sg: 'SG',
+  'south africa': 'ZA', za: 'ZA',
+  'south korea': 'KR', kr: 'KR',
   spain: 'ES', es: 'ES', españa: 'ES',
   sweden: 'SE', se: 'SE',
-  switzerland: 'CH', ch: 'CH', suisse: 'CH'
+  switzerland: 'CH', ch: 'CH', suisse: 'CH',
+  turkey: 'TR', tr: 'TR',
+  ukraine: 'UA', ua: 'UA'
 };
 
 function normalizeCountryCode(code) {
