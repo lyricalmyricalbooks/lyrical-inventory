@@ -106,7 +106,15 @@ export function stageShippoExpenseEnrichment(
 
 export function applyShippoExpenseEnrichments(staged = []) {
   staged.forEach(entry => {
-    if (entry?.target && entry?.enriched) Object.assign(entry.target, entry.enriched);
+    if (!entry?.target || !entry?.enriched) return;
+    [
+      'shippingOrderNumber',
+      'shippingSuggestedOrderNumber',
+      'shippingCandidateOrderNumbers',
+      'shippingMatchMethod',
+      'shippingMatchStatus',
+    ].forEach(key => delete entry.target[key]);
+    Object.assign(entry.target, entry.enriched);
   });
 }
 
