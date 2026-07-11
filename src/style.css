@@ -1,6 +1,7 @@
 :root {
   --ink:#0e0c0a; --ink2:#1c1917; --ink3:#2a2723; --ink4:#3d3a35;
   --cream:#f7f2e9; --cream2:#efe9dc; --cream3:#e5ddd0; --cream4:#d9d0c2;
+  --surface-card:#fff;
   --gold:#c8913a; --gold2:#e5a93f; --gold3:#f0c060; --gold-text:#8a5815;
   --gold-bg:rgba(200,145,58,.1); --gold-line:rgba(200,145,58,.25);
   --text:#0e0c0a; --text2:#4a4540; --text3:#8a8078; --text4:#b8b0a5;
@@ -213,7 +214,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 
 /* COMBINED DASHBOARD STRIPS */
 .book-strip {
-  background: white;
+  background: var(--surface-card);
+  background: color-mix(in srgb, var(--accent-color) 7%, var(--surface-card));
   border-radius: var(--r3);
   border: 1px solid var(--border);
   padding: 1.5rem;
