@@ -16264,11 +16264,10 @@ function renderShippingReconciliationWorklist() {
   const count = $('shipping-reconciliation-count');
   if (!list || !count || isAuthor()) return;
   const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:') && expense.shippingMatchStatus !== 'matched' && !expense.shippingReconciliationDismissed
+    String(expense?.ref || '').startsWith('shippo:') && expense.shippingMatchStatus !== 'matched'
   );
   const knownOrders = getShippingReconciliationOrders();
   count.textContent = `${expenses.length} to review`;
-  applyShippingReconciliationVisibility();
   if (!expenses.length) {
     list.innerHTML = '<div class="shipping-reconciliation-empty">All imported postage is linked to an order.</div>';
     return;
@@ -16293,39 +16292,6 @@ function renderShippingReconciliationWorklist() {
       <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)">Link postage</button>
     </div>`;
   }).join('');
-}
-
-function applyShippingReconciliationVisibility() {
-  const list = $('shipping-reconciliation-list');
-  const button = $('shipping-reconciliation-close');
-  if (!list || !button) return;
-  const collapsed = localStorage.getItem('lm-shipping-reconciliation-collapsed') === 'true';
-  list.hidden = collapsed;
-  button.textContent = collapsed ? 'Show' : 'Close';
-  button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-}
-
-function toggleShippingReconciliation() {
-  const list = $('shipping-reconciliation-list');
-  if (!list) return;
-  localStorage.setItem('lm-shipping-reconciliation-collapsed', String(!list.hidden));
-  applyShippingReconciliationVisibility();
-}
-
-async function clearShippingReconciliationList() {
-  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:') && expense.shippingMatchStatus !== 'matched' && !expense.shippingReconciliationDismissed
-  );
-  if (!expenses.length) return;
-  const confirmed = await confirmDialog(
-    `Clear ${expenses.length} unmatched postage item${expenses.length === 1 ? '' : 's'} from this review list? The expenses will stay in your ledger.`,
-    { title: 'Clear shipping reconciliation list', okLabel: 'Clear list' }
-  );
-  if (!confirmed) return;
-  expenses.forEach(expense => { expense.shippingReconciliationDismissed = true; });
-  await saveTaxCenter();
-  renderShippingReconciliationWorklist();
-  showToast('Shipping reconciliation list cleared', 'ok');
 }
 
 async function linkShippingExpense(ref) {
@@ -23493,7 +23459,6 @@ function exposeLegacyInlineHandlers() {
     getShippoTxCost, saveShippoLabelLocally, fetchShippoTransactionsPageAPI,
     fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
     processShippoTxToExpense, renderShippingReconciliationWorklist, linkShippingExpense,
-    toggleShippingReconciliation, clearShippingReconciliationList,
     importShippoShippingFromApi, submitTaxExpense, addRecurring,
     removeRecurring, downloadTaxLedgerCSV, posBooksMap, posResolveBook, isPosOnlyBook,
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,

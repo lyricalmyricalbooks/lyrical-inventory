@@ -51,8 +51,6 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain("type: 'Shipping income'");
     expect(mainContent).toContain('function renderOrderShippingSummary');
     expect(mainContent).toContain('function renderShippingReconciliationWorklist');
-    expect(mainContent).toContain('function toggleShippingReconciliation');
-    expect(mainContent).toContain('function clearShippingReconciliationList');
     expect(mainContent).toContain('async function linkShippingExpense');
     expect(mainContent).toContain('enrichShippoExpense(');
     expect(mainContent).toContain('orderNumber: h.num');
