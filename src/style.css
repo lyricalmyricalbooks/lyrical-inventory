@@ -16,6 +16,7 @@
   --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
   --shadow:0 2px 12px rgba(14,12,10,.07);
   --shadow2:0 8px 32px rgba(14,12,10,.12);
+  --book-kpi-rail-width:37rem;
   /* Per-book accent - overridden by JS */
   --book-accent: var(--gold2);
   --book-accent-bg: var(--gold-bg);
@@ -356,13 +357,15 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 /* KPI GRID TILE SYSTEM */
 .book-strip-kpis {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  flex: 0 0 var(--book-kpi-rail-width);
+  width: var(--book-kpi-rail-width);
   gap: 10px;
   background: var(--cream2);
   padding: 10px;
   border-radius: var(--r2);
   border: 1px solid var(--border);
-  min-width: 340px;
+  min-width: 0;
 }
 .bsk {
   text-align: center;
@@ -375,7 +378,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   justify-content: center;
   align-items: center;
   transition: transform 0.15s, box-shadow 0.15s;
-  min-width: 75px;
+  min-width: 0;
 }
 .bsk:hover {
   transform: translateY(-1px);
@@ -1012,6 +1015,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   }
   .book-strip-kpis {
     grid-template-columns: repeat(2, 1fr) !important;
+    flex: 1 1 100%;
     width: 100%;
     min-width: 0 !important;
     gap: 8px !important;
