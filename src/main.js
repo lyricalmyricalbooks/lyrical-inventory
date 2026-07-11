@@ -16201,8 +16201,18 @@ function renderShippingReconciliationWorklist() {
   const list = $('shipping-reconciliation-list');
   const count = $('shipping-reconciliation-count');
   if (!list || !count || isAuthor()) return;
+  const panel = list.closest('.shipping-reconciliation');
+  const openButton = $('shipping-reconciliation-open');
+  if (panel?.dataset.closed === 'true') {
+    panel.style.display = 'none';
+    if (openButton) openButton.style.display = '';
+    return;
+  }
+  if (panel) panel.style.display = '';
+  if (openButton) openButton.style.display = 'none';
   const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
-    String(expense?.ref || '').startsWith('shippo:') && expense.shippingMatchStatus !== 'matched'
+    String(expense?.ref || '').startsWith('shippo:') &&
+    expense.shippingMatchStatus !== 'matched' && expense.shippingMatchStatus !== 'dismissed'
   );
   const knownOrders = getShippingReconciliationOrders();
   count.textContent = `${expenses.length} to review`;
@@ -16230,6 +16240,52 @@ function renderShippingReconciliationWorklist() {
       <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)">Link postage</button>
     </div>`;
   }).join('');
+}
+
+function closeShippingReconciliation() {
+  const panel = document.querySelector('.shipping-reconciliation');
+  if (!panel) return;
+  panel.dataset.closed = 'true';
+  renderShippingReconciliationWorklist();
+}
+
+function openShippingReconciliation() {
+  const panel = document.querySelector('.shipping-reconciliation');
+  if (!panel) return;
+  delete panel.dataset.closed;
+  renderShippingReconciliationWorklist();
+}
+
+async function clearShippingReconciliationList() {
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
+    String(expense?.ref || '').startsWith('shippo:') &&
+    expense.shippingMatchStatus !== 'matched' && expense.shippingMatchStatus !== 'dismissed'
+  );
+  if (!expenses.length) {
+    showToast('The reconciliation list is already clear', 'warn');
+    return;
+  }
+  const accepted = await confirmDialog(
+    `Dismiss ${expenses.length} unmatched Shippo postage item${expenses.length === 1 ? '' : 's'} from this list?\n\n` +
+    'The expenses will stay in your Shipping & Postage ledger.',
+    { title: 'Clear shipping reconciliation list', okLabel: 'Clear list' },
+  );
+  if (!accepted) return;
+  const priorStatuses = expenses.map(expense => ({ expense, hadStatus: Object.prototype.hasOwnProperty.call(expense, 'shippingMatchStatus'), status: expense.shippingMatchStatus }));
+  expenses.forEach(expense => { expense.shippingMatchStatus = 'dismissed'; });
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    priorStatuses.forEach(({ expense, hadStatus, status }) => {
+      if (hadStatus) expense.shippingMatchStatus = status;
+      else delete expense.shippingMatchStatus;
+    });
+    console.error('Shipping reconciliation clear failed', error);
+    showToast('Could not clear the reconciliation list. Please try again.', 'err');
+    return;
+  }
+  renderShippingReconciliationWorklist();
+  showToast(`Cleared ${expenses.length} reconciliation item${expenses.length === 1 ? '' : 's'}`);
 }
 
 async function linkShippingExpense(ref) {
@@ -23397,6 +23453,7 @@ function exposeLegacyInlineHandlers() {
     getShippoTxCost, saveShippoLabelLocally, fetchShippoTransactionsPageAPI,
     fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
     processShippoTxToExpense, renderShippingReconciliationWorklist, linkShippingExpense,
+    closeShippingReconciliation, openShippingReconciliation, clearShippingReconciliationList,
     importShippoShippingFromApi, submitTaxExpense, addRecurring,
     removeRecurring, downloadTaxLedgerCSV, posBooksMap, posResolveBook, isPosOnlyBook,
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,
