@@ -5439,7 +5439,7 @@ function getShippingReconciliationOrders() {
 function renderOrderShippingSummary(order, currency) {
   const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => String(expense?.ref || '').startsWith('shippo:'));
   const summary = linkedShippingSummary(order, expenses, shippingRateToBase(currency));
-  const customer = `<span class="shipping-money customer">Customer paid ${fmt(summary.customerPaid, currency)}</span>`;
+  const customer = `<span class="shipping-money customer">Shipping paid ${fmt(summary.customerPaid, currency)}</span>`;
   if (summary.postageBase == null) {
     const label = summary.linkedCount ? 'Postage linked · FX rate needed' : 'Postage not linked';
     return `<span class="shipping-summary">${customer}<span class="shipping-money unlinked">${label}</span></span>`;
