@@ -2,6 +2,19 @@
 // Loaded after src/main.js to wrap global handlers and ensure color consistency.
 
 (function() {
+  // Hex to RGBA converter helper
+  function hexToRgba(hex, alpha) {
+    if (!hex) return 'transparent';
+    hex = hex.replace('#', '');
+    if (hex.length === 3) {
+      hex = hex.split('').map(c => c + c).join('');
+    }
+    const r = parseInt(hex.substring(0, 2), 16) || 0;
+    const g = parseInt(hex.substring(2, 4), 16) || 0;
+    const b = parseInt(hex.substring(4, 6), 16) || 0;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   // Helper to ensure test books are always violet/purple
   function applyTestBookOverrides() {
     if (window.BOOKS) {
@@ -41,6 +54,8 @@
   if (originalSwitchBook) {
     window.switchBook = function(bookId) {
       originalSwitchBook(bookId);
+      
+      // Override accent colors if it's the test book
       if (window.isTestBookId && window.isTestBookId(bookId)) {
         document.documentElement.style.setProperty('--book-accent', '#8b5cf6');
         document.documentElement.style.setProperty('--book-accent-bg', 'rgba(139, 92, 246, 0.1)');
@@ -56,6 +71,21 @@
         const dot = document.getElementById('book-dropdown-dot');
         if (dot) dot.style.background = '#8b5cf6';
       }
+
+      // Apply dynamic body background tint
+      let bodyBgTint = 'transparent';
+      if (bookId !== 'all') {
+        const isTest = window.isTestBookId && window.isTestBookId(bookId);
+        if (isTest) {
+          bodyBgTint = 'rgba(139, 92, 246, 0.03)';
+        } else if (window.BOOKS && window.BOOKS[bookId]) {
+          const accent = window.BOOKS[bookId].accent;
+          if (accent) {
+            bodyBgTint = hexToRgba(accent, 0.03);
+          }
+        }
+      }
+      document.documentElement.style.setProperty('--body-bg-tint', bodyBgTint);
     };
   }
 
@@ -76,4 +106,7 @@
 
   // Run initial override in case catalog was already loaded
   applyTestBookOverrides();
+  if (window.activeBook) {
+    window.switchBook(window.activeBook);
+  }
 })();
