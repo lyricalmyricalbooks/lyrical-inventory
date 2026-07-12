@@ -512,7 +512,7 @@
     <div style="display:flex;align-items:center;gap:12px;">
       <button class="btn gold sm" id="d-email-artist-btn" onclick="emailArtistForPayment()" style="font-size:11px;display:none;">✉ Email artist for payment</button>
       <button class="btn gold sm" id="d-qr-btn" onclick="openPaymentQRModal()" style="font-size:11px;">Payment QR Code</button>
-      <button class="btn sm" id="d-seed-test-btn" onclick="seedMockTestData()" style="font-size:11px;display:none;background:linear-gradient(135deg,#10b981,#059669);color:#ffffff;border:none;box-shadow:0 2px 8px rgba(16,185,129,0.3);">🧪 Seed Mock Test Data</button>
+      <button class="btn sm" id="d-seed-test-btn" onclick="seedMockTestData()" style="font-size:11px;display:none;background:linear-gradient(135deg,#a78bfa,#8b5cf6);color:#ffffff;border:none;box-shadow:0 2px 8px rgba(139,92,246,0.3);">🧪 Seed Mock Test Data</button>
       <span id="d-notify-status" class="pill gray" style="font-size:10px;display:none;" title="Whether artist submissions can email you for approval"></span>
       <div class="dash-context-meta">Dashboard overview</div>
     </div>
@@ -2385,7 +2385,7 @@
         <div>
           <div style="display:flex; align-items:center; gap:8px;">
             <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:700; color:var(--gold2);">📊 Google Sheets Sandbox Simulator</div>
-            <span style="background:linear-gradient(135deg, #10b981, #059669); color:white; font-size:9px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; letter-spacing:0.05em; display:inline-block;">Test Mode Active</span>
+            <span style="background:linear-gradient(135deg, #a78bfa, #8b5cf6); color:white; font-size:9px; font-weight:700; padding:2px 8px; border-radius:10px; text-transform:uppercase; letter-spacing:0.05em; display:inline-block;">Test Mode Active</span>
           </div>
           <div style="font-size:12px; color:rgba(255,255,255,0.7); margin-top:4px; line-height:1.5;">
             Simulating synchronization in real-time. Transactions logged in the Test Profile are captured here in-memory.
@@ -3289,5 +3289,6 @@
 </div>
 
 <script type="module" src="/src/main.js"></script>
+<script type="module" src="/src/test-profile-tint-fix.js"></script>
 </body>
 </html>
