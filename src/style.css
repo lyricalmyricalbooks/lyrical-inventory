@@ -672,6 +672,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 /* ORDER CARDS */
 .order-card{background:white;border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);}
 .order-card.done{border-left-color:var(--border);opacity:.5;}
+.order-card.cancelled{border-left-color:var(--red);opacity:.6;}
 .order-row{display:flex;justify-content:space-between;align-items:center;}
 .order-num{font-weight:600;font-size:13px;}
 .order-meta{font-size:12px;color:var(--text3);margin-top:2px;}

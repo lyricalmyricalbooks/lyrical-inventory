@@ -5604,14 +5604,25 @@ function renderOrders() {
   // Filter to current book; show all if bookId not set
   const rel = orders.filter(o => o.hasBook && (!o.bookId || o.bookId === activeBook));
   const appliedIds = getAllAppliedIds();
+  const mem = getScanMemory();
+  const cancelledNums = mem.cancelledNums || [];
 
-  // Smart filter: hide orders whose order number already exists in history
-  const visible = rel.filter(o => !appliedIds.has(o.orderNum));
+  const showAllChk = $('show-all-orders-chk');
+  const showAll = showAllChk ? showAllChk.checked : false;
+
+  const isApplied = (o) => appliedIds.has(o.id) || appliedIds.has(o.orderNum);
+  const isCancelled = (o) => cancelledNums.includes(o.orderNum);
+
+  // Smart filter: hide orders whose order number already exists in history or is cancelled
+  const visible = rel.filter(o => {
+    if (showAll) return true;
+    return !isApplied(o) && !isCancelled(o);
+  });
   const hiddenCount = rel.length - visible.length;
 
   if (!visible.length) {
     const msg = hiddenCount > 0
-      ? `<div class="empty-state web-empty success"><div class="e-icon">✅</div><strong>Everything is up to date</strong><span>All ${hiddenCount} found order(s) are already applied. Scan again to check for newer receipts.</span></div>`
+      ? `<div class="empty-state web-empty success"><div class="e-icon">✅</div><strong>Everything is up to date</strong><span>All ${hiddenCount} found order(s) are already applied or hidden. Scan again to check for newer receipts.</span></div>`
       : `<div class="empty-state web-empty"><div class="e-icon">📬</div><strong>No orders found for this book</strong><span>Make sure Google Sheets is connected, then scan Gmail for recent Big Cartel receipts.</span><button class="btn ink sm" onclick="fetchOrders()">Scan Gmail</button></div>`;
     list.innerHTML = msg;
     $('apply-all-btn').disabled = true;
@@ -5619,14 +5630,15 @@ function renderOrders() {
   }
 
   list.innerHTML = visible.map(o => {
-    const done = appliedIds.has(o.id) || appliedIds.has(o.orderNum);
+    const done = isApplied(o);
+    const cancelled = isCancelled(o);
     const addrParts = [o.shipAddr1, o.shipCity, o.shipProvince, o.shipCountry].filter(Boolean);
     const addrLine = addrParts.length
       ? `<div style="font-size:11px;color:var(--text3);margin-top:4px;">📦 ${addrParts.join(', ')}</div>`
       : '';
     const listPrice = BOOKS[o.bookId]?.listPrice || book.listPrice;
     const listCur   = BOOKS[o.bookId]?.currency   || cur;
-    const priceMismatch = !done && o.price && Math.abs(o.price - listPrice) > 0.5;
+    const priceMismatch = !done && !cancelled && o.price && Math.abs(o.price - listPrice) > 0.5;
     const priceWarn = priceMismatch
       ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
       : '';
@@ -5637,30 +5649,71 @@ function renderOrders() {
     const viewEmailBtn = o.id
       ? `<a href="https://mail.google.com/mail/u/0/#all/${o.id}" target="_blank" class="btn sm" style="font-size:10px;opacity:.7;">📧 View</a>`
       : '';
-    return `<div class="order-card${done ? ' done' : ''}">
+
+    let cardClass = 'order-card';
+    if (done) cardClass += ' done';
+    else if (cancelled) cardClass += ' cancelled';
+
+    const statusPill = done
+      ? '<span class="pill gray">Applied</span>'
+      : cancelled
+        ? '<span class="pill red" style="background:#fbe9e7;color:#b3261e;border:1px solid #ffccbc;">Cancelled</span>'
+        : '<span class="pill gold">New</span>';
+
+    let actionsHtml = viewEmailBtn;
+    if (done) {
+      actionsHtml += `<button class="btn sm" onclick="reapplyOne('${o.id}')" title="Update this applied order with the latest receipt totals">Reapply</button>`;
+    } else if (cancelled) {
+      actionsHtml += `<button class="btn sm gold" onclick="restoreOrder('${o.orderNum}')" title="Restore this order to New status">Restore</button>`;
+    } else {
+      actionsHtml += `<button class="btn sm" onclick="cancelOrder('${o.orderNum}')" title="Cancel/dismiss this order" style="color:var(--text3);border-color:var(--border);background:transparent;">Cancel</button>
+                      <button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>`;
+    }
+
+    return `<div class="${cardClass}">
       <div class="order-row order-card-top">
         <div class="order-identity">
           <div class="order-num">${escapeHtml(o.orderNum)}</div>
           <div class="order-meta">${escapeHtml(o.date)} · ${escapeHtml(o.customer) || '—'} · <span>${escapeHtml(o.email)}</span></div>
           ${addrLine}
         </div>
-        <span class="pill ${done ? 'gray' : 'gold'}">${done ? 'Applied' : 'New'}</span>
+        ${statusPill}
       </div>
       <div class="order-row order-card-bottom">
         <span class="order-summary">${bookLabel}<span>Qty ${o.qty}</span><span>${fmt(o.price || listPrice, listCur)}</span>${shippingBadge}${priceWarn}</span>
         <div class="order-actions">
-          ${viewEmailBtn}
-          ${!done ? `<button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>` : `<button class="btn sm" onclick="reapplyOne('${o.id}')" title="Update this applied order with the latest receipt totals">Reapply</button>`}
+          ${actionsHtml}
         </div>
       </div>
     </div>`;
   }).join('');
 
-  if (hiddenCount > 0) {
-    list.innerHTML += `<div class="orders-hidden-note">${hiddenCount} already-applied order(s) hidden.</div>`;
+  if (hiddenCount > 0 && !showAll) {
+    list.innerHTML += `<div class="orders-hidden-note">${hiddenCount} already-applied or hidden order(s) hidden.</div>`;
   }
 
-  $('apply-all-btn').disabled = !visible.some(o => !appliedIds.has(o.id) && !appliedIds.has(o.orderNum));
+  $('apply-all-btn').disabled = !visible.some(o => !isApplied(o) && !isCancelled(o));
+}
+
+function cancelOrder(orderNum) {
+  const mem = getScanMemory();
+  if (!mem.cancelledNums) mem.cancelledNums = [];
+  if (!mem.cancelledNums.includes(orderNum)) {
+    mem.cancelledNums.push(orderNum);
+  }
+  saveScanMemory(mem);
+  renderOrders();
+  showToast(`✓ Order ${orderNum} cancelled/hidden`, 'ok');
+}
+
+function restoreOrder(orderNum) {
+  const mem = getScanMemory();
+  if (mem.cancelledNums) {
+    mem.cancelledNums = mem.cancelledNums.filter(num => num !== orderNum);
+    saveScanMemory(mem);
+  }
+  renderOrders();
+  showToast(`✓ Order ${orderNum} restored to New`, 'ok');
 }
 
 // Update an already-applied website order in place after a receipt backfill.
@@ -5748,6 +5801,10 @@ function applyOne(id, { deferRender = false } = {}) {
   const mem = getScanMemory();
   if (!mem.appliedNums) mem.appliedNums = [];
   if (!mem.appliedNums.includes(o.orderNum)) mem.appliedNums.push(o.orderNum);
+  // Also remove from cancelledNums if it was cancelled
+  if (mem.cancelledNums) {
+    mem.cancelledNums = mem.cancelledNums.filter(num => num !== o.orderNum);
+  }
   mem.lastScan = new Date().toISOString();
   saveScanMemory(mem);
   syncToSheets({ type: 'order', book: targetBk.title, date: entry.date, num: o.orderNum, chan: 'Website', qty: o.qty, price, total: o.qty * price, stockAfter: targetState.stock, notes: 'Big Cartel', sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBk) });
@@ -5765,7 +5822,9 @@ function applyOne(id, { deferRender = false } = {}) {
 
 function applyAll() {
   const applied = getAllAppliedIds();
-  const toApply = orders.filter(o => o.hasBook && !applied.has(o.id) && !applied.has(o.orderNum));
+  const mem = getScanMemory();
+  const cancelledNums = mem.cancelledNums || [];
+  const toApply = orders.filter(o => o.hasBook && !applied.has(o.id) && !applied.has(o.orderNum) && !cancelledNums.includes(o.orderNum));
   // Apply the whole batch without rendering, then paint once at the end —
   // turns N full renderOrders()/updateDash() cycles into a single render.
   toApply.forEach(o => applyOne(o.id, { deferRender: true }));
@@ -22127,7 +22186,7 @@ Object.assign(window, {
   ocApproveProposal, ocDismissProposal, ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocSetServerSchedule,
   ocToggleSection, ocTogglePhotoPick,
   toggleCurrentBookView,
-  fetchOrders, applyOne, applyAll, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
+  fetchOrders, applyOne, applyAll, cancelOrder, restoreOrder, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
 
   submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale,
@@ -23376,7 +23435,7 @@ function exposeLegacyInlineHandlers() {
     ocReadProposalCreditEdit_, ocFlashCard_, ocApproveProposal, ocDismissProposal,
     ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocCopyEmails, ocSearch,
     ocFilterByStage, recordOrder, showMoreHist, showAllHist, renderConsignHistRow, renderHist,
-    getScanMemory, saveScanMemory, getAllAppliedIds, renderOrders, applyOne, reapplyOne, applyAll, fetchOrders,
+    getScanMemory, saveScanMemory, getAllAppliedIds, renderOrders, applyOne, reapplyOne, applyAll, fetchOrders, cancelOrder, restoreOrder,
     backfillShipping, fetchLiveRate, fetchHistoricalRate, onManualCurrencyChange, calcFx,
     calcManualFxRate, onExpenseCurrencyChange, calcExpenseFx, _toggleShippingPanel, openLabelModal,
     updateShippedStatusUI, toggleShipped, printShippingLabel, saveArtistPaymentLink,

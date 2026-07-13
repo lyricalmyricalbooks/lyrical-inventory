@@ -95,4 +95,12 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('onclick="reapplyOne');
     expect(mainContent).toContain('does not decrement stock');
   });
+
+  it('offers cancel and restore paths for website orders', () => {
+    expect(mainContent).toContain('function cancelOrder');
+    expect(mainContent).toContain('function restoreOrder');
+    expect(mainContent).toContain('onclick="cancelOrder');
+    expect(mainContent).toContain('onclick="restoreOrder');
+    expect(mainContent).toContain('show-all-orders-chk');
+  });
 });
