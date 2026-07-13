@@ -5662,7 +5662,8 @@ function renderOrders() {
 
     let actionsHtml = viewEmailBtn;
     if (done) {
-      actionsHtml += `<button class="btn sm" onclick="reapplyOne('${o.id}')" title="Update this applied order with the latest receipt totals">Reapply</button>`;
+      actionsHtml += `<button class="btn sm danger-btn" onclick="unapplyOne('${o.id}')" title="Revert this applied order back to New status">Unapply</button>
+                      <button class="btn sm" onclick="reapplyOne('${o.id}')" title="Update this applied order with the latest receipt totals">Reapply</button>`;
     } else if (cancelled) {
       actionsHtml += `<button class="btn sm gold" onclick="restoreOrder('${o.orderNum}')" title="Restore this order to New status">Restore</button>`;
     } else {
@@ -5714,6 +5715,56 @@ function restoreOrder(orderNum) {
   }
   renderOrders();
   showToast(`✓ Order ${orderNum} restored to New`, 'ok');
+}
+
+function unapplyOne(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  const targetBook = o.bookId && BOOKS[o.bookId] ? o.bookId : activeBook;
+  const state = states[targetBook];
+  const book = BOOKS[targetBook];
+  if (!state || !book) { showToast('Cannot find book for this order', 'err'); return; }
+
+  const histIndex = (state.hist || []).findIndex(h => h.num === o.orderNum && h.chan === 'Website');
+  if (histIndex === -1) {
+    showToast('Applied order history not found', 'warn');
+    return;
+  }
+  const h = state.hist[histIndex];
+
+  if (!h.voided) {
+    state.stock += h.qty;
+    state.sold = Math.max(0, state.sold - h.qty);
+    state.revenue = Math.max(0, state.revenue - h.qty * h.price);
+    if (state.chStats['Website']) {
+      state.chStats['Website'].txns = Math.max(0, state.chStats['Website'].txns - 1);
+      state.chStats['Website'].units = Math.max(0, state.chStats['Website'].units - h.qty);
+      state.chStats['Website'].revenue = Math.max(0, state.chStats['Website'].revenue - h.qty * h.price);
+      if (state.chStats['Website'].txns <= 0) delete state.chStats['Website'];
+    }
+  }
+
+  state.hist.splice(histIndex, 1);
+
+  if (state.doneIds) {
+    state.doneIds = state.doneIds.filter(x => x !== id && x !== o.id);
+  }
+
+  const mem = getScanMemory();
+  if (mem.appliedNums) {
+    mem.appliedNums = mem.appliedNums.filter(num => num !== o.orderNum);
+    saveScanMemory(mem);
+  }
+
+  _appliedIdsCache = null;
+
+  syncHistoryVoidDeletion(h, true);
+  saveState(targetBook);
+
+  renderOrders();
+  if (targetBook === activeBook) updateDash();
+
+  showToast(`✓ Reverted ${o.orderNum} to New`, 'ok');
 }
 
 // Update an already-applied website order in place after a receipt backfill.
@@ -22186,7 +22237,7 @@ Object.assign(window, {
   ocApproveProposal, ocDismissProposal, ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocSetServerSchedule,
   ocToggleSection, ocTogglePhotoPick,
   toggleCurrentBookView,
-  fetchOrders, applyOne, applyAll, cancelOrder, restoreOrder, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
+  fetchOrders, applyOne, applyAll, cancelOrder, restoreOrder, unapplyOne, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
 
   submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale,
@@ -23435,7 +23486,7 @@ function exposeLegacyInlineHandlers() {
     ocReadProposalCreditEdit_, ocFlashCard_, ocApproveProposal, ocDismissProposal,
     ocApproveAllProposals, ocOutboxRemove, ocOutboxSendAll, ocCopyEmails, ocSearch,
     ocFilterByStage, recordOrder, showMoreHist, showAllHist, renderConsignHistRow, renderHist,
-    getScanMemory, saveScanMemory, getAllAppliedIds, renderOrders, applyOne, reapplyOne, applyAll, fetchOrders, cancelOrder, restoreOrder,
+    getScanMemory, saveScanMemory, getAllAppliedIds, renderOrders, applyOne, reapplyOne, applyAll, fetchOrders, cancelOrder, restoreOrder, unapplyOne,
     backfillShipping, fetchLiveRate, fetchHistoricalRate, onManualCurrencyChange, calcFx,
     calcManualFxRate, onExpenseCurrencyChange, calcExpenseFx, _toggleShippingPanel, openLabelModal,
     updateShippedStatusUI, toggleShipped, printShippingLabel, saveArtistPaymentLink,

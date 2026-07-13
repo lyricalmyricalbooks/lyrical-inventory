@@ -99,8 +99,10 @@ describe('main.js window binding verification', () => {
   it('offers cancel and restore paths for website orders', () => {
     expect(mainContent).toContain('function cancelOrder');
     expect(mainContent).toContain('function restoreOrder');
+    expect(mainContent).toContain('function unapplyOne');
     expect(mainContent).toContain('onclick="cancelOrder');
     expect(mainContent).toContain('onclick="restoreOrder');
+    expect(mainContent).toContain('onclick="unapplyOne');
     expect(mainContent).toContain('show-all-orders-chk');
   });
 });
