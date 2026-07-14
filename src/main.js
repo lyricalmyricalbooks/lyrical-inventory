@@ -16307,11 +16307,34 @@ async function fetchShippoObject(token, resource, id) {
 async function fetchShippoContext(token, tx) {
   let shipment = tx.shipment && typeof tx.shipment === 'object' ? tx.shipment : {};
   const shipmentId = typeof tx.shipment === 'string' ? tx.shipment : shipment.object_id;
-  if (shipmentId && !shipment.address_to) shipment = await fetchShippoObject(token, 'shipments', shipmentId);
+  if (shipmentId && !shipment.address_to) {
+    shipment = await fetchShippoObject(token, 'shipments', shipmentId);
+  }
+
+  // Shippo sometimes returns address_to as a string ID
+  if (typeof shipment.address_to === 'string') {
+    try {
+      shipment.address_to = await fetchShippoObject(token, 'addresses', shipment.address_to);
+    } catch (e) {
+      console.warn('Failed to fetch shipment.address_to', e);
+    }
+  }
 
   let shippoOrder = tx.order && typeof tx.order === 'object' ? tx.order : {};
   const orderId = typeof tx.order === 'string' ? tx.order : (shippoOrder.object_id || shipment.order);
-  if (orderId && !shippoOrder.order_number) shippoOrder = await fetchShippoObject(token, 'orders', orderId);
+  if (orderId && !shippoOrder.order_number) {
+    shippoOrder = await fetchShippoObject(token, 'orders', orderId);
+  }
+
+  // Shippo sometimes returns to_address as a string ID
+  if (typeof shippoOrder.to_address === 'string') {
+    try {
+      shippoOrder.to_address = await fetchShippoObject(token, 'addresses', shippoOrder.to_address);
+    } catch (e) {
+      console.warn('Failed to fetch shippoOrder.to_address', e);
+    }
+  }
+
   return { shipment, shippoOrder };
 }
 
