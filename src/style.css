@@ -5611,3 +5611,12 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .manual-link-empty {
   text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 0.9rem;
 }
+
+@keyframes flashRow {
+  0% { background-color: transparent; }
+  10% { background-color: rgba(46, 125, 50, 0.2); }
+  100% { background-color: transparent; }
+}
+.flash-highlight {
+  animation: flashRow 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}

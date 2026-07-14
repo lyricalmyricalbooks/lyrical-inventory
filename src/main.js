@@ -23672,6 +23672,12 @@ async function confirmSuggestedShippoLink(orderNum, txRef) {
     await persistManualShippingLink(expense, orderNum, () => saveTaxCenter());
     showToast(`Linked ${orderNum} to ${txRef.replace('shippo:', '')} ✓`, 'success');
     renderShippingAnalysisHub();
+    
+    const row = document.getElementById(`shipping-ledger-row-${escapeHtml(orderNum)}`);
+    if (row) {
+      row.classList.add('flash-highlight');
+      setTimeout(() => row.classList.remove('flash-highlight'), 2000);
+    }
   } catch (err) {
     console.error('confirmSuggestedShippoLink failed', err);
     showToast('Could not save link. Please try again.', 'err');
@@ -23767,6 +23773,12 @@ async function doManualShippoLink(orderNum, txRef) {
     showToast(`Linked ${orderNum} to ${txRef.replace('shippo:', '')} ✓`, 'success');
     closeManualShippoLinkModal();
     renderShippingAnalysisHub();
+    
+    const row = document.getElementById(`shipping-ledger-row-${escapeHtml(orderNum)}`);
+    if (row) {
+      row.classList.add('flash-highlight');
+      setTimeout(() => row.classList.remove('flash-highlight'), 2000);
+    }
   } catch (err) {
     console.error('doManualShippoLink failed', err);
     showToast('Could not save link. Please try again.', 'err');
@@ -23778,6 +23790,29 @@ function closeManualShippoLinkModal() {
   const el = $('manual-link-modal-backdrop');
   if (el) el.remove();
 }
+
+/** Unlinks a Shippo expense from any order. */
+async function unlinkShippoExpense(txRef) {
+  const expense = (TAX_CENTER.businessExpenses || []).find(e => e.ref === txRef);
+  if (!expense) {
+    showToast('Expense not found.', 'err');
+    return;
+  }
+  
+  delete expense.shippingOrderNumber;
+  delete expense.shippingMatchMethod;
+  expense.shippingMatchStatus = 'unmatched';
+  
+  try {
+    await saveTaxCenter();
+    showToast(`Unlinked ${txRef.replace('shippo:', '')}`, 'ok');
+    renderShippingAnalysisHub();
+  } catch (err) {
+    console.error('unlinkShippoExpense failed', err);
+    showToast('Could not unlink. Please try again.', 'err');
+  }
+}
+
 
 function renderShippingAnalysisHub() {
   const hub = $('ship-analysis-hub');
@@ -24165,10 +24200,13 @@ function renderShippingAnalysisHub() {
         </div>`;
     } else if (!isLinked) {
       actionBtn = `<div style="margin-top:6px;"><button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:10px; padding:3px 8px;">Link</button></div>`;
+    } else if (isLinked) {
+      const txRef = escapeHtml(linked[0].ref);
+      actionBtn = `<div style="margin-top:6px;"><button class="btn sm ghost" onclick="unlinkShippoExpense('${txRef}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Unlink</button></div>`;
     }
 
     ledgerRowsHtml += `
-      <tr class="shipping-pnl-ledger-row ${status.className}">
+      <tr id="shipping-ledger-row-${escapeHtml(o.num)}" class="shipping-pnl-ledger-row ${status.className}">
         <td class="shipping-pnl-order" data-label="Order">${escapeHtml(o.num)}</td>
         <td class="shipping-pnl-recipient" data-label="Recipient">
           <strong>${escapeHtml(o.shipName || 'Recipient')}</strong>
@@ -24516,7 +24554,7 @@ function exposeLegacyInlineHandlers() {
     buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
-    doManualShippoLink, closeManualShippoLinkModal,
+    doManualShippoLink, closeManualShippoLinkModal, unlinkShippoExpense,
   });
 }
 
@@ -24542,6 +24580,7 @@ window.openManualShippoLinkModal = openManualShippoLinkModal;
 window.filterManualShippoLinkRows = filterManualShippoLinkRows;
 window.doManualShippoLink = doManualShippoLink;
 window.closeManualShippoLinkModal = closeManualShippoLinkModal;
+window.unlinkShippoExpense = unlinkShippoExpense;
 
 if (window._fbReady) { initStartup(); }
 else { document.addEventListener('firebase-ready', initStartup); }
