@@ -23640,6 +23640,29 @@ async function calculateShippoRates() {
   }
 }
 
+async function editShippingPaid(bookId, orderIdentifier) {
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+  
+  const current = h.shippingPaid || 0;
+  const input = prompt(`Enter shipping paid by customer for order ${h.num} (in CAD):`, current);
+  if (input === null) return;
+  
+  const val = Number(input);
+  if (isNaN(val) || val < 0) {
+    showToast('Invalid shipping amount', 'err');
+    return;
+  }
+  
+  h.shippingPaid = val;
+  h.manualShippingPaid = true;
+  await window.saveState(bookId);
+  showToast('Shipping paid updated', 'ok');
+  renderShippingAnalysisHub();
+}
+
 let shipAnalysisBookFilter = 'all';
 let shipAnalysisCurrentPage = 1;
 const SHIP_ANALYSIS_PAGE_SIZE = 10;
@@ -24216,7 +24239,12 @@ function renderShippingAnalysisHub() {
           <span class="shipping-pnl-status ${status.className}">${status.label}</span>
           ${actionBtn}
         </td>
-        <td class="shipping-pnl-money" data-label="Customer paid">${fmt(customerPaidBase, 'CAD')}</td>
+        <td class="shipping-pnl-money" data-label="Customer paid">
+          <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
+            <span style="${o.manualShippingPaid ? 'border-bottom:1px dashed var(--gold); cursor:help;' : ''}" title="${o.manualShippingPaid ? 'Manually overridden' : ''}">${fmt(customerPaidBase, 'CAD')}</span>
+            <button class="btn sm" style="padding:2px; height:20px; width:20px; background:transparent; border:none; opacity:0.35; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center;" onclick="editShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Edit customer paid shipping">✏️</button>
+          </div>
+        </td>
         <td class="shipping-pnl-money" data-label="Postage">${isLinked ? `${postageCostCAD.toFixed(2)} CAD` : '—'}</td>
         <td class="shipping-pnl-money ${marginClass}" data-label="Margin">
           ${isLinked ? `<strong>${margin >= 0 ? '+' : ''}${margin.toFixed(2)} CAD</strong>${markupText}` : '<strong>—</strong>'}
@@ -24554,7 +24582,7 @@ function exposeLegacyInlineHandlers() {
     buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
-    doManualShippoLink, closeManualShippoLinkModal, unlinkShippoExpense,
+    doManualShippoLink, closeManualShippoLinkModal, editShippingPaid, unlinkShippoExpense,
   });
 }
 
