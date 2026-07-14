@@ -23671,43 +23671,48 @@ function openManualShippoLinkModal(orderNum) {
     const date = escapeHtml(e.date || '—');
     return `
       <tr class="shippo-link-row" data-ref="${escapeHtml(e.ref)}" data-name="${recipient.toLowerCase()}">
-        <td style="padding:8px 12px; font-size:12px;" class="mono">${txId.slice(0, 16)}…</td>
-        <td style="padding:8px 12px; font-size:12px;">${recipient}</td>
-        <td style="padding:8px 12px; font-size:12px;">${date}</td>
-        <td style="padding:8px 12px; font-size:12px; font-weight:600;">CA$${amount}</td>
-        <td style="padding:8px 12px; text-align:right;">
-          <button class="btn sm gold" style="font-size:11px;" onclick="doManualShippoLink('${escapeHtml(orderNum)}', '${escapeHtml(e.ref)}')">Link</button>
+        <td class="mono">${txId.slice(0, 16)}…</td>
+        <td>${recipient}</td>
+        <td>${date}</td>
+        <td style="text-align:right; font-weight:600;">CA$${amount}</td>
+        <td style="text-align:right; width:60px;">
+          <button class="manual-link-btn" onclick="doManualShippoLink('${escapeHtml(orderNum)}', '${escapeHtml(e.ref)}')">Link</button>
         </td>
       </tr>`;
   }).join('');
 
   const modalHtml = `
-    <div id="manual-link-modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px); z-index:9000; display:flex; align-items:center; justify-content:center;" onclick="if(event.target===this)closeManualShippoLinkModal()">
-      <div style="background:var(--card-bg); border:1px solid var(--border); border-radius:var(--r3); padding:1.5rem; width:min(680px,95vw); max-height:80vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+    <div id="manual-link-modal-backdrop" class="manual-link-backdrop" onclick="if(event.target===this)closeManualShippoLinkModal()">
+      <div class="manual-link-modal">
+        <div class="manual-link-header">
           <div>
-            <div style="font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--text3); font-weight:700;">Manual Shippo Link</div>
-            <div style="font-size:16px; font-weight:700; color:var(--text); margin-top:2px;">Link a postage label → <span style="color:var(--gold);">${escapeHtml(orderNum)}</span></div>
+            <div class="manual-link-eyebrow">Manual Shippo Link</div>
+            <div class="manual-link-title">Link a postage label → <span>${escapeHtml(orderNum)}</span></div>
           </div>
-          <button class="btn sm" onclick="closeManualShippoLinkModal()" style="font-size:18px; padding:4px 10px; line-height:1;">✕</button>
+          <button class="manual-link-close" onclick="closeManualShippoLinkModal()" aria-label="Close">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
         </div>
-        <input type="text" placeholder="Search by recipient name…" oninput="filterManualShippoLinkRows(this.value)"
-          style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--bg2); color:var(--text); font-size:13px; margin-bottom:1rem; outline:none; box-sizing:border-box;" />
-        ${rows ? `
-          <table style="width:100%; border-collapse:collapse;">
-            <thead>
-              <tr style="border-bottom:1px solid var(--border);">
-                <th style="text-align:left; padding:6px 12px; font-size:11px; text-transform:uppercase; color:var(--text3);">Shippo ID</th>
-                <th style="text-align:left; padding:6px 12px; font-size:11px; text-transform:uppercase; color:var(--text3);">Recipient</th>
-                <th style="text-align:left; padding:6px 12px; font-size:11px; text-transform:uppercase; color:var(--text3);">Date</th>
-                <th style="text-align:left; padding:6px 12px; font-size:11px; text-transform:uppercase; color:var(--text3);">Amount</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="manual-link-modal-rows">
-              ${rows}
-            </tbody>
-          </table>` : `<div style="text-align:center; padding:2rem; color:var(--text3); font-size:14px;">No unlinked Shippo labels found. Try syncing Shippo first.</div>`}
+        <div class="manual-link-body">
+          <input type="text" class="manual-link-search" placeholder="Search by recipient name…" oninput="filterManualShippoLinkRows(this.value)" />
+          ${rows ? `
+            <div class="manual-link-table-container">
+              <table class="manual-link-table">
+                <thead>
+                  <tr>
+                    <th>Shippo ID</th>
+                    <th>Recipient</th>
+                    <th>Date</th>
+                    <th style="text-align:right;">Amount</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="manual-link-modal-rows">
+                  ${rows}
+                </tbody>
+              </table>
+            </div>` : `<div class="manual-link-empty">No unlinked Shippo labels found. Try syncing Shippo first.</div>`}
+        </div>
       </div>
     </div>`;
 
