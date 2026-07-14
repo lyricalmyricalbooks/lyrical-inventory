@@ -60,6 +60,15 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain("select.dataset.orderNumber = ''");
   });
 
+  it('renders Shipping P&L as an operational dashboard with a scoped ledger', () => {
+    expect(mainContent).toContain('shipping-pnl-dashboard');
+    expect(mainContent).toContain('shipping-pnl-attention');
+    expect(mainContent).toContain('shipping-pnl-ledger');
+    expect(mainContent).toContain('shipping-pnl-insights');
+    expect(mainContent).toContain('shipping-pnl-status');
+    expect(mainContent).toContain('Postage not linked');
+  });
+
   it('includes a linked order number in Tax Center shipping expense exports', () => {
     expect(mainContent).toContain('e.shippingOrderNumber ? `${e.ref || \'\'} · ${e.shippingOrderNumber}` : e.ref || \'\'');
   });
