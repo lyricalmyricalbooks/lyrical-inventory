@@ -24013,7 +24013,7 @@ function renderShippingAnalysisHub() {
           <span>${escapeHtml([o.shipCity, o.shipCountry].filter(Boolean).join(', ') || 'Destination unavailable')}</span>
         </td>
         <td data-label="Status"><span class="shipping-pnl-status ${status.className}">${status.label}</span></td>
-        <td class="shipping-pnl-money" data-label="Customer paid">${fmt(o.shippingPaid || 0, cur)}</td>
+        <td class="shipping-pnl-money" data-label="Customer paid">${fmt(customerPaidBase, 'CAD')}</td>
         <td class="shipping-pnl-money" data-label="Postage">${isLinked ? `${postageCostCAD.toFixed(2)} CAD` : '—'}</td>
         <td class="shipping-pnl-money ${marginClass}" data-label="Margin">
           ${isLinked ? `<strong>${margin >= 0 ? '+' : ''}${margin.toFixed(2)} CAD</strong>${markupText}` : '<strong>—</strong>'}
