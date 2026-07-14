@@ -150,6 +150,9 @@ function ownersFromBooks() {
     const email = (BOOKS[id].authorEmail || '').toLowerCase().trim();
     if (email) owners[id] = email;
   });
+  return owners;
+}
+
 function saveCatalogWithDeletions() {
   // Keep the rules-readable ownership map in step with the catalog so the
   // tightened security rules can verify author→book ownership. Publisher-only —
