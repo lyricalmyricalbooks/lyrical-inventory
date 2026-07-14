@@ -2759,7 +2759,13 @@ function updateDash() {
   }
   $('d-book-author').textContent = (book.author||'—') + ' · List price '+cur+book.listPrice;
   $('d-book-isbn').textContent = book.isbn || '—';
-  $('d-stock-sub').textContent = 'of '+book.maxPrint+' printed';
+  const cost = book.productionCost || 0;
+  const printed = book.maxPrint || 0;
+  let stockSubText = 'of ' + printed + ' printed';
+  if (!isAuthor() && cost > 0 && printed > 0) {
+    stockSubText += ' · ' + fmt(cost / printed, cur) + '/book';
+  }
+  $('d-stock-sub').textContent = stockSubText;
   $('d-thresh-sub').textContent = 'threshold: '+book.threshold+' units';
   $('d-thresh-label').textContent = 'Alert at '+book.threshold+' units';
   animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
@@ -2899,24 +2905,6 @@ function updateDash() {
   }
 
   // ── BREAK-EVEN (publisher only)
-  const cost = book.productionCost || 0;
-  const printed = book.maxPrint || 0;
-  const unitCostKpi = $('d-unitcost-kpi');
-  if (unitCostKpi) {
-    if (!isAuthor()) {
-      unitCostKpi.style.display = '';
-      if (cost > 0 && printed > 0) {
-        $('d-unitcost-val').textContent = fmt(cost / printed, cur);
-        $('d-unitcost-sub').textContent = `of ${fmt(cost, cur)} total cost`;
-      } else {
-        $('d-unitcost-val').textContent = '—';
-        $('d-unitcost-sub').textContent = 'set cost & print run';
-      }
-    } else {
-      unitCostKpi.style.display = 'none';
-    }
-  }
-
   if(!isAuthor() && cost > 0){
     $('d-breakeven-kpi').style.display='';
     $('d-breakeven-block').style.display='';

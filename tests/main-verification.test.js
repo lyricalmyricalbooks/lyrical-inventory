@@ -107,9 +107,8 @@ describe('main.js window binding verification', () => {
   });
 
   it('displays the unit production cost on the book dashboard', () => {
-    expect(mainContent).toContain('d-unitcost-kpi');
-    expect(mainContent).toContain('d-unitcost-val');
-    expect(mainContent).toContain('d-unitcost-sub');
+    expect(mainContent).toContain('d-stock-sub');
     expect(mainContent).toContain('cost / printed');
+    expect(mainContent).toContain('/book');
   });
 });
