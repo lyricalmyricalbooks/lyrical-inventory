@@ -150,9 +150,6 @@ function ownersFromBooks() {
     const email = (BOOKS[id].authorEmail || '').toLowerCase().trim();
     if (email) owners[id] = email;
   });
-  return owners;
-}
-
 function saveCatalogWithDeletions() {
   // Keep the rules-readable ownership map in step with the catalog so the
   // tightened security rules can verify author→book ownership. Publisher-only —
@@ -16536,60 +16533,81 @@ async function importShippoShippingFromApi() {
       //   still appear and can be imported.
       const json = await fetchShippoTransactionsPageAPI(token, page);
       const rows = json.results || [];
-      for (const tx of rows) {
-        const status = String(tx?.status || '').toUpperCase();
-        if (!tx || status === 'REFUNDED' || status === 'ERROR' || status === 'INVALID') { skipped++; continue; }
-        const txId = String(tx.object_id || '').trim();
-        if (!txId) { skipped++; continue; } // require stable ID so repeat imports are idempotent
-        const ref = `shippo:${txId}`;
-        if (fetchedIds.has(txId)) { alreadyImported++; continue; }
-        fetchedIds.add(txId);
-
-        const existingExpense = existingExpensesByRef.get(ref);
-        // Only skip if already confirmed-matched — re-run enrichment on any
-        // unmatched, suggested, or ambiguous labels so historical labels can
-        // pick up the order number from Shippo metadata on every sync.
-        if (existingExpense && existingExpense.shippingMatchStatus === 'matched') {
-          alreadyImported++;
-          continue;
-        }
-
-        let context = { shipment: {}, shippoOrder: {} };
-        let contextLoaded = true;
-        try {
-          context = await fetchShippoContext(token, tx);
-        } catch (error) {
-          console.warn(`Shippo context lookup failed for ${txId}`, error);
-          contextFailureCount++;
-          contextLoaded = false;
-        }
-
-        if (existingExpense) {
-          const staged = stageShippoExpenseEnrichment(
-            existingExpense, tx, context.shipment, context.shippoOrder, knownOrders, contextLoaded,
-          );
-          if (staged) {
-            stagedExistingEnrichments.push(staged);
-            enrichedCount++;
+      const CHUNK_SIZE = 10;
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + CHUNK_SIZE);
+        
+        const chunkResults = await Promise.all(chunk.map(async (tx, chunkIdx) => {
+          const result = { skipped: false, alreadyImported: false, staged: null, expense: null, txId: null, contextFailure: false, ref: null };
+          const status = String(tx?.status || '').toUpperCase();
+          if (!tx || status === 'REFUNDED' || status === 'ERROR' || status === 'INVALID') { result.skipped = true; return result; }
+          const txId = String(tx.object_id || '').trim();
+          if (!txId) { result.skipped = true; return result; }
+          const ref = `shippo:${txId}`;
+          result.txId = txId;
+          result.ref = ref;
+          
+          if (fetchedIds.has(txId)) { result.alreadyImported = true; return result; }
+          fetchedIds.add(txId);
+          
+          const existingExpense = existingExpensesByRef.get(ref);
+          if (existingExpense && existingExpense.shippingMatchStatus === 'matched') {
+            result.alreadyImported = true;
+            return result;
           }
-          alreadyImported++;
-          continue;
+          
+          let context = { shipment: {}, shippoOrder: {} };
+          let contextLoaded = true;
+          try {
+            context = await fetchShippoContext(token, tx);
+          } catch (error) {
+            console.warn(`Shippo context lookup failed for ${txId}`, error);
+            result.contextFailure = true;
+            contextLoaded = false;
+          }
+          
+          if (existingExpense) {
+            const staged = stageShippoExpenseEnrichment(
+              existingExpense, tx, context.shipment, context.shippoOrder, knownOrders, contextLoaded,
+            );
+            if (staged) result.staged = staged;
+            result.alreadyImported = true;
+            return result;
+          }
+          
+          const expense = await processShippoTxToExpense(
+            tx, token, txId, ref, imported + i + chunkIdx, context, knownOrders,
+          );
+          
+          if (!expense) {
+            result.skipped = true;
+            return result;
+          }
+          
+          result.expense = expense;
+          return result;
+        }));
+        
+        for (const res of chunkResults) {
+          if (res.contextFailure) contextFailureCount++;
+          if (res.skipped) { skipped++; continue; }
+          if (res.alreadyImported) {
+            alreadyImported++;
+            if (res.staged) {
+              const staged = res.staged;
+              stagedExistingEnrichments.push(staged);
+              enrichedCount++;
+            }
+            continue;
+          }
+          if (res.expense) {
+            pendingExpenses.push(res.expense);
+            existingExpensesByRef.set(res.ref, res.expense);
+            importedIds.add(res.txId);
+            imported++;
+            if (res.expense.currency === 'USD') totalUsd += res.expense.amount;
+          }
         }
-
-        const expense = await processShippoTxToExpense(
-          tx, token, txId, ref, imported, context, knownOrders,
-        );
-
-        if (!expense) {
-          skipped++;
-          continue;
-        }
-
-        pendingExpenses.push(expense);
-        existingExpensesByRef.set(ref, expense);
-        importedIds.add(txId);
-        imported++;
-        if (expense.currency === 'USD') totalUsd += expense.amount;
       }
       hasMore = Boolean(json.next);
       page += 1;
@@ -23663,7 +23681,62 @@ async function editShippingPaid(bookId, orderIdentifier) {
   renderShippingAnalysisHub();
 }
 
+async function editPostageCost(bookId, orderIdentifier) {
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+  
+  const current = h.postagePaid || 0;
+  const input = prompt(`Enter postage cost (shipping cost you paid) for order ${h.num} (in CAD):`, current);
+  if (input === null) return;
+  
+  const val = Number(input);
+  if (isNaN(val) || val < 0) {
+    showToast('Invalid postage cost amount', 'err');
+    return;
+  }
+  
+  h.postagePaid = val;
+  h.manualPostagePaid = true;
+  await window.saveState(bookId);
+  showToast('Postage cost updated', 'ok');
+  renderShippingAnalysisHub();
+}
+
+async function unlinkManualPostage(bookId, orderIdentifier) {
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+  
+  delete h.postagePaid;
+  delete h.manualPostagePaid;
+  await window.saveState(bookId);
+  showToast('Manual postage cleared', 'ok');
+  renderShippingAnalysisHub();
+}
+
+async function deleteShippingAnalysisOrder(bookId, orderIdentifier) {
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+
+  const ok = await confirmDialog(`Are you sure you want to permanently delete order "${h.num}" from the book history? This cannot be undone.`, {
+    danger: true,
+    okLabel: 'Delete Order'
+  });
+  if (!ok) return;
+
+  s.hist = s.hist.filter(x => x.id !== h.id && x.num !== h.num);
+  await window.saveState(bookId);
+  showToast('Order permanently deleted', 'ok');
+  renderShippingAnalysisHub();
+}
+
 let shipAnalysisBookFilter = 'all';
+let shipAnalysisMarginFilter = 'all';
 let shipAnalysisCurrentPage = 1;
 const SHIP_ANALYSIS_PAGE_SIZE = 10;
 
@@ -23677,6 +23750,13 @@ function onShipAnalysisBookFilterChange() {
   if (select) {
     shipAnalysisBookFilter = select.value;
   }
+  shipAnalysisCurrentPage = 1;
+  renderShippingAnalysisHub();
+}
+
+function onShipAnalysisMarginFilterChange() {
+  const select = $('ship-analysis-margin-filter');
+  if (select) shipAnalysisMarginFilter = select.value;
   shipAnalysisCurrentPage = 1;
   renderShippingAnalysisHub();
 }
@@ -23851,12 +23931,15 @@ function renderShippingAnalysisHub() {
       if (s && Array.isArray(s.hist)) {
         s.hist.forEach(h => {
           if (h && h.chan === 'Website' && !h.voided) {
-            allOrders.push({ ...h, bookId });
+            const dateMs = h.date ? new Date(h.date).getTime() : 0;
+            allOrders.push({ ...h, bookId, _dateMs: dateMs });
           }
         });
       }
     }
   });
+
+  allOrders.sort((a, b) => b._dateMs - a._dateMs);
 
   // 2. Gather all Shippo postage expenses matching the selected analysis book filter
   const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
@@ -23873,6 +23956,13 @@ function renderShippingAnalysisHub() {
     bookFilterOptions += `<option value="${b.id}" ${shipAnalysisBookFilter === b.id ? 'selected' : ''}>${escapeHtml(b.title)}</option>`;
   });
 
+  let marginFilterOptions = `
+    <option value="all" ${shipAnalysisMarginFilter === 'all' ? 'selected' : ''}>— All Margins —</option>
+    <option value="loss" ${shipAnalysisMarginFilter === 'loss' ? 'selected' : ''}>Undercharged (Losses)</option>
+    <option value="profit" ${shipAnalysisMarginFilter === 'profit' ? 'selected' : ''}>Profitable</option>
+    <option value="missing" ${shipAnalysisMarginFilter === 'missing' ? 'selected' : ''}>Missing Cust. Paid</option>
+  `;
+
   // ── 1. Calculate P&L KPIs (Publisher view only) ──
   let pnlHtml = '';
   if (isPub) {
@@ -23880,7 +23970,18 @@ function renderShippingAnalysisHub() {
       return sum + (Number(o.shippingPaid) || 0);
     }, 0);
 
-    const totalPostageCost = relevantExpenses.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+    let totalPostageCost = relevantExpenses.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+    allOrders.forEach(o => {
+      if (o.manualPostagePaid) {
+        const orderNumber = normalizeShippingOrderNumber(o.num);
+        const linked = orderNumber ? relevantExpenses.filter(e =>
+          e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+        ) : [];
+        const linkedCost = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+        totalPostageCost += (Number(o.postagePaid) || 0) - linkedCost;
+      }
+    });
+
     const netMargin = totalShippingIncome - totalPostageCost;
     const marginClass = netMargin > 0 ? 'positive' : netMargin < 0 ? 'negative' : 'neutral';
     
@@ -23895,8 +23996,12 @@ function renderShippingAnalysisHub() {
       const linked = orderNumber ? shippoExpenses.filter(e =>
         e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
       ) : [];
-      if (linked.length > 0) {
-        const cost = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+      
+      const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
+      if (hasPostage) {
+        const cost = o.manualPostagePaid 
+          ? (Number(o.postagePaid) || 0)
+          : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
         if (cost > 0) {
           totalMarkupSum += ((customerPaidBase - cost) / cost) * 100;
           markupCount++;
@@ -23912,7 +24017,10 @@ function renderShippingAnalysisHub() {
         .map(e => normalizeShippingOrderNumber(e.shippingOrderNumber))
         .filter(Boolean)
     );
-    const unmatchedCount = allOrders.filter(o => !matchedOrderNumbers.has(normalizeShippingOrderNumber(o.num))).length;
+    const unmatchedCount = allOrders.filter(o => {
+      if (o.manualPostagePaid) return false;
+      return !matchedOrderNumbers.has(normalizeShippingOrderNumber(o.num));
+    }).length;
     const linkedOrderCount = allOrders.length - unmatchedCount;
 
     pnlHtml = `
@@ -23926,8 +24034,12 @@ function renderShippingAnalysisHub() {
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0;">Book Filter:</span>
-              <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:200px;">
+              <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:150px;">
                 ${bookFilterOptions}
+              </select>
+              <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0; margin-left:8px;">Margin Health:</span>
+              <select id="ship-analysis-margin-filter" onchange="onShipAnalysisMarginFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:150px;">
+                ${marginFilterOptions}
               </select>
             </div>
             <div class="shipping-pnl-header-meta" style="margin-top: 4px;">
@@ -23978,8 +24090,12 @@ function renderShippingAnalysisHub() {
         <span>📊 Shipping Performance Analysis</span>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0;">Book Filter:</span>
-          <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:200px;">
+          <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:150px;">
             ${bookFilterOptions}
+          </select>
+          <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0; margin-left:8px;">Margin Health:</span>
+          <select id="ship-analysis-margin-filter" onchange="onShipAnalysisMarginFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:150px;">
+            ${marginFilterOptions}
           </select>
         </div>
       </div>
@@ -24157,13 +24273,39 @@ function renderShippingAnalysisHub() {
   `;
 
   // ── 5. Side-by-Side Shipping Ledger Pagination ──
-  const totalItems = allOrders.length;
+  // Apply Margin Health filter before pagination
+  const filteredLedgerOrders = allOrders.filter(o => {
+    if (shipAnalysisMarginFilter === 'all') return true;
+    
+    const customerPaidBase = Number(o.shippingPaid) || 0;
+    const orderNumber = normalizeShippingOrderNumber(o.num);
+    const linked = orderNumber ? shippoExpenses.filter(e =>
+      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+    ) : [];
+    
+    if (shipAnalysisMarginFilter === 'missing') return customerPaidBase === 0;
+    
+    const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
+    if (!hasPostage) return false;
+    
+    const postageCostCAD = o.manualPostagePaid
+      ? (Number(o.postagePaid) || 0)
+      : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+    const margin = customerPaidBase - postageCostCAD;
+    
+    if (shipAnalysisMarginFilter === 'loss') return margin < 0;
+    if (shipAnalysisMarginFilter === 'profit') return margin >= 0;
+    
+    return true;
+  });
+
+  const totalItems = filteredLedgerOrders.length;
   const totalPages = Math.ceil(totalItems / SHIP_ANALYSIS_PAGE_SIZE) || 1;
   const currentPage = Math.min(shipAnalysisCurrentPage, totalPages);
   
   const startIdx = (currentPage - 1) * SHIP_ANALYSIS_PAGE_SIZE;
   const endIdx = startIdx + SHIP_ANALYSIS_PAGE_SIZE;
-  const pagedOrders = allOrders.slice(startIdx, endIdx);
+  const pagedOrders = filteredLedgerOrders.slice(startIdx, endIdx);
 
   let ledgerRowsHtml = '';
   pagedOrders.forEach(o => {
@@ -24179,21 +24321,27 @@ function renderShippingAnalysisHub() {
       e.shippingMatchStatus === 'suggested' && normalizeShippingOrderNumber(e.shippingSuggestedOrderNumber) === orderNumber
     ) : [];
     
-    const postageCostCAD = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+    const postageCostCAD = o.manualPostagePaid
+      ? (Number(o.postagePaid) || 0)
+      : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+      
     const margin = customerPaidBase - postageCostCAD;
     const marginClass = margin > 0 ? 'positive' : margin < 0 ? 'negative' : 'neutral';
-    const isLinked = linked.length > 0;
+    const isLinked = linked.length > 0 || !!o.manualPostagePaid;
     const isSuggested = !isLinked && suggested.length > 0;
     
     // Undercharged check (Suggestion 3)
     const isUndercharged = postageCostCAD > (customerPaidBase * 1.15) + 0.01;
-    const status = !isLinked && !isSuggested
-      ? { label: 'Needs link', className: 'needs-link' }
-      : isSuggested
-        ? { label: 'Suggested', className: 'suggested' }
-        : isUndercharged
-          ? { label: 'Undercharged', className: 'undercharged' }
-          : { label: 'Matched', className: 'matched' };
+    
+    const status = o.manualPostagePaid
+      ? { label: 'Manual', className: 'matched' }
+      : (!isLinked && !isSuggested
+        ? { label: 'Needs link', className: 'needs-link' }
+        : isSuggested
+          ? { label: 'Suggested', className: 'suggested' }
+          : isUndercharged
+            ? { label: 'Undercharged', className: 'undercharged' }
+            : { label: 'Matched', className: 'matched' });
       
     // Markup check (Suggestion 4)
     let markupText = '';
@@ -24202,7 +24350,10 @@ function renderShippingAnalysisHub() {
       markupText = `<span style="font-size:10px; font-weight:500; display:block; color:${markup >= 0 ? '#2e7d32' : 'var(--red)'};">${markup >= 0 ? '+' : ''}${markup.toFixed(0)}% markup</span>`;
     }
 
-    const matchedRef = linked.map(e => e.ref.replace('shippo:', '')).join(', ') || 'Unlinked';
+    const matchedRef = o.manualPostagePaid
+      ? 'Manual Override'
+      : (linked.map(e => e.ref.replace('shippo:', '')).join(', ') || 'Unlinked');
+      
     const trackingCell = linked.map(e => {
       const parsedDesc = e.desc.match(/#([A-Za-z0-9]+)/);
       const trackingNum = parsedDesc ? parsedDesc[1] : '';
@@ -24219,13 +24370,26 @@ function renderShippingAnalysisHub() {
       actionBtn = `
         <div style="margin-top:6px;">
           <div style="font-size:10px; color:var(--text3); margin-bottom:4px;">${escapeHtml(suggested[0].recipientName || '')} · CA$${suggestedAmount}</div>
-          <button class="btn sm gold" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${txRef}')" style="font-size:10px; padding:3px 8px;">✓ Confirm match</button>
+          <div style="display:flex; gap:4px; align-items:center;">
+            <button class="btn sm gold" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${txRef}')" style="font-size:10px; padding:3px 8px;">✓ Confirm</button>
+            <button class="btn sm ghost" onclick="deleteShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--red); min-width:unset;" title="Delete order from history">🗑️</button>
+          </div>
         </div>`;
     } else if (!isLinked) {
-      actionBtn = `<div style="margin-top:6px;"><button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:10px; padding:3px 8px;">Link</button></div>`;
+      actionBtn = `
+        <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
+          <button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:10px; padding:3px 8px;">Link</button>
+          <button class="btn sm ghost" onclick="deleteShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--red); min-width:unset;" title="Delete order from history">🗑️</button>
+        </div>`;
     } else if (isLinked) {
-      const txRef = escapeHtml(linked[0].ref);
-      actionBtn = `<div style="margin-top:6px;"><button class="btn sm ghost" onclick="unlinkShippoExpense('${txRef}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Unlink</button></div>`;
+      const mainBtn = o.manualPostagePaid
+        ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Clear manual</button>`
+        : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(linked[0].ref)}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Unlink</button>`;
+      actionBtn = `
+        <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
+          ${mainBtn}
+          <button class="btn sm ghost" onclick="deleteShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--red); min-width:unset;" title="Delete order from history">🗑️</button>
+        </div>`;
     }
 
     ledgerRowsHtml += `
@@ -24245,7 +24409,12 @@ function renderShippingAnalysisHub() {
             <button class="btn sm" style="padding:2px; height:20px; width:20px; background:transparent; border:none; opacity:0.35; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center;" onclick="editShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Edit customer paid shipping">✏️</button>
           </div>
         </td>
-        <td class="shipping-pnl-money" data-label="Postage">${isLinked ? `${postageCostCAD.toFixed(2)} CAD` : '—'}</td>
+        <td class="shipping-pnl-money" data-label="Postage">
+          <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
+            <span style="${o.manualPostagePaid ? 'border-bottom:1px dashed var(--gold); cursor:help;' : ''}" title="${o.manualPostagePaid ? 'Manually entered postage' : ''}">${isLinked ? `${postageCostCAD.toFixed(2)} CAD` : '—'}</span>
+            <button class="btn sm" style="padding:2px; height:20px; width:20px; background:transparent; border:none; opacity:0.35; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center;" onclick="editPostageCost('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Edit postage cost">✏️</button>
+          </div>
+        </td>
         <td class="shipping-pnl-money ${marginClass}" data-label="Margin">
           ${isLinked ? `<strong>${margin >= 0 ? '+' : ''}${margin.toFixed(2)} CAD</strong>${markupText}` : '<strong>—</strong>'}
         </td>
@@ -24583,6 +24752,7 @@ function exposeLegacyInlineHandlers() {
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
     doManualShippoLink, closeManualShippoLinkModal, editShippingPaid, unlinkShippoExpense,
+    editPostageCost, unlinkManualPostage, deleteShippingAnalysisOrder,
   });
 }
 
@@ -24609,6 +24779,9 @@ window.filterManualShippoLinkRows = filterManualShippoLinkRows;
 window.doManualShippoLink = doManualShippoLink;
 window.closeManualShippoLinkModal = closeManualShippoLinkModal;
 window.unlinkShippoExpense = unlinkShippoExpense;
+window.editPostageCost = editPostageCost;
+window.unlinkManualPostage = unlinkManualPostage;
+window.deleteShippingAnalysisOrder = deleteShippingAnalysisOrder;
 
 if (window._fbReady) { initStartup(); }
 else { document.addEventListener('firebase-ready', initStartup); }

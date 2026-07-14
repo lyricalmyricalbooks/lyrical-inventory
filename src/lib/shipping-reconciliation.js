@@ -4,6 +4,20 @@ const ORDER_PATTERN = /#?([A-Z0-9]+-[A-Z0-9-]+)/i;
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 const normalizePostal = (value) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+function levenshteinDistance(a, b) {
+  if (!a || !b) return (a || b || '').length;
+  const mx = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+  for (let i = 0; i <= a.length; i++) mx[0][i] = i;
+  for (let j = 0; j <= b.length; j++) mx[j][0] = j;
+  for (let j = 1; j <= b.length; j++) {
+    for (let i = 1; i <= a.length; i++) {
+      const subCost = a[i - 1] === b[j - 1] ? 0 : 1;
+      mx[j][i] = Math.min(mx[j][i - 1] + 1, mx[j - 1][i] + 1, mx[j - 1][i - 1] + subCost);
+    }
+  }
+  return mx[b.length][a.length];
+}
+
 export function normalizeShippingOrderNumber(value) {
   const match = String(value || '').trim().match(ORDER_PATTERN);
   return match ? `#${match[1].toUpperCase()}` : '';
@@ -43,12 +57,21 @@ export function reconcileShippingExpense(expense = {}, orders = []) {
         normalizeText(order.shipName || order.customer) === name && normalizePostal(order.shipPostal) === postal
       );
     }
-    // Fallback: name-only match within 14 days when postal is absent
-    if (!candidates.length && name && !postal) {
+    // Fallback: fuzzy name match within 14 days when postal is absent or exact match failed
+    if (!candidates.length && name) {
       const widerEligible = orders.filter(order => withinShippingWindow(order.date, expense.date, 14));
-      candidates = widerEligible.filter(order =>
-        normalizeText(order.shipName || order.customer) === name
-      );
+      candidates = widerEligible.filter(order => {
+        const orderName = normalizeText(order.shipName || order.customer);
+        if (!orderName) return false;
+        if (orderName === name) return true;
+        
+        // Levenshtein fuzzy matching
+        const distance = levenshteinDistance(name, orderName);
+        const maxLength = Math.max(name.length, orderName.length);
+        // Allow up to 3 typos for names 10+ chars, 2 typos for 6+ chars, 1 typo otherwise
+        const threshold = maxLength >= 10 ? 3 : (maxLength >= 6 ? 2 : 1);
+        return distance <= threshold;
+      });
     }
   }
 
