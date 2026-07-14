@@ -484,6 +484,9 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 #ship-analysis-hub .shipping-pnl-status.matched { background: rgba(23, 107, 70, 0.11); color: var(--shipping-pnl-success); }
 #ship-analysis-hub .shipping-pnl-status.needs-link { background: rgba(154, 91, 20, 0.13); color: var(--shipping-pnl-warning); }
 #ship-analysis-hub .shipping-pnl-status.undercharged { background: rgba(163, 60, 67, 0.11); color: var(--shipping-pnl-danger); }
+#ship-analysis-hub .shipping-pnl-status.suggested { background: rgba(200, 145, 58, 0.15); color: #7a4e0e; }
+.dark #ship-analysis-hub .shipping-pnl-status.suggested { background: rgba(200, 145, 58, 0.18); color: #e8b46a; }
+#ship-analysis-hub .shipping-pnl-ledger-row.suggested td { background: rgba(200, 145, 58, 0.04); }
 #ship-analysis-hub .shipping-pnl-tracking a { color: var(--shipping-pnl-success); font-weight: 700; text-decoration-color: color-mix(in srgb, var(--shipping-pnl-success) 45%, transparent) !important; text-underline-offset: 0.18em; }
 #ship-analysis-hub .shipping-pnl-empty { padding: var(--shipping-pnl-space-5); color: var(--shipping-pnl-muted); text-align: center; }
 
