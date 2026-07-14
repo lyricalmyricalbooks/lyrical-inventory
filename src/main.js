@@ -24135,7 +24135,7 @@ function renderShippingAnalysisHub() {
           <div style="font-size:10px; color:var(--text3); margin-bottom:4px;">${escapeHtml(suggested[0].recipientName || '')} · CA$${suggestedAmount}</div>
           <button class="btn sm gold" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${txRef}')" style="font-size:10px; padding:3px 8px;">✓ Confirm match</button>
         </div>`;
-    } else if (!isLinked && !isSuggested) {
+    } else if (!isLinked) {
       actionBtn = `<div style="margin-top:6px;"><button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:10px; padding:3px 8px;">Link</button></div>`;
     }
 
