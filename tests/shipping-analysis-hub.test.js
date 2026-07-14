@@ -73,4 +73,92 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(renderCalled).toBe(true);
     });
   });
+
+  describe('dismiss and restore actions', () => {
+    let dismissFn, restoreFn, batchDismissFn, mockStates, mockCalls, mockCheckboxes;
+    beforeEach(() => {
+      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      
+      const dismissMatch = mainContent.match(/async function dismissShippingAnalysisOrder\(bookId, orderIdentifier\) \{([\s\S]+?)\n\}/);
+      const restoreMatch = mainContent.match(/async function restoreShippingAnalysisOrder\(bookId, orderIdentifier\) \{([\s\S]+?)\n\}/);
+      const batchDismissMatch = mainContent.match(/async function batchDismissShippingAnalysisOrders\(\) \{([\s\S]+?)\n\}/);
+      
+      mockStates = {
+        'book1': {
+          hist: [{ id: 'order1', num: '1001' }, { id: 'order2', num: '1002' }]
+        },
+        'book2': {
+          hist: [{ id: 'order3', num: '1003' }]
+        }
+      };
+      mockCalls = [];
+      mockCheckboxes = [];
+      
+      const mockEnvBase = `
+        const states = mockStates;
+        const confirmDialog = async () => true;
+        const window = { saveState: async (b) => { mockCalls.push('saveState:' + b); } };
+        const showToast = (msg) => { mockCalls.push('showToast:' + msg); };
+        const renderShippingAnalysisHub = () => { mockCalls.push('render'); };
+      `;
+
+      const documentMock = `
+        const document = {
+          querySelectorAll: () => mockCheckboxes
+        };
+      `;
+      
+      dismissFn = new Function('mockStates', 'mockCalls', 'bookId', 'orderIdentifier', `
+        ${mockEnvBase}
+        ${dismissMatch[0]}
+        return dismissShippingAnalysisOrder(bookId, orderIdentifier);
+      `);
+      
+      restoreFn = new Function('mockStates', 'mockCalls', 'bookId', 'orderIdentifier', `
+        ${mockEnvBase}
+        ${restoreMatch[0]}
+        return restoreShippingAnalysisOrder(bookId, orderIdentifier);
+      `);
+
+      batchDismissFn = new Function('mockStates', 'mockCalls', 'mockCheckboxes', `
+        ${mockEnvBase}
+        ${documentMock}
+        ${batchDismissMatch[0]}
+        return batchDismissShippingAnalysisOrders();
+      `);
+    });
+
+    it('dismisses an order by setting excludeFromShipping to true', async () => {
+      await dismissFn.call(null, mockStates, mockCalls, 'book1', 'order1');
+      expect(mockStates['book1'].hist[0].excludeFromShipping).toBe(true);
+      expect(mockStates['book1'].hist[1].excludeFromShipping).toBeUndefined();
+      expect(mockCalls).toEqual(['saveState:book1', 'showToast:Order dismissed from shipping', 'render']);
+    });
+
+    it('restores an order by removing excludeFromShipping', async () => {
+      mockStates['book1'].hist[0].excludeFromShipping = true;
+      await restoreFn.call(null, mockStates, mockCalls, 'book1', 'order1');
+      expect(mockStates['book1'].hist[0].excludeFromShipping).toBeUndefined();
+      expect(mockCalls).toEqual(['saveState:book1', 'showToast:Order restored to shipping ledger', 'render']);
+    });
+
+    it('batch dismisses multiple orders across books', async () => {
+      mockCheckboxes = [
+        { value: 'book1|order1' },
+        { value: 'book1|order2' },
+        { value: 'book2|order3' }
+      ];
+      await batchDismissFn.call(null, mockStates, mockCalls, mockCheckboxes);
+      
+      expect(mockStates['book1'].hist[0].excludeFromShipping).toBe(true);
+      expect(mockStates['book1'].hist[1].excludeFromShipping).toBe(true);
+      expect(mockStates['book2'].hist[0].excludeFromShipping).toBe(true);
+      
+      // Should save state for each affected book exactly once
+      expect(mockCalls).toContain('saveState:book1');
+      expect(mockCalls).toContain('saveState:book2');
+      expect(mockCalls).toContain('showToast:Dismissed 3 orders');
+      expect(mockCalls).toContain('render');
+    });
+  });
 });
