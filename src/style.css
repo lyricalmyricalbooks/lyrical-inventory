@@ -5112,3 +5112,28 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
     min-width: 560px;
   }
 }
+
+/* ==========================================
+   WHAT'S NEW MODAL COMMIT ITEMS
+   ========================================== */
+.commit-item {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.commit-item:hover {
+  background: var(--gold-bg);
+  border-color: var(--gold3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+.commit-item:active {
+  transform: translateY(0);
+}
+

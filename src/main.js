@@ -22326,7 +22326,8 @@ async function fetchRecentChanges() {
     return commits.map(c => ({
       message: c.commit.message,
       date: c.commit.author.date,
-      sha: c.sha.substring(0, 7)
+      sha: c.sha.substring(0, 7),
+      fullSha: c.sha
     }));
   } catch (e) {
     console.error('Failed to fetch changes from GitHub', e);
@@ -22385,9 +22386,9 @@ async function showWhatsNew(event) {
       const dateStr = new Date(c.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
       const cleanMsg = escapeHtml(c.message);
       return `
-        <div style="padding:10px;border-radius:6px;background:var(--cream);border:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+        <div class="commit-item" onclick="window.open('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/${c.fullSha}', '_blank')" title="Click to view commit details on GitHub">
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold-text);font-weight:600;">sha: ${c.sha}</span>
+            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold-text);font-weight:600;">sha: ${c.sha} ↗</span>
             <span style="font-size:10px;color:var(--text3);">${dateStr}</span>
           </div>
           <div style="font-size:12.5px;color:var(--text);white-space:pre-wrap;line-height:1.45;font-family:'Syne',sans-serif;font-weight:500;">${cleanMsg}</div>

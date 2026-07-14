@@ -111,4 +111,10 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('cost / printed');
     expect(mainContent).toContain('/book');
   });
+
+  it('makes recent changes commits clickable in the Whats New modal', () => {
+    expect(mainContent).toContain('class="commit-item"');
+    expect(mainContent).toContain('fullSha');
+    expect(mainContent).toContain('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/');
+  });
 });
