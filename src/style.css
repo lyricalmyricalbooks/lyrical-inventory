@@ -204,6 +204,350 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .sheets-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:100px;font-size:10px;font-weight:600;letter-spacing:.04em;background:rgba(74,222,128,.12);color:#4ade80;border:1px solid rgba(74,222,128,.2);white-space:nowrap;}
 .sheets-badge.off{background:rgba(255,255,255,.05);color:rgba(255,255,255,.3);border-color:rgba(255,255,255,.08);}
 
+/* SHIPPING P&L DASHBOARD */
+#ship-analysis-hub {
+  --shipping-pnl-ink: var(--text, #1f2a24);
+  --shipping-pnl-muted: var(--text3, #6f776f);
+  --shipping-pnl-border: var(--border, rgba(31, 42, 36, 0.12));
+  --shipping-pnl-surface: var(--card-bg, #fffdf8);
+  --shipping-pnl-surface-quiet: color-mix(in srgb, var(--card-bg, #fffdf8) 91%, var(--accent-color, #c8913a));
+  --shipping-pnl-success: #176b46;
+  --shipping-pnl-warning: #9a5b14;
+  --shipping-pnl-danger: #a33c43;
+  --shipping-pnl-radius: 18px;
+  --shipping-pnl-space-1: 0.5rem;
+  --shipping-pnl-space-2: 0.875rem;
+  --shipping-pnl-space-3: 1.25rem;
+  --shipping-pnl-space-4: 1.75rem;
+  --shipping-pnl-space-5: 2.5rem;
+  color: var(--shipping-pnl-ink);
+}
+
+#ship-analysis-hub .shipping-pnl-dashboard,
+#ship-analysis-hub .shipping-pnl-ledger,
+#ship-analysis-hub .shipping-pnl-insights {
+  border: 1px solid var(--shipping-pnl-border);
+  border-radius: var(--shipping-pnl-radius);
+  background: var(--shipping-pnl-surface);
+  box-shadow: 0 1px 3px rgba(14, 21, 17, 0.04), 0 12px 28px rgba(14, 21, 17, 0.035);
+}
+
+#ship-analysis-hub .shipping-pnl-dashboard {
+  overflow: hidden;
+  margin-bottom: var(--shipping-pnl-space-4);
+}
+
+#ship-analysis-hub .shipping-pnl-header,
+#ship-analysis-hub .shipping-pnl-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--shipping-pnl-space-3);
+}
+
+#ship-analysis-hub .shipping-pnl-header {
+  padding: var(--shipping-pnl-space-5) var(--shipping-pnl-space-5) var(--shipping-pnl-space-4);
+}
+
+#ship-analysis-hub .shipping-pnl-eyebrow,
+#ship-analysis-hub .shipping-pnl-kpi-label {
+  display: block;
+  margin: 0 0 0.45rem;
+  color: var(--shipping-pnl-muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+#ship-analysis-hub .shipping-pnl-header h2,
+#ship-analysis-hub .shipping-pnl-section-header h3 {
+  margin: 0;
+  color: var(--shipping-pnl-ink);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+#ship-analysis-hub .shipping-pnl-header h2 {
+  font-size: clamp(2.05rem, 3vw, 2.8rem);
+  line-height: 0.95;
+}
+
+#ship-analysis-hub .shipping-pnl-intro,
+#ship-analysis-hub .shipping-pnl-section-header p,
+#ship-analysis-hub .shipping-pnl-attention > p {
+  max-width: 43rem;
+  margin: var(--shipping-pnl-space-2) 0 0;
+  color: var(--shipping-pnl-muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+#ship-analysis-hub .shipping-pnl-header-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--shipping-pnl-space-2);
+  flex-wrap: wrap;
+  min-width: min-content;
+}
+
+#ship-analysis-hub .shipping-pnl-freshness {
+  color: var(--shipping-pnl-muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.67rem;
+  white-space: nowrap;
+}
+
+#ship-analysis-hub .shipping-pnl-action,
+#ship-analysis-hub .shipping-pnl-attention a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--shipping-pnl-ink);
+  color: var(--shipping-pnl-surface);
+  font-family: 'Syne', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  padding: 0.72rem 1rem;
+  text-decoration: none;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#ship-analysis-hub .shipping-pnl-action:hover,
+#ship-analysis-hub .shipping-pnl-attention a:hover {
+  background: var(--shipping-pnl-success);
+  box-shadow: 0 10px 20px rgba(23, 107, 70, 0.17);
+  transform: translateY(-1px);
+}
+
+#ship-analysis-hub .shipping-pnl-action:focus-visible,
+#ship-analysis-hub .shipping-pnl-attention a:focus-visible,
+#ship-analysis-hub .shipping-pnl-insights summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--shipping-pnl-success) 45%, transparent);
+  outline-offset: 3px;
+}
+
+#ship-analysis-hub .shipping-pnl-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--shipping-pnl-border);
+  border-bottom: 1px solid var(--shipping-pnl-border);
+}
+
+#ship-analysis-hub .shipping-pnl-kpi {
+  min-width: 0;
+  padding: var(--shipping-pnl-space-4) var(--shipping-pnl-space-3);
+}
+
+#ship-analysis-hub .shipping-pnl-kpi + .shipping-pnl-kpi {
+  border-left: 1px solid var(--shipping-pnl-border);
+}
+
+#ship-analysis-hub .shipping-pnl-kpi strong {
+  display: block;
+  overflow: hidden;
+  color: var(--shipping-pnl-ink);
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(1.25rem, 2vw, 1.65rem);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#ship-analysis-hub .shipping-pnl-kpi.positive strong { color: var(--shipping-pnl-success); }
+#ship-analysis-hub .shipping-pnl-kpi.negative strong { color: var(--shipping-pnl-danger); }
+
+#ship-analysis-hub .shipping-pnl-kpi strong small {
+  color: inherit;
+  font-size: 0.55em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+#ship-analysis-hub .shipping-pnl-kpi > span:last-child {
+  display: block;
+  margin-top: var(--shipping-pnl-space-1);
+  color: var(--shipping-pnl-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+#ship-analysis-hub .shipping-pnl-attention {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1.1fr) auto minmax(14rem, 1fr) auto;
+  align-items: center;
+  gap: var(--shipping-pnl-space-3);
+  padding: var(--shipping-pnl-space-3) var(--shipping-pnl-space-5);
+  background: var(--shipping-pnl-surface-quiet);
+}
+
+#ship-analysis-hub .shipping-pnl-attention h3 {
+  margin: 0;
+  color: var(--shipping-pnl-ink);
+  font-family: 'Syne', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+#ship-analysis-hub .shipping-pnl-attention-item {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 6.5rem;
+  border-left: 2px solid var(--shipping-pnl-warning);
+  padding-left: var(--shipping-pnl-space-2);
+}
+
+#ship-analysis-hub .shipping-pnl-attention-item strong {
+  color: var(--shipping-pnl-warning);
+  font-family: 'Syne', sans-serif;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+#ship-analysis-hub .shipping-pnl-attention-item span { color: var(--shipping-pnl-ink); font-size: 0.75rem; }
+#ship-analysis-hub .shipping-pnl-attention > p { margin: 0; }
+
+#ship-analysis-hub .shipping-pnl-attention a {
+  min-height: 36px;
+  background: transparent;
+  border-color: var(--shipping-pnl-border);
+  color: var(--shipping-pnl-ink);
+  padding: 0.5rem 0.8rem;
+}
+
+#ship-analysis-hub .shipping-pnl-attention a:hover { background: var(--shipping-pnl-ink); color: var(--shipping-pnl-surface); }
+
+#ship-analysis-hub .shipping-pnl-ledger { padding: var(--shipping-pnl-space-4) 0 0; margin-bottom: var(--shipping-pnl-space-4); overflow: hidden; }
+
+#ship-analysis-hub .shipping-pnl-section-header { padding: 0 var(--shipping-pnl-space-4) var(--shipping-pnl-space-3); }
+
+#ship-analysis-hub .shipping-pnl-section-header h3 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.08rem;
+  letter-spacing: -0.025em;
+}
+
+#ship-analysis-hub .shipping-pnl-section-header p { max-width: 19rem; margin: 0; text-align: right; }
+
+#ship-analysis-hub .shipping-pnl-table-wrap { overflow-x: auto; border-top: 1px solid var(--shipping-pnl-border); }
+
+#ship-analysis-hub .shipping-pnl-ledger-table,
+#ship-analysis-hub .shipping-pnl-insight-table { width: 100%; border-collapse: collapse; }
+
+#ship-analysis-hub .shipping-pnl-ledger-table { min-width: 940px; }
+
+#ship-analysis-hub .shipping-pnl-ledger-table th,
+#ship-analysis-hub .shipping-pnl-insight-table th {
+  color: var(--shipping-pnl-muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+#ship-analysis-hub .shipping-pnl-ledger-table th { padding: 0.8rem var(--shipping-pnl-space-2); text-align: left; white-space: nowrap; }
+#ship-analysis-hub .shipping-pnl-ledger-table th:nth-child(4),
+#ship-analysis-hub .shipping-pnl-ledger-table th:nth-child(5),
+#ship-analysis-hub .shipping-pnl-ledger-table th:nth-child(6) { text-align: right; }
+
+#ship-analysis-hub .shipping-pnl-ledger-table td { border-top: 1px solid color-mix(in srgb, var(--shipping-pnl-border) 72%, transparent); padding: 0.85rem var(--shipping-pnl-space-2); vertical-align: middle; }
+#ship-analysis-hub .shipping-pnl-ledger-row { transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+#ship-analysis-hub .shipping-pnl-ledger-row:hover { background: color-mix(in srgb, var(--shipping-pnl-surface-quiet) 65%, transparent); }
+
+#ship-analysis-hub .shipping-pnl-order,
+#ship-analysis-hub .shipping-pnl-reference,
+#ship-analysis-hub .shipping-pnl-tracking { font-family: 'DM Mono', monospace; font-size: 0.69rem; }
+#ship-analysis-hub .shipping-pnl-order { max-width: 10.5rem; overflow: hidden; color: var(--shipping-pnl-ink); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+#ship-analysis-hub .shipping-pnl-reference { max-width: 9rem; overflow: hidden; color: var(--shipping-pnl-muted); text-overflow: ellipsis; white-space: nowrap; }
+#ship-analysis-hub .shipping-pnl-recipient strong,
+#ship-analysis-hub .shipping-pnl-recipient span { display: block; }
+#ship-analysis-hub .shipping-pnl-recipient strong { color: var(--shipping-pnl-ink); font-size: 0.8rem; font-weight: 700; }
+#ship-analysis-hub .shipping-pnl-recipient span { max-width: 12rem; overflow: hidden; margin-top: 0.2rem; color: var(--shipping-pnl-muted); font-size: 0.69rem; text-overflow: ellipsis; white-space: nowrap; }
+#ship-analysis-hub .shipping-pnl-money { color: var(--shipping-pnl-ink); font-family: 'DM Mono', monospace; font-size: 0.72rem; text-align: right; white-space: nowrap; }
+#ship-analysis-hub .shipping-pnl-money.positive strong { color: var(--shipping-pnl-success); }
+#ship-analysis-hub .shipping-pnl-money.negative strong { color: var(--shipping-pnl-danger); }
+#ship-analysis-hub .shipping-pnl-money span { margin-top: 0.2rem; font-family: inherit; }
+
+#ship-analysis-hub .shipping-pnl-status { display: inline-flex; align-items: center; min-height: 24px; border-radius: 999px; font-family: 'DM Mono', monospace; font-size: 0.61rem; font-weight: 700; letter-spacing: 0.035em; padding: 0.22rem 0.48rem; white-space: nowrap; }
+#ship-analysis-hub .shipping-pnl-status.matched { background: rgba(23, 107, 70, 0.11); color: var(--shipping-pnl-success); }
+#ship-analysis-hub .shipping-pnl-status.needs-link { background: rgba(154, 91, 20, 0.13); color: var(--shipping-pnl-warning); }
+#ship-analysis-hub .shipping-pnl-status.undercharged { background: rgba(163, 60, 67, 0.11); color: var(--shipping-pnl-danger); }
+#ship-analysis-hub .shipping-pnl-tracking a { color: var(--shipping-pnl-success); font-weight: 700; text-decoration-color: color-mix(in srgb, var(--shipping-pnl-success) 45%, transparent) !important; text-underline-offset: 0.18em; }
+#ship-analysis-hub .shipping-pnl-empty { padding: var(--shipping-pnl-space-5); color: var(--shipping-pnl-muted); text-align: center; }
+
+#ship-analysis-hub .shipping-pnl-insights { margin: 0; overflow: hidden; }
+#ship-analysis-hub .shipping-pnl-insights summary { display: flex; align-items: center; justify-content: space-between; gap: var(--shipping-pnl-space-3); padding: var(--shipping-pnl-space-3) var(--shipping-pnl-space-4); cursor: pointer; list-style: none; }
+#ship-analysis-hub .shipping-pnl-insights summary::-webkit-details-marker { display: none; }
+#ship-analysis-hub .shipping-pnl-insights summary strong { display: block; color: var(--shipping-pnl-ink); font-size: 0.88rem; }
+#ship-analysis-hub .shipping-pnl-disclosure { color: var(--shipping-pnl-success); font-family: 'DM Mono', monospace; font-size: 0.67rem; font-weight: 700; white-space: nowrap; }
+#ship-analysis-hub .shipping-pnl-insights[open] .shipping-pnl-disclosure { font-size: 0; }
+#ship-analysis-hub .shipping-pnl-insights[open] .shipping-pnl-disclosure::after { content: 'Hide analysis'; font-size: 0.67rem; }
+#ship-analysis-hub .shipping-pnl-insights-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--shipping-pnl-border); }
+#ship-analysis-hub .shipping-pnl-insight-card { min-width: 0; padding: var(--shipping-pnl-space-3); }
+#ship-analysis-hub .shipping-pnl-insight-card + .shipping-pnl-insight-card { border-left: 1px solid var(--shipping-pnl-border); }
+#ship-analysis-hub .shipping-pnl-insight-card h3 { margin: 0 0 var(--shipping-pnl-space-2); color: var(--shipping-pnl-ink); font-family: 'Syne', sans-serif; font-size: 0.78rem; font-weight: 700; }
+#ship-analysis-hub .shipping-pnl-insight-table th,
+#ship-analysis-hub .shipping-pnl-insight-table td { border-top: 1px solid color-mix(in srgb, var(--shipping-pnl-border) 72%, transparent); padding: 0.55rem 0.2rem; color: var(--shipping-pnl-ink); font-size: 0.72rem; line-height: 1.35; }
+#ship-analysis-hub .shipping-pnl-insight-table th { border-top: 0; color: var(--shipping-pnl-muted); }
+#ship-analysis-hub .shipping-pnl-insight-table td[style*="color:var(--text2)"] { color: var(--shipping-pnl-ink) !important; }
+
+@media (max-width: 1100px) {
+  #ship-analysis-hub .shipping-pnl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #ship-analysis-hub .shipping-pnl-kpi:nth-child(3) { border-left: 0; border-top: 1px solid var(--shipping-pnl-border); }
+  #ship-analysis-hub .shipping-pnl-kpi:nth-child(4) { border-top: 1px solid var(--shipping-pnl-border); }
+  #ship-analysis-hub .shipping-pnl-attention { grid-template-columns: 1fr auto; }
+  #ship-analysis-hub .shipping-pnl-attention > p { grid-column: 1 / -1; }
+  #ship-analysis-hub .shipping-pnl-insights-grid { grid-template-columns: 1fr; }
+  #ship-analysis-hub .shipping-pnl-insight-card + .shipping-pnl-insight-card { border-left: 0; border-top: 1px solid var(--shipping-pnl-border); }
+}
+
+@media (max-width: 680px) {
+  #ship-analysis-hub .shipping-pnl-header,
+  #ship-analysis-hub .shipping-pnl-section-header { display: grid; }
+  #ship-analysis-hub .shipping-pnl-header { padding: var(--shipping-pnl-space-4) var(--shipping-pnl-space-3) var(--shipping-pnl-space-3); }
+  #ship-analysis-hub .shipping-pnl-header-meta { justify-content: flex-start; }
+  #ship-analysis-hub .shipping-pnl-action { flex: 1; }
+  #ship-analysis-hub .shipping-pnl-kpis { grid-template-columns: 1fr; }
+  #ship-analysis-hub .shipping-pnl-kpi,
+  #ship-analysis-hub .shipping-pnl-kpi + .shipping-pnl-kpi,
+  #ship-analysis-hub .shipping-pnl-kpi:nth-child(3),
+  #ship-analysis-hub .shipping-pnl-kpi:nth-child(4) { border-left: 0; border-top: 1px solid var(--shipping-pnl-border); }
+  #ship-analysis-hub .shipping-pnl-kpi:first-child { border-top: 0; }
+  #ship-analysis-hub .shipping-pnl-attention { grid-template-columns: 1fr; padding: var(--shipping-pnl-space-3); }
+  #ship-analysis-hub .shipping-pnl-attention > p { grid-column: auto; }
+  #ship-analysis-hub .shipping-pnl-attention a { width: 100%; }
+  #ship-analysis-hub .shipping-pnl-ledger { padding-top: var(--shipping-pnl-space-3); }
+  #ship-analysis-hub .shipping-pnl-section-header { padding: 0 var(--shipping-pnl-space-3) var(--shipping-pnl-space-3); }
+  #ship-analysis-hub .shipping-pnl-section-header p { max-width: none; text-align: left; }
+  #ship-analysis-hub .shipping-pnl-ledger-table { min-width: 0; }
+  #ship-analysis-hub .shipping-pnl-ledger-table thead { display: none; }
+  #ship-analysis-hub .shipping-pnl-ledger-table,
+  #ship-analysis-hub .shipping-pnl-ledger-table tbody,
+  #ship-analysis-hub .shipping-pnl-ledger-table tr,
+  #ship-analysis-hub .shipping-pnl-ledger-table td { display: block; width: 100%; }
+  #ship-analysis-hub .shipping-pnl-ledger-table tr { padding: var(--shipping-pnl-space-2) var(--shipping-pnl-space-3); }
+  #ship-analysis-hub .shipping-pnl-ledger-table td { display: flex; align-items: center; justify-content: space-between; gap: var(--shipping-pnl-space-2); border-top: 0; padding: 0.35rem 0; text-align: right; }
+  #ship-analysis-hub .shipping-pnl-ledger-table td::before { content: attr(data-label); color: var(--shipping-pnl-muted); font-family: 'DM Mono', monospace; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.075em; text-align: left; text-transform: uppercase; }
+  #ship-analysis-hub .shipping-pnl-ledger-table .shipping-pnl-order { display: block; padding-bottom: var(--shipping-pnl-space-2); font-size: 0.78rem; text-align: left; }
+  #ship-analysis-hub .shipping-pnl-ledger-table .shipping-pnl-order::before { display: none; }
+  #ship-analysis-hub .shipping-pnl-ledger-table .shipping-pnl-recipient { align-items: flex-start; }
+  #ship-analysis-hub .shipping-pnl-ledger-table .shipping-pnl-recipient > * { text-align: right; }
+  #ship-analysis-hub .shipping-pnl-ledger-table .shipping-pnl-recipient span { max-width: 12rem; }
+  #ship-analysis-hub .shipping-pnl-insights summary { padding: var(--shipping-pnl-space-3); }
+}
+
 /* BOOK SWITCHER (publisher only) */
 .book-switcher{background:var(--ink3);border-bottom:1px solid rgba(255,255,255,.06);padding:0 2rem;display:flex;align-items:center;gap:0;overflow:visible;position:relative;z-index:90;}
 .book-switcher::-webkit-scrollbar{display:none;}

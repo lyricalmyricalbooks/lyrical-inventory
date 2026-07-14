@@ -23704,34 +23704,71 @@ function renderShippingAnalysisHub() {
     const avgMarkup = markupCount > 0 ? (totalMarkupSum / markupCount) : 0;
     const avgMarkupText = markupCount > 0 ? `${avgMarkup > 0 ? '+' : ''}${avgMarkup.toFixed(1)}%` : '—';
 
+    const matchedOrderNumbers = new Set(
+      shippoExpenses
+        .filter(e => e.shippingMatchStatus === 'matched')
+        .map(e => normalizeShippingOrderNumber(e.shippingOrderNumber))
+        .filter(Boolean)
+    );
+    const unmatchedCount = allOrders.filter(o => !matchedOrderNumbers.has(normalizeShippingOrderNumber(o.num))).length;
+    const linkedOrderCount = allOrders.length - unmatchedCount;
+
     pnlHtml = `
-      <div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-        <span>📊 Shipping P&L Dashboard (Publisher view)</span>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0;">Book Filter:</span>
-          <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:200px;">
-            ${bookFilterOptions}
-          </select>
-        </div>
-      </div>
-      <div class="kpi-row" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:1.5rem;">
-        <div class="card kpi-card" style="padding: 1rem; border-left: 4px solid var(--gold); background: var(--card-bg);">
-          <div class="kpi-label" style="font-size:11px; text-transform:uppercase; color:var(--text3); font-weight:600; margin-bottom:6px;">Shipping Revenue (Charged)</div>
-          <div class="kpi-val" style="font-size:20px; font-weight:700; color:var(--text2);">${totalShippingIncome.toFixed(2)} CAD</div>
-        </div>
-        <div class="card kpi-card" style="padding: 1rem; border-left: 4px solid var(--text4); background: var(--card-bg);">
-          <div class="kpi-label" style="font-size:11px; text-transform:uppercase; color:var(--text3); font-weight:600; margin-bottom:6px;">Total Postage Cost (Actual)</div>
-          <div class="kpi-val" style="font-size:20px; font-weight:700; color:var(--text2);">${totalPostageCost.toFixed(2)} CAD</div>
-        </div>
-        <div class="card kpi-card" style="padding: 1rem; border-left: 4px solid ${netMargin >= 0 ? '#2e7d32' : 'var(--red)'}; background: var(--card-bg);">
-          <div class="kpi-label" style="font-size:11px; text-transform:uppercase; color:var(--text3); font-weight:600; margin-bottom:6px;">Net Shipping Margin</div>
-          <div class="kpi-val ${marginClass}" style="font-size:20px; font-weight:700; color:${netMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${netMargin >= 0 ? '+' : ''}${netMargin.toFixed(2)} CAD</div>
-        </div>
-        <div class="card kpi-card" style="padding: 1rem; border-left: 4px solid var(--text3); background: var(--card-bg);">
-          <div class="kpi-label" style="font-size:11px; text-transform:uppercase; color:var(--text3); font-weight:600; margin-bottom:6px;">Average Markup (Linked)</div>
-          <div class="kpi-val" style="font-size:20px; font-weight:700; color:var(--text2);">${avgMarkupText}</div>
-        </div>
-      </div>
+      <section class="shipping-pnl-dashboard" aria-labelledby="shipping-pnl-title">
+        <header class="shipping-pnl-header">
+          <div>
+            <p class="shipping-pnl-eyebrow">Publisher finance</p>
+            <h2 id="shipping-pnl-title">Shipping performance</h2>
+            <p class="shipping-pnl-intro">Understand recovered shipping costs and resolve outstanding postage records.</p>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0;">Book Filter:</span>
+              <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:200px;">
+                ${bookFilterOptions}
+              </select>
+            </div>
+            <div class="shipping-pnl-header-meta" style="margin-top: 4px;">
+              <span class="shipping-pnl-freshness">All recorded website orders</span>
+              <a class="shipping-pnl-action" href="#shipping-pnl-ledger">Review reconciliation</a>
+            </div>
+          </div>
+        </header>
+        <div class="shipping-pnl-kpis">
+          <article class="shipping-pnl-kpi">
+            <span class="shipping-pnl-kpi-label">Shipping revenue</span>
+            <strong>${totalShippingIncome.toFixed(2)} <small>CAD</small></strong>
+            <span>Customer-paid shipping</span>
+          </article>
+          <article class="shipping-pnl-kpi">
+            <span class="shipping-pnl-kpi-label">Postage cost</span>
+            <strong>${totalPostageCost.toFixed(2)} <small>CAD</small></strong>
+            <span>All imported Shippo labels</span>
+          </article>
+          <article class="shipping-pnl-kpi ${marginClass}">
+            <span class="shipping-pnl-kpi-label">Net margin</span>
+            <strong>${netMargin >= 0 ? '+' : ''}${netMargin.toFixed(2)} <small>CAD</small></strong>
+            <span>Revenue less actual postage</span>
+          </article>
+          <article class="shipping-pnl-kpi">
+            <span class="shipping-pnl-kpi-label">Link coverage</span>
+            <strong>${linkedOrderCount} <small>/ ${allOrders.length} orders</small></strong>
+            <span>${avgMarkupText} average markup on linked orders</span>
+          </article>
+</div>
+        <section class="shipping-pnl-attention" aria-labelledby="shipping-pnl-attention-title">
+          <div>
+            <p class="shipping-pnl-eyebrow">Needs attention</p>
+            <h3 id="shipping-pnl-attention-title">Keep margins trustworthy</h3>
+          </div>
+          <div class="shipping-pnl-attention-item">
+            <strong>${unmatchedCount}</strong>
+            <span>Postage not linked</span>
+          </div>
+          <p>Unlinked orders show no settled postage or margin until a Shippo expense is matched.</p>
+          <a href="#shipping-pnl-ledger">View ledger</a>
+        </section>
+      </section>
     `;
   } else {
     pnlHtml = `
@@ -23781,7 +23818,7 @@ function renderShippingAnalysisHub() {
 
   const carrierTableHtml = carrierRows
     ? `
-      <table class="recon-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+      <table class="shipping-pnl-insight-table">
         <thead>
           <tr>
             <th style="text-align:left;">Carrier</th>
@@ -23831,7 +23868,7 @@ function renderShippingAnalysisHub() {
   const intlMargin = intlRevenue - intlCost;
 
   const splitTableHtml = `
-    <table class="recon-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+    <table class="shipping-pnl-insight-table">
       <thead>
         <tr>
           <th style="text-align:left;">Region</th>
@@ -23904,7 +23941,7 @@ function renderShippingAnalysisHub() {
   });
 
   const weightTableHtml = `
-    <table class="recon-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+    <table class="shipping-pnl-insight-table">
       <thead>
         <tr>
           <th style="text-align:left;">Weight Band</th>
@@ -23942,12 +23979,15 @@ function renderShippingAnalysisHub() {
     const postageCostCAD = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
     const margin = customerPaidBase - postageCostCAD;
     const marginClass = margin > 0 ? 'positive' : margin < 0 ? 'negative' : 'neutral';
+    const isLinked = linked.length > 0;
     
     // Undercharged check (Suggestion 3)
     const isUndercharged = postageCostCAD > (customerPaidBase * 1.15) + 0.01;
-    const underchargeBadge = isUndercharged
-      ? `<span class="pill red" style="font-size:10px; font-weight:600; padding:2px 6px; display:inline-block; margin-top:4px;">⚠️ Undercharged</span>`
-      : '';
+    const status = !isLinked
+      ? { label: 'Needs link', className: 'needs-link' }
+      : isUndercharged
+        ? { label: 'Undercharged', className: 'undercharged' }
+        : { label: 'Matched', className: 'matched' };
       
     // Markup check (Suggestion 4)
     let markupText = '';
@@ -23966,21 +24006,20 @@ function renderShippingAnalysisHub() {
     }).join('<br>') || '—';
 
     ledgerRowsHtml += `
-      <tr style="${isUndercharged ? 'background:rgba(253,237,237,0.06);' : ''}">
-        <td class="mono" style="font-weight:600;">${escapeHtml(o.num)}</td>
-        <td>
-          <div style="font-weight:600; color:var(--text2);">${escapeHtml(o.shipName || 'Recipient')}</div>
-          <div style="font-size:11px; color:var(--text3);">${escapeHtml(o.shipCity || '')}, ${escapeHtml(o.shipCountry || '')}</div>
+      <tr class="shipping-pnl-ledger-row ${status.className}">
+        <td class="shipping-pnl-order" data-label="Order">${escapeHtml(o.num)}</td>
+        <td class="shipping-pnl-recipient" data-label="Recipient">
+          <strong>${escapeHtml(o.shipName || 'Recipient')}</strong>
+          <span>${escapeHtml([o.shipCity, o.shipCountry].filter(Boolean).join(', ') || 'Destination unavailable')}</span>
         </td>
-        <td style="text-align:right;">${fmt(o.shippingPaid || 0, cur)}</td>
-        <td style="text-align:right; font-weight:600;">${postageCostCAD.toFixed(2)} CAD</td>
-        <td style="text-align:right;">
-          <span class="${marginClass}" style="font-weight:700; color:${margin >= 0 ? '#2e7d32' : 'var(--red)'};">${margin >= 0 ? '+' : ''}${margin.toFixed(2)} CAD</span>
-          ${markupText}
-          ${underchargeBadge}
+        <td data-label="Status"><span class="shipping-pnl-status ${status.className}">${status.label}</span></td>
+        <td class="shipping-pnl-money" data-label="Customer paid">${fmt(o.shippingPaid || 0, cur)}</td>
+        <td class="shipping-pnl-money" data-label="Postage">${isLinked ? `${postageCostCAD.toFixed(2)} CAD` : '—'}</td>
+        <td class="shipping-pnl-money ${marginClass}" data-label="Margin">
+          ${isLinked ? `<strong>${margin >= 0 ? '+' : ''}${margin.toFixed(2)} CAD</strong>${markupText}` : '<strong>—</strong>'}
         </td>
-        <td class="mono" style="font-size:11px; color:var(--text3);">${matchedRef}</td>
-        <td>${trackingCell}</td>
+        <td class="shipping-pnl-reference" data-label="Shippo reference">${matchedRef}</td>
+        <td class="shipping-pnl-tracking" data-label="Tracking">${trackingCell}</td>
       </tr>
     `;
   });
@@ -24021,17 +24060,18 @@ function renderShippingAnalysisHub() {
 
   const ledgerTableHtml = ledgerRowsHtml
     ? `
-      <div style="overflow-x:auto; margin-top:8px;">
-        <table class="recon-table" style="width:100%; border-collapse:collapse;">
+      <div class="shipping-pnl-table-wrap">
+        <table class="shipping-pnl-ledger-table">
           <thead>
             <tr>
-              <th style="text-align:left; width:100px;">Order #</th>
-              <th style="text-align:left;">Recipient</th>
-              <th style="text-align:right; width:100px;">Charged</th>
-              <th style="text-align:right; width:110px;">Postage Cost</th>
-              <th style="text-align:right; width:140px;">Margin</th>
-              <th style="text-align:left; width:130px;">Shippo ID</th>
-              <th style="text-align:left; width:130px;">Tracking</th>
+              <th>Order</th>
+              <th>Recipient</th>
+              <th>Status</th>
+              <th>Customer paid</th>
+              <th>Postage</th>
+              <th>Margin</th>
+              <th>Shippo reference</th>
+              <th>Tracking</th>
             </tr>
           </thead>
           <tbody>
@@ -24041,35 +24081,45 @@ function renderShippingAnalysisHub() {
       </div>
       ${paginationHtml}
     `
-    : `<div class="empty-state" style="padding:1.5rem;">No direct website orders mapped for shipping analysis.</div>`;
+    : `<div class="shipping-pnl-empty">No direct website orders are available for shipping analysis yet.</div>`;
 
   // ── Render complete layout ──
   hub.innerHTML = `
     ${pnlHtml}
-    
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:24px; margin-bottom:2rem;">
-      <div class="card" style="padding: 1.25rem; background: var(--card-bg);">
-        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">🚚 Carrier Efficiency Scorecard</div>
-        ${carrierTableHtml}
-      </div>
-      
-      <div class="card" style="padding: 1.25rem; background: var(--card-bg);">
-        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">🌍 Domestic vs. International Split</div>
-        ${splitTableHtml}
-      </div>
-      
-      <div class="card" style="padding: 1.25rem; background: var(--card-bg);">
-        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">⚖️ Weight Band Cost Averages</div>
-        ${weightTableHtml}
-      </div>
-    </div>
-    
-    <div class="card" style="padding: 1.5rem; background: var(--card-bg);">
-      <div style="font-size:14px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--text); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
-        <span>📝 Side-by-Side Shipping Ledger & Reconciliation</span>
-      </div>
+    <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
+      <header class="shipping-pnl-section-header">
+        <div>
+          <p class="shipping-pnl-eyebrow">Reconciliation ledger</p>
+          <h3 id="shipping-pnl-ledger-title">Every order, clearly accounted for</h3>
+        </div>
+        <p>Unlinked orders are kept distinct so zeroes never imply settled postage.</p>
+      </header>
       ${ledgerTableHtml}
-    </div>
+    </section>
+
+    <details class="shipping-pnl-insights">
+      <summary>
+        <span>
+          <span class="shipping-pnl-eyebrow">Insights</span>
+          <strong>Explore carrier, destination, and weight patterns</strong>
+        </span>
+        <span class="shipping-pnl-disclosure">Show analysis</span>
+      </summary>
+      <div class="shipping-pnl-insights-grid">
+        <section class="shipping-pnl-insight-card">
+          <h3>Carrier efficiency</h3>
+        ${carrierTableHtml}
+        </section>
+        <section class="shipping-pnl-insight-card">
+          <h3>Destination mix</h3>
+        ${splitTableHtml}
+        </section>
+        <section class="shipping-pnl-insight-card">
+          <h3>Weight-band cost</h3>
+        ${weightTableHtml}
+        </section>
+      </div>
+    </details>
   `;
 }
 
