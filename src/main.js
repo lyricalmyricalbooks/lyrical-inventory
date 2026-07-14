@@ -23720,21 +23720,82 @@ async function unlinkManualPostage(bookId, orderIdentifier) {
   renderShippingAnalysisHub();
 }
 
-async function deleteShippingAnalysisOrder(bookId, orderIdentifier) {
+async function dismissShippingAnalysisOrder(bookId, orderIdentifier) {
   const s = states[bookId];
   if (!s || !s.hist) return;
   const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
   if (!h) return;
 
-  const ok = await confirmDialog(`Are you sure you want to permanently delete order "${h.num}" from the book history? This cannot be undone.`, {
-    danger: true,
-    okLabel: 'Delete Order'
+  const ok = await confirmDialog(`Are you sure you want to dismiss order "${h.num}" from the shipping ledger and calculations? It will be hidden.`, {
+    danger: false,
+    okLabel: 'Dismiss Order'
   });
   if (!ok) return;
 
-  s.hist = s.hist.filter(x => x.id !== h.id && x.num !== h.num);
+  h.excludeFromShipping = true;
   await window.saveState(bookId);
-  showToast('Order permanently deleted', 'ok');
+  showToast('Order dismissed from shipping', 'ok');
+  renderShippingAnalysisHub();
+}
+
+async function restoreShippingAnalysisOrder(bookId, orderIdentifier) {
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+
+  delete h.excludeFromShipping;
+  await window.saveState(bookId);
+  showToast('Order restored to shipping ledger', 'ok');
+  renderShippingAnalysisHub();
+}
+
+function toggleAllShipAnalysisOrders(checked) {
+  const checkboxes = document.querySelectorAll('.ship-order-checkbox');
+  checkboxes.forEach(cb => cb.checked = checked);
+  updateShipAnalysisBatchActionUI();
+}
+
+function updateShipAnalysisBatchActionUI() {
+  const checkboxes = document.querySelectorAll('.ship-order-checkbox:checked');
+  const batchActions = $('ship-analysis-batch-actions');
+  if (!batchActions) return;
+  if (checkboxes.length > 0) {
+    batchActions.style.display = 'flex';
+    $('ship-analysis-batch-count').textContent = checkboxes.length;
+  } else {
+    batchActions.style.display = 'none';
+    $('selectAllShipOrders').checked = false;
+  }
+}
+
+async function batchDismissShippingAnalysisOrders() {
+  const checkboxes = document.querySelectorAll('.ship-order-checkbox:checked');
+  if (checkboxes.length === 0) return;
+
+  const ok = await confirmDialog(`Are you sure you want to dismiss ${checkboxes.length} selected orders from the calculations?`, {
+    danger: false,
+    okLabel: 'Dismiss Selected'
+  });
+  if (!ok) return;
+
+  const updatesByBook = {};
+  checkboxes.forEach(cb => {
+    const [bookId, orderIdentifier] = cb.value.split('|');
+    const s = states[bookId];
+    if (s && s.hist) {
+      const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+      if (h) {
+        h.excludeFromShipping = true;
+        updatesByBook[bookId] = true;
+      }
+    }
+  });
+
+  const promises = Object.keys(updatesByBook).map(bookId => window.saveState(bookId));
+  await Promise.all(promises);
+
+  showToast(`Dismissed ${checkboxes.length} orders`, 'ok');
   renderShippingAnalysisHub();
 }
 
@@ -23964,17 +24025,19 @@ function renderShippingAnalysisHub() {
     <option value="loss" ${shipAnalysisMarginFilter === 'loss' ? 'selected' : ''}>Undercharged (Losses)</option>
     <option value="profit" ${shipAnalysisMarginFilter === 'profit' ? 'selected' : ''}>Profitable</option>
     <option value="missing" ${shipAnalysisMarginFilter === 'missing' ? 'selected' : ''}>Missing Cust. Paid</option>
+    <option value="dismissed" ${shipAnalysisMarginFilter === 'dismissed' ? 'selected' : ''}>Dismissed / Hidden</option>
   `;
 
   // ── 1. Calculate P&L KPIs (Publisher view only) ──
   let pnlHtml = '';
   if (isPub) {
-    const totalShippingIncome = allOrders.reduce((sum, o) => {
+    const activeOrders = allOrders.filter(o => !o.excludeFromShipping);
+    const totalShippingIncome = activeOrders.reduce((sum, o) => {
       return sum + (Number(o.shippingPaid) || 0);
     }, 0);
 
     let totalPostageCost = relevantExpenses.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-    allOrders.forEach(o => {
+    activeOrders.forEach(o => {
       if (o.manualPostagePaid) {
         const orderNumber = normalizeShippingOrderNumber(o.num);
         const linked = orderNumber ? relevantExpenses.filter(e =>
@@ -23991,7 +24054,7 @@ function renderShippingAnalysisHub() {
     // Average markup calculation on linked orders
     let totalMarkupSum = 0;
     let markupCount = 0;
-    allOrders.forEach(o => {
+    activeOrders.forEach(o => {
       const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
       const rate = shippingRateToBase(cur);
       const customerPaidBase = (Number(o.shippingPaid) || 0) * rate;
@@ -24020,11 +24083,11 @@ function renderShippingAnalysisHub() {
         .map(e => normalizeShippingOrderNumber(e.shippingOrderNumber))
         .filter(Boolean)
     );
-    const unmatchedCount = allOrders.filter(o => {
+    const unmatchedCount = activeOrders.filter(o => {
       if (o.manualPostagePaid) return false;
       return !matchedOrderNumbers.has(normalizeShippingOrderNumber(o.num));
     }).length;
-    const linkedOrderCount = allOrders.length - unmatchedCount;
+    const linkedOrderCount = activeOrders.length - unmatchedCount;
 
     pnlHtml = `
       <section class="shipping-pnl-dashboard" aria-labelledby="shipping-pnl-title">
@@ -24069,7 +24132,7 @@ function renderShippingAnalysisHub() {
           </article>
           <article class="shipping-pnl-kpi">
             <span class="shipping-pnl-kpi-label">Link coverage</span>
-            <strong>${linkedOrderCount} <small>/ ${allOrders.length} orders</small></strong>
+            <strong>${linkedOrderCount} <small>/ ${activeOrders.length} orders</small></strong>
             <span>${avgMarkupText} average markup on linked orders</span>
           </article>
 </div>
@@ -24278,6 +24341,9 @@ function renderShippingAnalysisHub() {
   // ── 5. Side-by-Side Shipping Ledger Pagination ──
   // Apply Margin Health filter before pagination
   const filteredLedgerOrders = allOrders.filter(o => {
+    if (shipAnalysisMarginFilter === 'dismissed') return o.excludeFromShipping === true;
+    if (o.excludeFromShipping) return false;
+
     if (shipAnalysisMarginFilter === 'all') return true;
     
     const customerPaidBase = Number(o.shippingPaid) || 0;
@@ -24336,15 +24402,17 @@ function renderShippingAnalysisHub() {
     // Undercharged check (Suggestion 3)
     const isUndercharged = postageCostCAD > (customerPaidBase * 1.15) + 0.01;
     
-    const status = o.manualPostagePaid
-      ? { label: 'Manual', className: 'matched' }
-      : (!isLinked && !isSuggested
-        ? { label: 'Needs link', className: 'needs-link' }
-        : isSuggested
-          ? { label: 'Suggested', className: 'suggested' }
-          : isUndercharged
-            ? { label: 'Undercharged', className: 'undercharged' }
-            : { label: 'Matched', className: 'matched' });
+    const status = o.excludeFromShipping
+      ? { label: 'Dismissed', className: 'neutral' }
+      : o.manualPostagePaid
+        ? { label: 'Manual', className: 'matched' }
+        : (!isLinked && !isSuggested
+          ? { label: 'Needs link', className: 'needs-link' }
+          : isSuggested
+            ? { label: 'Suggested', className: 'suggested' }
+            : isUndercharged
+              ? { label: 'Undercharged', className: 'undercharged' }
+              : { label: 'Matched', className: 'matched' });
       
     // Markup check (Suggestion 4)
     let markupText = '';
@@ -24367,7 +24435,12 @@ function renderShippingAnalysisHub() {
 
     // Build action button for status column
     let actionBtn = '';
-    if (isSuggested && suggested.length === 1) {
+    if (o.excludeFromShipping) {
+      actionBtn = `
+        <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
+          <button class="btn sm ghost" onclick="restoreShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--text); min-width:unset;" title="Restore order to shipping ledger">↺ Restore</button>
+        </div>`;
+    } else if (isSuggested && suggested.length === 1) {
       const txRef = escapeHtml(suggested[0].ref);
       const suggestedAmount = (Number(suggested[0].baseAmount) || Number(suggested[0].amount) || 0).toFixed(2);
       actionBtn = `
@@ -24375,14 +24448,14 @@ function renderShippingAnalysisHub() {
           <div style="font-size:10px; color:var(--text3); margin-bottom:4px;">${escapeHtml(suggested[0].recipientName || '')} · CA$${suggestedAmount}</div>
           <div style="display:flex; gap:4px; align-items:center;">
             <button class="btn sm gold" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${txRef}')" style="font-size:10px; padding:3px 8px;">✓ Confirm</button>
-            <button class="btn sm ghost" onclick="deleteShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--red); min-width:unset;" title="Delete order from history">🗑️</button>
+            <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
           </div>
         </div>`;
     } else if (!isLinked) {
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
           <button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:10px; padding:3px 8px;">Link</button>
-          <button class="btn sm ghost" onclick="deleteShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--red); min-width:unset;" title="Delete order from history">🗑️</button>
+          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
     } else if (isLinked) {
       const mainBtn = o.manualPostagePaid
@@ -24391,12 +24464,17 @@ function renderShippingAnalysisHub() {
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
           ${mainBtn}
-          <button class="btn sm ghost" onclick="deleteShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--red); min-width:unset;" title="Delete order from history">🗑️</button>
+          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
     }
 
+    const checkboxHtml = !o.excludeFromShipping 
+      ? `<input type="checkbox" class="ship-order-checkbox" value="${escapeHtml(o.bookId + '|' + (o.id || o.num))}" onchange="updateShipAnalysisBatchActionUI()" />`
+      : '';
+
     ledgerRowsHtml += `
       <tr id="shipping-ledger-row-${escapeHtml(o.num)}" class="shipping-pnl-ledger-row ${status.className}">
+        <td style="text-align: center; vertical-align: middle;">${checkboxHtml}</td>
         <td class="shipping-pnl-order" data-label="Order">${escapeHtml(o.num)}</td>
         <td class="shipping-pnl-recipient" data-label="Recipient">
           <strong>${escapeHtml(o.shipName || 'Recipient')}</strong>
@@ -24464,9 +24542,14 @@ function renderShippingAnalysisHub() {
   const ledgerTableHtml = ledgerRowsHtml
     ? `
       <div class="shipping-pnl-table-wrap">
+        <div id="ship-analysis-batch-actions" style="display:none; padding:8px 12px; background:var(--card-bg); border-bottom:1px solid var(--border); align-items:center; justify-content:space-between; gap:12px;">
+          <span style="font-size:12px; font-weight:600; color:var(--text);"><span id="ship-analysis-batch-count">0</span> orders selected</span>
+          <button class="btn sm ghost" onclick="batchDismissShippingAnalysisOrders()" style="color:var(--text3); border:1px solid var(--border);">✕ Dismiss Selected</button>
+        </div>
         <table class="shipping-pnl-ledger-table">
           <thead>
             <tr>
+              <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllShipOrders" onchange="toggleAllShipAnalysisOrders(this.checked)" /></th>
               <th>Order</th>
               <th>Recipient</th>
               <th>Status</th>
@@ -24754,8 +24837,8 @@ function exposeLegacyInlineHandlers() {
     buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
-    doManualShippoLink, closeManualShippoLinkModal, editShippingPaid, unlinkShippoExpense,
-    editPostageCost, unlinkManualPostage, deleteShippingAnalysisOrder,
+    editPostageCost, unlinkManualPostage, dismissShippingAnalysisOrder, restoreShippingAnalysisOrder,
+    toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders
   });
 }
 
@@ -24784,7 +24867,11 @@ window.closeManualShippoLinkModal = closeManualShippoLinkModal;
 window.unlinkShippoExpense = unlinkShippoExpense;
 window.editPostageCost = editPostageCost;
 window.unlinkManualPostage = unlinkManualPostage;
-window.deleteShippingAnalysisOrder = deleteShippingAnalysisOrder;
+window.dismissShippingAnalysisOrder = dismissShippingAnalysisOrder;
+window.restoreShippingAnalysisOrder = restoreShippingAnalysisOrder;
+window.toggleAllShipAnalysisOrders = toggleAllShipAnalysisOrders;
+window.updateShipAnalysisBatchActionUI = updateShipAnalysisBatchActionUI;
+window.batchDismissShippingAnalysisOrders = batchDismissShippingAnalysisOrders;
 
 if (window._fbReady) { initStartup(); }
 else { document.addEventListener('firebase-ready', initStartup); }
