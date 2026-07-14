@@ -23673,9 +23673,7 @@ function renderShippingAnalysisHub() {
   let pnlHtml = '';
   if (isPub) {
     const totalShippingIncome = allOrders.reduce((sum, o) => {
-      const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
-      const rate = shippingRateToBase(cur);
-      return sum + ((Number(o.shippingPaid) || 0) * rate);
+      return sum + (Number(o.shippingPaid) || 0);
     }, 0);
 
     const totalPostageCost = relevantExpenses.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
@@ -23840,9 +23838,7 @@ function renderShippingAnalysisHub() {
   let intlCount = 0, intlRevenue = 0, intlCost = 0;
 
   allOrders.forEach(o => {
-    const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
-    const rate = shippingRateToBase(cur);
-    const revenue = (Number(o.shippingPaid) || 0) * rate;
+    const revenue = Number(o.shippingPaid) || 0;
     
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>
@@ -23967,9 +23963,7 @@ function renderShippingAnalysisHub() {
 
   let ledgerRowsHtml = '';
   pagedOrders.forEach(o => {
-    const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
-    const rate = shippingRateToBase(cur);
-    const customerPaidBase = (Number(o.shippingPaid) || 0) * rate;
+    const customerPaidBase = Number(o.shippingPaid) || 0;
     
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>

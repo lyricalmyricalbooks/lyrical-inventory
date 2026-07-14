@@ -92,6 +92,7 @@ You are an expert in financial tracking, transactional double-entry systems, and
 - **Strict Currency Precision:** Never use raw floating-point operations for accounting/balances. Always utilize the system's normalized money/currency structures and formatting helpers.
 - **Stripe & Webhook Verification:** Handle Stripe keys and response data with strict input verification. Do not assume fields exist in webhook payloads; write resilient validation code.
 - **Double-Entry & Reconciliation Math:** Enforce precise matching of ledger entries and payment settlements to maintain accounting integrity.
+- **Shipping Fees Currency Invariant:** All customer-paid shipping values (`shippingPaid` or `customerShipping`) parsed from orders or external platforms are natively in CAD. They must be consumed and formatted as CAD directly, and must **never** undergo FX rate conversion.
 
 ---
 
