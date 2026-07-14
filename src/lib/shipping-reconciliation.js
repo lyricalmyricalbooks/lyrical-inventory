@@ -17,12 +17,12 @@ export function extractShippingOrderNumber(...values) {
   return '';
 }
 
-function withinShippingWindow(orderDate, expenseDate) {
+function withinShippingWindow(orderDate, expenseDate, maxDays = 7) {
   const orderMs = Date.parse(`${orderDate || ''}T00:00:00Z`);
   const expenseMs = Date.parse(`${expenseDate || ''}T00:00:00Z`);
   if (!Number.isFinite(orderMs) || !Number.isFinite(expenseMs)) return false;
   const days = Math.floor((expenseMs - orderMs) / 86400000);
-  return days >= 0 && days <= 7;
+  return days >= 0 && days <= maxDays;
 }
 
 export function reconcileShippingExpense(expense = {}, orders = []) {
@@ -41,6 +41,13 @@ export function reconcileShippingExpense(expense = {}, orders = []) {
     if (name && postal) {
       candidates = eligible.filter(order =>
         normalizeText(order.shipName || order.customer) === name && normalizePostal(order.shipPostal) === postal
+      );
+    }
+    // Fallback: name-only match within 14 days when postal is absent
+    if (!candidates.length && name && !postal) {
+      const widerEligible = orders.filter(order => withinShippingWindow(order.date, expense.date, 14));
+      candidates = widerEligible.filter(order =>
+        normalizeText(order.shipName || order.customer) === name
       );
     }
   }

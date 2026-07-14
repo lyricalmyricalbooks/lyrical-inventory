@@ -231,4 +231,40 @@ describe('shipping reconciliation', () => {
       1,
     )).toEqual({ customerPaid: 12, customerBase: 12, postageBase: null, marginBase: null, linkedCount: 1 });
   });
+
+  it('matches by name-only within 14 days when postal is absent on the expense', () => {
+    // Expense has a recipient name but NO postal code
+    const result = reconcileShippingExpense(
+      { recipientName: 'Dave Hebb', recipientPostal: '', date: '2026-07-20' },
+      orders,
+    );
+    // 2026-07-20 is 10 days after 2026-07-10 — within the 14-day name-only window
+    expect(result).toMatchObject({
+      shippingSuggestedOrderNumber: '#GPWT-916083',
+      shippingMatchMethod: 'recipient',
+      shippingMatchStatus: 'suggested',
+    });
+  });
+
+  it('does not match by name-only outside the 14-day fallback window', () => {
+    const result = reconcileShippingExpense(
+      { recipientName: 'Dave Hebb', recipientPostal: '', date: '2026-07-28' },
+      orders,
+    );
+    // 2026-07-28 is 18 days after 2026-07-10 — outside 14-day window
+    expect(result.shippingMatchStatus).toBe('unmatched');
+  });
+
+  it('prefers name+postal match over name-only fallback when postal is present', () => {
+    // Expense has both name and postal — should match via standard tier, not fallback
+    const result = reconcileShippingExpense(
+      { recipientName: 'Dave Hebb', recipientPostal: '12409', date: '2026-07-15' },
+      orders,
+    );
+    expect(result).toMatchObject({
+      shippingMatchStatus: 'suggested',
+      shippingSuggestedOrderNumber: '#GPWT-916083',
+    });
+  });
 });
+

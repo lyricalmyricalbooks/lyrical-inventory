@@ -16523,8 +16523,10 @@ async function importShippoShippingFromApi() {
         fetchedIds.add(txId);
 
         const existingExpense = existingExpensesByRef.get(ref);
-        const needsEnrichment = !existingExpense || existingExpense.shippingMatchStatus !== 'matched';
-        if (existingExpense && !needsEnrichment) {
+        // Only skip if already confirmed-matched — re-run enrichment on any
+        // unmatched, suggested, or ambiguous labels so historical labels can
+        // pick up the order number from Shippo metadata on every sync.
+        if (existingExpense && existingExpense.shippingMatchStatus === 'matched') {
           alreadyImported++;
           continue;
         }
@@ -23633,6 +23635,122 @@ function onShipAnalysisBookFilterChange() {
   renderShippingAnalysisHub();
 }
 
+/**
+ * Confirms a suggested Shippo expense match for a given order number.
+ * Calls persistManualShippingLink which already exists in shipping-reconciliation.js.
+ */
+async function confirmSuggestedShippoLink(orderNum, txRef) {
+  const expense = (TAX_CENTER.businessExpenses || []).find(e => e.ref === txRef);
+  if (!expense) {
+    showToast('Shippo expense not found. Try re-syncing Shippo.', 'err');
+    return;
+  }
+  try {
+    await persistManualShippingLink(expense, orderNum, () => saveTaxCenter());
+    showToast(`Linked ${orderNum} to ${txRef.replace('shippo:', '')} ✓`, 'success');
+    renderShippingAnalysisHub();
+  } catch (err) {
+    console.error('confirmSuggestedShippoLink failed', err);
+    showToast('Could not save link. Please try again.', 'err');
+  }
+}
+
+/**
+ * Opens a modal to manually search and link a Shippo expense to an order number.
+ */
+function openManualShippoLinkModal(orderNum) {
+  const unlinkedExpenses = (TAX_CENTER.businessExpenses || []).filter(e =>
+    String(e?.ref || '').startsWith('shippo:') &&
+    e.shippingMatchStatus !== 'matched'
+  );
+
+  const rows = unlinkedExpenses.map(e => {
+    const txId = e.ref.replace('shippo:', '');
+    const amount = (Number(e.baseAmount) || Number(e.amount) || 0).toFixed(2);
+    const recipient = escapeHtml(e.recipientName || 'Unknown recipient');
+    const date = escapeHtml(e.date || '—');
+    return `
+      <tr class="shippo-link-row" data-ref="${escapeHtml(e.ref)}" data-name="${recipient.toLowerCase()}">
+        <td style="padding:8px 12px; font-size:12px;" class="mono">${txId.slice(0, 16)}…</td>
+        <td style="padding:8px 12px; font-size:12px;">${recipient}</td>
+        <td style="padding:8px 12px; font-size:12px;">${date}</td>
+        <td style="padding:8px 12px; font-size:12px; font-weight:600;">CA$${amount}</td>
+        <td style="padding:8px 12px; text-align:right;">
+          <button class="btn sm gold" style="font-size:11px;" onclick="doManualShippoLink('${escapeHtml(orderNum)}', '${escapeHtml(e.ref)}')">Link</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  const modalHtml = `
+    <div id="manual-link-modal-backdrop" style="position:fixed; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px); z-index:9000; display:flex; align-items:center; justify-content:center;" onclick="if(event.target===this)closeManualShippoLinkModal()">
+      <div style="background:var(--card-bg); border:1px solid var(--border); border-radius:var(--r3); padding:1.5rem; width:min(680px,95vw); max-height:80vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <div>
+            <div style="font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--text3); font-weight:700;">Manual Shippo Link</div>
+            <div style="font-size:16px; font-weight:700; color:var(--text); margin-top:2px;">Link a postage label → <span style="color:var(--gold);">${escapeHtml(orderNum)}</span></div>
+          </div>
+          <button class="btn sm" onclick="closeManualShippoLinkModal()" style="font-size:18px; padding:4px 10px; line-height:1;">✕</button>
+        </div>
+        <input type="text" placeholder="Search by recipient name…" oninput="filterManualShippoLinkRows(this.value)"
+          style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--bg2); color:var(--text); font-size:13px; margin-bottom:1rem; outline:none; box-sizing:border-box;" />
+        ${rows ? `
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);">
+                <th style="text-align:left; padding:6px 12px; font-size:11px; text-transform:uppercase; color:var(--text3);">Shippo ID</th>
+                <th style="text-align:left; padding:6px 12px; font-size:11px; text-transform:uppercase; color:var(--text3);">Recipient</th>
+                <th style="text-align:left; padding:6px 12px; font-size:11px; text-transform:uppercase; color:var(--text3);">Date</th>
+                <th style="text-align:left; padding:6px 12px; font-size:11px; text-transform:uppercase; color:var(--text3);">Amount</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="manual-link-modal-rows">
+              ${rows}
+            </tbody>
+          </table>` : `<div style="text-align:center; padding:2rem; color:var(--text3); font-size:14px;">No unlinked Shippo labels found. Try syncing Shippo first.</div>`}
+      </div>
+    </div>`;
+
+  const backdrop = document.createElement('div');
+  backdrop.innerHTML = modalHtml;
+  document.body.appendChild(backdrop.firstElementChild);
+}
+
+/** Filters the manual link modal rows by recipient name search. */
+function filterManualShippoLinkRows(query) {
+  const tbody = $('manual-link-modal-rows');
+  if (!tbody) return;
+  const q = (query || '').toLowerCase().trim();
+  tbody.querySelectorAll('.shippo-link-row').forEach(row => {
+    const name = (row.dataset.name || '').toLowerCase();
+    row.style.display = (!q || name.includes(q)) ? '' : 'none';
+  });
+}
+
+/** Performs the manual Shippo link and closes the modal. */
+async function doManualShippoLink(orderNum, txRef) {
+  const expense = (TAX_CENTER.businessExpenses || []).find(e => e.ref === txRef);
+  if (!expense) {
+    showToast('Expense not found.', 'err');
+    return;
+  }
+  try {
+    await persistManualShippingLink(expense, orderNum, () => saveTaxCenter());
+    showToast(`Linked ${orderNum} to ${txRef.replace('shippo:', '')} ✓`, 'success');
+    closeManualShippoLinkModal();
+    renderShippingAnalysisHub();
+  } catch (err) {
+    console.error('doManualShippoLink failed', err);
+    showToast('Could not save link. Please try again.', 'err');
+  }
+}
+
+/** Closes and removes the manual link modal from the DOM. */
+function closeManualShippoLinkModal() {
+  const el = $('manual-link-modal-backdrop');
+  if (el) el.remove();
+}
+
 function renderShippingAnalysisHub() {
   const hub = $('ship-analysis-hub');
   if (!hub) return;
@@ -23969,19 +24087,27 @@ function renderShippingAnalysisHub() {
     const linked = orderNumber ? shippoExpenses.filter(e =>
       e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
     ) : [];
+
+    // Check for a suggested (unconfirmed) expense match for this order
+    const suggested = orderNumber ? shippoExpenses.filter(e =>
+      e.shippingMatchStatus === 'suggested' && normalizeShippingOrderNumber(e.shippingSuggestedOrderNumber) === orderNumber
+    ) : [];
     
     const postageCostCAD = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
     const margin = customerPaidBase - postageCostCAD;
     const marginClass = margin > 0 ? 'positive' : margin < 0 ? 'negative' : 'neutral';
     const isLinked = linked.length > 0;
+    const isSuggested = !isLinked && suggested.length > 0;
     
     // Undercharged check (Suggestion 3)
     const isUndercharged = postageCostCAD > (customerPaidBase * 1.15) + 0.01;
-    const status = !isLinked
+    const status = !isLinked && !isSuggested
       ? { label: 'Needs link', className: 'needs-link' }
-      : isUndercharged
-        ? { label: 'Undercharged', className: 'undercharged' }
-        : { label: 'Matched', className: 'matched' };
+      : isSuggested
+        ? { label: 'Suggested', className: 'suggested' }
+        : isUndercharged
+          ? { label: 'Undercharged', className: 'undercharged' }
+          : { label: 'Matched', className: 'matched' };
       
     // Markup check (Suggestion 4)
     let markupText = '';
@@ -23999,6 +24125,20 @@ function renderShippingAnalysisHub() {
         : '—';
     }).join('<br>') || '—';
 
+    // Build action button for status column
+    let actionBtn = '';
+    if (isSuggested && suggested.length === 1) {
+      const txRef = escapeHtml(suggested[0].ref);
+      const suggestedAmount = (Number(suggested[0].baseAmount) || Number(suggested[0].amount) || 0).toFixed(2);
+      actionBtn = `
+        <div style="margin-top:6px;">
+          <div style="font-size:10px; color:var(--text3); margin-bottom:4px;">${escapeHtml(suggested[0].recipientName || '')} · CA$${suggestedAmount}</div>
+          <button class="btn sm gold" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${txRef}')" style="font-size:10px; padding:3px 8px;">✓ Confirm match</button>
+        </div>`;
+    } else if (!isLinked) {
+      actionBtn = `<div style="margin-top:6px;"><button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:10px; padding:3px 8px;">Link</button></div>`;
+    }
+
     ledgerRowsHtml += `
       <tr class="shipping-pnl-ledger-row ${status.className}">
         <td class="shipping-pnl-order" data-label="Order">${escapeHtml(o.num)}</td>
@@ -24006,7 +24146,10 @@ function renderShippingAnalysisHub() {
           <strong>${escapeHtml(o.shipName || 'Recipient')}</strong>
           <span>${escapeHtml([o.shipCity, o.shipCountry].filter(Boolean).join(', ') || 'Destination unavailable')}</span>
         </td>
-        <td data-label="Status"><span class="shipping-pnl-status ${status.className}">${status.label}</span></td>
+        <td data-label="Status">
+          <span class="shipping-pnl-status ${status.className}">${status.label}</span>
+          ${actionBtn}
+        </td>
         <td class="shipping-pnl-money" data-label="Customer paid">${fmt(customerPaidBase, 'CAD')}</td>
         <td class="shipping-pnl-money" data-label="Postage">${isLinked ? `${postageCostCAD.toFixed(2)} CAD` : '—'}</td>
         <td class="shipping-pnl-money ${marginClass}" data-label="Margin">
@@ -24344,6 +24487,8 @@ function exposeLegacyInlineHandlers() {
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
     buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange,
+    confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
+    doManualShippoLink, closeManualShippoLinkModal,
   });
 }
 
@@ -24364,6 +24509,11 @@ window.downloadInventoryValuationCSV = downloadInventoryValuationCSV;
 window.renderShippingAnalysisHub = renderShippingAnalysisHub;
 window.changeShipAnalysisPage = changeShipAnalysisPage;
 window.onShipAnalysisBookFilterChange = onShipAnalysisBookFilterChange;
+window.confirmSuggestedShippoLink = confirmSuggestedShippoLink;
+window.openManualShippoLinkModal = openManualShippoLinkModal;
+window.filterManualShippoLinkRows = filterManualShippoLinkRows;
+window.doManualShippoLink = doManualShippoLink;
+window.closeManualShippoLinkModal = closeManualShippoLinkModal;
 
 if (window._fbReady) { initStartup(); }
 else { document.addEventListener('firebase-ready', initStartup); }
