@@ -1694,6 +1694,7 @@
         <option value="2023">2023</option>
       </select>
       <button class="btn tag" onclick="downloadTaxLedgerCSV()">Export Ledger CSV</button>
+      <button class="btn tag" onclick="downloadInventoryValuationCSV()">📦 Inventory Valuation</button>
       <button class="btn gold" onclick="downloadFullTaxSeasonExport()">📦 Tax Season Export</button>
     </div>
   </div>
@@ -1827,7 +1828,10 @@
 
         <!-- Destination Card -->
         <div class="card" style="margin-bottom:0; height:100%;">
-          <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Destination (To)</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3);">Destination (To)</div>
+            <button class="btn sm tag" onclick="validateDestinationAddress()" style="margin:0; padding:4px 10px; font-size:10px; font-weight:600;">🔍 Validate Address</button>
+          </div>
           <div class="form-group" style="margin-bottom:8px;"><label>Recipient Name</label><input type="text" id="st-name" placeholder="John Doe"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Company</label><input type="text" id="st-company" placeholder="Optional"></div>
           <div class="form-group" style="margin-bottom:8px;"><label>Phone <span style="font-size:10px;color:var(--text3);text-transform:none;letter-spacing:0;">required for international</span></label><input type="tel" id="st-phone" placeholder="+1 604 555 0123"></div>
@@ -1996,6 +2000,10 @@
       </div>
     </div>
   </div>
+
+  <hr style="margin: 2.5rem 0; border: none; border-top: 1px solid var(--border);">
+
+  <div id="ship-analysis-hub"></div>
 </div>
 
 <!-- EVENT POS -->
@@ -3028,10 +3036,10 @@
         </select>
       </div>
     </div>
-    <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label>Weight</label><input id="nb-ship-weight" type="number" placeholder="Weight" step="0.01"></div>
-      <div class="form-group">
-        <label>Weight Unit</label>
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
+      <div class="form-group" style="margin:0;"><label for="nb-ship-weight">Weight</label><input id="nb-ship-weight" type="number" placeholder="Weight" step="0.01"></div>
+      <div class="form-group" style="margin:0;">
+        <label for="nb-ship-weight-unit">Weight Unit</label>
         <select id="nb-ship-weight-unit">
           <option value="lb">Pounds (lb)</option>
           <option value="oz">Ounces (oz)</option>
@@ -3039,6 +3047,7 @@
           <option value="g">Grams (g)</option>
         </select>
       </div>
+      <div class="form-group" style="margin:0;"><label for="nb-ship-hs">HS Tariff Code</label><input id="nb-ship-hs" type="text" placeholder="e.g. 490199" value="490199"></div>
     </div>
   </div>
 
