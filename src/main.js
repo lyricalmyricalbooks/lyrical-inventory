@@ -23615,16 +23615,34 @@ async function calculateShippoRates() {
   }
 }
 
+let shipAnalysisBookFilter = 'all';
+let shipAnalysisCurrentPage = 1;
+const SHIP_ANALYSIS_PAGE_SIZE = 10;
+
+function changeShipAnalysisPage(page) {
+  shipAnalysisCurrentPage = page;
+  renderShippingAnalysisHub();
+}
+
+function onShipAnalysisBookFilterChange() {
+  const select = $('ship-analysis-book-filter');
+  if (select) {
+    shipAnalysisBookFilter = select.value;
+  }
+  shipAnalysisCurrentPage = 1;
+  renderShippingAnalysisHub();
+}
+
 function renderShippingAnalysisHub() {
   const hub = $('ship-analysis-hub');
   if (!hub) return;
 
   const isPub = !isAuthor();
-  
-  // 1. Gather all website orders
+
+  // 1. Gather all website orders matching the selected analysis book filter
   const allOrders = [];
   Object.keys(states).forEach(bookId => {
-    if (!activeBook || activeBook === 'all' || bookId === activeBook) {
+    if (shipAnalysisBookFilter === 'all' || bookId === shipAnalysisBookFilter) {
       const s = states[bookId];
       if (s && Array.isArray(s.hist)) {
         s.hist.forEach(h => {
@@ -23636,14 +23654,20 @@ function renderShippingAnalysisHub() {
     }
   });
 
-  // 2. Gather all Shippo postage expenses
+  // 2. Gather all Shippo postage expenses matching the selected analysis book filter
   const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
-  const relevantExpenses = (!activeBook || activeBook === 'all')
+  const relevantExpenses = (shipAnalysisBookFilter === 'all')
     ? shippoExpenses
     : shippoExpenses.filter(e => {
         const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
         return num && allOrders.some(o => normalizeShippingOrderNumber(o.num) === num);
       });
+
+  // Build the book filter dropdown options
+  let bookFilterOptions = `<option value="all" ${shipAnalysisBookFilter === 'all' ? 'selected' : ''}>— All Books —</option>`;
+  BOOK_LIST.forEach(b => {
+    bookFilterOptions += `<option value="${b.id}" ${shipAnalysisBookFilter === b.id ? 'selected' : ''}>${escapeHtml(b.title)}</option>`;
+  });
 
   // ── 1. Calculate P&L KPIs (Publisher view only) ──
   let pnlHtml = '';
@@ -23697,9 +23721,17 @@ function renderShippingAnalysisHub() {
             <h2 id="shipping-pnl-title">Shipping performance</h2>
             <p class="shipping-pnl-intro">Understand recovered shipping costs and resolve outstanding postage records.</p>
           </div>
-          <div class="shipping-pnl-header-meta">
-            <span class="shipping-pnl-freshness">All recorded website orders</span>
-            <a class="shipping-pnl-action" href="#shipping-pnl-ledger">Review reconciliation</a>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0;">Book Filter:</span>
+              <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:200px;">
+                ${bookFilterOptions}
+              </select>
+            </div>
+            <div class="shipping-pnl-header-meta" style="margin-top: 4px;">
+              <span class="shipping-pnl-freshness">All recorded website orders</span>
+              <a class="shipping-pnl-action" href="#shipping-pnl-ledger">Review reconciliation</a>
+            </div>
           </div>
         </header>
         <div class="shipping-pnl-kpis">
@@ -23723,7 +23755,7 @@ function renderShippingAnalysisHub() {
             <strong>${linkedOrderCount} <small>/ ${allOrders.length} orders</small></strong>
             <span>${avgMarkupText} average markup on linked orders</span>
           </article>
-        </div>
+</div>
         <section class="shipping-pnl-attention" aria-labelledby="shipping-pnl-attention-title">
           <div>
             <p class="shipping-pnl-eyebrow">Needs attention</p>
@@ -23737,6 +23769,18 @@ function renderShippingAnalysisHub() {
           <a href="#shipping-pnl-ledger">View ledger</a>
         </section>
       </section>
+    `;
+  } else {
+    pnlHtml = `
+      <div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <span>📊 Shipping Performance Analysis</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0;">Book Filter:</span>
+          <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:200px;">
+            ${bookFilterOptions}
+          </select>
+        </div>
+      </div>
     `;
   }
 
@@ -23912,9 +23956,17 @@ function renderShippingAnalysisHub() {
     </table>
   `;
 
-  // ── 5. Side-by-Side Shipping Ledger View (Suggestion 10) ──
+  // ── 5. Side-by-Side Shipping Ledger Pagination ──
+  const totalItems = allOrders.length;
+  const totalPages = Math.ceil(totalItems / SHIP_ANALYSIS_PAGE_SIZE) || 1;
+  const currentPage = Math.min(shipAnalysisCurrentPage, totalPages);
+  
+  const startIdx = (currentPage - 1) * SHIP_ANALYSIS_PAGE_SIZE;
+  const endIdx = startIdx + SHIP_ANALYSIS_PAGE_SIZE;
+  const pagedOrders = allOrders.slice(startIdx, endIdx);
+
   let ledgerRowsHtml = '';
-  allOrders.forEach(o => {
+  pagedOrders.forEach(o => {
     const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
     const rate = shippingRateToBase(cur);
     const customerPaidBase = (Number(o.shippingPaid) || 0) * rate;
@@ -23972,6 +24024,40 @@ function renderShippingAnalysisHub() {
     `;
   });
 
+  // Generate pagination buttons HTML
+  let paginationHtml = '';
+  if (totalPages > 1) {
+    let pageButtons = '';
+    const maxButtons = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+    if (endPage - startPage + 1 < maxButtons) {
+      startPage = Math.max(1, endPage - maxButtons + 1);
+    }
+    
+    for (let p = startPage; p <= endPage; p++) {
+      const isCurrent = p === currentPage;
+      pageButtons += `
+        <button class="btn sm ${isCurrent ? 'gold' : ''}" 
+                onclick="changeShipAnalysisPage(${p})" 
+                style="padding:4px 8px; min-width:28px; font-weight:${isCurrent ? '700' : 'normal'}; margin: 0 2px;">
+          ${p}
+        </button>
+      `;
+    }
+
+    paginationHtml = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border); flex-wrap:wrap; gap:12px;">
+        <div style="font-size:12px; color:var(--text3);">Showing ${startIdx + 1}-${Math.min(endIdx, totalItems)} of ${totalItems} orders</div>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button class="btn sm" onclick="changeShipAnalysisPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>
+          ${pageButtons}
+          <button class="btn sm" onclick="changeShipAnalysisPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
+        </div>
+      </div>
+    `;
+  }
+
   const ledgerTableHtml = ledgerRowsHtml
     ? `
       <div class="shipping-pnl-table-wrap">
@@ -23993,6 +24079,7 @@ function renderShippingAnalysisHub() {
           </tbody>
         </table>
       </div>
+      ${paginationHtml}
     `
     : `<div class="shipping-pnl-empty">No direct website orders are available for shipping analysis yet.</div>`;
 
@@ -24262,7 +24349,7 @@ function exposeLegacyInlineHandlers() {
     renderShippingChargePrediction, collectShippoMessages, renderShippoDiagnostics,
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
     buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV,
-    renderShippingAnalysisHub,
+    renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange,
   });
 }
 
@@ -24281,6 +24368,8 @@ window.buyShippoLabel = buyShippoLabel;
 window.validateDestinationAddress = validateDestinationAddress;
 window.downloadInventoryValuationCSV = downloadInventoryValuationCSV;
 window.renderShippingAnalysisHub = renderShippingAnalysisHub;
+window.changeShipAnalysisPage = changeShipAnalysisPage;
+window.onShipAnalysisBookFilterChange = onShipAnalysisBookFilterChange;
 
 if (window._fbReady) { initStartup(); }
 else { document.addEventListener('firebase-ready', initStartup); }

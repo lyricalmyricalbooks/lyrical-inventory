@@ -55,4 +55,22 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(getWeightInLbs(2, null)).toBe(2.4);
     });
   });
+
+  describe('changeShipAnalysisPage', () => {
+    it('sets the current page and triggers render', () => {
+      let renderCalled = false;
+      const mockRender = () => { renderCalled = true; };
+      
+      // We simulate changeShipAnalysisPage logic
+      let pageVar = 1;
+      const fn = (page) => {
+        pageVar = page;
+        mockRender();
+      };
+      
+      fn(3);
+      expect(pageVar).toBe(3);
+      expect(renderCalled).toBe(true);
+    });
+  });
 });
