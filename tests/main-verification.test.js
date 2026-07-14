@@ -105,4 +105,11 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('onclick="unapplyOne');
     expect(mainContent).toContain('show-all-orders-chk');
   });
+
+  it('displays the unit production cost on the book dashboard', () => {
+    expect(mainContent).toContain('d-unitcost-kpi');
+    expect(mainContent).toContain('d-unitcost-val');
+    expect(mainContent).toContain('d-unitcost-sub');
+    expect(mainContent).toContain('cost / printed');
+  });
 });

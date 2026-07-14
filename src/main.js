@@ -2900,6 +2900,18 @@ function updateDash() {
 
   // ── BREAK-EVEN (publisher only)
   const cost = book.productionCost || 0;
+  const printed = book.maxPrint || 0;
+  const unitCostKpi = $('d-unitcost-kpi');
+  if (unitCostKpi) {
+    if (!isAuthor() && cost > 0 && printed > 0) {
+      unitCostKpi.style.display = '';
+      $('d-unitcost-val').textContent = fmt(cost / printed, cur);
+      $('d-unitcost-sub').textContent = `of ${fmt(cost, cur)} total cost`;
+    } else {
+      unitCostKpi.style.display = 'none';
+    }
+  }
+
   if(!isAuthor() && cost > 0){
     $('d-breakeven-kpi').style.display='';
     $('d-breakeven-block').style.display='';
