@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v19)
+/* Lyricalmyrical Inventory — Unified Backend (v20)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -68,6 +68,8 @@
  *      from explicit Shipping/Postage rows or named shipping methods by using
  *      Total - Subtotal - Tax. Bump flags v18-and-older as outdated so the
  *      publisher redeploys before scanning website orders.
+ *  18. v20: Big Cartel proxy API request handler. Bypasses client-side CORS issues.
+ *      Bump flags v19-and-older as outdated.
  */
 
 const HEADERS = [
@@ -113,9 +115,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v19',
-    scriptVersion: 'v19',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true },
+    service: 'lyrical-sheets-webhook-v20',
+    scriptVersion: 'v20',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -530,6 +532,47 @@ function doPost(e) {
         return jsonOut_({ ok: true, notified: true });
       } catch (err) {
         return jsonOut_({ error: 'mail failed: ' + String(err) });
+      }
+    }
+
+    // ── Proxy Big Cartel API Requests to bypass CORS ──
+    if (action === 'proxybigcartel') {
+      const d = payload.payload || {};
+      try {
+        const url = d.url;
+        const username = d.username;
+        const password = d.password;
+        const method = d.method || 'GET';
+        const userAgent = d.userAgent || 'LyricalInventoryProxy/1.0 (lyricalmyricalbooks@gmail.com)';
+
+        if (!url || !url.startsWith('https://api.bigcartel.com/')) {
+          return jsonOut_({ error: 'invalid API url' });
+        }
+
+        const headers = {
+          'Authorization': 'Basic ' + Utilities.base64Encode(username + ':' + password),
+          'Accept': 'application/vnd.api+json',
+          'User-Agent': userAgent
+        };
+
+        const fetchOptions = {
+          method: method,
+          headers: headers,
+          muteHttpExceptions: true
+        };
+
+        if (method === 'POST' || method === 'PUT') {
+          fetchOptions.contentType = 'application/json';
+          fetchOptions.payload = typeof d.body === 'string' ? d.body : JSON.stringify(d.body || {});
+        }
+
+        const response = UrlFetchApp.fetch(url, fetchOptions);
+        const code = response.getResponseCode();
+        const content = response.getContentText();
+
+        return jsonOut_({ ok: true, code: code, content: content });
+      } catch (err) {
+        return jsonOut_({ error: 'Proxy request failed: ' + String(err) });
       }
     }
 

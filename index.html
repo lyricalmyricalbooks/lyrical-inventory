@@ -220,6 +220,7 @@
     <div class="o3-subgrouplabel">Data</div>
     <button type="button" class="snav" title="Shipping Specs" onclick="switchTab('shipping')"><span class="snav-ic">📦</span><span class="snav-label">Shipping Specs</span></button>
     <button type="button" class="snav" title="Sheets" onclick="switchTab('sheets')"><span class="snav-ic">⚙️</span><span class="snav-label">Sheets</span></button>
+    <button type="button" class="snav" title="Big Cartel" onclick="switchTab('bigcartel')"><span class="snav-ic">🏪</span><span class="snav-label">Big Cartel</span></button>
     <button type="button" class="snav" title="Backups" onclick="switchTab('backups')"><span class="snav-ic">💾</span><span class="snav-label">Backups</span></button>
   </nav>
 
@@ -405,6 +406,7 @@
   <button class="tab-btn" id="webanalytics-tab-btn" onclick="switchTab('webanalytics')">Web Analytics</button>
   <button class="tab-btn" onclick="switchTab('myqr')" id="myqr-tab-btn" style="display:none;">📲 My QR Code</button>
   <button class="tab-btn" id="shipping-tab-btn" onclick="switchTab('shipping')">📦 Shipping Rates</button>
+  <button class="tab-btn" id="bigcartel-tab-btn" onclick="switchTab('bigcartel')">Big Cartel</button>
   <span class="tab-author" id="tab-author"></span>
   <span class="tab-updated" id="tab-updated"></span>
 </nav>
@@ -1713,6 +1715,112 @@
     <tfoot id="tc-ledger-foot"></tfoot>
   </table></div>
   <div id="tc-ledger-pagination"></div>
+</div>
+
+<!-- BIG CARTEL DASHBOARD -->
+<div class="tab-panel" id="tab-bigcartel" style="display:none;">
+  <div class="row-between" style="margin-bottom:0.5rem;">
+    <div class="section-hed">🏪 Big Cartel Sync & Dashboard</div>
+    <div class="bc-connection-status">
+      <div id="bc-status-dot" class="bc-dot disconnected"></div>
+      <span id="bc-status-text">Disconnected</span>
+    </div>
+  </div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem;">Configure your Big Cartel merchant API credentials, test the connection, and view your store products and orders in real-time.</div>
+
+  <!-- API Connection Card -->
+  <div class="card" style="margin-bottom:1.5rem; padding: 1.25rem 1.5rem;">
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; align-items:flex-end;">
+      <div class="form-group" style="margin:0;">
+        <label for="bc-subdomain">Store Subdomain</label>
+        <input type="text" id="bc-subdomain" placeholder="my-store-name" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label for="bc-username">API Username / Login</label>
+        <input type="text" id="bc-username" placeholder="Subdomain or Username" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label for="bc-password">API Password / Token</label>
+        <input type="password" id="bc-password" placeholder="••••••••••••••••" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--cream); outline:none;">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="bc-test-btn" class="btn sm" onclick="testBigCartelConnection()" style="flex:1;">Test Connection</button>
+        <button id="bc-save-btn" class="btn gold sm" onclick="saveBigCartelSettings()" style="flex:1;">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Store Details (initially hidden) -->
+  <div id="bc-store-card" class="card" style="display:none; margin-bottom:1.5rem; border-left:3px solid var(--gold-line);">
+    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); margin-bottom:10px;">Connected Store Info</div>
+    <div class="bc-details-grid">
+      <div class="bc-detail-card">
+        <div class="bc-detail-label">Store Name</div>
+        <div id="bc-store-name" class="bc-detail-val">—</div>
+      </div>
+      <div class="bc-detail-card">
+        <div class="bc-detail-label">Plan</div>
+        <div id="bc-store-plan" class="bc-detail-val">—</div>
+      </div>
+      <div class="bc-detail-card">
+        <div class="bc-detail-label">Currency</div>
+        <div id="bc-store-currency" class="bc-detail-val">—</div>
+      </div>
+      <div class="bc-detail-card">
+        <div class="bc-detail-label">Contact Email</div>
+        <div id="bc-store-email" class="bc-detail-val">—</div>
+      </div>
+    </div>
+    <div style="font-size:11px; color:var(--text3);">
+      Store URL: <a id="bc-store-url" href="#" target="_blank" style="color:var(--gold); text-decoration:none;">—</a>
+    </div>
+  </div>
+
+  <!-- Dashboard Navigation Sub-tabs -->
+  <div id="bc-dashboard-content" style="display:none;">
+    <div class="bc-sub-nav">
+      <button class="bc-sub-tab active" id="bc-btn-subtab-products" onclick="switchBigCartelSubTab('products')">📚 Store Products</button>
+      <button class="bc-sub-tab" id="bc-btn-subtab-orders" onclick="switchBigCartelSubTab('orders')">🛍 Recent Orders</button>
+    </div>
+
+    <!-- PRODUCTS TAB -->
+    <div id="bc-sec-products" style="display:block;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <span style="font-size:13px; font-weight:600; color:var(--text2);">Catalog Products on Big Cartel</span>
+        <button class="btn sm" onclick="loadBigCartelData()">Refresh Products</button>
+      </div>
+      <div id="bc-products-grid" class="bc-grid">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- ORDERS TAB -->
+    <div id="bc-sec-orders" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <span style="font-size:13px; font-weight:600; color:var(--text2);">Recent Orders</span>
+        <button class="btn sm" onclick="loadBigCartelData()">Refresh Orders</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Items</th>
+              <th class="r">Tax</th>
+              <th class="r">Shipping (CAD)</th>
+              <th class="r">Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="bc-orders-list">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- SHIPPING RATES CALCULATOR -->
