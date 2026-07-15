@@ -5620,3 +5620,143 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .flash-highlight {
   animation: flashRow 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
+
+/* Big Cartel Dashboard styling */
+.bc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+.bc-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+.bc-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold-line);
+  box-shadow: var(--shadow);
+}
+.bc-img-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+}
+.bc-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bc-info {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+.bc-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.35;
+}
+.bc-price {
+  font-family: 'DM Mono', monospace;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--gold);
+}
+.bc-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--text3);
+  margin-top: auto;
+}
+.bc-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 99px;
+}
+.bc-badge.active { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.bc-badge.hidden { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+.bc-badge.sold_out { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+.bc-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.bc-detail-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 1rem 1.25rem;
+}
+.bc-detail-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+  margin-bottom: 4px;
+}
+.bc-detail-val {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.bc-connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.bc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.bc-dot.connected { background: #10b981; box-shadow: 0 0 8px #10b981; }
+.bc-dot.disconnected { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+/* Subtab styling to match global subtabs */
+.bc-sub-nav {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.25rem;
+  padding-bottom: 2px;
+}
+.bc-sub-tab {
+  background: transparent;
+  border: none;
+  color: var(--text3);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+.bc-sub-tab:hover {
+  color: var(--text2);
+}
+.bc-sub-tab.active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}

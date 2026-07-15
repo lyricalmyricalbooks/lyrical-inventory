@@ -922,7 +922,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v19';
+const EXPECTED_SCRIPT_VERSION = 'v20';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -2076,15 +2076,16 @@ window.clearHistChanFilter = function() { histChanFilter = null; renderHist(); }
 // ── TABS
 // Friendly destination labels for the publisher app-shell top bar (#shell-page-title).
 const SHELL_TAB_LABELS = {
-  dashboard:'Dashboard', website:'Website orders', manual:'Manual entry',
+  dashboard: 'Dashboard', website: 'Website Orders', manual: 'Manual Entry',
   consignment:'Consignment', history:'History', expenses:'Expenses',
   pos:'Event POS', taxcenter:'Tax Centre', reconcile:'Payments', qrcodes:'QR Codes',
   customers:'Customers', opencall:'Open Call', sheets:'Sheets', backups:'Backups',
-  financials:'Financials', myqr:'My QR Code', webanalytics:'Web Analytics', shipping:'Shipping'
+  financials:'Financials', myqr:'My QR Code', webanalytics:'Web Analytics', shipping:'Shipping',
+  bigcartel: 'Big Cartel'
 };
 function switchTab(name) {
   // publisher-only tabs redirect authors to dashboard
-  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping')) name = 'dashboard';
+  if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
   
@@ -2150,6 +2151,7 @@ function switchTab(name) {
   if(name==='pos') { renderPOS(); renderPOSFxStatus(); }
   if(name==='webanalytics') renderWebAnalytics();
   if(name==='shipping') { initShippingTab(); }
+  if(name==='bigcartel') { renderBigCartelTab(); }
 }
 
 function updateHeader() {
@@ -24845,6 +24847,421 @@ function exposeLegacyInlineHandlers() {
 exposeLegacyInlineHandlers();
 
 // Bind to window to allow HTML onclick access
+// ═══════════════════════════════════════════════════════════════════════
+//  BIG CARTEL INTEGRATION (Publisher-only)
+// ═══════════════════════════════════════════════════════════════════════
+let bigCartelConfig = null;
+let bigCartelData = { store: null, products: [], orders: [] };
+let activeBigCartelSubTab = 'products';
+
+async function loadBigCartelConfig() {
+  if (bigCartelConfig) return bigCartelConfig;
+  try {
+    bigCartelConfig = await window._fbLoadSettings('bigCartelConfig') || { subdomain: '', username: '', password: '' };
+    return bigCartelConfig;
+  } catch (e) {
+    console.error('Error loading Big Cartel settings:', e);
+    return { subdomain: '', username: '', password: '' };
+  }
+}
+
+async function renderBigCartelTab() {
+  const config = await loadBigCartelConfig();
+  $('bc-subdomain').value = config.subdomain || '';
+  $('bc-username').value = config.username || '';
+  $('bc-password').value = config.password || '';
+
+  updateBigCartelConnectionUI(!!(config.subdomain && config.username && config.password));
+  
+  if (config.subdomain && config.username && config.password) {
+    $('bc-dashboard-content').style.display = 'block';
+    if (!bigCartelData.products.length && !bigCartelData.orders.length) {
+      loadBigCartelData();
+    } else {
+      renderBigCartelStoreDetails(bigCartelData.store);
+      renderBigCartelProducts(bigCartelData.products);
+      renderBigCartelOrders(bigCartelData.orders);
+    }
+  } else {
+    $('bc-dashboard-content').style.display = 'none';
+  }
+}
+
+function updateBigCartelConnectionUI(isConnected, statusText = '') {
+  const dot = $('bc-status-dot');
+  const txt = $('bc-status-text');
+  
+  if (isConnected) {
+    dot.className = 'bc-dot connected';
+    txt.textContent = statusText || 'Connected';
+  } else {
+    dot.className = 'bc-dot disconnected';
+    txt.textContent = statusText || 'Disconnected';
+  }
+}
+
+async function fetchBigCartel(endpoint) {
+  const config = await loadBigCartelConfig();
+  if (!config.subdomain || !config.username || !config.password) {
+    throw new Error('Big Cartel credentials are not fully configured.');
+  }
+  
+  if (!sheetsUrl) {
+    throw new Error('Google Sheets Connection is required to proxy Big Cartel API requests.');
+  }
+
+  const url = endpoint ? `https://api.bigcartel.com/v1/accounts/${config.subdomain}/${endpoint}` : `https://api.bigcartel.com/v1/accounts`;
+  
+  const payload = {
+    version: 2,
+    action: 'proxybigcartel',
+    eventId: 'probe-' + Date.now(),
+    payload: {
+      url: url,
+      username: config.username,
+      password: config.password,
+      method: 'GET'
+    }
+  };
+
+  const res = await fetch(sheetsUrl, {
+    method: 'POST',
+    mode: 'cors',
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP error! status: ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (data.error) {
+    throw new Error(data.error);
+  }
+
+  if (data.code !== 200) {
+    throw new Error(`Big Cartel API returned status ${data.code}`);
+  }
+
+  return JSON.parse(data.content);
+}
+
+async function testBigCartelConnection() {
+  const subdomain = $('bc-subdomain').value.trim();
+  const username = $('bc-username').value.trim();
+  const password = $('bc-password').value.trim();
+
+  if (!subdomain || !username || !password) {
+    showToast('All credentials are required to test connection.', 'warn');
+    return;
+  }
+
+  const testBtn = $('bc-test-btn');
+  testBtn.disabled = true;
+  testBtn.textContent = 'Testing...';
+  updateBigCartelConnectionUI(false, 'Testing connection...');
+
+  try {
+    const url = `https://api.bigcartel.com/v1/accounts`;
+    const payload = {
+      version: 2,
+      action: 'proxybigcartel',
+      eventId: 'probe-' + Date.now(),
+      payload: {
+        url: url,
+        username: username,
+        password: password,
+        method: 'GET'
+      }
+    };
+    
+    if (!sheetsUrl) {
+      throw new Error('Google Sheets Connection URL is not set in Settings -> Sheets.');
+    }
+
+    const res = await fetch(sheetsUrl, {
+      method: 'POST',
+      mode: 'cors',
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) throw new Error(`Webhook error: ${res.status}`);
+    
+    const data = await res.json();
+    if (!data || data.error) throw new Error(data ? data.error : 'Connection failed');
+    if (data.code !== 200) throw new Error(`API error ${data.code}`);
+
+    const content = JSON.parse(data.content);
+    if (content.data && content.data.length > 0) {
+      showToast('✓ Connection successful!', 'ok');
+      updateBigCartelConnectionUI(true, 'Connection Successful');
+      
+      const storeInfo = content.data.find(acc => acc.attributes.subdomain === subdomain) || content.data[0];
+      renderBigCartelStoreDetails(storeInfo);
+    } else {
+      throw new Error('No account found for credentials');
+    }
+  } catch (e) {
+    console.error('Test connection failed:', e);
+    showToast('Connection failed: ' + e.message, 'err');
+    updateBigCartelConnectionUI(false, 'Connection Failed');
+  } finally {
+    testBtn.disabled = false;
+    testBtn.textContent = 'Test Connection';
+  }
+}
+
+async function saveBigCartelSettings() {
+  const subdomain = $('bc-subdomain').value.trim();
+  const username = $('bc-username').value.trim();
+  const password = $('bc-password').value.trim();
+
+  if (!subdomain || !username || !password) {
+    showToast('All credentials are required to save.', 'warn');
+    return;
+  }
+
+  const saveBtn = $('bc-save-btn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
+
+  try {
+    const config = { subdomain, username, password };
+    await window._fbSaveSettings('bigCartelConfig', config);
+    bigCartelConfig = config;
+    showToast('✓ Big Cartel credentials saved & synced', 'ok');
+    
+    $('bc-dashboard-content').style.display = 'block';
+    updateBigCartelConnectionUI(true, 'Connected');
+    
+    loadBigCartelData();
+  } catch (e) {
+    console.error('Save failed:', e);
+    showToast('Save failed: ' + e.message, 'err');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Settings';
+  }
+}
+
+async function loadBigCartelData() {
+  const container = $('bc-products-grid');
+  const list = $('bc-orders-list');
+  
+  if (activeBigCartelSubTab === 'products') {
+    container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--text3);">Loading products from Big Cartel...</div>';
+  } else {
+    list.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text3);">Loading orders from Big Cartel...</td></tr>';
+  }
+
+  try {
+    if (!bigCartelData.store) {
+      const accountsRes = await fetchBigCartel('');
+      if (accountsRes.data && accountsRes.data.length > 0) {
+        const subdomain = (await loadBigCartelConfig()).subdomain;
+        bigCartelData.store = accountsRes.data.find(acc => acc.attributes.subdomain === subdomain) || accountsRes.data[0];
+        renderBigCartelStoreDetails(bigCartelData.store);
+      }
+    }
+    
+    if (activeBigCartelSubTab === 'products') {
+      const productsRes = await fetchBigCartel('products');
+      bigCartelData.products = productsRes.data || [];
+      renderBigCartelProducts(bigCartelData.products, productsRes.included);
+    } else {
+      const ordersRes = await fetchBigCartel('orders');
+      bigCartelData.orders = ordersRes.data || [];
+      renderBigCartelOrders(bigCartelData.orders, ordersRes.included);
+    }
+  } catch (e) {
+    console.error('Error loading Big Cartel data:', e);
+    showToast('Failed to load Big Cartel data: ' + e.message, 'err');
+    if (activeBigCartelSubTab === 'products') {
+      container.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--red);">Failed to load products: ${e.message}</div>`;
+    } else {
+      list.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--red);">Failed to load orders: ${e.message}</td></tr>`;
+    }
+  }
+}
+
+function renderBigCartelStoreDetails(store) {
+  if (!store) return;
+  $('bc-store-card').style.display = 'block';
+  $('bc-store-name').textContent = store.attributes.store_name || store.attributes.subdomain;
+  $('bc-store-plan').textContent = store.relationships?.plan?.data?.id || 'Platinum';
+  $('bc-store-currency').textContent = store.relationships?.currency?.data?.id || 'CAD';
+  $('bc-store-email').textContent = store.attributes.contact_email || '—';
+  
+  const link = $('bc-store-url');
+  link.href = store.attributes.url || `https://${store.attributes.subdomain}.bigcartel.com`;
+  link.textContent = store.attributes.url || `${store.attributes.subdomain}.bigcartel.com`;
+}
+
+function renderBigCartelProducts(products, included = []) {
+  const container = $('bc-products-grid');
+  container.innerHTML = '';
+  
+  if (!products || products.length === 0) {
+    container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--text3);">No products found in this store.</div>';
+    return;
+  }
+
+  const imgLookup = {};
+  const optLookup = {};
+  if (included && included.length > 0) {
+    included.forEach(item => {
+      if (item.type === 'product_images') {
+        imgLookup[item.id] = item.attributes.url;
+      }
+      if (item.type === 'product_options') {
+        optLookup[item.id] = item.attributes;
+      }
+    });
+  }
+
+  products.forEach(p => {
+    const attr = p.attributes || {};
+    let imgUrl = attr.primary_image_url;
+    if (!imgUrl && p.relationships?.images?.data?.length > 0) {
+      const primaryImgId = p.relationships.images.data[0].id;
+      imgUrl = imgLookup[primaryImgId];
+    }
+    imgUrl = imgUrl || 'public/logo.png';
+    
+    let statusClass = 'bc-badge active';
+    let statusLabel = attr.status || 'active';
+    if (attr.status === 'hidden') statusClass = 'bc-badge hidden';
+    if (attr.status === 'sold_out') statusClass = 'bc-badge sold_out';
+    
+    let optionsListHtml = '';
+    let totalStock = 0;
+    let hasStockTracking = false;
+    
+    if (p.relationships?.options?.data?.length > 0) {
+      p.relationships.options.data.forEach(optRef => {
+        const opt = optLookup[optRef.id];
+        if (opt) {
+          const price = parseFloat(opt.price || attr.default_price || 0).toFixed(2);
+          const quantity = opt.quantity != null ? opt.quantity : '∞';
+          const sold = opt.sold || 0;
+          if (opt.quantity != null) {
+            totalStock += opt.quantity;
+            hasStockTracking = true;
+          }
+          optionsListHtml += `
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text2); margin-top:2px; font-family:'DM Mono', monospace;">
+              <span>${escapeHTML(opt.name || 'Default')}</span>
+              <span>$${price} (Stock: ${quantity} | Sold: ${sold})</span>
+            </div>
+          `;
+        }
+      });
+    }
+
+    const price = parseFloat(attr.default_price || 0).toFixed(2);
+
+    const card = document.createElement('div');
+    card.className = 'bc-card';
+    card.innerHTML = `
+      <div class="bc-img-wrap">
+        <img class="bc-img" src="${imgUrl}" alt="${escapeHTML(attr.name)}" loading="lazy">
+      </div>
+      <div class="bc-info">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          <h3 class="bc-title">${escapeHTML(attr.name)}</h3>
+          <span class="${statusClass}">${statusLabel}</span>
+        </div>
+        <div class="bc-price">$${price} CAD</div>
+        <div style="border-top:1px dashed var(--border); padding-top:6px; margin-top:4px;">
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text3); margin-bottom:4px;">Pricing & Options</div>
+          ${optionsListHtml}
+        </div>
+        <div class="bc-meta-row" style="margin-top:10px; font-size:11px;">
+          <span>Category: ${escapeHTML((attr.category_names && attr.category_names[0]) || 'Books')}</span>
+          <span>Stock: ${hasStockTracking ? totalStock : '∞'}</span>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function renderBigCartelOrders(orders, _included = []) {
+  const list = $('bc-orders-list');
+  list.innerHTML = '';
+  
+  if (!orders || orders.length === 0) {
+    list.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text3);">No orders found.</td></tr>';
+    return;
+  }
+
+  orders.forEach(o => {
+    const attr = o.attributes || {};
+    const dateStr = attr.created_at ? new Date(attr.created_at).toLocaleDateString() : '—';
+    const customer = (attr.buyer_first_name || '') + ' ' + (attr.buyer_last_name || '');
+    
+    let statusPill = 'pill gray';
+    if (attr.status === 'completed') statusPill = 'pill green';
+    if (attr.status === 'pending') statusPill = 'pill gold';
+    if (attr.status === 'cancelled') statusPill = 'pill red';
+
+    let itemsHtml = '';
+    if (attr.line_items && attr.line_items.length > 0) {
+      itemsHtml = attr.line_items.map(item => {
+        return `${escapeHTML(item.product_name)} x${item.quantity}`;
+      }).join('<br>');
+    } else {
+      itemsHtml = '—';
+    }
+
+    const total = parseFloat(attr.total || 0).toFixed(2);
+    const tax = parseFloat(attr.tax_total || 0).toFixed(2);
+    const shipping = parseFloat(attr.shipping_total || 0).toFixed(2);
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td style="font-family:'DM Mono', monospace; font-size:11px;">#${escapeHTML(o.id)}</td>
+      <td>${dateStr}</td>
+      <td style="font-weight:600;">${escapeHTML(customer)}<br><span style="font-size:11px; color:var(--text3); font-weight:normal;">${escapeHTML(attr.buyer_email || '')}</span></td>
+      <td style="font-size:12px; line-height:1.45;">${itemsHtml}</td>
+      <td class="r" style="font-family:'DM Mono', monospace;">$${tax}</td>
+      <td class="r" style="font-family:'DM Mono', monospace;">$${shipping}</td>
+      <td class="r" style="font-family:'DM Mono', monospace; font-weight:700; color:var(--gold);">$${total}</td>
+      <td><span class="${statusPill}" style="font-size:10px; padding:3px 8px;">${attr.status || 'unknown'}</span></td>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function switchBigCartelSubTab(tabName) {
+  activeBigCartelSubTab = tabName;
+  
+  const btnProducts = $('bc-btn-subtab-products');
+  const btnOrders = $('bc-btn-subtab-orders');
+  const secProducts = $('bc-sec-products');
+  const secOrders = $('bc-sec-orders');
+  
+  if (tabName === 'products') {
+    btnProducts.classList.add('active');
+    btnOrders.classList.remove('active');
+    secProducts.style.display = 'block';
+    secOrders.style.display = 'none';
+  } else {
+    btnProducts.classList.remove('active');
+    btnOrders.classList.add('active');
+    secProducts.style.display = 'none';
+    secOrders.style.display = 'block';
+  }
+  
+  loadBigCartelData();
+}
+
+window.testBigCartelConnection = testBigCartelConnection;
+window.saveBigCartelSettings = saveBigCartelSettings;
+window.switchBigCartelSubTab = switchBigCartelSubTab;
+window.loadBigCartelData = loadBigCartelData;
+window.renderBigCartelTab = renderBigCartelTab;
+
 window.initShippingTab = initShippingTab;
 window.saveShippoApiKey = saveShippoApiKey;
 window.editShippoApiKey = editShippoApiKey;
