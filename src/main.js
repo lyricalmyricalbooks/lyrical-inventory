@@ -24900,7 +24900,7 @@ function updateBigCartelConnectionUI(isConnected, statusText = '') {
   }
 }
 
-async function fetchBigCartel(endpoint) {
+async function fetchBigCartel(endpoint, accountId = '') {
   const config = await loadBigCartelConfig();
   if (!config.subdomain || !config.username || !config.password) {
     throw new Error('Big Cartel credentials are not fully configured.');
@@ -24910,7 +24910,13 @@ async function fetchBigCartel(endpoint) {
     throw new Error('Google Sheets Connection is required to proxy Big Cartel API requests.');
   }
 
-  const url = endpoint ? `https://api.bigcartel.com/v1/accounts/${config.subdomain}/${endpoint}` : `https://api.bigcartel.com/v1/accounts`;
+  if (endpoint && !accountId) {
+    throw new Error('Big Cartel account ID is unavailable; reload the connected store and try again.');
+  }
+
+  const url = endpoint
+    ? `https://api.bigcartel.com/v1/accounts/${encodeURIComponent(accountId)}/${endpoint}`
+    : `https://api.bigcartel.com/v1/accounts`;
   
   const payload = {
     version: 2,
@@ -24940,7 +24946,17 @@ async function fetchBigCartel(endpoint) {
   }
 
   if (data.code !== 200) {
-    throw new Error(`Big Cartel API returned status ${data.code}`);
+    let apiError = '';
+    try {
+      const parsed = JSON.parse(data.content || '{}');
+      apiError = (parsed.errors || [])
+        .map(error => error.detail || error.title || error.code)
+        .filter(Boolean)
+        .join('; ');
+    } catch (_) {
+      // Keep the HTTP status when Big Cartel returns a non-JSON error body.
+    }
+    throw new Error(`Big Cartel API returned status ${data.code}${apiError ? `: ${apiError}` : ''}`);
   }
 
   return JSON.parse(data.content);
@@ -25065,11 +25081,11 @@ async function loadBigCartelData() {
     }
     
     if (activeBigCartelSubTab === 'products') {
-      const productsRes = await fetchBigCartel('products');
+      const productsRes = await fetchBigCartel('products', bigCartelData.store.id);
       bigCartelData.products = productsRes.data || [];
       renderBigCartelProducts(bigCartelData.products, productsRes.included);
     } else {
-      const ordersRes = await fetchBigCartel('orders');
+      const ordersRes = await fetchBigCartel('orders', bigCartelData.store.id);
       bigCartelData.orders = ordersRes.data || [];
       renderBigCartelOrders(bigCartelData.orders, ordersRes.included);
     }
