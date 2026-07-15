@@ -24939,8 +24939,12 @@ async function fetchBigCartel(endpoint) {
     throw new Error(data.error);
   }
 
+  if (data.code === undefined) {
+    throw new Error("Your Apps Script webhook is out of date. Please go to the 'Connect your Google Sheet' tab, copy the latest script (v20+), and redeploy your webhook in Google Sheets.");
+  }
+
   if (data.code !== 200) {
-    throw new Error(`Big Cartel API returned status ${data.code}`);
+    throw new Error(`Big Cartel API returned status ${data.code}. Response: ${data.content || ''}`);
   }
 
   return JSON.parse(data.content);
