@@ -24832,7 +24832,7 @@ function exposeLegacyInlineHandlers() {
     exportCustomersCSV, checkAppUpdate, dismissAppUpdate, fetchRecentChanges, showWhatsNew,
     initStartup, setupGate, renderWebAnalytics, updateModalAccentPreview, normalizeCountryCode,
     getAllStores, getBookPresetSpecs, initShippingTab, getRecentShippingOrders, saveShippoApiKey,
-    editShippoApiKey, onShippoPreFillDestChange, onShippoBookPresetChange, isCanadaPostRate,
+    editShippoApiKey, onShippoPreFillDestChange, prefillShippingFromBigCartelOrder, onShippoBookPresetChange, isCanadaPostRate,
     moneyAmount, roundShippingCharge, buildShippingChargePrediction,
     renderShippingChargePrediction, collectShippoMessages, renderShippoDiagnostics,
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
@@ -24871,7 +24871,12 @@ async function renderBigCartelTab() {
   $('bc-username').value = config.username || '';
   $('bc-password').value = config.password || '';
 
-  updateBigCartelConnectionUI(!!(config.subdomain && config.username && config.password));
+  if (config.subdomain && config.username && config.password) {
+    updateBigCartelConnectionUI(true, 'Configured (Test to Verify)');
+    $('bc-status-dot').className = 'sync-dot amber'; // override to amber instead of green
+  } else {
+    updateBigCartelConnectionUI(false, 'Disconnected');
+  }
   
   if (config.subdomain && config.username && config.password) {
     $('bc-dashboard-content').style.display = 'block';
@@ -24943,6 +24948,10 @@ async function fetchBigCartel(endpoint, accountId = '') {
   const data = await res.json();
   if (data.error) {
     throw new Error(data.error);
+  }
+
+  if (data.code === undefined) {
+    throw new Error("Your Apps Script webhook is out of date. Please go to the 'Connect your Google Sheet' tab, copy the latest script (v20+), and redeploy your webhook in Google Sheets.");
   }
 
   if (data.code !== 200) {
@@ -25067,7 +25076,7 @@ async function loadBigCartelData() {
   if (activeBigCartelSubTab === 'products') {
     container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--text3);">Loading products from Big Cartel...</div>';
   } else {
-    list.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text3);">Loading orders from Big Cartel...</td></tr>';
+    list.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text3);">Loading orders from Big Cartel...</td></tr>';
   }
 
   try {
@@ -25095,7 +25104,7 @@ async function loadBigCartelData() {
     if (activeBigCartelSubTab === 'products') {
       container.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--red);">Failed to load products: ${e.message}</div>`;
     } else {
-      list.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--red);">Failed to load orders: ${e.message}</td></tr>`;
+      list.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--red);">Failed to load orders: ${e.message}</td></tr>`;
     }
   }
 }
@@ -25207,7 +25216,7 @@ function renderBigCartelOrders(orders, _included = []) {
   list.innerHTML = '';
   
   if (!orders || orders.length === 0) {
-    list.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:3rem; color:var(--text3);">No orders found.</td></tr>';
+    list.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text3);">No orders found.</td></tr>';
     return;
   }
 
@@ -25244,9 +25253,79 @@ function renderBigCartelOrders(orders, _included = []) {
       <td class="r" style="font-family:'DM Mono', monospace;">$${shipping}</td>
       <td class="r" style="font-family:'DM Mono', monospace; font-weight:700; color:var(--gold);">$${total}</td>
       <td><span class="${statusPill}" style="font-size:10px; padding:3px 8px;">${attr.status || 'unknown'}</span></td>
+      <td class="r">
+        <button class="btn gold sm" onclick="prefillShippingFromBigCartelOrder('${o.id}')" style="margin:0; display:inline-flex; align-items:center; gap:4px;">
+          <span>📦</span> Ship
+        </button>
+      </td>
     `;
     list.appendChild(row);
   });
+}
+
+function prefillShippingFromBigCartelOrder(orderId) {
+  const order = bigCartelData.orders.find(o => String(o.id) === String(orderId));
+  if (!order) {
+    showToast('Order details not found', 'err');
+    return;
+  }
+  
+  const attr = order.attributes || {};
+  
+  // Extract recipient details
+  const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim();
+  const recipientPhone = attr.shipping_phone || attr.buyer_phone || '';
+  
+  // Extract address fields
+  const street1 = attr.shipping_address_1 || '';
+  const street2 = attr.shipping_address_2 || '';
+  const city = attr.shipping_city || '';
+  const state = attr.shipping_state || '';
+  const zip = attr.shipping_zip || '';
+  
+  // Extract country (2-letter ISO code or similar)
+  let country = 'US';
+  if (attr.shipping_country_code) {
+    country = attr.shipping_country_code;
+  } else if (attr.shipping_country_id) {
+    country = attr.shipping_country_id;
+  } else if (typeof attr.shipping_country === 'string') {
+    country = attr.shipping_country;
+  } else if (attr.shipping_country && typeof attr.shipping_country === 'object') {
+    country = attr.shipping_country.code || attr.shipping_country.id || attr.shipping_country.name || 'US';
+  }
+  
+  // Clean and uppercase country code
+  country = String(country).trim().toUpperCase();
+  
+  // Populate the fields on the Shipping Tab
+  $('st-name').value = recipientName;
+  $('st-company').value = attr.shipping_company || '';
+  $('st-phone').value = recipientPhone;
+  $('st-street1').value = street1;
+  $('st-street2').value = street2;
+  $('st-city').value = city;
+  $('st-state').value = state;
+  $('st-zip').value = zip;
+  
+  // Set the country dropdown
+  const countrySelect = $('st-country');
+  if (countrySelect) {
+    const optionExists = Array.from(countrySelect.options).some(opt => opt.value === country);
+    countrySelect.value = optionExists ? country : 'US';
+  }
+  
+  // Link the order number to the shipping prefill dataset so reconciliation can trace it
+  const select = $('ship-prefill-dest');
+  if (select) {
+    select.dataset.orderNumber = normalizeShippingOrderNumber(orderId);
+    select.value = ''; // Clear select dropdown visual state
+  }
+  
+  // Switch to the Shipping tab
+  switchTab('shipping');
+  
+  showToast(`✓ Populated shipping details for Order #${orderId}`);
 }
 
 function switchBigCartelSubTab(tabName) {
