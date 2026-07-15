@@ -24915,7 +24915,7 @@ async function fetchBigCartel(endpoint) {
   const payload = {
     version: 2,
     action: 'proxybigcartel',
-    eventId: 'probe-' + Date.now(),
+    eventId: 'bigcartel-' + Date.now(),
     payload: {
       url: url,
       username: config.username,
@@ -24966,7 +24966,7 @@ async function testBigCartelConnection() {
     const payload = {
       version: 2,
       action: 'proxybigcartel',
-      eventId: 'probe-' + Date.now(),
+      eventId: 'bigcartel-test-' + Date.now(),
       payload: {
         url: url,
         username: username,
