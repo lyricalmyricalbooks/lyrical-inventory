@@ -24096,7 +24096,6 @@ function renderShippingAnalysisHub() {
 
   // ── 1. Calculate P&L KPIs (Publisher view only) ──
   let pnlHtml = '';
-  const originCountry = localStorage.getItem('lm-shippo-origin-country') || $('sf-country')?.value || 'CA';
 
   if (isPub) {
     const activeOrders = allOrders.filter(o => !o.excludeFromShipping);
@@ -24142,9 +24141,13 @@ function renderShippingAnalysisHub() {
       // C. Region filter
       if (shipAnalysisRegionFilter !== 'all') {
         const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-        const isIntl = isInternationalShipment(originCountry, destCountry);
-        const region = isIntl ? 'international' : 'domestic';
-        if (region !== shipAnalysisRegionFilter) return false;
+        if (shipAnalysisRegionFilter === 'CA') {
+          if (destCountry !== 'CA') return false;
+        } else if (shipAnalysisRegionFilter === 'US') {
+          if (destCountry !== 'US') return false;
+        } else if (shipAnalysisRegionFilter === 'intl') {
+          if (destCountry === 'CA' || destCountry === 'US') return false;
+        }
       }
 
       // D. Weight filter
@@ -24379,7 +24382,8 @@ function renderShippingAnalysisHub() {
     : `<div class="empty-state" style="padding:1rem;">No carrier data logged.</div>`;
 
   // ── 3. Domestic vs. International Margin Split ──
-  let domCount = 0, domRevenue = 0, domCost = 0;
+  let caCount = 0, caRevenue = 0, caCost = 0;
+  let usCount = 0, usRevenue = 0, usCost = 0;
   let intlCount = 0, intlRevenue = 0, intlCost = 0;
 
   allOrders.forEach(o => {
@@ -24396,25 +24400,31 @@ function renderShippingAnalysisHub() {
       : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
 
     const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-    const isIntl = isInternationalShipment(originCountry, destCountry);
 
-    if (isIntl) {
+    if (destCountry === 'CA') {
+      caCount++;
+      caRevenue += revenue;
+      caCost += cost;
+    } else if (destCountry === 'US') {
+      usCount++;
+      usRevenue += revenue;
+      usCost += cost;
+    } else {
       intlCount++;
       intlRevenue += revenue;
       intlCost += cost;
-    } else {
-      domCount++;
-      domRevenue += revenue;
-      domCost += cost;
     }
   });
 
-  const domMargin = domRevenue - domCost;
+  const caMargin = caRevenue - caCost;
+  const usMargin = usRevenue - usCost;
   const intlMargin = intlRevenue - intlCost;
 
-  const isDomActive = (shipAnalysisRegionFilter === 'domestic');
-  const isIntlActive = (shipAnalysisRegionFilter === 'international');
-  const domRowClass = isDomActive ? 'active-insight-row' : '';
+  const isCaActive = (shipAnalysisRegionFilter === 'CA');
+  const isUsActive = (shipAnalysisRegionFilter === 'US');
+  const isIntlActive = (shipAnalysisRegionFilter === 'intl');
+  const caRowClass = isCaActive ? 'active-insight-row' : '';
+  const usRowClass = isUsActive ? 'active-insight-row' : '';
   const intlRowClass = isIntlActive ? 'active-insight-row' : '';
 
   const splitTableHtml = `
@@ -24429,18 +24439,27 @@ function renderShippingAnalysisHub() {
         </tr>
       </thead>
       <tbody>
-        <tr class="insight-clickable-row ${domRowClass}" onclick="toggleShipAnalysisRegionFilter('domestic')" title="Click to filter ledger by Domestic">
+        <tr class="insight-clickable-row ${caRowClass}" onclick="toggleShipAnalysisRegionFilter('CA')" title="Click to filter ledger by Canadian">
           <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
-            ${isDomActive ? '<span class="insight-active-dot"></span>' : ''}
-            🇨🇦/🇺🇸 Domestic
+            ${isCaActive ? '<span class="insight-active-dot"></span>' : ''}
+            🇨🇦 Canadian
           </td>
-          <td style="text-align:center;">${domCount}</td>
-          <td style="text-align:right;">${domRevenue.toFixed(2)} CAD</td>
-          <td style="text-align:right;">${domCost.toFixed(2)} CAD</td>
-          <td style="text-align:right; font-weight:700; color:${domMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${domMargin >= 0 ? '+' : ''}
-${domMargin.toFixed(2)} CAD</td>
+          <td style="text-align:center;">${caCount}</td>
+          <td style="text-align:right;">${caRevenue.toFixed(2)} CAD</td>
+          <td style="text-align:right;">${caCost.toFixed(2)} CAD</td>
+          <td style="text-align:right; font-weight:700; color:${caMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${caMargin >= 0 ? '+' : ''}${caMargin.toFixed(2)} CAD</td>
         </tr>
-        <tr class="insight-clickable-row ${intlRowClass}" onclick="toggleShipAnalysisRegionFilter('international')" title="Click to filter ledger by International">
+        <tr class="insight-clickable-row ${usRowClass}" onclick="toggleShipAnalysisRegionFilter('US')" title="Click to filter ledger by USA">
+          <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
+            ${isUsActive ? '<span class="insight-active-dot"></span>' : ''}
+            🇺🇸 USA
+          </td>
+          <td style="text-align:center;">${usCount}</td>
+          <td style="text-align:right;">${usRevenue.toFixed(2)} CAD</td>
+          <td style="text-align:right;">${usCost.toFixed(2)} CAD</td>
+          <td style="text-align:right; font-weight:700; color:${usMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${usMargin >= 0 ? '+' : ''}${usMargin.toFixed(2)} CAD</td>
+        </tr>
+        <tr class="insight-clickable-row ${intlRowClass}" onclick="toggleShipAnalysisRegionFilter('intl')" title="Click to filter ledger by International">
           <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
             ${isIntlActive ? '<span class="insight-active-dot"></span>' : ''}
             🌍 International
@@ -24448,8 +24467,7 @@ ${domMargin.toFixed(2)} CAD</td>
           <td style="text-align:center;">${intlCount}</td>
           <td style="text-align:right;">${intlRevenue.toFixed(2)} CAD</td>
           <td style="text-align:right;">${intlCost.toFixed(2)} CAD</td>
-          <td style="text-align:right; font-weight:700; color:${intlMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${intlMargin >= 0 ? '+' : ''}
-${intlMargin.toFixed(2)} CAD</td>
+          <td style="text-align:right; font-weight:700; color:${intlMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${intlMargin >= 0 ? '+' : ''}${intlMargin.toFixed(2)} CAD</td>
         </tr>
       </tbody>
     </table>
@@ -24574,12 +24592,16 @@ ${margin.toFixed(2)} CAD</td>
     }
 
     // C. Region filter
-    if (shipAnalysisRegionFilter !== 'all') {
-      const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-      const isIntl = isInternationalShipment(originCountry, destCountry);
-      const region = isIntl ? 'international' : 'domestic';
-      if (region !== shipAnalysisRegionFilter) return false;
-    }
+      if (shipAnalysisRegionFilter !== 'all') {
+        const destCountry = normalizeCountryCode(o.shipCountry || 'US');
+        if (shipAnalysisRegionFilter === 'CA') {
+          if (destCountry !== 'CA') return false;
+        } else if (shipAnalysisRegionFilter === 'US') {
+          if (destCountry !== 'US') return false;
+        } else if (shipAnalysisRegionFilter === 'intl') {
+          if (destCountry === 'CA' || destCountry === 'US') return false;
+        }
+      }
 
     // D. Weight filter
     if (shipAnalysisWeightFilter !== 'all') {
@@ -24814,7 +24836,7 @@ ${margin.toFixed(2)} CAD</td>
     if (shipAnalysisRegionFilter !== 'all') {
       filterBadges += `
         <span class="shipping-filter-badge">
-          Region: ${shipAnalysisRegionFilter === 'domestic' ? 'Domestic' : 'International'}
+          Region: ${shipAnalysisRegionFilter === 'CA' ? 'Canadian' : (shipAnalysisRegionFilter === 'US' ? 'USA' : 'International')}
           <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisRegionFilter('${shipAnalysisRegionFilter}')" title="Remove filter">✕</span>
         </span>
       `;
@@ -24849,19 +24871,19 @@ ${margin.toFixed(2)} CAD</td>
           <span class="shipping-pnl-eyebrow">Insights</span>
           <strong>Explore carrier, destination, and weight patterns</strong>
         </span>
-        <span class="shipping-pnl-disclosure">Show analysis</span>
+        <span class="shipping-pnl-disclosure">Show analysis ▼</span>
       </summary>
       <div class="shipping-pnl-insights-grid">
         <section class="shipping-pnl-insight-card">
-          <h3>Carrier efficiency</h3>
+          <h3>📦 Carrier efficiency</h3>
         ${carrierTableHtml}
         </section>
         <section class="shipping-pnl-insight-card">
-          <h3>Destination mix</h3>
+          <h3>🌎 Destination mix</h3>
         ${splitTableHtml}
         </section>
         <section class="shipping-pnl-insight-card">
-          <h3>Weight-band cost</h3>
+          <h3>⚖️ Weight-band cost</h3>
         ${weightTableHtml}
         </section>
       </div>
@@ -24888,7 +24910,6 @@ ${margin.toFixed(2)} CAD</td>
 }
 
 function downloadFilteredShippingLedgerCSV() {
-  const originCountry = localStorage.getItem('lm-shippo-origin-country') || $('sf-country')?.value || 'CA';
   const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
   
   const allOrders = [];
@@ -24949,12 +24970,16 @@ function downloadFilteredShippingLedgerCSV() {
     }
 
     // C. Region filter
-    if (shipAnalysisRegionFilter !== 'all') {
-      const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-      const isIntl = isInternationalShipment(originCountry, destCountry);
-      const region = isIntl ? 'international' : 'domestic';
-      if (region !== shipAnalysisRegionFilter) return false;
-    }
+      if (shipAnalysisRegionFilter !== 'all') {
+        const destCountry = normalizeCountryCode(o.shipCountry || 'US');
+        if (shipAnalysisRegionFilter === 'CA') {
+          if (destCountry !== 'CA') return false;
+        } else if (shipAnalysisRegionFilter === 'US') {
+          if (destCountry !== 'US') return false;
+        } else if (shipAnalysisRegionFilter === 'intl') {
+          if (destCountry === 'CA' || destCountry === 'US') return false;
+        }
+      }
 
     // D. Weight filter
     if (shipAnalysisWeightFilter !== 'all') {
@@ -25027,8 +25052,9 @@ function downloadFilteredShippingLedgerCSV() {
       : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
     
     const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-    const isIntl = isInternationalShipment(originCountry, destCountry);
-    const region = isIntl ? 'International' : 'Domestic';
+    let region = 'International';
+    if (destCountry === 'CA') region = 'Canadian';
+    else if (destCountry === 'US') region = 'USA';
     const ref = linked.length > 0 ? linked[0].ref : (o.manualPostagePaid ? 'Manual Override' : 'Unlinked');
 
     csv += `${esc(o.num)},${esc(o.shipName || o.name || 'Anonymous')},${esc(book?.title || 'Unknown book')},${o.qty || 1},${weightKg.toFixed(3)},${esc(statusLabel)},${customerPaidBase.toFixed(2)},${postageCostCAD.toFixed(2)},${margin.toFixed(2)},${esc(carrier)},${esc(region)},${esc(ref)}\n`;
