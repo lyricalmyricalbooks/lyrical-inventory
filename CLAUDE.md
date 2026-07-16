@@ -25,11 +25,12 @@ Each suggestion is one or two lines:
 Then offer to do the top one right away.
 
 ### What makes a suggestion good here
-- Tied to what just changed. First ask yourself: did this edit open an edge case, threaten offline sync, or leave an obvious next step? Lead with that.
-- High-leverage, not generic. Skip boilerplate best-practice filler.
-- Specific. Name the file, function, or screen.
-- Honest. If nothing is genuinely worth doing, say "nothing pressing" and stop.
-- No repeats. Don't re-pitch anything already declined this session.
+- **Highly adaptive and context-tied:** Tied to what just changed or the latest discussion in the conversation. First ask yourself: did this edit or the last conversation/pull request open an edge case, threaten offline sync, or leave an obvious next step? Lead with that. Propose suggestions that branch directly from recent edits.
+- **Dynamic, not static:** Do NOT output the same static list of suggestions across different turns. The recommendations must dynamically adapt to the immediate context of the conversation and recent commits/PRs. Avoid boilerplate or placeholder list filler.
+- **Specific:** Name the file, function, or screen.
+- **High-leverage:** Skip generic best-practice suggestions.
+- **Honest:** If nothing is genuinely worth doing, say "nothing pressing" and stop.
+- **No repeats:** Don't re-pitch anything already declined this session.
 
 ### Constraints every suggestion must respect
 > [!IMPORTANT]
