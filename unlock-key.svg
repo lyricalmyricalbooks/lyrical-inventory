@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-hidden="true">
+  <defs>
+    <linearGradient id="lmGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0c060" />
+      <stop offset="100%" stop-color="#c8913a" />
+    </linearGradient>
+  </defs>
+  <circle cx="22" cy="22" r="12" fill="none" stroke="url(#lmGold)" stroke-width="6" />
+  <path
+    d="M31 22h20v8h-6v6h-8v-6h-6z"
+    fill="url(#lmGold)"
+  />
+</svg>

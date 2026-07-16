@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lyricalmyrical Admin</title>
+    <meta http-equiv="refresh" content="0; url=../?mode=admin" />
+    <script>
+      const q = window.location.search || '';
+      const h = window.location.hash || '';
+      window.location.replace(`../?mode=admin${q}${h}`);
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to the admin app…</p>
+    <p><a href="../?mode=admin">Continue manually</a></p>
+  </body>
+</html>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --ink:#211d18; --muted:#786f66; --line:#e8e0d5; --paper:#fffdfa; --canvas:#f5f0e8; --gold:#c78924; --gold-soft:#f8e7bf; --green:#2f7258; --shadow:0 16px 38px rgba(61,45,25,.12); }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--canvas); color:var(--ink); font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
+    .page { max-width:1280px; margin:0 auto; padding:46px 32px 64px; }
+    .eyebrow { font-size:11px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:var(--gold); }
+    h1 { font-family:Georgia,serif; font-size:42px; line-height:1; letter-spacing:-.04em; margin:10px 0 10px; }
+    .intro { max-width:690px; color:var(--muted); font-size:16px; line-height:1.6; margin:0 0 28px; }
+    .choices { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+    .concept { background:var(--paper); border:1px solid var(--line); border-radius:22px; padding:13px; box-shadow:var(--shadow); cursor:pointer; transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+    .concept:hover,.concept.selected { transform:translateY(-3px); border-color:var(--gold); box-shadow:0 20px 46px rgba(61,45,25,.17); }
+    .concept h2 { font-size:15px; margin:16px 10px 2px; }
+    .concept p { font-size:13px; line-height:1.55; color:var(--muted); margin:4px 10px 8px; }
+    .label { display:inline-block; margin:0 10px 12px; color:var(--gold); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    .mock { overflow:hidden; min-height:475px; border:1px solid #e3dbcf; border-radius:15px; background:#f8f4ed; font-size:10px; }
+    .top { height:40px; padding:12px 16px; background:#fffdf9; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+    .brand { font-family:Georgia,serif; font-size:13px; font-weight:800; }.top-right { color:var(--muted); }
+    .grid { display:grid; grid-template-columns:145px 1fr; min-height:435px; }.rail { padding:15px 11px; border-right:1px solid var(--line); background:#fbf8f2; }
+    .project { padding:10px; border:1px solid #eadfce; border-radius:9px; background:#fffdf9; font-weight:700; }.project span { display:block; margin-top:5px; color:var(--muted); font-size:8px; font-weight:500; }
+    .nav { margin-top:17px; display:grid; gap:5px; color:var(--muted); }.nav div { padding:8px 9px; border-radius:7px; }.nav .active { color:#47351a; background:var(--gold-soft); font-weight:800; }
+    .inside { padding:21px; }.crumb { color:var(--muted); font-size:9px; }.titleline { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }.titleline h3 { font-family:Georgia,serif; font-size:25px; letter-spacing:-.04em; margin:7px 0 14px; }.mini-button,.primary { border:0; border-radius:8px; font-size:9px; font-weight:800; padding:10px 12px; }.primary { background:var(--gold); color:#241a0d; }.mini-button { background:#f2ece2; color:#574d42; }
+    .attention { display:grid; grid-template-columns:1.25fr 1fr 1fr; gap:9px; }.attention-card { padding:13px; border:1px solid #eadfce; border-radius:11px; background:#fffdf9; }.attention-card strong { display:block; font-family:Georgia,serif; font-size:24px; color:#b47718; margin-bottom:4px; }.attention-card span { color:var(--muted); font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; }.attention-card.main { background:#2e2923; border-color:#2e2923; color:#fff; }.attention-card.main strong { color:#f3bb55; font-size:17px; }.attention-card.main span { color:#d4ccc2; }
+    .section-head { display:flex; align-items:center; justify-content:space-between; margin:20px 0 9px; font-weight:800; font-size:10px; }.stagebar { display:grid; grid-template-columns:repeat(5,1fr); background:#fffdf9; border:1px solid #eadfce; border-radius:10px; overflow:hidden; }.stage { padding:10px 8px; border-right:1px solid #eee5da; color:var(--muted); }.stage:last-child { border:0; }.stage b { display:block; color:var(--ink); font-size:14px; margin-bottom:3px; }.stage.active { background:#fff5df; box-shadow:inset 0 -2px var(--gold); }
+    .queue { margin-top:14px; display:grid; grid-template-columns:1.1fr .9fr; gap:10px; }.panel { background:#fffdf9; border:1px solid #eadfce; border-radius:11px; padding:12px; }.panel h4 { margin:0 0 9px; font-size:10px; }.item { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-top:1px solid #f0e9de; }.item:first-of-type { border-top:0; }.item .person b { display:block; font-size:9px; }.item .person span { color:var(--muted); font-size:8px; }.tag { color:var(--green); background:#e8f3ec; padding:4px 6px; border-radius:999px; font-weight:800; font-size:7px; }
+    .workboard .inside { padding:21px; }.workboard .filterline { display:flex; gap:7px; margin:0 0 14px; }.filter { padding:7px 9px; border:1px solid #eadfce; border-radius:7px; color:var(--muted); }.filter.active { background:#fff5df; color:#82550f; border-color:#e5bc70; font-weight:800; }.workitem { background:#fffdf9; border:1px solid #eadfce; border-radius:11px; padding:14px; margin-top:9px; display:grid; grid-template-columns:34px 1fr auto; gap:10px; align-items:center; }.avatar { width:34px; height:34px; display:grid; place-items:center; background:#e3aa43; color:#251a0e; border-radius:50%; font-weight:900; }.workitem h4 { font-size:11px; margin:0 0 3px; }.workitem p { margin:0; color:var(--muted); font-size:8px; }.progress { grid-column:2/4; height:4px; background:#eee6dc; border-radius:999px; overflow:hidden; }.progress i { display:block; height:100%; background:var(--gold); width:24%; }.details { font-size:8px; color:#9a6a18; font-weight:800; }
+    @media (max-width:900px){.choices{grid-template-columns:1fr}.page{padding:28px 16px}.mock{min-height:430px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="eyebrow">Open Call redesign</div>
+    <h1>Choose the calmer operating rhythm.</h1>
+    <p class="intro">Both concepts retain the project, pipeline, email, and contributor controls. The difference is what earns the first screen: time-sensitive campaign actions, or the contributor worklist itself.</p>
+    <section class="choices">
+      <article class="concept" data-choice="campaign-command-centre" onclick="toggleSelect(this)">
+        <div class="mock">
+          <div class="top"><span class="brand">Lyricalmyrical</span><span class="top-right">Open Call · Collective Photobook</span></div>
+          <div class="grid"><aside class="rail"><div class="project">Collective Photobook<span>1 contributor · active</span></div><div class="nav"><div class="active">✦ Campaign overview</div><div>Contributors</div><div>Campaign tools</div><div>Project settings</div></div></aside><div class="inside"><div class="crumb">Open Call / Collective Photobook</div><div class="titleline"><h3>Good afternoon, Julia.</h3><button class="mini-button">Edit campaign</button></div><div class="attention"><div class="attention-card main"><strong>3 updates need review</strong><span>Replies detected from Gmail</span></div><div class="attention-card"><strong>2</strong><span>Waiting 4+ days</span></div><div class="attention-card"><strong>1</strong><span>Ready to send</span></div></div><div class="section-head"><span>Pipeline</span><span style="color:#9a6a18">Clear filter</span></div><div class="stagebar"><div class="stage active"><b>1</b>Selected</div><div class="stage"><b>0</b>Credit</div><div class="stage"><b>0</b>CMYK</div><div class="stage"><b>0</b>Files</div><div class="stage"><b>0</b>Pre-order</div></div><div class="queue"><div class="panel"><h4>Review updates</h4><div class="item"><div class="person"><b>Julian Iacobelli</b><span>Credit name received · 6m ago</span></div><span class="tag">Review</span></div><div class="item"><div class="person"><b>Amal K.</b><span>Files attached · 2h ago</span></div><span class="tag">Review</span></div></div><div class="panel"><h4>Ready to send</h4><div class="item"><div class="person"><b>Selection notice</b><span>1 recipient · saved template</span></div><button class="primary">Send</button></div></div></div></div></div>
+        </div>
+        <h2>Campaign Command Centre</h2><p>Recommended. The page starts with decisions that move the project forward; templates, imports, and bulk tools become a quiet secondary layer.</p><span class="label">Option A · action-first</span>
+      </article>
+      <article class="concept workboard" data-choice="contributor-workboard" onclick="toggleSelect(this)">
+        <div class="mock">
+          <div class="top"><span class="brand">Lyricalmyrical</span><span class="top-right">Open Call · Collective Photobook</span></div>
+          <div class="grid"><aside class="rail"><div class="project">Collective Photobook<span>1 contributor · active</span></div><div class="nav"><div class="active">Contributors</div><div>Campaign overview</div><div>Campaign tools</div><div>Project settings</div></div></aside><div class="inside"><div class="crumb">Open Call / Contributors</div><div class="titleline"><h3>Contributor workboard</h3><button class="primary">Add contributor</button></div><div class="filterline"><span class="filter active">Needs action · 3</span><span class="filter">Waiting · 2</span><span class="filter">Complete · 0</span></div><div class="workitem"><div class="avatar">JI</div><div><h4>Julian Iacobelli</h4><p>Awaiting credit name · waiting 2d</p></div><button class="primary">Request credit</button><div class="progress"><i></i></div></div><div class="workitem"><div class="avatar" style="background:#d8c59b">AK</div><div><h4>Amal K.</h4><p>Files received · ready for pre-order</p></div><button class="primary">Send pre-order</button><div class="progress"><i style="width:78%"></i></div></div><div class="workitem"><div class="avatar" style="background:#c8d9d1">MS</div><div><h4>Marcel S.</h4><p>New reply detected · needs review</p></div><span class="details">Open details →</span><div class="progress"><i style="width:42%"></i></div></div><div class="section-head"><span>Campaign health</span><span style="color:#9a6a18">View overview →</span></div><div class="stagebar"><div class="stage active"><b>1</b>Selected</div><div class="stage"><b>2</b>Credit</div><div class="stage"><b>1</b>CMYK</div><div class="stage"><b>0</b>Files</div><div class="stage"><b>0</b>Pre-order</div></div></div></div>
+        </div>
+        <h2>Contributor Workboard</h2><p>People-first. It turns every artist into a clean, actionable work item and moves campaign administration into the background.</p><span class="label">Option B · people-first</span>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
