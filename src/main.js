@@ -90,13 +90,13 @@ const _updateSW = registerSW({
   }
 });
 
-window.triggerPwaUpdate = function() {
+window.triggerPwaUpdate = function () {
   if (typeof updateSWFunc === 'function') {
     updateSWFunc();
   }
 };
 
-window.dismissPwaUpdate = function(event) {
+window.dismissPwaUpdate = function (event) {
   if (event) event.stopPropagation();
   hideUpdatePrompt();
 };
@@ -131,7 +131,7 @@ function isTestBook(b) {
   const idLower = (b.id || '').toLowerCase();
   const titleLower = (b.title || '').toLowerCase().trim();
   return idLower === 'test1' || idLower === 'testpage' || idLower.includes('test') ||
-         titleLower === 'test1' || titleLower === 'testpage' || titleLower === 'test page';
+    titleLower === 'test1' || titleLower === 'testpage' || titleLower === 'test page';
 }
 
 function isTestBookId(bid) {
@@ -213,7 +213,7 @@ async function syncCatalog() {
   if (window.IS_PUBLISHER) {
     try {
       await saveCatalogWithDeletions();
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 
@@ -357,9 +357,9 @@ async function saveBookFromModal() {
   // restrict it to a safe slug (lowercase letters, digits, dashes).
   const rawId = $('nb-id').value.trim();
   const id = rawId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  
+
   await syncCatalog();
-  
+
   const currentBook = BOOKS[editingBookId] || BOOKS[id] || {};
   const book = {
     id,
@@ -390,7 +390,7 @@ async function saveBookFromModal() {
     shipWeightUnit: $('nb-ship-weight-unit').value || 'lb',
     shipHsCode: $('nb-ship-hs').value.trim() || '490199'
   };
-  
+
   // Keep the first break-even tier aligned when it still represents production-cost recovery.
   const previousCost = currentBook.productionCost || 0;
   const val = book.productionCost;
@@ -403,7 +403,7 @@ async function saveBookFromModal() {
 
     if (shouldSyncThreshold) firstTier.revenueUpTo = val;
   }
-  
+
   if (editingBookId && editingBookId !== id) {
     delete BOOKS[editingBookId];
     if (states[editingBookId]) {
@@ -419,7 +419,7 @@ async function saveBookFromModal() {
     const i = deletedDefaultIds.indexOf(id);
     if (i !== -1) deletedDefaultIds.splice(i, 1);
   }
-  
+
   // Compile and sync productionCosts & paymentLinks to Firebase/localStorage for backward compatibility
   const prodCosts = {};
   const payLinks = {};
@@ -427,15 +427,15 @@ async function saveBookFromModal() {
     prodCosts[b.id] = b.productionCost || 0;
     payLinks[b.id] = b.paymentLink || '';
   });
-  try { await window._fbSaveSettings('productionCosts', prodCosts); } catch (_) {}
+  try { await window._fbSaveSettings('productionCosts', prodCosts); } catch (_) { }
   localStorage.setItem('lm-production-costs', JSON.stringify(prodCosts));
-  try { await window._fbSaveSettings('paymentLinks', payLinks); } catch (_) {}
+  try { await window._fbSaveSettings('paymentLinks', payLinks); } catch (_) { }
   localStorage.setItem('lm-payment-links', JSON.stringify(payLinks));
 
   await saveCatalogWithDeletions();
-  
+
   if ($('add-book-unsaved-indicator')) $('add-book-unsaved-indicator').classList.remove('show');
-  
+
   showToast(editingBookId ? '✓ Book updated' : '✓ Book added to catalog');
   closeAddBookModal();
   buildBookSwitcher();
@@ -445,7 +445,7 @@ async function saveBookFromModal() {
   if (activeBook && activeBook !== 'all' && BOOKS[activeBook]) {
     const ab = BOOKS[activeBook];
     const lbl = $('book-dropdown-label'); if (lbl) lbl.textContent = ab.title;
-    const dt  = $('book-dropdown-dot');   if (dt)  dt.style.background = ab.accent;
+    const dt = $('book-dropdown-dot'); if (dt) dt.style.background = ab.accent;
     document.documentElement.style.setProperty('--book-accent', ab.accent);
     document.documentElement.style.setProperty('--book-accent-bg', ab.accentBg);
   }
@@ -457,7 +457,7 @@ function renderCatalogList() {
   if (!container) return;
 
   const testContainer = $('test-catalog-list');
-  
+
   // Find test books (e.g. title or id contains "test")
   const testBooks = BOOK_LIST.filter(b => b.id.toLowerCase().includes('test') || b.title.toLowerCase().includes('test'));
   const regularBooks = BOOK_LIST.filter(b => !b.id.toLowerCase().includes('test') && !b.title.toLowerCase().includes('test'));
@@ -550,26 +550,26 @@ function openPaymentQRModal() {
   if (!activeBook || activeBook === 'all' || isAuthor()) return;
   const book = BOOKS[activeBook];
   const url = getEffectiveBookPaymentLink(book) || 'https://paypal.me/lyricalmyricalbooks';
-  
+
   $('qr-book-title').textContent = book.title;
   $('qr-payment-link').value = url;
-  
+
   const canvasContainer = $('payment-qr-canvas');
   canvasContainer.innerHTML = '';
-  
+
   if (typeof QRCode !== 'undefined') {
     _currentQR = new QRCode(canvasContainer, {
       text: url,
       width: 256,
       height: 256,
-      colorDark : "#000000",
-      colorLight : "#ffffff",
-      correctLevel : QRCode.CorrectLevel.H
+      colorDark: "#000000",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.H
     });
   } else {
     canvasContainer.innerHTML = '<div style="color:var(--text3);font-size:12px;">QR Library failed to load.</div>';
   }
-  
+
   openM('payment-qr');
 }
 
@@ -640,7 +640,7 @@ function renderAllQRCodes() {
     linkRow.innerHTML = `
       <div style="font-size:10px;color:rgba(255,255,255,.3);font-family:'DM Mono',monospace;word-break:break-all;text-align:center;min-height:14px;">${url || 'No link configured'}</div>
       <div style="display:flex;gap:8px;">
-        <button class="btn ink" style="flex:1;font-size:11px;" onclick="window.copyBookQR('${book.id}','${url.replace(/'/g,"\\'")}')">Copy link</button>
+        <button class="btn ink" style="flex:1;font-size:11px;" onclick="window.copyBookQR('${book.id}','${url.replace(/'/g, "\\'")}')">Copy link</button>
         <button class="btn gold" style="flex:1;font-size:11px;" ${url ? '' : 'disabled'} onclick="window.downloadBookQR('${book.id}')">Download</button>
       </div>`;
     card.appendChild(linkRow);
@@ -650,7 +650,7 @@ function renderAllQRCodes() {
 
 window.renderAllQRCodes = renderAllQRCodes;
 
-window.copyBookQR = function(bookId, url) {
+window.copyBookQR = function (bookId, url) {
   if (!url) { showToast('No link set for this book', 'warn'); return; }
   navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
     const ta = document.createElement('textarea');
@@ -659,7 +659,7 @@ window.copyBookQR = function(bookId, url) {
   });
 };
 
-window.downloadBookQR = function(bookId) {
+window.downloadBookQR = function (bookId) {
   const canvas = document.querySelector(`#qr-all-${bookId} canvas`);
   if (!canvas) { showToast('QR not ready', 'warn'); return; }
   const a = document.createElement('a');
@@ -679,10 +679,10 @@ function renderAuthorQRPage() {
 
   // Populate header
   const titleEl = $('myqr-book-title');
-  const metaEl  = $('myqr-book-meta');
+  const metaEl = $('myqr-book-meta');
   const statusEl = $('myqr-status');
   if (titleEl) titleEl.textContent = book.title;
-  if (metaEl)  metaEl.textContent  = (book.author || '') + (book.author ? ' · ' : '') + book.currency + book.listPrice;
+  if (metaEl) metaEl.textContent = (book.author || '') + (book.author ? ' · ' : '') + book.currency + book.listPrice;
 
   // Set accent colour
   document.documentElement.style.setProperty('--book-accent', book.accent);
@@ -718,7 +718,7 @@ function renderAuthorQRPage() {
   }
 }
 
-window.copyAuthorQR = function() {
+window.copyAuthorQR = function () {
   const book = BOOKS[activeBook];
   if (!book) return;
   const url = book.stripeLink || book.paymentLink || '';
@@ -730,7 +730,7 @@ window.copyAuthorQR = function() {
   });
 };
 
-window.downloadAuthorQR = function() {
+window.downloadAuthorQR = function () {
   const canvas = document.querySelector('#author-qr-canvas canvas');
   if (!canvas) { showToast('QR not ready', 'warn'); return; }
   const a = document.createElement('a');
@@ -935,19 +935,19 @@ function defaultState(book) {
   return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0, openCall: [] };
 }
 
-function getState() { 
+function getState() {
   if (!states[activeBook]) {
     states[activeBook] = defaultState(BOOKS[activeBook] || BOOK_LIST[0]);
   }
   return states[activeBook];
 }
-function getBook()  { return BOOKS[activeBook] || BOOK_LIST[0]; }
+function getBook() { return BOOKS[activeBook] || BOOK_LIST[0]; }
 
 // ── TOAST
-function showToast(msg, type='ok', dur=2800) {
-  const t=$('toast'); t.textContent=msg;
-  t.className='toast show'+(type==='warn'?' warn':type==='err'?' err':'');
-  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),dur);
+function showToast(msg, type = 'ok', dur = 2800) {
+  const t = $('toast'); t.textContent = msg;
+  t.className = 'toast show' + (type === 'warn' ? ' warn' : type === 'err' ? ' err' : '');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), dur);
 }
 // Expose so modules loaded before main.js completes (firebase.js) can call back.
 window.showToast = showToast;
@@ -1012,23 +1012,23 @@ function setSyncState(status, msg) {
   // (offline)" message; collapsing that to "Live" would falsely read as fully
   // synced — dangerous in the publisher shell where #side-sync-text is the only
   // visible status. Detect it and surface "Offline" + an amber (syncing) dot.
-  const offline = (status==='ok') && (/queued|offline/i.test(msg||'') ||
-    (typeof navigator!=='undefined' && navigator.onLine===false));
+  const offline = (status === 'ok') && (/queued|offline/i.test(msg || '') ||
+    (typeof navigator !== 'undefined' && navigator.onLine === false));
   // Derive the short word + dot class ONCE so header and sidebar can't drift.
-  const word = status==='syncing' ? 'Saving…' : status==='error' ? 'Sync error' : offline ? 'Offline' : 'Live';
-  const dotCls = 'sync-dot'+(status==='syncing'||offline ? ' syncing' : status==='error' ? ' error' : '');
+  const word = status === 'syncing' ? 'Saving…' : status === 'error' ? 'Sync error' : offline ? 'Offline' : 'Live';
+  const dotCls = 'sync-dot' + (status === 'syncing' || offline ? ' syncing' : status === 'error' ? ' error' : '');
 
-  const dot=$('sync-dot'), label=$('sync-label'), time=$('sync-time');
-  dot.className=dotCls;
-  label.innerHTML=msg; time.textContent=new Date().toLocaleTimeString();
+  const dot = $('sync-dot'), label = $('sync-label'), time = $('sync-time');
+  dot.className = dotCls;
+  label.innerHTML = msg; time.textContent = new Date().toLocaleTimeString();
   // Short status word shown in the header pill (the full label lives in the menu).
-  const pill=$('sync-pill-text');
-  if(pill) pill.textContent = word;
+  const pill = $('sync-pill-text');
+  if (pill) pill.textContent = word;
   // Mirror the live state into the publisher app-shell sidebar footer account
   // (desktop shell only; ids are guarded so authors/mobile are unaffected).
-  const sideDot=$('side-sync-dot'), sideText=$('side-sync-text');
-  if(sideDot) sideDot.className=dotCls;
-  if(sideText) sideText.textContent = word;
+  const sideDot = $('side-sync-dot'), sideText = $('side-sync-text');
+  if (sideDot) sideDot.className = dotCls;
+  if (sideText) sideText.textContent = word;
 }
 
 // ── FIREBASE (per-book)
@@ -1052,8 +1052,8 @@ async function saveState(bookId) {
     lastSavedHashes[bookId] = json;
     lastSaveTimes[bookId] = Date.now();
     setSyncState('ok', '<b>Firestore</b> · saved · live sync on');
-    const ind=$('save-ind'); if(ind){ind.classList.add('show');setTimeout(()=>ind.classList.remove('show'),2000);}
-  } catch(e) {
+    const ind = $('save-ind'); if (ind) { ind.classList.add('show'); setTimeout(() => ind.classList.remove('show'), 2000); }
+  } catch (e) {
     console.error(`Firebase Save Error [${bookId}]:`, e);
     // The optimistic UI already shows this change, but the cloud write
     // failed. Queue it (with backoff retry) so the change is never lost
@@ -1086,16 +1086,16 @@ async function loadBook(bookId) {
     window._fbWatchSubmissions(bookId, data => {
       window.authorSubmissions[bookId] = data || {};
       if (activeBook === bookId || activeBook === 'all') scheduleRender();
-      else { try { updatePublisherActionBanner(); } catch(_) {} }
+      else { try { updatePublisherActionBanner(); } catch (_) { } }
     });
-    
+
     window._fbWatch(bookId, json2 => {
       if (json2 === lastSavedHashes[bookId]) return;
       const loaded = JSON.parse(json2);
       states[bookId] = { ...defaultState(book), ...loaded };
       if (!states[bookId].doneIds) states[bookId].doneIds = [];
       if (!states[bookId].artistTransfers) states[bookId].artistTransfers = [];
-    if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
+      if (!states[bookId].artistPayouts) states[bookId].artistPayouts = [];
       recomputeAfters(states[bookId], BOOKS[bookId]);
       lastSavedHashes[bookId] = json2;
       _appliedIdsCache = null;
@@ -1103,12 +1103,12 @@ async function loadBook(bookId) {
       // Suppress the echo-toast that fires right after a local save is written to Firestore
       const timeSinceLastSave = Date.now() - (lastSaveTimes[bookId] || 0);
       if (timeSinceLastSave > 3000) {
-        showToast('↺ '+book.title+' updated from Firestore');
+        showToast('↺ ' + book.title + ' updated from Firestore');
       }
     });
-  } catch(e) {
+  } catch (e) {
     states[bookId] = defaultState(BOOKS[bookId]);
-    setSyncState('error','<b>Firestore</b> · connection failed');
+    setSyncState('error', '<b>Firestore</b> · connection failed');
   }
 }
 
@@ -1131,14 +1131,14 @@ async function toggleFirestoreMode() {
     if (isFirstMigration) {
       try {
         showToast('Migrating global settings to Firestore…', 'ok');
-        
+
         // TEMPORARILY enable global flag to perform the save to Firestore
         window._enableFirestoreGlobal();
-        
+
         // Mirror current memory state to Firestore
         await saveCatalogWithDeletions();
         await saveTaxCenter();
-        
+
         const prodCosts = {};
         const payLinks = {};
         Object.keys(BOOKS).forEach(bid => {
@@ -1205,7 +1205,7 @@ window.performFullMigration = async () => {
     "Are you absolutely sure you want to proceed?",
     { title: 'Mass migration', okLabel: 'Proceed', danger: true }
   ))) return;
-  
+
   if (prompt('Type "CONFIRM" to start massive data migration:') !== "CONFIRM") {
     return showToast('Migration aborted.', 'warn');
   }
@@ -1217,14 +1217,14 @@ window.performFullMigration = async () => {
   try {
     const success = await window._fbMassMigrate(BOOKS);
     if (!success) throw new Error("Migration utility returned false.");
-    
+
     // Globally enable Firestore
     window._enableFirestoreGlobal();
     // Enable for all books — persisted to Firestore so ALL devices pick this up
     Object.keys(BOOKS).forEach(id => {
       window._setBookFirestoreMode(id, true);
     });
-    
+
     showToast('✓ FULL MIGRATION SUCCESSFUL! RELOADING...', 'ok', 100000);
     setTimeout(() => location.reload(), 3000);
   } catch (e) {
@@ -1273,33 +1273,33 @@ function processRecurringExpenses() {
   if (isAuthor() || !TAX_CENTER.recurring || TAX_CENTER.recurring.length === 0) return;
   const now = new Date();
   const _currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  
+
   let modified = false;
   TAX_CENTER.recurring.forEach(sub => {
     const startDate = sub.startDate || today();
     const start = new Date(startDate);
     const startDay = start.getDate();
-    
+
     // Start checking from the month of startDate
     let checkDate = new Date(start.getFullYear(), start.getMonth(), 1);
     const todayMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
+
     while (checkDate <= todayMonth) {
       const mStr = checkDate.getFullYear() + '-' + String(checkDate.getMonth() + 1).padStart(2, '0');
-      
+
       // Inject if this month is after lastInjected (YYYY-MM comparison)
       if (mStr > (sub.lastInjected || '')) {
         const lastDayInMonth = new Date(checkDate.getFullYear(), checkDate.getMonth() + 1, 0).getDate();
         const injectionDay = Math.min(startDay, lastDayInMonth);
-        const injectionDateStr = checkDate.getFullYear() + '-' + 
-                                 String(checkDate.getMonth() + 1).padStart(2, '0') + '-' + 
-                                 String(injectionDay).padStart(2, '0');
+        const injectionDateStr = checkDate.getFullYear() + '-' +
+          String(checkDate.getMonth() + 1).padStart(2, '0') + '-' +
+          String(injectionDay).padStart(2, '0');
 
         if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
         const origCur = sub.currency || 'CAD';
         const fxRate = _fxRateCache[`${origCur}_CAD`] || 1;
         const baseAmount = (parseFloat(sub.amount) || 0) * fxRate;
-        
+
         TAX_CENTER.businessExpenses.unshift({
           id: Date.now() + Math.random(),
           desc: sub.desc + ' (Recurring)',
@@ -1312,16 +1312,16 @@ function processRecurringExpenses() {
           ref: 'Auto-Injected',
           receipt: ''
         });
-        
+
         sub.lastInjected = mStr;
         modified = true;
       }
-      
+
       // Advance by one month
       checkDate.setMonth(checkDate.getMonth() + 1);
     }
   });
-  
+
   if (modified) {
     saveTaxCenter();
     renderTaxCenter();
@@ -1332,40 +1332,40 @@ async function refreshDailyRates() {
   if (isAuthor()) return;
   const todayStr = today();
   if (TAX_CENTER.settings && TAX_CENTER.settings.lastRateSync === todayStr && TAX_CENTER.settings.rates) {
-      Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
-      return;
+    Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
+    return;
   }
-  
+
   try {
-      const res = await fetch(`https://open.er-api.com/v6/latest/CAD`);
-      if (res.ok) {
-          const json = await res.json();
-          const rates = {};
-          if (json.rates) {
-             Object.keys(json.rates).forEach(cur => {
-                 // Convert TO CAD rate (e.g. USD is 1.35 CAD)
-                 rates[`${cur}_CAD`] = 1 / json.rates[cur]; 
-             });
-             rates['CAD_CAD'] = 1;
-             Object.assign(_fxRateCache, rates);
-             if(!TAX_CENTER.settings) TAX_CENTER.settings = { baseCurrency: 'CAD', geminiKey: '' };
-             TAX_CENTER.settings.rates = rates;
-             TAX_CENTER.settings.lastRateSync = todayStr;
-             saveTaxCenter();
-          }
+    const res = await fetch(`https://open.er-api.com/v6/latest/CAD`);
+    if (res.ok) {
+      const json = await res.json();
+      const rates = {};
+      if (json.rates) {
+        Object.keys(json.rates).forEach(cur => {
+          // Convert TO CAD rate (e.g. USD is 1.35 CAD)
+          rates[`${cur}_CAD`] = 1 / json.rates[cur];
+        });
+        rates['CAD_CAD'] = 1;
+        Object.assign(_fxRateCache, rates);
+        if (!TAX_CENTER.settings) TAX_CENTER.settings = { baseCurrency: 'CAD', geminiKey: '' };
+        TAX_CENTER.settings.rates = rates;
+        TAX_CENTER.settings.lastRateSync = todayStr;
+        saveTaxCenter();
       }
-  } catch(e) {
-      console.warn("Failed to fetch daily rates", e);
+    }
+  } catch (e) {
+    console.warn("Failed to fetch daily rates", e);
   }
 }
 
 
 async function loadAllBooks() {
-  setSyncState('syncing','<b>Firestore</b> · loading all books.');
+  setSyncState('syncing', '<b>Firestore</b> · loading all books.');
   await Promise.all(Object.keys(BOOKS).map(id => loadBook(id)));
   await loadTaxCenter();
   startEmailInboxWatcher();
-  setSyncState('ok','<b>Firestore</b> · connected · live sync on');
+  setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
   updateSubheader(new Date().toLocaleTimeString());
   renderCurrent();
 }
@@ -1396,7 +1396,7 @@ function buildBookSwitcher() {
     item.dataset.id = it.id;
     item.style.cssText = `display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;font-family:'Syne',sans-serif;font-size:12px;font-weight:600;color:${isActive ? 'var(--gold3)' : 'rgba(255,255,255,.7)'};background:${isActive ? 'rgba(255,255,255,.04)' : ''};border-bottom:1px solid rgba(255,255,255,${idx === 0 ? '.06' : '.04'});transition:background .12s;`;
     item.onmouseover = () => { if (!item.classList.contains('active')) item.style.background = 'rgba(255,255,255,.06)'; };
-    item.onmouseout  = () => { if (!item.classList.contains('active')) item.style.background = ''; };
+    item.onmouseout = () => { if (!item.classList.contains('active')) item.style.background = ''; };
     item.onclick = (e) => { e.stopPropagation(); switchBook(it.id); closeBookDropdown(); };
     item.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:${it.accent};flex-shrink:0;"></div>${escapeHtml(it.title)}`;
     menu.appendChild(item);
@@ -1774,7 +1774,7 @@ async function seedMockTestData() {
     showToast('⚠ Test book not found in catalog', 'err');
     return;
   }
-  
+
   book.maxPrint = 15;
   book.listPrice = 17;
   book.currency = '€';
@@ -1793,7 +1793,7 @@ async function seedMockTestData() {
   // 2. Build mock state
   const testState = defaultState(book);
   testState.stock = 15; // Set starting stock on hand in database (we'll intentionally drift this from derived count of 9)
-  
+
   // Consignment stores
   testState.stores = [
     {
@@ -1959,7 +1959,7 @@ async function seedMockTestData() {
 
   // Recompute statistics
   recomputeAfters(states[testBookId], book);
-  
+
   // Intentionally set stock to 15 (instead of derived 9) to showcase stock drift banner!
   states[testBookId].stock = 15;
 
@@ -1979,14 +1979,14 @@ function switchBook(bookId) {
   activeBook = bookId;
   // Update custom dropdown label + dot
   const label = $('book-dropdown-label');
-  const dot   = $('book-dropdown-dot');
+  const dot = $('book-dropdown-dot');
   if (bookId === 'all') {
     if (label) label.textContent = 'All books';
-    if (dot)   dot.style.background = 'rgba(255,255,255,.25)';
+    if (dot) dot.style.background = 'rgba(255,255,255,.25)';
   } else {
     const book = BOOKS[bookId];
     if (label) label.textContent = book.title;
-    if (dot)   dot.style.background = book.accent;
+    if (dot) dot.style.background = book.accent;
   }
   // Highlight active item in menu
   document.querySelectorAll('.book-dd-item').forEach(el => {
@@ -2066,21 +2066,21 @@ function switchBook(bookId) {
 // channel row in the All-books analytics legend; cleared via the chip's ✕,
 // or automatically once the active book no longer matches.
 let histChanFilter = null; // { bookId, chan } | null
-window.drillToChannel = function(bookId, chan) {
+window.drillToChannel = function (bookId, chan) {
   histChanFilter = { bookId, chan };
   switchBook(bookId);
   switchTab('history');
 };
-window.clearHistChanFilter = function() { histChanFilter = null; renderHist(); };
+window.clearHistChanFilter = function () { histChanFilter = null; renderHist(); };
 
 // ── TABS
 // Friendly destination labels for the publisher app-shell top bar (#shell-page-title).
 const SHELL_TAB_LABELS = {
   dashboard: 'Dashboard', website: 'Website Orders', manual: 'Manual Entry',
-  consignment:'Consignment', history:'History', expenses:'Expenses',
-  pos:'Event POS', taxcenter:'Tax Centre', reconcile:'Payments', qrcodes:'QR Codes',
-  customers:'Customers', opencall:'Open Call', sheets:'Sheets', backups:'Backups',
-  financials:'Financials', myqr:'My QR Code', webanalytics:'Web Analytics', shipping:'Shipping',
+  consignment: 'Consignment', history: 'History', expenses: 'Expenses',
+  pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
+  customers: 'Customers', opencall: 'Open Call', sheets: 'Sheets', backups: 'Backups',
+  financials: 'Financials', myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
   bigcartel: 'Big Cartel'
 };
 function switchTab(name) {
@@ -2088,10 +2088,10 @@ function switchTab(name) {
   if (isAuthor() && (name === 'website' || name === 'backups' || name === 'financials' || name === 'taxcenter' || name === 'sheets' || name === 'qrcodes' || name === 'reconcile' || name === 'customers' || name === 'opencall' || name === 'webanalytics' || name === 'shipping' || name === 'bigcartel')) name = 'dashboard';
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
-  
+
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos, webanalytics, shipping
-  const names = ['dashboard','website','manual','consignment','history','expenses','opencall','reconcile','customers','financials','taxcenter','sheets','backups','qrcodes','myqr','pos','webanalytics','shipping'];
+  const names = ['dashboard', 'website', 'manual', 'consignment', 'history', 'expenses', 'opencall', 'reconcile', 'customers', 'financials', 'taxcenter', 'sheets', 'backups', 'qrcodes', 'myqr', 'pos', 'webanalytics', 'shipping'];
 
   // Selecting a destination closes any open header category menu (and the
   // sidebar footer account menu, if open).
@@ -2122,36 +2122,36 @@ function switchTab(name) {
   });
 
   names.forEach(n => {
-    const p = $('tab-'+n);
-    if(p) { p.classList.remove('active'); p.style.display='none'; }
+    const p = $('tab-' + n);
+    if (p) { p.classList.remove('active'); p.style.display = 'none'; }
   });
-  
+
   const overview = $('tab-all-overview');
   if (overview) {
     overview.classList.remove('active');
-    overview.style.display='none';
+    overview.style.display = 'none';
   }
 
-  const panel = $('tab-'+name);
-  if(panel){ panel.style.display='block'; panel.classList.add('active'); }
-  
-  if(name==='dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
-  if(name==='history') renderHist();
-  if(name==='manual') updateManualForm();
-  if(name==='consignment'){ renderStores(); renderLedger(); renderInvoices(); }
-  if(name==='expenses'){ renderExpenses(); updateExpenseForm(); }
-  if(name==='opencall') renderOpenCall();
-  if(name==='reconcile') renderReconcile();
-  if(name==='customers') renderCustomers();
-  if(name==='financials') renderFinancials();
-  if(name==='taxcenter') renderTaxCenter();
-  if(name==='sheets'){ loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
-  if(name==='qrcodes') renderAllQRCodes();
-  if(name==='myqr') renderAuthorQRPage();
-  if(name==='pos') { renderPOS(); renderPOSFxStatus(); }
-  if(name==='webanalytics') renderWebAnalytics();
-  if(name==='shipping') { initShippingTab(); }
-  if(name==='bigcartel') { renderBigCartelTab(); }
+  const panel = $('tab-' + name);
+  if (panel) { panel.style.display = 'block'; panel.classList.add('active'); }
+
+  if (name === 'dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
+  if (name === 'history') renderHist();
+  if (name === 'manual') updateManualForm();
+  if (name === 'consignment') { renderStores(); renderLedger(); renderInvoices(); }
+  if (name === 'expenses') { renderExpenses(); updateExpenseForm(); }
+  if (name === 'opencall') renderOpenCall();
+  if (name === 'reconcile') renderReconcile();
+  if (name === 'customers') renderCustomers();
+  if (name === 'financials') renderFinancials();
+  if (name === 'taxcenter') renderTaxCenter();
+  if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
+  if (name === 'qrcodes') renderAllQRCodes();
+  if (name === 'myqr') renderAuthorQRPage();
+  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); }
+  if (name === 'webanalytics') renderWebAnalytics();
+  if (name === 'shipping') { initShippingTab(); }
+  if (name === 'bigcartel') { renderBigCartelTab(); }
 }
 
 function updateHeader() {
@@ -2161,7 +2161,7 @@ function updateHeader() {
     Object.values(states).forEach(s => {
       totalStock += (s.stock || 0);
       totalRev += recognizedRevenueOf(s);
-      totalCon += s.stores.reduce((b,st)=>b+st.outstanding,0);
+      totalCon += s.stores.reduce((b, st) => b + st.outstanding, 0);
     });
     animateCountValue('h-stock', totalStock);
     animateCountValue('h-revenue', '~' + Math.round(totalRev).toLocaleString());
@@ -2171,7 +2171,7 @@ function updateHeader() {
     const cur = book.currency;
     animateCountValue('h-stock', s.stock);
     animateCountValue('h-revenue', fmt(recognizedRevenueOf(s), cur));
-    animateCountValue('h-consigned', s.stores.reduce((a,st)=>a+st.outstanding,0));
+    animateCountValue('h-consigned', s.stores.reduce((a, st) => a + st.outstanding, 0));
   }
 }
 
@@ -2195,7 +2195,7 @@ function updateAllOverview() {
     const recognizedRev = recognizedRevenueOf(s);
     const broken = cost > 0 && recognizedRev >= cost;
     const bePct = cost > 0 ? Math.min(100, recognizedRev / cost * 100) : null;
-    
+
     const beBar = (!isAuthor() && bePct !== null) ? `
       <div class="book-progress-wrapper" title="${broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, book.currency)} of ${fmt(cost, book.currency)} recovered (${bePct.toFixed(0)}%)`}">
         <div class="book-progress-header">
@@ -2209,7 +2209,7 @@ function updateAllOverview() {
         </div>
       </div>` : '';
 
-    const expTotal = (s.expenses||[]).reduce((a,e)=>a+(e.amount||0),0);
+    const expTotal = (s.expenses || []).reduce((a, e) => a + (e.amount || 0), 0);
 
     return `<div class="book-strip" style="--accent-color: ${book.accent}; --accent-color-bg: ${book.accentBg}; --accent-color-light: ${lightenColor(book.accent, 0.25)}; --accent-text: ${getContrastSafeText(book.accent)}; --accent-contrast: ${getContrastColor(book.accent)};">
       <div class="book-cover-3d" aria-hidden="true">
@@ -2270,29 +2270,31 @@ function updateAllOverview() {
   const byCur = {}; // currency -> { books:[...], channelTotals:{chan:{txns,units,revenue,books:Set}} }
   allBooksVisible.forEach(book => {
     const s = states[book.id] || defaultState(book);
-    const entries = Object.entries(s.chStats||{});
+    const entries = Object.entries(s.chStats || {});
     if (!entries.length) return;
     // Direct-to-artist sales bump a channel's txns/units but not its revenue until
     // forwarded; fold the held gross back in per channel so the channel revenue is
     // recognized consistently with the headline figures.
     const heldByChan = {};
-    (s.artistTransfers||[]).forEach(t => { heldByChan[t.chan] = (heldByChan[t.chan]||0) + (t.total||0); });
-    const revOf = (chan, cs) => (cs.revenue||0) + (heldByChan[chan]||0);
-    const bookRev = entries.reduce((a,[chan,cs])=>a+revOf(chan,cs),0);
+    (s.artistTransfers || []).forEach(t => { heldByChan[t.chan] = (heldByChan[t.chan] || 0) + (t.total || 0); });
+    const revOf = (chan, cs) => (cs.revenue || 0) + (heldByChan[chan] || 0);
+    const bookRev = entries.reduce((a, [chan, cs]) => a + revOf(chan, cs), 0);
     const cur = book.currency;
-    const cd = byCur[cur] = byCur[cur] || { books:[], channelTotals:{} };
-    const channels = entries.map(([chan,cs]) => {
-      const txns = cs.txns||0, units = cs.units||0, rev = revOf(chan,cs);
-      const t = cd.channelTotals[chan] = cd.channelTotals[chan] || {txns:0,units:0,revenue:0,books:new Set()};
+    const cd = byCur[cur] = byCur[cur] || { books: [], channelTotals: {} };
+    const channels = entries.map(([chan, cs]) => {
+      const txns = cs.txns || 0, units = cs.units || 0, rev = revOf(chan, cs);
+      const t = cd.channelTotals[chan] = cd.channelTotals[chan] || { txns: 0, units: 0, revenue: 0, books: new Set() };
       t.txns += txns; t.units += units; t.revenue += rev; t.books.add(book.title);
-      return { chan, txns, units, rev,
-        avgTxn: txns ? rev/txns : 0, revUnit: units ? rev/units : 0,
-        share: bookRev>0 ? rev/bookRev*100 : 0 };
-    }).sort((a,b)=>b.rev-a.rev);
-    const bestChan = (channels.length>1 && channels[0].rev>0) ? channels[0].chan : null;
-    cd.books.push({ id: book.id, title: book.title, accent: book.accent||'var(--gold2)', cur, total: bookRev, channels, bestChan });
+      return {
+        chan, txns, units, rev,
+        avgTxn: txns ? rev / txns : 0, revUnit: units ? rev / units : 0,
+        share: bookRev > 0 ? rev / bookRev * 100 : 0
+      };
+    }).sort((a, b) => b.rev - a.rev);
+    const bestChan = (channels.length > 1 && channels[0].rev > 0) ? channels[0].chan : null;
+    cd.books.push({ id: book.id, title: book.title, accent: book.accent || 'var(--gold2)', cur, total: bookRev, channels, bestChan });
   });
-  Object.values(byCur).forEach(cd => cd.books.sort((a,b)=>b.total-a.total));
+  Object.values(byCur).forEach(cd => cd.books.sort((a, b) => b.total - a.total));
   window._allChData = byCur;
   const curKeys = Object.keys(byCur);
   if (!curKeys.includes(window._allChCur)) window._allChCur = curKeys[0] || null;
@@ -2311,7 +2313,7 @@ function updateAllOverview() {
       conTotals.sent += st.sent || 0;
       conTotals.sold += st.sold || 0;
       conTotals.outstanding += st.outstanding || 0;
-      conRows.push(`<tr class="${isActive ? 'is-active' : 'is-settled'}"><td style="font-weight:700;">${escapeHtml(book.title)}</td><td><span class="store-name-cell">${escapeHtml(st.name)}</span></td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r outstanding-cell">${st.outstanding}</td><td>${isActive?'<span class="pill amber">● Active</span>':'<span class="pill gray">✓ Settled</span>'}</td></tr>`);
+      conRows.push(`<tr class="${isActive ? 'is-active' : 'is-settled'}"><td style="font-weight:700;">${escapeHtml(book.title)}</td><td><span class="store-name-cell">${escapeHtml(st.name)}</span></td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r outstanding-cell">${st.outstanding}</td><td>${isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td></tr>`);
     });
   });
   const sellThrough = conTotals.sent ? Math.round((conTotals.sold / conTotals.sent) * 100) : 0;
@@ -2367,14 +2369,14 @@ function renderCustomersStat(allCustomers) {
 // chart, the stacked book bars and the legend dots. Unknown channels get a
 // stable colour hashed from a small fallback palette.
 const CHANNEL_COLORS = {
-  'in person':'#e5a93f', 'book fair':'#2f8f8f', 'website':'#3a7cc8',
-  'gratuity':'#b8b0a5', 'consignment':'#8a5cc8', 'direct':'#c8693a', '':'#c8693a',
+  'in person': '#e5a93f', 'book fair': '#2f8f8f', 'website': '#3a7cc8',
+  'gratuity': '#b8b0a5', 'consignment': '#8a5cc8', 'direct': '#c8693a', '': '#c8693a',
 };
-const _CHAN_FALLBACK = ['#6b8f2f','#c84a6b','#3a6ec8','#a8852f','#5c7a8a'];
+const _CHAN_FALLBACK = ['#6b8f2f', '#c84a6b', '#3a6ec8', '#a8852f', '#5c7a8a'];
 function channelColor(chan) {
-  const k = (chan||'').toLowerCase().trim();
+  const k = (chan || '').toLowerCase().trim();
   if (CHANNEL_COLORS[k] != null) return CHANNEL_COLORS[k];
-  let h = 0; for (let i=0;i<k.length;i++) h = (h*31 + k.charCodeAt(i)) >>> 0;
+  let h = 0; for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
   return _CHAN_FALLBACK[h % _CHAN_FALLBACK.length];
 }
 const chanLabel = (chan) => (chan && chan.trim()) ? chan : 'Direct';
@@ -2396,13 +2398,13 @@ function renderChannelAnalytics() {
   let toggle = '';
   if (curKeys.length > 1) {
     toggle = `<div class="ch-cur-toggle">` + curKeys.map(c => {
-      const tot = (byCur[c].books||[]).reduce((a,b)=>a+b.total,0);
-      return `<button class="ch-cur-btn${c===cur?' active':''}" onclick="selectAllChCurrency('${c.replace(/'/g,"\\'")}')">${escapeHtml(c)} <span>${fmt(tot,c)}</span></button>`;
+      const tot = (byCur[c].books || []).reduce((a, b) => a + b.total, 0);
+      return `<button class="ch-cur-btn${c === cur ? ' active' : ''}" onclick="selectAllChCurrency('${c.replace(/'/g, "\\'")}')">${escapeHtml(c)} <span>${fmt(tot, c)}</span></button>`;
     }).join('') + `</div>`;
   }
 
   // Channel performance — comparative horizontal bar chart
-  const chans = Object.entries(cd.channelTotals).map(([chan,t])=>({chan, ...t})).sort((a,b)=>b.revenue-a.revenue);
+  const chans = Object.entries(cd.channelTotals).map(([chan, t]) => ({ chan, ...t })).sort((a, b) => b.revenue - a.revenue);
   // ⚡ Bolt Optimization: Combine multiple channel aggregate passes into a single loop instead of 4 separate reduces
   let grandRev = 0, grandTxn = 0, grandU = 0, maxRev = 0;
   for (let i = 0; i < chans.length; i++) {
@@ -2420,16 +2422,16 @@ function renderChannelAnalytics() {
   const topShare = top && grandRev > 0 ? top.revenue / grandRev * 100 : 0;
   const heroColor = top ? channelColor(top.chan) : 'var(--gold2)';
   const chartRows = chans.map((x, idx) => {
-    const share = grandRev>0 ? x.revenue/grandRev*100 : 0;
+    const share = grandRev > 0 ? x.revenue / grandRev * 100 : 0;
     const col = channelColor(x.chan);
-    const avgTxn = x.txns ? x.revenue/x.txns : 0;
-    const revUnit = x.units ? x.revenue/x.units : 0;
+    const avgTxn = x.txns ? x.revenue / x.txns : 0;
+    const revUnit = x.units ? x.revenue / x.units : 0;
     return `<div class="ch-bar-row" style="--ch:${col}">
       <div class="ch-rank">${idx + 1}</div>
       <div class="ch-bar-main">
-        <div class="ch-bar-head"><span class="ch-dot" style="background:${col}"></span><span class="ch-bar-name">${escapeHtml(chanLabel(x.chan))}</span><span class="ch-bar-val">${fmt(x.revenue,cur)} <em>${share.toFixed(0)}%</em></span></div>
-        <div class="ch-bar-track" role="img" aria-label="${escapeHtml(chanLabel(x.chan))} generated ${share.toFixed(0)}% of ${escapeHtml(cur)} revenue"><div class="ch-bar-fill" style="width:${x.revenue/maxRev*100}%;background:linear-gradient(90deg, ${lightenColor(col, 0.25)}, ${col});"></div></div>
-        <div class="ch-bar-meta"><span>${x.txns} txn</span><span>${x.units} units</span>${x.txns?`<span>${fmt(avgTxn,cur)}/txn</span>`:''}${x.units?`<span>${fmt(revUnit,cur)}/unit</span>`:''}</div>
+        <div class="ch-bar-head"><span class="ch-dot" style="background:${col}"></span><span class="ch-bar-name">${escapeHtml(chanLabel(x.chan))}</span><span class="ch-bar-val">${fmt(x.revenue, cur)} <em>${share.toFixed(0)}%</em></span></div>
+        <div class="ch-bar-track" role="img" aria-label="${escapeHtml(chanLabel(x.chan))} generated ${share.toFixed(0)}% of ${escapeHtml(cur)} revenue"><div class="ch-bar-fill" style="width:${x.revenue / maxRev * 100}%;background:linear-gradient(90deg, ${lightenColor(col, 0.25)}, ${col});"></div></div>
+        <div class="ch-bar-meta"><span>${x.txns} txn</span><span>${x.units} units</span>${x.txns ? `<span>${fmt(avgTxn, cur)}/txn</span>` : ''}${x.units ? `<span>${fmt(revUnit, cur)}/unit</span>` : ''}</div>
       </div>
     </div>`;
   }).join('');
@@ -2438,14 +2440,14 @@ function renderChannelAnalytics() {
       <div>
         <div class="ch-eyebrow">Channel performance</div>
         <div class="ch-hero-title">${top ? `${escapeHtml(chanLabel(top.chan))} leads at ${topShare.toFixed(0)}%` : 'No leading channel yet'}</div>
-        <div class="ch-hero-sub">${fmt(grandRev,cur)} total · ${grandTxn} transactions · ${grandU} units</div>
+        <div class="ch-hero-sub">${fmt(grandRev, cur)} total · ${grandTxn} transactions · ${grandU} units</div>
       </div>
-      <div class="ch-hero-badge">${top ? `Top channel<br><strong>${fmt(top.revenue,cur)}</strong>` : 'No sales'}</div>
+      <div class="ch-hero-badge">${top ? `Top channel<br><strong>${fmt(top.revenue, cur)}</strong>` : 'No sales'}</div>
     </div>
     <div class="ch-metrics">
-      <div class="ch-metric"><span>Total revenue</span><strong>${fmt(grandRev,cur)}</strong></div>
-      <div class="ch-metric"><span>Avg / txn</span><strong>${fmt(avgOrder,cur)}</strong></div>
-      <div class="ch-metric"><span>Avg / unit</span><strong>${fmt(avgUnit,cur)}</strong></div>
+      <div class="ch-metric"><span>Total revenue</span><strong>${fmt(grandRev, cur)}</strong></div>
+      <div class="ch-metric"><span>Avg / txn</span><strong>${fmt(avgOrder, cur)}</strong></div>
+      <div class="ch-metric"><span>Avg / unit</span><strong>${fmt(avgUnit, cur)}</strong></div>
       <div class="ch-metric"><span>Active channels</span><strong>${activeChans}/${chans.length}</strong></div>
     </div>
     <div class="ch-bars">${chartRows}</div>
@@ -2453,26 +2455,26 @@ function renderChannelAnalytics() {
 
   // Per-book cards — one stacked channel-mix bar per book + colour-keyed legend
   const cards = cd.books.map(b => {
-    const segs = b.channels.filter(c=>c.rev>0).map(c =>
-      `<div class="ch-seg" style="width:${b.total>0?c.rev/b.total*100:0}%;background:${channelColor(c.chan)}" title="${escapeHtml(chanLabel(c.chan))}: ${fmt(c.rev,b.cur)}"></div>`
+    const segs = b.channels.filter(c => c.rev > 0).map(c =>
+      `<div class="ch-seg" style="width:${b.total > 0 ? c.rev / b.total * 100 : 0}%;background:${channelColor(c.chan)}" title="${escapeHtml(chanLabel(c.chan))}: ${fmt(c.rev, b.cur)}"></div>`
     ).join('') || `<div class="ch-seg" style="width:100%;background:var(--cream3)"></div>`;
     const legend = b.channels.map(c => {
       const top = c.chan === b.bestChan;
       // Rows with real transactions drill into that book + channel's order history.
       const clickable = c.txns > 0;
-      const jsChan = (c.chan||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const jsChan = (c.chan || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       const tap = clickable
         ? ` class="ch-leg-row ch-leg-tap" title="View ${escapeHtml(chanLabel(c.chan))} orders" onclick="${escapeHtml(`drillToChannel('${b.id}','${jsChan}')`)}"`
         : ` class="ch-leg-row"`;
       return `<div${tap}>
         <span class="ch-dot" style="background:${channelColor(c.chan)}"></span>
-        <span class="ch-leg-name">${escapeHtml(chanLabel(c.chan))}${top?' <span class="pill gold ch-top">TOP</span>':''}</span>
-        <span class="ch-leg-val">${fmt(c.rev,b.cur)} <em>${c.share.toFixed(0)}%</em></span>
-        <span class="ch-leg-meta">${c.txns} txn · ${c.units} u${clickable?' <span class="ch-leg-go">›</span>':''}</span>
+        <span class="ch-leg-name">${escapeHtml(chanLabel(c.chan))}${top ? ' <span class="pill gold ch-top">TOP</span>' : ''}</span>
+        <span class="ch-leg-val">${fmt(c.rev, b.cur)} <em>${c.share.toFixed(0)}%</em></span>
+        <span class="ch-leg-meta">${c.txns} txn · ${c.units} u${clickable ? ' <span class="ch-leg-go">›</span>' : ''}</span>
       </div>`;
     }).join('');
     return `<div class="ch-book-card">
-      <div class="ch-book-head"><span class="ch-book-title">${escapeHtml(b.title)}</span><span class="ch-book-total">${fmt(b.total,b.cur)}</span></div>
+      <div class="ch-book-head"><span class="ch-book-title">${escapeHtml(b.title)}</span><span class="ch-book-total">${fmt(b.total, b.cur)}</span></div>
       <div class="ch-stack">${segs}</div>
       <div class="ch-legend">${legend}</div>
     </div>`;
@@ -2480,7 +2482,7 @@ function renderChannelAnalytics() {
 
   host.innerHTML = toggle + chart + `<div class="ch-book-grid">${cards}</div>`;
 }
-window.selectAllChCurrency = function(c) { window._allChCur = c; renderChannelAnalytics(); };
+window.selectAllChCurrency = function (c) { window._allChCur = c; renderChannelAnalytics(); };
 
 // ── BOOK CONTEXT BANNERS
 function renderGlobalPendingAlert() {
@@ -2543,7 +2545,7 @@ function renderGlobalPendingAlert() {
             <div style="display:flex; justify-content:space-between; align-items:center; background:white; padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
               <div>
                 <strong style="color:var(--text2);">${escapeHtml(b.title)}</strong>
-                <span style="font-size:12px; color:var(--text3); margin-left:8px;">${b.waiting} contributor${b.waiting>1?'s':''} awaiting next step</span>
+                <span style="font-size:12px; color:var(--text3); margin-left:8px;">${b.waiting} contributor${b.waiting > 1 ? 's' : ''} awaiting next step</span>
               </div>
               <button class="btn sm gold" onclick="switchBook('${b.bookId}'); setTimeout(()=>switchTab('opencall'), 50);">Review →</button>
             </div>
@@ -2564,9 +2566,9 @@ function renderGlobalPendingAlert() {
 function updateContextBanners() {
   if (!activeBook || activeBook === 'all') return;
   const book = getBook();
-  ['dash','web','man','con','hist','exp'].forEach(sfx => {
-    const t = $('bc-title-'+sfx);
-    if(t) t.textContent = book.title;
+  ['dash', 'web', 'man', 'con', 'hist', 'exp'].forEach(sfx => {
+    const t = $('bc-title-' + sfx);
+    if (t) t.textContent = book.title;
   });
   const dashMeta = $('bc-meta-dash');
   if (dashMeta) dashMeta.textContent = book.author || '—';
@@ -2600,12 +2602,12 @@ function updatePublisherActionBanner() {
       try {
         const raw = (typeof pbSales[k].data === 'string') ? JSON.parse(pbSales[k].data) : pbSales[k].data;
         if (isDirectToArtistSale(raw)) artistPaymentCount++;
-      } catch(_) {}
+      } catch (_) { }
     });
   });
 
   const total = salesCount + expCount;
-  const signature = `${salesCount}|${expCount}|${artistPaymentCount}|${booksWithPending.map(b=>b.bookId).join(',')}`;
+  const signature = `${salesCount}|${expCount}|${artistPaymentCount}|${booksWithPending.map(b => b.bookId).join(',')}`;
 
   if (total === 0) {
     banner.style.display = 'none';
@@ -2619,14 +2621,14 @@ function updatePublisherActionBanner() {
   const actEl = document.getElementById('pab-actions');
 
   const parts = [];
-  if (artistPaymentCount > 0) parts.push(`${artistPaymentCount} artist payment${artistPaymentCount>1?'s':''} to approve`);
-  if (salesCount - artistPaymentCount > 0) parts.push(`${salesCount - artistPaymentCount} sale${(salesCount-artistPaymentCount)>1?'s':''}`);
-  if (expCount > 0) parts.push(`${expCount} expense${expCount>1?'s':''}`);
+  if (artistPaymentCount > 0) parts.push(`${artistPaymentCount} artist payment${artistPaymentCount > 1 ? 's' : ''} to approve`);
+  if (salesCount - artistPaymentCount > 0) parts.push(`${salesCount - artistPaymentCount} sale${(salesCount - artistPaymentCount) > 1 ? 's' : ''}`);
+  if (expCount > 0) parts.push(`${expCount} expense${expCount > 1 ? 's' : ''}`);
 
   titleEl.textContent = artistPaymentCount > 0
-    ? `Action required · ${artistPaymentCount} artist payment${artistPaymentCount>1?'s':''} awaiting approval`
-    : `Action required · ${total} pending submission${total>1?'s':''}`;
-  subEl.textContent = parts.join(' · ') + ` — across ${booksWithPending.length} book${booksWithPending.length>1?'s':''}.`;
+    ? `Action required · ${artistPaymentCount} artist payment${artistPaymentCount > 1 ? 's' : ''} awaiting approval`
+    : `Action required · ${total} pending submission${total > 1 ? 's' : ''}`;
+  subEl.textContent = parts.join(' · ') + ` — across ${booksWithPending.length} book${booksWithPending.length > 1 ? 's' : ''}.`;
 
   // Build action buttons: jump straight to the first pending book, plus per-section buttons if a single book has pending
   actEl.innerHTML = '';
@@ -2635,22 +2637,22 @@ function updatePublisherActionBanner() {
     if (sc > 0) {
       const b = document.createElement('button');
       b.className = 'pab-btn'; b.type = 'button';
-      b.textContent = `Review ${sc} sale${sc>1?'s':''} →`;
-      b.onclick = () => { try { switchBook(bookId); } catch(_) {} setTimeout(()=>switchTab('history'), 50); };
+      b.textContent = `Review ${sc} sale${sc > 1 ? 's' : ''} →`;
+      b.onclick = () => { try { switchBook(bookId); } catch (_) { } setTimeout(() => switchTab('history'), 50); };
       actEl.appendChild(b);
     }
     if (ec > 0) {
       const b = document.createElement('button');
       b.className = 'pab-btn'; b.type = 'button';
-      b.textContent = `Review ${ec} expense${ec>1?'s':''} →`;
-      b.onclick = () => { try { switchBook(bookId); } catch(_) {} setTimeout(()=>switchTab('expenses'), 50); };
+      b.textContent = `Review ${ec} expense${ec > 1 ? 's' : ''} →`;
+      b.onclick = () => { try { switchBook(bookId); } catch (_) { } setTimeout(() => switchTab('expenses'), 50); };
       actEl.appendChild(b);
     }
   } else {
     const b = document.createElement('button');
     b.className = 'pab-btn'; b.type = 'button';
     b.textContent = 'Review all →';
-    b.onclick = () => { try { switchBook('all'); } catch(_) {} };
+    b.onclick = () => { try { switchBook('all'); } catch (_) { } };
     actEl.appendChild(b);
   }
 
@@ -2744,25 +2746,25 @@ function updateDash() {
   // "Email artist for payment" button: publisher-only, needs an artist email on
   // file and a connected Sheet/Web App to actually send through.
   const emailArtistBtn = $('d-email-artist-btn');
-  if(emailArtistBtn){
-    const canEmail = !isAuthor() && !!(book.authorEmail||'').trim() && !!sheetsUrl;
+  if (emailArtistBtn) {
+    const canEmail = !isAuthor() && !!(book.authorEmail || '').trim() && !!sheetsUrl;
     emailArtistBtn.style.display = canEmail ? '' : 'none';
   }
   // Approval-emails status: publisher-only at-a-glance check that artist
   // submissions can actually reach you. "On" needs a shared notify endpoint
   // (set when the Sheet was connected); "off" means submissions sync silently.
   const notifyStatus = $('d-notify-status');
-  if(notifyStatus){
-    if(isAuthor()){
-      notifyStatus.style.display='none';
-    }else{
+  if (notifyStatus) {
+    if (isAuthor()) {
+      notifyStatus.style.display = 'none';
+    } else {
       const on = !!(sheetsUrl || notifyUrl);
-      notifyStatus.style.display='';
+      notifyStatus.style.display = '';
       notifyStatus.textContent = on ? '✓ Approval emails on' : '⚠ Approval emails off';
       notifyStatus.className = 'pill ' + (on ? 'green' : 'amber');
     }
   }
-  $('d-book-author').textContent = (book.author||'—') + ' · List price '+cur+book.listPrice;
+  $('d-book-author').textContent = (book.author || '—') + ' · List price ' + cur + book.listPrice;
   $('d-book-isbn').textContent = book.isbn || '—';
   const cost = book.productionCost || 0;
   const printed = book.maxPrint || 0;
@@ -2771,8 +2773,8 @@ function updateDash() {
     stockSubText += ' · ' + fmt(cost / printed, cur) + '/book';
   }
   $('d-stock-sub').textContent = stockSubText;
-  $('d-thresh-sub').textContent = 'threshold: '+book.threshold+' units';
-  $('d-thresh-label').textContent = 'Alert at '+book.threshold+' units';
+  $('d-thresh-sub').textContent = 'threshold: ' + book.threshold + ' units';
+  $('d-thresh-label').textContent = 'Alert at ' + book.threshold + ' units';
   animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
   // Surface on-hand drift: if the stored count disagrees with what the records
   // imply (a sale/return/consignment that didn't update inventory, or an
@@ -2797,14 +2799,14 @@ function updateDash() {
   const recalcWrap = $('d-recalc-onhand-wrap');
   if (recalcWrap) recalcWrap.style.display = isAuthor() ? 'none' : '';
   animateCountValue('d-sold', s.sold);
-  const heldGross=heldGrossOf(s);
-  const recognizedRev=recognizedRevenueOf(s);
-  animateCountValue('d-revenue', fmt(recognizedRev,cur)); animateCountValue('h-revenue', fmt(recognizedRev,cur));
-  const revSub=$('d-revenue-sub');
-  if(revSub) revSub.textContent = heldGross>0.01
-    ? `${fmt(s.revenue,cur)} collected · ${fmt(heldGross,cur)} held by artist`
+  const heldGross = heldGrossOf(s);
+  const recognizedRev = recognizedRevenueOf(s);
+  animateCountValue('d-revenue', fmt(recognizedRev, cur)); animateCountValue('h-revenue', fmt(recognizedRev, cur));
+  const revSub = $('d-revenue-sub');
+  if (revSub) revSub.textContent = heldGross > 0.01
+    ? `${fmt(s.revenue, cur)} collected · ${fmt(heldGross, cur)} held by artist`
     : 'total collected';
-  $('d-avg-sub').textContent='avg '+(s.sold>0?fmt(recognizedRev/s.sold,cur):'—');
+  $('d-avg-sub').textContent = 'avg ' + (s.sold > 0 ? fmt(recognizedRev / s.sold, cur) : '—');
   // ⚡ Bolt Optimization: Calculate consigned and owed in a single loop
   let consigned = 0, owed = 0;
   for (let i = 0; i < s.stores.length; i++) {
@@ -2812,10 +2814,10 @@ function updateDash() {
     owed += s.stores[i].amountOwed || 0;
   }
   animateCountValue('d-consigned', consigned); animateCountValue('h-consigned', consigned);
-  $('d-stores').textContent=s.stores.length;
-  animateCountValue('d-owed', fmt(owed,cur)); $('d-owed').className='kpi-value'+(owed>0?' warn':'');
-  const pendingTransfers=[...(s.artistTransfers||[])];
-  
+  $('d-stores').textContent = s.stores.length;
+  animateCountValue('d-owed', fmt(owed, cur)); $('d-owed').className = 'kpi-value' + (owed > 0 ? ' warn' : '');
+  const pendingTransfers = [...(s.artistTransfers || [])];
+
   // Merge pending sales where they collected payment
   const pbSales2 = window.authorSubmissions[activeBook]?.sales || {};
   Object.keys(pbSales2).forEach(k => {
@@ -2828,38 +2830,38 @@ function updateDash() {
     }
   });
 
-  const pendingTotal=pendingTransfers.reduce((a,t)=>a+t.total,0);
-  animateCountValue('d-artist-pending', pendingTransfers.length>0?fmt(pendingTotal,cur):'—');
-  $('d-artist-pending').className='kpi-value'+(pendingTransfers.length>0?' warn':'');
-  $('d-artist-pending-sub').textContent=pendingTransfers.length>0?`${pendingTransfers.length} order${pendingTransfers.length>1?'s':''} (incl. pending) awaiting forwarding`:'no pending transfers';
+  const pendingTotal = pendingTransfers.reduce((a, t) => a + t.total, 0);
+  animateCountValue('d-artist-pending', pendingTransfers.length > 0 ? fmt(pendingTotal, cur) : '—');
+  $('d-artist-pending').className = 'kpi-value' + (pendingTransfers.length > 0 ? ' warn' : '');
+  $('d-artist-pending-sub').textContent = pendingTransfers.length > 0 ? `${pendingTransfers.length} order${pendingTransfers.length > 1 ? 's' : ''} (incl. pending) awaiting forwarding` : 'no pending transfers';
   renderArtistTransfers();
-  $('d-low').textContent=s.stock<=book.threshold?'⚠ Low':'OK';
-  $('d-low').className='kpi-value'+(s.stock<=book.threshold?' danger':'');
-  const pct=Math.max(0,s.stock/book.maxPrint*100);
-  $('d-bar').style.width=pct+'%';
-  $('d-bar').style.background=s.stock<=book.threshold?'#f87171':book.accent;
-  $('d-bar-label').textContent=s.stock+' / '+book.maxPrint+' units on hand';
-  const al=$('d-alert');
-  if(s.stock<=book.threshold){al.className='stock-alert danger';al.textContent='⚠ Below threshold ('+book.threshold+') — reorder now.';}
-  else if(s.stock<=book.threshold*2){al.className='stock-alert warn';al.textContent='Getting low — '+s.stock+' units remaining.';}
-  else{al.className='stock-alert ok';al.textContent='Stock is healthy.';}
-  const ckeys=Object.keys(s.chStats||{});
-  $('ch-body').innerHTML=ckeys.length?ckeys.map(k=>{const cs=s.chStats[k];return`<tr><td style="font-weight:600;">${escapeHtml(chanLabel(k))}</td><td class="r">${cs.txns}</td><td class="r">${cs.units}</td><td class="r">${fmt(cs.revenue,cur)}</td></tr>`;}).join(''):'<tr><td colspan="4"><div class="empty-state" style="padding:1rem;">No sales yet.</div></td></tr>';
-  $('dash-con-body').innerHTML=s.stores.length?s.stores.map(st=>`<tr><td style="font-weight:600;">${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding>0?'<span class="pill amber">Active</span>':'<span class="pill gray">Settled</span>'}</td></tr>`).join(''):'<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
+  $('d-low').textContent = s.stock <= book.threshold ? '⚠ Low' : 'OK';
+  $('d-low').className = 'kpi-value' + (s.stock <= book.threshold ? ' danger' : '');
+  const pct = Math.max(0, s.stock / book.maxPrint * 100);
+  $('d-bar').style.width = pct + '%';
+  $('d-bar').style.background = s.stock <= book.threshold ? '#f87171' : book.accent;
+  $('d-bar-label').textContent = s.stock + ' / ' + book.maxPrint + ' units on hand';
+  const al = $('d-alert');
+  if (s.stock <= book.threshold) { al.className = 'stock-alert danger'; al.textContent = '⚠ Below threshold (' + book.threshold + ') — reorder now.'; }
+  else if (s.stock <= book.threshold * 2) { al.className = 'stock-alert warn'; al.textContent = 'Getting low — ' + s.stock + ' units remaining.'; }
+  else { al.className = 'stock-alert ok'; al.textContent = 'Stock is healthy.'; }
+  const ckeys = Object.keys(s.chStats || {});
+  $('ch-body').innerHTML = ckeys.length ? ckeys.map(k => { const cs = s.chStats[k]; return `<tr><td style="font-weight:600;">${escapeHtml(chanLabel(k))}</td><td class="r">${cs.txns}</td><td class="r">${cs.units}</td><td class="r">${fmt(cs.revenue, cur)}</td></tr>`; }).join('') : '<tr><td colspan="4"><div class="empty-state" style="padding:1rem;">No sales yet.</div></td></tr>';
+  $('dash-con-body').innerHTML = s.stores.length ? s.stores.map(st => `<tr><td style="font-weight:600;">${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding > 0 ? '<span class="pill amber">Active</span>' : '<span class="pill gray">Settled</span>'}</td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
   // Show danger zone only for publisher — explicitly hide for authors so it
   // doesn't linger when switching from publisher into an author view.
   if (!isAuthor()) {
-    $('danger-zone-sect').style.display='';
-    $('danger-zone-block').style.display='flex';
+    $('danger-zone-sect').style.display = '';
+    $('danger-zone-block').style.display = 'flex';
   } else {
-    $('danger-zone-sect').style.display='none';
-    $('danger-zone-block').style.display='none';
+    $('danger-zone-sect').style.display = 'none';
+    $('danger-zone-block').style.display = 'none';
   }
   // ── EXPENSES SUMMARY (publisher only)
-  if(!isAuthor()){
-   
+  if (!isAuthor()) {
+
     renderPendingExpenses();
-    const expenses = s.expenses||[];
+    const expenses = s.expenses || [];
     const unreceivedExp = [];
     let expTotal = 0;
     for (const e of expenses) {
@@ -2870,75 +2872,75 @@ function updateDash() {
     }
     const expKpi = $('d-expenses-kpi');
     const expSect = $('d-expenses-sect');
-    if(unreceivedExp.length){
+    if (unreceivedExp.length) {
       // KPI tile
-      if(expKpi){ expKpi.style.display=''; }
-      animateCountValue('d-expenses-owed', fmt(expTotal,cur));
-      $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length!==1?'s':''} outstanding`;
+      if (expKpi) { expKpi.style.display = ''; }
+      animateCountValue('d-expenses-owed', fmt(expTotal, cur));
+      $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length !== 1 ? 's' : ''} outstanding`;
       // Detail table — dark banner style
-      if(expSect){
-        expSect.style.display='';
-        animateCountValue('d-exp-total', fmt(expTotal,cur));
-        $('d-exp-count').textContent = `${expenses.length} expense${expenses.length!==1?'s':''} logged`;
-        $('d-exp-body').innerHTML = unreceivedExp.map(e=>`
+      if (expSect) {
+        expSect.style.display = '';
+        animateCountValue('d-exp-total', fmt(expTotal, cur));
+        $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
+        $('d-exp-body').innerHTML = unreceivedExp.map(e => `
           <tr>
             <td style="padding:6px 0;color:rgba(255,255,255,.35);white-space:nowrap;">${fmtD(e.date)}</td>
             <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
             <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
-            <td style="padding:6px 8px;color:rgba(255,255,255,.25);">${escapeHtml(e.ref)||'—'}</td>
-            <td style="padding:6px 0;text-align:right;color:#f87171;font-weight:500;">${fmt(e.amount,cur)}</td>
+            <td style="padding:6px 8px;color:rgba(255,255,255,.25);">${escapeHtml(e.ref) || '—'}</td>
+            <td style="padding:6px 0;text-align:right;color:#f87171;font-weight:500;">${fmt(e.amount, cur)}</td>
           </tr>`).join('');
         // Payment button
-        const artistLink = (s.artistPaymentLink||'').trim();
+        const artistLink = (s.artistPaymentLink || '').trim();
         const payBtn = $('d-exp-pay-btn');
         const payHint = $('d-exp-pay-hint');
-        if(payBtn){
-          if(artistLink){
-            payBtn.href = artistLink.startsWith('http') ? artistLink : 'https://'+artistLink;
-            payBtn.style.display='';
-            if(payHint) payHint.textContent='Opens payment link in a new tab';
+        if (payBtn) {
+          if (artistLink) {
+            payBtn.href = artistLink.startsWith('http') ? artistLink : 'https://' + artistLink;
+            payBtn.style.display = '';
+            if (payHint) payHint.textContent = 'Opens payment link in a new tab';
           } else {
-            payBtn.style.display='none';
-            if(payHint) payHint.textContent='Artist has not set a payment link yet';
+            payBtn.style.display = 'none';
+            if (payHint) payHint.textContent = 'Artist has not set a payment link yet';
           }
         }
       }
     } else {
-      if(expKpi) expKpi.style.display='none';
-      if(expSect) expSect.style.display='none';
+      if (expKpi) expKpi.style.display = 'none';
+      if (expSect) expSect.style.display = 'none';
     }
   }
 
   // ── BREAK-EVEN (publisher only)
-  if(!isAuthor() && cost > 0){
-    $('d-breakeven-kpi').style.display='';
-    $('d-breakeven-block').style.display='';
+  if (!isAuthor() && cost > 0) {
+    $('d-breakeven-kpi').style.display = '';
+    $('d-breakeven-block').style.display = '';
     const pctBe = Math.min(100, recognizedRev / cost * 100);
     const remaining = Math.max(0, cost - recognizedRev);
     const broken = recognizedRev >= cost;
-    $('d-breakeven-val').textContent = broken ? '✓ Done' : fmt(remaining,cur)+' to go';
+    $('d-breakeven-val').textContent = broken ? '✓ Done' : fmt(remaining, cur) + ' to go';
     $('d-breakeven-val').className = 'kpi-value' + (broken ? ' gold' : '');
-    $('d-breakeven-sub').textContent = `of ${fmt(cost,cur)} production cost`;
+    $('d-breakeven-sub').textContent = `of ${fmt(cost, cur)} production cost`;
     $('d-be-title').textContent = broken ? 'Project has broken even' : 'Not yet broken even';
-    $('d-be-sub').textContent = `Production cost: ${fmt(cost,cur)} · Revenue to date: ${fmt(recognizedRev,cur)}`;
-    $('d-be-bar').style.width = pctBe+'%';
-    $('d-be-bar').style.background = broken ? '#4ade80' : pctBe>=70 ? '#fb923c' : (book.accent || 'var(--gold2)');
-    $('d-be-bar-label').textContent = `${fmt(recognizedRev,cur)} recovered (${pctBe.toFixed(1)}%)`;
-    $('d-be-bar-right').textContent = broken ? 'Break-even reached ✓' : `${fmt(remaining,cur)} remaining`;
+    $('d-be-sub').textContent = `Production cost: ${fmt(cost, cur)} · Revenue to date: ${fmt(recognizedRev, cur)}`;
+    $('d-be-bar').style.width = pctBe + '%';
+    $('d-be-bar').style.background = broken ? '#4ade80' : pctBe >= 70 ? '#fb923c' : (book.accent || 'var(--gold2)');
+    $('d-be-bar-label').textContent = `${fmt(recognizedRev, cur)} recovered (${pctBe.toFixed(1)}%)`;
+    $('d-be-bar-right').textContent = broken ? 'Break-even reached ✓' : `${fmt(remaining, cur)} remaining`;
     const trackEl = $('d-be-bar-track');
     if (trackEl) {
-      trackEl.title = broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev,cur)} of ${fmt(cost,cur)} recovered (${pctBe.toFixed(1)}%)`;
+      trackEl.title = broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, cur)} of ${fmt(cost, cur)} recovered (${pctBe.toFixed(1)}%)`;
     }
-    const al=$('d-be-alert');
-    if(broken){
-      al.className='stock-alert ok';
-      al.textContent='✓ Production costs fully recovered — everything earned from here is profit.';
+    const al = $('d-be-alert');
+    if (broken) {
+      al.className = 'stock-alert ok';
+      al.textContent = '✓ Production costs fully recovered — everything earned from here is profit.';
     } else {
       const unitsNeeded = remaining > 0 ? Math.ceil(remaining / (book.listPrice || 1)) : 0;
       const isClose = pctBe >= 70;
-      
+
       al.className = 'stock-alert warn';
-      
+
       if (isClose) {
         al.style.borderLeftColor = '#fb923c';
         al.style.background = 'rgba(251, 146, 60, 0.08)';
@@ -2948,11 +2950,11 @@ function updateDash() {
         al.style.background = 'rgba(200, 145, 58, 0.08)';
         al.style.color = 'var(--gold2)';
       }
-      
+
       const themeColor = isClose ? '#fb923c' : 'var(--gold3)';
       const themeBg = isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
       const themeBorder = isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
-      
+
       al.innerHTML = `
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
           <div style="display:flex; align-items:center; gap:8px;">
@@ -2971,8 +2973,8 @@ function updateDash() {
       `;
     }
   } else {
-    $('d-breakeven-kpi').style.display='none';
-    $('d-breakeven-block').style.display='none';
+    $('d-breakeven-kpi').style.display = 'none';
+    $('d-breakeven-block').style.display = 'none';
   }
 
   // ── NET TO PUBLISHER KPI (only shown when profit sharing is configured)
@@ -2998,11 +3000,11 @@ function getProfitTiersHtml(book, stats, cur) {
     if (isBreakEvenTier && book.productionCost > 0) return book.productionCost;
     return hasCap(t) ? t.revenueUpTo : null;
   };
-  const tiers = [...book.profitTiers].sort((a,b) => (hasCap(a) ? a.revenueUpTo : Infinity) - (hasCap(b) ? b.revenueUpTo : Infinity));
+  const tiers = [...book.profitTiers].sort((a, b) => (hasCap(a) ? a.revenueUpTo : Infinity) - (hasCap(b) ? b.revenueUpTo : Infinity));
 
   // Find which tier is currently active based on cumulative revenue
   const currentTier = tiers.find(t => effectiveCap(t) !== null && stats.cumulativeRevenue < effectiveCap(t)) || tiers[tiers.length - 1];
-  const nextTier    = tiers.find(t => effectiveCap(t) !== null && stats.cumulativeRevenue < effectiveCap(t));
+  const nextTier = tiers.find(t => effectiveCap(t) !== null && stats.cumulativeRevenue < effectiveCap(t));
 
   const tierHeader = `
     <div style="display:grid; grid-template-columns: 1fr auto 70px 70px; gap:12px; align-items:center;
@@ -3015,15 +3017,15 @@ function getProfitTiersHtml(book, stats, cur) {
     </div>`;
 
   const tierHtml = tiers.map((t, i) => {
-    const tCap        = effectiveCap(t);
-    const isActive    = t === currentTier;
+    const tCap = effectiveCap(t);
+    const isActive = t === currentTier;
     const isCompleted = tCap !== null && stats.cumulativeRevenue >= tCap;
-    const threshold   = tCap !== null ? `Up to ${fmt(tCap, cur)}` : 'No cap';
-    const tierStat    = (stats.perTier || []).find(p => p.tier === t);
-    const earned      = tierStat ? tierStat.artistEarned : 0;
-    const tierRev     = tierStat ? tierStat.revenue : 0;
-    const prevCap     = i > 0 && effectiveCap(tiers[i - 1]) !== null ? effectiveCap(tiers[i - 1]) : 0;
-    const tierCap     = tCap !== null ? tCap - prevCap : null;
+    const threshold = tCap !== null ? `Up to ${fmt(tCap, cur)}` : 'No cap';
+    const tierStat = (stats.perTier || []).find(p => p.tier === t);
+    const earned = tierStat ? tierStat.artistEarned : 0;
+    const tierRev = tierStat ? tierStat.revenue : 0;
+    const prevCap = i > 0 && effectiveCap(tiers[i - 1]) !== null ? effectiveCap(tiers[i - 1]) : 0;
+    const tierCap = tCap !== null ? tCap - prevCap : null;
     const tierCapText = tierCap !== null
       ? `${fmt(tierRev, cur)} / ${fmt(tierCap, cur)}`
       : fmt(tierRev, cur);
@@ -3145,7 +3147,7 @@ function getArtistHeldHtml(stats, cur) {
 function getPayoutHistoryHtml(stats, bookId, cur) {
   return (stats.payouts || []).length > 0
     // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
-    ? stats.payouts.slice().sort((a,b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : 0); }).map(p => `
+    ? stats.payouts.slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : 0); }).map(p => `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; font-size:12px;
           border-bottom:1px solid rgba(0,0,0,.05);">
           <span style="display:flex; flex-direction:column;">
@@ -3255,9 +3257,9 @@ function toggleArtistPayoutForm(bookId) {
 
 async function recordArtistPayout(bookId) {
   const amountEl = document.getElementById(`ap-amount-${bookId}`);
-  const dateEl   = document.getElementById(`ap-date-${bookId}`);
+  const dateEl = document.getElementById(`ap-date-${bookId}`);
   const methodEl = document.getElementById(`ap-method-${bookId}`);
-  const notesEl  = document.getElementById(`ap-notes-${bookId}`);
+  const notesEl = document.getElementById(`ap-notes-${bookId}`);
   const amount = parseFloat(amountEl.value);
   if (!amount || amount <= 0) { showToast('⚠ Enter a valid amount', 'warn'); return; }
   const s = states[bookId];
@@ -3298,7 +3300,7 @@ function renderAll() {
 function renderCurrent() {
   if (activeBook === 'all') { updateAllOverview(); updateHeader(); }
   else renderAll();
-  try { updatePublisherActionBanner(); } catch(_) {}
+  try { updatePublisherActionBanner(); } catch (_) { }
 
   // Firestore DB status indicator update
   const fsBtn = document.getElementById('fs-toggle-btn');
@@ -3411,7 +3413,7 @@ async function ocTogglePhotoPick(cId, idx) {
   showToast(picking
     ? `★ Picked “${p}” — {{photo}} in emails now uses ${c.selectedPhotos.length > 1 ? 'the starred files' : 'this file'}`
     : `Unpicked “${p}”${c.selectedPhotos.length ? '' : ' — {{photo}} falls back to all photos'}`,
-  picking ? 'ok' : 'warn');
+    picking ? 'ok' : 'warn');
 }
 
 function ocSetSort(val) {
@@ -3428,23 +3430,23 @@ function ocSetTmplTab(val) {
 function ocUpdateTmplPreview() {
   const sub = $('oc-tmpl-subject')?.value || '';
   const body = $('oc-tmpl-body')?.innerHTML || '';
-  
+
   const sampleName = 'Alex Mercer';
   const samplePhoto = 'alex_mercer_artwork.jpg';
   const sampleCreditName = 'Alex Mercer';
   const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
-  
+
   const personalize = (str) => str
     .replace(/\{\{name\}\}/g, sampleName)
     .replace(/\{\{photo\}\}/g, samplePhoto)
     .replace(/\{\{creditName\}\}/g, sampleCreditName)
     .replace(/\{\{project\}\}/g, activeProj ? activeProj.title : '')
     .replace(/\{\{date\}\}/g, 'July 15th'); // sample date
-  
+
   const resolvedSub = personalize(sub);
   const serializedBody = serializeEditorHtml(body);
   const resolvedBody = personalize(serializedBody);
-  
+
   const subEl = $('oc-preview-subject');
   const bodyEl = $('oc-preview-body');
   if (subEl) subEl.textContent = resolvedSub;
@@ -3465,7 +3467,7 @@ function ocThreadForStage(c, stageKey) {
   return c.gmailThreadId
     || (stageKey === 'cmykSent' ? c.creditThreadId
       : stageKey === 'preorderSent' ? c.filesThreadId
-      : null)
+        : null)
     || null;
 }
 
@@ -3512,13 +3514,13 @@ function closeOcBulkModal() {
 function renderOcBulkModalContent(retryMode = false) {
   const modal = $('oc-bulk-modal');
   if (!modal) return;
-  
+
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
-  
+
   const stage = $('oc-bulk-stage')?.value || 'selectionSent';
   const resendMode = $('oc-bulk-resend-toggle')?.checked || false;
-  
+
   // Get eligible contributors — resend mode shows already-sent ones too
   let eligible = [];
   if (retryMode && _ocBulkFailedIds.length > 0) {
@@ -3536,21 +3538,21 @@ function renderOcBulkModalContent(retryMode = false) {
       ? proj.contributors.filter(c => c.email && c.preorderSent)
       : proj.contributors.filter(c => c.email && c.cmykSent && c.filesReceived && !c.preorderSent);
   }
-  
+
   const listHtml = eligible.length > 0
     ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
         <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:4px;cursor:pointer;" onclick="ocBulkSelectAll(true)">Select All</button>
         <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:4px;cursor:pointer;" onclick="ocBulkSelectAll(false)">Deselect All</button>
         <span style="font-size:10px;color:var(--text3);margin-left:auto;align-self:center;" id="oc-bulk-recipient-count">${eligible.length} recipient${eligible.length !== 1 ? 's' : ''}</span>
       </div>` +
-      eligible.map(c => `
+    eligible.map(c => `
         <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:4px 0;border-radius:4px;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
           <input type="checkbox" class="oc-bulk-recipient-check" value="${c.id}" checked style="margin:0;cursor:pointer;" onchange="ocBulkUpdateCount()">
           <span><strong>${escapeHtml(c.name || 'Unnamed')}</strong> <span style="color:var(--text3);">(${escapeHtml(c.email)})</span></span>
         </label>
       `).join('')
     : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">No eligible contributors found for this stage.</div>';
-  
+
   const tmpl = proj.templates ? proj.templates[stage] : null;
   const dl = localStorage.getItem('lm-oc-last-deadline') || 'July 15th';
   const previewSub = tmpl ? tmpl.subject
@@ -3565,7 +3567,7 @@ function renderOcBulkModalContent(retryMode = false) {
     .replace(/\{\{creditName\}\}/g, 'Alex Mercer')
     .replace(/\{\{project\}\}/g, proj.title)
     .replace(/\{\{date\}\}/g, dl) : '';
-  
+
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:660px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
       <button onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
@@ -3717,27 +3719,27 @@ function onOcBulkStageChange(_val) {
 async function sendOcBulkEmails(_retryFailedOnly = false) {
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
-  
+
   const stage = $('oc-bulk-stage').value;
   const tmpl = proj.templates ? proj.templates[stage] : null;
   if (!tmpl) {
     showToast('Template not found for this stage. Save a template first.', 'err');
     return;
   }
-  
+
   const replyTo = $('oc-bulk-replyto')?.value?.trim() || '';
   const delayMs = parseInt($('oc-bulk-delay')?.value || '1000', 10);
   const simulate = $('oc-bulk-simulate-toggle')?.checked || false;
-  
+
   // Get checked recipients
   const checks = document.querySelectorAll('.oc-bulk-recipient-check:checked');
   const selectedIds = Array.from(checks).map(cb => cb.value);
-  
+
   if (selectedIds.length === 0) {
     showToast('No recipients selected', 'warn');
     return;
   }
-  
+
   const selectedRecs = proj.contributors.filter(c => selectedIds.includes(c.id));
 
   // Safety gate: a real (non-simulated) send goes to real inboxes and can't be
@@ -3789,32 +3791,32 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
   $('oc-bulk-actions').innerHTML = `
     <button class="btn" id="oc-bulk-cancel-btn" onclick="cancelOcBulkSend()" style="background:rgba(239,68,68,0.1);color:var(--red);border-color:rgba(239,68,68,0.3);">✕ Cancel</button>
   `;
-  
+
   const consoleEl = $('oc-bulk-console');
   consoleEl.innerHTML = simulate
     ? `<div style="color:#fbbf24;margin-bottom:4px;">[SIMULATION] Starting dry run · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''}</div>`
-    : `<div style="color:#6b8cff;margin-bottom:4px;">Starting bulk send · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''} · ${delayMs > 0 ? delayMs/1000 + 's delay' : 'no delay'}${replyTo ? ' · reply-to: ' + replyTo : ''}</div>`;
-  
+    : `<div style="color:#6b8cff;margin-bottom:4px;">Starting bulk send · ${selectedRecs.length} recipient${selectedRecs.length !== 1 ? 's' : ''} · ${delayMs > 0 ? delayMs / 1000 + 's delay' : 'no delay'}${replyTo ? ' · reply-to: ' + replyTo : ''}</div>`;
+
   _ocBulkSendingActive = true;
   _ocBulkFailedIds = [];
   let successCount = 0;
   let failCount = 0;
-  
+
   for (let i = 0; i < selectedRecs.length; i++) {
     if (!_ocBulkSendingActive) {
       consoleEl.innerHTML += `<div style="color:#fbbf24;">[CANCELLED] Stopped after ${i} of ${selectedRecs.length}.</div>`;
       break;
     }
-    
+
     const c = selectedRecs[i];
     $('oc-bulk-progress-text').textContent = simulate
       ? `Simulating ${i + 1}/${selectedRecs.length} — ${c.name || c.email}...`
       : `Sending ${i + 1}/${selectedRecs.length} — ${c.name || c.email}...`;
-    
+
     const dl = $('oc-bulk-deadline')?.value || '';
     const subject = ocMergeTemplate(tmpl.subject, c, { project: proj.title, date: dl });
     const body = ocMergeTemplate(tmpl.body, c, { project: proj.title, date: dl });
-    
+
     try {
       if (simulate) {
         consoleEl.innerHTML += `<div style="color:#a9ffaf;border-left:2px solid #a9ffaf;padding-left:8px;margin:8px 0 12px 0;text-align:left;line-height:1.5;background:rgba(255,255,255,0.02);padding:8px;border-radius:4px;">
@@ -3833,46 +3835,46 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
         const usedThreadId = (resp && resp.threadId) ? resp.threadId : threadId;
         if (usedThreadId) c.gmailThreadId = usedThreadId;
         successCount++;
-        consoleEl.innerHTML += `<div style="color:#a9ffaf;">✓ [${i+1}/${selectedRecs.length}] ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})</div>`;
+        consoleEl.innerHTML += `<div style="color:#a9ffaf;">✓ [${i + 1}/${selectedRecs.length}] ${escapeHtml(c.email)} (${escapeHtml(c.name || 'Artist')})</div>`;
       }
     } catch (err) {
       failCount++;
       _ocBulkFailedIds.push(c.id);
-      consoleEl.innerHTML += `<div style="color:#f87171;">✕ [${i+1}/${selectedRecs.length}] ${escapeHtml(c.email)}: ${escapeHtml(err.message)}</div>`;
+      consoleEl.innerHTML += `<div style="color:#f87171;">✕ [${i + 1}/${selectedRecs.length}] ${escapeHtml(c.email)}: ${escapeHtml(err.message)}</div>`;
     }
-    
+
     // Update progress bar
     const pct = Math.round((i + 1) / selectedRecs.length * 100);
     $('oc-bulk-progress-pct').textContent = pct + '%';
     $('oc-bulk-progress-fill').style.width = pct + '%';
     consoleEl.scrollTop = consoleEl.scrollHeight;
-    
+
     // Delay between sends (except after the last one)
     const actualDelay = simulate ? 100 : delayMs;
     if (actualDelay > 0 && i < selectedRecs.length - 1 && _ocBulkSendingActive) {
       await new Promise(res => setTimeout(res, actualDelay));
     }
   }
-  
+
   _ocBulkSendingActive = false;
-  
+
   // Finish summary
   $('oc-bulk-progress-text').textContent = simulate
     ? `Simulation Done · ✓ ${successCount} simulated · 0 failed`
     : `Done · ✓ ${successCount} sent · ${failCount > 0 ? '✕ ' + failCount + ' failed' : '0 failed'}`;
-  
+
   if (simulate) {
     consoleEl.innerHTML += `<div style="color:#fbbf24;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Simulation Finished · ${successCount} emails simulated. No emails were sent.</div>`;
   } else {
     consoleEl.innerHTML += `<div style="color:#6b8cff;border-top:1px solid #2a2a2a;margin-top:6px;padding-top:6px;">Finished · ${successCount} succeeded · ${failCount} failed</div>`;
   }
   consoleEl.scrollTop = consoleEl.scrollHeight;
-  
+
   if (!simulate) {
     await _persistOpenCalls();
     renderOpenCall();
   }
-  
+
   // Show done actions — with retry button if there were failures (and not in simulation)
   const retryBtn = (_ocBulkFailedIds.length > 0 && !simulate)
     ? `<button class="btn" onclick="sendOcBulkEmails(true)" style="background:rgba(239,68,68,0.08);color:var(--red);border-color:rgba(239,68,68,0.25);">↩ Retry ${_ocBulkFailedIds.length} Failed</button>`
@@ -3913,7 +3915,7 @@ function openOcBulkRemoveModal() {
     modal.style.zIndex = '10000';
     document.body.appendChild(modal);
   }
-  
+
   modal.style.display = 'flex';
   renderOcBulkRemoveModalContent();
 }
@@ -3928,12 +3930,12 @@ function closeOcBulkRemoveModal() {
 function renderOcBulkRemoveModalContent() {
   const modal = $('oc-bulk-remove-modal');
   if (!modal) return;
-  
+
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
-  
+
   const eligible = proj.contributors || [];
-  
+
   const listHtml = eligible.length > 0
     ? `<div style="display:flex;gap:6px;margin-bottom:8px;">
         <button type="button" style="font-size:10px;padding:2px 8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:4px;cursor:pointer;" onclick="ocBulkRemoveSelectAll(true)">Select All</button>
@@ -3942,7 +3944,7 @@ function renderOcBulkRemoveModalContent() {
       </div>
       <div id="oc-bulk-remove-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:10px;background:var(--input-bg);display:flex;flex-direction:column;gap:2px;">
       ` +
-      eligible.map(c => `
+    eligible.map(c => `
         <label class="oc-bulk-remove-item" data-name="${escapeHtml((c.name || '').toLowerCase())}" data-email="${escapeHtml((c.email || '').toLowerCase())}" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:4px 0;border-radius:4px;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background='transparent'">
           <input type="checkbox" class="oc-bulk-remove-check" value="${c.id}" style="margin:0;cursor:pointer;" onchange="ocBulkRemoveUpdateCount()">
           <span><strong>${escapeHtml(c.name || 'Unnamed')}</strong> <span style="color:var(--text3);">(${escapeHtml(c.email || 'no email')})</span></span>
@@ -3974,7 +3976,7 @@ function renderOcBulkRemoveModalContent() {
         <button class="btn danger-btn" id="oc-bulk-remove-btn-submit" onclick="executeOcBulkRemove()" disabled>✕ Remove Selected</button>
       </div>
     </div>`;
-  
+
   if (eligible.length > 0) {
     ocBulkRemoveUpdateCount();
   }
@@ -4018,20 +4020,20 @@ function ocBulkRemoveFilter(query) {
 async function executeOcBulkRemove() {
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
-  
+
   const checks = document.querySelectorAll('.oc-bulk-remove-check:checked');
   const selectedIds = Array.from(checks).map(cb => cb.value);
-  
+
   if (selectedIds.length === 0) {
     showToast('No contributors selected', 'warn');
     return;
   }
-  
+
   const ok = await confirmDialog(`Are you sure you want to remove ${selectedIds.length} contributor${selectedIds.length !== 1 ? 's' : ''}? This action cannot be undone.`, { danger: true, okLabel: 'Remove' });
   if (!ok) return;
-  
+
   proj.contributors = proj.contributors.filter(c => !selectedIds.includes(c.id));
-  
+
   await _persistOpenCalls();
   closeOcBulkRemoveModal();
   renderOpenCall();
@@ -4063,9 +4065,9 @@ function renderOpenCall() {
   }
 
   const listRaw = ocList();
-  
+
   let list = listRaw;
-  
+
   // Filtering (including Completed view)
   if (ocFilterStage === 'complete') {
     list = list.filter(c => OC_STAGES.every(st => c[st.key]));
@@ -4075,7 +4077,7 @@ function renderOpenCall() {
       return next && next.key === ocFilterStage;
     });
   }
-  
+
   if (ocSearchQuery.trim()) {
     const q = ocSearchQuery.toLowerCase().trim();
     list = list.filter(c =>
@@ -4137,8 +4139,8 @@ function renderOpenCall() {
   const inboxCount = activeProj ? activeProj.inbox.length : 0;
   const outboxCount = activeProj ? activeProj.outbox.length : 0;
   const lastScannedVal = activeProj ? activeProj.lastScanned : null;
-  const lastScannedHtml = lastScannedVal 
-    ? `<div class="oc-last-scanned">Last scanned: ${formatDateTime(lastScannedVal)}</div>` 
+  const lastScannedHtml = lastScannedVal
+    ? `<div class="oc-last-scanned">Last scanned: ${formatDateTime(lastScannedVal)}</div>`
     : '';
 
   // Project Progress Bar
@@ -4439,9 +4441,9 @@ function renderOpenCall() {
       : '';
 
     const emailCell = c.email
-      ? ( _isCustomerSuppressed(c.email)
-          ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(c.email)}</span>`
-          : `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>` )
+      ? (_isCustomerSuppressed(c.email)
+        ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(c.email)}</span>`
+        : `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>`)
       : '<span>no email</span>';
 
     let gmailLinksHtml = '';
@@ -4481,14 +4483,14 @@ function renderOpenCall() {
       <div class="oc-photo-row">
         <span class="oc-photo-label">📷 Photos:</span>
         ${photosArr.map((p, idx) => {
-          const isPicked = picks.includes(p);
-          return `
+      const isPicked = picks.includes(p);
+      return `
           <span class="oc-photo-chip ${isPicked ? 'picked' : ''}">
             <span class="oc-photo-pick ${isPicked ? 'on' : ''}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" title="${isPicked ? 'Unpick this photo' : 'Pick this photo as a chosen one — emails will reference it'}">${isPicked ? '★' : '☆'}</span>
             ${escapeHtml(p)}
             <span class="oc-photo-chip-remove" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" title="Remove photo">✕</span>
           </span>`;
-        }).join('')}
+    }).join('')}
         ${pickStatus}
         <span id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</span>
         <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
@@ -4569,11 +4571,11 @@ function renderOpenCall() {
         <div class="oc-status-strip">
           ${pipelineVisualizer}
           ${next
-            ? `<div class="oc-next-action">${next}${(() => {
-                const wd = ocWaitingDays(c);
-                return wd !== null && wd >= 2 ? ` <span class="oc-wait-chip" title="No movement for ${wd} day${wd === 1 ? '' : 's'} — measured from the last stage change">⏳ ${wd}d</span>` : '';
-              })()}</div>`
-            : `<div class="oc-all-complete">✓ All stages complete</div>`}
+        ? `<div class="oc-next-action">${next}${(() => {
+          const wd = ocWaitingDays(c);
+          return wd !== null && wd >= 2 ? ` <span class="oc-wait-chip" title="No movement for ${wd} day${wd === 1 ? '' : 's'} — measured from the last stage change">⏳ ${wd}d</span>` : '';
+        })()}</div>`
+        : `<div class="oc-all-complete">✓ All stages complete</div>`}
         </div>
         <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
       </div>`;
@@ -4786,8 +4788,8 @@ function renderOpenCall() {
             <div class="oc-empty-icon">🎨</div>
             <div class="oc-empty-title">${ocSearchQuery || ocFilterStage ? 'No matches found' : 'No contributors yet'}</div>
             <div class="oc-empty-body">${ocSearchQuery || ocFilterStage
-              ? 'Try adjusting your search or filter to find contributors.'
-              : 'Add your first contributor using the form on the left, or import a list from a spreadsheet.'}
+      ? 'Try adjusting your search or filter to find contributors.'
+      : 'Add your first contributor using the form on the left, or import a list from a spreadsheet.'}
             </div>
             ${(!ocSearchQuery && !ocFilterStage) ? `<button class="btn gold" onclick="document.getElementById('oc-name')?.focus()" style="margin-top:4px;">＋ Add First Contributor</button>` : ''}
           </div>`}
@@ -4999,14 +5001,14 @@ function addOcPhotoChip() {
   if (!input) return;
   const val = input.value.trim();
   if (!val) return;
-  
+
   const items = val.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean);
   items.forEach(item => {
     if (!_ocNewContributorPhotos.includes(item)) {
       _ocNewContributorPhotos.push(item);
     }
   });
-  
+
   input.value = '';
   renderOcPhotoChips();
 }
@@ -5033,11 +5035,11 @@ async function ocAddPhotoToContributor(cId, photoName) {
   if (!proj) return;
   const c = proj.contributors.find(x => x.id === cId);
   if (!c) return;
-  
+
   if (!c.photos) {
     c.photos = c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
   }
-  
+
   const items = photoName.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean);
   let added = false;
   items.forEach(item => {
@@ -5046,7 +5048,7 @@ async function ocAddPhotoToContributor(cId, photoName) {
       added = true;
     }
   });
-  
+
   if (added) {
     c.photo = c.photos.join(', ');
     await _persistOpenCalls();
@@ -5060,11 +5062,11 @@ async function ocRemovePhotoFromContributor(cId, photoIdx) {
   if (!proj) return;
   const c = proj.contributors.find(x => x.id === cId);
   if (!c) return;
-  
+
   if (!c.photos) {
     c.photos = c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
   }
-  
+
   c.photos.splice(photoIdx, 1);
   c.photo = c.photos.join(', ');
   // A removed photo can't stay a starred pick.
@@ -5079,7 +5081,7 @@ async function ocAdd() {
   const name = ($('oc-name')?.value || '').trim();
   const email = ($('oc-email')?.value || '').trim();
   if (!name && !email) { showToast('Enter a name or email', 'warn'); return; }
-  
+
   const leftoverPhoto = ($('oc-photo')?.value || '').trim();
   let photos = [..._ocNewContributorPhotos];
   if (leftoverPhoto) {
@@ -5088,17 +5090,17 @@ async function ocAdd() {
       if (!photos.includes(item)) photos.push(item);
     });
   }
-  
+
   const photoString = photos.join(', ');
-  
+
   ocList().push(newContributor({ name, email, photo: photoString, photos, createdAt: today() }));
-  
+
   if ($('oc-name')) $('oc-name').value = '';
   if ($('oc-email')) $('oc-email').value = '';
   if ($('oc-photo')) $('oc-photo').value = '';
-  
+
   _ocNewContributorPhotos = [];
-  
+
   await _persistOpenCalls();
   renderOpenCall();
   showToast('Contributor added');
@@ -5119,7 +5121,7 @@ async function ocRunImport() {
 
   if (!added) { showToast(skipped ? 'All rows already imported' : 'Nothing to import', 'warn'); return; }
   contributors.forEach(c => { c.createdAt = today(); list.push(c); });
-  
+
   await _persistOpenCalls();
   ocImportOpen = false;
   renderOpenCall();
@@ -5373,17 +5375,17 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   const enteredBy = isAuthor() ? 'Artist' : 'Publisher';
   s.stock = Math.max(0, s.stock - qty);
   s.sold += qty; s.revenue += qty * price;
-  if (!s.chStats[chan]) s.chStats[chan]={txns:0,units:0,revenue:0};
-  s.chStats[chan].txns++; s.chStats[chan].units+=qty; s.chStats[chan].revenue+=qty*price;
+  if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
+  s.chStats[chan].txns++; s.chStats[chan].units += qty; s.chStats[chan].revenue += qty * price;
   const sheetsId = makeEventId();
-  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),payment,enteredBy,sheetsId});
+  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: notes || '', date: today(), payment, enteredBy, sheetsId });
   recomputeAfters(s, book);
   renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
   const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
-    type:'order',book:book.title,date:today(),num,chan,qty,price,total:totalNative,stockAfter:s.stock,notes:notes||'',
+    type: 'order', book: book.title, date: today(), num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: notes || '',
     sheetsId,
     currency: nativeCur,
     paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
@@ -5470,7 +5472,7 @@ function renderHist() {
     const raw = JSON.parse(pbSales[k].data);
     return { ...raw, _subKey: k, pendingAuth: true, after: '?' };
   });
-  
+
   // Channel drill-down filter (from the analytics legend). Only applies while
   // the active book matches the one that was tapped.
   if (histChanFilter && histChanFilter.bookId !== activeBook) histChanFilter = null;
@@ -5536,59 +5538,59 @@ function renderHist() {
     : '';
 
   $('hist-body').innerHTML = combined.length
-    ? shownRows.map((row)=>{
-        if (row.type === 'consign') return renderConsignHistRow(row.e, row._after);
-        const h = row.h, i = row.i;
-        if (h.pendingAuth) {
-           const actionCell = window.IS_PUBLISHER
-             ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
-             : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
-           return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${escapeHtml(h.num)}</td><td>${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price,cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty*h.price,cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes)||'—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill amber" style="font-size:10px;">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
-        }
-        const voided = h.voided ? ' voided' : '';
-        const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
-        const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
-        const isGrat = h.gratuity || h.chan === 'Gratuity';
-        const isPending = h.artistPending;
-        // Consignment Sale mirror: surface its paid/pending state and an invoice
-        // badge so History cross-references the ledger + invoice (absent → '').
-        const consignExtra = h.consignmentLink
-          ? `${h.paidState==='paid'?' <span class="pill green" style="font-size:10px;">Paid</span>':(!h.voided?` <button class="pill amber" style="font-size:10px;cursor:pointer;border:none;outline:none;" onclick="markHistoryConsignmentPaid('${h.num}')" title="Click to mark as paid">Pending</button>`:'')}${invoiceBadgeHTML(h.invoiceId, h.invoiceNum)}`
-          : '';
-        const chanCell = (isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : escapeHtml(h.chan)) + consignExtra;
-        const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price,cur);
-        const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty*h.price,cur)}</span>` : fmt(h.qty*h.price,cur);
-        const rowStyle = isGrat ? ' style="background:var(--cream2);font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
-        const isWebsite = (h.chan === 'Website') && !isGrat && !h.voided;
-        const labelBtn = isWebsite
-          ? (h.shipped
-              ? `<button class="edit-btn" onclick="openLabelModal(${i})" title="Shipped${h.shippedDate ? ' on ' + fmtD(h.shippedDate) : ''} — click to update or reprint" style="opacity:1;color:#2e7d32;border-color:#c8e6c9;background:#e8f5e9;font-weight:600;">✓ Shipped</button>`
-              : `<button class="edit-btn" onclick="openLabelModal(${i})" title="Print shipping label" style="opacity:1;color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg);">📦 Ship</button>`)
-          : '';
-        const shippedPill = isWebsite && h.shipped
-          ? ` <span class="pill" style="font-size:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;">✓ Shipped${h.shippedDate ? ' ' + fmtD(h.shippedDate) : ''}</span>`
-          : '';
-        const paymentInfo = paymentSummary(h.payment, book);
-        const shippingInfo = isWebsite ? renderOrderShippingSummary(h, cur) : '';
-        const notesText = escapeHtml(h.notes) || '—';
-        const notesCell = [
-          notesText,
-          paymentInfo ? `<span style="font-size:11px;color:var(--text4);">${escapeHtml(paymentInfo)}</span>` : '',
-          shippingInfo,
-        ].filter(Boolean).join('<br>');
-        const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
-        const enteredByPill = enteredBy === 'Artist'
-          ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
-          : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
-        return `<tr class="${voided}"${rowStyle}><td class="mono">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided?'':'-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${row._after}</td><td style="font-size:12px;color:var(--text3);">${notesCell||'—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
-      }).join('') + moreRow
+    ? shownRows.map((row) => {
+      if (row.type === 'consign') return renderConsignHistRow(row.e, row._after);
+      const h = row.h, i = row.i;
+      if (h.pendingAuth) {
+        const actionCell = window.IS_PUBLISHER
+          ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
+          : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
+        return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${escapeHtml(h.num)}</td><td>${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price, cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty * h.price, cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill amber" style="font-size:10px;">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+      }
+      const voided = h.voided ? ' voided' : '';
+      const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
+      const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
+      const isGrat = h.gratuity || h.chan === 'Gratuity';
+      const isPending = h.artistPending;
+      // Consignment Sale mirror: surface its paid/pending state and an invoice
+      // badge so History cross-references the ledger + invoice (absent → '').
+      const consignExtra = h.consignmentLink
+        ? `${h.paidState === 'paid' ? ' <span class="pill green" style="font-size:10px;">Paid</span>' : (!h.voided ? ` <button class="pill amber" style="font-size:10px;cursor:pointer;border:none;outline:none;" onclick="markHistoryConsignmentPaid('${h.num}')" title="Click to mark as paid">Pending</button>` : '')}${invoiceBadgeHTML(h.invoiceId, h.invoiceNum)}`
+        : '';
+      const chanCell = (isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : escapeHtml(h.chan)) + consignExtra;
+      const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price, cur);
+      const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, cur)}</span>` : fmt(h.qty * h.price, cur);
+      const rowStyle = isGrat ? ' style="background:var(--cream2);font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
+      const isWebsite = (h.chan === 'Website') && !isGrat && !h.voided;
+      const labelBtn = isWebsite
+        ? (h.shipped
+          ? `<button class="edit-btn" onclick="openLabelModal(${i})" title="Shipped${h.shippedDate ? ' on ' + fmtD(h.shippedDate) : ''} — click to update or reprint" style="opacity:1;color:#2e7d32;border-color:#c8e6c9;background:#e8f5e9;font-weight:600;">✓ Shipped</button>`
+          : `<button class="edit-btn" onclick="openLabelModal(${i})" title="Print shipping label" style="opacity:1;color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg);">📦 Ship</button>`)
+        : '';
+      const shippedPill = isWebsite && h.shipped
+        ? ` <span class="pill" style="font-size:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;">✓ Shipped${h.shippedDate ? ' ' + fmtD(h.shippedDate) : ''}</span>`
+        : '';
+      const paymentInfo = paymentSummary(h.payment, book);
+      const shippingInfo = isWebsite ? renderOrderShippingSummary(h, cur) : '';
+      const notesText = escapeHtml(h.notes) || '—';
+      const notesCell = [
+        notesText,
+        paymentInfo ? `<span style="font-size:11px;color:var(--text4);">${escapeHtml(paymentInfo)}</span>` : '',
+        shippingInfo,
+      ].filter(Boolean).join('<br>');
+      const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
+      const enteredByPill = enteredBy === 'Artist'
+        ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
+        : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
+      return `<tr class="${voided}"${rowStyle}><td class="mono">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided ? '' : '-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${row._after}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+    }).join('') + moreRow
     : `<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">${chanFilter !== null ? `No ${escapeHtml(chanLabel(chanFilter))} orders for this book.` : 'No orders yet.'}</div></td></tr>`;
 }
 
 // ── WEBSITE ORDERS — persistent scan memory
 const SCAN_MEMORY_KEY = 'lm-scan-memory';
 function getScanMemory() {
-  try { return JSON.parse(localStorage.getItem(SCAN_MEMORY_KEY) || '{}'); } catch(e) { return {}; }
+  try { return JSON.parse(localStorage.getItem(SCAN_MEMORY_KEY) || '{}'); } catch (e) { return {}; }
 }
 function saveScanMemory(mem) {
   localStorage.setItem(SCAN_MEMORY_KEY, JSON.stringify(mem));
@@ -5647,7 +5649,7 @@ function renderOrders() {
       ? `<div style="font-size:11px;color:var(--text3);margin-top:4px;">📦 ${addrParts.join(', ')}</div>`
       : '';
     const listPrice = BOOKS[o.bookId]?.listPrice || book.listPrice;
-    const listCur   = BOOKS[o.bookId]?.currency   || cur;
+    const listCur = BOOKS[o.bookId]?.currency || cur;
     const priceMismatch = !done && !cancelled && o.price && Math.abs(o.price - listPrice) > 0.5;
     const priceWarn = priceMismatch
       ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
@@ -5824,18 +5826,19 @@ function applyOne(id, { deferRender = false } = {}) {
   // Use the matched book if it differs from active
   const targetBook = o.bookId && BOOKS[o.bookId] ? o.bookId : activeBook;
   const targetState = states[targetBook];
-  const targetBk    = BOOKS[targetBook];
+  const targetBk = BOOKS[targetBook];
   if (!targetState || !targetBk) { showToast('Cannot find book for this order', 'err'); return; }
   // Use target book's price if not on order
   const price = o.price || targetBk.listPrice;
   targetState.stock = Math.max(0, targetState.stock - o.qty);
-  targetState.sold  += o.qty;
+  targetState.sold += o.qty;
   targetState.revenue += o.qty * price;
   if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
   targetState.chStats['Website'].txns++;
   targetState.chStats['Website'].units += o.qty;
   targetState.chStats['Website'].revenue += o.qty * price;
-  const entry = { num: o.orderNum, chan: 'Website', qty: o.qty, price, after: targetState.stock,
+  const entry = {
+    num: o.orderNum, chan: 'Website', qty: o.qty, price, after: targetState.stock,
     notes: 'Big Cartel', date: (o.date && o.date !== '—') ? o.date : today(),
     shipName: o.shipName || o.customer || '', shipEmail: o.email || '',
     shipAddr1: o.shipAddr1 || '', shipAddr2: o.shipAddr2 || '',
@@ -5894,8 +5897,8 @@ function applyAll() {
 
 async function fetchOrders() {
   const book = getBook();
-  const btn  = $('scan-btn');
-  const log  = 'log-web';
+  const btn = $('scan-btn');
+  const log = 'log-web';
   const MAX_RETRIES = 3;
 
   if (!sheetsUrl) {
@@ -5908,9 +5911,9 @@ async function fetchOrders() {
   // Read scan memory for smarter queries
   const mem = getScanMemory();
   const lastScanDate = mem.lastScan ? new Date(mem.lastScan) : null;
-  const appliedNums  = new Set(mem.appliedNums || []);
-  const daysBack     = parseInt(localStorage.getItem('lm-scan-days') || '30');
-  const sinceDate    = new Date(Date.now() - daysBack * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const appliedNums = new Set(mem.appliedNums || []);
+  const daysBack = parseInt(localStorage.getItem('lm-scan-days') || '30');
+  const sinceDate = new Date(Date.now() - daysBack * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const normalizeText = (value) => String(value || '')
     .toLowerCase()
@@ -5986,15 +5989,15 @@ async function fetchOrders() {
     const stableId = String(o.id || orderNum).trim();
     // Use the fetched email body to identify the correct book
     const textBlob = [o.body, o.notes, o.itemTitle, o.title].filter(Boolean).join(' ');
-    
+
     let resolvedBookId = inferBookIdFromText(textBlob) || inferBookIdFromText(o.orderNum);
     if (!resolvedBookId) {
       resolvedBookId = BOOKS[activeBook] ? activeBook : Object.keys(BOOKS)[0];
     }
-    
+
     const qty = Math.max(1, parseInt(o.qty ?? o.quantity ?? 1, 10) || 1);
     const price = parseFloat(o.price ?? o.unitPrice ?? o.amount ?? 0) || BOOKS[resolvedBookId]?.listPrice || book.listPrice;
-    
+
     const rawDate = o.date || o.timestamp || o.time || o.orderDate || '';
     let normalizedDate = '';
     if (rawDate) {
@@ -6094,7 +6097,7 @@ async function backfillShipping() {
   }
 
   const fields = ['shipName', 'shipEmail', 'shipAddr1', 'shipAddr2',
-                  'shipCity', 'shipProvince', 'shipPostal', 'shipCountry'];
+    'shipCity', 'shipProvince', 'shipPostal', 'shipCountry'];
   let updated = 0;
   let stillMissing = 0;
   const touchedBooks = new Set();
@@ -6157,10 +6160,10 @@ async function backfillShipping() {
 async function fetchLiveRate(from, to) {
   if (from === to) return { rate: 1 };
   if (from === 'OTHER' || to === 'OTHER' || !from || !to) return { error: 'manual' };
-  
+
   const key = `${from}_${to}`;
   if (_fxRateCache[key]) return { rate: _fxRateCache[key] };
-  
+
   // Primary API: open.er-api.com (v6) — very reliable
   try {
     const res = await fetch(`https://open.er-api.com/v6/latest/${from}`);
@@ -6172,7 +6175,7 @@ async function fetchLiveRate(from, to) {
         return { rate };
       }
     }
-  } catch(e) {
+  } catch (e) {
     console.warn('Primary FX API failed, trying fallback...', e);
   }
 
@@ -6188,7 +6191,7 @@ async function fetchLiveRate(from, to) {
       }
     }
     return { error: `API ${res.status}`, context: `${from}->${to}` };
-  } catch(e) {
+  } catch (e) {
     return { error: 'network', details: e.message || String(e), context: `${from}->${to}` };
   }
 }
@@ -6238,19 +6241,19 @@ async function onManualCurrencyChange() {
     resultSpan.style.color = 'var(--text3)';
   }
   if (manualRateRow) manualRateRow.style.display = 'none';
-  
+
   const key = `${cur}_${native}`;
   let rate = _fxRateCache[key];
-  
+
   if (!rate) {
     try {
       const res = await fetchLiveRate(cur, native);
       if (res.rate) {
         rate = res.rate;
       }
-    } catch(e) {}
+    } catch (e) { }
   }
-  
+
   if (rate) {
     _manualFxRate = rate;
     calcFx();
@@ -6277,11 +6280,11 @@ async function onManualCurrencyChange() {
 function calcFx() {
   const resultSpan = $('m-fx-inline-result');
   if (!resultSpan || !_manualFxRate) return;
-  
+
   const amt = parseFloat($('m-price').value) || 0;
   const book = getBook();
   const converted = amt * _manualFxRate;
-  
+
   resultSpan.textContent = `≈ ${fmt(converted, book.currency)}`;
   resultSpan.style.color = 'var(--gold)';
 }
@@ -6317,19 +6320,19 @@ async function onExpenseCurrencyChange() {
     resultSpan.textContent = '(fetching rate...)';
     resultSpan.style.color = 'var(--text3)';
   }
-  
+
   const key = `${cur}_${native}`;
   let rate = _fxRateCache[key];
-  
+
   if (!rate) {
     try {
       const res = await fetchLiveRate(cur, native);
       if (res.rate) {
         rate = res.rate;
       }
-    } catch(e) {}
+    } catch (e) { }
   }
-  
+
   if (rate) {
     _expenseFxRate = rate;
     calcExpenseFx();
@@ -6345,15 +6348,15 @@ async function onExpenseCurrencyChange() {
 function calcExpenseFx() {
   const resultSpan = $('exp-fx-inline-result');
   if (!resultSpan || !_expenseFxRate) return;
-  
+
   const amt = parseFloat($('exp-amount').value) || 0;
   const book = getBook();
   const converted = amt * _expenseFxRate;
-  
+
   resultSpan.textContent = `≈ ${fmt(converted, book.currency)}`;
   resultSpan.style.color = 'var(--gold)';
 }
-function _toggleShippingPanel(){}  // no-op, kept for safety
+function _toggleShippingPanel() { }  // no-op, kept for safety
 
 let _labelOrderIndex = null;
 
@@ -6362,14 +6365,14 @@ function openLabelModal(histIndex) {
   const h = getState().hist[histIndex];
   const book = getBook();
   $('shipping-label-order-info').textContent = `${h.num} · ${book.title} × ${h.qty} · ${fmtD(h.date)}`;
-  $('sl-name').value     = h.shipName     || '';
-  $('sl-email').value    = h.shipEmail    || '';
-  $('sl-addr1').value    = h.shipAddr1    || '';
-  $('sl-addr2').value    = h.shipAddr2    || '';
-  $('sl-city').value     = h.shipCity     || '';
+  $('sl-name').value = h.shipName || '';
+  $('sl-email').value = h.shipEmail || '';
+  $('sl-addr1').value = h.shipAddr1 || '';
+  $('sl-addr2').value = h.shipAddr2 || '';
+  $('sl-city').value = h.shipCity || '';
   $('sl-province').value = h.shipProvince || '';
-  $('sl-postal').value   = h.shipPostal   || '';
-  $('sl-country').value  = h.shipCountry  || 'Canada';
+  $('sl-postal').value = h.shipPostal || '';
+  $('sl-country').value = h.shipCountry || 'Canada';
   updateShippedStatusUI(h);
   openM('shipping-label');
 }
@@ -6409,14 +6412,14 @@ function printShippingLabel() {
   const h = getState().hist[_labelOrderIndex];
 
   // Save address to history entry so it's remembered next time
-  h.shipName     = $('sl-name').value.trim();
-  h.shipEmail    = $('sl-email').value.trim();
-  h.shipAddr1    = $('sl-addr1').value.trim();
-  h.shipAddr2    = $('sl-addr2').value.trim();
-  h.shipCity     = $('sl-city').value.trim();
+  h.shipName = $('sl-name').value.trim();
+  h.shipEmail = $('sl-email').value.trim();
+  h.shipAddr1 = $('sl-addr1').value.trim();
+  h.shipAddr2 = $('sl-addr2').value.trim();
+  h.shipCity = $('sl-city').value.trim();
   h.shipProvince = $('sl-province').value.trim();
-  h.shipPostal   = $('sl-postal').value.trim();
-  h.shipCountry  = $('sl-country').value.trim();
+  h.shipPostal = $('sl-postal').value.trim();
+  h.shipCountry = $('sl-country').value.trim();
   if (!h.shipped) {
     h.shipped = true;
     h.shippedDate = today();
@@ -6424,15 +6427,17 @@ function printShippingLabel() {
   saveState(activeBook);
   renderHist();
 
-  const ship = { name:h.shipName, addr1:h.shipAddr1, addr2:h.shipAddr2,
-                 city:h.shipCity, province:h.shipProvince, postal:h.shipPostal, country:h.shipCountry };
+  const ship = {
+    name: h.shipName, addr1: h.shipAddr1, addr2: h.shipAddr2,
+    city: h.shipCity, province: h.shipProvince, postal: h.shipPostal, country: h.shipCountry
+  };
 
   const fromLines = ['Lyricalmyrical Books', '456 Montrose Ave', 'Toronto, ON  M6G 3H1', 'Canada'];
 
   const cityLine = [ship.city, ship.province].filter(Boolean).join(', ');
   const cityPostal = [cityLine, ship.postal].filter(Boolean).join('  ');
   const toLines = [ship.addr1, ship.addr2, cityPostal].filter(Boolean);
-  const country = (ship.country||'').toUpperCase();
+  const country = (ship.country || '').toUpperCase();
 
   const esc = escapeHtml;
 
@@ -6440,9 +6445,9 @@ function printShippingLabel() {
   <div class="label">
     <section class="to">
       <div class="kicker">Ship To</div>
-      <div class="to-name">${esc(ship.name||'')}</div>
+      <div class="to-name">${esc(ship.name || '')}</div>
       <div class="to-lines">
-        ${toLines.map(l=>`<div>${esc(l)}</div>`).join('')}
+        ${toLines.map(l => `<div>${esc(l)}</div>`).join('')}
       </div>
       ${country ? `<div class="to-country">${esc(country)}</div>` : ''}
     </section>
@@ -6450,7 +6455,7 @@ function printShippingLabel() {
     <section class="from">
       <div class="kicker">From</div>
       <div class="from-lines">
-        ${fromLines.map(l=>`<div>${esc(l)}</div>`).join('')}
+        ${fromLines.map(l => `<div>${esc(l)}</div>`).join('')}
       </div>
     </section>
   </div>`;
@@ -6507,25 +6512,25 @@ function printShippingLabel() {
     }
   `;
 
-  const win = window.open('','_blank','width=620,height=720');
+  const win = window.open('', '_blank', 'width=620,height=720');
   win.document.write(`<!DOCTYPE html><html><head><title>Label — ${esc(h.num)}</title>
     <meta charset="utf-8">
     <style>${styles}</style>
     </head><body>${labelHTML}</body></html>`);
   win.document.close();
   win.focus();
-  setTimeout(()=>{ win.print(); }, 350);
+  setTimeout(() => { win.print(); }, 350);
   closeM('shipping-label');
 }
 
 
 // ── ARTIST PAYMENT LINK
-function saveArtistPaymentLink(){
-  const val=($('artist-pay-link-input').value||'').trim();
-  const s=getState();
-  s.artistPaymentLink=val;
+function saveArtistPaymentLink() {
+  const val = ($('artist-pay-link-input').value || '').trim();
+  const s = getState();
+  s.artistPaymentLink = val;
   // Also store on book object so publisher can read it
-  getBook().artistPaymentLink=val;
+  getBook().artistPaymentLink = val;
   saveState(activeBook);
   showToast('✓ Payment link saved');
 }
@@ -6533,27 +6538,27 @@ function saveArtistPaymentLink(){
 // Gratuity expenses track the publisher's own cost of gifted copies — they are
 // never reimbursed to the author, so they must be excluded from every "owed /
 // reimbursement" surface. Legacy records (pre-flag) are detected by their GRAT- ref.
-function isGratuityExpense(e){
+function isGratuityExpense(e) {
   return !!(e && (e.gratuity === true || (typeof e.ref === 'string' && e.ref.startsWith('GRAT-'))));
 }
 
-function renderArtistReimburseBanner(){
-  const s=getState(),book=getBook(),cur=book.currency;
+function renderArtistReimburseBanner() {
+  const s = getState(), book = getBook(), cur = book.currency;
   // Show payment link card for authors
-  const linkCard=$('artist-payment-link-card');
-  if(linkCard){
-    if(isAuthor()){
-      linkCard.style.display='';
-      const inp=$('artist-pay-link-input');
-      if(inp && !inp.value) inp.value=s.artistPaymentLink||'';
+  const linkCard = $('artist-payment-link-card');
+  if (linkCard) {
+    if (isAuthor()) {
+      linkCard.style.display = '';
+      const inp = $('artist-pay-link-input');
+      if (inp && !inp.value) inp.value = s.artistPaymentLink || '';
     } else {
-      linkCard.style.display='none';
+      linkCard.style.display = 'none';
     }
   }
   // Show received expenses banner for authors
-  const banner=$('artist-reimburse-banner');
-  if(!banner) return;
-  if(!isAuthor()){ banner.style.display='none'; return; }
+  const banner = $('artist-reimburse-banner');
+  if (!banner) return;
+  if (!isAuthor()) { banner.style.display = 'none'; return; }
   // ⚡ Bolt Optimization: Loop Fusion
   // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
   const received = [];
@@ -6564,24 +6569,24 @@ function renderArtistReimburseBanner(){
       total += (e.amount || 0);
     }
   }
-  if(!received.length){ banner.style.display='none'; return; }
-  banner.style.display='';
-  $('arb-amount').textContent=fmt(total,cur);
-  $('arb-detail').textContent=`${received.length} expense${received.length!==1?'s':''} marked as received by publisher`;
-  $('arb-hint').textContent='These expenses have been settled';
-  $('arb-items').innerHTML=received.map(e=>`
+  if (!received.length) { banner.style.display = 'none'; return; }
+  banner.style.display = '';
+  $('arb-amount').textContent = fmt(total, cur);
+  $('arb-detail').textContent = `${received.length} expense${received.length !== 1 ? 's' : ''} marked as received by publisher`;
+  $('arb-hint').textContent = 'These expenses have been settled';
+  $('arb-items').innerHTML = received.map(e => `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.35);">
         ${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span style="font-size:9px;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:100px;">${escapeHtml(e.cat)}</span>
       </div>
-      <div style="font-family:'DM Mono',monospace;font-size:13px;color:#6ee7a8;font-weight:500;">${fmt(e.amount,cur)}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:13px;color:#6ee7a8;font-weight:500;">${fmt(e.amount, cur)}</div>
     </div>`).join('');
 }
 
-function updateExpenseForm(){
-  const book=getBook();
-  $('exp-date').value=today();
-  
+function updateExpenseForm() {
+  const book = getBook();
+  $('exp-date').value = today();
+
   const native = getBookCurrencyCode(book);
   if ($('exp-cur')) $('exp-cur').value = native;
   if ($('exp-fx-inline-result')) $('exp-fx-inline-result').style.display = 'none';
@@ -6594,15 +6599,15 @@ function updateExpenseForm(){
   }
 }
 
-async function submitExpense(){
+async function submitExpense() {
   if (!activeBook) { showToast('⚠ Error: No active book selected', 'err'); return; }
-  const desc=($('exp-desc').value||'').trim();
-  const cat=$('exp-cat').value;
-  const date=$('exp-date').value||today();
-  const ref=($('exp-ref').value||'').trim();
-  const book=getBook();
+  const desc = ($('exp-desc').value || '').trim();
+  const cat = $('exp-cat').value;
+  const date = $('exp-date').value || today();
+  const ref = ($('exp-ref').value || '').trim();
+  const book = getBook();
 
-  
+
   const curField = $('exp-cur');
   const rawAmount = parseFloat($('exp-amount').value) || 0;
   const cur = curField ? curField.value : book.currency;
@@ -6618,25 +6623,25 @@ async function submitExpense(){
   } else {
     currency = cur; // If no FX used, use the selected currency (should match native anyway)
   }
-  
+
   const finalDesc = desc + fxNote;
-  
-  if(!desc){ showToast('⚠ Please enter a description','warn'); $('exp-desc').focus(); return; }
-  if(!rawAmount){ showToast('⚠ Please enter an amount','warn'); $('exp-amount').focus(); return; }
-  
+
+  if (!desc) { showToast('⚠ Please enter a description', 'warn'); $('exp-desc').focus(); return; }
+  if (!rawAmount) { showToast('⚠ Please enter an amount', 'warn'); $('exp-amount').focus(); return; }
+
   const fileInput = $('exp-file');
   let receiptUrl = '';
   if (fileInput && fileInput.files.length > 0) {
     const file = fileInput.files[0];
     const submitBtn = $('submit-exp-btn');
     const oldText = submitBtn.textContent;
-    
+
     if (window.IS_PUBLISHER) {
       submitBtn.textContent = 'Saving locally...'; submitBtn.disabled = true;
       try {
         const localUrl = await saveReceiptToLocalFile(file, book.title);
         if (localUrl) receiptUrl = localUrl;
-      } catch(e) {
+      } catch (e) {
         console.error(e);
         showToast('⚠ Error saving receipt locally', 'err');
       }
@@ -6652,7 +6657,7 @@ async function submitExpense(){
           setTimeout(() => reject(new Error('Upload timed out')), 30000)
         );
         receiptUrl = await Promise.race([uploadPromise, timeoutPromise]);
-      } catch(e) {
+      } catch (e) {
         console.error(e);
         showToast('⚠ Cloud upload failed — submitting without receipt', 'err');
       }
@@ -6660,25 +6665,25 @@ async function submitExpense(){
     submitBtn.textContent = oldText; submitBtn.disabled = false;
   }
 
-  const s=getState();
-  if(!s.expenses) s.expenses=[];
-  
+  const s = getState();
+  if (!s.expenses) s.expenses = [];
+
   // Store original payment info for ledger display
   const origAmount = rawAmount;
   const origCurrency = cur;
-  
+
   // Calculate CAD equivalence for publisher reporting (only once, at submission time)
   const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
   const baseAmount = cadRate ? (amount * cadRate) : amount;
-  const newExpense = {id:Date.now(),desc:finalDesc,cat,amount,currency,origAmount,origCurrency,date,ref,receipt: receiptUrl,fxRate:_expenseFxRate,baseAmount};
-  
+  const newExpense = { id: Date.now(), desc: finalDesc, cat, amount, currency, origAmount, origCurrency, date, ref, receipt: receiptUrl, fxRate: _expenseFxRate, baseAmount };
+
   if (isAuthor()) {
     try {
       await window._fbSubmitActivity(activeBook, 'expenses', newExpense);
-      addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,currency)} (Submitted)`,'ok');
+      addLog('log-expenses', `${cat}: ${desc} — ${fmt(amount, currency)} (Submitted)`, 'ok');
       showToast('✓ Expense submitted for approval');
-      notifyPublisherSubmission('Expense', newExpense, `${cat}: ${desc} — ${fmt(amount,currency)}`);
-    } catch(e) {
+      notifyPublisherSubmission('Expense', newExpense, `${cat}: ${desc} — ${fmt(amount, currency)}`);
+    } catch (e) {
       console.error("Submission error:", e);
       if (e.message && e.message.includes('PERMISSION_DENIED')) {
         showToast('⚠ Permission denied by Firestore Rules', 'err');
@@ -6687,50 +6692,50 @@ async function submitExpense(){
       }
     }
   } else {
-    const s=getState();
-    if(!s.expenses) s.expenses=[];
+    const s = getState();
+    if (!s.expenses) s.expenses = [];
     s.expenses.unshift(newExpense);
     saveState(activeBook);
-    addLog('log-expenses',`${cat}: ${desc} — ${fmt(amount,currency)}`,'ok');
+    addLog('log-expenses', `${cat}: ${desc} — ${fmt(amount, currency)}`, 'ok');
     showToast('✓ Expense logged');
   }
-  
+
   renderExpenses();
   updateDash();
-  $('exp-desc').value='';$('exp-amount').value='';$('exp-ref').value='';$('exp-date').value=today();
-  if(fileInput) fileInput.value = '';
+  $('exp-desc').value = ''; $('exp-amount').value = ''; $('exp-ref').value = ''; $('exp-date').value = today();
+  if (fileInput) fileInput.value = '';
   if (typeof window.expFileChosen === 'function') window.expFileChosen();
 }
 
-function voidExpense(id){
-  const s=getState();
-  s.expenses=(s.expenses||[]).filter(e=>e.id!==id);
+function voidExpense(id) {
+  const s = getState();
+  s.expenses = (s.expenses || []).filter(e => e.id !== id);
   renderExpenses();
   updateDash();
   saveState(activeBook);
-  showToast('Expense removed','warn');
+  showToast('Expense removed', 'warn');
 }
 
 // ── Receipt dropzone (expense form) — styled file chip + drag-and-drop.
 // Reflects the chosen file into a chip and toggles the dropzone prompt. The
 // underlying #exp-file input stays the single source of truth that
 // submitExpense / scanProjectReceiptWithAI read from.
-window.expFileChosen = function() {
+window.expFileChosen = function () {
   const input = $('exp-file'), chip = $('exp-file-chip'), nameEl = $('exp-file-name'), dz = $('exp-dropzone');
   const hasFile = input && input.files && input.files.length > 0;
   if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
   if (chip) chip.style.display = hasFile ? 'flex' : 'none';
   if (dz) dz.style.display = hasFile ? 'none' : 'flex';
 };
-window.expFileClear = function(ev) {
+window.expFileClear = function (ev) {
   if (ev) ev.preventDefault();
   const input = $('exp-file');
   if (input) input.value = '';
   window.expFileChosen();
 };
-window.expFileDragOver = function(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.add('drag'); };
-window.expFileDragLeave = function(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag'); };
-window.expFileDrop = function(ev) {
+window.expFileDragOver = function (ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.add('drag'); };
+window.expFileDragLeave = function (ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag'); };
+window.expFileDrop = function (ev) {
   ev.preventDefault();
   const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag');
   const input = $('exp-file');
@@ -6741,46 +6746,46 @@ window.expFileDrop = function(ev) {
 };
 
 async function scanProjectReceiptWithAI() {
-    const fileInput = $('exp-file');
-    if(!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
-    
-    const apiKey = TAX_CENTER.settings?.geminiKey;
-    if(!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+  const fileInput = $('exp-file');
+  if (!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
 
-    const file = fileInput.files[0];
-    const btn = $('exp-ai-btn');
-    const oldText = btn.textContent;
-    btn.textContent = 'Scanning...'; btn.disabled = true;
+  const apiKey = TAX_CENTER.settings?.geminiKey;
+  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
 
-    try {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        await new Promise(r => reader.onload = r);
-        const base64Data = reader.result.split(',')[1];
-        const mimeType = file.type;
+  const file = fileInput.files[0];
+  const btn = $('exp-ai-btn');
+  const oldText = btn.textContent;
+  btn.textContent = 'Scanning...'; btn.disabled = true;
 
-        const parts = [
-            { text: "Extract these exact 3 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase). No markdown, just raw JSON." },
-            { inline_data: { mime_type: mimeType, data: base64Data } }
-        ];
+  try {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    await new Promise(r => reader.onload = r);
+    const base64Data = reader.result.split(',')[1];
+    const mimeType = file.type;
 
-        let extractedJsonStr = await _callGeminiForReceipts(apiKey, parts);
-        if (!extractedJsonStr) throw new Error("No text returned from AI");
-        extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-        const _jsonMatch = extractedJsonStr.match(/\{[\s\S]*\}/);
-        const extracted = JSON.parse(_jsonMatch ? _jsonMatch[0] : extractedJsonStr);
+    const parts = [
+      { text: "Extract these exact 3 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase). No markdown, just raw JSON." },
+      { inline_data: { mime_type: mimeType, data: base64Data } }
+    ];
 
-        if(extracted.vendor) $('exp-desc').value = extracted.vendor;
-        if(extracted.date) $('exp-date').value = extracted.date;
-        if(extracted.amount) $('exp-amount').value = extracted.amount;
-        if(extracted.currency && $('exp-cur')) $('exp-cur').value = extracted.currency;
+    let extractedJsonStr = await _callGeminiForReceipts(apiKey, parts);
+    if (!extractedJsonStr) throw new Error("No text returned from AI");
+    extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+    const _jsonMatch = extractedJsonStr.match(/\{[\s\S]*\}/);
+    const extracted = JSON.parse(_jsonMatch ? _jsonMatch[0] : extractedJsonStr);
 
-        showToast('✓ Receipt data extracted');
-    } catch(e) {
-        console.error("AI Scan Error:", e);
-        showToast(`⚠ AI extraction failed: ${e.message}`, 'err');
-    }
-    btn.textContent = oldText; btn.disabled = false;
+    if (extracted.vendor) $('exp-desc').value = extracted.vendor;
+    if (extracted.date) $('exp-date').value = extracted.date;
+    if (extracted.amount) $('exp-amount').value = extracted.amount;
+    if (extracted.currency && $('exp-cur')) $('exp-cur').value = extracted.currency;
+
+    showToast('✓ Receipt data extracted');
+  } catch (e) {
+    console.error("AI Scan Error:", e);
+    showToast(`⚠ AI extraction failed: ${e.message}`, 'err');
+  }
+  btn.textContent = oldText; btn.disabled = false;
 }
 
 // ── EMAIL RECEIPT IMPORT
@@ -6897,7 +6902,7 @@ async function readReceiptFiles(files) {
   for (const file of files) {
     const name = file.name || 'attachment';
     const isText = /^(text\/|message\/)/.test(file.type) ||
-                   /\.(eml|txt|html?|md)$/i.test(name);
+      /\.(eml|txt|html?|md)$/i.test(name);
     if (isText) {
       const txt = await file.text();
       out.push({ kind: 'text', text: parseEmlOrText(txt), name });
@@ -6959,7 +6964,7 @@ function openEmailReceiptImportModal() {
       if (!list) return;
       const fs = Array.from(fileInput.files || []);
       list.innerHTML = fs.length
-        ? fs.map(f => `• ${f.name} <span style="opacity:.6;">(${Math.round(f.size/1024)} KB)</span>`).join('<br>')
+        ? fs.map(f => `• ${f.name} <span style="opacity:.6;">(${Math.round(f.size / 1024)} KB)</span>`).join('<br>')
         : '';
     };
   }
@@ -7077,7 +7082,7 @@ async function localizeInboxReceiptFiles(item) {
       if (local) {
         if (!firstLocal) firstLocal = local;
         // The cloud copy was only a staging area — remove it now it's local.
-        try { await window._fbDeleteReceipt(url); } catch (_) {}
+        try { await window._fbDeleteReceipt(url); } catch (_) { }
       }
     } catch (_) { /* skip this file, keep going */ }
   }
@@ -7265,10 +7270,10 @@ function renderGmailEmailsList() {
   const esc = escapeHtml;
   const rowsHtml = _gmailEmailsFetched.map((email) => {
     const dateStr = new Date(email.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
-    const attachmentBadge = email.hasAttachments 
-      ? `<span class="pill gray" style="font-size:10px;padding:1px 6px;" title="${esc(email.attachmentNames.join(', '))} font-weight:normal;">📎 ${email.attachmentCount}</span>` 
+    const attachmentBadge = email.hasAttachments
+      ? `<span class="pill gray" style="font-size:10px;padding:1px 6px;" title="${esc(email.attachmentNames.join(', '))} font-weight:normal;">📎 ${email.attachmentCount}</span>`
       : '—';
-      
+
     const fromParts = email.from.match(/^(.*?)\s*<.*>$/);
     const cleanFrom = fromParts ? fromParts[1].replace(/['"]/g, '').trim() : email.from;
 
@@ -7360,7 +7365,7 @@ async function toggleEmailPreview(msgId) {
   } else {
     row.style.display = '';
     btn.textContent = 'Close';
-    
+
     const drawer = $('email-preview-drawer-' + msgId);
     if (drawer && !_emailContentCache[msgId]) {
       drawer.innerHTML = `
@@ -7375,7 +7380,7 @@ async function toggleEmailPreview(msgId) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!data || !data.ok) throw new Error(data.error || 'Failed to fetch content');
-        
+
         _emailContentCache[msgId] = data.email;
         renderEmailPreviewContent(msgId, drawer);
       } catch (err) {
@@ -7445,7 +7450,7 @@ function renderEmailPreviewContent(msgId, container) {
         </label>
       `;
     }).join('');
-    
+
     attachmentsHtml = `
       <div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;">
         <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:var(--text2);">Include attachments in AI Scan (${email.fileParts.length}):</div>
@@ -7503,7 +7508,7 @@ async function _callGeminiForReceipts(apiKey, parts) {
               shouldStop = true;
             }
           }
-        } catch (_) {}
+        } catch (_) { }
         lastErr = new Error(detail);
         if (shouldStop) throw lastErr;
         continue;
@@ -7584,7 +7589,7 @@ Rules:
     } catch (e) {
       console.error('[email-receipt-import] fetch failed', e);
       if (wrap) {
-        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Gmail retrieval failed: ${(e.message || e).toString().replace(/</g,'&lt;')}</div>`;
+        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Gmail retrieval failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
       }
       showToast('Could not fetch email details', 'err');
       if (btn) btn.disabled = false;
@@ -7615,7 +7620,7 @@ Rules:
     } catch (e) {
       console.error('[email-receipt-import] file read failed', e);
       if (wrap) {
-        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g,'&lt;')}</div>`;
+        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
       }
       showToast('Could not read files', 'err');
       if (btn) btn.disabled = false;
@@ -7669,7 +7674,7 @@ Rules:
   } catch (e) {
     console.error('[email-receipt-import] Gemini failed', e);
     if (wrap) {
-      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Extraction failed: ${(e.message || e).toString().replace(/</g,'&lt;')}<br><span style="color:var(--text3);">Verify your Gemini API key and parameters.</span></div>`;
+      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Extraction failed: ${(e.message || e).toString().replace(/</g, '&lt;')}<br><span style="color:var(--text3);">Verify your Gemini API key and parameters.</span></div>`;
     }
     showToast('Could not extract receipts', 'err');
   } finally {
@@ -7711,14 +7716,14 @@ function renderEmailReceiptDrafts(receipts) {
   const esc = escapeHtml;
   const catOptions = (sel) => EXPENSE_CATEGORIES
     .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
-  const curOptions = (sel) => ['CAD','USD','EUR','GBP','AUD','JPY','MXN','CHF','SEK','NOK','DKK']
+  const curOptions = (sel) => ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'MXN', 'CHF', 'SEK', 'NOK', 'DKK']
     .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
 
   const dupCount = receipts.filter(r => _isLikelyDuplicateExpense(r)).length;
 
   wrap.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
-      <div style="font-size:12px;color:var(--text3);">${receipts.length} draft${receipts.length>1?'s':''} extracted${dupCount?` · <span style="color:var(--amber);">${dupCount} possible duplicate${dupCount>1?'s':''}</span>`:''}. Edit any field, deselect rows you don't want.</div>
+      <div style="font-size:12px;color:var(--text3);">${receipts.length} draft${receipts.length > 1 ? 's' : ''} extracted${dupCount ? ` · <span style="color:var(--amber);">${dupCount} possible duplicate${dupCount > 1 ? 's' : ''}</span>` : ''}. Edit any field, deselect rows you don't want.</div>
       <div style="display:flex;gap:6px;">
         <button class="btn sm" type="button" onclick="toggleAllEmailDrafts(true)">Select all</button>
         <button class="btn sm" type="button" onclick="toggleAllEmailDrafts(false)">Select none</button>
@@ -7732,19 +7737,19 @@ function renderEmailReceiptDrafts(receipts) {
         </tr></thead>
         <tbody>
         ${receipts.map((r, i) => {
-          const dup = _isLikelyDuplicateExpense(r);
-          const lowConf = (r.confidence ?? 1) < 0.5;
-          return `<tr data-erd-row="${i}" style="${dup?'background:rgba(220,170,40,.06);':''}">
-            <td><input type="checkbox" data-erd-include="${i}" ${r.include!==false?'checked':''}></td>
+    const dup = _isLikelyDuplicateExpense(r);
+    const lowConf = (r.confidence ?? 1) < 0.5;
+    return `<tr data-erd-row="${i}" style="${dup ? 'background:rgba(220,170,40,.06);' : ''}">
+            <td><input type="checkbox" data-erd-include="${i}" ${r.include !== false ? 'checked' : ''}></td>
             <td><input type="date" data-erd-field="date" data-erd-i="${i}" value="${esc(r.date)}" style="font-size:12px;width:130px;"></td>
             <td>
               <input type="text" data-erd-field="vendor" data-erd-i="${i}" value="${esc(r.vendor)}" placeholder="Vendor" style="font-size:12px;width:100%;margin-bottom:2px;">
               <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:11px;width:100%;color:var(--text2);">
-              ${dup?`<div style="font-size:10px;color:var(--amber);margin-top:2px;">⚠ matches an existing expense</div>`:''}
-              ${lowConf?`<div style="font-size:10px;color:var(--text3);margin-top:2px;">low confidence (${(r.confidence*100|0)}%)</div>`:''}
+              ${dup ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;">⚠ matches an existing expense</div>` : ''}
+              ${lowConf ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">low confidence (${(r.confidence * 100 | 0)}%)</div>` : ''}
               ${r.msgId
-                ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">${(r.selectedAtts&&r.selectedAtts.length)?`📎 ${r.selectedAtts.length} file${r.selectedAtts.length>1?'s':''} + email`:`📄 email`} → receipts folder on import</div>`
-                : ''}
+        ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → receipts folder on import</div>`
+        : ''}
             </td>
             <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:12px;">${catOptions(r.category)}</select></td>
             <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:12px;width:120px;"></td>
@@ -7754,9 +7759,9 @@ function renderEmailReceiptDrafts(receipts) {
                 <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:12px;width:90px;text-align:right;">
               </div>
             </td>
-            <td>${r.sourceSnippet?`<button class="btn sm" type="button" title="View source snippet" aria-label="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>`:''}</td>
+            <td>${r.sourceSnippet ? `<button class="btn sm" type="button" title="View source snippet" aria-label="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>` : ''}</td>
           </tr>`;
-        }).join('')}
+  }).join('')}
         </tbody>
       </table>
     </div>
@@ -7958,11 +7963,11 @@ async function importEmailReceiptDrafts() {
   else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
 }
 
-function renderExpenses(){
-  const s=getState(),book=getBook(),cur=book.currency;
-  const expenses=s.expenses||[];
-  const body=$('exp-body');
-  if(!body)return;
+function renderExpenses() {
+  const s = getState(), book = getBook(), cur = book.currency;
+  const expenses = s.expenses || [];
+  const body = $('exp-body');
+  if (!body) return;
   const pbExp = window.authorSubmissions[activeBook]?.expenses || {};
   const pendingAuthExpenses = Object.keys(pbExp).map(k => {
     const raw = JSON.parse(pbExp[k].data);
@@ -7970,8 +7975,8 @@ function renderExpenses(){
   });
   const combined = [...pendingAuthExpenses, ...expenses];
 
-  if(!combined.length){
-    body.innerHTML=`<tr><td colspan="${window.IS_PUBLISHER ? 9 : 8}"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>`;
+  if (!combined.length) {
+    body.innerHTML = `<tr><td colspan="${window.IS_PUBLISHER ? 9 : 8}"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>`;
     return;
   }
 
@@ -7985,10 +7990,10 @@ function renderExpenses(){
       total += (e.amount || 0);
     }
   }
-  
+
   $('exp-head-row').innerHTML = `<tr><th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
-  
-  body.innerHTML=combined.map(e=>{
+
+  body.innerHTML = combined.map(e => {
     if (e.pendingAuth) {
       const actionCell = window.IS_PUBLISHER
         ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', '${e._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', '${e._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
@@ -7997,7 +8002,7 @@ function renderExpenses(){
         <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
         <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
         <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
-        <td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref)||'—'}</td>
+        <td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
         <td>—</td>
         <td class="r" style="font-weight:600;">${fmt(e.amount, e.currency)}</td>
         ${window.IS_PUBLISHER ? '<td class="r">—</td>' : ''}
@@ -8006,17 +8011,17 @@ function renderExpenses(){
       </tr>`;
     }
 
-    const statusCell=isGratuityExpense(e)
-      ?'<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — not reimbursed to the author">Publisher expense</span>'
-      :e.received
-      ?'<span class="pill green" style="font-size:10px;">✓ Received</span>'
-      :'<span style="font-size:11px;color:var(--text4);">Pending</span>';
-    const actionCell=(!e.received && !isAuthor() && !isGratuityExpense(e))
-      ?`<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>`:'';
+    const statusCell = isGratuityExpense(e)
+      ? '<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — not reimbursed to the author">Publisher expense</span>'
+      : e.received
+        ? '<span class="pill green" style="font-size:10px;">✓ Received</span>'
+        : '<span style="font-size:11px;color:var(--text4);">Pending</span>';
+    const actionCell = (!e.received && !isAuthor() && !isGratuityExpense(e))
+      ? `<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>` : '';
     const baseReceiptLink = e.receipt ? (
       e.receipt.startsWith('local://')
-      ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://',''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
-      : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
+        ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
+        : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
     ) : `<span style="font-size:11px;color:var(--text4); font-weight: 500;">Missing</span>`;
     const trackLink = e.trackingUrl
       ? ` <a href="${e.trackingUrl}" target="_blank" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
@@ -8030,37 +8035,37 @@ function renderExpenses(){
     let baseAmountTitle = '';
 
     if (window.IS_PUBLISHER) {
-       if (isBase) {
-           baseAmountText = '-';
-       } else if (e.baseAmount) {
-           baseAmountText = fmt(e.baseAmount, 'CAD');
-       } else if (_fxRateCache[`${eCur}_CAD`]) {
-           baseAmountText = fmt(e.amount * _fxRateCache[`${eCur}_CAD`], 'CAD');
-       } else {
-           baseAmountText = '<span style="color:var(--amber);" title="Missing exchange rate">⚠️</span>';
-       }
-       // Audit trail: show the exact rate used and on which date.
-       const usedRate = (Number(e.fxRate) > 0) ? Number(e.fxRate) : _fxRateCache[`${eCur}_CAD`];
-       if (!isBase && usedRate > 0) {
-           baseAmountTitle = `1 ${eCur} = ${usedRate.toFixed(4)} CAD${e.date ? ` on ${e.date}` : ''}`;
-       }
+      if (isBase) {
+        baseAmountText = '-';
+      } else if (e.baseAmount) {
+        baseAmountText = fmt(e.baseAmount, 'CAD');
+      } else if (_fxRateCache[`${eCur}_CAD`]) {
+        baseAmountText = fmt(e.amount * _fxRateCache[`${eCur}_CAD`], 'CAD');
+      } else {
+        baseAmountText = '<span style="color:var(--amber);" title="Missing exchange rate">⚠️</span>';
+      }
+      // Audit trail: show the exact rate used and on which date.
+      const usedRate = (Number(e.fxRate) > 0) ? Number(e.fxRate) : _fxRateCache[`${eCur}_CAD`];
+      if (!isBase && usedRate > 0) {
+        baseAmountTitle = `1 ${eCur} = ${usedRate.toFixed(4)} CAD${e.date ? ` on ${e.date}` : ''}`;
+      }
     }
 
-    return `<tr style="${e.received?'opacity:.5;':''}">
+    return `<tr style="${e.received ? 'opacity:.5;' : ''}">
       <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
       <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
       <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
-      <td style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref)||'—'}</td>
+      <td style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
       <td>${receiptCell}</td>
-      <td class="r" style="color:${e.received?'var(--text4)':'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount,eCur)}</td>
+      <td class="r" style="color:${e.received ? 'var(--text4)' : 'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount, eCur)}</td>
       ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
       <td>${statusCell}</td>
       <td>${actionCell}</td>
     </tr>`;
   }).join('')
-  +`<tr style="background:var(--cream2);">
+    + `<tr style="background:var(--cream2);">
       <td colspan="5" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding</td>
-      <td class="r" style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${fmt(total,cur)}</td>
+      <td class="r" style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${fmt(total, cur)}</td>
       <td colspan="${window.IS_PUBLISHER ? 3 : 2}"></td>
     </tr>`;
 }
@@ -8079,14 +8084,14 @@ function handleImportFile(event) {
       const wb = XLSX.read(data, { type: 'array', cellDates: true });
       const book = getBook();
 
-      const SHORT = {'Un Fantastico Altrove':'Altrove','The Hound':'Hound','Archaeology of Presence':'Archaeology','Sistema_non_autorizzato':'Sistema','As if Nobody is Watching':'Nobody','Collective Photobook':'Collective'};
+      const SHORT = { 'Un Fantastico Altrove': 'Altrove', 'The Hound': 'Hound', 'Archaeology of Presence': 'Archaeology', 'Sistema_non_autorizzato': 'Sistema', 'As if Nobody is Watching': 'Nobody', 'Collective Photobook': 'Collective' };
       const shortName = SHORT[book.title] || book.title;
       // Try short name first, then full name, then first sheet
       let sheetName = wb.SheetNames.find(n => n === shortName + ' — Orders')
-                   || wb.SheetNames.find(n => n === book.title + ' — Orders')
-                   || wb.SheetNames.find(n => n.toLowerCase().includes(shortName.toLowerCase()))
-                   || wb.SheetNames.find(n => n.toLowerCase().includes(book.title.toLowerCase().slice(0,6)))
-                   || wb.SheetNames[0];
+        || wb.SheetNames.find(n => n === book.title + ' — Orders')
+        || wb.SheetNames.find(n => n.toLowerCase().includes(shortName.toLowerCase()))
+        || wb.SheetNames.find(n => n.toLowerCase().includes(book.title.toLowerCase().slice(0, 6)))
+        || wb.SheetNames[0];
       const ws = wb.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
@@ -8096,12 +8101,12 @@ function handleImportFile(event) {
       const colMap = (row) => {
         const k = (name) => {
           const keys = Object.keys(row);
-          return keys.find(k => k.toLowerCase().replace(/[\s_#]/g,'').includes(name)) || '';
+          return keys.find(k => k.toLowerCase().replace(/[\s_#]/g, '').includes(name)) || '';
         };
-        const num   = row[k('order')] || row[k('num')] || '';
-        const date  = row[k('date')] || '';
-        const chan   = row[k('channel')] || row[k('chan')] || 'Website';
-        const qty   = parseFloat(row[k('qty')] || row[k('quantity')] || 1) || 1;
+        const num = row[k('order')] || row[k('num')] || '';
+        const date = row[k('date')] || '';
+        const chan = row[k('channel')] || row[k('chan')] || 'Website';
+        const qty = parseFloat(row[k('qty')] || row[k('quantity')] || 1) || 1;
         const price = parseFloat(row[k('unit')] || row[k('price')] || 0) || 0;
         const notes = row[k('note')] || '';
         // Parse date — handle Excel date objects, strings, etc.
@@ -8112,9 +8117,9 @@ function handleImportFile(event) {
           if (!isNaN(d)) parsedDate = d.toISOString().split('T')[0];
         } else if (typeof date === 'number') {
           const d = XLSX.SSF.parse_date_code(date);
-          parsedDate = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+          parsedDate = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
         }
-        return { num: String(num||'IMP-'+Date.now()), date: parsedDate, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
+        return { num: String(num || 'IMP-' + Date.now()), date: parsedDate, chan: String(chan), qty: Math.abs(Math.round(qty)), price, notes: String(notes) };
       };
 
       _importRows = rows.map(colMap).filter(r => r.qty > 0);
@@ -8146,12 +8151,12 @@ function handleImportFile(event) {
           <td>${escapeHtml(r.chan)}</td>
           <td class="r">${r.qty}</td>
           <td class="r">${book.currency}${r.price.toFixed(2)}</td>
-          <td class="r" style="font-weight:600;">${book.currency}${(r.qty*r.price).toFixed(2)}</td>
-          <td style="font-size:11px;color:var(--text3);">${escapeHtml(r.notes)||'—'}</td>
+          <td class="r" style="font-weight:600;">${book.currency}${(r.qty * r.price).toFixed(2)}</td>
+          <td style="font-size:11px;color:var(--text3);">${escapeHtml(r.notes) || '—'}</td>
           <td><span class="pill blue" style="font-size:10px;">New</span></td>
         </tr>`).join('');
       openM('import');
-    } catch(err) {
+    } catch (err) {
       showToast('Could not read file: ' + err.message, 'err');
     }
   };
@@ -8170,11 +8175,11 @@ function confirmImport() {
     s.stock = Math.max(0, s.stock - r.qty);
     s.sold += r.qty;
     s.revenue += r.qty * r.price;
-    if (!s.chStats[r.chan]) s.chStats[r.chan] = { txns:0, units:0, revenue:0 };
+    if (!s.chStats[r.chan]) s.chStats[r.chan] = { txns: 0, units: 0, revenue: 0 };
     s.chStats[r.chan].txns++;
     s.chStats[r.chan].units += r.qty;
     s.chStats[r.chan].revenue += r.qty * r.price;
-    s.hist.unshift({ num:r.num, chan:r.chan, qty:r.qty, price:r.price, after:s.stock, notes:r.notes, date:r.date });
+    s.hist.unshift({ num: r.num, chan: r.chan, qty: r.qty, price: r.price, after: s.stock, notes: r.notes, date: r.date });
     imported++;
   });
 
@@ -8199,7 +8204,7 @@ function updateManualForm() {
   // Update book context bar
   const ctxTitle = $('bc-title-man');
   if (ctxTitle) ctxTitle.textContent = book.title;
-  
+
   const gExpWrap = $('g-expense-wrap');
   if (gExpWrap) gExpWrap.style.display = isAuthor() ? 'none' : 'flex';
 
@@ -8207,37 +8212,37 @@ function updateManualForm() {
   if (typeof window.updateGratuitySourceHint === 'function') window.updateGratuitySourceHint();
 }
 
-function phint(){
-  const book=getBook(),p=parseFloat($('m-price').value)||0,q=parseInt($('m-qty').value)||1,h=$('m-hint');
+function phint() {
+  const book = getBook(), p = parseFloat($('m-price').value) || 0, q = parseInt($('m-qty').value) || 1, h = $('m-hint');
   let t = p * q;
-  
+
   if (_manualFxRate) {
-     calcFx(); // Update the inline converted value
-     const convertedP = p * _manualFxRate;
-     t = convertedP * q;
-     h.className='hint-text';
-     h.textContent=t>0 ? `Total revenue: ${fmt(t, book.currency)}` : '';
-  } else if(p<book.listPrice){
-     h.className='hint-text amber';
-     h.textContent=`Discounted from ${book.currency}${book.listPrice} — total ${fmt(t,book.currency)}`;
+    calcFx(); // Update the inline converted value
+    const convertedP = p * _manualFxRate;
+    t = convertedP * q;
+    h.className = 'hint-text';
+    h.textContent = t > 0 ? `Total revenue: ${fmt(t, book.currency)}` : '';
+  } else if (p < book.listPrice) {
+    h.className = 'hint-text amber';
+    h.textContent = `Discounted from ${book.currency}${book.listPrice} — total ${fmt(t, book.currency)}`;
   } else {
-     h.className='hint-text';
-     h.textContent=q>1?`Total ${fmt(t,book.currency)}`:'';
+    h.className = 'hint-text';
+    h.textContent = q > 1 ? `Total ${fmt(t, book.currency)}` : '';
   }
 }
-async function submitManual(ev){
+async function submitManual(ev) {
   return withButtonLoading(ev, 'Saving…', async () => {
-    const book=getBook(),qty=parseInt($('m-qty').value)||1;
-    const rawPrice=parseFloat($('m-price').value)||book.listPrice;
-    const num=$('m-num').value.trim()||'MAN-'+Date.now(),chan=$('m-chan').value,notes=$('m-notes').value.trim();
-    const paymentType=$('m-payment-type').value;
-    if(!paymentType){
-      $('m-payment-type').style.borderColor='var(--red)';
+    const book = getBook(), qty = parseInt($('m-qty').value) || 1;
+    const rawPrice = parseFloat($('m-price').value) || book.listPrice;
+    const num = $('m-num').value.trim() || 'MAN-' + Date.now(), chan = $('m-chan').value, notes = $('m-notes').value.trim();
+    const paymentType = $('m-payment-type').value;
+    if (!paymentType) {
+      $('m-payment-type').style.borderColor = 'var(--red)';
       $('m-payment-type').focus();
-      showToast('⚠ Please select a payment type','warn');
+      showToast('⚠ Please select a payment type', 'warn');
       return;
     }
-    $('m-payment-type').style.borderColor='';
+    $('m-payment-type').style.borderColor = '';
 
     let price = rawPrice;
     let fxNote = '';
@@ -8260,7 +8265,7 @@ async function submitManual(ev){
       payment = buildPaymentMeta({ book, qty, unitPrice: price });
     }
 
-    const fullNotes=[notes,fxNote,paymentType].filter(Boolean).join(' · ');
+    const fullNotes = [notes, fxNote, paymentType].filter(Boolean).join(' · ');
 
     // Create standard entry payload. `directToArtist` is the structured flag used
     // for detection (isDirectToArtistSale); paymentType is kept for display/back-compat.
@@ -8271,12 +8276,12 @@ async function submitManual(ev){
       // Author queue route
       try {
         await window._fbSubmitActivity(activeBook, 'sales', entryPayload);
-        addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — (Submitted)`,'warn');
+        addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — (Submitted)`, 'warn');
         const isArtistPayment = directToArtist;
         const notifyKind = isArtistPayment ? 'Artist Payment Approval' : 'Sale';
-        const baseSummary = `${num}: -${qty} @ ${fmt(price,book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
+        const baseSummary = `${num}: -${qty} @ ${fmt(price, book.currency)}${paymentType ? ' · ' + paymentType : ''}`;
         const notifySummary = isArtistPayment
-          ? `ACTION REQUIRED — artist payment of ${fmt(qty*price,book.currency)} awaiting your approval. ${baseSummary}`
+          ? `ACTION REQUIRED — artist payment of ${fmt(qty * price, book.currency)} awaiting your approval. ${baseSummary}`
           : baseSummary;
         notifyPublisherSubmission(notifyKind, entryPayload, notifySummary);
 
@@ -8299,22 +8304,22 @@ async function submitManual(ev){
       }
     } else {
       // Publisher direct route
-      if(directToArtist){
-        recordOrderPendingTransfer(num,chan,qty,price,fullNotes,payment);
-        addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)} — ⏳ awaiting artist transfer`,'warn');
+      if (directToArtist) {
+        recordOrderPendingTransfer(num, chan, qty, price, fullNotes, payment);
+        addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)} — ⏳ awaiting artist transfer`, 'warn');
         showToast('⏳ Order logged — awaiting artist transfer to publisher');
       } else {
-        recordOrder(num,chan,qty,price,fullNotes,payment);
-        addLog('log-manual',`${num}: -${qty} @ ${fmt(price,book.currency)}${fxNote?' ('+fxNote+')':''} → ${getState().stock} remaining`,'ok');
-        if(getState().stock<=book.threshold)addLog('log-manual','⚠ Below threshold!','warn');
+        recordOrder(num, chan, qty, price, fullNotes, payment);
+        addLog('log-manual', `${num}: -${qty} @ ${fmt(price, book.currency)}${fxNote ? ' (' + fxNote + ')' : ''} → ${getState().stock} remaining`, 'ok');
+        if (getState().stock <= book.threshold) addLog('log-manual', '⚠ Below threshold!', 'warn');
         showToast('✓ Order saved · syncing to Sheets…');
       }
     }
 
-    $('m-num').value='';$('m-qty').value='1';
-    $('m-price').value=book.listPrice.toFixed(2);
-    $('m-notes').value='';$('m-payment-type').value='';$('m-hint').textContent='';
-    $('m-price-cur').value='BOOK';
+    $('m-num').value = ''; $('m-qty').value = '1';
+    $('m-price').value = book.listPrice.toFixed(2);
+    $('m-notes').value = ''; $('m-payment-type').value = ''; $('m-hint').textContent = '';
+    $('m-price-cur').value = 'BOOK';
     onManualCurrencyChange(); // reset fx logic
   });
 }
@@ -8324,56 +8329,56 @@ async function submitManual(ev){
 // twice (inventory off, revenue double-counted). Keys are `${type}:${subKey}`.
 const _submissionsInFlight = new Set();
 
-window.approveSubmission = async function(type, subKey) {
+window.approveSubmission = async function (type, subKey) {
   const queue = window.authorSubmissions[activeBook]?.[type] || {};
   if (!queue[subKey]) return;
   const flightKey = `${activeBook}:${type}:${subKey}`;
   if (_submissionsInFlight.has(flightKey)) return;
   _submissionsInFlight.add(flightKey);
   try {
-  const raw = JSON.parse(queue[subKey].data);
-  const s = getState();
+    const raw = JSON.parse(queue[subKey].data);
+    const s = getState();
 
-  if (type === 'expenses') {
-    if (!s.expenses) s.expenses = [];
+    if (type === 'expenses') {
+      if (!s.expenses) s.expenses = [];
 
-    s.expenses.unshift(raw);
-    saveState(activeBook);
-    await window._fbDeleteSubmission(activeBook, type, subKey);
-    showToast('✓ Expense approved and added to ledger');
-    updateDash();
-    switchTab('dashboard');
-    setTimeout(() => {
-      const expBanner = $('d-expenses-sect');
-      if (expBanner) expBanner.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-  } else if (type === 'sales') {
-    let pendingTransfer = false;
-    if(isDirectToArtistSale(raw)){
-      recordOrderPendingTransfer(raw.num,raw.chan,raw.qty,raw.price,raw.notes,raw.payment);
-      pendingTransfer = true;
-    } else {
-      recordOrder(raw.num,raw.chan,raw.qty,raw.price,raw.notes,raw.payment);
-    }
-    await window._fbDeleteSubmission(activeBook, type, subKey);
-    showToast('✓ Sale approved and added to ledger');
-    updateDash();
-    if (pendingTransfer) {
+      s.expenses.unshift(raw);
+      saveState(activeBook);
+      await window._fbDeleteSubmission(activeBook, type, subKey);
+      showToast('✓ Expense approved and added to ledger');
+      updateDash();
       switchTab('dashboard');
       setTimeout(() => {
-        const transSect = $('artist-transfers-sect');
-        if (transSect) transSect.scrollIntoView({ behavior: 'smooth' });
+        const expBanner = $('d-expenses-sect');
+        if (expBanner) expBanner.scrollIntoView({ behavior: 'smooth' });
       }, 100);
-    } else {
-      renderHist();
+    } else if (type === 'sales') {
+      let pendingTransfer = false;
+      if (isDirectToArtistSale(raw)) {
+        recordOrderPendingTransfer(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
+        pendingTransfer = true;
+      } else {
+        recordOrder(raw.num, raw.chan, raw.qty, raw.price, raw.notes, raw.payment);
+      }
+      await window._fbDeleteSubmission(activeBook, type, subKey);
+      showToast('✓ Sale approved and added to ledger');
+      updateDash();
+      if (pendingTransfer) {
+        switchTab('dashboard');
+        setTimeout(() => {
+          const transSect = $('artist-transfers-sect');
+          if (transSect) transSect.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      } else {
+        renderHist();
+      }
     }
-  }
   } finally {
     _submissionsInFlight.delete(flightKey);
   }
 }
 
-window.rejectSubmission = async function(type, subKey) {
+window.rejectSubmission = async function (type, subKey) {
   const flightKey = `${activeBook}:${type}:${subKey}`;
   if (_submissionsInFlight.has(flightKey)) return;
   if (!(await confirmDialog('Reject this submission from the author?', { okLabel: 'Reject', danger: true }))) return;
@@ -8388,26 +8393,26 @@ window.rejectSubmission = async function(type, subKey) {
   }
 }
 
-function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
-  const s=getState(),book=getBook();
+function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null) {
+  const s = getState(), book = getBook();
   // Reduce stock and count as sold, but do NOT add to revenue yet
-  s.stock=Math.max(0,s.stock-qty);
-  s.sold+=qty;
-  if(!s.chStats[chan])s.chStats[chan]={txns:0,units:0,revenue:0};
-  s.chStats[chan].txns++;s.chStats[chan].units+=qty;
+  s.stock = Math.max(0, s.stock - qty);
+  s.sold += qty;
+  if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
+  s.chStats[chan].txns++; s.chStats[chan].units += qty;
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({num,chan,qty,price,after:s.stock,notes:notes||'',date:today(),artistPending:true,directToArtist:true,payment,sheetsId});
+  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: notes || '', date: today(), artistPending: true, directToArtist: true, payment, sheetsId });
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
-  s.artistTransfers.push({id:Date.now(),num,chan,qty,price,total:qty*price,notes:notes||'',date:today(),payment,sheetsId});
+  s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: notes || '', date: today(), payment, sheetsId });
   recomputeAfters(s, book);
-  renderHist();updateDash();saveState(activeBook);
+  renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
   const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
-    type:'order',book:book.title,date:today(),num,chan,qty,price,total:totalNative,stockAfter:s.stock,notes:(notes||'')+' [PENDING ARTIST TRANSFER]',
+    type: 'order', book: book.title, date: today(), num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: (notes || '') + ' [PENDING ARTIST TRANSFER]',
     sheetsId,
     currency: nativeCur,
     paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
@@ -8417,26 +8422,26 @@ function recordOrderPendingTransfer(num,chan,qty,price,notes,payment=null){
   });
 }
 
-function markArtistTransferReceived(transferId){
-  const s=getState(),book=getBook();
-  const t=s.artistTransfers.find(x=>x.id===transferId);
-  if(!t)return;
+function markArtistTransferReceived(transferId) {
+  const s = getState(), book = getBook();
+  const t = s.artistTransfers.find(x => x.id === transferId);
+  if (!t) return;
   // Now credit the revenue
-  s.revenue+=t.total;
-  if(!s.chStats[t.chan])s.chStats[t.chan]={txns:0,units:0,revenue:0};
-  s.chStats[t.chan].revenue+=t.total;
+  s.revenue += t.total;
+  if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
+  s.chStats[t.chan].revenue += t.total;
   // Mark history entry as resolved
-  const h=s.hist.find(x=>x.num===t.num&&x.artistPending);
-  if(h){h.artistPending=false;h.notes=(h.notes?h.notes+' · ':'')+'Transfer received';}
+  const h = s.hist.find(x => x.num === t.num && x.artistPending);
+  if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + 'Transfer received'; }
   // Remove from pending queue
-  s.artistTransfers=s.artistTransfers.filter(x=>x.id!==transferId);
-  renderHist();updateDash();renderArtistTransfers();saveState(activeBook);
+  s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
+  renderHist(); updateDash(); renderArtistTransfers(); saveState(activeBook);
   const nativeCurT = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   let cadEquivT = '';
   if (nativeCurT === 'CAD') cadEquivT = t.total;
   else if (t.payment && t.payment.currency === 'CAD' && t.payment.amount) cadEquivT = t.payment.amount;
   syncToSheets({
-    type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST TRANSFER RECEIVED]',
+    type: 'order', book: book.title, date: today(), num: t.num, chan: t.chan, qty: t.qty, price: t.price, total: t.total, stockAfter: s.stock, notes: (t.notes || '') + ' [ARTIST TRANSFER RECEIVED]',
     sheetsId: t.sheetsId || (h && h.sheetsId) || '',
     currency: nativeCurT,
     paymentCurrency: normalizeCurrencyCode(t.payment?.currency || nativeCurT, 'CAD'),
@@ -8444,7 +8449,7 @@ function markArtistTransferReceived(transferId){
     paymentRate: t.payment?.rate ?? '',
     convertedTotal: cadEquivT
   });
-  showToast(`✓ Transfer received — ${fmt(t.total,book.currency)} added to revenue`);
+  showToast(`✓ Transfer received — ${fmt(t.total, book.currency)} added to revenue`);
 }
 
 // Settle a held transfer where the artist KEEPS their share and only forwards
@@ -8452,55 +8457,55 @@ function markArtistTransferReceived(transferId){
 // assumes the artist forwards the full gross — this credits the sale to revenue,
 // records the artist's share as already-paid (they kept the cash), and leaves only
 // the publisher cut as the amount the artist still owes you.
-async function settleArtistTransferKeepShare(transferId){
-  const s=getState(),book=getBook();
-  const t=s.artistTransfers.find(x=>x.id===transferId);
-  if(!t)return;
+async function settleArtistTransferKeepShare(transferId) {
+  const s = getState(), book = getBook();
+  const t = s.artistTransfers.find(x => x.id === transferId);
+  if (!t) return;
 
   // The held sale already counts toward earnings, so its marginal share is the
   // drop in lifetime earnings if it were removed (this respects tier placement).
-  const h=s.hist.find(x=>x.num===t.num&&x.artistPending);
-  const full=calculateArtistEarnings(activeBook);
-  const without=calcArtistEarnings(book, { ...s, hist: s.hist.filter(x => x !== h) });
-  const share=(full&&without)
+  const h = s.hist.find(x => x.num === t.num && x.artistPending);
+  const full = calculateArtistEarnings(activeBook);
+  const without = calcArtistEarnings(book, { ...s, hist: s.hist.filter(x => x !== h) });
+  const share = (full && without)
     ? Math.max(0, +(full.totalArtistEarned - without.totalArtistEarned).toFixed(2))
-    : +(t.total/2).toFixed(2);
-  const publisherCut=+(t.total - share).toFixed(2);
+    : +(t.total / 2).toFixed(2);
+  const publisherCut = +(t.total - share).toFixed(2);
 
-  if(!(await confirmDialog(
-    `Settle ${escapeHtml(t.num)} — artist keeps their ${fmt(share,book.currency)} share?\n\n`+
-    `The full ${fmt(t.total,book.currency)} sale is booked to revenue. The artist's `+
-    `${fmt(share,book.currency)} share is recorded as paid (they kept the cash), leaving `+
-    `${fmt(publisherCut,book.currency)} — your cut — for them to forward.`,
+  if (!(await confirmDialog(
+    `Settle ${escapeHtml(t.num)} — artist keeps their ${fmt(share, book.currency)} share?\n\n` +
+    `The full ${fmt(t.total, book.currency)} sale is booked to revenue. The artist's ` +
+    `${fmt(share, book.currency)} share is recorded as paid (they kept the cash), leaving ` +
+    `${fmt(publisherCut, book.currency)} — your cut — for them to forward.`,
     { okLabel: 'Settle' }
   ))) return;
 
   // Credit the sale to revenue and resolve the pending history entry.
-  s.revenue+=t.total;
-  if(!s.chStats[t.chan])s.chStats[t.chan]={txns:0,units:0,revenue:0};
-  s.chStats[t.chan].revenue+=t.total;
-  if(h){h.artistPending=false;h.notes=(h.notes?h.notes+' · ':'')+'Artist kept their share';}
+  s.revenue += t.total;
+  if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
+  s.chStats[t.chan].revenue += t.total;
+  if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + 'Artist kept their share'; }
 
   // Record the artist's share as a payout — they already hold that cash.
-  if(!s.artistPayouts)s.artistPayouts=[];
-  if(share>0){
+  if (!s.artistPayouts) s.artistPayouts = [];
+  if (share > 0) {
     s.artistPayouts.push({
-      id:Date.now(),
-      date:today(),
-      amount:share,
-      method:'Kept from direct sale',
-      notes:`${t.num} — artist retained their share`
+      id: Date.now(),
+      date: today(),
+      amount: share,
+      method: 'Kept from direct sale',
+      notes: `${t.num} — artist retained their share`
     });
   }
 
-  s.artistTransfers=s.artistTransfers.filter(x=>x.id!==transferId);
-  renderHist();updateDash();renderArtistTransfers();await saveState(activeBook);
+  s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
+  renderHist(); updateDash(); renderArtistTransfers(); await saveState(activeBook);
   const nativeCurS = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   let cadEquivS = '';
   if (nativeCurS === 'CAD') cadEquivS = t.total;
   else if (t.payment && t.payment.currency === 'CAD' && t.payment.amount) cadEquivS = t.payment.amount;
   syncToSheets({
-    type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST KEPT SHARE]',
+    type: 'order', book: book.title, date: today(), num: t.num, chan: t.chan, qty: t.qty, price: t.price, total: t.total, stockAfter: s.stock, notes: (t.notes || '') + ' [ARTIST KEPT SHARE]',
     sheetsId: t.sheetsId || (h && h.sheetsId) || '',
     currency: nativeCurS,
     paymentCurrency: normalizeCurrencyCode(t.payment?.currency || nativeCurS, 'CAD'),
@@ -8508,50 +8513,50 @@ async function settleArtistTransferKeepShare(transferId){
     paymentRate: t.payment?.rate ?? '',
     convertedTotal: cadEquivS
   });
-  showToast(`✓ Settled — artist keeps ${fmt(share,book.currency)}; ${fmt(publisherCut,book.currency)} still to forward`);
+  showToast(`✓ Settled — artist keeps ${fmt(share, book.currency)}; ${fmt(publisherCut, book.currency)} still to forward`);
 }
 
 // Settle a held transfer where the artist keeps the FULL gross — the publisher
 // forgives their cut entirely. The full sale is booked to revenue and the full
 // gross is recorded as a payout to the artist (they owe nothing further).
-async function settleArtistTransferKeepAll(transferId){
-  const s=getState(),book=getBook();
-  const t=s.artistTransfers.find(x=>x.id===transferId);
-  if(!t)return;
+async function settleArtistTransferKeepAll(transferId) {
+  const s = getState(), book = getBook();
+  const t = s.artistTransfers.find(x => x.id === transferId);
+  if (!t) return;
 
-  if(!(await confirmDialog(
-    `Settle ${escapeHtml(t.num)} — artist keeps everything?\n\n`+
-    `The full ${fmt(t.total,book.currency)} sale is booked to revenue and recorded as a `+
+  if (!(await confirmDialog(
+    `Settle ${escapeHtml(t.num)} — artist keeps everything?\n\n` +
+    `The full ${fmt(t.total, book.currency)} sale is booked to revenue and recorded as a ` +
     `payout to the artist. Your publisher cut is forgiven — the artist owes nothing further.`,
     { okLabel: 'Settle — forgive publisher cut' }
   ))) return;
 
-  const h=s.hist.find(x=>x.num===t.num&&x.artistPending);
+  const h = s.hist.find(x => x.num === t.num && x.artistPending);
 
   // Credit the full gross to revenue and resolve the pending history entry.
-  s.revenue+=t.total;
-  if(!s.chStats[t.chan])s.chStats[t.chan]={txns:0,units:0,revenue:0};
-  s.chStats[t.chan].revenue+=t.total;
-  if(h){h.artistPending=false;h.notes=(h.notes?h.notes+' · ':'')+'Artist kept full amount (publisher cut forgiven)';}
+  s.revenue += t.total;
+  if (!s.chStats[t.chan]) s.chStats[t.chan] = { txns: 0, units: 0, revenue: 0 };
+  s.chStats[t.chan].revenue += t.total;
+  if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + 'Artist kept full amount (publisher cut forgiven)'; }
 
   // Record the full gross as a payout — artist held all of it.
-  if(!s.artistPayouts)s.artistPayouts=[];
+  if (!s.artistPayouts) s.artistPayouts = [];
   s.artistPayouts.push({
-    id:Date.now(),
-    date:today(),
-    amount:t.total,
-    method:'Kept from direct sale (full)',
-    notes:`${t.num} — artist retained full gross; publisher cut forgiven`
+    id: Date.now(),
+    date: today(),
+    amount: t.total,
+    method: 'Kept from direct sale (full)',
+    notes: `${t.num} — artist retained full gross; publisher cut forgiven`
   });
 
-  s.artistTransfers=s.artistTransfers.filter(x=>x.id!==transferId);
-  renderHist();updateDash();renderArtistTransfers();await saveState(activeBook);
+  s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
+  renderHist(); updateDash(); renderArtistTransfers(); await saveState(activeBook);
   const nativeCurA = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   let cadEquivA = '';
   if (nativeCurA === 'CAD') cadEquivA = t.total;
   else if (t.payment && t.payment.currency === 'CAD' && t.payment.amount) cadEquivA = t.payment.amount;
   syncToSheets({
-    type:'order',book:book.title,date:today(),num:t.num,chan:t.chan,qty:t.qty,price:t.price,total:t.total,stockAfter:s.stock,notes:(t.notes||'')+' [ARTIST KEPT ALL — PUBLISHER CUT FORGIVEN]',
+    type: 'order', book: book.title, date: today(), num: t.num, chan: t.chan, qty: t.qty, price: t.price, total: t.total, stockAfter: s.stock, notes: (t.notes || '') + ' [ARTIST KEPT ALL — PUBLISHER CUT FORGIVEN]',
     sheetsId: t.sheetsId || (h && h.sheetsId) || '',
     currency: nativeCurA,
     paymentCurrency: normalizeCurrencyCode(t.payment?.currency || nativeCurA, 'CAD'),
@@ -8559,13 +8564,13 @@ async function settleArtistTransferKeepAll(transferId){
     paymentRate: t.payment?.rate ?? '',
     convertedTotal: cadEquivA
   });
-  showToast(`✓ Settled — artist keeps full ${fmt(t.total,book.currency)}; publisher cut forgiven`);
+  showToast(`✓ Settled — artist keeps full ${fmt(t.total, book.currency)}; publisher cut forgiven`);
 }
 
-function renderArtistTransfers(){
-  const s=getState(),book=getBook(),cur=book.currency;
+function renderArtistTransfers() {
+  const s = getState(), book = getBook(), cur = book.currency;
   let transfers = [...(s.artistTransfers || [])].map(t => ({ ...t, status: 'approved' }));
-  const payLink=book.paymentLink||'';
+  const payLink = book.paymentLink || '';
 
   // Merge in pending author submissions for BOTH author and publisher views
   const pbSales = window.authorSubmissions[activeBook]?.sales || {};
@@ -8581,106 +8586,106 @@ function renderArtistTransfers(){
   });
 
   // ── AUTHOR BANNER
-  const banner=$('author-payment-banner');
-  if(banner){
-    if(isAuthor() && transfers.length>0){
-      const totalOwed=transfers.reduce((a,t)=>a+t.total,0);
-      banner.style.display='';
-      $('apb-amount').textContent=fmt(totalOwed,cur);
-      $('apb-detail').textContent=`${transfers.length} transfer${transfers.length>1?'s':''} from sales collected on your end (incl. pending)`;
-      const btn=$('apb-pay-btn');
-      if(payLink){
-        const fullLink = payLink.startsWith('http') ? payLink : 'https://'+payLink;
-        btn.href=fullLink;
-        btn.textContent='Send payment →';
-        $('apb-link-hint').textContent='Opens payment link in a new tab';
+  const banner = $('author-payment-banner');
+  if (banner) {
+    if (isAuthor() && transfers.length > 0) {
+      const totalOwed = transfers.reduce((a, t) => a + t.total, 0);
+      banner.style.display = '';
+      $('apb-amount').textContent = fmt(totalOwed, cur);
+      $('apb-detail').textContent = `${transfers.length} transfer${transfers.length > 1 ? 's' : ''} from sales collected on your end (incl. pending)`;
+      const btn = $('apb-pay-btn');
+      if (payLink) {
+        const fullLink = payLink.startsWith('http') ? payLink : 'https://' + payLink;
+        btn.href = fullLink;
+        btn.textContent = 'Send payment →';
+        $('apb-link-hint').textContent = 'Opens payment link in a new tab';
       } else {
-        btn.href='#';
-        btn.onclick=e=>{e.preventDefault();};
-        btn.textContent='Contact publisher';
-        $('apb-link-hint').textContent='Payment link not set — contact your publisher';
+        btn.href = '#';
+        btn.onclick = e => { e.preventDefault(); };
+        btn.textContent = 'Contact publisher';
+        $('apb-link-hint').textContent = 'Payment link not set — contact your publisher';
       }
-      $('apb-transfers').innerHTML=transfers.map(t=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; opacity: ${t.status==='pending'?'.6': '1'}">
+      $('apb-transfers').innerHTML = transfers.map(t => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; opacity: ${t.status === 'pending' ? '.6' : '1'}">
           <div style="font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.35);">
-            ${escapeHtml(t.num)} · ${fmtD(t.date)} · ${t.qty}× ${t.status==='pending'?' (Pending Approval)':''}
+            ${escapeHtml(t.num)} · ${fmtD(t.date)} · ${t.qty}× ${t.status === 'pending' ? ' (Pending Approval)' : ''}
           </div>
-          <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--gold2);font-weight:500;">${fmt(t.total,cur)}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--gold2);font-weight:500;">${fmt(t.total, cur)}</div>
         </div>`).join('');
     } else {
-      banner.style.display='none';
+      banner.style.display = 'none';
     }
   }
 
   // ── PUBLISHER PANEL
-  const sect=$('artist-transfers-sect'),list=$('artist-transfers-list');
-  if(!sect)return;
-  if(!transfers.length){sect.style.display='none';return;}
-  sect.style.display='';
-  const fullPayLink = payLink.startsWith('http') ? payLink : payLink ? 'https://'+payLink : '';
+  const sect = $('artist-transfers-sect'), list = $('artist-transfers-list');
+  if (!sect) return;
+  if (!transfers.length) { sect.style.display = 'none'; return; }
+  sect.style.display = '';
+  const fullPayLink = payLink.startsWith('http') ? payLink : payLink ? 'https://' + payLink : '';
   const payHtml = fullPayLink
     ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : `<span style="font-size:10px;color:var(--text4);font-family:'DM Mono',monospace;">No payment link set</span>`;
-  
-  list.innerHTML=transfers.map(t=>`
-    <div style="background:white;border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;opacity: ${t.status==='pending'?'.6':'1'};">
+
+  list.innerHTML = transfers.map(t => `
+    <div style="background:white;border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;opacity: ${t.status === 'pending' ? '.6' : '1'};">
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
           <span class="pill amber">⏳ Awaiting transfer</span>
           <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${escapeHtml(t.num)}</span>
           ${t.status === 'pending' ? `<span class="pill gray" style="font-size:10px;">Pending Approval</span>` : ''}
         </div>
-        <div style="font-size:12px;color:var(--text3);">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong style="color:var(--amber);">${fmt(t.total,cur)} held</strong></div>
-        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${escapeHtml(t.notes)||'—'}</div>
+        <div style="font-size:12px;color:var(--text3);">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong style="color:var(--amber);">${fmt(t.total, cur)} held</strong></div>
+        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${escapeHtml(t.notes) || '—'}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${payHtml}
         ${t.status === 'pending'
-          ? `<button class="btn sm outline" disabled>Approve sale first</button>`
-          : `<button class="btn sm outline" onclick="settleArtistTransferKeepShare(${t.id})" title="Artist keeps their share; only your cut is forwarded">Artist keeps share</button>
+      ? `<button class="btn sm outline" disabled>Approve sale first</button>`
+      : `<button class="btn sm outline" onclick="settleArtistTransferKeepShare(${t.id})" title="Artist keeps their share; only your cut is forwarded">Artist keeps share</button>
              <button class="btn sm outline" onclick="settleArtistTransferKeepAll(${t.id})" title="Artist keeps everything — publisher forgives their cut">Artist keeps all</button>
              <button class="btn gold" onclick="markArtistTransferReceived(${t.id})" title="Artist forwarded the full amount to you">✓ Mark transfer received</button>`}
       </div>
     </div>`).join('');
 }
 
-function markExpenseReceived(id){
-  const s=getState(),book=getBook(),cur=book.currency;
-  const e=s.expenses.find(x=>x.id===id);
-  if(!e) return;
-  e.received=true;
-  e.receivedDate=today();
+function markExpenseReceived(id) {
+  const s = getState(), book = getBook(), cur = book.currency;
+  const e = s.expenses.find(x => x.id === id);
+  if (!e) return;
+  e.received = true;
+  e.receivedDate = today();
   saveState(activeBook);
   renderPendingExpenses(); renderExpenses(); updateDash();
-  showToast(`✓ Expense marked as received — ${fmt(e.amount,cur)}`);
+  showToast(`✓ Expense marked as received — ${fmt(e.amount, cur)}`);
 }
 
-function renderPendingExpenses(){
-  const s=getState(),book=getBook(),cur=book.currency;
+function renderPendingExpenses() {
+  const s = getState(), book = getBook(), cur = book.currency;
   const pending = [];
   for (const e of (s.expenses || [])) {
     if (!e.received && !isGratuityExpense(e)) {
       pending.push(e);
     }
   }
-  const sect=$('d-pending-expenses-sect'),list=$('d-pending-expenses-list');
-  if(!sect) return;
-  if(!pending.length){sect.style.display='none';return;}
-  sect.style.display='';
-  const artistLink=(s.artistPaymentLink||'').trim();
-  const fullLink=artistLink?(artistLink.startsWith('http')?artistLink:'https://'+artistLink):'';
-  const payHtml=fullLink
-    ?`<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    :`<span style="font-size:10px;color:var(--text4);font-family:'DM Mono',monospace;">No payment link set</span>`;
-  list.innerHTML=pending.map(e=>`
+  const sect = $('d-pending-expenses-sect'), list = $('d-pending-expenses-list');
+  if (!sect) return;
+  if (!pending.length) { sect.style.display = 'none'; return; }
+  sect.style.display = '';
+  const artistLink = (s.artistPaymentLink || '').trim();
+  const fullLink = artistLink ? (artistLink.startsWith('http') ? artistLink : 'https://' + artistLink) : '';
+  const payHtml = fullLink
+    ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
+    : `<span style="font-size:10px;color:var(--text4);font-family:'DM Mono',monospace;">No payment link set</span>`;
+  list.innerHTML = pending.map(e => `
     <div style="background:white;border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
           <span class="pill amber">⏳ Awaiting payment</span>
-          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${fmt(e.amount,cur)}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${fmt(e.amount, cur)}</span>
         </div>
         <div style="font-size:12px;color:var(--text3);">${fmtD(e.date)} · <span style="background:var(--cream3);padding:1px 7px;border-radius:100px;font-size:10px;">${escapeHtml(e.cat)}</span> · <strong style="color:var(--text2);">${escapeHtml(e.desc)}</strong></div>
-        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${escapeHtml(e.ref)||''}</div>
+        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${escapeHtml(e.ref) || ''}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${payHtml}
@@ -8690,7 +8695,7 @@ function renderPendingExpenses(){
 }
 
 
-window.toggleGratuityExpense = function() {
+window.toggleGratuityExpense = function () {
   const cb = $('g-expense-cb');
   const fields = $('g-expense-fields');
   if (cb.checked) {
@@ -8704,19 +8709,19 @@ window.toggleGratuityExpense = function() {
   }
 }
 
-window.updateGratuityExpenseHint = function() {
+window.updateGratuityExpenseHint = function () {
   const qty = parseInt($('g-qty').value) || 1;
   const val = parseFloat($('g-exp-val').value) || 0;
   const book = getBook();
   $('g-exp-total').textContent = fmt(qty * val, book.currency);
 }
 
-window.updateGratuitySourceHint = function() {
+window.updateGratuitySourceHint = function () {
   const book = getBook(); if (!book) return;
   const s = getState(); if (!s) return;
   const hist = s.hist || [];
-  const usedPub = hist.filter(h => h.gratuity && !h.voided && h.gratSource === 'publisher').reduce((a,h)=>a+(h.qty||0),0);
-  const usedAuth = hist.filter(h => h.gratuity && !h.voided && h.gratSource === 'author').reduce((a,h)=>a+(h.qty||0),0);
+  const usedPub = hist.filter(h => h.gratuity && !h.voided && h.gratSource === 'publisher').reduce((a, h) => a + (h.qty || 0), 0);
+  const usedAuth = hist.filter(h => h.gratuity && !h.voided && h.gratSource === 'author').reduce((a, h) => a + (h.qty || 0), 0);
   const pubAlloc = book.pubGratuity || 0, authAlloc = book.authorGratuity || 0;
   const pubLeft = pubAlloc - usedPub, authLeft = authAlloc - usedAuth;
   const sel = $('g-source');
@@ -8729,30 +8734,30 @@ window.updateGratuitySourceHint = function() {
   if (hint) {
     const warnPub = pubLeft < 0, warnAuth = authLeft < 0;
     const warnStyle = ' style="color:var(--red)"';
-    hint.innerHTML = `<span class="pile-chip"><span class="dot pub"></span>Publisher <strong${warnPub?warnStyle:''}>${pubLeft} of ${pubAlloc}</strong></span><span class="pile-chip"><span class="dot auth"></span>Author <strong${warnAuth?warnStyle:''}>${authLeft} of ${authAlloc}</strong></span>`;
+    hint.innerHTML = `<span class="pile-chip"><span class="dot pub"></span>Publisher <strong${warnPub ? warnStyle : ''}>${pubLeft} of ${pubAlloc}</strong></span><span class="pile-chip"><span class="dot auth"></span>Author <strong${warnAuth ? warnStyle : ''}>${authLeft} of ${authAlloc}</strong></span>`;
   }
 };
 
-async function submitGratuity(ev){
+async function submitGratuity(ev) {
   return withButtonLoading(ev, 'Saving…', async () => {
-    const book=getBook(),qty=parseInt($('g-qty').value)||1,ref=$('g-ref').value.trim(),notes=$('g-notes').value.trim(),date=$('g-date').value||today();
+    const book = getBook(), qty = parseInt($('g-qty').value) || 1, ref = $('g-ref').value.trim(), notes = $('g-notes').value.trim(), date = $('g-date').value || today();
     const gratSource = ($('g-source') && $('g-source').value) || 'publisher';
     const expenseIt = $('g-expense-cb') && $('g-expense-cb').checked;
     let expVal = 0;
     if (expenseIt) expVal = parseFloat($('g-exp-val').value) || 0;
 
-    const s=getState();
-    if(qty>s.stock){showToast('⚠ Not enough stock on hand','warn');return;}
-    const num='GRAT-'+Date.now().toString().slice(-6);
+    const s = getState();
+    if (qty > s.stock) { showToast('⚠ Not enough stock on hand', 'warn'); return; }
+    const num = 'GRAT-' + Date.now().toString().slice(-6);
     // Reduce stock only — no revenue, no sold count
-    s.stock=Math.max(0,s.stock-qty);
-    if(!s.chStats['Gratuity'])s.chStats['Gratuity']={txns:0,units:0,revenue:0};
-    s.chStats['Gratuity'].txns++;s.chStats['Gratuity'].units+=qty;
+    s.stock = Math.max(0, s.stock - qty);
+    if (!s.chStats['Gratuity']) s.chStats['Gratuity'] = { txns: 0, units: 0, revenue: 0 };
+    s.chStats['Gratuity'].txns++; s.chStats['Gratuity'].units += qty;
     const sheetsId = makeEventId();
-    s.hist.unshift({num,chan:'Gratuity',qty,price:0,after:s.stock,notes:(ref?(ref+(notes?' · '+notes:'')):notes)||'',date,gratuity:true,gratSource,sheetsId});
-    
-    if(expenseIt && expVal > 0) {
-      if(!s.expenses) s.expenses = [];
+    s.hist.unshift({ num, chan: 'Gratuity', qty, price: 0, after: s.stock, notes: (ref ? (ref + (notes ? ' · ' + notes : '')) : notes) || '', date, gratuity: true, gratSource, sheetsId });
+
+    if (expenseIt && expVal > 0) {
+      if (!s.expenses) s.expenses = [];
       const totalExp = qty * expVal;
 
       const currency = getBookCurrencyCode(book);
@@ -8777,27 +8782,27 @@ async function submitGratuity(ev){
 
     recomputeAfters(s, book);
     renderHist();
-    if(expenseIt) renderExpenses();
-    updateDash();saveState(activeBook);
-    syncToSheets({type:'order',book:book.title,date,num,chan:'Gratuity',qty,price:0,total:0,stockAfter:s.stock,notes:(ref?ref+' · ':'')+notes+(notes||ref?' · ':'')+gratSource+' pile',sheetsId,currency:getBookCurrencyCode(book)});
-    addLog('log-gratuity',`${num}: ${qty} gifted → ${s.stock} remaining`,'ok');
-    if(s.stock<=book.threshold)addLog('log-gratuity','⚠ Below threshold!','warn');
-    $('g-ref').value='';$('g-qty').value='1';$('g-notes').value='';$('g-date').value=today();
-    if($('g-expense-cb')) {
-      $('g-expense-cb').checked=false;
+    if (expenseIt) renderExpenses();
+    updateDash(); saveState(activeBook);
+    syncToSheets({ type: 'order', book: book.title, date, num, chan: 'Gratuity', qty, price: 0, total: 0, stockAfter: s.stock, notes: (ref ? ref + ' · ' : '') + notes + (notes || ref ? ' · ' : '') + gratSource + ' pile', sheetsId, currency: getBookCurrencyCode(book) });
+    addLog('log-gratuity', `${num}: ${qty} gifted → ${s.stock} remaining`, 'ok');
+    if (s.stock <= book.threshold) addLog('log-gratuity', '⚠ Below threshold!', 'warn');
+    $('g-ref').value = ''; $('g-qty').value = '1'; $('g-notes').value = ''; $('g-date').value = today();
+    if ($('g-expense-cb')) {
+      $('g-expense-cb').checked = false;
       window.toggleGratuityExpense();
     }
-    if (typeof window.updateGratuitySourceHint==='function') window.updateGratuitySourceHint();
+    if (typeof window.updateGratuitySourceHint === 'function') window.updateGratuitySourceHint();
     showToast('✓ Gratuity logged' + (expenseIt && expVal > 0 ? ' and expensed' : ''));
   });
 }
 
-window.backfillGratuityExpenses = function() {
+window.backfillGratuityExpenses = function () {
   const book = getBook();
   const s = getState();
   if (!s.hist) return;
   if (!s.expenses) s.expenses = [];
-  
+
   const unitCost = (book.productionCost || 0) / (book.maxPrint || 1);
   if (unitCost <= 0) {
     showToast('⚠ Book has no production cost to expense', 'warn');
@@ -8808,7 +8813,7 @@ window.backfillGratuityExpenses = function() {
   let patched = 0;
   // find all gratuities in history
   const gratuities = s.hist.filter(h => h.gratuity && !h.voided);
-  
+
   gratuities.forEach(h => {
     const existing = s.expenses.find(e => e.ref === h.num || (e.date === h.date && e.desc.includes(h.notes || 'Gifted')));
     const amount = h.qty * unitCost;
@@ -8845,11 +8850,11 @@ window.backfillGratuityExpenses = function() {
 
   if (added > 0 || patched > 0) {
     // sort expenses to keep newest first
-    s.expenses.sort((a,b) => b.id - a.id);
+    s.expenses.sort((a, b) => b.id - a.id);
     renderExpenses();
     updateDash();
     saveState(activeBook);
-    if(typeof renderTaxCenter === 'function') renderTaxCenter();
+    if (typeof renderTaxCenter === 'function') renderTaxCenter();
     showToast(`✓ Backfilled ${added} and fixed ${patched} past gratuity expenses`);
   } else {
     showToast('All past gratuities are already accounted for properly');
@@ -8857,30 +8862,30 @@ window.backfillGratuityExpenses = function() {
 }
 
 
-function storeById(id){return getState().stores.find(s=>s.id===id);}
+function storeById(id) { return getState().stores.find(s => s.id === id); }
 
-function addStore(){
-  if(!validateFields([
-    {id:'ns-name',test:v=>v.trim().length>0,msg:'Store name is required'},
-    {id:'ns-rate',test:v=>{if(v.trim()==='')return true;const n=parseFloat(v);return !isNaN(n)&&n>=0&&n<=100;},msg:'Commission must be between 0 and 100'},
-  ]))return;
-  const name=$('ns-name').value.trim();
-  getState().stores.push({id:Date.now(),name,contact:$('ns-contact').value.trim(),email:$('ns-email').value.trim(),phone:$('ns-phone').value.trim(),address:$('ns-address').value.trim(),city:$('ns-city').value.trim(),region:$('ns-region').value.trim(),postal:$('ns-postal').value.trim(),country:$('ns-country').value.trim(),website:$('ns-website').value.trim(),terms:$('ns-terms').value.trim(),rate:parseFloat($('ns-rate').value)||40,notes:$('ns-notes').value.trim(),sent:0,sold:0,returned:0,outstanding:0,amountOwed:0});
-  closeM('add-store');['ns-name','ns-contact','ns-email','ns-phone','ns-address','ns-city','ns-region','ns-postal','ns-country','ns-website','ns-terms','ns-notes'].forEach(id=>$(id).value='');$('ns-rate').value='40';renderStores();updateDash();saveState(activeBook);showToast('✓ Store added');
+function addStore() {
+  if (!validateFields([
+    { id: 'ns-name', test: v => v.trim().length > 0, msg: 'Store name is required' },
+    { id: 'ns-rate', test: v => { if (v.trim() === '') return true; const n = parseFloat(v); return !isNaN(n) && n >= 0 && n <= 100; }, msg: 'Commission must be between 0 and 100' },
+  ])) return;
+  const name = $('ns-name').value.trim();
+  getState().stores.push({ id: Date.now(), name, contact: $('ns-contact').value.trim(), email: $('ns-email').value.trim(), phone: $('ns-phone').value.trim(), address: $('ns-address').value.trim(), city: $('ns-city').value.trim(), region: $('ns-region').value.trim(), postal: $('ns-postal').value.trim(), country: $('ns-country').value.trim(), website: $('ns-website').value.trim(), terms: $('ns-terms').value.trim(), rate: parseFloat($('ns-rate').value) || 40, notes: $('ns-notes').value.trim(), sent: 0, sold: 0, returned: 0, outstanding: 0, amountOwed: 0 });
+  closeM('add-store');['ns-name', 'ns-contact', 'ns-email', 'ns-phone', 'ns-address', 'ns-city', 'ns-region', 'ns-postal', 'ns-country', 'ns-website', 'ns-terms', 'ns-notes'].forEach(id => $(id).value = ''); $('ns-rate').value = '40'; renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store added');
 }
-function renderStores(){
-  const s=getState(),el=$('stores-list'),book=getBook(),cur=book.currency;
-  if(!s.stores.length){el.innerHTML='<div class="empty-state"><div class="e-icon">🏪</div>No stores yet. Add your first consignment account.<div style="margin-top:12px;"><button class="btn gold" onclick="openM(\'add-store\')">+ Add store</button></div></div>';return;}
-  el.innerHTML=s.stores.map(st=>{
-    const sp=st.outstanding===0&&st.sent>0?'<span class="pill gray">Settled</span>':st.amountOwed>0?'<span class="pill amber">Payment due</span>':'<span class="pill green">Active</span>';
+function renderStores() {
+  const s = getState(), el = $('stores-list'), book = getBook(), cur = book.currency;
+  if (!s.stores.length) { el.innerHTML = '<div class="empty-state"><div class="e-icon">🏪</div>No stores yet. Add your first consignment account.<div style="margin-top:12px;"><button class="btn gold" onclick="openM(\'add-store\')">+ Add store</button></div></div>'; return; }
+  el.innerHTML = s.stores.map(st => {
+    const sp = st.outstanding === 0 && st.sent > 0 ? '<span class="pill gray">Settled</span>' : st.amountOwed > 0 ? '<span class="pill amber">Payment due</span>' : '<span class="pill green">Active</span>';
 
     // ── #3: Double-entry ledger balance check ───────────────────────────────
     const ledger = s.ledger || [];
-    const ledgerSent     = ledger.filter(e => e.storeId===st.id && e.type==='Shipment' && !e.voided).reduce((a,e)=>a+(e.qty||0),0);
-    const ledgerSold     = ledger.filter(e => e.storeId===st.id && e.type==='Sale'     && !e.voided).reduce((a,e)=>a+(e.qty||0),0);
-    const ledgerReturned = ledger.filter(e => e.storeId===st.id && e.type==='Return'   && !e.voided).reduce((a,e)=>a+(e.qty||0),0);
+    const ledgerSent = ledger.filter(e => e.storeId === st.id && e.type === 'Shipment' && !e.voided).reduce((a, e) => a + (e.qty || 0), 0);
+    const ledgerSold = ledger.filter(e => e.storeId === st.id && e.type === 'Sale' && !e.voided).reduce((a, e) => a + (e.qty || 0), 0);
+    const ledgerReturned = ledger.filter(e => e.storeId === st.id && e.type === 'Return' && !e.voided).reduce((a, e) => a + (e.qty || 0), 0);
     const calculatedOutstanding = ledgerSent - ledgerSold - ledgerReturned;
-    const isUnbalanced = (ledgerSent>0||st.sent>0) && (
+    const isUnbalanced = (ledgerSent > 0 || st.sent > 0) && (
       st.sent !== ledgerSent ||
       st.sold !== ledgerSold ||
       st.outstanding !== calculatedOutstanding
@@ -8888,181 +8893,183 @@ function renderStores(){
     const unbalancedBadge = isUnbalanced
       ? `<span title="Ledger mismatch: cached outstanding=${st.outstanding}, calculated=${calculatedOutstanding}" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#c0392b;border-radius:6px;padding:3px 8px;margin-left:8px;cursor:help;">⚠ Unbalanced</span>`
       : '';
-    const outstandingCell = `<div class="sk-v ${st.outstanding>0?'warn':''}" style="display:flex;align-items:center;gap:4px;">${st.outstanding}${unbalancedBadge}</div>`;
+    const outstandingCell = `<div class="sk-v ${st.outstanding > 0 ? 'warn' : ''}" style="display:flex;align-items:center;gap:4px;">${st.outstanding}${unbalancedBadge}</div>`;
 
-    return`<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city,st.contact,st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed>0?'warn':''}">${st.amountOwed>0?fmt(st.amountOwed,cur):'—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding?'disabled':''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding?'disabled':''}>Return</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div></div>`;
+    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city, st.contact, st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div></div>`;
   }).join('');
 }
-async function removeStore(id){
-  if(!(await confirmDialog('Remove this store?', { okLabel: 'Remove', danger: true }))) return;
-  getState().stores=getState().stores.filter(s=>s.id!==id);
-  renderStores();updateDash();saveState(activeBook);
+async function removeStore(id) {
+  if (!(await confirmDialog('Remove this store?', { okLabel: 'Remove', danger: true }))) return;
+  getState().stores = getState().stores.filter(s => s.id !== id);
+  renderStores(); updateDash(); saveState(activeBook);
 }
-function openEditStore(id){activeId=id;const st=storeById(id);if(!st)return;$('es-name').value=st.name;$('es-contact').value=st.contact||'';$('es-email').value=st.email||'';$('es-phone').value=st.phone||'';$('es-address').value=st.address||'';$('es-city').value=st.city||'';$('es-region').value=st.region||'';$('es-postal').value=st.postal||'';$('es-country').value=st.country||'';$('es-website').value=st.website||'';$('es-terms').value=st.terms||'';$('es-rate').value=st.rate;$('es-notes').value=st.notes||'';openM('edit-store');}
-function confirmEditStore(){
-  const st=storeById(activeId);if(!st)return;
-  if(!validateFields([
-    {id:'es-name',test:v=>v.trim().length>0,msg:'Store name is required'},
-    {id:'es-rate',test:v=>{if(v.trim()==='')return true;const n=parseFloat(v);return !isNaN(n)&&n>=0&&n<=100;},msg:'Commission must be between 0 and 100'},
-  ]))return;
-  const name=$('es-name').value.trim();
-  st.name=name;st.contact=$('es-contact').value.trim();st.email=$('es-email').value.trim();st.phone=$('es-phone').value.trim();st.address=$('es-address').value.trim();st.city=$('es-city').value.trim();st.region=$('es-region').value.trim();st.postal=$('es-postal').value.trim();st.country=$('es-country').value.trim();st.website=$('es-website').value.trim();st.terms=$('es-terms').value.trim();st.rate=parseFloat($('es-rate').value)||st.rate;st.notes=$('es-notes').value.trim();
-  closeM('edit-store');renderStores();updateDash();saveState(activeBook);showToast('✓ Store updated');
+function openEditStore(id) { activeId = id; const st = storeById(id); if (!st) return; $('es-name').value = st.name; $('es-contact').value = st.contact || ''; $('es-email').value = st.email || ''; $('es-phone').value = st.phone || ''; $('es-address').value = st.address || ''; $('es-city').value = st.city || ''; $('es-region').value = st.region || ''; $('es-postal').value = st.postal || ''; $('es-country').value = st.country || ''; $('es-website').value = st.website || ''; $('es-terms').value = st.terms || ''; $('es-rate').value = st.rate; $('es-notes').value = st.notes || ''; openM('edit-store'); }
+function confirmEditStore() {
+  const st = storeById(activeId); if (!st) return;
+  if (!validateFields([
+    { id: 'es-name', test: v => v.trim().length > 0, msg: 'Store name is required' },
+    { id: 'es-rate', test: v => { if (v.trim() === '') return true; const n = parseFloat(v); return !isNaN(n) && n >= 0 && n <= 100; }, msg: 'Commission must be between 0 and 100' },
+  ])) return;
+  const name = $('es-name').value.trim();
+  st.name = name; st.contact = $('es-contact').value.trim(); st.email = $('es-email').value.trim(); st.phone = $('es-phone').value.trim(); st.address = $('es-address').value.trim(); st.city = $('es-city').value.trim(); st.region = $('es-region').value.trim(); st.postal = $('es-postal').value.trim(); st.country = $('es-country').value.trim(); st.website = $('es-website').value.trim(); st.terms = $('es-terms').value.trim(); st.rate = parseFloat($('es-rate').value) || st.rate; st.notes = $('es-notes').value.trim();
+  closeM('edit-store'); renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store updated');
 }
-function openSend(id){activeId=id;const st=storeById(id);$('send-sname').textContent=st.name;$('send-rate').value=st.rate;openM('send-books');}
-function confirmSend(){
-  const s=getState(),book=getBook(),st=storeById(activeId);
-  if(!validateFields([
-    {id:'send-qty',test:v=>(parseInt(v)||0)>0,msg:'Enter a quantity greater than 0'},
-    {id:'send-qty',test:v=>(parseInt(v)||0)<=s.stock,msg:`Only ${s.stock} in stock`},
-    {id:'send-rate',test:v=>{const n=parseFloat(v);return !isNaN(n)&&n>=0&&n<=100;},msg:'Commission must be between 0 and 100'},
-  ]))return;
-  const qty=parseInt($('send-qty').value)||0,date=$('send-date').value,rate=parseFloat($('send-rate').value)||st.rate,notes=$('send-notes').value.trim();
-  s.stock-=qty;st.sent+=qty;st.outstanding+=qty;
+function openSend(id) { activeId = id; const st = storeById(id); $('send-sname').textContent = st.name; $('send-rate').value = st.rate; openM('send-books'); }
+function confirmSend() {
+  const s = getState(), book = getBook(), st = storeById(activeId);
+  if (!validateFields([
+    { id: 'send-qty', test: v => (parseInt(v) || 0) > 0, msg: 'Enter a quantity greater than 0' },
+    { id: 'send-qty', test: v => (parseInt(v) || 0) <= s.stock, msg: `Only ${s.stock} in stock` },
+    { id: 'send-rate', test: v => { const n = parseFloat(v); return !isNaN(n) && n >= 0 && n <= 100; }, msg: 'Commission must be between 0 and 100' },
+  ])) return;
+  const qty = parseInt($('send-qty').value) || 0, date = $('send-date').value, rate = parseFloat($('send-rate').value) || st.rate, notes = $('send-notes').value.trim();
+  s.stock -= qty; st.sent += qty; st.outstanding += qty;
   const sheetsId = makeEventId();
-  s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Shipment',date,qty,rate,amountDue:0,paid:'n/a',notes,status:'sent',sheetsId});
-  closeM('send-books');renderStores();renderLedger();updateDash();saveState(activeBook);
-  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Shipment',qty,rate,amountDue:0,notes,status:'sent',sheetsId,currency:getBookCurrencyCode(book)});
+  s.ledger.push({ id: Date.now(), storeId: st.id, storeName: st.name, type: 'Shipment', date, qty, rate, amountDue: 0, paid: 'n/a', notes, status: 'sent', sheetsId });
+  closeM('send-books'); renderStores(); renderLedger(); updateDash(); saveState(activeBook);
+  syncToSheets({ type: 'consignment', book: book.title, date, store: st.name, event: 'Shipment', qty, rate, amountDue: 0, notes, status: 'sent', sheetsId, currency: getBookCurrencyCode(book) });
   showToast(`✓ ${qty} books sent to ${st.name}`);
 }
 
 // ── BULK SEND (ship to several stores in one pass) ──────────────────────
-function openBulkSend(){
-  const s=getState();
-  if(!s.stores.length){showToast('Add a store first','warn');return;}
-  $('bulk-send-list').innerHTML=s.stores.map(st=>`<label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+function openBulkSend() {
+  const s = getState();
+  if (!s.stores.length) { showToast('Add a store first', 'warn'); return; }
+  $('bulk-send-list').innerHTML = s.stores.map(st => `<label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
     <input type="checkbox" class="bulk-send-check" data-sid="${st.id}" onchange="bulkCheckChanged('${st.id}')" style="width:auto;margin:0;">
-    <span style="flex:1;min-width:0;"><span style="font-weight:600;">${escapeHtml(st.name)}</span>${st.city?`<span style="color:var(--text3);font-size:12px;"> · ${escapeHtml(st.city)}</span>`:''}<br><span style="color:var(--text3);font-size:11px;">${st.rate}% commission · ${st.outstanding} outstanding</span></span>
+    <span style="flex:1;min-width:0;"><span style="font-weight:600;">${escapeHtml(st.name)}</span>${st.city ? `<span style="color:var(--text3);font-size:12px;"> · ${escapeHtml(st.city)}</span>` : ''}<br><span style="color:var(--text3);font-size:11px;">${st.rate}% commission · ${st.outstanding} outstanding</span></span>
     <input type="number" class="bulk-send-qty" data-sid="${st.id}" min="0" value="0" style="width:64px;" oninput="bulkQtyChanged('${st.id}')">
   </label>`).join('');
-  $('bulk-qty').value='10';
-  $('bulk-date').value=today();
-  $('bulk-rate').value='';
-  $('bulk-notes').value='';
-  $('bulk-send-stock').textContent=s.stock;
+  $('bulk-qty').value = '10';
+  $('bulk-date').value = today();
+  $('bulk-rate').value = '';
+  $('bulk-notes').value = '';
+  $('bulk-send-stock').textContent = s.stock;
   updateBulkSendSummary();
   openM('bulk-send');
 }
-function bulkRowEls(sid){
+function bulkRowEls(sid) {
   return {
-    cb:document.querySelector(`#bulk-send-list .bulk-send-check[data-sid="${sid}"]`),
-    qty:document.querySelector(`#bulk-send-list .bulk-send-qty[data-sid="${sid}"]`),
+    cb: document.querySelector(`#bulk-send-list .bulk-send-check[data-sid="${sid}"]`),
+    qty: document.querySelector(`#bulk-send-list .bulk-send-qty[data-sid="${sid}"]`),
   };
 }
-function bulkApplyQty(){
-  const q=parseInt($('bulk-qty').value)||0;
-  getState().stores.forEach(st=>{
-    const {cb,qty}=bulkRowEls(st.id);
-    if(cb)cb.checked=q>0;
-    if(qty)qty.value=q;
+function bulkApplyQty() {
+  const q = parseInt($('bulk-qty').value) || 0;
+  getState().stores.forEach(st => {
+    const { cb, qty } = bulkRowEls(st.id);
+    if (cb) cb.checked = q > 0;
+    if (qty) qty.value = q;
   });
   updateBulkSendSummary();
 }
-function bulkQtyChanged(sid){
-  const {cb,qty}=bulkRowEls(sid);
-  const q=qty?parseInt(qty.value)||0:0;
-  if(cb)cb.checked=q>0;
+function bulkQtyChanged(sid) {
+  const { cb, qty } = bulkRowEls(sid);
+  const q = qty ? parseInt(qty.value) || 0 : 0;
+  if (cb) cb.checked = q > 0;
   updateBulkSendSummary();
 }
-function bulkCheckChanged(sid){
-  const {cb,qty}=bulkRowEls(sid);
-  if(cb&&qty){
-    if(cb.checked&&(parseInt(qty.value)||0)<=0)qty.value=parseInt($('bulk-qty').value)||1;
-    else if(!cb.checked)qty.value=0;
+function bulkCheckChanged(sid) {
+  const { cb, qty } = bulkRowEls(sid);
+  if (cb && qty) {
+    if (cb.checked && (parseInt(qty.value) || 0) <= 0) qty.value = parseInt($('bulk-qty').value) || 1;
+    else if (!cb.checked) qty.value = 0;
   }
   updateBulkSendSummary();
 }
-function updateBulkSendSummary(){
-  let total=0,count=0;
-  getState().stores.forEach(st=>{
-    const {cb,qty}=bulkRowEls(st.id);
-    const q=qty?parseInt(qty.value)||0:0;
-    if(cb&&cb.checked&&q>0){total+=q;count++;}
+function updateBulkSendSummary() {
+  let total = 0, count = 0;
+  getState().stores.forEach(st => {
+    const { cb, qty } = bulkRowEls(st.id);
+    const q = qty ? parseInt(qty.value) || 0 : 0;
+    if (cb && cb.checked && q > 0) { total += q; count++; }
   });
-  const stock=getState().stock;
-  $('bulk-send-total').textContent=total;
-  $('bulk-send-count').textContent=count;
-  const totEl=$('bulk-send-total');
-  if(totEl)totEl.style.color=total>stock?'#c0392b':'';
+  const stock = getState().stock;
+  $('bulk-send-total').textContent = total;
+  $('bulk-send-count').textContent = count;
+  const totEl = $('bulk-send-total');
+  if (totEl) totEl.style.color = total > stock ? '#c0392b' : '';
 }
-function confirmBulkSend(){
-  const s=getState(),book=getBook();
-  const rateRaw=$('bulk-rate').value.trim();
-  const overrideRate=rateRaw===''?null:parseFloat(rateRaw);
-  if(overrideRate!==null&&(isNaN(overrideRate)||overrideRate<0||overrideRate>100)){showToast('Commission override must be between 0 and 100','err');return;}
-  const date=$('bulk-date').value||today();
-  const notes=$('bulk-notes').value.trim();
-  const picks=[];
-  s.stores.forEach(st=>{
-    const {cb,qty}=bulkRowEls(st.id);
-    const q=qty?parseInt(qty.value)||0:0;
-    if(cb&&cb.checked&&q>0)picks.push({st,qty:q});
+function confirmBulkSend() {
+  const s = getState(), book = getBook();
+  const rateRaw = $('bulk-rate').value.trim();
+  const overrideRate = rateRaw === '' ? null : parseFloat(rateRaw);
+  if (overrideRate !== null && (isNaN(overrideRate) || overrideRate < 0 || overrideRate > 100)) { showToast('Commission override must be between 0 and 100', 'err'); return; }
+  const date = $('bulk-date').value || today();
+  const notes = $('bulk-notes').value.trim();
+  const picks = [];
+  s.stores.forEach(st => {
+    const { cb, qty } = bulkRowEls(st.id);
+    const q = qty ? parseInt(qty.value) || 0 : 0;
+    if (cb && cb.checked && q > 0) picks.push({ st, qty: q });
   });
-  if(!picks.length){showToast('Select at least one store and a quantity','warn');return;}
-  const totalQty=picks.reduce((a,p)=>a+p.qty,0);
-  if(totalQty>s.stock){showToast(`Only ${s.stock} in stock — you selected ${totalQty}`,'err');return;}
-  picks.forEach((p,i)=>{
-    const st=p.st,qty=p.qty,rate=overrideRate!==null?overrideRate:st.rate;
-    s.stock-=qty;st.sent+=qty;st.outstanding+=qty;
-    const sheetsId=makeEventId();
-    s.ledger.push({id:Date.now()+i,storeId:st.id,storeName:st.name,type:'Shipment',date,qty,rate,amountDue:0,paid:'n/a',notes,status:'sent',sheetsId});
-    syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Shipment',qty,rate,amountDue:0,notes,status:'sent',sheetsId,currency:getBookCurrencyCode(book)});
+  if (!picks.length) { showToast('Select at least one store and a quantity', 'warn'); return; }
+  const totalQty = picks.reduce((a, p) => a + p.qty, 0);
+  if (totalQty > s.stock) { showToast(`Only ${s.stock} in stock — you selected ${totalQty}`, 'err'); return; }
+  picks.forEach((p, i) => {
+    const st = p.st, qty = p.qty, rate = overrideRate !== null ? overrideRate : st.rate;
+    s.stock -= qty; st.sent += qty; st.outstanding += qty;
+    const sheetsId = makeEventId();
+    s.ledger.push({ id: Date.now() + i, storeId: st.id, storeName: st.name, type: 'Shipment', date, qty, rate, amountDue: 0, paid: 'n/a', notes, status: 'sent', sheetsId });
+    syncToSheets({ type: 'consignment', book: book.title, date, store: st.name, event: 'Shipment', qty, rate, amountDue: 0, notes, status: 'sent', sheetsId, currency: getBookCurrencyCode(book) });
   });
-  closeM('bulk-send');renderStores();renderLedger();updateDash();saveState(activeBook);
-  showToast(`✓ Sent ${totalQty} book${totalQty>1?'s':''} to ${picks.length} store${picks.length>1?'s':''}`);
+  closeM('bulk-send'); renderStores(); renderLedger(); updateDash(); saveState(activeBook);
+  showToast(`✓ Sent ${totalQty} book${totalQty > 1 ? 's' : ''} to ${picks.length} store${picks.length > 1 ? 's' : ''}`);
 }
-function openSale(id){activeId=id;const book=getBook();$('sale-sym').textContent=book.currency;$('sale-price').value=book.listPrice.toFixed(2);$('sale-sname').textContent=storeById(id).name;
+function openSale(id) {
+  activeId = id; const book = getBook(); $('sale-sym').textContent = book.currency; $('sale-price').value = book.listPrice.toFixed(2); $('sale-sname').textContent = storeById(id).name;
   // The "draft an invoice after saving" shortcut only makes sense where the
   // Invoices panel is available (publisher, single-book view).
-  const invRow=$('sale-invoice-row');
-  if(invRow)invRow.style.display=invoicesVisibleHere()?'':'none';
-  if($('sale-makeinvoice'))$('sale-makeinvoice').checked=false;
-  openM('record-sale');}
-function confirmSale(){
-  const s=getState(),book=getBook(),cur=book.currency,st=storeById(activeId);
-  if(!validateFields([
-    {id:'sale-qty',test:v=>(parseInt(v)||0)>0,msg:'Enter a quantity greater than 0'},
-    {id:'sale-qty',test:v=>(parseInt(v)||0)<=st.outstanding,msg:`Only ${st.outstanding} outstanding`},
-    {id:'sale-price',test:v=>(parseFloat(v)||0)>0,msg:'Enter a price greater than 0'},
-  ]))return;
-  const qty=parseInt($('sale-qty').value)||0,date=$('sale-date').value,price=parseFloat($('sale-price').value)||book.listPrice,paid=$('sale-paid').value,notes=$('sale-notes').value.trim();
+  const invRow = $('sale-invoice-row');
+  if (invRow) invRow.style.display = invoicesVisibleHere() ? '' : 'none';
+  if ($('sale-makeinvoice')) $('sale-makeinvoice').checked = false;
+  openM('record-sale');
+}
+function confirmSale() {
+  const s = getState(), book = getBook(), cur = book.currency, st = storeById(activeId);
+  if (!validateFields([
+    { id: 'sale-qty', test: v => (parseInt(v) || 0) > 0, msg: 'Enter a quantity greater than 0' },
+    { id: 'sale-qty', test: v => (parseInt(v) || 0) <= st.outstanding, msg: `Only ${st.outstanding} outstanding` },
+    { id: 'sale-price', test: v => (parseFloat(v) || 0) > 0, msg: 'Enter a price greater than 0' },
+  ])) return;
+  const qty = parseInt($('sale-qty').value) || 0, date = $('sale-date').value, price = parseFloat($('sale-price').value) || book.listPrice, paid = $('sale-paid').value, notes = $('sale-notes').value.trim();
   // Capture before closeM clears modal state: open a prefilled invoice afterward?
-  const makeInvoice=invoicesVisibleHere()&&$('sale-makeinvoice')&&$('sale-makeinvoice').checked;
-  const invoiceStoreId=st.id;
-  const gross=qty*price,pub=gross*(1-st.rate/100);
-  st.sold+=qty;st.outstanding-=qty;st.amountOwed+=paid==='pending'?pub:0;
-  s.sold+=qty;s.revenue+=pub;
-  if(!s.chStats['Consignment'])s.chStats['Consignment']={txns:0,units:0,revenue:0};
-  s.chStats['Consignment'].txns++;s.chStats['Consignment'].units+=qty;s.chStats['Consignment'].revenue+=pub;
-  const num='CON-'+st.name.replace(/\s+/g,'').slice(0,5).toUpperCase()+'-'+Date.now().toString().slice(-4);
+  const makeInvoice = invoicesVisibleHere() && $('sale-makeinvoice') && $('sale-makeinvoice').checked;
+  const invoiceStoreId = st.id;
+  const gross = qty * price, pub = gross * (1 - st.rate / 100);
+  st.sold += qty; st.outstanding -= qty; st.amountOwed += paid === 'pending' ? pub : 0;
+  s.sold += qty; s.revenue += pub;
+  if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 };
+  s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += qty; s.chStats['Consignment'].revenue += pub;
+  const num = 'CON-' + st.name.replace(/\s+/g, '').slice(0, 5).toUpperCase() + '-' + Date.now().toString().slice(-4);
   // Share one sheetsId between the hist mirror and the ledger entry so they
   // map to the SAME row in Sheets — editing or voiding either updates the
   // single underlying row instead of producing duplicates.
   const sheetsId = makeEventId();
-  s.hist.unshift({num,chan:'Consignment',qty,price:pub/qty,after:s.stock,notes:st.name,date,sheetsId,consignmentLink:true});
-  s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Sale',date,qty,rate:st.rate,amountDue:pub,paid,notes,status:paid,sheetsId});
+  s.hist.unshift({ num, chan: 'Consignment', qty, price: pub / qty, after: s.stock, notes: st.name, date, sheetsId, consignmentLink: true });
+  s.ledger.push({ id: Date.now(), storeId: st.id, storeName: st.name, type: 'Sale', date, qty, rate: st.rate, amountDue: pub, paid, notes, status: paid, sheetsId });
   recomputeAfters(s, book);
-  closeM('record-sale');renderStores();renderLedger();renderHist();updateDash();saveState(activeBook);
-  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Sale',qty,rate:st.rate,amountDue:pub,notes,status:paid,sheetsId,currency:getBookCurrencyCode(book)});
-  showToast(`✓ Sale recorded — ${fmt(pub,cur)} due to you`);
+  closeM('record-sale'); renderStores(); renderLedger(); renderHist(); updateDash(); saveState(activeBook);
+  syncToSheets({ type: 'consignment', book: book.title, date, store: st.name, event: 'Sale', qty, rate: st.rate, amountDue: pub, notes, status: paid, sheetsId, currency: getBookCurrencyCode(book) });
+  showToast(`✓ Sale recorded — ${fmt(pub, cur)} due to you`);
   // Hand straight off to the invoice editor, prefilled from this store's
   // unpaid sales (which now includes the one just recorded).
-  if(makeInvoice)setTimeout(()=>openCreateInvoice(invoiceStoreId),160);
+  if (makeInvoice) setTimeout(() => openCreateInvoice(invoiceStoreId), 160);
 }
-function openRet(id){activeId=id;$('ret-sname').textContent=storeById(id).name;openM('return');}
-function confirmReturn(){
-  const s=getState(),book=getBook(),st=storeById(activeId);
-  if(!validateFields([
-    {id:'ret-qty',test:v=>(parseInt(v)||0)>0,msg:'Enter a quantity greater than 0'},
-    {id:'ret-qty',test:v=>(parseInt(v)||0)<=st.outstanding,msg:`Only ${st.outstanding} outstanding`},
-  ]))return;
-  const qty=parseInt($('ret-qty').value)||0,date=$('ret-date').value,cond=$('ret-cond').value,notes=$('ret-notes').value.trim();
-  st.returned+=qty;st.outstanding-=qty;const good=cond.startsWith('Good');if(good)s.stock+=qty;
+function openRet(id) { activeId = id; $('ret-sname').textContent = storeById(id).name; openM('return'); }
+function confirmReturn() {
+  const s = getState(), book = getBook(), st = storeById(activeId);
+  if (!validateFields([
+    { id: 'ret-qty', test: v => (parseInt(v) || 0) > 0, msg: 'Enter a quantity greater than 0' },
+    { id: 'ret-qty', test: v => (parseInt(v) || 0) <= st.outstanding, msg: `Only ${st.outstanding} outstanding` },
+  ])) return;
+  const qty = parseInt($('ret-qty').value) || 0, date = $('ret-date').value, cond = $('ret-cond').value, notes = $('ret-notes').value.trim();
+  st.returned += qty; st.outstanding -= qty; const good = cond.startsWith('Good'); if (good) s.stock += qty;
   const sheetsId = makeEventId();
-  s.ledger.push({id:Date.now(),storeId:st.id,storeName:st.name,type:'Return',date,qty,rate:st.rate,amountDue:0,paid:'n/a',notes:(notes?notes+' · ':'')+cond,status:good?'restocked':'written off',sheetsId});
-  closeM('return');renderStores();renderLedger();updateDash();saveState(activeBook);
-  syncToSheets({type:'consignment',book:book.title,date,store:st.name,event:'Return',qty,rate:st.rate,amountDue:0,notes:cond,status:good?'restocked':'written off',sheetsId,currency:getBookCurrencyCode(book)});
-  showToast(good?`✓ ${qty} books returned to stock`:`✓ ${qty} books written off`);
+  s.ledger.push({ id: Date.now(), storeId: st.id, storeName: st.name, type: 'Return', date, qty, rate: st.rate, amountDue: 0, paid: 'n/a', notes: (notes ? notes + ' · ' : '') + cond, status: good ? 'restocked' : 'written off', sheetsId });
+  closeM('return'); renderStores(); renderLedger(); updateDash(); saveState(activeBook);
+  syncToSheets({ type: 'consignment', book: book.title, date, store: st.name, event: 'Return', qty, rate: st.rate, amountDue: 0, notes: cond, status: good ? 'restocked' : 'written off', sheetsId, currency: getBookCurrencyCode(book) });
+  showToast(good ? `✓ ${qty} books returned to stock` : `✓ ${qty} books written off`);
 }
 // ── Invoice ↔ Ledger ↔ History consistency helpers ───────────────────────
 // Single source of truth for keeping the three views cross-referenced. All
@@ -9076,41 +9083,41 @@ function confirmReturn(){
 
 // Canonical "mark this sale paid": guards pending/non-voided, reduces the store's
 // owed, flips ledger + hist mirror state. Returns true if it actually changed.
-function settleLedgerSalePaid(s, e){
-  if(!e || e.status !== 'pending' || e.voided) return false;
-  const st = (s.stores||[]).find(x => x.id === e.storeId);
-  if(st) st.amountOwed = Math.max(0, (st.amountOwed||0) - (e.amountDue||0));
+function settleLedgerSalePaid(s, e) {
+  if (!e || e.status !== 'pending' || e.voided) return false;
+  const st = (s.stores || []).find(x => x.id === e.storeId);
+  if (st) st.amountOwed = Math.max(0, (st.amountOwed || 0) - (e.amountDue || 0));
   e.status = 'paid'; e.paid = 'paid';
   const h = histMirrorForLedger(s, e);
-  if(h) h.paidState = 'paid';
+  if (h) h.paidState = 'paid';
   return true;
 }
 
 // Decision #1: when the last unpaid linked sale of an invoice becomes paid via
 // the ledger, auto-flip the invoice to PAID. Only flips draft/sent invoices; skips
 // cancelled/already-paid and invoices with zero resolvable (non-voided) sales.
-function maybeAutoPayInvoiceForLedger(s, e){
-  if(!e || !e.invoiceId) return;
-  const inv = (s.invoices||[]).find(i => i.id === e.invoiceId);
-  if(!inv || (inv.status !== 'draft' && inv.status !== 'sent')) return;
+function maybeAutoPayInvoiceForLedger(s, e) {
+  if (!e || !e.invoiceId) return;
+  const inv = (s.invoices || []).find(i => i.id === e.invoiceId);
+  if (!inv || (inv.status !== 'draft' && inv.status !== 'sent')) return;
   // Resolve the invoice's linked, non-voided ledger sales.
-  const linked = (inv.items||[])
-    .map(it => it._ledgerId ? (s.ledger||[]).find(x => x.id === it._ledgerId) : null)
+  const linked = (inv.items || [])
+    .map(it => it._ledgerId ? (s.ledger || []).find(x => x.id === it._ledgerId) : null)
     .filter(x => x && !x.voided);
-  if(!linked.length) return;                         // nothing resolvable → skip
-  if(linked.some(x => x.status !== 'paid')) return;  // not all paid yet → wait
+  if (!linked.length) return;                         // nothing resolvable → skip
+  if (linked.some(x => x.status !== 'paid')) return;  // not all paid yet → wait
   inv.status = 'paid'; inv.paidAt = Date.now(); inv.paidMethod = 'Ledger';
 }
 
 // A small clickable badge linking a ledger/history row back to its invoice; '' when
 // unlinked. Reused by the ledger and history renderers. viewInvoice is global.
-function invoiceBadgeHTML(invoiceId, invoiceNum){
-  if(!invoiceId || !invoiceNum) return '';
+function invoiceBadgeHTML(invoiceId, invoiceNum) {
+  if (!invoiceId || !invoiceNum) return '';
   return `<button class="pill gray" style="font-size:10px;cursor:pointer;margin-left:6px;" onclick="viewInvoice('${invoiceId}')">🧾 ${escapeHtml(invoiceNum)}</button>`;
 }
 
-function markPaid(lid){
-  const s=getState(),book=getBook(),e=s.ledger.find(x=>x.id===lid);if(!e)return;
+function markPaid(lid) {
+  const s = getState(), book = getBook(), e = s.ledger.find(x => x.id === lid); if (!e) return;
   // Canonical settle (reduces owed, flips ledger + hist mirror); then auto-flip
   // the invoice to paid if this was its last unpaid linked sale (decision #1).
   settleLedgerSalePaid(s, e);
@@ -9118,8 +9125,8 @@ function markPaid(lid){
   if (sheetsUrl && e.sheetsId) {
     try { syncToSheets(consignmentSyncPayload(book, e)); } catch (err) { console.error(err); }
   }
-  renderLedger();renderStores();renderInvoices();renderHist();updateDash();saveState(activeBook);
-  showToast(`✓ Payment of ${fmt(e.amountDue,book.currency)} marked as received`);
+  renderLedger(); renderStores(); renderInvoices(); renderHist(); updateDash(); saveState(activeBook);
+  showToast(`✓ Payment of ${fmt(e.amountDue, book.currency)} marked as received`);
 }
 
 async function markHistoryConsignmentPaid(num) {
@@ -9147,67 +9154,67 @@ async function markHistoryConsignmentPaid(num) {
   if (!(await confirmDialog(`Mark consignment sale "${num}" (${fmt(e.amountDue, book.currency)}) as paid?`, { title: 'Mark Consignment Paid', okLabel: 'Mark paid' }))) return;
   markPaid(e.id);
 }
-function renderLedger(){
-  const s=getState(),book=getBook(),cur=book.currency,b=$('ledger-body');
-  if(!s.ledger.length){b.innerHTML='<tr><td colspan="8"><div class="empty-state" style="padding:1rem;">No entries.</div></td></tr>';return;}
-  const pill=e=>{
-    if(e.voided)return'<span class="void-badge">Void</span>';
-    if(e.type==='Shipment')return'<span class="pill blue">Sent</span>';
-    if(e.status==='paid')return'<span class="pill green">Paid</span>';
-    if(e.status==='pending')return'<span class="pill amber">Pending</span>';
-    if(e.status==='restocked')return'<span class="pill green">Restocked</span>';
-    if(e.status==='written off')return'<span class="pill red">Written off</span>';
-    return`<span class="pill gray">${e.status}</span>`;
+function renderLedger() {
+  const s = getState(), book = getBook(), cur = book.currency, b = $('ledger-body');
+  if (!s.ledger.length) { b.innerHTML = '<tr><td colspan="8"><div class="empty-state" style="padding:1rem;">No entries.</div></td></tr>'; return; }
+  const pill = e => {
+    if (e.voided) return '<span class="void-badge">Void</span>';
+    if (e.type === 'Shipment') return '<span class="pill blue">Sent</span>';
+    if (e.status === 'paid') return '<span class="pill green">Paid</span>';
+    if (e.status === 'pending') return '<span class="pill amber">Pending</span>';
+    if (e.status === 'restocked') return '<span class="pill green">Restocked</span>';
+    if (e.status === 'written off') return '<span class="pill red">Written off</span>';
+    return `<span class="pill gray">${e.status}</span>`;
   };
   // Map ledger indices so edit buttons can reference them correctly (ledger is displayed reversed)
-  const indexed = s.ledger.map((e,i)=>({e,i}));
-  b.innerHTML=[...indexed].reverse().map(({e,i})=>{
-    const voided = e.voided?' voided':'';
+  const indexed = s.ledger.map((e, i) => ({ e, i }));
+  b.innerHTML = [...indexed].reverse().map(({ e, i }) => {
+    const voided = e.voided ? ' voided' : '';
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     // Cross-link Sale rows back to the invoice that bills them (absent id → '').
-    const invBadge = e.type==='Sale' ? invoiceBadgeHTML(e.invoiceId, e.invoiceNum) : '';
-    return`<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type==='Sale'?e.rate+'%':'—'}</td><td class="r" style="font-weight:600;">${e.amountDue>0?fmt(e.amountDue,cur):'—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes)||'—'}</td><td>${pill(e)}${e.status==='pending'&&!e.voided?` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>`:''}${invBadge}</td></tr>`;
+    const invBadge = e.type === 'Sale' ? invoiceBadgeHTML(e.invoiceId, e.invoiceNum) : '';
+    return `<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, cur) : '—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
   }).join('');
 }
 
 // Export the current book's consignment ledger (shipments, sales, returns) as a
 // CSV for accounting — independent of the full Google Sheets sync so it works
 // offline and without a connected sheet.
-function exportConsignmentLedgerCSV(){
-  const s=getState(),book=getBook(),rows=s.ledger||[];
-  if(!rows.length){showToast('No ledger entries to export','warn');return;}
+function exportConsignmentLedgerCSV() {
+  const s = getState(), book = getBook(), rows = s.ledger || [];
+  if (!rows.length) { showToast('No ledger entries to export', 'warn'); return; }
   // Refresh each Sale's invoice number from its live invoice before exporting so
   // accountants reconciling the CSV see which invoice billed each sale.
   reconcileConsignmentInvoiceLinks(s);
-  const curCode=getBookCurrencyCode(book);
-  const header=['Date','Store','Type','Qty','Commission %','Due to you','Currency','Status','Voided','Invoice','Notes'];
+  const curCode = getBookCurrencyCode(book);
+  const header = ['Date', 'Store', 'Type', 'Qty', 'Commission %', 'Due to you', 'Currency', 'Status', 'Voided', 'Invoice', 'Notes'];
   // Chronological order (the on-screen table shows newest first; a CSV reads
   // better oldest→newest for a running statement).
-  const sorted=[...rows].sort((a,b)=>{const da=a.date||'',db=b.date||'';return da<db?-1:da>db?1:0;});
-  const out=[header];
-  for(const e of sorted){
+  const sorted = [...rows].sort((a, b) => { const da = a.date || '', db = b.date || ''; return da < db ? -1 : da > db ? 1 : 0; });
+  const out = [header];
+  for (const e of sorted) {
     out.push([
-      e.date||'',
-      e.storeName||'',
-      e.type||'',
-      e.qty??'',
-      e.type==='Sale'?(e.rate??''):'',
-      e.amountDue?Number(e.amountDue).toFixed(2):'',
+      e.date || '',
+      e.storeName || '',
+      e.type || '',
+      e.qty ?? '',
+      e.type === 'Sale' ? (e.rate ?? '') : '',
+      e.amountDue ? Number(e.amountDue).toFixed(2) : '',
       curCode,
-      e.voided?'VOID':(e.status||''),
-      e.voided?'YES':'',
-      e.invoiceNum||'',
-      e.notes||''
+      e.voided ? 'VOID' : (e.status || ''),
+      e.voided ? 'YES' : '',
+      e.invoiceNum || '',
+      e.notes || ''
     ]);
   }
-  const csv=out.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  const slug=String(book.id||book.title||'book').replace(/[^a-z0-9]+/gi,'-').toLowerCase();
-  a.href=url;a.download=`consignment-ledger-${slug}-${today()}.csv`;
-  document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),500);
+  const csv = out.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const slug = String(book.id || book.title || 'book').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  a.href = url; a.download = `consignment-ledger-${slug}-${today()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
   showToast('✓ Consignment ledger exported');
 }
 
@@ -9215,38 +9222,38 @@ function exportConsignmentLedgerCSV(){
 //  INVOICES (publisher-only, lives inside Consignment tab)
 // ═══════════════════════════════════════════════════════════════════════
 const INVOICE_SETTINGS_KEY = 'lm-invoice-settings';
-function getInvoiceSettings(){
+function getInvoiceSettings() {
   try { return JSON.parse(localStorage.getItem(INVOICE_SETTINGS_KEY) || '{}'); }
-  catch(e){ return {}; }
+  catch (e) { return {}; }
 }
-function saveInvoiceSettingsObj(o){ localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(o||{})); }
+function saveInvoiceSettingsObj(o) { localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(o || {})); }
 
-function openInvoiceTemplateSettings(){
+function openInvoiceTemplateSettings() {
   const s = getInvoiceSettings();
-  $('ivs-name').value  = s.name  || 'Lyricalmyrical Books';
+  $('ivs-name').value = s.name || 'Lyricalmyrical Books';
   $('ivs-email').value = s.email || '';
-  $('ivs-addr').value  = s.addr  || '';
-  $('ivs-vat').value   = s.vat   || '';
-  $('ivs-web').value   = s.web   || '';
+  $('ivs-addr').value = s.addr || '';
+  $('ivs-vat').value = s.vat || '';
+  $('ivs-web').value = s.web || '';
   $('ivs-terms').value = s.terms || 'Net 30. Payment via Stripe, PayPal, or bank transfer.';
-  $('ivs-footer').value= s.footer|| 'Thank you for stocking our books.';
-  $('ivs-bank').value  = s.bank  || '';
-  if ($('ivs-stripe-key'))  $('ivs-stripe-key').value  = s.stripeKey || '';
+  $('ivs-footer').value = s.footer || 'Thank you for stocking our books.';
+  $('ivs-bank').value = s.bank || '';
+  if ($('ivs-stripe-key')) $('ivs-stripe-key').value = s.stripeKey || '';
   if ($('ivs-stripe-auto')) $('ivs-stripe-auto').checked = s.stripeAuto !== false; // default ON
   if ($('ivs-stripe-test')) $('ivs-stripe-test').checked = !!s.stripeTest;
   openM('invoice-settings');
 }
-function saveInvoiceSettings(){
+function saveInvoiceSettings() {
   saveInvoiceSettingsObj({
-    name:  $('ivs-name').value.trim(),
+    name: $('ivs-name').value.trim(),
     email: $('ivs-email').value.trim(),
-    addr:  $('ivs-addr').value.trim(),
-    vat:   $('ivs-vat').value.trim(),
-    web:   $('ivs-web').value.trim(),
+    addr: $('ivs-addr').value.trim(),
+    vat: $('ivs-vat').value.trim(),
+    web: $('ivs-web').value.trim(),
     terms: $('ivs-terms').value.trim(),
-    footer:$('ivs-footer').value.trim(),
-    bank:  $('ivs-bank').value.trim(),
-    stripeKey:  $('ivs-stripe-key')  ? $('ivs-stripe-key').value.trim() : '',
+    footer: $('ivs-footer').value.trim(),
+    bank: $('ivs-bank').value.trim(),
+    stripeKey: $('ivs-stripe-key') ? $('ivs-stripe-key').value.trim() : '',
     stripeAuto: $('ivs-stripe-auto') ? !!$('ivs-stripe-auto').checked : true,
     stripeTest: $('ivs-stripe-test') ? !!$('ivs-stripe-test').checked : false,
   });
@@ -9255,9 +9262,9 @@ function saveInvoiceSettings(){
 }
 
 // ── STRIPE DYNAMIC PAYMENT LINK (exact-amount Checkout per invoice) ─────
-const _STRIPE_ZERO_DECIMAL_INV = new Set(['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','UGX','VND','VUV','XAF','XOF','XPF']);
+const _STRIPE_ZERO_DECIMAL_INV = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
 
-async function createStripePaymentLinkForInvoice(invoice){
+async function createStripePaymentLinkForInvoice(invoice) {
   const settings = getInvoiceSettings();
   const key = (settings.stripeKey || '').trim();
   if (!key) throw new Error('Stripe key not set — open Invoice Settings to add one');
@@ -9283,15 +9290,15 @@ async function createStripePaymentLinkForInvoice(invoice){
   // attach metadata to the price so it shows up in the Stripe dashboard
   priceParams.set('metadata[invoice_num]', invoice.num || '');
   priceParams.set('metadata[store_name]', invoice.storeName || '');
-  priceParams.set('metadata[book_id]',   book.id || '');
+  priceParams.set('metadata[book_id]', book.id || '');
 
   const priceRes = await fetch('https://api.stripe.com/v1/prices', {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: priceParams.toString(),
   });
-  if (!priceRes.ok){
-    const err = await priceRes.json().catch(()=>({}));
+  if (!priceRes.ok) {
+    const err = await priceRes.json().catch(() => ({}));
     throw new Error('Stripe price: ' + (err.error?.message || ('HTTP ' + priceRes.status)));
   }
   const price = await priceRes.json();
@@ -9301,13 +9308,13 @@ async function createStripePaymentLinkForInvoice(invoice){
   linkParams.set('line_items[0][price]', price.id);
   linkParams.set('line_items[0][quantity]', '1');
   linkParams.set('metadata[invoice_num]', invoice.num || '');
-  linkParams.set('metadata[store_id]',   String(invoice.storeId || ''));
+  linkParams.set('metadata[store_id]', String(invoice.storeId || ''));
   linkParams.set('metadata[store_name]', invoice.storeName || '');
-  linkParams.set('metadata[book_id]',    book.id || '');
+  linkParams.set('metadata[book_id]', book.id || '');
   linkParams.set('payment_intent_data[description]', description.slice(0, 350));
   linkParams.set('payment_intent_data[metadata][invoice_num]', invoice.num || '');
   linkParams.set('payment_intent_data[metadata][store_name]', invoice.storeName || '');
-  linkParams.set('payment_intent_data[statement_descriptor_suffix]', (invoice.num || 'Invoice').replace(/[^A-Za-z0-9\- ]/g,'').slice(0, 22));
+  linkParams.set('payment_intent_data[statement_descriptor_suffix]', (invoice.num || 'Invoice').replace(/[^A-Za-z0-9\- ]/g, '').slice(0, 22));
   linkParams.set('allow_promotion_codes', 'false');
   linkParams.set('billing_address_collection', 'auto');
 
@@ -9316,8 +9323,8 @@ async function createStripePaymentLinkForInvoice(invoice){
     headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: linkParams.toString(),
   });
-  if (!linkRes.ok){
-    const err = await linkRes.json().catch(()=>({}));
+  if (!linkRes.ok) {
+    const err = await linkRes.json().catch(() => ({}));
     throw new Error('Stripe payment link: ' + (err.error?.message || ('HTTP ' + linkRes.status)));
   }
   const link = await linkRes.json();
@@ -9332,7 +9339,7 @@ async function createStripePaymentLinkForInvoice(invoice){
   };
 }
 
-async function deactivateStripePaymentLink(paymentLinkId){
+async function deactivateStripePaymentLink(paymentLinkId) {
   const key = (getInvoiceSettings().stripeKey || '').trim();
   if (!key || !paymentLinkId) return;
   try {
@@ -9343,15 +9350,15 @@ async function deactivateStripePaymentLink(paymentLinkId){
       headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
     });
-  } catch(e){ /* best effort */ }
+  } catch (e) { /* best effort */ }
 }
 
-function invoicesVisibleHere(){
+function invoicesVisibleHere() {
   // Publisher only, single-book view only (invoice numbering is per-book)
   return !!window.IS_PUBLISHER && !isAuthor() && activeBook && activeBook !== 'all';
 }
 
-function renderInvoices(){
+function renderInvoices() {
   const section = $('invoices-section');
   if (!section) return;
   if (!invoicesVisibleHere()) { section.style.display = 'none'; return; }
@@ -9359,7 +9366,7 @@ function renderInvoices(){
 
   const s = getState(), book = getBook(), cur = book.currency, list = $('invoices-list'), summary = $('inv-summary');
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
-  const invs = (s.invoices || []).slice().sort((a,b)=> { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : ((b.createdAt||0) - (a.createdAt||0))); });
+  const invs = (s.invoices || []).slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : ((b.createdAt || 0) - (a.createdAt || 0))); });
 
   // Mark overdue automatically (visual only, not persisted)
   const todayStr = today();
@@ -9375,16 +9382,16 @@ function renderInvoices(){
     else if (i.status === 'paid') paid += (i.total || 0);
     else if (i.status === 'draft') drafts++;
   }
-  summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts?` · ${drafts} draft${drafts>1?'s':''}`:''}`;
+  summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}`;
 
-  if (!invs.length){
+  if (!invs.length) {
     list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';
     return;
   }
 
   list.innerHTML = invs.map(inv => {
-    const statusLabel = inv._overdue ? 'OVERDUE' : (inv.status||'draft').toUpperCase();
-    const statusCls   = inv._overdue ? 'overdue' : (inv.status||'draft');
+    const statusLabel = inv._overdue ? 'OVERDUE' : (inv.status || 'draft').toUpperCase();
+    const statusCls = inv._overdue ? 'overdue' : (inv.status || 'draft');
     const due = inv.dueDate ? fmtD(inv.dueDate) : '—';
     const stripeChip = isDynamicStripeLink(inv)
       ? `<span title="Dynamic Stripe Checkout · exact amount" style="display:inline-block;margin-left:6px;background:#0e0c0a;color:#f0c060;font-size:8px;font-weight:700;letter-spacing:.16em;padding:2px 6px;border-radius:99px;">💳 STRIPE</span>`
@@ -9394,11 +9401,11 @@ function renderInvoices(){
       <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div></div>
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
-      <div class="inv-c-cell amt">Total<strong>${fmt(inv.total||0, cur)}</strong></div>
+      <div class="inv-c-cell amt">Total<strong>${fmt(inv.total || 0, cur)}</strong></div>
       <div class="inv-c-actions" style="flex-direction:column;align-items:stretch;gap:6px;">
         <span class="inv-status ${statusCls}" style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:4px 10px;border-radius:99px;text-align:center;
-          background:${statusCls==='paid'?'#e0f5ea':statusCls==='sent'?'#ebf2ff':statusCls==='overdue'?'#fde6e0':statusCls==='cancelled'?'#eee':'#e9e6e0'};
-          color:${statusCls==='paid'?'#1d7a4a':statusCls==='sent'?'#1d4cb3':statusCls==='overdue'?'#a13a1b':statusCls==='cancelled'?'#5a544c':'#6b665e'};">${statusLabel}</span>
+          background:${statusCls === 'paid' ? '#e0f5ea' : statusCls === 'sent' ? '#ebf2ff' : statusCls === 'overdue' ? '#fde6e0' : statusCls === 'cancelled' ? '#eee' : '#e9e6e0'};
+          color:${statusCls === 'paid' ? '#1d7a4a' : statusCls === 'sent' ? '#1d4cb3' : statusCls === 'overdue' ? '#a13a1b' : statusCls === 'cancelled' ? '#5a544c' : '#6b665e'};">${statusLabel}</span>
         <div style="display:flex;gap:4px;justify-content:flex-end;">
           <button class="btn sm" onclick="viewInvoice('${inv.id}')">View</button>
           <button class="btn sm ink" onclick="openCreateInvoice(null,'${inv.id}')">Edit</button>
@@ -9411,31 +9418,31 @@ function renderInvoices(){
 // ── invoice editor state ────────────────────────────────────────────────
 let invoiceCtx = null; // { editingId, items: [{description,qty,unitPrice}] }
 
-function openCreateInvoice(storeId, editingId){
+function openCreateInvoice(storeId, editingId) {
   const s = getState(), book = getBook();
   // Populate store dropdown
   const sel = $('inv-store');
-  sel.innerHTML = '<option value="">— Select store —</option>' + (s.stores||[]).map(st => `<option value="${st.id}">${escapeHtml(st.name)}${st.city?' · '+escapeHtml(st.city):''}</option>`).join('');
+  sel.innerHTML = '<option value="">— Select store —</option>' + (s.stores || []).map(st => `<option value="${st.id}">${escapeHtml(st.name)}${st.city ? ' · ' + escapeHtml(st.city) : ''}</option>`).join('');
 
   // set currency dropdown — default to book currency
   const bookCurCode = getBookCurrencyCode(book);
   if ($('inv-currency')) $('inv-currency').value = bookCurCode;
   $('inv-discount-sym').textContent = getSym(bookCurCode);
 
-  if (editingId){
-    const inv = (s.invoices||[]).find(i => i.id === editingId);
+  if (editingId) {
+    const inv = (s.invoices || []).find(i => i.id === editingId);
     if (!inv) { showToast('Invoice not found', 'err'); return; }
     invoiceCtx = { editingId, items: JSON.parse(JSON.stringify(inv.items || [])) };
     $('inv-edit-title').textContent = `Edit ${inv.num}`;
-    sel.value     = inv.storeId || '';
-    $('inv-num').value  = inv.num || '';
+    sel.value = inv.storeId || '';
+    $('inv-num').value = inv.num || '';
     $('inv-date').value = inv.date || today();
-    $('inv-due').value  = inv.dueDate || '';
+    $('inv-due').value = inv.dueDate || '';
     $('inv-discount').value = inv.discount || 0;
-    $('inv-tax').value      = inv.taxRate  || 0;
-    $('inv-paylink').value  = inv.paymentLink || '';
-    $('inv-notes').value    = inv.notes || '';
-    $('inv-terms').value    = inv.terms || '';
+    $('inv-tax').value = inv.taxRate || 0;
+    $('inv-paylink').value = inv.paymentLink || '';
+    $('inv-notes').value = inv.notes || '';
+    $('inv-terms').value = inv.terms || '';
     $('inv-delete-btn').style.display = '';
     // restore invoice's own currency
     const invCurCode = normalizeCurrencyCode(inv.currency || bookCurCode, bookCurCode);
@@ -9445,10 +9452,10 @@ function openCreateInvoice(storeId, editingId){
     invoiceCtx = { editingId: null, items: [] };
     $('inv-edit-title').textContent = 'New invoice';
     sel.value = storeId ? String(storeId) : '';
-    $('inv-num').value  = nextInvoiceNumber();
+    $('inv-num').value = nextInvoiceNumber();
     $('inv-date').value = today();
     // default due date = 30 days from today
-    const d = new Date(); d.setDate(d.getDate()+30);
+    const d = new Date(); d.setDate(d.getDate() + 30);
     $('inv-due').value = d.toISOString().split('T')[0];
     $('inv-discount').value = 0;
     $('inv-tax').value = 0;
@@ -9465,10 +9472,10 @@ function openCreateInvoice(storeId, editingId){
   openM('invoice-edit');
 }
 
-function nextInvoiceNumber(){
+function nextInvoiceNumber() {
   const s = getState(), book = getBook();
   const year = new Date().getFullYear();
-  const prefix = (book.id || 'BOOK').slice(0,6).toUpperCase();
+  const prefix = (book.id || 'BOOK').slice(0, 6).toUpperCase();
   // ⚡ Bolt Optimization: Loop Fusion
   // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
   let maxSeq = s.invoiceSeq || 0;
@@ -9481,17 +9488,17 @@ function nextInvoiceNumber(){
       }
     }
   }
-  return `INV-${prefix}-${year}-${String(maxSeq+1).padStart(3,'0')}`;
+  return `INV-${prefix}-${year}-${String(maxSeq + 1).padStart(3, '0')}`;
 }
 
-function onInvoiceStoreChange(){
+function onInvoiceStoreChange() {
   // No automatic refill — user might be editing. Just keep selection.
   // ── #9: Autocomplete billing details preview ────────────────────────────
   const storeId = Number($('inv-store').value);
   const preview = $('inv-store-preview');
   if (!preview) return;
   if (!storeId) { preview.style.display = 'none'; preview.innerHTML = ''; return; }
-  const st = (getState().stores||[]).find(s => s.id === storeId);
+  const st = (getState().stores || []).find(s => s.id === storeId);
   if (!st) { preview.style.display = 'none'; return; }
 
   // Auto-populate Terms if empty
@@ -9502,15 +9509,15 @@ function onInvoiceStoreChange(){
 
   // Build preview lines
   const lines = [
-    st.contact  ? `<strong>Contact:</strong> ${escapeHtml(st.contact)}` : '',
-    st.email    ? `<strong>Email:</strong> ${escapeHtml(st.email)}` : '',
-    st.phone    ? `<strong>Phone:</strong> ${escapeHtml(st.phone)}` : '',
-    st.address  ? `<strong>Address:</strong> ${escapeHtml(st.address)}` : '',
+    st.contact ? `<strong>Contact:</strong> ${escapeHtml(st.contact)}` : '',
+    st.email ? `<strong>Email:</strong> ${escapeHtml(st.email)}` : '',
+    st.phone ? `<strong>Phone:</strong> ${escapeHtml(st.phone)}` : '',
+    st.address ? `<strong>Address:</strong> ${escapeHtml(st.address)}` : '',
     [st.city, st.region, st.postal].filter(Boolean).length
       ? `<strong>City:</strong> ${escapeHtml([st.city, st.region, st.postal].filter(Boolean).join(', '))}` : '',
-    st.country  ? `<strong>Country:</strong> ${escapeHtml(st.country)}` : '',
+    st.country ? `<strong>Country:</strong> ${escapeHtml(st.country)}` : '',
     typeof st.rate === 'number' ? `<strong>Commission rate:</strong> ${st.rate}%` : '',
-    st.terms    ? `<strong>Default terms:</strong> ${escapeHtml(st.terms)}` : '',
+    st.terms ? `<strong>Default terms:</strong> ${escapeHtml(st.terms)}` : '',
   ].filter(Boolean);
 
   if (lines.length) {
@@ -9521,122 +9528,122 @@ function onInvoiceStoreChange(){
   }
 }
 
-function getInvoiceCurrency(){
+function getInvoiceCurrency() {
   const sel = $('inv-currency');
   if (sel && sel.value) return sel.value;
   return getBookCurrencyCode(getBook());
 }
 
-function onInvoiceCurrencyChange(){
+function onInvoiceCurrencyChange() {
   const code = getInvoiceCurrency();
   $('inv-discount-sym').textContent = getSym(code);
   renderInvoiceItems();
   recalcInvoiceTotals();
 }
 
-function addInvoiceItem(description='', qty=1, unitPrice=0){
+function addInvoiceItem(description = '', qty = 1, unitPrice = 0) {
   invoiceCtx.items.push({ description, qty, unitPrice });
   renderInvoiceItems();
   recalcInvoiceTotals();
 }
 
-function removeInvoiceItem(idx){
+function removeInvoiceItem(idx) {
   invoiceCtx.items.splice(idx, 1);
   renderInvoiceItems();
   recalcInvoiceTotals();
 }
 
-function updateInvoiceItem(idx, field, value){
+function updateInvoiceItem(idx, field, value) {
   const it = invoiceCtx.items[idx]; if (!it) return;
   if (field === 'description') it.description = value;
   else it[field] = parseFloat(value) || 0;
   // Re-render only the amount cell for performance
   const amtEl = document.querySelector(`#inv-items-body tr[data-i="${idx}"] .inv-item-amt`);
-  if (amtEl) amtEl.textContent = fmt((it.qty||0)*(it.unitPrice||0), getSym(getInvoiceCurrency()));
+  if (amtEl) amtEl.textContent = fmt((it.qty || 0) * (it.unitPrice || 0), getSym(getInvoiceCurrency()));
   recalcInvoiceTotals();
 }
 
-function renderInvoiceItems(){
+function renderInvoiceItems() {
   const body = $('inv-items-body'), cur = getSym(getInvoiceCurrency());
-  if (!invoiceCtx.items.length){
+  if (!invoiceCtx.items.length) {
     body.innerHTML = `<tr><td colspan="5" style="font-size:12px;color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
     return;
   }
   body.innerHTML = invoiceCtx.items.map((it, i) => `<tr class="inv-item-row" data-i="${i}">
-    <td><input type="text" value="${escapeHTML(it.description||'')}" placeholder="e.g. ${getBook().title} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></td>
-    <td><input type="number" min="0" step="1" value="${it.qty||0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
-    <td><input type="number" min="0" step="0.01" value="${(it.unitPrice||0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
-    <td class="r"><span class="inv-item-amt">${fmt((it.qty||0)*(it.unitPrice||0), cur)}</span></td>
+    <td><input type="text" value="${escapeHTML(it.description || '')}" placeholder="e.g. ${getBook().title} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></td>
+    <td><input type="number" min="0" step="1" value="${it.qty || 0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
+    <td><input type="number" min="0" step="0.01" value="${(it.unitPrice || 0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
+    <td class="r"><span class="inv-item-amt">${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</span></td>
     <td><button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove line" aria-label="Remove line">×</button></td>
   </tr>`).join('');
 }
 
-function escapeHTML(s){ return escapeHtml(s); }
+function escapeHTML(s) { return escapeHtml(s); }
 
-function recalcInvoiceTotals(){
+function recalcInvoiceTotals() {
   const cur = getSym(getInvoiceCurrency());
-  const subtotal = invoiceCtx.items.reduce((a,it)=> a + (parseFloat(it.qty)||0) * (parseFloat(it.unitPrice)||0), 0);
+  const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
   const discount = parseFloat($('inv-discount').value) || 0;
-  const taxRate  = parseFloat($('inv-tax').value) || 0;
-  const taxable  = Math.max(0, subtotal - discount);
-  const tax      = taxable * (taxRate/100);
-  const total    = taxable + tax;
-  $('inv-sub-val').textContent  = fmt(subtotal, cur);
+  const taxRate = parseFloat($('inv-tax').value) || 0;
+  const taxable = Math.max(0, subtotal - discount);
+  const tax = taxable * (taxRate / 100);
+  const total = taxable + tax;
+  $('inv-sub-val').textContent = fmt(subtotal, cur);
   $('inv-disc-val').textContent = discount ? '−' + fmt(discount, cur) : fmt(0, cur);
-  $('inv-tax-val').textContent  = fmt(tax, cur);
-  $('inv-total-val').textContent= fmt(total, cur);
+  $('inv-tax-val').textContent = fmt(tax, cur);
+  $('inv-total-val').textContent = fmt(total, cur);
   return { subtotal, discount, taxRate, tax, total };
 }
 
-function prefillFromPendingSales(forceStoreId){
+function prefillFromPendingSales(forceStoreId) {
   const s = getState(), book = getBook();
   const storeId = forceStoreId ? Number(forceStoreId) : Number($('inv-store').value);
   if (!storeId) { showToast('Pick a store first', 'warn'); return; }
   $('inv-store').value = String(storeId);
-  const store = (s.stores||[]).find(st => st.id === storeId);
+  const store = (s.stores || []).find(st => st.id === storeId);
   if (!store) return;
   // pull all unpaid, un-voided Sale ledger entries for that store
-  const pending = (s.ledger||[]).filter(e => e.storeId === storeId && e.type === 'Sale' && !e.voided && e.status !== 'paid');
-  if (!pending.length){
+  const pending = (s.ledger || []).filter(e => e.storeId === storeId && e.type === 'Sale' && !e.voided && e.status !== 'paid');
+  if (!pending.length) {
     showToast('No unpaid consignment sales for this store', 'warn');
     if (!invoiceCtx.items.length) addInvoiceItem();
     return;
   }
   // group by month
   invoiceCtx.items = pending.map(e => ({
-    description: `${book.title} — consignment sale${e.date?' · '+fmtD(e.date):''} (qty ${e.qty} @ ${(100-e.rate).toFixed(0)}% net of ${book.currency}${book.listPrice} retail)`,
+    description: `${book.title} — consignment sale${e.date ? ' · ' + fmtD(e.date) : ''} (qty ${e.qty} @ ${(100 - e.rate).toFixed(0)}% net of ${book.currency}${book.listPrice} retail)`,
     qty: e.qty,
     unitPrice: e.qty ? (e.amountDue / e.qty) : 0,
     _ledgerId: e.id,
   }));
   renderInvoiceItems();
   recalcInvoiceTotals();
-  showToast(`✓ Imported ${pending.length} pending sale${pending.length>1?'s':''}`);
+  showToast(`✓ Imported ${pending.length} pending sale${pending.length > 1 ? 's' : ''}`);
 }
 
-function saveInvoice(status){
+function saveInvoice(status) {
   const s = getState(), book = getBook();
   const storeId = Number($('inv-store').value);
-  if (!storeId){ showToast('Choose a store to bill', 'err'); return; }
-  if (!invoiceCtx.items.length){ showToast('Add at least one line item', 'err'); return; }
-  const store = (s.stores||[]).find(st => st.id === storeId);
-  if (!store){ showToast('Store not found', 'err'); return; }
+  if (!storeId) { showToast('Choose a store to bill', 'err'); return; }
+  if (!invoiceCtx.items.length) { showToast('Add at least one line item', 'err'); return; }
+  const store = (s.stores || []).find(st => st.id === storeId);
+  if (!store) { showToast('Store not found', 'err'); return; }
 
   const totals = recalcInvoiceTotals();
-  if (totals.total <= 0){ showToast('Invoice total must be greater than zero', 'err'); return; }
+  if (totals.total <= 0) { showToast('Invoice total must be greater than zero', 'err'); return; }
 
   const num = ($('inv-num').value || '').trim() || nextInvoiceNumber();
   const date = $('inv-date').value || today();
   const dueDate = $('inv-due').value || '';
   // Use the currency selected in the editor (ISO code → symbol for storage, consistent with book.currency pattern)
   const invoiceCurCode = getInvoiceCurrency();
-  const invoiceCurSym  = getSym(invoiceCurCode); // e.g. "US$", "€"
+  const invoiceCurSym = getSym(invoiceCurCode); // e.g. "US$", "€"
 
   const payload = {
-    id: invoiceCtx.editingId || ('inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7)),
-    num, storeId, storeName: store.name, storeEmail: store.email||'', storeCity: store.city||'', storeContact: store.contact||'', storePhone: store.phone||'', storeAddress: store.address||'', storeRegion: store.region||'', storePostal: store.postal||'', storeCountry: store.country||'',
+    id: invoiceCtx.editingId || ('inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7)),
+    num, storeId, storeName: store.name, storeEmail: store.email || '', storeCity: store.city || '', storeContact: store.contact || '', storePhone: store.phone || '', storeAddress: store.address || '', storeRegion: store.region || '', storePostal: store.postal || '', storeCountry: store.country || '',
     date, dueDate,
-    items: invoiceCtx.items.map(it => ({ description: it.description||'', qty: parseFloat(it.qty)||0, unitPrice: parseFloat(it.unitPrice)||0, _ledgerId: it._ledgerId || null })),
+    items: invoiceCtx.items.map(it => ({ description: it.description || '', qty: parseFloat(it.qty) || 0, unitPrice: parseFloat(it.unitPrice) || 0, _ledgerId: it._ledgerId || null })),
     subtotal: totals.subtotal,
     discount: totals.discount,
     taxRate: totals.taxRate,
@@ -9648,7 +9655,7 @@ function saveInvoice(status){
     notes: $('inv-notes').value.trim(),
     terms: $('inv-terms').value.trim(),
     status,
-    createdAt: invoiceCtx.editingId ? (s.invoices.find(i=>i.id===invoiceCtx.editingId)?.createdAt || Date.now()) : Date.now(),
+    createdAt: invoiceCtx.editingId ? (s.invoices.find(i => i.id === invoiceCtx.editingId)?.createdAt || Date.now()) : Date.now(),
     updatedAt: Date.now(),
   };
 
@@ -9656,17 +9663,17 @@ function saveInvoice(status){
   // Capture the ledger ids this invoice billed BEFORE we overwrite it, so we can
   // clear back-links that were dropped from the line items during an edit.
   let oldLedgerIds = [];
-  if (invoiceCtx.editingId){
+  if (invoiceCtx.editingId) {
     const idx = s.invoices.findIndex(i => i.id === invoiceCtx.editingId);
     if (idx >= 0) {
       // preserve paid metadata if existing
       const old = s.invoices[idx];
-      oldLedgerIds = (old.items||[]).map(it => it._ledgerId).filter(Boolean);
+      oldLedgerIds = (old.items || []).map(it => it._ledgerId).filter(Boolean);
       payload.paidAt = old.paidAt || null;
       payload.paidMethod = old.paidMethod || null;
       // preserve Stripe link only if amount/currency unchanged
-      const amountChanged = (Number(old.total||0).toFixed(2) !== Number(payload.total||0).toFixed(2))
-                          || (old.currency !== payload.currency);
+      const amountChanged = (Number(old.total || 0).toFixed(2) !== Number(payload.total || 0).toFixed(2))
+        || (old.currency !== payload.currency);
       if (old.stripe && !amountChanged) {
         payload.stripe = old.stripe;
       } else if (old.stripe) {
@@ -9682,22 +9689,22 @@ function saveInvoice(status){
     s.invoices.push(payload);
     // bump seq counter for safety
     const mt = /-(\d+)$/.exec(num);
-    if (mt) s.invoiceSeq = Math.max(s.invoiceSeq || 0, parseInt(mt[1],10));
+    if (mt) s.invoiceSeq = Math.max(s.invoiceSeq || 0, parseInt(mt[1], 10));
   }
 
   // ── Stamp ledger ↔ invoice back-links (covers create AND edit re-pointing).
   // Clear links for ledger ids that were dropped from this invoice on edit…
-  const newLedgerIds = (payload.items||[]).map(it => it._ledgerId).filter(Boolean);
-  for (const oldId of oldLedgerIds){
+  const newLedgerIds = (payload.items || []).map(it => it._ledgerId).filter(Boolean);
+  for (const oldId of oldLedgerIds) {
     if (!newLedgerIds.includes(oldId)) stampLedgerInvoiceLink(s, oldId, null);
   }
   // …then point each current line item's ledger sale at this invoice. Decision #3:
   // if a sale is already on a DIFFERENT live invoice, warn but proceed (last writer
   // wins — the ledger tracks the most-recent invoice link).
-  for (const id of newLedgerIds){
-    const le = (s.ledger||[]).find(x => x.id === id);
-    if (le && le.invoiceId && le.invoiceId !== payload.id){
-      const other = (s.invoices||[]).find(i => i.id === le.invoiceId);
+  for (const id of newLedgerIds) {
+    const le = (s.ledger || []).find(x => x.id === id);
+    if (le && le.invoiceId && le.invoiceId !== payload.id) {
+      const other = (s.invoices || []).find(i => i.id === le.invoiceId);
       if (other && other.status !== 'cancelled')
         showToast(`⚠ A sale was already on invoice ${other.num} — re-billing on ${payload.num}`, 'warn', 4000);
     }
@@ -9708,10 +9715,10 @@ function saveInvoice(status){
   // touched (newly linked, re-numbered, or just-unlinked) so the Google Sheet's
   // Invoice column tracks the change. The mirror is canonicalised in the ledger,
   // so one upsert per affected ledger Sale keeps the sheet honest.
-  if (sheetsUrl){
+  if (sheetsUrl) {
     const affected = new Set([...oldLedgerIds, ...newLedgerIds]);
-    for (const id of affected){
-      const le = (s.ledger||[]).find(x => x.id === id);
+    for (const id of affected) {
+      const le = (s.ledger || []).find(x => x.id === id);
       if (le && le.sheetsId && !le.voided) syncToSheets(consignmentSyncPayload(book, le));
     }
   }
@@ -9728,35 +9735,35 @@ function saveInvoice(status){
   const shouldAutoStripe = status !== 'draft' && settings.stripeAuto !== false && !!settings.stripeKey && !payload.stripe;
   if (oldStripeLinkId) deactivateStripePaymentLink(oldStripeLinkId);
 
-  if (shouldAutoStripe){
+  if (shouldAutoStripe) {
     showToast('Creating Stripe Payment Link…', 'ok', 1800);
     createStripePaymentLinkForInvoice(payload).then(stripe => {
       const s2 = getState();
-      const inv = (s2.invoices||[]).find(i => i.id === payload.id);
+      const inv = (s2.invoices || []).find(i => i.id === payload.id);
       if (!inv) return;
       inv.stripe = stripe;
       inv.paymentLink = stripe.url; // also set as the primary payment link so QR/etc. use it
       saveState(activeBook);
       renderInvoices();
-      setTimeout(()=> viewInvoice(payload.id), 60);
+      setTimeout(() => viewInvoice(payload.id), 60);
       showToast(`✓ Stripe link ready — ${fmt(payload.total, payload.currency)} owed`);
     }).catch(err => {
       console.error('Stripe link creation failed:', err);
       showToast('Stripe link failed: ' + err.message, 'err', 5000);
-      setTimeout(()=> viewInvoice(payload.id), 60);
+      setTimeout(() => viewInvoice(payload.id), 60);
     });
   } else {
-    setTimeout(()=> viewInvoice(payload.id), 80);
+    setTimeout(() => viewInvoice(payload.id), 80);
   }
 }
 
-async function regenerateStripeLinkFromView(){
+async function regenerateStripeLinkFromView() {
   if (!currentViewInvoiceId) return;
   const s = getState();
-  const inv = (s.invoices||[]).find(i => i.id === currentViewInvoiceId);
+  const inv = (s.invoices || []).find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
   const settings = getInvoiceSettings();
-  if (!settings.stripeKey){
+  if (!settings.stripeKey) {
     if (await confirmDialog('No Stripe key configured yet. Open Invoice Settings to add one?', { okLabel: 'Open settings' })) {
       closeM('invoice-view');
       setTimeout(openInvoiceTemplateSettings, 80);
@@ -9775,7 +9782,7 @@ async function regenerateStripeLinkFromView(){
     renderInvoices();
     viewInvoice(currentViewInvoiceId);
     showToast(`✓ Stripe link ready — ${fmt(inv.total, inv.currency)} owed`);
-  } catch(e){
+  } catch (e) {
     console.error(e);
     showToast('Stripe: ' + e.message, 'err', 5500);
   } finally {
@@ -9783,15 +9790,15 @@ async function regenerateStripeLinkFromView(){
   }
 }
 
-async function deleteInvoice(){
+async function deleteInvoice() {
   if (!invoiceCtx || !invoiceCtx.editingId) return;
   const s = getState();
-  const inv = (s.invoices||[]).find(i => i.id === invoiceCtx.editingId);
+  const inv = (s.invoices || []).find(i => i.id === invoiceCtx.editingId);
   if (!inv) return;
   if (!(await confirmDialog(`Delete invoice ${inv.num}? This cannot be undone.`, { okLabel: 'Delete invoice', danger: true }))) return;
   // Clear the back-links on every ledger sale this invoice billed, so the ledger
   // and history no longer point at a deleted invoice.
-  for (const it of (inv.items||[])){
+  for (const it of (inv.items || [])) {
     if (it._ledgerId) stampLedgerInvoiceLink(s, it._ledgerId, null);
   }
   s.invoices = s.invoices.filter(i => i.id !== invoiceCtx.editingId);
@@ -9806,22 +9813,22 @@ async function deleteInvoice(){
 // ── invoice view (printable) ────────────────────────────────────────────
 let currentViewInvoiceId = null;
 
-function viewInvoice(id){
+function viewInvoice(id) {
   const s = getState();
-  const inv = (s.invoices||[]).find(i => i.id === id);
-  if (!inv){ showToast('Invoice not found', 'err'); return; }
+  const inv = (s.invoices || []).find(i => i.id === id);
+  if (!inv) { showToast('Invoice not found', 'err'); return; }
   currentViewInvoiceId = id;
   $('invoice-print-area').innerHTML = renderInvoicePaperHTML(inv);
   // Paid invoices show a non-clickable "✓ Paid" badge; unpaid ones keep the
   // clickable gold "✓ Mark paid" action. (Same element is reused across
   // invoices, so set the full state both ways.)
   const mp = $('inv-mark-paid-btn');
-  if (mp){
+  if (mp) {
     const paid = inv.status === 'paid';
     mp.style.display = '';
     mp.disabled = paid;
     mp.textContent = paid ? '✓ Paid' : '✓ Mark paid';
-    if (paid){
+    if (paid) {
       mp.classList.remove('gold');
       mp.style.background = '#e0f5ea';
       mp.style.color = '#1d7a4a';
@@ -9837,34 +9844,34 @@ function viewInvoice(id){
   }
   openM('invoice-view');
   // Render QR if QRCode library is available
-  setTimeout(()=>{
+  setTimeout(() => {
     const qrEl = document.querySelector('#invoice-print-area .inv-qr');
     const url = effectivePaymentLink(inv);
-    if (qrEl && url && typeof QRCode !== 'undefined'){
+    if (qrEl && url && typeof QRCode !== 'undefined') {
       qrEl.innerHTML = '';
       new QRCode(qrEl, { text: url, width: 104, height: 104, colorDark: '#0e0c0a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
     }
   }, 30);
 }
 
-function effectivePaymentLink(inv){
+function effectivePaymentLink(inv) {
   const book = BOOKS[activeBook] || getBook();
   const acceptedMethods = getAcceptedPaymentMethodsForBook(book.id);
-  
+
   if (inv.stripe && inv.stripe.url && acceptedMethods.includes('stripe')) return inv.stripe.url;
-  
+
   let url = '';
   if (inv.paymentLink) {
     const isStripe = /buy\.stripe\.com/i.test(inv.paymentLink);
     const isPaypal = /paypal/i.test(inv.paymentLink);
     const isInterac = /^[^\s@]+@[^\s@]+$/.test(inv.paymentLink);
     if ((isStripe && acceptedMethods.includes('stripe')) ||
-        (isPaypal && acceptedMethods.includes('paypal')) ||
-        (isInterac && acceptedMethods.includes('interac'))) {
+      (isPaypal && acceptedMethods.includes('paypal')) ||
+      (isInterac && acceptedMethods.includes('interac'))) {
       url = inv.paymentLink;
     }
   }
-  
+
   if (!url) {
     if (acceptedMethods.includes('stripe') && book.stripeLink) {
       url = book.stripeLink;
@@ -9874,9 +9881,9 @@ function effectivePaymentLink(inv){
       url = book.paymentLink;
     }
   }
-  
+
   if (!url) return '';
-  
+
   try {
     if (/buy\.stripe\.com/i.test(url)) {
       const u = new URL(url);
@@ -9884,28 +9891,28 @@ function effectivePaymentLink(inv){
       if (inv.storeEmail && !u.searchParams.has('prefilled_email')) u.searchParams.set('prefilled_email', inv.storeEmail);
       url = u.toString();
     }
-  } catch(e){}
+  } catch (e) { }
   return url;
 }
 
-function isDynamicStripeLink(inv){ return !!(inv && inv.stripe && inv.stripe.url); }
+function isDynamicStripeLink(inv) { return !!(inv && inv.stripe && inv.stripe.url); }
 
-function renderInvoicePaperHTML(inv){
+function renderInvoicePaperHTML(inv) {
   const settings = getInvoiceSettings();
   const book = BOOKS[activeBook] || getBook();
   const cur = inv.currency || book.currency;
   const payUrl = effectivePaymentLink(inv);
   const todayStr = today();
   const overdue = inv.status === 'sent' && inv.dueDate && inv.dueDate < todayStr;
-  const statusLabel = overdue ? 'OVERDUE' : (inv.status||'draft').toUpperCase();
-  const statusCls   = overdue ? 'overdue' : (inv.status||'draft');
+  const statusLabel = overdue ? 'OVERDUE' : (inv.status || 'draft').toUpperCase();
+  const statusCls = overdue ? 'overdue' : (inv.status || 'draft');
 
   const accent = book.accent || '#c8913a';
-  const itemsHtml = (inv.items||[]).map(it => `<tr>
-    <td>${escapeHTML(it.description||'—')}</td>
-    <td class="r">${(it.qty||0)}</td>
-    <td class="r">${fmt(it.unitPrice||0, cur)}</td>
-    <td class="r"><strong>${fmt((it.qty||0)*(it.unitPrice||0), cur)}</strong></td>
+  const itemsHtml = (inv.items || []).map(it => `<tr>
+    <td>${escapeHTML(it.description || '—')}</td>
+    <td class="r">${(it.qty || 0)}</td>
+    <td class="r">${fmt(it.unitPrice || 0, cur)}</td>
+    <td class="r"><strong>${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</strong></td>
   </tr>`).join('');
 
   const acceptedMethods = getAcceptedPaymentMethodsForBook(book.id);
@@ -9923,10 +9930,10 @@ function renderInvoicePaperHTML(inv){
 
   const dyn = isDynamicStripeLink(inv);
   const testBadge = (dyn && inv.stripe.livemode === false) ? `<span style="display:inline-block;margin-left:8px;background:#fde6e0;color:#a13a1b;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:3px 8px;border-radius:99px;">Test mode</span>` : '';
-  const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#0e0c0a;color:#f0c060;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:99px;margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge?' ':''}${testBadge}</div>` : '';
+  const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#0e0c0a;color:#f0c060;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:99px;margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge ? ' ' : ''}${testBadge}</div>` : '';
   const payCopy = dyn
-    ? `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> via Stripe Checkout.`
-    : `Click below to pay <strong>${fmt(inv.total||0, cur)}</strong> securely, or scan the QR with your phone.`;
+    ? `Click below to pay <strong>${fmt(inv.total || 0, cur)}</strong> via Stripe Checkout.`
+    : `Click below to pay <strong>${fmt(inv.total || 0, cur)}</strong> securely, or scan the QR with your phone.`;
 
   const payFallback = payUrl ? `
     <p class="inv-pay-fallback">Pay online: <a href="${payUrl}" target="_blank" rel="noopener">${escapeHTML(payUrl)}</a></p>` : '';
@@ -9937,7 +9944,7 @@ function renderInvoicePaperHTML(inv){
         ${dynBadge}
         <h3>Pay this invoice</h3>
         <p>${payCopy}</p>
-        <a class="pay-btn" href="${payUrl}" target="_blank" rel="noopener">Pay ${fmt(inv.total||0, cur)} →</a>
+        <a class="pay-btn" href="${payUrl}" target="_blank" rel="noopener">Pay ${fmt(inv.total || 0, cur)} →</a>
         <div class="pay-methods">${payMethodsLabel}</div>
       </div>
       <div class="inv-qr"></div>
@@ -9954,7 +9961,7 @@ function renderInvoicePaperHTML(inv){
     <header class="inv-head">
       <div class="inv-brand">
         <h1>${escapeHTML(settings.name || 'Lyricalmyrical Books')}</h1>
-        <div class="inv-addr">${escapeHTML(settings.addr || '')}${settings.email?'\n'+escapeHTML(settings.email):''}${settings.web?'\n'+escapeHTML(settings.web):''}${settings.vat?'\nVAT/Tax ID: '+escapeHTML(settings.vat):''}</div>
+        <div class="inv-addr">${escapeHTML(settings.addr || '')}${settings.email ? '\n' + escapeHTML(settings.email) : ''}${settings.web ? '\n' + escapeHTML(settings.web) : ''}${settings.vat ? '\nVAT/Tax ID: ' + escapeHTML(settings.vat) : ''}</div>
       </div>
       <div class="inv-id">
         <div class="inv-word">Invoice</div>
@@ -9966,18 +9973,18 @@ function renderInvoicePaperHTML(inv){
     <section class="inv-meta-grid">
       <div>
         <label>Billed to</label>
-        <strong>${escapeHTML(inv.storeName||'—')}</strong>
+        <strong>${escapeHTML(inv.storeName || '—')}</strong>
         <div class="inv-meta-sub">${[inv.storeContact, inv.storeEmail, inv.storePhone, inv.storeAddress, [inv.storeCity, inv.storeRegion, inv.storePostal].filter(Boolean).join(', '), inv.storeCountry].filter(Boolean).map(escapeHTML).join('\n')}</div>
       </div>
       <div>
         <label>Issue date</label>
         <strong>${fmtD(inv.date)}</strong>
-        ${inv.dueDate?`<div class="inv-meta-sub">Due ${fmtD(inv.dueDate)}</div>`:''}
+        ${inv.dueDate ? `<div class="inv-meta-sub">Due ${fmtD(inv.dueDate)}</div>` : ''}
       </div>
       <div>
         <label>Amount due</label>
-        <strong style="color:${statusCls==='paid'?'#1d7a4a':'#0e0c0a'};font-size:18px;">${fmt(inv.total||0, cur)}</strong>
-        <div class="inv-meta-sub">${(inv.items||[]).reduce((a,i)=>a+(i.qty||0),0)} item${(inv.items||[]).reduce((a,i)=>a+(i.qty||0),0)===1?'':'s'}</div>
+        <strong style="color:${statusCls === 'paid' ? '#1d7a4a' : '#0e0c0a'};font-size:18px;">${fmt(inv.total || 0, cur)}</strong>
+        <div class="inv-meta-sub">${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0)} item${(inv.items || []).reduce((a, i) => a + (i.qty || 0), 0) === 1 ? '' : 's'}</div>
         ${settlesLine}
         ${divergedNote}
       </div>
@@ -9989,17 +9996,17 @@ function renderInvoicePaperHTML(inv){
     </table>
 
     <div class="inv-totals">
-      <div class="tr"><span>Subtotal</span><span class="val">${fmt(inv.subtotal||0, cur)}</span></div>
-      ${(inv.discount||0)>0 ? `<div class="tr"><span>Discount</span><span class="val">−${fmt(inv.discount, cur)}</span></div>` : ''}
-      ${(inv.taxRate||0)>0 ? `<div class="tr"><span>Tax (${inv.taxRate}%)</span><span class="val">${fmt(inv.tax||0, cur)}</span></div>` : ''}
-      <div class="grand"><div class="tr" style="padding:0;color:inherit;"><span>Total due</span><span class="val">${fmt(inv.total||0, cur)}</span></div></div>
+      <div class="tr"><span>Subtotal</span><span class="val">${fmt(inv.subtotal || 0, cur)}</span></div>
+      ${(inv.discount || 0) > 0 ? `<div class="tr"><span>Discount</span><span class="val">−${fmt(inv.discount, cur)}</span></div>` : ''}
+      ${(inv.taxRate || 0) > 0 ? `<div class="tr"><span>Tax (${inv.taxRate}%)</span><span class="val">${fmt(inv.tax || 0, cur)}</span></div>` : ''}
+      <div class="grand"><div class="tr" style="padding:0;color:inherit;"><span>Total due</span><span class="val">${fmt(inv.total || 0, cur)}</span></div></div>
     </div>
 
     ${payBlock}
 
     <div class="inv-notes">
-      ${inv.notes?`<div class="inv-notes-block"><h4>Notes</h4><div>${escapeHTML(inv.notes)}</div></div>`:''}
-      ${inv.terms?`<div class="inv-notes-block"><h4>Terms</h4><div>${escapeHTML(inv.terms)}</div></div>`:''}
+      ${inv.notes ? `<div class="inv-notes-block"><h4>Notes</h4><div>${escapeHTML(inv.notes)}</div></div>` : ''}
+      ${inv.terms ? `<div class="inv-notes-block"><h4>Terms</h4><div>${escapeHTML(inv.terms)}</div></div>` : ''}
       ${bankBlock}
     </div>
 
@@ -10007,30 +10014,30 @@ function renderInvoicePaperHTML(inv){
   </div>`;
 }
 
-function editInvoiceFromView(){
+function editInvoiceFromView() {
   if (!currentViewInvoiceId) return;
   closeM('invoice-view');
-  setTimeout(()=> openCreateInvoice(null, currentViewInvoiceId), 60);
+  setTimeout(() => openCreateInvoice(null, currentViewInvoiceId), 60);
 }
 
-async function markInvoicePaidFromView(){
+async function markInvoicePaidFromView() {
   if (!currentViewInvoiceId) return;
   const s = getState(), book = getBook();
-  const inv = (s.invoices||[]).find(i => i.id === currentViewInvoiceId);
+  const inv = (s.invoices || []).find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
   if (!(await confirmDialog(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`, { okLabel: 'Mark paid' }))) return;
   inv.status = 'paid';
   inv.paidAt = Date.now();
   inv.paidMethod = isDynamicStripeLink(inv) ? 'Stripe Checkout'
-                : (inv.paymentLink && /buy\.stripe\.com/i.test(inv.paymentLink)) ? 'Stripe'
-                : (inv.paymentLink && /paypal/i.test(inv.paymentLink))           ? 'PayPal'
-                : (book.stripeLink ? 'Stripe' : 'Other');
+    : (inv.paymentLink && /buy\.stripe\.com/i.test(inv.paymentLink)) ? 'Stripe'
+      : (inv.paymentLink && /paypal/i.test(inv.paymentLink)) ? 'PayPal'
+        : (book.stripeLink ? 'Stripe' : 'Other');
   // best-effort: deactivate the Stripe Payment Link so it can't be paid twice
   if (inv.stripe?.paymentLinkId) deactivateStripePaymentLink(inv.stripe.paymentLinkId);
   // settle any linked pending ledger entries via the canonical helper, so the
   // ledger row, store owed, and hist mirror paidState all flip together.
-  for (const it of (inv.items||[])){
-    if (it._ledgerId){
+  for (const it of (inv.items || [])) {
+    if (it._ledgerId) {
       const e = s.ledger.find(x => x.id === it._ledgerId);
       if (e) settleLedgerSalePaid(s, e);
     }
@@ -10045,7 +10052,7 @@ async function markInvoicePaidFromView(){
   showToast(`✓ ${inv.num} marked paid`);
 }
 
-function printInvoice(){
+function printInvoice() {
   if (!currentViewInvoiceId) return;
   const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
@@ -10068,27 +10075,27 @@ function printInvoice(){
     doc.open(); doc.write(html); doc.close();
     const triggerPrint = () => {
       try { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
-      catch(e){ printInvoiceViaPopup(html); }
-      finally { setTimeout(() => { try { iframe.remove(); } catch(e){} }, 1500); }
+      catch (e) { printInvoiceViaPopup(html); }
+      finally { setTimeout(() => { try { iframe.remove(); } catch (e) { } }, 1500); }
     };
     // Wait for the doc (and its embedded QR/image + fonts) to settle, otherwise
     // the QR/styles may be missing in the PDF.
-    if (iframe.contentWindow.document.readyState === 'complete'){
+    if (iframe.contentWindow.document.readyState === 'complete') {
       setTimeout(triggerPrint, 250);
     } else {
       iframe.addEventListener('load', () => setTimeout(triggerPrint, 250), { once: true });
     }
-  } catch(e){
-    if (iframe) { try { iframe.remove(); } catch(_){} }
+  } catch (e) {
+    if (iframe) { try { iframe.remove(); } catch (_) { } }
     printInvoiceViaPopup(html);
   }
 }
 
 // Last-resort print path: open the standalone invoice doc in a new tab and print
 // it. Used when the hidden-iframe route is unavailable (e.g. sandboxed frames).
-function printInvoiceViaPopup(html){
+function printInvoiceViaPopup(html) {
   const w = window.open('', '_blank');
-  if (!w){
+  if (!w) {
     // Popup blocked too — fall back to printing the page (the @media print CSS
     // in index.html isolates #m-invoice-view) and nudge toward Download instead.
     showToast('Allow popups to print, or use “Download” and print the saved file.', 'warn');
@@ -10096,33 +10103,33 @@ function printInvoiceViaPopup(html){
     return;
   }
   w.document.open(); w.document.write(html); w.document.close();
-  const go = () => { try { w.focus(); w.print(); } catch(e){} };
+  const go = () => { try { w.focus(); w.print(); } catch (e) { } };
   if (w.document.readyState === 'complete') setTimeout(go, 250);
   else w.addEventListener('load', () => setTimeout(go, 250), { once: true });
 }
 
-function copyInvoicePayLink(){
+function copyInvoicePayLink() {
   if (!currentViewInvoiceId) return;
   const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
   const url = effectivePaymentLink(inv);
-  if (!url){ showToast('No payment link set for this book or invoice', 'warn'); return; }
+  if (!url) { showToast('No payment link set for this book or invoice', 'warn'); return; }
   navigator.clipboard.writeText(url).then(
     () => showToast('✓ Payment link copied'),
     () => showToast('Could not copy — your browser blocked it', 'err')
   );
 }
 
-function invoiceEmailPlainText(inv){
+function invoiceEmailPlainText(inv) {
   const settings = getInvoiceSettings();
   const cur = inv.currency || getBook().currency;
   const payUrl = effectivePaymentLink(inv);
   return [
     `Hi ${inv.storeContact || inv.storeName || 'there'},`,
     ``,
-    `Your invoice ${inv.num} for ${fmt(inv.total||0, cur)} is below. Issued ${fmtD(inv.date)}${inv.dueDate?', due '+fmtD(inv.dueDate):''}.`,
+    `Your invoice ${inv.num} for ${fmt(inv.total || 0, cur)} is below. Issued ${fmtD(inv.date)}${inv.dueDate ? ', due ' + fmtD(inv.dueDate) : ''}.`,
     payUrl ? `` : null,
-    payUrl ? `Pay securely online${isDynamicStripeLink(inv)?' (exact amount via Stripe)':''}: ${payUrl}` : null,
+    payUrl ? `Pay securely online${isDynamicStripeLink(inv) ? ' (exact amount via Stripe)' : ''}: ${payUrl}` : null,
     inv.notes ? `` : null,
     inv.notes ? `Notes: ${inv.notes}` : null,
     ``,
@@ -10135,7 +10142,7 @@ function invoiceEmailPlainText(inv){
 // like the invoice itself, copy a rich, inline-styled email (greeting + invoice
 // card + pay button) to the clipboard, then open Gmail with just recipient and
 // subject filled so the user can paste the formatted invoice into the message.
-function buildInvoiceEmailHTML(inv){
+function buildInvoiceEmailHTML(inv) {
   const settings = getInvoiceSettings();
   const cur = inv.currency || getBook().currency;
   const payUrl = effectivePaymentLink(inv);
@@ -10158,7 +10165,7 @@ function buildInvoiceEmailHTML(inv){
 <div style="margin:0;padding:0;background:#f7f2e9;color:#1a1814;font-family:Arial,Helvetica,sans-serif;">
   <div style="max-width:760px;margin:0 auto;padding:24px 14px;">
     <p style="font-size:16px;line-height:1.55;margin:0 0 16px;">Hi ${contact},</p>
-    <p style="font-size:15px;line-height:1.55;margin:0 0 22px;">Here is invoice <strong>${escapeHTML(inv.num)}</strong> for <strong>${fmt(inv.total||0, cur)}</strong>. It is also ready to print or save as a PDF from the invoice screen.</p>
+    <p style="font-size:15px;line-height:1.55;margin:0 0 22px;">Here is invoice <strong>${escapeHTML(inv.num)}</strong> for <strong>${fmt(inv.total || 0, cur)}</strong>. It is also ready to print or save as a PDF from the invoice screen.</p>
     <div style="background:#ffffff;border:1px solid #eadfca;border-radius:12px;overflow:hidden;box-shadow:0 8px 28px rgba(14,12,10,.10);">
       <div style="height:7px;background:${escapeHTML(accent)};"></div>
       <div style="padding:30px 34px;">
@@ -10166,7 +10173,7 @@ function buildInvoiceEmailHTML(inv){
           <tr>
             <td style="vertical-align:top;">
               <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#0e0c0a;line-height:1.1;">${escapeHTML(settings.name || 'Lyricalmyrical Books')}</div>
-              <div style="font-size:12px;line-height:1.55;color:#756e64;margin-top:10px;white-space:pre-wrap;">${escapeHTML(settings.addr || '')}${settings.email?'<br>'+escapeHTML(settings.email):''}${settings.web?'<br>'+escapeHTML(settings.web):''}</div>
+              <div style="font-size:12px;line-height:1.55;color:#756e64;margin-top:10px;white-space:pre-wrap;">${escapeHTML(settings.addr || '')}${settings.email ? '<br>' + escapeHTML(settings.email) : ''}${settings.web ? '<br>' + escapeHTML(settings.web) : ''}</div>
             </td>
             <td align="right" style="vertical-align:top;white-space:nowrap;">
               <div style="font-family:Georgia,'Times New Roman',serif;font-size:22px;color:${escapeHTML(accent)};letter-spacing:.16em;text-transform:uppercase;font-weight:700;">Invoice</div>
@@ -10177,8 +10184,8 @@ function buildInvoiceEmailHTML(inv){
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border-top:1px solid #eadfca;border-bottom:1px solid #eadfca;margin-bottom:22px;">
           <tr>
             <td style="padding:16px 12px 16px 0;vertical-align:top;width:45%;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Billed to</div><div style="font-weight:700;">${escapeHTML(inv.storeName || '—')}</div><div style="font-size:12px;line-height:1.5;color:#756e64;margin-top:4px;">${billedTo}</div></td>
-            <td style="padding:16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Issue date</div><div style="font-weight:700;">${fmtD(inv.date)}</div>${inv.dueDate?`<div style="font-size:12px;color:#756e64;margin-top:4px;">Due ${fmtD(inv.dueDate)}</div>`:''}</td>
-            <td align="right" style="padding:16px 0 16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Amount due</div><div style="font-size:22px;font-weight:800;color:#0e0c0a;">${fmt(inv.total||0, cur)}</div></td>
+            <td style="padding:16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Issue date</div><div style="font-weight:700;">${fmtD(inv.date)}</div>${inv.dueDate ? `<div style="font-size:12px;color:#756e64;margin-top:4px;">Due ${fmtD(inv.dueDate)}</div>` : ''}</td>
+            <td align="right" style="padding:16px 0 16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Amount due</div><div style="font-size:22px;font-weight:800;color:#0e0c0a;">${fmt(inv.total || 0, cur)}</div></td>
           </tr>
         </table>
         <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:18px;">
@@ -10186,13 +10193,13 @@ function buildInvoiceEmailHTML(inv){
           <tbody>${items}</tbody>
         </table>
         <table role="presentation" align="right" width="300" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:22px;">
-          <tr><td style="padding:6px 12px;color:#4a443c;">Subtotal</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(inv.subtotal||0, cur)}</td></tr>
-          ${(inv.discount||0)>0 ? `<tr><td style="padding:6px 12px;color:#4a443c;">Discount</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">−${fmt(inv.discount, cur)}</td></tr>` : ''}
-          ${(inv.taxRate||0)>0 ? `<tr><td style="padding:6px 12px;color:#4a443c;">Tax (${inv.taxRate}%)</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(inv.tax||0, cur)}</td></tr>` : ''}
-          <tr><td style="padding:14px 12px;background:#0e0c0a;color:#f7f2e9;border-radius:6px 0 0 6px;font-weight:800;">Total due</td><td align="right" style="padding:14px 12px;background:#0e0c0a;color:#f0c060;border-radius:0 6px 6px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:800;">${fmt(inv.total||0, cur)}</td></tr>
+          <tr><td style="padding:6px 12px;color:#4a443c;">Subtotal</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(inv.subtotal || 0, cur)}</td></tr>
+          ${(inv.discount || 0) > 0 ? `<tr><td style="padding:6px 12px;color:#4a443c;">Discount</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">−${fmt(inv.discount, cur)}</td></tr>` : ''}
+          ${(inv.taxRate || 0) > 0 ? `<tr><td style="padding:6px 12px;color:#4a443c;">Tax (${inv.taxRate}%)</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(inv.tax || 0, cur)}</td></tr>` : ''}
+          <tr><td style="padding:14px 12px;background:#0e0c0a;color:#f7f2e9;border-radius:6px 0 0 6px;font-weight:800;">Total due</td><td align="right" style="padding:14px 12px;background:#0e0c0a;color:#f0c060;border-radius:0 6px 6px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:800;">${fmt(inv.total || 0, cur)}</td></tr>
         </table>
         <div style="clear:both;"></div>
-        ${payUrl ? `<div style="background:#faf6ec;border:1px solid #eadfca;border-radius:10px;padding:18px 20px;margin:16px 0 20px;"><div style="font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Pay this invoice</div><div style="font-size:13px;line-height:1.5;color:#675f55;margin-bottom:14px;">Pay <strong>${fmt(inv.total||0, cur)}</strong> securely online${isDynamicStripeLink(inv)?' via Stripe Checkout':''}.</div><a href="${payUrl}" style="display:inline-block;background:#0e0c0a;color:#f0c060;text-decoration:none;border-radius:999px;padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;">Pay ${fmt(inv.total||0, cur)} →</a><div style="font-size:11px;line-height:1.4;color:#8c8378;margin-top:10px;word-break:break-all;">${escapeHTML(payUrl)}</div></div>` : ''}
+        ${payUrl ? `<div style="background:#faf6ec;border:1px solid #eadfca;border-radius:10px;padding:18px 20px;margin:16px 0 20px;"><div style="font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Pay this invoice</div><div style="font-size:13px;line-height:1.5;color:#675f55;margin-bottom:14px;">Pay <strong>${fmt(inv.total || 0, cur)}</strong> securely online${isDynamicStripeLink(inv) ? ' via Stripe Checkout' : ''}.</div><a href="${payUrl}" style="display:inline-block;background:#0e0c0a;color:#f0c060;text-decoration:none;border-radius:999px;padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;">Pay ${fmt(inv.total || 0, cur)} →</a><div style="font-size:11px;line-height:1.4;color:#8c8378;margin-top:10px;word-break:break-all;">${escapeHTML(payUrl)}</div></div>` : ''}
         ${notes}
         <div style="text-align:center;font-size:12px;color:#9b9184;margin-top:24px;font-style:italic;">${escapeHTML(settings.footer || 'Thank you for stocking our books.')}</div>
       </div>
@@ -10202,10 +10209,10 @@ function buildInvoiceEmailHTML(inv){
 </div>`;
 }
 
-async function copyInvoiceEmailToClipboard(inv){
+async function copyInvoiceEmailToClipboard(inv) {
   const html = buildInvoiceEmailHTML(inv);
   const text = invoiceEmailPlainText(inv);
-  if (navigator.clipboard && window.ClipboardItem){
+  if (navigator.clipboard && window.ClipboardItem) {
     await navigator.clipboard.write([
       new ClipboardItem({
         'text/html': new Blob([html], { type: 'text/html' }),
@@ -10214,11 +10221,11 @@ async function copyInvoiceEmailToClipboard(inv){
     ]);
     return true;
   }
-  if (navigator.clipboard?.writeText){ await navigator.clipboard.writeText(text); return false; }
+  if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return false; }
   throw new Error('Clipboard unavailable');
 }
 
-async function emailInvoice(){
+async function emailInvoice() {
   if (!currentViewInvoiceId) return;
   const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
@@ -10228,7 +10235,7 @@ async function emailInvoice(){
   let richCopied = false;
   try {
     richCopied = await copyInvoiceEmailToClipboard(inv);
-  } catch(e){
+  } catch (e) {
     showToast('Could not copy the formatted invoice email. Your browser may have blocked clipboard access.', 'warn');
   }
   // Still download the one-page invoice file as a backup attachment / PDF source,
@@ -10239,8 +10246,8 @@ async function emailInvoice(){
   const msg = richCopied
     ? '✓ Formatted invoice email copied. Paste into Gmail compose, then attach the downloaded invoice if you want.'
     : '✓ Plain invoice text copied. Paste into Gmail compose, then attach the downloaded invoice if you want.';
-  if (w){
-    try { w.opener = null; } catch(e){}
+  if (w) {
+    try { w.opener = null; } catch (e) { }
     showToast(msg);
   } else {
     const mailtoUrl = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(invoiceEmailPlainText(inv))}`;
@@ -10256,16 +10263,16 @@ async function emailInvoice(){
 // {display:none}`), which has no #m-invoice-view to match in this standalone doc
 // and so blanked the entire page in the PDF. Cross-origin sheets (Google Fonts)
 // throw on .cssRules access and are skipped — their fonts come via the <link>.
-function collectInvoicePaperCss(){
+function collectInvoicePaperCss() {
   const out = [];
-  for (const sheet of Array.from(document.styleSheets || [])){
+  for (const sheet of Array.from(document.styleSheets || [])) {
     let rules;
-    try { rules = sheet.cssRules; } catch(e){ continue; }
+    try { rules = sheet.cssRules; } catch (e) { continue; }
     if (!rules) continue;
-    for (const rule of Array.from(rules)){
+    for (const rule of Array.from(rules)) {
       // Plain style rules scoped to the invoice paper; @media/@font-face blocks
       // (no selectorText) are skipped — we supply our own clean print rules.
-      if (rule.selectorText && rule.selectorText.includes('.invoice-paper')){
+      if (rule.selectorText && rule.selectorText.includes('.invoice-paper')) {
         out.push(rule.cssText);
       }
     }
@@ -10276,16 +10283,16 @@ function collectInvoicePaperCss(){
 // Returns the invoice paper's inner HTML with the live QR (drawn to a <canvas>
 // at view time) inlined as a PNG <img>, so it survives outside the live preview
 // (standalone file, print window, or rasterized PDF).
-function invoicePaperBodyWithQR(inv){
+function invoicePaperBodyWithQR(inv) {
   let bodyInner = renderInvoicePaperHTML(inv);
   const liveQr = document.querySelector('#invoice-print-area .inv-qr canvas');
-  if (liveQr){
+  if (liveQr) {
     try {
       bodyInner = bodyInner.replace(
         '<div class="inv-qr"></div>',
         `<div class="inv-qr"><img src="${liveQr.toDataURL('image/png')}" width="104" height="104" alt="Scan to pay" style="display:block;"></div>`
       );
-    } catch(e){}
+    } catch (e) { }
   }
   return bodyInner;
 }
@@ -10293,7 +10300,7 @@ function invoicePaperBodyWithQR(inv){
 // Builds a fully self-contained invoice document with the Stripe pay link embedded
 // (clickable button + scannable QR + plain-text URL) that survives PDF export and
 // email-client styling — so the link is never dropped when the invoice is sent.
-function buildStandaloneInvoiceHTML(inv){
+function buildStandaloneInvoiceHTML(inv) {
   const bodyInner = invoicePaperBodyWithQR(inv);
 
   // Only the font stylesheets/preconnects are carried over from the page; the
@@ -10325,7 +10332,7 @@ function buildStandaloneInvoiceHTML(inv){
   return `<!doctype html><html><head>${head}</head>${body}</html>`;
 }
 
-function downloadInvoiceHTML(opts){
+function downloadInvoiceHTML(opts) {
   if (!currentViewInvoiceId) return;
   const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
@@ -10335,8 +10342,8 @@ function downloadInvoiceHTML(opts){
   const a = document.createElement('a');
   a.href = url; a.download = `${inv.num}.html`;
   document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 1000);
-  if (!(opts && opts.silent)){
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (!(opts && opts.silent)) {
     showToast(effectivePaymentLink(inv)
       ? '✓ Invoice downloaded with the Stripe pay link embedded — attach it or print to PDF.'
       : '✓ Invoice downloaded (open & print to PDF).');
@@ -10348,7 +10355,7 @@ function downloadInvoiceHTML(opts){
 // the first online load this works offline too. Failures reject so callers can
 // fall back gracefully.
 const _externalScripts = {};
-function loadExternalScript(src){
+function loadExternalScript(src) {
   if (_externalScripts[src]) return _externalScripts[src];
   _externalScripts[src] = new Promise((resolve, reject) => {
     const s = document.createElement('script');
@@ -10362,11 +10369,11 @@ function loadExternalScript(src){
 
 // jsPDF + html2canvas are ~0.5 MB combined, so they're only fetched the first
 // time the user actually exports a PDF (not on every page load).
-async function ensurePdfLibs(){
-  if (!(window.jspdf && window.jspdf.jsPDF)){
+async function ensurePdfLibs() {
+  if (!(window.jspdf && window.jspdf.jsPDF)) {
     await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
   }
-  if (!window.html2canvas){
+  if (!window.html2canvas) {
     await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
   }
 }
@@ -10376,13 +10383,13 @@ async function ensurePdfLibs(){
 // loaded fonts apply (correct typography even offline), rasterized with
 // html2canvas, then placed into an A4 jsPDF and saved as <invoice>.pdf. Falls
 // back to the print/Save-as-PDF flow if the libraries can't be loaded.
-async function downloadInvoicePDF(){
+async function downloadInvoicePDF() {
   if (!currentViewInvoiceId) return;
   const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
   const btn = $('inv-pdf-btn');
   const prevLabel = btn ? btn.textContent : '';
-  if (btn){ btn.disabled = true; btn.textContent = '… Building PDF'; }
+  if (btn) { btn.disabled = true; btn.textContent = '… Building PDF'; }
 
   let holder;
   try {
@@ -10393,7 +10400,7 @@ async function downloadInvoicePDF(){
     holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:780px;background:#fff;';
     holder.innerHTML = `<div class="invoice-paper" style="box-shadow:none;border-radius:0;max-width:none;">${invoicePaperBodyWithQR(inv)}</div>`;
     document.body.appendChild(holder);
-    try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(e){}
+    try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { }
 
     const canvas = await window.html2canvas(holder.firstElementChild, {
       scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false
@@ -10409,7 +10416,7 @@ async function downloadInvoicePDF(){
     const imgData = canvas.toDataURL('image/png');
     const contentH = pageH - margin * 2;
 
-    if (imgH <= contentH){
+    if (imgH <= contentH) {
       pdf.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
     } else {
       // Taller than one page: place the full image and shift it up per page so
@@ -10417,7 +10424,7 @@ async function downloadInvoicePDF(){
       let heightLeft = imgH, position = margin;
       pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH);
       heightLeft -= contentH;
-      while (heightLeft > 0){
+      while (heightLeft > 0) {
         position = margin - (imgH - heightLeft);
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', margin, position, imgW, imgH);
@@ -10427,13 +10434,13 @@ async function downloadInvoicePDF(){
 
     pdf.save(`${inv.num || 'invoice'}.pdf`);
     showToast('✓ PDF downloaded');
-  } catch(e){
+  } catch (e) {
     console.error('PDF export failed:', e);
     showToast('Could not build the PDF — opening the print dialog instead.', 'warn');
     printInvoice();
   } finally {
-    if (holder) { try { holder.remove(); } catch(e){} }
-    if (btn){ btn.disabled = false; btn.textContent = prevLabel; }
+    if (holder) { try { holder.remove(); } catch (e) { } }
+    if (btn) { btn.disabled = false; btn.textContent = prevLabel; }
   }
 }
 
@@ -10468,10 +10475,10 @@ async function convertKeptAllToReceived() {
   const payout = s.artistPayouts[pIdx];
 
   if (!(await confirmDialog(
-    `Record ${escapeHtml(h.num)} as fully forwarded?\n\n`+
-    `This sale was settled as "artist keeps all" — the artist kept ${fmt(payout.amount,book.currency)} `+
-    `and your cut was forgiven. Recording the full transfer removes that `+
-    `${fmt(payout.amount,book.currency)} payout: the publisher now holds all the cash and the artist `+
+    `Record ${escapeHtml(h.num)} as fully forwarded?\n\n` +
+    `This sale was settled as "artist keeps all" — the artist kept ${fmt(payout.amount, book.currency)} ` +
+    `and your cut was forgiven. Recording the full transfer removes that ` +
+    `${fmt(payout.amount, book.currency)} payout: the publisher now holds all the cash and the artist ` +
     `is owed their normal share again.`,
     { okLabel: 'Record full transfer' }
   ))) return;
@@ -10491,26 +10498,26 @@ async function convertKeptAllToReceived() {
     const totalNative = h.qty * h.price;
     const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
     syncToSheets({
-      type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
-      qty:h.qty, price:h.price, total:totalNative, stockAfter:h.after,
-      notes:(h.notes||'')+' [FULL TRANSFER RECEIVED AFTER KEEP-ALL]',
-      sheetsId:h.sheetsId||'',
-      currency:nativeCur,
-      paymentCurrency:normalizeCurrencyCode(h.payment?.currency||nativeCur,'CAD'),
-      paymentAmount:h.payment?.amount ?? totalNative,
-      paymentRate:h.payment?.rate ?? '',
-      convertedTotal:cadEquiv,
-      enteredBy:h.enteredBy||'',
-      status:'OK'
+      type: 'order', book: book.title, date: h.date, num: h.num, chan: h.chan,
+      qty: h.qty, price: h.price, total: totalNative, stockAfter: h.after,
+      notes: (h.notes || '') + ' [FULL TRANSFER RECEIVED AFTER KEEP-ALL]',
+      sheetsId: h.sheetsId || '',
+      currency: nativeCur,
+      paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
+      paymentAmount: h.payment?.amount ?? totalNative,
+      paymentRate: h.payment?.rate ?? '',
+      convertedTotal: cadEquiv,
+      enteredBy: h.enteredBy || '',
+      status: 'OK'
     });
   }
-  showToast(`✓ Full transfer recorded — ${fmt(payout.amount,book.currency)} payout reversed`);
+  showToast(`✓ Full transfer recorded — ${fmt(payout.amount, book.currency)} payout reversed`);
 }
 
 function openEditHist(idx) {
   const s = getState(), book = getBook(), h = s.hist[idx];
   if (!h) return;
-  editCtx = { kind:'hist', idx, snapshot: JSON.parse(JSON.stringify(h)) };
+  editCtx = { kind: 'hist', idx, snapshot: JSON.parse(JSON.stringify(h)) };
   $('edit-modal-title').textContent = 'Edit order entry';
   $('edit-modal-type-badge').textContent = h.chan + ' order';
   $('edit-order-fields').style.display = '';
@@ -10552,7 +10559,7 @@ function openEditHist(idx) {
 function openEditLedger(idx) {
   const s = getState(), book = getBook(), e = s.ledger[idx];
   if (!e) return;
-  editCtx = { kind:'ledger', idx, snapshot: JSON.parse(JSON.stringify(e)) };
+  editCtx = { kind: 'ledger', idx, snapshot: JSON.parse(JSON.stringify(e)) };
   $('edit-modal-title').textContent = 'Edit consignment entry';
   $('edit-modal-type-badge').textContent = e.storeName + ' · ' + e.type;
   $('edit-order-fields').style.display = 'none';
@@ -10568,7 +10575,7 @@ function openEditLedger(idx) {
   // what was actually charged, then let the user correct a mistaken price.
   const priceRow = $('edit-l-price-row');
   if (e.type === 'Sale') {
-    const derivedPrice = (e.amountDue > 0 && e.qty) ? (e.amountDue / (e.qty * (1 - e.rate/100))) : book.listPrice;
+    const derivedPrice = (e.amountDue > 0 && e.qty) ? (e.amountDue / (e.qty * (1 - e.rate / 100))) : book.listPrice;
     $('edit-l-price').value = (derivedPrice || 0).toFixed(2);
     if ($('edit-l-price-sym')) $('edit-l-price-sym').textContent = book.currency;
     if (priceRow) priceRow.style.display = '';
@@ -10613,7 +10620,7 @@ function saveEntryEdit() {
       s.stock = Math.max(0, s.stock - newQty);
       s.sold += newQty;
       s.revenue += newQty * newPrice;
-      if (!s.chStats[newChan]) s.chStats[newChan] = {txns:0,units:0,revenue:0};
+      if (!s.chStats[newChan]) s.chStats[newChan] = { txns: 0, units: 0, revenue: 0 };
       s.chStats[newChan].txns++;
       s.chStats[newChan].units += newQty;
       s.chStats[newChan].revenue += newQty * newPrice;
@@ -10679,15 +10686,15 @@ function saveEntryEdit() {
     }
     if (e.type === 'Sale' && !e.voided) {
       // Find the store and adjust owed
-      const st = getState().stores.find(st=>st.id===e.storeId);
+      const st = getState().stores.find(st => st.id === e.storeId);
       if (st) {
         const oldDue = e.amountDue;
         // Prefer the price the user typed in the edit modal; otherwise estimate
         // it from the old amountDue so quantity/rate-only edits behave as before.
-        const derivedPrice = oldDue > 0 ? (oldDue / (e.qty * (1 - e.rate/100))) : book.listPrice;
+        const derivedPrice = oldDue > 0 ? (oldDue / (e.qty * (1 - e.rate / 100))) : book.listPrice;
         const typedPrice = parseFloat($('edit-l-price') ? $('edit-l-price').value : '');
         const salePrice = (!isNaN(typedPrice) && typedPrice > 0) ? typedPrice : derivedPrice;
-        const newDue = newQty * salePrice * (1 - newRate/100);
+        const newDue = newQty * salePrice * (1 - newRate / 100);
         if (e.paid === 'pending' && st) {
           st.amountOwed = Math.max(0, st.amountOwed - oldDue + newDue);
         }
@@ -10702,10 +10709,10 @@ function saveEntryEdit() {
       // Decision #2: editing a billed sale must NOT rewrite the invoice. Keep the
       // link, flag the invoice as diverged (its view shows a "ledger changed since
       // invoiced" note), and tell the user which invoice this sale sits on.
-      if (e.invoiceId){
-        const inv = (s.invoices||[]).find(i => i.id === e.invoiceId);
+      if (e.invoiceId) {
+        const inv = (s.invoices || []).find(i => i.id === e.invoiceId);
         if (inv) inv.ledgerDivergedAt = Date.now();
-        showToast(`This sale is on invoice ${e.invoiceNum||''} — reopen it to re-import the new amount.`, 'warn', 4500);
+        showToast(`This sale is on invoice ${e.invoiceNum || ''} — reopen it to re-import the new amount.`, 'warn', 4500);
       }
     }
     e.qty = newQty;
@@ -10938,7 +10945,7 @@ function voidEntry() {
         s.sold += h.qty;
         s.revenue += h.qty * h.price;
       }
-      if (!s.chStats[h.chan]) s.chStats[h.chan] = {txns:0,units:0,revenue:0};
+      if (!s.chStats[h.chan]) s.chStats[h.chan] = { txns: 0, units: 0, revenue: 0 };
       s.chStats[h.chan].txns++;
       s.chStats[h.chan].units += h.qty;
       s.chStats[h.chan].revenue += h.qty * h.price;
@@ -10950,12 +10957,12 @@ function voidEntry() {
   } else {
     const e = s.ledger[editCtx.idx];
     if (!e) return;
-    const st = s.stores.find(st=>st.id===e.storeId);
+    const st = s.stores.find(st => st.id === e.storeId);
     if (!e.voided) {
       // VOID consignment entry
-      if (e.type === 'Shipment' && st) { st.sent = Math.max(0,st.sent-e.qty); st.outstanding = Math.max(0,st.outstanding-e.qty); s.stock += e.qty; }
-      if (e.type === 'Sale' && st) { st.sold = Math.max(0,st.sold-e.qty); st.outstanding += e.qty; s.sold = Math.max(0,s.sold-e.qty); s.revenue = Math.max(0,s.revenue-e.amountDue); if(e.paid==='pending')st.amountOwed = Math.max(0,st.amountOwed-e.amountDue); if(s.chStats['Consignment']){s.chStats['Consignment'].txns=Math.max(0,s.chStats['Consignment'].txns-1);s.chStats['Consignment'].units=Math.max(0,s.chStats['Consignment'].units-e.qty);s.chStats['Consignment'].revenue=Math.max(0,s.chStats['Consignment'].revenue-e.amountDue);} }
-      if (e.type === 'Return' && st) { st.returned = Math.max(0,st.returned-e.qty); st.outstanding += e.qty; if(e.status==='restocked') s.stock = Math.max(0,s.stock-e.qty); }
+      if (e.type === 'Shipment' && st) { st.sent = Math.max(0, st.sent - e.qty); st.outstanding = Math.max(0, st.outstanding - e.qty); s.stock += e.qty; }
+      if (e.type === 'Sale' && st) { st.sold = Math.max(0, st.sold - e.qty); st.outstanding += e.qty; s.sold = Math.max(0, s.sold - e.qty); s.revenue = Math.max(0, s.revenue - e.amountDue); if (e.paid === 'pending') st.amountOwed = Math.max(0, st.amountOwed - e.amountDue); if (s.chStats['Consignment']) { s.chStats['Consignment'].txns = Math.max(0, s.chStats['Consignment'].txns - 1); s.chStats['Consignment'].units = Math.max(0, s.chStats['Consignment'].units - e.qty); s.chStats['Consignment'].revenue = Math.max(0, s.chStats['Consignment'].revenue - e.amountDue); } }
+      if (e.type === 'Return' && st) { st.returned = Math.max(0, st.returned - e.qty); st.outstanding += e.qty; if (e.status === 'restocked') s.stock = Math.max(0, s.stock - e.qty); }
       e.voided = true;
       // Decision #4: keep invoiceId/invoiceNum across the void (so unvoid restores
       // the link) and never auto-un-pay the invoice. maybeAutoPayInvoiceForLedger
@@ -10965,9 +10972,9 @@ function voidEntry() {
       showToast('Consignment entry voided — effects reversed (Sheets row delete queued)', 'warn');
     } else {
       // UNVOID consignment entry
-      if (e.type === 'Shipment' && st) { st.sent += e.qty; st.outstanding += e.qty; s.stock = Math.max(0,s.stock-e.qty); }
-      if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0,st.outstanding-e.qty); s.sold += e.qty; s.revenue += e.amountDue; if(e.paid==='pending')st.amountOwed += e.amountDue; if(!s.chStats['Consignment'])s.chStats['Consignment']={txns:0,units:0,revenue:0}; s.chStats['Consignment'].txns++;s.chStats['Consignment'].units+=e.qty;s.chStats['Consignment'].revenue+=e.amountDue; }
-      if (e.type === 'Return' && st) { st.returned += e.qty; st.outstanding = Math.max(0,st.outstanding-e.qty); if(e.status==='restocked')s.stock += e.qty; }
+      if (e.type === 'Shipment' && st) { st.sent += e.qty; st.outstanding += e.qty; s.stock = Math.max(0, s.stock - e.qty); }
+      if (e.type === 'Sale' && st) { st.sold += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); s.sold += e.qty; s.revenue += e.amountDue; if (e.paid === 'pending') st.amountOwed += e.amountDue; if (!s.chStats['Consignment']) s.chStats['Consignment'] = { txns: 0, units: 0, revenue: 0 }; s.chStats['Consignment'].txns++; s.chStats['Consignment'].units += e.qty; s.chStats['Consignment'].revenue += e.amountDue; }
+      if (e.type === 'Return' && st) { st.returned += e.qty; st.outstanding = Math.max(0, st.outstanding - e.qty); if (e.status === 'restocked') s.stock += e.qty; }
       e.voided = false;
       syncLedgerVoid(e, false);
       showToast('Consignment entry unvoided — effects restored (Sheets row restore queued)');
@@ -10979,12 +10986,12 @@ function voidEntry() {
 }
 
 // ── RESET
-async function resetBookData(){
-  const book=getBook();
-  if(!(await confirmDialog(`Reset ALL data for "${book.title}"? Orders, history and consignment will be cleared. Your Google Sheet backup is untouched.`, { okLabel: 'Continue', danger: true })))return;
-  if(!(await confirmDialog('Last chance — this cannot be undone. Reset now?', { okLabel: 'Reset everything', danger: true })))return;
-  states[activeBook]=defaultState(book);lastSavedHashes[activeBook]='';
-  renderAll();saveState(activeBook);showToast('✓ Book data reset. Sheet backup untouched.','warn',4000);
+async function resetBookData() {
+  const book = getBook();
+  if (!(await confirmDialog(`Reset ALL data for "${book.title}"? Orders, history and consignment will be cleared. Your Google Sheet backup is untouched.`, { okLabel: 'Continue', danger: true }))) return;
+  if (!(await confirmDialog('Last chance — this cannot be undone. Reset now?', { okLabel: 'Reset everything', danger: true }))) return;
+  states[activeBook] = defaultState(book); lastSavedHashes[activeBook] = '';
+  renderAll(); saveState(activeBook); showToast('✓ Book data reset. Sheet backup untouched.', 'warn', 4000);
 }
 
 let _sheetsRestoreData = null;
@@ -10996,11 +11003,11 @@ function parseAndValidateDate(rawDate) {
   }
   let dStr = String(rawDate).trim();
   if (!dStr) return today();
-  
+
   if (dStr.includes('T')) {
     dStr = dStr.split('T')[0];
   }
-  
+
   const d = new Date(dStr);
   if (!isNaN(d.getTime())) {
     return d.toISOString().split('T')[0];
@@ -11322,7 +11329,7 @@ async function confirmRestoreBookDataFromSheets() {
 
     newHist.forEach(h => {
       if (h.voided) return;
-      
+
       const chan = h.chan || 'Manual';
       if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
       s.chStats[chan].txns++;
@@ -11368,154 +11375,154 @@ window.confirmRestoreBookDataFromSheets = confirmRestoreBookDataFromSheets;
 // Snapshot of a modal's field values, taken when it opens — used by the
 // backdrop/Esc close guard to detect unsaved edits.
 let _modalSnapshots = {};
-function _modalFieldSig(id){
-  const el=$('m-'+id); if(!el) return '';
+function _modalFieldSig(id) {
+  const el = $('m-' + id); if (!el) return '';
   return Array.from(el.querySelectorAll('input,select,textarea'))
-    .map(f=>(f.type==='checkbox'||f.type==='radio')?(f.checked?'1':'0'):(f.value||''))
+    .map(f => (f.type === 'checkbox' || f.type === 'radio') ? (f.checked ? '1' : '0') : (f.value || ''))
     .join('');
 }
-function _prefersReducedMotion(){
+function _prefersReducedMotion() {
   return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
-let _modalReturnFocus=null;
-function openM(id){
-  const el=$('m-'+id); if(!el) return;
+let _modalReturnFocus = null;
+function openM(id) {
+  const el = $('m-' + id); if (!el) return;
   el.classList.remove('closing');
   clearFieldErrors(el);
-  el.style.display='flex';
-  const d=id==='send-books'?'send-date':id==='record-sale'?'sale-date':'ret-date';
-  if($(d))$(d).value=today();
+  el.style.display = 'flex';
+  const d = id === 'send-books' ? 'send-date' : id === 'record-sale' ? 'sale-date' : 'ret-date';
+  if ($(d)) $(d).value = today();
   // Snapshot AFTER open* helpers and date defaults have populated fields, so a
   // later mismatch means the *user* changed something.
-  _modalSnapshots[id]=_modalFieldSig(id);
+  _modalSnapshots[id] = _modalFieldSig(id);
   // Move keyboard focus into the dialog and remember where to send it back, so
   // keyboard/screen-reader users aren't stranded on the (now-inert) page behind.
-  _modalReturnFocus=document.activeElement;
-  const focusable=el.querySelector('input:not([type=hidden]),select,textarea,button,[tabindex]:not([tabindex="-1"])');
-  if(focusable) setTimeout(()=>{ try{ focusable.focus(); }catch{} }, 0);
+  _modalReturnFocus = document.activeElement;
+  const focusable = el.querySelector('input:not([type=hidden]),select,textarea,button,[tabindex]:not([tabindex="-1"])');
+  if (focusable) setTimeout(() => { try { focusable.focus(); } catch { } }, 0);
 }
-function closeM(id){
-  const el=$('m-'+id); if(!el) return;
+function closeM(id) {
+  const el = $('m-' + id); if (!el) return;
   el.dispatchEvent(new Event('modal-close'));
   delete _modalSnapshots[id];
   // Restore focus to whatever opened the modal (if it's still around).
-  if(_modalReturnFocus && el.contains(document.activeElement)){
-    try{ _modalReturnFocus.focus(); }catch{}
+  if (_modalReturnFocus && el.contains(document.activeElement)) {
+    try { _modalReturnFocus.focus(); } catch { }
   }
-  _modalReturnFocus=null;
-  if(el.classList.contains('closing')) return;
-  if(_prefersReducedMotion()){ el.style.display='none'; clearFieldErrors(el); return; }
+  _modalReturnFocus = null;
+  if (el.classList.contains('closing')) return;
+  if (_prefersReducedMotion()) { el.style.display = 'none'; clearFieldErrors(el); return; }
   el.classList.add('closing');
   let t;
-  const done=()=>{
-    el.style.display='none';
+  const done = () => {
+    el.style.display = 'none';
     el.classList.remove('closing');
     clearFieldErrors(el);
-    el.removeEventListener('animationend',done);
+    el.removeEventListener('animationend', done);
     clearTimeout(t);
   };
-  t=setTimeout(done,240); // fallback if animationend doesn't fire
-  el.addEventListener('animationend',done);
+  t = setTimeout(done, 240); // fallback if animationend doesn't fire
+  el.addEventListener('animationend', done);
 }
 // Close a modal, but if the user has unsaved edits, confirm first. Used by the
 // backdrop-click and Esc handlers so a stray tap can't silently lose data.
-async function attemptCloseModal(id){
-  if(_modalSnapshots[id]!==undefined && _modalFieldSig(id)!==_modalSnapshots[id]){
-    if(!(await confirmDialog('Discard your unsaved changes?',
-      { okLabel:'Discard', cancelLabel:'Keep editing', danger:true }))) return;
+async function attemptCloseModal(id) {
+  if (_modalSnapshots[id] !== undefined && _modalFieldSig(id) !== _modalSnapshots[id]) {
+    if (!(await confirmDialog('Discard your unsaved changes?',
+      { okLabel: 'Discard', cancelLabel: 'Keep editing', danger: true }))) return;
   }
   closeM(id);
 }
 
 // ── INLINE FORM VALIDATION ──────────────────────────────────────────────
-function fieldError(id, msg){
-  const el=$(id); if(!el) return;
-  const fg=el.closest('.form-group')||el.parentElement;
-  if(fg){
+function fieldError(id, msg) {
+  const el = $(id); if (!el) return;
+  const fg = el.closest('.form-group') || el.parentElement;
+  if (fg) {
     fg.classList.add('invalid');
-    let e=fg.querySelector('.field-error');
-    if(!e){ e=document.createElement('div'); e.className='field-error'; fg.appendChild(e); }
-    e.textContent=msg;
+    let e = fg.querySelector('.field-error');
+    if (!e) { e = document.createElement('div'); e.className = 'field-error'; fg.appendChild(e); }
+    e.textContent = msg;
   }
-  el.setAttribute('aria-invalid','true');
+  el.setAttribute('aria-invalid', 'true');
 }
-function clearFieldError(el){
-  const fg=el && el.closest && el.closest('.form-group');
-  if(fg){
+function clearFieldError(el) {
+  const fg = el && el.closest && el.closest('.form-group');
+  if (fg) {
     fg.classList.remove('invalid');
-    const e=fg.querySelector('.field-error'); if(e) e.remove();
+    const e = fg.querySelector('.field-error'); if (e) e.remove();
   }
-  if(el && el.removeAttribute) el.removeAttribute('aria-invalid');
+  if (el && el.removeAttribute) el.removeAttribute('aria-invalid');
 }
-function clearFieldErrors(scope){
-  const root=scope||document;
-  root.querySelectorAll('.form-group.invalid').forEach(fg=>{
+function clearFieldErrors(scope) {
+  const root = scope || document;
+  root.querySelectorAll('.form-group.invalid').forEach(fg => {
     fg.classList.remove('invalid');
-    const e=fg.querySelector('.field-error'); if(e) e.remove();
+    const e = fg.querySelector('.field-error'); if (e) e.remove();
   });
-  root.querySelectorAll('[aria-invalid]').forEach(el=>el.removeAttribute('aria-invalid'));
+  root.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
 }
 // rules: [{ id, test:(value, el)=>bool, msg }]. Multiple rules may target the
 // same field; the first failing rule wins and later ones for it are skipped.
 // Returns true when every field passes.
-function validateFields(rules){
-  let firstBad=null; const failed=new Set();
-  rules.forEach(r=>{
-    const el=$(r.id); if(!el || failed.has(r.id)) return;
-    if(r.test(el.value, el)){ clearFieldError(el); }
-    else { fieldError(r.id, r.msg); failed.add(r.id); if(!firstBad) firstBad=el; }
+function validateFields(rules) {
+  let firstBad = null; const failed = new Set();
+  rules.forEach(r => {
+    const el = $(r.id); if (!el || failed.has(r.id)) return;
+    if (r.test(el.value, el)) { clearFieldError(el); }
+    else { fieldError(r.id, r.msg); failed.add(r.id); if (!firstBad) firstBad = el; }
   });
-  if(firstBad && firstBad.focus) firstBad.focus();
-  return failed.size===0;
+  if (firstBad && firstBad.focus) firstBad.focus();
+  return failed.size === 0;
 }
 
 // ── BUTTON LOADING STATE ────────────────────────────────────────────────
 // Disables the clicked button and shows a spinner while an async op runs, so
 // users can't double-submit. Pass the click event; safe to call with none.
-async function withButtonLoading(ev, busyLabel, fn){
+async function withButtonLoading(ev, busyLabel, fn) {
   const btn = ev && (ev.currentTarget ||
     (ev.target && ev.target.closest && ev.target.closest('button')));
   let original;
-  if(btn){ original=btn.innerHTML; btn.disabled=true; btn.innerHTML=`<span class="spinner"></span>${busyLabel}`; }
+  if (btn) { original = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>${busyLabel}`; }
   try { return await fn(); }
-  finally { if(btn){ btn.disabled=false; btn.innerHTML=original; } }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = original; } }
 }
 window.withButtonLoading = withButtonLoading;
-function addLog(lid,msg,type=''){const el=$(lid);el.style.display='block';const s=document.createElement('span');s.className='log-line '+type;s.textContent=new Date().toLocaleTimeString()+' · '+msg;el.appendChild(s);el.scrollTop=el.scrollHeight;}
+function addLog(lid, msg, type = '') { const el = $(lid); el.style.display = 'block'; const s = document.createElement('span'); s.className = 'log-line ' + type; s.textContent = new Date().toLocaleTimeString() + ' · ' + msg; el.appendChild(s); el.scrollTop = el.scrollHeight; }
 
 // ── GOOGLE SHEETS
-function updateSheetsBadge(){
-  [$('sheets-badge'),$('sheets-badge2')].forEach(b=>{
-    if(!b)return;
-    b.textContent=sheetsUrl?'📊 Sheets: live':'📊 Sheets: not set up';
-    b.className=sheetsUrl?'sheets-badge':'sheets-badge off';
+function updateSheetsBadge() {
+  [$('sheets-badge'), $('sheets-badge2')].forEach(b => {
+    if (!b) return;
+    b.textContent = sheetsUrl ? '📊 Sheets: live' : '📊 Sheets: not set up';
+    b.className = sheetsUrl ? 'sheets-badge' : 'sheets-badge off';
   });
-  const openLink=$('sheets-open-link');if(openLink){if(sheetsSpreadsheetUrl){openLink.href=sheetsSpreadsheetUrl;openLink.style.display='';}else openLink.style.display='none';}
-  const cardLink=$('open-sheet-link');if(cardLink){if(sheetsSpreadsheetUrl){cardLink.href=sheetsSpreadsheetUrl;cardLink.style.display='';}else cardLink.style.display='none';}
+  const openLink = $('sheets-open-link'); if (openLink) { if (sheetsSpreadsheetUrl) { openLink.href = sheetsSpreadsheetUrl; openLink.style.display = ''; } else openLink.style.display = 'none'; }
+  const cardLink = $('open-sheet-link'); if (cardLink) { if (sheetsSpreadsheetUrl) { cardLink.href = sheetsSpreadsheetUrl; cardLink.style.display = ''; } else cardLink.style.display = 'none'; }
   // Sidebar footer "Open Google Sheet" (publisher app-shell) — mirror sheets-open-link.
-  const sideLink=$('side-sheets-open');if(sideLink){if(sheetsSpreadsheetUrl){sideLink.href=sheetsSpreadsheetUrl;sideLink.style.display='';}else sideLink.style.display='none';}
+  const sideLink = $('side-sheets-open'); if (sideLink) { if (sheetsSpreadsheetUrl) { sideLink.href = sheetsSpreadsheetUrl; sideLink.style.display = ''; } else sideLink.style.display = 'none'; }
 }
-function normalizeAppsScriptUrl(rawUrl){
-  const cleaned=(rawUrl||'').trim();
-  if(!cleaned) return '';
-  try{
-    const u=new URL(cleaned);
-    if(!/script\.google\.com$/i.test(u.hostname)) return '';
+function normalizeAppsScriptUrl(rawUrl) {
+  const cleaned = (rawUrl || '').trim();
+  if (!cleaned) return '';
+  try {
+    const u = new URL(cleaned);
+    if (!/script\.google\.com$/i.test(u.hostname)) return '';
     // Support URLs with /u/index/ segments (multi-account login)
-    const m=u.pathname.match(/\/macros\/(?:u\/\d+\/)?s\/([^/]+)\/(exec|dev)/i);
-    if(!m) return '';
-    const deploymentId=m[1];
-    const type=m[2];
-    
-    u.pathname=`/macros/s/${deploymentId}/${type}`;
-    u.search='';
-    u.hash='';
+    const m = u.pathname.match(/\/macros\/(?:u\/\d+\/)?s\/([^/]+)\/(exec|dev)/i);
+    if (!m) return '';
+    const deploymentId = m[1];
+    const type = m[2];
+
+    u.pathname = `/macros/s/${deploymentId}/${type}`;
+    u.search = '';
+    u.hash = '';
     return u.toString();
-  }catch(_){
+  } catch (_) {
     return '';
   }
 }
-async function probeSheetsConnection(url){
+async function probeSheetsConnection(url) {
   // 1. Try a GET handshake first (Most reliable for initial verification)
   try {
     const res = await fetch(url);
@@ -11550,84 +11557,84 @@ async function probeSheetsConnection(url){
       notes: 'Connection probe'
     }
   };
-  
+
   const res = await fetch(url, {
     method: 'POST',
     mode: 'cors',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(probePayload)
   });
-  
+
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json().catch(() => null);
   if (!json || json.ok !== true) throw new Error('Probe response was not { ok: true }');
-  
+
   return { ok: true, method: 'POST' };
 }
 
-async function connectSheets(){
-  const rawUrl=$('sheets-url-input').value.trim(),spreadUrl=($('sheets-spreadsheet-input').value||'').trim();
-  const normalizedUrl=normalizeAppsScriptUrl(rawUrl);
-  if(!normalizedUrl){showToast('Paste a deployed Web App URL (…/macros/s/<id>/exec)','warn');return;}
-  if(rawUrl.includes('/dev')) showToast('Using /exec endpoint for public sync (recommended).','warn',3000);
-  try{
+async function connectSheets() {
+  const rawUrl = $('sheets-url-input').value.trim(), spreadUrl = ($('sheets-spreadsheet-input').value || '').trim();
+  const normalizedUrl = normalizeAppsScriptUrl(rawUrl);
+  if (!normalizedUrl) { showToast('Paste a deployed Web App URL (…/macros/s/<id>/exec)', 'warn'); return; }
+  if (rawUrl.includes('/dev')) showToast('Using /exec endpoint for public sync (recommended).', 'warn', 3000);
+  try {
     const info = await probeSheetsConnection(normalizedUrl);
     showToast(`✓ Connection verified: ${info.sheetName || 'Active'}`);
-  }catch(e){
+  } catch (e) {
     // If the error is 'Failed to fetch', it's likely a CORS issue.
     // Since we have a no-cors fallback for actual data delivery,
     // let's show a helpful warning but still allow the connection.
     if ((e && e.message && e.message.includes('fetch')) || !navigator.onLine) {
       showToast('⚠ Connection unverified (CORS). Link saved anyway — try a test row.', 'warn', 5000);
     } else {
-      showToast(`Connection error: ${e.message || 'Unknown'}`,'err', 4000);
+      showToast(`Connection error: ${e.message || 'Unknown'}`, 'err', 4000);
       return;
     }
   }
-  sheetsUrl=normalizedUrl;
-  localStorage.setItem('lm-sheets-url',normalizedUrl);
-  localStorage.setItem('lm-last-sheets-url',normalizedUrl);
+  sheetsUrl = normalizedUrl;
+  localStorage.setItem('lm-sheets-url', normalizedUrl);
+  localStorage.setItem('lm-last-sheets-url', normalizedUrl);
   // Share the endpoint so artist sessions on other devices can send the
   // approval-needed email when they submit a payment/expense.
-  notifyUrl=normalizedUrl;localStorage.setItem('lm-notify-url',normalizedUrl);
-  try{ await window._fbSaveSettings('notifyEndpoint', { url: normalizedUrl }); }catch(_){}
-  if(spreadUrl){
-    sheetsSpreadsheetUrl=spreadUrl;
-    localStorage.setItem('lm-sheets-spreadsheet-url',spreadUrl);
-    localStorage.setItem('lm-last-spreadsheet-url',spreadUrl);
-  }else{
-    sheetsSpreadsheetUrl='';
+  notifyUrl = normalizedUrl; localStorage.setItem('lm-notify-url', normalizedUrl);
+  try { await window._fbSaveSettings('notifyEndpoint', { url: normalizedUrl }); } catch (_) { }
+  if (spreadUrl) {
+    sheetsSpreadsheetUrl = spreadUrl;
+    localStorage.setItem('lm-sheets-spreadsheet-url', spreadUrl);
+    localStorage.setItem('lm-last-spreadsheet-url', spreadUrl);
+  } else {
+    sheetsSpreadsheetUrl = '';
     localStorage.removeItem('lm-sheets-spreadsheet-url');
   }
   showSheetsConnected();
   showToast('✓ Google Sheets connected and verified!');
 }
-async function disconnectSheets(){
-  if(!(await confirmDialog('Disconnect Google Sheets?', { okLabel: 'Disconnect', danger: true })))return;
-  
+async function disconnectSheets() {
+  if (!(await confirmDialog('Disconnect Google Sheets?', { okLabel: 'Disconnect', danger: true }))) return;
+
   // Only preserve the Google Sheets spreadsheet URL, clear the Web App URL
   const setupUrlInput = $('sheets-url-input');
   if (setupUrlInput) setupUrlInput.value = '';
   const setupSpreadsheetInput = $('sheets-spreadsheet-input');
   if (setupSpreadsheetInput) setupSpreadsheetInput.value = sheetsSpreadsheetUrl;
 
-  sheetsUrl='';sheetsSpreadsheetUrl='';notifyUrl='';
+  sheetsUrl = ''; sheetsSpreadsheetUrl = ''; notifyUrl = '';
   localStorage.removeItem('lm-sheets-url');
   localStorage.removeItem('lm-sheets-spreadsheet-url');
   localStorage.removeItem('lm-sheets-secret');
   localStorage.removeItem('lm-notify-url');
-  try{ await window._fbSaveSettings('notifyEndpoint', { url: '' }); }catch(_){}
-  $('sheets-setup-card').style.display='';
-  $('sheets-connected-card').style.display='none';
+  try { await window._fbSaveSettings('notifyEndpoint', { url: '' }); } catch (_) { }
+  $('sheets-setup-card').style.display = '';
+  $('sheets-connected-card').style.display = 'none';
   const warningEl = $('sheets-version-warning');
   if (warningEl) warningEl.style.display = 'none';
   updateSheetsBadge();
-  showToast('Sheets disconnected','warn');
+  showToast('Sheets disconnected', 'warn');
 }
-function showSheetsConnected(){
-  $('sheets-setup-card').style.display='none';
-  $('sheets-connected-card').style.display='';
-  $('sheets-url-display').textContent=sheetsUrl;
+function showSheetsConnected() {
+  $('sheets-setup-card').style.display = 'none';
+  $('sheets-connected-card').style.display = '';
+  $('sheets-url-display').textContent = sheetsUrl;
   updateSheetsBadge();
   checkSheetsVersion();
 }
@@ -11743,7 +11750,7 @@ async function simulatePostToSheets(body) {
 
     const currency = item.currency || item.paymentCurrency || 'EUR';
     const total = item.amountDue ?? item.total ?? 0;
-    
+
     let cad = '';
     if (currency === 'CAD') {
       cad = total;
@@ -11856,20 +11863,20 @@ function renderMockSpreadsheet() {
   rows.forEach((r, idx) => {
     const isEven = idx % 2 === 0;
     const rowBg = isEven ? '#15151b' : '#1a1a24';
-    
+
     let cellsHtml = `<td style="background:#1d1d26; color:rgba(255,255,255,0.3); border:1px solid rgba(255,255,255,0.08); text-align:center; user-select:none; font-family:sans-serif; font-size:10px;">${idx + 1}</td>`;
-    
+
     for (let c = 1; c < r.length; c++) {
       let val = r[c] ?? '';
       let style = `padding:6px 10px; border:1px solid rgba(255,255,255,0.05);`;
-      
+
       if (c === 6 || c === 8 || c === 9 || c === 10) {
         style += ` text-align:right;`;
         if (typeof val === 'number') {
           val = val.toFixed(2);
         }
       }
-      
+
       if (c === 11) {
         if (/VOID|CANCEL/i.test(String(val))) {
           style += ` color:#ef4444; font-weight:bold;`;
@@ -11877,11 +11884,11 @@ function renderMockSpreadsheet() {
           style += ` color:#10b981;`;
         }
       }
-      
+
       if (c === 2) {
         style += ` color:var(--gold3); font-weight:600;`;
       }
-      
+
       if (c === 3) {
         if (val === 'Shipment') style += ` color:#3b82f6;`;
         else if (val === 'Sale' || val === 'Order') style += ` color:#10b981;`;
@@ -11915,7 +11922,7 @@ function updateSheetsTabUI() {
   const simCard = $('sheets-simulated-card');
   const setupCard = $('sheets-setup-card');
   const connectedCard = $('sheets-connected-card');
-  
+
   if (isTest) {
     if (simCard) simCard.style.display = 'block';
     if (setupCard) setupCard.style.display = 'none';
@@ -11949,39 +11956,39 @@ window.clearSimulatedSheet = clearSimulatedSheet;
 window.renderMockSpreadsheet = renderMockSpreadsheet;
 window.updateSheetsTabUI = updateSheetsTabUI;
 
-function testSheets(){
-  if(!sheetsUrl)return;
-  const btn=document.querySelector('[onclick="testSheets()"]');
-  if(btn){btn.textContent='Testing…';btn.disabled=true;}
+function testSheets() {
+  if (!sheetsUrl) return;
+  const btn = document.querySelector('[onclick="testSheets()"]');
+  if (btn) { btn.textContent = 'Testing…'; btn.disabled = true; }
   // Use POST so verification works even when Apps Script has no doGet().
   syncToSheets({
-    type:'order',
-    book:'Test',
-    date:today(),
-    num:'TEST-'+Date.now().toString().slice(-4),
-    chan:'Test',
-    qty:0,
-    price:0,
-    total:0,
-    stockAfter:0,
-    notes:'Connection test — check your sheet for this row'
+    type: 'order',
+    book: 'Test',
+    date: today(),
+    num: 'TEST-' + Date.now().toString().slice(-4),
+    chan: 'Test',
+    qty: 0,
+    price: 0,
+    total: 0,
+    stockAfter: 0,
+    notes: 'Connection test — check your sheet for this row'
   });
   showToast('✓ Test row sent — check your Google Sheet');
   checkSheetsVersion();
-  setTimeout(()=>{if(btn){btn.textContent='Test connection';btn.disabled=false;}},500);
+  setTimeout(() => { if (btn) { btn.textContent = 'Test connection'; btn.disabled = false; } }, 500);
 }
 // Sheets delivery engine (rebuilt): durable queue + retry + deterministic event IDs
-const SHEETS_QUEUE_KEY='lm-sheets-write-queue-v2';
-const SHEETS_LOG_KEY='lm-sheets-log-v2';
-const MAX_SHEETS_RETRIES=6;
-const RETRY_BASE_MS=1200;
-let _sheetsQueue=JSON.parse(localStorage.getItem(SHEETS_QUEUE_KEY)||'[]');
-let _sheetsWriting=false;
-let sheetsLog=JSON.parse(localStorage.getItem(SHEETS_LOG_KEY)||'[]');
+const SHEETS_QUEUE_KEY = 'lm-sheets-write-queue-v2';
+const SHEETS_LOG_KEY = 'lm-sheets-log-v2';
+const MAX_SHEETS_RETRIES = 6;
+const RETRY_BASE_MS = 1200;
+let _sheetsQueue = JSON.parse(localStorage.getItem(SHEETS_QUEUE_KEY) || '[]');
+let _sheetsWriting = false;
+let sheetsLog = JSON.parse(localStorage.getItem(SHEETS_LOG_KEY) || '[]');
 
-function persistSheetsQueue(){ localStorage.setItem(SHEETS_QUEUE_KEY, JSON.stringify(_sheetsQueue)); }
-function persistSheetsLog(){ localStorage.setItem(SHEETS_LOG_KEY, JSON.stringify(sheetsLog)); }
-function makeEventId(){ return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,9)}`; }
+function persistSheetsQueue() { localStorage.setItem(SHEETS_QUEUE_KEY, JSON.stringify(_sheetsQueue)); }
+function persistSheetsLog() { localStorage.setItem(SHEETS_LOG_KEY, JSON.stringify(sheetsLog)); }
+function makeEventId() { return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
 
 // Stamp a stable sheetsId on every existing record that lacks one so future
 // edits/voids can be matched against the corresponding sheet row.
@@ -12024,9 +12031,9 @@ async function backfillAndResync() {
   if (typeof pushAllToSheets === 'function') pushAllToSheets({ rebuild: true, skipConfirm: true });
 }
 window.backfillAndResync = backfillAndResync;
-function retryDelayMs(attempt){ return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0,attempt-1))); }
+function retryDelayMs(attempt) { return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0, attempt - 1))); }
 
-async function postToSheets(body, urlOverride){
+async function postToSheets(body, urlOverride) {
   const isTest = isTestBookId(activeBook);
   if (isTest) {
     return simulatePostToSheets(body);
@@ -12034,41 +12041,41 @@ async function postToSheets(body, urlOverride){
   const url = urlOverride || sheetsUrl;
   const payload = JSON.stringify(body);
 
-  try{
-    const res=await fetch(url,{
-      method:'POST',
-      mode:'cors',
-      headers:{
-        'Content-Type':'text/plain;charset=utf-8'
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
       },
-      body:payload
+      body: payload
     });
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json().catch(()=>null);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json().catch(() => null);
     if (data && data.ok) return data;
     if (data && data.error) throw new Error(data.error);
     return { ok: true };
-  }catch(e){
+  } catch (e) {
     // Fallback to no-cors for strict environments.
     await fetch(url, {
-      method:'POST',
-      mode:'no-cors',
-      headers:{
-        'Content-Type':'text/plain;charset=utf-8'
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
       },
-      body:payload
+      body: payload
     });
     return 'unknown';
   }
 }
 
-async function notifyPublisherSubmission(kind, data, summary){
+async function notifyPublisherSubmission(kind, data, summary) {
   // Prefer the local Sheet URL (publisher device); fall back to the shared
   // endpoint loaded from cloud settings (artist devices that never set up the
   // Sheet) so the approval email fires no matter who submitted.
   const url = sheetsUrl || notifyUrl;
-  if(!url) return;
-  try{
+  if (!url) return;
+  try {
     const book = (typeof getBook === 'function') ? getBook() : (BOOKS && BOOKS[activeBook]) || {};
     await postToSheets({
       version: 2,
@@ -12085,7 +12092,7 @@ async function notifyPublisherSubmission(kind, data, summary){
         data
       }
     }, url);
-  }catch(e){
+  } catch (e) {
     // Don't fail silently: a misconfigured/stale endpoint means the publisher
     // never learns a submission is waiting. Surface it so it can be fixed.
     console.warn('notifyPublisher failed', e);
@@ -12096,13 +12103,13 @@ async function notifyPublisherSubmission(kind, data, summary){
 // Publisher-only: fire a harmless notifyPublisher probe so the whole approval-
 // email chain (Web App reachable + MailApp authorised + correct deployment) can
 // be confirmed end-to-end without staging a real submission.
-async function sendTestNotification(){
+async function sendTestNotification() {
   const url = sheetsUrl || notifyUrl;
-  if(!url){ showToast('Connect your Google Sheet first','warn'); return; }
+  if (!url) { showToast('Connect your Google Sheet first', 'warn'); return; }
   const btn = $('test-notify-btn');
   const prev = btn ? btn.textContent : '';
-  if(btn){ btn.disabled = true; btn.textContent = 'Sending…'; }
-  try{
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
     const res = await postToSheets({
       version: 2,
       action: 'notifyPublisher',
@@ -12118,17 +12125,17 @@ async function sendTestNotification(){
         data: { test: true }
       }
     }, url);
-    if(res && res.ok && res.notified){
+    if (res && res.ok && res.notified) {
       showToast('✓ Test email sent to lyricalmyricalbooks@gmail.com');
-    }else{
+    } else {
       // no-cors fallback (res === 'unknown') can't read the response — the POST
       // went out but we can't confirm the send. Tell the user to check.
-      showToast('Sent — check lyricalmyricalbooks@gmail.com to confirm','warn',4500);
+      showToast('Sent — check lyricalmyricalbooks@gmail.com to confirm', 'warn', 4500);
     }
-  }catch(e){
-    showToast('⚠ Test failed: '+(e.message||'could not reach the notifier'),'err',5000);
-  }finally{
-    if(btn){ btn.disabled=false; btn.textContent=prev; }
+  } catch (e) {
+    showToast('⚠ Test failed: ' + (e.message || 'could not reach the notifier'), 'err', 5000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = prev; }
   }
 }
 window.sendTestNotification = sendTestNotification;
@@ -12136,14 +12143,14 @@ window.sendTestNotification = sendTestNotification;
 // Publisher-only: email the book's artist a payment request via the connected
 // Apps Script Web App (free Gmail send — no API key in the client). Triggered
 // by the "Email artist for payment" button on the per-book dashboard.
-async function emailArtistForPayment(){
-  if(isAuthor()){ showToast('Publisher only','warn'); return; }
-  if(!activeBook || activeBook==='all'){ showToast('Open a book first','warn'); return; }
-  if(!sheetsUrl){ showToast('Connect your Google Sheet first to send email','warn'); return; }
+async function emailArtistForPayment() {
+  if (isAuthor()) { showToast('Publisher only', 'warn'); return; }
+  if (!activeBook || activeBook === 'all') { showToast('Open a book first', 'warn'); return; }
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first to send email', 'warn'); return; }
   const book = getBook();
-  const to = (book.authorEmail||'').trim();
-  if(!to){ showToast('No artist email on file for this book','warn'); return; }
-  if(!confirm(`Send a payment-request email to ${to}?`)) return;
+  const to = (book.authorEmail || '').trim();
+  if (!to) { showToast('No artist email on file for this book', 'warn'); return; }
+  if (!confirm(`Send a payment-request email to ${to}?`)) return;
   const title = book.title || activeBook;
   const subject = `Payment request — ${title}`;
   const body = [
@@ -12157,38 +12164,38 @@ async function emailArtistForPayment(){
   ].join('\n');
   const btn = $('d-email-artist-btn');
   const prev = btn ? btn.textContent : '';
-  if(btn){ btn.disabled = true; btn.textContent = 'Sending…'; }
-  try{
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
     await postToSheets({
       version: 2,
       action: 'emailAuthor',
       eventId: 'emailauthor-' + Date.now(),
-      payload: { action:'emailAuthor', to, bookId: activeBook, bookTitle: title, subject, body }
+      payload: { action: 'emailAuthor', to, bookId: activeBook, bookTitle: title, subject, body }
     });
-    showToast('✓ Payment request sent to '+to);
-  }catch(e){
+    showToast('✓ Payment request sent to ' + to);
+  } catch (e) {
     console.warn('emailAuthor failed', e);
-    showToast('⚠ Could not send email','err');
-  }finally{
-    if(btn){ btn.disabled = false; btn.textContent = prev; }
+    showToast('⚠ Could not send email', 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = prev; }
   }
 }
 window.emailArtistForPayment = emailArtistForPayment;
 
-async function _processQueue(){
-  if(_sheetsWriting||!_sheetsQueue.length||!sheetsUrl||!navigator.onLine)return;
-  _sheetsWriting=true;
-  const item=_sheetsQueue[0];
-  try{
+async function _processQueue() {
+  if (_sheetsWriting || !_sheetsQueue.length || !sheetsUrl || !navigator.onLine) return;
+  _sheetsWriting = true;
+  const item = _sheetsQueue[0];
+  try {
     const resp = await postToSheets({
-      version:2,
-      eventId:item.id,
-      action:item.payload && item.payload.action,
-      sentAt:new Date().toISOString(),
-      payload:item.payload
+      version: 2,
+      eventId: item.id,
+      action: item.payload && item.payload.action,
+      sentAt: new Date().toISOString(),
+      payload: item.payload
     });
     const replaced = resp && typeof resp.replaced === 'number' ? resp.replaced : 0;
-    const removed  = resp && typeof resp.removed  === 'number' ? resp.removed  : 0;
+    const removed = resp && typeof resp.removed === 'number' ? resp.removed : 0;
     const count = item.count || 1;
     let suffix = '';
     if (item.payload && (item.payload.action === 'delete' || item.payload.action === 'void')) {
@@ -12196,48 +12203,48 @@ async function _processQueue(){
     } else if (replaced > 0) {
       suffix = ` · replaced ${replaced}`;
     }
-    addSheetsLog(item.book,item.type,item.summary+suffix,'ok');
+    addSheetsLog(item.book, item.type, item.summary + suffix, 'ok');
     _sheetsQueue.shift();
     persistSheetsQueue();
     updateBulkProgress(count);
-  }catch(e){
-    item.attempts=(item.attempts||0)+1;
-    item.lastError=(e&&e.message)||'network error';
-    item.nextTryAt=Date.now()+retryDelayMs(item.attempts);
+  } catch (e) {
+    item.attempts = (item.attempts || 0) + 1;
+    item.lastError = (e && e.message) || 'network error';
+    item.nextTryAt = Date.now() + retryDelayMs(item.attempts);
     persistSheetsQueue();
-    if(item.attempts>=MAX_SHEETS_RETRIES){
-      addSheetsLog(item.book,item.type,item.summary+' [max retries reached]','err');
+    if (item.attempts >= MAX_SHEETS_RETRIES) {
+      addSheetsLog(item.book, item.type, item.summary + ' [max retries reached]', 'err');
       _sheetsQueue.shift();
       persistSheetsQueue();
       updateBulkProgress(item.count || 1);
-    }else{
-      addSheetsLog(item.book,item.type,item.summary+` [retry ${item.attempts}/${MAX_SHEETS_RETRIES}]`,'retry');
+    } else {
+      addSheetsLog(item.book, item.type, item.summary + ` [retry ${item.attempts}/${MAX_SHEETS_RETRIES}]`, 'retry');
     }
   }
-  _sheetsWriting=false;
-  const next=_sheetsQueue[0];
-  if(next){
-    const wait=Math.max(250, (next.nextTryAt||0)-Date.now());
+  _sheetsWriting = false;
+  const next = _sheetsQueue[0];
+  if (next) {
+    const wait = Math.max(250, (next.nextTryAt || 0) - Date.now());
     setTimeout(_processQueue, wait);
   }
 }
 
-function sheetPayloadWithBookAccent(payload){
+function sheetPayloadWithBookAccent(payload) {
   if (!payload || payload.bookColor || !payload.book) return payload;
   const book = Object.values(BOOKS || {}).find(b => b && b.title === payload.book);
   return book && book.accent ? { ...payload, bookColor: book.accent } : payload;
 }
 
-function syncToSheets(payload){
-  if(!sheetsUrl)return;
+function syncToSheets(payload) {
+  if (!sheetsUrl) return;
   payload = sheetPayloadWithBookAccent(payload);
   const action = payload.action;
   const typeLabel = action === 'reset' ? 'Rebuild'
-    : payload.type==='order' ? 'Order' : 'Consignment';
+    : payload.type === 'order' ? 'Order' : 'Consignment';
   const summary = action === 'reset' ? 'Clear sheet for rebuild'
-    : action === 'delete' ? `${payload.type==='order' ? (payload.num||'order') : (payload.store||'consignment')} · remove row`
-    : payload.type==='order' ? `${payload.num} · ${payload.chan} · ${payload.qty}×`
-    : `${payload.store} · ${payload.event} · ${payload.qty}×`;
+    : action === 'delete' ? `${payload.type === 'order' ? (payload.num || 'order') : (payload.store || 'consignment')} · remove row`
+      : payload.type === 'order' ? `${payload.num} · ${payload.chan} · ${payload.qty}×`
+        : `${payload.store} · ${payload.event} · ${payload.qty}×`;
   // Use the record's own sheetsId as the queue id so the backend can match
   // and replace the row; fall back to a fresh id for first-time writes.
   const queueId = payload.sheetsId || makeEventId();
@@ -12245,31 +12252,31 @@ function syncToSheets(payload){
     id: queueId,
     payload,
     summary,
-    book:payload.book,
-    type:typeLabel,
-    attempts:0,
-    nextTryAt:Date.now()
+    book: payload.book,
+    type: typeLabel,
+    attempts: 0,
+    nextTryAt: Date.now()
   });
   persistSheetsQueue();
-  addSheetsLog(payload.book,typeLabel,summary,'queued');
+  addSheetsLog(payload.book, typeLabel, summary, 'queued');
   _processQueue();
 }
 
-function syncBatchToSheets(rows, label = 'Bulk sync'){
-  if(!sheetsUrl || !Array.isArray(rows) || !rows.length)return;
+function syncBatchToSheets(rows, label = 'Bulk sync') {
+  if (!sheetsUrl || !Array.isArray(rows) || !rows.length) return;
   const rowsWithAccents = rows.map(row => sheetPayloadWithBookAccent(row));
   _sheetsQueue.push({
     id: 'batch-' + makeEventId(),
     payload: { action: 'batch', rows: rowsWithAccents },
     summary: `${label} · ${rows.length} records`,
-    book:'All books',
-    type:'Batch',
+    book: 'All books',
+    type: 'Batch',
     count: rows.length,
-    attempts:0,
-    nextTryAt:Date.now()
+    attempts: 0,
+    nextTryAt: Date.now()
   });
   persistSheetsQueue();
-  addSheetsLog('All books','Batch',`${label} · ${rows.length} records`,'queued');
+  addSheetsLog('All books', 'Batch', `${label} · ${rows.length} records`, 'queued');
   _processQueue();
 }
 
@@ -12310,9 +12317,9 @@ function orderRowPayload(book, nativeCur, h) {
   const totalNative = h.qty * h.price;
   const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment: h.payment });
   return {
-    type:'order', book:book.title, date:h.date, num:h.num, chan:h.chan,
-    qty:h.qty, price:h.price, total:totalNative, stockAfter:h.after,
-    notes:h.notes||'',
+    type: 'order', book: book.title, date: h.date, num: h.num, chan: h.chan,
+    qty: h.qty, price: h.price, total: totalNative, stockAfter: h.after,
+    notes: h.notes || '',
     sheetsId: h.sheetsId || '',
     currency: nativeCur,
     paymentCurrency: normalizeCurrencyCode(h.payment?.currency || nativeCur, 'CAD'),
@@ -12326,16 +12333,16 @@ function orderRowPayload(book, nativeCur, h) {
 function shippingPurchaseRowPayload(book, nativeCur, h) {
   const amount = Number(h.shippingPaid || 0) || 0;
   return {
-    type:'shipping',
-    book:book.title,
-    date:h.date,
-    num:h.num,
-    chan:'Website shipping',
-    qty:'',
-    price:'',
-    total:amount,
-    stockAfter:h.after,
-    notes:`Customer shipping paid${h.num ? ` on ${h.num}` : ''}`,
+    type: 'shipping',
+    book: book.title,
+    date: h.date,
+    num: h.num,
+    chan: 'Website shipping',
+    qty: '',
+    price: '',
+    total: amount,
+    stockAfter: h.after,
+    notes: `Customer shipping paid${h.num ? ` on ${h.num}` : ''}`,
     sheetsId: (h.sheetsId || `ship-${String(h.num || '').replace(/^#/, '').replace(/[^A-Za-z0-9-]/g, '')}`) + '-shipping',
     currency: nativeCur,
     paymentCurrency: nativeCur,
@@ -12352,12 +12359,12 @@ function shippingPurchaseRowPayload(book, nativeCur, h) {
 //   • rebuild:false → in-place upsert by stable id; voided entries are deleted.
 async function pushAllToSheets(opts = {}) {
   const { rebuild = false, skipConfirm = false } = opts;
-  if(!sheetsUrl) { showToast('Connect Google Sheets first','warn'); return; }
-  if(!skipConfirm){
+  if (!sheetsUrl) { showToast('Connect Google Sheets first', 'warn'); return; }
+  if (!skipConfirm) {
     const msg = rebuild
       ? 'Rebuild the Google Sheet from the app: this clears the current rows, then re-adds every live record so duplicates disappear, CAD equivalents refill, and voided entries drop off. Continue?'
       : 'This will enqueue all live records for all books, then deliver them with retry. Voided entries are removed from the sheet. Continue?';
-    if(!(await confirmDialog(msg, { okLabel: 'Continue' }))) return;
+    if (!(await confirmDialog(msg, { okLabel: 'Continue' }))) return;
   }
 
   const btn = $('push-all-btn');
@@ -12398,8 +12405,8 @@ async function pushAllToSheets(opts = {}) {
         // A reset empties the sheet, so only the in-place path needs an explicit
         // delete to clear a previously-synced row.
         if (!willReset && h.sheetsId) {
-          deletions.push({ action:'delete', type:'order', book:book.title, sheetsId:h.sheetsId });
-          if ((Number(h.shippingPaid || 0) || 0) > 0) deletions.push({ action:'delete', type:'shipping', book:book.title, sheetsId:h.sheetsId + '-shipping' });
+          deletions.push({ action: 'delete', type: 'order', book: book.title, sheetsId: h.sheetsId });
+          if ((Number(h.shippingPaid || 0) || 0) > 0) deletions.push({ action: 'delete', type: 'shipping', book: book.title, sheetsId: h.sheetsId + '-shipping' });
         }
         return;
       }
@@ -12409,15 +12416,15 @@ async function pushAllToSheets(opts = {}) {
     (s.ledger || []).forEach(e => {
       const ledgerCur = normalizeCurrencyCode(book.currency, 'CAD');
       if (e.voided) {
-        if (!willReset && e.sheetsId) deletions.push({ action:'delete', type:'consignment', book:book.title, sheetsId:e.sheetsId });
+        if (!willReset && e.sheetsId) deletions.push({ action: 'delete', type: 'consignment', book: book.title, sheetsId: e.sheetsId });
         return;
       }
       const totalNative = e.amountDue || 0;
       const cadEquiv = cadEquivalentForSale({ nativeCurrency: ledgerCur, totalNative });
       toSync.push({
-        type:'consignment', book:book.title, date:e.date, store:e.storeName,
-        event:e.type, qty:e.qty, rate:e.rate, amountDue:totalNative,
-        notes:e.notes||'', status: e.status || 'OK',
+        type: 'consignment', book: book.title, date: e.date, store: e.storeName,
+        event: e.type, qty: e.qty, rate: e.rate, amountDue: totalNative,
+        notes: e.notes || '', status: e.status || 'OK',
         invoiceNum: e.invoiceNum || '',
         sheetsId: e.sheetsId || '',
         currency: ledgerCur,
@@ -12430,8 +12437,8 @@ async function pushAllToSheets(opts = {}) {
   _bulkTotal = queue.length;
   _bulkDone = 0;
 
-  if(_bulkTotal === 0) {
-    showToast('No records found to sync','warn');
+  if (_bulkTotal === 0) {
+    showToast('No records found to sync', 'warn');
     _isBulkSync = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Sync all data'; }
     if (bar) bar.style.display = 'none';
@@ -12447,60 +12454,60 @@ async function pushAllToSheets(opts = {}) {
       syncBatchToSheets(dataRows.slice(i, i + SHEETS_BULK_BATCH_SIZE), rebuild ? 'Rebuild batch' : 'Sync batch');
     }
   } else {
-    for(const row of queue) syncToSheets(row);
+    for (const row of queue) syncToSheets(row);
   }
   if (btn) btn.textContent = canBatch ? 'Syncing batches...' : 'Syncing...';
 }
 
 function updateBulkProgress(done = 1) {
-  if(!_isBulkSync) return;
+  if (!_isBulkSync) return;
   _bulkDone += done;
   const pct = Math.min(100, (_bulkDone / _bulkTotal) * 100);
   const fill = $('sync-progress-fill');
   const stats = $('sync-stats');
   const btn = $('push-all-btn');
 
-  if(fill) fill.style.width = pct + '%';
-  if(stats) stats.textContent = `Syncing: ${_bulkDone} / ${_bulkTotal} (${Math.round(pct)}%)`;
+  if (fill) fill.style.width = pct + '%';
+  if (stats) stats.textContent = `Syncing: ${_bulkDone} / ${_bulkTotal} (${Math.round(pct)}%)`;
 
-  if(_bulkDone >= _bulkTotal) {
+  if (_bulkDone >= _bulkTotal) {
     _isBulkSync = false;
-    if(btn) { btn.disabled = false; btn.textContent = 'Sync all data'; }
-    if(stats) stats.textContent = `✓ Queue processed: ${_bulkTotal} records.`;
+    if (btn) { btn.disabled = false; btn.textContent = 'Sync all data'; }
+    if (stats) stats.textContent = `✓ Queue processed: ${_bulkTotal} records.`;
     showToast(`✓ Sheets queue processed: ${_bulkTotal} records.`);
     setTimeout(() => {
-      if(!_isBulkSync) {
-        if($('sync-progress-bar')) $('sync-progress-bar').style.display = 'none';
-        if($('sync-stats')) $('sync-stats').style.display = 'none';
+      if (!_isBulkSync) {
+        if ($('sync-progress-bar')) $('sync-progress-bar').style.display = 'none';
+        if ($('sync-stats')) $('sync-stats').style.display = 'none';
       }
     }, 4000);
   }
 }
 
-function addSheetsLog(book,type,summary,status){
-  sheetsLog.unshift({time:new Date().toLocaleTimeString(),book,type,summary,status});
-  if(sheetsLog.length>120)sheetsLog.pop();
+function addSheetsLog(book, type, summary, status) {
+  sheetsLog.unshift({ time: new Date().toLocaleTimeString(), book, type, summary, status });
+  if (sheetsLog.length > 120) sheetsLog.pop();
   persistSheetsLog();
   renderSheetsLog();
 }
 let _syncLogPage = 0;
-function renderSheetsLog(){
-  const b=$('sheets-log-body');
-  if(!b) return;
-  if(!sheetsLog.length){
-    b.innerHTML='<tr><td colspan="5" class="sheets-empty">No sync events yet.</td></tr>';
+function renderSheetsLog() {
+  const b = $('sheets-log-body');
+  if (!b) return;
+  if (!sheetsLog.length) {
+    b.innerHTML = '<tr><td colspan="5" class="sheets-empty">No sync events yet.</td></tr>';
     return;
   }
-  const PAGE_SIZE=15;
-  const totalPages=Math.ceil(sheetsLog.length/PAGE_SIZE);
-  if(_syncLogPage>=totalPages) _syncLogPage=Math.max(0,totalPages-1);
-  const pageItems=sheetsLog.slice(_syncLogPage*PAGE_SIZE, (_syncLogPage+1)*PAGE_SIZE);
+  const PAGE_SIZE = 15;
+  const totalPages = Math.ceil(sheetsLog.length / PAGE_SIZE);
+  if (_syncLogPage >= totalPages) _syncLogPage = Math.max(0, totalPages - 1);
+  const pageItems = sheetsLog.slice(_syncLogPage * PAGE_SIZE, (_syncLogPage + 1) * PAGE_SIZE);
 
-  const labelFor=(st)=> st==='ok'?'Written':st==='unknown'?'Sent (unverified)':st==='queued'?'Queued':st==='retry'?'Retrying':'Failed';
-  const classFor=(st)=> st==='ok'||st==='unknown'?'ok':st==='queued'||st==='retry'?'syncing':'err';
-  const iconFor=(st)=> st==='ok'?'✓':st==='unknown'?'~':st==='queued'?'…':st==='retry'?'↻':'⚠';
+  const labelFor = (st) => st === 'ok' ? 'Written' : st === 'unknown' ? 'Sent (unverified)' : st === 'queued' ? 'Queued' : st === 'retry' ? 'Retrying' : 'Failed';
+  const classFor = (st) => st === 'ok' || st === 'unknown' ? 'ok' : st === 'queued' || st === 'retry' ? 'syncing' : 'err';
+  const iconFor = (st) => st === 'ok' ? '✓' : st === 'unknown' ? '~' : st === 'queued' ? '…' : st === 'retry' ? '↻' : '⚠';
 
-  let html=pageItems.map(l=>`<tr>
+  let html = pageItems.map(l => `<tr>
       <td class="sheets-time">${l.time}</td>
       <td class="sheets-book">${l.book}</td>
       <td><span class="sheets-type">${l.type}</span></td>
@@ -12511,52 +12518,52 @@ function renderSheetsLog(){
       </td>
     </tr>`).join('');
 
-  if(totalPages>1){
-    html+=`<tr><td colspan="5" class="sheets-pager">
-      <button class="btn sm" onclick="_syncLogPage=Math.max(0,_syncLogPage-1);renderSheetsLog()" ${_syncLogPage===0?'disabled':''}>← Prev</button>
-      <span class="sheets-page-label">Page ${_syncLogPage+1} of ${totalPages}</span>
-      <button class="btn sm" onclick="_syncLogPage=Math.min(${totalPages-1},_syncLogPage+1);renderSheetsLog()" ${_syncLogPage===totalPages-1?'disabled':''}>Next →</button>
+  if (totalPages > 1) {
+    html += `<tr><td colspan="5" class="sheets-pager">
+      <button class="btn sm" onclick="_syncLogPage=Math.max(0,_syncLogPage-1);renderSheetsLog()" ${_syncLogPage === 0 ? 'disabled' : ''}>← Prev</button>
+      <span class="sheets-page-label">Page ${_syncLogPage + 1} of ${totalPages}</span>
+      <button class="btn sm" onclick="_syncLogPage=Math.min(${totalPages - 1},_syncLogPage+1);renderSheetsLog()" ${_syncLogPage === totalPages - 1 ? 'disabled' : ''}>Next →</button>
     </td></tr>`;
   }
-  b.innerHTML=html;
+  b.innerHTML = html;
 }
 // The Apps Script source (~50 KB) is no longer embedded in index.html — it is
 // fetched on demand the first time the "Connect your Google Sheet" tab opens,
 // keeping that weight off every page load. Assigned via textContent so the raw
 // source needs no HTML-escaping. _gasCodeLoaded guards against re-fetching.
 let _gasCodeLoaded = false;
-async function loadGasCode(){
-  if(_gasCodeLoaded) return;
-  const el=$('gas-code'); if(!el) return;
-  try{
-    const res=await fetch(`${import.meta.env.BASE_URL}gas-code.txt?v=${encodeURIComponent(EXPECTED_SCRIPT_VERSION)}`, {cache:'no-store'});
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    el.textContent=await res.text();
-    _gasCodeLoaded=true;
-  }catch(e){
-    el.textContent='Could not load the backend code. Check your connection and reopen this tab.';
+async function loadGasCode() {
+  if (_gasCodeLoaded) return;
+  const el = $('gas-code'); if (!el) return;
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}gas-code.txt?v=${encodeURIComponent(EXPECTED_SCRIPT_VERSION)}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    el.textContent = await res.text();
+    _gasCodeLoaded = true;
+  } catch (e) {
+    el.textContent = 'Could not load the backend code. Check your connection and reopen this tab.';
     console.warn('[gas-code] load failed', e);
   }
 }
-function copyGasCode(){
-  const text=$('gas-code').textContent;
-  if(!_gasCodeLoaded||!text){ showToast('Code still loading — try again in a moment', 'warn'); return; }
-  navigator.clipboard.writeText(text).then(()=>showToast('✓ Code copied!'));
+function copyGasCode() {
+  const text = $('gas-code').textContent;
+  if (!_gasCodeLoaded || !text) { showToast('Code still loading — try again in a moment', 'warn'); return; }
+  navigator.clipboard.writeText(text).then(() => showToast('✓ Code copied!'));
 }
-async function verifyUrl(){
-  if(!sheetsUrl)return;
-  const btn=$('verify-url-btn');
-  if(btn){ btn.textContent='Verifying...'; btn.disabled=true; }
-  
+async function verifyUrl() {
+  if (!sheetsUrl) return;
+  const btn = $('verify-url-btn');
+  if (btn) { btn.textContent = 'Verifying...'; btn.disabled = true; }
+
   try {
     // Try a GET request first to see if the endpoint is alive
     const res = await fetch(sheetsUrl);
-    if(res.ok) {
+    if (res.ok) {
       const data = await res.json();
-      if(data && typeof data.service === 'string' && data.service.indexOf('lyrical-sheets-webhook') === 0) {
+      if (data && typeof data.service === 'string' && data.service.indexOf('lyrical-sheets-webhook') === 0) {
         showToast(`✓ Connection verified: ${data.sheetName || 'Active'}`);
         addSheetsLog('System', 'Verify', 'Handshake successful', 'ok');
-        
+
         // Version Check
         const deployedVer = data.scriptVersion || 'unknown';
         const warningEl = $('sheets-version-warning');
@@ -12573,22 +12580,22 @@ async function verifyUrl(){
         showToast('⚠ Unexpected response from URL', 'warn');
       }
     } else {
-       // If GET fails but URL looks right, it might be a POST-only deployment or CORS
-       showToast('Queuing test row (GET unverified)', 'warn');
+      // If GET fails but URL looks right, it might be a POST-only deployment or CORS
+      showToast('Queuing test row (GET unverified)', 'warn');
     }
-  } catch(e) {
+  } catch (e) {
     showToast('Queuing test row (Network check failed)', 'warn');
   }
 
   syncToSheets({
-    type:'order',book:'Test',date:today(),num:'VERIFY-'+Date.now().toString().slice(-4),
-    chan:'Verify URL',qty:0,price:0,total:0,stockAfter:0,notes:'Verify URL button test'
+    type: 'order', book: 'Test', date: today(), num: 'VERIFY-' + Date.now().toString().slice(-4),
+    chan: 'Verify URL', qty: 0, price: 0, total: 0, stockAfter: 0, notes: 'Verify URL button test'
   });
-  
-  setTimeout(() => { if(btn){ btn.textContent='↗ Verify URL'; btn.disabled=false; } }, 1000);
+
+  setTimeout(() => { if (btn) { btn.textContent = '↗ Verify URL'; btn.disabled = false; } }, 1000);
 }
-window.addEventListener('online',()=>_processQueue());
-setTimeout(()=>_processQueue(),300);
+window.addEventListener('online', () => _processQueue());
+setTimeout(() => _processQueue(), 300);
 
 // ── DATA BACKUPS & PORTABILITY
 function backupFileName() {
@@ -12758,7 +12765,7 @@ async function openReceiptCameraModal() {
     const msg = e?.name === 'NotAllowedError'
       ? 'Camera permission denied. Allow access in your browser settings.'
       : e?.name === 'NotFoundError' ? 'No camera detected on this device.'
-      : 'Could not start camera.';
+        : 'Could not start camera.';
     _setReceiptCamStatus(msg);
   }
 }
@@ -12898,15 +12905,26 @@ async function authorizeReceiptFolder() {
   }
 }
 
+async function handleFolderError(e, title, message) {
+  console.error(title, e);
+  const reconnect = await confirmDialog(
+    message + '\n\nWould you like to re-select the connected folder now?',
+    { title: title, okLabel: 'Re-connect Folder', cancelLabel: 'Cancel' }
+  );
+  if (reconnect) {
+    await setupReceiptFolder();
+  }
+}
+
 async function saveReceiptToLocalFile(file, subfolderName = '') {
   const dirHandle = await loadReceiptFolderHandle();
   if (!dirHandle) return null;
   try {
     const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
     if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return null;
-    
+
     const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: true });
-    
+
     let targetDir = receiptsDir;
     if (subfolderName) {
       targetDir = await receiptsDir.getDirectoryHandle(subfolderName, { create: true });
@@ -12915,16 +12933,15 @@ async function saveReceiptToLocalFile(file, subfolderName = '') {
     const stamp = new Date().toISOString().split('T')[0];
     const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
     const filename = `${stamp}_${cleanName}`;
-    
+
     const fileHandle = await targetDir.getFileHandle(filename, { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(file);
     await writable.close();
-    
+
     return subfolderName ? `local://${subfolderName}/${filename}` : `local://${filename}`;
   } catch (e) {
-    console.error('Local receipt save failed', e);
-    showToast('⚠ Receipt file save failed — check folder permissions', 'err', 4500);
+    await handleFolderError(e, 'Error Saving Receipt', 'Receipt file save failed. The folder may have been moved or disconnected.');
     return null;
   }
 }
@@ -12953,14 +12970,23 @@ function _localReceiptCell(item) {
 
 async function viewLocalReceipt(path) {
   const dirHandle = await loadReceiptFolderHandle();
-  if (!dirHandle) { showToast('⚠ Receipt folder not connected', 'warn'); return; }
+  if (!dirHandle) {
+    const reconnect = await confirmDialog(
+      'Receipt folder not connected. Would you like to connect it now?',
+      { title: 'Folder Not Connected', okLabel: 'Choose Folder', cancelLabel: 'Cancel' }
+    );
+    if (reconnect) {
+      await setupReceiptFolder();
+    }
+    return;
+  }
   try {
     const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
     if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return;
-    
+
     const receiptsDir = await dirHandle.getDirectoryHandle('receipts');
     let fileHandle;
-    
+
     if (path.includes('/')) {
       const [subfolder, filename] = path.split('/');
       const subDir = await receiptsDir.getDirectoryHandle(subfolder);
@@ -12973,8 +12999,7 @@ async function viewLocalReceipt(path) {
     const url = URL.createObjectURL(file);
     window.open(url, '_blank');
   } catch (e) {
-    console.error('Failed to open local receipt', e);
-    showToast('⚠ Could not find or open local file', 'err');
+    await handleFolderError(e, 'Error Opening Receipt', 'Could not open local file. The folder may have been moved or disconnected.');
   }
 }
 
@@ -12986,7 +13011,7 @@ async function initializeBackupFolderDisplay() {
   try {
     const dirHandle = await loadBackupFolderHandle();
     updateBackupFolderDisplay(dirHandle ? `Backup folder: ${dirHandle.name}` : 'Backup folder: Browser Downloads (default)');
-    
+
     // Auto-sync receipts if publisher and folder connected
     if (window.IS_PUBLISHER && dirHandle) {
       setTimeout(() => syncAllReceipts(), 2000); // Wait for initial app load
@@ -13060,14 +13085,14 @@ async function downloadAndLocalizeReceipt(url, projectName) {
   try {
     const response = await fetch(url);
     const blob = await response.blob();
-    
+
     // Create a pseudo-file object for our saver
-    const filename = url.split('%2F').pop().split('?')[0]; 
+    const filename = url.split('%2F').pop().split('?')[0];
     const file = new File([blob], filename, { type: blob.type });
 
     // Save locally
     const localRef = await saveReceiptToLocalFile(file, projectName.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
-    
+
     if (localRef) {
       // DELETE from cloud now that it's safe locally
       await window._fbDeleteReceipt(url);
@@ -13099,7 +13124,7 @@ async function exportToJSON(ev) {
 
     localStorage.setItem('lm-last-backup-ts', Date.now().toString());
     updateLastBackupDisplay();
-    if($('backup-reminder')) $('backup-reminder').style.display = 'none';
+    if ($('backup-reminder')) $('backup-reminder').style.display = 'none';
     showToast(savedToFolder ? '✓ JSON backup saved to your selected folder' : '✓ JSON backup downloaded');
   });
 }
@@ -13130,18 +13155,18 @@ function updateLastBackupDisplay() {
   if (!el) return;
   if (!ts) { el.textContent = 'Last backup: Never'; return; }
   const date = new Date(parseInt(ts));
-  el.textContent = `Last backup: ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+  el.textContent = `Last backup: ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 function checkDailyBackup() {
   const ts = localStorage.getItem('lm-last-backup-ts');
   const now = Date.now();
   const ONE_DAY = 24 * 60 * 60 * 1000;
-  
+
   if (!ts || (now - parseInt(ts)) > ONE_DAY) {
-    if($('backup-reminder')) $('backup-reminder').style.display = 'flex';
+    if ($('backup-reminder')) $('backup-reminder').style.display = 'flex';
   } else {
-    if($('backup-reminder')) $('backup-reminder').style.display = 'none';
+    if ($('backup-reminder')) $('backup-reminder').style.display = 'none';
   }
 }
 
@@ -13233,7 +13258,7 @@ function renderSystemBackups() {
   const sorted = [...systemBackups].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const PAGE_SIZE = 10;
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
-  if(_sysBackupPage >= totalPages) _sysBackupPage = Math.max(0, totalPages - 1);
+  if (_sysBackupPage >= totalPages) _sysBackupPage = Math.max(0, totalPages - 1);
   const pageItems = sorted.slice(_sysBackupPage * PAGE_SIZE, (_sysBackupPage + 1) * PAGE_SIZE);
 
   let html = pageItems.map(b => `
@@ -13248,11 +13273,11 @@ function renderSystemBackups() {
     </tr>
   `).join('');
 
-  if(totalPages > 1){
-    html+=`<tr><td colspan="4" style="text-align:center;padding:1rem;background:rgba(0,0,0,.15);">
-      <button class="btn sm" onclick="gotoSysBackupPage(-1)" ${_sysBackupPage===0?'disabled':''}>← Prev</button>
-      <span style="margin:0 15px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">Page ${_sysBackupPage+1} of ${totalPages}</span>
-      <button class="btn sm" onclick="gotoSysBackupPage(1)" ${_sysBackupPage===totalPages-1?'disabled':''}>Next →</button>
+  if (totalPages > 1) {
+    html += `<tr><td colspan="4" style="text-align:center;padding:1rem;background:rgba(0,0,0,.15);">
+      <button class="btn sm" onclick="gotoSysBackupPage(-1)" ${_sysBackupPage === 0 ? 'disabled' : ''}>← Prev</button>
+      <span style="margin:0 15px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">Page ${_sysBackupPage + 1} of ${totalPages}</span>
+      <button class="btn sm" onclick="gotoSysBackupPage(1)" ${_sysBackupPage === totalPages - 1 ? 'disabled' : ''}>Next →</button>
     </td></tr>`;
   }
   body.innerHTML = html;
@@ -13419,7 +13444,7 @@ async function applyBackupData(data) {
     setOrClear('lm-sheets-secret', ig.sheetsSecret);
     if (ig.sheetsSpreadsheetUrl) localStorage.setItem('lm-last-spreadsheet-url', ig.sheetsSpreadsheetUrl);
     if (ig.sheetsUrl) localStorage.setItem('lm-last-sheets-url', ig.sheetsUrl);
-    try { await window._fbSaveSettings('notifyEndpoint', { url: ig.notifyUrl || '' }); } catch (_) {}
+    try { await window._fbSaveSettings('notifyEndpoint', { url: ig.notifyUrl || '' }); } catch (_) { }
   }
 }
 
@@ -13588,13 +13613,13 @@ async function applyBookRestore(bid) {
       const pc = JSON.parse(localStorage.getItem('lm-production-costs') || '{}');
       pc[bid] = snapshot.productionCosts[bid];
       localStorage.setItem('lm-production-costs', JSON.stringify(pc));
-      try { await window._fbSaveSettings('productionCosts', pc); } catch (_) {}
+      try { await window._fbSaveSettings('productionCosts', pc); } catch (_) { }
     }
     if (snapshot.paymentLinks && bid in snapshot.paymentLinks) {
       const pl = JSON.parse(localStorage.getItem('lm-payment-links') || '{}');
       pl[bid] = snapshot.paymentLinks[bid];
       localStorage.setItem('lm-payment-links', JSON.stringify(pl));
-      try { await window._fbSaveSettings('paymentLinks', pl); } catch (_) {}
+      try { await window._fbSaveSettings('paymentLinks', pl); } catch (_) { }
     }
 
     closeM('restore-book');
@@ -13654,17 +13679,17 @@ async function handleBackupImportFile(e) {
     try {
       const data = JSON.parse(event.target.result);
       if (!data.BOOKS || !data.states) throw new Error('Invalid backup format: Missing core data');
-      
+
       if (!(await confirmDialog('Are you sure? This will OVERWRITE your entire existing database and reload the app.', { title: 'Restore from file', okLabel: 'Overwrite & restore', danger: true }))) {
         if (info) info.textContent = 'Import cancelled';
         return;
       }
-      
+
       await applyBackupData(data);
-      
+
       showToast('✓ Restore successful! Reloading...');
       setTimeout(() => location.reload(), 1500);
-      
+
     } catch (err) {
       console.error('Import failed', err);
       showToast('Error: Invalid backup file', 'err');
@@ -13695,11 +13720,11 @@ function exportAllToCSV() {
     'Notes'
   ]];
   const loggedAt = new Date().toISOString();
-  
+
   Object.keys(BOOKS).forEach(bid => {
     const s = states[bid] || defaultState(BOOKS[bid]);
     const bookTitle = BOOKS[bid].title;
-    
+
     // History
     (s.hist || []).forEach(h => {
       rows.push([
@@ -13722,7 +13747,7 @@ function exportAllToCSV() {
         h.notes || ''
       ]);
     });
-    
+
     // Ledger
     (s.ledger || []).forEach(l => {
       rows.push([
@@ -13769,9 +13794,9 @@ function exportAllToCSV() {
       ]);
     });
   });
-  
+
   if (rows.length === 1) { showToast('No records to export', 'warn'); return; }
-  
+
   const csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -13786,10 +13811,10 @@ function exportAllToCSV() {
 }
 
 // ── PAYMENT LINKS
-function _renderProductionCostFields(){
-  const container=$('production-cost-fields');
-  if(!container)return;
-  container.innerHTML=BOOK_LIST.map(book=>`
+function _renderProductionCostFields() {
+  const container = $('production-cost-fields');
+  if (!container) return;
+  container.innerHTML = BOOK_LIST.map(book => `
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:220px;">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
@@ -13799,22 +13824,22 @@ function _renderProductionCostFields(){
       <div class="form-group" style="flex:1;margin:0;">
         <div class="price-wrap">
           <span class="sym">${book.currency}</span>
-          <input type="number" id="pc-${book.id}" value="${book.productionCost||''}" placeholder="0.00" step="0.01" min="0">
+          <input type="number" id="pc-${book.id}" value="${book.productionCost || ''}" placeholder="0.00" step="0.01" min="0">
         </div>
       </div>
     </div>`).join('');
 }
 
-async function saveProductionCosts(){
+async function saveProductionCosts() {
   await syncCatalog();
-  const stored={};
-  BOOK_LIST.forEach(book=>{
-    const inp=$('pc-'+book.id);
-    if(inp){
+  const stored = {};
+  BOOK_LIST.forEach(book => {
+    const inp = $('pc-' + book.id);
+    if (inp) {
       const previousCost = book.productionCost || 0;
-      const val=parseFloat(inp.value)||0;
-      book.productionCost=val;
-      stored[book.id]=val;
+      const val = parseFloat(inp.value) || 0;
+      book.productionCost = val;
+      stored[book.id] = val;
 
       // Keep the first break-even tier aligned when it still represents production-cost recovery.
       if (Array.isArray(book.profitTiers) && book.profitTiers.length > 0) {
@@ -13829,64 +13854,64 @@ async function saveProductionCosts(){
     }
   });
   // Save to Firebase + localStorage fallback
-  try{ await window._fbSaveSettings('productionCosts', stored); }catch(_){}
-  localStorage.setItem('lm-production-costs',JSON.stringify(stored));
+  try { await window._fbSaveSettings('productionCosts', stored); } catch (_) { }
+  localStorage.setItem('lm-production-costs', JSON.stringify(stored));
   // Persist synced profitTiers so the threshold survives a page reload
-  try{ await saveCatalogWithDeletions(); }catch(_){}
+  try { await saveCatalogWithDeletions(); } catch (_) { }
   showToast('✓ Break-even targets saved');
-  if(activeBook&&activeBook!=='all') updateDash();
+  if (activeBook && activeBook !== 'all') updateDash();
   else updateAllOverview();
 }
 
-async function loadProductionCosts(){
-  try{
+async function loadProductionCosts() {
+  try {
     // Try Firebase first
     const stored = await window._fbLoadSettings('productionCosts');
-    if(stored){ BOOK_LIST.forEach(b=>{ if(stored[b.id]!=null) b.productionCost=stored[b.id]; }); return; }
-  }catch(_){}
+    if (stored) { BOOK_LIST.forEach(b => { if (stored[b.id] != null) b.productionCost = stored[b.id]; }); return; }
+  } catch (_) { }
   // Fallback to localStorage
-  try{
-    const stored=JSON.parse(localStorage.getItem('lm-production-costs')||'{}');
-    BOOK_LIST.forEach(b=>{ if(stored[b.id]!=null) b.productionCost=stored[b.id]; });
-  }catch(_){}
+  try {
+    const stored = JSON.parse(localStorage.getItem('lm-production-costs') || '{}');
+    BOOK_LIST.forEach(b => { if (stored[b.id] != null) b.productionCost = stored[b.id]; });
+  } catch (_) { }
 }
 
-function _renderPaymentLinkFields(){
-  const container=$('payment-link-fields');
-  if(!container)return;
-  container.innerHTML=BOOK_LIST.map(book=>`
+function _renderPaymentLinkFields() {
+  const container = $('payment-link-fields');
+  if (!container) return;
+  container.innerHTML = BOOK_LIST.map(book => `
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;min-width:200px;">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
         <span style="font-size:13px;font-weight:600;color:var(--text);">${escapeHtml(book.title)}</span>
       </div>
       <div class="form-group" style="flex:1;margin:0;">
-        <input type="text" id="pl-${book.id}" value="${book.paymentLink||''}" placeholder="https://paypal.me/… or email@interac.ca">
+        <input type="text" id="pl-${book.id}" value="${book.paymentLink || ''}" placeholder="https://paypal.me/… or email@interac.ca">
       </div>
     </div>`).join('');
 }
 
-async function savePaymentLinks(){
+async function savePaymentLinks() {
   await syncCatalog();
-  BOOK_LIST.forEach(book=>{
-    const inp=$('pl-'+book.id);
-    if(inp) book.paymentLink=inp.value.trim();
+  BOOK_LIST.forEach(book => {
+    const inp = $('pl-' + book.id);
+    if (inp) book.paymentLink = inp.value.trim();
   });
-  const stored={};
-  BOOK_LIST.forEach(b=>stored[b.id]=b.paymentLink||'');
+  const stored = {};
+  BOOK_LIST.forEach(b => stored[b.id] = b.paymentLink || '');
   // Save to Firebase (syncs across all devices) + localStorage as fallback
-  try{ await window._fbSaveSettings('paymentLinks', stored); }catch(_){}
-  localStorage.setItem('lm-payment-links',JSON.stringify(stored));
+  try { await window._fbSaveSettings('paymentLinks', stored); } catch (_) { }
+  localStorage.setItem('lm-payment-links', JSON.stringify(stored));
   showToast('✓ Payment links saved');
-  if(activeBook&&activeBook!=='all') renderArtistTransfers();
+  if (activeBook && activeBook !== 'all') renderArtistTransfers();
 }
 
-async function loadPaymentLinks(){
-  try{
+async function loadPaymentLinks() {
+  try {
     // Try Firebase first
     const stored = await window._fbLoadSettings('paymentLinks');
-    if(stored){ BOOK_LIST.forEach(b=>{ if(stored[b.id]) b.paymentLink=stored[b.id]; }); return; }
-  }catch(_){}
+    if (stored) { BOOK_LIST.forEach(b => { if (stored[b.id]) b.paymentLink = stored[b.id]; }); return; }
+  } catch (_) { }
 }
 
 async function loadWebsitePaymentMethods() {
@@ -13923,7 +13948,7 @@ function getAcceptedPaymentMethodsForBook(bookId) {
 function getEffectiveBookPaymentLink(book) {
   if (!book) return '';
   const acceptedMethods = getAcceptedPaymentMethodsForBook(book.id);
-  
+
   let url = '';
   if (acceptedMethods.includes('stripe') && book.stripeLink) {
     url = book.stripeLink;
@@ -13932,7 +13957,7 @@ function getEffectiveBookPaymentLink(book) {
   } else if (acceptedMethods.includes('interac') && book.paymentLink && /^[^\s@]+@[^\s@]+$/.test(book.paymentLink)) {
     url = book.paymentLink;
   }
-  
+
   return url || book.stripeLink || book.paymentLink || '';
 }
 
@@ -13946,7 +13971,7 @@ function renderPaymentConfig() {
       { id: 'interac', title: 'Interac e-Transfer', desc: 'Accept email bank transfers.' },
       { id: 'cash_card', title: 'Cash/Card (local)', desc: 'Accept physical cash/cards for manual checkouts.' }
     ];
-    
+
     globalList.innerHTML = methods.map(m => {
       const checked = WEBSITE_PAYMENT_METHODS.includes(m.id) ? 'checked' : '';
       return `
@@ -13976,7 +14001,7 @@ function renderPaymentConfig() {
   renderBookPaymentConfig();
 }
 
-window.updateGlobalPaymentMethod = function(id, checked) {
+window.updateGlobalPaymentMethod = function (id, checked) {
   if (checked) {
     if (!WEBSITE_PAYMENT_METHODS.includes(id)) WEBSITE_PAYMENT_METHODS.push(id);
   } else {
@@ -14027,7 +14052,7 @@ function renderBookPaymentConfig() {
   }
 }
 
-window.toggleBookUseGlobal = function() {
+window.toggleBookUseGlobal = function () {
   const bookId = pmSelectedBookId;
   if (!bookId || !BOOKS[bookId]) return;
   const useGlobal = $('pm-book-use-global').checked;
@@ -14035,9 +14060,9 @@ window.toggleBookUseGlobal = function() {
   renderBookPaymentConfig();
 };
 
-window.savePaymentConfig = async function() {
+window.savePaymentConfig = async function () {
   if (isAuthor()) return;
-  
+
   const bookId = pmSelectedBookId;
   if (bookId && BOOKS[bookId]) {
     const book = BOOKS[bookId];
@@ -14062,7 +14087,7 @@ window.savePaymentConfig = async function() {
 
   await saveWebsitePaymentMethods();
   await saveCatalogWithDeletions();
-  
+
   showToast('✓ Payment methods saved successfully');
   renderPaymentConfig();
 };
@@ -14110,7 +14135,7 @@ function renderProfitSettings() {
       <label for="ps-book-selector">Book</label>
       <select id="ps-book-selector">
         <option value="">Select a book…</option>
-        ${BOOK_LIST.map(b => `<option value="${escapeHtml(b.id)}" ${b.id===currentVal?'selected':''}>${escapeHtml(b.title)}</option>`).join('')}
+        ${BOOK_LIST.map(b => `<option value="${escapeHtml(b.id)}" ${b.id === currentVal ? 'selected' : ''}>${escapeHtml(b.title)}</option>`).join('')}
       </select>
     `;
     const sel = $('ps-book-selector');
@@ -14235,14 +14260,14 @@ function renderProfitTierList() {
     // Top line: stage badge + covered revenue range + remove button
     const top = document.createElement('div');
     top.className = 'tier-card-header';
-    
+
     const badge = document.createElement('span');
     badge.className = 'tier-badge';
     badge.textContent = String(i + 1);
-    
+
     const range = document.createElement('div');
     range.className = 'tier-range';
-    
+
     const removeBtn = document.createElement('button');
     removeBtn.className = 'tier-remove-btn';
     removeBtn.innerHTML = '✕';
@@ -14357,7 +14382,7 @@ function renderProfitTierList() {
 
 // Re-assigned inside renderProfitTierList so input handlers can refresh derived
 // UI (range text, split bars, validation, preview) without rebuilding inputs.
-let psUpdateDerived = () => {};
+let psUpdateDerived = () => { };
 
 // Recommended starter: lower share until break-even, higher share after.
 function psApplyTemplate() {
@@ -14417,7 +14442,7 @@ function psRenderSummary(book, cur, productionCost) {
 
   // ── What-if simulator
   let defaultGross = productionCost > 0 ? Math.round(productionCost * 2) : 1000;
-  try { const st = calculateArtistEarnings(psActiveBookId); if (st && st.cumulativeRevenue > 0) defaultGross = Math.round(st.cumulativeRevenue); } catch (_) {}
+  try { const st = calculateArtistEarnings(psActiveBookId); if (st && st.cumulativeRevenue > 0) defaultGross = Math.round(st.cumulativeRevenue); } catch (_) { }
   const gross = psSimGross == null ? defaultGross : psSimGross;
   const sim = psSimulateSplit(tiers, productionCost, gross);
   const artistPct = sim.gross > 0 ? (sim.totalArtist / sim.gross) * 100 : 0;
@@ -14516,9 +14541,9 @@ async function saveProfitTiers() {
   if (!psActiveBookId) { showToast('No book selected', 'warn'); return; }
   const ind = $('ps-save-indicator');
   if (ind) ind.classList.add('show');
-  
+
   const editedTiers = BOOKS[psActiveBookId] ? BOOKS[psActiveBookId].profitTiers : null;
-  
+
   try {
     await syncCatalog();
     if (BOOKS[psActiveBookId] && editedTiers) {
@@ -14527,7 +14552,7 @@ async function saveProfitTiers() {
     await saveCatalogWithDeletions();
     showToast('✓ Profit tiers saved');
     if (activeBook === psActiveBookId) updateDash();
-  } catch(e) {
+  } catch (e) {
     showToast('⚠ Error saving tiers', 'err');
   } finally {
     if (ind) setTimeout(() => ind.classList.remove('show'), 1500);
@@ -14552,7 +14577,7 @@ function calculateFinancials(year) {
     opex: 0,
     shares: 0,
     profit: 0,
-    bookStats: [], 
+    bookStats: [],
     expCats: {},
     missingReceiptsCount: 0
   };
@@ -14566,10 +14591,10 @@ function calculateFinancials(year) {
   BOOK_LIST.forEach(book => {
     const s = states[book.id] || defaultState(book);
     const unitCost = (book.productionCost || 0) / (book.maxPrint || 1);
-    
+
     let bookRev = 0;
     let bookUnits = 0;
-    
+
     (s.hist || []).forEach(h => {
       const inYear = h.date && h.date.startsWith(yearStr);
       if (!h.voided && !h.gratuity && inYear) {
@@ -14577,14 +14602,14 @@ function calculateFinancials(year) {
         bookUnits += (parseInt(h.qty) || 0);
       }
     });
-    
+
     const bookCogs = bookUnits * unitCost;
     const bookShares = filterArtistEarningsByYear(book.id, year);
-    
+
     result.revenue += bookRev;
     result.cogs += bookCogs;
     result.shares += bookShares;
-    
+
     result.bookStats.push({
       title: book.title,
       units: bookUnits,
@@ -14594,7 +14619,7 @@ function calculateFinancials(year) {
       shares: bookShares,
       net: bookRev - bookCogs - bookShares
     });
-    
+
     (s.expenses || []).forEach(e => {
       const inYear = e.date && e.date.startsWith(yearStr);
       if (!e.voided && inYear) {
@@ -14636,7 +14661,7 @@ function calculateFinancials(year) {
 function filterArtistEarningsByYear(bookId, year) {
   const book = BOOKS[bookId];
   const s = states[bookId] || defaultState(book);
-  const tiers = [...(book.profitTiers || [])].sort((a,b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
+  const tiers = [...(book.profitTiers || [])].sort((a, b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
   if (tiers.length === 0) return 0;
 
   const yearStr = String(year);
@@ -14676,18 +14701,18 @@ function renderFinancials() {
   $('fin-rev').textContent = fmt(fin.revenue, cur);
   $('fin-cogs').textContent = fmt(fin.cogs, cur);
   $('fin-exp').textContent = fmt(fin.opex + fin.shares, cur);
-  
-  const totalExpCount = Object.values(fin.expCats).reduce((a,c)=>a+c.count,0);
-  let subText = `${totalExpCount} expense${totalExpCount!==1?'s':''} logged`;
-  if(fin.missingReceiptsCount > 0) {
-    subText += ` · <span style="color:var(--red);font-weight:600;">${fin.missingReceiptsCount} missing receipt${fin.missingReceiptsCount!==1?'s':''}</span>`;
+
+  const totalExpCount = Object.values(fin.expCats).reduce((a, c) => a + c.count, 0);
+  let subText = `${totalExpCount} expense${totalExpCount !== 1 ? 's' : ''} logged`;
+  if (fin.missingReceiptsCount > 0) {
+    subText += ` · <span style="color:var(--red);font-weight:600;">${fin.missingReceiptsCount} missing receipt${fin.missingReceiptsCount !== 1 ? 's' : ''}</span>`;
   }
   $('fin-exp-sub').innerHTML = subText;
   $('fin-profit').textContent = fmt(fin.profit, cur);
-  
+
   const expBody = $('fin-exp-body');
   if (expBody) {
-    const sortedCats = Object.entries(fin.expCats).sort((a,b) => b[1].total - a[1].total);
+    const sortedCats = Object.entries(fin.expCats).sort((a, b) => b[1].total - a[1].total);
     expBody.innerHTML = sortedCats.map(([cat, val]) => `
       <tr>
         <td style="font-weight:600; display:flex; align-items:center;">${cat} ${val.missingReceipts ? `<span class="pill" style="margin-left:8px; font-size:9px; background:var(--red); color:var(--dark); font-weight:600;">${val.missingReceipts} missing</span>` : ''}</td>
@@ -14716,7 +14741,7 @@ function downloadTaxReport() {
   const year = $('fin-year-selector').value;
   const fin = calculateFinancials(parseInt(year));
   const yearStr = String(year);
-  
+
   let csv = 'Date,Type,Book/Source,Category,Description,Receipt URL,Revenue,COGS,Expense,Artist Payout,Net\n';
 
   BOOK_LIST.forEach(book => {
@@ -14724,15 +14749,15 @@ function downloadTaxReport() {
     s.hist.filter(h => !h.voided && !h.gratuity).forEach(h => {
       // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
       if (h.date && h.date.startsWith(yearStr)) {
-        csv += `${h.date},Order,${book.title},Sale,"${h.chan} Order #${h.num}",,${(h.qty*h.price).toFixed(2)},0,0,0,${(h.qty*h.price).toFixed(2)}\n`;
+        csv += `${h.date},Order,${book.title},Sale,"${h.chan} Order #${h.num}",,${(h.qty * h.price).toFixed(2)},0,0,0,${(h.qty * h.price).toFixed(2)}\n`;
       }
     });
 
     (s.expenses || []).forEach(e => {
-        // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
-        if (e.date && e.date.startsWith(yearStr)) {
-          csv += `${e.date},Expense,${book.title},${e.cat},"${e.desc}","${e.receipt || ''}",0,0,${e.amount.toFixed(2)},0,-${e.amount.toFixed(2)}\n`;
-        }
+      // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
+      if (e.date && e.date.startsWith(yearStr)) {
+        csv += `${e.date},Expense,${book.title},${e.cat},"${e.desc}","${e.receipt || ''}",0,0,${e.amount.toFixed(2)},0,-${e.amount.toFixed(2)}\n`;
+      }
     });
   });
 
@@ -14752,7 +14777,7 @@ function downloadTaxReport() {
 }
 
 // ── GOOGLE AUTHENTICATION
-window.tryGoogleLogin = async function() {
+window.tryGoogleLogin = async function () {
   const err = $('pw-err');
   err.textContent = 'Contacting Google...';
   try {
@@ -14773,32 +14798,32 @@ function logout() {
 }
 
 function showApp(role, bookId) {
-  $('pw-gate').style.display='none';
-  $('pw-app').style.display='';
+  $('pw-gate').style.display = 'none';
+  $('pw-app').style.display = '';
   if (role === 'author' || IS_AUTHOR_MODE) {
     document.getElementById('main-app').classList.add('author-mode');
     const allOv = $('tab-all-overview');
-    if(allOv){ allOv.style.display='none'; allOv.classList.remove('active'); }
+    if (allOv) { allOv.style.display = 'none'; allOv.classList.remove('active'); }
     $('tab-bar').style.display = '';
-    const wm=$('author-watermark'); if(wm){wm.textContent=BOOKS[bookId||ACTIVE_BOOK_FORCED]?.title+' · Author view';wm.style.display='';}
-    const sheetsBtn=$('sheets-tab-btn'); if(sheetsBtn)sheetsBtn.style.display='none';
-    const websiteTabBtn=$('website-tab-btn'); if(websiteTabBtn) websiteTabBtn.style.display='none';
-    const backupsBtn=$('backups-tab-btn'); if(backupsBtn) backupsBtn.style.display='none';
-    const websitePanel=$('tab-website');
+    const wm = $('author-watermark'); if (wm) { wm.textContent = BOOKS[bookId || ACTIVE_BOOK_FORCED]?.title + ' · Author view'; wm.style.display = ''; }
+    const sheetsBtn = $('sheets-tab-btn'); if (sheetsBtn) sheetsBtn.style.display = 'none';
+    const websiteTabBtn = $('website-tab-btn'); if (websiteTabBtn) websiteTabBtn.style.display = 'none';
+    const backupsBtn = $('backups-tab-btn'); if (backupsBtn) backupsBtn.style.display = 'none';
+    const websitePanel = $('tab-website');
     if (websitePanel) {
-      websitePanel.style.display='none';
+      websitePanel.style.display = 'none';
       websitePanel.classList.remove('active');
     }
-    const openLink=$('sheets-open-link'); if(openLink)openLink.style.display='none !important';
-    const style=document.createElement('style');
-    style.textContent='#sheets-open-link{display:none!important;}#side-sheets-open{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-ai-btn{display:none!important;}';
+    const openLink = $('sheets-open-link'); if (openLink) openLink.style.display = 'none !important';
+    const style = document.createElement('style');
+    style.textContent = '#sheets-open-link{display:none!important;}#side-sheets-open{display:none!important;}#open-sheet-link{display:none!important;}#d-breakeven-kpi{display:none!important;}#d-breakeven-block{display:none!important;}#d-reimburse-sect{display:none!important;}#d-expenses-sect{display:none!important;}#d-expenses-kpi{display:none!important;}#d-reimburse-kpi{display:none!important;}#danger-zone-sect{display:none!important;}#danger-zone-block{display:none!important;}#import-btn{display:none!important;}#tab-all-overview{display:none!important;}#backups-tab-btn{display:none!important;}#exp-ai-btn{display:none!important;}';
     document.head.appendChild(style);
   } else {
     // Publisher — show import button and financials tab
-    const importBtn=$('import-btn'); if(importBtn)importBtn.style.display='';
-    const finBtn=$('financials-tab-btn'); if(finBtn)finBtn.style.display='';
-    const websiteTabBtn=$('website-tab-btn'); if(websiteTabBtn) websiteTabBtn.style.display='';
-    const backupsBtn=$('backups-tab-btn'); if(backupsBtn) backupsBtn.style.display='';
+    const importBtn = $('import-btn'); if (importBtn) importBtn.style.display = '';
+    const finBtn = $('financials-tab-btn'); if (finBtn) finBtn.style.display = '';
+    const websiteTabBtn = $('website-tab-btn'); if (websiteTabBtn) websiteTabBtn.style.display = '';
+    const backupsBtn = $('backups-tab-btn'); if (backupsBtn) backupsBtn.style.display = '';
   }
   updateRoleToggleButton();
   syncRoleUI();
@@ -14822,7 +14847,7 @@ async function boot(forcedBook) {
     setupSpreadsheetInput.value = sheetsSpreadsheetUrl || localStorage.getItem('lm-last-spreadsheet-url') || '';
   }
 
-  if(sheetsUrl) showSheetsConnected();
+  if (sheetsUrl) showSheetsConnected();
   updateSheetsBadge();
   updateLastBackupDisplay();
   initializeBackupFolderDisplay();
@@ -14839,15 +14864,15 @@ async function boot(forcedBook) {
       if (!book) { showToast('Book not found', 'err'); return; }
       document.documentElement.style.setProperty('--book-accent', book.accent);
       document.documentElement.style.setProperty('--book-accent-bg', book.accentBg);
-      $('tab-all-overview').style.display='none';
+      $('tab-all-overview').style.display = 'none';
       $('tab-all-overview').classList.remove('active');
       $('tab-bar').style.display = '';
-      $('tab-dashboard').style.display='block';
+      $('tab-dashboard').style.display = 'block';
       $('tab-dashboard').classList.add('active');
-      loadBook(forcedBook).then(()=>{
-        setSyncState('ok','<b>Firestore</b> · connected');
+      loadBook(forcedBook).then(() => {
+        setSyncState('ok', '<b>Firestore</b> · connected');
         updateSubheader(new Date().toLocaleTimeString());
-        renderAll();updateHeader();updateRoleToggleButton();syncRoleUI();
+        renderAll(); updateHeader(); updateRoleToggleButton(); syncRoleUI();
       });
     } else {
       // Publisher
@@ -14981,7 +15006,7 @@ function tcClearLedgerFilters() {
 // Apply the active search + type filter to the full (year-filtered) ledger array.
 function _tcApplyLedgerFilter(rows) {
   let out = rows;
-  if (_tcLedgerType === 'sales')        out = out.filter(r => r.isIncome);
+  if (_tcLedgerType === 'sales') out = out.filter(r => r.isIncome);
   else if (_tcLedgerType === 'expenses') out = out.filter(r => !r.isIncome);
   const q = _tcLedgerSearch.trim().toLowerCase();
   if (q) {
@@ -14998,8 +15023,8 @@ function renderTaxCenter() {
   // Restore the saved ledger view (year + search + type) before reading the year.
   _tcRestoreLedgerPrefs();
   // Initialize AI key input UI
-  if($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
-  if($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
+  if ($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
+  if ($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
   const _stripeStatusEl = $('stripe-fees-status');
   if (_stripeStatusEl && !_stripeStatusEl.textContent && TAX_CENTER.settings?.stripeFeesLastImportAt) {
     const last = new Date(TAX_CENTER.settings.stripeFeesLastImportAt);
@@ -15009,7 +15034,7 @@ function renderTaxCenter() {
       _stripeStatusEl.textContent = `Fees last inserted into ledger ${ago} (${last.toISOString().slice(0, 10)}). Fetch again to refresh.`;
     }
   }
-  if($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
+  if ($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
   const _shippoStatusEl = $('tc-shippo-status');
   if (_shippoStatusEl && TAX_CENTER.settings?.shippoLastImportAt) {
     const last = new Date(TAX_CENTER.settings.shippoLastImportAt);
@@ -15054,7 +15079,7 @@ function renderTaxCenter() {
   let totalGrossSales = 0;
   let totalOperatingExpenses = 0;
   let allLedger = [];
-  
+
   Object.keys(BOOKS).forEach(bid => {
     if (bid.toLowerCase().includes('test') || BOOKS[bid]?.title?.toLowerCase()?.includes('test')) return;
     const s = states[bid] || defaultState(BOOKS[bid]);
@@ -15069,154 +15094,154 @@ function renderTaxCenter() {
 
     // Add sales to ledger
     (s.hist || []).filter(h => !h.artistPending || h.voided).forEach(h => {
-        const hYear = h.date ? h.date.substring(0, 4) : '';
-        if (selectedYear !== 'all' && hYear !== selectedYear) return;
+      const hYear = h.date ? h.date.substring(0, 4) : '';
+      if (selectedYear !== 'all' && hYear !== selectedYear) return;
 
-        const unitPrice = h.price ?? h.unitPrice ?? 0;
-        const amt = h.voided ? 0 : (unitPrice * (h.qty || 1));
-        const baseAmt = amt * hRate;
-        totalGrossSales += baseAmt;
-        
+      const unitPrice = h.price ?? h.unitPrice ?? 0;
+      const amt = h.voided ? 0 : (unitPrice * (h.qty || 1));
+      const baseAmt = amt * hRate;
+      totalGrossSales += baseAmt;
+
+      allLedger.push({
+        date: h.date,
+        type: 'Sale',
+        desc: `${b.title} (Qty: ${h.qty || 1})`,
+        cat: 'Income',
+        ref: h.num,
+        invoiceNum: h.consignmentLink ? (h.invoiceNum || '') : '',
+        origCurrency: cur,
+        origAmount: amt,
+        baseAmount: baseAmt,
+        qty: h.qty || 1,
+        voided: !!h.voided,
+        hasRateError: !hRate,
+        isIncome: true,
+        sourceType: 'sale',
+        sourceId: bid,
+        itemId: h.id || h.num
+      });
+
+      const shippingIncome = h.voided ? 0 : (Number(h.shippingPaid) || 0);
+      if (shippingIncome > 0) {
+        const shippingBase = roundCents(shippingIncome * hRate);
+        totalGrossSales = roundCents(totalGrossSales + shippingBase);
         allLedger.push({
-            date: h.date,
-            type: 'Sale',
-            desc: `${b.title} (Qty: ${h.qty || 1})`,
-            cat: 'Income',
-            ref: h.num,
-            invoiceNum: h.consignmentLink ? (h.invoiceNum || '') : '',
-            origCurrency: cur,
-            origAmount: amt,
-            baseAmount: baseAmt,
-            qty: h.qty || 1,
-            voided: !!h.voided,
-            hasRateError: !hRate,
-            isIncome: true,
-            sourceType: 'sale',
-            sourceId: bid,
-            itemId: h.id || h.num
+          date: h.date,
+          type: 'Shipping income',
+          desc: `Customer shipping paid (${b.title})`,
+          cat: 'Income',
+          ref: h.num,
+          origCurrency: cur,
+          origAmount: shippingIncome,
+          baseAmount: shippingBase,
+          qty: 0,
+          voided: false,
+          hasRateError: !hRate,
+          isIncome: true,
+          sourceType: 'shippingIncome',
+          sourceId: bid,
+          itemId: `${h.id || h.num}-shipping-income`,
         });
-
-        const shippingIncome = h.voided ? 0 : (Number(h.shippingPaid) || 0);
-        if (shippingIncome > 0) {
-          const shippingBase = roundCents(shippingIncome * hRate);
-          totalGrossSales = roundCents(totalGrossSales + shippingBase);
-          allLedger.push({
-            date: h.date,
-            type: 'Shipping income',
-            desc: `Customer shipping paid (${b.title})`,
-            cat: 'Income',
-            ref: h.num,
-            origCurrency: cur,
-            origAmount: shippingIncome,
-            baseAmount: shippingBase,
-            qty: 0,
-            voided: false,
-            hasRateError: !hRate,
-            isIncome: true,
-            sourceType: 'shippingIncome',
-            sourceId: bid,
-            itemId: `${h.id || h.num}-shipping-income`,
-          });
-        }
+      }
     });
-    
+
     // Add book specific expenses
     (s.expenses || []).forEach(e => {
-        const eYear = e.date ? e.date.substring(0, 4) : '';
-        if (selectedYear !== 'all' && eYear !== selectedYear) return;
+      const eYear = e.date ? e.date.substring(0, 4) : '';
+      if (selectedYear !== 'all' && eYear !== selectedYear) return;
 
-        // Use stored origCurrency/origAmount for display, and stored baseAmount to avoid double-conversion.
-        // Fallback for legacy entries that don't have baseAmount stored.
-        const displayOrigCur = e.origCurrency || e.currency || 'CAD';
-        const displayOrigAmt = e.origAmount != null ? e.origAmount : (e.amount || 0);
-        const bookCur = e.currency || 'CAD';
-        
-        let eBase;
-        if (e.baseAmount != null) {
-          // Pre-calculated at submission time — no double conversion
-          eBase = e.baseAmount;
-        } else {
-          // Legacy entry: calculate once now
-          const eRate = _fxRateCache[`${bookCur}_CAD`] || 1;
-          eBase = (e.amount || 0) * eRate;
-        }
-        
-        totalOperatingExpenses += eBase;
-        
-        allLedger.push({
-            date: e.date,
-            type: 'Expense',
-            desc: e.desc + ` (${b.title})`,
-            cat: e.cat || 'Project Expense',
-            ref: e.shippingOrderNumber ? `${e.ref || ''} · ${e.shippingOrderNumber}` : e.ref || '',
-            receipt: e.receipt || '',
-            origCurrency: displayOrigCur,
-            origAmount: displayOrigAmt,
-            baseAmount: eBase,
-            hasRateError: false,
-            isIncome: false,
-            sourceType: 'bookExpense',
-            sourceId: bid,
-            itemId: e.id
-        });
+      // Use stored origCurrency/origAmount for display, and stored baseAmount to avoid double-conversion.
+      // Fallback for legacy entries that don't have baseAmount stored.
+      const displayOrigCur = e.origCurrency || e.currency || 'CAD';
+      const displayOrigAmt = e.origAmount != null ? e.origAmount : (e.amount || 0);
+      const bookCur = e.currency || 'CAD';
+
+      let eBase;
+      if (e.baseAmount != null) {
+        // Pre-calculated at submission time — no double conversion
+        eBase = e.baseAmount;
+      } else {
+        // Legacy entry: calculate once now
+        const eRate = _fxRateCache[`${bookCur}_CAD`] || 1;
+        eBase = (e.amount || 0) * eRate;
+      }
+
+      totalOperatingExpenses += eBase;
+
+      allLedger.push({
+        date: e.date,
+        type: 'Expense',
+        desc: e.desc + ` (${b.title})`,
+        cat: e.cat || 'Project Expense',
+        ref: e.shippingOrderNumber ? `${e.ref || ''} · ${e.shippingOrderNumber}` : e.ref || '',
+        receipt: e.receipt || '',
+        origCurrency: displayOrigCur,
+        origAmount: displayOrigAmt,
+        baseAmount: eBase,
+        hasRateError: false,
+        isIncome: false,
+        sourceType: 'bookExpense',
+        sourceId: bid,
+        itemId: e.id
+      });
     });
-    
+
     // Add artist payments
     (s.artistTransfers || []).filter(t => t.paid).forEach(t => {
-        const tDate = t.paidDate || t.date || '';
-        const tYear = tDate ? tDate.substring(0, 4) : '';
-        if (selectedYear !== 'all' && tYear !== selectedYear) return;
+      const tDate = t.paidDate || t.date || '';
+      const tYear = tDate ? tDate.substring(0, 4) : '';
+      if (selectedYear !== 'all' && tYear !== selectedYear) return;
 
-        const tBase = (t.total || 0) * hRate;
-        allLedger.push({
-            date: tDate,
-            type: 'Expense',
-            desc: `Artist Payout (${b.title})`,
-            cat: 'Artist Royalties',
-            ref: t.num,
-            origCurrency: cur,
-            origAmount: t.total || 0,
-            baseAmount: tBase,
-            hasRateError: !hRate,
-            isIncome: false,
-            sourceType: 'artistPayout',
-            sourceId: bid,
-            itemId: t.id || t.num
-        });
+      const tBase = (t.total || 0) * hRate;
+      allLedger.push({
+        date: tDate,
+        type: 'Expense',
+        desc: `Artist Payout (${b.title})`,
+        cat: 'Artist Royalties',
+        ref: t.num,
+        origCurrency: cur,
+        origAmount: t.total || 0,
+        baseAmount: tBase,
+        hasRateError: !hRate,
+        isIncome: false,
+        sourceType: 'artistPayout',
+        sourceId: bid,
+        itemId: t.id || t.num
+      });
     });
   });
 
   (TAX_CENTER.businessExpenses || []).forEach(e => {
-      const eYear = e.date ? e.date.substring(0, 4) : '';
-      if (selectedYear !== 'all' && eYear !== selectedYear) return;
+    const eYear = e.date ? e.date.substring(0, 4) : '';
+    if (selectedYear !== 'all' && eYear !== selectedYear) return;
 
-      const eCur = e.currency || 'CAD';
-      // Use stored baseAmount when available to avoid re-conversion
-      const eBase = e.baseAmount != null
-        ? e.baseAmount
-        : e.fxMissing
-          ? 0
-          : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
-      
-      totalOperatingExpenses += eBase;
-      
-      allLedger.push({
-            date: e.date,
-            type: 'Business Exp.',
-            desc: e.desc,
-            cat: e.cat || 'Other',
-            ref: e.ref || '',
-            receipt: e.receipt || '',
-            receiptFiles: e.receiptFiles || [],
-            origCurrency: eCur,
-            origAmount: e.amount || 0,
-            baseAmount: eBase,
-            hasRateError: !!e.fxMissing,
-            isIncome: false,
-            sourceType: 'businessExpense',
-            itemId: e.id,
-            trip: e.trip || ''
-        });
+    const eCur = e.currency || 'CAD';
+    // Use stored baseAmount when available to avoid re-conversion
+    const eBase = e.baseAmount != null
+      ? e.baseAmount
+      : e.fxMissing
+        ? 0
+        : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+
+    totalOperatingExpenses += eBase;
+
+    allLedger.push({
+      date: e.date,
+      type: 'Business Exp.',
+      desc: e.desc,
+      cat: e.cat || 'Other',
+      ref: e.ref || '',
+      receipt: e.receipt || '',
+      receiptFiles: e.receiptFiles || [],
+      origCurrency: eCur,
+      origAmount: e.amount || 0,
+      baseAmount: eBase,
+      hasRateError: !!e.fxMissing,
+      isIncome: false,
+      sourceType: 'businessExpense',
+      itemId: e.id,
+      trip: e.trip || ''
+    });
   });
 
   const netCashFlow = totalGrossSales - totalOperatingExpenses;
@@ -15252,13 +15277,13 @@ function renderTaxCenter() {
   )).sort();
   ['tc-trip-suggestions', 'tc-trip-suggestions-modal'].forEach(id => {
     const dl = $(id);
-    if (dl) dl.innerHTML = allTripNames.map(t => `<option value="${t.replace(/"/g,'&quot;')}">`).join('');
+    if (dl) dl.innerHTML = allTripNames.map(t => `<option value="${t.replace(/"/g, '&quot;')}">`).join('');
   });
 
   if (tripBody) {
-    const tripList = Object.keys(tripSummary).map(t => ({ name: t, ...tripSummary[t] })).sort((a,b) => b.total - a.total);
+    const tripList = Object.keys(tripSummary).map(t => ({ name: t, ...tripSummary[t] })).sort((a, b) => b.total - a.total);
     tripBody.innerHTML = tripList.map(t => `
-        <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${escapeHtml(t.name)}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count===1?'':'s'}">
+        <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${escapeHtml(t.name)}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count === 1 ? '' : 's'}">
           <td style="color:var(--gold);text-decoration:underline;">✈ ${escapeHtml(t.name)}</td>
           <td class="r">${t.count}</td>
           <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(t.total, baseCurrency)}</td>
@@ -15268,25 +15293,25 @@ function renderTaxCenter() {
 
   const catBody = $('tc-category-body');
   if (catBody) {
-      const expenses = allLedger.filter(item => !item.isIncome);
-      const catSummary = {};
-      expenses.forEach(ex => {
-          const c = ex.cat || 'Uncategorized';
-          if (!catSummary[c]) catSummary[c] = { total: 0, count: 0, items: [] };
-          catSummary[c].total += ex.baseAmount;
-          catSummary[c].count++;
-          catSummary[c].items.push(ex);
-      });
-      const catList = Object.keys(catSummary).map(c => ({ name: c, ...catSummary[c] })).sort((a,b) => b.total - a.total);
+    const expenses = allLedger.filter(item => !item.isIncome);
+    const catSummary = {};
+    expenses.forEach(ex => {
+      const c = ex.cat || 'Uncategorized';
+      if (!catSummary[c]) catSummary[c] = { total: 0, count: 0, items: [] };
+      catSummary[c].total += ex.baseAmount;
+      catSummary[c].count++;
+      catSummary[c].items.push(ex);
+    });
+    const catList = Object.keys(catSummary).map(c => ({ name: c, ...catSummary[c] })).sort((a, b) => b.total - a.total);
 
-      // Stash by index so the detail modal can read transactions without escaping issues.
-      window._tcCategoryDetail = {
-        baseCurrency,
-        byName: catSummary
-      };
+    // Stash by index so the detail modal can read transactions without escaping issues.
+    window._tcCategoryDetail = {
+      baseCurrency,
+      byName: catSummary
+    };
 
-      catBody.innerHTML = catList.map(c => `
-          <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${escapeHtml(c.name)}" style="cursor:pointer;" title="Click to view ${c.count} transaction${c.count===1?'':'s'}">
+    catBody.innerHTML = catList.map(c => `
+          <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${escapeHtml(c.name)}" style="cursor:pointer;" title="Click to view ${c.count} transaction${c.count === 1 ? '' : 's'}">
             <td style="color:var(--gold3);text-decoration:underline;">${escapeHtml(c.name)}</td>
             <td class="r">${c.count}</td>
             <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}</td>
@@ -15315,46 +15340,46 @@ function renderTaxCenter() {
   const pageLedger = filteredLedger.slice(pageStart, pageStart + TC_LEDGER_PAGE_SIZE);
 
   const ledTbody = $('tc-ledger-body');
-  if(ledTbody) {
-      ledTbody.innerHTML = pageLedger.map(item => {
-        // Build receipt/ref cell — receipt links AND the reference number
-        // together; a ref must never hide the saved receipt files.
-        let displayRef = item.ref != null ? String(item.ref) : '';
-        let legacyReceipt = '';
-        // Legacy cleanup: if ref contains a local link, extract it
-        if (displayRef && displayRef.includes('local://')) {
-          const match = displayRef.match(/href="([^"]+)"/);
-          if (match) legacyReceipt = match[1];
-          displayRef = '';
-        }
-        const links = _localReceiptCell(item) || (legacyReceipt ? _localReceiptCell({ receipt: legacyReceipt }) : '');
-        const refCell = [
-          links,
-          displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : '',
-          item.invoiceNum ? `<span style="font-size:11px;color:var(--gold);">🧾 ${escapeHtml(item.invoiceNum)}</span>` : ''
-        ].filter(Boolean).join('<br>');
+  if (ledTbody) {
+    ledTbody.innerHTML = pageLedger.map(item => {
+      // Build receipt/ref cell — receipt links AND the reference number
+      // together; a ref must never hide the saved receipt files.
+      let displayRef = item.ref != null ? String(item.ref) : '';
+      let legacyReceipt = '';
+      // Legacy cleanup: if ref contains a local link, extract it
+      if (displayRef && displayRef.includes('local://')) {
+        const match = displayRef.match(/href="([^"]+)"/);
+        if (match) legacyReceipt = match[1];
+        displayRef = '';
+      }
+      const links = _localReceiptCell(item) || (legacyReceipt ? _localReceiptCell({ receipt: legacyReceipt }) : '');
+      const refCell = [
+        links,
+        displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : '',
+        item.invoiceNum ? `<span style="font-size:11px;color:var(--gold);">🧾 ${escapeHtml(item.invoiceNum)}</span>` : ''
+      ].filter(Boolean).join('<br>');
 
-        // Show original amount in its native currency; show CAD equivalent separately
-        const origSym = getSym(item.origCurrency || 'CAD');
-        const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
-        const cadDisplay = `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}`;
+      // Show original amount in its native currency; show CAD equivalent separately
+      const origSym = getSym(item.origCurrency || 'CAD');
+      const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
+      const cadDisplay = `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}`;
 
-        const catCell = item.sourceType === 'businessExpense'
-          ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:11px;padding:2px 4px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,.15);border-radius:4px;max-width:170px;" title="Change category">
-              ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g,'&quot;')}"${c===item.cat?' selected':''}>${c}</option>`).join('')}
-              ${TC_CATEGORIES.includes(item.cat) ? '' : `<option value="${(item.cat||'').replace(/"/g,'&quot;')}" selected>${item.cat||''}</option>`}
+      const catCell = item.sourceType === 'businessExpense'
+        ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:11px;padding:2px 4px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,.15);border-radius:4px;max-width:170px;" title="Change category">
+              ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}"${c === item.cat ? ' selected' : ''}>${c}</option>`).join('')}
+              ${TC_CATEGORIES.includes(item.cat) ? '' : `<option value="${(item.cat || '').replace(/"/g, '&quot;')}" selected>${item.cat || ''}</option>`}
             </select>`
-          : item.cat;
+        : item.cat;
 
-        let descCell = item.desc || '';
-        if (item.sourceType === 'businessExpense') {
-          const tripPill = item.trip
-            ? `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Edit trip">✈ ${item.trip}</span>`
-            : `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;color:var(--text3);border:1px dashed var(--border);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Assign to a trip">+ trip</span>`;
-          descCell = `<div>${item.desc || ''}</div>${tripPill}`;
-        }
+      let descCell = item.desc || '';
+      if (item.sourceType === 'businessExpense') {
+        const tripPill = item.trip
+          ? `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Edit trip">✈ ${item.trip}</span>`
+          : `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;color:var(--text3);border:1px dashed var(--border);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Assign to a trip">+ trip</span>`;
+        descCell = `<div>${item.desc || ''}</div>${tripPill}`;
+      }
 
-        return `
+      return `
         <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'}">
             <td style="font-size:12px;">${item.date || '—'}</td>
             <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
@@ -15365,19 +15390,19 @@ function renderTaxCenter() {
             <td class="r" style="font-weight:600;">${cadDisplay}</td>
             <td class="r">
               ${(item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense')
-                ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
-                : (item.sourceType === 'sale'
-                  ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditSale('${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
-                  : (item.sourceType === 'artistPayout'
-                    ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
-                    : ''
-                  )
-                )
-              }
-              ${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}
+          ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+          : (item.sourceType === 'sale'
+            ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditSale('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+            : (item.sourceType === 'artistPayout'
+              ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+              : ''
+            )
+          )
+        }
+              ${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}
             </td>
         </tr>`;
-      }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</td></tr>`;
+    }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</td></tr>`;
   }
 
   // Filtered totals footer — reacts to the year + search + type filter.
@@ -15457,12 +15482,12 @@ function renderTaxCenter() {
   }
 
   const recBody = $('tc-recurring-body');
-  if(recBody) {
-      recBody.innerHTML = (TAX_CENTER.recurring || []).map((sub, i) => `
+  if (recBody) {
+    recBody.innerHTML = (TAX_CENTER.recurring || []).map((sub, i) => `
         <tr>
             <td>${escapeHtml(sub.desc)}</td>
             <td>${escapeHtml(sub.cat)}</td>
-            <td>${fmt(sub.amount, sub.currency||'CAD')}</td>
+            <td>${fmt(sub.amount, sub.currency || 'CAD')}</td>
             <td>${escapeHtml(sub.startDate || '-')}</td>
             <td>${escapeHtml(sub.lastInjected || 'Never')}</td>
             <td><button class="btn tx" onclick="removeRecurring(${i})">Remove</button></td>
@@ -15474,7 +15499,7 @@ function renderTaxCenter() {
   // regardless of which control triggered the change (or a restored pref).
   [$('tc-year'), $('tc-year-ledger')].forEach(el => {
     if (el && el.value !== selectedYear &&
-        Array.from(el.options).some(o => o.value === selectedYear)) {
+      Array.from(el.options).some(o => o.value === selectedYear)) {
       el.value = selectedYear;
     }
   });
@@ -15511,7 +15536,7 @@ function _tcDeltaChip(delta, prevYear, goodWhenUp) {
 // chart. No external libraries; everything is a string built here.
 function _tcRenderCashFlowSummary(ctx) {
   const { selectedYear, baseCurrency, allLedger,
-          totalGrossSales, totalOperatingExpenses, netCashFlow } = ctx;
+    totalGrossSales, totalOperatingExpenses, netCashFlow } = ctx;
 
   // ---- Headline values + colours -----------------------------------------
   const salesEl = $('tc-sales');
@@ -15769,10 +15794,10 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
 
 async function removeLedgerEntry(type, bid, id) {
   if (!(await confirmDialog('Are you sure you want to permanently delete this entry from the ledger?', { okLabel: 'Delete entry', danger: true }))) return;
-  
+
   if (type === 'businessExpense') {
     TAX_CENTER.businessExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e.id) !== String(id));
-    saveTaxCenter(); 
+    saveTaxCenter();
   } else if (type === 'bookExpense') {
     const s = states[bid];
     if (s && s.expenses) {
@@ -15786,13 +15811,13 @@ async function removeLedgerEntry(type, bid, id) {
       saveState(bid);
     }
   } else if (type === 'sale') {
-      const s = states[bid];
-      if (s && s.hist) {
-          s.hist = s.hist.filter(h => String(h.id || h.num) !== String(id));
-          saveState(bid);
-      }
+    const s = states[bid];
+    if (s && s.hist) {
+      s.hist = s.hist.filter(h => String(h.id || h.num) !== String(id));
+      saveState(bid);
+    }
   }
-  
+
   renderTaxCenter();
   showToast('✓ Entry removed from ledger');
 }
@@ -15832,7 +15857,7 @@ function renderEditExpenseReceipts() {
     container.innerHTML = '<span style="color:var(--text3);font-size:11px;">No receipts attached</span>';
     return;
   }
-  
+
   container.innerHTML = _editingExpense.files.map((r, idx) => {
     let name = 'Receipt';
     let viewLink = '';
@@ -15886,7 +15911,7 @@ async function openEditArtistPayout(bid, itemId) {
     showToast('⚠ Payout record not found', 'err');
     return;
   }
-  
+
   const proceed = await confirmDialog(
     `Artist payouts are automatically generated from recorded sales.\n\n` +
     `To edit the details of this payout (like amount or qty), you should edit the corresponding sale entry (#${t.num}).\n\n` +
@@ -15917,9 +15942,9 @@ function openEditExpense(type, bid, id) {
   // Populate dynamic category dropdown
   const catSelect = $('edit-exp-cat');
   if (catSelect) {
-    catSelect.innerHTML = TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g,'&quot;')}">${c}</option>`).join('');
+    catSelect.innerHTML = TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
     if (exp.cat && !TC_CATEGORIES.includes(exp.cat)) {
-      catSelect.innerHTML += `<option value="${exp.cat.replace(/"/g,'&quot;')}">${exp.cat}</option>`;
+      catSelect.innerHTML += `<option value="${exp.cat.replace(/"/g, '&quot;')}">${exp.cat}</option>`;
     }
     catSelect.value = exp.cat || 'Other';
   }
@@ -15946,7 +15971,7 @@ function openEditExpense(type, bid, id) {
 async function saveExpenseEdit() {
   if (!_editingExpense) return;
   const { type, bid, id } = _editingExpense;
-  
+
   const desc = ($('edit-exp-desc').value || '').trim();
   const cat = $('edit-exp-cat').value;
   const currency = $('edit-exp-cur').value || 'CAD';
@@ -15954,8 +15979,8 @@ async function saveExpenseEdit() {
   const date = $('edit-exp-date').value || today();
   const trip = ($('edit-exp-trip').value || '').trim();
 
-  if(!desc){ showToast('⚠ Please enter a description','warn'); $('edit-exp-desc').focus(); return; }
-  if(!amount){ showToast('⚠ Please enter an amount','warn'); $('edit-exp-amount').focus(); return; }
+  if (!desc) { showToast('⚠ Please enter a description', 'warn'); $('edit-exp-desc').focus(); return; }
+  if (!amount) { showToast('⚠ Please enter an amount', 'warn'); $('edit-exp-amount').focus(); return; }
 
   const submitBtn = $('m-edit-expense').querySelector('.modal-footer .gold');
   const oldText = submitBtn.textContent;
@@ -16086,7 +16111,7 @@ function showTripDetail(tripName) {
   }).join('');
 
   $('tc-trip-detail-title').textContent = tripName;
-  $('tc-trip-detail-summary').innerHTML = `${count} expense${count===1?'':'s'} · <span style="color:var(--red);font-weight:bold;">Trip total: - ${fmt(total, baseCurrency)}</span>`;
+  $('tc-trip-detail-summary').innerHTML = `${count} expense${count === 1 ? '' : 's'} · <span style="color:var(--red);font-weight:bold;">Trip total: - ${fmt(total, baseCurrency)}</span>`;
   $('tc-trip-detail-body').innerHTML = rows;
   openM('tc-trip-detail');
 }
@@ -16104,7 +16129,7 @@ function renameTripPrompt() {
   closeM('tc-trip-detail');
   _tcOpenTripName = null;
   renderTaxCenter();
-  showToast(`✓ Renamed trip (${changed} expense${changed===1?'':'s'})`);
+  showToast(`✓ Renamed trip (${changed} expense${changed === 1 ? '' : 's'})`);
 }
 
 function showCategoryDetail(catName) {
@@ -16140,12 +16165,12 @@ function showCategoryDetail(catName) {
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
     const moveCell = item.sourceType === 'businessExpense'
       ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:11px;padding:2px 4px;border:1px solid rgba(255,255,255,.15);border-radius:4px;max-width:170px;" title="Move to another category">
-          ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g,'&quot;')}"${c===item.cat?' selected':''}>${c}</option>`).join('')}
+          ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}"${c === item.cat ? ' selected' : ''}>${c}</option>`).join('')}
         </select>`
       : '<span style="font-size:11px;color:var(--text3);">—</span>';
     const showEdit = (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense');
-    const editBtn = showEdit ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>` : '';
-    const deleteBtn = item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId||''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : '';
+    const editBtn = showEdit ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>` : '';
+    const deleteBtn = item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : '';
     return `
       <tr style="color:var(--red);">
         <td style="font-size:12px;">${item.date || '—'}</td>
@@ -16160,78 +16185,78 @@ function showCategoryDetail(catName) {
   }).join('');
 
   $('tc-cat-detail-title').textContent = catName;
-  $('tc-cat-detail-summary').innerHTML = `${count} transaction${count===1?'':'s'} · <span style="color:var(--red);font-weight:bold;">Total: - ${fmt(total, baseCurrency)}</span>`;
+  $('tc-cat-detail-summary').innerHTML = `${count} transaction${count === 1 ? '' : 's'} · <span style="color:var(--red);font-weight:bold;">Total: - ${fmt(total, baseCurrency)}</span>`;
   $('tc-cat-detail-body').innerHTML = rows;
   openM('tc-cat-detail');
 }
 
 async function saveTaxCenterSettings() {
-    const btn = $('tc-save-config-btn');
-    const oldText = btn.textContent;
-    btn.textContent = 'Saving...'; btn.disabled = true;
+  const btn = $('tc-save-config-btn');
+  const oldText = btn.textContent;
+  btn.textContent = 'Saving...'; btn.disabled = true;
 
-    const geminiKey = document.getElementById('tc-api-key').value.trim();
-    
-    try {
-        await loadTaxCenter();
-        if(!TAX_CENTER.settings) TAX_CENTER.settings = {};
-        TAX_CENTER.settings.geminiKey = geminiKey;
-        await saveTaxCenter();
-        showToast('✓ Settings saved to Firebase');
-    } catch(e) {
-        console.error(e);
-        showToast('⚠ Failed to save settings', 'err');
-    }
-    
-    btn.textContent = oldText; btn.disabled = false;
+  const geminiKey = document.getElementById('tc-api-key').value.trim();
+
+  try {
+    await loadTaxCenter();
+    if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+    TAX_CENTER.settings.geminiKey = geminiKey;
+    await saveTaxCenter();
+    showToast('✓ Settings saved to Firebase');
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Failed to save settings', 'err');
+  }
+
+  btn.textContent = oldText; btn.disabled = false;
 }
 
 async function scanReceiptWithAI() {
-    const fileInput = $('tc-exp-file');
-    if(!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
-    
-    const apiKey = TAX_CENTER.settings?.geminiKey || document.getElementById('tc-api-key').value.trim();
-    if(!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+  const fileInput = $('tc-exp-file');
+  if (!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
 
-    const file = fileInput.files[0];
-    const btn = $('tc-ai-scan-btn');
-    const oldText = btn.textContent;
-    btn.textContent = 'Scanning...'; btn.disabled = true;
+  const apiKey = TAX_CENTER.settings?.geminiKey || document.getElementById('tc-api-key').value.trim();
+  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
 
-    try {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        await new Promise(r => reader.onload = r);
-        const base64Data = reader.result.split(',')[1];
-        const mimeType = file.type;
+  const file = fileInput.files[0];
+  const btn = $('tc-ai-scan-btn');
+  const oldText = btn.textContent;
+  btn.textContent = 'Scanning...'; btn.disabled = true;
 
-        const parts = [
-            { text: "Extract these exact 4 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase, e.g., CAD, USD). No markdown, just raw JSON. If currency is not found, assume CAD." },
-            { inline_data: { mime_type: mimeType, data: base64Data } }
-        ];
+  try {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    await new Promise(r => reader.onload = r);
+    const base64Data = reader.result.split(',')[1];
+    const mimeType = file.type;
 
-        let extractedJsonStr = await _callGeminiForReceipts(apiKey, parts);
-        if (!extractedJsonStr) throw new Error("No text returned from AI");
+    const parts = [
+      { text: "Extract these exact 4 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase, e.g., CAD, USD). No markdown, just raw JSON. If currency is not found, assume CAD." },
+      { inline_data: { mime_type: mimeType, data: base64Data } }
+    ];
 
-        extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+    let extractedJsonStr = await _callGeminiForReceipts(apiKey, parts);
+    if (!extractedJsonStr) throw new Error("No text returned from AI");
 
-        const _jsonMatch = extractedJsonStr.match(/\{[\s\S]*\}/);
-        const extracted = JSON.parse(_jsonMatch ? _jsonMatch[0] : extractedJsonStr);
+    extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
 
-        if(extracted.vendor) $('tc-exp-desc').value = extracted.vendor;
-        if(extracted.date) $('tc-exp-date').value = extracted.date;
-        if(extracted.amount) $('tc-exp-amount').value = extracted.amount;
-        if(extracted.currency) $('tc-exp-cur').value = extracted.currency;
+    const _jsonMatch = extractedJsonStr.match(/\{[\s\S]*\}/);
+    const extracted = JSON.parse(_jsonMatch ? _jsonMatch[0] : extractedJsonStr);
 
-        const ev = new Event('input');
-        $('tc-exp-desc').dispatchEvent(ev);
+    if (extracted.vendor) $('tc-exp-desc').value = extracted.vendor;
+    if (extracted.date) $('tc-exp-date').value = extracted.date;
+    if (extracted.amount) $('tc-exp-amount').value = extracted.amount;
+    if (extracted.currency) $('tc-exp-cur').value = extracted.currency;
 
-        showToast('✓ Receipt data extracted');
-    } catch(e) {
-        console.error("AI Scan Error:", e);
-        showToast(`⚠ AI extraction failed: ${e.message}`, 'err');
-    }
-    btn.textContent = oldText; btn.disabled = false;
+    const ev = new Event('input');
+    $('tc-exp-desc').dispatchEvent(ev);
+
+    showToast('✓ Receipt data extracted');
+  } catch (e) {
+    console.error("AI Scan Error:", e);
+    showToast(`⚠ AI extraction failed: ${e.message}`, 'err');
+  }
+  btn.textContent = oldText; btn.disabled = false;
 }
 
 
@@ -16241,8 +16266,10 @@ async function getShippoTxCost(tx, token) {
     return { amount: parseFloat(tx.rate.amount), currency: String(tx.rate.currency || 'USD').toUpperCase() };
   }
   if (tx.rate_amount != null || tx.amount != null) {
-    return { amount: parseFloat(tx.rate_amount != null ? tx.rate_amount : tx.amount),
-             currency: String(tx.rate_currency || tx.currency || 'USD').toUpperCase() };
+    return {
+      amount: parseFloat(tx.rate_amount != null ? tx.rate_amount : tx.amount),
+      currency: String(tx.rate_currency || tx.currency || 'USD').toUpperCase()
+    };
   }
   if (tx.rate && typeof tx.rate === 'string') {
     if (_rateCostCache.has(tx.rate)) return _rateCostCache.get(tx.rate);
@@ -16289,7 +16316,7 @@ async function fetchShippoTransactionsPageAPI(token, page) {
   });
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '');
-    throw new Error(`Shippo API error ${resp.status}${txt ? `: ${txt.slice(0,140)}` : ''}`);
+    throw new Error(`Shippo API error ${resp.status}${txt ? `: ${txt.slice(0, 140)}` : ''}`);
   }
   return resp.json();
 }
@@ -16541,7 +16568,7 @@ async function importShippoShippingFromApi() {
       const CHUNK_SIZE = 10;
       for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
         const chunk = rows.slice(i, i + CHUNK_SIZE);
-        
+
         const chunkResults = await Promise.all(chunk.map(async (tx, chunkIdx) => {
           const result = { skipped: false, alreadyImported: false, staged: null, expense: null, txId: null, contextFailure: false, ref: null };
           const status = String(tx?.status || '').toUpperCase();
@@ -16551,16 +16578,16 @@ async function importShippoShippingFromApi() {
           const ref = `shippo:${txId}`;
           result.txId = txId;
           result.ref = ref;
-          
+
           if (fetchedIds.has(txId)) { result.alreadyImported = true; return result; }
           fetchedIds.add(txId);
-          
+
           const existingExpense = existingExpensesByRef.get(ref);
           if (existingExpense && existingExpense.shippingMatchStatus === 'matched') {
             result.alreadyImported = true;
             return result;
           }
-          
+
           let context = { shipment: {}, shippoOrder: {} };
           let contextLoaded = true;
           try {
@@ -16570,7 +16597,7 @@ async function importShippoShippingFromApi() {
             result.contextFailure = true;
             contextLoaded = false;
           }
-          
+
           if (existingExpense) {
             const staged = stageShippoExpenseEnrichment(
               existingExpense, tx, context.shipment, context.shippoOrder, knownOrders, contextLoaded,
@@ -16579,20 +16606,20 @@ async function importShippoShippingFromApi() {
             result.alreadyImported = true;
             return result;
           }
-          
+
           const expense = await processShippoTxToExpense(
             tx, token, txId, ref, imported + i + chunkIdx, context, knownOrders,
           );
-          
+
           if (!expense) {
             result.skipped = true;
             return result;
           }
-          
+
           result.expense = expense;
           return result;
         }));
-        
+
         for (const res of chunkResults) {
           if (res.contextFailure) contextFailureCount++;
           if (res.skipped) { skipped++; continue; }
@@ -16616,7 +16643,7 @@ async function importShippoShippingFromApi() {
       }
       hasMore = Boolean(json.next);
       page += 1;
-      if (statusEl) statusEl.textContent = `Fetched ${imported + skipped} transactions…`; 
+      if (statusEl) statusEl.textContent = `Fetched ${imported + skipped} transactions…`;
     }
 
     if (imported > 0) {
@@ -16692,13 +16719,13 @@ async function submitTaxExpense() {
   const currency = $('tc-exp-cur').value || 'CAD';
   const amount = parseFloat($('tc-exp-amount').value) || 0;
   const date = $('tc-exp-date').value || today();
-  
-  if(!desc){ showToast('⚠ Please enter a description','warn'); $('tc-exp-desc').focus(); return; }
-  if(!amount){ showToast('⚠ Please enter an amount','warn'); $('tc-exp-amount').focus(); return; }
+
+  if (!desc) { showToast('⚠ Please enter a description', 'warn'); $('tc-exp-desc').focus(); return; }
+  if (!amount) { showToast('⚠ Please enter an amount', 'warn'); $('tc-exp-amount').focus(); return; }
 
   const fileInput = $('tc-exp-file');
   let receiptUrl = '';
-  if(fileInput && fileInput.files.length > 0) {
+  if (fileInput && fileInput.files.length > 0) {
     const file = fileInput.files[0];
     // Webcam captures are written to the local folder immediately on
     // "Use Photo", so reuse that path instead of writing the same bytes
@@ -16713,7 +16740,7 @@ async function submitTaxExpense() {
         // For Tax Centre, use a "General" subfolder or the project name if applicable
         const localUrl = await saveReceiptToLocalFile(file, 'General');
         if (localUrl) receiptUrl = localUrl;
-      } catch(e) {
+      } catch (e) {
         console.error(e);
         showToast('⚠ Error saving receipt', 'err');
         submitBtn.textContent = oldText; submitBtn.disabled = false;
@@ -16727,16 +16754,16 @@ async function submitTaxExpense() {
   const fxRate = _fxRateCache[`${currency}_CAD`] || 1;
   const baseAmount = amount * fxRate;
 
-  if(!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
   const trip = ($('tc-exp-trip')?.value || '').trim();
-  TAX_CENTER.businessExpenses.unshift({id: Date.now(), desc, cat, currency, amount, fxRate, baseAmount, date, ref: '', receipt: receiptUrl, trip});
+  TAX_CENTER.businessExpenses.unshift({ id: Date.now(), desc, cat, currency, amount, fxRate, baseAmount, date, ref: '', receipt: receiptUrl, trip });
 
   saveTaxCenter();
   renderTaxCenter();
   showToast(trip ? `✓ Logged to trip: ${trip}` : '✓ Business Expense logged');
-  $('tc-exp-desc').value='';$('tc-exp-amount').value='';$('tc-exp-date').value=today();
-  if($('tc-exp-trip')) $('tc-exp-trip').value='';
-  if(fileInput) fileInput.value = '';
+  $('tc-exp-desc').value = ''; $('tc-exp-amount').value = ''; $('tc-exp-date').value = today();
+  if ($('tc-exp-trip')) $('tc-exp-trip').value = '';
+  if (fileInput) fileInput.value = '';
   const filePreview = $('tc-exp-file-preview');
   if (filePreview) filePreview.textContent = '';
   _pendingWebcamReceipt = null;
@@ -16749,157 +16776,157 @@ async function addRecurring() {
   const amount = parseFloat($('tc-rec-amount').value) || 0;
   const startDate = $('tc-rec-start').value || today();
 
-  if(!desc || !amount) { showToast('⚠ Details required','warn'); return; }
-  
+  if (!desc || !amount) { showToast('⚠ Details required', 'warn'); return; }
+
   await loadTaxCenter();
-  if(!TAX_CENTER.recurring) TAX_CENTER.recurring = [];
+  if (!TAX_CENTER.recurring) TAX_CENTER.recurring = [];
   TAX_CENTER.recurring.push({ desc, cat, currency, amount, startDate, lastInjected: '' });
   await saveTaxCenter();
   renderTaxCenter();
   showToast('✓ Subscription added');
-  $('tc-rec-desc').value=''; $('tc-rec-amount').value=''; $('tc-rec-start').value='';
+  $('tc-rec-desc').value = ''; $('tc-rec-amount').value = ''; $('tc-rec-start').value = '';
 }
 
 async function removeRecurring(idx) {
-    const itemToRemove = TAX_CENTER.recurring[idx];
-    if (!itemToRemove) return;
-    
-    await loadTaxCenter();
-    
-    const freshIdx = TAX_CENTER.recurring.findIndex(sub => 
-      sub.desc === itemToRemove.desc && 
-      sub.amount === itemToRemove.amount && 
-      sub.startDate === itemToRemove.startDate && 
-      sub.cat === itemToRemove.cat
-    );
-    
-    if (freshIdx !== -1) {
-      TAX_CENTER.recurring.splice(freshIdx, 1);
-    } else {
-      TAX_CENTER.recurring.splice(idx, 1);
-    }
-    await saveTaxCenter();
-    renderTaxCenter();
-    showToast('✓ Subscription removed');
+  const itemToRemove = TAX_CENTER.recurring[idx];
+  if (!itemToRemove) return;
+
+  await loadTaxCenter();
+
+  const freshIdx = TAX_CENTER.recurring.findIndex(sub =>
+    sub.desc === itemToRemove.desc &&
+    sub.amount === itemToRemove.amount &&
+    sub.startDate === itemToRemove.startDate &&
+    sub.cat === itemToRemove.cat
+  );
+
+  if (freshIdx !== -1) {
+    TAX_CENTER.recurring.splice(freshIdx, 1);
+  } else {
+    TAX_CENTER.recurring.splice(idx, 1);
+  }
+  await saveTaxCenter();
+  renderTaxCenter();
+  showToast('✓ Subscription removed');
 }
 
 function downloadTaxLedgerCSV() {
-    // Build straight from the filtered ledger data (stashed by renderTaxCenter),
-    // NOT the paginated DOM — so the export covers the entire filtered year, all
-    // columns. renderTaxCenter() always runs when the Tax Center is visible, but
-    // call it once here as a safety net if the stash is missing.
-    if (!window._tcLedgerExport) renderTaxCenter();
-    const exportData = window._tcLedgerExport || { rows: [], baseCurrency: 'CAD' };
-    const { rows: data, baseCurrency } = exportData;
+  // Build straight from the filtered ledger data (stashed by renderTaxCenter),
+  // NOT the paginated DOM — so the export covers the entire filtered year, all
+  // columns. renderTaxCenter() always runs when the Tax Center is visible, but
+  // call it once here as a safety net if the stash is missing.
+  if (!window._tcLedgerExport) renderTaxCenter();
+  const exportData = window._tcLedgerExport || { rows: [], baseCurrency: 'CAD' };
+  const { rows: data, baseCurrency } = exportData;
 
-    if (!data.length) { showToast('Nothing to export for this filter'); return; }
+  if (!data.length) { showToast('Nothing to export for this filter'); return; }
 
-    // RFC-4180 escaping: wrap in quotes and double any embedded quotes.
-    const cell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  // RFC-4180 escaping: wrap in quotes and double any embedded quotes.
+  const cell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
 
-    const rows = [['Date','Type','Description','Category','Receipt/Ref','Orig Currency','Amount (Orig)',`Amount (${baseCurrency})`].map(cell)];
-    for (const r of data) {
-        // Sign the base-currency column so totals sum correctly in a spreadsheet.
-        const signedBase = (r.isIncome ? 1 : -1) * Number(r.baseAmount || 0);
-        rows.push([
-            cell(r.date || ''),
-            cell(r.type || ''),
-            cell(r.desc || ''),
-            cell(r.cat || ''),
-            cell([r.ref || '', r.invoiceNum ? `Invoice ${r.invoiceNum}` : ''].filter(Boolean).join(' · ')),
-            cell(r.origCurrency || ''),
-            cell(Number(r.origAmount || 0).toFixed(2)),
-            cell(signedBase.toFixed(2)),
-        ]);
-    }
+  const rows = [['Date', 'Type', 'Description', 'Category', 'Receipt/Ref', 'Orig Currency', 'Amount (Orig)', `Amount (${baseCurrency})`].map(cell)];
+  for (const r of data) {
+    // Sign the base-currency column so totals sum correctly in a spreadsheet.
+    const signedBase = (r.isIncome ? 1 : -1) * Number(r.baseAmount || 0);
+    rows.push([
+      cell(r.date || ''),
+      cell(r.type || ''),
+      cell(r.desc || ''),
+      cell(r.cat || ''),
+      cell([r.ref || '', r.invoiceNum ? `Invoice ${r.invoiceNum}` : ''].filter(Boolean).join(' · ')),
+      cell(r.origCurrency || ''),
+      cell(Number(r.origAmount || 0).toFixed(2)),
+      cell(signedBase.toFixed(2)),
+    ]);
+  }
 
-    const csvStr = rows.map(r => r.join(',')).join('\r\n');
-    const blob = new Blob(['﻿' + csvStr], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Tax_Ledger_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const csvStr = rows.map(r => r.join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csvStr], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Tax_Ledger_${today()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // Smart categorization listener
 const TAX_CATEGORIES = {
-    'squarespace': 'Software & Subscriptions',
-    'shopify': 'Software & Subscriptions',
-    'google': 'Software & Subscriptions',
-    'hosting': 'Software & Subscriptions',
-    'domain': 'Software & Subscriptions',
-    'adobe': 'Software & Subscriptions',
-    'meta': 'Marketing & Advertising',
-    'facebook': 'Marketing & Advertising',
-    'instagram': 'Marketing & Advertising',
-    'ads': 'Marketing & Advertising',
-    'mailchimp': 'Marketing & Advertising',
-    'usps': 'Shipping & Postage',
-    'fedex': 'Shipping & Postage',
-    'ups': 'Shipping & Postage',
-    'royal mail': 'Shipping & Postage',
-    'post office': 'Shipping & Postage',
-    'stamps': 'Shipping & Postage',
-    'paper': 'Office Supplies',
-    'ink': 'Office Supplies',
-    'boxes': 'Office Supplies',
-    'mailers': 'Office Supplies',
-    'flight': 'Travel & Meals',
-    'uber': 'Travel & Meals',
-    'hotel': 'Travel & Meals',
-    'dinner': 'Travel & Meals',
-    'lunch': 'Travel & Meals',
-    'accountant': 'Professional Services',
-    'legal': 'Professional Services',
-    'lawyer': 'Professional Services',
-    'printer': 'Printing & Production',
-    'printing': 'Printing & Production',
-    'proof': 'Editorial & Proofreading',
-    'editor': 'Editorial & Proofreading',
-    'copyedit': 'Editorial & Proofreading',
-    'illustration': 'Illustration & Photography',
-    'illustrator': 'Illustration & Photography',
-    'photo': 'Illustration & Photography',
-    'photographer': 'Illustration & Photography',
-    'licensing': 'Rights & Permissions',
-    'rights': 'Rights & Permissions',
-    'permission': 'Rights & Permissions',
-    'isbn': 'ISBN, Barcodes & Cataloging',
-    'barcode': 'ISBN, Barcodes & Cataloging',
-    'cataloging': 'ISBN, Barcodes & Cataloging',
-    'warehouse': 'Warehousing & Fulfillment',
-    'fulfillment': 'Warehousing & Fulfillment',
-    'packaging': 'Packaging Materials',
-    'bubble wrap': 'Packaging Materials',
-    'research': 'Books, Research & Reference',
-    'reference': 'Books, Research & Reference',
-    'museum': 'Events & Exhibitions',
-    'exhibition': 'Events & Exhibitions',
-    'fair': 'Events & Exhibitions',
+  'squarespace': 'Software & Subscriptions',
+  'shopify': 'Software & Subscriptions',
+  'google': 'Software & Subscriptions',
+  'hosting': 'Software & Subscriptions',
+  'domain': 'Software & Subscriptions',
+  'adobe': 'Software & Subscriptions',
+  'meta': 'Marketing & Advertising',
+  'facebook': 'Marketing & Advertising',
+  'instagram': 'Marketing & Advertising',
+  'ads': 'Marketing & Advertising',
+  'mailchimp': 'Marketing & Advertising',
+  'usps': 'Shipping & Postage',
+  'fedex': 'Shipping & Postage',
+  'ups': 'Shipping & Postage',
+  'royal mail': 'Shipping & Postage',
+  'post office': 'Shipping & Postage',
+  'stamps': 'Shipping & Postage',
+  'paper': 'Office Supplies',
+  'ink': 'Office Supplies',
+  'boxes': 'Office Supplies',
+  'mailers': 'Office Supplies',
+  'flight': 'Travel & Meals',
+  'uber': 'Travel & Meals',
+  'hotel': 'Travel & Meals',
+  'dinner': 'Travel & Meals',
+  'lunch': 'Travel & Meals',
+  'accountant': 'Professional Services',
+  'legal': 'Professional Services',
+  'lawyer': 'Professional Services',
+  'printer': 'Printing & Production',
+  'printing': 'Printing & Production',
+  'proof': 'Editorial & Proofreading',
+  'editor': 'Editorial & Proofreading',
+  'copyedit': 'Editorial & Proofreading',
+  'illustration': 'Illustration & Photography',
+  'illustrator': 'Illustration & Photography',
+  'photo': 'Illustration & Photography',
+  'photographer': 'Illustration & Photography',
+  'licensing': 'Rights & Permissions',
+  'rights': 'Rights & Permissions',
+  'permission': 'Rights & Permissions',
+  'isbn': 'ISBN, Barcodes & Cataloging',
+  'barcode': 'ISBN, Barcodes & Cataloging',
+  'cataloging': 'ISBN, Barcodes & Cataloging',
+  'warehouse': 'Warehousing & Fulfillment',
+  'fulfillment': 'Warehousing & Fulfillment',
+  'packaging': 'Packaging Materials',
+  'bubble wrap': 'Packaging Materials',
+  'research': 'Books, Research & Reference',
+  'reference': 'Books, Research & Reference',
+  'museum': 'Events & Exhibitions',
+  'exhibition': 'Events & Exhibitions',
+  'fair': 'Events & Exhibitions',
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    const descInput = document.getElementById('tc-exp-desc');
-    if(descInput) {
-        descInput.addEventListener('input', (e) => {
-            const val = e.target.value.toLowerCase();
-            const catSelect = document.getElementById('tc-exp-cat');
-            if(!catSelect) return;
-            for(const keyword in TAX_CATEGORIES) {
-                if(val.includes(keyword)) {
-                    catSelect.value = TAX_CATEGORIES[keyword];
-                    break;
-                }
-            }
-        });
-    }
+  const descInput = document.getElementById('tc-exp-desc');
+  if (descInput) {
+    descInput.addEventListener('input', (e) => {
+      const val = e.target.value.toLowerCase();
+      const catSelect = document.getElementById('tc-exp-cat');
+      if (!catSelect) return;
+      for (const keyword in TAX_CATEGORIES) {
+        if (val.includes(keyword)) {
+          catSelect.value = TAX_CATEGORIES[keyword];
+          break;
+        }
+      }
+    });
+  }
 });
 
 
 document.addEventListener('DOMContentLoaded', () => {
-  const numericIds = ['nb-max','nb-price','nb-thresh','nb-prod','m-qty','m-price','sale-qty','sale-price','sent-qty','exp-amt','tc-exp-amt'];
+  const numericIds = ['nb-max', 'nb-price', 'nb-thresh', 'nb-prod', 'm-qty', 'm-price', 'sale-qty', 'sale-price', 'sent-qty', 'exp-amt', 'tc-exp-amt'];
   numericIds.forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -17060,7 +17087,7 @@ function buildPOSCartRows() {
 
 // ── #2: POS keyboard search state ─────────────────────────────────────
 let posSearchQuery = '';
-window.posSearchFilter = function(val) {
+window.posSearchFilter = function (val) {
   posSearchQuery = (val || '').toLowerCase().trim();
   renderPOS();
 };
@@ -17069,7 +17096,7 @@ window.posSearchFilter = function(val) {
 // /         → focus POS search input
 // Escape    → clear and blur POS search
 // Ctrl+Enter → trigger checkout
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function (e) {
   // Only apply shortcuts when on the POS tab
   const posPanel = $('tab-pos');
   if (!posPanel || posPanel.style.display === 'none') return;
@@ -17109,7 +17136,7 @@ document.addEventListener('keydown', function(e) {
 
 function renderPOS() {
   const grid = $('pos-grid');
-  if(!grid) return;
+  if (!grid) return;
 
   const cartRows = buildPOSCartRows();
   const cartItemsEl = $('pos-cart-items');
@@ -17139,34 +17166,34 @@ function renderPOS() {
   // ── #2: Filter books by search query ───────────────────────────────────
   const booksArr = Object.values(booksToRender).filter(b =>
     !posSearchQuery ||
-    (b.title||'').toLowerCase().includes(posSearchQuery) ||
-    (b.author||'').toLowerCase().includes(posSearchQuery)
+    (b.title || '').toLowerCase().includes(posSearchQuery) ||
+    (b.author || '').toLowerCase().includes(posSearchQuery)
   );
   if (!booksArr.length && posSearchQuery) {
     grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--text3);font-size:13px;">No books match <strong style="color:var(--cream);">&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<br><span style="font-size:11px;">Press <kbd style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:4px;">Esc</kbd> to clear.</span></div>`;
   } else {
-  grid.innerHTML = booksArr.map((book) => {
-    const qty = posCart[book.id] || 0;
-    const sourceCode = currencyToCode(book.currency);
-    const converted = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
-    const convertedLabel = converted === null
-      ? `No FX rate → ${posFormat(book.listPrice || 0, sourceCode)}`
-      : `${posFormat(converted, posTransactionCurrency)} (${sourceCode})`;
-    const posOnly = isPosOnlyBook(book.id);
-    const idAttr = escapeHtml(book.id);
-    const badge = posOnly
-      ? `<span style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:6px;padding:2px 6px;margin-bottom:6px;">POS-only</span>`
-      : '';
-    const soldNote = (posOnly && book.sold)
-      ? `<div style="font-size:11px;color:var(--green);margin-top:3px;">${book.sold} sold${book.revenue ? ' · ' + posFormat(book.revenue, sourceCode) : ''}</div>`
-      : '';
-    const editControls = posOnly
-      ? `<div style="display:flex;gap:6px;margin-top:8px;">
+    grid.innerHTML = booksArr.map((book) => {
+      const qty = posCart[book.id] || 0;
+      const sourceCode = currencyToCode(book.currency);
+      const converted = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
+      const convertedLabel = converted === null
+        ? `No FX rate → ${posFormat(book.listPrice || 0, sourceCode)}`
+        : `${posFormat(converted, posTransactionCurrency)} (${sourceCode})`;
+      const posOnly = isPosOnlyBook(book.id);
+      const idAttr = escapeHtml(book.id);
+      const badge = posOnly
+        ? `<span style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:6px;padding:2px 6px;margin-bottom:6px;">POS-only</span>`
+        : '';
+      const soldNote = (posOnly && book.sold)
+        ? `<div style="font-size:11px;color:var(--green);margin-top:3px;">${book.sold} sold${book.revenue ? ' · ' + posFormat(book.revenue, sourceCode) : ''}</div>`
+        : '';
+      const editControls = posOnly
+        ? `<div style="display:flex;gap:6px;margin-top:8px;">
            <button class="btn sm" style="flex:1;font-size:11px;" onclick="openPosBookModal('${idAttr}')" aria-label="Edit or view QR">✎ Edit / QR</button>
            <button class="btn sm danger-btn" style="font-size:11px;" onclick="removePosBook('${idAttr}')" title="Remove POS-only book" aria-label="Remove POS-only book">✕</button>
          </div>`
-      : '';
-    return `
+        : '';
+      return `
       <div class="card pos-card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.1rem;${posOnly ? 'border:1px solid var(--gold-line);' : ''}">
         <div>
           ${badge}
@@ -17184,7 +17211,7 @@ function renderPOS() {
         </div>
       </div>
     `;
-  }).join('') + (allowPosOnly && !posSearchQuery ? `
+    }).join('') + (allowPosOnly && !posSearchQuery ? `
       <button type="button" class="card pos-card" onclick="openPosBookModal()" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:1.1rem;border:1.5px dashed var(--gold-line);background:transparent;cursor:pointer;color:var(--gold);min-height:120px;">
         <div style="font-size:28px;line-height:1;">＋</div>
         <div style="font-size:13px;font-weight:600;">Add POS-only book</div>
@@ -17235,13 +17262,13 @@ function renderPOS() {
   }
 }
 
-window.posUpdateQty = function(bookId, delta) {
+window.posUpdateQty = function (bookId, delta) {
   posCart[bookId] = Math.max(0, (posCart[bookId] || 0) + delta);
   if (posCart[bookId] === 0) delete posCart[bookId];
   renderPOS();
 };
 
-window.posRemoveItem = function(bookId) {
+window.posRemoveItem = function (bookId) {
   delete posCart[bookId];
   delete posPriceOverrides[bookId];
   renderPOS();
@@ -17251,7 +17278,7 @@ window.posRemoveItem = function(bookId) {
 // Opens a compact editor for one cart line so the seller can hand-price a book
 // or apply a quick discount. Prices are edited in the book's native currency
 // (what flows into revenue/ledger); the cart converts to the txn currency.
-window.openPosPriceModal = function(bookId) {
+window.openPosPriceModal = function (bookId) {
   const book = posResolveBook(bookId);
   if (!book) return;
   _posPriceEditId = bookId;
@@ -17273,7 +17300,7 @@ window.openPosPriceModal = function(bookId) {
 };
 
 // Quick discount buttons: set the field to a percentage off the list price.
-window.posPriceQuick = function(pct) {
+window.posPriceQuick = function (pct) {
   const book = posResolveBook(_posPriceEditId);
   if (!book) return;
   const list = book.listPrice || 0;
@@ -17282,7 +17309,7 @@ window.posPriceQuick = function(pct) {
   window.posPricePreview();
 };
 
-window.posPricePreview = function() {
+window.posPricePreview = function () {
   const book = posResolveBook(_posPriceEditId);
   if (!book) return;
   const list = book.listPrice || 0;
@@ -17300,7 +17327,7 @@ window.posPricePreview = function() {
   }
 };
 
-window.savePosPrice = function() {
+window.savePosPrice = function () {
   const book = posResolveBook(_posPriceEditId);
   if (!book) return;
   const val = parseFloat($('pp-price').value);
@@ -17316,7 +17343,7 @@ window.savePosPrice = function() {
   showToast('✓ Price updated');
 };
 
-window.posResetPrice = function() {
+window.posResetPrice = function () {
   if (_posPriceEditId) delete posPriceOverrides[_posPriceEditId];
   closeM('pos-price');
   _posPriceEditId = null;
@@ -17345,14 +17372,14 @@ function _showPosQR(url, amountLabel, sub) {
   openM('pos-qr');
 }
 
-window.copyPosQRLink = function() {
+window.copyPosQRLink = function () {
   if (!_posQRLink) { showToast('No link yet', 'warn'); return; }
   navigator.clipboard.writeText(_posQRLink).then(() => showToast('Payment link copied')).catch(() => {
     const ta = document.createElement('textarea'); ta.value = _posQRLink; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Payment link copied');
   });
 };
 
-window.downloadPosQR = function() {
+window.downloadPosQR = function () {
   const canvas = document.querySelector('#pos-qr-canvas canvas');
   if (!canvas) { showToast('QR not ready', 'warn'); return; }
   const a = document.createElement('a');
@@ -17364,7 +17391,7 @@ window.downloadPosQR = function() {
 
 // QR for the whole cart at the exact total (discounts included), in the
 // transaction currency the customer is paying.
-window.posGenerateSaleQR = async function() {
+window.posGenerateSaleQR = async function () {
   const rows = buildPOSCartRows();
   if (!rows.length) { showToast('Cart is empty', 'warn'); return; }
   if (rows.some((r) => r.convertedLine === null)) {
@@ -17403,7 +17430,7 @@ window.posGenerateSaleQR = async function() {
 };
 
 // QR for a single cart line at its adjusted price, in the transaction currency.
-window.posGenerateLineQR = async function(bookId) {
+window.posGenerateLineQR = async function (bookId) {
   const row = buildPOSCartRows().find((r) => r.book.id === bookId);
   if (!row) { showToast('Item not in cart', 'warn'); return; }
   if (row.convertedLine === null) {
@@ -17425,14 +17452,14 @@ window.posGenerateLineQR = async function(bookId) {
   }
 };
 
-window.posSetCurrency = function(code) {
+window.posSetCurrency = function (code) {
   posTransactionCurrency = code || posTransactionCurrency;
   renderPOS();
 };
 
 // Fetch live rates for all POS currencies (CAD-pivot) and populate both
 // posExchangeRates and _fxRateCache so Tax Center conversions stay correct.
-window.posConfigureRates = async function() {
+window.posConfigureRates = async function () {
   const currencies = getPOSCurrencies().filter(c => c !== 'CAD');
   const btn = document.querySelector('[onclick="posConfigureRates()"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Fetching…'; }
@@ -17487,7 +17514,7 @@ function renderPOSFxStatus() {
     el.style.color = 'var(--amber)';
   } else {
     const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
-    const label = mins < 2 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins/60)}h ago`;
+    const label = mins < 2 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`;
     el.textContent = `Live rates fetched ${label}`;
     el.style.color = 'var(--green)';
   }
@@ -17522,13 +17549,13 @@ function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode
   return { num, chan, qty, price: basePrice, notes, payment };
 }
 
-window.posCheckout = function() {
+window.posCheckout = function () {
   const method = $('pos-payment-method').value;
   const rows = buildPOSCartRows();
-  
-  if(rows.length === 0) {
-      showToast('Cart is empty', 'warn');
-      return;
+
+  if (rows.length === 0) {
+    showToast('Cart is empty', 'warn');
+    return;
   }
 
   const hasMissingFx = rows.some((row) => row.convertedLine === null);
@@ -17561,7 +17588,7 @@ window.posCheckout = function() {
   openM('pos-sale-confirm');
 };
 
-window.posConfirmSale = async function() {
+window.posConfirmSale = async function () {
   if (!posPendingSale) return;
   await syncCatalog();
   const previousBook = activeBook;
@@ -17607,7 +17634,7 @@ window.posConfirmSale = async function() {
       } else {
         // Derive from CAD-pivot posExchangeRates as fallback:
         // (txnCur → CAD) / (nativeCur → CAD)  = txnCur → nativeCur
-        const txnToCAD    = posExchangeRates[txnCurCode]    || 1;
+        const txnToCAD = posExchangeRates[txnCurCode] || 1;
         const nativeToCAD = posExchangeRates[nativeCurCode] || 1;
         nativePerTxnRate = txnToCAD / nativeToCAD;
         // Cache it for paymentSummary to use
@@ -17647,7 +17674,7 @@ window.posConfirmSale = async function() {
   showToast('✓ Sale complete', 'ok');
 };
 
-window.posPrintReceipt = function() {
+window.posPrintReceipt = function () {
   if (!posPendingSale) return;
   const rowsHtml = posPendingSale.rows.map((row) => {
     const line = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posPendingSale.currency);
@@ -17703,18 +17730,18 @@ function renderSalesTrackerBookList() {
   }
 }
 
-window.openSalesTrackerModal = function() {
+window.openSalesTrackerModal = function () {
   const dateInput = document.getElementById('st-date');
   if (dateInput && !dateInput.value) dateInput.value = today();
   renderSalesTrackerBookList();
   openM('sales-tracker');
 };
 
-window.salesTrackerSelectAll = function(checked) {
+window.salesTrackerSelectAll = function (checked) {
   document.querySelectorAll('.st-book-check').forEach((el) => { el.checked = !!checked; });
 };
 
-window.salesTrackerAddCustom = function() {
+window.salesTrackerAddCustom = function () {
   const titleEl = document.getElementById('st-custom-title');
   const authorEl = document.getElementById('st-custom-author');
   const title = (titleEl.value || '').trim();
@@ -17731,14 +17758,14 @@ window.salesTrackerAddCustom = function() {
   titleEl.focus();
 };
 
-window.salesTrackerRemoveCustom = function(idx) {
+window.salesTrackerRemoveCustom = function (idx) {
   salesTrackerCustomBooks.splice(idx, 1);
   renderSalesTrackerBookList();
 };
 
 // escapeHtml is imported from ./lib/html.js
 
-window.printSalesTracker = function() {
+window.printSalesTracker = function () {
   const eventName = (document.getElementById('st-event').value || '').trim();
   const dateValue = (document.getElementById('st-date').value || '').trim();
   let cols = parseInt(document.getElementById('st-cols').value, 10);
@@ -17897,18 +17924,18 @@ function renderQRPrintBookList() {
   }).join('');
 }
 
-window.openQRPrintModal = function() {
+window.openQRPrintModal = function () {
   renderQRPrintBookList();
   openM('qr-print');
 };
 
-window.qrPrintSelectAll = function(checked) {
+window.qrPrintSelectAll = function (checked) {
   document.querySelectorAll('.qrp-book-check').forEach((el) => {
     if (!el.disabled) el.checked = !!checked;
   });
 };
 
-window.printPaymentQRCodes = function() {
+window.printPaymentQRCodes = function () {
   const cols = Math.max(1, Math.min(6, parseInt(document.getElementById('qrp-cols').value, 10) || 3));
   const baseCur = document.getElementById('qrp-base-cur').value || 'auto';
   const showEUR = !!document.getElementById('qrp-show-eur').checked;
@@ -18124,7 +18151,7 @@ function _posSlugId(title) {
   return id;
 }
 
-window.openPosBookModal = function(id) {
+window.openPosBookModal = function (id) {
   editingPosBookId = id || null;
   const book = id ? posExtraBooks[id] : null;
   $('pb-modal-title').textContent = book ? `Edit POS-only book · ${book.title}` : 'Add POS-only book';
@@ -18142,7 +18169,7 @@ window.openPosBookModal = function(id) {
   openM('pos-book');
 };
 
-window.closePosBookModal = function() { closeM('pos-book'); editingPosBookId = null; };
+window.closePosBookModal = function () { closeM('pos-book'); editingPosBookId = null; };
 
 function renderPosBookModalQR() {
   const wrap = $('pb-qr-canvas');
@@ -18165,7 +18192,7 @@ function renderPosBookModalQR() {
 }
 window.renderPosBookModalQR = renderPosBookModalQR;
 
-window.generatePosBookStripeLink = async function() {
+window.generatePosBookStripeLink = async function () {
   const btn = $('pb-gen-stripe-btn');
   const title = ($('pb-title')?.value || '').trim();
   const listPrice = parseFloat($('pb-price')?.value) || 0;
@@ -18186,7 +18213,7 @@ window.generatePosBookStripeLink = async function() {
   }
 };
 
-window.copyPosBookLink = function() {
+window.copyPosBookLink = function () {
   const url = ($('pb-paylink')?.value || '').trim();
   if (!url) { showToast('No link to copy', 'warn'); return; }
   navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
@@ -18194,7 +18221,7 @@ window.copyPosBookLink = function() {
   });
 };
 
-window.downloadPosBookQR = function() {
+window.downloadPosBookQR = function () {
   const canvas = document.querySelector('#pb-qr-canvas canvas');
   if (!canvas) { showToast('Generate or add a link first', 'warn'); return; }
   const a = document.createElement('a');
@@ -18204,7 +18231,7 @@ window.downloadPosBookQR = function() {
   showToast('Downloading QR Code image');
 };
 
-window.savePosBook = async function() {
+window.savePosBook = async function () {
   const title = ($('pb-title')?.value || '').trim();
   if (!title) { showToast('Title is required', 'warn'); $('pb-title')?.focus(); return; }
   const listPrice = parseFloat($('pb-price')?.value) || 0;
@@ -18212,9 +18239,9 @@ window.savePosBook = async function() {
   const accent = $('pb-accent')?.value || '#c8913a';
   const link = ($('pb-paylink')?.value || '').trim();
   const id = editingPosBookId || _posSlugId(title);
-  
+
   await syncCatalog();
-  
+
   const existing = posExtraBooks[id] || {};
   posExtraBooks[id] = {
     ...existing,
@@ -18241,15 +18268,15 @@ window.savePosBook = async function() {
   renderPOS();
 };
 
-window.removeCurrentPosBook = function() { if (editingPosBookId) window.removePosBook(editingPosBookId); };
+window.removeCurrentPosBook = function () { if (editingPosBookId) window.removePosBook(editingPosBookId); };
 
-window.removePosBook = async function(id) {
+window.removePosBook = async function (id) {
   const book = posExtraBooks[id];
   if (!book) return;
   if (!(await confirmDialog(`Remove POS-only book "${book.title}"?\n\nIt will disappear from the POS, the sales tracker, and the QR sheet. Its isolated sales tally is discarded.`, { danger: true, okLabel: 'Remove' }))) return;
-  
+
   await syncCatalog();
-  
+
   delete posExtraBooks[id];
   delete posCart[id];
   try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only remove failed', e); }
@@ -18261,11 +18288,11 @@ window.removePosBook = async function(id) {
 window.downloadInventoryValuationCSV = function() {
   let csv = 'Lyricalmyrical Book Inventory Valuation Report\n';
   csv += 'Generated on: ' + today() + '\n\n';
-  
+
   const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
-  
+
   csv += 'Book ID,Title,ISBN,Stock on Hand,Currency,Unit Production Cost (Native),Total Asset Value (Native),CAD Exchange Rate,Total Asset Value (CAD)\n';
-  
+
   BOOK_LIST.forEach(book => {
     const s = states[book.id] || defaultState(book);
     const stock = s.stock || 0;
@@ -18275,10 +18302,10 @@ window.downloadInventoryValuationCSV = function() {
     const isCAD = cur === 'CAD';
     const rate = isCAD ? 1 : (_fxRateCache[`${cur}_CAD`] || 1);
     const totalCAD = totalNative * rate;
-    
+
     csv += `${esc(book.id)},${esc(book.title)},${esc(book.isbn)},${stock},${esc(cur)},${cost.toFixed(2)},${totalNative.toFixed(2)},${rate.toFixed(4)},${totalCAD.toFixed(2)}\n`;
   });
-  
+
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -18290,15 +18317,15 @@ window.downloadInventoryValuationCSV = function() {
 };
 
 // ── TAX SEASON EXPORT ──
-window.downloadFullTaxSeasonExport = function() {
+window.downloadFullTaxSeasonExport = function () {
   const yearSelect = document.getElementById('tc-year');
   const year = yearSelect ? yearSelect.value : 'all';
   const isAllTime = (year === 'all');
-  
+
   let csv = 'Lyricalmyrical Tax Season Export\n';
   csv += 'Generated on: ' + today() + '\n';
   csv += 'Tax Year: ' + (isAllTime ? 'All Time' : year) + '\n\n';
-  
+
   const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
   const getAmt = (e) => (parseFloat(e.baseAmount || e.amountCAD || e.amount || 0));
 
@@ -18312,96 +18339,96 @@ window.downloadFullTaxSeasonExport = function() {
   // Section 1: Revenue by Book
   csv += '--- REVENUE BY BOOK ---\n';
   csv += 'Book Title,Gross Revenue,Net Revenue (after COGS & Royalty),Total Units Sold\n';
-  
-  BOOK_LIST.forEach(book => {
-      const s = states[book.id] || defaultState(book);
-      // Sales + royalty are recorded in the book's native currency; convert to the
-      // export's base (CAD) so they're comparable with the CAD expense figures.
-      const cur = getBookCurrencyCode(book);
-      const rawRate = _fxRateCache[`${cur}_CAD`];
-      const hRate = rawRate || 1;
 
-      // ⚡ Bolt Optimization: Loop Fusion - Compute sold and revenue in a single pass without intermediate array allocation
-      let sold = 0;
-      let revenue = 0;
-      for (let i = 0; i < s.hist.length; i++) {
-        const h = s.hist[i];
-        if (h.voided || h.gratuity) continue;
-        if (!isAllTime && (!h.date || !h.date.startsWith(year))) continue;
-        sold += (h.qty || 0);
-        revenue += ((h.qty || 0) * (h.price || 0));
-      }
-      
-      // ⚡ Bolt Optimization: Loop Fusion - Compute expTotal in a single pass without intermediate array allocation
-      let expTotal = 0;
-      const expenses = s.expenses || [];
-      for (let i = 0; i < expenses.length; i++) {
-        const e = expenses[i];
-        if (e.voided) continue;
-        if (!isAllTime && (!e.date || !e.date.startsWith(year))) continue;
-        expTotal += getAmt(e);
-      }
-      
-      // Royalty
-      let shares = 0;
-      if (isAllTime) {
-          const earn = (typeof calculateArtistEarnings === 'function') ? calculateArtistEarnings(book.id) : null;
-          shares = (earn && typeof earn === 'object') ? (earn.totalArtistEarned || 0) : (earn || 0);
-      } else {
-          shares = (typeof filterArtistEarningsByYear === 'function') ? filterArtistEarningsByYear(book.id, parseInt(year)) : 0;
-      }
-      
-      // expTotal is already CAD (uses each expense's stored baseAmount); convert
-      // the native-currency revenue + royalty before subtracting so net is all-CAD.
-      const revenueCAD = revenue * hRate;
-      const sharesCAD = shares * hRate;
-      const net = revenueCAD - expTotal - sharesCAD;
-      flagRateIfMissing(book, cur, rawRate, revenue > 0 || shares > 0);
-      csv += `${esc(book.title)},${revenueCAD.toFixed(2)},${net.toFixed(2)},${sold}\n`;
+  BOOK_LIST.forEach(book => {
+    const s = states[book.id] || defaultState(book);
+    // Sales + royalty are recorded in the book's native currency; convert to the
+    // export's base (CAD) so they're comparable with the CAD expense figures.
+    const cur = getBookCurrencyCode(book);
+    const rawRate = _fxRateCache[`${cur}_CAD`];
+    const hRate = rawRate || 1;
+
+    // ⚡ Bolt Optimization: Loop Fusion - Compute sold and revenue in a single pass without intermediate array allocation
+    let sold = 0;
+    let revenue = 0;
+    for (let i = 0; i < s.hist.length; i++) {
+      const h = s.hist[i];
+      if (h.voided || h.gratuity) continue;
+      if (!isAllTime && (!h.date || !h.date.startsWith(year))) continue;
+      sold += (h.qty || 0);
+      revenue += ((h.qty || 0) * (h.price || 0));
+    }
+
+    // ⚡ Bolt Optimization: Loop Fusion - Compute expTotal in a single pass without intermediate array allocation
+    let expTotal = 0;
+    const expenses = s.expenses || [];
+    for (let i = 0; i < expenses.length; i++) {
+      const e = expenses[i];
+      if (e.voided) continue;
+      if (!isAllTime && (!e.date || !e.date.startsWith(year))) continue;
+      expTotal += getAmt(e);
+    }
+
+    // Royalty
+    let shares = 0;
+    if (isAllTime) {
+      const earn = (typeof calculateArtistEarnings === 'function') ? calculateArtistEarnings(book.id) : null;
+      shares = (earn && typeof earn === 'object') ? (earn.totalArtistEarned || 0) : (earn || 0);
+    } else {
+      shares = (typeof filterArtistEarningsByYear === 'function') ? filterArtistEarningsByYear(book.id, parseInt(year)) : 0;
+    }
+
+    // expTotal is already CAD (uses each expense's stored baseAmount); convert
+    // the native-currency revenue + royalty before subtracting so net is all-CAD.
+    const revenueCAD = revenue * hRate;
+    const sharesCAD = shares * hRate;
+    const net = revenueCAD - expTotal - sharesCAD;
+    flagRateIfMissing(book, cur, rawRate, revenue > 0 || shares > 0);
+    csv += `${esc(book.title)},${revenueCAD.toFixed(2)},${net.toFixed(2)},${sold}\n`;
   });
-  
+
   // Section 2: All Expenses & Payouts
   csv += '\n--- ALL EXPENSES & PAYOUTS ---\n';
   csv += 'Date,Book/Entity,Category,Description,Amount (CAD),Receipt Link\n';
-  
+
   // 2a. Book-level expenses & payouts
   BOOK_LIST.forEach(book => {
-      const s = states[book.id] || defaultState(book);
-      const cur = getBookCurrencyCode(book);
-      const rawRate = _fxRateCache[`${cur}_CAD`];
-      const hRate = rawRate || 1;
+    const s = states[book.id] || defaultState(book);
+    const cur = getBookCurrencyCode(book);
+    const rawRate = _fxRateCache[`${cur}_CAD`];
+    const hRate = rawRate || 1;
 
-      // Book Expenses
-      (s.expenses || []).filter(e => {
-          if (e.voided) return false;
-          if (isAllTime) return true;
-          return e.date && e.date.startsWith(year);
-      }).forEach(e => {
-          csv += `${e.date},${esc(book.title)},${esc(e.cat)},${esc(e.desc)},${getAmt(e).toFixed(2)},${esc(e.receipt)}\n`;
-      });
+    // Book Expenses
+    (s.expenses || []).filter(e => {
+      if (e.voided) return false;
+      if (isAllTime) return true;
+      return e.date && e.date.startsWith(year);
+    }).forEach(e => {
+      csv += `${e.date},${esc(book.title)},${esc(e.cat)},${esc(e.desc)},${getAmt(e).toFixed(2)},${esc(e.receipt)}\n`;
+    });
 
-      // Artist Payouts (Transfers)
-      (s.artistTransfers || []).filter(t => {
-          if (isAllTime) return true;
-          return t.date && t.date.startsWith(year);
-      }).forEach(t => {
-          // Use .total for payouts as per state structure; payout totals are in the
-          // book's native currency — convert to CAD to match the column header.
-          const payoutRaw = parseFloat(t.total || t.amount || 0);
-          flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
-          const payoutCAD = payoutRaw * hRate;
-          csv += `${t.date},${esc(book.title)},"Artist Payout","Transfer to Artist",${payoutCAD.toFixed(2)},""\n`;
-      });
+    // Artist Payouts (Transfers)
+    (s.artistTransfers || []).filter(t => {
+      if (isAllTime) return true;
+      return t.date && t.date.startsWith(year);
+    }).forEach(t => {
+      // Use .total for payouts as per state structure; payout totals are in the
+      // book's native currency — convert to CAD to match the column header.
+      const payoutRaw = parseFloat(t.total || t.amount || 0);
+      flagRateIfMissing(book, cur, rawRate, payoutRaw > 0);
+      const payoutCAD = payoutRaw * hRate;
+      csv += `${t.date},${esc(book.title)},"Artist Payout","Transfer to Artist",${payoutCAD.toFixed(2)},""\n`;
+    });
   });
-  
+
   // 2b. Include Tax Center business expenses (General Publisher Expenses)
   const ledger = TAX_CENTER.businessExpenses || [];
   ledger.filter(l => {
-      if (l.voided) return false;
-      if (isAllTime) return true;
-      return l.date && l.date.startsWith(year);
+    if (l.voided) return false;
+    if (isAllTime) return true;
+    return l.date && l.date.startsWith(year);
   }).forEach(l => {
-      csv += `${l.date},"Publisher (General)",${esc(l.cat)},${esc(l.desc)},${getAmt(l).toFixed(2)},${esc(l.receipt)}\n`;
+    csv += `${l.date},"Publisher (General)",${esc(l.cat)},${esc(l.desc)},${getAmt(l).toFixed(2)},${esc(l.receipt)}\n`;
   });
 
   // Section 3: FX rate warnings — surface any book exported at 1.0 because no
@@ -18427,7 +18454,7 @@ window.downloadFullTaxSeasonExport = function() {
 };
 
 // ── STRIPE FEES BY YEAR
-const _STRIPE_ZERO_DECIMAL = new Set(['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','UGX','VND','VUV','XAF','XOF','XPF']);
+const _STRIPE_ZERO_DECIMAL = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
 function _stripeMinorToMajor(amt, cur) {
   return _STRIPE_ZERO_DECIMAL.has((cur || '').toUpperCase()) ? amt : amt / 100;
 }
@@ -18519,15 +18546,15 @@ function aggregateStripeTransactions(allTxns) {
     const c = y[cur] = y[cur] || {};
     const t = c[type] = c[type] || { gross: 0, fee: 0, net: 0, count: 0 };
     t.gross += tx.amount || 0;
-    t.fee   += tx.fee || 0;
-    t.net   += tx.net || 0;
+    t.fee += tx.fee || 0;
+    t.net += tx.net || 0;
     t.count += 1;
 
     const ya = byYearCurAll[year] = byYearCurAll[year] || {};
     const ca = ya[cur] = ya[cur] || { gross: 0, fee: 0, net: 0, count: 0 };
     ca.gross += tx.amount || 0;
-    ca.fee   += tx.fee || 0;
-    ca.net   += tx.net || 0;
+    ca.fee += tx.fee || 0;
+    ca.net += tx.net || 0;
     ca.count += 1;
   }
 
@@ -18567,8 +18594,8 @@ function renderStripeFeesCards(data, byYearCurAll) {
       for (const t of Object.keys(types)) {
         if (SALES_TYPES.has(t)) {
           salesAgg.gross += types[t].gross;
-          salesAgg.fee   += types[t].fee;
-          salesAgg.net   += types[t].net;
+          salesAgg.fee += types[t].fee;
+          salesAgg.net += types[t].net;
           salesAgg.count += types[t].count;
         }
       }
@@ -18576,9 +18603,9 @@ function renderStripeFeesCards(data, byYearCurAll) {
       let headline;
       if (salesAgg.count > 0) {
         const gross = _stripeMinorToMajor(salesAgg.gross, cur);
-        const fee   = _stripeMinorToMajor(salesAgg.fee, cur);
-        const net   = _stripeMinorToMajor(salesAgg.net, cur);
-        const pct   = salesAgg.gross ? (salesAgg.fee / salesAgg.gross) * 100 : 0;
+        const fee = _stripeMinorToMajor(salesAgg.fee, cur);
+        const net = _stripeMinorToMajor(salesAgg.net, cur);
+        const pct = salesAgg.gross ? (salesAgg.fee / salesAgg.gross) * 100 : 0;
         headline = `
           <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:flex-end;">
             <div style="flex:2;min-width:240px;">
@@ -18603,8 +18630,8 @@ function renderStripeFeesCards(data, byYearCurAll) {
       const detailRows = [];
       if (salesAgg.count > 0) {
         const gross = _stripeMinorToMajor(salesAgg.gross, cur);
-        const fee   = _stripeMinorToMajor(salesAgg.fee, cur);
-        const net   = _stripeMinorToMajor(salesAgg.net, cur);
+        const fee = _stripeMinorToMajor(salesAgg.fee, cur);
+        const net = _stripeMinorToMajor(salesAgg.net, cur);
         detailRows.push(`<tr style="background:rgba(200,145,58,.06);">
           <td><strong>Customer payments</strong><div style="font-size:10px;color:var(--text3);">charge · payment</div></td>
           <td class="r">${salesAgg.count}</td>
@@ -18616,8 +18643,8 @@ function renderStripeFeesCards(data, byYearCurAll) {
       for (const t of otherTypes) {
         const r = types[t];
         const gross = _stripeMinorToMajor(r.gross, cur);
-        const fee   = _stripeMinorToMajor(r.fee, cur);
-        const net   = _stripeMinorToMajor(r.net, cur);
+        const fee = _stripeMinorToMajor(r.fee, cur);
+        const net = _stripeMinorToMajor(r.net, cur);
         detailRows.push(`<tr>
           <td>${_stripeFriendlyType(t)}<div style="font-size:10px;color:var(--text3);">${t}</div></td>
           <td class="r">${r.count}</td>
@@ -18629,8 +18656,8 @@ function renderStripeFeesCards(data, byYearCurAll) {
 
       const tot = byYearCurAll[year][cur];
       const tgross = _stripeMinorToMajor(tot.gross, cur);
-      const tfee   = _stripeMinorToMajor(tot.fee, cur);
-      const tnet   = _stripeMinorToMajor(tot.net, cur);
+      const tfee = _stripeMinorToMajor(tot.fee, cur);
+      const tnet = _stripeMinorToMajor(tot.net, cur);
       const detailId = `stripe-detail-${year}-${cur}`;
 
       cards.push(`
@@ -18937,10 +18964,10 @@ async function clearStoredStripeKey() {
 function downloadStripeFeesAuditCSV() {
   const rows = window._stripeFeesAudit || [];
   if (!rows.length) { showToast('Run a Stripe fees fetch first.', 'warn'); return; }
-  const header = ['id','created_iso','year','currency','type','amount_major','fee_major','net_major','source','description'];
+  const header = ['id', 'created_iso', 'year', 'currency', 'type', 'amount_major', 'fee_major', 'net_major', 'source', 'description'];
   const esc = v => {
     const s = v == null ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [header.join(',')];
   for (const r of rows) {
@@ -18958,7 +18985,7 @@ function downloadStripeFeesAuditCSV() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `stripe-balance-transactions-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `stripe-balance-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -19260,16 +19287,16 @@ function _reconMatchesFilter(p, c) {
   }
   if (_reconFilter.q) {
     const hay = [p.customer, p.email, p.description, p.currency, String(p.amount),
-      _stripeFmtMoney(p.amount, p.currency), c.ref || ''].join(' ').toLowerCase();
+    _stripeFmtMoney(p.amount, p.currency), c.ref || ''].join(' ').toLowerCase();
     if (!hay.includes(_reconFilter.q)) return false;
   }
   return true;
 }
 const _RECON_SORTERS = {
   'date-desc': (a, b) => b.p.created - a.p.created,
-  'date-asc':  (a, b) => a.p.created - b.p.created,
-  'amt-desc':  (a, b) => b.p.amount - a.p.amount,
-  'amt-asc':   (a, b) => a.p.amount - b.p.amount,
+  'date-asc': (a, b) => a.p.created - b.p.created,
+  'amt-desc': (a, b) => b.p.amount - a.p.amount,
+  'amt-asc': (a, b) => a.p.amount - b.p.amount,
 };
 
 // ── Card fragments shared by single + grouped rendering
@@ -19534,7 +19561,7 @@ function reconcileOpenInvoice(idSafe) {
   if (!c.bookId) { showToast('Invoice not found in this app', 'warn'); return; }
   if (typeof switchBook === 'function') switchBook(c.bookId);
   switchTab('consignment');
-  setTimeout(() => { try { if (c.inv) viewInvoice(c.inv.id); } catch (_) {} }, 60);
+  setTimeout(() => { try { if (c.inv) viewInvoice(c.inv.id); } catch (_) { } }, 60);
 }
 
 function reconcileDismiss(idSafe) {
@@ -19779,16 +19806,16 @@ async function loadCustomerSuppression() {
   try {
     const stored = await window._fbLoadSettings('customerSuppress');
     if (stored && Array.isArray(stored.emails)) { _customerSuppress = new Set(stored.emails.map(_custEmailKey)); return; }
-  } catch (_) {}
+  } catch (_) { }
   try {
     const local = JSON.parse(localStorage.getItem(CUSTOMER_SUPPRESS_KEY) || '[]');
     if (Array.isArray(local)) _customerSuppress = new Set(local.map(_custEmailKey));
-  } catch (_) {}
+  } catch (_) { }
 }
 async function _persistCustomerSuppression() {
   const emails = Array.from(_customerSuppress);
-  try { await window._fbSaveSettings('customerSuppress', { emails }); } catch (_) {}
-  try { localStorage.setItem(CUSTOMER_SUPPRESS_KEY, JSON.stringify(emails)); } catch (_) {}
+  try { await window._fbSaveSettings('customerSuppress', { emails }); } catch (_) { }
+  try { localStorage.setItem(CUSTOMER_SUPPRESS_KEY, JSON.stringify(emails)); } catch (_) { }
 }
 async function toggleCustomerSuppress(encEmail) {
   const key = _custEmailKey(decodeURIComponent(encEmail));
@@ -19814,15 +19841,15 @@ function mailingListHas(email) { return !!MAILING_LIST.subs[_custEmailKey(email)
 
 async function loadMailingList() {
   let data = null;
-  try { data = await window._fbLoadSettings('mailingList'); } catch (_) {}
-  if (!data) { try { data = JSON.parse(localStorage.getItem(MAILING_LIST_KEY) || 'null'); } catch (_) {} }
+  try { data = await window._fbLoadSettings('mailingList'); } catch (_) { }
+  if (!data) { try { data = JSON.parse(localStorage.getItem(MAILING_LIST_KEY) || 'null'); } catch (_) { } }
   if (data && typeof data === 'object') {
     MAILING_LIST = { subs: (data.subs && typeof data.subs === 'object') ? data.subs : {}, autoAdd: !!data.autoAdd };
   }
 }
 async function _persistMailingList() {
-  try { await window._fbSaveSettings('mailingList', MAILING_LIST); } catch (_) {}
-  try { localStorage.setItem(MAILING_LIST_KEY, JSON.stringify(MAILING_LIST)); } catch (_) {}
+  try { await window._fbSaveSettings('mailingList', MAILING_LIST); } catch (_) { }
+  try { localStorage.setItem(MAILING_LIST_KEY, JSON.stringify(MAILING_LIST)); } catch (_) { }
 }
 
 // Upsert one subscriber. Returns true only when a brand-new entry is created.
@@ -19915,18 +19942,18 @@ function renderMailingList() {
   if (countEl) countEl.textContent = `${subs.length} subscriber${subs.length === 1 ? '' : 's'}` + (unsub ? ` · ${unsub} unsubscribed (excluded from sends)` : '');
   body.innerHTML = subs.length
     ? subs.map(s => {
-        const sup = _isCustomerSuppressed(s.email);
-        const emailCell = sup
-          ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(s.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
-          : `<a href="mailto:${escapeHtml(s.email)}" style="color:var(--gold2);">${escapeHtml(s.email)}</a>`;
-        return `<tr${sup ? ' style="opacity:.55;"' : ''}>
+      const sup = _isCustomerSuppressed(s.email);
+      const emailCell = sup
+        ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(s.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
+        : `<a href="mailto:${escapeHtml(s.email)}" style="color:var(--gold2);">${escapeHtml(s.email)}</a>`;
+      return `<tr${sup ? ' style="opacity:.55;"' : ''}>
           <td>${escapeHtml(s.name) || '<span style="color:var(--text4);">—</span>'}</td>
           <td>${emailCell}</td>
           <td style="font-size:12px;color:var(--text3);">${s.added ? fmtD(s.added) : '—'}</td>
           <td><span class="pill gray" style="font-size:10px;">${escapeHtml(s.source || 'Manual')}</span></td>
           <td><button class="btn sm" onclick="removeFromMailingList('${encodeURIComponent(s.email)}')" title="Remove from mailing list">Remove</button></td>
         </tr>`;
-      }).join('')
+    }).join('')
     : `<tr><td colspan="5"><div class="empty-state" style="padding:1.25rem;">Your mailing list is empty. Add someone by hand above, or click <strong>Add all buyers</strong> to pull in everyone we found below.</div></td></tr>`;
 }
 
@@ -19982,7 +20009,7 @@ function _loadCustomerStripeCache() {
   catch (_) { return []; }
 }
 function _saveCustomerStripeCache(rows) {
-  try { localStorage.setItem(CUSTOMER_STRIPE_KEY, JSON.stringify(rows || [])); } catch (_) {}
+  try { localStorage.setItem(CUSTOMER_STRIPE_KEY, JSON.stringify(rows || [])); } catch (_) { }
 }
 
 // Stable dedup key for a buyer — lowercased, trimmed email.
@@ -19993,9 +20020,11 @@ function _custUpsert(map, email, name) {
   if (!key) return null;
   let rec = map.get(key);
   if (!rec) {
-    rec = { email: String(email).trim(), name: '', orders: 0, units: 0,
-            books: new Set(), bookIds: new Set(), channels: new Set(), sources: new Set(),
-            spend: {}, first: '', last: '' };
+    rec = {
+      email: String(email).trim(), name: '', orders: 0, units: 0,
+      books: new Set(), bookIds: new Set(), channels: new Set(), sources: new Set(),
+      spend: {}, first: '', last: ''
+    };
     map.set(key, rec);
   }
   const nm = String(name || '').trim();
@@ -20227,8 +20256,8 @@ let activeCustomersSubTab = 'audience';
 
 async function loadCampaigns() {
   let data = null;
-  try { data = await window._fbLoadSettings('campaigns'); } catch (_) {}
-  if (!data) { try { data = JSON.parse(localStorage.getItem(CAMPAIGNS_KEY) || '[]'); } catch (_) {} }
+  try { data = await window._fbLoadSettings('campaigns'); } catch (_) { }
+  if (!data) { try { data = JSON.parse(localStorage.getItem(CAMPAIGNS_KEY) || '[]'); } catch (_) { } }
   if (Array.isArray(data)) {
     CAMPAIGNS = data;
   } else {
@@ -20237,8 +20266,8 @@ async function loadCampaigns() {
 }
 
 async function _persistCampaigns() {
-  try { await window._fbSaveSettings('campaigns', CAMPAIGNS); } catch (_) {}
-  try { localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(CAMPAIGNS)); } catch (_) {}
+  try { await window._fbSaveSettings('campaigns', CAMPAIGNS); } catch (_) { }
+  try { localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(CAMPAIGNS)); } catch (_) { }
 }
 
 // ── Decoupled Open Call Portal
@@ -20252,8 +20281,8 @@ let ocFilterStage = '';
 
 async function loadOpenCalls() {
   let data = null;
-  try { data = await window._fbLoadSettings('openCalls'); } catch (_) {}
-  if (!data) { try { data = JSON.parse(localStorage.getItem(OPENCALL_KEY)); } catch (_) {} }
+  try { data = await window._fbLoadSettings('openCalls'); } catch (_) { }
+  if (!data) { try { data = JSON.parse(localStorage.getItem(OPENCALL_KEY)); } catch (_) { } }
   if (data && typeof data === 'object' && data.projects) {
     OPENCALL_DATA = data;
     Object.values(OPENCALL_DATA.projects).forEach(proj => {
@@ -20299,8 +20328,8 @@ async function _persistOpenCalls() {
     proj.inbox = pruned.inbox;
     proj.outbox = pruned.outbox;
   });
-  try { await window._fbSaveSettings('openCalls', OPENCALL_DATA); } catch (_) {}
-  try { localStorage.setItem(OPENCALL_KEY, JSON.stringify(OPENCALL_DATA)); } catch (_) {}
+  try { await window._fbSaveSettings('openCalls', OPENCALL_DATA); } catch (_) { }
+  try { localStorage.setItem(OPENCALL_KEY, JSON.stringify(OPENCALL_DATA)); } catch (_) { }
   updateOpenCallBadges();
   ocScheduleSnapshotPush_();
 }
@@ -20331,7 +20360,7 @@ async function migrateLegacyOpenCalls() {
           await window._fbSave(bid, JSON.stringify(stateObj));
         }
       }
-    } catch (_) {}
+    } catch (_) { }
   }
   if (migrated) {
     if (OPENCALL_DATA.projects['default'] && OPENCALL_DATA.projects['default'].contributors.length === 0 && Object.keys(OPENCALL_DATA.projects).length > 1) {
@@ -20375,9 +20404,9 @@ async function ocDeleteProject() {
   if (!current) return;
   const ok = await confirmDialog(`Are you sure you want to delete project "${current.title}" and all its contributors?`, { danger: true, okLabel: 'Delete' });
   if (!ok) return;
-  
+
   delete OPENCALL_DATA.projects[currentId];
-  
+
   const remaining = Object.keys(OPENCALL_DATA.projects);
   if (remaining.length === 0) {
     OPENCALL_DATA.projects['default'] = {
@@ -20403,18 +20432,18 @@ function ocSwitchProject(id) {
 
 function parseMarkdownToHtml(text) {
   let html = escapeHtml(text);
-  
+
   // Restore safe HTML tags that might have been escaped
   // 1. Restore <mark style="..."> and </mark>
   html = html.replace(/&lt;mark style=&quot;(.*?)&quot;&gt;/gi, '<mark style="$1">');
   html = html.replace(/&lt;mark&gt;/gi, '<mark>');
   html = html.replace(/&lt;\/mark&gt;/gi, '</mark>');
-  
+
   // 2. Restore <span style="..."> and </span>
   html = html.replace(/&lt;span style=&quot;(.*?)&quot;&gt;/gi, '<span style="$1">');
   html = html.replace(/&lt;span&gt;/gi, '<span>');
   html = html.replace(/&lt;\/span&gt;/gi, '</span>');
-  
+
   // 3. Restore other basic tags if they typed them
   html = html.replace(/&lt;strong&gt;/gi, '<strong>').replace(/&lt;\/strong&gt;/gi, '</strong>');
   html = html.replace(/&lt;em&gt;/gi, '<em>').replace(/&lt;\/em&gt;/gi, '</em>');
@@ -20436,9 +20465,9 @@ function parseMarkdownToHtml(text) {
 function insertFormattingTag(tag) {
   const editor = $('oc-tmpl-body');
   if (!editor) return;
-  
+
   editor.focus();
-  
+
   const selection = window.getSelection();
   let range;
   if (selection.rangeCount > 0) {
@@ -20448,9 +20477,9 @@ function insertFormattingTag(tag) {
     range.selectNodeContents(editor);
     range.collapse(false);
   }
-  
+
   const selectedText = selection.toString();
-  
+
   if (tag === 'bold') {
     document.execCommand('bold', false, null);
   } else if (tag === 'italic') {
@@ -20492,7 +20521,7 @@ function insertFormattingTag(tag) {
     badge.setAttribute('contenteditable', 'false');
     badge.setAttribute('data-token', tag);
     badge.textContent = `{{${tag}}}`;
-    
+
     range.deleteContents();
     range.insertNode(badge);
     range.setStartAfter(badge);
@@ -20500,7 +20529,7 @@ function insertFormattingTag(tag) {
     selection.removeAllRanges();
     selection.addRange(range);
   }
-  
+
   ocUpdateTmplPreview();
 }
 
@@ -20529,10 +20558,10 @@ function ocToggleColorPalette(type) {
   const isFore = type === 'fore';
   const el = isFore ? $('oc-forecolor-palette') : $('oc-backcolor-palette');
   const otherEl = isFore ? $('oc-backcolor-palette') : $('oc-forecolor-palette');
-  
+
   if (otherEl) otherEl.classList.remove('open');
   if (el) el.classList.toggle('open');
-  
+
   const closePalette = (e) => {
     if (el && !el.contains(e.target) && !e.target.closest('.oc-dropdown-container')) {
       el.classList.remove('open');
@@ -20547,18 +20576,18 @@ function ocToggleColorPalette(type) {
 function ocApplyColor(type, val) {
   const editor = $('oc-tmpl-body');
   if (!editor) return;
-  
+
   editor.focus();
-  
+
   if (type === 'fore') {
     document.execCommand('foreColor', false, val);
   } else {
     document.execCommand('backColor', false, val);
   }
-  
+
   const el = type === 'fore' ? $('oc-forecolor-palette') : $('oc-backcolor-palette');
   if (el) el.classList.remove('open');
-  
+
   ocUpdateTmplPreview();
 }
 
@@ -20578,7 +20607,7 @@ function updateOpenCallBadges() {
       if (proj && Array.isArray(proj.inbox)) count += proj.inbox.length;
     });
   }
-  
+
   const badgeEl = $('oc-nav-badge');
   if (badgeEl) {
     if (count > 0) {
@@ -20588,7 +20617,7 @@ function updateOpenCallBadges() {
       badgeEl.style.display = 'none';
     }
   }
-  
+
   const hdrBadgeEl = $('oc-hdr-badge');
   if (hdrBadgeEl) {
     if (count > 0) {
@@ -20634,7 +20663,7 @@ function handleOcCsvFile(file) {
   const fname = (file.name || '').toLowerCase();
   const isExcel = /\.(xlsx|xls)$/.test(fname);
   const reader = new FileReader();
-  reader.onload = async function(e) {
+  reader.onload = async function (e) {
     try {
       let text;
       if (isExcel) {
@@ -20688,7 +20717,7 @@ function handleOcCsvDrop(e) {
   e.stopPropagation();
   e.currentTarget.style.borderColor = 'var(--border2)';
   e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)';
-  
+
   const file = e.dataTransfer?.files?.[0];
   if (file && /\.(csv|xlsx|xls)$/.test(file.name.toLowerCase())) {
     handleOcCsvFile(file);
@@ -20706,7 +20735,7 @@ function ocComposeStageEmail(cId, stageKey) {
 
   let subject = '';
   let body = '';
-  
+
   const tmpl = (proj.templates && proj.templates[stageKey]) || null;
   if (tmpl) {
     let dl = '';
@@ -20715,7 +20744,7 @@ function ocComposeStageEmail(cId, stageKey) {
       if (dl === null) return; // Cancelled
       if (dl) localStorage.setItem('lm-oc-last-deadline', dl);
     }
-    
+
     subject = ocMergeTemplate(tmpl.subject, c, { project: proj.title, date: dl || 'July 15th' });
     body = ocMergeTemplate(tmpl.body, c, { project: proj.title, date: dl || 'July 15th' });
   } else {
@@ -20874,7 +20903,7 @@ function ocPreviewModalEditInWizard(cId, _stageKey) {
 
   switchTab('customers');
   switchCustomersSubTab('campaign');
-  
+
   openCampaignWizard({
     email: c.email,
     subject: subject,
@@ -20888,22 +20917,22 @@ async function ocScanReplies(options = {}) {
     if (!options.background) showToast('Connect your Google Sheet first to scan replies', 'warn');
     return;
   }
-  
+
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj || !proj.contributors.length) {
     if (!options.background) showToast('No contributors in this project to scan', 'warn');
     return;
   }
-  
+
   const btn = $('oc-scan-btn');
   const prevText = btn ? btn.textContent : '';
   if (!options.background && btn) {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>Scanning…';
   }
-  
+
   const daysBack = parseInt($('oc-scan-days')?.value || 120, 10);
-  
+
   try {
     const payload = {
       version: 2,
@@ -20930,7 +20959,7 @@ async function ocScanReplies(options = {}) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    
+
     const updates = data.updates || [];
 
     // Findings are no longer applied silently — they become proposals in the
@@ -21022,10 +21051,10 @@ function renderOcImportGmailModal() {
          <button type="button" class="btn sm" onclick="ocImportGmailSelectAll(false)">Deselect All</button>
          <span style="font-size:11px;color:var(--text3);margin-left:auto;align-self:center;">${_ocSubmissionResults.length} found</span>
        </div>` +
-      _ocSubmissionResults.map((s, idx) => {
-        const n = (s.photos || []).length;
-        const list = n ? ': ' + escapeHtml(s.photos.slice(0, 5).join(', ')) + (n > 5 ? ' …' : '') : '';
-        return `
+    _ocSubmissionResults.map((s, idx) => {
+      const n = (s.photos || []).length;
+      const list = n ? ': ' + escapeHtml(s.photos.slice(0, 5).join(', ')) + (n > 5 ? ' …' : '') : '';
+      return `
         <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:6px 4px;border-bottom:1px solid var(--border);">
           <input type="checkbox" class="oc-sub-check" value="${idx}" checked style="margin-top:2px;cursor:pointer;">
           <span style="flex:1;">
@@ -21033,7 +21062,7 @@ function renderOcImportGmailModal() {
             <span style="color:var(--text3);font-size:11px;">${n} attachment${n === 1 ? '' : 's'}${list}</span>
           </span>
         </label>`;
-      }).join('')
+    }).join('')
     : '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;">Run a search to find submission emails. New contributors are matched by sender; anyone already in this project is skipped.</div>';
 
   modal.innerHTML = `
@@ -21144,7 +21173,7 @@ async function ocScanRepliesSingle(cId) {
     showToast('Connect your Google Sheet first to scan replies', 'warn');
     return;
   }
-  
+
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
   const c = proj.contributors.find(x => x.id === cId);
@@ -21152,16 +21181,16 @@ async function ocScanRepliesSingle(cId) {
     showToast('Contributor email not found', 'warn');
     return;
   }
-  
+
   const btn = $(`oc-scan-single-${cId}`);
   const prevText = btn ? btn.textContent : '';
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
   }
-  
+
   const daysBack = parseInt($('oc-scan-days')?.value || 120, 10);
-  
+
   try {
     const payload = {
       version: 2,
@@ -21178,17 +21207,17 @@ async function ocScanRepliesSingle(cId) {
         }]
       }
     };
-    
+
     const res = await fetch(sheetsUrl, {
       method: 'POST',
       mode: 'cors',
       body: JSON.stringify(payload)
     });
-    
+
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    
+
     const updates = data.updates || [];
 
     // Same approval flow as the bulk scan: findings land in the Review inbox
@@ -21298,7 +21327,7 @@ function openOcEditModal(cId) {
     modal.style.zIndex = '10000';
     document.body.appendChild(modal);
   }
-  
+
   modal.style.display = 'flex';
   renderOcEditModalContent(cId);
 }
@@ -21311,12 +21340,12 @@ function closeOcEditModal() {
 function renderOcEditModalContent(cId) {
   const modal = $('oc-edit-modal');
   if (!modal) return;
-  
+
   const proj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
   if (!proj) return;
   const c = proj.contributors.find(x => x.id === cId);
   if (!c) return;
-  
+
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:500px;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
       <button onclick="closeOcEditModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
@@ -21380,20 +21409,20 @@ async function saveOcContributor(cId) {
   if (!proj) return;
   const c = proj.contributors.find(x => x.id === cId);
   if (!c) return;
-  
+
   const name = ($('oc-edit-name')?.value || '').trim();
   const email = ($('oc-edit-email')?.value || '').trim();
   const creditName = ($('oc-edit-creditname')?.value || '').trim();
   const notes = ($('oc-edit-notes')?.value || '').trim();
   const gmailThreadId = ($('oc-edit-threadid')?.value || '').trim();
   const photosStr = ($('oc-edit-photos')?.value || '').trim();
-  
+
   c.name = name;
   c.email = email;
   c.creditName = creditName;
   c.notes = notes;
   c.gmailThreadId = gmailThreadId;
-  
+
   c.photos = photosStr ? photosStr.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
   c.photo = c.photos.join(', ');
   // Starred picks must stay a subset of the (possibly renamed) photo list.
@@ -21457,7 +21486,7 @@ function ocUpdateBulkPreview() {
   const stage = $('oc-bulk-stage')?.value || 'selectionSent';
   const tmpl = proj.templates?.[stage];
   if (!tmpl) return;
-  
+
   const dl = $('oc-bulk-deadline')?.value || '';
   const sub = tmpl.subject
     .replace(/\{\{name\}\}/g, 'Alex Mercer')
@@ -21471,7 +21500,7 @@ function ocUpdateBulkPreview() {
     .replace(/\{\{creditName\}\}/g, 'Alex Mercer')
     .replace(/\{\{project\}\}/g, proj.title)
     .replace(/\{\{date\}\}/g, dl);
-  
+
   const subEl = $('oc-bulk-preview-sub-container');
   const bodyEl = $('oc-bulk-preview-body-container');
   if (subEl) subEl.textContent = 'Subject: ' + sub;
@@ -21493,7 +21522,7 @@ async function ocSaveTemplates() {
   }
 
   proj.templates[activeTmplTab] = { subject, body: serializedBody };
-  
+
   await _persistOpenCalls();
   showToast(`✓ ${activeTmplTab === 'selectionSent' ? 'Selection' : activeTmplTab === 'cmykSent' ? 'Request Files' : 'Pre-order'} template saved!`);
 }
@@ -21591,18 +21620,18 @@ function renderCustomersAudience() {
 
   body.innerHTML = list.length
     ? list.map(r => {
-        const sup = _isCustomerSuppressed(r.email);
-        const emailCell = sup
-          ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(r.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
-          : `<a href="mailto:${escapeHtml(r.email)}" style="color:var(--gold2);">${escapeHtml(r.email)}</a>`;
-        const onList = mailingListHas(r.email);
-        const listBtn = sup
-          ? ''
-          : (onList
-              ? `<button class="btn sm" disabled title="Already on your mailing list" style="opacity:.55;">✓ On list</button>`
-              : `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(r.email)}')" title="Add to your mailing list">＋ List</button>`);
-        const supBtn = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
-        return `<tr${sup ? ' style="opacity:.55;"' : ''}>
+      const sup = _isCustomerSuppressed(r.email);
+      const emailCell = sup
+        ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(r.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
+        : `<a href="mailto:${escapeHtml(r.email)}" style="color:var(--gold2);">${escapeHtml(r.email)}</a>`;
+      const onList = mailingListHas(r.email);
+      const listBtn = sup
+        ? ''
+        : (onList
+          ? `<button class="btn sm" disabled title="Already on your mailing list" style="opacity:.55;">✓ On list</button>`
+          : `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(r.email)}')" title="Add to your mailing list">＋ List</button>`);
+      const supBtn = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
+      return `<tr${sup ? ' style="opacity:.55;"' : ''}>
         <td>${escapeHtml(r.name) || '<span style="color:var(--text4);">—</span>'}</td>
         <td>${emailCell}</td>
         <td class="r">${r.orders}</td>
@@ -21613,7 +21642,7 @@ function renderCustomersAudience() {
         <td>${Array.from(r.sources).map(s => `<span class="pill gray" style="font-size:10px;">${escapeHtml(s)}</span>`).join(' ')}</td>
         <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${listBtn}${supBtn}</div></td>
       </tr>`;
-      }).join('')
+    }).join('')
     : `<tr><td colspan="9"><div class="empty-state" style="padding:1.5rem;">${(_customerFilter.trim() || _customerBookFilter || _customerChannelFilter || _customerSpendFilter || _customerOrdersFilter) ? 'No customers match this filter.' : 'No customers found yet. Apply some website orders, log in-person sales with an email, or pull buyers from Stripe.'}</div></td></tr>`;
 }
 
@@ -21626,7 +21655,7 @@ function openCampaignWizard(presets = null) {
       if (segmentSel) {
         const prevTemp = segmentSel.querySelector('option[data-temp="true"]');
         if (prevTemp) prevTemp.remove();
-        
+
         const tempOpt = document.createElement('option');
         tempOpt.value = 'single-target:' + presets.email;
         tempOpt.textContent = `Single Recipient (${presets.email})`;
@@ -21669,9 +21698,9 @@ function updateCampaignModeStatus() {
   const dot = $('c-mode-indicator-dot');
   const text = $('c-mode-indicator-text');
   const row = document.querySelector('.campaign-mode-row');
-  
+
   if (!dot || !text) return;
-  
+
   if (forceMock) {
     dot.style.backgroundColor = 'var(--amber)';
     text.innerHTML = 'Simulation Mode: Emails will be simulated and logged locally';
@@ -21759,13 +21788,13 @@ function onCampaignSegmentChange() {
 function getSegmentRecipients(segmentName) {
   const allDiscovered = buildCustomerList();
   const curated = mailingSubsArray().filter(s => !_isCustomerSuppressed(s.email));
-  
+
   if (segmentName.startsWith('single-target:')) {
     const email = segmentName.split(':')[1];
     const existing = curated.find(s => s.email === email) || allDiscovered.find(c => c.email === email);
     return [{ name: existing?.name || '', email: email }];
   }
-  
+
   if (segmentName === 'all-curated') {
     return curated;
   }
@@ -21833,7 +21862,7 @@ async function editCampaignDraft(id) {
   $('c-segment').value = camp.segment;
   $('c-replyto').value = camp.replyTo || 'lyricalmyricalbooks@gmail.com';
   $('c-body').value = camp.body;
-  
+
   $('campaign-wizard-title').textContent = 'Edit Campaign Draft';
   $('campaign-wizard-card').style.display = 'block';
   updateCampaignPreview();
@@ -21987,7 +22016,7 @@ async function sendCampaignLaunch() {
 
   const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   const invalidRecs = recs.filter(r => !r.email || !emailRegex.test(r.email.trim()));
-  
+
   if (invalidRecs.length > 0) {
     const invalidList = invalidRecs.map(r => `${r.name || 'Unnamed'} (${r.email || 'no email'})`).join(', ');
     const proceed = await confirmDialog(
@@ -22064,11 +22093,11 @@ async function finishCampaignSend(subject, body, replyTo, draftId, wasAborted) {
   _campaignSendingActive = false;
   $('c-send-progress-fill').style.width = '100%';
   $('c-send-progress-text').textContent = wasAborted ? 'Sending Aborted' : 'Campaign Completed!';
-  
+
   $('c-send-log-console').innerHTML += `
     <div style="font-weight:bold;margin-top:8px;" id="c-send-finished-summary">[FINISHED] Success: ${_campaignSuccessCount} · Failed: ${_campaignFailCount}</div>
   `;
-  
+
   const btn = $('c-send-cancel-btn');
   btn.textContent = '✕ Close Window';
   btn.disabled = false;
@@ -22105,13 +22134,13 @@ async function finishCampaignSend(subject, body, replyTo, draftId, wasAborted) {
 async function retryCampaignEmail(idx) {
   const rec = _campaignSendingRecipients[idx];
   if (!rec) return;
-  
+
   const to = rec.email;
   const name = rec.name || 'Customer';
   const subject = $('c-subject').value.trim();
   const body = $('c-body').value.trim();
   const replyTo = $('c-replyto').value.trim();
-  
+
   const consoleEl = $('c-send-log-console');
   if (!consoleEl) return;
   const failLines = consoleEl.querySelectorAll('.campaign-log-fail');
@@ -22122,12 +22151,12 @@ async function retryCampaignEmail(idx) {
       break;
     }
   }
-  
+
   if (targetLine) {
     targetLine.style.color = 'var(--text3)';
     targetLine.innerHTML = `⏳ Retrying for ${to}...`;
   }
-  
+
   try {
     const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
     if (!to || !emailRegex.test(to.trim())) {
@@ -22138,16 +22167,16 @@ async function retryCampaignEmail(idx) {
       .replace(/\{\{email\}\}/g, to);
 
     await sendSingleEmailViaBackend(to, subject, personalizedBody, replyTo);
-    
+
     _campaignSuccessCount++;
     _campaignFailCount--;
-    
+
     if (targetLine) {
       targetLine.style.color = '#a9ffaf';
       targetLine.className = '';
       targetLine.innerHTML = `✓ Sent to ${to} (${name}) (Retried)`;
     }
-    
+
     updateCampaignSendFinishedSummary();
   } catch (e) {
     if (targetLine) {
@@ -22274,7 +22303,7 @@ function _custFallbackCopy(text) {
   const ta = document.createElement('textarea');
   ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
   document.body.appendChild(ta); ta.select();
-  try { document.execCommand('copy'); } catch (_) {}
+  try { document.execCommand('copy'); } catch (_) { }
   ta.remove();
 }
 
@@ -22334,7 +22363,7 @@ Object.assign(window, {
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
-  submitExpense, voidExpense, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier, 
+  submitExpense, voidExpense, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier,
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
@@ -22388,7 +22417,7 @@ function dismissAppUpdate(event) {
   if (event) event.stopPropagation();
   const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
   localStorage.setItem('lm-last-seen-version', currentVersion);
-  
+
   const badge = $('pub-update-badge');
   if (badge) {
     badge.classList.remove('is-visible');
@@ -22430,16 +22459,16 @@ async function showWhatsNew(event) {
     showToast(`❌ Failed to open Whats New: ${err.message}`, 'err');
     console.error('Failed to open Whats New modal:', err);
   }
-  
+
   const container = $('whats-new-list');
   if (!container) return;
-  
+
   container.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:20px 0;">Loading recent changes...</div>';
-  
+
   // Update last seen version when they click/view the updates
   const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
   localStorage.setItem('lm-last-seen-version', currentVersion);
-  
+
   const badge = $('pub-update-badge');
   if (badge) {
     badge.classList.remove('is-visible');
@@ -22486,7 +22515,7 @@ window.showWhatsNew = showWhatsNew;
 // ── STARTUP ROUTING
 async function initStartup() {
   // Master Publisher Email
-  const publisherEmail = 'lyricalmyrical@gmail.com'; 
+  const publisherEmail = 'lyricalmyrical@gmail.com';
 
   window._fbOnAuthStateChanged(async user => {
     const dismissSplash = () => {
@@ -22521,30 +22550,30 @@ async function initStartup() {
         dismissSplash();
         return;
       }
-      
+
       // Load shared Firestore mode flags FIRST — before any data reads.
       // This ensures all devices agree on which database to use.
       await window._fbLoadModeFlags();
-  
+
       // Pull the shared notification endpoint so artist sessions — which never ran
       // the Sheet setup locally — still have a URL to POST the approval-needed
       // email to when they submit. Publisher writes it; everyone can read it.
       try {
         const ep = await window._fbLoadSettings('notifyEndpoint');
         if (ep && ep.url) { notifyUrl = ep.url; localStorage.setItem('lm-notify-url', ep.url); }
-      } catch (_) {}
-  
+      } catch (_) { }
+
       try {
         const ac = await window._fbLoadSettings('analyticsConfig');
         if (ac && ac.url) {
           localStorage.setItem('lm-analytics-url', ac.url);
         }
-      } catch (_) {}
-  
+      } catch (_) { }
+
       // NOW that we have a valid token, we pull the protected catalog.
-      await loadCatalog(); 
+      await loadCatalog();
       loadAuthorViewOverrides();
-  
+
       // Check access
       const uEmail = user.email.toLowerCase().trim();
       if (uEmail === publisherEmail || uEmail === 'lyricalmyricalbooks@gmail.com') {
@@ -22559,13 +22588,13 @@ async function initStartup() {
         dismissSplash();
         return;
       }
-  
+
       // Artist Check
       const matchedBookId = Object.keys(BOOKS).find(id => {
         const dbEmail = (BOOKS[id].authorEmail || '').toLowerCase().trim();
         return dbEmail === uEmail;
       });
-  
+
       if (matchedBookId) {
         window.IS_PUBLISHER = false;
         IS_AUTHOR_MODE = true;
@@ -22574,7 +22603,7 @@ async function initStartup() {
         dismissSplash();
         return;
       }
-      
+
       // No match
       window._fbSignOut();
       setupGate(`Your Google account (${user.email}) is not authorized for any books.`);
@@ -22589,8 +22618,8 @@ async function initStartup() {
 }
 
 function setupGate(errMsg) {
-  $('pw-gate').style.display='';
-  $('pw-app').style.display='none';
+  $('pw-gate').style.display = '';
+  $('pw-app').style.display = 'none';
   document.querySelector('#gate-sub').textContent = 'inventory app';
   document.querySelector('#pw-gate .wm').textContent = 'Lyricalmyrical Books';
   const desc = document.getElementById('gate-desc');
@@ -22621,7 +22650,7 @@ function renderWebAnalytics() {
     }
     if (setupView) setupView.style.display = 'none';
     if (connectedView) connectedView.style.display = 'block';
-    
+
     // Extract domain from URL for aesthetics
     try {
       const parsed = new URL(url);
@@ -22652,11 +22681,11 @@ function renderWebAnalytics() {
   }
 }
 
-window.toggleAnalyticsHeight = function() {
+window.toggleAnalyticsHeight = function () {
   const iframe = $('webanalytics-iframe');
   const btn = $('webanalytics-height-btn');
   if (!iframe || !btn) return;
-  
+
   if (iframe.style.height === '1200px') {
     iframe.style.height = '700px';
     btn.textContent = '↕ Expand';
@@ -22666,7 +22695,7 @@ window.toggleAnalyticsHeight = function() {
   }
 };
 
-window.saveAnalyticsUrl = async function() {
+window.saveAnalyticsUrl = async function () {
   const urlInput = $('webanalytics-url-input');
   if (!urlInput) return;
   const url = urlInput.value.trim();
@@ -22693,7 +22722,7 @@ window.saveAnalyticsUrl = async function() {
   }
 };
 
-window.disconnectAnalytics = async function() {
+window.disconnectAnalytics = async function () {
   try {
     localStorage.removeItem('lm-analytics-url');
     if (typeof window._fbSaveSettings === 'function') {
@@ -22804,7 +22833,7 @@ function getAllStores() {
 
 function getBookPresetSpecs(book) {
   if (!book) return { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
-  
+
   // Prioritize custom specifications saved on the book
   if (book.shipLength && book.shipWidth && book.shipHeight && book.shipWeight) {
     return {
@@ -22818,7 +22847,7 @@ function getBookPresetSpecs(book) {
   }
 
   const title = (book.title || '').toLowerCase();
-  
+
   if (title.includes('altrove')) {
     return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.1, weight_unit: 'lb' };
   } else if (title.includes('hound')) {
@@ -23003,12 +23032,12 @@ function saveShippoApiKey() {
     showToast('⚠️ Enter a valid Shippo token', 'warn');
     return;
   }
-  
+
   if (!TAX_CENTER.settings) {
     TAX_CENTER.settings = { baseCurrency: 'CAD', geminiKey: '' };
   }
   TAX_CENTER.settings.shippoKey = token;
-  
+
   saveTaxCenter()
     .then(() => {
       showToast('✓ Shippo API key saved');
@@ -23028,7 +23057,7 @@ function editShippoApiKey() {
   const setupGroup = $('ship-key-setup-group');
   const activeGroup = $('ship-key-active-group');
   const keyInput = $('ship-api-key-input');
-  
+
   if (setupGroup) setupGroup.style.display = 'flex';
   if (activeGroup) activeGroup.style.display = 'none';
   if (keyInput) {
@@ -23044,7 +23073,7 @@ function onShippoPreFillDestChange() {
     select.dataset.orderNumber = '';
     return;
   }
-  
+
   try {
     const addr = JSON.parse(select.value);
     select.dataset.orderNumber = normalizeShippingOrderNumber(addr.orderNumber);
@@ -23066,16 +23095,16 @@ function onShippoPreFillDestChange() {
 function onShippoBookPresetChange() {
   const select = $('ship-preset-book');
   if (!select || !select.value) return;
-  
+
   const book = BOOKS[select.value];
   if (!book) return;
-  
+
   const specs = getBookPresetSpecs(book);
-  
+
   // Set quantity back to 1
   const qtyInput = $('sp-qty');
   if (qtyInput) qtyInput.value = '1';
-  
+
   // Update inputs
   $('sp-length').value = specs.length;
   $('sp-width').value = specs.width;
@@ -23089,7 +23118,7 @@ function onShippoBookPresetChange() {
   if (customsDescription) customsDescription.value = `${book.title || 'Printed books'} - printed books`.slice(0, 80);
   const customsHs = $('sp-customs-hs');
   if (customsHs) customsHs.value = book.shipHsCode || '490199';
-  
+
   // Update base specifications cache
   shippoBaseSpecs = {
     length: specs.length,
@@ -23099,7 +23128,7 @@ function onShippoBookPresetChange() {
     weight: specs.weight,
     weight_unit: specs.weight_unit
   };
-  
+
   showToast(`✓ Package preset loaded: ${book.title}`);
 }
 
@@ -23283,7 +23312,7 @@ async function validateDestinationAddress() {
     showToast('⚠️ Please configure your Shippo API Key first', 'warn');
     return;
   }
-  
+
   const stName = $('st-name').value.trim();
   const stStreet1 = $('st-street1').value.trim();
   const stCity = $('st-city').value.trim();
@@ -23291,14 +23320,14 @@ async function validateDestinationAddress() {
   const stZip = $('st-zip').value.trim();
   const stCountry = $('st-country').value;
   const stCountryCode = normalizeCountryCode(stCountry);
-  
+
   if (!stStreet1 || !stCity || !stZip || !stCountryCode) {
     showToast('⚠️ Street Address, City, Zip, and Country are required to validate.', 'warn');
     return;
   }
-  
+
   showToast('🔍 Validating recipient address...');
-  
+
   try {
     const payload = {
       name: stName || 'Recipient',
@@ -23309,7 +23338,7 @@ async function validateDestinationAddress() {
       country: stCountryCode,
       validate: true
     };
-    
+
     const resp = await fetch('https://api.goshippo.com/addresses/', {
       method: 'POST',
       headers: {
@@ -23318,15 +23347,15 @@ async function validateDestinationAddress() {
       },
       body: JSON.stringify(payload)
     });
-    
+
     if (!resp.ok) {
       const err = await resp.json().catch(() => null);
       throw new Error(err ? JSON.stringify(err) : `API Error ${resp.status}`);
     }
-    
+
     const data = await resp.json();
     const results = data.validation_results || {};
-    
+
     if (results.is_valid) {
       showToast('✓ Address is VALID and deliverable!', 'ok', 5000);
     } else {
@@ -23617,13 +23646,13 @@ async function calculateShippoRates() {
         const logoUrl = r.provider_image_75 || '';
         const isCheapest = r.object_id === cheapestId;
         const isFastest = r.object_id === fastestId && !isCheapest;
-        
+
         let badgesHtml = '';
         if (isCheapest) badgesHtml += '<span class="rate-badge cheapest">Cheapest</span>';
         if (isFastest) badgesHtml += '<span class="rate-badge fastest">Fastest</span>';
         if (isCanadaPostRate(r)) badgesHtml += '<span class="rate-badge canada-post">Canada Post</span>';
 
-        const transitDays = r.estimated_days 
+        const transitDays = r.estimated_days
           ? `${r.estimated_days} ${parseInt(r.estimated_days) === 1 ? 'day' : 'days'}`
           : '';
         const transitInfo = [transitDays, r.duration_terms].filter(Boolean).join(' · ');
@@ -23632,7 +23661,7 @@ async function calculateShippoRates() {
           <div class="rate-card">
             <div class="rate-info">
               <div class="rate-logo">
-                ${logoUrl ? `<img src="${logoUrl}" alt="${r.provider}">` : `<span style="font-size:9px; font-weight:700;">${r.provider.slice(0,3)}</span>`}
+                ${logoUrl ? `<img src="${logoUrl}" alt="${r.provider}">` : `<span style="font-size:9px; font-weight:700;">${r.provider.slice(0, 3)}</span>`}
               </div>
               <div class="rate-details">
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -23668,17 +23697,17 @@ async function editShippingPaid(bookId, orderIdentifier) {
   if (!s || !s.hist) return;
   const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
   if (!h) return;
-  
+
   const current = h.shippingPaid || 0;
   const input = prompt(`Enter shipping paid by customer for order ${h.num} (in CAD):`, current);
   if (input === null) return;
-  
+
   const val = Number(input);
   if (isNaN(val) || val < 0) {
     showToast('Invalid shipping amount', 'err');
     return;
   }
-  
+
   h.shippingPaid = val;
   h.manualShippingPaid = true;
   await window.saveState(bookId);
@@ -23691,17 +23720,17 @@ async function editPostageCost(bookId, orderIdentifier) {
   if (!s || !s.hist) return;
   const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
   if (!h) return;
-  
+
   const current = h.postagePaid || 0;
   const input = prompt(`Enter postage cost (shipping cost you paid) for order ${h.num} (in CAD):`, current);
   if (input === null) return;
-  
+
   const val = Number(input);
   if (isNaN(val) || val < 0) {
     showToast('Invalid postage cost amount', 'err');
     return;
   }
-  
+
   h.postagePaid = val;
   h.manualPostagePaid = true;
   await window.saveState(bookId);
@@ -23714,7 +23743,7 @@ async function unlinkManualPostage(bookId, orderIdentifier) {
   if (!s || !s.hist) return;
   const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
   if (!h) return;
-  
+
   delete h.postagePaid;
   delete h.manualPostagePaid;
   await window.saveState(bookId);
@@ -23841,7 +23870,7 @@ async function confirmSuggestedShippoLink(orderNum, txRef) {
     await persistManualShippingLink(expense, orderNum, () => saveTaxCenter());
     showToast(`Linked ${orderNum} to ${txRef.replace('shippo:', '')} ✓`, 'success');
     renderShippingAnalysisHub();
-    
+
     const row = document.getElementById(`shipping-ledger-row-${escapeHtml(orderNum)}`);
     if (row) {
       row.classList.add('flash-highlight');
@@ -23942,7 +23971,7 @@ async function doManualShippoLink(orderNum, txRef) {
     showToast(`Linked ${orderNum} to ${txRef.replace('shippo:', '')} ✓`, 'success');
     closeManualShippoLinkModal();
     renderShippingAnalysisHub();
-    
+
     const row = document.getElementById(`shipping-ledger-row-${escapeHtml(orderNum)}`);
     if (row) {
       row.classList.add('flash-highlight');
@@ -23967,11 +23996,11 @@ async function unlinkShippoExpense(txRef) {
     showToast('Expense not found.', 'err');
     return;
   }
-  
+
   delete expense.shippingOrderNumber;
   delete expense.shippingMatchMethod;
   expense.shippingMatchStatus = 'unmatched';
-  
+
   try {
     await saveTaxCenter();
     showToast(`Unlinked ${txRef.replace('shippo:', '')}`, 'ok');
@@ -24012,9 +24041,9 @@ function renderShippingAnalysisHub() {
   const relevantExpenses = (shipAnalysisBookFilter === 'all')
     ? shippoExpenses
     : shippoExpenses.filter(e => {
-        const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
-        return num && allOrders.some(o => normalizeShippingOrderNumber(o.num) === num);
-      });
+      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+      return num && allOrders.some(o => normalizeShippingOrderNumber(o.num) === num);
+    });
 
   // Build the book filter dropdown options
   let bookFilterOptions = `<option value="all" ${shipAnalysisBookFilter === 'all' ? 'selected' : ''}>— All Books —</option>`;
@@ -24052,7 +24081,7 @@ function renderShippingAnalysisHub() {
 
     const netMargin = totalShippingIncome - totalPostageCost;
     const marginClass = netMargin > 0 ? 'positive' : netMargin < 0 ? 'negative' : 'neutral';
-    
+
     // Average markup calculation on linked orders
     let totalMarkupSum = 0;
     let markupCount = 0;
@@ -24064,10 +24093,10 @@ function renderShippingAnalysisHub() {
       const linked = orderNumber ? shippoExpenses.filter(e =>
         e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
       ) : [];
-      
+
       const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
       if (hasPostage) {
-        const cost = o.manualPostagePaid 
+        const cost = o.manualPostagePaid
           ? (Number(o.postagePaid) || 0)
           : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
         if (cost > 0) {
@@ -24183,7 +24212,7 @@ function renderShippingAnalysisHub() {
     }
     carrierStats[provider].count++;
     carrierStats[provider].totalCost += cost;
-    
+
     if (!carrierStats[provider].services[service]) {
       carrierStats[provider].services[service] = { count: 0, totalCost: 0 };
     }
@@ -24230,16 +24259,16 @@ function renderShippingAnalysisHub() {
 
   allOrders.forEach(o => {
     const revenue = Number(o.shippingPaid) || 0;
-    
+
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>
       e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
     ) : [];
     const cost = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-    
+
     const destCountry = normalizeCountryCode(o.shipCountry || 'US');
     const isIntl = isInternationalShipment(originCountry, destCountry);
-    
+
     if (isIntl) {
       intlCount++;
       intlRevenue += revenue;
@@ -24291,23 +24320,23 @@ function renderShippingAnalysisHub() {
     '2 - 5 lbs': { count: 0, totalCost: 0 },
     'Over 5 lbs': { count: 0, totalCost: 0 }
   };
-  
+
   allOrders.forEach(o => {
     const book = BOOK_LIST.find(b => b.id === o.bookId);
     const weight = getWeightInLbs(o.qty || 1, book);
-    
+
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>
       e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
     ) : [];
-    
+
     if (linked.length > 0) {
       const cost = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
       let band = 'Over 5 lbs';
       if (weight < 1) band = 'Under 1 lb';
       else if (weight <= 2) band = '1 - 2 lbs';
       else if (weight <= 5) band = '2 - 5 lbs';
-      
+
       weightBands[band].count++;
       weightBands[band].totalCost += cost;
     }
@@ -24350,33 +24379,33 @@ function renderShippingAnalysisHub() {
     if (o.excludeFromShipping) return false;
 
     if (shipAnalysisMarginFilter === 'all') return true;
-    
+
     const customerPaidBase = Number(o.shippingPaid) || 0;
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>
       e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
     ) : [];
-    
+
     if (shipAnalysisMarginFilter === 'missing') return customerPaidBase === 0;
-    
+
     const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
     if (!hasPostage) return false;
-    
+
     const postageCostCAD = o.manualPostagePaid
       ? (Number(o.postagePaid) || 0)
       : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
     const margin = customerPaidBase - postageCostCAD;
-    
+
     if (shipAnalysisMarginFilter === 'loss') return margin < 0;
     if (shipAnalysisMarginFilter === 'profit') return margin >= 0;
-    
+
     return true;
   });
 
   const totalItems = filteredLedgerOrders.length;
   const totalPages = Math.ceil(totalItems / SHIP_ANALYSIS_PAGE_SIZE) || 1;
   const currentPage = Math.min(shipAnalysisCurrentPage, totalPages);
-  
+
   const startIdx = (currentPage - 1) * SHIP_ANALYSIS_PAGE_SIZE;
   const endIdx = startIdx + SHIP_ANALYSIS_PAGE_SIZE;
   const pagedOrders = filteredLedgerOrders.slice(startIdx, endIdx);
@@ -24384,7 +24413,7 @@ function renderShippingAnalysisHub() {
   let ledgerRowsHtml = '';
   pagedOrders.forEach(o => {
     const customerPaidBase = Number(o.shippingPaid) || 0;
-    
+
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>
       e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
@@ -24394,19 +24423,19 @@ function renderShippingAnalysisHub() {
     const suggested = orderNumber ? shippoExpenses.filter(e =>
       e.shippingMatchStatus === 'suggested' && normalizeShippingOrderNumber(e.shippingSuggestedOrderNumber) === orderNumber
     ) : [];
-    
+
     const postageCostCAD = o.manualPostagePaid
       ? (Number(o.postagePaid) || 0)
       : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-      
+
     const margin = customerPaidBase - postageCostCAD;
     const marginClass = margin > 0 ? 'positive' : margin < 0 ? 'negative' : 'neutral';
     const isLinked = linked.length > 0 || !!o.manualPostagePaid;
     const isSuggested = !isLinked && suggested.length > 0;
-    
+
     // Undercharged check (Suggestion 3)
     const isUndercharged = postageCostCAD > (customerPaidBase * 1.15) + 0.01;
-    
+
     const status = o.excludeFromShipping
       ? { label: 'Dismissed', className: 'neutral' }
       : o.manualPostagePaid
@@ -24418,7 +24447,7 @@ function renderShippingAnalysisHub() {
             : isUndercharged
               ? { label: 'Undercharged', className: 'undercharged' }
               : { label: 'Matched', className: 'matched' });
-      
+
     // Markup check (Suggestion 4)
     let markupText = '';
     if (postageCostCAD > 0) {
@@ -24429,7 +24458,7 @@ function renderShippingAnalysisHub() {
     const matchedRef = o.manualPostagePaid
       ? 'Manual Override'
       : (linked.map(e => e.ref.replace('shippo:', '')).join(', ') || 'Unlinked');
-      
+
     const trackingCell = linked.map(e => {
       const parsedDesc = e.desc.match(/#([A-Za-z0-9]+)/);
       const trackingNum = parsedDesc ? parsedDesc[1] : '';
@@ -24473,7 +24502,7 @@ function renderShippingAnalysisHub() {
         </div>`;
     }
 
-    const checkboxHtml = !o.excludeFromShipping 
+    const checkboxHtml = !o.excludeFromShipping
       ? `<input type="checkbox" class="ship-order-checkbox" value="${escapeHtml(o.bookId + '|' + (o.id || o.num))}" onchange="updateShipAnalysisBatchActionUI()" />`
       : '';
 
@@ -24520,7 +24549,7 @@ function renderShippingAnalysisHub() {
     if (endPage - startPage + 1 < maxButtons) {
       startPage = Math.max(1, endPage - maxButtons + 1);
     }
-    
+
     for (let p = startPage; p <= endPage; p++) {
       const isCurrent = p === currentPage;
       pageButtons += `
@@ -24663,7 +24692,7 @@ function onShippoQuantityChange() {
 
   $('sp-height').value = parseFloat(scaledHeight.toFixed(2));
   $('sp-weight').value = parseFloat(scaledWeight.toFixed(2));
-  
+
   showToast(`✓ Scaled specs for ${qty} ${qty === 1 ? 'copy' : 'copies'}`);
 }
 
@@ -24881,7 +24910,7 @@ async function renderBigCartelTab() {
   } else {
     updateBigCartelConnectionUI(false, 'Disconnected');
   }
-  
+
   if (config.subdomain && config.username && config.password) {
     $('bc-dashboard-content').style.display = 'block';
     if (!bigCartelData.products.length && !bigCartelData.orders.length) {
@@ -24899,7 +24928,7 @@ async function renderBigCartelTab() {
 function updateBigCartelConnectionUI(isConnected, statusText = '') {
   const dot = $('bc-status-dot');
   const txt = $('bc-status-text');
-  
+
   if (isConnected) {
     dot.className = 'bc-dot connected';
     txt.textContent = statusText || 'Connected';
@@ -24914,7 +24943,7 @@ async function fetchBigCartel(endpoint, accountId = '') {
   if (!config.subdomain || !config.username || !config.password) {
     throw new Error('Big Cartel credentials are not fully configured.');
   }
-  
+
   if (!sheetsUrl) {
     throw new Error('Google Sheets Connection is required to proxy Big Cartel API requests.');
   }
@@ -24926,7 +24955,7 @@ async function fetchBigCartel(endpoint, accountId = '') {
   const url = endpoint
     ? `https://api.bigcartel.com/v1/accounts/${encodeURIComponent(accountId)}/${endpoint}`
     : `https://api.bigcartel.com/v1/accounts`;
-  
+
   const payload = {
     version: 2,
     action: 'proxybigcartel',
@@ -25003,7 +25032,7 @@ async function testBigCartelConnection() {
         method: 'GET'
       }
     };
-    
+
     if (!sheetsUrl) {
       throw new Error('Google Sheets Connection URL is not set in Settings -> Sheets.');
     }
@@ -25013,9 +25042,9 @@ async function testBigCartelConnection() {
       mode: 'cors',
       body: JSON.stringify(payload)
     });
-    
+
     if (!res.ok) throw new Error(`Webhook error: ${res.status}`);
-    
+
     const data = await res.json();
     if (!data || data.error) throw new Error(data ? data.error : 'Connection failed');
     if (data.code !== 200) throw new Error(`API error ${data.code}`);
@@ -25024,7 +25053,7 @@ async function testBigCartelConnection() {
     if (content.data && content.data.length > 0) {
       showToast('✓ Connection successful!', 'ok');
       updateBigCartelConnectionUI(true, 'Connection Successful');
-      
+
       const storeInfo = content.data.find(acc => acc.attributes.subdomain === subdomain) || content.data[0];
       renderBigCartelStoreDetails(storeInfo);
     } else {
@@ -25059,10 +25088,10 @@ async function saveBigCartelSettings() {
     await window._fbSaveSettings('bigCartelConfig', config);
     bigCartelConfig = config;
     showToast('✓ Big Cartel credentials saved & synced', 'ok');
-    
+
     $('bc-dashboard-content').style.display = 'block';
     updateBigCartelConnectionUI(true, 'Connected');
-    
+
     loadBigCartelData();
   } catch (e) {
     console.error('Save failed:', e);
@@ -25076,7 +25105,7 @@ async function saveBigCartelSettings() {
 async function loadBigCartelData() {
   const container = $('bc-products-grid');
   const list = $('bc-orders-list');
-  
+
   if (activeBigCartelSubTab === 'products') {
     container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--text3);">Loading products from Big Cartel...</div>';
   } else {
@@ -25092,7 +25121,7 @@ async function loadBigCartelData() {
         renderBigCartelStoreDetails(bigCartelData.store);
       }
     }
-    
+
     if (activeBigCartelSubTab === 'products') {
       const productsRes = await fetchBigCartel('products', bigCartelData.store.id);
       bigCartelData.products = productsRes.data || [];
@@ -25122,7 +25151,7 @@ function renderBigCartelStoreDetails(store) {
   $('bc-store-plan').textContent = store.relationships?.plan?.data?.id || 'Platinum';
   $('bc-store-currency').textContent = store.relationships?.currency?.data?.id || 'CAD';
   $('bc-store-email').textContent = store.attributes.contact_email || '—';
-  
+
   const link = $('bc-store-url');
   link.href = store.attributes.url || `https://${store.attributes.subdomain}.bigcartel.com`;
   link.textContent = store.attributes.url || `${store.attributes.subdomain}.bigcartel.com`;
@@ -25131,7 +25160,7 @@ function renderBigCartelStoreDetails(store) {
 function renderBigCartelProducts(products, included = []) {
   const container = $('bc-products-grid');
   container.innerHTML = '';
-  
+
   if (!products || products.length === 0) {
     container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--text3);">No products found in this store.</div>';
     return;
@@ -25158,16 +25187,16 @@ function renderBigCartelProducts(products, included = []) {
       imgUrl = imgLookup[primaryImgId];
     }
     imgUrl = imgUrl || 'public/logo.png';
-    
+
     let statusClass = 'bc-badge active';
     let statusLabel = attr.status || 'active';
     if (attr.status === 'hidden') statusClass = 'bc-badge hidden';
     if (attr.status === 'sold_out') statusClass = 'bc-badge sold_out';
-    
+
     let optionsListHtml = '';
     let totalStock = 0;
     let hasStockTracking = false;
-    
+
     if (p.relationships?.options?.data?.length > 0) {
       p.relationships.options.data.forEach(optRef => {
         const opt = optLookup[optRef.id];
@@ -25220,7 +25249,7 @@ function renderBigCartelProducts(products, included = []) {
 function renderBigCartelOrders(orders, _included = []) {
   const list = $('bc-orders-list');
   list.innerHTML = '';
-  
+
   if (!orders || orders.length === 0) {
     list.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text3);">No orders found.</td></tr>';
     return;
@@ -25230,7 +25259,7 @@ function renderBigCartelOrders(orders, _included = []) {
     const attr = o.attributes || {};
     const dateStr = attr.created_at ? new Date(attr.created_at).toLocaleDateString() : '—';
     const customer = (attr.buyer_first_name || '') + ' ' + (attr.buyer_last_name || '');
-    
+
     let statusPill = 'pill gray';
     if (attr.status === 'completed') statusPill = 'pill green';
     if (attr.status === 'pending') statusPill = 'pill gold';
@@ -25275,20 +25304,20 @@ function prefillShippingFromBigCartelOrder(orderId) {
     showToast('Order details not found', 'err');
     return;
   }
-  
+
   const attr = order.attributes || {};
-  
+
   // Extract recipient details
   const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim();
   const recipientPhone = attr.shipping_phone || attr.buyer_phone || '';
-  
+
   // Extract address fields
   const street1 = attr.shipping_address_1 || '';
   const street2 = attr.shipping_address_2 || '';
   const city = attr.shipping_city || '';
   const state = attr.shipping_state || '';
   const zip = attr.shipping_zip || '';
-  
+
   // Extract country (2-letter ISO code or similar)
   let country = 'US';
   if (attr.shipping_country_code) {
@@ -25300,10 +25329,10 @@ function prefillShippingFromBigCartelOrder(orderId) {
   } else if (attr.shipping_country && typeof attr.shipping_country === 'object') {
     country = attr.shipping_country.code || attr.shipping_country.id || attr.shipping_country.name || 'US';
   }
-  
+
   // Clean and uppercase country code
   country = String(country).trim().toUpperCase();
-  
+
   // Populate the fields on the Shipping Tab
   $('st-name').value = recipientName;
   $('st-company').value = attr.shipping_company || '';
@@ -25313,35 +25342,35 @@ function prefillShippingFromBigCartelOrder(orderId) {
   $('st-city').value = city;
   $('st-state').value = state;
   $('st-zip').value = zip;
-  
+
   // Set the country dropdown
   const countrySelect = $('st-country');
   if (countrySelect) {
     const optionExists = Array.from(countrySelect.options).some(opt => opt.value === country);
     countrySelect.value = optionExists ? country : 'US';
   }
-  
+
   // Link the order number to the shipping prefill dataset so reconciliation can trace it
   const select = $('ship-prefill-dest');
   if (select) {
     select.dataset.orderNumber = normalizeShippingOrderNumber(orderId);
     select.value = ''; // Clear select dropdown visual state
   }
-  
+
   // Switch to the Shipping tab
   switchTab('shipping');
-  
+
   showToast(`✓ Populated shipping details for Order #${orderId}`);
 }
 
 function switchBigCartelSubTab(tabName) {
   activeBigCartelSubTab = tabName;
-  
+
   const btnProducts = $('bc-btn-subtab-products');
   const btnOrders = $('bc-btn-subtab-orders');
   const secProducts = $('bc-sec-products');
   const secOrders = $('bc-sec-orders');
-  
+
   if (tabName === 'products') {
     btnProducts.classList.add('active');
     btnOrders.classList.remove('active');
@@ -25353,7 +25382,7 @@ function switchBigCartelSubTab(tabName) {
     secProducts.style.display = 'none';
     secOrders.style.display = 'block';
   }
-  
+
   loadBigCartelData();
 }
 
@@ -25400,9 +25429,8 @@ async function fetchAllBigCartelOrders(storeId) {
   let offset = 0;
   let hasMore = true;
   let page = 1;
-  let maxPages = 50;
-  let detectedLimit = null;
-  
+  let maxPages = 5;
+
   while (hasMore && page <= maxPages) {
     const res = await fetchBigCartel(`orders?page[limit]=${limit}&page[offset]=${offset}`, storeId);
     if (res && res.data && res.data.length > 0) {
@@ -25410,15 +25438,10 @@ async function fetchAllBigCartelOrders(storeId) {
       if (res.included) {
         allIncluded = allIncluded.concat(res.included);
       }
-      
-      if (detectedLimit === null) {
-        detectedLimit = res.data.length;
-      }
-      
-      if (res.data.length < detectedLimit) {
+      if (res.data.length < limit) {
         hasMore = false;
       } else {
-        offset += res.data.length;
+        offset += limit;
         page++;
       }
     } else {
@@ -25430,15 +25453,15 @@ async function fetchAllBigCartelOrders(storeId) {
 
 async function syncBigCartelShippingPaid(bcOrders) {
   if (!bcOrders || bcOrders.length === 0) return;
-  
+
   let updateCount = 0;
   const affectedBooks = new Set();
-  
+
   bcOrders.forEach(bcOrder => {
     const bcId = bcOrder.id;
     const normalizedBcId = normalizeShippingOrderNumber(bcId);
     const shippingPaid = parseFloat(bcOrder.attributes?.shipping_total || 0);
-    
+
     Object.keys(states).forEach(bookId => {
       const s = states[bookId];
       if (s && Array.isArray(s.hist)) {
@@ -25448,7 +25471,7 @@ async function syncBigCartelShippingPaid(bcOrders) {
               h.shippingPaid = shippingPaid;
               affectedBooks.add(bookId);
               updateCount++;
-              
+
               const bookObj = BOOKS[bookId];
               if (bookObj) {
                 syncToSheets({
@@ -25477,7 +25500,7 @@ async function syncBigCartelShippingPaid(bcOrders) {
       }
     });
   });
-  
+
   if (updateCount > 0) {
     for (const bookId of affectedBooks) {
       await window.saveState(bookId);
@@ -25493,13 +25516,13 @@ async function triggerBigCartelShippingSync() {
     showToast('⚠️ Big Cartel is not configured. Please set credentials in the Big Cartel tab.', 'warn');
     return;
   }
-  
+
   const btn = document.getElementById('ship-bc-sync-btn');
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<span>🔄</span> Syncing...';
   }
-  
+
   try {
     if (!bigCartelData.store) {
       const accountsRes = await fetchBigCartel('');
@@ -25507,22 +25530,22 @@ async function triggerBigCartelShippingSync() {
         bigCartelData.store = accountsRes.data.find(acc => acc.attributes.subdomain === config.subdomain) || accountsRes.data[0];
       }
     }
-    
+
     if (!bigCartelData.store) {
       throw new Error('Big Cartel store info not found.');
     }
-    
+
     const ordersRes = await fetchAllBigCartelOrders(bigCartelData.store.id);
     bigCartelData.orders = ordersRes.data || [];
-    
+
     let updateCount = 0;
     const affectedBooks = new Set();
-    
+
     bigCartelData.orders.forEach(bcOrder => {
       const bcId = bcOrder.id;
       const normalizedBcId = normalizeShippingOrderNumber(bcId);
       const shippingPaid = parseFloat(bcOrder.attributes?.shipping_total || 0);
-      
+
       Object.keys(states).forEach(bookId => {
         const s = states[bookId];
         if (s && Array.isArray(s.hist)) {
@@ -25532,7 +25555,7 @@ async function triggerBigCartelShippingSync() {
                 h.shippingPaid = shippingPaid;
                 affectedBooks.add(bookId);
                 updateCount++;
-                
+
                 const bookObj = BOOKS[bookId];
                 if (bookObj) {
                   syncToSheets({
@@ -25561,7 +25584,7 @@ async function triggerBigCartelShippingSync() {
         }
       });
     });
-    
+
     if (updateCount > 0) {
       for (const bookId of affectedBooks) {
         await window.saveState(bookId);
