@@ -11,6 +11,7 @@ describe('Shipping Analysis Hub Functions', () => {
   let parseCarrierInfo;
   let getWeightInLbs;
   let getWeightInKg;
+  let downloadFilteredShippingLedgerCSV;
 
   beforeEach(() => {
     const mainContent = fs.readFileSync(mainJsPath, 'utf8');
@@ -19,14 +20,17 @@ describe('Shipping Analysis Hub Functions', () => {
     const carrierMatch = mainContent.match(/function parseCarrierInfo\(desc\) \{([\s\S]+?)\n\}/);
     const weightMatch = mainContent.match(/function getWeightInLbs\(qty, book\) \{([\s\S]+?)\n\}/);
     const weightKgMatch = mainContent.match(/function getWeightInKg\(qty, book\) \{([\s\S]+?)\n\}/);
+    const csvMatch = mainContent.match(/function downloadFilteredShippingLedgerCSV\(\) \{([\s\S]+?)\n\}/);
 
     expect(carrierMatch).not.toBeNull();
     expect(weightMatch).not.toBeNull();
     expect(weightKgMatch).not.toBeNull();
+    expect(csvMatch).not.toBeNull();
 
     parseCarrierInfo = new Function('desc', carrierMatch[0] + '\nreturn parseCarrierInfo(desc);');
     getWeightInLbs = new Function('qty', 'book', weightMatch[0] + '\nreturn getWeightInLbs(qty, book);');
     getWeightInKg = new Function('qty', 'book', weightMatch[0] + '\n' + weightKgMatch[0] + '\nreturn getWeightInKg(qty, book);');
+    downloadFilteredShippingLedgerCSV = new Function('qty', 'book', weightMatch[0] + '\n' + weightKgMatch[0] + '\n' + csvMatch[0] + '\nreturn downloadFilteredShippingLedgerCSV;');
   });
 
   describe('parseCarrierInfo', () => {
@@ -65,6 +69,12 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(getWeightInKg(1, { shipWeight: 1, shipWeightUnit: 'lb' })).toBeCloseTo(0.45359237, 4);
       expect(getWeightInKg(1, { shipWeight: 1, shipWeightUnit: 'kg' })).toBeCloseTo(1.0, 4);
       expect(getWeightInKg(2, null)).toBeCloseTo(2.4 * 0.45359237, 4);
+    });
+  });
+
+  describe('downloadFilteredShippingLedgerCSV', () => {
+    it('extracts successfully and returns function type', () => {
+      expect(typeof downloadFilteredShippingLedgerCSV).toBe('function');
     });
   });
 

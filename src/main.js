@@ -24096,22 +24096,86 @@ function renderShippingAnalysisHub() {
 
   // ── 1. Calculate P&L KPIs (Publisher view only) ──
   let pnlHtml = '';
+  const originCountry = localStorage.getItem('lm-shippo-origin-country') || $('sf-country')?.value || 'CA';
+
   if (isPub) {
     const activeOrders = allOrders.filter(o => !o.excludeFromShipping);
-    const totalShippingIncome = activeOrders.reduce((sum, o) => {
+
+    // Apply all interactive filters to compute current P&L totals
+    const kpiOrders = activeOrders.filter(o => {
+      // A. Margin health filter
+      if (shipAnalysisMarginFilter !== 'all') {
+        const customerPaidBase = Number(o.shippingPaid) || 0;
+        const orderNumber = normalizeShippingOrderNumber(o.num);
+        const linked = orderNumber ? shippoExpenses.filter(e =>
+          e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+        ) : [];
+
+        if (shipAnalysisMarginFilter === 'missing') {
+          if (customerPaidBase !== 0) return false;
+        } else {
+          const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
+          if (!hasPostage) return false;
+
+          const postageCostCAD = o.manualPostagePaid
+            ? (Number(o.postagePaid) || 0)
+            : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+          const margin = customerPaidBase - postageCostCAD;
+
+          if (shipAnalysisMarginFilter === 'loss' && margin >= 0) return false;
+          if (shipAnalysisMarginFilter === 'profit' && margin < 0) return false;
+        }
+      }
+
+      // B. Carrier filter
+      if (shipAnalysisCarrierFilter !== 'all') {
+        const orderNumber = normalizeShippingOrderNumber(o.num);
+        const linked = orderNumber ? shippoExpenses.filter(e =>
+          e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+        ) : [];
+        const carrier = o.manualPostagePaid
+          ? 'Manual Override'
+          : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
+        if (carrier !== shipAnalysisCarrierFilter) return false;
+      }
+
+      // C. Region filter
+      if (shipAnalysisRegionFilter !== 'all') {
+        const destCountry = normalizeCountryCode(o.shipCountry || 'US');
+        const isIntl = isInternationalShipment(originCountry, destCountry);
+        const region = isIntl ? 'international' : 'domestic';
+        if (region !== shipAnalysisRegionFilter) return false;
+      }
+
+      // D. Weight filter
+      if (shipAnalysisWeightFilter !== 'all') {
+        const book = BOOK_LIST.find(b => b.id === o.bookId);
+        const weightKg = getWeightInKg(o.qty || 1, book);
+        let band = 'Over 2 kg';
+        if (weightKg < 0.5) band = 'Under 0.5 kg';
+        else if (weightKg <= 1) band = '0.5 - 1 kg';
+        else if (weightKg <= 2) band = '1 - 2 kg';
+        if (band !== shipAnalysisWeightFilter) return false;
+      }
+
+      return true;
+    });
+
+    const totalShippingIncome = kpiOrders.reduce((sum, o) => {
       return sum + (Number(o.shippingPaid) || 0);
     }, 0);
 
-    let totalPostageCost = relevantExpenses.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-    activeOrders.forEach(o => {
-      if (o.manualPostagePaid) {
-        const orderNumber = normalizeShippingOrderNumber(o.num);
-        const linked = orderNumber ? relevantExpenses.filter(e =>
-          e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-        ) : [];
-        const linkedCost = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-        totalPostageCost += (Number(o.postagePaid) || 0) - linkedCost;
-      }
+    let totalPostageCost = 0;
+    kpiOrders.forEach(o => {
+      const orderNumber = normalizeShippingOrderNumber(o.num);
+      const linked = orderNumber ? relevantExpenses.filter(e =>
+        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+      ) : [];
+      
+      const cost = o.manualPostagePaid
+        ? (Number(o.postagePaid) || 0)
+        : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+      totalPostageCost += cost;
     });
 
     const netMargin = totalShippingIncome - totalPostageCost;
@@ -24120,7 +24184,7 @@ function renderShippingAnalysisHub() {
     // Average markup calculation on linked orders
     let totalMarkupSum = 0;
     let markupCount = 0;
-    activeOrders.forEach(o => {
+    kpiOrders.forEach(o => {
       const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
       const rate = shippingRateToBase(cur);
       const customerPaidBase = (Number(o.shippingPaid) || 0) * rate;
@@ -24149,11 +24213,11 @@ function renderShippingAnalysisHub() {
         .map(e => normalizeShippingOrderNumber(e.shippingOrderNumber))
         .filter(Boolean)
     );
-    const unmatchedCount = activeOrders.filter(o => {
+    const unmatchedCount = kpiOrders.filter(o => {
       if (o.manualPostagePaid) return false;
       return !matchedOrderNumbers.has(normalizeShippingOrderNumber(o.num));
     }).length;
-    const linkedOrderCount = activeOrders.length - unmatchedCount;
+    const linkedOrderCount = kpiOrders.length - unmatchedCount;
 
     pnlHtml = `
       <section class="shipping-pnl-dashboard" aria-labelledby="shipping-pnl-title">
@@ -24201,10 +24265,10 @@ function renderShippingAnalysisHub() {
           </article>
           <article class="shipping-pnl-kpi">
             <span class="shipping-pnl-kpi-label">Link coverage</span>
-            <strong>${linkedOrderCount} <small>/ ${activeOrders.length} orders</small></strong>
+            <strong>${linkedOrderCount} <small>/ ${kpiOrders.length} orders</small></strong>
             <span>${avgMarkupText} average markup on linked orders</span>
           </article>
-</div>
+        </div>
         <section class="shipping-pnl-attention" aria-labelledby="shipping-pnl-attention-title">
           <div>
             <p class="shipping-pnl-eyebrow">Needs attention</p>
@@ -24315,7 +24379,6 @@ function renderShippingAnalysisHub() {
     : `<div class="empty-state" style="padding:1rem;">No carrier data logged.</div>`;
 
   // ── 3. Domestic vs. International Margin Split ──
-  const originCountry = localStorage.getItem('lm-shippo-origin-country') || $('sf-country')?.value || 'CA';
   let domCount = 0, domRevenue = 0, domCost = 0;
   let intlCount = 0, intlRevenue = 0, intlCost = 0;
 
@@ -24374,7 +24437,8 @@ function renderShippingAnalysisHub() {
           <td style="text-align:center;">${domCount}</td>
           <td style="text-align:right;">${domRevenue.toFixed(2)} CAD</td>
           <td style="text-align:right;">${domCost.toFixed(2)} CAD</td>
-          <td style="text-align:right; font-weight:700; color:${domMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${domMargin >= 0 ? '+' : ''}${domMargin.toFixed(2)} CAD</td>
+          <td style="text-align:right; font-weight:700; color:${domMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${domMargin >= 0 ? '+' : ''}
+${domMargin.toFixed(2)} CAD</td>
         </tr>
         <tr class="insight-clickable-row ${intlRowClass}" onclick="toggleShipAnalysisRegionFilter('international')" title="Click to filter ledger by International">
           <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
@@ -24384,7 +24448,8 @@ function renderShippingAnalysisHub() {
           <td style="text-align:center;">${intlCount}</td>
           <td style="text-align:right;">${intlRevenue.toFixed(2)} CAD</td>
           <td style="text-align:right;">${intlCost.toFixed(2)} CAD</td>
-          <td style="text-align:right; font-weight:700; color:${intlMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${intlMargin >= 0 ? '+' : ''}${intlMargin.toFixed(2)} CAD</td>
+          <td style="text-align:right; font-weight:700; color:${intlMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${intlMargin >= 0 ? '+' : ''}
+${intlMargin.toFixed(2)} CAD</td>
         </tr>
       </tbody>
     </table>
@@ -24392,10 +24457,10 @@ function renderShippingAnalysisHub() {
 
   // ── 4. Package Weight Band Cost Average ──
   const weightBands = {
-    'Under 0.5 kg': { count: 0, totalCost: 0 },
-    '0.5 - 1 kg': { count: 0, totalCost: 0 },
-    '1 - 2 kg': { count: 0, totalCost: 0 },
-    'Over 2 kg': { count: 0, totalCost: 0 }
+    'Under 0.5 kg': { count: 0, totalCost: 0, totalRevenue: 0 },
+    '0.5 - 1 kg': { count: 0, totalCost: 0, totalRevenue: 0 },
+    '1 - 2 kg': { count: 0, totalCost: 0, totalRevenue: 0 },
+    'Over 2 kg': { count: 0, totalCost: 0, totalRevenue: 0 }
   };
 
   allOrders.forEach(o => {
@@ -24414,6 +24479,8 @@ function renderShippingAnalysisHub() {
         ? (Number(o.postagePaid) || 0)
         : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
       
+      const revenue = Number(o.shippingPaid) || 0;
+
       let band = 'Over 2 kg';
       if (weightKg < 0.5) band = 'Under 0.5 kg';
       else if (weightKg <= 1) band = '0.5 - 1 kg';
@@ -24421,6 +24488,7 @@ function renderShippingAnalysisHub() {
 
       weightBands[band].count++;
       weightBands[band].totalCost += cost;
+      weightBands[band].totalRevenue += revenue;
     }
   });
 
@@ -24428,6 +24496,7 @@ function renderShippingAnalysisHub() {
   Object.keys(weightBands).forEach(band => {
     const data = weightBands[band];
     const avg = data.count > 0 ? (data.totalCost / data.count) : 0;
+    const margin = data.totalRevenue - data.totalCost;
     const isActive = (shipAnalysisWeightFilter === band);
     const rowClass = isActive ? 'active-insight-row' : '';
     weightRows += `
@@ -24439,6 +24508,8 @@ function renderShippingAnalysisHub() {
         <td style="text-align:center;">${data.count}</td>
         <td style="text-align:right;">${data.totalCost.toFixed(2)} CAD</td>
         <td style="text-align:right; font-weight:600;">${avg.toFixed(2)} CAD</td>
+        <td style="text-align:right; font-weight:700; color:${margin >= 0 ? '#2e7d32' : 'var(--red)'};">${margin >= 0 ? '+' : ''}
+${margin.toFixed(2)} CAD</td>
       </tr>
     `;
   });
@@ -24448,9 +24519,10 @@ function renderShippingAnalysisHub() {
       <thead>
         <tr>
           <th style="text-align:left;">Weight Band</th>
-          <th style="text-align:center; width:80px;">Shipments</th>
-          <th style="text-align:right; width:120px;">Total Cost</th>
-          <th style="text-align:right; width:120px;">Avg Cost</th>
+          <th style="text-align:center; width:65px;">Shipments</th>
+          <th style="text-align:right; width:90px;">Total Cost</th>
+          <th style="text-align:right; width:90px;">Avg Cost</th>
+          <th style="text-align:right; width:90px;">Net Margin</th>
         </tr>
       </thead>
       <tbody>
@@ -24532,22 +24604,52 @@ function renderShippingAnalysisHub() {
 
   let ledgerRowsHtml = '';
   paginatedOrders.forEach(o => {
-    const status = getReconciledStatus(o, shippoExpenses);
-    const book = BOOK_LIST.find(b => b.id === o.bookId);
-
-    let isLinked = false;
-    let isSuggested = false;
-    let linkBtn = '';
-    let trackingLinkHtml = '';
-    let expenseRefHtml = '';
-
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>
       e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
     ) : [];
 
+    const isLinked = linked.length > 0;
+    
+    // Find if there's a suggested match
+    const suggested = orderNumber ? (TAX_CENTER.businessExpenses || []).filter(e =>
+      String(e?.ref || '').startsWith('shippo:') &&
+      e.shippingMatchStatus !== 'matched' &&
+      normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+    ) : [];
+    const isSuggested = suggested.length > 0;
+
+    const postageCostCAD = o.manualPostagePaid
+      ? (Number(o.postagePaid) || 0)
+      : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+
+    const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
+    const rate = shippingRateToBase(cur);
+    const customerPaidBase = (Number(o.shippingPaid) || 0) * rate;
+    const margin = customerPaidBase - postageCostCAD;
+
+    const isUndercharged = isLinked && (margin < 0);
+    const marginClass = margin >= 0 ? 'positive' : 'negative';
+
+    const status = o.excludeFromShipping
+      ? { label: 'Dismissed', className: 'neutral' }
+      : o.manualPostagePaid
+        ? { label: 'Manual', className: 'matched' }
+        : (!isLinked && !isSuggested
+          ? { label: 'Needs link', className: 'needs-link' }
+          : isSuggested
+            ? { label: 'Suggested', className: 'suggested' }
+            : isUndercharged
+              ? { label: 'Undercharged', className: 'undercharged' }
+              : { label: 'Matched', className: 'matched' });
+
+    const book = BOOK_LIST.find(b => b.id === o.bookId);
+
+    let linkBtn = '';
+    let trackingLinkHtml = '';
+    let expenseRefHtml = '';
+
     if (linked.length > 0) {
-      isLinked = true;
       const primary = linked[0];
       const tracking = primary.metadata?.tracking_number || '';
       const carrier = primary.metadata?.carrier || '';
@@ -24559,7 +24661,7 @@ function renderShippingAnalysisHub() {
         </div>`;
 
       if (tracking) {
-        const url = getTrackingUrl(carrier, tracking);
+        const url = primary.trackingUrl || '';
         trackingLinkHtml = url
           ? `<a href="${escapeHtml(url)}" target="_blank" class="shipping-pnl-tracking-link">${escapeHtml(carrier)}: ${escapeHtml(tracking)}</a>`
           : `${escapeHtml(carrier)}: ${escapeHtml(tracking)}`;
@@ -24570,16 +24672,10 @@ function renderShippingAnalysisHub() {
       expenseRefHtml = `<span style="color:var(--text3); font-style:italic;">Unlinked</span>`;
       trackingLinkHtml = `<span style="color:var(--text3); font-style:italic;">—</span>`;
 
-      const suggested = orderNumber ? (TAX_CENTER.businessExpenses || []).find(e =>
-        String(e?.ref || '').startsWith('shippo:') &&
-        e.shippingMatchStatus !== 'matched' &&
-        normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-      ) : null;
-
-      if (suggested) {
-        isSuggested = true;
+      if (isSuggested) {
+        const suggestedItem = suggested[0];
         linkBtn = `
-          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(suggested.ref)}')" style="font-size:10px; padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:#fff;">
+          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(suggestedItem.ref)}')" style="font-size:10px; padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:#fff;">
             Confirm Match
           </button>`;
       }
@@ -24626,12 +24722,12 @@ function renderShippingAnalysisHub() {
         </td>
         <td class="shipping-pnl-money" data-label="Postage">
           <div style="display:flex; flex-direction:column; align-items:flex-end;">
-            <strong>${status.postage.toFixed(2)} CAD</strong>
+            <strong>${postageCostCAD.toFixed(2)} CAD</strong>
             <button class="btn sm ghost" onclick="editPostageCost('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:1px 4px; color:var(--text3); border:none; background:none;" title="Set manual postage cost">✏️ Edit</button>
           </div>
         </td>
-        <td class="shipping-pnl-money ${status.margin >= 0 ? 'positive' : 'negative'}" data-label="Margin">
-          <strong>${status.margin >= 0 ? '+' : ''}${status.margin.toFixed(2)} CAD</strong>
+        <td class="shipping-pnl-money ${marginClass}" data-label="Margin">
+          <strong>${margin >= 0 ? '+' : ''}${margin.toFixed(2)} CAD</strong>
         </td>
         <td class="shipping-pnl-reference" data-label="Shippo reference">
           ${expenseRefHtml}
@@ -24778,12 +24874,174 @@ function renderShippingAnalysisHub() {
           <p class="shipping-pnl-eyebrow">Reconciliation ledger</p>
           <h3 id="shipping-pnl-ledger-title">Every order, clearly accounted for</h3>
         </div>
-        <p>Unlinked orders are kept distinct so zeroes never imply settled postage.</p>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+          <button class="btn sm gold" onclick="downloadFilteredShippingLedgerCSV()" style="font-size:11px; padding:4px 10px; font-weight:600; cursor:pointer;">
+            📥 Export CSV
+          </button>
+          <p>Unlinked orders are kept distinct so zeroes never imply settled postage.</p>
+        </div>
       </header>
       ${activeFiltersBannerHtml}
       ${ledgerTableHtml}
     </section>
   `;
+}
+
+function downloadFilteredShippingLedgerCSV() {
+  const originCountry = localStorage.getItem('lm-shippo-origin-country') || $('sf-country')?.value || 'CA';
+  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
+  
+  const allOrders = [];
+  Object.keys(states).forEach(bookId => {
+    if (shipAnalysisBookFilter === 'all' || bookId === shipAnalysisBookFilter) {
+      const s = states[bookId];
+      if (s && Array.isArray(s.hist)) {
+        s.hist.forEach(h => {
+          if (h && h.chan === 'Website' && !h.voided) {
+            const dateMs = h.date ? new Date(h.date).getTime() : 0;
+            allOrders.push({ ...h, bookId, _dateMs: dateMs });
+          }
+        });
+      }
+    }
+  });
+
+  allOrders.sort((a, b) => b._dateMs - a._dateMs);
+
+  const filteredOrders = allOrders.filter(o => {
+    if (shipAnalysisMarginFilter === 'dismissed') return o.excludeFromShipping === true;
+    if (o.excludeFromShipping) return false;
+
+    // A. Margin health filter
+    if (shipAnalysisMarginFilter !== 'all') {
+      const customerPaidBase = Number(o.shippingPaid) || 0;
+      const orderNumber = normalizeShippingOrderNumber(o.num);
+      const linked = orderNumber ? shippoExpenses.filter(e =>
+        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+      ) : [];
+
+      if (shipAnalysisMarginFilter === 'missing') {
+        if (customerPaidBase !== 0) return false;
+      } else {
+        const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
+        if (!hasPostage) return false;
+
+        const postageCostCAD = o.manualPostagePaid
+          ? (Number(o.postagePaid) || 0)
+          : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+        const margin = customerPaidBase - postageCostCAD;
+
+        if (shipAnalysisMarginFilter === 'loss' && margin >= 0) return false;
+        if (shipAnalysisMarginFilter === 'profit' && margin < 0) return false;
+      }
+    }
+
+    // B. Carrier filter
+    if (shipAnalysisCarrierFilter !== 'all') {
+      const orderNumber = normalizeShippingOrderNumber(o.num);
+      const linked = orderNumber ? shippoExpenses.filter(e =>
+        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+      ) : [];
+      const carrier = o.manualPostagePaid
+        ? 'Manual Override'
+        : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
+      if (carrier !== shipAnalysisCarrierFilter) return false;
+    }
+
+    // C. Region filter
+    if (shipAnalysisRegionFilter !== 'all') {
+      const destCountry = normalizeCountryCode(o.shipCountry || 'US');
+      const isIntl = isInternationalShipment(originCountry, destCountry);
+      const region = isIntl ? 'international' : 'domestic';
+      if (region !== shipAnalysisRegionFilter) return false;
+    }
+
+    // D. Weight filter
+    if (shipAnalysisWeightFilter !== 'all') {
+      const book = BOOK_LIST.find(b => b.id === o.bookId);
+      const weightKg = getWeightInKg(o.qty || 1, book);
+      let band = 'Over 2 kg';
+      if (weightKg < 0.5) band = 'Under 0.5 kg';
+      else if (weightKg <= 1) band = '0.5 - 1 kg';
+      else if (weightKg <= 2) band = '1 - 2 kg';
+      if (band !== shipAnalysisWeightFilter) return false;
+    }
+
+    return true;
+  });
+
+  if (filteredOrders.length === 0) {
+    showToast('No orders matching the active filters to export.', 'warn');
+    return;
+  }
+
+  let csv = 'Lyricalmyrical Book Shipping Reconciliation Report\n';
+  csv += 'Generated on: ' + today() + '\n';
+  csv += `Active Filters: Book: ${shipAnalysisBookFilter}, Margin: ${shipAnalysisMarginFilter}, Carrier: ${shipAnalysisCarrierFilter}, Region: ${shipAnalysisRegionFilter}, Weight Band: ${shipAnalysisWeightFilter}\n\n`;
+
+  const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+
+  csv += 'Order Number,Recipient,Book Title,Qty,Weight (kg),Status,Customer Paid (CAD),Postage Cost (CAD),Margin (CAD),Carrier,Region,Shippo Ref\n';
+
+  filteredOrders.forEach(o => {
+    const orderNumber = normalizeShippingOrderNumber(o.num);
+    const linked = orderNumber ? shippoExpenses.filter(e =>
+      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+    ) : [];
+
+    const postageCostCAD = o.manualPostagePaid
+      ? (Number(o.postagePaid) || 0)
+      : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+
+    const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
+    const rate = shippingRateToBase(cur);
+    const customerPaidBase = (Number(o.shippingPaid) || 0) * rate;
+    const margin = customerPaidBase - postageCostCAD;
+
+    const isLinked = linked.length > 0;
+    const suggested = orderNumber ? (TAX_CENTER.businessExpenses || []).filter(e =>
+      String(e?.ref || '').startsWith('shippo:') &&
+      e.shippingMatchStatus !== 'matched' &&
+      normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+    ) : [];
+    const isSuggested = suggested.length > 0;
+    const isUndercharged = isLinked && (margin < 0);
+
+    const statusLabel = o.excludeFromShipping
+      ? 'Dismissed'
+      : o.manualPostagePaid
+        ? 'Manual'
+        : (!isLinked && !isSuggested
+          ? 'Needs link'
+          : isSuggested
+            ? 'Suggested'
+            : isUndercharged
+              ? 'Undercharged'
+              : 'Matched');
+
+    const book = BOOK_LIST.find(b => b.id === o.bookId);
+    const weightKg = getWeightInKg(o.qty || 1, book);
+
+    const carrier = o.manualPostagePaid
+      ? 'Manual Override'
+      : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
+    
+    const destCountry = normalizeCountryCode(o.shipCountry || 'US');
+    const isIntl = isInternationalShipment(originCountry, destCountry);
+    const region = isIntl ? 'International' : 'Domestic';
+    const ref = linked.length > 0 ? linked[0].ref : (o.manualPostagePaid ? 'Manual Override' : 'Unlinked');
+
+    csv += `${esc(o.num)},${esc(o.shipName || o.name || 'Anonymous')},${esc(book?.title || 'Unknown book')},${o.qty || 1},${weightKg.toFixed(3)},${esc(statusLabel)},${customerPaidBase.toFixed(2)},${postageCostCAD.toFixed(2)},${margin.toFixed(2)},${esc(carrier)},${esc(region)},${esc(ref)}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.setAttribute('download', `Lyrical_Shipping_Ledger_${today()}.csv`);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('✓ Filtered shipping ledger CSV exported');
 }
 
 function parseCarrierInfo(desc) {
@@ -25022,7 +25280,7 @@ function exposeLegacyInlineHandlers() {
     editPostageCost, unlinkManualPostage, dismissShippingAnalysisOrder, restoreShippingAnalysisOrder,
     toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders,
     syncBigCartelShippingPaid, triggerBigCartelShippingSync,
-    toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters
+    toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV
   });
 }
 
@@ -25574,6 +25832,7 @@ window.toggleShipAnalysisCarrierFilter = toggleShipAnalysisCarrierFilter;
 window.toggleShipAnalysisRegionFilter = toggleShipAnalysisRegionFilter;
 window.toggleShipAnalysisWeightFilter = toggleShipAnalysisWeightFilter;
 window.clearAllShipAnalysisFilters = clearAllShipAnalysisFilters;
+window.downloadFilteredShippingLedgerCSV = downloadFilteredShippingLedgerCSV;
 
 async function fetchAllBigCartelOrders(storeId) {
   let allOrders = [];
