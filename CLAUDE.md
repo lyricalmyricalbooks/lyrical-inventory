@@ -16,7 +16,7 @@
 - **Apps Script:** [apps-script/Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs)
 
 ## Your job after every change
-After completing any code enhancement, end your turn with a short "Next moves" list: 5 genuinely high-value suggestions for improving the app, ranked best-first.
+After completing any code enhancement, end your turn with a short "Next moves" list: 7 genuinely high-value suggestions for improving the app, ranked best-first.
 Each suggestion is one or two lines:
 - **What** — a concrete, specific action (e.g. "Debounce the catalog search box" instead of "improve performance").
 - **Why** — the payoff (e.g. a sale not lost, a faster screen, a bug avoided).
