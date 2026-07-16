@@ -23832,8 +23832,43 @@ async function batchDismissShippingAnalysisOrders() {
 
 let shipAnalysisBookFilter = 'all';
 let shipAnalysisMarginFilter = 'all';
+let shipAnalysisCarrierFilter = 'all';
+let shipAnalysisRegionFilter = 'all';
+let shipAnalysisWeightFilter = 'all';
 let shipAnalysisCurrentPage = 1;
 const SHIP_ANALYSIS_PAGE_SIZE = 10;
+
+function toggleShipAnalysisCarrierFilter(carrier) {
+  shipAnalysisCarrierFilter = shipAnalysisCarrierFilter === carrier ? 'all' : carrier;
+  shipAnalysisCurrentPage = 1;
+  renderShippingAnalysisHub();
+}
+
+function toggleShipAnalysisRegionFilter(region) {
+  shipAnalysisRegionFilter = shipAnalysisRegionFilter === region ? 'all' : region;
+  shipAnalysisCurrentPage = 1;
+  renderShippingAnalysisHub();
+}
+
+function toggleShipAnalysisWeightFilter(weightBand) {
+  shipAnalysisWeightFilter = shipAnalysisWeightFilter === weightBand ? 'all' : weightBand;
+  shipAnalysisCurrentPage = 1;
+  renderShippingAnalysisHub();
+}
+
+function clearAllShipAnalysisFilters() {
+  shipAnalysisCarrierFilter = 'all';
+  shipAnalysisRegionFilter = 'all';
+  shipAnalysisWeightFilter = 'all';
+  shipAnalysisBookFilter = 'all';
+  shipAnalysisMarginFilter = 'all';
+  shipAnalysisCurrentPage = 1;
+  const bSel = $('ship-analysis-book-filter');
+  if (bSel) bSel.value = 'all';
+  const mSel = $('ship-analysis-margin-filter');
+  if (mSel) mSel.value = 'all';
+  renderShippingAnalysisHub();
+}
 
 function changeShipAnalysisPage(page) {
   shipAnalysisCurrentPage = page;
@@ -24246,9 +24281,14 @@ function renderShippingAnalysisHub() {
   Object.keys(carrierStats).forEach(provider => {
     const data = carrierStats[provider];
     const avg = data.count > 0 ? (data.totalCost / data.count) : 0;
+    const isActive = (shipAnalysisCarrierFilter === provider);
+    const rowClass = isActive ? 'active-insight-row' : '';
     carrierRows += `
-      <tr>
-        <td style="font-weight:600; color:var(--text2);">${escapeHtml(provider)}</td>
+      <tr class="insight-clickable-row ${rowClass}" onclick="toggleShipAnalysisCarrierFilter('${escapeHtml(provider)}')" title="Click to filter ledger by ${escapeHtml(provider)}">
+        <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
+          ${isActive ? '<span class="insight-active-dot"></span>' : ''}
+          ${escapeHtml(provider)}
+        </td>
         <td style="text-align:center;">${data.count}</td>
         <td style="text-align:right;">${data.totalCost.toFixed(2)} CAD</td>
         <td style="text-align:right; font-weight:600;">${avg.toFixed(2)} CAD</td>
@@ -24309,6 +24349,11 @@ function renderShippingAnalysisHub() {
   const domMargin = domRevenue - domCost;
   const intlMargin = intlRevenue - intlCost;
 
+  const isDomActive = (shipAnalysisRegionFilter === 'domestic');
+  const isIntlActive = (shipAnalysisRegionFilter === 'international');
+  const domRowClass = isDomActive ? 'active-insight-row' : '';
+  const intlRowClass = isIntlActive ? 'active-insight-row' : '';
+
   const splitTableHtml = `
     <table class="shipping-pnl-insight-table">
       <thead>
@@ -24321,15 +24366,21 @@ function renderShippingAnalysisHub() {
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td style="font-weight:600; color:var(--text2);">🇨🇦/🇺🇸 Domestic</td>
+        <tr class="insight-clickable-row ${domRowClass}" onclick="toggleShipAnalysisRegionFilter('domestic')" title="Click to filter ledger by Domestic">
+          <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
+            ${isDomActive ? '<span class="insight-active-dot"></span>' : ''}
+            🇨🇦/🇺🇸 Domestic
+          </td>
           <td style="text-align:center;">${domCount}</td>
           <td style="text-align:right;">${domRevenue.toFixed(2)} CAD</td>
           <td style="text-align:right;">${domCost.toFixed(2)} CAD</td>
           <td style="text-align:right; font-weight:700; color:${domMargin >= 0 ? '#2e7d32' : 'var(--red)'};">${domMargin >= 0 ? '+' : ''}${domMargin.toFixed(2)} CAD</td>
         </tr>
-        <tr>
-          <td style="font-weight:600; color:var(--text2);">🌍 International</td>
+        <tr class="insight-clickable-row ${intlRowClass}" onclick="toggleShipAnalysisRegionFilter('international')" title="Click to filter ledger by International">
+          <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
+            ${isIntlActive ? '<span class="insight-active-dot"></span>' : ''}
+            🌍 International
+          </td>
           <td style="text-align:center;">${intlCount}</td>
           <td style="text-align:right;">${intlRevenue.toFixed(2)} CAD</td>
           <td style="text-align:right;">${intlCost.toFixed(2)} CAD</td>
@@ -24341,16 +24392,16 @@ function renderShippingAnalysisHub() {
 
   // ── 4. Package Weight Band Cost Average ──
   const weightBands = {
-    'Under 1 lb': { count: 0, totalCost: 0 },
-    '1 - 2 lbs': { count: 0, totalCost: 0 },
-    '2 - 5 lbs': { count: 0, totalCost: 0 },
-    'Over 5 lbs': { count: 0, totalCost: 0 }
+    'Under 0.5 kg': { count: 0, totalCost: 0 },
+    '0.5 - 1 kg': { count: 0, totalCost: 0 },
+    '1 - 2 kg': { count: 0, totalCost: 0 },
+    'Over 2 kg': { count: 0, totalCost: 0 }
   };
 
   allOrders.forEach(o => {
     if (o.excludeFromShipping) return;
     const book = BOOK_LIST.find(b => b.id === o.bookId);
-    const weight = getWeightInLbs(o.qty || 1, book);
+    const weightKg = getWeightInKg(o.qty || 1, book);
 
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>
@@ -24363,10 +24414,10 @@ function renderShippingAnalysisHub() {
         ? (Number(o.postagePaid) || 0)
         : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
       
-      let band = 'Over 5 lbs';
-      if (weight < 1) band = 'Under 1 lb';
-      else if (weight <= 2) band = '1 - 2 lbs';
-      else if (weight <= 5) band = '2 - 5 lbs';
+      let band = 'Over 2 kg';
+      if (weightKg < 0.5) band = 'Under 0.5 kg';
+      else if (weightKg <= 1) band = '0.5 - 1 kg';
+      else if (weightKg <= 2) band = '1 - 2 kg';
 
       weightBands[band].count++;
       weightBands[band].totalCost += cost;
@@ -24377,9 +24428,14 @@ function renderShippingAnalysisHub() {
   Object.keys(weightBands).forEach(band => {
     const data = weightBands[band];
     const avg = data.count > 0 ? (data.totalCost / data.count) : 0;
+    const isActive = (shipAnalysisWeightFilter === band);
+    const rowClass = isActive ? 'active-insight-row' : '';
     weightRows += `
-      <tr>
-        <td style="font-weight:600; color:var(--text2);">${band}</td>
+      <tr class="insight-clickable-row ${rowClass}" onclick="toggleShipAnalysisWeightFilter('${band}')" title="Click to filter ledger by ${band}">
+        <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
+          ${isActive ? '<span class="insight-active-dot"></span>' : ''}
+          ${band}
+        </td>
         <td style="text-align:center;">${data.count}</td>
         <td style="text-align:right;">${data.totalCost.toFixed(2)} CAD</td>
         <td style="text-align:right; font-weight:600;">${avg.toFixed(2)} CAD</td>
@@ -24404,125 +24460,139 @@ function renderShippingAnalysisHub() {
   `;
 
   // ── 5. Side-by-Side Shipping Ledger Pagination ──
-  // Apply Margin Health filter before pagination
+  // Apply all interactive filters before pagination
   const filteredLedgerOrders = allOrders.filter(o => {
     if (shipAnalysisMarginFilter === 'dismissed') return o.excludeFromShipping === true;
     if (o.excludeFromShipping) return false;
 
-    if (shipAnalysisMarginFilter === 'all') return true;
+    // A. Margin health filter
+    if (shipAnalysisMarginFilter !== 'all') {
+      const customerPaidBase = Number(o.shippingPaid) || 0;
+      const orderNumber = normalizeShippingOrderNumber(o.num);
+      const linked = orderNumber ? shippoExpenses.filter(e =>
+        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+      ) : [];
 
-    const customerPaidBase = Number(o.shippingPaid) || 0;
-    const orderNumber = normalizeShippingOrderNumber(o.num);
-    const linked = orderNumber ? shippoExpenses.filter(e =>
-      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
-    ) : [];
+      if (shipAnalysisMarginFilter === 'missing') {
+        if (customerPaidBase !== 0) return false;
+      } else {
+        const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
+        if (!hasPostage) return false;
 
-    if (shipAnalysisMarginFilter === 'missing') return customerPaidBase === 0;
+        const postageCostCAD = o.manualPostagePaid
+          ? (Number(o.postagePaid) || 0)
+          : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+        const margin = customerPaidBase - postageCostCAD;
 
-    const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
-    if (!hasPostage) return false;
+        if (shipAnalysisMarginFilter === 'loss' && margin >= 0) return false;
+        if (shipAnalysisMarginFilter === 'profit' && margin < 0) return false;
+      }
+    }
 
-    const postageCostCAD = o.manualPostagePaid
-      ? (Number(o.postagePaid) || 0)
-      : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
-    const margin = customerPaidBase - postageCostCAD;
+    // B. Carrier filter
+    if (shipAnalysisCarrierFilter !== 'all') {
+      const orderNumber = normalizeShippingOrderNumber(o.num);
+      const linked = orderNumber ? shippoExpenses.filter(e =>
+        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+      ) : [];
+      const carrier = o.manualPostagePaid
+        ? 'Manual Override'
+        : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
+      if (carrier !== shipAnalysisCarrierFilter) return false;
+    }
 
-    if (shipAnalysisMarginFilter === 'loss') return margin < 0;
-    if (shipAnalysisMarginFilter === 'profit') return margin >= 0;
+    // C. Region filter
+    if (shipAnalysisRegionFilter !== 'all') {
+      const destCountry = normalizeCountryCode(o.shipCountry || 'US');
+      const isIntl = isInternationalShipment(originCountry, destCountry);
+      const region = isIntl ? 'international' : 'domestic';
+      if (region !== shipAnalysisRegionFilter) return false;
+    }
+
+    // D. Weight filter
+    if (shipAnalysisWeightFilter !== 'all') {
+      const book = BOOK_LIST.find(b => b.id === o.bookId);
+      const weightKg = getWeightInKg(o.qty || 1, book);
+      let band = 'Over 2 kg';
+      if (weightKg < 0.5) band = 'Under 0.5 kg';
+      else if (weightKg <= 1) band = '0.5 - 1 kg';
+      else if (weightKg <= 2) band = '1 - 2 kg';
+      if (band !== shipAnalysisWeightFilter) return false;
+    }
 
     return true;
   });
 
-  const totalItems = filteredLedgerOrders.length;
-  const totalPages = Math.ceil(totalItems / SHIP_ANALYSIS_PAGE_SIZE) || 1;
+  const totalOrders = filteredLedgerOrders.length;
+  const totalPages = Math.ceil(totalOrders / SHIP_ANALYSIS_PAGE_SIZE) || 1;
   const currentPage = Math.min(shipAnalysisCurrentPage, totalPages);
-
-  const startIdx = (currentPage - 1) * SHIP_ANALYSIS_PAGE_SIZE;
-  const endIdx = startIdx + SHIP_ANALYSIS_PAGE_SIZE;
-  const pagedOrders = filteredLedgerOrders.slice(startIdx, endIdx);
+  const startIndex = (currentPage - 1) * SHIP_ANALYSIS_PAGE_SIZE;
+  const endIndex = Math.min(startIndex + SHIP_ANALYSIS_PAGE_SIZE, totalOrders);
+  const paginatedOrders = filteredLedgerOrders.slice(startIndex, endIndex);
 
   let ledgerRowsHtml = '';
-  pagedOrders.forEach(o => {
-    const customerPaidBase = Number(o.shippingPaid) || 0;
+  paginatedOrders.forEach(o => {
+    const status = getReconciledStatus(o, shippoExpenses);
+    const book = BOOK_LIST.find(b => b.id === o.bookId);
+
+    let isLinked = false;
+    let isSuggested = false;
+    let linkBtn = '';
+    let trackingLinkHtml = '';
+    let expenseRefHtml = '';
 
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>
       e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
     ) : [];
 
-    // Check for a suggested (unconfirmed) expense match for this order
-    const suggested = orderNumber ? shippoExpenses.filter(e =>
-      e.shippingMatchStatus === 'suggested' && normalizeShippingOrderNumber(e.shippingSuggestedOrderNumber) === orderNumber
-    ) : [];
+    if (linked.length > 0) {
+      isLinked = true;
+      const primary = linked[0];
+      const tracking = primary.metadata?.tracking_number || '';
+      const carrier = primary.metadata?.carrier || '';
+      
+      expenseRefHtml = `
+        <div style="font-weight:600; color:var(--text);">${escapeHtml(primary.ref)}</div>
+        <div style="font-size:10px; color:var(--text3); margin-top:2px;">
+          ${escapeHtml(primary.desc || 'Shippo shipping label')}
+        </div>`;
 
-    const postageCostCAD = o.manualPostagePaid
-      ? (Number(o.postagePaid) || 0)
-      : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+      if (tracking) {
+        const url = getTrackingUrl(carrier, tracking);
+        trackingLinkHtml = url
+          ? `<a href="${escapeHtml(url)}" target="_blank" class="shipping-pnl-tracking-link">${escapeHtml(carrier)}: ${escapeHtml(tracking)}</a>`
+          : `${escapeHtml(carrier)}: ${escapeHtml(tracking)}`;
+      } else {
+        trackingLinkHtml = `<span style="color:var(--text3); font-style:italic;">No tracking</span>`;
+      }
+    } else {
+      expenseRefHtml = `<span style="color:var(--text3); font-style:italic;">Unlinked</span>`;
+      trackingLinkHtml = `<span style="color:var(--text3); font-style:italic;">—</span>`;
 
-    const margin = customerPaidBase - postageCostCAD;
-    const marginClass = margin > 0 ? 'positive' : margin < 0 ? 'negative' : 'neutral';
-    const isLinked = linked.length > 0 || !!o.manualPostagePaid;
-    const isSuggested = !isLinked && suggested.length > 0;
+      const suggested = orderNumber ? (TAX_CENTER.businessExpenses || []).find(e =>
+        String(e?.ref || '').startsWith('shippo:') &&
+        e.shippingMatchStatus !== 'matched' &&
+        normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+      ) : null;
 
-    // Undercharged check (Suggestion 3)
-    const isUndercharged = postageCostCAD > (customerPaidBase * 1.15) + 0.01;
-
-    const status = o.excludeFromShipping
-      ? { label: 'Dismissed', className: 'neutral' }
-      : o.manualPostagePaid
-        ? { label: 'Manual', className: 'matched' }
-        : (!isLinked && !isSuggested
-          ? { label: 'Needs link', className: 'needs-link' }
-          : isSuggested
-            ? { label: 'Suggested', className: 'suggested' }
-            : isUndercharged
-              ? { label: 'Undercharged', className: 'undercharged' }
-              : { label: 'Matched', className: 'matched' });
-
-    // Markup check (Suggestion 4)
-    let markupText = '';
-    if (postageCostCAD > 0) {
-      const markup = ((customerPaidBase - postageCostCAD) / postageCostCAD) * 100;
-      markupText = `<span style="font-size:10px; font-weight:500; display:block; color:${markup >= 0 ? '#2e7d32' : 'var(--red)'};">${markup >= 0 ? '+' : ''}${markup.toFixed(0)}% markup</span>`;
+      if (suggested) {
+        isSuggested = true;
+        linkBtn = `
+          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(suggested.ref)}')" style="font-size:10px; padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:#fff;">
+            Confirm Match
+          </button>`;
+      }
     }
 
-    const matchedRef = o.manualPostagePaid
-      ? 'Manual Override'
-      : (linked.map(e => e.ref.replace('shippo:', '')).join(', ') || 'Unlinked');
-
-    const trackingCell = linked.map(e => {
-      const parsedDesc = e.desc.match(/#([A-Za-z0-9]+)/);
-      const trackingNum = parsedDesc ? parsedDesc[1] : '';
-      return trackingNum
-        ? `<a href="${e.trackingUrl || '#'}" target="_blank" class="mono" style="font-size:11px; text-decoration:underline;">${trackingNum}</a>`
-        : '—';
-    }).join('<br>') || '—';
-
-    // Build action button for status column
     let actionBtn = '';
-    if (o.excludeFromShipping) {
-      actionBtn = `
-        <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
-          <button class="btn sm ghost" onclick="restoreShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--text); min-width:unset;" title="Restore order to shipping ledger">↺ Restore</button>
-        </div>`;
-    } else if (isSuggested && suggested.length === 1) {
-      const txRef = escapeHtml(suggested[0].ref);
-      const suggestedAmount = (Number(suggested[0].baseAmount) || Number(suggested[0].amount) || 0).toFixed(2);
-      actionBtn = `
-        <div style="margin-top:6px;">
-          <div style="font-size:10px; color:var(--text3); margin-bottom:4px;">${escapeHtml(suggested[0].recipientName || '')} · CA$${suggestedAmount}</div>
-          <div style="display:flex; gap:4px; align-items:center;">
-            <button class="btn sm gold" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${txRef}')" style="font-size:10px; padding:3px 8px;">✓ Confirm</button>
-            <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
-          </div>
-        </div>`;
-    } else if (!isLinked) {
+    if (!o.excludeFromShipping && !isLinked && !isSuggested) {
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
           <button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:10px; padding:3px 8px;">Link</button>
           <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
-    } else if (isLinked) {
+    } else if (isLinked || o.manualPostagePaid) {
       const mainBtn = o.manualPostagePaid
         ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Clear manual</button>`
         : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(linked[0].ref)}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Unlink</button>`;
@@ -24542,60 +24612,59 @@ function renderShippingAnalysisHub() {
         <td style="text-align: center; vertical-align: middle;">${checkboxHtml}</td>
         <td class="shipping-pnl-order" data-label="Order">${escapeHtml(o.num)}</td>
         <td class="shipping-pnl-recipient" data-label="Recipient">
-          <strong>${escapeHtml(o.shipName || 'Recipient')}</strong>
-          <span>${escapeHtml([o.shipCity, o.shipCountry].filter(Boolean).join(', ') || 'Destination unavailable')}</span>
+          <strong>${escapeHtml(o.shipName || o.name || 'Anonymous')}</strong>
+          <span>${escapeHtml(book?.title || 'Unknown book')} (qty: ${o.qty || 1})</span>
         </td>
         <td data-label="Status">
-          <span class="shipping-pnl-status ${status.className}">${status.label}</span>
-          ${actionBtn}
+          <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
+            <span class="shipping-pnl-status ${status.className}">${escapeHtml(status.label)}</span>
+            ${linkBtn}
+          </div>
         </td>
         <td class="shipping-pnl-money" data-label="Customer paid">
-          <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
-            <span style="${o.manualShippingPaid ? 'border-bottom:1px dashed var(--gold); cursor:help;' : ''}" title="${o.manualShippingPaid ? 'Manually overridden' : ''}">${fmt(customerPaidBase, 'CAD')}</span>
-            <button class="btn sm" style="padding:2px; height:20px; width:20px; background:transparent; border:none; opacity:0.35; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center;" onclick="editShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Edit customer paid shipping">✏️</button>
-          </div>
+          <strong>${(Number(o.shippingPaid) || 0).toFixed(2)} CAD</strong>
         </td>
         <td class="shipping-pnl-money" data-label="Postage">
-          <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
-            <span style="${o.manualPostagePaid ? 'border-bottom:1px dashed var(--gold); cursor:help;' : ''}" title="${o.manualPostagePaid ? 'Manually entered postage' : ''}">${isLinked ? `${postageCostCAD.toFixed(2)} CAD` : '—'}</span>
-            <button class="btn sm" style="padding:2px; height:20px; width:20px; background:transparent; border:none; opacity:0.35; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center;" onclick="editPostageCost('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Edit postage cost">✏️</button>
+          <div style="display:flex; flex-direction:column; align-items:flex-end;">
+            <strong>${status.postage.toFixed(2)} CAD</strong>
+            <button class="btn sm ghost" onclick="editPostageCost('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:1px 4px; color:var(--text3); border:none; background:none;" title="Set manual postage cost">✏️ Edit</button>
           </div>
         </td>
-        <td class="shipping-pnl-money ${marginClass}" data-label="Margin">
-          ${isLinked ? `<strong>${margin >= 0 ? '+' : ''}${margin.toFixed(2)} CAD</strong>${markupText}` : '<strong>—</strong>'}
+        <td class="shipping-pnl-money ${status.margin >= 0 ? 'positive' : 'negative'}" data-label="Margin">
+          <strong>${status.margin >= 0 ? '+' : ''}${status.margin.toFixed(2)} CAD</strong>
         </td>
-        <td class="shipping-pnl-reference" data-label="Shippo reference">${matchedRef}</td>
-        <td class="shipping-pnl-tracking" data-label="Tracking">${trackingCell}</td>
+        <td class="shipping-pnl-reference" data-label="Shippo reference">
+          ${expenseRefHtml}
+          ${actionBtn}
+        </td>
+        <td class="shipping-pnl-tracking" data-label="Tracking">
+          ${trackingLinkHtml}
+        </td>
       </tr>
     `;
   });
 
-  // Generate pagination buttons HTML
   let paginationHtml = '';
   if (totalPages > 1) {
     let pageButtons = '';
-    const maxButtons = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
-    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
-    if (endPage - startPage + 1 < maxButtons) {
-      startPage = Math.max(1, endPage - maxButtons + 1);
+    const maxVisible = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+    if (endPage - startPage + 1 < maxVisible) {
+      startPage = Math.max(1, endPage - maxVisible + 1);
     }
-
     for (let p = startPage; p <= endPage; p++) {
-      const isCurrent = p === currentPage;
       pageButtons += `
-        <button class="btn sm ${isCurrent ? 'gold' : ''}" 
+        <button class="btn sm ${p === currentPage ? 'primary' : 'ghost'}" 
                 onclick="changeShipAnalysisPage(${p})" 
-                style="padding:4px 8px; min-width:28px; font-weight:${isCurrent ? '700' : 'normal'}; margin: 0 2px;">
-          ${p}
-        </button>
+                style="min-width:32px; padding:4px 8px;">${p}</button>
       `;
     }
 
     paginationHtml = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border); flex-wrap:wrap; gap:12px;">
-        <div style="font-size:12px; color:var(--text3);">Showing ${startIdx + 1}-${Math.min(endIdx, totalItems)} of ${totalItems} orders</div>
-        <div style="display:flex; gap:6px; align-items:center;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-top:1px solid var(--border); font-size:12px; color:var(--text3); flex-wrap:wrap; gap:12px;">
+        <div>Showing ${startIndex + 1} - ${endIndex} of ${totalOrders} orders</div>
+        <div style="display:flex; gap:4px; align-items:center;">
           <button class="btn sm" onclick="changeShipAnalysisPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>
           ${pageButtons}
           <button class="btn sm" onclick="changeShipAnalysisPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
@@ -24634,6 +24703,48 @@ function renderShippingAnalysisHub() {
     `
     : `<div class="shipping-pnl-empty">No direct website orders are available for shipping analysis yet.</div>`;
 
+  const hasActiveFilters = (shipAnalysisCarrierFilter !== 'all' || shipAnalysisRegionFilter !== 'all' || shipAnalysisWeightFilter !== 'all');
+  let activeFiltersBannerHtml = '';
+  if (hasActiveFilters) {
+    let filterBadges = '';
+    if (shipAnalysisCarrierFilter !== 'all') {
+      filterBadges += `
+        <span class="shipping-filter-badge">
+          Carrier: ${escapeHtml(shipAnalysisCarrierFilter)}
+          <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisCarrierFilter('${escapeHtml(shipAnalysisCarrierFilter)}')" title="Remove filter">✕</span>
+        </span>
+      `;
+    }
+    if (shipAnalysisRegionFilter !== 'all') {
+      filterBadges += `
+        <span class="shipping-filter-badge">
+          Region: ${shipAnalysisRegionFilter === 'domestic' ? 'Domestic' : 'International'}
+          <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisRegionFilter('${shipAnalysisRegionFilter}')" title="Remove filter">✕</span>
+        </span>
+      `;
+    }
+    if (shipAnalysisWeightFilter !== 'all') {
+      filterBadges += `
+        <span class="shipping-filter-badge">
+          Weight: ${escapeHtml(shipAnalysisWeightFilter)}
+          <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisWeightFilter('${escapeHtml(shipAnalysisWeightFilter)}')" title="Remove filter">✕</span>
+        </span>
+      `;
+    }
+
+    activeFiltersBannerHtml = `
+      <div class="shipping-active-filters-bar">
+        <span class="shipping-active-filters-label">Active Drill-down:</span>
+        <div class="shipping-active-filters-badges">
+          ${filterBadges}
+        </div>
+        <button class="btn sm ghost" onclick="clearAllShipAnalysisFilters()" style="color:var(--red); font-size:11px; padding:2px 8px; border:1px solid var(--red); border-radius:var(--r2); background:transparent; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; margin-left:auto;">
+          ✕ Clear All
+        </button>
+      </div>
+    `;
+  }
+
   // ── Render complete layout ──
   hub.innerHTML = `
     <details class="shipping-pnl-insights" style="margin-bottom: var(--shipping-pnl-space-4) !important;">
@@ -24669,6 +24780,7 @@ function renderShippingAnalysisHub() {
         </div>
         <p>Unlinked orders are kept distinct so zeroes never imply settled postage.</p>
       </header>
+      ${activeFiltersBannerHtml}
       ${ledgerTableHtml}
     </section>
   `;
@@ -24700,6 +24812,11 @@ function getWeightInLbs(qty, book) {
   else if (unit === 'kg') weightInLbs = weightInLbs * 2.20462;
   else if (unit === 'g') weightInLbs = weightInLbs / 453.592;
   return weightInLbs;
+}
+
+function getWeightInKg(qty, book) {
+  const lbs = getWeightInLbs(qty, book);
+  return lbs * 0.45359237;
 }
 
 function updateShippoBaseSpecsFromInputs() {
@@ -24904,7 +25021,8 @@ function exposeLegacyInlineHandlers() {
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
     editPostageCost, unlinkManualPostage, dismissShippingAnalysisOrder, restoreShippingAnalysisOrder,
     toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders,
-    syncBigCartelShippingPaid, triggerBigCartelShippingSync
+    syncBigCartelShippingPaid, triggerBigCartelShippingSync,
+    toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters
   });
 }
 
@@ -25452,6 +25570,10 @@ window.updateShipAnalysisBatchActionUI = updateShipAnalysisBatchActionUI;
 window.batchDismissShippingAnalysisOrders = batchDismissShippingAnalysisOrders;
 window.syncBigCartelShippingPaid = syncBigCartelShippingPaid;
 window.triggerBigCartelShippingSync = triggerBigCartelShippingSync;
+window.toggleShipAnalysisCarrierFilter = toggleShipAnalysisCarrierFilter;
+window.toggleShipAnalysisRegionFilter = toggleShipAnalysisRegionFilter;
+window.toggleShipAnalysisWeightFilter = toggleShipAnalysisWeightFilter;
+window.clearAllShipAnalysisFilters = clearAllShipAnalysisFilters;
 
 async function fetchAllBigCartelOrders(storeId) {
   let allOrders = [];

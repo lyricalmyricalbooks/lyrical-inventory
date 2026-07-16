@@ -10,6 +10,7 @@ describe('Shipping Analysis Hub Functions', () => {
   const mainJsPath = path.resolve(__dirname, '../src/main.js');
   let parseCarrierInfo;
   let getWeightInLbs;
+  let getWeightInKg;
 
   beforeEach(() => {
     const mainContent = fs.readFileSync(mainJsPath, 'utf8');
@@ -17,12 +18,15 @@ describe('Shipping Analysis Hub Functions', () => {
     // Extract helper functions
     const carrierMatch = mainContent.match(/function parseCarrierInfo\(desc\) \{([\s\S]+?)\n\}/);
     const weightMatch = mainContent.match(/function getWeightInLbs\(qty, book\) \{([\s\S]+?)\n\}/);
+    const weightKgMatch = mainContent.match(/function getWeightInKg\(qty, book\) \{([\s\S]+?)\n\}/);
 
     expect(carrierMatch).not.toBeNull();
     expect(weightMatch).not.toBeNull();
+    expect(weightKgMatch).not.toBeNull();
 
     parseCarrierInfo = new Function('desc', carrierMatch[0] + '\nreturn parseCarrierInfo(desc);');
     getWeightInLbs = new Function('qty', 'book', weightMatch[0] + '\nreturn getWeightInLbs(qty, book);');
+    getWeightInKg = new Function('qty', 'book', weightMatch[0] + '\n' + weightKgMatch[0] + '\nreturn getWeightInKg(qty, book);');
   });
 
   describe('parseCarrierInfo', () => {
@@ -53,6 +57,14 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(getWeightInLbs(1, { shipWeight: 1, shipWeightUnit: 'kg' })).toBeCloseTo(2.20462, 4);
       expect(getWeightInLbs(1, { shipWeight: 453.592, shipWeightUnit: 'g' })).toBeCloseTo(1.0, 4);
       expect(getWeightInLbs(2, null)).toBe(2.4);
+    });
+  });
+
+  describe('getWeightInKg', () => {
+    it('normalizes weights from various units to kilograms', () => {
+      expect(getWeightInKg(1, { shipWeight: 1, shipWeightUnit: 'lb' })).toBeCloseTo(0.45359237, 4);
+      expect(getWeightInKg(1, { shipWeight: 1, shipWeightUnit: 'kg' })).toBeCloseTo(1.0, 4);
+      expect(getWeightInKg(2, null)).toBeCloseTo(2.4 * 0.45359237, 4);
     });
   });
 
