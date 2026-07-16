@@ -25098,7 +25098,8 @@ async function loadBigCartelData() {
       bigCartelData.products = productsRes.data || [];
       renderBigCartelProducts(bigCartelData.products, productsRes.included);
     } else {
-      const ordersRes = await fetchBigCartel('orders', bigCartelData.store.id);
+      // fetchBigCartel('orders', bigCartelData.store.id)
+      const ordersRes = await fetchAllBigCartelOrders(bigCartelData.store.id);
       bigCartelData.orders = ordersRes.data || [];
       renderBigCartelOrders(bigCartelData.orders, ordersRes.included);
       await syncBigCartelShippingPaid(bigCartelData.orders);
@@ -25392,6 +25393,35 @@ window.batchDismissShippingAnalysisOrders = batchDismissShippingAnalysisOrders;
 window.syncBigCartelShippingPaid = syncBigCartelShippingPaid;
 window.triggerBigCartelShippingSync = triggerBigCartelShippingSync;
 
+async function fetchAllBigCartelOrders(storeId) {
+  let allOrders = [];
+  let allIncluded = [];
+  let limit = 100;
+  let offset = 0;
+  let hasMore = true;
+  let page = 1;
+  let maxPages = 5;
+  
+  while (hasMore && page <= maxPages) {
+    const res = await fetchBigCartel(`orders?page[limit]=${limit}&page[offset]=${offset}`, storeId);
+    if (res && res.data && res.data.length > 0) {
+      allOrders = allOrders.concat(res.data);
+      if (res.included) {
+        allIncluded = allIncluded.concat(res.included);
+      }
+      if (res.data.length < limit) {
+        hasMore = false;
+      } else {
+        offset += limit;
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+  return { data: allOrders, included: allIncluded };
+}
+
 async function syncBigCartelShippingPaid(bcOrders) {
   if (!bcOrders || bcOrders.length === 0) return;
   
@@ -25476,7 +25506,7 @@ async function triggerBigCartelShippingSync() {
       throw new Error('Big Cartel store info not found.');
     }
     
-    const ordersRes = await fetchBigCartel('orders', bigCartelData.store.id);
+    const ordersRes = await fetchAllBigCartelOrders(bigCartelData.store.id);
     bigCartelData.orders = ordersRes.data || [];
     
     let updateCount = 0;
