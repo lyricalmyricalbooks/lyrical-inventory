@@ -25400,7 +25400,8 @@ async function fetchAllBigCartelOrders(storeId) {
   let offset = 0;
   let hasMore = true;
   let page = 1;
-  let maxPages = 5;
+  let maxPages = 50;
+  let detectedLimit = null;
   
   while (hasMore && page <= maxPages) {
     const res = await fetchBigCartel(`orders?page[limit]=${limit}&page[offset]=${offset}`, storeId);
@@ -25409,10 +25410,15 @@ async function fetchAllBigCartelOrders(storeId) {
       if (res.included) {
         allIncluded = allIncluded.concat(res.included);
       }
-      if (res.data.length < limit) {
+      
+      if (detectedLimit === null) {
+        detectedLimit = res.data.length;
+      }
+      
+      if (res.data.length < detectedLimit) {
         hasMore = false;
       } else {
-        offset += limit;
+        offset += res.data.length;
         page++;
       }
     } else {
