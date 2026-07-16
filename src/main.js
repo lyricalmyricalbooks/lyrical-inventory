@@ -24204,6 +24204,8 @@ function renderShippingAnalysisHub() {
 
   // ── 2. Carrier Efficiency Scorecard ──
   const carrierStats = {};
+  
+  // A. Process linked Shippo expenses
   relevantExpenses.forEach(e => {
     const { provider, service } = parseCarrierInfo(e.desc);
     const cost = Number(e.baseAmount) || Number(e.amount) || 0;
@@ -24218,6 +24220,26 @@ function renderShippingAnalysisHub() {
     }
     carrierStats[provider].services[service].count++;
     carrierStats[provider].services[service].totalCost += cost;
+  });
+
+  // B. Process manual entries from active/relevant orders
+  allOrders.forEach(o => {
+    if (o.manualPostagePaid && !o.excludeFromShipping) {
+      const cost = Number(o.postagePaid) || 0;
+      const provider = 'Manual Override';
+      const service = 'Manual';
+      if (!carrierStats[provider]) {
+        carrierStats[provider] = { count: 0, totalCost: 0, services: {} };
+      }
+      carrierStats[provider].count++;
+      carrierStats[provider].totalCost += cost;
+
+      if (!carrierStats[provider].services[service]) {
+        carrierStats[provider].services[service] = { count: 0, totalCost: 0 };
+      }
+      carrierStats[provider].services[service].count++;
+      carrierStats[provider].services[service].totalCost += cost;
+    }
   });
 
   let carrierRows = '';
@@ -24258,13 +24280,17 @@ function renderShippingAnalysisHub() {
   let intlCount = 0, intlRevenue = 0, intlCost = 0;
 
   allOrders.forEach(o => {
+    if (o.excludeFromShipping) return;
     const revenue = Number(o.shippingPaid) || 0;
 
     const orderNumber = normalizeShippingOrderNumber(o.num);
     const linked = orderNumber ? shippoExpenses.filter(e =>
       e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
     ) : [];
-    const cost = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+    
+    const cost = o.manualPostagePaid
+      ? (Number(o.postagePaid) || 0)
+      : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
 
     const destCountry = normalizeCountryCode(o.shipCountry || 'US');
     const isIntl = isInternationalShipment(originCountry, destCountry);
@@ -24322,6 +24348,7 @@ function renderShippingAnalysisHub() {
   };
 
   allOrders.forEach(o => {
+    if (o.excludeFromShipping) return;
     const book = BOOK_LIST.find(b => b.id === o.bookId);
     const weight = getWeightInLbs(o.qty || 1, book);
 
@@ -24330,8 +24357,12 @@ function renderShippingAnalysisHub() {
       e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
     ) : [];
 
-    if (linked.length > 0) {
-      const cost = linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+    const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
+    if (hasPostage) {
+      const cost = o.manualPostagePaid
+        ? (Number(o.postagePaid) || 0)
+        : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+      
       let band = 'Over 5 lbs';
       if (weight < 1) band = 'Under 1 lb';
       else if (weight <= 2) band = '1 - 2 lbs';
@@ -24605,19 +24636,7 @@ function renderShippingAnalysisHub() {
 
   // ── Render complete layout ──
   hub.innerHTML = `
-    ${pnlHtml}
-    <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
-      <header class="shipping-pnl-section-header">
-        <div>
-          <p class="shipping-pnl-eyebrow">Reconciliation ledger</p>
-          <h3 id="shipping-pnl-ledger-title">Every order, clearly accounted for</h3>
-        </div>
-        <p>Unlinked orders are kept distinct so zeroes never imply settled postage.</p>
-      </header>
-      ${ledgerTableHtml}
-    </section>
-
-    <details class="shipping-pnl-insights">
+    <details class="shipping-pnl-insights" style="margin-bottom: var(--shipping-pnl-space-4) !important;">
       <summary>
         <span>
           <span class="shipping-pnl-eyebrow">Insights</span>
@@ -24640,6 +24659,18 @@ function renderShippingAnalysisHub() {
         </section>
       </div>
     </details>
+
+    ${pnlHtml}
+    <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
+      <header class="shipping-pnl-section-header">
+        <div>
+          <p class="shipping-pnl-eyebrow">Reconciliation ledger</p>
+          <h3 id="shipping-pnl-ledger-title">Every order, clearly accounted for</h3>
+        </div>
+        <p>Unlinked orders are kept distinct so zeroes never imply settled postage.</p>
+      </header>
+      ${ledgerTableHtml}
+    </section>
   `;
 }
 
