@@ -161,4 +161,66 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(mockCalls).toContain('render');
     });
   });
+
+  describe('syncBigCartelShippingPaid', () => {
+    let syncFn, mockStates, mockCalls, mockSheetsQueue;
+    beforeEach(() => {
+      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      const syncMatch = mainContent.match(/async function syncBigCartelShippingPaid\(bcOrders\) \{([\s\S]+?)\n\}/);
+      expect(syncMatch).not.toBeNull();
+
+      mockStates = {
+        'book1': {
+          hist: [
+            { num: '#1001', chan: 'Website', shippingPaid: 0, date: '2026-07-10', sheetsId: 'bc-1001' },
+            { num: '#1002', chan: 'Website', shippingPaid: 5, manualShippingPaid: true, date: '2026-07-11', sheetsId: 'bc-1002' },
+            { num: '#1003', chan: 'Website', shippingPaid: 0, date: '2026-07-12', sheetsId: 'bc-1003' }
+          ]
+        }
+      };
+
+      mockCalls = [];
+      mockSheetsQueue = [];
+
+      const mockEnvBase = `
+        const states = mockStates;
+        const BOOKS = { 'book1': { title: 'Test Book' } };
+        const normalizeShippingOrderNumber = (val) => '#' + String(val).trim().replace(/^#/, '');
+        const getBookCurrencyCode = () => 'CAD';
+        const shippingPurchaseRowPayload = (book, cur, h) => ({ type: 'shipping', sheetsId: h.sheetsId + '-shipping', total: h.shippingPaid });
+        const syncToSheets = (payload) => { mockSheetsQueue.push(payload); };
+        const window = { saveState: async (b) => { mockCalls.push('saveState:' + b); } };
+        const showToast = (msg) => { mockCalls.push('showToast:' + msg); };
+        const renderShippingAnalysisHub = () => { mockCalls.push('render'); };
+      `;
+
+      syncFn = new Function('mockStates', 'mockCalls', 'mockSheetsQueue', 'bcOrders', `
+        ${mockEnvBase}
+        ${syncMatch[0]}
+        return syncBigCartelShippingPaid(bcOrders);
+      `);
+    });
+
+    it('matches and updates order shippingPaid, skipping manual overrides', async () => {
+      const bcOrders = [
+        { id: '1001', attributes: { shipping_total: '12.50' } },
+        { id: '1002', attributes: { shipping_total: '15.00' } }, // manual override, should skip
+        { id: '1003', attributes: { shipping_total: '0.00' } }   // same value, should skip
+      ];
+
+      await syncFn.call(null, mockStates, mockCalls, mockSheetsQueue, bcOrders);
+
+      // Verify book1 hist values
+      expect(mockStates['book1'].hist[0].shippingPaid).toBe(12.50);
+      expect(mockStates['book1'].hist[1].shippingPaid).toBe(5); // unchanged
+      expect(mockStates['book1'].hist[2].shippingPaid).toBe(0); // unchanged
+
+      // Verify saves and toast calls
+      expect(mockCalls).toEqual(['saveState:book1', 'showToast:✓ Auto-synced 1 shipping costs from Big Cartel', 'render']);
+
+      // Verify Sheets synchronization call was triggered for #1001 (order update and shipping purchase row)
+      expect(mockSheetsQueue).toContainEqual(expect.objectContaining({ num: '#1001', type: 'order' }));
+      expect(mockSheetsQueue).toContainEqual(expect.objectContaining({ type: 'shipping', total: 12.50 }));
+    });
+  });
 });

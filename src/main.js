@@ -24109,6 +24109,9 @@ function renderShippingAnalysisHub() {
               <select id="ship-analysis-margin-filter" onchange="onShipAnalysisMarginFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:150px;">
                 ${marginFilterOptions}
               </select>
+              <button class="btn sm gold" id="ship-bc-sync-btn" onclick="triggerBigCartelShippingSync()" style="height:32px; padding:0 12px; margin-left:8px; display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600;">
+                <span>🔄</span> Sync Big Cartel Shipping
+              </button>
             </div>
             <div class="shipping-pnl-header-meta" style="margin-top: 4px;">
               <span class="shipping-pnl-freshness">All recorded website orders</span>
@@ -24840,7 +24843,8 @@ function exposeLegacyInlineHandlers() {
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
     editPostageCost, unlinkManualPostage, dismissShippingAnalysisOrder, restoreShippingAnalysisOrder,
-    toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders
+    toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders,
+    syncBigCartelShippingPaid, triggerBigCartelShippingSync
   });
 }
 
@@ -25097,6 +25101,7 @@ async function loadBigCartelData() {
       const ordersRes = await fetchBigCartel('orders', bigCartelData.store.id);
       bigCartelData.orders = ordersRes.data || [];
       renderBigCartelOrders(bigCartelData.orders, ordersRes.included);
+      await syncBigCartelShippingPaid(bigCartelData.orders);
     }
   } catch (e) {
     console.error('Error loading Big Cartel data:', e);
@@ -25384,6 +25389,162 @@ window.restoreShippingAnalysisOrder = restoreShippingAnalysisOrder;
 window.toggleAllShipAnalysisOrders = toggleAllShipAnalysisOrders;
 window.updateShipAnalysisBatchActionUI = updateShipAnalysisBatchActionUI;
 window.batchDismissShippingAnalysisOrders = batchDismissShippingAnalysisOrders;
+window.syncBigCartelShippingPaid = syncBigCartelShippingPaid;
+window.triggerBigCartelShippingSync = triggerBigCartelShippingSync;
+
+async function syncBigCartelShippingPaid(bcOrders) {
+  if (!bcOrders || bcOrders.length === 0) return;
+  
+  let updateCount = 0;
+  const affectedBooks = new Set();
+  
+  bcOrders.forEach(bcOrder => {
+    const bcId = bcOrder.id;
+    const normalizedBcId = normalizeShippingOrderNumber(bcId);
+    const shippingPaid = parseFloat(bcOrder.attributes?.shipping_total || 0);
+    
+    Object.keys(states).forEach(bookId => {
+      const s = states[bookId];
+      if (s && Array.isArray(s.hist)) {
+        s.hist.forEach(h => {
+          if (h && h.chan === 'Website' && normalizeShippingOrderNumber(h.num) === normalizedBcId) {
+            if (!h.manualShippingPaid && h.shippingPaid !== shippingPaid) {
+              h.shippingPaid = shippingPaid;
+              affectedBooks.add(bookId);
+              updateCount++;
+              
+              const bookObj = BOOKS[bookId];
+              if (bookObj) {
+                syncToSheets({
+                  type: 'order',
+                  book: bookObj.title,
+                  date: h.date,
+                  num: h.num,
+                  chan: h.chan || 'Website',
+                  qty: h.qty,
+                  price: h.price,
+                  total: h.qty * h.price,
+                  stockAfter: h.after,
+                  notes: h.notes || 'Big Cartel',
+                  sheetsId: h.sheetsId,
+                  currency: getBookCurrencyCode(bookObj)
+                });
+                if (h.shippingPaid > 0) {
+                  syncToSheets(shippingPurchaseRowPayload(bookObj, getBookCurrencyCode(bookObj), h));
+                } else {
+                  syncToSheets({ action: 'delete', type: 'shipping', book: bookObj.title, sheetsId: h.sheetsId + '-shipping' });
+                }
+              }
+            }
+          }
+        });
+      }
+    });
+  });
+  
+  if (updateCount > 0) {
+    for (const bookId of affectedBooks) {
+      await window.saveState(bookId);
+    }
+    showToast(`✓ Auto-synced ${updateCount} shipping costs from Big Cartel`, 'ok');
+    renderShippingAnalysisHub();
+  }
+}
+
+async function triggerBigCartelShippingSync() {
+  const config = await loadBigCartelConfig();
+  if (!config.subdomain || !config.username || !config.password) {
+    showToast('⚠️ Big Cartel is not configured. Please set credentials in the Big Cartel tab.', 'warn');
+    return;
+  }
+  
+  const btn = document.getElementById('ship-bc-sync-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>🔄</span> Syncing...';
+  }
+  
+  try {
+    if (!bigCartelData.store) {
+      const accountsRes = await fetchBigCartel('');
+      if (accountsRes.data && accountsRes.data.length > 0) {
+        bigCartelData.store = accountsRes.data.find(acc => acc.attributes.subdomain === config.subdomain) || accountsRes.data[0];
+      }
+    }
+    
+    if (!bigCartelData.store) {
+      throw new Error('Big Cartel store info not found.');
+    }
+    
+    const ordersRes = await fetchBigCartel('orders', bigCartelData.store.id);
+    bigCartelData.orders = ordersRes.data || [];
+    
+    let updateCount = 0;
+    const affectedBooks = new Set();
+    
+    bigCartelData.orders.forEach(bcOrder => {
+      const bcId = bcOrder.id;
+      const normalizedBcId = normalizeShippingOrderNumber(bcId);
+      const shippingPaid = parseFloat(bcOrder.attributes?.shipping_total || 0);
+      
+      Object.keys(states).forEach(bookId => {
+        const s = states[bookId];
+        if (s && Array.isArray(s.hist)) {
+          s.hist.forEach(h => {
+            if (h && h.chan === 'Website' && normalizeShippingOrderNumber(h.num) === normalizedBcId) {
+              if (!h.manualShippingPaid && h.shippingPaid !== shippingPaid) {
+                h.shippingPaid = shippingPaid;
+                affectedBooks.add(bookId);
+                updateCount++;
+                
+                const bookObj = BOOKS[bookId];
+                if (bookObj) {
+                  syncToSheets({
+                    type: 'order',
+                    book: bookObj.title,
+                    date: h.date,
+                    num: h.num,
+                    chan: h.chan || 'Website',
+                    qty: h.qty,
+                    price: h.price,
+                    total: h.qty * h.price,
+                    stockAfter: h.after,
+                    notes: h.notes || 'Big Cartel',
+                    sheetsId: h.sheetsId,
+                    currency: getBookCurrencyCode(bookObj)
+                  });
+                  if (h.shippingPaid > 0) {
+                    syncToSheets(shippingPurchaseRowPayload(bookObj, getBookCurrencyCode(bookObj), h));
+                  } else {
+                    syncToSheets({ action: 'delete', type: 'shipping', book: bookObj.title, sheetsId: h.sheetsId + '-shipping' });
+                  }
+                }
+              }
+            }
+          });
+        }
+      });
+    });
+    
+    if (updateCount > 0) {
+      for (const bookId of affectedBooks) {
+        await window.saveState(bookId);
+      }
+      showToast(`✓ Synced ${updateCount} shipping costs from Big Cartel`, 'ok');
+      renderShippingAnalysisHub();
+    } else {
+      showToast('✓ Shipping costs are already up to date', 'ok');
+    }
+  } catch (e) {
+    console.error('Error syncing Big Cartel shipping:', e);
+    showToast('Failed to sync Big Cartel shipping: ' + e.message, 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>🔄</span> Sync Big Cartel Shipping';
+    }
+  }
+}
 
 if (window._fbReady) { initStartup(); }
 else { document.addEventListener('firebase-ready', initStartup); }
