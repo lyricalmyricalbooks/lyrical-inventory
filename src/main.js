@@ -24183,26 +24183,27 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses) {
   else if (weightKg >= 0.5) bandName = '0.5 - 1 kg';
 
   const getFallbackRates = (region, w) => {
+    // Canada Post 2026 Solutions for Small Business / Tracked Packet rates
     if (w < 0.5) {
-      if (region === 'ON') return { base: 12.00, addon: 3.00 };
-      if (region === 'CA') return { base: 16.00, addon: 4.00 };
+      if (region === 'ON') return { base: 12.50, addon: 3.50 };
+      if (region === 'CA') return { base: 17.50, addon: 4.50 };
       if (region === 'US') return { base: 18.00, addon: 5.00 };
-      return { base: 24.00, addon: 10.00 };
+      return { base: 26.50, addon: 12.00 };
     } else if (w <= 1) {
-      if (region === 'ON') return { base: 16.00, addon: 5.00 };
-      if (region === 'CA') return { base: 20.00, addon: 6.00 };
-      if (region === 'US') return { base: 22.00, addon: 8.00 };
-      return { base: 28.00, addon: 12.00 };
-    } else if (w <= 2) {
-      if (region === 'ON') return { base: 20.00, addon: 8.00 };
-      if (region === 'CA') return { base: 24.00, addon: 10.00 };
-      if (region === 'US') return { base: 26.00, addon: 12.00 };
+      if (region === 'ON') return { base: 14.50, addon: 5.00 };
+      if (region === 'CA') return { base: 20.00, addon: 6.50 };
+      if (region === 'US') return { base: 22.50, addon: 8.50 };
       return { base: 35.00, addon: 15.00 };
+    } else if (w <= 2) {
+      if (region === 'ON') return { base: 17.00, addon: 8.00 };
+      if (region === 'CA') return { base: 24.50, addon: 10.00 };
+      if (region === 'US') return { base: 27.00, addon: 12.00 };
+      return { base: 48.00, addon: 18.00 };
     } else {
-      if (region === 'ON') return { base: 25.00, addon: 10.00 };
-      if (region === 'CA') return { base: 30.00, addon: 12.00 };
-      if (region === 'US') return { base: 32.00, addon: 15.00 };
-      return { base: 45.00, addon: 20.00 };
+      if (region === 'ON') return { base: 21.00, addon: 10.00 };
+      if (region === 'CA') return { base: 29.50, addon: 12.50 };
+      if (region === 'US') return { base: 34.00, addon: 15.00 };
+      return { base: 65.00, addon: 22.00 };
     }
   };
 

@@ -289,11 +289,11 @@ describe('Shipping Analysis Hub Functions', () => {
       const result = getSmartShippingRecommendations([], []);
       expect(result.weightKg).toBeCloseTo(0.8, 2);
       expect(result.bandName).toBe('0.5 - 1 kg');
-      // For a 0.5 - 1 kg book, the default base rates should be: ON=16, CA=20, US=22, intl=28
-      expect(result.results.ON.recoBase).toBe(16);
-      expect(result.results.CA.recoBase).toBe(20);
-      expect(result.results.US.recoBase).toBe(22);
-      expect(result.results.intl.recoBase).toBe(28);
+      // For a 0.5 - 1 kg book, the Canada Post default base rates should be: ON=14.50, CA=20.00, US=22.50, intl=35.00
+      expect(result.results.ON.recoBase).toBe(14.50);
+      expect(result.results.CA.recoBase).toBe(20.00);
+      expect(result.results.US.recoBase).toBe(22.50);
+      expect(result.results.intl.recoBase).toBe(35.00);
     });
 
     it('calculates statistical percentile-based recommendations when data is sufficient', () => {
