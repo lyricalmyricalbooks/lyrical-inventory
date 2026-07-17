@@ -274,10 +274,11 @@ describe('Shipping Analysis Hub Functions', () => {
         function normalizeShippingOrderNumber(num) { return num; }
       `;
 
-      getSmartShippingRecommendations = new Function('allOrders', 'shippoExpenses', 'weightOverride', `
+      getSmartShippingRecommendations = new Function('allOrders', 'shippoExpenses', 'weightOverride', 'recoMode', `
         const BOOK_LIST = [{ id: 'book1', title: 'The Hound', shipWeight: 0.8, shipWeightUnit: 'kg' }];
         let shipAnalysisBookFilter = 'all';
         let shipAnalysisWeightOverride = weightOverride || 'default';
+        let shipAnalysisRecoMode = recoMode || 'blended';
         function normalizeCountryCode(c) { 
           c = String(c || '').trim().toUpperCase();
           if (c === 'CANADA' || c === 'CA') return 'CA';
@@ -351,6 +352,31 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(resCustom.weightKg).toBeCloseTo(1.5, 2);
       expect(resCustom.bandName).toBe('1 - 2 kg');
       expect(resCustom.results.ON.recoBase).toBe(17.00);
+    });
+
+    it('isolates Canada Post rate recommendations in cpost mode', () => {
+      const allOrders = [
+        { num: 'O1', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O2', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O3', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O4', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O5', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O6', shipCountry: 'CA', shipState: 'ON', qty: 2, bookId: 'book1' }
+      ];
+
+      const shippoExpenses = [
+        { shippingOrderNumber: 'O1', shippingMatchStatus: 'matched', baseAmount: 11.50 },
+        { shippingOrderNumber: 'O2', shippingMatchStatus: 'matched', baseAmount: 12.00 },
+        { shippingOrderNumber: 'O3', shippingMatchStatus: 'matched', baseAmount: 12.50 },
+        { shippingOrderNumber: 'O4', shippingMatchStatus: 'matched', baseAmount: 13.00 },
+        { shippingOrderNumber: 'O5', shippingMatchStatus: 'matched', baseAmount: 14.50 },
+        { shippingOrderNumber: 'O6', shippingMatchStatus: 'matched', baseAmount: 18.50 }
+      ];
+
+      const result = getSmartShippingRecommendations(allOrders, shippoExpenses, 'default', 'cpost');
+      expect(result.results.ON.recoBase).toBe(14.50);
+      expect(result.results.ON.recoAddon).toBe(5.00);
+      expect(result.results.ON.confidence).toBe('Canada Post');
     });
   });
 });

@@ -24158,6 +24158,12 @@ async function unlinkShippoExpense(txRef) {
 
 
 let shipAnalysisWeightOverride = 'default';
+let shipAnalysisRecoMode = 'blended';
+
+function onShipRecoModeChange(val) {
+  shipAnalysisRecoMode = val;
+  renderShippingAnalysisHub();
+}
 
 function onShipRecoWeightSelectChange(val) {
   if (val === 'custom') {
@@ -24296,17 +24302,23 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses) {
     let recoAddon = fallback.addon;
     let confidence = 'Default';
 
-    if (N >= 5) {
-      recoBase = Math.round(p75Base);
-      recoAddon = avgInc !== null ? Math.max(2, Math.round(avgInc)) : Math.round(recoBase * 0.4);
-      confidence = 'High';
-    } else if (N > 0) {
-      const w = N / 5;
-      const baseBlend = avgBase * w + fallback.base * (1 - w);
-      const addBlend = (avgInc || fallback.addon) * w + fallback.addon * (1 - w);
-      recoBase = Math.round(baseBlend);
-      recoAddon = Math.round(addBlend);
-      confidence = 'Medium';
+    if (shipAnalysisRecoMode === 'cpost') {
+      recoBase = fallback.base;
+      recoAddon = fallback.addon;
+      confidence = 'Canada Post';
+    } else {
+      if (N >= 5) {
+        recoBase = Math.round(p75Base);
+        recoAddon = avgInc !== null ? Math.max(2, Math.round(avgInc)) : Math.round(recoBase * 0.4);
+        confidence = 'High';
+      } else if (N > 0) {
+        const w = N / 5;
+        const baseBlend = avgBase * w + fallback.base * (1 - w);
+        const addBlend = (avgInc || fallback.addon) * w + fallback.addon * (1 - w);
+        recoBase = Math.round(baseBlend);
+        recoAddon = Math.round(addBlend);
+        confidence = 'Medium';
+      }
     }
 
     recoAddon = Math.max(1, recoAddon);
@@ -25301,20 +25313,32 @@ ${margin.toFixed(2)} CAD</td>
               Analyzes historical shipping labels and order quantities to calculate optimized rates. Base price targets the 75th percentile of actual postage for outlier coverage; add-ons reflect average incremental weight costs.
             </p>
           </div>
-          <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:1px solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:8px; font-weight:600; flex-wrap:wrap;">
-            <span style="font-size:13px; display:inline-flex; align-items:center; gap:4px;">⚖️ Weight Profile:</span>
-            <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
-              <option value="default" ${shipAnalysisWeightOverride === 'default' ? 'selected' : ''}>Book Weight (${bookWeightKg.toFixed(2)} kg)</option>
-              <option value="under_0.5" ${shipAnalysisWeightOverride === 'under_0.5' ? 'selected' : ''}>Under 0.5 kg (0.3 kg)</option>
-              <option value="0.5_1" ${shipAnalysisWeightOverride === '0.5_1' ? 'selected' : ''}>0.5 - 1 kg (0.8 kg)</option>
-              <option value="1_2" ${shipAnalysisWeightOverride === '1_2' ? 'selected' : ''}>1 - 2 kg (1.5 kg)</option>
-              <option value="over_2" ${shipAnalysisWeightOverride === 'over_2' ? 'selected' : ''}>Over 2 kg (2.5 kg)</option>
-              <option value="custom" ${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? 'selected' : ''}>Custom Weight...</option>
-            </select>
-            <input id="ship-reco-custom-weight-input" type="number" step="0.1" min="0.01" value="${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? parseFloat(shipAnalysisWeightOverride).toFixed(2) : bookWeightKg.toFixed(2)}" 
-              onchange="onShipRecoCustomWeightChange(this.value)"
-              style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
-            <span style="font-size:11px; color:var(--text3); font-weight:400;">(${recoData.bandName})</span>
+          <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:1px solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:12px; font-weight:600; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:4px;">
+              <span style="font-size:13px;">⚖️</span> Weight Profile:
+              <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+                <option value="default" ${shipAnalysisWeightOverride === 'default' ? 'selected' : ''}>Book Weight (${bookWeightKg.toFixed(2)} kg)</option>
+                <option value="under_0.5" ${shipAnalysisWeightOverride === 'under_0.5' ? 'selected' : ''}>Under 0.5 kg (0.3 kg)</option>
+                <option value="0.5_1" ${shipAnalysisWeightOverride === '0.5_1' ? 'selected' : ''}>0.5 - 1 kg (0.8 kg)</option>
+                <option value="1_2" ${shipAnalysisWeightOverride === '1_2' ? 'selected' : ''}>1 - 2 kg (1.5 kg)</option>
+                <option value="over_2" ${shipAnalysisWeightOverride === 'over_2' ? 'selected' : ''}>Over 2 kg (2.5 kg)</option>
+                <option value="custom" ${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? 'selected' : ''}>Custom Weight...</option>
+              </select>
+              <input id="ship-reco-custom-weight-input" type="number" step="0.1" min="0.01" value="${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? parseFloat(shipAnalysisWeightOverride).toFixed(2) : bookWeightKg.toFixed(2)}" 
+                onchange="onShipRecoCustomWeightChange(this.value)"
+                style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); text-align:right; font-family:'DM Mono',monospace; outline:none; margin-left:4px;" />
+              <span style="font-size:11px; color:var(--text3); font-weight:400; margin-left:4px;">(${recoData.bandName})</span>
+            </div>
+            
+            <div style="border-left:1px solid var(--border); height:16px;"></div>
+            
+            <div style="display:flex; align-items:center; gap:4px;">
+              <span style="font-size:13px;">⚙️</span> Methodology:
+              <select id="ship-reco-mode-select" onchange="onShipRecoModeChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+                <option value="blended" ${shipAnalysisRecoMode === 'blended' ? 'selected' : ''}>Blended (History + CP)</option>
+                <option value="cpost" ${shipAnalysisRecoMode === 'cpost' ? 'selected' : ''}>Canada Post Only</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="shipping-reco-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
