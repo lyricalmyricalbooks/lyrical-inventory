@@ -245,4 +245,82 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(mockSheetsQueue).toContainEqual(expect.objectContaining({ type: 'shipping', total: 12.50 }));
     });
   });
+
+  describe('getSmartShippingRecommendations', () => {
+    let getSmartShippingRecommendations;
+
+    beforeEach(() => {
+      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+
+      const getPercentileMatch = mainContent.match(/function getPercentile\(arr, pct\) \{([\s\S]+?)\n\}/);
+      const getMeanMatch = mainContent.match(/function getMean\(arr\) \{([\s\S]+?)\n\}/);
+      const getSmartRecosMatch = mainContent.match(/function getSmartShippingRecommendations\(allOrders, shippoExpenses\) \{([\s\S]+?)\n\}/);
+      const getWeightInLbsMatch = mainContent.match(/function getWeightInLbs\(qty, book\) \{([\s\S]+?)\n\}/);
+      const getWeightInKgMatch = mainContent.match(/function getWeightInKg\(qty, book\) \{([\s\S]+?)\n\}/);
+
+      expect(getPercentileMatch).not.toBeNull();
+      expect(getMeanMatch).not.toBeNull();
+      expect(getSmartRecosMatch).not.toBeNull();
+
+      const mockEnvBase = `
+        const BOOK_LIST = [{ id: 'book1', title: 'The Hound', shipWeight: 0.8, shipWeightUnit: 'kg' }];
+        let shipAnalysisBookFilter = 'all';
+        function normalizeCountryCode(c) { 
+          c = String(c || '').trim().toUpperCase();
+          if (c === 'CANADA' || c === 'CA') return 'CA';
+          if (c === 'USA' || c === 'US') return 'US';
+          return 'intl';
+        }
+        function normalizeShippingOrderNumber(num) { return num; }
+      `;
+
+      getSmartShippingRecommendations = new Function('allOrders', 'shippoExpenses', `
+        ${mockEnvBase}
+        ${getPercentileMatch[0]}
+        ${getMeanMatch[0]}
+        ${getWeightInLbsMatch[0]}
+        ${getWeightInKgMatch[0]}
+        ${getSmartRecosMatch[0]}
+        return getSmartShippingRecommendations(allOrders, shippoExpenses);
+      `);
+    });
+
+    it('returns weight-based defaults if there are no historical orders', () => {
+      const result = getSmartShippingRecommendations([], []);
+      expect(result.weightKg).toBeCloseTo(0.8, 2);
+      expect(result.bandName).toBe('0.5 - 1 kg');
+      // For a 0.5 - 1 kg book, the default base rates should be: ON=16, CA=20, US=22, intl=28
+      expect(result.results.ON.recoBase).toBe(16);
+      expect(result.results.CA.recoBase).toBe(20);
+      expect(result.results.US.recoBase).toBe(22);
+      expect(result.results.intl.recoBase).toBe(28);
+    });
+
+    it('calculates statistical percentile-based recommendations when data is sufficient', () => {
+      const allOrders = [
+        { num: 'O1', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O2', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O3', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O4', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O5', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O6', shipCountry: 'CA', shipState: 'ON', qty: 2, bookId: 'book1' }
+      ];
+
+      const shippoExpenses = [
+        { shippingOrderNumber: 'O1', shippingMatchStatus: 'matched', baseAmount: 11.50 },
+        { shippingOrderNumber: 'O2', shippingMatchStatus: 'matched', baseAmount: 12.00 },
+        { shippingOrderNumber: 'O3', shippingMatchStatus: 'matched', baseAmount: 12.50 },
+        { shippingOrderNumber: 'O4', shippingMatchStatus: 'matched', baseAmount: 13.00 },
+        { shippingOrderNumber: 'O5', shippingMatchStatus: 'matched', baseAmount: 14.50 },
+        { shippingOrderNumber: 'O6', shippingMatchStatus: 'matched', baseAmount: 18.50 }
+      ];
+
+      const result = getSmartShippingRecommendations(allOrders, shippoExpenses);
+      
+      expect(result.results.ON.recoBase).toBe(13);
+      expect(result.results.ON.recoAddon).toBe(6);
+      expect(result.results.ON.confidence).toBe('High');
+      expect(result.results.ON.N).toBe(6);
+    });
+  });
 });

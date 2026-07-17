@@ -24157,6 +24157,179 @@ async function unlinkShippoExpense(txRef) {
 }
 
 
+function getPercentile(arr, pct) {
+  if (!arr || arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = Math.ceil((pct / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, idx)];
+}
+
+function getMean(arr) {
+  if (!arr || arr.length === 0) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function getSmartShippingRecommendations(allOrders, shippoExpenses) {
+  const activeBookId = shipAnalysisBookFilter;
+  let book = null;
+  if (activeBookId !== 'all') {
+    book = BOOK_LIST.find(b => b.id === activeBookId);
+  }
+  const weightKg = getWeightInKg(1, book || BOOK_LIST[0]);
+  
+  let bandName = 'Under 0.5 kg';
+  if (weightKg >= 2) bandName = 'Over 2 kg';
+  else if (weightKg > 1) bandName = '1 - 2 kg';
+  else if (weightKg >= 0.5) bandName = '0.5 - 1 kg';
+
+  const getFallbackRates = (region, w) => {
+    if (w < 0.5) {
+      if (region === 'ON') return { base: 12.00, addon: 3.00 };
+      if (region === 'CA') return { base: 16.00, addon: 4.00 };
+      if (region === 'US') return { base: 18.00, addon: 5.00 };
+      return { base: 24.00, addon: 10.00 };
+    } else if (w <= 1) {
+      if (region === 'ON') return { base: 16.00, addon: 5.00 };
+      if (region === 'CA') return { base: 20.00, addon: 6.00 };
+      if (region === 'US') return { base: 22.00, addon: 8.00 };
+      return { base: 28.00, addon: 12.00 };
+    } else if (w <= 2) {
+      if (region === 'ON') return { base: 20.00, addon: 8.00 };
+      if (region === 'CA') return { base: 24.00, addon: 10.00 };
+      if (region === 'US') return { base: 26.00, addon: 12.00 };
+      return { base: 35.00, addon: 15.00 };
+    } else {
+      if (region === 'ON') return { base: 25.00, addon: 10.00 };
+      if (region === 'CA') return { base: 30.00, addon: 12.00 };
+      if (region === 'US') return { base: 32.00, addon: 15.00 };
+      return { base: 45.00, addon: 20.00 };
+    }
+  };
+
+  const regions = ['ON', 'CA', 'US', 'intl'];
+  const results = {};
+
+  regions.forEach(region => {
+    const regOrders = allOrders.filter(o => {
+      const country = normalizeCountryCode(o.shipCountry || 'US');
+      const state = String(o.shipState || '').trim().toUpperCase();
+      const isON = state === 'ON' || state === 'ONTARIO';
+
+      if (region === 'ON') return country === 'CA' && isON;
+      if (region === 'CA') return country === 'CA' && !isON;
+      if (region === 'US') return country === 'US';
+      return country !== 'CA' && country !== 'US';
+    });
+
+    const values = [];
+    regOrders.forEach(o => {
+      const orderNumber = normalizeShippingOrderNumber(o.num);
+      const linked = orderNumber ? shippoExpenses.filter(e =>
+        e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+      ) : [];
+      const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
+      if (hasPostage) {
+        const cost = o.manualPostagePaid
+          ? (Number(o.postagePaid) || 0)
+          : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+        if (cost > 0) {
+          values.push({ cost, qty: o.qty || 1 });
+        }
+      }
+    });
+
+    const N = values.length;
+    const singleCosts = values.filter(v => v.qty === 1).map(v => v.cost);
+    
+    let avgBase = null;
+    let p75Base = null;
+    let p90Base = null;
+    let avgInc = null;
+
+    if (singleCosts.length > 0) {
+      avgBase = getMean(singleCosts);
+      p75Base = getPercentile(singleCosts, 75);
+      p90Base = getPercentile(singleCosts, 90);
+    } else if (values.length > 0) {
+      const perUnit = values.map(v => v.cost / v.qty);
+      avgBase = getMean(perUnit);
+      p75Base = getPercentile(perUnit, 75);
+      p90Base = getPercentile(perUnit, 90);
+    }
+
+    const multi = values.filter(v => v.qty > 1);
+    if (multi.length > 0 && avgBase !== null) {
+      const incs = multi.map(v => (v.cost - avgBase) / (v.qty - 1));
+      avgInc = getMean(incs.filter(c => c > 0));
+    }
+
+    const fallback = getFallbackRates(region, weightKg);
+    let recoBase = fallback.base;
+    let recoAddon = fallback.addon;
+    let confidence = 'Default';
+
+    if (N >= 5) {
+      recoBase = Math.round(p75Base);
+      recoAddon = avgInc !== null ? Math.max(2, Math.round(avgInc)) : Math.round(recoBase * 0.4);
+      confidence = 'High';
+    } else if (N > 0) {
+      const w = N / 5;
+      const baseBlend = avgBase * w + fallback.base * (1 - w);
+      const addBlend = (avgInc || fallback.addon) * w + fallback.addon * (1 - w);
+      recoBase = Math.round(baseBlend);
+      recoAddon = Math.round(addBlend);
+      confidence = 'Medium';
+    }
+
+    recoAddon = Math.max(1, recoAddon);
+
+    results[region] = {
+      recoBase,
+      recoAddon,
+      confidence,
+      N,
+      avgCost: N > 0 ? getMean(values.map(v => v.cost)) : null,
+      p90Cost: N > 0 ? getPercentile(values.map(v => v.cost), 90) : null
+    };
+  });
+
+  return { results, weightKg, bandName };
+}
+
+function updateManualShippingRates(region, type, val) {
+  const s = getState();
+  if (!s.shippingRates) {
+    s.shippingRates = {
+      ON: { base: 16.00, addon: 10.00 },
+      CA: { base: 20.00, addon: 10.00 },
+      US: { base: 25.00, addon: 10.00 },
+      intl: { base: 25.00, addon: 10.00 }
+    };
+  }
+  const floatVal = Math.max(0, parseFloat(val) || 0);
+  s.shippingRates[region][type] = floatVal;
+  saveState(activeBook);
+  renderShippingAnalysisHub();
+}
+
+function applySmartShippingRates(region, base, addon) {
+  const s = getState();
+  if (!s.shippingRates) {
+    s.shippingRates = {
+      ON: { base: 16.00, addon: 10.00 },
+      CA: { base: 20.00, addon: 10.00 },
+      US: { base: 25.00, addon: 10.00 },
+      intl: { base: 25.00, addon: 10.00 }
+    };
+  }
+  s.shippingRates[region].base = base;
+  s.shippingRates[region].addon = addon;
+  saveState(activeBook);
+  renderShippingAnalysisHub();
+  showToast(`Applied recommended rates for ${region === 'ON' ? 'Ontario' : region === 'CA' ? 'Rest of Canada' : region === 'US' ? 'United States' : 'International'}`);
+}
+
+
 function renderShippingAnalysisHub() {
   const hub = $('ship-analysis-hub');
   if (!hub) return;
@@ -24969,6 +25142,112 @@ ${margin.toFixed(2)} CAD</td>
     `;
   }
 
+  // Calculate smart shipping rate recommendations
+  const s = getState();
+  const book = getBook();
+  const recoData = getSmartShippingRecommendations(allOrders, shippoExpenses);
+  const targetRates = s.shippingRates || {
+    ON: { base: 16.00, addon: 10.00 },
+    CA: { base: 20.00, addon: 10.00 },
+    US: { base: 25.00, addon: 10.00 },
+    intl: { base: 25.00, addon: 10.00 }
+  };
+
+  const regionMeta = {
+    ON: { name: 'Ontario', icon: '🍁', key: 'ON' },
+    CA: { name: 'Rest of Canada', icon: '🇨🇦', key: 'CA' },
+    US: { name: 'United States', icon: '🇺🇸', key: 'US' },
+    intl: { name: 'International', icon: '🌐', key: 'intl' }
+  };
+
+  let columnsHtml = '';
+  Object.keys(regionMeta).forEach(key => {
+    const meta = regionMeta[key];
+    const data = recoData.results[key];
+    const current = targetRates[key] || { base: 0, addon: 0 };
+    const currentBase = current.base;
+    const currentAddon = current.addon;
+    const recoBase = data.recoBase;
+    const recoAddon = data.recoAddon;
+
+    let statusBadgeHtml = '';
+    let borderStyle = 'border: 1px solid var(--border);';
+    if (data.N === 0) {
+      statusBadgeHtml = `<span style="background:rgba(107,102,94,0.08); color:#6b665e; font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(107,102,94,0.15);">Default</span>`;
+    } else if (currentBase < recoBase) {
+      statusBadgeHtml = `<span style="background:rgba(201,75,50,0.08); color:#c94b32; font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(201,75,50,0.15);">⚠️ Undercharged</span>`;
+      borderStyle = 'border: 1px solid rgba(201,75,50,0.3); box-shadow: 0 4px 15px rgba(201,75,50,0.04);';
+    } else {
+      statusBadgeHtml = `<span style="background:rgba(29,122,74,0.08); color:#1d7a4a; font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(29,122,74,0.15);">✓ Optimized</span>`;
+    }
+
+    const confidenceColor = data.confidence === 'High' ? '#1d7a4a' : data.confidence === 'Medium' ? '#c8913a' : '#6b665e';
+    const avgCostStr = data.avgCost !== null ? `$${data.avgCost.toFixed(2)} CAD` : '—';
+    const p90CostStr = data.p90Cost !== null ? `$${data.p90Cost.toFixed(2)} CAD` : '—';
+
+    columnsHtml += `
+      <div class="shipping-reco-col" style="background:var(--cream2); border-radius:var(--r2); padding:18px; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; min-height:330px; transition: all 0.2s ease-in-out; ${borderStyle}">
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h4 style="font-size:14px; font-weight:700; color:var(--text); margin:0; display:flex; align-items:center; gap:6px;">
+              <span style="font-size:16px;">${meta.icon}</span> ${meta.name}
+            </h4>
+            ${statusBadgeHtml}
+          </div>
+
+          <div style="background:#fff; border:1px solid var(--border); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">
+            <label style="font-size:9px; font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:4px;">Recommended Rate</label>
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+              <span style="font-size:18px; font-weight:800; color:var(--gold);">$${recoBase.toFixed(2)} <span style="font-size:10px; font-weight:400; color:var(--text3);">base</span></span>
+              <span style="font-size:13px; font-weight:600; color:var(--text2);">+$${recoAddon.toFixed(2)} <span style="font-size:10px; font-weight:400; color:var(--text3);">add-on</span></span>
+            </div>
+          </div>
+
+          <div style="font-size:11px; color:var(--text3); margin-bottom:16px; line-height:1.7;">
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed rgba(0,0,0,0.04); padding-bottom:3px;">
+              <span>Confidence:</span>
+              <span style="font-weight:700; color:${confidenceColor};">${data.confidence}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed rgba(0,0,0,0.04); padding-bottom:3px; margin-top:3px;">
+              <span>Historical labels:</span>
+              <strong style="color:var(--text);">${data.N}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px dashed rgba(0,0,0,0.04); padding-bottom:3px; margin-top:3px;">
+              <span>Avg postage cost:</span>
+              <strong style="color:var(--text);">${avgCostStr}</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding-bottom:3px; margin-top:3px;">
+              <span>90th percentile cost:</span>
+              <strong style="color:var(--text);">${p90CostStr}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:auto;">
+          <label style="font-size:9px; font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:8px;">Current Store Setup</label>
+          <div style="display:flex; gap:6px; align-items:center; margin-bottom:10px;">
+            <div style="flex:1;">
+              <span style="font-size:9px; color:var(--text4); display:block; margin-bottom:2px;">Base ($)</span>
+              <input type="number" step="0.50" min="0" value="${currentBase.toFixed(2)}" 
+                onblur="updateManualShippingRates('${meta.key}', 'base', this.value)"
+                style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
+            </div>
+            <div style="flex:1;">
+              <span style="font-size:9px; color:var(--text4); display:block; margin-bottom:2px;">Add-on ($)</span>
+              <input type="number" step="0.50" min="0" value="${currentAddon.toFixed(2)}" 
+                onblur="updateManualShippingRates('${meta.key}', 'addon', this.value)"
+                style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
+            </div>
+          </div>
+          <button class="btn sm ghost" onclick="applySmartShippingRates('${meta.key}', ${recoBase}, ${recoAddon})" 
+            style="width:100%; font-size:10px; padding:4px; border-radius:var(--r); text-align:center; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; height:28px; border:1px dashed var(--border); cursor:pointer;">
+            ⚡ Apply Recommended
+          </button>
+        </div>
+      </div>
+    `;
+  });
+
   // ── Render complete layout ──
   hub.innerHTML = `
     <details class="shipping-pnl-insights" open style="margin-bottom: var(--shipping-pnl-space-4) !important;">
@@ -24979,6 +25258,26 @@ ${margin.toFixed(2)} CAD</td>
         </span>
         <span class="shipping-pnl-disclosure">Show analysis ▼</span>
       </summary>
+
+      <section class="shipping-reco-container" style="background:#fff; border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin-top:20px; margin-bottom:20px; box-shadow:0 8px 30px rgba(0,0,0,0.04);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h3 style="font-family:'Playfair Display',serif; font-size:20px; color:var(--text); margin:0; display:flex; align-items:center; gap:8px; font-weight:700;">
+              <span>🪄</span> Smart Shipping Rate Recommendations
+            </h3>
+            <p style="font-size:12px; color:var(--text3); margin:4px 0 0; line-height:1.5; max-width:650px;">
+              Analyzes historical shipping labels and order quantities to calculate optimized rates. Base price targets the 75th percentile of actual postage for outlier coverage; add-ons reflect average incremental weight costs.
+            </p>
+          </div>
+          <div style="background:var(--cream2); padding:6px 12px; border-radius:var(--r2); border:1px solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:6px; font-weight:600;">
+            <span style="font-size:13px;">⚖️</span> Weight Profile: <strong>${recoData.weightKg.toFixed(2)} kg</strong> (${recoData.bandName})
+          </div>
+        </div>
+        <div class="shipping-reco-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+          ${columnsHtml}
+        </div>
+      </section>
+
       <div class="shipping-pnl-insights-grid">
         <section class="shipping-pnl-insight-card">
           <h3>📦 Carrier efficiency</h3>
@@ -25411,7 +25710,8 @@ function exposeLegacyInlineHandlers() {
     editPostageCost, unlinkManualPostage, dismissShippingAnalysisOrder, restoreShippingAnalysisOrder,
     toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders,
     syncBigCartelShippingPaid, triggerBigCartelShippingSync,
-    toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV
+    toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV,
+    updateManualShippingRates, applySmartShippingRates
   });
 }
 
