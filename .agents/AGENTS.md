@@ -127,3 +127,10 @@ You maintain extremely high standards of code hygiene, test coverage, and user f
 - **Comment Preservation:** Never delete or alter existing comments, docstrings, or explanatory notes in the codebase unless they are directly contradicted by your changes. Preserving this context is critical for long-term maintenance.
 - **Graceful Error Handling:** Wrap all external API calls, storage mutations, and network requests in try-catch blocks. Log the technical error to `console.error` and show a user-friendly message via `showToast`.
 
+---
+
+## 10. Turn-Ending "Next moves" Dynamic Generation Invariant
+- **Strict Invariant**: Every "Next moves" list MUST be custom-generated from scratch based on the immediate code changes, edge cases, and topics of the *current* turn.
+- **No Static Repeating**: Do not copy-paste or carry over next-move items from previous turns unless they are still the single most relevant technical continuation.
+- **Context Relevance Check**: If the last edit was about shipping, the suggestions must be about shipping (e.g., caching rates, preset weights, address formats) — not unrelated features like invoices, POS checkouts, or mail campaigns unless explicitly requested.
+
