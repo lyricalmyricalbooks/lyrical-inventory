@@ -126,4 +126,10 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain('fullSha');
     expect(mainContent).toContain('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/');
   });
+
+  it('supports percentage discount in recalcInvoiceTotals and saveInvoice', () => {
+    expect(mainContent).toContain("discountType: totals.discountType || 'flat'");
+    expect(mainContent).toContain("discountRate: totals.discountRate || 0");
+    expect(mainContent).toContain("function onDiscountTypeChange");
+  });
 });

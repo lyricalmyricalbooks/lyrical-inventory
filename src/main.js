@@ -9438,7 +9438,21 @@ function openCreateInvoice(storeId, editingId) {
     $('inv-num').value = inv.num || '';
     $('inv-date').value = inv.date || today();
     $('inv-due').value = inv.dueDate || '';
-    $('inv-discount').value = inv.discount || 0;
+    const distType = inv.discountType || 'flat';
+    $('inv-discount-type').value = distType;
+    if (distType === 'percent') {
+      $('inv-discount-percent').value = inv.discountRate || 0;
+      $('inv-discount').value = 0;
+      $('inv-discount-flat-wrap').style.display = 'none';
+      $('inv-discount-percent-wrap').style.display = 'flex';
+      $('inv-discount-label-text').textContent = 'Discount (percent, optional)';
+    } else {
+      $('inv-discount').value = inv.discount || 0;
+      $('inv-discount-percent').value = 0;
+      $('inv-discount-flat-wrap').style.display = 'flex';
+      $('inv-discount-percent-wrap').style.display = 'none';
+      $('inv-discount-label-text').textContent = 'Discount (flat, optional)';
+    }
     $('inv-tax').value = inv.taxRate || 0;
     $('inv-paylink').value = inv.paymentLink || '';
     $('inv-notes').value = inv.notes || '';
@@ -9457,7 +9471,12 @@ function openCreateInvoice(storeId, editingId) {
     // default due date = 30 days from today
     const d = new Date(); d.setDate(d.getDate() + 30);
     $('inv-due').value = d.toISOString().split('T')[0];
+    $('inv-discount-type').value = 'flat';
     $('inv-discount').value = 0;
+    $('inv-discount-percent').value = 0;
+    $('inv-discount-flat-wrap').style.display = 'flex';
+    $('inv-discount-percent-wrap').style.display = 'none';
+    $('inv-discount-label-text').textContent = 'Discount (flat, optional)';
     $('inv-tax').value = 0;
     $('inv-paylink').value = '';
     const settings = getInvoiceSettings();
@@ -9580,19 +9599,61 @@ function renderInvoiceItems() {
 
 function escapeHTML(s) { return escapeHtml(s); }
 
+function onDiscountTypeChange() {
+  const type = $('inv-discount-type').value;
+  if (type === 'percent') {
+    $('inv-discount-flat-wrap').style.display = 'none';
+    $('inv-discount-percent-wrap').style.display = 'flex';
+    $('inv-discount-label-text').textContent = 'Discount (percent, optional)';
+    // Convert current flat value to percent of subtotal (best effort)
+    const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
+    const flatVal = parseFloat($('inv-discount').value) || 0;
+    if (subtotal > 0 && flatVal > 0) {
+      $('inv-discount-percent').value = parseFloat(((flatVal / subtotal) * 100).toFixed(2));
+    } else {
+      $('inv-discount-percent').value = 0;
+    }
+  } else {
+    $('inv-discount-flat-wrap').style.display = 'flex';
+    $('inv-discount-percent-wrap').style.display = 'none';
+    $('inv-discount-label-text').textContent = 'Discount (flat, optional)';
+    // Convert current percent value to flat amount (best effort)
+    const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
+    const percentVal = parseFloat($('inv-discount-percent').value) || 0;
+    if (subtotal > 0 && percentVal > 0) {
+      $('inv-discount').value = parseFloat(((subtotal * percentVal) / 100).toFixed(2));
+    } else {
+      $('inv-discount').value = 0;
+    }
+  }
+  recalcInvoiceTotals();
+}
+
 function recalcInvoiceTotals() {
   const cur = getSym(getInvoiceCurrency());
   const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
-  const discount = parseFloat($('inv-discount').value) || 0;
+  
+  const type = $('inv-discount-type') ? $('inv-discount-type').value : 'flat';
+  let discount = 0;
+  let discountRate = 0;
+  if (type === 'percent') {
+    discountRate = parseFloat($('inv-discount-percent').value) || 0;
+    discount = parseFloat(((subtotal * discountRate) / 100).toFixed(2));
+  } else {
+    discount = parseFloat($('inv-discount').value) || 0;
+  }
+  
   const taxRate = parseFloat($('inv-tax').value) || 0;
   const taxable = Math.max(0, subtotal - discount);
-  const tax = taxable * (taxRate / 100);
-  const total = taxable + tax;
+  const tax = parseFloat((taxable * (taxRate / 100)).toFixed(2));
+  const total = parseFloat((taxable + tax).toFixed(2));
+  
   $('inv-sub-val').textContent = fmt(subtotal, cur);
   $('inv-disc-val').textContent = discount ? '−' + fmt(discount, cur) : fmt(0, cur);
   $('inv-tax-val').textContent = fmt(tax, cur);
   $('inv-total-val').textContent = fmt(total, cur);
-  return { subtotal, discount, taxRate, tax, total };
+  
+  return { subtotal, discount, discountType: type, discountRate, taxRate, tax, total };
 }
 
 function prefillFromPendingSales(forceStoreId) {
@@ -9646,6 +9707,8 @@ function saveInvoice(status) {
     items: invoiceCtx.items.map(it => ({ description: it.description || '', qty: parseFloat(it.qty) || 0, unitPrice: parseFloat(it.unitPrice) || 0, _ledgerId: it._ledgerId || null })),
     subtotal: totals.subtotal,
     discount: totals.discount,
+    discountType: totals.discountType || 'flat',
+    discountRate: totals.discountRate || 0,
     taxRate: totals.taxRate,
     tax: totals.tax,
     total: totals.total,
@@ -9997,7 +10060,7 @@ function renderInvoicePaperHTML(inv) {
 
     <div class="inv-totals">
       <div class="tr"><span>Subtotal</span><span class="val">${fmt(inv.subtotal || 0, cur)}</span></div>
-      ${(inv.discount || 0) > 0 ? `<div class="tr"><span>Discount</span><span class="val">−${fmt(inv.discount, cur)}</span></div>` : ''}
+      ${(inv.discount || 0) > 0 ? `<div class="tr"><span>Discount${inv.discountType === 'percent' && inv.discountRate ? ` (${inv.discountRate}%)` : ''}</span><span class="val">−${fmt(inv.discount, cur)}</span></div>` : ''}
       ${(inv.taxRate || 0) > 0 ? `<div class="tr"><span>Tax (${inv.taxRate}%)</span><span class="val">${fmt(inv.tax || 0, cur)}</span></div>` : ''}
       <div class="grand"><div class="tr" style="padding:0;color:inherit;"><span>Total due</span><span class="val">${fmt(inv.total || 0, cur)}</span></div></div>
     </div>
@@ -10194,7 +10257,7 @@ function buildInvoiceEmailHTML(inv) {
         </table>
         <table role="presentation" align="right" width="300" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:22px;">
           <tr><td style="padding:6px 12px;color:#4a443c;">Subtotal</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(inv.subtotal || 0, cur)}</td></tr>
-          ${(inv.discount || 0) > 0 ? `<tr><td style="padding:6px 12px;color:#4a443c;">Discount</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">−${fmt(inv.discount, cur)}</td></tr>` : ''}
+          ${(inv.discount || 0) > 0 ? `<tr><td style="padding:6px 12px;color:#4a443c;">Discount${inv.discountType === 'percent' && inv.discountRate ? ` (${inv.discountRate}%)` : ''}</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">−${fmt(inv.discount, cur)}</td></tr>` : ''}
           ${(inv.taxRate || 0) > 0 ? `<tr><td style="padding:6px 12px;color:#4a443c;">Tax (${inv.taxRate}%)</td><td align="right" style="padding:6px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${fmt(inv.tax || 0, cur)}</td></tr>` : ''}
           <tr><td style="padding:14px 12px;background:#0e0c0a;color:#f7f2e9;border-radius:6px 0 0 6px;font-weight:800;">Total due</td><td align="right" style="padding:14px 12px;background:#0e0c0a;color:#f0c060;border-radius:0 6px 6px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:800;">${fmt(inv.total || 0, cur)}</td></tr>
         </table>
@@ -25196,6 +25259,7 @@ function exposeLegacyInlineHandlers() {
     renderInvoices, openCreateInvoice, nextInvoiceNumber, onInvoiceStoreChange, getInvoiceCurrency,
     onInvoiceCurrencyChange, addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
     renderInvoiceItems, escapeHTML, recalcInvoiceTotals, prefillFromPendingSales, saveInvoice,
+    onDiscountTypeChange,
     regenerateStripeLinkFromView, deleteInvoice, viewInvoice, effectivePaymentLink,
     isDynamicStripeLink, renderInvoicePaperHTML, editInvoiceFromView, markInvoicePaidFromView,
     printInvoice, printInvoiceViaPopup, copyInvoicePayLink, invoiceEmailPlainText,

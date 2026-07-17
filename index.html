@@ -2909,8 +2909,22 @@
   </div>
 
   <div class="g2" style="margin-bottom:12px;">
-    <div class="form-group"><label for="inv-discount">Discount (flat, optional)</label>
-      <div class="price-wrap"><span class="sym" id="inv-discount-sym">€</span><input id="inv-discount" type="number" inputmode="decimal" step="0.01" min="0" value="0" oninput="recalcInvoiceTotals()"></div>
+    <div class="form-group">
+      <label style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+        <span id="inv-discount-label-text">Discount (flat, optional)</span>
+        <select id="inv-discount-type" style="width:auto; padding:2px 8px; font-size:11px; height:24px; margin:0; border-radius:4px;" onchange="onDiscountTypeChange()">
+          <option value="flat">Flat Amount</option>
+          <option value="percent">Percentage (%)</option>
+        </select>
+      </label>
+      <div class="price-wrap" id="inv-discount-flat-wrap">
+        <span class="sym" id="inv-discount-sym">€</span>
+        <input id="inv-discount" type="number" inputmode="decimal" step="0.01" min="0" value="0" oninput="recalcInvoiceTotals()">
+      </div>
+      <div class="price-wrap" id="inv-discount-percent-wrap" style="display:none;">
+        <input id="inv-discount-percent" type="number" inputmode="decimal" step="0.01" min="0" max="100" value="0" oninput="recalcInvoiceTotals()">
+        <span class="sym">%</span>
+      </div>
     </div>
     <div class="form-group"><label for="inv-tax">Tax / VAT rate (%)</label>
       <input id="inv-tax" type="number" inputmode="decimal" step="0.01" min="0" max="100" value="0" oninput="recalcInvoiceTotals()">
