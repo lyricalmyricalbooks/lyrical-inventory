@@ -5463,8 +5463,8 @@ function getShippingReconciliationOrders() {
 
 function renderOrderShippingSummary(order, currency) {
   const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => String(expense?.ref || '').startsWith('shippo:'));
-  const summary = linkedShippingSummary(order, expenses, shippingRateToBase(currency));
-  const customer = `<span class="shipping-money customer">Shipping paid ${fmt(summary.customerPaid, currency)}</span>`;
+  const summary = linkedShippingSummary(order, expenses, 1);
+  const customer = `<span class="shipping-money customer">Shipping paid ${fmt(summary.customerPaid, 'CAD')}</span>`;
   if (summary.postageBase == null) {
     const label = summary.linkedCount ? 'Postage linked · FX rate needed' : 'Postage not linked';
     return `<span class="shipping-summary">${customer}<span class="shipping-money unlinked">${label}</span></span>`;
@@ -24298,9 +24298,7 @@ function renderShippingAnalysisHub() {
     let totalMarkupSum = 0;
     let markupCount = 0;
     kpiOrders.forEach(o => {
-      const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
-      const rate = shippingRateToBase(cur);
-      const customerPaidBase = (Number(o.shippingPaid) || 0) * rate;
+      const customerPaidBase = (Number(o.shippingPaid) || 0);
       const orderNumber = normalizeShippingOrderNumber(o.num);
       const linked = orderNumber ? shippoExpenses.filter(e =>
         e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
@@ -24755,9 +24753,7 @@ ${margin.toFixed(2)} CAD</td>
       ? (Number(o.postagePaid) || 0)
       : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
 
-    const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
-    const rate = shippingRateToBase(cur);
-    const customerPaidBase = (Number(o.shippingPaid) || 0) * rate;
+    const customerPaidBase = (Number(o.shippingPaid) || 0);
     const margin = customerPaidBase - postageCostCAD;
 
     const isUndercharged = isLinked && (margin < 0);
@@ -25128,9 +25124,7 @@ function downloadFilteredShippingLedgerCSV() {
       ? (Number(o.postagePaid) || 0)
       : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
 
-    const cur = o.bookId ? getBookCurrencyCode({ id: o.bookId }) : 'CAD';
-    const rate = shippingRateToBase(cur);
-    const customerPaidBase = (Number(o.shippingPaid) || 0) * rate;
+    const customerPaidBase = (Number(o.shippingPaid) || 0);
     const margin = customerPaidBase - postageCostCAD;
 
     const isLinked = linked.length > 0;
