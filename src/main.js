@@ -24157,6 +24157,24 @@ async function unlinkShippoExpense(txRef) {
 }
 
 
+let shipAnalysisWeightOverride = 'default';
+
+function onShipRecoWeightSelectChange(val) {
+  if (val === 'custom') {
+    shipAnalysisWeightOverride = '1.0';
+  } else {
+    shipAnalysisWeightOverride = val;
+  }
+  renderShippingAnalysisHub();
+}
+
+function onShipRecoCustomWeightChange(val) {
+  const parsed = Math.max(0.01, parseFloat(val) || 0.8);
+  shipAnalysisWeightOverride = parsed.toString();
+  renderShippingAnalysisHub();
+}
+
+
 function getPercentile(arr, pct) {
   if (!arr || arr.length === 0) return 0;
   const sorted = [...arr].sort((a, b) => a - b);
@@ -24175,7 +24193,16 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses) {
   if (activeBookId !== 'all') {
     book = BOOK_LIST.find(b => b.id === activeBookId);
   }
-  const weightKg = getWeightInKg(1, book || BOOK_LIST[0]);
+  const bookWeightKg = getWeightInKg(1, book || BOOK_LIST[0]);
+  
+  let weightKg = bookWeightKg;
+  if (shipAnalysisWeightOverride === 'under_0.5') weightKg = 0.3;
+  else if (shipAnalysisWeightOverride === '0.5_1') weightKg = 0.8;
+  else if (shipAnalysisWeightOverride === '1_2') weightKg = 1.5;
+  else if (shipAnalysisWeightOverride === 'over_2') weightKg = 2.5;
+  else if (shipAnalysisWeightOverride !== 'default') {
+    weightKg = parseFloat(shipAnalysisWeightOverride) || bookWeightKg;
+  }
   
   let bandName = 'Under 0.5 kg';
   if (weightKg >= 2) bandName = 'Over 2 kg';
@@ -25250,6 +25277,10 @@ ${margin.toFixed(2)} CAD</td>
   });
 
   // ── Render complete layout ──
+  const activeBookIdForWeight = shipAnalysisBookFilter;
+  const filteredBookForWeight = activeBookIdForWeight !== 'all' ? BOOK_LIST.find(b => b.id === activeBookIdForWeight) : null;
+  const bookWeightKg = getWeightInKg(1, filteredBookForWeight || BOOK_LIST[0]);
+
   hub.innerHTML = `
     <details class="shipping-pnl-insights" open style="margin-bottom: var(--shipping-pnl-space-4) !important;">
       <summary>
@@ -25270,8 +25301,20 @@ ${margin.toFixed(2)} CAD</td>
               Analyzes historical shipping labels and order quantities to calculate optimized rates. Base price targets the 75th percentile of actual postage for outlier coverage; add-ons reflect average incremental weight costs.
             </p>
           </div>
-          <div style="background:var(--cream2); padding:6px 12px; border-radius:var(--r2); border:1px solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:6px; font-weight:600;">
-            <span style="font-size:13px;">⚖️</span> Weight Profile: <strong>${recoData.weightKg.toFixed(2)} kg</strong> (${recoData.bandName})
+          <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:1px solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:8px; font-weight:600; flex-wrap:wrap;">
+            <span style="font-size:13px; display:inline-flex; align-items:center; gap:4px;">⚖️ Weight Profile:</span>
+            <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+              <option value="default" ${shipAnalysisWeightOverride === 'default' ? 'selected' : ''}>Book Weight (${bookWeightKg.toFixed(2)} kg)</option>
+              <option value="under_0.5" ${shipAnalysisWeightOverride === 'under_0.5' ? 'selected' : ''}>Under 0.5 kg (0.3 kg)</option>
+              <option value="0.5_1" ${shipAnalysisWeightOverride === '0.5_1' ? 'selected' : ''}>0.5 - 1 kg (0.8 kg)</option>
+              <option value="1_2" ${shipAnalysisWeightOverride === '1_2' ? 'selected' : ''}>1 - 2 kg (1.5 kg)</option>
+              <option value="over_2" ${shipAnalysisWeightOverride === 'over_2' ? 'selected' : ''}>Over 2 kg (2.5 kg)</option>
+              <option value="custom" ${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? 'selected' : ''}>Custom Weight...</option>
+            </select>
+            <input id="ship-reco-custom-weight-input" type="number" step="0.1" min="0.01" value="${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? parseFloat(shipAnalysisWeightOverride).toFixed(2) : bookWeightKg.toFixed(2)}" 
+              onchange="onShipRecoCustomWeightChange(this.value)"
+              style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
+            <span style="font-size:11px; color:var(--text3); font-weight:400;">(${recoData.bandName})</span>
           </div>
         </div>
         <div class="shipping-reco-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
@@ -25712,7 +25755,7 @@ function exposeLegacyInlineHandlers() {
     toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders,
     syncBigCartelShippingPaid, triggerBigCartelShippingSync,
     toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV,
-    updateManualShippingRates, applySmartShippingRates
+    updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange
   });
 }
 
@@ -26265,6 +26308,8 @@ window.toggleShipAnalysisRegionFilter = toggleShipAnalysisRegionFilter;
 window.toggleShipAnalysisWeightFilter = toggleShipAnalysisWeightFilter;
 window.clearAllShipAnalysisFilters = clearAllShipAnalysisFilters;
 window.downloadFilteredShippingLedgerCSV = downloadFilteredShippingLedgerCSV;
+window.onShipRecoWeightSelectChange = onShipRecoWeightSelectChange;
+window.onShipRecoCustomWeightChange = onShipRecoCustomWeightChange;
 
 async function fetchAllBigCartelOrders(storeId) {
   let allOrders = [];

@@ -274,8 +274,18 @@ describe('Shipping Analysis Hub Functions', () => {
         function normalizeShippingOrderNumber(num) { return num; }
       `;
 
-      getSmartShippingRecommendations = new Function('allOrders', 'shippoExpenses', `
-        ${mockEnvBase}
+      getSmartShippingRecommendations = new Function('allOrders', 'shippoExpenses', 'weightOverride', `
+        const BOOK_LIST = [{ id: 'book1', title: 'The Hound', shipWeight: 0.8, shipWeightUnit: 'kg' }];
+        let shipAnalysisBookFilter = 'all';
+        let shipAnalysisWeightOverride = weightOverride || 'default';
+        function normalizeCountryCode(c) { 
+          c = String(c || '').trim().toUpperCase();
+          if (c === 'CANADA' || c === 'CA') return 'CA';
+          if (c === 'USA' || c === 'US') return 'US';
+          return 'intl';
+        }
+        function normalizeShippingOrderNumber(num) { return num; }
+
         ${getPercentileMatch[0]}
         ${getMeanMatch[0]}
         ${getWeightInLbsMatch[0]}
@@ -321,6 +331,26 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(result.results.ON.recoAddon).toBe(6);
       expect(result.results.ON.confidence).toBe('High');
       expect(result.results.ON.N).toBe(6);
+    });
+
+    it('applies selected or custom weight overrides dynamically', () => {
+      // Under 0.5 kg override (0.3 kg) -> ON base should be 12.50
+      const resUnder = getSmartShippingRecommendations([], [], 'under_0.5');
+      expect(resUnder.weightKg).toBeCloseTo(0.3, 2);
+      expect(resUnder.bandName).toBe('Under 0.5 kg');
+      expect(resUnder.results.ON.recoBase).toBe(12.50);
+
+      // Over 2 kg override (2.5 kg) -> ON base should be 21.00
+      const resOver = getSmartShippingRecommendations([], [], 'over_2');
+      expect(resOver.weightKg).toBeCloseTo(2.5, 2);
+      expect(resOver.bandName).toBe('Over 2 kg');
+      expect(resOver.results.ON.recoBase).toBe(21.00);
+
+      // Custom numeric override (1.5 kg) -> ON base should be 17.00 (from 1 - 2 kg band)
+      const resCustom = getSmartShippingRecommendations([], [], '1.5');
+      expect(resCustom.weightKg).toBeCloseTo(1.5, 2);
+      expect(resCustom.bandName).toBe('1 - 2 kg');
+      expect(resCustom.results.ON.recoBase).toBe(17.00);
     });
   });
 });
