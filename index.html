@@ -112,16 +112,40 @@
 
   /* ─── PRINT ─────────────────────────────────────────────────────────── */
   @media print {
-    body{background:#fff !important;}
+    body{background:#fff !important;margin:0 !important;padding:0 !important;}
     body > *:not(#m-invoice-view){display:none !important;}
     #m-invoice-view{position:static !important;background:#fff !important;display:block !important;backdrop-filter:none !important;}
     #m-invoice-view .modal{box-shadow:none !important;background:#fff !important;max-width:none !important;max-height:none !important;padding:0 !important;border:none !important;border-radius:0 !important;}
     .no-print{display:none !important;}
-    .invoice-paper .inv-pay{display:flex !important;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
-    .invoice-paper .inv-pay .pay-btn{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
     #invoice-print-area{box-shadow:none !important;border-radius:0 !important;padding:0 !important;max-width:none !important;}
-    .invoice-paper::before{display:none;}
-    @page{margin:0.6in;}
+    @page{margin:0.4in !important;}
+
+    /* Tighten invoice paper dimensions for single-page printing */
+    .invoice-paper {
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      max-width: none !important;
+      padding: 20px 30px !important;
+      margin: 0 !important;
+    }
+    .invoice-paper::before{display:none !important;}
+    .invoice-paper .inv-head{margin-bottom: 16px !important;}
+    .invoice-paper .inv-meta-grid{margin-bottom: 16px !important; padding: 10px 0 !important; gap: 12px !important;}
+    .invoice-paper .inv-items{margin-bottom: 12px !important;}
+    .invoice-paper .inv-items th{padding-bottom: 6px !important;}
+    .invoice-paper .inv-items td{padding: 8px 12px !important;}
+    .invoice-paper .inv-totals{margin-bottom: 16px !important;}
+    .invoice-paper .inv-totals .tr{padding: 4px 12px !important;}
+    .invoice-paper .inv-totals .grand{margin-top: 4px !important; padding: 10px 12px !important;}
+    .invoice-paper .inv-pay{margin-bottom: 16px !important; padding: 12px 16px !important; gap: 12px !important; display:flex !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;}
+    .invoice-paper .inv-pay .pay-btn{display:inline-block !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;}
+    .invoice-paper .inv-pay .inv-qr{padding: 6px !important;}
+    .invoice-paper .inv-pay .inv-qr img,
+    .invoice-paper .inv-pay .inv-qr canvas { width: 80px !important; height: 80px !important; }
+    .invoice-paper .inv-pay-fallback{margin: -8px 2px 12px !important;}
+    .invoice-paper .inv-notes{padding-top: 10px !important;}
+    .invoice-paper .inv-notes .inv-notes-block{margin-bottom: 8px !important;}
+    .invoice-paper .inv-foot{margin-top: 12px !important;}
   }
 </style>
 
