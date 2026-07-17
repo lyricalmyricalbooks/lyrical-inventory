@@ -24971,7 +24971,7 @@ ${margin.toFixed(2)} CAD</td>
 
   // ── Render complete layout ──
   hub.innerHTML = `
-    <details class="shipping-pnl-insights" style="margin-bottom: var(--shipping-pnl-space-4) !important;">
+    <details class="shipping-pnl-insights" open style="margin-bottom: var(--shipping-pnl-space-4) !important;">
       <summary>
         <span>
           <span class="shipping-pnl-eyebrow">Insights</span>
