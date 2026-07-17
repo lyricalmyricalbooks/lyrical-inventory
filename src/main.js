@@ -5377,15 +5377,28 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   s.sold += qty; s.revenue += qty * price;
   if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
   s.chStats[chan].txns++; s.chStats[chan].units += qty; s.chStats[chan].revenue += qty * price;
+  let updatedNotes = notes || '';
+  if (num && num.startsWith('INV-')) {
+    const inv = (s.invoices || []).find(i => i.num === num || i.id === num);
+    if (inv && inv.discount > 0) {
+      const discStr = inv.discountType === 'percent'
+        ? `Invoice Discount: ${inv.discountRate}%`
+        : `Invoice Discount: flat`;
+      if (!updatedNotes.includes('Invoice Discount:')) {
+        updatedNotes = updatedNotes ? `${updatedNotes} · ${discStr}` : discStr;
+      }
+    }
+  }
+
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: notes || '', date: today(), payment, enteredBy, sheetsId });
+  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), payment, enteredBy, sheetsId });
   recomputeAfters(s, book);
   renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
   const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
-    type: 'order', book: book.title, date: today(), num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: notes || '',
+    type: 'order', book: book.title, date: today(), num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: updatedNotes,
     sheetsId,
     currency: nativeCur,
     paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
@@ -8400,19 +8413,32 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
   s.sold += qty;
   if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
   s.chStats[chan].txns++; s.chStats[chan].units += qty;
+  let updatedNotes = notes || '';
+  if (num && num.startsWith('INV-')) {
+    const inv = (s.invoices || []).find(i => i.num === num || i.id === num);
+    if (inv && inv.discount > 0) {
+      const discStr = inv.discountType === 'percent'
+        ? `Invoice Discount: ${inv.discountRate}%`
+        : `Invoice Discount: flat`;
+      if (!updatedNotes.includes('Invoice Discount:')) {
+        updatedNotes = updatedNotes ? `${updatedNotes} · ${discStr}` : discStr;
+      }
+    }
+  }
+
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: notes || '', date: today(), artistPending: true, directToArtist: true, payment, sheetsId });
+  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), artistPending: true, directToArtist: true, payment, sheetsId });
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
-  s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: notes || '', date: today(), payment, sheetsId });
+  s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: today(), payment, sheetsId });
   recomputeAfters(s, book);
   renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
   const totalNative = qty * price;
   const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
   syncToSheets({
-    type: 'order', book: book.title, date: today(), num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: (notes || '') + ' [PENDING ARTIST TRANSFER]',
+    type: 'order', book: book.title, date: today(), num, chan, qty, price, total: totalNative, stockAfter: s.stock, notes: updatedNotes + ' [PENDING ARTIST TRANSFER]',
     sheetsId,
     currency: nativeCur,
     paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),

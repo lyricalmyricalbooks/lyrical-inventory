@@ -39,6 +39,20 @@ export function stampLedgerInvoiceLink(s, ledgerId, inv) {
   if (!e) return;
   e.invoiceId = inv ? inv.id : null;
   e.invoiceNum = inv ? inv.num : null;
+
+  if (inv && inv.discount > 0) {
+    const discStr = inv.discountType === 'percent'
+      ? `Invoice Discount: ${inv.discountRate}%`
+      : `Invoice Discount: flat`;
+    let cleaned = e.notes || '';
+    cleaned = cleaned.replace(/\s*·\s*Invoice Discount:\s*[^·]+/g, '').replace(/Invoice Discount:\s*[^·]+/g, '').trim();
+    e.notes = cleaned ? `${cleaned} · ${discStr}` : discStr;
+  } else if (!inv) {
+    if (e.notes) {
+      e.notes = e.notes.replace(/\s*·\s*Invoice Discount:\s*[^·]+/g, '').replace(/Invoice Discount:\s*[^·]+/g, '').trim();
+    }
+  }
+
   const h = histMirrorForLedger(s, e);
   if (h) {
     // Heal a legacy split sheetsId so future lookups stay O(1) and robust. The
@@ -47,6 +61,7 @@ export function stampLedgerInvoiceLink(s, ledgerId, inv) {
     if (e.sheetsId && h.sheetsId !== e.sheetsId) h.sheetsId = e.sheetsId;
     h.invoiceId = inv ? inv.id : null;
     h.invoiceNum = inv ? inv.num : null;
+    h.notes = e.notes || '';
   }
 }
 

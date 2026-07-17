@@ -105,6 +105,27 @@ describe('stampLedgerInvoiceLink', () => {
     const s = { ledger: [ledgerSale()], hist: [histMirror()] };
     expect(() => stampLedgerInvoiceLink(s, 999, invoice())).not.toThrow();
   });
+
+  it('appends invoice discount details to notes when stamped, and cleans them when unlinked', () => {
+    const e = ledgerSale({ sheetsId: 'evt-aaa', notes: 'Rooneys' });
+    const h = histMirror({ sheetsId: 'evt-aaa', notes: 'Rooneys' });
+    const s = { ledger: [e], hist: [h] };
+    
+    // Stamping invoice with percent discount
+    stampLedgerInvoiceLink(s, 1, invoice({ discount: 10, discountType: 'percent', discountRate: 10 }));
+    expect(e.notes).toBe('Rooneys · Invoice Discount: 10%');
+    expect(h.notes).toBe('Rooneys · Invoice Discount: 10%');
+
+    // Stamping again with different discount (cleans up previous note)
+    stampLedgerInvoiceLink(s, 1, invoice({ discount: 5, discountType: 'percent', discountRate: 5 }));
+    expect(e.notes).toBe('Rooneys · Invoice Discount: 5%');
+    expect(h.notes).toBe('Rooneys · Invoice Discount: 5%');
+
+    // Unlinking (clears discount note)
+    stampLedgerInvoiceLink(s, 1, null);
+    expect(e.notes).toBe('Rooneys');
+    expect(h.notes).toBe('Rooneys');
+  });
 });
 
 describe('reconcileConsignmentInvoiceLinks', () => {
