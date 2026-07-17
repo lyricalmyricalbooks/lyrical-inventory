@@ -277,8 +277,8 @@ describe('Shipping Analysis Hub Functions', () => {
       getSmartShippingRecommendations = new Function('allOrders', 'shippoExpenses', 'weightOverride', 'recoMode', `
         const BOOK_LIST = [{ id: 'book1', title: 'The Hound', shipWeight: 0.8, shipWeightUnit: 'kg' }];
         let shipAnalysisBookFilter = 'all';
-        let shipAnalysisWeightOverride = weightOverride || 'default';
-        let shipAnalysisRecoMode = recoMode || 'blended';
+        const getShipWeightOverride = () => weightOverride || 'default';
+        const getShipRecoMode = () => recoMode || 'blended';
         function normalizeCountryCode(c) { 
           c = String(c || '').trim().toUpperCase();
           if (c === 'CANADA' || c === 'CA') return 'CA';

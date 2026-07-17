@@ -132,4 +132,12 @@ describe('main.js window binding verification', () => {
     expect(mainContent).toContain("discountRate: totals.discountRate || 0");
     expect(mainContent).toContain("function onDiscountTypeChange");
   });
+
+  it('supports local storage state persistence for shipping recommendation card controls', () => {
+    expect(mainContent).toContain("function getShipRecoMode");
+    expect(mainContent).toContain("function getShipWeightOverride");
+    expect(mainContent).toContain("function onShipInsightsToggle");
+    expect(mainContent).toContain("localStorage.setItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val)");
+    expect(mainContent).toContain("localStorage.setItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`, isOpen ? 'true' : 'false')");
+  });
 });

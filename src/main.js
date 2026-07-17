@@ -24157,26 +24157,43 @@ async function unlinkShippoExpense(txRef) {
 }
 
 
-let shipAnalysisWeightOverride = 'default';
-let shipAnalysisRecoMode = 'blended';
+function getShipRecoMode() {
+  return localStorage.getItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`) || 'blended';
+}
+
+function setShipRecoMode(val) {
+  localStorage.setItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val);
+}
+
+function getShipWeightOverride() {
+  return localStorage.getItem(`lm-ship-weight-override-${shipAnalysisBookFilter}`) || 'default';
+}
+
+function setShipWeightOverride(val) {
+  localStorage.setItem(`lm-ship-weight-override-${shipAnalysisBookFilter}`, val);
+}
+
+function onShipInsightsToggle(isOpen) {
+  localStorage.setItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`, isOpen ? 'true' : 'false');
+}
 
 function onShipRecoModeChange(val) {
-  shipAnalysisRecoMode = val;
+  setShipRecoMode(val);
   renderShippingAnalysisHub();
 }
 
 function onShipRecoWeightSelectChange(val) {
   if (val === 'custom') {
-    shipAnalysisWeightOverride = '1.0';
+    setShipWeightOverride('1.0');
   } else {
-    shipAnalysisWeightOverride = val;
+    setShipWeightOverride(val);
   }
   renderShippingAnalysisHub();
 }
 
 function onShipRecoCustomWeightChange(val) {
   const parsed = Math.max(0.01, parseFloat(val) || 0.8);
-  shipAnalysisWeightOverride = parsed.toString();
+  setShipWeightOverride(parsed.toString());
   renderShippingAnalysisHub();
 }
 
@@ -24201,13 +24218,14 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses) {
   }
   const bookWeightKg = getWeightInKg(1, book || BOOK_LIST[0]);
   
+  const weightOverride = getShipWeightOverride();
   let weightKg = bookWeightKg;
-  if (shipAnalysisWeightOverride === 'under_0.5') weightKg = 0.3;
-  else if (shipAnalysisWeightOverride === '0.5_1') weightKg = 0.8;
-  else if (shipAnalysisWeightOverride === '1_2') weightKg = 1.5;
-  else if (shipAnalysisWeightOverride === 'over_2') weightKg = 2.5;
-  else if (shipAnalysisWeightOverride !== 'default') {
-    weightKg = parseFloat(shipAnalysisWeightOverride) || bookWeightKg;
+  if (weightOverride === 'under_0.5') weightKg = 0.3;
+  else if (weightOverride === '0.5_1') weightKg = 0.8;
+  else if (weightOverride === '1_2') weightKg = 1.5;
+  else if (weightOverride === 'over_2') weightKg = 2.5;
+  else if (weightOverride !== 'default') {
+    weightKg = parseFloat(weightOverride) || bookWeightKg;
   }
   
   let bandName = 'Under 0.5 kg';
@@ -24302,7 +24320,8 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses) {
     let recoAddon = fallback.addon;
     let confidence = 'Default';
 
-    if (shipAnalysisRecoMode === 'cpost') {
+    const recoMode = getShipRecoMode();
+    if (recoMode === 'cpost') {
       recoBase = fallback.base;
       recoAddon = fallback.addon;
       confidence = 'Canada Post';
@@ -25292,9 +25311,13 @@ ${margin.toFixed(2)} CAD</td>
   const activeBookIdForWeight = shipAnalysisBookFilter;
   const filteredBookForWeight = activeBookIdForWeight !== 'all' ? BOOK_LIST.find(b => b.id === activeBookIdForWeight) : null;
   const bookWeightKg = getWeightInKg(1, filteredBookForWeight || BOOK_LIST[0]);
+  
+  const weightOverride = getShipWeightOverride();
+  const recoMode = getShipRecoMode();
+  const isInsightsOpen = localStorage.getItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`) !== 'false';
 
   hub.innerHTML = `
-    <details class="shipping-pnl-insights" open style="margin-bottom: var(--shipping-pnl-space-4) !important;">
+    <details class="shipping-pnl-insights" ${isInsightsOpen ? 'open' : ''} ontoggle="onShipInsightsToggle(this.open)" style="margin-bottom: var(--shipping-pnl-space-4) !important;">
       <summary>
         <span>
           <span class="shipping-pnl-eyebrow">Insights</span>
@@ -25317,16 +25340,16 @@ ${margin.toFixed(2)} CAD</td>
             <div style="display:flex; align-items:center; gap:4px;">
               <span style="font-size:13px;">⚖️</span> Weight Profile:
               <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
-                <option value="default" ${shipAnalysisWeightOverride === 'default' ? 'selected' : ''}>Book Weight (${bookWeightKg.toFixed(2)} kg)</option>
-                <option value="under_0.5" ${shipAnalysisWeightOverride === 'under_0.5' ? 'selected' : ''}>Under 0.5 kg (0.3 kg)</option>
-                <option value="0.5_1" ${shipAnalysisWeightOverride === '0.5_1' ? 'selected' : ''}>0.5 - 1 kg (0.8 kg)</option>
-                <option value="1_2" ${shipAnalysisWeightOverride === '1_2' ? 'selected' : ''}>1 - 2 kg (1.5 kg)</option>
-                <option value="over_2" ${shipAnalysisWeightOverride === 'over_2' ? 'selected' : ''}>Over 2 kg (2.5 kg)</option>
-                <option value="custom" ${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? 'selected' : ''}>Custom Weight...</option>
+                <option value="default" ${weightOverride === 'default' ? 'selected' : ''}>Book Weight (${bookWeightKg.toFixed(2)} kg)</option>
+                <option value="under_0.5" ${weightOverride === 'under_0.5' ? 'selected' : ''}>Under 0.5 kg (0.3 kg)</option>
+                <option value="0.5_1" ${weightOverride === '0.5_1' ? 'selected' : ''}>0.5 - 1 kg (0.8 kg)</option>
+                <option value="1_2" ${weightOverride === '1_2' ? 'selected' : ''}>1 - 2 kg (1.5 kg)</option>
+                <option value="over_2" ${weightOverride === 'over_2' ? 'selected' : ''}>Over 2 kg (2.5 kg)</option>
+                <option value="custom" ${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? 'selected' : ''}>Custom Weight...</option>
               </select>
-              <input id="ship-reco-custom-weight-input" type="number" step="0.1" min="0.01" value="${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? parseFloat(shipAnalysisWeightOverride).toFixed(2) : bookWeightKg.toFixed(2)}" 
+              <input id="ship-reco-custom-weight-input" type="number" step="0.1" min="0.01" value="${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? parseFloat(weightOverride).toFixed(2) : bookWeightKg.toFixed(2)}" 
                 onchange="onShipRecoCustomWeightChange(this.value)"
-                style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(shipAnalysisWeightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); text-align:right; font-family:'DM Mono',monospace; outline:none; margin-left:4px;" />
+                style="display:${!['default','under_0.5','0.5_1','1_2','over_2'].includes(weightOverride) ? 'inline-block' : 'none'}; width:60px; padding:3px 6px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); text-align:right; font-family:'DM Mono',monospace; outline:none; margin-left:4px;" />
               <span style="font-size:11px; color:var(--text3); font-weight:400; margin-left:4px;">(${recoData.bandName})</span>
             </div>
             
@@ -25335,8 +25358,8 @@ ${margin.toFixed(2)} CAD</td>
             <div style="display:flex; align-items:center; gap:4px;">
               <span style="font-size:13px;">⚙️</span> Methodology:
               <select id="ship-reco-mode-select" onchange="onShipRecoModeChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
-                <option value="blended" ${shipAnalysisRecoMode === 'blended' ? 'selected' : ''}>Blended (History + CP)</option>
-                <option value="cpost" ${shipAnalysisRecoMode === 'cpost' ? 'selected' : ''}>Canada Post Only</option>
+                <option value="blended" ${recoMode === 'blended' ? 'selected' : ''}>Blended (History + CP)</option>
+                <option value="cpost" ${recoMode === 'cpost' ? 'selected' : ''}>Canada Post Only</option>
               </select>
             </div>
           </div>
@@ -25779,7 +25802,7 @@ function exposeLegacyInlineHandlers() {
     toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders,
     syncBigCartelShippingPaid, triggerBigCartelShippingSync,
     toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV,
-    updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange
+    updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange, onShipRecoModeChange, onShipInsightsToggle
   });
 }
 
@@ -26334,6 +26357,8 @@ window.clearAllShipAnalysisFilters = clearAllShipAnalysisFilters;
 window.downloadFilteredShippingLedgerCSV = downloadFilteredShippingLedgerCSV;
 window.onShipRecoWeightSelectChange = onShipRecoWeightSelectChange;
 window.onShipRecoCustomWeightChange = onShipRecoCustomWeightChange;
+window.onShipRecoModeChange = onShipRecoModeChange;
+window.onShipInsightsToggle = onShipInsightsToggle;
 
 async function fetchAllBigCartelOrders(storeId) {
   let allOrders = [];
