@@ -254,12 +254,14 @@ describe('Shipping Analysis Hub Functions', () => {
 
       const getPercentileMatch = mainContent.match(/function getPercentile\(arr, pct\) \{([\s\S]+?)\n\}/);
       const getMeanMatch = mainContent.match(/function getMean\(arr\) \{([\s\S]+?)\n\}/);
-      const getSmartRecosMatch = mainContent.match(/function getSmartShippingRecommendations\(allOrders, shippoExpenses\) \{([\s\S]+?)\n\}/);
+      const getFallbackRatesMatch = mainContent.match(/function getFallbackRates\(region, w\) \{([\s\S]+?)\n\}/);
+      const getSmartRecosMatch = mainContent.match(/function getSmartShippingRecommendations\([^)]*\) \{([\s\S]+?)\n\}/);
       const getWeightInLbsMatch = mainContent.match(/function getWeightInLbs\(qty, book\) \{([\s\S]+?)\n\}/);
       const getWeightInKgMatch = mainContent.match(/function getWeightInKg\(qty, book\) \{([\s\S]+?)\n\}/);
 
       expect(getPercentileMatch).not.toBeNull();
       expect(getMeanMatch).not.toBeNull();
+      expect(getFallbackRatesMatch).not.toBeNull();
       expect(getSmartRecosMatch).not.toBeNull();
 
       const mockEnvBase = `
@@ -290,6 +292,7 @@ describe('Shipping Analysis Hub Functions', () => {
 
         ${getPercentileMatch[0]}
         ${getMeanMatch[0]}
+        ${getFallbackRatesMatch[0]}
         ${getWeightInLbsMatch[0]}
         ${getWeightInKgMatch[0]}
         ${getSmartRecosMatch[0]}
@@ -407,6 +410,124 @@ describe('Shipping Analysis Hub Functions', () => {
 
       const resultAggressive = getSmartShippingRecommendations(allOrders, shippoExpenses, 'default', 'blended', 50);
       expect(resultAggressive.results.ON.recoBase).toBe(13);
+    });
+  });
+
+  describe('updateShippingSimulation', () => {
+    let updateShippingSimulationFn;
+
+    beforeEach(() => {
+      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+
+      const getPercentileMatch = mainContent.match(/function getPercentile\(arr, pct\) \{([\s\S]+?)\n\}/);
+      const getMeanMatch = mainContent.match(/function getMean\(arr\) \{([\s\S]+?)\n\}/);
+      const getFallbackRatesMatch = mainContent.match(/function getFallbackRates\(region, w\) \{([\s\S]+?)\n\}/);
+      const getSmartRecosMatch = mainContent.match(/function getSmartShippingRecommendations\([^)]*\) \{([\s\S]+?)\n\}/);
+      const getWeightInLbsMatch = mainContent.match(/function getWeightInLbs\(qty, book\) \{([\s\S]+?)\n\}/);
+      const getWeightInKgMatch = mainContent.match(/function getWeightInKg\(qty, book\) \{([\s\S]+?)\n\}/);
+      const updateShippingSimulationMatch = mainContent.match(/function updateShippingSimulation\(\) \{([\s\S]+?)\n\}/);
+
+      expect(updateShippingSimulationMatch).not.toBeNull();
+
+      updateShippingSimulationFn = new Function(
+        'mockElements', 'mockState', 'mockBookList', 'mockTaxCenter', 'mockCalls',
+        `
+        const BOOK_LIST = mockBookList;
+        const TAX_CENTER = mockTaxCenter;
+        const states = mockState;
+        let shipAnalysisBookFilter = 'all';
+        
+        const $ = (id) => mockElements[id];
+        const getState = () => mockState;
+        const getShipWeightOverride = () => 'default';
+        const getShipRecoMode = () => 'blended';
+        const getShipRecoPercentile = () => 75;
+        function normalizeCountryCode(c) { 
+          c = String(c || '').trim().toUpperCase();
+          if (c === 'CANADA' || c === 'CA') return 'CA';
+          if (c === 'USA' || c === 'US') return 'US';
+          return 'intl';
+        }
+        function normalizeShippingOrderNumber(num) { return num; }
+
+        ${getPercentileMatch[0]}
+        ${getMeanMatch[0]}
+        ${getFallbackRatesMatch[0]}
+        ${getWeightInLbsMatch[0]}
+        ${getWeightInKgMatch[0]}
+        ${getSmartRecosMatch[0]}
+        ${updateShippingSimulationMatch[0]}
+
+        return updateShippingSimulation();
+      `);
+    });
+
+    it('correctly calculates and renders simulation results', () => {
+      const mockBookList = [
+        { id: 'book1', title: 'The Hound', shipWeight: 0.8, shipWeightUnit: 'kg' }
+      ];
+
+      const mockState = {
+        shippingRates: {
+          ON: { base: 15.00, addon: 4.00 }
+        },
+        book1: {
+          hist: [
+            { num: 'O1', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1', chan: 'Website' }
+          ]
+        }
+      };
+
+      const mockTaxCenter = {
+        businessExpenses: []
+      };
+
+      const resultsPanel = { innerHTML: '' };
+      const mockElements = {
+        'sim-book-select': { value: 'book1' },
+        'sim-qty-input': { value: '1' },
+        'sim-region-select': { value: 'ON' },
+        'sim-postage-override': { value: '' },
+        'sim-results-panel': resultsPanel
+      };
+
+      updateShippingSimulationFn(mockElements, mockState, mockBookList, mockTaxCenter, []);
+
+      expect(resultsPanel.innerHTML).toContain('Simulated Weight');
+      expect(resultsPanel.innerHTML).toContain('0.800 kg');
+      expect(resultsPanel.innerHTML).toContain('$15.00 CAD'); // current store rate (qty 1)
+      expect(resultsPanel.innerHTML).toContain('$14.50 CAD'); // estimated/fallback postage cost for 0.8kg ON
+    });
+
+    it('applies custom postage override in calculations', () => {
+      const mockBookList = [
+        { id: 'book1', title: 'The Hound', shipWeight: 0.8, shipWeightUnit: 'kg' }
+      ];
+
+      const mockState = {
+        shippingRates: {
+          ON: { base: 15.00, addon: 4.00 }
+        },
+        book1: {
+          hist: []
+        }
+      };
+
+      const mockTaxCenter = { businessExpenses: [] };
+
+      const resultsPanel = { innerHTML: '' };
+      const mockElements = {
+        'sim-book-select': { value: 'book1' },
+        'sim-qty-input': { value: '1' },
+        'sim-region-select': { value: 'ON' },
+        'sim-postage-override': { value: '10.50' }, // Custom postage override
+        'sim-results-panel': resultsPanel
+      };
+
+      updateShippingSimulationFn(mockElements, mockState, mockBookList, mockTaxCenter, []);
+
+      expect(resultsPanel.innerHTML).toContain('$10.50 CAD'); // Shows custom postage override
+      expect(resultsPanel.innerHTML).toContain('+4.50'); // Margin: 15.00 (current store rate) - 10.50 (postage) = +4.50
     });
   });
 });
