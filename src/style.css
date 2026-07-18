@@ -232,6 +232,13 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   box-shadow: 0 1px 3px rgba(14, 21, 17, 0.04), 0 12px 28px rgba(14, 21, 17, 0.035);
 }
 
+#ship-analysis-hub .shipping-pnl-dashboard .shipping-pnl-insights {
+  border: none;
+  border-top: 1px solid var(--shipping-pnl-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
 #ship-analysis-hub .shipping-pnl-dashboard {
   overflow: hidden;
   margin-bottom: var(--shipping-pnl-space-4);
