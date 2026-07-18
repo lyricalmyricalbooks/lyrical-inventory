@@ -25413,22 +25413,6 @@ ${margin.toFixed(2)} CAD</td>
           ${columnsHtml}
         </div>
       </section>
-
-      <div class="shipping-pnl-insights-grid">
-        <section class="shipping-pnl-insight-card">
-          <h3>📦 Carrier efficiency</h3>
-        ${carrierTableHtml}
-        </section>
-        <section class="shipping-pnl-insight-card">
-          <h3>🌎 Destination mix</h3>
-        ${splitTableHtml}
-        </section>
-        <section class="shipping-pnl-insight-card">
-          <h3>⚖️ Weight-band cost</h3>
-        ${weightTableHtml}
-        </section>
-      </div>
-
       <section class="shipping-reco-container" style="background:var(--cream2); border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin-top:20px; box-shadow:0 4px 15px rgba(0,0,0,0.02);">
         <h3 style="font-family:'Playfair Display',serif; font-size:18px; color:var(--text); margin:0 0 6px; font-weight:700;">
           🧪 Live Rate Simulation Sandbox
@@ -25477,6 +25461,21 @@ ${margin.toFixed(2)} CAD</td>
           </div>
         </div>
       </section>
+
+      <div class="shipping-pnl-insights-grid" style="margin-top: 20px;">
+        <section class="shipping-pnl-insight-card">
+          <h3>📦 Carrier efficiency</h3>
+        ${carrierTableHtml}
+        </section>
+        <section class="shipping-pnl-insight-card">
+          <h3>🌎 Destination mix</h3>
+        ${splitTableHtml}
+        </section>
+        <section class="shipping-pnl-insight-card">
+          <h3>⚖️ Weight-band cost</h3>
+        ${weightTableHtml}
+        </section>
+      </div>
     </details>
 
     ${pnlHtml}
