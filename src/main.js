@@ -25414,21 +25414,26 @@ ${margin.toFixed(2)} CAD</td>
         </div>
       </section>
 
-      <div class="shipping-pnl-insights-grid" style="margin-top: 20px;">
+    </details>
+  `;
+
+  const statsHtml = `
+    <div class="shipping-pnl-insights" style="margin-bottom: var(--shipping-pnl-space-4) !important; padding: 0;">
+      <div class="shipping-pnl-insights-grid" style="border-top: none;">
         <section class="shipping-pnl-insight-card">
           <h3>📦 Carrier efficiency</h3>
-        ${carrierTableHtml}
+          ${carrierTableHtml}
         </section>
         <section class="shipping-pnl-insight-card">
           <h3>🌎 Destination mix</h3>
-        ${splitTableHtml}
+          ${splitTableHtml}
         </section>
         <section class="shipping-pnl-insight-card">
           <h3>⚖️ Weight-band cost</h3>
-        ${weightTableHtml}
+          ${weightTableHtml}
         </section>
       </div>
-    </details>
+    </div>
   `;
 
   const sandboxHtml = `
@@ -25485,6 +25490,7 @@ ${margin.toFixed(2)} CAD</td>
   hub.innerHTML = `
     ${pnlHtml}
     ${insightsHtml}
+    ${statsHtml}
     ${sandboxHtml}
     <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
       <header class="shipping-pnl-section-header">
