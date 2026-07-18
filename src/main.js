@@ -24224,7 +24224,32 @@ function getMean(arr) {
   return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
-function getSmartShippingRecommendations(allOrders, shippoExpenses) {
+function getFallbackRates(region, w) {
+  // Canada Post 2026 Solutions for Small Business / Tracked Packet rates
+  if (w < 0.5) {
+    if (region === 'ON') return { base: 12.50, addon: 3.50 };
+    if (region === 'CA') return { base: 17.50, addon: 4.50 };
+    if (region === 'US') return { base: 18.00, addon: 5.00 };
+    return { base: 26.50, addon: 12.00 };
+  } else if (w <= 1) {
+    if (region === 'ON') return { base: 14.50, addon: 5.00 };
+    if (region === 'CA') return { base: 20.00, addon: 6.50 };
+    if (region === 'US') return { base: 22.50, addon: 8.50 };
+    return { base: 35.00, addon: 15.00 };
+  } else if (w <= 2) {
+    if (region === 'ON') return { base: 17.00, addon: 8.00 };
+    if (region === 'CA') return { base: 24.50, addon: 10.00 };
+    if (region === 'US') return { base: 27.00, addon: 12.00 };
+    return { base: 48.00, addon: 18.00 };
+  } else {
+    if (region === 'ON') return { base: 21.00, addon: 10.00 };
+    if (region === 'CA') return { base: 29.50, addon: 12.50 };
+    if (region === 'US') return { base: 34.00, addon: 15.00 };
+    return { base: 65.00, addon: 22.00 };
+  }
+}
+
+function getSmartShippingRecommendations(allOrders, shippoExpenses, optWeightOverride) {
   const activeBookId = shipAnalysisBookFilter;
   let book = null;
   if (activeBookId !== 'all') {
@@ -24232,7 +24257,7 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses) {
   }
   const bookWeightKg = getWeightInKg(1, book || BOOK_LIST[0]);
   
-  const weightOverride = getShipWeightOverride();
+  const weightOverride = optWeightOverride || getShipWeightOverride();
   let weightKg = bookWeightKg;
   if (weightOverride === 'under_0.5') weightKg = 0.3;
   else if (weightOverride === '0.5_1') weightKg = 0.8;
@@ -24247,30 +24272,6 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses) {
   else if (weightKg > 1) bandName = '1 - 2 kg';
   else if (weightKg >= 0.5) bandName = '0.5 - 1 kg';
 
-  const getFallbackRates = (region, w) => {
-    // Canada Post 2026 Solutions for Small Business / Tracked Packet rates
-    if (w < 0.5) {
-      if (region === 'ON') return { base: 12.50, addon: 3.50 };
-      if (region === 'CA') return { base: 17.50, addon: 4.50 };
-      if (region === 'US') return { base: 18.00, addon: 5.00 };
-      return { base: 26.50, addon: 12.00 };
-    } else if (w <= 1) {
-      if (region === 'ON') return { base: 14.50, addon: 5.00 };
-      if (region === 'CA') return { base: 20.00, addon: 6.50 };
-      if (region === 'US') return { base: 22.50, addon: 8.50 };
-      return { base: 35.00, addon: 15.00 };
-    } else if (w <= 2) {
-      if (region === 'ON') return { base: 17.00, addon: 8.00 };
-      if (region === 'CA') return { base: 24.50, addon: 10.00 };
-      if (region === 'US') return { base: 27.00, addon: 12.00 };
-      return { base: 48.00, addon: 18.00 };
-    } else {
-      if (region === 'ON') return { base: 21.00, addon: 10.00 };
-      if (region === 'CA') return { base: 29.50, addon: 12.50 };
-      if (region === 'US') return { base: 34.00, addon: 15.00 };
-      return { base: 65.00, addon: 22.00 };
-    }
-  };
 
   const regions = ['ON', 'CA', 'US', 'intl'];
   const results = {};
@@ -25324,6 +25325,12 @@ ${margin.toFixed(2)} CAD</td>
     `;
   });
 
+  let bookOptionsHtml = '';
+  BOOK_LIST.forEach(b => {
+    const wStr = b.shipWeight ? `${b.shipWeight} ${b.shipWeightUnit || 'lb'}` : 'unknown';
+    bookOptionsHtml += `<option value="${escapeHtml(b.id)}">${escapeHtml(b.title)} (${wStr})</option>`;
+  });
+
   // ── Render complete layout ──
   const activeBookIdForWeight = shipAnalysisBookFilter;
   const filteredBookForWeight = activeBookIdForWeight !== 'all' ? BOOK_LIST.find(b => b.id === activeBookIdForWeight) : null;
@@ -25416,6 +25423,55 @@ ${margin.toFixed(2)} CAD</td>
         ${weightTableHtml}
         </section>
       </div>
+
+      <section class="shipping-reco-container" style="background:var(--cream2); border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin-top:20px; box-shadow:0 4px 15px rgba(0,0,0,0.02);">
+        <h3 style="font-family:'Playfair Display',serif; font-size:18px; color:var(--text); margin:0 0 6px; font-weight:700;">
+          🧪 Live Rate Simulation Sandbox
+        </h3>
+        <p style="font-size:12px; color:var(--text3); margin:0 0 16px; line-height:1.5;">
+          Test how your current and recommended shipping rates perform against actual weight calculations and estimated postage costs.
+        </p>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; align-items:start;">
+          <!-- Controls -->
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Select Book</label>
+              <select id="sim-book-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+                ${bookOptionsHtml}
+              </select>
+            </div>
+
+            <div style="display:flex; gap:12px;">
+              <div class="form-group" style="flex:1; margin:0;">
+                <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Quantity</label>
+                <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+              </div>
+              <div class="form-group" style="flex:1; margin:0;">
+                <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Destination</label>
+                <select id="sim-region-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+                  <option value="ON">Ontario 🍁</option>
+                  <option value="CA">Rest of Canada 🇨🇦</option>
+                  <option value="US">United States 🇺🇸</option>
+                  <option value="intl">International 🌐</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
+                Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text4);">(optional)</span>
+              </label>
+              <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+            </div>
+          </div>
+
+          <!-- Results -->
+          <div id="sim-results-panel" style="background:#fff; border:1px solid var(--border); border-radius:var(--r2); padding:16px; min-height:190px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 4px 10px rgba(0,0,0,0.01);">
+            <!-- Will be populated dynamically via updateShippingSimulation() -->
+          </div>
+        </div>
+      </section>
     </details>
 
     ${pnlHtml}
@@ -25435,6 +25491,125 @@ ${margin.toFixed(2)} CAD</td>
       ${activeFiltersBannerHtml}
       ${ledgerTableHtml}
     </section>
+  `;
+
+  setTimeout(updateShippingSimulation, 50);
+}
+
+function updateShippingSimulation() {
+  const bookSelect = $('sim-book-select');
+  const qtyInput = $('sim-qty-input');
+  const regionSelect = $('sim-region-select');
+  const postageOverride = $('sim-postage-override');
+  const simResultsPanel = $('sim-results-panel');
+
+  if (!bookSelect || !qtyInput || !regionSelect || !simResultsPanel) return;
+
+  const bookId = bookSelect.value;
+  const qty = Math.max(1, parseInt(qtyInput.value, 10) || 1);
+  const region = regionSelect.value;
+  const customPostage = postageOverride && postageOverride.value ? parseFloat(postageOverride.value) : null;
+
+  const book = BOOK_LIST.find(b => b.id === bookId);
+  if (!book) {
+    simResultsPanel.innerHTML = '<div style="color:var(--text3); font-style:italic;">Select a valid book to simulate.</div>';
+    return;
+  }
+
+  const simWeightKg = getWeightInKg(qty, book);
+  const simWeightLbs = getWeightInLbs(qty, book);
+
+  // 1. Current Store Rate Setup
+  const s = getState();
+  const targetRates = s.shippingRates || {
+    ON: { base: 16.00, addon: 10.00 },
+    CA: { base: 20.00, addon: 10.00 },
+    US: { base: 25.00, addon: 10.00 },
+    intl: { base: 25.00, addon: 10.00 }
+  };
+  const currentRegion = targetRates[region] || { base: 0, addon: 0 };
+  const currentCharge = currentRegion.base + (qty - 1) * currentRegion.addon;
+
+  // 2. Recommended Rates for simulated weight
+  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
+  const allOrders = [];
+  Object.keys(states).forEach(bId => {
+    const st = states[bId];
+    if (st && Array.isArray(st.hist)) {
+      st.hist.forEach(h => {
+        if (h && h.chan === 'Website' && !h.voided) {
+          allOrders.push(h);
+        }
+      });
+    }
+  });
+
+  const simRecoData = getSmartShippingRecommendations(allOrders, shippoExpenses, simWeightKg.toString());
+  const simRecoRegion = simRecoData.results[region] || { recoBase: 0, recoAddon: 0 };
+  const recommendedCharge = simRecoRegion.recoBase + (qty - 1) * simRecoRegion.recoAddon;
+
+  // 3. Estimated Postage Cost
+  const fallback = getFallbackRates(region, simWeightKg);
+  const estimatedPostage = fallback.base + (qty - 1) * fallback.addon;
+  const postageCost = customPostage !== null && !isNaN(customPostage) ? customPostage : estimatedPostage;
+
+  // 4. Margins
+  const currentMargin = currentCharge - postageCost;
+  const recommendedMargin = recommendedCharge - postageCost;
+
+  const currentMarginClass = currentMargin >= 0 ? 'positive' : 'negative';
+  const recommendedMarginClass = recommendedMargin >= 0 ? 'positive' : 'negative';
+
+  const formatCcy = (val) => `$${val.toFixed(2)} CAD`;
+
+  simResultsPanel.innerHTML = `
+    <div style="display:flex; flex-direction:column; gap:12px; height:100%; justify-content:space-between;">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px;">
+          <span style="font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase;">Simulated Weight</span>
+          <span style="font-family:'DM Mono',monospace; font-size:13px; font-weight:700; color:var(--text);">${simWeightKg.toFixed(3)} kg (${simWeightLbs.toFixed(2)} lbs)</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <!-- Current Setup -->
+          <div style="background:var(--cream); border:1px solid var(--border); border-radius:var(--r); padding:8px 10px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <span style="font-size:9px; font-weight:700; text-transform:uppercase; color:var(--text3); display:block;">Current Store Rate</span>
+              <span style="font-family:'DM Mono',monospace; font-size:14px; font-weight:800; color:var(--text);">${formatCcy(currentCharge)}</span>
+            </div>
+            <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(0,0,0,0.06); padding-top:4px;">
+              <span style="font-size:9px; color:var(--text3);">Est. Margin:</span>
+              <span class="shipping-money margin ${currentMarginClass}" style="font-size:10px; padding:1px 6px; font-weight:700; border-radius:99px; display:inline-block; text-align:center;">${currentMargin >= 0 ? '+' : ''}${currentMargin.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <!-- Recommended Setup -->
+          <div style="background:rgba(200,145,58,0.06); border:1px solid var(--gold-line); border-radius:var(--r); padding:8px 10px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <span style="font-size:9px; font-weight:700; text-transform:uppercase; color:var(--text3); display:block;">Recommended Rate</span>
+              <span style="font-family:'DM Mono',monospace; font-size:14px; font-weight:800; color:var(--gold);">${formatCcy(recommendedCharge)}</span>
+            </div>
+            <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(0,0,0,0.06); padding-top:4px;">
+              <span style="font-size:9px; color:var(--text3);">Proj. Margin:</span>
+              <span class="shipping-money margin ${recommendedMarginClass}" style="font-size:10px; padding:1px 6px; font-weight:700; border-radius:99px; display:inline-block; text-align:center;">${recommendedMargin >= 0 ? '+' : ''}${recommendedMargin.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:10px; color:var(--text3); line-height:1.5; background:var(--cream2); padding:8px 10px; border-radius:var(--r); border:1px solid var(--border);">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span>Est. Postage Cost (${region}):</span>
+          <strong style="color:var(--text);">${formatCcy(postageCost)}</strong>
+        </div>
+        ${simWeightKg < 0.5 && qty === 1
+          ? `<div style="color:var(--green); font-weight:600; margin-top:4px; display:flex; gap:4px; align-items:center;">
+               <span>💡</span> <span>Potentially Canada Post Lettermail eligible (if thickness &lt; 2cm).</span>
+             </div>`
+          : ''
+        }
+      </div>
+    </div>
   `;
 }
 
@@ -25836,7 +26011,7 @@ function exposeLegacyInlineHandlers() {
     syncBigCartelShippingPaid, triggerBigCartelShippingSync,
     toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV,
     updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange, onShipRecoModeChange, onShipInsightsToggle,
-    getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange
+    getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation
   });
 }
 
@@ -26396,6 +26571,7 @@ window.onShipInsightsToggle = onShipInsightsToggle;
 window.getShipRecoPercentile = getShipRecoPercentile;
 window.setShipRecoPercentile = setShipRecoPercentile;
 window.onShipRecoPercentileChange = onShipRecoPercentileChange;
+window.updateShippingSimulation = updateShippingSimulation;
 
 async function fetchAllBigCartelOrders(storeId) {
   let allOrders = [];
