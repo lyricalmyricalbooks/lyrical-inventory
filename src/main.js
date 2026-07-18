@@ -24455,9 +24455,7 @@ function renderShippingAnalysisHub() {
   `;
 
   // ── 1. Calculate P&L KPIs (Publisher view only) ──
-  let pnlDashboardStartHtml = '';
-  let pnlDashboardEndHtml = '';
-  let authorHeaderHtml = '';
+  let pnlHtml = '';
 
   if (isPub) {
     const activeOrders = allOrders.filter(o => !o.excludeFromShipping);
@@ -24582,7 +24580,7 @@ function renderShippingAnalysisHub() {
     }).length;
     const linkedOrderCount = kpiOrders.length - unmatchedCount;
 
-    pnlDashboardStartHtml = `
+    pnlHtml = `
       <section class="shipping-pnl-dashboard" aria-labelledby="shipping-pnl-title">
         <header class="shipping-pnl-header">
           <div>
@@ -24644,12 +24642,10 @@ function renderShippingAnalysisHub() {
           <p>Unlinked orders show no settled postage or margin until a Shippo expense is matched.</p>
           <a href="#shipping-pnl-ledger">View ledger</a>
         </section>
-    `;
-    pnlDashboardEndHtml = `
       </section>
     `;
   } else {
-    authorHeaderHtml = `
+    pnlHtml = `
       <div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
         <span>📊 Shipping Performance Analysis</span>
         <div style="display:flex; align-items:center; gap:8px;">
@@ -25354,9 +25350,8 @@ ${margin.toFixed(2)} CAD</td>
     explanationText = `Using fixed Canada Post flat-rates. Risk profiles and statistical percentiles are inactive when not using blended history.`;
   }
 
-  const insightsHtml = `
-    <details class="shipping-pnl-insights" ${isInsightsOpen ? 'open' : ''} ontoggle="onShipInsightsToggle(this.open)" 
-      style="${isPub ? 'border:none; border-top:1px solid var(--shipping-pnl-border); border-radius:0; box-shadow:none; margin-bottom:0 !important; margin-top:20px;' : 'margin-bottom: var(--shipping-pnl-space-4) !important;'}">
+  hub.innerHTML = `
+    <details class="shipping-pnl-insights" ${isInsightsOpen ? 'open' : ''} ontoggle="onShipInsightsToggle(this.open)" style="margin-bottom: var(--shipping-pnl-space-4) !important;">
       <summary>
         <span>
           <span class="shipping-pnl-eyebrow">Insights</span>
@@ -25418,7 +25413,6 @@ ${margin.toFixed(2)} CAD</td>
           ${columnsHtml}
         </div>
       </section>
-
       <section class="shipping-reco-container" style="background:var(--cream2); border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin-top:20px; box-shadow:0 4px 15px rgba(0,0,0,0.02);">
         <h3 style="font-family:'Playfair Display',serif; font-size:18px; color:var(--text); margin:0 0 6px; font-weight:700;">
           🧪 Live Rate Simulation Sandbox
@@ -25483,9 +25477,8 @@ ${margin.toFixed(2)} CAD</td>
         </section>
       </div>
     </details>
-  `;
 
-  const ledgerHtml = `
+    ${pnlHtml}
     <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
       <header class="shipping-pnl-section-header">
         <div>
@@ -25503,21 +25496,6 @@ ${margin.toFixed(2)} CAD</td>
       ${ledgerTableHtml}
     </section>
   `;
-
-  if (isPub) {
-    hub.innerHTML = `
-      ${pnlDashboardStartHtml}
-      ${insightsHtml}
-      ${pnlDashboardEndHtml}
-      ${ledgerHtml}
-    `;
-  } else {
-    hub.innerHTML = `
-      ${authorHeaderHtml}
-      ${insightsHtml}
-      ${ledgerHtml}
-    `;
-  }
 
   setTimeout(updateShippingSimulation, 50);
 }
