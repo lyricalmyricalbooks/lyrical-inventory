@@ -25350,7 +25350,7 @@ ${margin.toFixed(2)} CAD</td>
     explanationText = `Using fixed Canada Post flat-rates. Risk profiles and statistical percentiles are inactive when not using blended history.`;
   }
 
-  hub.innerHTML = `
+  const insightsHtml = `
     <details class="shipping-pnl-insights" ${isInsightsOpen ? 'open' : ''} ontoggle="onShipInsightsToggle(this.open)" style="margin-bottom: var(--shipping-pnl-space-4) !important;">
       <summary>
         <span>
@@ -25413,6 +25413,7 @@ ${margin.toFixed(2)} CAD</td>
           ${columnsHtml}
         </div>
       </section>
+
       <section class="shipping-reco-container" style="background:var(--cream2); border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin-top:20px; box-shadow:0 4px 15px rgba(0,0,0,0.02);">
         <h3 style="font-family:'Playfair Display',serif; font-size:18px; color:var(--text); margin:0 0 6px; font-weight:700;">
           🧪 Live Rate Simulation Sandbox
@@ -25477,8 +25478,11 @@ ${margin.toFixed(2)} CAD</td>
         </section>
       </div>
     </details>
+  `;
 
+  hub.innerHTML = `
     ${pnlHtml}
+    ${insightsHtml}
     <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
       <header class="shipping-pnl-section-header">
         <div>
