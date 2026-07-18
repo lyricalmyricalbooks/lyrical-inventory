@@ -25345,6 +25345,11 @@ ${margin.toFixed(2)} CAD</td>
   if (recoPercentile === 90) pctLabel = '90th';
   else if (recoPercentile === 50) pctLabel = '50th';
 
+  let explanationText = `Analyzes historical shipping labels and order quantities to calculate optimized rates. Base price targets the ${pctLabel} percentile of actual postage for outlier coverage; add-ons reflect average incremental weight costs.`;
+  if (recoMode === 'cpost') {
+    explanationText = `Using fixed Canada Post flat-rates. Risk profiles and statistical percentiles are inactive when not using blended history.`;
+  }
+
   hub.innerHTML = `
     <details class="shipping-pnl-insights" ${isInsightsOpen ? 'open' : ''} ontoggle="onShipInsightsToggle(this.open)" style="margin-bottom: var(--shipping-pnl-space-4) !important;">
       <summary>
@@ -25362,7 +25367,7 @@ ${margin.toFixed(2)} CAD</td>
               <span>🪄</span> Smart Shipping Rate Recommendations
             </h3>
             <p style="font-size:12px; color:var(--text3); margin:4px 0 0; line-height:1.5; max-width:650px;">
-              Analyzes historical shipping labels and order quantities to calculate optimized rates. Base price targets the ${pctLabel} percentile of actual postage for outlier coverage; add-ons reflect average incremental weight costs.
+              ${explanationText}
             </p>
           </div>
           <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:1px solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:12px; font-weight:600; flex-wrap:wrap;">
@@ -25394,9 +25399,9 @@ ${margin.toFixed(2)} CAD</td>
 
             <div style="border-left:1px solid var(--border); height:16px;"></div>
 
-            <div style="display:flex; align-items:center; gap:4px;">
+            <div style="display:flex; align-items:center; gap:4px; opacity:${recoMode === 'cpost' ? '0.5' : '1'};">
               <span style="font-size:13px;">🎯</span> Risk Profile:
-              <select id="ship-reco-percentile-select" onchange="onShipRecoPercentileChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+              <select id="ship-reco-percentile-select" onchange="onShipRecoPercentileChange(this.value)" ${recoMode === 'cpost' ? 'disabled' : ''} style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:${recoMode === 'cpost' ? 'not-allowed' : 'pointer'}; margin-left:4px;">
                 <option value="90" ${recoPercentile === 90 ? 'selected' : ''}>Conservative (90th %)</option>
                 <option value="75" ${recoPercentile === 75 ? 'selected' : ''}>Balanced (75th %)</option>
                 <option value="50" ${recoPercentile === 50 ? 'selected' : ''}>Aggressive (50th %)</option>
