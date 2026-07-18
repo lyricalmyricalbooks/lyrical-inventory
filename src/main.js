@@ -24165,6 +24165,15 @@ function setShipRecoMode(val) {
   localStorage.setItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val);
 }
 
+function getShipRecoPercentile() {
+  const val = localStorage.getItem(`lm-ship-reco-pct-${shipAnalysisBookFilter}`);
+  return val ? parseInt(val, 10) : 75;
+}
+
+function setShipRecoPercentile(val) {
+  localStorage.setItem(`lm-ship-reco-pct-${shipAnalysisBookFilter}`, val.toString());
+}
+
 function getShipWeightOverride() {
   return localStorage.getItem(`lm-ship-weight-override-${shipAnalysisBookFilter}`) || 'default';
 }
@@ -24179,6 +24188,11 @@ function onShipInsightsToggle(isOpen) {
 
 function onShipRecoModeChange(val) {
   setShipRecoMode(val);
+  renderShippingAnalysisHub();
+}
+
+function onShipRecoPercentileChange(val) {
+  setShipRecoPercentile(val);
   renderShippingAnalysisHub();
 }
 
@@ -24293,19 +24307,22 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses) {
     const N = values.length;
     const singleCosts = values.filter(v => v.qty === 1).map(v => v.cost);
     
+    const pctFn = typeof getShipRecoPercentile === 'function' ? getShipRecoPercentile : () => 75;
+    const pct = pctFn();
+
     let avgBase = null;
-    let p75Base = null;
+    let targetBase = null;
     let p90Base = null;
     let avgInc = null;
 
     if (singleCosts.length > 0) {
       avgBase = getMean(singleCosts);
-      p75Base = getPercentile(singleCosts, 75);
+      targetBase = getPercentile(singleCosts, pct);
       p90Base = getPercentile(singleCosts, 90);
     } else if (values.length > 0) {
       const perUnit = values.map(v => v.cost / v.qty);
       avgBase = getMean(perUnit);
-      p75Base = getPercentile(perUnit, 75);
+      targetBase = getPercentile(perUnit, pct);
       p90Base = getPercentile(perUnit, 90);
     }
 
@@ -24327,7 +24344,7 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses) {
       confidence = 'Canada Post';
     } else {
       if (N >= 5) {
-        recoBase = Math.round(p75Base);
+        recoBase = Math.round(targetBase);
         recoAddon = avgInc !== null ? Math.max(2, Math.round(avgInc)) : Math.round(recoBase * 0.4);
         confidence = 'High';
       } else if (N > 0) {
@@ -25314,7 +25331,12 @@ ${margin.toFixed(2)} CAD</td>
   
   const weightOverride = getShipWeightOverride();
   const recoMode = getShipRecoMode();
+  const recoPercentile = getShipRecoPercentile();
   const isInsightsOpen = localStorage.getItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`) !== 'false';
+
+  let pctLabel = '75th';
+  if (recoPercentile === 90) pctLabel = '90th';
+  else if (recoPercentile === 50) pctLabel = '50th';
 
   hub.innerHTML = `
     <details class="shipping-pnl-insights" ${isInsightsOpen ? 'open' : ''} ontoggle="onShipInsightsToggle(this.open)" style="margin-bottom: var(--shipping-pnl-space-4) !important;">
@@ -25333,7 +25355,7 @@ ${margin.toFixed(2)} CAD</td>
               <span>🪄</span> Smart Shipping Rate Recommendations
             </h3>
             <p style="font-size:12px; color:var(--text3); margin:4px 0 0; line-height:1.5; max-width:650px;">
-              Analyzes historical shipping labels and order quantities to calculate optimized rates. Base price targets the 75th percentile of actual postage for outlier coverage; add-ons reflect average incremental weight costs.
+              Analyzes historical shipping labels and order quantities to calculate optimized rates. Base price targets the ${pctLabel} percentile of actual postage for outlier coverage; add-ons reflect average incremental weight costs.
             </p>
           </div>
           <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:1px solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:12px; font-weight:600; flex-wrap:wrap;">
@@ -25360,6 +25382,17 @@ ${margin.toFixed(2)} CAD</td>
               <select id="ship-reco-mode-select" onchange="onShipRecoModeChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
                 <option value="blended" ${recoMode === 'blended' ? 'selected' : ''}>Blended (History + CP)</option>
                 <option value="cpost" ${recoMode === 'cpost' ? 'selected' : ''}>Canada Post Only</option>
+              </select>
+            </div>
+
+            <div style="border-left:1px solid var(--border); height:16px;"></div>
+
+            <div style="display:flex; align-items:center; gap:4px;">
+              <span style="font-size:13px;">🎯</span> Risk Profile:
+              <select id="ship-reco-percentile-select" onchange="onShipRecoPercentileChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+                <option value="90" ${recoPercentile === 90 ? 'selected' : ''}>Conservative (90th %)</option>
+                <option value="75" ${recoPercentile === 75 ? 'selected' : ''}>Balanced (75th %)</option>
+                <option value="50" ${recoPercentile === 50 ? 'selected' : ''}>Aggressive (50th %)</option>
               </select>
             </div>
           </div>
@@ -25802,7 +25835,8 @@ function exposeLegacyInlineHandlers() {
     toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders,
     syncBigCartelShippingPaid, triggerBigCartelShippingSync,
     toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV,
-    updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange, onShipRecoModeChange, onShipInsightsToggle
+    updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange, onShipRecoModeChange, onShipInsightsToggle,
+    getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange
   });
 }
 
@@ -26359,6 +26393,9 @@ window.onShipRecoWeightSelectChange = onShipRecoWeightSelectChange;
 window.onShipRecoCustomWeightChange = onShipRecoCustomWeightChange;
 window.onShipRecoModeChange = onShipRecoModeChange;
 window.onShipInsightsToggle = onShipInsightsToggle;
+window.getShipRecoPercentile = getShipRecoPercentile;
+window.setShipRecoPercentile = setShipRecoPercentile;
+window.onShipRecoPercentileChange = onShipRecoPercentileChange;
 
 async function fetchAllBigCartelOrders(storeId) {
   let allOrders = [];

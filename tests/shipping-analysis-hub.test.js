@@ -274,11 +274,12 @@ describe('Shipping Analysis Hub Functions', () => {
         function normalizeShippingOrderNumber(num) { return num; }
       `;
 
-      getSmartShippingRecommendations = new Function('allOrders', 'shippoExpenses', 'weightOverride', 'recoMode', `
+      getSmartShippingRecommendations = new Function('allOrders', 'shippoExpenses', 'weightOverride', 'recoMode', 'recoPercentile', `
         const BOOK_LIST = [{ id: 'book1', title: 'The Hound', shipWeight: 0.8, shipWeightUnit: 'kg' }];
         let shipAnalysisBookFilter = 'all';
         const getShipWeightOverride = () => weightOverride || 'default';
         const getShipRecoMode = () => recoMode || 'blended';
+        const getShipRecoPercentile = () => recoPercentile || 75;
         function normalizeCountryCode(c) { 
           c = String(c || '').trim().toUpperCase();
           if (c === 'CANADA' || c === 'CA') return 'CA';
@@ -377,6 +378,35 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(result.results.ON.recoBase).toBe(14.50);
       expect(result.results.ON.recoAddon).toBe(5.00);
       expect(result.results.ON.confidence).toBe('Canada Post');
+    });
+
+    it('applies custom percentile tuned risk profiles correctly', () => {
+      const allOrders = [
+        { num: 'O1', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O2', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O3', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O4', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O5', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' },
+        { num: 'O6', shipCountry: 'CA', shipState: 'ON', qty: 1, bookId: 'book1' }
+      ];
+
+      const shippoExpenses = [
+        { shippingOrderNumber: 'O1', shippingMatchStatus: 'matched', baseAmount: 11.00 },
+        { shippingOrderNumber: 'O2', shippingMatchStatus: 'matched', baseAmount: 12.00 },
+        { shippingOrderNumber: 'O3', shippingMatchStatus: 'matched', baseAmount: 13.00 },
+        { shippingOrderNumber: 'O4', shippingMatchStatus: 'matched', baseAmount: 14.00 },
+        { shippingOrderNumber: 'O5', shippingMatchStatus: 'matched', baseAmount: 15.00 },
+        { shippingOrderNumber: 'O6', shippingMatchStatus: 'matched', baseAmount: 16.00 }
+      ];
+
+      const resultConservative = getSmartShippingRecommendations(allOrders, shippoExpenses, 'default', 'blended', 90);
+      expect(resultConservative.results.ON.recoBase).toBe(16);
+
+      const resultBalanced = getSmartShippingRecommendations(allOrders, shippoExpenses, 'default', 'blended', 75);
+      expect(resultBalanced.results.ON.recoBase).toBe(15);
+
+      const resultAggressive = getSmartShippingRecommendations(allOrders, shippoExpenses, 'default', 'blended', 50);
+      expect(resultAggressive.results.ON.recoBase).toBe(13);
     });
   });
 });
