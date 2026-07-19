@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales } from '../src/lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from '../src/lib/inventory.js';
 
 const book = (maxPrint = 100) => ({ maxPrint });
 const sale = (qty, extra = {}) => ({ qty, ...extra });
@@ -241,5 +241,100 @@ describe('deduplicateDirectConsignmentSales', () => {
     });
     deduplicateDirectConsignmentSales(s);
     expect(s.hist).toHaveLength(3);
+  });
+});
+
+describe('recalculateBookStatsFromHistory', () => {
+  it('handles an empty or undefined history', () => {
+    const s1 = state();
+    recalculateBookStatsFromHistory(s1);
+    expect(s1.sold).toBe(0);
+    expect(s1.revenue).toBe(0);
+    expect(s1.chStats).toEqual({});
+
+    const s2 = state({ hist: null });
+    recalculateBookStatsFromHistory(s2);
+    expect(s2.sold).toBe(0);
+    expect(s2.revenue).toBe(0);
+    expect(s2.chStats).toEqual({});
+  });
+
+  it('calculates basic stats correctly for standard sales', () => {
+    const s = state({
+      hist: [
+        { qty: 2, price: 10 },
+        { qty: 3, price: 15 }
+      ]
+    });
+    recalculateBookStatsFromHistory(s);
+    expect(s.sold).toBe(5);
+    expect(s.revenue).toBe(65); // 2*10 + 3*15
+  });
+
+  it('segregates stats by channel and defaults to Manual', () => {
+    const s = state({
+      hist: [
+        { qty: 2, price: 10, chan: 'Direct' },
+        { qty: 1, price: 15 }, // no chan, defaults to Manual
+        { qty: 3, price: 20, chan: 'Direct' },
+        { qty: 5, price: 10, chan: 'Website' }
+      ]
+    });
+    recalculateBookStatsFromHistory(s);
+    expect(s.chStats).toEqual({
+      Direct: { txns: 2, units: 5, revenue: 80 },
+      Manual: { txns: 1, units: 1, revenue: 15 },
+      Website: { txns: 1, units: 5, revenue: 50 }
+    });
+    expect(s.sold).toBe(11);
+    expect(s.revenue).toBe(145);
+  });
+
+  it('ignores voided sales entirely', () => {
+    const s = state({
+      hist: [
+        { qty: 2, price: 10 },
+        { qty: 5, price: 20, voided: true }
+      ]
+    });
+    recalculateBookStatsFromHistory(s);
+    expect(s.sold).toBe(2);
+    expect(s.revenue).toBe(20);
+    expect(s.chStats.Manual).toEqual({ txns: 1, units: 2, revenue: 20 });
+  });
+
+  it('includes gratuities in channel stats but excludes them from global sold/revenue', () => {
+    const s = state({
+      hist: [
+        { qty: 2, price: 10 },
+        { qty: 1, price: 0, gratuity: true, chan: 'Direct' }, // gratuity
+        { qty: 1, price: 20, gratuity: true, chan: 'Manual' } // gratuity with price
+      ]
+    });
+    recalculateBookStatsFromHistory(s);
+
+    // Global stats exclude gratuities
+    expect(s.sold).toBe(2);
+    expect(s.revenue).toBe(20);
+
+    // Channel stats include gratuities
+    expect(s.chStats).toEqual({
+      Manual: { txns: 2, units: 3, revenue: 40 }, // 2*10 (regular) + 1*20 (gratuity)
+      Direct: { txns: 1, units: 1, revenue: 0 }   // 1*0 (gratuity)
+    });
+  });
+
+  it('handles missing qty or price gracefully', () => {
+    const s = state({
+      hist: [
+        { qty: undefined, price: 10 }, // missing qty
+        { qty: 2, price: undefined },  // missing price
+        { qty: null, price: null }     // null values
+      ]
+    });
+    recalculateBookStatsFromHistory(s);
+    expect(s.sold).toBe(2);
+    expect(s.revenue).toBe(0); // 0*10 + 2*0 + 0*0
+    expect(s.chStats.Manual).toEqual({ txns: 3, units: 2, revenue: 0 });
   });
 });
