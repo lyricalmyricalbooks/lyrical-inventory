@@ -18909,10 +18909,12 @@ async function insertStripeFeesIntoLedger() {
   };
 
   const planned = [];
+  const fxRates = await Promise.all(rows.map(r => rateFor(r.cur.toUpperCase(), r.year)));
+  let i = 0;
   for (const r of rows) {
     const cur = r.cur.toUpperCase();
     const entryDate = r.year < currentYear ? `${r.year}-12-31` : today();
-    const fxRate = await rateFor(cur, r.year);
+    const fxRate = fxRates[i++];
 
     const salesFee = _stripeMinorToMajor(r.salesFeeMinor, r.cur);
     if (salesFee > 0) {
