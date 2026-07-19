@@ -1,4 +1,3 @@
-## 2024-06-29 - Parallel Shippo Transactions Fetch
-
-**Learning:** I noticed that inside a loop the application was awaiting an asynchronous transaction that hit a networking endpoint. This caused an N+1 problem resulting in unnecessary, sequentially processed promises. By keeping optimistic sets (`fetchedIds`, `importedIds`, `existingRefs`) updated temporarily inside the initial loop, we could successfully parallelize network requests with `Promise.all` and then iterate over the results resolving cleanly or reverting the optimistic insertions.
-**Action:** Implemented a split loop process in `src/main.js` which gathers validated array of rows, awaits a mapping of `Promise.all` resolving the expenses, and processes the outcome sequentially.
+## 2024-05-15 - Optimizing _reconLikelyAlreadyLogged
+ **Learning:** When creating a memoization/cache invalidation stamp for a deeply nested object like `states`, using `.map().join(',')` to generate a string signature creates unnecessary arrays and string allocations that trigger GC pressure if called in a hot loop (like classifying every stripe payment).
+ **Action:** Switched to maintaining a simple numeric sum of history lengths via a `for...of` loop. This avoids intermediate allocations while providing the same cache invalidation guarantees.

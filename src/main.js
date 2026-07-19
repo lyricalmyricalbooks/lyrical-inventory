@@ -19219,17 +19219,53 @@ function _reconFindInvoice(num) {
 // Soft heuristic: did the publisher likely already log this payment by hand?
 // Matches a non-void history entry with the same paid amount+currency within a
 // few days. Used only to keep already-handled payments out of the urgent list.
-function _reconLikelyAlreadyLogged(p) {
-  const target = Math.round(p.amount * 100);
+let _reconHistIndex = null;
+let _reconHistIndexStamp = '';
+
+function _buildReconHistIndex() {
+  let stamp = 0;
+  for (const s of Object.values(states)) {
+    stamp += (s.hist || []).length;
+  }
+  if (_reconHistIndex && _reconHistIndexStamp === stamp) return _reconHistIndex;
+
+  _reconHistIndex = new Map();
+  _reconHistIndexStamp = stamp;
+
   for (const s of Object.values(states)) {
     for (const h of (s.hist || [])) {
       if (h.voided || h.gratuity) continue;
       const pay = h.payment;
-      if (!pay || !pay.amount || normalizeCurrencyCode(pay.currency || '', '') !== p.currency) continue;
-      if (Math.round(pay.amount * 100) !== target) continue;
-      const dDays = Math.abs((new Date(h.date).getTime() - p.created) / 86400000);
-      if (dDays <= 3) return true;
+      if (!pay || !pay.amount) continue;
+      const cur = normalizeCurrencyCode(pay.currency || '', '');
+      const amt = Math.round(pay.amount * 100);
+      const key = `${amt}_${cur}`;
+      const ts = new Date(h.date).getTime();
+
+      let list = _reconHistIndex.get(key);
+      if (!list) {
+        list = [];
+        _reconHistIndex.set(key, list);
+      }
+      list.push(ts);
     }
+  }
+  return _reconHistIndex;
+}
+
+// Soft heuristic: did the publisher likely already log this payment by hand?
+// Matches a non-void history entry with the same paid amount+currency within a
+// few days. Used only to keep already-handled payments out of the urgent list.
+function _reconLikelyAlreadyLogged(p) {
+  const target = Math.round(p.amount * 100);
+  const key = `${target}_${p.currency}`;
+  const idx = _buildReconHistIndex();
+  const list = idx.get(key);
+  if (!list) return false;
+
+  for (const ts of list) {
+    const dDays = Math.abs((ts - p.created) / 86400000);
+    if (dDays <= 3) return true;
   }
   return false;
 }
