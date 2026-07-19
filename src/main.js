@@ -4094,9 +4094,9 @@ function renderOpenCall() {
     } else if (ocSortBy === 'nameDesc') {
       return (b.name || '').localeCompare(a.name || '');
     } else if (ocSortBy === 'dateAsc') {
-      return (a.createdAt || '').localeCompare(b.createdAt || '');
+      return (a.createdAt || '') > (b.createdAt || '') ? 1 : ((a.createdAt || '') < (b.createdAt || '') ? -1 : 0);
     } else if (ocSortBy === 'dateDesc') {
-      return (b.createdAt || '').localeCompare(a.createdAt || '');
+      return (b.createdAt || '') > (a.createdAt || '') ? 1 : ((b.createdAt || '') < (a.createdAt || '') ? -1 : 0);
     } else if (ocSortBy === 'progressDesc' || ocSortBy === 'progressAsc') {
       const getProgress = (c) => OC_STAGES.filter(st => c[st.key]).length;
       return ocSortBy === 'progressDesc' ? getProgress(b) - getProgress(a) : getProgress(a) - getProgress(b);
@@ -15754,7 +15754,7 @@ function _tcRenderSelectedCashFlowBucket() {
     return;
   }
 
-  const rows = _tcCashFlowBucketRows(key).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const rows = _tcCashFlowBucketRows(key).sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? 1 : (dA < dB ? -1 : 0); });
   const expenseRows = rows.filter((r) => !r.isIncome);
   const incomeRows = rows.filter((r) => r.isIncome);
   const activeType = data.detailType === 'income' || data.detailType === 'expenses' ? data.detailType : 'all';
@@ -19945,7 +19945,7 @@ const MAILING_LIST_KEY = 'lm-mailing-list';
 let MAILING_LIST = { subs: {}, autoAdd: false };
 
 function mailingSubsArray() {
-  return Object.values(MAILING_LIST.subs || {}).sort((a, b) => (b.added || '').localeCompare(a.added || ''));
+  return Object.values(MAILING_LIST.subs || {}).sort((a, b) => { const dA = b.added || ''; const dB = a.added || ''; return dA > dB ? 1 : (dA < dB ? -1 : 0); });
 }
 function mailingListHas(email) { return !!MAILING_LIST.subs[_custEmailKey(email)]; }
 
@@ -20219,7 +20219,7 @@ function buildCustomerList() {
   });
 
   const list = Array.from(map.values());
-  list.sort((a, b) => (b.last || '').localeCompare(a.last || '')); // most recent first
+  list.sort((a, b) => { const dA = b.last || ''; const dB = a.last || ''; return dA > dB ? 1 : (dA < dB ? -1 : 0); }); // most recent first
   list._noEmail = noEmail;
   return list;
 }
