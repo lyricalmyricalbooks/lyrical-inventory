@@ -7241,7 +7241,7 @@ async function searchGmailEmails() {
           <span style="font-size:11px;color:var(--text3);margin-top:6px;display:block;">${hint}</span>
         </div>`;
     }
-    showToast('Gmail search failed', 'err');
+    showToast(isNetwork ? 'Gmail search failed: Re-deploy Apps Script' : 'Gmail search failed', 'err');
   }
 
   if (btn) {
