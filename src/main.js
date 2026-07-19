@@ -18222,7 +18222,7 @@ document.getElementById('date-line').textContent = new Date().toLocaleDateString
 function renderQRs() {
   if (typeof QRCode === 'undefined') { setTimeout(renderQRs, 120); return; }
   document.querySelectorAll('[id^="qr-"]').forEach(function(el) {
-    var url = el.getAttribute('data-url');
+    const url = el.getAttribute('data-url');
     if (!url) return;
     new QRCode(el, { text: url, width: 138, height: 138, colorDark: "#1c1814", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
   });
