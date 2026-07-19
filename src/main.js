@@ -3570,7 +3570,7 @@ function renderOcBulkModalContent(retryMode = false) {
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:660px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
-      <button onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      <button aria-label="Close" onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
       
       <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:4px;">✉ Send Bulk Pipeline Emails</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Personalize and send stage emails to selected contributors.</div>
@@ -3954,7 +3954,7 @@ function renderOcBulkRemoveModalContent() {
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:500px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
-      <button onclick="closeOcBulkRemoveModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      <button aria-label="Close" onclick="closeOcBulkRemoveModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
       
       <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--red);margin-bottom:4px;">✕ Bulk Remove Contributors</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Select contributors to remove from the "${escapeHtml(proj.title)}" open call.</div>
@@ -4280,7 +4280,7 @@ function renderOpenCall() {
                       <div class="oc-color-swatch" style="background:transparent;border:1px dashed #ccc;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', 'transparent')"></div>
                     </div>
                   </div>
-                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('link')" title="Insert Link">🔗</button>
+                  <button type="button" class="oc-toolbar-btn" aria-label="Insert Link" onmousedown="event.preventDefault()" onclick="insertFormattingTag('link')" title="Insert Link">🔗</button>
                   <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('clear')" title="Clear Formatting">Tx</button>
                 </div>
                 <div class="oc-toolbar-group" style="gap:5px;">
@@ -4383,7 +4383,7 @@ function renderOpenCall() {
         <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
           <div style="display:flex;gap:6px;width:100%;">
             <input id="oc-photo" placeholder="Photo file name (Enter to add)" style="flex:1;" onkeydown="handleOcPhotoKeydown(event)">
-            <button class="btn sm gold" onclick="addOcPhotoChip()" style="padding:0 12px;height:38px;margin:0;">＋</button>
+            <button class="btn sm gold" aria-label="Add photo" onclick="addOcPhotoChip()" style="padding:0 12px;height:38px;margin:0;">＋</button>
           </div>
           <div id="oc-photo-chips" class="oc-addform-chips">${chipsHtml}</div>
         </div>
@@ -20900,7 +20900,7 @@ function openOcEmailPreviewModal(cId, stageKey, subject, body, c) {
     <div class="card" style="max-width:650px;width:90%;margin:0 auto;display:flex;flex-direction:column;box-shadow:var(--shadow2);border:1px solid var(--border);">
       <div class="row-between" style="border-bottom:1px solid var(--border);padding:14px 20px;background:var(--cream2);">
         <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--gold2);">✉ Review Email to ${escapeHtml(c.name)}</div>
-        <button class="btn sm" onclick="closeOcEmailPreviewModal()" style="padding:4px 8px;font-size:12px;">✕</button>
+        <button class="btn sm" aria-label="Close" onclick="closeOcEmailPreviewModal()" style="padding:4px 8px;font-size:12px;">✕</button>
       </div>
       
       <div style="padding:20px;display:flex;flex-direction:column;gap:12px;max-height:60vh;overflow-y:auto;">
@@ -21177,7 +21177,7 @@ function renderOcImportGmailModal() {
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:620px;max-height:90vh;overflow-y:auto;padding:24px;position:relative;" onclick="event.stopPropagation()">
-      <button onclick="closeOcImportGmailModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;">✕</button>
+      <button aria-label="Close" onclick="closeOcImportGmailModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;">✕</button>
       <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:4px;">📨 Import Submissions from Gmail</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Find the artists' original submission emails and add them as contributors — each one's thread is captured so every stage email replies into it.</div>
 
@@ -21458,7 +21458,7 @@ function renderOcEditModalContent(cId) {
 
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:500px;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
-      <button onclick="closeOcEditModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      <button aria-label="Close" onclick="closeOcEditModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
       
       <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:4px;">✎ Edit Contributor</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Update artist details and internal notes.</div>
@@ -22349,7 +22349,7 @@ async function renderCampaigns() {
             <span style="color:var(--red);">Failed</span>
             <strong style="color:var(--red);">${c.stats.failed}</strong>
           </div>` : ''}
-          <button class="btn sm" onclick="deleteCampaign('${c.id}')" title="Delete from history" style="margin-left:8px;">✕</button>
+          <button class="btn sm" aria-label="Delete campaign" onclick="deleteCampaign('${c.id}')" title="Delete from history" style="margin-left:8px;">✕</button>
         </div>
       </div>
     `).join('')
