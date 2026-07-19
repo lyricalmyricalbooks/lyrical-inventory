@@ -34,6 +34,8 @@ const DATA_FILE = path.join(DATA_DIR, 'store.json');
 ensureDataFile();
 let store = readStore();
 
+let mockEmailMutex = Promise.resolve();
+
 const server = http.createServer(async (req, res) => {
   try {
     setCors(res);
@@ -111,34 +113,35 @@ const server = http.createServer(async (req, res) => {
       Body: ${(emailBody || '').substring(0, 100)}...`);
       
       // Save mocked emails to a local file for inspection (Next Move #3)
-      try {
-        const mailDir = path.join(__dirname, 'data');
-        if (!fs.existsSync(mailDir)) {
-          fs.mkdirSync(mailDir, { recursive: true });
-        }
-        const filePath = path.join(mailDir, 'mock-emails.json');
-        let existing = [];
-        if (fs.existsSync(filePath)) {
+      mockEmailMutex = mockEmailMutex.then(async () => {
+        try {
+          const mailDir = path.join(__dirname, 'data');
+          await fs.promises.mkdir(mailDir, { recursive: true });
+
+          const filePath = path.join(mailDir, 'mock-emails.json');
+          let existing = [];
           try {
-            existing = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const fileContent = await fs.promises.readFile(filePath, 'utf8');
+            existing = JSON.parse(fileContent);
           } catch (e) {
             existing = [];
           }
+
+          existing.push({
+            timestamp: new Date().toISOString(),
+            to,
+            subject,
+            replyTo,
+            body: emailBody,
+            htmlBody,
+            simulated: !!simulated,
+            threadId: threadId || null
+          });
+          await fs.promises.writeFile(filePath, JSON.stringify(existing, null, 2), 'utf8');
+        } catch (err) {
+          console.error('Failed to save mock email locally:', err);
         }
-        existing.push({
-          timestamp: new Date().toISOString(),
-          to,
-          subject,
-          replyTo,
-          body: emailBody,
-          htmlBody,
-          simulated: !!simulated,
-          threadId: threadId || null
-        });
-        fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf8');
-      } catch (err) {
-        console.error('Failed to save mock email locally:', err);
-      }
+      });
       
       appendAudit(user ? user.email : 'anonymous', 'campaign.send_single', { to, subject });
       return sendJson(res, 200, { ok: true, emailed: true, via: 'mock-backend' });
