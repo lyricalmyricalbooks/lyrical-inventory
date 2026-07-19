@@ -1776,7 +1776,9 @@
 
   <!-- Store Details (initially hidden) -->
   <div id="bc-store-card" class="card" style="display:none; margin-bottom:1.5rem; border-left:3px solid var(--gold-line);">
-    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); margin-bottom:10px;">Connected Store Info</div>
+    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+      <span>🔌</span> Connected Store Info
+    </div>
     <div class="bc-details-grid">
       <div class="bc-detail-card">
         <div class="bc-detail-label">Store Name</div>
@@ -1784,7 +1786,7 @@
       </div>
       <div class="bc-detail-card">
         <div class="bc-detail-label">Plan</div>
-        <div id="bc-store-plan" class="bc-detail-val">—</div>
+        <div id="bc-store-plan" class="bc-detail-val" style="display:flex; align-items:center; height:24px;">—</div>
       </div>
       <div class="bc-detail-card">
         <div class="bc-detail-label">Currency</div>
@@ -1795,8 +1797,8 @@
         <div id="bc-store-email" class="bc-detail-val">—</div>
       </div>
     </div>
-    <div style="font-size:11px; color:var(--text3);">
-      Store URL: <a id="bc-store-url" href="#" target="_blank" style="color:var(--gold); text-decoration:none;">—</a>
+    <div style="font-size:11px; color:var(--text3); display:flex; align-items:center; gap:4px;">
+      Store Link: <a id="bc-store-url" href="#" target="_blank" style="color:var(--gold); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:3px;">— <span style="font-size:9px;">↗</span></a>
     </div>
   </div>
 
