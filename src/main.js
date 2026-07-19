@@ -5897,11 +5897,18 @@ function applyOne(id, { deferRender = false } = {}) {
   }
 }
 
+function isOrderEligibleForApply(order, appliedIds, cancelledNumsSet) {
+  return order.hasBook &&
+         !appliedIds.has(order.id) &&
+         !appliedIds.has(order.orderNum) &&
+         !cancelledNumsSet.has(order.orderNum);
+}
+
 function applyAll() {
   const applied = getAllAppliedIds();
   const mem = getScanMemory();
-  const cancelledNums = mem.cancelledNums || [];
-  const toApply = orders.filter(o => o.hasBook && !applied.has(o.id) && !applied.has(o.orderNum) && !cancelledNums.includes(o.orderNum));
+  const cancelledNumsSet = new Set(mem.cancelledNums || []);
+  const toApply = orders.filter(o => isOrderEligibleForApply(o, applied, cancelledNumsSet));
   // Apply the whole batch without rendering, then paint once at the end —
   // turns N full renderOrders()/updateDash() cycles into a single render.
   toApply.forEach(o => applyOne(o.id, { deferRender: true }));
