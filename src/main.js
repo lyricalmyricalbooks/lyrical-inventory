@@ -22186,10 +22186,10 @@ async function sendNextCampaignEmail(subject, body, replyTo, draftId) {
 
     await sendSingleEmailViaBackend(to, subject, personalizedBody, replyTo);
     _campaignSuccessCount++;
-    $('c-send-log-console').innerHTML += `<div style="color:#a9ffaf;">✓ Sent to ${to} (${name})</div>`;
+    $('c-send-log-console').innerHTML += `<div style="color:#a9ffaf;">✓ Sent to ${escapeHtml(to)} (${escapeHtml(name)})</div>`;
   } catch (e) {
     _campaignFailCount++;
-    $('c-send-log-console').innerHTML += `<div style="color:#f87171;" class="campaign-log-fail" data-index="${_campaignSendingIndex}">✕ Failed for ${to}: ${e.message} <button class="btn sm" onclick="retryCampaignEmail(${_campaignSendingIndex})" style="padding:2px 6px;font-size:10px;margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button></div>`;
+    $('c-send-log-console').innerHTML += `<div style="color:#f87171;" class="campaign-log-fail" data-index="${_campaignSendingIndex}">✕ Failed for ${escapeHtml(to)}: ${escapeHtml(e.message)} <button class="btn sm" onclick="retryCampaignEmail(${_campaignSendingIndex})" style="padding:2px 6px;font-size:10px;margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button></div>`;
   }
 
   const consoleEl = $('c-send-log-console');
@@ -22264,7 +22264,7 @@ async function retryCampaignEmail(idx) {
 
   if (targetLine) {
     targetLine.style.color = 'var(--text3)';
-    targetLine.innerHTML = `⏳ Retrying for ${to}...`;
+    targetLine.innerHTML = `⏳ Retrying for ${escapeHtml(to)}...`;
   }
 
   try {
@@ -22284,14 +22284,14 @@ async function retryCampaignEmail(idx) {
     if (targetLine) {
       targetLine.style.color = '#a9ffaf';
       targetLine.className = '';
-      targetLine.innerHTML = `✓ Sent to ${to} (${name}) (Retried)`;
+      targetLine.innerHTML = `✓ Sent to ${escapeHtml(to)} (${escapeHtml(name)}) (Retried)`;
     }
 
     updateCampaignSendFinishedSummary();
   } catch (e) {
     if (targetLine) {
       targetLine.style.color = '#f87171';
-      targetLine.innerHTML = `✕ Failed for ${to}: ${e.message} <button class="btn sm" onclick="retryCampaignEmail(${idx})" style="padding:2px 6px;font-size:10px;margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button>`;
+      targetLine.innerHTML = `✕ Failed for ${escapeHtml(to)}: ${escapeHtml(e.message)} <button class="btn sm" onclick="retryCampaignEmail(${idx})" style="padding:2px 6px;font-size:10px;margin-left:8px;line-height:1.2;height:auto;width:auto;display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;cursor:pointer;">Retry</button>`;
     }
   }
 }
