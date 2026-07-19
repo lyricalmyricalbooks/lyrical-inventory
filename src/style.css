@@ -5874,26 +5874,74 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .bc-details-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.25rem;
+  gap: 1rem;
+  margin-top: 15px;
   margin-bottom: 1.5rem;
 }
 .bc-detail-card {
-  background: var(--bg2);
+  background: var(--bg2, #fdfbfa);
   border: 1px solid var(--border);
   border-radius: var(--r2);
-  padding: 1rem 1.25rem;
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02), 0 2px 4px rgba(0,0,0,0.01);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.bc-detail-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.04), 0 2px 6px rgba(0,0,0,0.02);
+  border-color: var(--gold-line);
 }
 .bc-detail-label {
-  font-size: 0.75rem;
+  font-size: 0.68rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text3);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .bc-detail-val {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--text);
+  word-break: break-all;
+  line-height: 1.35;
+}
+.plan-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+.plan-badge.platinum {
+  background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+  color: #334155;
+  border: 1px solid #94a3b8;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.plan-badge.gold {
+  background: linear-gradient(135deg, #fef08a, #facc15);
+  color: #713f12;
+  border: 1px solid #ca8a04;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.plan-badge.diamond {
+  background: linear-gradient(135deg, #e0f2fe, #38bdf8);
+  color: #0369a1;
+  border: 1px solid #0284c7;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.plan-badge.individual, .plan-badge.standard, .plan-badge.free {
+  background: linear-gradient(135deg, var(--bg2), var(--border));
+  color: var(--text2);
+  border: 1px solid var(--border);
 }
 .bc-connection-status {
   display: flex;

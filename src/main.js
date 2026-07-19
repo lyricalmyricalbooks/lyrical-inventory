@@ -26303,7 +26303,9 @@ function renderBigCartelStoreDetails(store) {
   if (!store) return;
   $('bc-store-card').style.display = 'block';
   $('bc-store-name').textContent = store.attributes.store_name || store.attributes.subdomain;
-  $('bc-store-plan').textContent = store.relationships?.plan?.data?.id || 'Platinum';
+  const planName = store.relationships?.plan?.data?.id || 'Platinum';
+  const planClass = planName.toLowerCase();
+  $('bc-store-plan').innerHTML = `<span class="plan-badge ${planClass}">${planName}</span>`;
   $('bc-store-currency').textContent = store.relationships?.currency?.data?.id || 'CAD';
   $('bc-store-email').textContent = store.attributes.contact_email || '—';
 
