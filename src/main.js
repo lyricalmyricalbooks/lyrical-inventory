@@ -25350,17 +25350,68 @@ ${margin.toFixed(2)} CAD</td>
     explanationText = `Using fixed Canada Post flat-rates. Risk profiles and statistical percentiles are inactive when not using blended history.`;
   }
 
+  const sandboxHtml = `
+    <section class="shipping-reco-container" style="background:var(--cream2); border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin:0 20px 20px 20px; box-shadow:0 4px 15px rgba(0,0,0,0.02);">
+      <h3 style="font-family:'Playfair Display',serif; font-size:18px; color:var(--text); margin:0 0 6px; font-weight:700;">
+        🧪 Live Rate Simulation Sandbox
+      </h3>
+      <p style="font-size:12px; color:var(--text3); margin:0 0 16px; line-height:1.5;">
+        Test how your current and recommended shipping rates perform against actual weight calculations and estimated postage costs.
+      </p>
+
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; align-items:start;">
+        <!-- Controls -->
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Select Book</label>
+            <select id="sim-book-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+              ${bookOptionsHtml}
+            </select>
+          </div>
+
+          <div style="display:flex; gap:12px;">
+            <div class="form-group" style="flex:1; margin:0;">
+              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Quantity</label>
+              <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+            </div>
+            <div class="form-group" style="flex:1; margin:0;">
+              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Destination</label>
+              <select id="sim-region-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+                <option value="ON">Ontario 🍁</option>
+                <option value="CA">Rest of Canada 🇨🇦</option>
+                <option value="US">United States 🇺🇸</option>
+                <option value="intl">International 🌐</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
+              Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text4);">(optional)</span>
+            </label>
+            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div id="sim-results-panel" style="background:#fff; border:1px solid var(--border); border-radius:var(--r2); padding:16px; min-height:190px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 4px 10px rgba(0,0,0,0.01);">
+          <!-- Will be populated dynamically via updateShippingSimulation() -->
+        </div>
+      </div>
+    </section>
+  `;
+
   const insightsHtml = `
     <details class="shipping-pnl-insights" ${isInsightsOpen ? 'open' : ''} ontoggle="onShipInsightsToggle(this.open)" style="margin-bottom: var(--shipping-pnl-space-4) !important;">
       <summary>
         <span>
           <span class="shipping-pnl-eyebrow">Insights</span>
-          <strong>Explore carrier, destination, and weight patterns</strong>
+          <strong>Smart rate recommendations and live simulation sandbox</strong>
         </span>
         <span class="shipping-pnl-disclosure">Show analysis ▼</span>
       </summary>
 
-      <section class="shipping-reco-container" style="background:#fff; border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin-top:20px; margin-bottom:20px; box-shadow:0 8px 30px rgba(0,0,0,0.04);">
+      <section class="shipping-reco-container" style="background:#fff; border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin:20px; box-shadow:0 8px 30px rgba(0,0,0,0.04);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
           <div>
             <h3 style="font-family:'Playfair Display',serif; font-size:20px; color:var(--text); margin:0; display:flex; align-items:center; gap:8px; font-weight:700;">
@@ -25414,6 +25465,7 @@ ${margin.toFixed(2)} CAD</td>
         </div>
       </section>
 
+      ${sandboxHtml}
     </details>
   `;
 
@@ -25436,62 +25488,10 @@ ${margin.toFixed(2)} CAD</td>
     </div>
   `;
 
-  const sandboxHtml = `
-    <section class="shipping-reco-container" style="background:var(--cream2); border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin-bottom: var(--shipping-pnl-space-4) !important; box-shadow:0 4px 15px rgba(0,0,0,0.02);">
-      <h3 style="font-family:'Playfair Display',serif; font-size:18px; color:var(--text); margin:0 0 6px; font-weight:700;">
-        🧪 Live Rate Simulation Sandbox
-      </h3>
-      <p style="font-size:12px; color:var(--text3); margin:0 0 16px; line-height:1.5;">
-        Test how your current and recommended shipping rates perform against actual weight calculations and estimated postage costs.
-      </p>
-
-      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px; align-items:start;">
-        <!-- Controls -->
-        <div style="display:flex; flex-direction:column; gap:12px;">
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Select Book</label>
-            <select id="sim-book-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
-              ${bookOptionsHtml}
-            </select>
-          </div>
-
-          <div style="display:flex; gap:12px;">
-            <div class="form-group" style="flex:1; margin:0;">
-              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Quantity</label>
-              <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
-            </div>
-            <div class="form-group" style="flex:1; margin:0;">
-              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Destination</label>
-              <select id="sim-region-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
-                <option value="ON">Ontario 🍁</option>
-                <option value="CA">Rest of Canada 🇨🇦</option>
-                <option value="US">United States 🇺🇸</option>
-                <option value="intl">International 🌐</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
-              Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text4);">(optional)</span>
-            </label>
-            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
-          </div>
-        </div>
-
-        <!-- Results -->
-        <div id="sim-results-panel" style="background:#fff; border:1px solid var(--border); border-radius:var(--r2); padding:16px; min-height:190px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 4px 10px rgba(0,0,0,0.01);">
-          <!-- Will be populated dynamically via updateShippingSimulation() -->
-        </div>
-      </div>
-    </section>
-  `;
-
   hub.innerHTML = `
     ${pnlHtml}
     ${insightsHtml}
     ${statsHtml}
-    ${sandboxHtml}
     <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
       <header class="shipping-pnl-section-header">
         <div>
