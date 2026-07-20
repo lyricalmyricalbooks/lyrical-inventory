@@ -26348,10 +26348,13 @@ async function loadBigCartelData() {
   } catch (e) {
     console.error('Error loading Big Cartel data:', e);
     showToast('Failed to load Big Cartel data: ' + e.message, 'err');
+    const msg = e.message === 'Failed to fetch'
+      ? 'CORS error: Check Big Cartel API or browser extensions.'
+      : e.message;
     if (activeBigCartelSubTab === 'products') {
-      container.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--red);">Failed to load products: ${e.message}</div>`;
+      container.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--red);">Failed to load products: ${escapeHtml(msg)}</div>`;
     } else {
-      list.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--red);">Failed to load orders: ${e.message}</td></tr>`;
+      list.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--red);">Failed to load orders: ${escapeHtml(msg)}</td></tr>`;
     }
   }
 }
