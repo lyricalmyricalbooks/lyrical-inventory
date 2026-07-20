@@ -22792,7 +22792,7 @@ function setupGate(errMsg) {
   const desc = document.getElementById('gate-desc');
   if (desc) {
     desc.style.display = errMsg ? 'block' : 'none';
-    desc.innerHTML = errMsg ? `<span style="color:var(--red);font-weight:600;">${errMsg}</span>` : '';
+    desc.innerHTML = errMsg ? `<span style="color:var(--red);font-weight:600;">${escapeHtml(errMsg)}</span>` : '';
   }
 }
 
