@@ -23765,13 +23765,13 @@ async function calculateShippoRates() {
       let errMsg = `Shippo API Error ${resp.status}`;
       if (errData) {
         if (typeof errData === 'string') {
-          errMsg += `: ${errData}`;
+          errMsg += `: ${escapeHtml(errData)}`;
         } else if (Array.isArray(errData)) {
-          errMsg += `: ${errData.join(', ')}`;
+          errMsg += `: ${escapeHtml(errData.join(', '))}`;
         } else {
           const errors = [];
           for (const [key, val] of Object.entries(errData)) {
-            errors.push(`${key}: ${Array.isArray(val) ? val.join(', ') : JSON.stringify(val)}`);
+            errors.push(`${escapeHtml(key)}: ${escapeHtml(Array.isArray(val) ? val.join(', ') : JSON.stringify(val))}`);
           }
           errMsg += `<br><span style="font-size:12px; font-weight:normal; display:block; margin-top:8px;">${errors.join('<br>')}</span>`;
         }
