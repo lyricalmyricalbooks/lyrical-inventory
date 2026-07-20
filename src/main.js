@@ -24464,53 +24464,8 @@ function applySmartShippingRates(region, base, addon) {
 }
 
 
-function renderShippingAnalysisHub() {
-  const hub = $('ship-analysis-hub');
-  if (!hub) return;
 
-  const isPub = !isAuthor();
-
-  // 1. Gather all website orders matching the selected analysis book filter
-  const allOrders = [];
-  Object.keys(states).forEach(bookId => {
-    if (shipAnalysisBookFilter === 'all' || bookId === shipAnalysisBookFilter) {
-      const s = states[bookId];
-      if (s && Array.isArray(s.hist)) {
-        s.hist.forEach(h => {
-          if (h && h.chan === 'Website' && !h.voided) {
-            const dateMs = h.date ? new Date(h.date).getTime() : 0;
-            allOrders.push({ ...h, bookId, _dateMs: dateMs });
-          }
-        });
-      }
-    }
-  });
-
-  allOrders.sort((a, b) => b._dateMs - a._dateMs);
-
-  // 2. Gather all Shippo postage expenses matching the selected analysis book filter
-  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
-  const relevantExpenses = (shipAnalysisBookFilter === 'all')
-    ? shippoExpenses
-    : shippoExpenses.filter(e => {
-      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
-      return num && allOrders.some(o => normalizeShippingOrderNumber(o.num) === num);
-    });
-
-  // Build the book filter dropdown options
-  let bookFilterOptions = `<option value="all" ${shipAnalysisBookFilter === 'all' ? 'selected' : ''}>— All Books —</option>`;
-  BOOK_LIST.forEach(b => {
-    bookFilterOptions += `<option value="${b.id}" ${shipAnalysisBookFilter === b.id ? 'selected' : ''}>${escapeHtml(b.title)}</option>`;
-  });
-
-  let marginFilterOptions = `
-    <option value="all" ${shipAnalysisMarginFilter === 'all' ? 'selected' : ''}>— All Margins —</option>
-    <option value="loss" ${shipAnalysisMarginFilter === 'loss' ? 'selected' : ''}>Undercharged (Losses)</option>
-    <option value="profit" ${shipAnalysisMarginFilter === 'profit' ? 'selected' : ''}>Profitable</option>
-    <option value="missing" ${shipAnalysisMarginFilter === 'missing' ? 'selected' : ''}>Missing Cust. Paid</option>
-    <option value="dismissed" ${shipAnalysisMarginFilter === 'dismissed' ? 'selected' : ''}>Dismissed / Hidden</option>
-  `;
-
+function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookFilterOptions, marginFilterOptions, isPub) {
   // ── 1. Calculate P&L KPIs (Publisher view only) ──
   let pnlHtml = '';
 
@@ -24719,6 +24674,11 @@ function renderShippingAnalysisHub() {
     `;
   }
 
+
+  return pnlHtml;
+}
+
+function buildShippingCarrierScorecardHtml(allOrders, relevantExpenses) {
   // ── 2. Carrier Efficiency Scorecard ──
   const carrierStats = {};
   
@@ -24796,6 +24756,11 @@ function renderShippingAnalysisHub() {
     `
     : `<div class="empty-state" style="padding:1rem;">No carrier data logged.</div>`;
 
+
+  return carrierTableHtml;
+}
+
+function buildShippingRegionSplitHtml(allOrders, shippoExpenses) {
   // ── 3. Domestic vs. International Margin Split ──
   let caCount = 0, caRevenue = 0, caCost = 0;
   let usCount = 0, usRevenue = 0, usCost = 0;
@@ -24888,6 +24853,11 @@ function renderShippingAnalysisHub() {
     </table>
   `;
 
+
+  return splitTableHtml;
+}
+
+function buildShippingWeightBandHtml(allOrders, shippoExpenses) {
   // ── 4. Package Weight Band Cost Average ──
   const weightBands = {
     'Under 0.5 kg': { count: 0, totalCost: 0, totalRevenue: 0 },
@@ -24964,6 +24934,11 @@ ${margin.toFixed(2)} CAD</td>
     </table>
   `;
 
+
+  return weightTableHtml;
+}
+
+function buildShippingLedgerHtml(allOrders, shippoExpenses) {
   // ── 5. Side-by-Side Shipping Ledger Pagination ──
   // Apply all interactive filters before pagination
   const filteredLedgerOrders = allOrders.filter(o => {
@@ -25276,6 +25251,11 @@ ${margin.toFixed(2)} CAD</td>
     `;
   }
 
+
+  return { ledgerTableHtml, activeFiltersBannerHtml };
+}
+
+function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, splitTableHtml, weightTableHtml) {
   // Calculate smart shipping rate recommendations
   const s = getState();
   const book = getBook();
@@ -25544,6 +25524,64 @@ ${margin.toFixed(2)} CAD</td>
       </div>
     </div>
   `;
+
+
+  return { insightsHtml, statsHtml };
+}
+function renderShippingAnalysisHub() {
+  const hub = $('ship-analysis-hub');
+  if (!hub) return;
+
+  const isPub = !isAuthor();
+
+  // 1. Gather all website orders matching the selected analysis book filter
+  const allOrders = [];
+  Object.keys(states).forEach(bookId => {
+    if (shipAnalysisBookFilter === 'all' || bookId === shipAnalysisBookFilter) {
+      const s = states[bookId];
+      if (s && Array.isArray(s.hist)) {
+        s.hist.forEach(h => {
+          if (h && h.chan === 'Website' && !h.voided) {
+            const dateMs = h.date ? new Date(h.date).getTime() : 0;
+            allOrders.push({ ...h, bookId, _dateMs: dateMs });
+          }
+        });
+      }
+    }
+  });
+
+  allOrders.sort((a, b) => b._dateMs - a._dateMs);
+
+  // 2. Gather all Shippo postage expenses matching the selected analysis book filter
+  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
+  const relevantExpenses = (shipAnalysisBookFilter === 'all')
+    ? shippoExpenses
+    : shippoExpenses.filter(e => {
+      const num = normalizeShippingOrderNumber(e.shippingOrderNumber);
+      return num && allOrders.some(o => normalizeShippingOrderNumber(o.num) === num);
+    });
+
+  // Build the book filter dropdown options
+  let bookFilterOptions = `<option value="all" ${shipAnalysisBookFilter === 'all' ? 'selected' : ''}>— All Books —</option>`;
+  BOOK_LIST.forEach(b => {
+    bookFilterOptions += `<option value="${b.id}" ${shipAnalysisBookFilter === b.id ? 'selected' : ''}>${escapeHtml(b.title)}</option>`;
+  });
+
+  let marginFilterOptions = `
+    <option value="all" ${shipAnalysisMarginFilter === 'all' ? 'selected' : ''}>— All Margins —</option>
+    <option value="loss" ${shipAnalysisMarginFilter === 'loss' ? 'selected' : ''}>Undercharged (Losses)</option>
+    <option value="profit" ${shipAnalysisMarginFilter === 'profit' ? 'selected' : ''}>Profitable</option>
+    <option value="missing" ${shipAnalysisMarginFilter === 'missing' ? 'selected' : ''}>Missing Cust. Paid</option>
+    <option value="dismissed" ${shipAnalysisMarginFilter === 'dismissed' ? 'selected' : ''}>Dismissed / Hidden</option>
+  `;
+
+
+  const pnlHtml = buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookFilterOptions, marginFilterOptions, isPub);
+  const carrierTableHtml = buildShippingCarrierScorecardHtml(allOrders, relevantExpenses);
+  const splitTableHtml = buildShippingRegionSplitHtml(allOrders, shippoExpenses);
+  const weightTableHtml = buildShippingWeightBandHtml(allOrders, shippoExpenses);
+  const { ledgerTableHtml, activeFiltersBannerHtml } = buildShippingLedgerHtml(allOrders, shippoExpenses);
+  const { insightsHtml, statsHtml } = buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, splitTableHtml, weightTableHtml);
 
   hub.innerHTML = `
     ${pnlHtml}
