@@ -4040,79 +4040,11 @@ async function executeOcBulkRemove() {
   showToast(`Successfully removed ${selectedIds.length} contributor${selectedIds.length !== 1 ? 's' : ''}`);
 }
 
-function renderOpenCall() {
-  const body = $('opencall-body');
-  if (!body) return;
 
-  if (ocBlockedForAuthor_()) { body.innerHTML = ''; return; }
+// --- Extracted UI Component Helpers for renderOpenCall ---
 
-  const bc = $('book-context-oc');
-  if (bc) bc.style.display = 'none';
-
-  if (!OPENCALL_DATA.activeProjectId || !OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId]) {
-    const keys = Object.keys(OPENCALL_DATA.projects);
-    if (keys.length > 0) {
-      OPENCALL_DATA.activeProjectId = keys[0];
-    } else {
-      OPENCALL_DATA.projects['default'] = {
-        id: 'default',
-        title: 'General Open Call',
-        createdAt: today(),
-        contributors: []
-      };
-      OPENCALL_DATA.activeProjectId = 'default';
-    }
-  }
-
-  const listRaw = ocList();
-
-  let list = listRaw;
-
-  // Filtering (including Completed view)
-  if (ocFilterStage === 'complete') {
-    list = list.filter(c => OC_STAGES.every(st => c[st.key]));
-  } else if (ocFilterStage) {
-    list = list.filter(c => {
-      const next = OC_STAGES.find(st => !c[st.key]);
-      return next && next.key === ocFilterStage;
-    });
-  }
-
-  if (ocSearchQuery.trim()) {
-    const q = ocSearchQuery.toLowerCase().trim();
-    list = list.filter(c =>
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.email || '').toLowerCase().includes(q) ||
-      (c.photo || '').toLowerCase().includes(q)
-    );
-  }
-
-  // Sorting (Suggestion 1)
-  list.sort((a, b) => {
-    if (ocSortBy === 'nameAsc') {
-      return (a.name || '').localeCompare(b.name || '');
-    } else if (ocSortBy === 'nameDesc') {
-      return (b.name || '').localeCompare(a.name || '');
-    } else if (ocSortBy === 'dateAsc') {
-      return (a.createdAt || '').localeCompare(b.createdAt || '');
-    } else if (ocSortBy === 'dateDesc') {
-      return (b.createdAt || '').localeCompare(a.createdAt || '');
-    } else if (ocSortBy === 'progressDesc' || ocSortBy === 'progressAsc') {
-      const getProgress = (c) => OC_STAGES.filter(st => c[st.key]).length;
-      return ocSortBy === 'progressDesc' ? getProgress(b) - getProgress(a) : getProgress(a) - getProgress(b);
-    }
-    return 0;
-  });
-
-  const total = listRaw.length;
-  const done = listRaw.filter(c => OC_STAGES.every(st => c[st.key])).length;
-
-  const projectOptions = Object.keys(OPENCALL_DATA.projects).map(id => {
-    const proj = OPENCALL_DATA.projects[id];
-    return `<option value="${id}" ${id === OPENCALL_DATA.activeProjectId ? 'selected' : ''}>${escapeHtml(proj.title)}</option>`;
-  }).join('');
-
-  const projectSwitcher = `
+function _renderOcProjectSwitcher(projectOptions, _activeProjectId) {
+  return `
     <div class="card oc-project-card">
       <div class="oc-project-header">
         <span class="oc-project-icon">📣</span>
@@ -4127,51 +4059,10 @@ function renderOpenCall() {
         <button class="btn sm danger-btn" onclick="ocDeleteProject()">✕ Delete</button>
       </div>
     </div>`;
+}
 
-  const stageCounts = OC_STAGES.map(st => {
-    const n = listRaw.filter(c => c[st.key]).length;
-    const isDone = n === total && total > 0;
-    return `<span class="oc-stage-pill ${isDone ? 'done' : ''}" title="${st.label}">${st.label}: <strong>${n}/${total}</strong></span>`;
-  }).join('');
-
-  const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
-  if (activeProj) ocEnsureQueues_(activeProj);
-  const inboxCount = activeProj ? activeProj.inbox.length : 0;
-  const outboxCount = activeProj ? activeProj.outbox.length : 0;
-  const lastScannedVal = activeProj ? activeProj.lastScanned : null;
-  const lastScannedHtml = lastScannedVal
-    ? `<div class="oc-last-scanned">Last scanned: ${formatDateTime(lastScannedVal)}</div>`
-    : '';
-
-  // Project Progress Bar
-  const pct = total ? Math.round((done / total) * 100) : 0;
-  const progressBarHtml = total ? `
-    <div class="oc-progress-wrap">
-      <div class="row-between oc-progress-label">
-        <span>Project Progress</span>
-        <strong>${pct}% (${done}/${total} complete)</strong>
-      </div>
-      <div class="oc-progress-track">
-        <div class="oc-progress-fill" style="width:${pct}%;"></div>
-      </div>
-    </div>` : '';
-
-  // Server-side auto-scan control. The Apps Script runs the reply scan on a
-  // timer even when this app is closed; findings land in the Review inbox.
-  const sched = _ocScheduleCache();
-  const scheduleRowHtml = `
-    <div class="oc-sched-row" title="Runs the Gmail reply scan on Google's servers on a timer — findings wait in “Review scan results”, and the digest emails you a summary. Works even when this app is closed. Requires the latest Apps Script deployed.">
-      <span class="oc-sched-label">⏱ Auto-scan (server)</span>
-      <select id="oc-sched-interval" onchange="ocSetServerSchedule()" ${sheetsUrl ? '' : 'disabled'}>
-        <option value="0" ${!sched.enabled ? 'selected' : ''}>Off</option>
-        <option value="30" ${sched.enabled && sched.minutes === 30 ? 'selected' : ''}>Every 30 min</option>
-        <option value="60" ${sched.enabled && sched.minutes === 60 ? 'selected' : ''}>Every hour</option>
-      </select>
-      <label class="oc-sched-digest"><input type="checkbox" id="oc-sched-digest" ${sched.digest ? 'checked' : ''} ${sheetsUrl ? '' : 'disabled'} onchange="ocSetServerSchedule()"> Email digest</label>
-      <span id="oc-sched-status" class="oc-sched-status">${sched.enabled ? '● on' : ''}</span>
-    </div>`;
-
-  const summary = `
+function _renderOcSummaryCard(total, stageCounts, progressBarHtml, scheduleRowHtml, lastScannedHtml) {
+  return `
     <div class="card oc-summary-card">
       <div class="oc-section-title">Contributors · ${total}</div>
       <div class="oc-scan-controls">
@@ -4190,35 +4081,10 @@ function renderOpenCall() {
       ${scheduleRowHtml}
       ${lastScannedHtml}
     </div>`;
+}
 
-  // Initialize templates if not present
-  if (activeProj && !activeProj.templates) {
-    activeProj.templates = {
-      selectionSent: {
-        subject: `[Selected] Lyricalmyrical Collective Open Call`,
-        body: `Hi {{name}},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`
-      },
-      cmykSent: {
-        subject: `[Files Requested] Lyricalmyrical Open Call - ${activeProj.title}`,
-        body: `Hi {{name}},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`
-      },
-      preorderSent: {
-        subject: `[Pre-orders Open] Lyricalmyrical Collective Project - ${activeProj.title}`,
-        body: `Hi {{name}},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`
-      }
-    };
-  }
-
-  // Templates Editor Panel
-  let initialHtml = '';
-  if (activeProj && activeProj.templates && activeProj.templates[activeTmplTab]) {
-    const rawBody = activeProj.templates[activeTmplTab].body || '';
-    const cleanHtml = (rawBody.includes('<') || !rawBody) ? rawBody : parseMarkdownToHtml(rawBody);
-    initialHtml = deserializeHtmlToEditor(cleanHtml);
-  }
-
-  const tmplOpen = ocUiOpen_('tmpl', false);
-  const templatesEditor = activeProj ? `
+function _renderOcTemplatesEditor(activeProj, tmplOpen, activeTmplTab, initialHtml) {
+  return activeProj ? `
     <div class="card oc-collapse-card ${tmplOpen ? 'open' : ''}" style="margin-top:0;padding:20px;">
       <div class="row-between oc-collapse-head" onclick="if (event.target.closest('button')) return; ocToggleSection('tmpl')" style="${tmplOpen ? 'border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:15px;' : ''}flex-wrap:wrap;gap:8px;">
         <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--gold2);">✉ Email Template Designer</div>
@@ -4299,12 +4165,15 @@ function renderOpenCall() {
         <div class="oc-preview-box" style="align-self:stretch;display:flex;flex-direction:column;">
           <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);border-bottom:1px solid var(--cream3);padding-bottom:6px;margin-bottom:8px;font-weight:700;">Live Preview (Sample)</div>
           <div style="font-size:13.5px;font-weight:700;margin-bottom:8px;color:var(--text);" id="oc-preview-subject">—</div>
-          <div style="font-size:13px;color:var(--text2);line-height:1.6;font-family:inherit;flex:1;overflow-y:auto;" id="oc-preview-body">—</div>
+          <div style="flex:1;background:#fff;border-radius:4px;border:1px solid #e2e8f0;padding:15px;color:#1a1a1a;font-family:'Courier New',Courier,monospace;font-size:13px;line-height:1.6;overflow-y:auto;" id="oc-preview-body"></div>
         </div>
       </div>
     </div>` : '';
+}
 
-  const searchFilterBar = `
+
+function _renderOcSearchFilterBar(total, listLength, ocSearchQuery, ocFilterStage, ocSortBy) {
+  return `
     <div class="card" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:12px;">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex:1;">
@@ -4336,8 +4205,312 @@ function renderOpenCall() {
           <button class="btn" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'} title="Export all contributors to CSV">📤 Export CSV</button>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text3);">${total} contributor${total === 1 ? '' : 's'} total · ${list.length} shown</div>
+      <div style="font-size:11px;color:var(--text3);">${total} contributor${total === 1 ? '' : 's'} total · ${listLength} shown</div>
     </div>`;
+}
+
+function _renderOcAddForm(ocImportOpen, importPanel, chipsHtml) {
+  return `
+    <div class="card oc-add-form-card" style="margin-bottom:0;">
+      <div class="oc-add-form-header">
+        <div class="oc-section-title" style="margin-bottom:0;">Add contributor</div>
+        <button class="btn sm" onclick="ocToggleImport()">${ocImportOpen ? 'Close import' : '⬇ Paste / import list'}</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <input id="oc-name" placeholder="Artist name">
+        <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
+          <input id="oc-email" placeholder="Email" type="email" oninput="checkOcEmailTypo(this.value)">
+          <div id="oc-add-email-correction" class="email-suggest-correction" style="display:none;" onclick="applyOcEmailCorrection()"></div>
+        </div>
+        <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;gap:6px;width:100%;">
+            <input id="oc-photo" placeholder="Photo file name (Enter to add)" style="flex:1;" onkeydown="handleOcPhotoKeydown(event)">
+            <button class="btn sm gold" onclick="addOcPhotoChip()" style="padding:0 12px;height:38px;margin:0;">＋</button>
+          </div>
+          <div id="oc-photo-chips" class="oc-addform-chips">${chipsHtml}</div>
+        </div>
+        <button class="btn gold" onclick="ocAdd()">Add Contributor</button>
+      </div>
+      ${importPanel}
+    </div>`;
+}
+
+function _renderOcResendConfigCard(useResend, resendOpen) {
+  return `
+    <div class="card oc-resend-card oc-collapse-card ${resendOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
+      <div class="oc-collapse-head" onclick="ocToggleSection('resend')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);display:flex;justify-content:space-between;align-items:center;">
+        <span>⚡ Resend API Email</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span class="oc-collapse-status">${useResend ? 'on' : 'off'}</span>
+          <input type="checkbox" id="oc-use-resend" onclick="event.stopPropagation()" onchange="ocToggleResend(this.checked)" ${useResend ? 'checked' : ''} style="cursor:pointer;margin:0;">
+          <span class="oc-collapse-chevron">${resendOpen ? '▾' : '▸'}</span>
+        </span>
+      </div>
+      <div id="oc-resend-fields" style="display:${resendOpen && useResend ? 'flex' : 'none'};flex-direction:column;gap:8px;">
+        <div>
+          <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Resend API Key</label>
+          <input id="oc-resend-key" type="password" placeholder="re_..." value="${escapeHtml(localStorage.getItem('lm-resend-api-key') || '')}" oninput="ocSaveResendConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        </div>
+        <div>
+          <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Sender Email (Verified)</label>
+          <input id="oc-resend-from" type="email" placeholder="e.g. hello@yourdomain.com" value="${escapeHtml(localStorage.getItem('lm-resend-from') || '')}" oninput="ocSaveResendConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        </div>
+        <div style="font-size:10px;color:var(--text3);line-height:1.3;">
+          Local development only: sends through the Node backend at localhost:8787. On the live site, configure Resend in Google Apps Script properties and keep your key off the browser.
+        </div>
+      </div>
+    </div>`;
+}
+
+function _renderOcSenderConfigCard(senderOpen, ocFromAlias, ocFromName, ocAliasCache, sheetsUrl) {
+  return `
+    <div class="card oc-collapse-card ${senderOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
+      <div class="oc-collapse-head" onclick="ocToggleSection('sender')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);display:flex;justify-content:space-between;align-items:center;">
+        <span>✉ Open Call Sender</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span class="oc-collapse-status">${escapeHtml(ocFromAlias || 'your Gmail')}</span>
+          <span class="oc-collapse-chevron">${senderOpen ? '▾' : '▸'}</span>
+        </span>
+      </div>
+      <div class="oc-collapse-body" style="display:${senderOpen ? 'flex' : 'none'};flex-direction:column;gap:8px;">
+      <div>
+        <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Send emails as</label>
+        <input id="oc-from-alias" list="oc-alias-options" placeholder="default: your Gmail" value="${escapeHtml(ocFromAlias)}" oninput="ocSaveSenderConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        <datalist id="oc-alias-options">${ocAliasCache.map(a => `<option value="${escapeHtml(a)}"></option>`).join('')}</datalist>
+      </div>
+      <div>
+        <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Display name (optional)</label>
+        <input id="oc-from-name" placeholder="e.g. Lyricalmyrical Books" value="${escapeHtml(ocFromName)}" oninput="ocSaveSenderConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+      </div>
+      <button class="btn sm" onclick="ocLoadSenderAliases()" ${sheetsUrl ? '' : 'disabled'}>↻ Load my Gmail aliases</button>
+      <div style="font-size:10px;color:var(--text3);line-height:1.3;">
+        Must be a verified Gmail “Send mail as” alias (Gmail → Settings → Accounts). Sending from your own domain keeps SPF/DKIM valid — fewer emails bounce or land in spam — and replies still thread. Leave blank to send from your Gmail.
+      </div>
+      </div>
+    </div>`;
+}
+
+function _renderOcHero(total, inboxCount, outboxCount, pct) {
+  const heroStatsHtml = total ? `
+        <div class="oc-hero-stats">
+          <div class="oc-hero-stat">
+            <div class="oc-hero-stat-num">${total}</div>
+            <div class="oc-hero-stat-label">Contributors</div>
+          </div>
+          <div class="oc-hero-stat ${inboxCount ? 'alert action' : 'dim'}" ${inboxCount ? `onclick="document.querySelector('.oc-inbox-card')?.scrollIntoView({behavior:'smooth'})" title="Scan findings waiting for your approval — click to review"` : 'title="No scan findings waiting"'}>
+            <div class="oc-hero-stat-num">${inboxCount}</div>
+            <div class="oc-hero-stat-label">To review</div>
+          </div>
+          <div class="oc-hero-stat ${outboxCount ? 'ready action' : 'dim'}" ${outboxCount ? `onclick="document.querySelector('.oc-outbox-card')?.scrollIntoView({behavior:'smooth'})" title="Next-stage emails queued — click to send"` : 'title="No emails queued"'}>
+            <div class="oc-hero-stat-num">${outboxCount}</div>
+            <div class="oc-hero-stat-label">Ready to send</div>
+          </div>
+          <div class="oc-hero-stat">
+            <div class="oc-hero-stat-num">${pct}%</div>
+            <div class="oc-hero-stat-label">Complete</div>
+          </div>
+        </div>` : '';
+  return `
+    <div class="oc-hero">
+      <div class="oc-hero-text">
+        <div class="oc-hero-title"><span class="header-mark">✦</span>Open Call</div>
+        <div class="oc-hero-subtitle">Guide selected contributors from first notice through pre-order — one premium pipeline.</div>
+      </div>
+      ${heroStatsHtml}
+    </div>`;
+}
+
+function _renderOcFunnel(total, funnelCounts, done, ocFilterStage) {
+  const funnelSeg = (key, label, n, idx) => `
+        <button class="oc-funnel-seg ${ocFilterStage === key ? 'active' : ''} ${n ? '' : 'empty'} ${key === 'complete' ? 'complete' : ''}"
+          onclick="ocFilterByStage('${ocFilterStage === key ? '' : key}')"
+          title="${key === 'complete' ? 'Artists with every stage done' : `Artists whose next step is “${label}”`} — click to ${ocFilterStage === key ? 'clear the filter' : 'filter the list'}">
+          <span class="oc-funnel-num">${n}</span>
+          <span class="oc-funnel-label">${idx}${label}</span>
+          <span class="oc-funnel-bar"><span style="width:${total ? Math.max(n ? 6 : 0, Math.round(n / total * 100)) : 0}%"></span></span>
+        </button>`;
+  return total ? `
+    <div class="card oc-funnel-card">
+      <div class="oc-funnel">
+        ${funnelCounts.map((f, i) => funnelSeg(f.key, f.label, f.n, `${i + 1} · `)).join('')}
+        ${funnelSeg('complete', 'Complete', done, '✓ ')}
+      </div>
+    </div>` : '';
+}
+
+function _renderOcInboxCard(inboxItems, inboxRows) {
+  return inboxItems.length ? `
+    <div class="card oc-queue-card oc-inbox-card">
+      <div class="row-between" style="flex-wrap:wrap;gap:8px;">
+        <div class="oc-section-title" style="margin:0;">📥 Review scan results · ${inboxItems.length}</div>
+        <button class="btn sm gold" onclick="ocApproveAllProposals()">✓ Approve all</button>
+      </div>
+      <div class="oc-queue-note">Gmail scans propose updates here — nothing changes on a contributor until you approve it.</div>
+      ${inboxRows}
+    </div>` : '';
+}
+
+function _renderOcOutboxCard(outboxItems, outboxRows) {
+  return outboxItems.length ? `
+    <div class="card oc-queue-card oc-outbox-card">
+      <div class="row-between" style="flex-wrap:wrap;gap:8px;">
+        <div class="oc-section-title" style="margin:0;">📤 Ready to send · ${outboxItems.length}</div>
+        <button class="btn sm gold" id="oc-outbox-sendall-btn" onclick="ocOutboxSendAll()">▶ Send all (${outboxItems.length})</button>
+      </div>
+      <div class="oc-queue-note">Queued automatically when a reply comes in — each uses its stage template and replies into the contributor's thread. Nothing sends until you confirm.<span id="oc-outbox-status" class="oc-queue-status"></span></div>
+      ${outboxRows}
+    </div>` : '';
+}
+
+function renderOpenCall() {
+  const body = $('opencall-body');
+  if (!body) return;
+
+  if (ocBlockedForAuthor_()) { body.innerHTML = ''; return; }
+
+  const bc = $('book-context-oc');
+  if (bc) bc.style.display = 'none';
+
+  if (!OPENCALL_DATA.activeProjectId || !OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId]) {
+    const keys = Object.keys(OPENCALL_DATA.projects);
+    if (keys.length > 0) {
+      OPENCALL_DATA.activeProjectId = keys[0];
+    } else {
+      OPENCALL_DATA.projects['default'] = {
+        id: 'default',
+        title: 'General Open Call',
+        createdAt: today(),
+        contributors: []
+      };
+      OPENCALL_DATA.activeProjectId = 'default';
+    }
+  }
+
+  const listRaw = ocList();
+
+  let list = listRaw;
+
+  // Filtering (including Completed view)
+  if (ocFilterStage === 'complete') {
+    list = list.filter(c => OC_STAGES.every(st => c[st.key]));
+  } else if (ocFilterStage) {
+    list = list.filter(c => {
+      const next = OC_STAGES.find(st => !c[st.key]);
+      return next && next.key === ocFilterStage;
+    });
+  }
+
+  if (ocSearchQuery.trim()) {
+    const q = ocSearchQuery.toLowerCase().trim();
+    list = list.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.photo || '').toLowerCase().includes(q)
+    );
+  }
+
+  // Sorting (Suggestion 1)
+  list.sort((a, b) => {
+    if (ocSortBy === 'nameAsc') {
+      return (a.name || '').localeCompare(b.name || '');
+    } else if (ocSortBy === 'nameDesc') {
+      return (b.name || '').localeCompare(a.name || '');
+    } else if (ocSortBy === 'dateAsc') {
+      return (a.createdAt || '').localeCompare(b.createdAt || '');
+    } else if (ocSortBy === 'dateDesc') {
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    } else if (ocSortBy === 'progressDesc' || ocSortBy === 'progressAsc') {
+      const getProgress = (c) => OC_STAGES.filter(st => c[st.key]).length;
+      return ocSortBy === 'progressDesc' ? getProgress(b) - getProgress(a) : getProgress(a) - getProgress(b);
+    }
+    return 0;
+  });
+
+  const total = listRaw.length;
+  const done = listRaw.filter(c => OC_STAGES.every(st => c[st.key])).length;
+
+  const projectOptions = Object.keys(OPENCALL_DATA.projects).map(id => {
+    const proj = OPENCALL_DATA.projects[id];
+    return `<option value="${id}" ${id === OPENCALL_DATA.activeProjectId ? 'selected' : ''}>${escapeHtml(proj.title)}</option>`;
+  }).join('');
+
+  const projectSwitcher = _renderOcProjectSwitcher(projectOptions, OPENCALL_DATA.activeProjectId);
+
+  const stageCounts = OC_STAGES.map(st => {
+    const n = listRaw.filter(c => c[st.key]).length;
+    const isDone = n === total && total > 0;
+    return `<span class="oc-stage-pill ${isDone ? 'done' : ''}" title="${st.label}">${st.label}: <strong>${n}/${total}</strong></span>`;
+  }).join('');
+
+  const activeProj = OPENCALL_DATA.projects[OPENCALL_DATA.activeProjectId];
+  if (activeProj) ocEnsureQueues_(activeProj);
+  const inboxCount = activeProj ? activeProj.inbox.length : 0;
+  const outboxCount = activeProj ? activeProj.outbox.length : 0;
+  const lastScannedVal = activeProj ? activeProj.lastScanned : null;
+  const lastScannedHtml = lastScannedVal
+    ? `<div class="oc-last-scanned">Last scanned: ${formatDateTime(lastScannedVal)}</div>`
+    : '';
+
+  // Project Progress Bar
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const progressBarHtml = total ? `
+    <div class="oc-progress-wrap">
+      <div class="row-between oc-progress-label">
+        <span>Project Progress</span>
+        <strong>${pct}% (${done}/${total} complete)</strong>
+      </div>
+      <div class="oc-progress-track">
+        <div class="oc-progress-fill" style="width:${pct}%;"></div>
+      </div>
+    </div>` : '';
+
+  // Server-side auto-scan control. The Apps Script runs the reply scan on a
+  // timer even when this app is closed; findings land in the Review inbox.
+  const sched = _ocScheduleCache();
+  const scheduleRowHtml = `
+    <div class="oc-sched-row" title="Runs the Gmail reply scan on Google's servers on a timer — findings wait in “Review scan results”, and the digest emails you a summary. Works even when this app is closed. Requires the latest Apps Script deployed.">
+      <span class="oc-sched-label">⏱ Auto-scan (server)</span>
+      <select id="oc-sched-interval" onchange="ocSetServerSchedule()" ${sheetsUrl ? '' : 'disabled'}>
+        <option value="0" ${!sched.enabled ? 'selected' : ''}>Off</option>
+        <option value="30" ${sched.enabled && sched.minutes === 30 ? 'selected' : ''}>Every 30 min</option>
+        <option value="60" ${sched.enabled && sched.minutes === 60 ? 'selected' : ''}>Every hour</option>
+      </select>
+      <label class="oc-sched-digest"><input type="checkbox" id="oc-sched-digest" ${sched.digest ? 'checked' : ''} ${sheetsUrl ? '' : 'disabled'} onchange="ocSetServerSchedule()"> Email digest</label>
+      <span id="oc-sched-status" class="oc-sched-status">${sched.enabled ? '● on' : ''}</span>
+    </div>`;
+
+  const summary = _renderOcSummaryCard(total, stageCounts, progressBarHtml, scheduleRowHtml, lastScannedHtml);
+
+  // Initialize templates if not present
+  if (activeProj && !activeProj.templates) {
+    activeProj.templates = {
+      selectionSent: {
+        subject: `[Selected] Lyricalmyrical Collective Open Call`,
+        body: `Hi {{name}},\n\nCongratulations! Your work has been selected from our open call to be featured in our upcoming project. We're thrilled to include you!\n\nWe are now entering the layout phase and require one initial piece of info:\n1. The exact name you want to use in the credit index.\n\nPlease reply to this email to let us know.\n\nWarm regards,\nLyricalmyrical Books`
+      },
+      cmykSent: {
+        subject: `[Files Requested] Lyricalmyrical Open Call - ${activeProj.title}`,
+        body: `Hi {{name}},\n\nWe are now preparing the print-ready files and require your high-resolution artwork.\n\nPlease send us your files (CMYK profile, 300 DPI, with 3mm bleed) as soon as possible.\n\nThank you again!\n\nWarm regards,\nLyricalmyrical Books`
+      },
+      preorderSent: {
+        subject: `[Pre-orders Open] Lyricalmyrical Collective Project - ${activeProj.title}`,
+        body: `Hi {{name}},\n\nWe are thrilled to announce that pre-orders for the collective project are now officially open!\n\nAs selected contributor, you receive a special 50% discount on any number of copies. Use code LMBCOLLECTIVE at checkout:\nhttps://www.lyricalmyricalbooks.com/product/collective-photobook\n\nThank you for being part of this project!\n\nWarm regards,\nLyricalmyrical Books`
+      }
+    };
+  }
+
+  // Templates Editor Panel
+  let initialHtml = '';
+  if (activeProj && activeProj.templates && activeProj.templates[activeTmplTab]) {
+    const rawBody = activeProj.templates[activeTmplTab].body || '';
+    const cleanHtml = (rawBody.includes('<') || !rawBody) ? rawBody : parseMarkdownToHtml(rawBody);
+    initialHtml = deserializeHtmlToEditor(cleanHtml);
+  }
+
+  const tmplOpen = ocUiOpen_('tmpl', false);
+  const templatesEditor = _renderOcTemplatesEditor(activeProj, tmplOpen, activeTmplTab, initialHtml);
+
+  const searchFilterBar = _renderOcSearchFilterBar(total, list.length, ocSearchQuery, ocFilterStage, ocSortBy);
 
   const importPanel = ocImportOpen ? `
       <div class="oc-import-panel">
@@ -4368,29 +4541,7 @@ function renderOpenCall() {
     </span>
   `).join('');
 
-  const addForm = `
-    <div class="card oc-add-form-card" style="margin-bottom:0;">
-      <div class="oc-add-form-header">
-        <div class="oc-section-title" style="margin-bottom:0;">Add contributor</div>
-        <button class="btn sm" onclick="ocToggleImport()">${ocImportOpen ? 'Close import' : '⬇ Paste / import list'}</button>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <input id="oc-name" placeholder="Artist name">
-        <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
-          <input id="oc-email" placeholder="Email" type="email" oninput="checkOcEmailTypo(this.value)">
-          <div id="oc-add-email-correction" class="email-suggest-correction" style="display:none;" onclick="applyOcEmailCorrection()"></div>
-        </div>
-        <div style="width:100%;display:flex;flex-direction:column;gap:4px;">
-          <div style="display:flex;gap:6px;width:100%;">
-            <input id="oc-photo" placeholder="Photo file name (Enter to add)" style="flex:1;" onkeydown="handleOcPhotoKeydown(event)">
-            <button class="btn sm gold" onclick="addOcPhotoChip()" style="padding:0 12px;height:38px;margin:0;">＋</button>
-          </div>
-          <div id="oc-photo-chips" class="oc-addform-chips">${chipsHtml}</div>
-        </div>
-        <button class="btn gold" onclick="ocAdd()">Add Contributor</button>
-      </div>
-      ${importPanel}
-    </div>`;
+  const addForm = _renderOcAddForm(ocImportOpen, importPanel, chipsHtml);
 
   const cards = list.map(c => {
     const next = ocNextAction(c);
@@ -4583,61 +4734,14 @@ function renderOpenCall() {
 
   const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
   const resendOpen = ocUiOpen_('resend', false);
-  const resendConfigCard = `
-    <div class="card oc-resend-card oc-collapse-card ${resendOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
-      <div class="oc-collapse-head" onclick="ocToggleSection('resend')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);display:flex;justify-content:space-between;align-items:center;">
-        <span>⚡ Resend API Email</span>
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span class="oc-collapse-status">${useResend ? 'on' : 'off'}</span>
-          <input type="checkbox" id="oc-use-resend" onclick="event.stopPropagation()" onchange="ocToggleResend(this.checked)" ${useResend ? 'checked' : ''} style="cursor:pointer;margin:0;">
-          <span class="oc-collapse-chevron">${resendOpen ? '▾' : '▸'}</span>
-        </span>
-      </div>
-      <div id="oc-resend-fields" style="display:${resendOpen && useResend ? 'flex' : 'none'};flex-direction:column;gap:8px;">
-        <div>
-          <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Resend API Key</label>
-          <input id="oc-resend-key" type="password" placeholder="re_..." value="${escapeHtml(localStorage.getItem('lm-resend-api-key') || '')}" oninput="ocSaveResendConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-        </div>
-        <div>
-          <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Sender Email (Verified)</label>
-          <input id="oc-resend-from" type="email" placeholder="e.g. hello@yourdomain.com" value="${escapeHtml(localStorage.getItem('lm-resend-from') || '')}" oninput="ocSaveResendConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-        </div>
-        <div style="font-size:10px;color:var(--text3);line-height:1.3;">
-          Local development only: sends through the Node backend at localhost:8787. On the live site, configure Resend in Google Apps Script properties and keep your key off the browser.
-        </div>
-      </div>
-    </div>`;
+  const resendConfigCard = _renderOcResendConfigCard(useResend, resendOpen);
 
   const ocFromAlias = localStorage.getItem('lm-oc-fromalias') || '';
   const ocFromName = localStorage.getItem('lm-oc-fromname') || '';
   let ocAliasCache = [];
   try { ocAliasCache = JSON.parse(localStorage.getItem('lm-oc-alias-cache') || '[]'); } catch (_) { ocAliasCache = []; }
   const senderOpen = ocUiOpen_('sender', false);
-  const senderConfigCard = `
-    <div class="card oc-collapse-card ${senderOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
-      <div class="oc-collapse-head" onclick="ocToggleSection('sender')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);display:flex;justify-content:space-between;align-items:center;">
-        <span>✉ Open Call Sender</span>
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span class="oc-collapse-status">${escapeHtml(ocFromAlias || 'your Gmail')}</span>
-          <span class="oc-collapse-chevron">${senderOpen ? '▾' : '▸'}</span>
-        </span>
-      </div>
-      <div class="oc-collapse-body" style="display:${senderOpen ? 'flex' : 'none'};flex-direction:column;gap:8px;">
-      <div>
-        <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Send emails as</label>
-        <input id="oc-from-alias" list="oc-alias-options" placeholder="default: your Gmail" value="${escapeHtml(ocFromAlias)}" oninput="ocSaveSenderConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-        <datalist id="oc-alias-options">${ocAliasCache.map(a => `<option value="${escapeHtml(a)}"></option>`).join('')}</datalist>
-      </div>
-      <div>
-        <label style="font-size:9px;color:var(--text3);font-weight:600;display:block;margin-bottom:2px;text-transform:uppercase;">Display name (optional)</label>
-        <input id="oc-from-name" placeholder="e.g. Lyricalmyrical Books" value="${escapeHtml(ocFromName)}" oninput="ocSaveSenderConfig()" style="font-size:11px;padding:6px 10px;width:100%;box-sizing:border-box;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-      </div>
-      <button class="btn sm" onclick="ocLoadSenderAliases()" ${sheetsUrl ? '' : 'disabled'}>↻ Load my Gmail aliases</button>
-      <div style="font-size:10px;color:var(--text3);line-height:1.3;">
-        Must be a verified Gmail “Send mail as” alias (Gmail → Settings → Accounts). Sending from your own domain keeps SPF/DKIM valid — fewer emails bounce or land in spam — and replies still thread. Leave blank to send from your Gmail.
-      </div>
-      </div>
-    </div>`;
+  const senderConfigCard = _renderOcSenderConfigCard(senderOpen, ocFromAlias, ocFromName, ocAliasCache, sheetsUrl);
 
   const sidebarHtml = `
     <div class="oc-sidebar">
@@ -4650,33 +4754,7 @@ function renderOpenCall() {
 
   // Section hero — Playfair title, one-line subtitle, and *actionable* stats:
   // the two queue counts jump straight to their cards when clicked.
-  const heroStatsHtml = total ? `
-        <div class="oc-hero-stats">
-          <div class="oc-hero-stat">
-            <div class="oc-hero-stat-num">${total}</div>
-            <div class="oc-hero-stat-label">Contributors</div>
-          </div>
-          <div class="oc-hero-stat ${inboxCount ? 'alert action' : 'dim'}" ${inboxCount ? `onclick="document.querySelector('.oc-inbox-card')?.scrollIntoView({behavior:'smooth'})" title="Scan findings waiting for your approval — click to review"` : 'title="No scan findings waiting"'}>
-            <div class="oc-hero-stat-num">${inboxCount}</div>
-            <div class="oc-hero-stat-label">To review</div>
-          </div>
-          <div class="oc-hero-stat ${outboxCount ? 'ready action' : 'dim'}" ${outboxCount ? `onclick="document.querySelector('.oc-outbox-card')?.scrollIntoView({behavior:'smooth'})" title="Next-stage emails queued — click to send"` : 'title="No emails queued"'}>
-            <div class="oc-hero-stat-num">${outboxCount}</div>
-            <div class="oc-hero-stat-label">Ready to send</div>
-          </div>
-          <div class="oc-hero-stat">
-            <div class="oc-hero-stat-num">${pct}%</div>
-            <div class="oc-hero-stat-label">Complete</div>
-          </div>
-        </div>` : '';
-  const heroHtml = `
-    <div class="oc-hero">
-      <div class="oc-hero-text">
-        <div class="oc-hero-title"><span class="header-mark">✦</span>Open Call</div>
-        <div class="oc-hero-subtitle">Guide selected contributors from first notice through pre-order — one premium pipeline.</div>
-      </div>
-      ${heroStatsHtml}
-    </div>`;
+  const heroHtml = _renderOcHero(total, inboxCount, outboxCount, pct);
 
   // ── Pipeline funnel: who's waiting at each step, one click to filter ──
   // Segment semantics match the stage filter: "next step is X". Clicking a
@@ -4690,21 +4768,7 @@ function renderOpenCall() {
       return nx && nx.key === st.key;
     }).length,
   }));
-  const funnelSeg = (key, label, n, idx) => `
-        <button class="oc-funnel-seg ${ocFilterStage === key ? 'active' : ''} ${n ? '' : 'empty'} ${key === 'complete' ? 'complete' : ''}"
-          onclick="ocFilterByStage('${ocFilterStage === key ? '' : key}')"
-          title="${key === 'complete' ? 'Artists with every stage done' : `Artists whose next step is “${label}”`} — click to ${ocFilterStage === key ? 'clear the filter' : 'filter the list'}">
-          <span class="oc-funnel-num">${n}</span>
-          <span class="oc-funnel-label">${idx}${label}</span>
-          <span class="oc-funnel-bar"><span style="width:${total ? Math.max(n ? 6 : 0, Math.round(n / total * 100)) : 0}%"></span></span>
-        </button>`;
-  const funnelHtml = total ? `
-    <div class="card oc-funnel-card">
-      <div class="oc-funnel">
-        ${funnelCounts.map((f, i) => funnelSeg(f.key, f.label, f.n, `${i + 1} · `)).join('')}
-        ${funnelSeg('complete', 'Complete', done, '✓ ')}
-      </div>
-    </div>` : '';
+  const funnelHtml = _renderOcFunnel(total, funnelCounts, done, ocFilterStage);
 
   // ── Review inbox: scan findings awaiting the owner's approval ──
   if (activeProj) ocEnsureQueues_(activeProj);
@@ -4730,15 +4794,7 @@ function renderOpenCall() {
         </div>
       </div>`;
   }).join('');
-  const inboxHtml = inboxItems.length ? `
-    <div class="card oc-queue-card oc-inbox-card">
-      <div class="row-between" style="flex-wrap:wrap;gap:8px;">
-        <div class="oc-section-title" style="margin:0;">📥 Review scan results · ${inboxItems.length}</div>
-        <button class="btn sm gold" onclick="ocApproveAllProposals()">✓ Approve all</button>
-      </div>
-      <div class="oc-queue-note">Gmail scans propose updates here — nothing changes on a contributor until you approve it.</div>
-      ${inboxRows}
-    </div>` : '';
+  const inboxHtml = _renderOcInboxCard(inboxItems, inboxRows);
 
   // ── Ready-to-send outbox: next-stage emails queued for one approved batch ──
   const outboxItems = activeProj ? activeProj.outbox.filter(e => activeProj.contributors.some(c => c.id === e.contributorId)) : [];
@@ -4764,15 +4820,7 @@ function renderOpenCall() {
         </div>
       </div>`;
   }).join('');
-  const outboxHtml = outboxItems.length ? `
-    <div class="card oc-queue-card oc-outbox-card">
-      <div class="row-between" style="flex-wrap:wrap;gap:8px;">
-        <div class="oc-section-title" style="margin:0;">📤 Ready to send · ${outboxItems.length}</div>
-        <button class="btn sm gold" id="oc-outbox-sendall-btn" onclick="ocOutboxSendAll()">▶ Send all (${outboxItems.length})</button>
-      </div>
-      <div class="oc-queue-note">Queued automatically when a reply comes in — each uses its stage template and replies into the contributor's thread. Nothing sends until you confirm.<span id="oc-outbox-status" class="oc-queue-status"></span></div>
-      ${outboxRows}
-    </div>` : '';
+  const outboxHtml = _renderOcOutboxCard(outboxItems, outboxRows);
 
   const mainHtml = `
     <div class="oc-main">
