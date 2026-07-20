@@ -4040,6 +4040,325 @@ async function executeOcBulkRemove() {
   showToast(`Successfully removed ${selectedIds.length} contributor${selectedIds.length !== 1 ? 's' : ''}`);
 }
 
+
+function _renderOcContributorCard(c) {
+  const next = ocNextAction(c);
+
+  // Mailing list integration badges and actions
+  let mailStatusHtml = '';
+  let mailActionsHtml = '';
+  if (c.email) {
+    const sup = _isCustomerSuppressed(c.email);
+    const onList = mailingListHas(c.email);
+
+    if (sup) {
+      mailStatusHtml = `<span class="oc-mail-badge sup">unsubscribed</span>`;
+      mailActionsHtml = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Allow emailing this contributor again">Re-subscribe</button>`;
+    } else {
+      if (onList) {
+        mailStatusHtml = `<span class="oc-mail-badge on">✓ Subscribed</span>`;
+      } else {
+        mailStatusHtml = `<span class="oc-mail-badge off">not on list</span>`;
+        mailActionsHtml = `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(c.email)}')" title="Add to mailing list">＋ List</button>`;
+      }
+      mailActionsHtml += ` <button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Unsubscribe this contributor">Unsubscribe</button>`;
+    }
+
+    // Bounce flag (set by the reply scan when a delivery-failure notice names
+    // this address). Show it prominently and let the publisher clear it after
+    // fixing the address, so "bounced" never hides behind "no reply yet".
+    if (c.undeliverable) {
+      mailStatusHtml = `<span class="oc-mail-badge sup" title="A delivery-failure notice was found for this address. Check the email, fix it if needed, then clear this flag and re-send.">⚠ Undeliverable</span> ` + mailStatusHtml;
+      mailActionsHtml += ` <button class="btn sm" onclick="ocClearUndeliverable('${c.id}')" title="Clear the bounce flag (e.g. after correcting the address)">Clear bounce</button>`;
+    }
+  }
+
+  // Direct pipeline email triggers
+  let pipelineEmailBtnHtml = '';
+  if (c.email && !_isCustomerSuppressed(c.email)) {
+    if (!c.selectionSent) {
+      pipelineEmailBtnHtml = `<button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}', 'selectionSent')" title="Compose Selection congratulatory email">✉ Send Selection Notice</button>`;
+    } else if (c.creditReceived && !c.cmykSent) {
+      pipelineEmailBtnHtml = `<button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}', 'cmykSent')" title="Compose CMYK artwork request email">✉ Request Files</button>`;
+    } else if (c.cmykSent && c.filesReceived && !c.preorderSent) {
+      pipelineEmailBtnHtml = `<button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}', 'preorderSent')" title="Compose Pre-order launch email with contributor info">✉ Send Pre-order Info</button>`;
+    }
+  }
+
+  const creditNameHtml = c.creditName
+    ? `<span class="oc-credit-index" title="Print Credit Name">Index: "${escapeHtml(c.creditName)}"</span>`
+    : '';
+
+  const emailCell = c.email
+    ? (_isCustomerSuppressed(c.email)
+      ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(c.email)}</span>`
+      : `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>`)
+    : '<span>no email</span>';
+
+  let gmailLinksHtml = '';
+  if (c.email && (c.gmailThreadId || c.creditThreadId || c.filesThreadId)) {
+    const links = [];
+    // Canonical thread: the conversation every stage email replies into
+    // (captured at stage-1 send, or imported from the submission email).
+    if (c.gmailThreadId) {
+      links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.gmailThreadId}" target="_blank" title="View this contributor's email thread in Gmail">✉ View Thread</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.gmailThreadId}', 'Email Thread')" title="Preview email thread inline">👁 Preview</span>`);
+    }
+    // Reply threads, shown only when they're a different conversation than the
+    // canonical one (after promotion they usually coincide).
+    if (c.creditThreadId && c.creditThreadId !== c.gmailThreadId) {
+      links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" title="View credit name reply in Gmail">✉ View Credit Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" title="Preview email thread inline">👁 Preview</span>`);
+    }
+    if (c.filesThreadId && c.filesThreadId !== c.gmailThreadId) {
+      links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" title="View files reply in Gmail">✉ View Files Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" title="Preview email thread inline">👁 Preview</span>`);
+    }
+    gmailLinksHtml = `<span class="oc-gmail-links"> · ${links.join(' / ')}</span>`;
+  } else if (c.email && c.selectionSent) {
+    // Every follow-up must reply into the artist's thread — no captured
+    // thread means the next email would start a brand-new conversation.
+    gmailLinksHtml = `<span class="oc-thread-warn" title="No Gmail thread captured for this artist — the next email would start a NEW conversation instead of replying. Send through the app (threads auto-capture), use Import from Gmail, or paste the thread id in the email preview.">⚠ no thread</span>`;
+  }
+
+  // Interactive photos list on card (uses the v3 photo-row design system).
+  // The star curates: picked photos are what {{photo}} resolves to in every
+  // stage email — so the selection email names the winner(s), not all five.
+  const photosArr = c.photos || (c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : []);
+  const picks = Array.isArray(c.selectedPhotos) ? c.selectedPhotos : [];
+  const pickStatus = photosArr.length > 1
+    ? (picks.length
+      ? `<span class="oc-pick-count" title="Emails reference only the starred photo(s)">★ ${picks.length}/${photosArr.length} picked</span>`
+      : `<span class="oc-pick-hint" title="Click ☆ on the winning photo — {{photo}} in emails will use it instead of listing all ${photosArr.length}">☆ star the chosen photo</span>`)
+    : '';
+  const photosHtml = `
+    <div class="oc-photo-row">
+      <span class="oc-photo-label">📷 Photos:</span>
+      ${photosArr.map((p, idx) => {
+    const isPicked = picks.includes(p);
+    return `
+        <span class="oc-photo-chip ${isPicked ? 'picked' : ''}">
+          <span class="oc-photo-pick ${isPicked ? 'on' : ''}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" title="${isPicked ? 'Unpick this photo' : 'Pick this photo as a chosen one — emails will reference it'}">${isPicked ? '★' : '☆'}</span>
+          ${escapeHtml(p)}
+          <span class="oc-photo-chip-remove" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" title="Remove photo">✕</span>
+        </span>`;
+  }).join('')}
+      ${pickStatus}
+      <span id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</span>
+      <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
+    </div>`;
+
+  // Pipeline Step Tracker Visualizer (Interactive)
+  let progressPercent = 0;
+  if (c.preorderSent) progressPercent = 100;
+  else if (c.filesReceived) progressPercent = 75;
+  else if (c.cmykSent) progressPercent = 50;
+  else if (c.creditReceived) progressPercent = 25;
+  else if (c.selectionSent) progressPercent = 0;
+
+  const isNextStep = (contributor, key) => {
+    if (key === 'selectionSent' && !contributor.selectionSent) return true;
+    if (key === 'creditReceived' && contributor.selectionSent && !contributor.creditReceived) return true;
+    if (key === 'cmykSent' && contributor.creditReceived && !contributor.cmykSent) return true;
+    if (key === 'filesReceived' && contributor.cmykSent && !contributor.filesReceived) return true;
+    if (key === 'preorderSent' && contributor.filesReceived && !contributor.preorderSent) return true;
+    return false;
+  };
+
+  const stepHtml = (key, num, label) => {
+    const doneVal = c[key];
+    const activeVal = !doneVal && isNextStep(c, key);
+    const cls = doneVal ? 'done' : activeVal ? 'active' : '';
+    return `
+      <div class="oc-step ${cls}" onclick="ocToggle('${c.id}','${key}')" title="Click to toggle ${label} stage">
+        <div class="oc-step-circle">${doneVal ? '✓' : num}</div>
+        <div class="oc-step-label">${label}</div>
+      </div>`;
+  };
+
+  const pipelineVisualizer = `
+    <div class="oc-step-container">
+      <div class="oc-step-line"></div>
+      <div class="oc-step-line-fill" style="width: ${progressPercent}%;"></div>
+      ${stepHtml('selectionSent', '1', 'Selection')}
+      ${stepHtml('creditReceived', '2', 'Credit')}
+      ${stepHtml('cmykSent', '3', 'CMYK')}
+      ${stepHtml('filesReceived', '4', 'Files')}
+      ${stepHtml('preorderSent', '5', 'Pre-order')}
+    </div>`;
+
+  const notesHtml = c.notes
+    ? `<div class="oc-note"><strong>Note:</strong> ${escapeHtml(c.notes)}</div>`
+    : '';
+
+  const primaryCtaHtml = pipelineEmailBtnHtml
+    ? `<div class="oc-card-primary-cta">${pipelineEmailBtnHtml}</div>`
+    : '';
+
+  return `
+    <div class="card oc-contributor-card" id="oc-card-${c.id}">
+      <div class="oc-card-head">
+        <div class="oc-card-identity">
+          <div class="oc-avatar" aria-hidden="true">${escapeHtml(ocInitials(c.name))}</div>
+          <div class="oc-card-meta">
+            <div class="oc-contributor-name">${escapeHtml(c.name || '—')}${creditNameHtml}${mailStatusHtml}</div>
+            <div class="oc-email-row">
+              ${emailCell}
+              ${gmailLinksHtml}
+            </div>
+            ${photosHtml}
+          </div>
+        </div>
+        <div class="oc-card-actions">
+          ${primaryCtaHtml}
+          <div class="oc-util-actions">
+            ${mailActionsHtml}
+            <button class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">↻ Scan</button>
+            <button class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
+            <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">✕ Remove</button>
+          </div>
+        </div>
+      </div>
+      ${notesHtml}
+      <div class="oc-status-strip">
+        ${pipelineVisualizer}
+        ${next
+      ? `<div class="oc-next-action">${next}${(() => {
+        const wd = ocWaitingDays(c);
+        return wd !== null && wd >= 2 ? ` <span class="oc-wait-chip" title="No movement for ${wd} day${wd === 1 ? '' : 's'} — measured from the last stage change">⏳ ${wd}d</span>` : '';
+      })()}</div>`
+      : `<div class="oc-all-complete">✓ All stages complete</div>`}
+      </div>
+      <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
+    </div>`;
+
+}
+
+function _renderOcTemplatesEditor(activeProj, activeTmplTab, initialHtml, tmplOpen) {
+  if (!activeProj) return '';
+  return `
+    <div class="card oc-collapse-card ${tmplOpen ? 'open' : ''}" style="margin-top:0;padding:20px;">
+      <div class="row-between oc-collapse-head" onclick="if (event.target.closest('button')) return; ocToggleSection('tmpl')" style="${tmplOpen ? 'border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:15px;' : ''}flex-wrap:wrap;gap:8px;">
+        <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--gold2);">✉ Email Template Designer</div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          ${tmplOpen ? `
+          <button class="btn sm ${activeTmplTab === 'selectionSent' ? 'gold' : ''}" onclick="ocSetTmplTab('selectionSent')">Selection</button>
+          <button class="btn sm ${activeTmplTab === 'cmykSent' ? 'gold' : ''}" onclick="ocSetTmplTab('cmykSent')">Request Files</button>
+          <button class="btn sm ${activeTmplTab === 'preorderSent' ? 'gold' : ''}" onclick="ocSetTmplTab('preorderSent')">Pre-order</button>` : `
+          <span class="oc-collapse-status">3 stage templates · click to edit</span>`}
+          <span class="oc-collapse-chevron">${tmplOpen ? '▾' : '▸'}</span>
+        </div>
+      </div>
+
+      <div class="oc-collapse-body" style="display:${tmplOpen ? 'grid' : 'none'};grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+        <!-- Editor Column -->
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Subject Line</label>
+            <input id="oc-tmpl-subject" value="${escapeHtml(activeProj.templates[activeTmplTab].subject)}" oninput="ocUpdateTmplPreview()" placeholder="Subject Line" style="font-size:13.5px;padding:10px 12px;width:100%;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body</label>
+            <div class="oc-editor-container">
+              <div id="oc-tmpl-body" class="oc-rich-editor" contenteditable="true" oninput="ocUpdateTmplPreview()">${initialHtml}</div>
+              <div class="oc-editor-toolbar">
+                <div class="oc-toolbar-group">
+                  <button class="btn sm gold" onclick="ocSaveTemplates()" style="height:32px;padding:0 14px;font-weight:700;letter-spacing:0.02em;">Save</button>
+                  <div class="oc-toolbar-divider"></div>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('bold')" title="Bold (Ctrl+B)"><b>B</b></button>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('italic')" title="Italic (Ctrl+I)"><i>I</i></button>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('underline')" title="Underline (Ctrl+U)"><u>U</u></button>
+                  <div class="oc-dropdown-container">
+                    <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="ocToggleColorPalette('fore')" title="Text Color" style="font-weight:bold;color:#c5a880;">A</button>
+                    <div id="oc-forecolor-palette" class="oc-color-palette">
+                      <div class="oc-color-swatch" style="background:#0e0c0a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#0e0c0a')"></div>
+                      <div class="oc-color-swatch" style="background:#c8913a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#c8913a')"></div>
+                      <div class="oc-color-swatch" style="background:#e52e2e;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#e52e2e')"></div>
+                      <div class="oc-color-swatch" style="background:#1e40af;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#1e40af')"></div>
+                      <div class="oc-color-swatch" style="background:#047857;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#047857')"></div>
+                      <div class="oc-color-swatch" style="background:#78350f;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#78350f')"></div>
+                      <div class="oc-color-swatch" style="background:#6b21a8;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#6b21a8')"></div>
+                      <div class="oc-color-swatch" style="background:#4b5563;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#4b5563')"></div>
+                      <div class="oc-color-swatch" style="background:#9ca3af;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#9ca3af')"></div>
+                      <div class="oc-color-swatch" style="background:#ffffff;border:1px solid #ccc;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#ffffff')"></div>
+                    </div>
+                  </div>
+                  <div class="oc-dropdown-container">
+                    <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="ocToggleColorPalette('back')" title="Highlight Color" style="background:#fef08a;color:#000;border-radius:4px;width:24px;height:24px;font-size:11px;margin:4px;">H</button>
+                    <div id="oc-backcolor-palette" class="oc-color-palette">
+                      <div class="oc-color-swatch" style="background:#fef08a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fef08a')"></div>
+                      <div class="oc-color-swatch" style="background:#bdf5bd;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#bdf5bd')"></div>
+                      <div class="oc-color-swatch" style="background:#bfdbfe;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#bfdbfe')"></div>
+                      <div class="oc-color-swatch" style="background:#fbcfe8;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fbcfe8')"></div>
+                      <div class="oc-color-swatch" style="background:#fed7aa;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fed7aa')"></div>
+                      <div class="oc-color-swatch" style="background:#ddd6fe;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#ddd6fe')"></div>
+                      <div class="oc-color-swatch" style="background:#c8913a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#c8913a')"></div>
+                      <div class="oc-color-swatch" style="background:#e52e2e;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#e52e2e')"></div>
+                      <div class="oc-color-swatch" style="background:#e5ddd0;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#e5ddd0')"></div>
+                      <div class="oc-color-swatch" style="background:transparent;border:1px dashed #ccc;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', 'transparent')"></div>
+                    </div>
+                  </div>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('link')" title="Insert Link">🔗</button>
+                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('clear')" title="Clear Formatting">Tx</button>
+                </div>
+                <div class="oc-toolbar-group" style="gap:5px;">
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('name')" title="Insert Name Pill">name</button>
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('photo')" title="Insert Photo Pill">photo</button>
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('creditName')" title="Insert Credit Index Pill">creditName</button>
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('project')" title="Insert Project Title Pill">project</button>
+                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('date')" title="Insert Deadline Pill">date</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Preview Column -->
+        <div class="oc-preview-box" style="align-self:stretch;display:flex;flex-direction:column;">
+          <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);border-bottom:1px solid var(--cream3);padding-bottom:6px;margin-bottom:8px;font-weight:700;">Live Preview (Sample)</div>
+          <div style="font-size:13.5px;font-weight:700;margin-bottom:8px;color:var(--text);" id="oc-preview-subject">—</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.6;font-family:inherit;flex:1;overflow-y:auto;" id="oc-preview-body">—</div>
+        </div>
+      </div>
+
+    </div>`;
+}
+
+function _renderOcSearchFilterBar(total, listLength, ocSearchQuery, ocFilterStage, ocSortBy) {
+  return `
+    <div class="card" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex:1;">
+          <input type="search" id="oc-search" placeholder="Search artist, email..." value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" style="max-width:300px;">
+
+          <select id="oc-filter-stage" onchange="ocFilterByStage(this.value)" style="max-width:200px;">
+            <option value="">All pending stages</option>
+            <option value="selectionSent" ${ocFilterStage === 'selectionSent' ? 'selected' : ''}>Awaiting Selection</option>
+            <option value="creditReceived" ${ocFilterStage === 'creditReceived' ? 'selected' : ''}>Awaiting Credit</option>
+            <option value="cmykSent" ${ocFilterStage === 'cmykSent' ? 'selected' : ''}>Awaiting CMYK</option>
+            <option value="filesReceived" ${ocFilterStage === 'filesReceived' ? 'selected' : ''}>Awaiting Files</option>
+            <option value="preorderSent" ${ocFilterStage === 'preorderSent' ? 'selected' : ''}>Awaiting Pre-order</option>
+            <option value="complete" ${ocFilterStage === 'complete' ? 'selected' : ''}>✓ Completed</option>
+          </select>
+
+          <select id="oc-sort-by" onchange="ocSetSort(this.value)" style="max-width:200px;">
+            <option value="dateDesc" ${ocSortBy === 'dateDesc' ? 'selected' : ''}>Newest First</option>
+            <option value="dateAsc" ${ocSortBy === 'dateAsc' ? 'selected' : ''}>Oldest First</option>
+            <option value="nameAsc" ${ocSortBy === 'nameAsc' ? 'selected' : ''}>Name A-Z</option>
+            <option value="nameDesc" ${ocSortBy === 'nameDesc' ? 'selected' : ''}>Name Z-A</option>
+            <option value="progressDesc" ${ocSortBy === 'progressDesc' ? 'selected' : ''}>Progress (High to Low)</option>
+            <option value="progressAsc" ${ocSortBy === 'progressAsc' ? 'selected' : ''}>Progress (Low to High)</option>
+          </select>
+        </div>
+
+        <div style="display:flex;gap:6px;">
+          <button class="btn gold" onclick="openOcBulkModal()" ${total ? '' : 'disabled'}>✉ Bulk Email</button>
+          <button class="btn danger-btn" onclick="openOcBulkRemoveModal()" ${total ? '' : 'disabled'} title="Bulk remove contributors">✕ Bulk Remove</button>
+          <button class="btn" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'} title="Export all contributors to CSV">📤 Export CSV</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);">${total} contributor${total === 1 ? '' : 's'} total · ${listLength} shown</div>
+
+    </div>`;
+}
+
 function renderOpenCall() {
   const body = $('opencall-body');
   if (!body) return;
@@ -4218,126 +4537,9 @@ function renderOpenCall() {
   }
 
   const tmplOpen = ocUiOpen_('tmpl', false);
-  const templatesEditor = activeProj ? `
-    <div class="card oc-collapse-card ${tmplOpen ? 'open' : ''}" style="margin-top:0;padding:20px;">
-      <div class="row-between oc-collapse-head" onclick="if (event.target.closest('button')) return; ocToggleSection('tmpl')" style="${tmplOpen ? 'border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:15px;' : ''}flex-wrap:wrap;gap:8px;">
-        <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--gold2);">✉ Email Template Designer</div>
-        <div style="display:flex;gap:4px;align-items:center;">
-          ${tmplOpen ? `
-          <button class="btn sm ${activeTmplTab === 'selectionSent' ? 'gold' : ''}" onclick="ocSetTmplTab('selectionSent')">Selection</button>
-          <button class="btn sm ${activeTmplTab === 'cmykSent' ? 'gold' : ''}" onclick="ocSetTmplTab('cmykSent')">Request Files</button>
-          <button class="btn sm ${activeTmplTab === 'preorderSent' ? 'gold' : ''}" onclick="ocSetTmplTab('preorderSent')">Pre-order</button>` : `
-          <span class="oc-collapse-status">3 stage templates · click to edit</span>`}
-          <span class="oc-collapse-chevron">${tmplOpen ? '▾' : '▸'}</span>
-        </div>
-      </div>
+  const templatesEditor = _renderOcTemplatesEditor(activeProj, activeTmplTab, initialHtml, tmplOpen);
 
-      <div class="oc-collapse-body" style="display:${tmplOpen ? 'grid' : 'none'};grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
-        <!-- Editor Column -->
-        <div style="display:flex;flex-direction:column;gap:12px;">
-          <div>
-            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Subject Line</label>
-            <input id="oc-tmpl-subject" value="${escapeHtml(activeProj.templates[activeTmplTab].subject)}" oninput="ocUpdateTmplPreview()" placeholder="Subject Line" style="font-size:13.5px;padding:10px 12px;width:100%;box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="font-size:10px;color:var(--text3);font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;">Email Body</label>
-            <div class="oc-editor-container">
-              <div id="oc-tmpl-body" class="oc-rich-editor" contenteditable="true" oninput="ocUpdateTmplPreview()">${initialHtml}</div>
-              <div class="oc-editor-toolbar">
-                <div class="oc-toolbar-group">
-                  <button class="btn sm gold" onclick="ocSaveTemplates()" style="height:32px;padding:0 14px;font-weight:700;letter-spacing:0.02em;">Save</button>
-                  <div class="oc-toolbar-divider"></div>
-                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('bold')" title="Bold (Ctrl+B)"><b>B</b></button>
-                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('italic')" title="Italic (Ctrl+I)"><i>I</i></button>
-                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('underline')" title="Underline (Ctrl+U)"><u>U</u></button>
-                  <div class="oc-dropdown-container">
-                    <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="ocToggleColorPalette('fore')" title="Text Color" style="font-weight:bold;color:#c5a880;">A</button>
-                    <div id="oc-forecolor-palette" class="oc-color-palette">
-                      <div class="oc-color-swatch" style="background:#0e0c0a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#0e0c0a')"></div>
-                      <div class="oc-color-swatch" style="background:#c8913a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#c8913a')"></div>
-                      <div class="oc-color-swatch" style="background:#e52e2e;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#e52e2e')"></div>
-                      <div class="oc-color-swatch" style="background:#1e40af;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#1e40af')"></div>
-                      <div class="oc-color-swatch" style="background:#047857;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#047857')"></div>
-                      <div class="oc-color-swatch" style="background:#78350f;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#78350f')"></div>
-                      <div class="oc-color-swatch" style="background:#6b21a8;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#6b21a8')"></div>
-                      <div class="oc-color-swatch" style="background:#4b5563;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#4b5563')"></div>
-                      <div class="oc-color-swatch" style="background:#9ca3af;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#9ca3af')"></div>
-                      <div class="oc-color-swatch" style="background:#ffffff;border:1px solid #ccc;" onmousedown="event.preventDefault()" onclick="ocApplyColor('fore', '#ffffff')"></div>
-                    </div>
-                  </div>
-                  <div class="oc-dropdown-container">
-                    <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="ocToggleColorPalette('back')" title="Highlight Color" style="background:#fef08a;color:#000;border-radius:4px;width:24px;height:24px;font-size:11px;margin:4px;">H</button>
-                    <div id="oc-backcolor-palette" class="oc-color-palette">
-                      <div class="oc-color-swatch" style="background:#fef08a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fef08a')"></div>
-                      <div class="oc-color-swatch" style="background:#bdf5bd;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#bdf5bd')"></div>
-                      <div class="oc-color-swatch" style="background:#bfdbfe;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#bfdbfe')"></div>
-                      <div class="oc-color-swatch" style="background:#fbcfe8;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fbcfe8')"></div>
-                      <div class="oc-color-swatch" style="background:#fed7aa;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#fed7aa')"></div>
-                      <div class="oc-color-swatch" style="background:#ddd6fe;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#ddd6fe')"></div>
-                      <div class="oc-color-swatch" style="background:#c8913a;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#c8913a')"></div>
-                      <div class="oc-color-swatch" style="background:#e52e2e;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#e52e2e')"></div>
-                      <div class="oc-color-swatch" style="background:#e5ddd0;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', '#e5ddd0')"></div>
-                      <div class="oc-color-swatch" style="background:transparent;border:1px dashed #ccc;" onmousedown="event.preventDefault()" onclick="ocApplyColor('back', 'transparent')"></div>
-                    </div>
-                  </div>
-                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('link')" title="Insert Link">🔗</button>
-                  <button type="button" class="oc-toolbar-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('clear')" title="Clear Formatting">Tx</button>
-                </div>
-                <div class="oc-toolbar-group" style="gap:5px;">
-                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('name')" title="Insert Name Pill">name</button>
-                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('photo')" title="Insert Photo Pill">photo</button>
-                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('creditName')" title="Insert Credit Index Pill">creditName</button>
-                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('project')" title="Insert Project Title Pill">project</button>
-                  <button type="button" class="oc-token-btn" onmousedown="event.preventDefault()" onclick="insertFormattingTag('date')" title="Insert Deadline Pill">date</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Live Preview Column -->
-        <div class="oc-preview-box" style="align-self:stretch;display:flex;flex-direction:column;">
-          <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);border-bottom:1px solid var(--cream3);padding-bottom:6px;margin-bottom:8px;font-weight:700;">Live Preview (Sample)</div>
-          <div style="font-size:13.5px;font-weight:700;margin-bottom:8px;color:var(--text);" id="oc-preview-subject">—</div>
-          <div style="font-size:13px;color:var(--text2);line-height:1.6;font-family:inherit;flex:1;overflow-y:auto;" id="oc-preview-body">—</div>
-        </div>
-      </div>
-    </div>` : '';
-
-  const searchFilterBar = `
-    <div class="card" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:12px;">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex:1;">
-          <input type="search" id="oc-search" placeholder="Search artist, email..." value="${escapeHtml(ocSearchQuery)}" oninput="ocSearch(this.value)" style="max-width:300px;">
-          
-          <select id="oc-filter-stage" onchange="ocFilterByStage(this.value)" style="max-width:200px;">
-            <option value="">All pending stages</option>
-            <option value="selectionSent" ${ocFilterStage === 'selectionSent' ? 'selected' : ''}>Awaiting Selection</option>
-            <option value="creditReceived" ${ocFilterStage === 'creditReceived' ? 'selected' : ''}>Awaiting Credit</option>
-            <option value="cmykSent" ${ocFilterStage === 'cmykSent' ? 'selected' : ''}>Awaiting CMYK</option>
-            <option value="filesReceived" ${ocFilterStage === 'filesReceived' ? 'selected' : ''}>Awaiting Files</option>
-            <option value="preorderSent" ${ocFilterStage === 'preorderSent' ? 'selected' : ''}>Awaiting Pre-order</option>
-            <option value="complete" ${ocFilterStage === 'complete' ? 'selected' : ''}>✓ Completed</option>
-          </select>
-          
-          <select id="oc-sort-by" onchange="ocSetSort(this.value)" style="max-width:200px;">
-            <option value="dateDesc" ${ocSortBy === 'dateDesc' ? 'selected' : ''}>Newest First</option>
-            <option value="dateAsc" ${ocSortBy === 'dateAsc' ? 'selected' : ''}>Oldest First</option>
-            <option value="nameAsc" ${ocSortBy === 'nameAsc' ? 'selected' : ''}>Name A-Z</option>
-            <option value="nameDesc" ${ocSortBy === 'nameDesc' ? 'selected' : ''}>Name Z-A</option>
-            <option value="progressDesc" ${ocSortBy === 'progressDesc' ? 'selected' : ''}>Progress (High to Low)</option>
-            <option value="progressAsc" ${ocSortBy === 'progressAsc' ? 'selected' : ''}>Progress (Low to High)</option>
-          </select>
-        </div>
-        
-        <div style="display:flex;gap:6px;">
-          <button class="btn gold" onclick="openOcBulkModal()" ${total ? '' : 'disabled'}>✉ Bulk Email</button>
-          <button class="btn danger-btn" onclick="openOcBulkRemoveModal()" ${total ? '' : 'disabled'} title="Bulk remove contributors">✕ Bulk Remove</button>
-          <button class="btn" onclick="exportOpenCallCSV()" ${total ? '' : 'disabled'} title="Export all contributors to CSV">📤 Export CSV</button>
-        </div>
-      </div>
-      <div style="font-size:11px;color:var(--text3);">${total} contributor${total === 1 ? '' : 's'} total · ${list.length} shown</div>
-    </div>`;
+  const searchFilterBar = _renderOcSearchFilterBar(total, list.length, ocSearchQuery, ocFilterStage, ocSortBy);
 
   const importPanel = ocImportOpen ? `
       <div class="oc-import-panel">
@@ -4392,194 +4594,7 @@ function renderOpenCall() {
       ${importPanel}
     </div>`;
 
-  const cards = list.map(c => {
-    const next = ocNextAction(c);
-
-    // Mailing list integration badges and actions
-    let mailStatusHtml = '';
-    let mailActionsHtml = '';
-    if (c.email) {
-      const sup = _isCustomerSuppressed(c.email);
-      const onList = mailingListHas(c.email);
-
-      if (sup) {
-        mailStatusHtml = `<span class="oc-mail-badge sup">unsubscribed</span>`;
-        mailActionsHtml = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Allow emailing this contributor again">Re-subscribe</button>`;
-      } else {
-        if (onList) {
-          mailStatusHtml = `<span class="oc-mail-badge on">✓ Subscribed</span>`;
-        } else {
-          mailStatusHtml = `<span class="oc-mail-badge off">not on list</span>`;
-          mailActionsHtml = `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(c.email)}')" title="Add to mailing list">＋ List</button>`;
-        }
-        mailActionsHtml += ` <button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Unsubscribe this contributor">Unsubscribe</button>`;
-      }
-
-      // Bounce flag (set by the reply scan when a delivery-failure notice names
-      // this address). Show it prominently and let the publisher clear it after
-      // fixing the address, so "bounced" never hides behind "no reply yet".
-      if (c.undeliverable) {
-        mailStatusHtml = `<span class="oc-mail-badge sup" title="A delivery-failure notice was found for this address. Check the email, fix it if needed, then clear this flag and re-send.">⚠ Undeliverable</span> ` + mailStatusHtml;
-        mailActionsHtml += ` <button class="btn sm" onclick="ocClearUndeliverable('${c.id}')" title="Clear the bounce flag (e.g. after correcting the address)">Clear bounce</button>`;
-      }
-    }
-
-    // Direct pipeline email triggers
-    let pipelineEmailBtnHtml = '';
-    if (c.email && !_isCustomerSuppressed(c.email)) {
-      if (!c.selectionSent) {
-        pipelineEmailBtnHtml = `<button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}', 'selectionSent')" title="Compose Selection congratulatory email">✉ Send Selection Notice</button>`;
-      } else if (c.creditReceived && !c.cmykSent) {
-        pipelineEmailBtnHtml = `<button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}', 'cmykSent')" title="Compose CMYK artwork request email">✉ Request Files</button>`;
-      } else if (c.cmykSent && c.filesReceived && !c.preorderSent) {
-        pipelineEmailBtnHtml = `<button class="btn sm gold" onclick="ocComposeStageEmail('${c.id}', 'preorderSent')" title="Compose Pre-order launch email with contributor info">✉ Send Pre-order Info</button>`;
-      }
-    }
-
-    const creditNameHtml = c.creditName
-      ? `<span class="oc-credit-index" title="Print Credit Name">Index: "${escapeHtml(c.creditName)}"</span>`
-      : '';
-
-    const emailCell = c.email
-      ? (_isCustomerSuppressed(c.email)
-        ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(c.email)}</span>`
-        : `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>`)
-      : '<span>no email</span>';
-
-    let gmailLinksHtml = '';
-    if (c.email && (c.gmailThreadId || c.creditThreadId || c.filesThreadId)) {
-      const links = [];
-      // Canonical thread: the conversation every stage email replies into
-      // (captured at stage-1 send, or imported from the submission email).
-      if (c.gmailThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.gmailThreadId}" target="_blank" title="View this contributor's email thread in Gmail">✉ View Thread</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.gmailThreadId}', 'Email Thread')" title="Preview email thread inline">👁 Preview</span>`);
-      }
-      // Reply threads, shown only when they're a different conversation than the
-      // canonical one (after promotion they usually coincide).
-      if (c.creditThreadId && c.creditThreadId !== c.gmailThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.creditThreadId}" target="_blank" title="View credit name reply in Gmail">✉ View Credit Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.creditThreadId}', 'Credit Reply')" title="Preview email thread inline">👁 Preview</span>`);
-      }
-      if (c.filesThreadId && c.filesThreadId !== c.gmailThreadId) {
-        links.push(`<a href="https://mail.google.com/mail/u/0/#inbox/${c.filesThreadId}" target="_blank" title="View files reply in Gmail">✉ View Files Reply</a> <span class="oc-thread-preview" onclick="ocToggleInlineThread('${c.id}', '${c.filesThreadId}', 'Files Reply')" title="Preview email thread inline">👁 Preview</span>`);
-      }
-      gmailLinksHtml = `<span class="oc-gmail-links"> · ${links.join(' / ')}</span>`;
-    } else if (c.email && c.selectionSent) {
-      // Every follow-up must reply into the artist's thread — no captured
-      // thread means the next email would start a brand-new conversation.
-      gmailLinksHtml = `<span class="oc-thread-warn" title="No Gmail thread captured for this artist — the next email would start a NEW conversation instead of replying. Send through the app (threads auto-capture), use Import from Gmail, or paste the thread id in the email preview.">⚠ no thread</span>`;
-    }
-
-    // Interactive photos list on card (uses the v3 photo-row design system).
-    // The star curates: picked photos are what {{photo}} resolves to in every
-    // stage email — so the selection email names the winner(s), not all five.
-    const photosArr = c.photos || (c.photo ? c.photo.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : []);
-    const picks = Array.isArray(c.selectedPhotos) ? c.selectedPhotos : [];
-    const pickStatus = photosArr.length > 1
-      ? (picks.length
-        ? `<span class="oc-pick-count" title="Emails reference only the starred photo(s)">★ ${picks.length}/${photosArr.length} picked</span>`
-        : `<span class="oc-pick-hint" title="Click ☆ on the winning photo — {{photo}} in emails will use it instead of listing all ${photosArr.length}">☆ star the chosen photo</span>`)
-      : '';
-    const photosHtml = `
-      <div class="oc-photo-row">
-        <span class="oc-photo-label">📷 Photos:</span>
-        ${photosArr.map((p, idx) => {
-      const isPicked = picks.includes(p);
-      return `
-          <span class="oc-photo-chip ${isPicked ? 'picked' : ''}">
-            <span class="oc-photo-pick ${isPicked ? 'on' : ''}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" title="${isPicked ? 'Unpick this photo' : 'Pick this photo as a chosen one — emails will reference it'}">${isPicked ? '★' : '☆'}</span>
-            ${escapeHtml(p)}
-            <span class="oc-photo-chip-remove" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" title="Remove photo">✕</span>
-          </span>`;
-    }).join('')}
-        ${pickStatus}
-        <span id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</span>
-        <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
-      </div>`;
-
-    // Pipeline Step Tracker Visualizer (Interactive)
-    let progressPercent = 0;
-    if (c.preorderSent) progressPercent = 100;
-    else if (c.filesReceived) progressPercent = 75;
-    else if (c.cmykSent) progressPercent = 50;
-    else if (c.creditReceived) progressPercent = 25;
-    else if (c.selectionSent) progressPercent = 0;
-
-    const isNextStep = (contributor, key) => {
-      if (key === 'selectionSent' && !contributor.selectionSent) return true;
-      if (key === 'creditReceived' && contributor.selectionSent && !contributor.creditReceived) return true;
-      if (key === 'cmykSent' && contributor.creditReceived && !contributor.cmykSent) return true;
-      if (key === 'filesReceived' && contributor.cmykSent && !contributor.filesReceived) return true;
-      if (key === 'preorderSent' && contributor.filesReceived && !contributor.preorderSent) return true;
-      return false;
-    };
-
-    const stepHtml = (key, num, label) => {
-      const doneVal = c[key];
-      const activeVal = !doneVal && isNextStep(c, key);
-      const cls = doneVal ? 'done' : activeVal ? 'active' : '';
-      return `
-        <div class="oc-step ${cls}" onclick="ocToggle('${c.id}','${key}')" title="Click to toggle ${label} stage">
-          <div class="oc-step-circle">${doneVal ? '✓' : num}</div>
-          <div class="oc-step-label">${label}</div>
-        </div>`;
-    };
-
-    const pipelineVisualizer = `
-      <div class="oc-step-container">
-        <div class="oc-step-line"></div>
-        <div class="oc-step-line-fill" style="width: ${progressPercent}%;"></div>
-        ${stepHtml('selectionSent', '1', 'Selection')}
-        ${stepHtml('creditReceived', '2', 'Credit')}
-        ${stepHtml('cmykSent', '3', 'CMYK')}
-        ${stepHtml('filesReceived', '4', 'Files')}
-        ${stepHtml('preorderSent', '5', 'Pre-order')}
-      </div>`;
-
-    const notesHtml = c.notes
-      ? `<div class="oc-note"><strong>Note:</strong> ${escapeHtml(c.notes)}</div>`
-      : '';
-
-    const primaryCtaHtml = pipelineEmailBtnHtml
-      ? `<div class="oc-card-primary-cta">${pipelineEmailBtnHtml}</div>`
-      : '';
-
-    return `
-      <div class="card oc-contributor-card" id="oc-card-${c.id}">
-        <div class="oc-card-head">
-          <div class="oc-card-identity">
-            <div class="oc-avatar" aria-hidden="true">${escapeHtml(ocInitials(c.name))}</div>
-            <div class="oc-card-meta">
-              <div class="oc-contributor-name">${escapeHtml(c.name || '—')}${creditNameHtml}${mailStatusHtml}</div>
-              <div class="oc-email-row">
-                ${emailCell}
-                ${gmailLinksHtml}
-              </div>
-              ${photosHtml}
-            </div>
-          </div>
-          <div class="oc-card-actions">
-            ${primaryCtaHtml}
-            <div class="oc-util-actions">
-              ${mailActionsHtml}
-              <button class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Scan Gmail replies for this artist only">↻ Scan</button>
-              <button class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
-              <button class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">✕ Remove</button>
-            </div>
-          </div>
-        </div>
-        ${notesHtml}
-        <div class="oc-status-strip">
-          ${pipelineVisualizer}
-          ${next
-        ? `<div class="oc-next-action">${next}${(() => {
-          const wd = ocWaitingDays(c);
-          return wd !== null && wd >= 2 ? ` <span class="oc-wait-chip" title="No movement for ${wd} day${wd === 1 ? '' : 's'} — measured from the last stage change">⏳ ${wd}d</span>` : '';
-        })()}</div>`
-        : `<div class="oc-all-complete">✓ All stages complete</div>`}
-        </div>
-        <div id="oc-inline-thread-${c.id}" class="oc-inline-thread-container" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,0.15);border-radius:6px;border:1px solid var(--border);max-height:280px;overflow-y:auto;font-size:12px;text-align:left;"></div>
-      </div>`;
-  }).join('');
+  const cards = list.map(c => _renderOcContributorCard(c)).join('');
 
   const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
   const resendOpen = ocUiOpen_('resend', false);
