@@ -155,59 +155,59 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === '/api/website-settings') {
       if (req.method === 'GET') return sendJson(res, 200, store.websiteSettings);
-      if (req.method === 'PUT') return handleUpdateWebsiteSettings(req, res, user);
+      if (req.method === 'PUT') return await handleUpdateWebsiteSettings(req, res, user);
     }
 
     if (url.pathname === '/api/shipping-profiles' && req.method === 'GET') {
       return sendJson(res, 200, { items: Object.values(store.shippingProfiles) });
     }
     if (url.pathname === '/api/shipping-profiles' && req.method === 'POST') {
-      return handleCreateShippingProfile(req, res, user);
+      return await handleCreateShippingProfile(req, res, user);
     }
 
     if (url.pathname.startsWith('/api/shipping-profiles/')) {
       const id = url.pathname.split('/').pop();
       if (req.method === 'GET') return handleGetById(res, store.shippingProfiles, id, 'Shipping profile');
-      if (req.method === 'PUT') return handleUpdateShippingProfile(req, res, user, id);
-      if (req.method === 'DELETE') return handleDeleteShippingProfile(res, user, id);
+      if (req.method === 'PUT') return await handleUpdateShippingProfile(req, res, user, id);
+      if (req.method === 'DELETE') return await handleDeleteShippingProfile(res, user, id);
     }
 
     if (url.pathname === '/api/authors' && req.method === 'GET') {
       return sendJson(res, 200, { items: Object.values(store.authors) });
     }
     if (url.pathname === '/api/authors' && req.method === 'POST') {
-      return handleCreateAuthor(req, res, user);
+      return await handleCreateAuthor(req, res, user);
     }
 
     if (url.pathname.startsWith('/api/authors/')) {
       const id = url.pathname.split('/').pop();
       if (req.method === 'GET') return handleGetById(res, store.authors, id, 'Author');
-      if (req.method === 'PUT') return handleUpdateAuthor(req, res, user, id);
-      if (req.method === 'DELETE') return handleDeleteAuthor(res, user, id);
+      if (req.method === 'PUT') return await handleUpdateAuthor(req, res, user, id);
+      if (req.method === 'DELETE') return await handleDeleteAuthor(res, user, id);
     }
 
     if (url.pathname === '/api/books' && req.method === 'GET') {
       return sendJson(res, 200, { items: Object.values(store.books) });
     }
     if (url.pathname === '/api/books' && req.method === 'POST') {
-      return handleCreateBook(req, res, user);
+      return await handleCreateBook(req, res, user);
     }
 
     if (url.pathname.match(/^\/api\/books\/[^/]+\/photos$/) && req.method === 'POST') {
       const id = url.pathname.split('/')[3];
-      return handleAddBookPhoto(req, res, user, id);
+      return await handleAddBookPhoto(req, res, user, id);
     }
 
     if (url.pathname.match(/^\/api\/books\/[^/]+\/photos\/[^/]+$/) && req.method === 'DELETE') {
       const [, , , bookId, , photoId] = url.pathname.split('/');
-      return handleDeleteBookPhoto(res, user, bookId, photoId);
+      return await handleDeleteBookPhoto(res, user, bookId, photoId);
     }
 
     if (url.pathname.startsWith('/api/books/')) {
       const id = url.pathname.split('/').pop();
       if (req.method === 'GET') return handleGetById(res, store.books, id, 'Book');
-      if (req.method === 'PUT') return handleUpdateBook(req, res, user, id);
-      if (req.method === 'DELETE') return handleDeleteBook(res, user, id);
+      if (req.method === 'PUT') return await handleUpdateBook(req, res, user, id);
+      if (req.method === 'DELETE') return await handleDeleteBook(res, user, id);
     }
 
     // Compatibility endpoints for existing frontend data model.
@@ -221,7 +221,7 @@ const server = http.createServer(async (req, res) => {
         if (!body) return;
         store.inventory.books[bookId] = body.data;
         appendAudit(user.email, 'inventory.book.updated', { bookId });
-        persist();
+        await persist();
         return sendJson(res, 200, { ok: true });
       }
     }
@@ -234,7 +234,7 @@ const server = http.createServer(async (req, res) => {
         if (!body) return;
         store.inventory.settings[key] = body.data;
         appendAudit(user.email, 'inventory.settings.updated', { key });
-        persist();
+        await persist();
         return sendJson(res, 200, { ok: true });
       }
     }
@@ -246,7 +246,7 @@ const server = http.createServer(async (req, res) => {
         if (!body) return;
         store.inventory.catalog = body.data;
         appendAudit(user.email, 'inventory.catalog.updated');
-        persist();
+        await persist();
         return sendJson(res, 200, { ok: true });
       }
     }
@@ -331,7 +331,7 @@ async function handleCreateShippingProfile(req, res, user) {
   if (!profile.name) return sendJson(res, 400, { error: 'name is required' });
   store.shippingProfiles[id] = profile;
   appendAudit(user.email, 'shipping.create', { id });
-  persist();
+  await persist();
   sendJson(res, 201, profile);
 }
 
@@ -342,17 +342,17 @@ async function handleUpdateShippingProfile(req, res, user, id) {
   if (!body) return;
   store.shippingProfiles[id] = { ...current, ...body, id, updatedAt: new Date().toISOString() };
   appendAudit(user.email, 'shipping.update', { id });
-  persist();
+  await persist();
   sendJson(res, 200, store.shippingProfiles[id]);
 }
 
-function handleDeleteShippingProfile(res, user, id) {
+async function handleDeleteShippingProfile(res, user, id) {
   if (!store.shippingProfiles[id]) return sendJson(res, 404, { error: 'Shipping profile not found' });
   const inUse = Object.values(store.books).some((b) => b.shippingProfileId === id);
   if (inUse) return sendJson(res, 409, { error: 'Shipping profile is in use by a book' });
   delete store.shippingProfiles[id];
   appendAudit(user.email, 'shipping.delete', { id });
-  persist();
+  await persist();
   sendJson(res, 200, { ok: true });
 }
 
@@ -373,7 +373,7 @@ async function handleCreateAuthor(req, res, user) {
   if (!author.name) return sendJson(res, 400, { error: 'name is required' });
   store.authors[id] = author;
   appendAudit(user.email, 'author.create', { id });
-  persist();
+  await persist();
   sendJson(res, 201, author);
 }
 
@@ -384,17 +384,17 @@ async function handleUpdateAuthor(req, res, user, id) {
   if (!body) return;
   store.authors[id] = { ...current, ...body, id, updatedAt: new Date().toISOString() };
   appendAudit(user.email, 'author.update', { id });
-  persist();
+  await persist();
   sendJson(res, 200, store.authors[id]);
 }
 
-function handleDeleteAuthor(res, user, id) {
+async function handleDeleteAuthor(res, user, id) {
   if (!store.authors[id]) return sendJson(res, 404, { error: 'Author not found' });
   const inUse = Object.values(store.books).some((b) => (b.authorIds || []).includes(id));
   if (inUse) return sendJson(res, 409, { error: 'Author is in use by one or more books' });
   delete store.authors[id];
   appendAudit(user.email, 'author.delete', { id });
-  persist();
+  await persist();
   sendJson(res, 200, { ok: true });
 }
 
@@ -407,7 +407,7 @@ async function handleCreateBook(req, res, user) {
   if (!book.title) return sendJson(res, 400, { error: 'title is required' });
   store.books[id] = book;
   appendAudit(user.email, 'book.create', { id });
-  persist();
+  await persist();
   sendJson(res, 201, book);
 }
 
@@ -419,15 +419,15 @@ async function handleUpdateBook(req, res, user, id) {
   const book = normalizeBook({ ...current, ...body, id, photos: current.photos });
   store.books[id] = book;
   appendAudit(user.email, 'book.update', { id });
-  persist();
+  await persist();
   sendJson(res, 200, book);
 }
 
-function handleDeleteBook(res, user, id) {
+async function handleDeleteBook(res, user, id) {
   if (!store.books[id]) return sendJson(res, 404, { error: 'Book not found' });
   delete store.books[id];
   appendAudit(user.email, 'book.delete', { id });
-  persist();
+  await persist();
   sendJson(res, 200, { ok: true });
 }
 
@@ -451,11 +451,11 @@ async function handleAddBookPhoto(req, res, user, id) {
   book.photos.push(photo);
   book.updatedAt = new Date().toISOString();
   appendAudit(user.email, 'book.photo.add', { id, photoId: photo.id });
-  persist();
+  await persist();
   sendJson(res, 201, photo);
 }
 
-function handleDeleteBookPhoto(res, user, bookId, photoId) {
+async function handleDeleteBookPhoto(res, user, bookId, photoId) {
   const book = store.books[bookId];
   if (!book) return sendJson(res, 404, { error: 'Book not found' });
   const before = book.photos?.length || 0;
@@ -463,7 +463,7 @@ function handleDeleteBookPhoto(res, user, bookId, photoId) {
   if (book.photos.length === before) return sendJson(res, 404, { error: 'Photo not found' });
   book.updatedAt = new Date().toISOString();
   appendAudit(user.email, 'book.photo.delete', { id: bookId, photoId });
-  persist();
+  await persist();
   sendJson(res, 200, { ok: true });
 }
 
@@ -476,7 +476,7 @@ async function handleUpdateWebsiteSettings(req, res, user) {
     updatedAt: new Date().toISOString(),
   };
   appendAudit(user.email, 'settings.website.update');
-  persist();
+  await persist();
   sendJson(res, 200, store.websiteSettings);
 }
 
@@ -579,8 +579,14 @@ function readStore() {
   return { ...defaultStore(), ...parsed };
 }
 
-function persist() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2));
+let _writeQueue = Promise.resolve();
+async function persist() {
+  const data = JSON.stringify(store, null, 2);
+  const task = _writeQueue.then(() => fs.promises.writeFile(DATA_FILE, data)).catch(err => {
+    console.error('Failed to write store.json:', err);
+  });
+  _writeQueue = task;
+  await task;
 }
 
 function defaultStore() {
