@@ -20448,7 +20448,7 @@ async function _persistOpenCalls() {
 
 async function migrateLegacyOpenCalls() {
   let migrated = false;
-  for (const bid of Object.keys(BOOKS)) {
+  const promises = Object.keys(BOOKS).map(async (bid) => {
     const book = BOOKS[bid];
     try {
       const json = await window._fbLoad(bid);
@@ -20456,6 +20456,7 @@ async function migrateLegacyOpenCalls() {
         const stateObj = JSON.parse(json);
         if (stateObj && Array.isArray(stateObj.openCall) && stateObj.openCall.length > 0) {
           const projId = 'oc-migrated-' + bid;
+          let localMigrated = false;
           if (!OPENCALL_DATA.projects[projId]) {
             OPENCALL_DATA.projects[projId] = {
               id: projId,
@@ -20466,14 +20467,24 @@ async function migrateLegacyOpenCalls() {
             if (OPENCALL_DATA.activeProjectId === 'default' && OPENCALL_DATA.projects['default'].contributors.length === 0) {
               OPENCALL_DATA.activeProjectId = projId;
             }
-            migrated = true;
+            localMigrated = true;
           }
           stateObj.openCall = [];
           await window._fbSave(bid, JSON.stringify(stateObj));
+          return localMigrated;
         }
       }
     } catch (_) { }
+    return false;
+  });
+
+  const results = await Promise.allSettled(promises);
+  for (const res of results) {
+    if (res.status === 'fulfilled' && res.value) {
+      migrated = true;
+    }
   }
+
   if (migrated) {
     if (OPENCALL_DATA.projects['default'] && OPENCALL_DATA.projects['default'].contributors.length === 0 && Object.keys(OPENCALL_DATA.projects).length > 1) {
       delete OPENCALL_DATA.projects['default'];
