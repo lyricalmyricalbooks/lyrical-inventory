@@ -15135,64 +15135,237 @@ function _tcApplyLedgerFilter(rows) {
   return out;
 }
 
-function renderTaxCenter() {
-  if (isAuthor()) return;
-  // Restore the saved ledger view (year + search + type) before reading the year.
-  _tcRestoreLedgerPrefs();
-  // Initialize AI key input UI
-  if ($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
-  if ($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
-  const _stripeStatusEl = $('stripe-fees-status');
-  if (_stripeStatusEl && !_stripeStatusEl.textContent && TAX_CENTER.settings?.stripeFeesLastImportAt) {
-    const last = new Date(TAX_CENTER.settings.stripeFeesLastImportAt);
-    if (!isNaN(last)) {
-      const days = Math.floor((Date.now() - last.getTime()) / 86400000);
-      const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
-      _stripeStatusEl.textContent = `Fees last inserted into ledger ${ago} (${last.toISOString().slice(0, 10)}). Fetch again to refresh.`;
-    }
+function _tcRenderRecurringSubscriptions() {
+  const recBody = $('tc-recurring-body');
+  if (recBody) {
+    recBody.innerHTML = (TAX_CENTER.recurring || []).map((sub, i) => `
+        <tr>
+            <td>${escapeHtml(sub.desc)}</td>
+            <td>${escapeHtml(sub.cat)}</td>
+            <td>${fmt(sub.amount, sub.currency || 'CAD')}</td>
+            <td>${escapeHtml(sub.startDate || '-')}</td>
+            <td>${escapeHtml(sub.lastInjected || 'Never')}</td>
+            <td><button class="btn tx" onclick="removeRecurring(${i})">Remove</button></td>
+        </tr>
+      `).join('') || `<tr><td colspan="5" class="r" style="text-align:center;">No active subscriptions</td></tr>`;
   }
-  if ($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
-  const _shippoStatusEl = $('tc-shippo-status');
-  if (_shippoStatusEl && TAX_CENTER.settings?.shippoLastImportAt) {
-    const last = new Date(TAX_CENTER.settings.shippoLastImportAt);
-    if (!isNaN(last)) {
-      const days = Math.floor((Date.now() - last.getTime()) / 86400000);
-      const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
-      _shippoStatusEl.textContent = `Last synced ${ago} (${last.toISOString().slice(0, 10)}). Imports non-refunded transaction rates as Shipping & Postage expenses.`;
-    }
-  }
+}
 
-  // Update the receipt storage status shown inline next to the Receipt
-  // input on Log Business Expense.
-  loadReceiptFolderHandle().then(async handle => {
-    const inlineStatus = $('tc-exp-storage-status');
-    const inlineAuthBtn = $('tc-exp-storage-auth-btn');
-    const setInline = (text, color, showAuth) => {
-      if (inlineStatus) {
-        inlineStatus.innerHTML = text;
-        inlineStatus.style.color = color || 'var(--text3)';
-      }
-      if (inlineAuthBtn) inlineAuthBtn.style.display = showAuth ? '' : 'none';
-    };
-    if (!handle) {
-      setInline('Storage: <strong>Cloud (Firestore)</strong> — pick a local folder to save receipts as files', 'var(--text3)', false);
-      return;
-    }
-    const perm = await handle.queryPermission({ mode: 'readwrite' });
-    if (perm === 'granted') {
-      // Use a chevron between the chosen folder and the sub-path so a
-      // folder that happens to be named "receipts" doesn't read as the
-      // confusing "receipts/receipts/General/".
-      setInline(`Saving to: <strong>${escapeHtml(handle.name)}</strong> › receipts/General`, 'var(--green)', false);
+function _tcRenderLedgerPagination(filteredLedger, pageStart, totalPages) {
+  const pgWrap = $('tc-ledger-pagination');
+  if (pgWrap) {
+    if (totalPages <= 1) {
+      pgWrap.innerHTML = '';
     } else {
-      setInline(`⚠ Access needed for folder: <strong>${escapeHtml(handle.name)}</strong>`, 'var(--amber)', true);
+      const from = filteredLedger.length ? pageStart + 1 : 0;
+      const to = Math.min(pageStart + TC_LEDGER_PAGE_SIZE, filteredLedger.length);
+      const btnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--cream2);color:var(--text);';
+      const activeBtnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gold);background:var(--gold);color:var(--ink);font-weight:600;';
+      // Show at most 7 page buttons around current page
+      const maxBtns = 7;
+      let startBtn = Math.max(0, _tcLedgerPage - Math.floor(maxBtns / 2));
+      let endBtn = Math.min(totalPages - 1, startBtn + maxBtns - 1);
+      if (endBtn - startBtn < maxBtns - 1) startBtn = Math.max(0, endBtn - maxBtns + 1);
+      let btns = '';
+      if (startBtn > 0) btns += `<button style="${btnStyle}" onclick="setTcLedgerPage(0)">1</button><span style="color:var(--text3);padding:0 4px;">…</span>`;
+      for (let p = startBtn; p <= endBtn; p++) {
+        btns += `<button style="${p === _tcLedgerPage ? activeBtnStyle : btnStyle}" onclick="setTcLedgerPage(${p})">${p + 1}</button>`;
+      }
+      if (endBtn < totalPages - 1) btns += `<span style="color:var(--text3);padding:0 4px;">…</span><button style="${btnStyle}" onclick="setTcLedgerPage(${totalPages - 1})">${totalPages}</button>`;
+      pgWrap.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
+          <span style="font-size:12px;color:var(--text3);">Showing ${from}–${to} of ${filteredLedger.length} entries</span>
+          <div style="display:flex;gap:4px;align-items:center;">
+            <button style="${btnStyle}" onclick="setTcLedgerPage(${_tcLedgerPage - 1})" ${_tcLedgerPage === 0 ? 'disabled' : ''}>‹ Prev</button>
+            ${btns}
+            <button style="${btnStyle}" onclick="setTcLedgerPage(${_tcLedgerPage + 1})" ${_tcLedgerPage === totalPages - 1 ? 'disabled' : ''}>Next ›</button>
+          </div>
+        </div>`;
     }
+  }
+}
+
+function _tcRenderLedgerFilterChip() {
+  const filterChip = $('tc-ledger-filter-chip');
+  if (filterChip) {
+    const parts = [];
+    if (_tcLedgerType === 'sales') parts.push('Sales only');
+    else if (_tcLedgerType === 'expenses') parts.push('Expenses only');
+    const q = _tcLedgerSearch.trim();
+    if (q) parts.push(`“${escapeHtml(q)}”`);
+    filterChip.innerHTML = parts.length
+      ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:14px;padding:3px 6px 3px 12px;">Filtered: ${parts.join(' · ')}<button onclick="tcClearLedgerFilters()" title="Clear filters" aria-label="Clear filters" style="border:none;background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 4px;">✕</button></span>`
+      : '';
+  }
+}
+
+function _tcRenderLedgerFoot(filteredLedger, baseCurrency) {
+  const footEl = $('tc-ledger-foot');
+  if (footEl) {
+    if (!filteredLedger.length) {
+      footEl.innerHTML = '';
+    } else {
+      let fIncome = 0, fExpense = 0;
+      for (const r of filteredLedger) {
+        if (r.isIncome) fIncome += r.baseAmount || 0;
+        else fExpense += r.baseAmount || 0;
+      }
+      const fNet = fIncome - fExpense;
+      const netColor = fNet >= 0 ? 'var(--green)' : 'var(--red)';
+      footEl.innerHTML = `
+        <tr>
+          <td colspan="8" style="padding:10px 12px;background:var(--cream2);border-top:2px solid var(--gold-line);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;">
+              <span style="color:var(--text3);">${filteredLedger.length} ${filteredLedger.length === 1 ? 'entry' : 'entries'}${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? ' (filtered)' : ''}</span>
+              <div style="display:flex;gap:18px;flex-wrap:wrap;">
+                <span>Income <strong style="color:var(--green);">+${fmt(fIncome, baseCurrency)}</strong></span>
+                <span>Expenses <strong style="color:var(--red);">-${fmt(fExpense, baseCurrency)}</strong></span>
+                <span>Net <strong style="color:${netColor};">${fmt(fNet, baseCurrency)}</strong></span>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+    }
+  }
+}
+
+function _tcRenderLedgerTable(pageLedger, baseCurrency) {
+  const ledTbody = $('tc-ledger-body');
+  if (ledTbody) {
+    ledTbody.innerHTML = pageLedger.map(item => {
+      // Build receipt/ref cell — receipt links AND the reference number
+      // together; a ref must never hide the saved receipt files.
+      let displayRef = item.ref != null ? String(item.ref) : '';
+      let legacyReceipt = '';
+      // Legacy cleanup: if ref contains a local link, extract it
+      if (displayRef && displayRef.includes('local://')) {
+        const match = displayRef.match(/href="([^"]+)"/);
+        if (match) legacyReceipt = match[1];
+        displayRef = '';
+      }
+      const links = _localReceiptCell(item) || (legacyReceipt ? _localReceiptCell({ receipt: legacyReceipt }) : '');
+      const refCell = [
+        links,
+        displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : '',
+        item.invoiceNum ? `<span style="font-size:11px;color:var(--gold);">🧾 ${escapeHtml(item.invoiceNum)}</span>` : ''
+      ].filter(Boolean).join('<br>');
+
+      // Show original amount in its native currency; show CAD equivalent separately
+      const origSym = getSym(item.origCurrency || 'CAD');
+      const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
+      const cadDisplay = `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}`;
+
+      const catCell = item.sourceType === 'businessExpense'
+        ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:11px;padding:2px 4px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,.15);border-radius:4px;max-width:170px;" title="Change category">
+              ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}"${c === item.cat ? ' selected' : ''}>${c}</option>`).join('')}
+              ${TC_CATEGORIES.includes(item.cat) ? '' : `<option value="${(item.cat || '').replace(/"/g, '&quot;')}" selected>${item.cat || ''}</option>`}
+            </select>`
+        : item.cat;
+
+      let descCell = item.desc || '';
+      if (item.sourceType === 'businessExpense') {
+        const tripPill = item.trip
+          ? `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Edit trip">✈ ${item.trip}</span>`
+          : `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;color:var(--text3);border:1px dashed var(--border);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Assign to a trip">+ trip</span>`;
+        descCell = `<div>${item.desc || ''}</div>${tripPill}`;
+      }
+
+      return `
+        <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'}">
+            <td style="font-size:12px;">${item.date || '—'}</td>
+            <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
+            <td style="font-size:12px;">${descCell}</td>
+            <td style="font-size:12px;">${catCell}</td>
+            <td style="font-size:12px;">${refCell}</td>
+            <td class="r" style="font-size:12px;">${origDisplay}</td>
+            <td class="r" style="font-weight:600;">${cadDisplay}</td>
+            <td class="r">
+              ${(item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense')
+          ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+          : (item.sourceType === 'sale'
+            ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditSale('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+            : (item.sourceType === 'artistPayout'
+              ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+              : ''
+            )
+          )
+        }
+              ${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}
+            </td>
+        </tr>`;
+    }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</td></tr>`;
+  }
+}
+
+function _tcRenderCategoryPanel(allLedger, baseCurrency) {
+  const catBody = $('tc-category-body');
+  if (catBody) {
+    const expenses = allLedger.filter(item => !item.isIncome);
+    const catSummary = {};
+    expenses.forEach(ex => {
+      const c = ex.cat || 'Uncategorized';
+      if (!catSummary[c]) catSummary[c] = { total: 0, count: 0, items: [] };
+      catSummary[c].total += ex.baseAmount;
+      catSummary[c].count++;
+      catSummary[c].items.push(ex);
+    });
+    const catList = Object.keys(catSummary).map(c => ({ name: c, ...catSummary[c] })).sort((a, b) => b.total - a.total);
+
+    // Stash by index so the detail modal can read transactions without escaping issues.
+    window._tcCategoryDetail = {
+      baseCurrency,
+      byName: catSummary
+    };
+
+    catBody.innerHTML = catList.map(c => `
+          <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${escapeHtml(c.name)}" style="cursor:pointer;" title="Click to view ${c.count} transaction${c.count === 1 ? '' : 's'}">
+            <td style="color:var(--gold3);text-decoration:underline;">${escapeHtml(c.name)}</td>
+            <td class="r">${c.count}</td>
+            <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}</td>
+          </tr>
+      `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;">No deductible expenses recorded</td></tr>`;
+  }
+}
+
+function _tcRenderTripsPanel(selectedYear, baseCurrency) {
+  const tripBody = $('tc-trip-body');
+  const tripSummary = {};
+  (TAX_CENTER.businessExpenses || []).forEach(e => {
+    const eYear = e.date ? e.date.substring(0, 4) : '';
+    if (selectedYear !== 'all' && eYear !== selectedYear) return;
+    const t = (e.trip || '').trim();
+    if (!t) return;
+    const eCur = e.currency || 'CAD';
+    const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+    if (!tripSummary[t]) tripSummary[t] = { total: 0, count: 0, items: [] };
+    tripSummary[t].total += eBase;
+    tripSummary[t].count++;
+    tripSummary[t].items.push({ ...e, baseAmount: eBase, origCurrency: eCur, origAmount: e.amount || 0 });
+  });
+  window._tcTripDetail = { baseCurrency, byName: tripSummary };
+
+  // Populate datalists for trip autocomplete (use ALL trips ever seen, not just filtered year)
+  const allTripNames = Array.from(new Set(
+    (TAX_CENTER.businessExpenses || []).map(e => (e.trip || '').trim()).filter(Boolean)
+  )).sort();
+  ['tc-trip-suggestions', 'tc-trip-suggestions-modal'].forEach(id => {
+    const dl = $(id);
+    if (dl) dl.innerHTML = allTripNames.map(t => `<option value="${t.replace(/"/g, '&quot;')}">`).join('');
   });
 
-  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
-  const yearSelect = $('tc-year');
-  const selectedYear = yearSelect ? yearSelect.value : 'all';
+  if (tripBody) {
+    const tripList = Object.keys(tripSummary).map(t => ({ name: t, ...tripSummary[t] })).sort((a, b) => b.total - a.total);
+    tripBody.innerHTML = tripList.map(t => `
+        <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${escapeHtml(t.name)}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count === 1 ? '' : 's'}">
+          <td style="color:var(--gold);text-decoration:underline;">✈ ${escapeHtml(t.name)}</td>
+          <td class="r">${t.count}</td>
+          <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(t.total, baseCurrency)}</td>
+        </tr>
+    `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;color:var(--text3);">No trips yet — add a Trip name when logging an expense to group them here.</td></tr>`;
+  }
+}
 
+function _tcBuildLedger(selectedYear) {
   let totalGrossSales = 0;
   let totalOperatingExpenses = 0;
   let allLedger = [];
@@ -15361,6 +15534,72 @@ function renderTaxCenter() {
     });
   });
 
+  return { totalGrossSales, totalOperatingExpenses, allLedger };
+}
+
+function _tcRenderStatusHeaders() {
+  if ($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
+  if ($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
+  const _stripeStatusEl = $('stripe-fees-status');
+  if (_stripeStatusEl && !_stripeStatusEl.textContent && TAX_CENTER.settings?.stripeFeesLastImportAt) {
+    const last = new Date(TAX_CENTER.settings.stripeFeesLastImportAt);
+    if (!isNaN(last)) {
+      const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+      const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+      _stripeStatusEl.textContent = `Fees last inserted into ledger ${ago} (${last.toISOString().slice(0, 10)}). Fetch again to refresh.`;
+    }
+  }
+  if ($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
+  const _shippoStatusEl = $('tc-shippo-status');
+  if (_shippoStatusEl && TAX_CENTER.settings?.shippoLastImportAt) {
+    const last = new Date(TAX_CENTER.settings.shippoLastImportAt);
+    if (!isNaN(last)) {
+      const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+      const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+      _shippoStatusEl.textContent = `Last synced ${ago} (${last.toISOString().slice(0, 10)}). Imports non-refunded transaction rates as Shipping & Postage expenses.`;
+    }
+  }
+
+  // Update the receipt storage status shown inline next to the Receipt
+  // input on Log Business Expense.
+  loadReceiptFolderHandle().then(async handle => {
+    const inlineStatus = $('tc-exp-storage-status');
+    const inlineAuthBtn = $('tc-exp-storage-auth-btn');
+    const setInline = (text, color, showAuth) => {
+      if (inlineStatus) {
+        inlineStatus.innerHTML = text;
+        inlineStatus.style.color = color || 'var(--text3)';
+      }
+      if (inlineAuthBtn) inlineAuthBtn.style.display = showAuth ? '' : 'none';
+    };
+    if (!handle) {
+      setInline('Storage: <strong>Cloud (Firestore)</strong> — pick a local folder to save receipts as files', 'var(--text3)', false);
+      return;
+    }
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      // Use a chevron between the chosen folder and the sub-path so a
+      // folder that happens to be named "receipts" doesn't read as the
+      // confusing "receipts/receipts/General/".
+      setInline(`Saving to: <strong>${escapeHtml(handle.name)}</strong> › receipts/General`, 'var(--green)', false);
+    } else {
+      setInline(`⚠ Access needed for folder: <strong>${escapeHtml(handle.name)}</strong>`, 'var(--amber)', true);
+    }
+  });
+}
+
+function renderTaxCenter() {
+  if (isAuthor()) return;
+  // Restore the saved ledger view (year + search + type) before reading the year.
+  _tcRestoreLedgerPrefs();
+  _tcRenderStatusHeaders();
+
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  const yearSelect = $('tc-year');
+  const selectedYear = yearSelect ? yearSelect.value : 'all';
+
+  const { totalGrossSales, totalOperatingExpenses, allLedger } = _tcBuildLedger(selectedYear);
+
   const netCashFlow = totalGrossSales - totalOperatingExpenses;
 
   // Render the redesigned Cash Flow Summary card (headline stats + deltas +
@@ -15372,69 +15611,9 @@ function renderTaxCenter() {
   });
 
   // Trips panel + autocomplete suggestions
-  const tripBody = $('tc-trip-body');
-  const tripSummary = {};
-  (TAX_CENTER.businessExpenses || []).forEach(e => {
-    const eYear = e.date ? e.date.substring(0, 4) : '';
-    if (selectedYear !== 'all' && eYear !== selectedYear) return;
-    const t = (e.trip || '').trim();
-    if (!t) return;
-    const eCur = e.currency || 'CAD';
-    const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
-    if (!tripSummary[t]) tripSummary[t] = { total: 0, count: 0, items: [] };
-    tripSummary[t].total += eBase;
-    tripSummary[t].count++;
-    tripSummary[t].items.push({ ...e, baseAmount: eBase, origCurrency: eCur, origAmount: e.amount || 0 });
-  });
-  window._tcTripDetail = { baseCurrency, byName: tripSummary };
+  _tcRenderTripsPanel(selectedYear, baseCurrency);
 
-  // Populate datalists for trip autocomplete (use ALL trips ever seen, not just filtered year)
-  const allTripNames = Array.from(new Set(
-    (TAX_CENTER.businessExpenses || []).map(e => (e.trip || '').trim()).filter(Boolean)
-  )).sort();
-  ['tc-trip-suggestions', 'tc-trip-suggestions-modal'].forEach(id => {
-    const dl = $(id);
-    if (dl) dl.innerHTML = allTripNames.map(t => `<option value="${t.replace(/"/g, '&quot;')}">`).join('');
-  });
-
-  if (tripBody) {
-    const tripList = Object.keys(tripSummary).map(t => ({ name: t, ...tripSummary[t] })).sort((a, b) => b.total - a.total);
-    tripBody.innerHTML = tripList.map(t => `
-        <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${escapeHtml(t.name)}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count === 1 ? '' : 's'}">
-          <td style="color:var(--gold);text-decoration:underline;">✈ ${escapeHtml(t.name)}</td>
-          <td class="r">${t.count}</td>
-          <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(t.total, baseCurrency)}</td>
-        </tr>
-    `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;color:var(--text3);">No trips yet — add a Trip name when logging an expense to group them here.</td></tr>`;
-  }
-
-  const catBody = $('tc-category-body');
-  if (catBody) {
-    const expenses = allLedger.filter(item => !item.isIncome);
-    const catSummary = {};
-    expenses.forEach(ex => {
-      const c = ex.cat || 'Uncategorized';
-      if (!catSummary[c]) catSummary[c] = { total: 0, count: 0, items: [] };
-      catSummary[c].total += ex.baseAmount;
-      catSummary[c].count++;
-      catSummary[c].items.push(ex);
-    });
-    const catList = Object.keys(catSummary).map(c => ({ name: c, ...catSummary[c] })).sort((a, b) => b.total - a.total);
-
-    // Stash by index so the detail modal can read transactions without escaping issues.
-    window._tcCategoryDetail = {
-      baseCurrency,
-      byName: catSummary
-    };
-
-    catBody.innerHTML = catList.map(c => `
-          <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${escapeHtml(c.name)}" style="cursor:pointer;" title="Click to view ${c.count} transaction${c.count === 1 ? '' : 's'}">
-            <td style="color:var(--gold3);text-decoration:underline;">${escapeHtml(c.name)}</td>
-            <td class="r">${c.count}</td>
-            <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}</td>
-          </tr>
-      `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;">No deductible expenses recorded</td></tr>`;
-  }
+  _tcRenderCategoryPanel(allLedger, baseCurrency);
 
   // ⚡ Bolt Optimization: Use string comparison instead of parsing to Date for sorting "YYYY-MM-DD" formatted dates
   allLedger.sort((a, b) => {
@@ -15456,161 +15635,19 @@ function renderTaxCenter() {
   const pageStart = _tcLedgerPage * TC_LEDGER_PAGE_SIZE;
   const pageLedger = filteredLedger.slice(pageStart, pageStart + TC_LEDGER_PAGE_SIZE);
 
-  const ledTbody = $('tc-ledger-body');
-  if (ledTbody) {
-    ledTbody.innerHTML = pageLedger.map(item => {
-      // Build receipt/ref cell — receipt links AND the reference number
-      // together; a ref must never hide the saved receipt files.
-      let displayRef = item.ref != null ? String(item.ref) : '';
-      let legacyReceipt = '';
-      // Legacy cleanup: if ref contains a local link, extract it
-      if (displayRef && displayRef.includes('local://')) {
-        const match = displayRef.match(/href="([^"]+)"/);
-        if (match) legacyReceipt = match[1];
-        displayRef = '';
-      }
-      const links = _localReceiptCell(item) || (legacyReceipt ? _localReceiptCell({ receipt: legacyReceipt }) : '');
-      const refCell = [
-        links,
-        displayRef ? `<span style="font-size:11px;color:var(--text3);">${displayRef}</span>` : '',
-        item.invoiceNum ? `<span style="font-size:11px;color:var(--gold);">🧾 ${escapeHtml(item.invoiceNum)}</span>` : ''
-      ].filter(Boolean).join('<br>');
-
-      // Show original amount in its native currency; show CAD equivalent separately
-      const origSym = getSym(item.origCurrency || 'CAD');
-      const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
-      const cadDisplay = `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}`;
-
-      const catCell = item.sourceType === 'businessExpense'
-        ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:11px;padding:2px 4px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,.15);border-radius:4px;max-width:170px;" title="Change category">
-              ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}"${c === item.cat ? ' selected' : ''}>${c}</option>`).join('')}
-              ${TC_CATEGORIES.includes(item.cat) ? '' : `<option value="${(item.cat || '').replace(/"/g, '&quot;')}" selected>${item.cat || ''}</option>`}
-            </select>`
-        : item.cat;
-
-      let descCell = item.desc || '';
-      if (item.sourceType === 'businessExpense') {
-        const tripPill = item.trip
-          ? `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Edit trip">✈ ${item.trip}</span>`
-          : `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;color:var(--text3);border:1px dashed var(--border);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Assign to a trip">+ trip</span>`;
-        descCell = `<div>${item.desc || ''}</div>${tripPill}`;
-      }
-
-      return `
-        <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'}">
-            <td style="font-size:12px;">${item.date || '—'}</td>
-            <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
-            <td style="font-size:12px;">${descCell}</td>
-            <td style="font-size:12px;">${catCell}</td>
-            <td style="font-size:12px;">${refCell}</td>
-            <td class="r" style="font-size:12px;">${origDisplay}</td>
-            <td class="r" style="font-weight:600;">${cadDisplay}</td>
-            <td class="r">
-              ${(item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense')
-          ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
-          : (item.sourceType === 'sale'
-            ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditSale('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
-            : (item.sourceType === 'artistPayout'
-              ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
-              : ''
-            )
-          )
-        }
-              ${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}
-            </td>
-        </tr>`;
-    }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</td></tr>`;
-  }
+  _tcRenderLedgerTable(pageLedger, baseCurrency);
 
   // Filtered totals footer — reacts to the year + search + type filter.
-  const footEl = $('tc-ledger-foot');
-  if (footEl) {
-    if (!filteredLedger.length) {
-      footEl.innerHTML = '';
-    } else {
-      let fIncome = 0, fExpense = 0;
-      for (const r of filteredLedger) {
-        if (r.isIncome) fIncome += r.baseAmount || 0;
-        else fExpense += r.baseAmount || 0;
-      }
-      const fNet = fIncome - fExpense;
-      const netColor = fNet >= 0 ? 'var(--green)' : 'var(--red)';
-      footEl.innerHTML = `
-        <tr>
-          <td colspan="8" style="padding:10px 12px;background:var(--cream2);border-top:2px solid var(--gold-line);">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;">
-              <span style="color:var(--text3);">${filteredLedger.length} ${filteredLedger.length === 1 ? 'entry' : 'entries'}${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? ' (filtered)' : ''}</span>
-              <div style="display:flex;gap:18px;flex-wrap:wrap;">
-                <span>Income <strong style="color:var(--green);">+${fmt(fIncome, baseCurrency)}</strong></span>
-                <span>Expenses <strong style="color:var(--red);">-${fmt(fExpense, baseCurrency)}</strong></span>
-                <span>Net <strong style="color:${netColor};">${fmt(fNet, baseCurrency)}</strong></span>
-              </div>
-            </div>
-          </td>
-        </tr>`;
-    }
-  }
+  _tcRenderLedgerFoot(filteredLedger, baseCurrency);
 
   // Active-filter chip (search + type) — makes it obvious why the table shows
   // fewer rows than the year-scoped summary cards, with one-click reset.
-  const filterChip = $('tc-ledger-filter-chip');
-  if (filterChip) {
-    const parts = [];
-    if (_tcLedgerType === 'sales') parts.push('Sales only');
-    else if (_tcLedgerType === 'expenses') parts.push('Expenses only');
-    const q = _tcLedgerSearch.trim();
-    if (q) parts.push(`“${escapeHtml(q)}”`);
-    filterChip.innerHTML = parts.length
-      ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:14px;padding:3px 6px 3px 12px;">Filtered: ${parts.join(' · ')}<button onclick="tcClearLedgerFilters()" title="Clear filters" aria-label="Clear filters" style="border:none;background:transparent;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 4px;">✕</button></span>`
-      : '';
-  }
+  _tcRenderLedgerFilterChip();
 
   // Pagination controls
-  const pgWrap = $('tc-ledger-pagination');
-  if (pgWrap) {
-    if (totalPages <= 1) {
-      pgWrap.innerHTML = '';
-    } else {
-      const from = filteredLedger.length ? pageStart + 1 : 0;
-      const to = Math.min(pageStart + TC_LEDGER_PAGE_SIZE, filteredLedger.length);
-      const btnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--cream2);color:var(--text);';
-      const activeBtnStyle = 'padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--gold);background:var(--gold);color:var(--ink);font-weight:600;';
-      // Show at most 7 page buttons around current page
-      const maxBtns = 7;
-      let startBtn = Math.max(0, _tcLedgerPage - Math.floor(maxBtns / 2));
-      let endBtn = Math.min(totalPages - 1, startBtn + maxBtns - 1);
-      if (endBtn - startBtn < maxBtns - 1) startBtn = Math.max(0, endBtn - maxBtns + 1);
-      let btns = '';
-      if (startBtn > 0) btns += `<button style="${btnStyle}" onclick="setTcLedgerPage(0)">1</button><span style="color:var(--text3);padding:0 4px;">…</span>`;
-      for (let p = startBtn; p <= endBtn; p++) {
-        btns += `<button style="${p === _tcLedgerPage ? activeBtnStyle : btnStyle}" onclick="setTcLedgerPage(${p})">${p + 1}</button>`;
-      }
-      if (endBtn < totalPages - 1) btns += `<span style="color:var(--text3);padding:0 4px;">…</span><button style="${btnStyle}" onclick="setTcLedgerPage(${totalPages - 1})">${totalPages}</button>`;
-      pgWrap.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:8px;">
-          <span style="font-size:12px;color:var(--text3);">Showing ${from}–${to} of ${filteredLedger.length} entries</span>
-          <div style="display:flex;gap:4px;align-items:center;">
-            <button style="${btnStyle}" onclick="setTcLedgerPage(${_tcLedgerPage - 1})" ${_tcLedgerPage === 0 ? 'disabled' : ''}>‹ Prev</button>
-            ${btns}
-            <button style="${btnStyle}" onclick="setTcLedgerPage(${_tcLedgerPage + 1})" ${_tcLedgerPage === totalPages - 1 ? 'disabled' : ''}>Next ›</button>
-          </div>
-        </div>`;
-    }
-  }
+  _tcRenderLedgerPagination(filteredLedger, pageStart, totalPages);
 
-  const recBody = $('tc-recurring-body');
-  if (recBody) {
-    recBody.innerHTML = (TAX_CENTER.recurring || []).map((sub, i) => `
-        <tr>
-            <td>${escapeHtml(sub.desc)}</td>
-            <td>${escapeHtml(sub.cat)}</td>
-            <td>${fmt(sub.amount, sub.currency || 'CAD')}</td>
-            <td>${escapeHtml(sub.startDate || '-')}</td>
-            <td>${escapeHtml(sub.lastInjected || 'Never')}</td>
-            <td><button class="btn tx" onclick="removeRecurring(${i})">Remove</button></td>
-        </tr>
-      `).join('') || `<tr><td colspan="5" class="r" style="text-align:center;">No active subscriptions</td></tr>`;
-  }
+  _tcRenderRecurringSubscriptions();
 
   // Keep BOTH year selects in agreement with the period that was just rendered,
   // regardless of which control triggered the change (or a restored pref).
