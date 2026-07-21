@@ -24025,6 +24025,7 @@ let shipAnalysisCarrierFilter = 'all';
 let shipAnalysisRegionFilter = 'all';
 let shipAnalysisWeightFilter = 'all';
 let shipAnalysisSearchQuery = '';
+let shipAnalysisRecentlySavedOrderId = '';
 let shipAnalysisCurrentPage = 1;
 const SHIP_ANALYSIS_PAGE_SIZE = 10;
 
@@ -24114,8 +24115,14 @@ async function onInlinePostageChange(inputEl) {
   h.postagePaid = val;
   h.manualPostagePaid = true;
   await window.saveState(bookId);
+  
+  shipAnalysisRecentlySavedOrderId = orderIdentifier;
   showToast(`Postage cost updated for Order #${h.num}`, 'ok');
   renderShippingAnalysisHub();
+
+  setTimeout(() => {
+    shipAnalysisRecentlySavedOrderId = '';
+  }, 1500);
 }
 
 /**
@@ -25218,6 +25225,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
               : { label: 'Matched', className: 'matched' });
 
     const book = BOOK_LIST.find(b => b.id === o.bookId);
+    const isSavedSuccess = (o.id === shipAnalysisRecentlySavedOrderId || o.num === shipAnalysisRecentlySavedOrderId);
 
     let linkBtn = '';
     let trackingLinkHtml = '';
@@ -25302,7 +25310,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         <td class="shipping-pnl-money" data-label="Postage">
           <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
             <input type="number" step="0.01" min="0" 
-              class="inline-postage-input" 
+              class="inline-postage-input ${isSavedSuccess ? 'saved-success' : ''}" 
               value="${postageCostCAD.toFixed(2)}" 
               data-book-id="${escapeHtml(o.bookId)}" 
               data-order-id="${escapeHtml(o.id || o.num)}" 

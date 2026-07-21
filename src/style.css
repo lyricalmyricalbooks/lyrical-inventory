@@ -433,6 +433,22 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   -moz-appearance: textfield;
 }
 
+@keyframes save-flash {
+  0% {
+    border-color: #176b46;
+    box-shadow: 0 0 0 3px rgba(23, 107, 70, 0.35);
+    background: color-mix(in srgb, var(--surface-card) 85%, #176b46);
+  }
+  100% {
+    border-color: var(--border);
+    box-shadow: none;
+    background: var(--cream2);
+  }
+}
+.inline-postage-input.saved-success {
+  animation: save-flash 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
 .shipping-pnl-tracking-link {
   color: var(--gold) !important;
   text-decoration: none !important;
