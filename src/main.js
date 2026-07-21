@@ -15335,8 +15335,220 @@ function _tcRenderCategoryPanel(allLedger, baseCurrency) {
   }
 }
 
+let _tcTripsViewMode = localStorage.getItem('tc_trips_view_mode') || 'cards';
+
+function tcSetTripsView(mode) {
+  _tcTripsViewMode = mode === 'table' ? 'table' : 'cards';
+  try { localStorage.setItem('tc_trips_view_mode', _tcTripsViewMode); } catch (e) {}
+  const cardsBtn = $('tc-trips-btn-cards');
+  const tableBtn = $('tc-trips-btn-table');
+  const cardsView = $('tc-trip-cards-view');
+  const tableView = $('tc-trip-table-view');
+
+  if (cardsBtn && tableBtn && cardsView && tableView) {
+    if (_tcTripsViewMode === 'cards') {
+      cardsBtn.classList.add('active');
+      tableBtn.classList.remove('active');
+      cardsView.style.display = 'block';
+      tableView.style.display = 'none';
+    } else {
+      tableBtn.classList.add('active');
+      cardsBtn.classList.remove('active');
+      tableView.style.display = 'block';
+      cardsView.style.display = 'none';
+    }
+  }
+}
+
+const TC_TRIP_CAT_COLORS = {
+  'Travel & Transit': 'var(--gold, #c8913a)',
+  'Lodging & Hotel': '#6366f1',
+  'Meals & Entertainment': '#f43f5e',
+  'Booths & Fairs': '#14b8a6',
+  'Supplies & Printing': '#a855f7',
+  'Other': '#a8a29e'
+};
+
+function _tcGetTripsSummaryAll() {
+  const tripSummary = {};
+  (TAX_CENTER.businessExpenses || []).forEach(e => {
+    const t = (e.trip || '').trim();
+    if (!t) return;
+    const eCur = e.currency || 'CAD';
+    const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
+    const cat = e.cat || 'Other';
+    if (!tripSummary[t]) {
+      tripSummary[t] = { total: 0, count: 0, latestDate: '', items: [], categories: {} };
+    }
+    tripSummary[t].total += eBase;
+    tripSummary[t].count++;
+    if (!tripSummary[t].categories[cat]) tripSummary[t].categories[cat] = 0;
+    tripSummary[t].categories[cat] += eBase;
+    if (e.date && (!tripSummary[t].latestDate || e.date > tripSummary[t].latestDate)) {
+      tripSummary[t].latestDate = e.date;
+    }
+    tripSummary[t].items.push({ ...e, baseAmount: eBase, origCurrency: eCur, origAmount: e.amount || 0 });
+  });
+  return tripSummary;
+}
+
+function tcRenderQuickTripChips() {
+  const chipsContainer = $('tc-trip-quick-chips');
+  if (!chipsContainer) return;
+
+  const tripSummary = _tcGetTripsSummaryAll();
+  const sortedTrips = Object.keys(tripSummary)
+    .map(name => ({ name, ...tripSummary[name] }))
+    .sort((a, b) => (b.latestDate || '').localeCompare(a.latestDate || ''))
+    .slice(0, 5);
+
+  if (sortedTrips.length === 0) {
+    chipsContainer.innerHTML = '';
+    return;
+  }
+
+  const currentVal = ($('tc-exp-trip')?.value || '').trim();
+  const chipsHtml = sortedTrips.map(t => {
+    const isActive = currentVal.toLowerCase() === t.name.toLowerCase();
+    return `<button type="button" class="tc-trip-chip ${isActive ? 'is-active' : ''}" onclick="tcSelectTripOption('tc-exp-trip', '${t.name.replace(/'/g, "\\'")}')">
+      ✈ ${escapeHtml(t.name)} <span class="count-pill">${t.count}</span>
+    </button>`;
+  }).join('');
+
+  chipsContainer.innerHTML = chipsHtml;
+}
+
+function tcUpdateTripSelectedPreview() {
+  const input = $('tc-exp-trip');
+  const preview = $('tc-trip-selected-preview');
+  if (!input || !preview) return;
+
+  const val = (input.value || '').trim();
+  if (!val) {
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+    return;
+  }
+
+  const summary = _tcGetTripsSummaryAll();
+  const tripInfo = summary[val];
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+
+  if (tripInfo) {
+    preview.style.display = 'flex';
+    preview.innerHTML = `
+      <span>✈ <b>Active Trip:</b> ${escapeHtml(val)} &bull; ${tripInfo.count} expense${tripInfo.count === 1 ? '' : 's'} logged (<span style="color:var(--red-light);font-weight:700;">-${fmt(tripInfo.total, baseCurrency)}</span>)</span>
+      <button class="clear-btn" type="button" onclick="tcClearSelectedTrip('tc-exp-trip')" title="Clear trip assignment">✕ Clear</button>
+    `;
+  } else {
+    preview.style.display = 'flex';
+    preview.innerHTML = `
+      <span>✨ <b>New Trip:</b> ${escapeHtml(val)} (will be created on save)</span>
+      <button class="clear-btn" type="button" onclick="tcClearSelectedTrip('tc-exp-trip')" title="Clear trip assignment">✕ Clear</button>
+    `;
+  }
+}
+
+function tcClearSelectedTrip(inputId) {
+  const input = $(inputId);
+  if (input) {
+    input.value = '';
+    if (inputId === 'tc-exp-trip') {
+      tcUpdateTripSelectedPreview();
+      tcRenderQuickTripChips();
+    }
+  }
+}
+
+function tcOpenTripDropdown(inputId) {
+  tcFilterTripDropdown(inputId);
+  const menu = $(`${inputId}-menu`);
+  if (menu) menu.classList.add('is-open');
+}
+
+function tcCloseTripDropdown(inputId) {
+  const menu = $(`${inputId}-menu`);
+  if (menu) menu.classList.remove('is-open');
+}
+
+function tcToggleTripDropdown(inputId) {
+  const menu = $(`${inputId}-menu`);
+  if (menu) {
+    if (menu.classList.contains('is-open')) {
+      tcCloseTripDropdown(inputId);
+    } else {
+      tcOpenTripDropdown(inputId);
+    }
+  }
+}
+
+function tcFilterTripDropdown(inputId) {
+  const input = $(inputId);
+  const menu = $(`${inputId}-menu`);
+  if (!input || !menu) return;
+
+  const filterText = (input.value || '').trim().toLowerCase();
+  const summary = _tcGetTripsSummaryAll();
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+
+  const allNames = Object.keys(summary).sort();
+  const matched = allNames.filter(name => name.toLowerCase().includes(filterText));
+
+  let html = matched.map(name => {
+    const t = summary[name];
+    const safeName = name.replace(/'/g, "\\'");
+    return `<div class="tc-trip-option" onclick="tcSelectTripOption('${inputId}', '${safeName}')">
+      <div class="tc-trip-option-main">
+        <span>✈</span>
+        <span class="tc-trip-option-name">${escapeHtml(name)}</span>
+      </div>
+      <div class="tc-trip-option-meta">
+        <span class="tc-trip-option-count">${t.count} item${t.count === 1 ? '' : 's'}</span>
+        <span class="tc-trip-option-amount">-${fmt(t.total, baseCurrency)}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  if (filterText && !allNames.some(name => name.toLowerCase() === filterText)) {
+    const typedEsc = input.value.trim().replace(/'/g, "\\'");
+    html += `<div class="tc-trip-create-option" onclick="tcSelectTripOption('${inputId}', '${typedEsc}')">
+      ➕ Add new trip: "${escapeHtml(input.value.trim())}"
+    </div>`;
+  }
+
+  if (!html) {
+    html = `<div style="padding:10px 12px;font-size:12px;color:var(--text3);text-align:center;">No existing trips. Type a name to create one!</div>`;
+  }
+
+  menu.innerHTML = html;
+  menu.classList.add('is-open');
+}
+
+function tcSelectTripOption(inputId, tripName) {
+  const input = $(inputId);
+  if (input) {
+    input.value = tripName;
+    tcCloseTripDropdown(inputId);
+    if (inputId === 'tc-exp-trip') {
+      tcUpdateTripSelectedPreview();
+      tcRenderQuickTripChips();
+    }
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.tc-trip-picker-wrapper')) {
+      ['tc-exp-trip', 'tc-edit-trip-input', 'edit-exp-trip'].forEach(tcCloseTripDropdown);
+    }
+  });
+}
+
 function _tcRenderTripsPanel(selectedYear, baseCurrency) {
   const tripBody = $('tc-trip-body');
+  const cardsGrid = $('tc-trip-cards-grid');
+  const statsBar = $('tc-trip-stats-bar');
+
   const tripSummary = {};
   (TAX_CENTER.businessExpenses || []).forEach(e => {
     const eYear = e.date ? e.date.substring(0, 4) : '';
@@ -15345,24 +15557,106 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
     if (!t) return;
     const eCur = e.currency || 'CAD';
     const eBase = e.baseAmount != null ? e.baseAmount : (e.amount || 0) * (_fxRateCache[`${eCur}_CAD`] || 1);
-    if (!tripSummary[t]) tripSummary[t] = { total: 0, count: 0, items: [] };
+    const cat = e.cat || 'Other';
+    if (!tripSummary[t]) tripSummary[t] = { total: 0, count: 0, items: [], categories: {}, minDate: '', maxDate: '' };
     tripSummary[t].total += eBase;
     tripSummary[t].count++;
+    if (!tripSummary[t].categories[cat]) tripSummary[t].categories[cat] = 0;
+    tripSummary[t].categories[cat] += eBase;
+
+    if (e.date) {
+      if (!tripSummary[t].minDate || e.date < tripSummary[t].minDate) tripSummary[t].minDate = e.date;
+      if (!tripSummary[t].maxDate || e.date > tripSummary[t].maxDate) tripSummary[t].maxDate = e.date;
+    }
+
     tripSummary[t].items.push({ ...e, baseAmount: eBase, origCurrency: eCur, origAmount: e.amount || 0 });
   });
+
   window._tcTripDetail = { baseCurrency, byName: tripSummary };
 
-  // Populate datalists for trip autocomplete (use ALL trips ever seen, not just filtered year)
-  const allTripNames = Array.from(new Set(
-    (TAX_CENTER.businessExpenses || []).map(e => (e.trip || '').trim()).filter(Boolean)
-  )).sort();
-  ['tc-trip-suggestions', 'tc-trip-suggestions-modal'].forEach(id => {
-    const dl = $(id);
-    if (dl) dl.innerHTML = allTripNames.map(t => `<option value="${t.replace(/"/g, '&quot;')}">`).join('');
-  });
+  const tripList = Object.keys(tripSummary)
+    .map(t => ({ name: t, ...tripSummary[t] }))
+    .sort((a, b) => b.total - a.total);
 
+  // Render Stats Bar
+  if (statsBar) {
+    const totalTrips = tripList.length;
+    const totalSpent = tripList.reduce((sum, t) => sum + t.total, 0);
+    const topTrip = tripList[0];
+    const avgSpent = totalTrips > 0 ? totalSpent / totalTrips : 0;
+
+    statsBar.innerHTML = `
+      <div class="tc-trip-stat-card">
+        <div class="tc-trip-stat-val">${totalTrips}</div>
+        <div class="tc-trip-stat-lbl">Active Business Trips</div>
+      </div>
+      <div class="tc-trip-stat-card">
+        <div class="tc-trip-stat-val" style="color:var(--red-light);">${fmt(totalSpent, baseCurrency)}</div>
+        <div class="tc-trip-stat-lbl">Total Trip Portfolio Spend</div>
+      </div>
+      <div class="tc-trip-stat-card">
+        <div class="tc-trip-stat-val">${topTrip ? escapeHtml(topTrip.name) : '—'}</div>
+        <div class="tc-trip-stat-lbl">Highest Spend Event ${topTrip ? `(${fmt(topTrip.total, baseCurrency)})` : ''}</div>
+      </div>
+      <div class="tc-trip-stat-card">
+        <div class="tc-trip-stat-val">${fmt(avgSpent, baseCurrency)}</div>
+        <div class="tc-trip-stat-lbl">Average Spend per Trip</div>
+      </div>
+    `;
+  }
+
+  // Render Visual Cards Grid
+  if (cardsGrid) {
+    if (tripList.length === 0) {
+      cardsGrid.innerHTML = `
+        <div style="grid-column:1/-1;text-align:center;padding:40px 20px;background:rgba(28,25,23,0.4);border:1px dashed rgba(255,255,255,0.1);border-radius:12px;">
+          <div style="font-size:28px;margin-bottom:8px;">✈</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:4px;">No business trips logged yet</div>
+          <div style="font-size:12px;color:var(--text3);max-width:380px;margin:0 auto 14px;">Assign expenses to a Trip name (e.g. "Toronto Book Fair") when logging transactions to group them in this visual portfolio.</div>
+        </div>
+      `;
+    } else {
+      cardsGrid.innerHTML = tripList.map(t => {
+        const catEntries = Object.entries(t.categories);
+        const catSegs = catEntries.map(([cat, amt]) => {
+          const pct = ((amt / t.total) * 100).toFixed(1);
+          const color = TC_TRIP_CAT_COLORS[cat] || 'var(--gold)';
+          return `<div class="tc-trip-cat-seg" style="width:${pct}%;background:${color};" title="${escapeHtml(cat)}: ${fmt(amt, baseCurrency)} (${pct}%)"></div>`;
+        }).join('');
+
+        const dateSpan = t.minDate && t.maxDate
+          ? (t.minDate === t.maxDate ? t.minDate : `${t.minDate} &rarr; ${t.maxDate}`)
+          : 'Multiple Dates';
+
+        const safeName = t.name.replace(/'/g, "\\'");
+        return `
+          <div class="tc-trip-card" onclick="showTripDetail('${safeName}')">
+            <div>
+              <div class="tc-trip-card-head">
+                <h4 class="tc-trip-card-title">✈ ${escapeHtml(t.name)}</h4>
+                <div class="tc-trip-card-total">-${fmt(t.total, baseCurrency)}</div>
+              </div>
+              <div class="tc-trip-card-meta">
+                <span>📅 ${dateSpan}</span>
+                <span>•</span>
+                <span>📄 ${t.count} expense${t.count === 1 ? '' : 's'}</span>
+              </div>
+              <div class="tc-trip-cat-bar" aria-label="Category breakdown bar">
+                ${catSegs}
+              </div>
+            </div>
+            <div class="tc-trip-card-foot">
+              <span style="color:var(--text3);font-size:11px;">Click to view expenses & breakdown</span>
+              <span style="color:var(--gold3);font-weight:600;">View Details &rarr;</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // Render Table View
   if (tripBody) {
-    const tripList = Object.keys(tripSummary).map(t => ({ name: t, ...tripSummary[t] })).sort((a, b) => b.total - a.total);
     tripBody.innerHTML = tripList.map(t => `
         <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${escapeHtml(t.name)}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count === 1 ? '' : 's'}">
           <td style="color:var(--gold);text-decoration:underline;">✈ ${escapeHtml(t.name)}</td>
@@ -15371,6 +15665,13 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
         </tr>
     `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;color:var(--text3);">No trips yet — add a Trip name when logging an expense to group them here.</td></tr>`;
   }
+
+  // Sync current view mode toggle button states
+  tcSetTripsView(_tcTripsViewMode);
+
+  // Render quick chips for expense logger input
+  tcRenderQuickTripChips();
+  tcUpdateTripSelectedPreview();
 }
 
 function _tcBuildLedger(selectedYear) {
@@ -16243,7 +16544,7 @@ function showTripDetail(tripName) {
   const detail = window._tcTripDetail;
   if (!detail || !detail.byName[tripName]) return;
   const { baseCurrency } = detail;
-  const { items, total, count } = detail.byName[tripName];
+  const { items, total, count, categories } = detail.byName[tripName];
   _tcOpenTripName = tripName;
 
   // ⚡ Bolt Optimization: Use string comparison instead of parsing to Date for sorting "YYYY-MM-DD" formatted dates
@@ -16252,6 +16553,11 @@ function showTripDetail(tripName) {
     const dateB = b.date || '';
     return dateA > dateB ? 1 : dateA < dateB ? -1 : 0;
   });
+
+  const catPills = Object.entries(categories || {}).map(([cat, amt]) => {
+    return `<span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);padding:2px 8px;border-radius:10px;font-size:11px;color:var(--text2);">${escapeHtml(cat)}: <b>-${fmt(amt, baseCurrency)}</b></span>`;
+  }).join(' ');
+
   const rows = sorted.map(item => {
     const refCell = _localReceiptCell(item);
     const origSym = getSym(item.origCurrency || 'CAD');
@@ -16272,8 +16578,13 @@ function showTripDetail(tripName) {
       </tr>`;
   }).join('');
 
-  $('tc-trip-detail-title').textContent = tripName;
-  $('tc-trip-detail-summary').innerHTML = `${count} expense${count === 1 ? '' : 's'} · <span style="color:var(--red);font-weight:bold;">Trip total: - ${fmt(total, baseCurrency)}</span>`;
+  $('tc-trip-detail-title').textContent = `✈ ${tripName}`;
+  $('tc-trip-detail-summary').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div>${count} expense${count === 1 ? '' : 's'} &bull; <span style="color:var(--red-light);font-weight:bold;">Trip total: -${fmt(total, baseCurrency)}</span></div>
+      ${catPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${catPills}</div>` : ''}
+    </div>
+  `;
   $('tc-trip-detail-body').innerHTML = rows;
   openM('tc-trip-detail');
 }
@@ -26272,6 +26583,9 @@ function exposeLegacyInlineHandlers() {
     _tcApplyLedgerFilter, renderTaxCenter, _tcSvgEsc, _tcDeltaChip, _tcRenderCashFlowSummary,
     _tcCashFlowBucketRows, _tcRenderSelectedCashFlowBucket, tcSelectCashFlowBucket,
     tcSetCashFlowDetailType, tcClearCashFlowBucket, _tcBuildCashFlowChart, removeLedgerEntry,
+    tcSetTripsView, _tcGetTripsSummaryAll, tcRenderQuickTripChips, tcUpdateTripSelectedPreview,
+    tcClearSelectedTrip, tcOpenTripDropdown, tcCloseTripDropdown, tcToggleTripDropdown,
+    tcFilterTripDropdown, tcSelectTripOption,
     openEditTrip, saveTripAssignment, renderEditExpenseReceipts, removeEditExpenseReceipt,
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,
     renameTripPrompt, showCategoryDetail, saveTaxCenterSettings, scanReceiptWithAI,
