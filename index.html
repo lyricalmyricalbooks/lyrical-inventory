@@ -1299,8 +1299,13 @@
   <div style="font-size:12px;color:var(--text3);margin-bottom:10px;" id="tc-edit-trip-context"></div>
   <div class="form-group">
     <label for="tc-edit-trip-input">Trip name (leave blank to remove)<span class="tip tip-mark" data-tip="Group expenses under a named trip (e.g. a book fair) so you can total travel, lodging and meals per event for your tax records.">?</span></label>
-    <input type="text" id="tc-edit-trip-input" list="tc-trip-suggestions-modal" placeholder="e.g. Toronto Book Fair · Oct 2025">
-    <datalist id="tc-trip-suggestions-modal"></datalist>
+    <div class="tc-trip-picker-wrapper">
+      <div class="tc-trip-input-container">
+        <input type="text" id="tc-edit-trip-input" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025" onfocus="tcOpenTripDropdown('tc-edit-trip-input')" oninput="tcFilterTripDropdown('tc-edit-trip-input')">
+        <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('tc-edit-trip-input')" tabindex="-1">▼</button>
+        <div id="tc-edit-trip-input-menu" class="tc-trip-dropdown-menu"></div>
+      </div>
+    </div>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
     <button class="btn" onclick="closeM('tc-edit-trip')">Cancel</button>
@@ -1541,9 +1546,17 @@
         </div>
       </div>
     </div>
-    <div class="form-group" style="margin-top:8px;"><label for="tc-exp-trip">Trip / Project (optional — groups expenses for a single business trip)</label>
-      <input type="text" id="tc-exp-trip" list="tc-trip-suggestions" placeholder="e.g. Toronto Book Fair · Oct 2025">
-      <datalist id="tc-trip-suggestions"></datalist>
+    <div class="form-group" style="margin-top:8px;">
+      <label for="tc-exp-trip">Trip / Project (optional — groups expenses for a single business trip)</label>
+      <div class="tc-trip-picker-wrapper">
+        <div id="tc-trip-quick-chips" class="tc-trip-quick-chips"></div>
+        <div class="tc-trip-input-container">
+          <input type="text" id="tc-exp-trip" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025" onfocus="tcOpenTripDropdown('tc-exp-trip')" oninput="tcFilterTripDropdown('tc-exp-trip')">
+          <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('tc-exp-trip')" tabindex="-1">▼</button>
+          <div id="tc-exp-trip-menu" class="tc-trip-dropdown-menu"></div>
+        </div>
+        <div id="tc-trip-selected-preview" style="display:none;"></div>
+      </div>
     </div>
     <div style="margin-top:16px;">
       <button class="btn gold" style="width:100%;height:48px;font-size:15px;font-weight:600;letter-spacing:.02em;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button>
@@ -1692,14 +1705,29 @@
     </div>
   </div>
 
-  <div class="row-between" style="margin-top:2.5rem;margin-bottom:12px;">
-    <div class="section-hed">Business Trips</div>
-    <div style="font-size:11px;color:var(--text3);">Group multi-expense trips while keeping each line in its proper tax category.</div>
+  <div class="tc-trips-header">
+    <div>
+      <div class="section-hed" style="margin-bottom:2px;">Business Trips & Event Portfolio</div>
+      <div style="font-size:11px;color:var(--text3);">Group multi-expense business trips & fairs while maintaining tax-deductible category totals.</div>
+    </div>
+    <div class="tc-trips-view-toggle">
+      <button class="tc-trips-view-btn active" id="tc-trips-btn-cards" onclick="tcSetTripsView('cards')">🖼 Cards</button>
+      <button class="tc-trips-view-btn" id="tc-trips-btn-table" onclick="tcSetTripsView('table')">📋 Table</button>
+    </div>
   </div>
-  <div class="tbl-wrap" style="margin-bottom:1.5rem;"><table class="tbl">
-    <thead><tr><th>Trip</th><th class="r">Expenses</th><th class="r">Total (CAD)</th></tr></thead>
-    <tbody id="tc-trip-body"></tbody>
-  </table></div>
+
+  <div id="tc-trip-stats-bar" class="tc-trip-stats-bar"></div>
+
+  <div id="tc-trip-cards-view" class="tc-trips-dashboard">
+    <div id="tc-trip-cards-grid" class="tc-trip-grid"></div>
+  </div>
+
+  <div id="tc-trip-table-view" class="tbl-wrap" style="margin-bottom:1.5rem;display:none;">
+    <table class="tbl">
+      <thead><tr><th>Trip</th><th class="r">Expenses</th><th class="r">Total (CAD)</th></tr></thead>
+      <tbody id="tc-trip-body"></tbody>
+    </table>
+  </div>
 
   <div class="row-between" style="margin-top:2.5rem;margin-bottom:12px;">
     <div class="section-hed">Expense Categorization (Tax Return Ready)</div>
@@ -2867,7 +2895,13 @@
     </div>
     <div class="form-group" style="margin-bottom:12px;">
       <label for="edit-exp-trip">Trip / Project (optional)</label>
-      <input id="edit-exp-trip" type="text" list="tc-trip-suggestions-modal">
+      <div class="tc-trip-picker-wrapper">
+        <div class="tc-trip-input-container">
+          <input id="edit-exp-trip" type="text" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025" onfocus="tcOpenTripDropdown('edit-exp-trip')" oninput="tcFilterTripDropdown('edit-exp-trip')">
+          <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('edit-exp-trip')" tabindex="-1">▼</button>
+          <div id="edit-exp-trip-menu" class="tc-trip-dropdown-menu"></div>
+        </div>
+      </div>
     </div>
     <div class="form-group" id="edit-exp-file-group" style="margin-bottom:12px;"><label>Receipts</label>
       <div id="edit-exp-receipts-preview" style="margin-bottom:8px;font-size:12px;display:flex;flex-direction:column;gap:4px;"></div>
