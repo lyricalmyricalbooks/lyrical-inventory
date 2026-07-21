@@ -43,5 +43,7 @@ describe('Trip Combobox & Visualizer Unit Tests', () => {
     expect(js).toContain('function tcOpenTripDropdown');
     expect(js).toContain('function tcFilterTripDropdown');
     expect(js).toContain('function tcSelectTripOption');
+    expect(js).toContain('function exportTripCSV');
+    expect(js).toContain('function setTripBudgetPrompt');
   });
 });

@@ -1287,8 +1287,12 @@
       <tbody id="tc-trip-detail-body"></tbody>
     </table>
   </div>
-  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;justify-content:space-between;">
-    <button class="btn" onclick="renameTripPrompt()">✎ Rename trip</button>
+  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" onclick="renameTripPrompt()">✎ Rename trip</button>
+      <button class="btn gold outline" onclick="exportTripCSV(_tcOpenTripName)">⬇ Export CSV</button>
+      <button class="btn tag" onclick="setTripBudgetPrompt(_tcOpenTripName)">🎯 Set budget</button>
+    </div>
     <button class="btn" onclick="closeM('tc-trip-detail')">Close</button>
   </div>
 </div></div>

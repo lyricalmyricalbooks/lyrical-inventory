@@ -15544,6 +15544,69 @@ if (typeof document !== 'undefined') {
   });
 }
 
+function exportTripCSV(tripName) {
+  const detail = window._tcTripDetail;
+  if (!detail || !detail.byName || !detail.byName[tripName]) {
+    showToast('⚠ Trip details not found', 'warn');
+    return;
+  }
+
+  const { baseCurrency, byName } = detail;
+  const { items } = byName[tripName];
+
+  const headers = ['Date', 'Description', 'Tax Category', 'Reference', 'Original Currency', 'Original Amount', `Base Amount (${baseCurrency})`, 'Receipt URL'];
+  const csvRows = [headers.join(',')];
+
+  items.forEach(item => {
+    const row = [
+      `"${(item.date || '').replace(/"/g, '""')}"`,
+      `"${(item.desc || '').replace(/"/g, '""')}"`,
+      `"${(item.cat || '').replace(/"/g, '""')}"`,
+      `"${(item.ref || '').replace(/"/g, '""')}"`,
+      `"${item.origCurrency || 'CAD'}"`,
+      Number(item.origAmount || 0).toFixed(2),
+      Number(item.baseAmount || 0).toFixed(2),
+      `"${(item.receipt || '').replace(/"/g, '""')}"`
+    ];
+    csvRows.push(row.join(','));
+  });
+
+  const csvString = csvRows.join('\n');
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const safeFilename = `trip_expenses_${tripName.replace(/[^a-zA-Z0-9_\-]/g, '_')}.csv`;
+  link.setAttribute('href', url);
+  link.setAttribute('download', safeFilename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast(`✓ Exported ${items.length} expenses to ${safeFilename}`);
+}
+
+async function setTripBudgetPrompt(tripName) {
+  if (!tripName) return;
+  if (!TAX_CENTER.tripBudgets) TAX_CENTER.tripBudgets = {};
+  const currentBudget = TAX_CENTER.tripBudgets[tripName] || '';
+  const input = window.prompt(`Set Target Budget (CAD) for trip "${tripName}":\n(Leave blank to clear budget limit)`, currentBudget);
+  if (input === null) return;
+
+  const val = parseFloat(input.trim());
+  if (!isNaN(val) && val > 0) {
+    TAX_CENTER.tripBudgets[tripName] = val;
+    showToast(`✓ Budget set to ${fmt(val, TAX_CENTER.settings?.baseCurrency || 'CAD')} for ${tripName}`);
+  } else {
+    delete TAX_CENTER.tripBudgets[tripName];
+    showToast(`✓ Budget cleared for ${tripName}`);
+  }
+
+  await saveTaxCenter();
+  renderTaxCenter();
+  if (_tcOpenTripName === tripName) {
+    showTripDetail(tripName);
+  }
+}
+
 function _tcRenderTripsPanel(selectedYear, baseCurrency) {
   const tripBody = $('tc-trip-body');
   const cardsGrid = $('tc-trip-cards-grid');
@@ -15628,6 +15691,27 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
           ? (t.minDate === t.maxDate ? t.minDate : `${t.minDate} &rarr; ${t.maxDate}`)
           : 'Multiple Dates';
 
+        const targetBudget = TAX_CENTER.tripBudgets?.[t.name] || 0;
+        let budgetHtml = '';
+        if (targetBudget > 0) {
+          const pct = Math.min(100, Math.round((t.total / targetBudget) * 100));
+          const isOver = t.total > targetBudget;
+          const barColor = isOver ? 'var(--red, #a63a2b)' : pct > 85 ? 'var(--gold2, #e5a93f)' : 'var(--green-light, #3ba75c)';
+          const badgeText = isOver
+            ? `⚠️ OVER BUDGET (+${fmt(t.total - targetBudget, baseCurrency)})`
+            : `🎯 ${pct}% of ${fmt(targetBudget, baseCurrency)} budget`;
+          budgetHtml = `
+            <div style="margin-bottom:12px;font-size:11px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:3px;font-weight:600;color:${isOver ? 'var(--red, #a63a2b)' : 'var(--text2)'};">
+                <span>${badgeText}</span>
+              </div>
+              <div style="height:5px;background:var(--cream3, #e5ddd0);border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width 0.3s ease;"></div>
+              </div>
+            </div>
+          `;
+        }
+
         const safeName = t.name.replace(/'/g, "\\'");
         return `
           <div class="tc-trip-card" onclick="showTripDetail('${safeName}')">
@@ -15644,10 +15728,11 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
               <div class="tc-trip-cat-bar" aria-label="Category breakdown bar">
                 ${catSegs}
               </div>
+              ${budgetHtml}
             </div>
             <div class="tc-trip-card-foot">
               <span style="color:var(--text3);font-size:11px;">Click to view expenses & breakdown</span>
-              <span style="color:var(--gold3);font-weight:600;">View Details &rarr;</span>
+              <span style="color:var(--gold-text, #8a5815);font-weight:700;">View Details &rarr;</span>
             </div>
           </div>
         `;
@@ -26585,7 +26670,7 @@ function exposeLegacyInlineHandlers() {
     tcSetCashFlowDetailType, tcClearCashFlowBucket, _tcBuildCashFlowChart, removeLedgerEntry,
     tcSetTripsView, _tcGetTripsSummaryAll, tcRenderQuickTripChips, tcUpdateTripSelectedPreview,
     tcClearSelectedTrip, tcOpenTripDropdown, tcCloseTripDropdown, tcToggleTripDropdown,
-    tcFilterTripDropdown, tcSelectTripOption,
+    tcFilterTripDropdown, tcSelectTripOption, exportTripCSV, setTripBudgetPrompt,
     openEditTrip, saveTripAssignment, renderEditExpenseReceipts, removeEditExpenseReceipt,
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,
     renameTripPrompt, showCategoryDetail, saveTaxCenterSettings, scanReceiptWithAI,
