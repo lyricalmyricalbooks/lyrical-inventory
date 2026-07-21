@@ -3524,7 +3524,9 @@ function renderOcBulkModalContent(retryMode = false) {
   // Get eligible contributors — resend mode shows already-sent ones too
   let eligible = [];
   if (retryMode && _ocBulkFailedIds.length > 0) {
-    eligible = proj.contributors.filter(c => c.email && _ocBulkFailedIds.includes(c.id));
+    // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
+    const failedSet = new Set(_ocBulkFailedIds);
+    eligible = proj.contributors.filter(c => c.email && failedSet.has(c.id));
   } else if (stage === 'selectionSent') {
     eligible = resendMode
       ? proj.contributors.filter(c => c.email && c.selectionSent)
@@ -3740,7 +3742,9 @@ async function sendOcBulkEmails(_retryFailedOnly = false) {
     return;
   }
 
-  const selectedRecs = proj.contributors.filter(c => selectedIds.includes(c.id));
+  // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
+  const selectedIdsSet = new Set(selectedIds);
+  const selectedRecs = proj.contributors.filter(c => selectedIdsSet.has(c.id));
 
   // Safety gate: a real (non-simulated) send goes to real inboxes and can't be
   // unsent, so always confirm first — recipient count + stage — and fold in any
@@ -4032,7 +4036,9 @@ async function executeOcBulkRemove() {
   const ok = await confirmDialog(`Are you sure you want to remove ${selectedIds.length} contributor${selectedIds.length !== 1 ? 's' : ''}? This action cannot be undone.`, { danger: true, okLabel: 'Remove' });
   if (!ok) return;
 
-  proj.contributors = proj.contributors.filter(c => !selectedIds.includes(c.id));
+  // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
+  const selectedIdsSet = new Set(selectedIds);
+  proj.contributors = proj.contributors.filter(c => !selectedIdsSet.has(c.id));
 
   await _persistOpenCalls();
   closeOcBulkRemoveModal();
@@ -5070,7 +5076,9 @@ async function ocRemovePhotoFromContributor(cId, photoIdx) {
   c.photos.splice(photoIdx, 1);
   c.photo = c.photos.join(', ');
   // A removed photo can't stay a starred pick.
-  if (Array.isArray(c.selectedPhotos)) c.selectedPhotos = c.selectedPhotos.filter(p => c.photos.includes(p));
+  // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
+  const photosSet = new Set(c.photos);
+  if (Array.isArray(c.selectedPhotos)) c.selectedPhotos = c.selectedPhotos.filter(p => photosSet.has(p));
   await _persistOpenCalls();
   renderOpenCall();
   showToast('Photo removed');
@@ -21593,7 +21601,9 @@ async function saveOcContributor(cId) {
   c.photos = photosStr ? photosStr.split(/;\s*|,\s*/).map(p => p.trim()).filter(Boolean) : [];
   c.photo = c.photos.join(', ');
   // Starred picks must stay a subset of the (possibly renamed) photo list.
-  if (Array.isArray(c.selectedPhotos)) c.selectedPhotos = c.selectedPhotos.filter(p => c.photos.includes(p));
+  // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
+  const photosSet = new Set(c.photos);
+  if (Array.isArray(c.selectedPhotos)) c.selectedPhotos = c.selectedPhotos.filter(p => photosSet.has(p));
 
   await _persistOpenCalls();
   closeOcEditModal();
