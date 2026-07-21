@@ -24025,6 +24025,7 @@ let shipAnalysisCarrierFilter = 'all';
 let shipAnalysisRegionFilter = 'all';
 let shipAnalysisWeightFilter = 'all';
 let shipAnalysisSearchQuery = '';
+let shipAnalysisRecentlySavedOrderId = '';
 let shipAnalysisCurrentPage = 1;
 const SHIP_ANALYSIS_PAGE_SIZE = 10;
 
@@ -24114,8 +24115,14 @@ async function onInlinePostageChange(inputEl) {
   h.postagePaid = val;
   h.manualPostagePaid = true;
   await window.saveState(bookId);
+  
+  shipAnalysisRecentlySavedOrderId = orderIdentifier;
   showToast(`Postage cost updated for Order #${h.num}`, 'ok');
   renderShippingAnalysisHub();
+
+  setTimeout(() => {
+    shipAnalysisRecentlySavedOrderId = '';
+  }, 1500);
 }
 
 /**
@@ -25218,6 +25225,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
               : { label: 'Matched', className: 'matched' });
 
     const book = BOOK_LIST.find(b => b.id === o.bookId);
+    const isSavedSuccess = (o.id === shipAnalysisRecentlySavedOrderId || o.num === shipAnalysisRecentlySavedOrderId);
 
     let linkBtn = '';
     let trackingLinkHtml = '';
@@ -25225,17 +25233,22 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
 
     if (linked.length > 0) {
       const primary = linked[0];
-      const tracking = primary.metadata?.tracking_number || '';
-      const carrier = primary.metadata?.carrier || '';
+      const parsedCarrier = parseCarrierInfo(primary.desc).provider;
+      const tracking = parseTrackingNumber(primary.desc) || o.trackingNumber || '';
+      const carrier = guessCarrier(tracking, primary.trackingUrl, parsedCarrier);
+      const url = primary.trackingUrl || '';
       
+      const refLink = primary.receipt
+        ? `<a href="${escapeHtml(primary.receipt)}" target="_blank" class="shipping-pnl-tracking-link" title="Open Shippo label/receipt">${escapeHtml(primary.ref)}</a>`
+        : `<div style="font-weight:600; color:var(--text);">${escapeHtml(primary.ref)}</div>`;
+
       expenseRefHtml = `
-        <div style="font-weight:600; color:var(--text);">${escapeHtml(primary.ref)}</div>
+        ${refLink}
         <div style="font-size:10px; color:var(--text3); margin-top:2px;">
           ${escapeHtml(primary.desc || 'Shippo shipping label')}
         </div>`;
 
       if (tracking) {
-        const url = primary.trackingUrl || '';
         trackingLinkHtml = url
           ? `<a href="${escapeHtml(url)}" target="_blank" class="shipping-pnl-tracking-link">${escapeHtml(carrier)}: ${escapeHtml(tracking)}</a>`
           : `${escapeHtml(carrier)}: ${escapeHtml(tracking)}`;
@@ -25297,7 +25310,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         <td class="shipping-pnl-money" data-label="Postage">
           <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
             <input type="number" step="0.01" min="0" 
-              class="inline-postage-input" 
+              class="inline-postage-input ${isSavedSuccess ? 'saved-success' : ''}" 
               value="${postageCostCAD.toFixed(2)}" 
               data-book-id="${escapeHtml(o.bookId)}" 
               data-order-id="${escapeHtml(o.id || o.num)}" 
@@ -26069,6 +26082,30 @@ function parseCarrierInfo(desc) {
   const provider = providerService.slice(0, spaceIdx).trim();
   const service = providerService.slice(spaceIdx).trim();
   return { provider, service };
+}
+
+function parseTrackingNumber(desc) {
+  if (!desc) return '';
+  const match = desc.match(/#([A-Za-z0-9\-_]+)/);
+  return match ? match[1] : '';
+}
+
+function guessCarrier(trackingNumber, trackingUrl, parsedCarrier) {
+  if (parsedCarrier && parsedCarrier !== 'Unknown' && parsedCarrier !== 'Shippo') {
+    return parsedCarrier;
+  }
+  const url = String(trackingUrl || '').toLowerCase();
+  if (url.includes('canadapost') || url.includes('canada-post')) return 'Canada Post';
+  if (url.includes('ups.com')) return 'UPS';
+  if (url.includes('fedex.com')) return 'FedEx';
+  if (url.includes('usps.com')) return 'USPS';
+  if (url.includes('dhl.com')) return 'DHL';
+  
+  const num = String(trackingNumber || '');
+  if (num.startsWith('1Z')) return 'UPS';
+  if (/^[0-9]{16}$/.test(num)) return 'Canada Post';
+  
+  return 'Shippo';
 }
 
 function getWeightInLbs(qty, book) {
