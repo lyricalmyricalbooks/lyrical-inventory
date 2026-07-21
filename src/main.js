@@ -25768,8 +25768,6 @@ function renderShippingAnalysisHub() {
 
   hub.innerHTML = `
     ${pnlHtml}
-    ${insightsHtml}
-    ${statsHtml}
     <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
       <header class="shipping-pnl-section-header">
         <div>
@@ -25786,6 +25784,8 @@ function renderShippingAnalysisHub() {
       ${activeFiltersBannerHtml}
       ${ledgerTableHtml}
     </section>
+    ${insightsHtml}
+    ${statsHtml}
   `;
 
   setTimeout(updateShippingSimulation, 50);
