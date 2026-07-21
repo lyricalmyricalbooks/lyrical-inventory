@@ -23945,6 +23945,7 @@ let shipAnalysisMarginFilter = 'all';
 let shipAnalysisCarrierFilter = 'all';
 let shipAnalysisRegionFilter = 'all';
 let shipAnalysisWeightFilter = 'all';
+let shipAnalysisSearchQuery = '';
 let shipAnalysisCurrentPage = 1;
 const SHIP_ANALYSIS_PAGE_SIZE = 10;
 
@@ -23972,11 +23973,12 @@ function clearAllShipAnalysisFilters() {
   shipAnalysisWeightFilter = 'all';
   shipAnalysisBookFilter = 'all';
   shipAnalysisMarginFilter = 'all';
+  shipAnalysisSearchQuery = '';
   shipAnalysisCurrentPage = 1;
   const bSel = $('ship-analysis-book-filter');
   if (bSel) bSel.value = 'all';
-  const mSel = $('ship-analysis-margin-filter');
-  if (mSel) mSel.value = 'all';
+  const sInput = $('ship-analysis-search');
+  if (sInput) sInput.value = '';
   renderShippingAnalysisHub();
 }
 
@@ -23998,6 +24000,42 @@ function onShipAnalysisMarginFilterChange() {
   const select = $('ship-analysis-margin-filter');
   if (select) shipAnalysisMarginFilter = select.value;
   shipAnalysisCurrentPage = 1;
+  renderShippingAnalysisHub();
+}
+
+function setShipAnalysisMarginFilter(val) {
+  shipAnalysisMarginFilter = val;
+  shipAnalysisCurrentPage = 1;
+  renderShippingAnalysisHub();
+}
+
+function onShipAnalysisSearch(val) {
+  shipAnalysisSearchQuery = String(val || '').trim().toLowerCase();
+  shipAnalysisCurrentPage = 1;
+  renderShippingAnalysisHub();
+}
+
+async function onInlinePostageChange(inputEl) {
+  const bookId = inputEl.dataset.bookId;
+  const orderIdentifier = inputEl.dataset.orderId;
+  const val = parseFloat(inputEl.value);
+
+  if (isNaN(val) || val < 0) {
+    showToast('Invalid postage cost amount', 'err');
+    // Restore previous value
+    renderShippingAnalysisHub();
+    return;
+  }
+
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+
+  h.postagePaid = val;
+  h.manualPostagePaid = true;
+  await window.saveState(bookId);
+  showToast(`Postage cost updated for Order #${h.num}`, 'ok');
   renderShippingAnalysisHub();
 }
 
@@ -24446,13 +24484,42 @@ function renderShippingAnalysisHub() {
     bookFilterOptions += `<option value="${b.id}" ${shipAnalysisBookFilter === b.id ? 'selected' : ''}>${escapeHtml(b.title)}</option>`;
   });
 
-  let marginFilterOptions = `
-    <option value="all" ${shipAnalysisMarginFilter === 'all' ? 'selected' : ''}>— All Margins —</option>
-    <option value="loss" ${shipAnalysisMarginFilter === 'loss' ? 'selected' : ''}>Undercharged (Losses)</option>
-    <option value="profit" ${shipAnalysisMarginFilter === 'profit' ? 'selected' : ''}>Profitable</option>
-    <option value="missing" ${shipAnalysisMarginFilter === 'missing' ? 'selected' : ''}>Missing Cust. Paid</option>
-    <option value="dismissed" ${shipAnalysisMarginFilter === 'dismissed' ? 'selected' : ''}>Dismissed / Hidden</option>
-  `;
+  // Calculate dynamic counts for Margin Health filters based on active Book Filter (using allOrders)
+  let countAll = 0;
+  let countLoss = 0;
+  let countProfit = 0;
+  let countMissing = 0;
+  let countDismissed = 0;
+
+  allOrders.forEach(o => {
+    if (o.excludeFromShipping) {
+      countDismissed++;
+      return;
+    }
+    countAll++;
+
+    const customerPaidBase = Number(o.shippingPaid) || 0;
+    if (customerPaidBase === 0) {
+      countMissing++;
+    }
+
+    const orderNumber = normalizeShippingOrderNumber(o.num);
+    const linked = orderNumber ? shippoExpenses.filter(e =>
+      e.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(e.shippingOrderNumber) === orderNumber
+    ) : [];
+    const hasPostage = linked.length > 0 || !!o.manualPostagePaid;
+    if (hasPostage) {
+      const postageCostCAD = o.manualPostagePaid
+        ? (Number(o.postagePaid) || 0)
+        : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
+      const margin = customerPaidBase - postageCostCAD;
+      if (margin < 0) {
+        countLoss++;
+      } else {
+        countProfit++;
+      }
+    }
+  });
 
   // ── 1. Calculate P&L KPIs (Publisher view only) ──
   let pnlHtml = '';
@@ -24590,24 +24657,54 @@ function renderShippingAnalysisHub() {
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0;">Book Filter:</span>
-              <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:150px;">
-                ${bookFilterOptions}
-              </select>
-              <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0; margin-left:8px;">Margin Health:</span>
-              <select id="ship-analysis-margin-filter" onchange="onShipAnalysisMarginFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:150px;">
-                ${marginFilterOptions}
-              </select>
-              <button class="btn sm gold" id="ship-bc-sync-btn" onclick="triggerBigCartelShippingSync()" style="height:32px; padding:0 12px; margin-left:8px; display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600;">
+              <button class="btn sm gold" id="ship-bc-sync-btn" onclick="triggerBigCartelShippingSync()" style="height:38px; padding:0 16px; display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; border-radius:99px; border:1px solid rgba(200,145,58,0.3); background:var(--gold-bg); color:var(--gold-text); cursor:pointer; transition:all 0.2s;">
                 <span>🔄</span> Sync Big Cartel Shipping
               </button>
+              <a class="shipping-pnl-action" href="#shipping-pnl-ledger">Review reconciliation</a>
             </div>
             <div class="shipping-pnl-header-meta" style="margin-top: 4px;">
               <span class="shipping-pnl-freshness">All recorded website orders</span>
-              <a class="shipping-pnl-action" href="#shipping-pnl-ledger">Review reconciliation</a>
             </div>
           </div>
         </header>
+        <div class="shipping-pnl-toolbar">
+          <div class="toolbar-group">
+            <span class="toolbar-label">Book Filter</span>
+            <div class="pill-select-wrapper">
+              <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" class="pill-select-input">
+                ${bookFilterOptions}
+              </select>
+              <span class="pill-select-arrow">▼</span>
+            </div>
+          </div>
+          <div class="toolbar-group">
+            <span class="toolbar-label">Margin Health</span>
+            <div class="filter-segmented-control">
+              <button type="button" class="filter-segmented-pill ${shipAnalysisMarginFilter === 'all' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('all')">
+                All <span class="filter-pill-badge">${countAll}</span>
+              </button>
+              <button type="button" class="filter-segmented-pill loss ${shipAnalysisMarginFilter === 'loss' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('loss')">
+                Losses <span class="filter-pill-badge">${countLoss}</span>
+              </button>
+              <button type="button" class="filter-segmented-pill profit ${shipAnalysisMarginFilter === 'profit' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('profit')">
+                Profitable <span class="filter-pill-badge">${countProfit}</span>
+              </button>
+              <button type="button" class="filter-segmented-pill missing ${shipAnalysisMarginFilter === 'missing' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('missing')">
+                Missing <span class="filter-pill-badge">${countMissing}</span>
+              </button>
+              <button type="button" class="filter-segmented-pill dismissed ${shipAnalysisMarginFilter === 'dismissed' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('dismissed')">
+                Dismissed <span class="filter-pill-badge">${countDismissed}</span>
+              </button>
+            </div>
+          </div>
+          <div class="toolbar-group search-group">
+            <span class="toolbar-label">Search</span>
+            <div style="position:relative; display:inline-flex; align-items:center;">
+              <input type="search" id="ship-analysis-search" placeholder="Order #, name..." value="${escapeHtml(shipAnalysisSearchQuery)}" oninput="onShipAnalysisSearch(this.value)" class="pill-search-input">
+              <span class="pill-search-icon">🔍</span>
+            </div>
+          </div>
+        </div>
         <div class="shipping-pnl-kpis">
           <article class="shipping-pnl-kpi">
             <span class="shipping-pnl-kpi-label">Shipping revenue</span>
@@ -24646,17 +24743,50 @@ function renderShippingAnalysisHub() {
     `;
   } else {
     pnlHtml = `
-      <div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-        <span>📊 Shipping Performance Analysis</span>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0;">Book Filter:</span>
-          <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:150px;">
-            ${bookFilterOptions}
-          </select>
-          <span style="font-size:12px; font-weight:600; color:var(--text3); margin:0; margin-left:8px;">Margin Health:</span>
-          <select id="ship-analysis-margin-filter" onchange="onShipAnalysisMarginFilterChange()" style="padding:6px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r2); background:var(--card-bg); outline:none; color:var(--text); width:150px;">
-            ${marginFilterOptions}
-          </select>
+      <div class="shipping-pnl-dashboard" style="margin-bottom: var(--shipping-pnl-space-4); overflow: hidden;">
+        <header class="shipping-pnl-header" style="padding: var(--shipping-pnl-space-4) var(--shipping-pnl-space-5) var(--shipping-pnl-space-3);">
+          <div>
+            <span class="shipping-pnl-eyebrow" style="margin-bottom:4px;">Author finance</span>
+            <h2 style="font-size: 1.8rem;">Shipping performance</h2>
+          </div>
+        </header>
+        <div class="shipping-pnl-toolbar">
+          <div class="toolbar-group">
+            <span class="toolbar-label">Book Filter</span>
+            <div class="pill-select-wrapper">
+              <select id="ship-analysis-book-filter" onchange="onShipAnalysisBookFilterChange()" class="pill-select-input">
+                ${bookFilterOptions}
+              </select>
+              <span class="pill-select-arrow">▼</span>
+            </div>
+          </div>
+          <div class="toolbar-group">
+            <span class="toolbar-label">Margin Health</span>
+            <div class="filter-segmented-control">
+              <button type="button" class="filter-segmented-pill ${shipAnalysisMarginFilter === 'all' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('all')">
+                All <span class="filter-pill-badge">${countAll}</span>
+              </button>
+              <button type="button" class="filter-segmented-pill loss ${shipAnalysisMarginFilter === 'loss' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('loss')">
+                Losses <span class="filter-pill-badge">${countLoss}</span>
+              </button>
+              <button type="button" class="filter-segmented-pill profit ${shipAnalysisMarginFilter === 'profit' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('profit')">
+                Profitable <span class="filter-pill-badge">${countProfit}</span>
+              </button>
+              <button type="button" class="filter-segmented-pill missing ${shipAnalysisMarginFilter === 'missing' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('missing')">
+                Missing <span class="filter-pill-badge">${countMissing}</span>
+              </button>
+              <button type="button" class="filter-segmented-pill dismissed ${shipAnalysisMarginFilter === 'dismissed' ? 'active' : ''}" onclick="setShipAnalysisMarginFilter('dismissed')">
+                Dismissed <span class="filter-pill-badge">${countDismissed}</span>
+              </button>
+            </div>
+          </div>
+          <div class="toolbar-group search-group">
+            <span class="toolbar-label">Search</span>
+            <div style="position:relative; display:inline-flex; align-items:center;">
+              <input type="search" id="ship-analysis-search" placeholder="Order #, name..." value="${escapeHtml(shipAnalysisSearchQuery)}" oninput="onShipAnalysisSearch(this.value)" class="pill-search-input">
+              <span class="pill-search-icon">🔍</span>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -24973,6 +25103,11 @@ ${margin.toFixed(2)} CAD</td>
     }
 
     return true;
+  }).filter(o => {
+    if (!shipAnalysisSearchQuery) return true;
+    const orderNum = String(o.num || '').toLowerCase();
+    const name = String(o.shipName || o.name || '').toLowerCase();
+    return orderNum.includes(shipAnalysisSearchQuery) || name.includes(shipAnalysisSearchQuery);
   });
 
   const totalOrders = filteredLedgerOrders.length;
@@ -25099,9 +25234,15 @@ ${margin.toFixed(2)} CAD</td>
           <strong>${(Number(o.shippingPaid) || 0).toFixed(2)} CAD</strong>
         </td>
         <td class="shipping-pnl-money" data-label="Postage">
-          <div style="display:flex; flex-direction:column; align-items:flex-end;">
-            <strong>${postageCostCAD.toFixed(2)} CAD</strong>
-            <button class="btn sm ghost" onclick="editPostageCost('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:1px 4px; color:var(--text3); border:none; background:none;" title="Set manual postage cost">✏️ Edit</button>
+          <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
+            <input type="number" step="0.01" min="0" 
+              class="inline-postage-input" 
+              value="${postageCostCAD.toFixed(2)}" 
+              data-book-id="${escapeHtml(o.bookId)}" 
+              data-order-id="${escapeHtml(o.id || o.num)}" 
+              onchange="onInlinePostageChange(this)"
+            />
+            <span style="font-size: 10px; color: var(--text3); font-weight: 600;">CAD</span>
           </div>
         </td>
         <td class="shipping-pnl-money ${marginClass}" data-label="Margin">
@@ -26021,7 +26162,8 @@ function exposeLegacyInlineHandlers() {
     renderShippingChargePrediction, collectShippoMessages, renderShippoDiagnostics,
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
     buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV,
-    renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange,
+    renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange, setShipAnalysisMarginFilter,
+    onShipAnalysisSearch, onInlinePostageChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
     editPostageCost, unlinkManualPostage, dismissShippingAnalysisOrder, restoreShippingAnalysisOrder,
     toggleAllShipAnalysisOrders, updateShipAnalysisBatchActionUI, batchDismissShippingAnalysisOrders,
@@ -26563,6 +26705,9 @@ window.downloadInventoryValuationCSV = downloadInventoryValuationCSV;
 window.renderShippingAnalysisHub = renderShippingAnalysisHub;
 window.changeShipAnalysisPage = changeShipAnalysisPage;
 window.onShipAnalysisBookFilterChange = onShipAnalysisBookFilterChange;
+window.setShipAnalysisMarginFilter = setShipAnalysisMarginFilter;
+window.onShipAnalysisSearch = onShipAnalysisSearch;
+window.onInlinePostageChange = onInlinePostageChange;
 window.confirmSuggestedShippoLink = confirmSuggestedShippoLink;
 window.openManualShippoLinkModal = openManualShippoLinkModal;
 window.filterManualShippoLinkRows = filterManualShippoLinkRows;
