@@ -16574,11 +16574,33 @@ function renderEditExpenseReceipts() {
       name = String(r).split('/').pop() || 'Remote Receipt';
       viewLink = `<a href="${r}" target="_blank" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(name)}</a>`;
     }
-    return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid rgba(255,255,255,0.1);">
-      <span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;">📄 ${viewLink}</span>
-      <button class="btn tx" onclick="removeEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--red);">Remove</button>
+    return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid rgba(255,255,255,0.1);margin-bottom:4px;">
+      <span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;" title="${escapeHtml(name)}">📄 ${viewLink}</span>
+      <div style="display:flex;gap:4px;">
+        <button class="btn tx" type="button" onclick="relinkEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--gold);" title="Change or edit this receipt link">✏️ Relink</button>
+        <button class="btn tx" type="button" onclick="removeEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--red);" title="Remove receipt attachment">Remove</button>
+      </div>
     </div>`;
   }).join('');
+}
+
+async function relinkEditExpenseReceipt(idx) {
+  if (!_editingExpense) return;
+  const currentPath = _editingExpense.files[idx] || '';
+  const currentFilename = typeof currentPath === 'string' ? currentPath.replace('local://', '') : '';
+
+  const newPath = await promptDialog(
+    `Enter the correct relative filename or path in your connected receipts folder:\n(e.g., "Business/2026-06-03_receipt.jpg" or "receipt_123.pdf")`,
+    currentFilename,
+    { title: 'Relink Receipt File', okLabel: 'Update Link', cancelLabel: 'Cancel' }
+  );
+
+  if (newPath !== null && newPath.trim()) {
+    const cleanPath = newPath.trim().replace(/^local:\/\//, '');
+    _editingExpense.files[idx] = `local://${cleanPath}`;
+    renderEditExpenseReceipts();
+    showToast('✓ Receipt link updated — click Save changes to apply', 'ok');
+  }
 }
 
 function removeEditExpenseReceipt(idx) {
@@ -23191,7 +23213,7 @@ Object.assign(window, {
   switchEmailImportTab, searchGmailEmails, applyGmailPresetQuery, toggleEmailPreview, toggleEmailRowSelection, toggleAllGmailSelections,
   showCategoryDetail, changeExpenseCategory, tcSelectCashFlowBucket, tcSetCashFlowDetailType, tcClearCashFlowBucket,
   showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt,
-  openEditExpense, removeEditExpenseReceipt, saveExpenseEdit, openEditSale, openEditArtistPayout,
+  openEditExpense, relinkEditExpenseReceipt, removeEditExpenseReceipt, saveExpenseEdit, openEditSale, openEditArtistPayout,
   // Invoices
   renderInvoices, openCreateInvoice, viewInvoice,
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
@@ -26952,7 +26974,7 @@ function exposeLegacyInlineHandlers() {
     tcSetTripsView, _tcGetTripsSummaryAll, tcRenderQuickTripChips, tcUpdateTripSelectedPreview,
     tcClearSelectedTrip, tcOpenTripDropdown, tcCloseTripDropdown, tcToggleTripDropdown,
     tcFilterTripDropdown, tcSelectTripOption, exportTripCSV, setTripBudgetPrompt,
-    openEditTrip, saveTripAssignment, renderEditExpenseReceipts, removeEditExpenseReceipt,
+    openEditTrip, saveTripAssignment, renderEditExpenseReceipts, relinkEditExpenseReceipt, removeEditExpenseReceipt,
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,
     renameTripPrompt, showCategoryDetail, saveTaxCenterSettings, scanReceiptWithAI,
     getShippoTxCost, saveShippoLabelLocally, fetchShippoTransactionsPageAPI,
