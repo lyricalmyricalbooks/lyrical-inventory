@@ -1705,6 +1705,8 @@ function syncRoleUI() {
   const webanalyticsTabBtn = $('webanalytics-tab-btn');
   const sidebarWebanalyticsBtn = $('sidebar-webanalytics-btn');
   const shippingTabBtn = $('shipping-tab-btn');
+  const bigcartelTabBtn = $('bigcartel-tab-btn');
+  const sidebarBigcartelBtn = $('sidebar-bigcartel-btn');
 
   if (reconcileTabBtn) reconcileTabBtn.style.display = authorNow ? 'none' : '';
   if (opencallTabBtn) opencallTabBtn.style.display = authorNow ? 'none' : '';
@@ -1719,6 +1721,8 @@ function syncRoleUI() {
   if (webanalyticsTabBtn) webanalyticsTabBtn.style.display = authorNow ? 'none' : '';
   if (sidebarWebanalyticsBtn) sidebarWebanalyticsBtn.style.display = authorNow ? 'none' : '';
   if (shippingTabBtn) shippingTabBtn.style.display = authorNow ? 'none' : '';
+  if (bigcartelTabBtn) bigcartelTabBtn.style.display = authorNow ? 'none' : '';
+  if (sidebarBigcartelBtn) sidebarBigcartelBtn.style.display = authorNow ? 'none' : '';
   // myqr tab is AUTHOR-only
   if (myqrTabBtn) myqrTabBtn.style.display = authorNow ? '' : 'none';
 
@@ -1738,7 +1742,9 @@ function syncRoleUI() {
     || $('tab-backups')?.classList.contains('active')
     || $('tab-qrcodes')?.classList.contains('active')
     || $('tab-reconcile')?.classList.contains('active')
-    || $('tab-webanalytics')?.classList.contains('active');
+    || $('tab-webanalytics')?.classList.contains('active')
+    || $('tab-shipping')?.classList.contains('active')
+    || $('tab-bigcartel')?.classList.contains('active');
   if (authorNow && publisherOnlyActive) switchTab('dashboard');
 
   // When switching BACK to publisher view — redirect away from author-only myqr tab
