@@ -5728,8 +5728,11 @@ function renderOrders() {
   const showAllChk = $('show-all-orders-chk');
   const showAll = showAllChk ? showAllChk.checked : false;
 
+  // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
+  const cancelledNumsSet = new Set(cancelledNums);
+
   const isApplied = (o) => appliedIds.has(o.id) || appliedIds.has(o.orderNum);
-  const isCancelled = (o) => cancelledNums.includes(o.orderNum);
+  const isCancelled = (o) => cancelledNumsSet.has(o.orderNum);
 
   // Smart filter: hide orders whose order number already exists in history or is cancelled
   const visible = rel.filter(o => {
