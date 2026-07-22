@@ -34,10 +34,10 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
       { id: 'book-2', title: 'Euro Classic', isbn: '789-012', format: 'Paperback', listPrice: 20.00, productionCost: 5.00, currency: '€', maxPrint: 50 }
     ];
     const mockStates = {
-      'book-1': { stock: 15, ledger: [{ storeName: 'Bookstore A', qty: 10, sold: 2 }] }, // 8 consigned -> 23 total unsold
-      'book-2': { stock: 20, ledger: [] } // 0 consigned -> 20 total unsold
+      'book-1': { stock: 15, stores: [{ name: 'Bookstore A', outstanding: 8, sold: 2 }] }, // 8 consigned -> 23 total unsold
+      'book-2': { stock: 20, stores: [] } // 0 consigned -> 20 total unsold
     };
-    const mockDefaultState = () => ({ stock: 0, ledger: [], hist: [] });
+    const mockDefaultState = () => ({ stock: 0, stores: [], hist: [] });
     const mockGetBookCurrencyCode = (book) => (book.currency === '€' ? 'EUR' : 'CAD');
     const mockFxRateCache = { 'EUR_CAD': 1.50 };
 
@@ -116,5 +116,41 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
 
     // Totals row
     expect(lines[8]).toContain('TOTALS,"Total Active Titles: 2",,,150,35,8,43,2,CAD,,,,,,300.00,80.00,380.00,1290.00,910.00');
+  });
+
+  it('divides total print run production cost by maxPrint to derive per-copy unit cost', () => {
+    const mockToday = () => '2026-07-14';
+    const mockBookList = [
+      { id: 'hound', title: 'The Hound', isbn: '—', format: 'Paperback', listPrice: 65.00, productionCost: 15937.00, currency: 'CA$', maxPrint: 300 }
+    ];
+    const mockStates = {
+      'hound': { stock: 86, stores: [{ name: 'Store 1', outstanding: 10, sold: 5 }] } // 10 consigned -> 96 unsold
+    };
+    const mockDefaultState = () => ({ stock: 0, stores: [], hist: [] });
+    const mockGetBookCurrencyCode = () => 'CAD';
+    const mockFxRateCache = {};
+
+    const calcMatch = mainContent.match(/function calculateInventoryValuationData\(\)\s*\{([\s\S]+?)\n\}/);
+    const factory = new Function(
+      'BOOK_LIST', 'states', 'defaultState', 'getBookCurrencyCode', '_fxRateCache',
+      `
+        function isTestBook() { return false; }
+        ${calcMatch[0]}
+        return calculateInventoryValuationData;
+      `
+    );
+
+    const calcFn = factory(mockBookList, mockStates, mockDefaultState, mockGetBookCurrencyCode, mockFxRateCache);
+    const result = calcFn();
+
+    expect(result.items.length).toBe(1);
+    const item = result.items[0];
+    expect(item.printRun).toBe(300);
+    expect(item.unitCost).toBeCloseTo(53.1233, 4); // 15937 / 300
+    expect(item.stockOnHand).toBe(86);
+    expect(item.stockConsigned).toBe(10);
+    expect(item.totalUnsold).toBe(96);
+    expect(item.totalCostCAD).toBeCloseTo(5099.84, 2); // 96 * 53.1233
+    expect(item.totalRetailCAD).toBe(6240.00); // 96 * 65.00
   });
 });
