@@ -17830,29 +17830,30 @@ function renderPOS() {
            <button class="btn sm danger-btn" style="font-size:11px;" onclick="removePosBook('${idAttr}')" title="Remove POS-only book" aria-label="Remove POS-only book">✕</button>
          </div>`
         : '';
+      const isActiveClass = qty > 0 ? ' is-active' : '';
       return `
-      <div class="card pos-card" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.1rem;${posOnly ? 'border:1px solid var(--gold-line);' : ''}">
+      <div class="card pos-card${isActiveClass}" style="display:flex; flex-direction:column; justify-content:space-between; padding:1.2rem;${posOnly ? 'border:1.5px solid var(--gold-line);' : ''}">
         <div>
           ${badge}
-          <div style="font-family:'Playfair Display',serif; font-size:18px; font-weight:600; margin-bottom:4px; color:var(--cream);">${escapeHtml(book.title)}</div>
-          <div style="font-size:12px; color:var(--text3);">${posFormat(book.listPrice || 0, sourceCode)} · ${convertedLabel}</div>
+          <div class="pos-card-title">${escapeHtml(book.title)}</div>
+          <div class="pos-card-sub">${posFormat(book.listPrice || 0, sourceCode)} &bull; ${convertedLabel}</div>
           ${soldNote}
         </div>
         <div>
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:1rem; background:rgba(255,255,255,.05); border-radius:var(--r2); padding:6px;">
-            <button class="btn sm pos-qty-btn" aria-label="Decrease quantity" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${idAttr}', -1)">-</button>
-            <span style="font-size:18px; font-weight:700; font-family:'DM Mono',monospace; width:40px; text-align:center;">${qty}</span>
-            <button class="btn sm pos-qty-btn" aria-label="Increase quantity" style="width:36px;height:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;" onclick="posUpdateQty('${idAttr}', 1)">+</button>
+          <div class="pos-qty-wrapper">
+            <button class="pos-qty-btn" aria-label="Decrease quantity" onclick="posUpdateQty('${idAttr}', -1)">-</button>
+            <span class="pos-qty-val"${qty > 0 ? ' style="color:var(--gold-text,#8a5815);"' : ''}>${qty}</span>
+            <button class="pos-qty-btn" aria-label="Increase quantity" onclick="posUpdateQty('${idAttr}', 1)">+</button>
           </div>
           ${editControls}
         </div>
       </div>
     `;
     }).join('') + (allowPosOnly && !posSearchQuery ? `
-      <button type="button" class="card pos-card" onclick="openPosBookModal()" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:1.1rem;border:1.5px dashed var(--gold-line);background:transparent;cursor:pointer;color:var(--gold);min-height:120px;">
+      <button type="button" class="card pos-card" onclick="openPosBookModal()" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:1.1rem;border:1.5px dashed var(--gold-line);background:transparent;cursor:pointer;color:var(--gold-text,#8a5815);min-height:140px;">
         <div style="font-size:28px;line-height:1;">＋</div>
-        <div style="font-size:13px;font-weight:600;">Add POS-only book</div>
-        <div style="font-size:11px;color:var(--text3);text-align:center;">Guest / consignment titles. Stays out of your catalog & ledger.</div>
+        <div style="font-size:13px;font-weight:700;color:#0e0c0a;">Add POS-only book</div>
+        <div style="font-size:11px;color:#4a4540;text-align:center;">Guest / consignment titles. Stays out of your catalog & ledger.</div>
       </button>
     ` : '');
   } // end search-filter else
@@ -17861,25 +17862,25 @@ function renderPOS() {
   if (cartItemsEl) {
     cartItemsEl.innerHTML = cartRows.length ? cartRows.map((row) => {
       const unitLabel = row.overridden
-        ? `<span style="text-decoration:line-through;color:var(--text3);">${posFormat(row.listUnit, row.sourceCode)}</span> <span style="color:var(--gold);font-weight:600;">${posFormat(row.sourceUnit, row.sourceCode)}</span> <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);">Adj</span>`
+        ? `<span style="text-decoration:line-through;color:#8a8078;">${posFormat(row.listUnit, row.sourceCode)}</span> <span style="color:var(--gold-text,#8a5815);font-weight:700;">${posFormat(row.sourceUnit, row.sourceCode)}</span> <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-text,#8a5815);">Adj</span>`
         : posFormat(row.sourceUnit, row.sourceCode);
       return `
-      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.08);">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid rgba(14,12,10,.08);">
         <div>
-          <div style="font-size:13px;color:var(--cream);font-weight:600;">${escapeHtml(row.book.title)}</div>
-          <div style="font-size:11px;color:var(--text3);">${row.qty} × ${unitLabel}</div>
+          <div style="font-size:13px;color:#0e0c0a;font-weight:700;">${escapeHtml(row.book.title)}</div>
+          <div style="font-size:11px;color:#4a4540;font-weight:500;">${row.qty} × ${unitLabel}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:13px;color:var(--cream);">${row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency)}</div>
+          <div style="font-size:13px;color:#0e0c0a;font-weight:700;">${row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency)}</div>
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:3px;">
-            <button class="btn sm" style="padding:2px 6px;font-size:11px;" onclick="openPosPriceModal('${row.book.id}')">Adjust</button>
-            <button class="btn sm" style="padding:2px 6px;font-size:11px;" onclick="posGenerateLineQR('${row.book.id}')" title="Payment QR for this line">QR</button>
-            <button class="btn sm" style="padding:2px 6px;font-size:11px;" onclick="posRemoveItem('${row.book.id}')">Remove</button>
+            <button class="btn sm" style="padding:2px 7px;font-size:11px;" onclick="openPosPriceModal('${row.book.id}')">Adjust</button>
+            <button class="btn sm" style="padding:2px 7px;font-size:11px;" onclick="posGenerateLineQR('${row.book.id}')" title="Payment QR for this line">QR</button>
+            <button class="btn sm" style="padding:2px 7px;font-size:11px;color:#a63a2b;" onclick="posRemoveItem('${row.book.id}')">Remove</button>
           </div>
         </div>
       </div>
     `;
-    }).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 0;">Cart is empty.</div>';
+    }).join('') : '<div style="font-size:12px;color:#8a8078;padding:10px 0;text-align:center;">Cart is empty.</div>';
   }
 
   if (subtotalEl) {
