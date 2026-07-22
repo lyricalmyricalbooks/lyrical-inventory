@@ -529,5 +529,40 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(resultsPanel.innerHTML).toContain('$10.50 CAD'); // Shows custom postage override
       expect(resultsPanel.innerHTML).toContain('+4.50'); // Margin: 15.00 (current store rate) - 10.50 (postage) = +4.50
     });
+
+    it('calculates estimated postage for multi-quantity orders as a single combined shipment by weight tier including packaging tare', () => {
+      const mockBookList = [
+        { id: 'book1', title: 'The Hound', shipWeight: 0.6, shipWeightUnit: 'kg' }
+      ];
+
+      const mockState = {
+        shippingRates: {
+          ON: { base: 16.00, addon: 10.00 }
+        },
+        book1: { hist: [] }
+      };
+
+      const mockTaxCenter = { businessExpenses: [] };
+      const resultsPanel = { innerHTML: '' };
+      const mockElements = {
+        'sim-book-select': { value: 'book1' },
+        'sim-qty-input': { value: '2' }, // Qty 2 => 1.2 kg + 0.15 kg box = 1.350 kg (1 - 2 kg band)
+        'sim-region-select': { value: 'ON' },
+        'sim-tare-select': { value: '0.15' },
+        'sim-postage-override': { value: '' },
+        'sim-results-panel': resultsPanel
+      };
+
+      updateShippingSimulationFn(mockElements, mockState, mockBookList, mockTaxCenter, []);
+
+      // Total simulated weight for 2 x 0.6kg + 0.15kg = 1.350 kg
+      expect(resultsPanel.innerHTML).toContain('1.350 kg');
+      // Weight band badge
+      expect(resultsPanel.innerHTML).toContain('Weight Band: 1 - 2 kg');
+      // For 1.35kg in ON, fallback postage is base rate $17.00 CAD (1-2kg band)
+      expect(resultsPanel.innerHTML).toContain('$17.00 CAD');
+      // Current store rate for qty 2 = 16.00 + 10.00 = $26.00 CAD
+      expect(resultsPanel.innerHTML).toContain('$26.00 CAD');
+    });
   });
 });

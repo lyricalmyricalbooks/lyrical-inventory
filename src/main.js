@@ -26176,11 +26176,22 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             </div>
           </div>
 
-          <div class="form-group" style="margin:0;">
-            <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
-              Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text4);">(optional)</span>
-            </label>
-            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+          <div style="display:flex; gap:12px;">
+            <div class="form-group" style="flex:1; margin:0;">
+              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Packaging Tare</label>
+              <select id="sim-tare-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+                <option value="0">None (0 g)</option>
+                <option value="0.05" selected>Bubble Mailer (+50 g)</option>
+                <option value="0.15">Cardboard Box (+150 g)</option>
+                <option value="0.30">Heavy Box (+300 g)</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1; margin:0;">
+              <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
+                Custom Override <span style="font-weight:400; text-transform:none; color:var(--text4);">(optional)</span>
+              </label>
+              <input type="number" id="sim-postage-override" placeholder="Fallback band" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+            </div>
           </div>
         </div>
 
@@ -26382,8 +26393,17 @@ function updateShippingSimulation() {
     return;
   }
 
-  const simWeightKg = getWeightInKg(qty, book);
-  const simWeightLbs = getWeightInLbs(qty, book);
+  const tareSelect = $('sim-tare-select');
+  const tareKg = tareSelect ? (parseFloat(tareSelect.value) || 0) : 0;
+
+  const bookWeightKg = getWeightInKg(qty, book);
+  const totalWeightKg = bookWeightKg + tareKg;
+  const totalWeightLbs = totalWeightKg * 2.20462;
+
+  let weightBandLabel = 'Under 0.5 kg';
+  if (totalWeightKg >= 2) weightBandLabel = 'Over 2 kg';
+  else if (totalWeightKg > 1) weightBandLabel = '1 - 2 kg';
+  else if (totalWeightKg >= 0.5) weightBandLabel = '0.5 - 1 kg';
 
   // 1. Current Store Rate Setup
   const s = getState();
@@ -26396,7 +26416,7 @@ function updateShippingSimulation() {
   const currentRegion = targetRates[region] || { base: 0, addon: 0 };
   const currentCharge = currentRegion.base + (qty - 1) * currentRegion.addon;
 
-  // 2. Recommended Rates for simulated weight
+  // 2. Recommended Rates for simulated total weight
   const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
   const allOrders = [];
   Object.keys(states).forEach(bId => {
@@ -26410,13 +26430,13 @@ function updateShippingSimulation() {
     }
   });
 
-  const simRecoData = getSmartShippingRecommendations(allOrders, shippoExpenses, simWeightKg.toString());
+  const simRecoData = getSmartShippingRecommendations(allOrders, shippoExpenses, totalWeightKg.toString());
   const simRecoRegion = simRecoData.results[region] || { recoBase: 0, recoAddon: 0 };
   const recommendedCharge = simRecoRegion.recoBase + (qty - 1) * simRecoRegion.recoAddon;
 
   // 3. Estimated Postage Cost
-  const fallback = getFallbackRates(region, simWeightKg);
-  const estimatedPostage = fallback.base + (qty - 1) * fallback.addon;
+  const fallback = getFallbackRates(region, totalWeightKg);
+  const estimatedPostage = fallback.base;
   const postageCost = customPostage !== null && !isNaN(customPostage) ? customPostage : estimatedPostage;
 
   // 4. Margins
@@ -26431,9 +26451,12 @@ function updateShippingSimulation() {
   simResultsPanel.innerHTML = `
     <div style="display:flex; flex-direction:column; gap:12px; height:100%; justify-content:space-between;">
       <div>
-        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px;">
-          <span style="font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase;">Simulated Weight</span>
-          <span style="font-family:'DM Mono',monospace; font-size:13px; font-weight:700; color:var(--text);">${simWeightKg.toFixed(3)} kg (${simWeightLbs.toFixed(2)} lbs)</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px; flex-wrap:wrap; gap:6px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase;">Simulated Weight</span>
+            <span style="background:var(--cream2); border:1px solid var(--border); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--text2);">🏷️ Weight Band: ${weightBandLabel}</span>
+          </div>
+          <span style="font-family:'DM Mono',monospace; font-size:13px; font-weight:700; color:var(--text);">${totalWeightKg.toFixed(3)} kg (${totalWeightLbs.toFixed(2)} lbs)</span>
         </div>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
@@ -26468,7 +26491,7 @@ function updateShippingSimulation() {
           <span>Est. Postage Cost (${region}):</span>
           <strong style="color:var(--text);">${formatCcy(postageCost)}</strong>
         </div>
-        ${simWeightKg < 0.5 && qty === 1
+        ${totalWeightKg < 0.5 && qty === 1
           ? `<div style="color:var(--green); font-weight:600; margin-top:4px; display:flex; gap:4px; align-items:center;">
                <span>💡</span> <span>Potentially Canada Post Lettermail eligible (if thickness &lt; 2cm).</span>
              </div>`
