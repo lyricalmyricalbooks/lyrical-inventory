@@ -12916,15 +12916,17 @@ async function loadReceiptFolderHandle() {
 async function setupReceiptFolder() {
   if (!('showDirectoryPicker' in window)) {
     showToast('Folder selection is not supported in this browser', 'warn');
-    return;
+    return null;
   }
   try {
     const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
     await saveReceiptFolderHandle(dirHandle);
     renderTaxCenter();
     showToast('✓ Receipt folder connected');
+    return dirHandle;
   } catch (e) {
     if (e?.name !== 'AbortError') showToast('Could not save folder', 'err');
+    return null;
   }
 }
 
@@ -13115,6 +13117,42 @@ async function authorizeReceiptFolder() {
   }
 }
 
+async function findFileHandleInDir(dirHandle, targetFilename) {
+  if (!dirHandle || !targetFilename) return null;
+  try {
+    // Top-level direct file check
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind === 'file' && entry.name === targetFilename) {
+        return entry;
+      }
+    }
+    // Deep search in 1st & 2nd level subdirectories
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind === 'directory') {
+        try {
+          for await (const subEntry of entry.values()) {
+            if (subEntry.kind === 'file' && subEntry.name === targetFilename) {
+              return subEntry;
+            }
+            if (subEntry.kind === 'directory') {
+              try {
+                for await (const deepEntry of subEntry.values()) {
+                  if (deepEntry.kind === 'file' && deepEntry.name === targetFilename) {
+                    return deepEntry;
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (e) {
+    console.warn('Receipt file deep lookup error', e);
+  }
+  return null;
+}
+
 async function handleFolderError(e, title, message) {
   console.error(title, e);
   const reconnect = await confirmDialog(
@@ -13122,8 +13160,10 @@ async function handleFolderError(e, title, message) {
     { title: title, okLabel: 'Re-connect Folder', cancelLabel: 'Cancel' }
   );
   if (reconnect) {
-    await setupReceiptFolder();
+    const handle = await setupReceiptFolder();
+    return !!handle;
   }
+  return false;
 }
 
 async function saveReceiptToLocalFile(file, subfolderName = '') {
@@ -13179,37 +13219,68 @@ function _localReceiptCell(item) {
 }
 
 async function viewLocalReceipt(path) {
-  const dirHandle = await loadReceiptFolderHandle();
+  let dirHandle = await loadReceiptFolderHandle();
   if (!dirHandle) {
     const reconnect = await confirmDialog(
       'Receipt folder not connected. Would you like to connect it now?',
       { title: 'Folder Not Connected', okLabel: 'Choose Folder', cancelLabel: 'Cancel' }
     );
     if (reconnect) {
-      await setupReceiptFolder();
+      const handle = await setupReceiptFolder();
+      if (!handle) return;
+      dirHandle = handle;
+    } else {
+      return;
     }
-    return;
   }
   try {
     const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
     if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return;
 
-    const receiptsDir = await dirHandle.getDirectoryHandle('receipts');
-    let fileHandle;
+    let fileHandle = null;
+    const baseFilename = path.split('/').pop();
 
-    if (path.includes('/')) {
-      const [subfolder, filename] = path.split('/');
-      const subDir = await receiptsDir.getDirectoryHandle(subfolder);
-      fileHandle = await subDir.getFileHandle(filename);
-    } else {
-      fileHandle = await receiptsDir.getFileHandle(path);
+    // Strategy 1: Direct lookup under 'receipts' subdirectory
+    try {
+      const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: false });
+      if (path.includes('/')) {
+        const [subfolder, filename] = path.split('/');
+        const subDir = await receiptsDir.getDirectoryHandle(subfolder, { create: false });
+        fileHandle = await subDir.getFileHandle(filename);
+      } else {
+        fileHandle = await receiptsDir.getFileHandle(path);
+      }
+    } catch (_) {
+      // Strategy 2: Direct lookup in root directory
+      try {
+        if (path.includes('/')) {
+          const [subfolder, filename] = path.split('/');
+          const subDir = await dirHandle.getDirectoryHandle(subfolder, { create: false });
+          fileHandle = await subDir.getFileHandle(filename);
+        } else {
+          fileHandle = await dirHandle.getFileHandle(path);
+        }
+      } catch (_) {}
+    }
+
+    // Strategy 3: Deep search across all subfolders (handles folder relocations & subfolder re-namings)
+    if (!fileHandle) {
+      fileHandle = await findFileHandleInDir(dirHandle, baseFilename);
+    }
+
+    if (!fileHandle) {
+      throw new Error(`File "${baseFilename}" not found in connected folder.`);
     }
 
     const file = await fileHandle.getFile();
     const url = URL.createObjectURL(file);
     window.open(url, '_blank');
   } catch (e) {
-    await handleFolderError(e, 'Error Opening Receipt', 'Could not open local file. The folder may have been moved or disconnected.');
+    const reconnected = await handleFolderError(e, 'Error Opening Receipt', 'Could not open local file. The folder may have been moved or disconnected.');
+    if (reconnected) {
+      // Auto-retry immediately with newly reconnected folder!
+      viewLocalReceipt(path);
+    }
   }
 }
 
