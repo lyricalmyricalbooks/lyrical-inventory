@@ -1547,6 +1547,7 @@
           <span id="tc-exp-storage-status">Storage: Cloud (Firestore)</span>
           <button class="btn tx" type="button" onclick="setupReceiptFolder()" style="padding:2px 8px;font-size:11px;">📁 Choose folder…</button>
           <button class="btn tx" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="padding:2px 8px;font-size:11px;background:var(--gold3);color:black;display:none;">Authorize access</button>
+          <button class="btn tx" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" style="padding:2px 8px;font-size:11px;color:var(--gold);" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link All Receipts</button>
         </div>
       </div>
     </div>
