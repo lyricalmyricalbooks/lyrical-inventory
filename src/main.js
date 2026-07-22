@@ -19297,19 +19297,25 @@ function calculateInventoryValuationData() {
   BOOK_LIST.forEach(book => {
     if (typeof isTestBook === 'function' && isTestBook(book)) return;
 
-    const s = states[book.id] || (typeof defaultState === 'function' ? defaultState(book) : { stock: 0, ledger: [], hist: [] });
+    const s = states[book.id] || (typeof defaultState === 'function' ? defaultState(book) : { stock: 0, stores: [], hist: [] });
 
     const stockOnHand = Math.max(0, parseInt(s.stock, 10) || 0);
 
-    const stockConsigned = (s.ledger || []).reduce((acc, entry) => {
-      const remaining = Math.max(0, (parseInt(entry.qty, 10) || 0) - (parseInt(entry.sold, 10) || 0));
-      return acc + remaining;
-    }, 0);
+    // Read real-time consignment balances from s.stores (outstanding copies)
+    const storesList = Array.isArray(s.stores) ? s.stores : [];
+    const storeBreakdown = storesList
+      .map(st => ({
+        storeName: st.name || st.storeName || st.store || 'Partner Store',
+        onHand: Math.max(0, parseInt(st.outstanding || (st.qty != null && st.sold != null ? st.qty - st.sold : 0), 10))
+      }))
+      .filter(x => x.onHand > 0);
+
+    const stockConsigned = storeBreakdown.reduce((sum, st) => sum + st.onHand, 0);
 
     const totalUnsold = stockOnHand + stockConsigned;
 
     const totalSold = (s.hist || []).reduce((acc, h) => acc + (parseInt(h.qty, 10) || 0), 0)
-      + (s.ledger || []).reduce((acc, l) => acc + (parseInt(l.sold, 10) || 0), 0);
+      + storesList.reduce((acc, l) => acc + (parseInt(l.sold, 10) || 0), 0);
 
     const printRun = parseInt(book.maxPrint || book.totalPrinted || 0, 10) || (totalUnsold + totalSold);
     const compsDamaged = Math.max(0, printRun - totalUnsold - totalSold);
@@ -19319,7 +19325,12 @@ function calculateInventoryValuationData() {
     const fxRate = isCAD ? 1 : (_fxRateCache[`${cur}_CAD`] || 1);
 
     const listPrice = parseFloat(book.listPrice || 0);
-    const unitCost = parseFloat(book.productionCost || 0);
+    const rawCost = parseFloat(book.productionCost || 0);
+
+    // Derive unit print/production cost. If book.productionCost is total print run cost, divide by printRun.
+    const unitCost = (rawCost > 0 && printRun > 1 && rawCost > (listPrice * 2))
+      ? (rawCost / printRun)
+      : rawCost;
 
     const unitMargin = Math.max(0, listPrice - unitCost);
     const unitMarginPct = listPrice > 0 ? (unitMargin / listPrice) * 100 : 0;
@@ -19377,10 +19388,7 @@ function calculateInventoryValuationData() {
       consignedRetailCAD,
       totalRetailCAD,
       potentialGrossProfitCAD,
-      storeBreakdown: (s.ledger || []).map(l => ({
-        storeName: l.storeName || 'Partner Store',
-        onHand: Math.max(0, (parseInt(l.qty, 10) || 0) - (parseInt(l.sold, 10) || 0))
-      })).filter(x => x.onHand > 0)
+      storeBreakdown
     });
 
     totals.totalTitles++;
