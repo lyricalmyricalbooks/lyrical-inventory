@@ -549,28 +549,105 @@ let _currentQR = null;
 function openPaymentQRModal() {
   if (!activeBook || activeBook === 'all' || isAuthor()) return;
   const book = BOOKS[activeBook];
-  const url = getEffectiveBookPaymentLink(book) || 'https://paypal.me/lyricalmyricalbooks';
 
-  $('qr-book-title').textContent = book.title;
-  $('qr-payment-link').value = url;
+  const titleEl = $('qr-book-title');
+  if (titleEl) titleEl.textContent = book.title;
 
-  const canvasContainer = $('payment-qr-canvas');
-  canvasContainer.innerHTML = '';
+  const curSelect = $('pqr-currency');
+  if (curSelect) curSelect.value = currencyToCode(book.currency) || 'CAD';
 
-  if (typeof QRCode !== 'undefined') {
-    _currentQR = new QRCode(canvasContainer, {
-      text: url,
-      width: 256,
-      height: 256,
-      colorDark: "#000000",
-      colorLight: "#ffffff",
-      correctLevel: QRCode.CorrectLevel.H
-    });
-  } else {
-    canvasContainer.innerHTML = '<div style="color:var(--text3);font-size:12px;">QR Library failed to load.</div>';
+  const overrideInput = $('pqr-override-price');
+  if (overrideInput) {
+    const curCode = curSelect ? curSelect.value : 'CAD';
+    overrideInput.value = book.priceOverrides?.[curCode] || '';
+    overrideInput.placeholder = (book.listPrice || 0).toFixed(2);
   }
 
+  updateSingleBookPaymentQR();
   openM('payment-qr');
+}
+
+function updateSingleBookPaymentQR() {
+  if (!activeBook || activeBook === 'all') return;
+  const book = BOOKS[activeBook];
+  const curCode = $('pqr-currency')?.value || currencyToCode(book.currency) || 'CAD';
+  const overrideVal = parseFloat($('pqr-override-price')?.value);
+  const hasOverride = !isNaN(overrideVal) && overrideVal > 0;
+  const targetPrice = hasOverride ? overrideVal : (book.listPrice || 0);
+
+  let url = getEffectiveBookPaymentLink(book) || 'https://paypal.me/lyricalmyricalbooks';
+  if (hasOverride && !url.includes('amount=')) {
+    // Include parameter hint for payment processors if not custom Stripe link
+    const joiner = url.includes('?') ? '&' : '?';
+    url = `${url}${joiner}amount=${targetPrice.toFixed(2)}&currency=${curCode}`;
+  }
+
+  const linkInput = $('qr-payment-link');
+  if (linkInput) linkInput.value = url;
+
+  const canvasContainer = $('payment-qr-canvas');
+  if (canvasContainer) {
+    canvasContainer.innerHTML = '';
+    if (typeof QRCode !== 'undefined') {
+      _currentQR = new QRCode(canvasContainer, {
+        text: url,
+        width: 230,
+        height: 230,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    }
+  }
+}
+
+async function generateSingleBookStripeQR() {
+  if (!activeBook || activeBook === 'all') return;
+  const book = BOOKS[activeBook];
+  const curCode = $('pqr-currency')?.value || 'CAD';
+  const overrideVal = parseFloat($('pqr-override-price')?.value);
+  const targetPrice = (!isNaN(overrideVal) && overrideVal > 0) ? overrideVal : (book.listPrice || 0);
+
+  const btn = $('pqr-gen-stripe-btn');
+  const restoreText = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Minting Stripe QR…'; }
+
+  try {
+    const url = await createStripePaymentLinkForAmount({
+      amountMajor: targetPrice,
+      currencyCode: curCode,
+      description: `${book.title} (${curCode} ${targetPrice.toFixed(2)})`,
+      metadata: { book_id: book.id, sku: book.id, override: 'true' }
+    });
+
+    if (!book.priceOverrides) book.priceOverrides = {};
+    if (!isNaN(overrideVal) && overrideVal > 0) {
+      book.priceOverrides[curCode] = overrideVal;
+    }
+
+    const linkInput = $('qr-payment-link');
+    if (linkInput) linkInput.value = url;
+
+    const canvasContainer = $('payment-qr-canvas');
+    if (canvasContainer) {
+      canvasContainer.innerHTML = '';
+      if (typeof QRCode !== 'undefined') {
+        _currentQR = new QRCode(canvasContainer, {
+          text: url,
+          width: 230,
+          height: 230,
+          colorDark: "#000000",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.H
+        });
+      }
+    }
+    showToast(`✓ Stripe QR generated for ${curCode} ${targetPrice.toFixed(2)}`);
+  } catch (e) {
+    showToast('Stripe: ' + (e.message || e), 'err', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = restoreText; }
+  }
 }
 
 function copyPaymentLink() {
@@ -595,6 +672,8 @@ function downloadPaymentQR() {
 }
 
 window.openPaymentQRModal = openPaymentQRModal;
+window.updateSingleBookPaymentQR = updateSingleBookPaymentQR;
+window.generateSingleBookStripeQR = generateSingleBookStripeQR;
 window.copyPaymentLink = copyPaymentLink;
 window.downloadPaymentQR = downloadPaymentQR;
 
@@ -18468,16 +18547,30 @@ function renderQRPrintBookList() {
     list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available.</div>';
     return;
   }
+  const baseCur = document.getElementById('qrp-base-cur')?.value || 'auto';
+
   list.innerHTML = entries.map((book) => {
     const url = book.stripeLink || book.paymentLink || '';
     const hasUrl = !!url;
+    const nativeCode = currencyToCode(book.currency);
+    const targetCode = baseCur === 'auto' ? nativeCode : baseCur;
+    const defaultPrice = baseCur === 'auto'
+      ? (book.listPrice || 0)
+      : convertCurrency(book.listPrice || 0, nativeCode, targetCode);
+    const existingOverride = book.priceOverrides?.[targetCode] || '';
+
     return `
-      <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);${hasUrl ? '' : 'opacity:.55;'}">
-        <input type="checkbox" class="qrp-book-check" value="${book.id}" ${hasUrl ? 'checked' : ''} ${hasUrl ? '' : 'disabled'} style="width:16px;height:16px;cursor:pointer;">
-        <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
-        <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
-        ${hasUrl ? '' : '<span style="font-size:10px;color:#a00;text-transform:uppercase;letter-spacing:.1em;">no link</span>'}
-      </label>
+      <div style="display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:6px;background:rgba(0,0,0,.03);margin-bottom:4px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;${hasUrl ? '' : 'opacity:.75;'}">
+          <input type="checkbox" class="qrp-book-check" value="${book.id}" ${hasUrl ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;">
+          <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
+          <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
+        </label>
+        <div style="display:flex;align-items:center;gap:8px;padding-left:26px;margin-top:2px;">
+          <span style="font-size:11px;color:#555;font-weight:500;">Manual price override (${escapeHtml(targetCode)}):</span>
+          <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="e.g. ${defaultPrice.toFixed(2)}" style="width:110px;padding:3px 6px;font-size:11px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#111;">
+        </div>
+      </div>
     `;
   }).join('');
 }
@@ -18493,7 +18586,7 @@ window.qrPrintSelectAll = function (checked) {
   });
 };
 
-window.printPaymentQRCodes = function () {
+window.printPaymentQRCodes = async function () {
   const cols = Math.max(1, Math.min(6, parseInt(document.getElementById('qrp-cols').value, 10) || 3));
   const baseCur = document.getElementById('qrp-base-cur').value || 'auto';
   const showEUR = !!document.getElementById('qrp-show-eur').checked;
@@ -18501,11 +18594,11 @@ window.printPaymentQRCodes = function () {
   const showUSD = !!document.getElementById('qrp-show-usd').checked;
 
   const selectedIds = Array.from(document.querySelectorAll('.qrp-book-check'))
-    .filter((el) => el.checked && !el.disabled)
+    .filter((el) => el.checked)
     .map((el) => el.value);
 
   if (!selectedIds.length) {
-    showToast('Select at least one book with a payment link', 'warn');
+    showToast('Select at least one book for the payment QR sheet', 'warn');
     return;
   }
 
@@ -18514,14 +18607,45 @@ window.printPaymentQRCodes = function () {
   if (showEUR) currenciesShown.push('EUR');
   if (showUSD) currenciesShown.push('USD');
 
-  const booksData = selectedIds.map((id) => {
+  showToast('⌛ Preparing payment QR code sheet…');
+
+  const booksData = await Promise.all(selectedIds.map(async (id) => {
     const book = posResolveBook(id);
-    const url = book.stripeLink || book.paymentLink || '';
     const nativeCode = currencyToCode(book.currency);
     const listedCode = baseCur === 'auto' ? nativeCode : baseCur;
-    const listedAmount = baseCur === 'auto'
-      ? (book.listPrice || 0)
-      : convertCurrency(book.listPrice || 0, nativeCode, listedCode);
+
+    const overrideInput = document.getElementById(`qrp-override-${id}`);
+    const overrideVal = overrideInput ? parseFloat(overrideInput.value) : NaN;
+    const hasOverride = !isNaN(overrideVal) && overrideVal > 0;
+
+    const listedAmount = hasOverride
+      ? overrideVal
+      : (baseCur === 'auto' ? (book.listPrice || 0) : convertCurrency(book.listPrice || 0, nativeCode, listedCode));
+
+    if (!book.priceOverrides) book.priceOverrides = {};
+    if (hasOverride) {
+      book.priceOverrides[listedCode] = overrideVal;
+    }
+
+    let url = book.stripeLink || book.paymentLink || '';
+
+    // If override is set and Stripe key is configured, create live Stripe Payment Link
+    const stripeKey = getReconStripeKey();
+    if (hasOverride && stripeKey) {
+      try {
+        url = await createStripePaymentLinkForAmount({
+          amountMajor: listedAmount,
+          currencyCode: listedCode,
+          description: `${book.title} (${listedCode} ${listedAmount.toFixed(2)})`,
+          metadata: { book_id: book.id, sku: book.id, override: 'true' }
+        });
+      } catch (err) {
+        console.warn('Stripe link creation failed for override:', err);
+      }
+    } else if (hasOverride && url && !url.includes('amount=')) {
+      const joiner = url.includes('?') ? '&' : '?';
+      url = `${url}${joiner}amount=${listedAmount.toFixed(2)}&currency=${listedCode}`;
+    }
 
     const prices = currenciesShown.map((code) => {
       let amount;
@@ -18539,14 +18663,14 @@ window.printPaymentQRCodes = function () {
       if (amount == null) {
         display = '—';
       } else {
-        const rounded = approx ? amount.toFixed(2) : amount.toFixed(2);
+        const rounded = amount.toFixed(2);
         display = `${approx ? '~' : ''}${symbol}${rounded}`;
       }
       return { currency: code, amount: display, base: code === listedCode };
     });
 
     return { id: book.id, title: book.title, author: book.author || '', url, prices };
-  });
+  }));
 
   const cardsHtml = booksData.map((book, i) => {
     const priceRows = book.prices.map((p) => `
@@ -26566,6 +26690,7 @@ function exposeLegacyInlineHandlers() {
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,
     resetBookForm, openAddBookModal, openEditBookModal, closeAddBookModal, isValidPaymentLink,
     updateUnsavedIndicator, saveBookFromModal, renderCatalogList, deleteBook, openPaymentQRModal,
+    updateSingleBookPaymentQR, generateSingleBookStripeQR,
     copyPaymentLink, downloadPaymentQR, renderAllQRCodes, renderAuthorQRPage,
     loadAuthorViewOverrides, saveAuthorViewOverrides, isPublisherSession, isAuthor,
     animateCountValue, triggerCardAnimations, queueSync, updatePendingIndicator, processSyncQueue,
