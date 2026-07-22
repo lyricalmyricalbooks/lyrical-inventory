@@ -26491,17 +26491,17 @@ function updateShippingSimulation() {
         </div>
 
         <!-- HERO CARD: Est. Postage Cost (Primary Focal Point) -->
-        <div style="background:linear-gradient(135deg, rgba(26,77,46,0.07), rgba(26,77,46,0.02)); border:1.5px solid var(--green); border-radius:var(--r2); padding:14px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+        <div style="background:linear-gradient(135deg, rgba(26,77,46,0.07), rgba(26,77,46,0.02)); border:1.5px solid var(--green); border-radius:var(--r2); padding:16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
           <div>
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
               <span style="font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--green);">Est. Postage Cost (${region})</span>
               <span style="background:rgba(26,77,46,0.1); color:var(--green); font-size:9px; font-weight:700; padding:1px 6px; border-radius:99px;">🚚 Tracked</span>
             </div>
-            <div style="font-family:'DM Mono',monospace; font-size:24px; font-weight:800; color:var(--text); line-height:1.1;">
+            <div style="font-family:'DM Mono',monospace; font-size:26px; font-weight:800; color:var(--text); line-height:1.1;">
               ${formatCcy(postageCost)}
             </div>
             ${billedWeightKg < 0.5 && qty === 1
-              ? `<div style="color:var(--green); font-size:10px; font-weight:600; margin-top:4px; display:flex; gap:4px; align-items:center;">
+              ? `<div style="color:var(--green); font-size:10px; font-weight:600; margin-top:6px; display:flex; gap:4px; align-items:center;">
                    <span>💡</span> <span>Canada Post Lettermail eligible (if thickness &lt; 2cm).</span>
                  </div>`
               : ''
@@ -26509,34 +26509,7 @@ function updateShippingSimulation() {
           </div>
           <div style="text-align:right;">
             <span style="font-size:10px; color:var(--text3); display:block;">Carrier</span>
-            <strong style="font-size:12px; color:var(--text); font-weight:700;">Canada Post</strong>
-          </div>
-        </div>
-
-        <!-- SECONDARY COMPARISON GRID: Current Store Rate vs Recommended Rate -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <!-- Current Setup -->
-          <div style="background:var(--cream); border:1px solid var(--border); border-radius:var(--r); padding:8px 10px; display:flex; flex-direction:column; justify-content:space-between;">
-            <div>
-              <span style="font-size:9px; font-weight:700; text-transform:uppercase; color:var(--text3); display:block;">Current Store Rate</span>
-              <span style="font-family:'DM Mono',monospace; font-size:13px; font-weight:800; color:var(--text);">${formatCcy(currentCharge)}</span>
-            </div>
-            <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(0,0,0,0.06); padding-top:4px;">
-              <span style="font-size:9px; color:var(--text3);">Est. Margin:</span>
-              <span class="shipping-money margin ${currentMarginClass}" style="font-size:10px; padding:1px 6px; font-weight:700; border-radius:99px; display:inline-block; text-align:center;">${currentMargin >= 0 ? '+' : ''}${currentMargin.toFixed(2)}</span>
-            </div>
-          </div>
-
-          <!-- Recommended Setup -->
-          <div style="background:rgba(200,145,58,0.06); border:1px solid var(--gold-line); border-radius:var(--r); padding:8px 10px; display:flex; flex-direction:column; justify-content:space-between;">
-            <div>
-              <span style="font-size:9px; font-weight:700; text-transform:uppercase; color:var(--text3); display:block;">Recommended Rate</span>
-              <span style="font-family:'DM Mono',monospace; font-size:13px; font-weight:800; color:var(--gold);">${formatCcy(recommendedCharge)}</span>
-            </div>
-            <div style="margin-top:6px; display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(0,0,0,0.06); padding-top:4px;">
-              <span style="font-size:9px; color:var(--text3);">Proj. Margin:</span>
-              <span class="shipping-money margin ${recommendedMarginClass}" style="font-size:10px; padding:1px 6px; font-weight:700; border-radius:99px; display:inline-block; text-align:center;">${recommendedMargin >= 0 ? '+' : ''}${recommendedMargin.toFixed(2)}</span>
-            </div>
+            <strong style="font-size:13px; color:var(--text); font-weight:700;">Canada Post</strong>
           </div>
         </div>
       </div>
