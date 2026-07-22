@@ -493,7 +493,7 @@ describe('Shipping Analysis Hub Functions', () => {
 
       updateShippingSimulationFn(mockElements, mockState, mockBookList, mockTaxCenter, []);
 
-      expect(resultsPanel.innerHTML).toContain('Simulated Weight');
+      expect(resultsPanel.innerHTML).toContain('Canada Post Billed Weight');
       expect(resultsPanel.innerHTML).toContain('0.800 kg');
       expect(resultsPanel.innerHTML).toContain('$15.00 CAD'); // current store rate (qty 1)
       expect(resultsPanel.innerHTML).toContain('$14.50 CAD'); // estimated/fallback postage cost for 0.8kg ON
@@ -563,6 +563,34 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(resultsPanel.innerHTML).toContain('$17.00 CAD');
       // Current store rate for qty 2 = 16.00 + 10.00 = $26.00 CAD
       expect(resultsPanel.innerHTML).toContain('$26.00 CAD');
+    });
+
+    it('bills based on Canada Post volumetric weight when dimensions exceed physical weight', () => {
+      const mockBookList = [
+        // Large lightweight art book: 40cm x 30cm x 5cm, physical weight 0.2kg
+        // Volumetric weight = (40 * 30 * 5) / 5000 = 1.2 kg
+        { id: 'artbook', title: 'Art Book', shipWeight: 0.2, shipWeightUnit: 'kg', lengthCm: 40, widthCm: 30, thicknessCm: 5 }
+      ];
+
+      const mockState = { shippingRates: { ON: { base: 16.00, addon: 10.00 } }, artbook: { hist: [] } };
+      const mockTaxCenter = { businessExpenses: [] };
+      const resultsPanel = { innerHTML: '' };
+      const mockElements = {
+        'sim-book-select': { value: 'artbook' },
+        'sim-qty-input': { value: '1' },
+        'sim-region-select': { value: 'ON' },
+        'sim-tare-select': { value: '0' },
+        'sim-postage-override': { value: '' },
+        'sim-results-panel': resultsPanel
+      };
+
+      updateShippingSimulationFn(mockElements, mockState, mockBookList, mockTaxCenter, []);
+
+      // Billed weight should be 1.200 kg (Volumetric), not 0.200 kg (Actual)
+      expect(resultsPanel.innerHTML).toContain('Volumetric Billed');
+      expect(resultsPanel.innerHTML).toContain('1.200 kg');
+      // For 1.2kg (1-2kg band), postage cost is $17.00 CAD
+      expect(resultsPanel.innerHTML).toContain('$17.00 CAD');
     });
   });
 });

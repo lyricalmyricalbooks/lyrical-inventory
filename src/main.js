@@ -24920,7 +24920,7 @@ function getMean(arr) {
 }
 
 function getFallbackRates(region, w) {
-  // Canada Post 2026 Solutions for Small Business / Tracked Packet rates
+  // Canada Post Solutions for Small Business / Tracked Packet rates
   if (w < 0.5) {
     if (region === 'ON') return { base: 12.50, addon: 3.50 };
     if (region === 'CA') return { base: 17.50, addon: 4.50 };
@@ -24937,10 +24937,12 @@ function getFallbackRates(region, w) {
     if (region === 'US') return { base: 27.00, addon: 12.00 };
     return { base: 48.00, addon: 18.00 };
   } else {
-    if (region === 'ON') return { base: 21.00, addon: 10.00 };
-    if (region === 'CA') return { base: 29.50, addon: 12.50 };
-    if (region === 'US') return { base: 34.00, addon: 15.00 };
-    return { base: 65.00, addon: 22.00 };
+    // For packages over 2 kg, Canada Post applies per-kg incremental rates above 2 kg
+    const extraKg = Math.ceil(w - 2);
+    if (region === 'ON') return { base: 21.00 + (extraKg - 1) * 2.50, addon: 10.00 };
+    if (region === 'CA') return { base: 29.50 + (extraKg - 1) * 3.50, addon: 12.50 };
+    if (region === 'US') return { base: 34.00 + (extraKg - 1) * 4.50, addon: 15.00 };
+    return { base: 65.00 + (extraKg - 1) * 8.00, addon: 22.00 };
   }
 }
 
@@ -26397,13 +26399,24 @@ function updateShippingSimulation() {
   const tareKg = tareSelect ? (parseFloat(tareSelect.value) || 0) : 0;
 
   const bookWeightKg = getWeightInKg(qty, book);
-  const totalWeightKg = bookWeightKg + tareKg;
-  const totalWeightLbs = totalWeightKg * 2.20462;
+  const totalActualWeightKg = bookWeightKg + tareKg;
+
+  // Canada Post Volumetric Weight formula: (L x W x H in cm) / 5000
+  const lengthCm = Number(book.lengthCm || book.length) || 23;
+  const widthCm = Number(book.widthCm || book.width) || 15;
+  const singleThicknessCm = Number(book.thicknessCm || book.thickness || book.depth) || 2.0;
+  const totalHeightCm = singleThicknessCm * qty + (tareKg > 0 ? 1.5 : 0);
+  const volumetricWeightKg = (lengthCm * widthCm * totalHeightCm) / 5000;
+
+  // Canada Post charges based on the greater of actual physical weight or volumetric weight
+  const billedWeightKg = Math.max(totalActualWeightKg, volumetricWeightKg);
+  const billedWeightLbs = billedWeightKg * 2.20462;
+  const isVolumetricBilled = volumetricWeightKg > totalActualWeightKg;
 
   let weightBandLabel = 'Under 0.5 kg';
-  if (totalWeightKg >= 2) weightBandLabel = 'Over 2 kg';
-  else if (totalWeightKg > 1) weightBandLabel = '1 - 2 kg';
-  else if (totalWeightKg >= 0.5) weightBandLabel = '0.5 - 1 kg';
+  if (billedWeightKg >= 2) weightBandLabel = 'Over 2 kg';
+  else if (billedWeightKg > 1) weightBandLabel = '1 - 2 kg';
+  else if (billedWeightKg >= 0.5) weightBandLabel = '0.5 - 1 kg';
 
   // 1. Current Store Rate Setup
   const s = getState();
@@ -26430,12 +26443,12 @@ function updateShippingSimulation() {
     }
   });
 
-  const simRecoData = getSmartShippingRecommendations(allOrders, shippoExpenses, totalWeightKg.toString());
+  const simRecoData = getSmartShippingRecommendations(allOrders, shippoExpenses, billedWeightKg.toString());
   const simRecoRegion = simRecoData.results[region] || { recoBase: 0, recoAddon: 0 };
   const recommendedCharge = simRecoRegion.recoBase + (qty - 1) * simRecoRegion.recoAddon;
 
   // 3. Estimated Postage Cost
-  const fallback = getFallbackRates(region, totalWeightKg);
+  const fallback = getFallbackRates(region, billedWeightKg);
   const estimatedPostage = fallback.base;
   const postageCost = customPostage !== null && !isNaN(customPostage) ? customPostage : estimatedPostage;
 
@@ -26452,11 +26465,15 @@ function updateShippingSimulation() {
     <div style="display:flex; flex-direction:column; gap:12px; height:100%; justify-content:space-between;">
       <div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px; flex-wrap:wrap; gap:6px;">
-          <div style="display:flex; align-items:center; gap:6px;">
-            <span style="font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase;">Simulated Weight</span>
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <span style="font-size:11px; font-weight:700; color:var(--text2); text-transform:uppercase;">Canada Post Billed Weight</span>
             <span style="background:var(--cream2); border:1px solid var(--border); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--text2);">🏷️ Weight Band: ${weightBandLabel}</span>
+            ${isVolumetricBilled
+              ? `<span style="background:rgba(200,145,58,0.15); border:1px solid var(--gold-line); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--gold);" title="Volumetric weight exceeds actual weight (L x W x H / 5000)">📐 Volumetric Billed (${volumetricWeightKg.toFixed(2)} kg)</span>`
+              : `<span style="background:rgba(0,120,60,0.08); border:1px solid rgba(0,120,60,0.2); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--green);">⚖️ Actual Weight</span>`
+            }
           </div>
-          <span style="font-family:'DM Mono',monospace; font-size:13px; font-weight:700; color:var(--text);">${totalWeightKg.toFixed(3)} kg (${totalWeightLbs.toFixed(2)} lbs)</span>
+          <span style="font-family:'DM Mono',monospace; font-size:13px; font-weight:700; color:var(--text);">${billedWeightKg.toFixed(3)} kg (${billedWeightLbs.toFixed(2)} lbs)</span>
         </div>
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
@@ -26491,7 +26508,7 @@ function updateShippingSimulation() {
           <span>Est. Postage Cost (${region}):</span>
           <strong style="color:var(--text);">${formatCcy(postageCost)}</strong>
         </div>
-        ${totalWeightKg < 0.5 && qty === 1
+        ${billedWeightKg < 0.5 && qty === 1
           ? `<div style="color:var(--green); font-weight:600; margin-top:4px; display:flex; gap:4px; align-items:center;">
                <span>💡</span> <span>Potentially Canada Post Lettermail eligible (if thickness &lt; 2cm).</span>
              </div>`
