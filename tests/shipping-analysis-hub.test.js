@@ -558,7 +558,7 @@ describe('Shipping Analysis Hub Functions', () => {
       // Total simulated weight for 2 x 0.6kg + 0.15kg = 1.350 kg
       expect(resultsPanel.innerHTML).toContain('1.350 kg');
       // Weight band badge
-      expect(resultsPanel.innerHTML).toContain('Weight Band: 1 - 2 kg');
+      expect(resultsPanel.innerHTML).toContain('Band: 1 - 2 kg');
       // For 1.35kg in ON, fallback postage is base rate $17.00 CAD (1-2kg band)
       expect(resultsPanel.innerHTML).toContain('$17.00 CAD');
       // Current store rate for qty 2 = 16.00 + 10.00 = $26.00 CAD
