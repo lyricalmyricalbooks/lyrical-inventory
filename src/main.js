@@ -18672,6 +18672,46 @@ window.printPaymentQRCodes = async function () {
     return { id: book.id, title: book.title, author: book.author || '', url, prices };
   }));
 
+  const fitOnePage = !!document.getElementById('qrp-fit-one-page')?.checked;
+  const count = booksData.length;
+
+  let effectiveCols = cols;
+  if (fitOnePage && count > 8 && cols < 4) {
+    effectiveCols = 4;
+  }
+
+  let headerPadding = '40px 32px 24px';
+  let cardPadding = '24px 18px 20px';
+  let qrFrameSize = '140px';
+  let qrRenderSize = 120;
+  let titleFontSize = '1.05rem';
+  let priceTdPadding = '4px 0';
+
+  if (fitOnePage || count > 6) {
+    if (count <= 6) {
+      headerPadding = '16px 20px 10px';
+      cardPadding = '14px 12px 10px';
+      qrFrameSize = '112px';
+      qrRenderSize = 94;
+      titleFontSize = '0.95rem';
+      priceTdPadding = '2px 0';
+    } else if (count <= 9) {
+      headerPadding = '12px 18px 8px';
+      cardPadding = '10px 8px 8px';
+      qrFrameSize = '94px';
+      qrRenderSize = 78;
+      titleFontSize = '0.88rem';
+      priceTdPadding = '2px 0';
+    } else {
+      headerPadding = '8px 14px 4px';
+      cardPadding = '8px 6px 6px';
+      qrFrameSize = '80px';
+      qrRenderSize = 64;
+      titleFontSize = '0.8rem';
+      priceTdPadding = '1px 0';
+    }
+  }
+
   const cardsHtml = booksData.map((book, i) => {
     const priceRows = book.prices.map((p) => `
       <tr${p.base ? ' class="base-price"' : ''}>
@@ -18713,60 +18753,60 @@ window.printPaymentQRCodes = async function () {
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--paper); font-family: 'Jost', sans-serif; font-weight: 300; color: var(--ink); }
 
-  .header { text-align: center; padding: 48px 40px 32px; border-bottom: 1px solid var(--rule); }
-  .header::before { content: ''; display: block; width: 40px; height: 1px; background: var(--accent); margin: 0 auto 18px; }
-  .brand { font-family: 'Cormorant Garamond', serif; font-size: 2.4rem; font-weight: 300; letter-spacing: 0.12em; line-height: 1; }
+  .header { text-align: center; padding: ${headerPadding}; border-bottom: 1px solid var(--rule); }
+  .header::before { content: ''; display: block; width: 32px; height: 1px; background: var(--accent); margin: 0 auto 10px; }
+  .brand { font-family: 'Cormorant Garamond', serif; font-size: ${fitOnePage ? '1.8rem' : '2.2rem'}; font-weight: 300; letter-spacing: 0.12em; line-height: 1; }
   .brand em { font-style: italic; }
-  .tagline { margin-top: 9px; font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent); }
-  .date-line { margin-top: 5px; font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; color: #aaa; }
+  .tagline { margin-top: 6px; font-size: 0.6rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent); }
+  .date-line { margin-top: 4px; font-size: 0.55rem; letter-spacing: 0.16em; text-transform: uppercase; color: #aaa; }
 
   .grid { display: flex; flex-wrap: wrap; justify-content: center; }
 
   .card {
-    width: calc(100% / ${cols});
-    padding: 32px 24px 28px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+    width: calc(100% / ${effectiveCols});
+    padding: ${cardPadding}; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
     display: flex; flex-direction: column; align-items: center; position: relative;
+    page-break-inside: avoid; break-inside: avoid;
   }
-  .card:nth-child(${cols}n) { border-right: none; }
-  .card::before, .card::after { content: ''; position: absolute; width: 7px; height: 7px; border-color: var(--accent); border-style: solid; opacity: 0.35; }
-  .card::before { top: 9px; left: 9px; border-width: 1px 0 0 1px; }
-  .card::after  { bottom: 9px; right: 9px; border-width: 0 1px 1px 0; }
+  .card:nth-child(${effectiveCols}n) { border-right: none; }
+  .card::before, .card::after { content: ''; position: absolute; width: 6px; height: 6px; border-color: var(--accent); border-style: solid; opacity: 0.35; }
+  .card::before { top: 6px; left: 6px; border-width: 1px 0 0 1px; }
+  .card::after  { bottom: 6px; right: 6px; border-width: 0 1px 1px 0; }
 
-  .card-num { font-size: 0.52rem; letter-spacing: 0.22em; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; font-weight: 400; }
+  .card-num { font-size: 0.5rem; letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; margin-bottom: 8px; font-weight: 400; }
 
-  .qr-frame { width: 156px; height: 156px; padding: 9px; background: #fff; border: 1px solid var(--rule); display: flex; align-items: center; justify-content: center; margin-bottom: 18px; flex-shrink: 0; }
+  .qr-frame { width: ${qrFrameSize}; height: ${qrFrameSize}; padding: 6px; background: #fff; border: 1px solid var(--rule); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; flex-shrink: 0; }
 
-  .card-title { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; font-style: italic; font-weight: 400; text-align: center; line-height: 1.3; margin-bottom: 14px; }
+  .card-title { font-family: 'Cormorant Garamond', serif; font-size: ${titleFontSize}; font-style: italic; font-weight: 400; text-align: center; line-height: 1.25; margin-bottom: 8px; }
 
-  .prices { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .prices { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
   .prices thead tr { border-bottom: 1px solid var(--rule); }
-  .prices thead th { font-size: 0.52rem; font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: #aaa; padding: 0 0 5px; text-align: left; }
+  .prices thead th { font-size: 0.5rem; font-weight: 400; letter-spacing: 0.18em; text-transform: uppercase; color: #aaa; padding: 0 0 3px; text-align: left; }
   .prices thead th:last-child { text-align: right; }
   .prices tbody tr { border-bottom: 1px solid #f0ebe3; }
   .prices tbody tr:last-child { border-bottom: none; }
-  .prices tbody td { font-size: 0.68rem; padding: 5px 0; color: var(--ink); letter-spacing: 0.04em; }
-  .prices tbody td:first-child { color: var(--accent); font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 400; }
-  .prices tbody td:last-child { text-align: right; font-family: 'Cormorant Garamond', serif; font-size: 0.85rem; }
+  .prices tbody td { font-size: 0.65rem; padding: ${priceTdPadding}; color: var(--ink); letter-spacing: 0.04em; }
+  .prices tbody td:first-child { color: var(--accent); font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 400; }
+  .prices tbody td:last-child { text-align: right; font-family: 'Cormorant Garamond', serif; font-size: 0.8rem; }
   .prices .base-price td:first-child { color: var(--ink); }
 
-  .card-url { font-size: 0.5rem; color: #c0b8ae; word-break: break-all; text-align: center; margin-top: 8px; line-height: 1.5; }
+  .card-url { font-size: 0.48rem; color: #c0b8ae; word-break: break-all; text-align: center; margin-top: 4px; line-height: 1.4; }
 
-  .footer { border-top: 1px solid var(--rule); padding: 18px 40px; display: flex; align-items: center; justify-content: space-between; }
-  .footer-brand { font-family: 'Cormorant Garamond', serif; font-size: 0.82rem; font-style: italic; color: #aaa; letter-spacing: 0.08em; }
-  .footer-note { font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: #bbb; }
+  .footer { border-top: 1px solid var(--rule); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .footer-brand { font-family: 'Cormorant Garamond', serif; font-size: 0.78rem; font-style: italic; color: #aaa; letter-spacing: 0.08em; }
+  .footer-note { font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; color: #bbb; }
 
   .print-bar { position: fixed; bottom: 22px; right: 22px; z-index: 100; }
   .print-btn { background: var(--ink); color: var(--paper); border: none; font-family: 'Jost', sans-serif; font-size: 0.68rem; font-weight: 300; letter-spacing: 0.16em; text-transform: uppercase; padding: 12px 26px; cursor: pointer; transition: background 0.2s; }
   .print-btn:hover { background: var(--accent); }
 
   @media print {
-    @page { size: A4; margin: 0; }
-    body { background: white; }
-    .print-bar { display: none; }
-    .header { padding: 32px 28px 24px; }
-    .brand { font-size: 2rem; }
-    .card { padding: 24px 18px 20px; }
-    .qr-frame { width: 140px; height: 140px; }
+    @page { size: portrait; margin: ${fitOnePage ? '0.1in' : '0.25in'}; }
+    html, body {
+      background: white !important;
+      ${fitOnePage ? 'height: 100vh; max-height: 100vh; overflow: hidden !important;' : ''}
+    }
+    .print-bar { display: none !important; }
   }
 </style>
 </head>
@@ -18796,7 +18836,7 @@ function renderQRs() {
   document.querySelectorAll('[id^="qr-"]').forEach(function(el) {
     const url = el.getAttribute('data-url');
     if (!url) return;
-    new QRCode(el, { text: url, width: 138, height: 138, colorDark: "#1c1814", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(el, { text: url, width: ${qrRenderSize}, height: ${qrRenderSize}, colorDark: "#1c1814", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
   });
 }
 renderQRs();
