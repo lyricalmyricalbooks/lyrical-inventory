@@ -592,5 +592,32 @@ describe('Shipping Analysis Hub Functions', () => {
       // For 1.2kg (1-2kg band), postage cost is $17.00 CAD
       expect(resultsPanel.innerHTML).toContain('$17.00 CAD');
     });
+
+    it('uses manual weight override when specified by user', () => {
+      const mockBookList = [
+        { id: 'book1', title: 'The Hound', shipWeight: 0.3, shipWeightUnit: 'kg' }
+      ];
+
+      const mockState = { shippingRates: { ON: { base: 16.00, addon: 10.00 } }, book1: { hist: [] } };
+      const mockTaxCenter = { businessExpenses: [] };
+      const resultsPanel = { innerHTML: '' };
+      const mockElements = {
+        'sim-book-select': { value: 'book1' },
+        'sim-qty-input': { value: '1' },
+        'sim-region-select': { value: 'ON' },
+        'sim-tare-select': { value: '0' },
+        'sim-weight-override': { value: '1.75' }, // Manually entered 1.75 kg (1-2kg band)
+        'sim-postage-override': { value: '' },
+        'sim-results-panel': resultsPanel
+      };
+
+      updateShippingSimulationFn(mockElements, mockState, mockBookList, mockTaxCenter, []);
+
+      // Billed weight should reflect user's manual input of 1.750 kg
+      expect(resultsPanel.innerHTML).toContain('1.750 kg');
+      expect(resultsPanel.innerHTML).toContain('Band: 1 - 2 kg');
+      // For 1.75kg in ON, fallback postage is $17.00 CAD
+      expect(resultsPanel.innerHTML).toContain('$17.00 CAD');
+    });
   });
 });
