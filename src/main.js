@@ -19272,26 +19272,153 @@ window.removePosBook = async function (id) {
   renderPOS();
 };
 
-window.downloadInventoryValuationCSV = function() {
-  let csv = 'Lyricalmyrical Book Inventory Valuation Report\n';
-  csv += 'Generated on: ' + today() + '\n\n';
+function calculateInventoryValuationData() {
+  const items = [];
+  const totals = {
+    totalTitles: 0,
+    totalPrintRun: 0,
+    totalStockOnHand: 0,
+    totalStockConsigned: 0,
+    totalUnsoldUnits: 0,
+    totalSoldUnits: 0,
+    totalOnHandCostCAD: 0,
+    totalConsignedCostCAD: 0,
+    totalAssetValueCostCAD: 0,
+    totalOnHandRetailCAD: 0,
+    totalConsignedRetailCAD: 0,
+    totalAssetValueRetailCAD: 0,
+    totalPotentialGrossProfitCAD: 0,
+    weightedAvgMarginPct: 0
+  };
 
-  const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
-
-  csv += 'Book ID,Title,ISBN,Stock on Hand,Currency,Unit Production Cost (Native),Total Asset Value (Native),CAD Exchange Rate,Total Asset Value (CAD)\n';
+  let totalMarginSum = 0;
+  let marginCount = 0;
 
   BOOK_LIST.forEach(book => {
-    const s = states[book.id] || defaultState(book);
-    const stock = s.stock || 0;
-    const cost = book.productionCost || 0;
-    const totalNative = stock * cost;
-    const cur = getBookCurrencyCode(book);
-    const isCAD = cur === 'CAD';
-    const rate = isCAD ? 1 : (_fxRateCache[`${cur}_CAD`] || 1);
-    const totalCAD = totalNative * rate;
+    if (typeof isTestBook === 'function' && isTestBook(book)) return;
 
-    csv += `${esc(book.id)},${esc(book.title)},${esc(book.isbn)},${stock},${esc(cur)},${cost.toFixed(2)},${totalNative.toFixed(2)},${rate.toFixed(4)},${totalCAD.toFixed(2)}\n`;
+    const s = states[book.id] || (typeof defaultState === 'function' ? defaultState(book) : { stock: 0, ledger: [], hist: [] });
+
+    const stockOnHand = Math.max(0, parseInt(s.stock, 10) || 0);
+
+    const stockConsigned = (s.ledger || []).reduce((acc, entry) => {
+      const remaining = Math.max(0, (parseInt(entry.qty, 10) || 0) - (parseInt(entry.sold, 10) || 0));
+      return acc + remaining;
+    }, 0);
+
+    const totalUnsold = stockOnHand + stockConsigned;
+
+    const totalSold = (s.hist || []).reduce((acc, h) => acc + (parseInt(h.qty, 10) || 0), 0)
+      + (s.ledger || []).reduce((acc, l) => acc + (parseInt(l.sold, 10) || 0), 0);
+
+    const printRun = parseInt(book.maxPrint || book.totalPrinted || 0, 10) || (totalUnsold + totalSold);
+    const compsDamaged = Math.max(0, printRun - totalUnsold - totalSold);
+
+    const cur = typeof getBookCurrencyCode === 'function' ? getBookCurrencyCode(book) : (book.currency || 'CAD');
+    const isCAD = cur === 'CAD';
+    const fxRate = isCAD ? 1 : (_fxRateCache[`${cur}_CAD`] || 1);
+
+    const listPrice = parseFloat(book.listPrice || 0);
+    const unitCost = parseFloat(book.productionCost || 0);
+
+    const unitMargin = Math.max(0, listPrice - unitCost);
+    const unitMarginPct = listPrice > 0 ? (unitMargin / listPrice) * 100 : 0;
+
+    if (listPrice > 0) {
+      totalMarginSum += unitMarginPct * totalUnsold;
+      marginCount += totalUnsold;
+    }
+
+    const onHandCostNative = stockOnHand * unitCost;
+    const consignedCostNative = stockConsigned * unitCost;
+    const totalCostNative = totalUnsold * unitCost;
+
+    const onHandRetailNative = stockOnHand * listPrice;
+    const consignedRetailNative = stockConsigned * listPrice;
+    const totalRetailNative = totalUnsold * listPrice;
+
+    const onHandCostCAD = onHandCostNative * fxRate;
+    const consignedCostCAD = consignedCostNative * fxRate;
+    const totalCostCAD = totalCostNative * fxRate;
+
+    const onHandRetailCAD = onHandRetailNative * fxRate;
+    const consignedRetailCAD = consignedRetailNative * fxRate;
+    const totalRetailCAD = totalRetailNative * fxRate;
+
+    const potentialGrossProfitCAD = totalRetailCAD - totalCostCAD;
+
+    items.push({
+      id: book.id,
+      title: book.title || 'Untitled',
+      isbn: book.isbn || '—',
+      format: book.format || 'Paperback',
+      printRun,
+      stockOnHand,
+      stockConsigned,
+      totalUnsold,
+      totalSold,
+      compsDamaged,
+      currency: cur,
+      fxRate,
+      listPrice,
+      unitCost,
+      unitMargin,
+      unitMarginPct,
+      onHandCostNative,
+      consignedCostNative,
+      totalCostNative,
+      onHandRetailNative,
+      consignedRetailNative,
+      totalRetailNative,
+      onHandCostCAD,
+      consignedCostCAD,
+      totalCostCAD,
+      onHandRetailCAD,
+      consignedRetailCAD,
+      totalRetailCAD,
+      potentialGrossProfitCAD,
+      storeBreakdown: (s.ledger || []).map(l => ({
+        storeName: l.storeName || 'Partner Store',
+        onHand: Math.max(0, (parseInt(l.qty, 10) || 0) - (parseInt(l.sold, 10) || 0))
+      })).filter(x => x.onHand > 0)
+    });
+
+    totals.totalTitles++;
+    totals.totalPrintRun += printRun;
+    totals.totalStockOnHand += stockOnHand;
+    totals.totalStockConsigned += stockConsigned;
+    totals.totalUnsoldUnits += totalUnsold;
+    totals.totalSoldUnits += totalSold;
+    totals.totalOnHandCostCAD += onHandCostCAD;
+    totals.totalConsignedCostCAD += consignedCostCAD;
+    totals.totalAssetValueCostCAD += totalCostCAD;
+    totals.totalOnHandRetailCAD += onHandRetailCAD;
+    totals.totalConsignedRetailCAD += consignedRetailCAD;
+    totals.totalAssetValueRetailCAD += totalRetailCAD;
+    totals.totalPotentialGrossProfitCAD += potentialGrossProfitCAD;
   });
+
+  totals.weightedAvgMarginPct = marginCount > 0 ? (totalMarginSum / marginCount) : 0;
+
+  return { items, totals };
+}
+
+window.downloadInventoryValuationCSV = function() {
+  const { items, totals } = calculateInventoryValuationData();
+  const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+
+  let csv = 'Lyricalmyrical Book Inventory Valuation Report\n';
+  csv += 'Generated on: ' + today() + '\n';
+  csv += `Active Titles: ${totals.totalTitles} | Total Unsold Units: ${totals.totalUnsoldUnits} (${totals.totalStockOnHand} Warehouse / ${totals.totalStockConsigned} Consigned)\n`;
+  csv += `Total Balance Sheet Inventory Asset Cost: CAD $${totals.totalAssetValueCostCAD.toFixed(2)} | Total Retail Value: CAD $${totals.totalAssetValueRetailCAD.toFixed(2)}\n\n`;
+
+  csv += 'Book ID,Title,ISBN,Binding / Format,Print Run,Stock On-Hand (Warehouse),Stock Consigned (Stores),Total Unsold Inventory,Lifetime Sold Units,Currency,Unit Print Cost (Native),Unit Retail Price (Native),Unit Margin (Native),Unit Margin %,FX Rate (CAD),On-Hand Asset Value Cost (CAD),Consigned Asset Value Cost (CAD),TOTAL ASSET VALUE COST (CAD),TOTAL RETAIL VALUE (CAD),POTENTIAL GROSS PROFIT (CAD)\n';
+
+  items.forEach(item => {
+    csv += `${esc(item.id)},${esc(item.title)},${esc(item.isbn)},${esc(item.format)},${item.printRun},${item.stockOnHand},${item.stockConsigned},${item.totalUnsold},${item.totalSold},${esc(item.currency)},${item.unitCost.toFixed(2)},${item.listPrice.toFixed(2)},${item.unitMargin.toFixed(2)},${item.unitMarginPct.toFixed(1)}%,${item.fxRate.toFixed(4)},${item.onHandCostCAD.toFixed(2)},${item.consignedCostCAD.toFixed(2)},${item.totalCostCAD.toFixed(2)},${item.totalRetailCAD.toFixed(2)},${item.potentialGrossProfitCAD.toFixed(2)}\n`;
+  });
+
+  csv += `TOTALS,"Total Active Titles: ${totals.totalTitles}",,,${totals.totalPrintRun},${totals.totalStockOnHand},${totals.totalStockConsigned},${totals.totalUnsoldUnits},${totals.totalSoldUnits},CAD,,,,,,${totals.totalOnHandCostCAD.toFixed(2)},${totals.totalConsignedCostCAD.toFixed(2)},${totals.totalAssetValueCostCAD.toFixed(2)},${totals.totalAssetValueRetailCAD.toFixed(2)},${totals.totalPotentialGrossProfitCAD.toFixed(2)}\n`;
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
@@ -19300,7 +19427,160 @@ window.downloadInventoryValuationCSV = function() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  showToast('✓ Inventory Valuation CSV exported');
+  showToast('✓ Comprehensive Inventory Valuation CSV exported');
+};
+
+window.openInventoryValuationModal = function() {
+  const data = calculateInventoryValuationData();
+  const { items, totals } = data;
+
+  const costEl = $('iv-stat-cost-cad');
+  const retailEl = $('iv-stat-retail-cad');
+  const unitsEl = $('iv-stat-unsold-units');
+  const subUnitsEl = $('iv-stat-unsold-sub');
+  const marginEl = $('iv-stat-margin-pct');
+  const subMarginEl = $('iv-stat-margin-sub');
+  const tbody = $('iv-modal-table-body');
+  const tfoot = $('iv-modal-table-foot');
+
+  if (costEl) costEl.textContent = `$${totals.totalAssetValueCostCAD.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CAD`;
+  if (retailEl) retailEl.textContent = `$${totals.totalAssetValueRetailCAD.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CAD`;
+  if (unitsEl) unitsEl.textContent = `${totals.totalUnsoldUnits.toLocaleString()} units`;
+  if (subUnitsEl) subUnitsEl.textContent = `${totals.totalStockOnHand.toLocaleString()} Warehouse · ${totals.totalStockConsigned.toLocaleString()} Consigned`;
+  if (marginEl) marginEl.textContent = `${totals.weightedAvgMarginPct.toFixed(1)}%`;
+  if (subMarginEl) subMarginEl.textContent = `$${totals.totalPotentialGrossProfitCAD.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CAD Total Profit`;
+
+  if (tbody) {
+    tbody.innerHTML = items.map(item => {
+      const storesTooltip = item.storeBreakdown.length
+        ? ` title="${item.storeBreakdown.map(s => `${s.storeName}: ${s.onHand}`).join(' | ')}"`
+        : '';
+      const storePill = item.stockConsigned > 0
+        ? `<span class="tag amber" style="font-size:10px; cursor:help;"${storesTooltip}>${item.stockConsigned} in ${item.storeBreakdown.length} store${item.storeBreakdown.length === 1 ? '' : 's'}</span>`
+        : '<span style="color:var(--text3);">0</span>';
+
+      const curSym = typeof getSym === 'function' ? getSym(item.currency) : '$';
+
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:600; color:var(--text1);">${escapeHtml(item.title)}</div>
+            <div style="font-size:10px; color:var(--text3);">${escapeHtml(item.isbn)} · ${escapeHtml(item.format)}</div>
+          </td>
+          <td class="r" style="font-weight:600;">${item.stockOnHand}</td>
+          <td class="r">${storePill}</td>
+          <td class="r" style="font-weight:700; color:var(--gold);">${item.totalUnsold}</td>
+          <td class="r" style="font-family:'DM Mono',monospace;">${curSym}${item.unitCost.toFixed(2)}</td>
+          <td class="r" style="font-family:'DM Mono',monospace;">${curSym}${item.listPrice.toFixed(2)}</td>
+          <td class="r" style="font-family:'DM Mono',monospace; font-weight:600; color:var(--gold);">$${item.totalCostCAD.toFixed(2)}</td>
+          <td class="r" style="font-family:'DM Mono',monospace; font-weight:600; color:var(--green);">$${item.totalRetailCAD.toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  if (tfoot) {
+    tfoot.innerHTML = `
+      <tr>
+        <td>TOTALS (${totals.totalTitles} Titles)</td>
+        <td class="r">${totals.totalStockOnHand}</td>
+        <td class="r">${totals.totalStockConsigned}</td>
+        <td class="r" style="color:var(--gold);">${totals.totalUnsoldUnits}</td>
+        <td class="r" colspan="2" style="font-size:11px; color:var(--text3);">Weighted Margin: ${totals.weightedAvgMarginPct.toFixed(1)}%</td>
+        <td class="r" style="color:var(--gold); font-size:13px;">$${totals.totalAssetValueCostCAD.toFixed(2)} CAD</td>
+        <td class="r" style="color:var(--green); font-size:13px;">$${totals.totalAssetValueRetailCAD.toFixed(2)} CAD</td>
+      </tr>
+    `;
+  }
+
+  openM('inventory-valuation-modal');
+};
+
+window.printInventoryValuationReport = function() {
+  const { items, totals } = calculateInventoryValuationData();
+  const printWin = window.open('', '_blank');
+  if (!printWin) {
+    showToast('⚠ Popup blocked. Allow popups to print report.', 'err');
+    return;
+  }
+
+  const rows = items.map(item => {
+    const curSym = typeof getSym === 'function' ? getSym(item.currency) : '$';
+    return `
+    <tr>
+      <td><strong>${escapeHtml(item.title)}</strong><br><small>${escapeHtml(item.isbn)} | ${escapeHtml(item.format)}</small></td>
+      <td style="text-align:right;">${item.stockOnHand}</td>
+      <td style="text-align:right;">${item.stockConsigned}</td>
+      <td style="text-align:right;font-weight:bold;">${item.totalUnsold}</td>
+      <td style="text-align:right;">${curSym}${item.unitCost.toFixed(2)}</td>
+      <td style="text-align:right;">${curSym}${item.listPrice.toFixed(2)}</td>
+      <td style="text-align:right;font-weight:bold;">$${item.totalCostCAD.toFixed(2)} CAD</td>
+      <td style="text-align:right;font-weight:bold;color:#15803d;">$${item.totalRetailCAD.toFixed(2)} CAD</td>
+    </tr>
+  `;
+  }).join('');
+
+  printWin.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Lyricalmyrical Books - Inventory Valuation Report</title>
+      <style>
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; color: #111; line-height: 1.5; }
+        h1 { margin: 0 0 4px 0; font-size: 24px; }
+        .meta { color: #555; font-size: 13px; margin-bottom: 20px; }
+        .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+        .card { border: 1px solid #ddd; padding: 12px; border-radius: 6px; background: #fafafa; }
+        .card-label { font-size: 10px; text-transform: uppercase; color: #666; font-weight: bold; }
+        .card-val { font-size: 18px; font-weight: bold; margin-top: 4px; color: #111; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+        th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
+        th { background: #f8fafc; font-size: 11px; text-transform: uppercase; }
+        tfoot tr td { background: #f1f5f9; font-weight: bold; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      <h1>Lyricalmyrical Books — Inventory Valuation Report</h1>
+      <div class="meta">Generated: ${today()} | Publisher Balance Sheet & Stock Audit</div>
+      <div class="summary">
+        <div class="card"><div class="card-label">Asset Cost Basis (CAD)</div><div class="card-val">$${totals.totalAssetValueCostCAD.toFixed(2)}</div></div>
+        <div class="card"><div class="card-label">Retail MSRP Value (CAD)</div><div class="card-val">$${totals.totalAssetValueRetailCAD.toFixed(2)}</div></div>
+        <div class="card"><div class="card-label">Total Unsold Stock</div><div class="card-val">${totals.totalUnsoldUnits} units</div></div>
+        <div class="card"><div class="card-label">Weighted Profit Margin</div><div class="card-val">${totals.weightedAvgMarginPct.toFixed(1)}%</div></div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Title &amp; ISBN</th>
+            <th style="text-align:right;">Warehouse</th>
+            <th style="text-align:right;">Consigned</th>
+            <th style="text-align:right;">Total Unsold</th>
+            <th style="text-align:right;">Unit Cost</th>
+            <th style="text-align:right;">MSRP</th>
+            <th style="text-align:right;">Cost Basis (CAD)</th>
+            <th style="text-align:right;">Retail Value (CAD)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr>
+            <td>TOTALS (${totals.totalTitles} Titles)</td>
+            <td style="text-align:right;">${totals.totalStockOnHand}</td>
+            <td style="text-align:right;">${totals.totalStockConsigned}</td>
+            <td style="text-align:right;">${totals.totalUnsoldUnits}</td>
+            <td colspan="2" style="text-align:right;">Weighted Margin: ${totals.weightedAvgMarginPct.toFixed(1)}%</td>
+            <td style="text-align:right;">$${totals.totalAssetValueCostCAD.toFixed(2)} CAD</td>
+            <td style="text-align:right;">$${totals.totalAssetValueRetailCAD.toFixed(2)} CAD</td>
+          </tr>
+        </tfoot>
+      </table>
+    </body>
+    </html>
+  `);
+  printWin.document.close();
+  printWin.focus();
+  setTimeout(() => printWin.print(), 300);
 };
 
 // ── TAX SEASON EXPORT ──
@@ -27201,7 +27481,7 @@ function exposeLegacyInlineHandlers() {
     moneyAmount, roundShippingCharge, buildShippingChargePrediction,
     renderShippingChargePrediction, collectShippoMessages, renderShippoDiagnostics,
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
-    buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV,
+    buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV, openInventoryValuationModal, printInventoryValuationReport,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange, setShipAnalysisMarginFilter,
     onShipAnalysisSearch, onInlinePostageChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
