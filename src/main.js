@@ -13153,6 +13153,166 @@ async function findFileHandleInDir(dirHandle, targetFilename) {
   return null;
 }
 
+async function getAllFilesInReceiptFolder(dirHandle) {
+  if (!dirHandle) return [];
+  const results = [];
+  try {
+    async function scanDir(handle, prefix = '') {
+      for await (const entry of handle.values()) {
+        if (entry.kind === 'file') {
+          results.push({
+            path: prefix ? `${prefix}/${entry.name}` : entry.name,
+            name: entry.name
+          });
+        } else if (entry.kind === 'directory') {
+          await scanDir(entry, prefix ? `${prefix}/${entry.name}` : entry.name);
+        }
+      }
+    }
+    await scanDir(dirHandle);
+  } catch (e) {
+    console.warn('Error reading receipt folder file list', e);
+  }
+  return results;
+}
+
+async function batchScanAndRelinkReceipts() {
+  let handle = await loadReceiptFolderHandle();
+  if (!handle) {
+    const connect = await confirmDialog('No receipt folder connected. Connect your local receipt folder to scan and re-link files now?', { okLabel: 'Connect Folder', cancelLabel: 'Cancel', title: 'Batch Re-link Receipts' });
+    if (connect) {
+      handle = await setupReceiptFolder();
+      if (!handle) return;
+    } else {
+      return;
+    }
+  }
+
+  const allDiskFiles = await getAllFilesInReceiptFolder(handle);
+  let totalChecked = 0;
+  let totalRelinked = 0;
+  let totalUnlinked = 0;
+
+  const expenses = TAX_CENTER.businessExpenses || [];
+  for (const exp of expenses) {
+    const files = Array.isArray(exp.receiptFiles) && exp.receiptFiles.length ? exp.receiptFiles : (exp.receipt ? [exp.receipt] : []);
+    if (!files.length) continue;
+    totalChecked++;
+
+    let expModified = false;
+    const updatedFiles = await Promise.all(files.map(async (r) => {
+      if (typeof r === 'string' && r.startsWith('local://')) {
+        const fn = r.replace('local://', '');
+        const baseFilename = fn.split('/').pop();
+        const existing = await findFileHandleInDir(handle, baseFilename);
+        if (!existing && allDiskFiles.length > 0) {
+          const match = allDiskFiles.find(f => f.name.toLowerCase() === baseFilename.toLowerCase())
+            || allDiskFiles.find(f => exp.date && f.name.includes(exp.date));
+          if (match) {
+            expModified = true;
+            return `local://${match.path}`;
+          } else {
+            totalUnlinked++;
+          }
+        }
+      }
+      return r;
+    }));
+
+    if (expModified) {
+      exp.receiptFiles = updatedFiles;
+      exp.receipt = updatedFiles[0] || '';
+      totalRelinked++;
+    }
+  }
+
+  if (totalRelinked > 0) {
+    await saveTaxCenter();
+    renderTaxCenter();
+  }
+
+  const msg = `✓ Receipt Batch Audit Completed\n\n• ${totalChecked} expense receipts verified\n• ${totalRelinked} mislinked files auto-relinked\n• ${totalUnlinked} files unlinked / missing on disk`;
+  confirmDialog(msg, { title: 'Batch Re-link Results', okLabel: 'OK', cancelLabel: 'Close' });
+  showToast(`✓ Batch audit finished: ${totalRelinked} receipts auto-relinked`, 'ok');
+}
+
+function tcExpenseRowDragOver(e, row) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (row) {
+    row.style.outline = '2px dashed var(--gold)';
+    row.style.background = 'rgba(200, 145, 58, 0.12)';
+  }
+}
+
+function tcExpenseRowDragLeave(e, row) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (row) {
+    row.style.outline = '';
+    row.style.background = '';
+  }
+}
+
+async function tcExpenseRowDrop(e, row, sourceType, sourceId, itemId) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (row) {
+    row.style.outline = '';
+    row.style.background = '';
+  }
+
+  const files = e.dataTransfer?.files;
+  if (!files || !files.length) return;
+
+  const file = files[0];
+  let exp = null;
+  let subfolder = 'General';
+
+  if (sourceType === 'businessExpense') {
+    exp = (TAX_CENTER.businessExpenses || []).find(x => String(x.id) === String(itemId));
+  } else if (sourceType === 'bookExpense') {
+    const s = states[sourceId];
+    if (s && s.expenses) {
+      exp = s.expenses.find(x => String(x.id) === String(itemId));
+      if (BOOKS[sourceId]) subfolder = BOOKS[sourceId].title.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    }
+  }
+
+  if (!exp) {
+    showToast('⚠ Expense entry not found', 'err');
+    return;
+  }
+
+  const localUrl = await saveReceiptToLocalFile(file, subfolder);
+  const targetUrl = localUrl || `local://${file.name}`;
+
+  if (!Array.isArray(exp.receiptFiles)) exp.receiptFiles = exp.receipt ? [exp.receipt] : [];
+  exp.receiptFiles.push(targetUrl);
+  exp.receipt = exp.receiptFiles[0] || '';
+
+  if (sourceType === 'businessExpense') {
+    await saveTaxCenter();
+  } else if (sourceType === 'bookExpense') {
+    await saveState(sourceId);
+  }
+
+  renderTaxCenter();
+  showToast(`✓ Attached receipt "${file.name}" to "${exp.desc || 'Expense'}"`, 'ok');
+}
+
+async function attachReceiptToExpenseRow(sourceType, sourceId, itemId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*,.pdf';
+  input.onchange = async () => {
+    if (!input.files || !input.files.length) return;
+    const fakeEvent = { preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: { files: input.files } };
+    await tcExpenseRowDrop(fakeEvent, null, sourceType, sourceId, itemId);
+  };
+  input.click();
+}
+
 async function handleFolderError(e, title, message) {
   console.error(title, e);
   const reconnect = await confirmDialog(
@@ -13204,7 +13364,12 @@ function _localReceiptCell(item) {
   const files = (Array.isArray(item.receiptFiles) && item.receiptFiles.length)
     ? item.receiptFiles
     : (item.receipt ? [item.receipt] : []);
-  if (!files.length) return '';
+  if (!files.length) {
+    if (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense') {
+      return `<button class="btn sm outline" type="button" onclick="attachReceiptToExpenseRow('${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')" style="font-size:10px;padding:1px 6px;color:var(--gold);" title="Attach receipt file">📎 Attach</button>`;
+    }
+    return '';
+  }
   const multi = files.length > 1;
   return files.map((r, idx) => {
     if (typeof r === 'string' && r.startsWith('local://')) {
@@ -15435,7 +15600,7 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
       }
 
       return `
-        <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'}">
+        <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'};transition:all 0.2s;" ondragover="tcExpenseRowDragOver(event, this)" ondragleave="tcExpenseRowDragLeave(event, this)" ondrop="tcExpenseRowDrop(event, this, '${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')">
             <td style="font-size:12px;">${item.date || '—'}</td>
             <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
             <td style="font-size:12px;">${descCell}</td>
@@ -23206,6 +23371,7 @@ Object.assign(window, {
   chooseBackupFolder, exportToJSON, exportAllToCSV,
   submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
+  batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
   tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcYearChange, tcClearLedgerFilters,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
@@ -26975,6 +27141,7 @@ function exposeLegacyInlineHandlers() {
     tcClearSelectedTrip, tcOpenTripDropdown, tcCloseTripDropdown, tcToggleTripDropdown,
     tcFilterTripDropdown, tcSelectTripOption, exportTripCSV, setTripBudgetPrompt,
     openEditTrip, saveTripAssignment, renderEditExpenseReceipts, relinkEditExpenseReceipt, removeEditExpenseReceipt,
+    batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,
     renameTripPrompt, showCategoryDetail, saveTaxCenterSettings, scanReceiptWithAI,
     getShippoTxCost, saveShippoLabelLocally, fetchShippoTransactionsPageAPI,
