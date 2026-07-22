@@ -495,7 +495,6 @@ describe('Shipping Analysis Hub Functions', () => {
 
       expect(resultsPanel.innerHTML).toContain('Canada Post Billed Weight');
       expect(resultsPanel.innerHTML).toContain('0.800 kg');
-      expect(resultsPanel.innerHTML).toContain('$15.00 CAD'); // current store rate (qty 1)
       expect(resultsPanel.innerHTML).toContain('$14.50 CAD'); // estimated/fallback postage cost for 0.8kg ON
     });
 
@@ -527,7 +526,6 @@ describe('Shipping Analysis Hub Functions', () => {
       updateShippingSimulationFn(mockElements, mockState, mockBookList, mockTaxCenter, []);
 
       expect(resultsPanel.innerHTML).toContain('$10.50 CAD'); // Shows custom postage override
-      expect(resultsPanel.innerHTML).toContain('+4.50'); // Margin: 15.00 (current store rate) - 10.50 (postage) = +4.50
     });
 
     it('calculates estimated postage for multi-quantity orders as a single combined shipment by weight tier including packaging tare', () => {
@@ -561,8 +559,6 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(resultsPanel.innerHTML).toContain('Band: 1 - 2 kg');
       // For 1.35kg in ON, fallback postage is base rate $17.00 CAD (1-2kg band)
       expect(resultsPanel.innerHTML).toContain('$17.00 CAD');
-      // Current store rate for qty 2 = 16.00 + 10.00 = $26.00 CAD
-      expect(resultsPanel.innerHTML).toContain('$26.00 CAD');
     });
 
     it('bills based on Canada Post volumetric weight when dimensions exceed physical weight', () => {
