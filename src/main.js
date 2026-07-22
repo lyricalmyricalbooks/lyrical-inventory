@@ -26190,10 +26190,17 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             </div>
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
-                Custom Override <span style="font-weight:400; text-transform:none; color:var(--text4);">(optional)</span>
+                Manual Weight <span style="font-weight:400; text-transform:none; color:var(--text4);">(kg)</span>
               </label>
-              <input type="number" id="sim-postage-override" placeholder="Fallback band" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+              <input type="number" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
             </div>
+          </div>
+
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
+              Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text4);">(optional)</span>
+            </label>
+            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
           </div>
         </div>
 
@@ -26395,11 +26402,17 @@ function updateShippingSimulation() {
     return;
   }
 
+  const weightOverrideInput = $('sim-weight-override');
+  const manualWeightKg = weightOverrideInput && weightOverrideInput.value !== '' ? parseFloat(weightOverrideInput.value) : null;
+
   const tareSelect = $('sim-tare-select');
   const tareKg = tareSelect ? (parseFloat(tareSelect.value) || 0) : 0;
 
   const bookWeightKg = getWeightInKg(qty, book);
-  const totalActualWeightKg = bookWeightKg + tareKg;
+  const calculatedActualWeightKg = bookWeightKg + tareKg;
+  const totalActualWeightKg = (manualWeightKg !== null && !isNaN(manualWeightKg) && manualWeightKg >= 0)
+    ? manualWeightKg
+    : calculatedActualWeightKg;
 
   // Canada Post Volumetric Weight formula: (L x W x H in cm) / 5000
   const lengthCm = Number(book.lengthCm || book.length) || 23;
