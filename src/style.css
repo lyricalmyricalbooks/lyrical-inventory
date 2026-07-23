@@ -6762,3 +6762,66 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   box-shadow: 0 8px 30px rgba(14, 12, 10, 0.08) !important;
 }
 
+/* Web Analytics Umami API KPI Grid */
+.analytics-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.analytics-kpi-card {
+  background: var(--surface-card, #ffffff);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--r2, 10px);
+  padding: 14px 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.analytics-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.analytics-kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text3, #777777);
+  margin-bottom: 6px;
+}
+
+.analytics-kpi-value {
+  font-size: 26px;
+  font-weight: 800;
+  font-family: 'DM Mono', monospace;
+  color: var(--text, #111111);
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+
+.analytics-kpi-change {
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.analytics-kpi-change.up {
+  color: #1d7a4a;
+}
+
+.analytics-kpi-change.down {
+  color: #c93b3b;
+}
+
+.analytics-kpi-change.neutral {
+  color: var(--text3, #888888);
+}
+
+

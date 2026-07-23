@@ -23921,6 +23921,179 @@ function setupGate(errMsg) {
 }
 
 // ── WEB ANALYTICS ───────────────────────────────────────────────────────
+function parseUmamiShareUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/\/share\/([a-zA-Z0-9\-_]+)/);
+    if (!match) return null;
+    return {
+      origin: parsed.origin,
+      shareId: match[1]
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function formatUmamiDuration(seconds) {
+  const sec = Math.max(0, Math.round(Number(seconds) || 0));
+  if (sec === 0) return '0s';
+  if (sec < 60) return `${sec}s`;
+  const mins = Math.floor(sec / 60);
+  const remSec = sec % 60;
+  if (mins < 60) {
+    return remSec > 0 ? `${mins}m ${remSec}s` : `${mins}m`;
+  }
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+}
+
+function calculateUmamiTimeframe(hours = 24) {
+  const endAt = Date.now();
+  const durationMs = hours * 60 * 60 * 1000;
+  const startAt = endAt - durationMs;
+  const prevEndAt = startAt;
+  const prevStartAt = startAt - durationMs;
+  return { startAt, endAt, prevStartAt, prevEndAt };
+}
+
+function computeMetricChange(currentVal, prevVal) {
+  const cur = Number(currentVal) || 0;
+  const prev = Number(prevVal) || 0;
+  if (prev === 0) {
+    if (cur === 0) return { percent: 0, formatted: '0%', isIncrease: false };
+    return { percent: 100, formatted: '↑ 100%', isIncrease: true };
+  }
+  const diff = cur - prev;
+  const percent = Math.round((diff / prev) * 100);
+  if (percent === 0) return { percent: 0, formatted: '0%', isIncrease: false };
+  const isIncrease = percent > 0;
+  const formatted = `${isIncrease ? '↑' : '↓'} ${Math.abs(percent)}%`;
+  return { percent, formatted, isIncrease };
+}
+
+async function fetchUmamiApiStats(shareUrl) {
+  const parsed = parseUmamiShareUrl(shareUrl);
+  if (!parsed) return null;
+
+  const { origin, shareId } = parsed;
+  const timeframe = calculateUmamiTimeframe(24);
+
+  const shareRes = await fetch(`${origin}/api/share/${shareId}`, {
+    headers: { 'Accept': 'application/json' }
+  });
+  if (!shareRes.ok) throw new Error(`Share API returned HTTP ${shareRes.status}`);
+  const shareData = await shareRes.json();
+  
+  const websiteId = shareData.websiteId || shareData.id || shareData.website?.id;
+  const token = shareData.token || shareId;
+  if (!websiteId) throw new Error('Could not resolve websiteId from Umami share API');
+
+  const headers = {
+    'Accept': 'application/json',
+    'x-umami-share-token': token
+  };
+
+  const [curRes, prevRes] = await Promise.all([
+    fetch(`${origin}/api/websites/${websiteId}/stats?startAt=${timeframe.startAt}&endAt=${timeframe.endAt}`, { headers }),
+    fetch(`${origin}/api/websites/${websiteId}/stats?startAt=${timeframe.prevStartAt}&endAt=${timeframe.prevEndAt}`, { headers })
+  ]);
+
+  if (!curRes.ok) throw new Error(`Stats API returned HTTP ${curRes.status}`);
+  const curStats = await curRes.json();
+  const prevStats = prevRes.ok ? await prevRes.json() : {};
+
+  const getVal = (obj, key) => (obj && obj[key] && typeof obj[key].value === 'number') ? obj[key].value : (typeof obj[key] === 'number' ? obj[key] : 0);
+
+  const visitors = getVal(curStats, 'visitors');
+  const prevVisitors = getVal(prevStats, 'visitors');
+
+  const visits = getVal(curStats, 'visits');
+  const prevVisits = getVal(prevStats, 'visits');
+
+  const views = getVal(curStats, 'pageviews');
+  const prevViews = getVal(prevStats, 'pageviews');
+
+  const bounces = getVal(curStats, 'bounces');
+  const prevBounces = getVal(prevStats, 'bounces');
+
+  const totalTime = getVal(curStats, 'totaltime');
+  const prevTotalTime = getVal(prevStats, 'totaltime');
+
+  const bounceRate = visits > 0 ? Math.round((bounces / visits) * 100) : 0;
+  const prevBounceRate = prevVisits > 0 ? Math.round((prevBounces / prevVisits) * 100) : 0;
+
+  const avgDuration = visits > 0 ? Math.round(totalTime / visits) : 0;
+  const prevAvgDuration = prevVisits > 0 ? Math.round(prevTotalTime / prevVisits) : 0;
+
+  return {
+    visitors: { value: visitors, change: computeMetricChange(visitors, prevVisitors) },
+    visits: { value: visits, change: computeMetricChange(visits, prevVisits) },
+    views: { value: views, change: computeMetricChange(views, prevViews) },
+    bounceRate: { value: `${bounceRate}%`, change: computeMetricChange(bounceRate, prevBounceRate), rawRate: bounceRate, prevRate: prevBounceRate },
+    avgDuration: { value: formatUmamiDuration(avgDuration), change: computeMetricChange(avgDuration, prevAvgDuration), rawSeconds: avgDuration }
+  };
+}
+
+async function renderUmamiStats(shareUrl) {
+  const kpiBar = $('webanalytics-kpi-bar');
+  const statusLabel = $('webanalytics-api-status');
+  if (!kpiBar) return;
+
+  const parsed = parseUmamiShareUrl(shareUrl);
+  if (!parsed) {
+    kpiBar.style.display = 'none';
+    return;
+  }
+
+  kpiBar.style.display = 'block';
+  if (statusLabel) statusLabel.textContent = 'Fetching live stats...';
+
+  try {
+    const stats = await fetchUmamiApiStats(shareUrl);
+    if (!stats) {
+      kpiBar.style.display = 'none';
+      return;
+    }
+
+    const setCard = (valId, changeId, metricObj, isBounce = false) => {
+      const valEl = $(valId);
+      const changeEl = $(changeId);
+      if (valEl) valEl.textContent = metricObj.value;
+      if (changeEl && metricObj.change) {
+        changeEl.textContent = metricObj.change.formatted;
+        let isGood = isBounce ? !metricObj.change.isIncrease : metricObj.change.isIncrease;
+        if (metricObj.change.percent === 0) {
+          changeEl.className = 'analytics-kpi-change neutral';
+        } else {
+          changeEl.className = `analytics-kpi-change ${isGood ? 'up' : 'down'}`;
+        }
+      }
+    };
+
+    setCard('umami-kpi-visitors', 'umami-change-visitors', stats.visitors);
+    setCard('umami-kpi-visits', 'umami-change-visits', stats.visits);
+    setCard('umami-kpi-views', 'umami-change-views', stats.views);
+    setCard('umami-kpi-bounces', 'umami-change-bounces', stats.bounceRate, true);
+    setCard('umami-kpi-duration', 'umami-change-duration', stats.avgDuration);
+
+    if (statusLabel) {
+      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      statusLabel.textContent = `Updated ${nowStr}`;
+    }
+  } catch (err) {
+    console.warn('Umami API fetch failed (falling back to iframe-only):', err.message);
+    if (statusLabel) statusLabel.textContent = 'API stats unavailable';
+  }
+}
+
+window.refreshUmamiStats = function () {
+  const url = localStorage.getItem('lm-analytics-url') || '';
+  if (url) renderUmamiStats(url);
+};
+
 function renderWebAnalytics() {
   const url = localStorage.getItem('lm-analytics-url') || '';
   const statusBadge = $('webanalytics-status-badge');
@@ -23956,6 +24129,8 @@ function renderWebAnalytics() {
     if (externalLink) {
       externalLink.href = url;
     }
+
+    renderUmamiStats(url);
   } else {
     // Show Setup View
     if (statusBadge) {
@@ -23969,6 +24144,9 @@ function renderWebAnalytics() {
     if (iframe) iframe.src = '';
     if (urlInput) urlInput.value = '';
     if (externalLink) externalLink.href = '#';
+
+    const kpiBar = $('webanalytics-kpi-bar');
+    if (kpiBar) kpiBar.style.display = 'none';
   }
 }
 
