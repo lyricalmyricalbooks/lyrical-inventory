@@ -8065,7 +8065,9 @@ async function importEmailReceiptDrafts() {
   const inboxIds = drafts.map(d => d._inboxId).filter(Boolean);
   if (inboxIds.length && typeof window._fbDeleteInboxItem === 'function') {
     await Promise.all(inboxIds.map(id => window._fbDeleteInboxItem(id)));
-    _emailInboxItems = _emailInboxItems.filter(i => !inboxIds.includes(i._inboxId));
+    // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
+    const inboxIdsSet = new Set(inboxIds);
+    _emailInboxItems = _emailInboxItems.filter(i => !inboxIdsSet.has(i._inboxId));
     updateEmailInboxBadge();
   }
 
@@ -8851,8 +8853,14 @@ window.updateGratuitySourceHint = function () {
   const book = getBook(); if (!book) return;
   const s = getState(); if (!s) return;
   const hist = s.hist || [];
-  const usedPub = hist.filter(h => h.gratuity && !h.voided && h.gratSource === 'publisher').reduce((a, h) => a + (h.qty || 0), 0);
-  const usedAuth = hist.filter(h => h.gratuity && !h.voided && h.gratSource === 'author').reduce((a, h) => a + (h.qty || 0), 0);
+  // ⚡ Bolt Optimization: Calculate gratuity balances in a single pass to eliminate intermediate arrays and multiple loop overhead
+  let usedPub = 0, usedAuth = 0;
+  for (const h of hist) {
+    if (h.gratuity && !h.voided) {
+      if (h.gratSource === 'publisher') usedPub += h.qty || 0;
+      else if (h.gratSource === 'author') usedAuth += h.qty || 0;
+    }
+  }
   const pubAlloc = book.pubGratuity || 0, authAlloc = book.authorGratuity || 0;
   const pubLeft = pubAlloc - usedPub, authLeft = authAlloc - usedAuth;
   const sel = $('g-source');
@@ -9012,9 +9020,15 @@ function renderStores() {
 
     // ── #3: Double-entry ledger balance check ───────────────────────────────
     const ledger = s.ledger || [];
-    const ledgerSent = ledger.filter(e => e.storeId === st.id && e.type === 'Shipment' && !e.voided).reduce((a, e) => a + (e.qty || 0), 0);
-    const ledgerSold = ledger.filter(e => e.storeId === st.id && e.type === 'Sale' && !e.voided).reduce((a, e) => a + (e.qty || 0), 0);
-    const ledgerReturned = ledger.filter(e => e.storeId === st.id && e.type === 'Return' && !e.voided).reduce((a, e) => a + (e.qty || 0), 0);
+    // ⚡ Bolt Optimization: Calculate double-entry ledger balances in a single pass to eliminate intermediate arrays and multiple loop overhead
+    let ledgerSent = 0, ledgerSold = 0, ledgerReturned = 0;
+    for (const e of ledger) {
+      if (e.storeId === st.id && !e.voided) {
+        if (e.type === 'Shipment') ledgerSent += e.qty || 0;
+        else if (e.type === 'Sale') ledgerSold += e.qty || 0;
+        else if (e.type === 'Return') ledgerReturned += e.qty || 0;
+      }
+    }
     const calculatedOutstanding = ledgerSent - ledgerSold - ledgerReturned;
     const isUnbalanced = (ledgerSent > 0 || st.sent > 0) && (
       st.sent !== ledgerSent ||
