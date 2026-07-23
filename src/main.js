@@ -128,16 +128,21 @@ let editingPosBookId = null;
 
 function isTestBook(b) {
   if (!b) return false;
-  const idLower = (b.id || '').toLowerCase();
-  const titleLower = (b.title || '').toLowerCase().trim();
+  const idLower = String(b.id || '').toLowerCase().trim();
+  const titleLower = String(b.title || '').toLowerCase().trim();
   return idLower === 'test1' || idLower === 'testpage' || idLower.includes('test') ||
-    titleLower === 'test1' || titleLower === 'testpage' || titleLower === 'test page';
+    titleLower === 'test1' || titleLower === 'testpage' || titleLower.includes('test');
 }
 
 function isTestBookId(bid) {
   if (!bid) return false;
-  if (bid === 'test1' || bid.toLowerCase() === 'testpage' || bid.toLowerCase().includes('test')) return true;
-  if (BOOKS[bid]) return isTestBook(BOOKS[bid]);
+  const str = String(bid).toLowerCase().trim();
+  if (str === 'test1' || str === 'testpage' || str.includes('test')) return true;
+  if (BOOKS && BOOKS[bid]) return isTestBook(BOOKS[bid]);
+  if (BOOKS) {
+    const found = Object.values(BOOKS).find(b => (b.id && String(b.id).toLowerCase() === str) || (b.title && String(b.title).toLowerCase() === str));
+    if (found) return isTestBook(found);
+  }
   return false;
 }
 
@@ -12465,7 +12470,11 @@ function sheetPayloadWithBookAccent(payload) {
 }
 
 function syncToSheets(payload) {
-  if (!sheetsUrl) return;
+  if (!sheetsUrl || !payload) return;
+  const bookIdent = payload.book || payload.bookId || payload.id;
+  if ((bookIdent && isTestBookId(bookIdent)) || (payload.bookObj && isTestBook(payload.bookObj))) {
+    return;
+  }
   payload = sheetPayloadWithBookAccent(payload);
   const action = payload.action;
   const typeLabel = action === 'reset' ? 'Rebuild'
@@ -12493,7 +12502,15 @@ function syncToSheets(payload) {
 
 function syncBatchToSheets(rows, label = 'Bulk sync') {
   if (!sheetsUrl || !Array.isArray(rows) || !rows.length) return;
-  const rowsWithAccents = rows.map(row => sheetPayloadWithBookAccent(row));
+  const filteredRows = rows.filter(row => {
+    if (!row) return false;
+    const bId = row.book || row.bookId || row.id;
+    if (bId && isTestBookId(bId)) return false;
+    if (row.bookObj && isTestBook(row.bookObj)) return false;
+    return true;
+  });
+  if (!filteredRows.length) return;
+  const rowsWithAccents = filteredRows.map(row => sheetPayloadWithBookAccent(row));
   _sheetsQueue.push({
     id: 'batch-' + makeEventId(),
     payload: { action: 'batch', rows: rowsWithAccents },
@@ -12625,8 +12642,9 @@ async function pushAllToSheets(opts = {}) {
   const toSync = [];
   const deletions = [];
   Object.keys(BOOKS).forEach(bid => {
-    const s = states[bid] || defaultState(BOOKS[bid]);
     const book = BOOKS[bid];
+    if (isTestBook(book) || isTestBookId(bid)) return;
+    const s = states[bid] || defaultState(BOOKS[bid]);
     const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
     (s.hist || []).forEach(h => {
       if (h.consignmentLink) return; // ledger is the canonical row
@@ -15054,6 +15072,7 @@ function calculateFinancials(year) {
 
   // 1. Process Book-specific data
   BOOK_LIST.forEach(book => {
+    if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
     const unitCost = (book.productionCost || 0) / (book.maxPrint || 1);
 
@@ -15210,6 +15229,7 @@ function downloadTaxReport() {
   let csv = 'Date,Type,Book/Source,Category,Description,Receipt URL,Revenue,COGS,Expense,Artist Payout,Net\n';
 
   BOOK_LIST.forEach(book => {
+    if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
     s.hist.filter(h => !h.voided && !h.gratuity).forEach(h => {
       // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
@@ -19635,6 +19655,7 @@ window.downloadFullTaxSeasonExport = function () {
   csv += 'Book Title,Gross Revenue,Net Revenue (after COGS & Royalty),Total Units Sold\n';
 
   BOOK_LIST.forEach(book => {
+    if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
     // Sales + royalty are recorded in the book's native currency; convert to the
     // export's base (CAD) so they're comparable with the CAD expense figures.
@@ -19687,6 +19708,7 @@ window.downloadFullTaxSeasonExport = function () {
 
   // 2a. Book-level expenses & payouts
   BOOK_LIST.forEach(book => {
+    if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
     const cur = getBookCurrencyCode(book);
     const rawRate = _fxRateCache[`${cur}_CAD`];
