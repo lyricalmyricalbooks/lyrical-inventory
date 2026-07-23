@@ -14548,7 +14548,7 @@ window.renderBookPaymentConfig = renderBookPaymentConfig;
 // ── PROFIT SHARING LOGIC
 let psActiveBookId = null;
 let psSimGross = null;   // "what-if" gross revenue for the live earnings preview
-let activeSettingsSubTab = 'profit';
+let activeSettingsSubTab = 'catalog';
 
 function switchSettingsSubTab(subTabName) {
   activeSettingsSubTab = subTabName;
