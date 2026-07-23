@@ -53,4 +53,10 @@ describe('escapeHtml', () => {
     expect(html).toContain('id="shipping-reconciliation-list"');
     expect(html).toContain('Shipping reconciliation');
   });
+
+  it('ensures bigcartel and shipping panels have tab-panel class for proper panel isolation', () => {
+    expect(html).toContain('class="tab-panel" id="tab-bigcartel"');
+    expect(html).toContain('class="tab-panel" id="tab-shipping"');
+  });
 });
+
