@@ -24682,25 +24682,39 @@ function renderCustomShippoDestPicker() {
   filterShippoDestMenu();
 }
 
-function toggleShippoDestDropdown(e) {
-  if (e) e.stopPropagation();
+function setShippoDestMenuOpenState(isOpen) {
   const menu = $('custom-ship-dest-menu');
   const trigger = $('custom-ship-dest-trigger');
   const arrow = $('custom-ship-dest-arrow');
-  if (!menu) return;
+  const wrapper = $('custom-ship-dest-wrapper');
+  const card = wrapper?.closest('.card');
 
-  const isOpen = menu.style.display === 'flex' || menu.style.display === 'block';
   if (isOpen) {
-    menu.style.display = 'none';
-    if (trigger) trigger.classList.remove('active');
-    if (arrow) arrow.style.transform = 'rotate(0deg)';
-  } else {
-    menu.style.display = 'flex';
+    if (menu) menu.style.display = 'flex';
     if (trigger) trigger.classList.add('active');
     if (arrow) arrow.style.transform = 'rotate(180deg)';
+    if (card) {
+      card.style.position = 'relative';
+      card.style.zIndex = '9999';
+    }
+    if (wrapper) wrapper.style.zIndex = '10000';
     const searchInput = $('custom-ship-dest-search');
     if (searchInput) searchInput.focus();
+  } else {
+    if (menu) menu.style.display = 'none';
+    if (trigger) trigger.classList.remove('active');
+    if (arrow) arrow.style.transform = 'rotate(0deg)';
+    if (card) card.style.zIndex = '10';
+    if (wrapper) wrapper.style.zIndex = '1000';
   }
+}
+
+function toggleShippoDestDropdown(e) {
+  if (e) e.stopPropagation();
+  const menu = $('custom-ship-dest-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display === 'flex' || menu.style.display === 'block';
+  setShippoDestMenuOpenState(!isOpen);
 }
 
 function setShippoDestCategoryFilter(cat, e) {
@@ -24776,13 +24790,8 @@ function selectShippoDestCustomItem(idx, e) {
   // Trigger form population
   onShippoPreFillDestChange();
 
-  // Close dropdown
-  const menu = $('custom-ship-dest-menu');
-  const trigger = $('custom-ship-dest-trigger');
-  const arrow = $('custom-ship-dest-arrow');
-  if (menu) menu.style.display = 'none';
-  if (trigger) trigger.classList.remove('active');
-  if (arrow) arrow.style.transform = 'rotate(0deg)';
+  // Close dropdown and reset z-indexes
+  setShippoDestMenuOpenState(false);
 }
 
 function clearShippoDestSelection(e) {
@@ -24820,11 +24829,8 @@ function clearShippoDestSelection(e) {
 document.addEventListener('click', (e) => {
   const menu = $('custom-ship-dest-menu');
   const trigger = $('custom-ship-dest-trigger');
-  const arrow = $('custom-ship-dest-arrow');
   if (menu && menu.style.display !== 'none' && !menu.contains(e.target) && !trigger?.contains(e.target)) {
-    menu.style.display = 'none';
-    if (trigger) trigger.classList.remove('active');
-    if (arrow) arrow.style.transform = 'rotate(0deg)';
+    setShippoDestMenuOpenState(false);
   }
 });
 
@@ -28856,6 +28862,7 @@ window.saveShippoApiKey = saveShippoApiKey;
 window.editShippoApiKey = editShippoApiKey;
 window.onShippoPreFillDestChange = onShippoPreFillDestChange;
 window.renderCustomShippoDestPicker = renderCustomShippoDestPicker;
+window.setShippoDestMenuOpenState = setShippoDestMenuOpenState;
 window.toggleShippoDestDropdown = toggleShippoDestDropdown;
 window.setShippoDestCategoryFilter = setShippoDestCategoryFilter;
 window.filterShippoDestMenu = filterShippoDestMenu;

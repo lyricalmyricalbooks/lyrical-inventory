@@ -62,4 +62,12 @@ describe('Custom Searchable Destination Picker UX/UI Suite', () => {
     expect(fallbackFunc('', '+16474096863')).toBe('+16474096863');
     expect(fallbackFunc(null, null)).toBe('+16474096863');
   });
+
+  it('elevates card z-index and ensures overflow:visible when dropdown is open', () => {
+    expect(styleContent).toContain('.ship-prefills-card');
+    expect(styleContent).toContain('overflow: visible !important;');
+    expect(styleContent).toContain('z-index: 99999 !important;');
+    expect(mainContent).toContain('function setShippoDestMenuOpenState(');
+    expect(mainContent).toContain('card.style.zIndex = \'9999\'');
+  });
 });
