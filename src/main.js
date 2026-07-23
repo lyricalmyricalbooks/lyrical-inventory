@@ -28059,7 +28059,80 @@ function renderBigCartelProducts(products, included = []) {
   });
 }
 
-function renderBigCartelOrders(orders, _included = []) {
+function extractBigCartelCustomerName(attr) {
+  if (!attr) return '—';
+  if (attr.customer_name && attr.customer_name.trim()) return attr.customer_name.trim();
+  if (attr.buyer_name && attr.buyer_name.trim()) return attr.buyer_name.trim();
+  if (attr.shipping_name && attr.shipping_name.trim()) return attr.shipping_name.trim();
+  if (attr.billing_name && attr.billing_name.trim()) return attr.billing_name.trim();
+  if (attr.name && attr.name.trim()) return attr.name.trim();
+  
+  const first = attr.buyer_first_name || attr.customer_first_name || attr.first_name || attr.shipping_first_name || '';
+  const last = attr.buyer_last_name || attr.customer_last_name || attr.last_name || attr.shipping_last_name || '';
+  const fullName = `${first} ${last}`.trim();
+  if (fullName) return fullName;
+
+  return attr.buyer_email || attr.customer_email || attr.email || '—';
+}
+
+function extractBigCartelOrderItems(order, included = []) {
+  const attr = order.attributes || {};
+  const items = [];
+
+  // 1. Direct line_items / items array embedded on attributes
+  const rawItems = attr.line_items || attr.items || attr.order_lines;
+  if (Array.isArray(rawItems) && rawItems.length > 0) {
+    rawItems.forEach(item => {
+      const name = item.product_name || item.name || item.option_name || 'Item';
+      const qty = item.quantity || 1;
+      items.push(`${escapeHTML(name)} x${qty}`);
+    });
+    if (items.length > 0) return items.join('<br>');
+  }
+
+  // Build lookup index from JSON:API included array
+  const itemLookup = {};
+  if (Array.isArray(included) && included.length > 0) {
+    included.forEach(inc => {
+      if (inc.type === 'items' || inc.type === 'line_items') {
+        itemLookup[inc.id] = inc.attributes || inc;
+      }
+    });
+  }
+
+  // 2. Map relationships.items.data to itemLookup
+  const relItems = order.relationships?.items?.data || order.relationships?.line_items?.data || [];
+  if (Array.isArray(relItems) && relItems.length > 0) {
+    relItems.forEach(ref => {
+      const itemAttr = itemLookup[ref.id];
+      if (itemAttr) {
+        const name = itemAttr.product_name || itemAttr.name || itemAttr.option_name || 'Item';
+        const qty = itemAttr.quantity || 1;
+        items.push(`${escapeHTML(name)} x${qty}`);
+      }
+    });
+    if (items.length > 0) return items.join('<br>');
+  }
+
+  // 3. Fallback: match order ID in included items attributes or relationships
+  if (Array.isArray(included) && included.length > 0) {
+    included.forEach(inc => {
+      if (inc.type === 'items' || inc.type === 'line_items') {
+        const orderRef = inc.relationships?.order?.data?.id || inc.attributes?.order_id;
+        if (String(orderRef) === String(order.id)) {
+          const name = inc.attributes?.product_name || inc.attributes?.name || 'Item';
+          const qty = inc.attributes?.quantity || 1;
+          items.push(`${escapeHTML(name)} x${qty}`);
+        }
+      }
+    });
+    if (items.length > 0) return items.join('<br>');
+  }
+
+  return '—';
+}
+
+function renderBigCartelOrders(orders, included = []) {
   const list = $('bc-orders-list');
   list.innerHTML = '';
 
@@ -28071,21 +28144,15 @@ function renderBigCartelOrders(orders, _included = []) {
   orders.forEach(o => {
     const attr = o.attributes || {};
     const dateStr = attr.created_at ? new Date(attr.created_at).toLocaleDateString() : '—';
-    const customer = (attr.buyer_first_name || '') + ' ' + (attr.buyer_last_name || '');
+    const customer = extractBigCartelCustomerName(attr);
+    const email = attr.buyer_email || attr.customer_email || attr.email || attr.shipping_email || '';
 
     let statusPill = 'pill gray';
     if (attr.status === 'completed') statusPill = 'pill green';
     if (attr.status === 'pending') statusPill = 'pill gold';
     if (attr.status === 'cancelled') statusPill = 'pill red';
 
-    let itemsHtml = '';
-    if (attr.line_items && attr.line_items.length > 0) {
-      itemsHtml = attr.line_items.map(item => {
-        return `${escapeHTML(item.product_name)} x${item.quantity}`;
-      }).join('<br>');
-    } else {
-      itemsHtml = '—';
-    }
+    const itemsHtml = extractBigCartelOrderItems(o, included);
 
     const total = parseFloat(attr.total || 0).toFixed(2);
     const tax = parseFloat(attr.tax_total || 0).toFixed(2);
@@ -28095,7 +28162,7 @@ function renderBigCartelOrders(orders, _included = []) {
     row.innerHTML = `
       <td style="font-family:'DM Mono', monospace; font-size:11px;">#${escapeHTML(o.id)}</td>
       <td>${dateStr}</td>
-      <td style="font-weight:600;">${escapeHTML(customer)}<br><span style="font-size:11px; color:var(--text3); font-weight:normal;">${escapeHTML(attr.buyer_email || '')}</span></td>
+      <td style="font-weight:600;">${escapeHTML(customer)}${email ? `<br><span style="font-size:11px; color:var(--text3); font-weight:normal;">${escapeHTML(email)}</span>` : ''}</td>
       <td style="font-size:12px; line-height:1.45;">${itemsHtml}</td>
       <td class="r" style="font-family:'DM Mono', monospace;">$${tax}</td>
       <td class="r" style="font-family:'DM Mono', monospace;">$${shipping}</td>
@@ -28261,7 +28328,7 @@ async function fetchAllBigCartelOrders(storeId) {
   let maxPages = 5;
 
   while (hasMore && page <= maxPages) {
-    const res = await fetchBigCartel(`orders?page[limit]=${limit}&page[offset]=${offset}`, storeId);
+    const res = await fetchBigCartel(`orders?include=items&page[limit]=${limit}&page[offset]=${offset}`, storeId);
     if (res && res.data && res.data.length > 0) {
       allOrders = allOrders.concat(res.data);
       if (res.included) {
