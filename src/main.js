@@ -2176,7 +2176,7 @@ function switchTab(name) {
 
   // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
   // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos, webanalytics, shipping
-  const names = ['dashboard', 'website', 'manual', 'consignment', 'history', 'expenses', 'opencall', 'reconcile', 'customers', 'financials', 'taxcenter', 'sheets', 'backups', 'qrcodes', 'myqr', 'pos', 'webanalytics', 'shipping'];
+  const names = ['dashboard', 'website', 'manual', 'consignment', 'history', 'expenses', 'opencall', 'reconcile', 'customers', 'financials', 'taxcenter', 'sheets', 'backups', 'qrcodes', 'myqr', 'pos', 'webanalytics', 'shipping', 'bigcartel'];
 
   // Selecting a destination closes any open header category menu (and the
   // sidebar footer account menu, if open).
@@ -2206,10 +2206,12 @@ function switchTab(name) {
     m.classList.toggle('has-active', !!m.querySelector('.header-menu-item.active'));
   });
 
-  names.forEach(n => {
-    const p = $('tab-' + n);
-    if (p) { p.classList.remove('active'); p.style.display = 'none'; }
+  // Hide all tab panels (including bigcartel and future panels)
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.classList.remove('active');
+    p.style.display = 'none';
   });
+
 
   const overview = $('tab-all-overview');
   if (overview) {
