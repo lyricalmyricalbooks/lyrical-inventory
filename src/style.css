@@ -6861,8 +6861,15 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 }
 
 /* Premium Custom Searchable Destination Dropdown */
+.ship-prefills-card {
+  position: relative !important;
+  z-index: 10 !important;
+  overflow: visible !important;
+}
+
 .custom-dest-wrapper {
-  position: relative;
+  position: relative !important;
+  z-index: 1000 !important;
   width: 100%;
 }
 
@@ -6893,16 +6900,17 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 }
 
 .custom-dest-menu {
-  position: absolute;
+  position: absolute !important;
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 1050;
+  z-index: 99999 !important;
   background: var(--card-bg, #ffffff);
   border: 1px solid var(--border);
   border-radius: var(--r2);
-  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.05);
-  backdrop-filter: blur(16px);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   padding: 10px;
   max-height: 380px;
   display: flex;
