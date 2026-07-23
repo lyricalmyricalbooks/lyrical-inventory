@@ -2038,9 +2038,38 @@
       <div class="card" style="margin-bottom:1.25rem;">
         <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">Quick Pre-fills</div>
         <div class="g2">
-          <div class="form-group">
-            <label>Load Destination From</label>
-            <select id="ship-prefill-dest" onchange="onShippoPreFillDestChange()">
+          <div class="form-group" style="position:relative;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <label style="margin-bottom:0;">Load Destination From</label>
+              <span id="ship-dest-count-badge" style="font-size:10px;color:var(--text3);font-weight:500;"></span>
+            </div>
+            <div id="custom-ship-dest-wrapper" class="custom-dest-wrapper">
+              <div id="custom-ship-dest-trigger" class="custom-dest-trigger" onclick="toggleShippoDestDropdown(event)" tabindex="0">
+                <div style="display:flex;align-items:center;gap:8px;overflow:hidden;width:100%;">
+                  <span id="custom-ship-dest-icon" style="font-size:14px;color:var(--text3);flex-shrink:0;">🔍</span>
+                  <span id="custom-ship-dest-label" style="font-size:13px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">— Search or select an address —</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                  <span id="custom-ship-dest-clear" style="display:none;font-size:12px;color:var(--text3);padding:2px 5px;cursor:pointer;border-radius:4px;" onclick="clearShippoDestSelection(event)">✕</span>
+                  <span id="custom-ship-dest-arrow" style="font-size:10px;color:var(--text3);transition:transform 0.2s;">▼</span>
+                </div>
+              </div>
+              <div id="custom-ship-dest-menu" class="custom-dest-menu" style="display:none;" onclick="event.stopPropagation()">
+                <div class="custom-dest-search-bar">
+                  <span style="font-size:13px;">🔍</span>
+                  <input type="text" id="custom-ship-dest-search" placeholder="Type to filter by name, order #, city..." oninput="filterShippoDestMenu()">
+                </div>
+                <div class="custom-dest-chips" id="custom-ship-dest-chips">
+                  <button type="button" class="dest-chip active" data-cat="all" onclick="setShippoDestCategoryFilter('all', event)">All</button>
+                  <button type="button" class="dest-chip" data-cat="bc" onclick="setShippoDestCategoryFilter('bc', event)">🛒 Big Cartel</button>
+                  <button type="button" class="dest-chip" data-cat="stores" onclick="setShippoDestCategoryFilter('stores', event)">🏬 Stores</button>
+                  <button type="button" class="dest-chip" data-cat="orders" onclick="setShippoDestCategoryFilter('orders', event)">📦 Orders</button>
+                </div>
+                <div id="custom-ship-dest-list" class="custom-dest-list"></div>
+              </div>
+            </div>
+            <!-- Hidden native select for form handlers & tests -->
+            <select id="ship-prefill-dest" onchange="onShippoPreFillDestChange()" style="display:none;">
               <option value="">— Select an address —</option>
               <optgroup label="Big Cartel Web Orders" id="ship-prefill-bc-group"></optgroup>
               <optgroup label="Consignment Stores" id="ship-prefill-stores-group"></optgroup>
