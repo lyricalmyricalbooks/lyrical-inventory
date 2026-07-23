@@ -24386,8 +24386,52 @@ function initShippingTab() {
   $('sf-country').value = savedOrigin.country || 'CA';
 
   // Populate pre-fill dropdowns
+  const bcGroup = $('ship-prefill-bc-group');
   const storesGroup = $('ship-prefill-stores-group');
   const ordersGroup = $('ship-prefill-orders-group');
+
+  if (bcGroup) {
+    bcGroup.innerHTML = '';
+    let bcOrders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
+      ? bigCartelData.orders
+      : (loadCachedBigCartelOrders()?.orders || []);
+
+    if (bcOrders.length === 0) {
+      const opt = document.createElement('option');
+      opt.disabled = true;
+      opt.textContent = 'No Big Cartel orders found';
+      bcGroup.appendChild(opt);
+    } else {
+      bcOrders.forEach(o => {
+        const attr = o.attributes || {};
+        const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Customer';
+        const city = attr.shipping_city || '';
+        const country = normalizeCountryCode(attr.shipping_country_code || attr.shipping_country || 'US');
+        const phone = attr.shipping_phone || attr.buyer_phone || '';
+        const street1 = attr.shipping_address_1 || '';
+        const street2 = attr.shipping_address_2 || '';
+        const state = attr.shipping_state || '';
+        const zip = attr.shipping_zip || '';
+
+        const addrObj = {
+          orderNumber: o.id,
+          name: recipientName,
+          company: attr.shipping_company || '',
+          phone: phone,
+          street1: street1,
+          street2: street2,
+          city: city,
+          state: state,
+          zip: zip,
+          country: country
+        };
+        const opt = document.createElement('option');
+        opt.value = JSON.stringify(addrObj);
+        opt.textContent = `Order #${o.id} - ${recipientName} (${city || 'Local'}, ${country})`;
+        bcGroup.appendChild(opt);
+      });
+    }
+  }
 
   if (storesGroup) {
     storesGroup.innerHTML = '';
@@ -28238,7 +28282,10 @@ function formatBigCartelOrderAddress(order) {
 }
 
 function copyBigCartelOrderAddress(orderId) {
-  const order = bigCartelData.orders.find(o => String(o.id) === String(orderId));
+  const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
+    ? bigCartelData.orders
+    : (loadCachedBigCartelOrders()?.orders || []);
+  const order = orders.find(o => String(o.id) === String(orderId));
   if (!order) {
     showToast('Order details not found', 'warn');
     return;
@@ -28263,7 +28310,10 @@ function copyBigCartelOrderAddress(orderId) {
 }
 
 function openBigCartelAddressPreview(orderId) {
-  const order = bigCartelData.orders.find(o => String(o.id) === String(orderId));
+  const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
+    ? bigCartelData.orders
+    : (loadCachedBigCartelOrders()?.orders || []);
+  const order = orders.find(o => String(o.id) === String(orderId));
   if (!order) {
     showToast('Order details not found', 'warn');
     return;
@@ -28391,7 +28441,10 @@ function renderBigCartelOrders(orders, included = []) {
 }
 
 function prefillShippingFromBigCartelOrder(orderId) {
-  const order = bigCartelData.orders.find(o => String(o.id) === String(orderId));
+  const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
+    ? bigCartelData.orders
+    : (loadCachedBigCartelOrders()?.orders || []);
+  const order = orders.find(o => String(o.id) === String(orderId));
   if (!order) {
     showToast('Order details not found', 'err');
     return;
