@@ -10,18 +10,58 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
   const mainJsPath = path.resolve(__dirname, '../src/main.js');
   let matchBigCartelOrderToCatalog;
   let formatBigCartelOrderAddress;
+  let extractBigCartelOrderItems;
 
   beforeEach(() => {
     const mainContent = fs.readFileSync(mainJsPath, 'utf8');
 
     const matchFunc = mainContent.match(/function matchBigCartelOrderToCatalog\([^)]*\)\s*\{([\s\S]+?)\n\}/);
     const formatFunc = mainContent.match(/function formatBigCartelOrderAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
+    const extractItemsFunc = mainContent.match(/function extractBigCartelOrderItems\([^)]*\)\s*\{([\s\S]+?)\n\}/);
 
     expect(matchFunc).not.toBeNull();
     expect(formatFunc).not.toBeNull();
+    expect(extractItemsFunc).not.toBeNull();
 
-    matchBigCartelOrderToCatalog = new Function('order', 'included', 'BOOKS', matchFunc[0] + '\nreturn matchBigCartelOrderToCatalog(order, included);');
+    matchBigCartelOrderToCatalog = new Function('order', 'included', 'BOOKS', 'function escapeHTML(s){return String(s||"");}\n' + extractItemsFunc[0] + '\n' + matchFunc[0] + '\nreturn matchBigCartelOrderToCatalog(order, included, BOOKS);');
     formatBigCartelOrderAddress = new Function('order', formatFunc[0] + '\nreturn formatBigCartelOrderAddress(order);');
+    extractBigCartelOrderItems = new Function('order', 'included', 'customBooks', 'function escapeHTML(s){return String(s||"");}\n' + extractItemsFunc[0] + '\nreturn extractBigCartelOrderItems(order, included, customBooks);');
+  });
+
+  describe('extractBigCartelOrderItems', () => {
+    const mockBooks = {
+      altrove: { id: 'altrove', title: 'Altrove', listPrice: '32.50' }
+    };
+
+    function escapeHTML(str) { return str; }
+
+    it('deduces ordered catalog items from order net total when line items array is stripped', () => {
+      const order = {
+        id: 'JMIQ-538069',
+        attributes: {
+          total: '57.50',
+          shipping_total: '25.00',
+          tax_total: '0.00'
+        }
+      };
+
+      const result = extractBigCartelOrderItems(order, [], mockBooks, escapeHTML);
+      expect(result).toContain('Altrove x1');
+    });
+
+    it('deduces multiple quantities based on net merchandise ratio', () => {
+      const order = {
+        id: 'ILTK-951862',
+        attributes: {
+          total: '94.00',
+          shipping_total: '29.00',
+          tax_total: '0.00'
+        }
+      };
+
+      const result = extractBigCartelOrderItems(order, [], mockBooks, escapeHTML);
+      expect(result).toContain('Altrove x2');
+    });
   });
 
   describe('matchBigCartelOrderToCatalog', () => {

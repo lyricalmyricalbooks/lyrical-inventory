@@ -28086,40 +28086,57 @@ function extractBigCartelCustomerName(attr) {
   return attr.buyer_email || attr.customer_email || attr.email || '—';
 }
 
-function extractBigCartelOrderItems(order, included = []) {
-  const attr = order.attributes || {};
+function extractBigCartelOrderItems(order, included = [], customBooks = null) {
+  if (!order) return '—';
+  const attr = order.attributes || order;
   const items = [];
 
-  // 1. Direct line_items / items array embedded on attributes
-  const rawItems = attr.line_items || attr.items || attr.order_lines;
+  const formatItemObj = (item) => {
+    if (!item) return null;
+    const itemAttr = item.attributes || item;
+    const name = itemAttr.product_name ||
+                 itemAttr.item_option_name ||
+                 itemAttr.option_name ||
+                 itemAttr.product_title ||
+                 (itemAttr.product && (itemAttr.product.name || itemAttr.product.title)) ||
+                 itemAttr.name ||
+                 itemAttr.title ||
+                 itemAttr.description;
+    const qty = itemAttr.quantity || itemAttr.qty || 1;
+    if (name) return `${escapeHTML(name)} x${qty}`;
+    return null;
+  };
+
+  // 1. Direct array embedded on attributes or order object
+  const rawItems = attr.line_items || attr.items || attr.order_items || attr.order_lines || attr.cart || attr.products;
   if (Array.isArray(rawItems) && rawItems.length > 0) {
     rawItems.forEach(item => {
-      const name = item.product_name || item.name || item.option_name || 'Item';
-      const qty = item.quantity || 1;
-      items.push(`${escapeHTML(name)} x${qty}`);
+      const formatted = formatItemObj(item);
+      if (formatted) items.push(formatted);
     });
     if (items.length > 0) return items.join('<br>');
   }
 
-  // Build lookup index from JSON:API included array
+  // 2. Build lookup index from JSON:API included array
   const itemLookup = {};
   if (Array.isArray(included) && included.length > 0) {
     included.forEach(inc => {
-      if (inc.type === 'items' || inc.type === 'line_items') {
-        itemLookup[inc.id] = inc.attributes || inc;
+      if (inc && inc.id) {
+        itemLookup[String(inc.id)] = inc;
       }
     });
   }
 
-  // 2. Map relationships.items.data to itemLookup
-  const relItems = order.relationships?.items?.data || order.relationships?.line_items?.data || [];
+  const relItems = order.relationships?.items?.data ||
+                   order.relationships?.line_items?.data ||
+                   order.relationships?.order_items?.data ||
+                   order.relationships?.products?.data || [];
   if (Array.isArray(relItems) && relItems.length > 0) {
     relItems.forEach(ref => {
-      const itemAttr = itemLookup[ref.id];
-      if (itemAttr) {
-        const name = itemAttr.product_name || itemAttr.name || itemAttr.option_name || 'Item';
-        const qty = itemAttr.quantity || 1;
-        items.push(`${escapeHTML(name)} x${qty}`);
+      const incItem = itemLookup[String(ref.id)];
+      if (incItem) {
+        const formatted = formatItemObj(incItem);
+        if (formatted) items.push(formatted);
       }
     });
     if (items.length > 0) return items.join('<br>');
@@ -28128,15 +28145,36 @@ function extractBigCartelOrderItems(order, included = []) {
   // 3. Fallback: match order ID in included items attributes or relationships
   if (Array.isArray(included) && included.length > 0) {
     included.forEach(inc => {
-      if (inc.type === 'items' || inc.type === 'line_items') {
-        const orderRef = inc.relationships?.order?.data?.id || inc.attributes?.order_id;
-        if (String(orderRef) === String(order.id)) {
-          const name = inc.attributes?.product_name || inc.attributes?.name || 'Item';
-          const qty = inc.attributes?.quantity || 1;
-          items.push(`${escapeHTML(name)} x${qty}`);
-        }
+      const orderRef = inc.relationships?.order?.data?.id || inc.attributes?.order_id || inc.order_id;
+      if (String(orderRef) === String(order.id)) {
+        const formatted = formatItemObj(inc);
+        if (formatted) items.push(formatted);
       }
     });
+    if (items.length > 0) return items.join('<br>');
+  }
+
+  // 4. Smart Price-Based Catalog Deduction Fallback
+  const total = parseFloat(attr.total || 0);
+  const tax = parseFloat(attr.tax_total || 0);
+  const shipping = parseFloat(attr.shipping_total || 0);
+  const netMerch = Math.max(0, total - tax - shipping);
+
+  if (netMerch > 0) {
+    const booksMap = customBooks || (typeof BOOKS !== 'undefined' ? BOOKS : {});
+    const catalogBooks = Object.values(booksMap).filter(b => b && b.listPrice && parseFloat(b.listPrice) > 0);
+
+    for (const book of catalogBooks) {
+      const price = parseFloat(book.listPrice);
+      if (price > 0) {
+        const qtyRatio = netMerch / price;
+        const roundedQty = Math.round(qtyRatio);
+        if (Math.abs(qtyRatio - roundedQty) < 0.05 && roundedQty > 0) {
+          items.push(`${escapeHTML(book.title)} x${roundedQty}`);
+          break;
+        }
+      }
+    }
     if (items.length > 0) return items.join('<br>');
   }
 
@@ -28145,46 +28183,24 @@ function extractBigCartelOrderItems(order, included = []) {
 
 function matchBigCartelOrderToCatalog(order, included = [], customBooks = null) {
   const booksMap = customBooks || (typeof BOOKS !== 'undefined' ? BOOKS : {});
-  const catalogTitles = Object.values(booksMap).map(b => (b.title || '').toLowerCase().trim()).filter(Boolean);
+  const catalogBooks = Object.values(booksMap);
+  const catalogTitles = catalogBooks.map(b => (b.title || '').toLowerCase().trim()).filter(Boolean);
   
   if (catalogTitles.length === 0) {
     return { matched: false, matchedBooks: [] };
   }
 
-  const orderItemNames = [];
-  const attr = order ? (order.attributes || {}) : {};
-
-  const rawItems = attr.line_items || attr.items || attr.order_lines;
-  if (Array.isArray(rawItems)) {
-    rawItems.forEach(item => {
-      if (item.product_name || item.name) orderItemNames.push((item.product_name || item.name).toLowerCase().trim());
-    });
-  }
-
-  if (Array.isArray(included)) {
-    const relItems = order && order.relationships ? (order.relationships.items?.data || order.relationships.line_items?.data || []) : [];
-    const relIds = new Set(relItems.map(r => r.id));
-    included.forEach(inc => {
-      if (inc.type === 'items' || inc.type === 'line_items') {
-        const orderRef = inc.relationships?.order?.data?.id || inc.attributes?.order_id;
-        if (relIds.has(inc.id) || String(orderRef) === String(order.id)) {
-          const name = inc.attributes?.product_name || inc.attributes?.name;
-          if (name) orderItemNames.push(name.toLowerCase().trim());
-        }
-      }
-    });
-  }
-
   const matchedBooks = [];
-  orderItemNames.forEach(name => {
-    catalogTitles.forEach(catTitle => {
-      if (name.includes(catTitle) || catTitle.includes(name)) {
-        const officialBook = Object.values(booksMap).find(b => (b.title || '').toLowerCase().trim() === catTitle);
-        const titleToAdd = officialBook ? officialBook.title : catTitle;
-        if (!matchedBooks.includes(titleToAdd)) matchedBooks.push(titleToAdd);
+
+  const itemsText = extractBigCartelOrderItems(order, included, booksMap);
+  if (itemsText && itemsText !== '—') {
+    catalogBooks.forEach(b => {
+      const titleLower = (b.title || '').toLowerCase().trim();
+      if (titleLower && itemsText.toLowerCase().includes(titleLower)) {
+        if (!matchedBooks.includes(b.title)) matchedBooks.push(b.title);
       }
     });
-  });
+  }
 
   return {
     matched: matchedBooks.length > 0,
