@@ -6824,4 +6824,41 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   color: var(--text3, #888888);
 }
 
+/* Big Cartel Customer Link & Match Badges */
+.bc-customer-link {
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.bc-customer-link:hover {
+  color: var(--gold);
+  text-decoration: underline;
+}
+
+.bc-match-pill {
+  font-size: 10px !important;
+  padding: 2px 7px !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin-top: 4px !important;
+}
+
+.bc-match-pill.matched {
+  background: #e0f5ea !important;
+  color: #1d7a4a !important;
+  border: 1px solid rgba(29, 122, 74, 0.2) !important;
+}
+
+.bc-match-pill.unmatched {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border: 1px solid rgba(146, 64, 14, 0.2) !important;
+}
+
+
 
