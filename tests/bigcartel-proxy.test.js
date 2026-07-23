@@ -50,4 +50,14 @@ describe('Big Cartel Apps Script proxy requests', () => {
     expect(fetchSource).toMatch(/Big Cartel API returned status \$\{data\.code\}\$\{apiError/);
     expect(fetchSource).toMatch(/parsed\.errors/);
   });
+
+  it('includes items relationship when fetching Big Cartel orders', () => {
+    expect(source).toMatch(/orders\?include=items&page/);
+  });
+
+  it('declares extractBigCartelCustomerName and extractBigCartelOrderItems helpers', () => {
+    expect(source).toContain('function extractBigCartelCustomerName(');
+    expect(source).toContain('function extractBigCartelOrderItems(');
+  });
 });
+
