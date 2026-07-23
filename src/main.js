@@ -24551,8 +24551,268 @@ function initShippingTab() {
     weight: parseFloat($('sp-weight').value) || 1.2,
     weight_unit: $('sp-weight-unit').value || 'lb'
   };
+  renderCustomShippoDestPicker();
   renderShippingAnalysisHub();
 }
+
+let _shippoDestMasterList = [];
+let _shippoDestActiveCat = 'all';
+
+function renderCustomShippoDestPicker() {
+  const wrapper = $('custom-ship-dest-wrapper');
+  if (!wrapper) return;
+
+  const items = [];
+
+  // 1. Big Cartel Orders
+  let bcOrders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
+    ? bigCartelData.orders
+    : (typeof loadCachedBigCartelOrders === 'function' ? loadCachedBigCartelOrders()?.orders || [] : []);
+
+  bcOrders.forEach(o => {
+    const attr = o.attributes || {};
+    const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Customer';
+    const city = attr.shipping_city || '';
+    const country = normalizeCountryCode(attr.shipping_country_code || attr.shipping_country || 'US');
+    const phone = attr.shipping_phone || attr.buyer_phone || '';
+    const street1 = attr.shipping_address_1 || '';
+    const street2 = attr.shipping_address_2 || '';
+    const state = attr.shipping_state || '';
+    const zip = attr.shipping_zip || '';
+
+    const addrObj = {
+      orderNumber: o.id,
+      name: recipientName,
+      company: attr.shipping_company || '',
+      phone: phone,
+      street1: street1,
+      street2: street2,
+      city: city,
+      state: state,
+      zip: zip,
+      country: country
+    };
+
+    items.push({
+      category: 'bc',
+      catLabel: 'Big Cartel',
+      icon: '🛒',
+      title: `Order #${o.id} · ${recipientName}`,
+      sub: `${street1 ? street1 + ', ' : ''}${city || 'Local'}${state ? ', ' + state : ''} ${country}`,
+      value: JSON.stringify(addrObj),
+      orderNumber: o.id,
+      searchText: `order #${o.id} ${recipientName} ${city} ${state} ${country} ${street1}`.toLowerCase()
+    });
+  });
+
+  // 2. Consignment Stores
+  const stores = typeof getAllStores === 'function' ? getAllStores() : [];
+  stores.forEach(st => {
+    const addrObj = {
+      name: st.contact || st.name,
+      company: st.name,
+      phone: st.phone || '',
+      street1: st.address || '',
+      street2: '',
+      city: st.city || '',
+      state: st.region || '',
+      zip: st.postal || '',
+      country: normalizeCountryCode(st.country || 'CA')
+    };
+
+    items.push({
+      category: 'stores',
+      catLabel: 'Store',
+      icon: '🏬',
+      title: st.name,
+      sub: `${st.address ? st.address + ', ' : ''}${st.city || ''} ${st.country || ''}`,
+      value: JSON.stringify(addrObj),
+      orderNumber: '',
+      searchText: `${st.name} ${st.contact || ''} ${st.city || ''} ${st.region || ''} ${st.country || ''}`.toLowerCase()
+    });
+  });
+
+  // 3. Ledger Orders
+  const recentOrders = typeof getRecentShippingOrders === 'function' ? getRecentShippingOrders() : [];
+  recentOrders.slice(0, 20).forEach(h => {
+    const addrObj = {
+      orderNumber: h.num,
+      name: h.shipName,
+      company: '',
+      phone: h.shipPhone || h.phone || '',
+      street1: h.shipAddr1,
+      street2: h.shipAddr2 || '',
+      city: h.shipCity,
+      state: h.shipProvince,
+      zip: h.shipPostal,
+      country: normalizeCountryCode(h.shipCountry || 'CA')
+    };
+
+    items.push({
+      category: 'orders',
+      catLabel: 'Order',
+      icon: '📦',
+      title: `${h.num ? 'Order #' + h.num + ' · ' : ''}${h.shipName}`,
+      sub: `${h.shipAddr1 ? h.shipAddr1 + ', ' : ''}${h.shipCity || ''} ${h.shipCountry || ''}`,
+      value: JSON.stringify(addrObj),
+      orderNumber: h.num,
+      searchText: `${h.num || ''} ${h.shipName} ${h.shipCity || ''} ${h.shipCountry || ''}`.toLowerCase()
+    });
+  });
+
+  _shippoDestMasterList = items;
+
+  const countBadge = $('ship-dest-count-badge');
+  if (countBadge) countBadge.textContent = `${items.length} destination${items.length === 1 ? '' : 's'}`;
+
+  filterShippoDestMenu();
+}
+
+function toggleShippoDestDropdown(e) {
+  if (e) e.stopPropagation();
+  const menu = $('custom-ship-dest-menu');
+  const trigger = $('custom-ship-dest-trigger');
+  const arrow = $('custom-ship-dest-arrow');
+  if (!menu) return;
+
+  const isOpen = menu.style.display === 'flex' || menu.style.display === 'block';
+  if (isOpen) {
+    menu.style.display = 'none';
+    if (trigger) trigger.classList.remove('active');
+    if (arrow) arrow.style.transform = 'rotate(0deg)';
+  } else {
+    menu.style.display = 'flex';
+    if (trigger) trigger.classList.add('active');
+    if (arrow) arrow.style.transform = 'rotate(180deg)';
+    const searchInput = $('custom-ship-dest-search');
+    if (searchInput) searchInput.focus();
+  }
+}
+
+function setShippoDestCategoryFilter(cat, e) {
+  if (e) e.stopPropagation();
+  _shippoDestActiveCat = cat;
+  const chips = document.querySelectorAll('#custom-ship-dest-chips .dest-chip');
+  chips.forEach(chip => {
+    if (chip.dataset.cat === cat) chip.classList.add('active');
+    else chip.classList.remove('active');
+  });
+  filterShippoDestMenu();
+}
+
+function filterShippoDestMenu() {
+  const searchInput = $('custom-ship-dest-search');
+  const query = (searchInput?.value || '').toLowerCase().trim();
+  const listContainer = $('custom-ship-dest-list');
+  if (!listContainer) return;
+
+  const filtered = _shippoDestMasterList.filter(item => {
+    if (_shippoDestActiveCat !== 'all' && item.category !== _shippoDestActiveCat) return false;
+    if (query && !item.searchText.includes(query)) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    listContainer.innerHTML = `
+      <div style="padding:16px;text-align:center;color:var(--text3);font-size:12px;">
+        No matching addresses found.
+      </div>`;
+    return;
+  }
+
+  const selectedVal = $('ship-prefill-dest')?.value || '';
+
+  listContainer.innerHTML = filtered.map(item => {
+    const isSelected = selectedVal === item.value;
+    const masterIdx = _shippoDestMasterList.indexOf(item);
+    return `
+      <div class="custom-dest-item ${isSelected ? 'selected' : ''}" onclick="selectShippoDestCustomItem(${masterIdx}, event)">
+        <div class="custom-dest-item-header">
+          <span class="custom-dest-item-title">${item.icon} ${escapeHtml(item.title)}</span>
+          <span class="custom-dest-item-badge ${item.category}">${escapeHtml(item.catLabel)}</span>
+        </div>
+        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}</div>
+      </div>`;
+  }).join('');
+}
+
+function selectShippoDestCustomItem(idx, e) {
+  if (e) e.stopPropagation();
+  const item = _shippoDestMasterList[idx];
+  if (!item) return;
+
+  const nativeSelect = $('ship-prefill-dest');
+  if (nativeSelect) {
+    nativeSelect.value = item.value;
+    nativeSelect.dataset.orderNumber = normalizeShippingOrderNumber(item.orderNumber);
+  }
+
+  const label = $('custom-ship-dest-label');
+  const icon = $('custom-ship-dest-icon');
+  const clearBtn = $('custom-ship-dest-clear');
+
+  if (label) {
+    label.textContent = item.title;
+    label.style.color = 'var(--text)';
+    label.style.fontWeight = '600';
+  }
+  if (icon) icon.textContent = item.icon;
+  if (clearBtn) clearBtn.style.display = 'inline-block';
+
+  // Trigger form population
+  onShippoPreFillDestChange();
+
+  // Close dropdown
+  const menu = $('custom-ship-dest-menu');
+  const trigger = $('custom-ship-dest-trigger');
+  const arrow = $('custom-ship-dest-arrow');
+  if (menu) menu.style.display = 'none';
+  if (trigger) trigger.classList.remove('active');
+  if (arrow) arrow.style.transform = 'rotate(0deg)';
+}
+
+function clearShippoDestSelection(e) {
+  if (e) e.stopPropagation();
+  const nativeSelect = $('ship-prefill-dest');
+  if (nativeSelect) {
+    nativeSelect.value = '';
+    nativeSelect.dataset.orderNumber = '';
+  }
+
+  const label = $('custom-ship-dest-label');
+  const icon = $('custom-ship-dest-icon');
+  const clearBtn = $('custom-ship-dest-clear');
+
+  if (label) {
+    label.textContent = '— Search or select an address —';
+    label.style.color = 'var(--text3)';
+    label.style.fontWeight = 'normal';
+  }
+  if (icon) icon.textContent = '🔍';
+  if (clearBtn) clearBtn.style.display = 'none';
+
+  // Clear inputs
+  $('st-name').value = '';
+  $('st-company').value = '';
+  $('st-phone').value = '';
+  $('st-street1').value = '';
+  $('st-street2').value = '';
+  $('st-city').value = '';
+  $('st-state').value = '';
+  $('st-zip').value = '';
+  $('st-country').value = 'US';
+}
+
+document.addEventListener('click', (e) => {
+  const menu = $('custom-ship-dest-menu');
+  const trigger = $('custom-ship-dest-trigger');
+  const arrow = $('custom-ship-dest-arrow');
+  if (menu && menu.style.display !== 'none' && !menu.contains(e.target) && !trigger?.contains(e.target)) {
+    menu.style.display = 'none';
+    if (trigger) trigger.classList.remove('active');
+    if (arrow) arrow.style.transform = 'rotate(0deg)';
+  }
+});
 
 function getRecentShippingOrders() {
   const orders = [];
@@ -28580,6 +28840,12 @@ window.initShippingTab = initShippingTab;
 window.saveShippoApiKey = saveShippoApiKey;
 window.editShippoApiKey = editShippoApiKey;
 window.onShippoPreFillDestChange = onShippoPreFillDestChange;
+window.renderCustomShippoDestPicker = renderCustomShippoDestPicker;
+window.toggleShippoDestDropdown = toggleShippoDestDropdown;
+window.setShippoDestCategoryFilter = setShippoDestCategoryFilter;
+window.filterShippoDestMenu = filterShippoDestMenu;
+window.selectShippoDestCustomItem = selectShippoDestCustomItem;
+window.clearShippoDestSelection = clearShippoDestSelection;
 window.onShippoBookPresetChange = onShippoBookPresetChange;
 window.calculateShippoRates = calculateShippoRates;
 window.updateShippoBaseSpecsFromInputs = updateShippoBaseSpecsFromInputs;

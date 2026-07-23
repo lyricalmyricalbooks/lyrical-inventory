@@ -6860,5 +6860,182 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   border: 1px solid rgba(146, 64, 14, 0.2) !important;
 }
 
+/* Premium Custom Searchable Destination Dropdown */
+.custom-dest-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.custom-dest-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  cursor: pointer;
+  min-height: 42px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.custom-dest-trigger:hover {
+  border-color: var(--gold-line);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.custom-dest-trigger:focus,
+.custom-dest-trigger.active {
+  border-color: var(--gold-line);
+  box-shadow: 0 0 0 3px rgba(200, 145, 58, 0.15);
+  outline: none;
+}
+
+.custom-dest-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 1050;
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(16px);
+  padding: 10px;
+  max-height: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-dest-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg2, rgba(0, 0, 0, 0.03));
+  border: 1px solid var(--border);
+  border-radius: var(--r1);
+}
+
+.custom-dest-search-bar input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.custom-dest-chips {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.custom-dest-chips .dest-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.custom-dest-chips .dest-chip.active,
+.custom-dest-chips .dest-chip:hover {
+  background: var(--gold-bg, rgba(200, 145, 58, 0.12));
+  color: var(--gold, #c8913a);
+  border-color: var(--gold-line);
+  font-weight: 600;
+}
+
+.custom-dest-list {
+  overflow-y: auto;
+  max-height: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.custom-dest-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--r1);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.custom-dest-item:hover,
+.custom-dest-item.selected {
+  background: var(--bg2, rgba(0, 0, 0, 0.04));
+  border-color: var(--border);
+}
+
+.custom-dest-item.selected {
+  border-color: var(--gold-line);
+  background: var(--gold-bg, rgba(200, 145, 58, 0.08));
+}
+
+.custom-dest-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.custom-dest-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-dest-item-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.custom-dest-item-badge.bc {
+  background: rgba(109, 40, 217, 0.1);
+  color: #6d28d9;
+  border: 1px solid rgba(109, 40, 217, 0.25);
+}
+
+.custom-dest-item-badge.stores {
+  background: rgba(29, 78, 216, 0.1);
+  color: #1d4ed8;
+  border: 1px solid rgba(29, 78, 216, 0.25);
+}
+
+.custom-dest-item-badge.orders {
+  background: rgba(4, 120, 87, 0.1);
+  color: #047857;
+  border: 1px solid rgba(4, 120, 87, 0.25);
+}
+
+.custom-dest-item-sub {
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 
 
