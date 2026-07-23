@@ -24443,7 +24443,8 @@ function initShippingTab() {
         const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Customer';
         const city = attr.shipping_city || '';
         const country = normalizeCountryCode(attr.shipping_country_code || attr.shipping_country || 'US');
-        const phone = attr.shipping_phone || attr.buyer_phone || '';
+        const rawPhone = attr.shipping_phone || attr.buyer_phone || attr.phone || attr.billing_phone || attr.customer_phone || '';
+        const phone = getFallbackShippingPhone(rawPhone);
         const street1 = attr.shipping_address_1 || '';
         const street2 = attr.shipping_address_2 || '';
         const state = attr.shipping_state || '';
@@ -24479,10 +24480,11 @@ function initShippingTab() {
       storesGroup.appendChild(opt);
     } else {
       stores.forEach(st => {
+        const rawPhone = st.phone || st.contactPhone || st.mobile || st.telephone || '';
         const addrObj = {
           name: st.contact || st.name,
           company: st.name,
-          phone: st.phone || '',
+          phone: getFallbackShippingPhone(rawPhone),
           street1: st.address || '',
           street2: '',
           city: st.city || '',
@@ -24508,11 +24510,12 @@ function initShippingTab() {
       ordersGroup.appendChild(opt);
     } else {
       orders.slice(0, 20).forEach(h => {
+        const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
         const addrObj = {
           orderNumber: h.num,
           name: h.shipName,
           company: '',
-          phone: h.shipPhone || h.phone || '',
+          phone: getFallbackShippingPhone(rawPhone),
           street1: h.shipAddr1,
           street2: h.shipAddr2 || '',
           city: h.shipCity,
@@ -24555,6 +24558,14 @@ function initShippingTab() {
   renderShippingAnalysisHub();
 }
 
+function getFallbackShippingPhone(preferredPhone) {
+  const clean = (preferredPhone || '').toString().trim();
+  if (clean) return clean;
+  const senderPhone = ($('sf-phone')?.value || localStorage.getItem('lm-shippo-origin-phone') || '').toString().trim();
+  if (senderPhone) return senderPhone;
+  return '+16474096863';
+}
+
 let _shippoDestMasterList = [];
 let _shippoDestActiveCat = 'all';
 
@@ -24574,7 +24585,8 @@ function renderCustomShippoDestPicker() {
     const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Customer';
     const city = attr.shipping_city || '';
     const country = normalizeCountryCode(attr.shipping_country_code || attr.shipping_country || 'US');
-    const phone = attr.shipping_phone || attr.buyer_phone || '';
+    const rawPhone = attr.shipping_phone || attr.buyer_phone || attr.phone || attr.billing_phone || attr.customer_phone || '';
+    const phone = getFallbackShippingPhone(rawPhone);
     const street1 = attr.shipping_address_1 || '';
     const street2 = attr.shipping_address_2 || '';
     const state = attr.shipping_state || '';
@@ -24608,10 +24620,11 @@ function renderCustomShippoDestPicker() {
   // 2. Consignment Stores
   const stores = typeof getAllStores === 'function' ? getAllStores() : [];
   stores.forEach(st => {
+    const rawPhone = st.phone || st.contactPhone || st.mobile || st.telephone || '';
     const addrObj = {
       name: st.contact || st.name,
       company: st.name,
-      phone: st.phone || '',
+      phone: getFallbackShippingPhone(rawPhone),
       street1: st.address || '',
       street2: '',
       city: st.city || '',
@@ -24635,11 +24648,12 @@ function renderCustomShippoDestPicker() {
   // 3. Ledger Orders
   const recentOrders = typeof getRecentShippingOrders === 'function' ? getRecentShippingOrders() : [];
   recentOrders.slice(0, 20).forEach(h => {
+    const rawPhone = h.shipPhone || h.phone || h.contactPhone || h.buyerPhone || '';
     const addrObj = {
       orderNumber: h.num,
       name: h.shipName,
       company: '',
-      phone: h.shipPhone || h.phone || '',
+      phone: getFallbackShippingPhone(rawPhone),
       street1: h.shipAddr1,
       street2: h.shipAddr2 || '',
       city: h.shipCity,
@@ -24893,7 +24907,7 @@ function onShippoPreFillDestChange() {
     select.dataset.orderNumber = normalizeShippingOrderNumber(addr.orderNumber);
     $('st-name').value = addr.name || '';
     $('st-company').value = addr.company || '';
-    $('st-phone').value = addr.phone || '';
+    $('st-phone').value = getFallbackShippingPhone(addr.phone);
     $('st-street1').value = addr.street1 || '';
     $('st-street2').value = addr.street2 || '';
     $('st-city').value = addr.city || '';
@@ -28750,7 +28764,8 @@ function prefillShippingFromBigCartelOrder(orderId) {
 
   // Extract recipient details
   const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim();
-  const recipientPhone = attr.shipping_phone || attr.buyer_phone || '';
+  const rawPhone = attr.shipping_phone || attr.buyer_phone || attr.phone || attr.billing_phone || attr.customer_phone || '';
+  const recipientPhone = getFallbackShippingPhone(rawPhone);
 
   // Extract address fields
   const street1 = attr.shipping_address_1 || '';
