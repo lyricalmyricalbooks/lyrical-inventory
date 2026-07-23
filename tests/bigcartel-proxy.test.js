@@ -33,7 +33,7 @@ describe('Big Cartel Apps Script proxy requests', () => {
 
     expect(fetchSource).toMatch(/async function fetchBigCartel\(endpoint, accountId(?: = '')?\)/);
     expect(fetchSource).toMatch(/accounts\/\$\{encodeURIComponent\(accountId\)\}/);
-    expect(loadSource).toMatch(/fetchBigCartel\('orders', bigCartelData\.store\.id\)/);
+    expect(loadSource).toMatch(/fetchAllBigCartelOrders\(bigCartelData\.store\.id\)/);
     expect(loadSource).toMatch(/fetchBigCartel\('products', bigCartelData\.store\.id\)/);
   });
 

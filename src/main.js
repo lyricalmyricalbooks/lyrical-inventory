@@ -27914,10 +27914,18 @@ async function loadBigCartelData() {
   const container = $('bc-products-grid');
   const list = $('bc-orders-list');
 
-  if (activeBigCartelSubTab === 'products') {
-    container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--text3);">Loading products from Big Cartel...</div>';
+  // Load cached orders for instant render
+  if (activeBigCartelSubTab === 'orders') {
+    const cached = loadCachedBigCartelOrders();
+    if (cached && cached.orders && cached.orders.length > 0) {
+      bigCartelData.orders = cached.orders;
+      bigCartelData.included = cached.included || [];
+      renderBigCartelOrders(bigCartelData.orders, bigCartelData.included);
+    } else {
+      list.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text3);">Loading orders from Big Cartel...</td></tr>';
+    }
   } else {
-    list.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text3);">Loading orders from Big Cartel...</td></tr>';
+    container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--text3);">Loading products from Big Cartel...</div>';
   }
 
   try {
@@ -27935,10 +27943,11 @@ async function loadBigCartelData() {
       bigCartelData.products = productsRes.data || [];
       renderBigCartelProducts(bigCartelData.products, productsRes.included);
     } else {
-      // fetchBigCartel('orders', bigCartelData.store.id)
       const ordersRes = await fetchAllBigCartelOrders(bigCartelData.store.id);
       bigCartelData.orders = ordersRes.data || [];
-      renderBigCartelOrders(bigCartelData.orders, ordersRes.included);
+      bigCartelData.included = ordersRes.included || [];
+      cacheBigCartelOrders(bigCartelData.orders, bigCartelData.included);
+      renderBigCartelOrders(bigCartelData.orders, bigCartelData.included);
       await syncBigCartelShippingPaid(bigCartelData.orders);
     }
   } catch (e) {
@@ -27950,7 +27959,9 @@ async function loadBigCartelData() {
     if (activeBigCartelSubTab === 'products') {
       container.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--red);">Failed to load products: ${escapeHtml(msg)}</div>`;
     } else {
-      list.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--red);">Failed to load orders: ${escapeHtml(msg)}</td></tr>`;
+      if (!bigCartelData.orders || bigCartelData.orders.length === 0) {
+        list.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--red);">Failed to load orders: ${escapeHtml(msg)}</td></tr>`;
+      }
     }
   }
 }
@@ -28132,6 +28143,180 @@ function extractBigCartelOrderItems(order, included = []) {
   return '—';
 }
 
+function matchBigCartelOrderToCatalog(order, included = [], customBooks = null) {
+  const booksMap = customBooks || (typeof BOOKS !== 'undefined' ? BOOKS : {});
+  const catalogTitles = Object.values(booksMap).map(b => (b.title || '').toLowerCase().trim()).filter(Boolean);
+  
+  if (catalogTitles.length === 0) {
+    return { matched: false, matchedBooks: [] };
+  }
+
+  const orderItemNames = [];
+  const attr = order ? (order.attributes || {}) : {};
+
+  const rawItems = attr.line_items || attr.items || attr.order_lines;
+  if (Array.isArray(rawItems)) {
+    rawItems.forEach(item => {
+      if (item.product_name || item.name) orderItemNames.push((item.product_name || item.name).toLowerCase().trim());
+    });
+  }
+
+  if (Array.isArray(included)) {
+    const relItems = order && order.relationships ? (order.relationships.items?.data || order.relationships.line_items?.data || []) : [];
+    const relIds = new Set(relItems.map(r => r.id));
+    included.forEach(inc => {
+      if (inc.type === 'items' || inc.type === 'line_items') {
+        const orderRef = inc.relationships?.order?.data?.id || inc.attributes?.order_id;
+        if (relIds.has(inc.id) || String(orderRef) === String(order.id)) {
+          const name = inc.attributes?.product_name || inc.attributes?.name;
+          if (name) orderItemNames.push(name.toLowerCase().trim());
+        }
+      }
+    });
+  }
+
+  const matchedBooks = [];
+  orderItemNames.forEach(name => {
+    catalogTitles.forEach(catTitle => {
+      if (name.includes(catTitle) || catTitle.includes(name)) {
+        const officialBook = Object.values(booksMap).find(b => (b.title || '').toLowerCase().trim() === catTitle);
+        const titleToAdd = officialBook ? officialBook.title : catTitle;
+        if (!matchedBooks.includes(titleToAdd)) matchedBooks.push(titleToAdd);
+      }
+    });
+  });
+
+  return {
+    matched: matchedBooks.length > 0,
+    matchedBooks: matchedBooks
+  };
+}
+
+function formatBigCartelOrderAddress(order) {
+  if (!order || !order.attributes) return 'No address data available';
+  const attr = order.attributes;
+
+  const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Recipient';
+  const street1 = attr.shipping_address_1 || attr.address_1 || '';
+  const street2 = attr.shipping_address_2 || attr.address_2 || '';
+  const city = attr.shipping_city || attr.city || '';
+  const state = attr.shipping_state || attr.state || '';
+  const zip = attr.shipping_zip || attr.zip || '';
+  const country = attr.shipping_country || attr.shipping_country_name || attr.country || '';
+  const phone = attr.shipping_phone || attr.buyer_phone || attr.phone || '';
+  const email = attr.buyer_email || attr.customer_email || attr.email || '';
+
+  const lines = [recipientName];
+  if (street1) lines.push(street1);
+  if (street2) lines.push(street2);
+
+  const cityState = [city, state].filter(Boolean).join(', ');
+  const cityStateZip = [cityState, zip].filter(Boolean).join(' ');
+  if (cityStateZip) lines.push(cityStateZip);
+  if (country) lines.push(typeof country === 'object' ? (country.name || country.code || '') : country);
+
+  if (phone) lines.push(`Phone: ${phone}`);
+  if (email) lines.push(`Email: ${email}`);
+
+  return lines.join('\n');
+}
+
+function copyBigCartelOrderAddress(orderId) {
+  const order = bigCartelData.orders.find(o => String(o.id) === String(orderId));
+  if (!order) {
+    showToast('Order details not found', 'warn');
+    return;
+  }
+
+  const text = formatBigCartelOrderAddress(order);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('✓ Shipping address copied to clipboard', 'ok');
+    }).catch(() => {
+      showToast('Failed to copy to clipboard', 'err');
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('✓ Shipping address copied to clipboard', 'ok');
+  }
+}
+
+function openBigCartelAddressPreview(orderId) {
+  const order = bigCartelData.orders.find(o => String(o.id) === String(orderId));
+  if (!order) {
+    showToast('Order details not found', 'warn');
+    return;
+  }
+
+  const attr = order.attributes || {};
+  const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Recipient';
+  const street1 = attr.shipping_address_1 || '';
+  const street2 = attr.shipping_address_2 || '';
+  const city = attr.shipping_city || '';
+  const state = attr.shipping_state || '';
+  const zip = attr.shipping_zip || '';
+  const countryStr = typeof attr.shipping_country === 'object' ? (attr.shipping_country.name || attr.shipping_country.code || '') : (attr.shipping_country || '');
+  const phone = attr.shipping_phone || attr.buyer_phone || '—';
+  const email = attr.buyer_email || attr.customer_email || '—';
+
+  const subtitle = $('bc-addr-order-subtitle');
+  const nameEl = $('bc-addr-name');
+  const linesEl = $('bc-addr-lines');
+  const phoneEl = $('bc-addr-phone');
+  const emailEl = $('bc-addr-email');
+
+  if (subtitle) subtitle.textContent = `Order #${orderId} • Placed ${attr.created_at ? new Date(attr.created_at).toLocaleDateString() : ''}`;
+  if (nameEl) nameEl.textContent = recipientName;
+  if (linesEl) {
+    const addrParts = [street1, street2, [city, state, zip].filter(Boolean).join(', '), countryStr].filter(Boolean);
+    linesEl.innerHTML = addrParts.join('<br>') || 'No street address provided';
+  }
+  if (phoneEl) phoneEl.textContent = `Phone: ${phone}`;
+  if (emailEl) emailEl.textContent = `Email: ${email}`;
+
+  const copyBtn = $('bc-addr-copy-btn');
+  if (copyBtn) {
+    copyBtn.onclick = () => copyBigCartelOrderAddress(orderId);
+  }
+
+  const shipBtn = $('bc-addr-ship-btn');
+  if (shipBtn) {
+    shipBtn.onclick = () => {
+      closeM('bc-address-preview');
+      prefillShippingFromBigCartelOrder(orderId);
+    };
+  }
+
+  openM('bc-address-preview');
+}
+
+function cacheBigCartelOrders(orders, included) {
+  try {
+    localStorage.setItem('lm-bigcartel-orders-cache', JSON.stringify({
+      timestamp: Date.now(),
+      orders: orders || [],
+      included: included || []
+    }));
+  } catch (e) {
+    console.warn('Failed to cache Big Cartel orders to localStorage', e);
+  }
+}
+
+function loadCachedBigCartelOrders() {
+  try {
+    const raw = localStorage.getItem('lm-bigcartel-orders-cache');
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+}
+
 function renderBigCartelOrders(orders, included = []) {
   const list = $('bc-orders-list');
   list.innerHTML = '';
@@ -28152,7 +28337,15 @@ function renderBigCartelOrders(orders, included = []) {
     if (attr.status === 'pending') statusPill = 'pill gold';
     if (attr.status === 'cancelled') statusPill = 'pill red';
 
-    const itemsHtml = extractBigCartelOrderItems(o, included);
+    const matchInfo = matchBigCartelOrderToCatalog(o, included);
+    let matchPillHtml = '';
+    if (matchInfo.matched) {
+      matchPillHtml = `<br><span class="bc-match-pill matched" title="Matches catalog inventory">✓ Matched: ${escapeHTML(matchInfo.matchedBooks.join(', '))}</span>`;
+    } else {
+      matchPillHtml = `<br><span class="bc-match-pill unmatched" title="Product is not linked to catalog book">⚠️ Unmatched</span>`;
+    }
+
+    const itemsHtml = extractBigCartelOrderItems(o, included) + matchPillHtml;
 
     const total = parseFloat(attr.total || 0).toFixed(2);
     const tax = parseFloat(attr.tax_total || 0).toFixed(2);
@@ -28162,13 +28355,16 @@ function renderBigCartelOrders(orders, included = []) {
     row.innerHTML = `
       <td style="font-family:'DM Mono', monospace; font-size:11px;">#${escapeHTML(o.id)}</td>
       <td>${dateStr}</td>
-      <td style="font-weight:600;">${escapeHTML(customer)}${email ? `<br><span style="font-size:11px; color:var(--text3); font-weight:normal;">${escapeHTML(email)}</span>` : ''}</td>
+      <td style="font-weight:600;"><a class="bc-customer-link" onclick="openBigCartelAddressPreview('${o.id}')" title="Click to view full shipping address">${escapeHTML(customer)}</a>${email ? `<br><span style="font-size:11px; color:var(--text3); font-weight:normal;">${escapeHTML(email)}</span>` : ''}</td>
       <td style="font-size:12px; line-height:1.45;">${itemsHtml}</td>
       <td class="r" style="font-family:'DM Mono', monospace;">$${tax}</td>
       <td class="r" style="font-family:'DM Mono', monospace;">$${shipping}</td>
       <td class="r" style="font-family:'DM Mono', monospace; font-weight:700; color:var(--gold);">$${total}</td>
       <td><span class="${statusPill}" style="font-size:10px; padding:3px 8px;">${attr.status || 'unknown'}</span></td>
-      <td class="r">
+      <td class="r" style="white-space:nowrap;">
+        <button class="btn sm" onclick="copyBigCartelOrderAddress('${o.id}')" title="Copy recipient shipping address to clipboard" style="margin-right:4px;">
+          📋 Copy
+        </button>
         <button class="btn gold sm" onclick="prefillShippingFromBigCartelOrder('${o.id}')" style="margin:0; display:inline-flex; align-items:center; gap:4px;">
           <span>📦</span> Ship
         </button>
@@ -28271,6 +28467,9 @@ window.saveBigCartelSettings = saveBigCartelSettings;
 window.switchBigCartelSubTab = switchBigCartelSubTab;
 window.loadBigCartelData = loadBigCartelData;
 window.renderBigCartelTab = renderBigCartelTab;
+window.prefillShippingFromBigCartelOrder = prefillShippingFromBigCartelOrder;
+window.copyBigCartelOrderAddress = copyBigCartelOrderAddress;
+window.openBigCartelAddressPreview = openBigCartelAddressPreview;
 
 window.initShippingTab = initShippingTab;
 window.saveShippoApiKey = saveShippoApiKey;
