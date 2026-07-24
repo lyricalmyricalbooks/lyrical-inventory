@@ -5672,7 +5672,7 @@ function renderHist() {
 
   $('hist-body').innerHTML = combined.length
     ? shownRows.map((row) => {
-      if (row.type === 'consign') return renderConsignHistRow(row.e, row.after);
+      if (row.type === 'consign') return renderConsignHistRow(row.e, row._after ?? row.after ?? '—');
       const h = row.h, i = row.i;
       if (h.pendingAuth) {
         const actionCell = window.IS_PUBLISHER
@@ -5707,7 +5707,8 @@ function renderHist() {
       ].filter(Boolean).join('<br>');
       const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
       const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
-      return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num" style="font-weight:600;">${totalCell}</td><td class="r mono-num">${row.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+      const stockAfterVal = row._after ?? row.after ?? '—';
+      return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num" style="font-weight:600;">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
     }).join('') + moreRow
     : `<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">${chanFilter !== null ? `No ${escapeHtml(chanLabel(chanFilter))} orders for this book.` : 'No orders yet.'}</div></td></tr>`;
 }
