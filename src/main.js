@@ -15170,20 +15170,25 @@ function filterArtistEarningsByYear(bookId, year) {
   // Deliberately INCLUDE artistPending (direct-to-artist) sales: calculateFinancials
   // already counts their gross in revenue, so their artist share must be counted too,
   // otherwise profit would be overstated on funds the artist is holding.
-  const sortedHist = [...s.hist].reverse().filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
 
-  sortedHist.forEach(h => {
-    const inYear = h.date && h.date.startsWith(yearStr);
-    let revRemaining = h.qty * h.price;
-    while (revRemaining > 0.001) {
-      const tier = tiers.find(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
-      const isLastTier = tier === tiers[tiers.length - 1] || tier.revenueUpTo === null;
-      const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tier.revenueUpTo - cumulativeRevenue);
-      if (inYear) yearArtistEarned += capacity * (tier.artistPct / 100);
-      cumulativeRevenue += capacity;
-      revRemaining -= capacity;
+  // ⚡ Bolt Optimization: Use backward loop to avoid multiple array allocations from [...].reverse().filter()
+  if (s.hist && s.hist.length > 0) {
+    for (let i = s.hist.length - 1; i >= 0; i--) {
+      const h = s.hist[i];
+      if (h.voided || h.gratuity || !(h.qty > 0) || !(h.price > 0)) continue;
+
+      const inYear = h.date && h.date.startsWith(yearStr);
+      let revRemaining = h.qty * h.price;
+      while (revRemaining > 0.001) {
+        const tier = tiers.find(t => t.revenueUpTo !== null && cumulativeRevenue < t.revenueUpTo) || tiers[tiers.length - 1];
+        const isLastTier = tier === tiers[tiers.length - 1] || tier.revenueUpTo === null;
+        const capacity = isLastTier ? revRemaining : Math.min(revRemaining, tier.revenueUpTo - cumulativeRevenue);
+        if (inYear) yearArtistEarned += capacity * (tier.artistPct / 100);
+        cumulativeRevenue += capacity;
+        revRemaining -= capacity;
+      }
     }
-  });
+  }
 
   return yearArtistEarned;
 }
@@ -15244,12 +15249,18 @@ function downloadTaxReport() {
   BOOK_LIST.forEach(book => {
     if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
-    s.hist.filter(h => !h.voided && !h.gratuity).forEach(h => {
-      // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
-      if (h.date && h.date.startsWith(yearStr)) {
-        csv += `${h.date},Order,${book.title},Sale,"${h.chan} Order #${h.num}",,${(h.qty * h.price).toFixed(2)},0,0,0,${(h.qty * h.price).toFixed(2)}\n`;
+
+    // ⚡ Bolt Optimization: Use imperative loop to avoid array allocation from .filter()
+    if (s.hist && s.hist.length > 0) {
+      for (const h of s.hist) {
+        if (h.voided || h.gratuity) continue;
+
+        // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
+        if (h.date && h.date.startsWith(yearStr)) {
+          csv += `${h.date},Order,${book.title},Sale,"${h.chan} Order #${h.num}",,${(h.qty * h.price).toFixed(2)},0,0,0,${(h.qty * h.price).toFixed(2)}\n`;
+        }
       }
-    });
+    }
 
     (s.expenses || []).forEach(e => {
       // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
@@ -16150,57 +16161,62 @@ function _tcBuildLedger(selectedYear) {
     const hRate = _fxRateCache[`${cur}_CAD`] || 1;
 
     // Add sales to ledger
-    (s.hist || []).filter(h => !h.artistPending || h.voided).forEach(h => {
-      const hYear = h.date ? h.date.substring(0, 4) : '';
-      if (selectedYear !== 'all' && hYear !== selectedYear) return;
+    // ⚡ Bolt Optimization: Use imperative loop to avoid array allocation from .filter()
+    if (s.hist && s.hist.length > 0) {
+      for (const h of s.hist) {
+        if (h.artistPending && !h.voided) continue;
 
-      const unitPrice = h.price ?? h.unitPrice ?? 0;
-      const amt = h.voided ? 0 : (unitPrice * (h.qty || 1));
-      const baseAmt = amt * hRate;
-      totalGrossSales += baseAmt;
+        const hYear = h.date ? h.date.substring(0, 4) : '';
+        if (selectedYear !== 'all' && hYear !== selectedYear) continue;
 
-      allLedger.push({
-        date: h.date,
-        type: 'Sale',
-        desc: `${b.title} (Qty: ${h.qty || 1})`,
-        cat: 'Income',
-        ref: h.num,
-        invoiceNum: h.consignmentLink ? (h.invoiceNum || '') : '',
-        origCurrency: cur,
-        origAmount: amt,
-        baseAmount: baseAmt,
-        qty: h.qty || 1,
-        voided: !!h.voided,
-        hasRateError: !hRate,
-        isIncome: true,
-        sourceType: 'sale',
-        sourceId: bid,
-        itemId: h.id || h.num
-      });
+        const unitPrice = h.price ?? h.unitPrice ?? 0;
+        const amt = h.voided ? 0 : (unitPrice * (h.qty || 1));
+        const baseAmt = amt * hRate;
+        totalGrossSales += baseAmt;
 
-      const shippingIncome = h.voided ? 0 : (Number(h.shippingPaid) || 0);
-      if (shippingIncome > 0) {
-        const shippingBase = roundCents(shippingIncome * hRate);
-        totalGrossSales = roundCents(totalGrossSales + shippingBase);
         allLedger.push({
           date: h.date,
-          type: 'Shipping income',
-          desc: `Customer shipping paid (${b.title})`,
+          type: 'Sale',
+          desc: `${b.title} (Qty: ${h.qty || 1})`,
           cat: 'Income',
           ref: h.num,
+          invoiceNum: h.consignmentLink ? (h.invoiceNum || '') : '',
           origCurrency: cur,
-          origAmount: shippingIncome,
-          baseAmount: shippingBase,
-          qty: 0,
-          voided: false,
+          origAmount: amt,
+          baseAmount: baseAmt,
+          qty: h.qty || 1,
+          voided: !!h.voided,
           hasRateError: !hRate,
           isIncome: true,
-          sourceType: 'shippingIncome',
+          sourceType: 'sale',
           sourceId: bid,
-          itemId: `${h.id || h.num}-shipping-income`,
+          itemId: h.id || h.num
         });
+
+        const shippingIncome = h.voided ? 0 : (Number(h.shippingPaid) || 0);
+        if (shippingIncome > 0) {
+          const shippingBase = roundCents(shippingIncome * hRate);
+          totalGrossSales = roundCents(totalGrossSales + shippingBase);
+          allLedger.push({
+            date: h.date,
+            type: 'Shipping income',
+            desc: `Customer shipping paid (${b.title})`,
+            cat: 'Income',
+            ref: h.num,
+            origCurrency: cur,
+            origAmount: shippingIncome,
+            baseAmount: shippingBase,
+            qty: 0,
+            voided: false,
+            hasRateError: !hRate,
+            isIncome: true,
+            sourceType: 'shippingIncome',
+            sourceId: bid,
+            itemId: `${h.id || h.num}-shipping-income`,
+          });
+        }
       }
-    });
+    }
 
     // Add book specific expenses
     (s.expenses || []).forEach(e => {
@@ -16244,28 +16260,33 @@ function _tcBuildLedger(selectedYear) {
     });
 
     // Add artist payments
-    (s.artistTransfers || []).filter(t => t.paid).forEach(t => {
-      const tDate = t.paidDate || t.date || '';
-      const tYear = tDate ? tDate.substring(0, 4) : '';
-      if (selectedYear !== 'all' && tYear !== selectedYear) return;
+    // ⚡ Bolt Optimization: Use imperative loop to avoid array allocation from .filter()
+    if (s.artistTransfers && s.artistTransfers.length > 0) {
+      for (const t of s.artistTransfers) {
+        if (!t.paid) continue;
 
-      const tBase = (t.total || 0) * hRate;
-      allLedger.push({
-        date: tDate,
-        type: 'Expense',
-        desc: `Artist Payout (${b.title})`,
-        cat: 'Artist Royalties',
-        ref: t.num,
-        origCurrency: cur,
-        origAmount: t.total || 0,
-        baseAmount: tBase,
-        hasRateError: !hRate,
-        isIncome: false,
-        sourceType: 'artistPayout',
-        sourceId: bid,
-        itemId: t.id || t.num
-      });
-    });
+        const tDate = t.paidDate || t.date || '';
+        const tYear = tDate ? tDate.substring(0, 4) : '';
+        if (selectedYear !== 'all' && tYear !== selectedYear) continue;
+
+        const tBase = (t.total || 0) * hRate;
+        allLedger.push({
+          date: tDate,
+          type: 'Expense',
+          desc: `Artist Payout (${b.title})`,
+          cat: 'Artist Royalties',
+          ref: t.num,
+          origCurrency: cur,
+          origAmount: t.total || 0,
+          baseAmount: tBase,
+          hasRateError: !hRate,
+          isIncome: false,
+          sourceType: 'artistPayout',
+          sourceId: bid,
+          itemId: t.id || t.num
+        });
+      }
+    }
   });
 
   (TAX_CENTER.businessExpenses || []).forEach(e => {
