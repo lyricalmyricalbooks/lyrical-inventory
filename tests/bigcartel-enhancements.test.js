@@ -24,7 +24,11 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
     expect(extractItemsFunc).not.toBeNull();
 
     matchBigCartelOrderToCatalog = new Function('order', 'included', 'BOOKS', 'function escapeHTML(s){return String(s||"");}\n' + extractItemsFunc[0] + '\n' + matchFunc[0] + '\nreturn matchBigCartelOrderToCatalog(order, included, BOOKS);');
-    formatBigCartelOrderAddress = new Function('order', formatFunc[0] + '\nreturn formatBigCartelOrderAddress(order);');
+    const extractAddrFunc = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
+    const countryCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);
+    const normCountryMatch = mainContent.match(/function normalizeCountryCode\([^)]*\)\s*\{([\s\S]+?)\n\}/);
+
+    formatBigCartelOrderAddress = new Function('order', countryCodesMatch[0] + '\n' + normCountryMatch[0] + '\n' + extractAddrFunc[0] + '\n' + formatFunc[0] + '\nreturn formatBigCartelOrderAddress(order);');
     extractBigCartelOrderItems = new Function('order', 'included', 'customBooks', 'function escapeHTML(s){return String(s||"");}\n' + extractItemsFunc[0] + '\nreturn extractBigCartelOrderItems(order, included, customBooks);');
   });
 
@@ -141,7 +145,7 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
       expect(addressText).toContain('123 Main Street');
       expect(addressText).toContain('Apt 4B');
       expect(addressText).toContain('Toronto, ON M5V 2J4');
-      expect(addressText).toContain('Canada');
+      expect(addressText).toContain('CA');
       expect(addressText).toContain('Phone: 416-555-0199');
       expect(addressText).toContain('Email: jane@example.com');
     });

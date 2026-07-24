@@ -24341,44 +24341,106 @@ function normalizeCountryCode(code) {
   return 'US';
 }
 
-function extractBigCartelAddress(attr = {}, orderId = '') {
-  const recipientName = (
-    attr.shipping_name ||
-    `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() ||
-    attr.customer_name ||
-    attr.buyer_name ||
-    attr.buyer_email ||
-    'Customer'
-  ).trim();
+function extractBigCartelAddress(orderOrAttr = {}, orderId = '', included = []) {
+  const attr = orderOrAttr.attributes || orderOrAttr;
+  const relationships = orderOrAttr.relationships || {};
 
-  const recipientPhone = (
-    attr.shipping_phone ||
-    attr.buyer_phone ||
-    attr.phone ||
-    attr.billing_phone ||
-    attr.customer_phone ||
-    attr.buyer?.phone ||
-    attr.customer?.phone ||
-    attr.shipping_address?.phone ||
-    ''
-  ).toString().trim();
+  // Check JSON:API included lookup
+  let incName = '';
+  let incPhone = '';
+  let incCompany = '';
+  let incStreet1 = '';
+  let incStreet2 = '';
+  let incCity = '';
+  let incState = '';
+  let incZip = '';
+  let incCountry = '';
 
-  const street1 = (attr.shipping_address_1 || attr.address_1 || attr.street1 || '').trim();
-  const street2 = (attr.shipping_address_2 || attr.address_2 || attr.street2 || '').trim();
-  const city = (attr.shipping_city || attr.city || '').trim();
-  const state = (attr.shipping_state || attr.state || attr.province || '').trim();
-  const zip = (attr.shipping_zip || attr.zip || attr.postal_code || '').trim();
+  const incList = Array.isArray(included) && included.length > 0
+    ? included
+    : ((typeof bigCartelData !== 'undefined' && bigCartelData && bigCartelData.included) || (typeof loadCachedBigCartelOrders === 'function' ? loadCachedBigCartelOrders()?.included || [] : []));
 
-  let rawCountry = attr.shipping_country_code || attr.shipping_country_id || attr.shipping_country_name || attr.shipping_country;
+  if (incList.length > 0) {
+    const custRef = relationships.customer?.data || relationships.shipping_address?.data || relationships.buyer?.data;
+    if (custRef && custRef.id) {
+      const matchInc = incList.find(i => String(i.id) === String(custRef.id));
+      if (matchInc && matchInc.attributes) {
+        const iA = matchInc.attributes;
+        incName = iA.name || iA.recipient_name || `${iA.first_name || ''} ${iA.last_name || ''}`.trim();
+        incPhone = iA.phone || iA.shipping_phone || iA.telephone || '';
+        incCompany = iA.company || iA.company_name || '';
+        incStreet1 = iA.address_1 || iA.street1 || iA.address1 || '';
+        incStreet2 = iA.address_2 || iA.street2 || iA.address2 || '';
+        incCity = iA.city || '';
+        incState = iA.state || iA.province || '';
+        incZip = iA.zip || iA.postal_code || '';
+        incCountry = iA.country_code || iA.country || '';
+      }
+    }
+  }
+
+  const shippingAddrObj = attr.shipping_address || {};
+  const customerObj = attr.customer || {};
+  const buyerObj = attr.buyer || {};
+  const billingAddrObj = attr.billing_address || {};
+
+  const nameParts = [
+    attr.shipping_name,
+    shippingAddrObj.name,
+    shippingAddrObj.recipient_name,
+    (attr.shipping_first_name || attr.shipping_last_name) ? `${attr.shipping_first_name || ''} ${attr.shipping_last_name || ''}`.trim() : '',
+    (shippingAddrObj.first_name || shippingAddrObj.last_name) ? `${shippingAddrObj.first_name || ''} ${shippingAddrObj.last_name || ''}`.trim() : '',
+    attr.customer_name,
+    attr.buyer_name,
+    (attr.buyer_first_name || attr.buyer_last_name) ? `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() : '',
+    (attr.customer_first_name || attr.customer_last_name) ? `${attr.customer_first_name || ''} ${attr.customer_last_name || ''}`.trim() : '',
+    customerObj.name,
+    (customerObj.first_name || customerObj.last_name) ? `${customerObj.first_name || ''} ${customerObj.last_name || ''}`.trim() : '',
+    buyerObj.name,
+    (buyerObj.first_name || buyerObj.last_name) ? `${buyerObj.first_name || ''} ${buyerObj.last_name || ''}`.trim() : '',
+    attr.billing_name,
+    billingAddrObj.name,
+    (attr.billing_first_name || attr.billing_last_name) ? `${attr.billing_first_name || ''} ${attr.billing_last_name || ''}`.trim() : '',
+    (attr.first_name || attr.last_name) ? `${attr.first_name || ''} ${attr.last_name || ''}`.trim() : '',
+    attr.name,
+    incName
+  ].filter(Boolean);
+
+  const recipientName = (nameParts[0] || attr.buyer_email || attr.customer_email || attr.email || 'Customer').trim();
+
+  const phoneParts = [
+    attr.shipping_phone,
+    shippingAddrObj.phone,
+    shippingAddrObj.telephone,
+    attr.buyer_phone,
+    attr.customer_phone,
+    attr.phone,
+    attr.billing_phone,
+    buyerObj.phone,
+    customerObj.phone,
+    billingAddrObj.phone,
+    incPhone
+  ].filter(Boolean);
+
+  const recipientPhone = (phoneParts[0] || '').toString().trim();
+
+  const street1 = (attr.shipping_address_1 || attr.address_1 || attr.street1 || shippingAddrObj.address_1 || shippingAddrObj.street1 || incStreet1 || '').trim();
+  const street2 = (attr.shipping_address_2 || attr.address_2 || attr.street2 || shippingAddrObj.address_2 || shippingAddrObj.street2 || incStreet2 || '').trim();
+  const city = (attr.shipping_city || attr.city || shippingAddrObj.city || incCity || '').trim();
+  const state = (attr.shipping_state || attr.state || attr.province || shippingAddrObj.state || incState || '').trim();
+  const zip = (attr.shipping_zip || attr.zip || attr.postal_code || shippingAddrObj.zip || incZip || '').trim();
+  const company = (attr.shipping_company || attr.company || shippingAddrObj.company || incCompany || '').trim();
+
+  let rawCountry = attr.shipping_country_code || attr.shipping_country_id || attr.shipping_country_name || attr.shipping_country || shippingAddrObj.country_code || shippingAddrObj.country || incCountry;
   if (typeof rawCountry === 'object' && rawCountry !== null) {
     rawCountry = rawCountry.code || rawCountry.id || rawCountry.country_code || rawCountry.name;
   }
   const country = normalizeCountryCode(rawCountry || 'US');
 
   return {
-    orderNumber: orderId,
+    orderNumber: orderId || orderOrAttr.id || '',
     name: recipientName,
-    company: attr.shipping_company || attr.company || '',
+    company: company,
     phone: recipientPhone,
     street1,
     street2,
@@ -24601,11 +24663,7 @@ function initShippingTab() {
 }
 
 function getFallbackShippingPhone(preferredPhone) {
-  const clean = (preferredPhone || '').toString().trim();
-  if (clean) return clean;
-  const senderPhone = ($('sf-phone')?.value || localStorage.getItem('lm-shippo-origin-phone') || '').toString().trim();
-  if (senderPhone) return senderPhone;
-  return '+16474096863';
+  return (preferredPhone || '').toString().trim();
 }
 
 let _shippoDestMasterList = [];
@@ -28588,30 +28646,23 @@ function matchBigCartelOrderToCatalog(order, included = [], customBooks = null) 
   };
 }
 
-function formatBigCartelOrderAddress(order) {
-  if (!order || !order.attributes) return 'No address data available';
-  const attr = order.attributes;
+function formatBigCartelOrderAddress(order, included = []) {
+  if (!order) return 'No address data available';
+  const addr = extractBigCartelAddress(order, order.id, included);
 
-  const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Recipient';
-  const street1 = attr.shipping_address_1 || attr.address_1 || '';
-  const street2 = attr.shipping_address_2 || attr.address_2 || '';
-  const city = attr.shipping_city || attr.city || '';
-  const state = attr.shipping_state || attr.state || '';
-  const zip = attr.shipping_zip || attr.zip || '';
-  const country = attr.shipping_country || attr.shipping_country_name || attr.country || '';
-  const phone = attr.shipping_phone || attr.buyer_phone || attr.phone || '';
-  const email = attr.buyer_email || attr.customer_email || attr.email || '';
+  const lines = [addr.name];
+  if (addr.company) lines.push(addr.company);
+  if (addr.street1) lines.push(addr.street1);
+  if (addr.street2) lines.push(addr.street2);
 
-  const lines = [recipientName];
-  if (street1) lines.push(street1);
-  if (street2) lines.push(street2);
-
-  const cityState = [city, state].filter(Boolean).join(', ');
-  const cityStateZip = [cityState, zip].filter(Boolean).join(' ');
+  const cityState = [addr.city, addr.state].filter(Boolean).join(', ');
+  const cityStateZip = [cityState, addr.zip].filter(Boolean).join(' ');
   if (cityStateZip) lines.push(cityStateZip);
-  if (country) lines.push(typeof country === 'object' ? (country.name || country.code || '') : country);
+  if (addr.country) lines.push(addr.country);
 
-  if (phone) lines.push(`Phone: ${phone}`);
+  if (addr.phone) lines.push(`Phone: ${addr.phone}`);
+  const attr = order.attributes || order;
+  const email = attr.buyer_email || attr.customer_email || attr.email || '';
   if (email) lines.push(`Email: ${email}`);
 
   return lines.join('\n');
@@ -28621,13 +28672,17 @@ function copyBigCartelOrderAddress(orderId) {
   const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
     ? bigCartelData.orders
     : (loadCachedBigCartelOrders()?.orders || []);
+  const included = (bigCartelData && bigCartelData.included)
+    ? bigCartelData.included
+    : (loadCachedBigCartelOrders()?.included || []);
+
   const order = orders.find(o => String(o.id) === String(orderId));
   if (!order) {
     showToast('Order details not found', 'warn');
     return;
   }
 
-  const text = formatBigCartelOrderAddress(order);
+  const text = formatBigCartelOrderAddress(order, included);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
       showToast('✓ Shipping address copied to clipboard', 'ok');
@@ -28649,6 +28704,10 @@ function openBigCartelAddressPreview(orderId) {
   const orders = (bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
     ? bigCartelData.orders
     : (loadCachedBigCartelOrders()?.orders || []);
+  const included = (bigCartelData && bigCartelData.included)
+    ? bigCartelData.included
+    : (loadCachedBigCartelOrders()?.included || []);
+
   const order = orders.find(o => String(o.id) === String(orderId));
   if (!order) {
     showToast('Order details not found', 'warn');
@@ -28656,15 +28715,8 @@ function openBigCartelAddressPreview(orderId) {
   }
 
   const attr = order.attributes || {};
-  const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Recipient';
-  const street1 = attr.shipping_address_1 || '';
-  const street2 = attr.shipping_address_2 || '';
-  const city = attr.shipping_city || '';
-  const state = attr.shipping_state || '';
-  const zip = attr.shipping_zip || '';
-  const countryStr = typeof attr.shipping_country === 'object' ? (attr.shipping_country.name || attr.shipping_country.code || '') : (attr.shipping_country || '');
-  const phone = attr.shipping_phone || attr.buyer_phone || '—';
-  const email = attr.buyer_email || attr.customer_email || '—';
+  const addr = extractBigCartelAddress(order, orderId, included);
+  const email = attr.buyer_email || attr.customer_email || attr.email || attr.shipping_email || '—';
 
   const subtitle = $('bc-addr-order-subtitle');
   const nameEl = $('bc-addr-name');
@@ -28673,12 +28725,12 @@ function openBigCartelAddressPreview(orderId) {
   const emailEl = $('bc-addr-email');
 
   if (subtitle) subtitle.textContent = `Order #${orderId} • Placed ${attr.created_at ? new Date(attr.created_at).toLocaleDateString() : ''}`;
-  if (nameEl) nameEl.textContent = recipientName;
+  if (nameEl) nameEl.textContent = addr.name;
   if (linesEl) {
-    const addrParts = [street1, street2, [city, state, zip].filter(Boolean).join(', '), countryStr].filter(Boolean);
+    const addrParts = [addr.company, addr.street1, addr.street2, [addr.city, addr.state, addr.zip].filter(Boolean).join(', '), addr.country].filter(Boolean);
     linesEl.innerHTML = addrParts.join('<br>') || 'No street address provided';
   }
-  if (phoneEl) phoneEl.textContent = `Phone: ${phone}`;
+  if (phoneEl) phoneEl.textContent = `Phone: ${addr.phone || '—'}`;
   if (emailEl) emailEl.textContent = `Email: ${email}`;
 
   const copyBtn = $('bc-addr-copy-btn');
