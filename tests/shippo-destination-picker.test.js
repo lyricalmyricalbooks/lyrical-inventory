@@ -46,21 +46,17 @@ describe('Custom Searchable Destination Picker UX/UI Suite', () => {
     expect(styleContent).toContain('.custom-dest-item-badge');
   });
 
-  it('guarantees destination phone population via getFallbackShippingPhone', () => {
+  it('returns clean recipient phone via getFallbackShippingPhone without injecting sender phone', () => {
     expect(mainContent).toContain('function getFallbackShippingPhone(');
     expect(mainContent).toContain('getFallbackShippingPhone(addr.phone)');
 
-    const fallbackFunc = new Function('preferredPhone', 'senderPhone', `
-      const clean = (preferredPhone || '').toString().trim();
-      if (clean) return clean;
-      const originPhone = (senderPhone || '').toString().trim();
-      if (originPhone) return originPhone;
-      return '+16474096863';
+    const fallbackFunc = new Function('preferredPhone', `
+      return (preferredPhone || '').toString().trim();
     `);
 
-    expect(fallbackFunc('+1 555 123 4567', '+16474096863')).toBe('+1 555 123 4567');
-    expect(fallbackFunc('', '+16474096863')).toBe('+16474096863');
-    expect(fallbackFunc(null, null)).toBe('+16474096863');
+    expect(fallbackFunc('+1 555 123 4567')).toBe('+1 555 123 4567');
+    expect(fallbackFunc('')).toBe('');
+    expect(fallbackFunc(null)).toBe('');
   });
 
   it('elevates card z-index and ensures overflow:visible when dropdown is open', () => {
