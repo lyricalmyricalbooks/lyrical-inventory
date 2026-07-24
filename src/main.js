@@ -5525,22 +5525,22 @@ function renderConsignHistRow(e, after) {
   const restocked = e.type === 'Return' && e.status === 'restocked';
   let badge, qtyCell, label;
   if (e.type === 'Shipment') {
-    badge = `<span class="pill blue" style="font-size:10px;">📦 Consignment</span> → ${store}`;
+    badge = `<span class="ch-badge ch-store" style="font-size:10px;"><span class="ch-icon">📦</span> Consignment</span> → ${store}`;
     qtyCell = `-${e.qty}`;            // left your on-hand for the store
     label = 'SENT';
   } else if (restocked) {
-    badge = `<span class="pill green" style="font-size:10px;">↩ Consignment return</span> ← ${store}`;
+    badge = `<span class="ch-badge ch-pos" style="font-size:10px;"><span class="ch-icon">↩</span> Consignment return</span> ← ${store}`;
     qtyCell = `+${e.qty}`;            // came back into on-hand
     label = 'RETURN';
   } else {
-    badge = `<span class="pill red" style="font-size:10px;">↩ Return · written off</span> ← ${store}`;
+    badge = `<span class="chip-status amber" style="font-size:10px;">↩ Return · written off</span> ← ${store}`;
     qtyCell = '0';                    // off the store's books, not back on your shelf
     label = 'RETURN';
   }
   const voided = e.voided ? ' voided' : '';
   const voidPill = e.voided ? '<span class="void-badge">Void</span>' : '';
   const manageBtn = `<button class="edit-btn" onclick="switchTab('consignment')" title="Manage in the Consignment tab" aria-label="Manage in Consignment">→</button>`;
-  return `<tr class="${voided}" style="background:var(--cream2);"><td class="mono" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r">${e.voided ? '' : qtyCell}</td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill gray" style="font-size:10px;">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
+  return `<tr class="hist-row ${voided}"><td class="mono mono-num" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r mono-num">${e.voided ? '' : qtyCell}</td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r mono-num">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
 }
 
 function shippingRateToBase(currency) {
@@ -5703,7 +5703,7 @@ function renderHist() {
       const chanCell = (isGrat ? `<span class="chip-status violet">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan)) + consignExtra;
       const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price, cur);
       const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, cur)}</span>` : fmt(h.qty * h.price, cur);
-      const rowStyle = isGrat ? ' style="background:var(--cream2);font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
+      const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
       const isWebsite = (h.chan === 'Website') && !isGrat && !h.voided;
       const labelBtn = isWebsite
         ? (h.shipped
