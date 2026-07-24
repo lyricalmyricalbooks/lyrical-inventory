@@ -5624,22 +5624,54 @@ function renderHist() {
   if (recon) {
     if (chanFilter === null && combined.length) {
       const bd = inventoryBreakdown(s, book);
-      const parts = [`${bd.onHand} on hand`];
-      if (bd.directSold) parts.push(`${bd.directSold} direct sales`);
-      if (bd.consignSold) parts.push(`${bd.consignSold} sold at stores`);
-      if (bd.gratuities) parts.push(`${bd.gratuities} gratuities`);
-      if (bd.onConsignment) parts.push(`${bd.onConsignment} on consignment`);
-      if (bd.writtenOff) parts.push(`${bd.writtenOff} written off`);
+      const printedCount = bd.printed || 0;
+      const onHandCount = bd.onHand || 0;
+      const distributedCount = printedCount - onHandCount;
+      const sellThroughPct = printedCount > 0 ? ((distributedCount / printedCount) * 100).toFixed(1) : '0.0';
+
       const warn = bd.unaccounted
-        ? ` &nbsp;·&nbsp; <span style="color:var(--red);">⚠ ${Math.abs(bd.unaccounted)} unaccounted</span>`
+        ? `<div style="font-size:11px; font-weight:700; color:var(--red); margin-top:6px;">⚠️ ${Math.abs(bd.unaccounted)} unaccounted copies in reconciliation</div>`
         : '';
+
       recon.style.display = '';
-      recon.innerHTML = `<div style="padding:.6rem .85rem;margin-bottom:.6rem;background:var(--cream2);border-radius:8px;font-size:13px;color:var(--text2);"><strong>${bd.printed}</strong> printed = ${parts.join(' + ')}${warn}</div>`;
+      recon.innerHTML = `
+        <div class="hist-kpi-container">
+          <div class="hist-kpi-card">
+            <div class="hist-kpi-label">Total Printed</div>
+            <div class="hist-kpi-val">${printedCount}</div>
+            <div class="hist-kpi-sub">Print Run Edition</div>
+          </div>
+          <div class="hist-kpi-card highlight-gold">
+            <div class="hist-kpi-label">Stock On Hand</div>
+            <div class="hist-kpi-val">${onHandCount}</div>
+            <div class="hist-kpi-sub">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}% available</div>
+          </div>
+          <div class="hist-kpi-card highlight-green">
+            <div class="hist-kpi-label">Distributed & Sold</div>
+            <div class="hist-kpi-val">${distributedCount}</div>
+            <div class="hist-kpi-sub">${sellThroughPct}% sell-through rate</div>
+          </div>
+        </div>
+        <div class="hist-progress-bar-wrap" title="${onHandCount} on hand of ${printedCount} printed (${sellThroughPct}% distributed)">
+          <div class="hist-progress-bar-fill" style="width: ${Math.min(100, Math.max(0, sellThroughPct))}%;"></div>
+        </div>
+        ${warn}
+      `;
     } else {
       recon.style.display = 'none';
       recon.innerHTML = '';
     }
   }
+
+  // Helper for branded channel micro-badges
+  const formatChannelBadge = (chanName) => {
+    if (!chanName) return '<span class="ch-badge">—</span>';
+    const c = String(chanName).trim();
+    if (c === 'Website' || c === 'Big Cartel') return `<span class="ch-badge ch-bc"><span class="ch-icon">🛒</span> Website</span>`;
+    if (c === 'POS' || c === 'Fair' || c === 'Event') return `<span class="ch-badge ch-pos"><span class="ch-icon">💳</span> POS</span>`;
+    if (c === 'Consignment' || c === 'Store') return `<span class="ch-badge ch-store"><span class="ch-icon">🏬</span> Store</span>`;
+    return `<span class="ch-badge">${escapeHtml(c)}</span>`;
+  };
 
   // Page the (already date-sorted) rows; reset the window per book/filter view.
   const pageSig = `${activeBook}|${chanFilter ?? ''}`;
@@ -5657,20 +5689,19 @@ function renderHist() {
       if (h.pendingAuth) {
         const actionCell = window.IS_PUBLISHER
           ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
-          : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
-        return `<tr style="opacity:0.8;background:#fffcede3;"><td class="mono">${escapeHtml(h.num)}</td><td>${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">Submitted</span></td><td class="r">-${h.qty}</td><td class="r">${fmt(h.price, cur)}</td><td class="r" style="font-weight:600;">${fmt(h.qty * h.price, cur)}</td><td class="r">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="pill amber" style="font-size:10px;">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+          : `<span class="chip-status amber">Awaiting Publisher</span>`;
+        return `<tr class="hist-row" style="opacity:0.8;background:#fffcede3;"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num" style="font-weight:600;">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status amber">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
       }
       const voided = h.voided ? ' voided' : '';
       const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
       const editBtn = `<button class="edit-btn" onclick="openEditHist(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
       const isGrat = h.gratuity || h.chan === 'Gratuity';
       const isPending = h.artistPending;
-      // Consignment Sale mirror: surface its paid/pending state and an invoice
-      // badge so History cross-references the ledger + invoice (absent → '').
+      
       const consignExtra = h.consignmentLink
-        ? `${h.paidState === 'paid' ? ' <span class="pill green" style="font-size:10px;">Paid</span>' : (!h.voided ? ` <button class="pill amber" style="font-size:10px;cursor:pointer;border:none;outline:none;" onclick="markHistoryConsignmentPaid('${h.num}')" title="Click to mark as paid">Pending</button>` : '')}${invoiceBadgeHTML(h.invoiceId, h.invoiceNum)}`
+        ? `${h.paidState === 'paid' ? ' <span class="chip-status emerald">Paid</span>' : (!h.voided ? ` <button class="chip-status amber" style="cursor:pointer;border:none;outline:none;" onclick="markHistoryConsignmentPaid('${h.num}')" title="Click to mark as paid">Pending</button>` : '')}${invoiceBadgeHTML(h.invoiceId, h.invoiceNum)}`
         : '';
-      const chanCell = (isGrat ? `<span class="pill gray" style="font-size:10px;">🎁 Gratuity</span>` : isPending ? `${escapeHtml(h.chan)} <span class="pill amber" style="font-size:10px;">⏳ pending</span>` : escapeHtml(h.chan)) + consignExtra;
+      const chanCell = (isGrat ? `<span class="chip-status violet">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan)) + consignExtra;
       const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price, cur);
       const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, cur)}</span>` : fmt(h.qty * h.price, cur);
       const rowStyle = isGrat ? ' style="background:var(--cream2);font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
@@ -5681,7 +5712,7 @@ function renderHist() {
           : `<button class="edit-btn" onclick="openLabelModal(${i})" title="Print shipping label" style="opacity:1;color:var(--gold);border-color:var(--gold-line);background:var(--gold-bg);">📦 Ship</button>`)
         : '';
       const shippedPill = isWebsite && h.shipped
-        ? ` <span class="pill" style="font-size:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;">✓ Shipped${h.shippedDate ? ' ' + fmtD(h.shippedDate) : ''}</span>`
+        ? ` <span class="chip-status emerald">✓ Shipped${h.shippedDate ? ' ' + fmtD(h.shippedDate) : ''}</span>`
         : '';
       const paymentInfo = paymentSummary(h.payment, book);
       const shippingInfo = isWebsite ? renderOrderShippingSummary(h, cur) : '';
@@ -5693,9 +5724,9 @@ function renderHist() {
       ].filter(Boolean).join('<br>');
       const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
       const enteredByPill = enteredBy === 'Artist'
-        ? '<span class="pill amber" style="font-size:10px;">Artist</span>'
-        : '<span class="pill gray" style="font-size:10px;">Publisher</span>';
-      return `<tr class="${voided}"${rowStyle}><td class="mono">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r">${h.voided ? '' : '-'}${h.qty}</td><td class="r">${priceCell}</td><td class="r" style="font-weight:600;">${totalCell}</td><td class="r">${row._after}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+        ? '<span class="chip-status amber">Artist</span>'
+        : '<span class="chip-status emerald">Publisher</span>';
+      return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}${shippedPill}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num" style="font-weight:600;">${totalCell}</td><td class="r mono-num">${row._after}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
     }).join('') + moreRow
     : `<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">${chanFilter !== null ? `No ${escapeHtml(chanLabel(chanFilter))} orders for this book.` : 'No orders yet.'}</div></td></tr>`;
 }
