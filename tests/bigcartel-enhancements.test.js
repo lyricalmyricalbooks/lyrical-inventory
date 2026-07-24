@@ -146,4 +146,69 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
       expect(addressText).toContain('Email: jane@example.com');
     });
   });
+
+  describe('extractBigCartelAddress', () => {
+    let extractBigCartelAddress;
+
+    beforeEach(() => {
+      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      const countryCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);
+      const extractFuncMatch = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
+      const normCountryMatch = mainContent.match(/function normalizeCountryCode\([^)]*\)\s*\{([\s\S]+?)\n\}/);
+
+      expect(countryCodesMatch).not.toBeNull();
+      expect(extractFuncMatch).not.toBeNull();
+      expect(normCountryMatch).not.toBeNull();
+
+      extractBigCartelAddress = new Function('attr', 'orderId', countryCodesMatch[0] + '\n' + normCountryMatch[0] + '\n' + extractFuncMatch[0] + '\nreturn extractBigCartelAddress(attr, orderId);');
+    });
+
+    it('extracts recipient and address fields correctly from flat shipping attributes', () => {
+      const attr = {
+        shipping_name: 'Alice Smith',
+        shipping_company: 'Acme Books',
+        shipping_phone: '555-1234',
+        shipping_address_1: '789 Oak Ave',
+        shipping_address_2: 'Suite 100',
+        shipping_city: 'Vancouver',
+        shipping_state: 'BC',
+        shipping_zip: 'V6B 1A1',
+        shipping_country_code: 'CA'
+      };
+
+      const result = extractBigCartelAddress(attr, 'ORD-001');
+      expect(result.orderNumber).toBe('ORD-001');
+      expect(result.name).toBe('Alice Smith');
+      expect(result.company).toBe('Acme Books');
+      expect(result.phone).toBe('555-1234');
+      expect(result.street1).toBe('789 Oak Ave');
+      expect(result.street2).toBe('Suite 100');
+      expect(result.city).toBe('Vancouver');
+      expect(result.state).toBe('BC');
+      expect(result.zip).toBe('V6B 1A1');
+      expect(result.country).toBe('CA');
+    });
+
+    it('falls back to buyer name, customer email, and nested country objects', () => {
+      const attr = {
+        buyer_first_name: 'Bob',
+        buyer_last_name: 'Jones',
+        buyer_phone: '555-9876',
+        address_1: '456 Pine St',
+        city: 'Seattle',
+        state: 'WA',
+        zip: '98101',
+        shipping_country: { code: 'US' }
+      };
+
+      const result = extractBigCartelAddress(attr, 'ORD-002');
+      expect(result.name).toBe('Bob Jones');
+      expect(result.phone).toBe('555-9876');
+      expect(result.street1).toBe('456 Pine St');
+      expect(result.city).toBe('Seattle');
+      expect(result.state).toBe('WA');
+      expect(result.zip).toBe('98101');
+      expect(result.country).toBe('US');
+    });
+  });
 });

@@ -24318,11 +24318,79 @@ const SHIPPO_COUNTRY_CODES = {
 
 function normalizeCountryCode(code) {
   if (!code) return 'US';
+  if (typeof code === 'object' && code !== null) {
+    code = code.code || code.id || code.iso2 || code.country_code || code.name || 'US';
+  }
   const raw = String(code).trim();
+  if (!raw) return 'US';
+
   const normalized = SHIPPO_COUNTRY_CODES[raw.toLowerCase()];
   if (normalized) return normalized;
   if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
-  return '';
+
+  const select = typeof document !== 'undefined' ? document.getElementById('st-country') : null;
+  if (select && select.options) {
+    const rawLower = raw.toLowerCase();
+    for (const opt of select.options) {
+      if (opt.value && (opt.value.toLowerCase() === rawLower || opt.textContent.toLowerCase() === rawLower)) {
+        return opt.value;
+      }
+    }
+  }
+
+  return 'US';
+}
+
+function extractBigCartelAddress(attr = {}, orderId = '') {
+  const recipientName = (
+    attr.shipping_name ||
+    `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() ||
+    attr.customer_name ||
+    attr.buyer_name ||
+    attr.buyer_email ||
+    'Customer'
+  ).trim();
+
+  const recipientPhone = (
+    attr.shipping_phone ||
+    attr.buyer_phone ||
+    attr.phone ||
+    attr.billing_phone ||
+    attr.customer_phone ||
+    attr.buyer?.phone ||
+    attr.customer?.phone ||
+    attr.shipping_address?.phone ||
+    ''
+  ).toString().trim();
+
+  const street1 = (attr.shipping_address_1 || attr.address_1 || attr.street1 || '').trim();
+  const street2 = (attr.shipping_address_2 || attr.address_2 || attr.street2 || '').trim();
+  const city = (attr.shipping_city || attr.city || '').trim();
+  const state = (attr.shipping_state || attr.state || attr.province || '').trim();
+  const zip = (attr.shipping_zip || attr.zip || attr.postal_code || '').trim();
+
+  let rawCountry = attr.shipping_country_code || attr.shipping_country_id || attr.shipping_country_name || attr.shipping_country;
+  if (typeof rawCountry === 'object' && rawCountry !== null) {
+    rawCountry = rawCountry.code || rawCountry.id || rawCountry.country_code || rawCountry.name;
+  }
+  const country = normalizeCountryCode(rawCountry || 'US');
+
+  return {
+    orderNumber: orderId,
+    name: recipientName,
+    company: attr.shipping_company || attr.company || '',
+    phone: recipientPhone,
+    street1,
+    street2,
+    city,
+    state,
+    zip,
+    country
+  };
+}
+
+function getFallbackShippingPhone(preferredPhone) {
+  return (preferredPhone || '').toString().trim();
 }
 
 function getAllStores() {
@@ -24439,32 +24507,10 @@ function initShippingTab() {
       bcGroup.appendChild(opt);
     } else {
       bcOrders.forEach(o => {
-        const attr = o.attributes || {};
-        const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Customer';
-        const city = attr.shipping_city || '';
-        const country = normalizeCountryCode(attr.shipping_country_code || attr.shipping_country || 'US');
-        const rawPhone = attr.shipping_phone || attr.buyer_phone || attr.phone || attr.billing_phone || attr.customer_phone || '';
-        const phone = getFallbackShippingPhone(rawPhone);
-        const street1 = attr.shipping_address_1 || '';
-        const street2 = attr.shipping_address_2 || '';
-        const state = attr.shipping_state || '';
-        const zip = attr.shipping_zip || '';
-
-        const addrObj = {
-          orderNumber: o.id,
-          name: recipientName,
-          company: attr.shipping_company || '',
-          phone: phone,
-          street1: street1,
-          street2: street2,
-          city: city,
-          state: state,
-          zip: zip,
-          country: country
-        };
+        const addrObj = extractBigCartelAddress(o.attributes || {}, o.id);
         const opt = document.createElement('option');
         opt.value = JSON.stringify(addrObj);
-        opt.textContent = `Order #${o.id} - ${recipientName} (${city || 'Local'}, ${country})`;
+        opt.textContent = `Order #${o.id} - ${addrObj.name} (${addrObj.city || 'Local'}, ${addrObj.country})`;
         bcGroup.appendChild(opt);
       });
     }
@@ -24581,39 +24627,17 @@ function renderCustomShippoDestPicker() {
     : (typeof loadCachedBigCartelOrders === 'function' ? loadCachedBigCartelOrders()?.orders || [] : []);
 
   bcOrders.forEach(o => {
-    const attr = o.attributes || {};
-    const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim() || attr.customer_name || 'Customer';
-    const city = attr.shipping_city || '';
-    const country = normalizeCountryCode(attr.shipping_country_code || attr.shipping_country || 'US');
-    const rawPhone = attr.shipping_phone || attr.buyer_phone || attr.phone || attr.billing_phone || attr.customer_phone || '';
-    const phone = getFallbackShippingPhone(rawPhone);
-    const street1 = attr.shipping_address_1 || '';
-    const street2 = attr.shipping_address_2 || '';
-    const state = attr.shipping_state || '';
-    const zip = attr.shipping_zip || '';
-
-    const addrObj = {
-      orderNumber: o.id,
-      name: recipientName,
-      company: attr.shipping_company || '',
-      phone: phone,
-      street1: street1,
-      street2: street2,
-      city: city,
-      state: state,
-      zip: zip,
-      country: country
-    };
+    const addrObj = extractBigCartelAddress(o.attributes || {}, o.id);
 
     items.push({
       category: 'bc',
       catLabel: 'Big Cartel',
       icon: '🛒',
-      title: `Order #${o.id} · ${recipientName}`,
-      sub: `${street1 ? street1 + ', ' : ''}${city || 'Local'}${state ? ', ' + state : ''} ${country}`,
+      title: `Order #${o.id} · ${addrObj.name}`,
+      sub: `${addrObj.street1 ? addrObj.street1 + ', ' : ''}${addrObj.city || 'Local'}${addrObj.state ? ', ' + addrObj.state : ''} ${addrObj.country}`,
       value: JSON.stringify(addrObj),
       orderNumber: o.id,
-      searchText: `order #${o.id} ${recipientName} ${city} ${state} ${country} ${street1}`.toLowerCase()
+      searchText: `order #${o.id} ${addrObj.name} ${addrObj.city} ${addrObj.state} ${addrObj.country} ${addrObj.street1}`.toLowerCase()
     });
   });
 
@@ -28766,50 +28790,24 @@ function prefillShippingFromBigCartelOrder(orderId) {
     return;
   }
 
-  const attr = order.attributes || {};
-
-  // Extract recipient details
-  const recipientName = attr.shipping_name || `${attr.buyer_first_name || ''} ${attr.buyer_last_name || ''}`.trim();
-  const rawPhone = attr.shipping_phone || attr.buyer_phone || attr.phone || attr.billing_phone || attr.customer_phone || '';
-  const recipientPhone = getFallbackShippingPhone(rawPhone);
-
-  // Extract address fields
-  const street1 = attr.shipping_address_1 || '';
-  const street2 = attr.shipping_address_2 || '';
-  const city = attr.shipping_city || '';
-  const state = attr.shipping_state || '';
-  const zip = attr.shipping_zip || '';
-
-  // Extract country (2-letter ISO code or similar)
-  let country = 'US';
-  if (attr.shipping_country_code) {
-    country = attr.shipping_country_code;
-  } else if (attr.shipping_country_id) {
-    country = attr.shipping_country_id;
-  } else if (typeof attr.shipping_country === 'string') {
-    country = attr.shipping_country;
-  } else if (attr.shipping_country && typeof attr.shipping_country === 'object') {
-    country = attr.shipping_country.code || attr.shipping_country.id || attr.shipping_country.name || 'US';
-  }
-
-  // Clean and uppercase country code
-  country = String(country).trim().toUpperCase();
+  const addr = extractBigCartelAddress(order.attributes || {}, orderId);
 
   // Populate the fields on the Shipping Tab
-  $('st-name').value = recipientName;
-  $('st-company').value = attr.shipping_company || '';
-  $('st-phone').value = recipientPhone;
-  $('st-street1').value = street1;
-  $('st-street2').value = street2;
-  $('st-city').value = city;
-  $('st-state').value = state;
-  $('st-zip').value = zip;
+  $('st-name').value = addr.name;
+  $('st-company').value = addr.company;
+  $('st-phone').value = addr.phone;
+  $('st-street1').value = addr.street1;
+  $('st-street2').value = addr.street2;
+  $('st-city').value = addr.city;
+  $('st-state').value = addr.state;
+  $('st-zip').value = addr.zip;
 
   // Set the country dropdown
   const countrySelect = $('st-country');
   if (countrySelect) {
-    const optionExists = Array.from(countrySelect.options).some(opt => opt.value === country);
-    countrySelect.value = optionExists ? country : 'US';
+    const normCountry = normalizeCountryCode(addr.country);
+    const optionExists = Array.from(countrySelect.options).some(opt => opt.value === normCountry);
+    countrySelect.value = optionExists ? normCountry : 'US';
   }
 
   // Link the order number to the shipping prefill dataset so reconciliation can trace it
@@ -28857,6 +28855,8 @@ window.prefillShippingFromBigCartelOrder = prefillShippingFromBigCartelOrder;
 window.copyBigCartelOrderAddress = copyBigCartelOrderAddress;
 window.openBigCartelAddressPreview = openBigCartelAddressPreview;
 
+window.extractBigCartelAddress = extractBigCartelAddress;
+window.getFallbackShippingPhone = getFallbackShippingPhone;
 window.initShippingTab = initShippingTab;
 window.saveShippoApiKey = saveShippoApiKey;
 window.editShippoApiKey = editShippoApiKey;
