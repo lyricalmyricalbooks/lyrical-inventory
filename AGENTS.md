@@ -59,6 +59,12 @@ Bug / edge case the change introduced · the next logical feature · offline & s
 > [!WARNING]
 > **Always update the externalized Apps Script copy** whenever [Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs) is modified: copy it **verbatim** (no HTML-escaping) to [gas-code.txt](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/public/gas-code.txt). The "Connect your Google Sheet" tab in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html) lazy-fetches this file via `loadGasCode()` in [main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js) the first time the tab opens. Do **not** re-embed the source inline in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html).
 
+### Visual Refactoring & UI Enhancement Guardrails
+> [!IMPORTANT]
+> - **Decouple Styling from Data Pipelines:** When executing UI/UX styling tasks (e.g. `/elite-ux-design`), DO NOT rewrite, replace, or simplify underlying data aggregation functions (such as `buildOrderTimeline`, `deriveOnHand`, or `inventoryBreakdown`). Keep data assembly 100% intact and modify ONLY CSS tokens, HTML wrapper classes, badge elements, and subtext formatting.
+> - **Verify Property Key Alignment:** Always inspect the underlying library or helper function output to verify exact property key names (e.g. `row._after` vs `row.after`) before referencing them in template literals.
+> - **Defensive Fallback Values:** Never output raw property evaluation in HTML templates without nullish coalescing or safe fallbacks (e.g. `${row._after ?? row.after ?? '—'}`).
+
 ## App Overview & Architecture
 
 Lyrical Inventory is a Progressive Web App (PWA) designed for Lyricalmyrical Books to manage book catalogs, sales inventory, consignment partners, invoices, expenses, and event checkouts (POS).

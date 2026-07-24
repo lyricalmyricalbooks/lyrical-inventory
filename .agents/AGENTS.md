@@ -134,3 +134,12 @@ You maintain extremely high standards of code hygiene, test coverage, and user f
 - **No Static Repeating**: Do not copy-paste or carry over next-move items from previous turns unless they are still the single most relevant technical continuation.
 - **Context Relevance Check**: If the last edit was about shipping, the suggestions must be about shipping (e.g., caching rates, preset weights, address formats) — not unrelated features like invoices, POS checkouts, or mail campaigns unless explicitly requested.
 
+---
+
+## 11. Visual Refactoring & UI Enhancement Guardrails
+> [!IMPORTANT]
+> - **Decouple Styling from Data Pipelines:** When executing UI/UX styling tasks (e.g. `/elite-ux-design`), DO NOT rewrite, replace, or simplify underlying data aggregation functions (such as `buildOrderTimeline`, `deriveOnHand`, or `inventoryBreakdown`). Keep data assembly 100% intact and modify ONLY CSS tokens, HTML wrapper classes, badge elements, and subtext formatting.
+> - **Verify Property Key Alignment:** Always inspect the underlying library or helper function output to verify exact property key names (e.g. `row._after` vs `row.after`) before referencing them in template literals.
+> - **Defensive Fallback Values:** Never output raw property evaluation in HTML templates without nullish coalescing or safe fallbacks (e.g. `${row._after ?? row.after ?? '—'}`).
+
+
