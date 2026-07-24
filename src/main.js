@@ -24389,10 +24389,6 @@ function extractBigCartelAddress(attr = {}, orderId = '') {
   };
 }
 
-function getFallbackShippingPhone(preferredPhone) {
-  return (preferredPhone || '').toString().trim();
-}
-
 function getAllStores() {
   const stores = [];
   const seenIds = new Set();
