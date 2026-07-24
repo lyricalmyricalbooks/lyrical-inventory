@@ -5577,72 +5577,27 @@ function renderOrderShippingSummary(order, currency) {
 
 function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
-  // Refresh consignment Sale ↔ invoice cross-links so a renamed/relinked invoice
-  // shows its current number on the History badges (and heals legacy mirrors).
   reconcileConsignmentInvoiceLinks(s);
 
   const pbSales = window.authorSubmissions[activeBook]?.sales || {};
   const pendingSales = Object.keys(pbSales).map(k => {
     const raw = JSON.parse(pbSales[k].data);
-    return { ...raw, _subKey: k, pendingAuth: true, date: pbSales[k].date || raw.date };
+    return { ...raw, _subKey: k, pendingAuth: true, after: '?' };
   });
 
-  const combined = Array.isArray(s.hist) ? [...pendingSales, ...s.hist] : [...pendingSales];
-  combined.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  if (histChanFilter && histChanFilter.bookId !== activeBook) histChanFilter = null;
+  const chanFilter = histChanFilter ? histChanFilter.chan : null;
 
-  let runStock = s.printed || s.stock || 0;
-  const historyWithStock = [];
-  for (let idx = combined.length - 1; idx >= 0; idx--) {
-    const entry = combined[idx];
-    if (!entry.voided) {
-      if (entry.qty) runStock -= entry.qty;
-    }
-    historyWithStock[idx] = { h: entry, _after: runStock, i: idx };
-  }
+  const timeline = buildOrderTimeline(s, book);
 
-  const consignHist = (s.consignments || [])
-    .filter(c => Array.isArray(c.history) && c.history.length)
-    .flatMap(c => c.history.map(h => ({ ...h, storeName: c.storeName, consignId: c.id })));
+  const rows = chanFilter !== null
+    ? timeline.filter(r => r.type === 'hist' && (r.h.chan || '') === chanFilter)
+    : timeline;
+  let pend = pendingSales.map(h => ({ type: 'pending', h }));
+  if (chanFilter !== null) pend = pend.filter(r => (r.h.chan || '') === chanFilter);
+  const matchCount = rows.length + pend.length;
+  const combined = [...pend, ...rows];
 
-  let runStockConsign = s.printed || s.stock || 0;
-  const combinedAll = [];
-  let hIdx = combined.length - 1;
-  let cIdx = consignHist.length - 1;
-
-  const consignWithStock = [];
-  for (let k = consignHist.length - 1; k >= 0; k--) {
-    const e = consignHist[k];
-    if (!e.voided) {
-      if (e.type === 'Shipment') runStockConsign -= (e.qty || 0);
-      else if (e.type === 'Return' && e.status === 'restocked') runStockConsign += (e.qty || 0);
-    }
-    consignWithStock[k] = { e, _after: runStockConsign, _dateMs: new Date(e.date || 0).getTime() };
-  }
-
-  consignHist.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
-  combinedAll.sort((a, b) => b._dateMs - a._dateMs);
-
-  const chanFilter = _histChanFilter;
-
-  let finalRows = [];
-  const salesMap = historyWithStock.map(hw => ({ type: 'sale', ...hw, _dateMs: new Date(hw.h.date || 0).getTime() }));
-  const consignMap = consignWithStock.map(cw => ({ type: 'consign', ...cw }));
-
-  finalRows = [...salesMap, ...consignMap].sort((a, b) => b._dateMs - a._dateMs);
-
-  if (chanFilter !== null) {
-    finalRows = finalRows.filter(r => {
-      if (r.type === 'consign') return chanFilter === 'Consignment';
-      const c = r.h.chan || 'Website';
-      return c === chanFilter;
-    });
-  }
-
-  renderHistTable(s, book, cur, finalRows, chanFilter);
-}
-
-function renderHistTable(s, book, cur, combined, chanFilter) {
-  const matchCount = combined.length;
   const filterBar = $('hist-filter-bar');
   if (filterBar) {
     if (chanFilter !== null) {
@@ -5654,7 +5609,49 @@ function renderHistTable(s, book, cur, combined, chanFilter) {
     }
   }
 
-  // Helper for branded channel micro-badges (1 line, clean)
+  const recon = $('hist-recon');
+  if (recon) {
+    if (chanFilter === null && combined.length) {
+      const bd = inventoryBreakdown(s, book);
+      const printedCount = bd.printed || 0;
+      const onHandCount = bd.onHand || 0;
+      const distributedCount = printedCount - onHandCount;
+      const sellThroughPct = printedCount > 0 ? ((distributedCount / printedCount) * 100).toFixed(1) : '0.0';
+
+      const warn = bd.unaccounted
+        ? `<div style="font-size:11px; font-weight:700; color:var(--red); margin-top:6px;">⚠️ ${Math.abs(bd.unaccounted)} unaccounted copies in reconciliation</div>`
+        : '';
+
+      recon.style.display = '';
+      recon.innerHTML = `
+        <div class="hist-kpi-container">
+          <div class="hist-kpi-card">
+            <div class="hist-kpi-label">Total Printed</div>
+            <div class="hist-kpi-val">${printedCount}</div>
+            <div class="hist-kpi-sub">Print Run Edition</div>
+          </div>
+          <div class="hist-kpi-card highlight-gold">
+            <div class="hist-kpi-label">Stock On Hand</div>
+            <div class="hist-kpi-val">${onHandCount}</div>
+            <div class="hist-kpi-sub">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}% available</div>
+          </div>
+          <div class="hist-kpi-card highlight-green">
+            <div class="hist-kpi-label">Distributed & Sold</div>
+            <div class="hist-kpi-val">${distributedCount}</div>
+            <div class="hist-kpi-sub">${sellThroughPct}% sell-through rate</div>
+          </div>
+        </div>
+        <div class="hist-progress-bar-wrap" title="${onHandCount} on hand of ${printedCount} printed (${sellThroughPct}% distributed)">
+          <div class="hist-progress-bar-fill" style="width: ${Math.min(100, Math.max(0, sellThroughPct))}%;"></div>
+        </div>
+        ${warn}
+      `;
+    } else {
+      recon.style.display = 'none';
+      recon.innerHTML = '';
+    }
+  }
+
   const formatChannelBadge = (chanName) => {
     if (!chanName) return '<span class="ch-badge">—</span>';
     const c = String(chanName).trim();
@@ -5665,7 +5662,6 @@ function renderHistTable(s, book, cur, combined, chanFilter) {
     return `<span class="ch-badge">${escapeHtml(c)}</span>`;
   };
 
-  // Page the (already date-sorted) rows; reset the window per book/filter view.
   const pageSig = `${activeBook}|${chanFilter ?? ''}`;
   if (_histPageSig !== pageSig) { _histLimit = HIST_PAGE; _histPageSig = pageSig; }
   const shownRows = combined.slice(0, _histLimit);
@@ -5676,7 +5672,7 @@ function renderHistTable(s, book, cur, combined, chanFilter) {
 
   $('hist-body').innerHTML = combined.length
     ? shownRows.map((row) => {
-      if (row.type === 'consign') return renderConsignHistRow(row.e, row._after);
+      if (row.type === 'consign') return renderConsignHistRow(row.e, row.after);
       const h = row.h, i = row.i;
       if (h.pendingAuth) {
         const actionCell = window.IS_PUBLISHER
@@ -5711,7 +5707,7 @@ function renderHistTable(s, book, cur, combined, chanFilter) {
       ].filter(Boolean).join('<br>');
       const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
       const enteredByPill = `<span class="chip-status gray">${escapeHtml(enteredBy)}</span>`;
-      return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num" style="font-weight:600;">${totalCell}</td><td class="r mono-num">${row._after}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
+      return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num" style="font-weight:600;">${totalCell}</td><td class="r mono-num">${row.after}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
     }).join('') + moreRow
     : `<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">${chanFilter !== null ? `No ${escapeHtml(chanLabel(chanFilter))} orders for this book.` : 'No orders yet.'}</div></td></tr>`;
 }
