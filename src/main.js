@@ -5564,14 +5564,13 @@ function getShippingReconciliationOrders() {
 function renderOrderShippingSummary(order, currency) {
   const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => String(expense?.ref || '').startsWith('shippo:'));
   const summary = linkedShippingSummary(order, expenses, 1);
-  const customer = `<span class="shipping-money customer">Shipping paid ${fmt(summary.customerPaid, 'CAD')}</span>`;
+  const customerPaidVal = summary.customerPaid ?? Number(order.shippingPaid || order.shipping_total || 0);
+  const customer = `<span class="shipping-money customer">Shipping paid ${fmt(customerPaidVal, 'CAD')}</span>`;
   if (summary.postageBase == null) {
     const label = summary.linkedCount ? 'Postage linked · FX rate needed' : 'Postage not linked';
     return `<span class="shipping-summary">${customer}<span class="shipping-money unlinked">${label}</span></span>`;
   }
-  const marginClass = summary.marginBase > 0 ? 'positive' : summary.marginBase < 0 ? 'negative' : 'neutral';
-  const sign = summary.marginBase > 0 ? '+' : '';
-  return `<span class="shipping-summary">${customer}<span class="shipping-money postage">Postage cost ${fmt(summary.postageBase, 'CAD')}</span><span class="shipping-money margin ${marginClass}">Shipping margin ${sign}${fmt(summary.marginBase, 'CAD')}</span></span>`;
+  return `<span class="shipping-summary">${customer}</span>`;
 }
 
 function renderHist() {
