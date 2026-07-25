@@ -70,6 +70,16 @@
  *      publisher redeploys before scanning website orders.
  *  18. v20: Big Cartel proxy API request handler. Bypasses client-side CORS issues.
  *      Bump flags v19-and-older as outdated.
+ *  19. v21: Import Receipts from Email was serializing one Apps Script round-trip
+ *      per selected message (each paying its own cold start) and, inside
+ *      listReceiptEmails_, calling GmailMessage.getMessages() once per thread —
+ *      50 sequential Gmail backend fetches to build a results list. Adds
+ *      'getEmailContents' (batch, up to 12 message ids per call, metadata-only
+ *      attachments by default) and switches listReceiptEmails_ to the batched
+ *      GmailApp.getMessagesForThreads(). The client feature-detects
+ *      capabilities.batchEmailContent before using the new endpoint, so an
+ *      older deployment keeps working on the one-at-a-time path. Bump flags
+ *      v20-and-older as outdated.
  */
 
 const HEADERS = [
@@ -104,6 +114,9 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.action === 'getEmailContent') {
     return getEmailContent_(e);
   }
+  if (e && e.parameter && e.parameter.action === 'getEmailContents') {
+    return getEmailContents_(e);
+  }
   if (e && e.parameter && e.parameter.action === 'getThreadContent') {
     return getThreadContent_(e);
   }
@@ -115,9 +128,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v20',
-    scriptVersion: 'v20',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true },
+    service: 'lyrical-sheets-webhook-v21',
+    scriptVersion: 'v21',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -280,16 +293,22 @@ function listReceiptEmails_(e) {
     try { account = Session.getEffectiveUser().getEmail() || ''; } catch (_) { account = ''; }
 
     const threads = GmailApp.search(query, 0, limit);
+    // getMessagesForThreads batches the backend fetch for every thread into
+    // one call. The previous per-thread thread.getMessages() forced up to
+    // `limit` sequential Gmail backend round-trips inside a single request —
+    // by far the largest cost in this endpoint.
+    const messagesByThread = GmailApp.getMessagesForThreads(threads);
     const emails = [];
     let skipped = 0;
     let skipError = '';
 
-    for (const thread of threads) {
+    for (let ti = 0; ti < threads.length; ti++) {
+      const thread = threads[ti];
       // Guard each thread so one unreadable message/attachment doesn't abort
       // the entire search.
       try {
-        const messages = thread.getMessages();
-        if (!messages.length) continue;
+        const messages = messagesByThread[ti];
+        if (!messages || !messages.length) continue;
         // Get the latest message in the thread
         const msg = messages[messages.length - 1];
         // Skip inline images (logos, signatures) so the badge counts real
@@ -397,6 +416,60 @@ function getEmailContent_(e) {
   }
 }
 
+// Batch version of getEmailContent_: fetches up to 12 messages in one Apps
+// Script execution instead of one call per message, collapsing N cold
+// starts + N redirect round-trips into one. Attachment bytes are metadata-
+// only by default (name/mime/size, no base64) — the client fetches bytes for
+// just the attachments it actually selected via the existing getAttachment_
+// endpoint, so a big PDF is never base64'd and shipped only to be discarded.
+// Pass attachments=full to get base64 inline (used for small/rare batches).
+function getEmailContents_(e) {
+  try {
+    const idsParam = (e && e.parameter && e.parameter.ids) || '';
+    const ids = idsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, 12);
+    if (!ids.length) return jsonOut_({ error: 'ids parameter is required' });
+    const wantBytes = (e && e.parameter && e.parameter.attachments) === 'full';
+
+    const emails = [];
+    const errors = [];
+    for (const id of ids) {
+      try {
+        const msg = GmailApp.getMessageById(id);
+        if (!msg) { errors.push({ id: id, error: 'Message not found' }); continue; }
+
+        const body = msg.getPlainBody() || msg.getBody() || '';
+        const attachments = msg.getAttachments({ includeInlineImages: false });
+        const fileParts = [];
+        attachments.forEach((att, idx) => {
+          const mime = att.getContentType();
+          const name = att.getName();
+          if (!(/pdf|image/i.test(mime) || /\.(pdf|png|jpe?g|webp)$/i.test(name))) return;
+          const part = { name: name, mime: mime, size: att.getSize(), idx: idx };
+          if (wantBytes) part.base64 = Utilities.base64Encode(att.getBytes());
+          fileParts.push(part);
+        });
+
+        emails.push({
+          id: msg.getId(),
+          subject: msg.getSubject() || '',
+          from: msg.getFrom() || '',
+          date: msg.getDate().toISOString(),
+          // Truncate at the source — the client only ever used the first
+          // 80,000 chars, so shipping more than that was pure waste.
+          body: body.slice(0, 80000),
+          fileParts: fileParts
+        });
+      } catch (msgErr) {
+        errors.push({ id: id, error: String(msgErr) });
+      }
+    }
+
+    return jsonOut_({ ok: true, emails: emails, errors: errors });
+  } catch (err) {
+    return jsonOut_({ error: 'Batch email fetch failed: ' + String(err) });
+  }
+}
+
 function getThreadContent_(e) {
   const threadId = e.parameter.threadId;
   if (!threadId) {
@@ -448,8 +521,9 @@ function getThreadContent_(e) {
 function getAttachment_(e) {
   const messageId = e.parameter.messageId;
   const name = e.parameter.name;
-  if (!messageId || !name) {
-    return jsonOut_({ error: 'messageId and name are required' });
+  const idxParam = e.parameter.idx;
+  if (!messageId || (!name && idxParam === undefined)) {
+    return jsonOut_({ error: 'messageId and (name or idx) are required' });
   }
 
   try {
@@ -459,7 +533,12 @@ function getAttachment_(e) {
     }
 
     const attachments = msg.getAttachments({ includeInlineImages: false });
-    const att = attachments.find(a => a.getName() === name);
+    // Prefer the positional index (stable, collision-free) when given — two
+    // attachments on one message can share a filename, which made name-only
+    // lookup ambiguous.
+    const att = (idxParam !== undefined && attachments[parseInt(idxParam, 10)])
+      ? attachments[parseInt(idxParam, 10)]
+      : attachments.find(a => a.getName() === name);
     if (!att) {
       return jsonOut_({ error: 'Attachment not found' });
     }

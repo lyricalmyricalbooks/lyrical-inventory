@@ -1689,7 +1689,11 @@ tr.hist-row:hover {
 
 /* MODALS */
 .overlay{position:fixed;inset:0;background:rgba(14,12,10,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;animation:overlayIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);}
-.modal{background:var(--cream);border-radius:var(--r3);border:1px solid var(--border);padding:var(--space-6);width:100%;max-width:500px;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);}
+/* max-height/overflow used to be set ONLY inside the <=768px media query, so
+   a modal whose content stacks tall on desktop (long forms, a rendered
+   drafts table) had no scroll container at all — content below the fold was
+   simply unreachable, with the primary action button as the first casualty. */
+.modal{background:var(--cream);border-radius:var(--r3);border:1px solid var(--border);padding:var(--space-6);width:100%;max-width:500px;max-height:88vh;overflow:auto;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);}
 @keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes overlayIn{from{opacity:0}to{opacity:1}}
 @keyframes modalOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.95) translateY(12px)}}
@@ -1704,7 +1708,7 @@ tr.hist-row:hover {
   .overlay,.modal,.overlay.closing,.overlay.closing .modal{animation:none !important;}
 }
 .modal-title{font-family:'Playfair Display',serif;font-size:22px;color:var(--text);margin-bottom:1.4rem;}
-.modal-footer{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-5);}
+.modal-footer{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-5);position:sticky;bottom:0;background:var(--cream);padding-top:var(--space-3);z-index:1;}
 
 /* INLINE FORM VALIDATION (#3) */
 .form-group.invalid input,.form-group.invalid select,.form-group.invalid textarea{
@@ -2251,6 +2255,27 @@ tr.hist-row:hover {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  /* Fixed layout + <th> widths (set inline per column) is what stops the
+     subject/snippet text from driving the table wider than its wrapper —
+     without it, auto layout gave nowrap cells their full min-content width
+     and forced a horizontal scrollbar inside a modal that should never
+     scroll sideways. */
+  table-layout: fixed;
+}
+.email-list-table thead th {
+  padding: 8px 12px;
+  text-align: left;
+  background: var(--ink);
+  color: rgba(255, 255, 255, .45);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  border-bottom: 1px solid var(--border);
+  /* Pinned so the select-all checkbox and column labels stay reachable past
+     the first ~4 rows instead of scrolling away with the body. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .email-list-row {
   border-bottom: 1px solid var(--border2);
@@ -2264,12 +2289,36 @@ tr.hist-row:hover {
   background: rgba(200, 145, 58, 0.04);
 }
 .email-list-cell {
-  padding: 10px 12px;
+  padding: 8px 12px;
   vertical-align: middle;
+  overflow: hidden;
+}
+.email-list-meta-header {
+  padding: 7px 12px;
+  font-size: 11px;
+  color: var(--text3);
+  background: var(--cream3);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+.email-sender {
+  /* max-width on a <td> is inert in table layout (CSS2.1 §17.5.2); the clamp
+     has to live on this inner element to actually take effect. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
 }
 .email-subject {
   font-weight: 600;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .email-from {
   color: var(--text3);
@@ -2281,7 +2330,9 @@ tr.hist-row:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 380px;
+  /* No max-width: with table-layout:fixed the column width already clamps
+     this, and a fixed 380px here is what used to force the column wider
+     than the modal on its own. */
 }
 
 /* Email Drawer Preview */
@@ -2301,9 +2352,55 @@ tr.hist-row:hover {
   max-height: 140px;
   overflow-y: auto;
   white-space: pre-wrap;
+  /* pre-wrap breaks at spaces but not inside a token — one long tracking URL
+     or invoice link could set the min-content width of this colspan cell
+     and stretch the whole table sideways. */
+  overflow-wrap: anywhere;
   margin-bottom: 8px;
   color: var(--text2);
   line-height: 1.45;
+}
+
+/* Live extraction progress, pinned above the drafts table */
+.email-extract-progress {
+  background: var(--cream3);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.email-extract-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.email-extract-progress-head span:nth-child(2) {
+  flex: 1;
+}
+.email-extract-progress-bar {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border2);
+  overflow: hidden;
+}
+.email-extract-progress-bar span {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.2s ease;
+}
+.email-extract-summary {
+  background: rgba(180, 140, 20, .06);
+  border: 1px solid rgba(180, 140, 20, .2);
+  border-radius: var(--r2);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.5;
 }
 
 /* Filter Chips */
