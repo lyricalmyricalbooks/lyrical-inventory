@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
-const styles = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+// See book-strip-kpi-alignment.test.js: jsdom's URL is not accepted by node:fs.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 
 test('book overview cards use each book accent as a subtle surface tint', () => {
   expect(styles).toMatch(

@@ -1,0 +1,42 @@
+# Dependency updates.
+#
+# The app itself has no runtime dependencies by design (see AGENTS.md) — the
+# whole dependency surface is build and test tooling, which is why `npm audit
+# --omit=dev` reports zero vulnerabilities while `npm audit` reports plenty.
+# That makes these updates low-risk but easy to neglect: at the time this file
+# was added vitest was two majors behind, with vite and eslint one each.
+#
+# Everything is grouped so a week's updates arrive as one or two PRs rather than
+# six. Majors are grouped separately because they need a human to read a
+# changelog, whereas the minor/patch group should be mergeable once CI is green.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      dev-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+      dev-major:
+        patterns: ['*']
+        update-types: [major]
+
+  # deploy.yml pins actions by major tag, so these only move when an action
+  # publishes a new major — rare, but silently falling behind is how a workflow
+  # ends up on a deprecated runner image.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']
