@@ -80,6 +80,10 @@
  *      capabilities.batchEmailContent before using the new endpoint, so an
  *      older deployment keeps working on the one-at-a-time path. Bump flags
  *      v20-and-older as outdated.
+ *  20. v22: notifyPublisher approval-alert emails now send a designed HTML
+ *      version (branded header, ACTION REQUIRED banner, labeled Book/Author/
+ *      Submitted fields, readable Details table instead of a raw JSON dump)
+ *      alongside the existing plain-text body as a fallback.
  */
 
 const HEADERS = [
@@ -588,10 +592,11 @@ function doPost(e) {
         const needsAction = /approval|payment|transfer/i.test(kind);
         const prefix = needsAction ? '[ACTION REQUIRED]' : '[Lyrical Inventory]';
         const subject = `${prefix} ${kind} awaiting approval — ${clean_(d.bookTitle)}`;
+        const intro = needsAction
+          ? `An author submission requires your action: ${kind}.`
+          : `A ${kind.toLowerCase()} from an author is awaiting your confirmation.`;
         const body = [
-          needsAction
-            ? `An author submission requires your action: ${kind}.`
-            : `A ${kind.toLowerCase()} from an author is awaiting your confirmation.`,
+          intro,
           '',
           `Book:      ${clean_(d.bookTitle)} (${clean_(d.bookId)})`,
           `Author:    ${clean_(d.authorEmail) || 'unknown'}`,
@@ -603,10 +608,22 @@ function doPost(e) {
           'Details:',
           JSON.stringify(d.data || {}, null, 2)
         ].join('\n');
+        const htmlBody = buildNotifyEmailHtml_({
+          kind: kind,
+          needsAction: needsAction,
+          intro: intro,
+          bookTitle: clean_(d.bookTitle),
+          bookId: clean_(d.bookId),
+          authorEmail: clean_(d.authorEmail),
+          submittedAt: clean_(d.submittedAt),
+          summary: d.summary || '',
+          data: d.data || {}
+        });
         MailApp.sendEmail({
           to: 'lyricalmyricalbooks@gmail.com',
           subject: subject,
-          body: body
+          body: body,
+          htmlBody: htmlBody
         });
         return jsonOut_({ ok: true, notified: true });
       } catch (err) {
@@ -1996,6 +2013,123 @@ function jsonOut_(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Publisher notification email — HTML formatting
+//
+// The 'notifypublisher' action used to dump JSON.stringify(d.data) straight
+// into the email body, which made ordinary sales/expenses/payments hard to
+// scan (a wall of raw keys like "chan"/"qty" instead of readable labels).
+// This builds a clean HTML version — labeled fields, a highlighted action
+// banner for approvals, human-readable field names — while the plain-text
+// body above stays as the fallback for clients that can't render HTML.
+// ─────────────────────────────────────────────────────────────
+function escapeHtml_(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// "convertedTotal" -> "Converted Total", "chan" -> "Chan", "qty" -> "Qty"
+const NOTIFY_LABEL_OVERRIDES_ = {
+  chan: 'Channel', qty: 'Quantity', num: 'Order #', id: 'ID',
+  directToArtist: 'Paid Directly to Artist', paymentType: 'Payment Type'
+};
+function prettyLabel_(key) {
+  if (Object.prototype.hasOwnProperty.call(NOTIFY_LABEL_OVERRIDES_, key)) {
+    return NOTIFY_LABEL_OVERRIDES_[key];
+  }
+  const spaced = String(key)
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function formatNotifyValue_(key, val) {
+  if (val === null || val === undefined || val === '') return '—';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  if (typeof val === 'number') {
+    return /price|amount|total|rate/i.test(key) && !Number.isInteger(val)
+      ? val.toFixed(2)
+      : String(val);
+  }
+  return String(val);
+}
+
+// Renders an object as a set of labeled rows; nested objects (e.g. a
+// "payment" sub-object) render as an indented mini-table instead of raw JSON.
+function notifyDetailsRowsHtml_(obj, depth) {
+  const keys = Object.keys(obj || {});
+  if (!keys.length) {
+    return '<tr><td colspan="2" style="padding:10px 0;color:#8a8078;font-style:italic;">No additional details</td></tr>';
+  }
+  const indent = 16 * (depth || 0);
+  return keys.map((key) => {
+    const val = obj[key];
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const nested = notifyDetailsRowsHtml_(val, (depth || 0) + 1);
+      return (
+        `<tr><td colspan="2" style="padding:12px 0 4px ${indent}px;font-family:'Syne',Georgia,serif;font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:#8c5b00;border-top:1px solid rgba(14,12,10,.09);">${escapeHtml_(prettyLabel_(key))}</td></tr>` +
+        nested
+      );
+    }
+    const display = Array.isArray(val) ? val.map((v) => formatNotifyValue_(key, v)).join(', ') : formatNotifyValue_(key, val);
+    return (
+      `<tr>` +
+      `<td style="padding:6px 12px 6px ${indent}px;color:#8a8078;font-size:13px;white-space:nowrap;vertical-align:top;">${escapeHtml_(prettyLabel_(key))}</td>` +
+      `<td style="padding:6px 0;color:#0e0c0a;font-size:13px;font-weight:600;font-family:'DM Mono',Consolas,monospace;">${escapeHtml_(display)}</td>` +
+      `</tr>`
+    );
+  }).join('');
+}
+
+function buildNotifyEmailHtml_(opts) {
+  const bannerBg = opts.needsAction ? '#8c5b00' : '#0e0c0a';
+  const bannerLabel = opts.needsAction ? 'ACTION REQUIRED' : 'FYI — NO ACTION NEEDED';
+  const detailsRows = notifyDetailsRowsHtml_(opts.data, 0);
+  const summaryHtml = opts.summary
+    ? `<div style="background:#f7f2e9;border-left:4px solid #c8913a;border-radius:6px;padding:14px 16px;margin:0 0 20px;color:#0e0c0a;font-size:14px;line-height:1.5;">${escapeHtml_(opts.summary)}</div>`
+    : '';
+
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#efe9dc;font-family:Helvetica,Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
+      <div style="background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid rgba(14,12,10,.09);">
+        <div style="background:#0e0c0a;padding:18px 24px;">
+          <div style="font-family:Georgia,serif;font-weight:700;font-size:16px;letter-spacing:.02em;color:#f0c060;">Lyrical Inventory</div>
+        </div>
+        <div style="background:${bannerBg};padding:10px 24px;">
+          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:12px;letter-spacing:.08em;color:#ffffff;">${escapeHtml_(bannerLabel)} · ${escapeHtml_(opts.kind)}</div>
+        </div>
+        <div style="padding:24px;">
+          <p style="margin:0 0 18px;color:#0e0c0a;font-size:14px;line-height:1.5;">${escapeHtml_(opts.intro)}</p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+            <tr><td style="padding:4px 0;color:#8a8078;font-size:12px;width:90px;vertical-align:top;">Book</td><td style="padding:4px 0;color:#0e0c0a;font-size:13px;font-weight:600;">${escapeHtml_(opts.bookTitle) || '—'} <span style="color:#8a8078;font-weight:400;">(${escapeHtml_(opts.bookId) || '—'})</span></td></tr>
+            <tr><td style="padding:4px 0;color:#8a8078;font-size:12px;vertical-align:top;">Author</td><td style="padding:4px 0;color:#0e0c0a;font-size:13px;font-weight:600;">${escapeHtml_(opts.authorEmail) || 'unknown'}</td></tr>
+            <tr><td style="padding:4px 0;color:#8a8078;font-size:12px;vertical-align:top;">Submitted</td><td style="padding:4px 0;color:#0e0c0a;font-size:13px;font-weight:600;">${escapeHtml_(opts.submittedAt) || '—'}</td></tr>
+          </table>
+
+          ${summaryHtml}
+
+          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8a8078;margin:0 0 6px;">Details</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            ${detailsRows}
+          </table>
+        </div>
+        <div style="background:#f7f2e9;padding:14px 24px;border-top:1px solid rgba(14,12,10,.09);">
+          <div style="color:#8a8078;font-size:11px;">Sent automatically by Lyrical Inventory — review and approve in the app.</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>`;
 }
 
 // ─────────────────────────────────────────────────────────────
