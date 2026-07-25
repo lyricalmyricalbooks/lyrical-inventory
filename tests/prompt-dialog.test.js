@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildHarness } from './helpers/extract-decl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 // A behaviour test rather than another source grep — the point of the jsdom
@@ -14,20 +14,19 @@ const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 // half that matters to whoever clicks "Relink".
 //
 // main.js can't be imported (30k lines, top-level Firebase side effects), so
-// the function is lifted out of the source and run against the real m-prompt
-// markup from index.html, with only its three collaborators stubbed.
+// the function is lifted out of the source by the shared extractor and run
+// against the real m-prompt markup from index.html, with only its three
+// collaborators stubbed.
 function loadPromptDialog() {
-  const match = mainJs.match(/\nfunction promptDialog\(message, defaultValue = '', opts = \{\}\) \{([\s\S]+?)\n\}\n/);
-  if (!match) throw new Error('promptDialog not found in src/main.js — did its signature change?');
-
-  const $ = (id) => document.getElementById(id);
-  const openM = () => {};
-  const closeM = () => {};
-
-  // eslint-disable-next-line no-new-func
-  const factory = new Function('$', 'openM', 'closeM',
-    `return function promptDialog(message, defaultValue = '', opts = {}) {${match[1]}\n};`);
-  return factory($, openM, closeM);
+  return buildHarness({
+    names: ['promptDialog'],
+    deps: {
+      $: (id) => document.getElementById(id),
+      openM: () => {},
+      closeM: () => {},
+    },
+    returns: 'promptDialog',
+  });
 }
 
 // Mount the actual dialog markup rather than a hand-written copy, so renaming
