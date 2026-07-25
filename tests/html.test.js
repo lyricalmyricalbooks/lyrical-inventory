@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { escapeHtml } from '../src/lib/html.js';
 
-const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+// See book-strip-kpi-alignment.test.js: jsdom's URL is not accepted by node:fs.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 
 describe('escapeHtml', () => {
   it('escapes the five HTML-significant characters', () => {

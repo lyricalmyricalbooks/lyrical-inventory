@@ -84,6 +84,30 @@ service cloud.firestore {
       allow read, write: if isPublisher();
     }
 
+    // Client error reports — window.onerror / unhandledrejection captures from
+    // main.js. Append-only: any signed-in user may file one (an author hitting
+    // a broken screen is worth knowing about too), but only the publisher can
+    // read or clear them, since a stack trace can name internal functions and
+    // the reporter's own email.
+    //
+    // Never updatable, and each row is size-capped so the collection can't be
+    // used as free storage. The client already caps itself at 25 reports per
+    // session and de-duplicates by signature; this is the backstop for a client
+    // that ignores those limits.
+    match /clientErrors/{id} {
+      allow read, delete: if isPublisher();
+      allow update: if false;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly([
+             'kind', 'message', 'stack', 'source', 'line',
+             'tab', 'role', 'book', 'online', 'build', 'ua', 'ts', 'email'
+           ])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 500
+        && request.resource.data.stack.size() <= 2000
+        && request.resource.data.ua.size() <= 300;
+    }
+
     // Email receipt inbox — draft expenses pushed by the Gmail add-on.
     // The add-on writes via the owner's OAuth token (IAM, which bypasses these
     // rules); the publisher client reads them live and deletes each one after

@@ -29,7 +29,10 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          # Kept in step with .nvmrc and package.json "engines" so a local build
+          # and the deployed one run the same runtime. Node 20 went end-of-life
+          # in April 2026, so this tracks the active LTS instead.
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install and Build

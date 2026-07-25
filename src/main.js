@@ -38,6 +38,111 @@ import {
   stageShippoExpenseEnrichment,
 } from './lib/shipping-reconciliation.js';
 
+// ─────────────────────────────────────────────
+// CLIENT ERROR REPORTING
+// ─────────────────────────────────────────────
+// Installed first thing, before any app code runs, so errors thrown during
+// start-up are caught too.
+//
+// Until now nothing observed failures in the field. An exception inside an
+// async handler becomes a rejected promise and disappears — no console anyone
+// reads, no toast, no report. That is how a "Relink" button calling a
+// non-existent promptDialog stayed broken: it rendered fine and did nothing.
+// On a POS and ledger app the first sign of a fault should not be a customer
+// mentioning it.
+//
+// Deliberately silent to the user. Toasting every scripting error would be
+// worse than the disease; these go to a publisher-only Firestore collection to
+// be read after the fact.
+const ERR_MAX_PER_SESSION = 25;
+const _errSeen = new Set();
+let _errCount = 0;
+let _errPending = [];   // buffered until Firebase is ready (start-up errors)
+let _errFlushing = false;
+
+function _errSignature(entry) {
+  return [entry.kind, entry.message, entry.source, entry.line].join('|');
+}
+
+function _flushClientErrors() {
+  if (_errFlushing || !_errPending.length) return;
+  if (typeof window._fbLogClientError !== 'function') return;
+  _errFlushing = true;
+  const batch = _errPending;
+  _errPending = [];
+  Promise.allSettled(batch.map(e => window._fbLogClientError(e)))
+    .catch(() => { })
+    .finally(() => {
+      _errFlushing = false;
+      // Anything that arrived mid-flight goes out on the next tick.
+      if (_errPending.length) setTimeout(_flushClientErrors, 0);
+    });
+}
+
+// Each context field is gathered behind its own guard. This function runs
+// before most of the module has evaluated, so reading a `let` declared further
+// down (IS_AUTHOR_MODE, activeBook) throws a temporal-dead-zone ReferenceError
+// during start-up — and a start-up error is precisely the one worth keeping.
+// Degrade the field, never the report.
+function _errField(read, fallback) {
+  try { const v = read(); return v == null ? fallback : v; } catch (_) { return fallback; }
+}
+
+// Nothing in here may throw: an error reporter that raises its own error would
+// recurse through the very listeners that called it.
+function reportClientError(kind, message, extra = {}) {
+  try {
+    if (_errCount >= ERR_MAX_PER_SESSION) return;
+    const entry = {
+      kind,
+      message: String(message ?? 'unknown').slice(0, 500),
+      stack: String(extra.stack || '').slice(0, 2000),
+      source: String(extra.source || '').slice(0, 300),
+      line: Number(extra.line) || 0,
+      // Context that makes a report actionable without carrying book data,
+      // customer details or anything else private into the log.
+      tab: _errField(() => (document.querySelector('.tab-panel.active') || {}).id, ''),
+      role: _errField(() => (window.IS_PUBLISHER ? 'publisher' : (IS_AUTHOR_MODE ? 'author' : 'anon')), 'unknown'),
+      book: _errField(() => (typeof activeBook === 'string' ? activeBook : ''), ''),
+      online: _errField(() => !!navigator.onLine, false),
+      build: _errField(() => (typeof __GIT_COMMIT_DATE__ === 'string' ? __GIT_COMMIT_DATE__ : ''), ''),
+      ua: _errField(() => String(navigator.userAgent || '').slice(0, 300), ''),
+      ts: Date.now(),
+    };
+
+    // One report per distinct fault per session — a failure inside a render
+    // loop would otherwise write thousands of identical rows.
+    const sig = _errSignature(entry);
+    if (_errSeen.has(sig)) return;
+    _errSeen.add(sig);
+    _errCount++;
+
+    if (_errPending.length < 50) _errPending.push(entry);
+    _flushClientErrors();
+  } catch (_) {
+    // Reporting is best-effort by definition.
+  }
+}
+
+window.addEventListener('error', (e) => {
+  reportClientError('error', e && e.message, {
+    stack: e && e.error && e.error.stack,
+    source: e && e.filename,
+    line: e && e.lineno,
+  });
+});
+
+// The important one. `await somethingUndefined()` inside a click handler lands
+// here and nowhere else.
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e && e.reason;
+  reportClientError('unhandledrejection', (r && r.message) || r, { stack: r && r.stack });
+});
+
+// Start-up errors are buffered until Firebase can accept them.
+document.addEventListener('firebase-ready', _flushClientErrors);
+window.addEventListener('online', _flushClientErrors);
+
 let updateSWFunc = null;
 
 function revealUpdatingScreen() {

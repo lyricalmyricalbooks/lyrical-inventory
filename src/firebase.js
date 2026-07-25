@@ -377,6 +377,31 @@ window._fbWatch = (bookId, cb) => {
 };
 
 // ─────────────────────────────────────────────
+// CLIENT ERROR REPORTING
+// ─────────────────────────────────────────────
+// Append-only sink for the window.onerror / unhandledrejection handlers in
+// main.js. Any signed-in user can create a row (an author's broken screen is
+// exactly as worth knowing about as the publisher's) but only the publisher can
+// read or clear them — see the clientErrors rule in firestore.rules.
+//
+// Never throws and never toasts: this runs on the failure path, so a reporting
+// problem must stay invisible rather than becoming a second visible fault.
+// Fire-and-forget on purpose; the caller does not await a diagnostic write.
+window._fbLogClientError = async (entry) => {
+  try {
+    if (!entry || !window._useFirestoreGlobal()) return;
+    await setDoc(doc(collection(fs, 'clientErrors')), {
+      ...entry,
+      email: (auth.currentUser && auth.currentUser.email) || '',
+      ts: entry.ts || Date.now(),
+    });
+  } catch (e) {
+    // Swallowed deliberately — see above. console only, no re-report.
+    console.warn('[FB] client error report failed', e);
+  }
+};
+
+// ─────────────────────────────────────────────
 // AUTHOR SUBMISSIONS
 // ─────────────────────────────────────────────
 window._fbSubmitActivity = async (bookId, type, data) => {

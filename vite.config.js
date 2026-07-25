@@ -60,6 +60,22 @@ export default defineConfig({
   define: {
     __GIT_COMMIT_DATE__: JSON.stringify(commitDate),
   },
+  test: {
+    // There was no test config at all before this, so vitest ran with no DOM.
+    // That is the reason so much of the suite asserts on the *text* of
+    // src/main.js rather than on behaviour: with no document to render into,
+    // grepping the source was the only option, and a test that greps for a
+    // function name passes just as happily when that function is broken.
+    //
+    // jsdom is the default rather than opt-in per file so that writing a real
+    // test is the path of least resistance. Node globals stay available, so the
+    // existing pure-logic and filesystem tests are unaffected.
+    environment: 'jsdom',
+    include: ['tests/**/*.test.js'],
+    // Nothing here touches the network or a real Firebase project; a test that
+    // hangs is a bug in the test, not something to wait 30s for.
+    testTimeout: 10000,
+  },
   plugins: [
     syncAppsScriptPlugin(),
     VitePWA({
