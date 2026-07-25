@@ -25,15 +25,20 @@ service cloud.firestore {
         && request.auth.token.email.lower() == bookOwnerEmail(bookId);
     }
 
-    // Per-book data — any authenticated user can read. Publisher writes any
-    // part; the owning author may write ONLY the consignment parts (stores +
-    // ledger) of their own book.
+    // Per-book data — readable ONLY by the publisher and the book's own author.
+    // A signed-in author must not be able to read another author's sales
+    // history, ledger, customers or payouts: authors are peers, not staff.
+    // The client already loads a single book in author mode (boot() →
+    // loadBook(ACTIVE_BOOK_FORCED)), so this matches what the app actually
+    // requests — it just stops the request working for anyone else.
+    // Publisher writes any part; the owning author may write ONLY the
+    // consignment parts (stores + ledger) of their own book.
     match /books/{bookId} {
-      allow read: if request.auth != null;
+      allow read: if isPublisher() || isBookAuthor(bookId);
       allow write: if isPublisher();
 
       match /data/{part} {
-        allow read: if request.auth != null;
+        allow read: if isPublisher() || isBookAuthor(bookId);
         allow write: if isPublisher()
           || ((part == 'stores' || part == 'ledger') && isBookAuthor(bookId));
       }
@@ -45,11 +50,31 @@ service cloud.firestore {
       allow read, write: if isPublisher() || isBookAuthor(bookId);
     }
 
-    // Global settings — catalog, taxCenter, productionCosts, paymentLinks,
-    // bookOwners, systemBackups, modeFlags. Readable by any authenticated user;
-    // only the publisher can write.
+    // Settings documents that must never leave the publisher's account. These
+    // hold API keys, third-party store credentials, business financials and the
+    // ownership map itself — none of which any author has a reason to read:
+    //   taxCenter        settings.geminiKey + every business expense and trip
+    //   bigCartelConfig  Big Cartel username + password
+    //   systemBackups    backup manifest spanning every book
+    //   bookOwners       the author→book map these rules are built on
+    // The client already never requests these in author mode (loadTaxCenter and
+    // saveTaxCenter both early-return on isAuthor(); the Tax Centre, Big Cartel
+    // and Backups tabs are hidden for authors) — but hiding a tab is UI, not a
+    // security boundary, which is exactly why it has to be enforced here.
+    //
+    // NOTE: this is a denylist, so a settings doc added later is author-readable
+    // by default. Any new doc holding a key, credential or publisher-only
+    // financial record must be added to this list.
+    function isPublisherOnlySetting(name) {
+      return name in ['taxCenter', 'bigCartelConfig', 'systemBackups', 'bookOwners'];
+    }
+
+    // Global settings — catalog, productionCosts, paymentLinks, modeFlags and
+    // friends stay readable by any authenticated user (authors need them to
+    // render their own book); only the publisher can write anything.
     match /settings/{document} {
-      allow read: if request.auth != null;
+      allow read: if isPublisher()
+        || (request.auth != null && !isPublisherOnlySetting(document));
       allow write: if isPublisher();
     }
 

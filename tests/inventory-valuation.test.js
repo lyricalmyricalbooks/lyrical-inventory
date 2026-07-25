@@ -13,9 +13,12 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
   const indexContent = fs.readFileSync(indexHtmlPath, 'utf8');
 
   it('declares calculateInventoryValuationData, openInventoryValuationModal, and printInventoryValuationReport in main.js', () => {
+    // Declared as plain functions (not `window.x = function`) so eslint's
+    // no-undef can see them — they reach the inline onclick handlers via
+    // exposeLegacyInlineHandlers like every other handler.
     expect(mainContent).toContain('function calculateInventoryValuationData()');
-    expect(mainContent).toContain('window.openInventoryValuationModal = function()');
-    expect(mainContent).toContain('window.printInventoryValuationReport = function()');
+    expect(mainContent).toContain('function openInventoryValuationModal()');
+    expect(mainContent).toContain('function printInventoryValuationReport()');
   });
 
   it('includes the Inventory Valuation Asset Report modal in index.html', () => {
@@ -74,7 +77,7 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
     const calcMatch = mainContent.match(/function calculateInventoryValuationData\(\)\s*\{([\s\S]+?)\n\}/);
     expect(calcMatch).not.toBeNull();
 
-    const csvMatch = mainContent.match(/window\.downloadInventoryValuationCSV\s*=\s*function\(\)\s*\{([\s\S]+?)\n\};/);
+    const csvMatch = mainContent.match(/function downloadInventoryValuationCSV\(\)\s*\{([\s\S]+?)\n\}/);
     expect(csvMatch).not.toBeNull();
 
     const factory = new Function(

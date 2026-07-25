@@ -1,16 +1,47 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /receipts/{allPaths=**} {
-      // Authors and the publisher both upload receipt images/PDFs, so any
-      // authenticated user may read and write here. Writes are constrained to
-      // reasonably sized images/PDFs to stop the bucket being used as free
-      // file storage or filled with junk that runs up egress/storage costs.
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
+
+    function isPublisher() {
+      return request.auth != null
+        && request.auth.token.email == 'lyricalmyricalbooks@gmail.com';
+    }
+
+    // Mirrors isBookAuthor() in firestore.rules, resolved cross-service against
+    // the same settings/bookOwners map ({ bookId: authorEmailLower }) the
+    // publisher client maintains on every catalog save. Guarded by exists() so
+    // a missing map denies rather than erroring.
+    function isBookAuthor(bookId) {
+      return request.auth != null
+        && request.auth.token.email != null
+        && firestore.exists(/databases/(default)/documents/settings/bookOwners)
+        && request.auth.token.email.lower() ==
+             firestore.get(/databases/(default)/documents/settings/bookOwners)
+               .data.get(bookId, '');
+    }
+
+    // Receipts are uploaded as `receipts/{bookId}/{timestamp}_{filename}`
+    // (see _fbUploadReceipt + the caller in main.js), so the owning book is the
+    // first path segment and access can be scoped per book.
+    //
+    // Previously ANY authenticated user could read, overwrite and delete ANY
+    // receipt in the bucket — one author could wipe another author's expense
+    // evidence. Now the publisher and the owning author are the only writers,
+    // and deletes are likewise scoped instead of open to every signed-in user.
+    //
+    // Caveat worth knowing: getDownloadURL() hands back a tokenised public URL,
+    // and the app stores those URLs in book state. Anyone holding such a URL can
+    // still fetch that one file without passing these rules — tightening `read`
+    // stops path enumeration and un-tokenised access, not links already issued.
+    match /receipts/{bookId}/{allPaths=**} {
+      allow read: if isPublisher() || isBookAuthor(bookId);
+      // Writes stay constrained to reasonably sized images/PDFs so the bucket
+      // can't be used as free file storage or filled with junk that runs up
+      // egress/storage costs.
+      allow write: if (isPublisher() || isBookAuthor(bookId))
         && request.resource.size < 15 * 1024 * 1024
         && request.resource.contentType.matches('image/.*|application/pdf');
-      allow delete: if request.auth != null;
+      allow delete: if isPublisher() || isBookAuthor(bookId);
     }
   }
 }

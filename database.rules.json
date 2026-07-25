@@ -3,7 +3,13 @@
     "lyrical": {
       "books": {
         "$bookId": {
-          ".read": "auth != null",
+          // Readable ONLY by the publisher and the book's own author — mirrors
+          // the same restriction in firestore.rules. Books can still live here
+          // (a book uses Firestore only once its fs_mode_<id> flag is set), so
+          // leaving this open to every signed-in user would let one author read
+          // another's sales, ledger and customers straight out of the RTDB
+          // fallback no matter how tight the Firestore rules are.
+          ".read": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || root.child('lyrical/settings/bookOwners').child($bookId).val() === auth.token.email.toLowerCase())",
           // Publisher writes any book; an author writes ONLY the book whose
           // authorEmail matches theirs in settings/bookOwners (a plain map
           // maintained by the publisher client). Ownership lives there because
@@ -26,8 +32,18 @@
         }
       },
       "settings": {
-        ".read": "auth != null",
-        ".write": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'"
+        // Only the publisher writes settings, at any key.
+        ".write": "auth != null && auth.token.email === 'lyricalmyricalbooks@gmail.com'",
+        // Read is granted per key rather than on the whole node, because RTDB
+        // read rules cascade downwards and cannot be revoked by a child — a
+        // ".read" here would hand every signed-in author the Gemini API key in
+        // taxCenter and the Big Cartel credentials. Same denylist as
+        // isPublisherOnlySetting() in firestore.rules; keep the two in step and
+        // add any future key holding a secret or publisher-only financial
+        // record to BOTH files.
+        "$key": {
+          ".read": "auth != null && (auth.token.email === 'lyricalmyricalbooks@gmail.com' || ($key !== 'taxCenter' && $key !== 'bigCartelConfig' && $key !== 'systemBackups' && $key !== 'bookOwners'))"
+        }
       },
       "backups": {
         // System backup snapshots — one node per backup, publisher only.

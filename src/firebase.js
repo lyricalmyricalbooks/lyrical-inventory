@@ -2,7 +2,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, collection, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocFromServer, collection, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { LIST_PARTS, splitState, stitchState, mergePart } from './lib/merge-state.js';
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -153,46 +154,117 @@ window._fbOnAuthStateChanged = (cb) => onAuthStateChanged(auth, cb);
 // ─────────────────────────────────────────────
 // PER-BOOK DATA
 // ─────────────────────────────────────────────
+// Saves a book's state, merging rather than clobbering when another device got
+// there first.
+//
+// window._fsHashes[bookId][part] holds the last per-part JSON this device knows
+// the server had (set by _fbLoad, refreshed by the _fbWatch snapshots and after
+// each write). That makes it the merge base. Before overwriting a dirty part
+// this now reads the server copy: if it still matches the base, nothing else
+// has touched it and the write is a plain overwrite exactly as before. If it
+// has moved on, the two versions are three-way merged against the base instead
+// of one silently replacing the other.
+//
+// Returns { ok, merged, state, conflicts }. `state` is the stitched result and
+// is only meaningful when `merged` is true — saveState() writes it back into
+// the local state so the UI shows the reconciled data rather than the version
+// it tried to save. ok:false means the server copy could not be read, so
+// nothing was written and the caller should queue and retry rather than risk
+// overwriting a change it cannot see.
 window._fbSave = async (bookId, json) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
-      const state = JSON.parse(json);
-      const s = { ...state };
-      const parts = {};
-      ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'].forEach(k => {
-        parts[k] = s[k] || [];
-        delete s[k];
-      });
-      parts.metadata = s;
+      const parts = splitState(JSON.parse(json));
 
       if (!window._fsHashes) window._fsHashes = {};
       if (!window._fsHashes[bookId]) window._fsHashes[bookId] = {};
-        
-      const promises = [];
-      Object.keys(parts).forEach(partName => {
-        const partJson = JSON.stringify(parts[partName]);
-        if (window._fsHashes[bookId][partName] !== partJson) {
-          const dRef = doc(fs, 'books', bookId, 'data', partName);
-          promises.push(setDoc(dRef, { data: partJson, ts: Date.now() }));
-          window._fsHashes[bookId][partName] = partJson;
-        }
+      const hashes = window._fsHashes[bookId];
+
+      const partNames = Object.keys(parts);
+      const dirty = partNames.filter(p => hashes[p] !== JSON.stringify(parts[p]));
+      if (!dirty.length) return { ok: true, merged: false };
+
+      // Read the server's current copy of every part we're about to change.
+      // getDocFromServer (not getDoc) on purpose: with persistent local cache
+      // enabled, getDoc can answer from cache, which would compare our base
+      // against our own stale copy and defeat the whole check.
+      let snaps;
+      try {
+        snaps = await Promise.all(dirty.map(p => getDocFromServer(doc(fs, 'books', bookId, 'data', p))));
+      } catch (readErr) {
+        // Can't see the server, so we can't know what we'd be overwriting.
+        // Leave the write unmade; saveState queues it and retries with backoff.
+        console.warn('[FB] pre-write read failed, not overwriting', readErr);
+        return { ok: false, merged: false, reason: 'read-failed' };
+      }
+
+      const emptyFor = p => (p === 'metadata' ? {} : []);
+      const merged = { ...parts };
+      const conflicts = [];
+      let didMerge = false;
+
+      dirty.forEach((p, i) => {
+        const snap = snaps[i];
+        const remoteJson = snap.exists() ? snap.data().data : null;
+        const baseJson = Object.prototype.hasOwnProperty.call(hashes, p) ? hashes[p] : null;
+        if (remoteJson === baseJson) return; // nobody else touched it
+
+        // Diverged. A null base (this device never read the part — a fresh tab
+        // that wrote before loading) is treated as empty, which makes the merge
+        // a union: it may keep a row the other device deleted, but it will
+        // never drop one, and dropping is the failure that loses money.
+        didMerge = true;
+        const remoteVal = remoteJson != null ? (safeParse(remoteJson) ?? emptyFor(p)) : emptyFor(p);
+        const baseVal = baseJson != null ? (safeParse(baseJson) ?? emptyFor(p)) : emptyFor(p);
+        const res = mergePart(p, baseVal, remoteVal, parts[p]);
+        merged[p] = res.value;
+        res.conflicts.forEach(c => conflicts.push(c));
       });
-      await Promise.all(promises);
-      return;
+
+      let stitched = stitchState(merged);
+
+      // Let the app recompute the values derived from the merged rows (stock,
+      // revenue, per-entry running balance) before any of it is persisted, so
+      // the stored blob is self-consistent in a single write.
+      if (didMerge && typeof window._normalizeMergedState === 'function') {
+        try { stitched = window._normalizeMergedState(bookId, stitched) || stitched; }
+        catch (e) { console.error('[FB] merge normalize failed', e); }
+      }
+
+      const finalParts = splitState(stitched);
+      const pending = [];
+      Object.keys(finalParts).forEach(p => {
+        const partJson = JSON.stringify(finalParts[p]);
+        if (hashes[p] !== partJson) pending.push({ part: p, partJson });
+      });
+      await Promise.all(pending.map(({ part, partJson }) =>
+        setDoc(doc(fs, 'books', bookId, 'data', part), { data: partJson, ts: Date.now() })
+      ));
+
+      // Advance the base only once the server has actually taken the write.
+      // Updating it alongside the setDoc call (as this did before) meant a
+      // failed write still marked the part clean, so the next save skipped it
+      // and the change was never retried — it just stopped existing anywhere
+      // but this tab.
+      pending.forEach(({ part, partJson }) => { hashes[part] = partJson; });
+
+      return { ok: true, merged: didMerge, state: didMerge ? stitched : null, conflicts };
     }
     await set(ref(db, `lyrical/books/${bookId}`), { data: json, ts: Date.now() });
+    return { ok: true, merged: false };
   } catch (e) {
     console.error("fbSave failed", e);
     if (typeof window.showToast === 'function') {
       window.showToast('⚠ Save to cloud failed — check connection', 'err', 4000);
     }
+    return { ok: false, merged: false, reason: 'write-failed' };
   }
 };
 
 window._fbLoad = async (bookId) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
-      const docNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'];
+      const docNames = ['metadata', ...LIST_PARTS];
       const promises = docNames.map(name => getDoc(doc(fs, 'books', bookId, 'data', name)));
       const snaps = await Promise.all(promises);
       
@@ -236,17 +308,7 @@ window._fbLoad = async (bookId) => {
         return rtData;
       }
 
-      const stitched = {
-        ...parts.metadata,
-        hist: parts.hist,
-        ledger: parts.ledger,
-        expenses: parts.expenses,
-        stores: parts.stores,
-        artistTransfers: parts.artistTransfers,
-        artistPayouts: parts.artistPayouts,
-        doneIds: parts.doneIds
-      };
-      return JSON.stringify(stitched);
+      return JSON.stringify(stitchState(parts));
     }
     const s = await get(ref(db, `lyrical/books/${bookId}`));
     return s.exists() ? s.val().data : null;
@@ -281,7 +343,7 @@ window._fbWatch = (bookId, cb) => {
       }
       _fsWatchUnsubs[bookId] = [];
       
-      const docNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'];
+      const docNames = ['metadata', ...LIST_PARTS];
       let localState = {};
       const loadedDocs = new Set();
       
@@ -300,19 +362,9 @@ window._fbWatch = (bookId, cb) => {
           loadedDocs.add(name);
           
           if (loadedDocs.size === docNames.length) {
-            // Build stitched state with a fixed key order so JSON.stringify is
-            // stable — prevents false-positive hash mismatches vs _fbLoad output.
-            const stitched = {
-              ...localState.metadata,
-              hist: localState.hist,
-              ledger: localState.ledger,
-              expenses: localState.expenses,
-              stores: localState.stores,
-              artistTransfers: localState.artistTransfers,
-              artistPayouts: localState.artistPayouts,
-              doneIds: localState.doneIds
-            };
-            cb(JSON.stringify(stitched));
+            // stitchState keeps a fixed key order so JSON.stringify is stable —
+            // prevents false-positive hash mismatches vs _fbLoad output.
+            cb(JSON.stringify(stitchState(localState)));
           }
         }, err => _reportWatchError(`Watch ${name}`, err));
         _fsWatchUnsubs[bookId].push(unsub);

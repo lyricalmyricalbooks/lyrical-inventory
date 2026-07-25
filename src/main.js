@@ -959,12 +959,25 @@ async function processSyncQueue() {
   _syncFlushing = true;
   const item = syncQueue[0];
   try {
-    await window._fbSave(item.bookId, JSON.stringify(item.state));
-    // Mark this exact snapshot as saved so saveState won't re-send it.
-    const json = JSON.stringify(item.state);
-    if (states[item.bookId] && JSON.stringify(states[item.bookId]) === json) {
-      lastSavedHashes[item.bookId] = json;
+    const res = await window._fbSave(item.bookId, JSON.stringify(item.state));
+    // The server copy couldn't be read, so nothing was written and the queued
+    // change is still pending. Treat it exactly like a failed write: keep it
+    // queued and let the backoff retry rather than dropping it.
+    if (res && res.ok === false) throw new Error(res.reason || 'save-unverified');
+
+    // This is the path that matters after a stretch offline: whatever the other
+    // device wrote while we were away is now merged in, so adopt the reconciled
+    // state instead of leaving the screen on our pre-merge copy.
+    if (res && res.merged && res.state) {
+      adoptMergedState(item.bookId, res);
       lastSaveTimes[item.bookId] = Date.now();
+    } else {
+      // Mark this exact snapshot as saved so saveState won't re-send it.
+      const json = JSON.stringify(item.state);
+      if (states[item.bookId] && JSON.stringify(states[item.bookId]) === json) {
+        lastSavedHashes[item.bookId] = json;
+        lastSaveTimes[item.bookId] = Date.now();
+      }
     }
     syncQueue.shift();
     localStorage.setItem('lm-sync-queue', JSON.stringify(syncQueue));
@@ -1084,6 +1097,57 @@ function confirmDialog(message, opts = {}) {
   });
 }
 
+// Styled single-line text prompt — the confirmDialog sibling for "type a value"
+// flows (replaces the browser's blocking prompt()). Resolves to the entered
+// string, or null if the user cancelled/dismissed, so callers can distinguish
+// "cancelled" from "deliberately cleared".
+function promptDialog(message, defaultValue = '', opts = {}) {
+  const overlay = $('m-prompt');
+  const body = $('m-prompt-body');
+  const titleEl = $('m-prompt-title');
+  const input = $('m-prompt-input');
+  const ok = $('m-prompt-ok');
+  const cancel = $('m-prompt-cancel');
+  if (!overlay || !body || !input || !ok || !cancel) {
+    // Should never happen in production, but keep a working fallback.
+    return Promise.resolve(window.prompt(message, defaultValue));
+  }
+  body.textContent = String(message ?? '');
+  if (titleEl) titleEl.textContent = opts.title || 'Enter a value';
+  ok.textContent = opts.okLabel || 'OK';
+  cancel.textContent = opts.cancelLabel || 'Cancel';
+  input.value = String(defaultValue ?? '');
+  input.placeholder = opts.placeholder || '';
+
+  return new Promise(resolve => {
+    const cleanup = (result) => {
+      overlay.removeEventListener('modal-close', onCloseEvent);
+      closeM('prompt');
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      input.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onOk = () => cleanup(input.value);
+    const onCancel = () => cleanup(null);
+    const onCloseEvent = () => cleanup(null);
+    // Scoped to the input rather than the document so this dialog's Enter key
+    // can't also trigger a confirmDialog that happens to be listening.
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); cleanup(input.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+    };
+
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    overlay.addEventListener('modal-close', onCloseEvent);
+    input.addEventListener('keydown', onKey);
+
+    openM('prompt');
+    setTimeout(() => { try { input.focus(); input.select(); } catch { } }, 0);
+  });
+}
+
 // Non-blocking alert replacement: shows a styled toast.
 // `type` is 'ok' | 'warn' | 'err'.
 function notify(msg, type = 'warn') {
@@ -1132,8 +1196,22 @@ async function saveState(bookId) {
       setSyncState('ok', '<b>Firestore</b> · changes queued (offline)');
       return;
     }
-    await window._fbSave(bookId, json);
-    lastSavedHashes[bookId] = json;
+    const res = await window._fbSave(bookId, json);
+    // Couldn't read the server copy, so _fbSave declined to overwrite it rather
+    // than risk erasing a change made on another device. Queue and retry.
+    if (res && res.ok === false) {
+      queueSync(bookId, state);
+      setSyncState('error', '<b>Firestore</b> · could not verify cloud copy · retrying…');
+      return;
+    }
+    // Another device had written since we last synced and _fbSave merged the
+    // two. Adopt the reconciled state locally so the screen matches the cloud
+    // instead of the version we tried to push.
+    if (res && res.merged && res.state) {
+      adoptMergedState(bookId, res);
+    } else {
+      lastSavedHashes[bookId] = json;
+    }
     lastSaveTimes[bookId] = Date.now();
     setSyncState('ok', '<b>Firestore</b> · saved · live sync on');
     const ind = $('save-ind'); if (ind) { ind.classList.add('show'); setTimeout(() => ind.classList.remove('show'), 2000); }
@@ -1144,6 +1222,52 @@ async function saveState(bookId) {
     // and reconciles automatically instead of silently diverging.
     queueSync(bookId, state);
   }
+}
+
+// Called by _fbSave once a three-way merge has produced a combined state, before
+// any of it is written. stock, revenue, per-channel stats and each history row's
+// running balance are all derived from hist/ledger, so after rows from two
+// devices are interleaved they have to be recomputed — otherwise the merged blob
+// would carry one device's totals against both devices' rows.
+window._normalizeMergedState = (bookId, merged) => {
+  try {
+    const book = BOOKS[bookId];
+    if (book && merged) recomputeAfters(merged, book);
+  } catch (e) {
+    console.error('[sync] could not recompute merged state', e);
+  }
+  return merged;
+};
+
+// Take on the state _fbSave reconciled with another device's copy, so the
+// screen shows what the cloud actually holds rather than the version this
+// device tried to push.
+function adoptMergedState(bookId, res) {
+  const book = BOOKS[bookId];
+  // Backfill any key the merge dropped (deleted on both sides) the same way
+  // loadBook does, so a renderer can't trip over a missing array.
+  states[bookId] = book ? { ...defaultState(book), ...res.state } : res.state;
+  // Track the server's version, not the defaults-filled local one — if they
+  // differ, the next saveState writes the difference instead of skipping it.
+  lastSavedHashes[bookId] = JSON.stringify(res.state);
+  if (activeBook === bookId || activeBook === 'all') renderCurrent();
+  reportMergeOutcome(res.conflicts);
+}
+
+// A merge is normal and needs no alarm; a conflict means the same record was
+// edited in two places and one version was dropped, which the user should hear
+// about rather than discover in the ledger later.
+function reportMergeOutcome(conflicts) {
+  const n = Array.isArray(conflicts) ? conflicts.length : 0;
+  if (!n) {
+    showToast('↩ Merged in changes from another device', 'ok', 4000);
+    return;
+  }
+  console.warn('[sync] merge conflicts — this device\'s version was kept:', conflicts);
+  showToast(
+    `⚠ Merged with another device · ${n} record${n === 1 ? '' : 's'} changed in both places kept this device's version`,
+    'warn', 7000
+  );
 }
 
 async function loadBook(bookId) {
@@ -20176,7 +20300,7 @@ function calculateInventoryValuationData() {
   return { items, totals };
 }
 
-window.downloadInventoryValuationCSV = function() {
+function downloadInventoryValuationCSV() {
   const { items, totals } = calculateInventoryValuationData();
   const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
 
@@ -20201,9 +20325,9 @@ window.downloadInventoryValuationCSV = function() {
   a.click();
   document.body.removeChild(a);
   showToast('✓ Comprehensive Inventory Valuation CSV exported');
-};
+}
 
-window.openInventoryValuationModal = function() {
+function openInventoryValuationModal() {
   const data = calculateInventoryValuationData();
   const { items, totals } = data;
 
@@ -20267,9 +20391,9 @@ window.openInventoryValuationModal = function() {
   }
 
   openM('inventory-valuation-modal');
-};
+}
 
-window.printInventoryValuationReport = function() {
+function printInventoryValuationReport() {
   const { items, totals } = calculateInventoryValuationData();
   const printWin = window.open('', '_blank');
   if (!printWin) {
@@ -20354,7 +20478,7 @@ window.printInventoryValuationReport = function() {
   printWin.document.close();
   printWin.focus();
   setTimeout(() => printWin.print(), 300);
-};
+}
 
 // ── TAX SEASON EXPORT ──
 window.downloadFullTaxSeasonExport = function () {
@@ -24386,7 +24510,7 @@ function exportCustomersCSV() {
 }
 
 Object.assign(window, {
-  confirmDialog, notify,
+  confirmDialog, promptDialog, notify,
   renderCustomers, filterCustomers, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
   toggleCustomerSuppress, setCustomerBookFilter, customerPullDeeper,
   addManualSubscriber, addBuyerToMailingList, removeFromMailingList, addAllBuyersToMailingList,
@@ -28724,7 +28848,7 @@ function exposeLegacyInlineHandlers() {
     copyPaymentLink, downloadPaymentQR, renderAllQRCodes, renderAuthorQRPage,
     loadAuthorViewOverrides, saveAuthorViewOverrides, isPublisherSession, isAuthor,
     animateCountValue, triggerCardAnimations, queueSync, updatePendingIndicator, processSyncQueue,
-    defaultState, getState, getBook, showToast, confirmDialog, notify, setSyncState, saveState,
+    defaultState, getState, getBook, showToast, confirmDialog, promptDialog, notify, setSyncState, saveState,
     loadBook, toggleFirestoreMode, loadTaxCenter, saveTaxCenter, processRecurringExpenses,
     refreshDailyRates, loadAllBooks, forceSync, buildBookSwitcher, toggleBookDropdown,
     closeBookDropdown, toggleHeaderMenu, closeHeaderMenus, closeSideAccount, toggleSideAccount,
