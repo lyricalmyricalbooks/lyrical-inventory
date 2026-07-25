@@ -51,8 +51,25 @@ describe('Big Cartel Apps Script proxy requests', () => {
     expect(fetchSource).toMatch(/parsed\.errors/);
   });
 
-  it('includes items relationship when fetching Big Cartel orders', () => {
-    expect(source).toMatch(/orders\?include=items&page/);
+  it('includes items plus the contact relationships that carry the recipient phone', () => {
+    expect(source).toContain("const BIG_CARTEL_ORDER_INCLUDES = 'items,customer,shipping_address';");
+    expect(source).toMatch(/orders\?include=\$\{includes\}&page/);
+    expect(source).toMatch(/let includes = BIG_CARTEL_ORDER_INCLUDES;/);
+  });
+
+  it('falls back to an items-only include when the extended list is rejected', () => {
+    const fetchOrdersSource = functionSource('fetchAllBigCartelOrders');
+
+    expect(fetchOrdersSource).toMatch(/if \(includes !== 'items'\)/);
+    expect(fetchOrdersSource).toMatch(/includes = 'items';/);
+    expect(fetchOrdersSource).toMatch(/throw e;/);
+  });
+
+  it('can pull a single order with its contact resources to recover a phone', () => {
+    const contactSource = functionSource('fetchBigCartelOrderContact');
+
+    expect(contactSource).toMatch(/orders\/\$\{encodeURIComponent\(rawId\)\}\?include=customer,shipping_address/);
+    expect(contactSource).toMatch(/replace\(\/\^#\/, ''\)/);
   });
 
   it('declares extractBigCartelCustomerName and extractBigCartelOrderItems helpers', () => {

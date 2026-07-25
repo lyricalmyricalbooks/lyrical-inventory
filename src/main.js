@@ -24379,6 +24379,21 @@ function extractBigCartelAddress(orderOrAttr = {}, orderId = '', included = []) 
   const attr = orderOrAttr.attributes || orderOrAttr;
   const relationships = orderOrAttr.relationships || {};
 
+  // Big Cartel exposes the recipient phone under a dozen different keys depending on
+  // whether we are reading a flat order, a nested address object, or an included resource.
+  const pickPhone = (source) => {
+    if (!source || typeof source !== 'object') return '';
+    const candidates = [
+      source.shipping_phone, source.shipping_phone_number, source.shipping_telephone,
+      source.phone, source.phone_number, source.telephone, source.mobile,
+      source.customer_phone, source.customer_phone_number,
+      source.buyer_phone, source.buyer_phone_number,
+      source.billing_phone, source.contact_phone
+    ];
+    const hit = candidates.find(v => v !== null && v !== undefined && String(v).trim() !== '');
+    return hit ? String(hit).trim() : '';
+  };
+
   // Check JSON:API included lookup
   let incName = '';
   let incPhone = '';
@@ -24394,23 +24409,44 @@ function extractBigCartelAddress(orderOrAttr = {}, orderId = '', included = []) 
     ? included
     : ((typeof bigCartelData !== 'undefined' && bigCartelData && bigCartelData.included) || (typeof loadCachedBigCartelOrders === 'function' ? loadCachedBigCartelOrders()?.included || [] : []));
 
-  if (incList.length > 0) {
-    const custRef = relationships.customer?.data || relationships.shipping_address?.data || relationships.buyer?.data;
-    if (custRef && custRef.id) {
-      const matchInc = incList.find(i => String(i.id) === String(custRef.id));
-      if (matchInc && matchInc.attributes) {
-        const iA = matchInc.attributes;
-        incName = iA.name || iA.recipient_name || `${iA.first_name || ''} ${iA.last_name || ''}`.trim();
-        incPhone = iA.phone || iA.shipping_phone || iA.telephone || '';
-        incCompany = iA.company || iA.company_name || '';
-        incStreet1 = iA.address_1 || iA.street1 || iA.address1 || '';
-        incStreet2 = iA.address_2 || iA.street2 || iA.address2 || '';
-        incCity = iA.city || '';
-        incState = iA.state || iA.province || '';
-        incZip = iA.zip || iA.postal_code || '';
-        incCountry = iA.country_code || iA.country || '';
-      }
-    }
+  // Collect every relationship that can carry contact details, not just the first one:
+  // the phone usually lives on shipping_address while the name lives on customer.
+  const contactRefs = [];
+  ['shipping_address', 'customer', 'buyer', 'billing_address', 'contact'].forEach(key => {
+    const ref = relationships[key] && relationships[key].data;
+    if (Array.isArray(ref)) ref.forEach(r => { if (r && r.id) contactRefs.push(r); });
+    else if (ref && ref.id) contactRefs.push(ref);
+  });
+
+  if (incList.length > 0 && contactRefs.length > 0) {
+    contactRefs.forEach(ref => {
+      // JSON:API ids are only unique per type, so match on type as well when both sides declare it.
+      const matchInc = incList.find(i => i && String(i.id) === String(ref.id)
+        && (!ref.type || !i.type || String(i.type) === String(ref.type)));
+      if (!matchInc || !matchInc.attributes) return;
+      const iA = matchInc.attributes;
+      incName = incName || iA.name || iA.recipient_name || `${iA.first_name || ''} ${iA.last_name || ''}`.trim();
+      incPhone = incPhone || pickPhone(iA);
+      incCompany = incCompany || iA.company || iA.company_name || '';
+      incStreet1 = incStreet1 || iA.address_1 || iA.street1 || iA.address1 || '';
+      incStreet2 = incStreet2 || iA.address_2 || iA.street2 || iA.address2 || '';
+      incCity = incCity || iA.city || '';
+      incState = incState || iA.state || iA.province || '';
+      incZip = incZip || iA.zip || iA.postal_code || '';
+      incCountry = incCountry || iA.country_code || iA.country || '';
+    });
+  }
+
+  // Last resort: an included customer/address resource that points back at this order.
+  if (!incPhone && incList.length > 0) {
+    const orderKey = String(orderId || orderOrAttr.id || '');
+    const related = incList.find(i => {
+      if (!i || !i.attributes || !pickPhone(i.attributes)) return false;
+      if (!/customer|address|buyer|contact/i.test(String(i.type || ''))) return false;
+      const orderRef = i.relationships && i.relationships.order && i.relationships.order.data;
+      return !orderRef || !orderKey || String(orderRef.id) === orderKey;
+    });
+    if (related) incPhone = pickPhone(related.attributes);
   }
 
   const shippingAddrObj = attr.shipping_address || {};
@@ -24443,16 +24479,11 @@ function extractBigCartelAddress(orderOrAttr = {}, orderId = '', included = []) 
   const recipientName = (nameParts[0] || attr.buyer_email || attr.customer_email || attr.email || 'Customer').trim();
 
   const phoneParts = [
-    attr.shipping_phone,
-    shippingAddrObj.phone,
-    shippingAddrObj.telephone,
-    attr.buyer_phone,
-    attr.customer_phone,
-    attr.phone,
-    attr.billing_phone,
-    buyerObj.phone,
-    customerObj.phone,
-    billingAddrObj.phone,
+    pickPhone(attr),
+    pickPhone(shippingAddrObj),
+    pickPhone(buyerObj),
+    pickPhone(customerObj),
+    pickPhone(billingAddrObj),
     incPhone
   ].filter(Boolean);
 
@@ -24599,7 +24630,9 @@ function initShippingTab() {
       bcGroup.appendChild(opt);
     } else {
       bcOrders.forEach(o => {
-        const addrObj = extractBigCartelAddress(o.attributes || {}, o.id);
+        // Pass the whole order: dropping `relationships` hides the included
+        // customer/shipping_address resources that carry the phone number.
+        const addrObj = extractBigCartelAddress(o, o.id, getBigCartelIncluded());
         const opt = document.createElement('option');
         opt.value = JSON.stringify(addrObj);
         opt.textContent = `Order #${o.id} - ${addrObj.name} (${addrObj.city || 'Local'}, ${addrObj.country})`;
@@ -24714,8 +24747,10 @@ function renderCustomShippoDestPicker() {
     ? bigCartelData.orders
     : (typeof loadCachedBigCartelOrders === 'function' ? loadCachedBigCartelOrders()?.orders || [] : []);
 
+  const bcIncluded = getBigCartelIncluded();
+
   bcOrders.forEach(o => {
-    const addrObj = extractBigCartelAddress(o.attributes || {}, o.id);
+    const addrObj = extractBigCartelAddress(o, o.id, bcIncluded);
 
     items.push({
       category: 'bc',
@@ -24725,6 +24760,7 @@ function renderCustomShippoDestPicker() {
       sub: `${addrObj.street1 ? addrObj.street1 + ', ' : ''}${addrObj.city || 'Local'}${addrObj.state ? ', ' + addrObj.state : ''} ${addrObj.country}`,
       value: JSON.stringify(addrObj),
       orderNumber: o.id,
+      missingPhone: !getFallbackShippingPhone(addrObj.phone),
       searchText: `order #${o.id} ${addrObj.name} ${addrObj.city} ${addrObj.state} ${addrObj.country} ${addrObj.street1}`.toLowerCase()
     });
   });
@@ -24753,6 +24789,7 @@ function renderCustomShippoDestPicker() {
       sub: `${st.address ? st.address + ', ' : ''}${st.city || ''} ${st.country || ''}`,
       value: JSON.stringify(addrObj),
       orderNumber: '',
+      missingPhone: !getFallbackShippingPhone(addrObj.phone),
       searchText: `${st.name} ${st.contact || ''} ${st.city || ''} ${st.region || ''} ${st.country || ''}`.toLowerCase()
     });
   });
@@ -24782,6 +24819,7 @@ function renderCustomShippoDestPicker() {
       sub: `${h.shipAddr1 ? h.shipAddr1 + ', ' : ''}${h.shipCity || ''} ${h.shipCountry || ''}`,
       value: JSON.stringify(addrObj),
       orderNumber: h.num,
+      missingPhone: !getFallbackShippingPhone(addrObj.phone),
       searchText: `${h.num || ''} ${h.shipName} ${h.shipCity || ''} ${h.shipCountry || ''}`.toLowerCase()
     });
   });
@@ -24861,17 +24899,24 @@ function filterShippoDestMenu() {
   }
 
   const selectedVal = $('ship-prefill-dest')?.value || '';
+  const originCountry = normalizeCountryCode(localStorage.getItem('lm-shippo-origin-country') || 'CA');
 
   listContainer.innerHTML = filtered.map(item => {
     const isSelected = selectedVal === item.value;
     const masterIdx = _shippoDestMasterList.indexOf(item);
+    // Carriers reject international labels without a recipient phone, so flag those rows up front.
+    let destCountry = '';
+    try { destCountry = JSON.parse(item.value).country || ''; } catch (_) { destCountry = ''; }
+    const phoneWarning = (item.missingPhone && destCountry && destCountry !== originCountry)
+      ? '<span class="custom-dest-item-warn" title="No recipient phone on file — required for international labels">⚠ no phone</span>'
+      : '';
     return `
       <div class="custom-dest-item ${isSelected ? 'selected' : ''}" onclick="selectShippoDestCustomItem(${masterIdx}, event)">
         <div class="custom-dest-item-header">
           <span class="custom-dest-item-title">${item.icon} ${escapeHtml(item.title)}</span>
           <span class="custom-dest-item-badge ${item.category}">${escapeHtml(item.catLabel)}</span>
         </div>
-        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}</div>
+        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${phoneWarning}</div>
       </div>`;
   }).join('');
 }
@@ -25033,6 +25078,12 @@ function onShippoPreFillDestChange() {
     $('st-zip').value = addr.zip || '';
     $('st-country').value = addr.country || 'US';
     showToast('✓ Destination populated');
+
+    // Older cached orders were fetched without the contact resources, so the phone
+    // can still be missing here — ask Big Cartel for it directly.
+    if (!$('st-phone').value && select.dataset.orderNumber) {
+      hydrateShippingDestinationPhone(select.dataset.orderNumber);
+    }
   } catch (e) {
     console.error('Failed to parse pre-fill address', e);
   }
@@ -28805,6 +28856,25 @@ function loadCachedBigCartelOrders() {
   }
 }
 
+// Single source of truth for the JSON:API sidecar resources (customers, shipping
+// addresses, items) so every consumer resolves relationships against the same list.
+function getBigCartelIncluded() {
+  if (typeof bigCartelData !== 'undefined' && bigCartelData && Array.isArray(bigCartelData.included) && bigCartelData.included.length > 0) {
+    return bigCartelData.included;
+  }
+  const cached = typeof loadCachedBigCartelOrders === 'function' ? loadCachedBigCartelOrders() : null;
+  return (cached && cached.included) || [];
+}
+
+function getCachedBigCartelOrder(orderId) {
+  const key = normalizeShippingOrderNumber(orderId) || String(orderId || '');
+  const orders = (typeof bigCartelData !== 'undefined' && bigCartelData && bigCartelData.orders && bigCartelData.orders.length > 0)
+    ? bigCartelData.orders
+    : (loadCachedBigCartelOrders()?.orders || []);
+  return orders.find(o => String(o.id) === String(orderId)
+    || normalizeShippingOrderNumber(o.id) === key) || null;
+}
+
 function renderBigCartelOrders(orders, included = []) {
   const list = $('bc-orders-list');
   list.innerHTML = '';
@@ -28872,12 +28942,12 @@ function prefillShippingFromBigCartelOrder(orderId) {
     return;
   }
 
-  const addr = extractBigCartelAddress(order.attributes || {}, orderId);
+  const addr = extractBigCartelAddress(order, orderId, getBigCartelIncluded());
 
   // Populate the fields on the Shipping Tab
   $('st-name').value = addr.name;
   $('st-company').value = addr.company;
-  $('st-phone').value = addr.phone;
+  $('st-phone').value = getFallbackShippingPhone(addr.phone);
   $('st-street1').value = addr.street1;
   $('st-street2').value = addr.street2;
   $('st-city').value = addr.city;
@@ -28901,6 +28971,10 @@ function prefillShippingFromBigCartelOrder(orderId) {
 
   // Switch to the Shipping tab
   switchTab('shipping');
+
+  if (!$('st-phone').value) {
+    hydrateShippingDestinationPhone(orderId);
+  }
 
   showToast(`✓ Populated shipping details for Order #${orderId}`);
 }
@@ -28992,22 +29066,49 @@ window.setShipRecoPercentile = setShipRecoPercentile;
 window.onShipRecoPercentileChange = onShipRecoPercentileChange;
 window.updateShippingSimulation = updateShippingSimulation;
 
+// `items` alone never returns the recipient phone — it lives on the customer /
+// shipping_address resources, which only arrive when they are explicitly included.
+const BIG_CARTEL_ORDER_INCLUDES = 'items,customer,shipping_address';
+
+function mergeBigCartelIncluded(target, incoming) {
+  if (!Array.isArray(incoming) || incoming.length === 0) return target;
+  const seen = new Set(target.map(i => `${i?.type || ''}:${i?.id || ''}`));
+  incoming.forEach(item => {
+    if (!item) return;
+    const key = `${item.type || ''}:${item.id || ''}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    target.push(item);
+  });
+  return target;
+}
+
 async function fetchAllBigCartelOrders(storeId) {
   let allOrders = [];
-  let allIncluded = [];
+  const allIncluded = [];
   let limit = 100;
   let offset = 0;
   let hasMore = true;
   let page = 1;
   let maxPages = 5;
+  let includes = BIG_CARTEL_ORDER_INCLUDES;
 
   while (hasMore && page <= maxPages) {
-    const res = await fetchBigCartel(`orders?include=items&page[limit]=${limit}&page[offset]=${offset}`, storeId);
+    let res;
+    try {
+      res = await fetchBigCartel(`orders?include=${includes}&page[limit]=${limit}&page[offset]=${offset}`, storeId);
+    } catch (e) {
+      // Stores that reject the richer include list still need to load: retry with items only.
+      if (includes !== 'items') {
+        console.warn('Big Cartel rejected the extended include list, retrying with items only', e);
+        includes = 'items';
+        continue;
+      }
+      throw e;
+    }
     if (res && res.data && res.data.length > 0) {
       allOrders = allOrders.concat(res.data);
-      if (res.included) {
-        allIncluded = allIncluded.concat(res.included);
-      }
+      mergeBigCartelIncluded(allIncluded, res.included);
       if (res.data.length < limit) {
         hasMore = false;
       } else {
@@ -29019,6 +29120,96 @@ async function fetchAllBigCartelOrders(storeId) {
     }
   }
   return { data: allOrders, included: allIncluded };
+}
+
+// Pulls one order straight from Big Cartel with its contact resources attached.
+// Used to recover a recipient phone the cached list payload never carried.
+async function fetchBigCartelOrderContact(orderId) {
+  const rawId = String(orderId || '').trim().replace(/^#/, '');
+  if (!rawId) return null;
+
+  let accountId = bigCartelData?.store?.id || '';
+  if (!accountId) {
+    const accountsRes = await fetchBigCartel('');
+    if (accountsRes?.data?.length) {
+      const subdomain = (await loadBigCartelConfig()).subdomain;
+      bigCartelData.store = accountsRes.data.find(acc => acc.attributes?.subdomain === subdomain) || accountsRes.data[0];
+      accountId = bigCartelData.store?.id || '';
+    }
+  }
+  if (!accountId) return null;
+
+  return fetchBigCartel(`orders/${encodeURIComponent(rawId)}?include=customer,shipping_address`, accountId);
+}
+
+// Write a recovered phone back into memory, the destination picker, and the
+// localStorage cache so the next prefill of this order is instant and offline-safe.
+function rememberBigCartelDestinationPhone(orderId, phone) {
+  const cleanPhone = getFallbackShippingPhone(phone);
+  if (!cleanPhone) return;
+  const key = normalizeShippingOrderNumber(orderId) || String(orderId || '');
+
+  const stampOrder = (order) => {
+    if (!order) return false;
+    if (String(order.id) !== String(orderId) && normalizeShippingOrderNumber(order.id) !== key) return false;
+    order.attributes = order.attributes || {};
+    order.attributes.shipping_phone = order.attributes.shipping_phone || cleanPhone;
+    return true;
+  };
+
+  if (typeof bigCartelData !== 'undefined' && Array.isArray(bigCartelData?.orders)) {
+    bigCartelData.orders.forEach(stampOrder);
+  }
+
+  const cached = loadCachedBigCartelOrders();
+  if (cached && Array.isArray(cached.orders)) {
+    let touched = false;
+    cached.orders.forEach(o => { if (stampOrder(o)) touched = true; });
+    if (touched) cacheBigCartelOrders(cached.orders, cached.included || []);
+  }
+
+  // Keep the already-rendered picker entries in sync so re-selecting fills the phone.
+  _shippoDestMasterList.forEach(item => {
+    if (normalizeShippingOrderNumber(item.orderNumber) !== key) return;
+    try {
+      const addr = JSON.parse(item.value);
+      if (getFallbackShippingPhone(addr.phone)) return;
+      addr.phone = cleanPhone;
+      item.value = JSON.stringify(addr);
+    } catch (_) {
+      // A malformed entry just misses the cache refresh; the live field is already filled.
+    }
+  });
+}
+
+// Fills a blank recipient phone from Big Cartel after the form has been prefilled.
+async function hydrateShippingDestinationPhone(orderId) {
+  const phoneEl = $('st-phone');
+  if (!phoneEl || phoneEl.value.trim() || !orderId) return;
+  const key = normalizeShippingOrderNumber(orderId);
+  if (!key) return;
+
+  try {
+    const res = await fetchBigCartelOrderContact(orderId);
+    const order = res?.data || getCachedBigCartelOrder(orderId);
+    if (!order) return;
+
+    const addr = extractBigCartelAddress(order, orderId, res?.included || getBigCartelIncluded());
+    const phone = getFallbackShippingPhone(addr.phone);
+    if (!phone) return;
+
+    rememberBigCartelDestinationPhone(orderId, phone);
+
+    // The user may have switched destination or typed a number while we were waiting.
+    const select = $('ship-prefill-dest');
+    if (select && normalizeShippingOrderNumber(select.dataset.orderNumber) !== key) return;
+    if (phoneEl.value.trim()) return;
+
+    phoneEl.value = phone;
+    showToast('✓ Recipient phone pulled from Big Cartel');
+  } catch (e) {
+    console.warn('Big Cartel phone lookup failed', e);
+  }
 }
 
 async function syncBigCartelShippingPaid(bcOrders) {

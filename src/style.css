@@ -7258,5 +7258,19 @@ tr.hist-row:hover {
   text-overflow: ellipsis;
 }
 
+.custom-dest-item-warn {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(180, 83, 9, 0.12);
+  color: #b45309;
+  border: 1px solid rgba(180, 83, 9, 0.28);
+}
+
 
 
