@@ -1,0 +1,63 @@
+# .github/workflows/ci.yml
+name: CI
+
+# Until this existed, nothing ran the checks automatically. deploy.yml only
+# triggers on push to main and only runs a build, so a failing test, a lint
+# error or a dead inline handler could be merged and shipped without anything
+# objecting — the guardrails in the suite were only ever as good as somebody
+# remembering to run them locally. Note this also means a change to deploy.yml
+# itself was previously unverifiable until after it merged.
+on:
+  pull_request:
+  # Also on main, so the default branch has its own signal: a red main tells
+  # you the problem is already merged, which is a different and more urgent
+  # thing than a red PR.
+  push:
+    branches: [main]
+
+# Superseded runs on the same PR are pointless — cancel them. (deploy.yml
+# deliberately does the opposite, because cancelling a half-finished Pages
+# deployment is not safe.)
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          # Same source of truth as deploy.yml and package.json "engines", so
+          # CI cannot pass on a runtime the deploy does not use.
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Ordered cheapest-first so an obvious mistake fails in seconds rather
+      # than after the whole suite. Each step is named so the failing one is
+      # identifiable from the checks list without opening the log.
+      - name: Lint
+        run: npm run lint
+
+      - name: Contrast check
+        run: npm run lint:contrast
+
+      - name: Tests
+        run: npm test
+
+      # The build is part of CI and not just deploy: a broken build merged to
+      # main takes the deployed site down, and finding that out on the PR is
+      # considerably cheaper.
+      - name: Build
+        run: npm run build
