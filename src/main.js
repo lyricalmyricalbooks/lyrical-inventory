@@ -6722,9 +6722,11 @@ function renderArtistReimburseBanner() {
 function updateExpenseForm() {
   const book = getBook();
   $('exp-date').value = today();
+  populateExpenseCategoryDropdown();
 
   const native = getBookCurrencyCode(book);
-  if ($('exp-cur')) $('exp-cur').value = native;
+  const curField = $('exp-cur');
+  if (curField) curField.value = localStorage.getItem('lastExpenseCurrency') || native;
   if ($('exp-fx-inline-result')) $('exp-fx-inline-result').style.display = 'none';
   _expenseFxRate = null;
 
@@ -6733,6 +6735,18 @@ function updateExpenseForm() {
   } else {
     if ($('exp-ai-btn')) $('exp-ai-btn').style.display = 'none';
   }
+}
+
+// Fills #exp-cat from the canonical EXPENSE_CATEGORIES list (shared with
+// email-receipt import & tax center) instead of the old hardcoded 8-option
+// list, so manually-logged and AI-imported expenses land in the same
+// categories. Defaults to whichever category was last used.
+function populateExpenseCategoryDropdown() {
+  const sel = $('exp-cat');
+  if (!sel || sel.options.length) return;
+  sel.innerHTML = EXPENSE_CATEGORIES.map(c => `<option>${escapeHtml(c)}</option>`).join('');
+  const last = localStorage.getItem('lastExpenseCategory');
+  if (last && EXPENSE_CATEGORIES.includes(last)) sel.value = last;
 }
 
 async function submitExpense() {
@@ -6764,6 +6778,20 @@ async function submitExpense() {
 
   if (!desc) { showToast('⚠ Please enter a description', 'warn'); $('exp-desc').focus(); return; }
   if (!rawAmount) { showToast('⚠ Please enter an amount', 'warn'); $('exp-amount').focus(); return; }
+
+  const existingExpenses = (getState().expenses || []);
+  const isDuplicate = existingExpenses.some(e =>
+    e.date === date &&
+    e.desc.trim().toLowerCase() === desc.toLowerCase() &&
+    Math.abs((e.origAmount ?? e.amount) - rawAmount) < 0.005
+  );
+  if (isDuplicate) {
+    const proceed = await confirmDialog(
+      `An expense dated ${fmtD(date)} for "${desc}" (${fmt(rawAmount, cur)}) already exists. Log it again anyway?`,
+      { title: 'Possible duplicate expense' }
+    );
+    if (!proceed) return;
+  }
 
   const fileInput = $('exp-file');
   let receiptUrl = '';
@@ -6836,11 +6864,15 @@ async function submitExpense() {
     showToast('✓ Expense logged');
   }
 
+  localStorage.setItem('lastExpenseCategory', cat);
+  localStorage.setItem('lastExpenseCurrency', cur);
+
   renderExpenses();
   updateDash();
   $('exp-desc').value = ''; $('exp-amount').value = ''; $('exp-ref').value = ''; $('exp-date').value = today();
   if (fileInput) fileInput.value = '';
   if (typeof window.expFileChosen === 'function') window.expFileChosen();
+  $('exp-desc').focus();
 }
 
 function voidExpense(id) {
@@ -8589,6 +8621,10 @@ async function importEmailReceiptDrafts() {
   else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
 }
 
+// Rows the author can select for a bulk reimbursement request (unreceived,
+// approved, non-gratuity expenses). Persists selection across re-renders.
+window._expReimburseSelection = window._expReimburseSelection || new Set();
+
 function renderExpenses() {
   const s = getState(), book = getBook(), cur = book.currency;
   const expenses = s.expenses || [];
@@ -8600,9 +8636,16 @@ function renderExpenses() {
     return { ...raw, _subKey: k, pendingAuth: true };
   });
   const combined = [...pendingAuthExpenses, ...expenses];
+  const showSelectCol = isAuthor() && !window.IS_PUBLISHER;
+
+  // Selection can only ever contain currently-eligible ids; drop anything
+  // that got received/voided elsewhere since the last render.
+  const eligibleIds = new Set(combined.filter(e => !e.received && !e.pendingAuth && !isGratuityExpense(e)).map(e => e.id));
+  for (const id of window._expReimburseSelection) if (!eligibleIds.has(id)) window._expReimburseSelection.delete(id);
 
   if (!combined.length) {
-    body.innerHTML = `<tr><td colspan="${window.IS_PUBLISHER ? 9 : 8}"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>`;
+    body.innerHTML = `<tr><td colspan="${window.IS_PUBLISHER ? 9 : (showSelectCol ? 9 : 8)}"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>`;
+    updateBulkReimburseButton();
     return;
   }
 
@@ -8617,7 +8660,7 @@ function renderExpenses() {
     }
   }
 
-  $('exp-head-row').innerHTML = `<tr><th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
+  $('exp-head-row').innerHTML = `<tr>${showSelectCol ? '<th></th>' : ''}<th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
 
   body.innerHTML = combined.map(e => {
     if (e.pendingAuth) {
@@ -8625,6 +8668,7 @@ function renderExpenses() {
         ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', '${e._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', '${e._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
         : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
       return `<tr style="opacity:0.8;background:#fffcede3;">
+        ${showSelectCol ? '<td></td>' : ''}
         <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
         <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
         <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
@@ -8677,7 +8721,14 @@ function renderExpenses() {
       }
     }
 
+    const selectCell = showSelectCol
+      ? (eligibleIds.has(e.id)
+        ? `<td><input type="checkbox" onchange="toggleExpenseReimburseSelect(${e.id}, this.checked)" ${window._expReimburseSelection.has(e.id) ? 'checked' : ''}></td>`
+        : '<td></td>')
+      : '';
+
     return `<tr style="${e.received ? 'opacity:.5;' : ''}">
+      ${selectCell}
       <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
       <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
       <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
@@ -8690,10 +8741,56 @@ function renderExpenses() {
     </tr>`;
   }).join('')
     + `<tr style="background:var(--cream2);">
-      <td colspan="5" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding</td>
+      <td colspan="${showSelectCol ? 6 : 5}" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding</td>
       <td class="r" style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${fmt(total, cur)}</td>
       <td colspan="${window.IS_PUBLISHER ? 3 : 2}"></td>
     </tr>`;
+
+  updateBulkReimburseButton();
+}
+
+function toggleExpenseReimburseSelect(id, checked) {
+  if (checked) window._expReimburseSelection.add(id);
+  else window._expReimburseSelection.delete(id);
+  updateBulkReimburseButton();
+}
+
+function updateBulkReimburseButton() {
+  const btn = $('exp-bulk-reimburse-btn');
+  const countEl = $('exp-bulk-reimburse-count');
+  if (!btn) return;
+  const n = window._expReimburseSelection.size;
+  if (countEl) countEl.textContent = n;
+  btn.style.display = n > 0 ? '' : 'none';
+}
+
+// Sends one consolidated "please reimburse these" notification to the
+// publisher for every expense the author checked, instead of chasing each
+// one down individually.
+async function requestBulkReimbursement() {
+  const ids = Array.from(window._expReimburseSelection);
+  if (!ids.length) return;
+  const s = getState(), book = getBook(), cur = book.currency;
+  const idSet = new Set(ids);
+  const items = (s.expenses || []).filter(e => idSet.has(e.id));
+  if (!items.length) { window._expReimburseSelection.clear(); updateBulkReimburseButton(); return; }
+
+  const total = items.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const summary = `Reimbursement requested for ${items.length} expense${items.length !== 1 ? 's' : ''} — ${fmt(total, cur)}`;
+  const btn = $('exp-bulk-reimburse-btn');
+  const oldText = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    await notifyPublisherSubmission('Reimbursement request', items, summary);
+    showToast(`✓ Requested reimbursement for ${items.length} expense${items.length !== 1 ? 's' : ''}`);
+    window._expReimburseSelection.clear();
+    renderExpenses();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Could not send reimbursement request', 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = oldText; }
+  }
 }
 
 // ── SPREADSHEET IMPORT
@@ -24216,7 +24313,7 @@ Object.assign(window, {
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
   handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
-  submitExpense, voidExpense, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier,
+  submitExpense, voidExpense, toggleExpenseReimburseSelect, requestBulkReimbursement, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier,
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
