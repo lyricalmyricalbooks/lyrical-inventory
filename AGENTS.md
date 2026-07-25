@@ -9,11 +9,11 @@
 - **Build:** `npm run build` (Vite build production bundle)
 
 ## Core Entry Points
-- **Frontend UI:** [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html)
-- **Frontend Logic:** [src/main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js)
-- **Styles:** [src/style.css](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/style.css)
-- **Local Backend:** [backend/server.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/backend/server.js)
-- **Apps Script:** [apps-script/Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs)
+- **Frontend UI:** [index.html](index.html)
+- **Frontend Logic:** [src/main.js](src/main.js)
+- **Styles:** [src/style.css](src/style.css)
+- **Local Backend:** [backend/server.js](backend/server.js)
+- **Apps Script:** [apps-script/Code.gs](apps-script/Code.gs)
 
 ## Your job after every change
 After completing any code enhancement, end your turn with a short "Next moves" list: 7 genuinely high-value suggestions for improving the app, ranked best-first.
@@ -34,7 +34,7 @@ Then offer to do the top one right away.
 
 ### Constraints every suggestion must respect
 > [!IMPORTANT]
-> - **Vanilla JS:** No framework, no build step, no bundler.
+> - **Vanilla JS:** No framework (no React/Vue/Svelte) and no runtime dependencies. Vite is the bundler and must stay a thin build step — don't add framework runtimes or a heavier toolchain on top of it.
 > - **Serverless Backend:** Firebase Firestore database and static hosting on GitHub Pages. No server or secret keys in client code.
 > - **Offline Resilience:** Must work fully offline (PWA) and synchronize local queue states later.
 
@@ -54,10 +54,17 @@ Bug / edge case the change introduced · the next logical feature · offline & s
 - Only ask clarifying questions if the request is genuinely ambiguous.
 
 ## Customizations & Style Guidelines
-- **Strict Guidelines:** Always adhere to the premium UX/UI, offline-first sync, financial ledger precision, role-based security, and spreadsheet integration rules defined in [.agents/AGENTS.md](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/.agents/AGENTS.md).
+- **Strict Guidelines:** Always adhere to the premium UX/UI, offline-first sync, financial ledger precision, role-based security, and spreadsheet integration rules defined in [.agents/AGENTS.md](.agents/AGENTS.md).
 
 > [!WARNING]
-> **Always update the externalized Apps Script copy** whenever [Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs) is modified: copy it **verbatim** (no HTML-escaping) to [gas-code.txt](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/public/gas-code.txt). The "Connect your Google Sheet" tab in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html) lazy-fetches this file via `loadGasCode()` in [main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js) the first time the tab opens. Do **not** re-embed the source inline in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html).
+> **Always update the externalized Apps Script copy** whenever [Code.gs](apps-script/Code.gs) is modified: copy it **verbatim** (no HTML-escaping) to [gas-code.txt](public/gas-code.txt). The "Connect your Google Sheet" tab in [index.html](index.html) lazy-fetches this file via `loadGasCode()` in [main.js](src/main.js) the first time the tab opens. Do **not** re-embed the source inline in [index.html](index.html).
+
+> [!WARNING]
+> **Always bump the script version** whenever [Code.gs](apps-script/Code.gs)'s behavior changes (new action, changed response shape, changed email/side-effect logic — not comment-only or pure-refactor edits). Three places move together, in the same commit:
+> 1. `scriptVersion: 'vNN'` and the matching `service: 'lyrical-sheets-webhook-vNN'` string in the `doGet` capabilities response in [Code.gs](apps-script/Code.gs).
+> 2. `EXPECTED_SCRIPT_VERSION` in [main.js](src/main.js) — this is what the client compares against to flag an out-of-date deployment on the connection card.
+> 3. A new numbered entry in the version-history comment block at the top of [Code.gs](apps-script/Code.gs) describing what changed and, if relevant, which older deployments it flags as outdated.
+> Skipping this means the publisher's already-deployed script silently diverges from what the client expects, with no warning surfaced anywhere.
 
 ### Visual Refactoring & UI Enhancement Guardrails
 > [!IMPORTANT]
@@ -105,6 +112,6 @@ graph TD
 | **Tax & Expenses** | Cash flow & operations | Tracks operating costs, business trips, subscription schedules, and receipt OCR scans via Gemini API |
 
 ### Technical Stack
-- **Frontend:** Vanilla HTML5 ([index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html)), CSS3 ([style.css](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/style.css)), and Vanilla JS ES Modules ([main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js)).
+- **Frontend:** Vanilla HTML5 ([index.html](index.html)), CSS3 ([style.css](src/style.css)), and Vanilla JS ES Modules ([main.js](src/main.js)).
 - **Backend:** Google Firebase (Firestore and Auth).
 - **Integrations:** Google Sheets Webhook via Apps Script, Shippo API, and Stripe API.
