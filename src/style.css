@@ -531,7 +531,18 @@ tr.hist-row:hover {
   color: #fff;
 }
 
-/* Pill Select Input styles */
+/* ── DROPDOWN DESIGN SYSTEM ──────────────────────────────────────────
+   One chevron, one set of states, two shapes: a rounded field for forms
+   (`.form-group select` below) and a full pill for filters/toolbars
+   (`.pill-select-input`, used in Book Filter and similar). Both share the
+   same SVG chevron (--text3, #8a8078) so every dropdown in the app reads
+   as one component instead of a mix of native and custom styles. */
+:root {
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8078' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c8913a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Pill Select Input styles — compact rounded-full variant for filter bars */
 .pill-select-wrapper {
   position: relative;
   display: inline-flex;
@@ -541,41 +552,44 @@ tr.hist-row:hover {
 .pill-select-input {
   appearance: none;
   -webkit-appearance: none;
-  background: var(--cream2);
+  background-color: var(--cream2);
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px;
   border: 1px solid var(--border);
   border-radius: 99px;
-  padding: 6px 32px 6px 16px;
+  padding: 7px 36px 7px 16px;
   font-family: 'Syne', sans-serif;
   font-size: 12px;
   font-weight: 700;
   color: var(--text);
   cursor: pointer;
   outline: none;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .pill-select-input:hover {
-  background: var(--cream3);
+  background-color: var(--cream3);
   border-color: var(--gold3);
 }
 
 .pill-select-input:focus {
   border-color: var(--gold);
+  background-image: var(--select-arrow-gold);
   box-shadow: 0 0 0 3px var(--gold-bg);
 }
 
-.pill-select-arrow {
-  position: absolute;
-  right: 12px;
-  font-size: 8px;
-  color: var(--text3);
-  pointer-events: none;
-  transition: transform 0.25s ease;
+.pill-select-input:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 
-.pill-select-input:focus + .pill-select-arrow {
-  transform: rotate(180deg);
-  color: var(--gold);
+/* Legacy sibling arrow markup some call sites still render — the select's
+   own SVG chevron now handles this, so hide the old text glyph instead of
+   showing both. */
+.pill-select-arrow {
+  display: none;
 }
 
 /* Search Input Pill styles */
@@ -1575,8 +1589,12 @@ tr.hist-row:hover {
 /* CARDS */
 .card{background:white;border-radius:var(--r3);border:1px solid var(--border);padding:1.4rem;margin-bottom:1.1rem;box-shadow:var(--shadow);}
 .form-group label{display:block;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;}
-.form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 13px;font-size:13px;font-family:'Syne',sans-serif;border:1px solid var(--border);border-radius:var(--r2);background:var(--cream);color:var(--text);transition:border-color .15s,box-shadow .15s;outline:none;touch-action:manipulation;}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 13px;font-size:13px;font-family:'Syne',sans-serif;border:1px solid var(--border);border-radius:var(--r2);background:var(--cream);color:var(--text);transition:border-color .15s,box-shadow .15s,background-color .15s;outline:none;touch-action:manipulation;}
+.form-group select{appearance:none;-webkit-appearance:none;background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 12px center;background-size:14px;padding-right:36px;cursor:pointer;}
+.form-group select:hover{border-color:var(--gold3);background-color:var(--cream2);}
+.form-group select:disabled{opacity:.55;cursor:not-allowed;background-color:var(--cream2);}
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(200,145,58,.12);}
+.form-group select:focus{background-image:var(--select-arrow-gold);}
 .form-group textarea{resize:vertical;min-height:60px;}
 .price-wrap{position:relative;}
 .price-wrap .sym{
@@ -1603,7 +1621,7 @@ tr.hist-row:hover {
 .req-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--red);background:var(--red-bg);padding:2px 7px;border-radius:99px;margin-left:6px;vertical-align:middle;}
 .field-note{font-size:11px;color:var(--text3);margin-top:6px;line-height:1.55;}
 /* Subtle red ring on a required control until it's filled (clears once a valid option is chosen) */
-.form-group.needs-attention select:invalid{border-color:rgba(149,32,32,.35);box-shadow:0 0 0 3px rgba(149,32,32,.07);background:#fff;}
+.form-group.needs-attention select:invalid{border-color:rgba(149,32,32,.35);box-shadow:0 0 0 3px rgba(149,32,32,.07);background-color:#fff;}
 /* Footer action bar — keeps the primary button below every field */
 .card-actions{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-top:1.3rem;padding-top:1.1rem;border-top:1px solid var(--border);}
 .card-actions .field-note{margin-top:0;max-width:62%;}
@@ -2446,8 +2464,8 @@ tr.hist-row:hover {
 .cf-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:1rem;}
 .cf-head-left{display:flex;align-items:center;gap:12px;}
 .cf-title{font-family:'Playfair Display',serif;font-size:18px;color:var(--text);}
-.cf-head select#tc-year{font-family:'Syne',sans-serif;font-size:13px;padding:5px 10px;border-radius:var(--r);border:1px solid var(--gold-line);background:var(--cream2);color:var(--text);cursor:pointer;min-width:90px;}
-.cf-head select#tc-year:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(200,145,58,.12);}
+.cf-head select#tc-year{appearance:none;-webkit-appearance:none;font-family:'Syne',sans-serif;font-size:13px;padding:5px 28px 5px 10px;border-radius:var(--r);border:1px solid var(--gold-line);background-color:var(--cream2);background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 8px center;background-size:12px;color:var(--text);cursor:pointer;min-width:90px;}
+.cf-head select#tc-year:focus{outline:none;border-color:var(--gold);background-image:var(--select-arrow-gold);box-shadow:0 0 0 3px rgba(200,145,58,.12);}
 .cf-cad-badge{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-line);padding:3px 10px;border-radius:99px;}
 
 /* Headline stat cards */
@@ -2858,12 +2876,25 @@ tr.hist-row:hover {
 #sheets-setup-card .form-group input:hover {
   border-color: var(--gold-line) !important;
 }
-#profit-sharing-settings-card .form-group input:focus, 
+#profit-sharing-settings-card .form-group input:focus,
 #profit-sharing-settings-card .form-group select:focus,
 #sheets-setup-card .form-group input:focus {
   outline: none !important;
   border-color: var(--gold) !important;
   box-shadow: 0 0 0 3px rgba(200, 145, 58, 0.15) !important;
+}
+#profit-sharing-settings-card .form-group select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 14px;
+  padding-right: 38px !important;
+  cursor: pointer;
+}
+#profit-sharing-settings-card .form-group select:focus {
+  background-image: var(--select-arrow-gold);
 }
 
 .alert-card {
@@ -3684,11 +3715,17 @@ tr.hist-row:hover {
 /* Specific select dropdown arrow styling */
 .oc-layout select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a5500' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  -webkit-appearance: none;
+  background-image: var(--select-arrow);
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 14px;
   padding-right: 36px;
+  cursor: pointer;
+}
+
+.oc-layout select:focus {
+  background-image: var(--select-arrow-gold);
 }
 
 /* Premium Email Links */
