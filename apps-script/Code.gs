@@ -84,6 +84,11 @@
  *      version (branded header, ACTION REQUIRED banner, labeled Book/Author/
  *      Submitted fields, readable Details table instead of a raw JSON dump)
  *      alongside the existing plain-text body as a fallback.
+ *  21. v23: notifyPublisher's needsAction test also matches "payout" and
+ *      "reimburse" kinds, so the new artist-initiated "Payout Request" (and the
+ *      existing "Reimbursement request") land as [ACTION REQUIRED] with the
+ *      action banner instead of being filed as informational. Bump flags
+ *      v22-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -132,8 +137,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v22',
-    scriptVersion: 'v22',
+    service: 'lyrical-sheets-webhook-v23',
+    scriptVersion: 'v23',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -589,7 +594,7 @@ function doPost(e) {
         // "Book\nBcc: evil@x.com" can't inject mail headers or extra lines.
         const clean_ = (s) => String(s == null ? '' : s).replace(/[\x00-\x1F\x7F]+/g, ' ').trim();
         const kind = clean_(d.kind || 'Submission');
-        const needsAction = /approval|payment|transfer/i.test(kind);
+        const needsAction = /approval|payment|payout|transfer|reimburse/i.test(kind);
         const prefix = needsAction ? '[ACTION REQUIRED]' : '[Lyrical Inventory]';
         const subject = `${prefix} ${kind} awaiting approval — ${clean_(d.bookTitle)}`;
         const intro = needsAction
