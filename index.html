@@ -1175,7 +1175,7 @@
     <div class="section-hed">Order history</div>
     <div style="display:flex;gap:8px;align-items:center;">
       <span class="save-indicator" id="save-ind">✓ Saved</span>
-      <button class="btn ink" id="import-btn" onclick="$('import-file-input').click()" style="display:none;">⬆ Import from spreadsheet</button>
+      <button class="btn ink" id="import-btn" onclick="document.getElementById('import-file-input').click()" style="display:none;">⬆ Import from spreadsheet</button>
       <input type="file" id="import-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleImportFile(event)">
     </div>
   </div>
@@ -3718,6 +3718,19 @@
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button type="button" class="btn" id="m-confirm-cancel">Cancel</button>
       <button type="button" class="btn gold" id="m-confirm-ok">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Styled text prompt (replaces browser prompt) -->
+<div class="overlay" id="m-prompt" style="display:none;z-index:1200;">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
+    <div class="modal-title" role="dialog" aria-modal="true" id="m-prompt-title">Enter a value</div>
+    <div id="m-prompt-body" style="font-size:13px;color:var(--text2);line-height:1.55;white-space:pre-wrap;margin-bottom:10px;"></div>
+    <div class="form-group"><input type="text" id="m-prompt-input" autocomplete="off" /></div>
+    <div class="modal-footer" role="dialog" aria-modal="true">
+      <button type="button" class="btn" id="m-prompt-cancel">Cancel</button>
+      <button type="button" class="btn gold" id="m-prompt-ok">OK</button>
     </div>
   </div>
 </div>

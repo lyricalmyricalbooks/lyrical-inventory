@@ -22,9 +22,14 @@ export default [
       },
     },
     rules: {
-      // Demoted to warn so it surfaces in lint output (e.g. broken
-      // references to undefined helpers) without blocking CI on day one.
-      'no-undef': 'warn',
+      // Promoted from warn to error: this rule is what catches a call to a
+      // helper that does not exist, and the codebase is now clean under it.
+      // It is not a style preference here — an undefined identifier inside an
+      // async handler rejects silently, so the button renders, the click does
+      // nothing, and no error reaches the user. That is exactly how the
+      // `promptDialog` call in relinkEditExpenseReceipt shipped dead.
+      // Anything genuinely global belongs in languageOptions.globals above.
+      'no-undef': 'error',
       'no-unused-vars': ['warn', {
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_',
