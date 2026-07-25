@@ -215,4 +215,99 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
       expect(result.country).toBe('US');
     });
   });
+
+  describe('extractBigCartelAddress JSON:API relationship resolution', () => {
+    let extractBigCartelAddress;
+
+    beforeEach(() => {
+      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      const countryCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);
+      const extractFuncMatch = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
+      const normCountryMatch = mainContent.match(/function normalizeCountryCode\([^)]*\)\s*\{([\s\S]+?)\n\}/);
+
+      extractBigCartelAddress = new Function('order', 'orderId', 'included',
+        countryCodesMatch[0] + '\n' + normCountryMatch[0] + '\n' + extractFuncMatch[0] +
+        '\nreturn extractBigCartelAddress(order, orderId, included);');
+    });
+
+    const buildOrder = () => ({
+      id: 'GOEQ-951023',
+      attributes: { shipping_city: 'Barcelona', shipping_country_code: 'ES' },
+      relationships: {
+        customer: { data: { type: 'customers', id: '77' } },
+        shipping_address: { data: { type: 'shipping_addresses', id: '42' } },
+        items: { data: [{ type: 'order_items', id: '9' }] }
+      }
+    });
+
+    it('pulls the phone from the included shipping_address resource', () => {
+      const included = [
+        { type: 'order_items', id: '9', attributes: { name: 'Altrove' } },
+        { type: 'customers', id: '77', attributes: { first_name: 'Irma', last_name: 'Oliveras Binoux' } },
+        { type: 'shipping_addresses', id: '42', attributes: { phone: '+34 612 345 678', address_1: 'Gran via 732', city: 'Barcelona', zip: '08013' } }
+      ];
+
+      const result = extractBigCartelAddress(buildOrder(), 'GOEQ-951023', included);
+      expect(result.phone).toBe('+34 612 345 678');
+      expect(result.name).toBe('Irma Oliveras Binoux');
+      expect(result.street1).toBe('Gran via 732');
+    });
+
+    it('does not match an included resource whose id collides across types', () => {
+      const included = [
+        { type: 'order_items', id: '42', attributes: { phone: '000-BAD-LINE' } }
+      ];
+
+      const result = extractBigCartelAddress(buildOrder(), 'GOEQ-951023', included);
+      expect(result.phone).toBe('');
+    });
+
+    it('accepts alternate phone key spellings on the customer resource', () => {
+      const included = [
+        { type: 'customers', id: '77', attributes: { name: 'Irma', phone_number: '604-555-0123' } }
+      ];
+
+      const result = extractBigCartelAddress(buildOrder(), 'GOEQ-951023', included);
+      expect(result.phone).toBe('604-555-0123');
+    });
+
+    it('falls back to an included contact resource that points back at the order', () => {
+      const order = { id: 'GOEQ-951023', attributes: { shipping_city: 'Barcelona' }, relationships: {} };
+      const included = [
+        { type: 'customers', id: '77', attributes: { telephone: '555-0000' }, relationships: { order: { data: { id: 'OTHER-1' } } } },
+        { type: 'customers', id: '88', attributes: { telephone: '555-7788' }, relationships: { order: { data: { id: 'GOEQ-951023' } } } }
+      ];
+
+      const result = extractBigCartelAddress(order, 'GOEQ-951023', included);
+      expect(result.phone).toBe('555-7788');
+    });
+
+    it('keeps flat shipping attributes ahead of included resources', () => {
+      const order = buildOrder();
+      order.attributes.shipping_phone = '+34 999 111 222';
+      const included = [
+        { type: 'shipping_addresses', id: '42', attributes: { phone: '+34 612 345 678' } }
+      ];
+
+      const result = extractBigCartelAddress(order, 'GOEQ-951023', included);
+      expect(result.phone).toBe('+34 999 111 222');
+    });
+  });
+
+  describe('destination prefill wiring', () => {
+    const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+
+    it('passes the whole order (not just attributes) so relationships survive', () => {
+      expect(mainContent).not.toContain('extractBigCartelAddress(o.attributes || {}, o.id)');
+      expect(mainContent).not.toContain('extractBigCartelAddress(order.attributes || {}, orderId)');
+      expect(mainContent).toContain('extractBigCartelAddress(o, o.id, bcIncluded)');
+      expect(mainContent).toContain('extractBigCartelAddress(order, orderId, getBigCartelIncluded())');
+    });
+
+    it('hydrates a blank recipient phone straight from the Big Cartel API', () => {
+      expect(mainContent).toContain('async function hydrateShippingDestinationPhone(');
+      expect(mainContent).toContain('function rememberBigCartelDestinationPhone(');
+      expect(mainContent).toMatch(/if \(!\$\('st-phone'\)\.value && select\.dataset\.orderNumber\)/);
+    });
+  });
 });
