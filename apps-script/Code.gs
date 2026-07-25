@@ -132,8 +132,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v21',
-    scriptVersion: 'v21',
+    service: 'lyrical-sheets-webhook-v22',
+    scriptVersion: 'v22',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });

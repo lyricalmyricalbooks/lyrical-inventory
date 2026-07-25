@@ -59,6 +59,13 @@ Bug / edge case the change introduced · the next logical feature · offline & s
 > [!WARNING]
 > **Always update the externalized Apps Script copy** whenever [Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs) is modified: copy it **verbatim** (no HTML-escaping) to [gas-code.txt](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/public/gas-code.txt). The "Connect your Google Sheet" tab in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html) lazy-fetches this file via `loadGasCode()` in [main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js) the first time the tab opens. Do **not** re-embed the source inline in [index.html](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/index.html).
 
+> [!WARNING]
+> **Always bump the script version** whenever [Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs)'s behavior changes (new action, changed response shape, changed email/side-effect logic — not comment-only or pure-refactor edits). Three places move together, in the same commit:
+> 1. `scriptVersion: 'vNN'` and the matching `service: 'lyrical-sheets-webhook-vNN'` string in the `doGet` capabilities response in [Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs).
+> 2. `EXPECTED_SCRIPT_VERSION` in [main.js](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/src/main.js) — this is what the client compares against to flag an out-of-date deployment on the connection card.
+> 3. A new numbered entry in the version-history comment block at the top of [Code.gs](file:///c:/Users/julia/.antigravity-ide/lyrical-inventory/apps-script/Code.gs) describing what changed and, if relevant, which older deployments it flags as outdated.
+> Skipping this means the publisher's already-deployed script silently diverges from what the client expects, with no warning surfaced anywhere.
+
 ## App Overview & Architecture
 
 Lyrical Inventory is a Progressive Web App (PWA) designed for Lyricalmyrical Books to manage book catalogs, sales inventory, consignment partners, invoices, expenses, and event checkouts (POS).
