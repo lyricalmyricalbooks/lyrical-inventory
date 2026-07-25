@@ -1006,7 +1006,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v22';
+const EXPECTED_SCRIPT_VERSION = 'v23';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -1016,7 +1016,7 @@ if (sheetsUrl) {
 }
 
 function defaultState(book) {
-  return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0, openCall: [] };
+  return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], payoutRequests: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0, openCall: [] };
 }
 
 function getState() {
@@ -3236,6 +3236,66 @@ function getArtistHeldHtml(stats, cur) {
   return { heldCardHtml, heldNoteHtml, hasHeld };
 }
 
+// The most recent payout request that hasn't been covered by a payout since.
+// A request is "settled" once the publisher records a payout dated on or after
+// it, so the artist isn't left staring at a stale "requested" pill forever.
+function pendingPayoutRequest(state, stats) {
+  const reqs = (state && state.payoutRequests) || [];
+  if (!reqs.length) return null;
+  const latest = reqs.slice().sort((a, b) => (b.requestedAt || '') > (a.requestedAt || '') ? 1 : -1)[0];
+  if (!latest) return null;
+  const settledSince = (stats.payouts || []).some(p => {
+    const paidAt = p.date || '';
+    return paidAt && latest.requestedAt && paidAt >= latest.requestedAt.slice(0, 10);
+  });
+  return settledSince ? null : latest;
+}
+
+// Artist-facing call to action: surfaces the share of profit that's actually
+// available to them right now and lets them ask for it in one click, instead
+// of having to email the publisher out of band. Publishers see the same figure
+// framed as an outstanding obligation, plus any request the artist has sent.
+function getPayoutRequestHtml(bookId, stats, cur, owed) {
+  if (!(owed > 0.01)) return '';
+  const authorView = isAuthor();
+  const pending = pendingPayoutRequest(states[bookId], stats);
+
+  if (!authorView) {
+    // Publisher side: only worth adding a row when the artist has asked.
+    if (!pending) return '';
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
+        background:var(--gold-bg); border:1px solid var(--gold-line); border-left:4px solid var(--gold);
+        border-radius:var(--r2); padding:12px 14px; margin-bottom:1.25rem;">
+        <div>
+          <div style="font-weight:600; color:var(--text2); font-size:13px;">The artist requested a payout of ${fmt(pending.amount, cur)}</div>
+          <div style="font-size:11px; color:var(--text3); margin-top:2px;">Requested ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')} · ${fmt(owed, cur)} currently owed</div>
+        </div>
+        <button class="btn gold" style="padding:6px 12px; font-size:11px;" onclick="toggleArtistPayoutForm('${bookId}')">Record payout</button>
+      </div>`;
+  }
+
+  const pendingHtml = pending ? `
+        <div style="font-size:11px; color:var(--text3); margin-top:6px;">
+          ✓ You requested ${fmt(pending.amount, cur)} on ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')} — the publisher has been notified.
+        </div>` : '';
+
+  return `
+    <div style="background:var(--cream2); border:1px solid var(--gold-line); border-left:4px solid var(--gold);
+      border-radius:var(--r2); padding:14px 16px; margin-bottom:1.25rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;">
+        <div>
+          <div class="hs-label" style="color:var(--text3);">Available to request</div>
+          <div class="hs-val" style="color:var(--gold-text); font-size:24px; font-weight:700;">${fmt(owed, cur)}</div>
+          <div style="font-size:11px; color:var(--text3); margin-top:2px;">your share of profit, not yet paid out</div>
+        </div>
+        <button class="btn gold" id="request-payout-btn-${bookId}" style="padding:10px 18px; font-size:12px;"
+          onclick="requestArtistPayout('${bookId}')">${pending ? 'Send reminder' : 'Request payout'}</button>
+      </div>
+      ${pendingHtml}
+    </div>`;
+}
+
 function getPayoutHistoryHtml(stats, bookId, cur) {
   return (stats.payouts || []).length > 0
     // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
@@ -3276,6 +3336,7 @@ function renderProfitSharingBreakdown(bookId) {
   const progressHtml = getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur);
   const { owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor, owed } = getOwedCardDetails(stats, cur);
   const { heldCardHtml, heldNoteHtml, hasHeld } = getArtistHeldHtml(stats, cur);
+  const payoutRequestHtml = getPayoutRequestHtml(bookId, stats, cur, owed);
   const payoutHistoryHtml = getPayoutHistoryHtml(stats, bookId, cur);
 
   content.innerHTML = `
@@ -3298,6 +3359,7 @@ function renderProfitSharingBreakdown(bookId) {
       </div>
     </div>
     ${heldNoteHtml}
+    ${payoutRequestHtml}
     <div style="margin-bottom:1rem;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
          <span class="sect" style="font-size:8px; margin:0;">Payout Tiers</span>
@@ -3369,6 +3431,50 @@ async function recordArtistPayout(bookId) {
   renderProfitSharingBreakdown(bookId);
 }
 
+// Artist asks the publisher for the profit they're owed. The request is stored
+// on the book's state (so it survives a reload and shows on the publisher's own
+// breakdown) and emailed through the same notifyPublisher path every other
+// author submission uses. The state write happens first so an offline artist
+// still has the request queued locally rather than losing it outright.
+async function requestArtistPayout(bookId) {
+  const book = BOOKS[bookId];
+  const stats = calculateArtistEarnings(bookId);
+  if (!book || !stats) return;
+  const cur = book.currency;
+  const owed = stats.owedToArtist;
+  if (!(owed > 0.01)) { showToast('⚠ Nothing is currently available to request', 'warn'); return; }
+
+  const s = states[bookId];
+  if (!s) return;
+  const btn = document.getElementById(`request-payout-btn-${bookId}`);
+  const oldText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  const req = {
+    id: Date.now(),
+    requestedAt: new Date().toISOString(),
+    amount: owed,
+    currency: cur
+  };
+  try {
+    if (!s.payoutRequests) s.payoutRequests = [];
+    s.payoutRequests.push(req);
+    await saveState(bookId);
+    await notifyPublisherSubmission(
+      'Payout Request',
+      { ...req, bookTitle: book.title, lifetimeEarned: stats.totalArtistEarned, alreadyPaid: stats.totalPaidToArtist },
+      `The artist requested a payout of ${fmt(owed, cur)} — their unpaid share of profit to date.`
+    );
+    showToast(`✓ Requested a payout of ${fmt(owed, cur)}`);
+  } catch (e) {
+    console.error('payout request failed', e);
+    showToast('⚠ Could not send the payout request', 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = oldText; }
+    renderProfitSharingBreakdown(bookId);
+  }
+}
+
 async function deleteArtistPayout(bookId, payoutId) {
   if (!(await confirmDialog('Delete this payout record?', { danger: true, okLabel: 'Delete' }))) return;
   const s = states[bookId];
@@ -3381,6 +3487,7 @@ async function deleteArtistPayout(bookId, payoutId) {
 
 window.toggleArtistPayoutForm = toggleArtistPayoutForm;
 window.recordArtistPayout = recordArtistPayout;
+window.requestArtistPayout = requestArtistPayout;
 window.deleteArtistPayout = deleteArtistPayout;
 
 function renderAll() {
