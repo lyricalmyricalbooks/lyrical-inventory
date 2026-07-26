@@ -10,6 +10,19 @@ describe('main.js window binding verification', () => {
   const mainJsPath = path.resolve(__dirname, '../src/main.js');
   const mainContent = fs.readFileSync(mainJsPath, 'utf8');
 
+  // exposeLegacyInlineHandlers still lives in main.js, but the functions it
+  // exposes may now be declared in a feature module and imported. The invariant
+  // is unchanged — every exposed name must be defined somewhere in the app —
+  // so the search widens to the feature modules rather than the check being
+  // weakened.
+  const featureDir = path.resolve(__dirname, '../src/features');
+  const appSource = [mainContent].concat(
+    fs.existsSync(featureDir)
+      ? fs.readdirSync(featureDir).filter(f => f.endsWith('.js'))
+          .map(f => fs.readFileSync(path.join(featureDir, f), 'utf8'))
+      : []
+  ).join('\n');
+
   it('declares every variable/function bound to window in exposeLegacyInlineHandlers', () => {
     expect(fs.existsSync(mainJsPath)).toBe(true);
 
@@ -38,7 +51,7 @@ describe('main.js window binding verification', () => {
         new RegExp(`\\b${name}\\s*=`)
       ];
 
-      const isDefined = regexPatterns.some(regex => regex.test(mainContent));
+      const isDefined = regexPatterns.some(regex => regex.test(appSource));
       if (!isDefined) {
         missingDefinitions.push(name);
       }
