@@ -2,8 +2,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getDatabase, ref, set, onValue, get, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocFromServer, collection, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { LIST_PARTS, splitState, stitchState, mergePart } from './lib/merge-state.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, getDocs, getDocFromServer, collection, onSnapshot, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { ALL_PARTS, LIST_PARTS, assembleParts, emptyPart, splitState, stitchState, mergePart } from './lib/merge-state.js';
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -198,7 +198,7 @@ window._fbSave = async (bookId, json) => {
         return { ok: false, merged: false, reason: 'read-failed' };
       }
 
-      const emptyFor = p => (p === 'metadata' ? {} : []);
+      const emptyFor = emptyPart;
       const merged = { ...parts };
       const conflicts = [];
       let didMerge = false;
@@ -237,9 +237,25 @@ window._fbSave = async (bookId, json) => {
         const partJson = JSON.stringify(finalParts[p]);
         if (hashes[p] !== partJson) pending.push({ part: p, partJson });
       });
-      await Promise.all(pending.map(({ part, partJson }) =>
-        setDoc(doc(fs, 'books', bookId, 'data', part), { data: partJson, ts: Date.now() })
-      ));
+
+      // One atomic batch rather than a setDoc per part. These parts are not
+      // independent — a sale writes a `hist` row AND the `metadata` stock count
+      // derived from it — so the previous Promise.all could half-succeed and
+      // leave the book internally inconsistent: stock decremented with no sale
+      // recorded, or a ledger row whose running balance never moved. A batch
+      // either lands entirely or not at all, and the not-at-all case is already
+      // handled (the caller queues and retries).
+      //
+      // Bounded by ALL_PARTS (8 documents), so Firestore's 500-write batch
+      // limit is not reachable here.
+      if (pending.length) {
+        const batch = writeBatch(fs);
+        const ts = Date.now();
+        pending.forEach(({ part, partJson }) => {
+          batch.set(doc(fs, 'books', bookId, 'data', part), { data: partJson, ts });
+        });
+        await batch.commit();
+      }
 
       // Advance the base only once the server has actually taken the write.
       // Updating it alongside the setDoc call (as this did before) meant a
@@ -264,28 +280,30 @@ window._fbSave = async (bookId, json) => {
 window._fbLoad = async (bookId) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
-      const docNames = ['metadata', ...LIST_PARTS];
-      const promises = docNames.map(name => getDoc(doc(fs, 'books', bookId, 'data', name)));
-      const snaps = await Promise.all(promises);
-      
-      const parts = {};
-      let hasData = false;
-      
+      // One collection read instead of a getDoc per part. Every part is needed
+      // on every load, so this bills the same number of document reads but
+      // costs one round trip instead of eight — and loadAllBooks() fires this
+      // for every book at once, so the saving multiplies by the catalog size.
+      const snaps = await getDocs(collection(fs, 'books', bookId, 'data'));
+
+      const raw = {};
+      snaps.forEach(d => { raw[d.id] = (d.data() || {}).data; });
+
+      const { parts, present } = assembleParts(raw);
+      const hasData = present.length > 0;
+
       if (!window._fsHashes) window._fsHashes = {};
       if (!window._fsHashes[bookId]) window._fsHashes[bookId] = {};
-      
-      snaps.forEach((snap, i) => {
-         const name = docNames[i];
-         if (snap.exists()) {
-           hasData = true;
-           parts[name] = JSON.parse(snap.data().data);
-           window._fsHashes[bookId][name] = snap.data().data;
-         } else {
-           parts[name] = (name === 'metadata') ? {} : [];
-           window._fsHashes[bookId][name] = JSON.stringify(parts[name]);
-         }
+
+      // Seed the merge base for every part, including the ones with no stored
+      // document: those are known-empty rather than unknown, which is what lets
+      // the next _fbSave tell "nothing there yet" apart from "never read it".
+      ALL_PARTS.forEach(name => {
+        window._fsHashes[bookId][name] = present.includes(name)
+          ? raw[name]
+          : JSON.stringify(parts[name]);
       });
-      
+
       if (!hasData) {
         // Transparent fallback: this book is flagged for Firestore but NONE of
         // its per-part docs exist there — almost always because it was never
@@ -342,33 +360,44 @@ window._fbWatch = (bookId, cb) => {
         _fsWatchUnsubs[bookId].forEach(u => u());
       }
       _fsWatchUnsubs[bookId] = [];
-      
-      const docNames = ['metadata', ...LIST_PARTS];
-      let localState = {};
-      const loadedDocs = new Set();
-      
+
       if (!window._fsHashes) window._fsHashes = {};
       if (!window._fsHashes[bookId]) window._fsHashes[bookId] = {};
 
-      docNames.forEach(name => {
-        const dRef = doc(fs, 'books', bookId, 'data', name);
-        const unsub = onSnapshot(dRef, (snap) => {
-          if (snap.exists()) {
-            localState[name] = JSON.parse(snap.data().data);
-            window._fsHashes[bookId][name] = snap.data().data;
-          } else {
-            localState[name] = (name === 'metadata') ? {} : [];
-          }
-          loadedDocs.add(name);
-          
-          if (loadedDocs.size === docNames.length) {
-            // stitchState keeps a fixed key order so JSON.stringify is stable —
-            // prevents false-positive hash mismatches vs _fbLoad output.
-            cb(JSON.stringify(stitchState(localState)));
-          }
-        }, err => _reportWatchError(`Watch ${name}`, err));
-        _fsWatchUnsubs[bookId].push(unsub);
-      });
+      // A single collection listener replaces the eight per-document ones this
+      // used to open. With every book watched at startup that was 8×N live
+      // listeners for data that always has to be applied together anyway.
+      //
+      // It also removes the "wait until all eight have reported once" dance:
+      // a collection snapshot is already a complete, consistent view, so the
+      // first one can be handed straight to the callback. Deleted parts simply
+      // stop appearing in the snapshot and assembleParts restores their empty
+      // default, which is what the old per-document !exists() branch did.
+      const collRef = collection(fs, 'books', bookId, 'data');
+      const unsub = onSnapshot(collRef, (snap) => {
+        try {
+          const raw = {};
+          snap.forEach(d => { raw[d.id] = (d.data() || {}).data; });
+
+          const { parts, present } = assembleParts(raw);
+
+          // Only advance the merge base for parts that actually have a stored
+          // document — same as before. A part with no document keeps whatever
+          // base it already had rather than being marked clean-and-empty.
+          present.forEach(name => { window._fsHashes[bookId][name] = raw[name]; });
+
+          // stitchState keeps a fixed key order so JSON.stringify is stable —
+          // prevents false-positive hash mismatches vs _fbLoad output.
+          cb(JSON.stringify(stitchState(parts)));
+        } catch (err) {
+          // One unparseable document used to break only its own listener and
+          // leave the other seven live. Now they share a callback, so an
+          // uncaught throw here would kill live sync for the whole book —
+          // report it the same way a listener failure is reported instead.
+          _reportWatchError('Watch book data', err);
+        }
+      }, err => _reportWatchError('Watch book data', err));
+      _fsWatchUnsubs[bookId].push(unsub);
       return;
     }
     onValue(ref(db, `lyrical/books/${bookId}`), s => { if (s.exists()) cb(s.val().data); },
@@ -466,13 +495,17 @@ window._fbDeleteBook = async (bookId) => {
     }
     if (window._fsHashes && window._fsHashes[bookId]) delete window._fsHashes[bookId];
 
-    const partNames = ['metadata', 'ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'];
     const subTypes = ['expenses', 'sales'];
 
     if (window._useFirestoreForBook(bookId)) {
-      await Promise.all(partNames.map(name =>
-        deleteDoc(doc(fs, 'books', bookId, 'data', name)).catch(() => {})
-      ));
+      // Atomic, so a deleted book can't come back half-alive: the old
+      // per-document deletes could drop `hist` and leave `metadata` behind,
+      // which is enough for the book to reappear with its stock counts intact
+      // and no sales to explain them. Deleting a missing document is a no-op in
+      // Firestore, so parts that were never written don't need tolerating.
+      const batch = writeBatch(fs);
+      ALL_PARTS.forEach(name => batch.delete(doc(fs, 'books', bookId, 'data', name)));
+      await batch.commit().catch(e => console.error('fbDeleteBook parts failed', e));
       for (const type of subTypes) {
         const snap = await get(ref(db, `lyrical/submissions/${bookId}/${type}`)).catch(() => null);
         if (snap && snap.exists()) {
@@ -654,7 +687,7 @@ window._fbMassMigrate = async (BOOKS) => {
         if (stateJson) {
           const s = { ...stateJson };
           const parts = {};
-          ['ledger', 'expenses', 'hist', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds'].forEach(k => {
+          LIST_PARTS.forEach(k => {
             parts[k] = s[k] || [];
             delete s[k];
           });
