@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { csvCell } from '../src/lib/csv.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -44,30 +45,17 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
     const mockGetBookCurrencyCode = (book) => (book.currency === '€' ? 'EUR' : 'CAD');
     const mockFxRateCache = { 'EUR_CAD': 1.50 };
 
-    let createdBlobContent = '';
-    let createdBlobType = '';
-    class MockBlob {
-      constructor(contentArray, options) {
-        createdBlobContent = contentArray.join('');
-        createdBlobType = options.type;
-      }
-    }
-
+    // The export hands its finished CSV to downloadCsv() rather than building
+    // an anchor itself, so this captures the call instead of mocking Blob and
+    // the DOM. What the anchor does with it — attach, click, revoke — is
+    // covered directly in tests/download.test.js and is not this test's job.
     let downloadTriggered = false;
+    let createdBlobContent = '';
     let downloadFileName = '';
-    const mockDocument = {
-      createElement: (tag) => {
-        expect(tag).toBe('a');
-        return {
-          setAttribute: (name, val) => {
-            if (name === 'download') downloadFileName = val;
-          },
-          click: () => {
-            downloadTriggered = true;
-          }
-        };
-      },
-      body: { appendChild: () => {}, removeChild: () => {} }
+    const mockDownloadCsv = (csv, filename) => {
+      downloadTriggered = true;
+      createdBlobContent = csv;
+      downloadFileName = filename;
     };
 
     let toastMessage = '';
@@ -80,8 +68,11 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
     const csvMatch = mainContent.match(/function downloadInventoryValuationCSV\(\)\s*\{([\s\S]+?)\n\}/);
     expect(csvMatch).not.toBeNull();
 
+    // csvCell is injected as the real implementation, not a stand-in: the
+    // column assertions below are exactly what it is responsible for getting
+    // right, so stubbing it would test nothing.
     const factory = new Function(
-      'today', 'BOOK_LIST', 'states', 'defaultState', 'getBookCurrencyCode', '_fxRateCache', 'Blob', 'document', 'showToast',
+      'today', 'BOOK_LIST', 'states', 'defaultState', 'getBookCurrencyCode', '_fxRateCache', 'csvCell', 'downloadCsv', 'showToast',
       `
         function isTestBook() { return false; }
         function calculateInventoryValuationData() { ${calcMatch[1]} }
@@ -89,10 +80,8 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
       `
     );
 
-    global.URL = { createObjectURL: () => 'blob:mock-url' };
-
     const exportFn = factory(
-      mockToday, mockBookList, mockStates, mockDefaultState, mockGetBookCurrencyCode, mockFxRateCache, MockBlob, mockDocument, mockShowToast
+      mockToday, mockBookList, mockStates, mockDefaultState, mockGetBookCurrencyCode, mockFxRateCache, csvCell, mockDownloadCsv, mockShowToast
     );
 
     exportFn();
@@ -100,7 +89,6 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
     expect(downloadTriggered).toBe(true);
     expect(downloadFileName).toBe('Lyrical_Inventory_Valuation_2026-07-14.csv');
     expect(toastMessage).toContain('Comprehensive Inventory Valuation CSV exported');
-    expect(createdBlobType).toBe('text/csv;charset=utf-8;');
 
     const lines = createdBlobContent.split('\n');
     expect(lines[0]).toBe('Lyricalmyrical Book Inventory Valuation Report');
