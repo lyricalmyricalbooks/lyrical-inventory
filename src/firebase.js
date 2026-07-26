@@ -433,6 +433,15 @@ window._fbLogClientError = async (entry) => {
 // ─────────────────────────────────────────────
 // AUTHOR SUBMISSIONS
 // ─────────────────────────────────────────────
+// Throws on failure — deliberately, and this is the whole point.
+//
+// This used to swallow the error and return normally. Both callers in main.js
+// wrap it in a try/catch that inspects the error and shows "⚠ Failed to submit
+// order" or a permission-denied message, and none of that could ever run: the
+// author saw "✓ Order submitted for approval", the log recorded a success, an
+// email went to the publisher announcing the submission, and the sale did not
+// exist anywhere. Author submissions do not go through the offline sync queue,
+// so nothing else was going to notice either.
 window._fbSubmitActivity = async (bookId, type, data) => {
   try {
     if (window._useFirestoreForBook(bookId)) {
@@ -442,7 +451,10 @@ window._fbSubmitActivity = async (bookId, type, data) => {
     }
     const newRef = push(ref(db, `lyrical/submissions/${bookId}/${type}`));
     await set(newRef, { data: JSON.stringify(data), ts: Date.now() });
-  } catch (e) { console.error("fbSubmit failed", e); }
+  } catch (e) {
+    console.error("fbSubmit failed", e);
+    throw e;
+  }
 };
 
 let _fsSubUnsubs = {};
@@ -536,14 +548,30 @@ window._fbDeleteSubmission = async (bookId, type, subId) => {
 // ─────────────────────────────────────────────
 // GLOBAL SETTINGS
 // ─────────────────────────────────────────────
+// Returns true when the write landed, false when it didn't, and toasts on
+// failure — the same contract _fbSave has had all along.
+//
+// This is where production costs, payment links, the mailing list, campaigns,
+// open calls, customer suppression and the notify endpoint are persisted. A
+// failure used to be a console line nobody reads: the edit stayed on screen
+// looking saved and was gone on the next load. Several callers wrap this in
+// `try { … } catch (_) {}`, which was always dead code — it never threw — so
+// there was nowhere else for the failure to surface either.
 window._fbSaveSettings = async (key, data) => {
   try {
     if (window._useFirestoreGlobal()) {
       await setDoc(doc(fs, 'settings', key), { data: JSON.stringify(data), ts: Date.now() });
-      return;
+      return true;
     }
     await set(ref(db, `lyrical/settings/${key}`), { data: JSON.stringify(data), ts: Date.now() });
-  } catch (e) { console.error("fbSaveSettings failed", e); }
+    return true;
+  } catch (e) {
+    console.error("fbSaveSettings failed", e);
+    if (typeof window.showToast === 'function') {
+      window.showToast(`⚠ Could not save ${key} to the cloud — your change may be lost on reload`, 'err', 5000);
+    }
+    return false;
+  }
 };
 
 window._fbLoadSettings = async (key) => {
@@ -590,14 +618,23 @@ window._fbDeleteInboxItem = async (id) => {
   catch (e) { console.error('fbDeleteInboxItem failed', e); }
 };
 
+// Same contract as _fbSaveSettings. A dropped catalog write loses a book's
+// title, price, print run or artist split, so it must not fail quietly either.
 window._fbSaveCatalog = async (catalog) => {
   try {
     if (window._useFirestoreGlobal()) {
       await setDoc(doc(fs, 'settings', 'catalog'), { data: JSON.stringify(catalog), ts: Date.now() });
-      return;
+      return true;
     }
     await set(ref(db, `lyrical/settings/catalog`), { data: JSON.stringify(catalog), ts: Date.now() });
-  } catch (e) { console.error("fbSaveCatalog failed", e); }
+    return true;
+  } catch (e) {
+    console.error("fbSaveCatalog failed", e);
+    if (typeof window.showToast === 'function') {
+      window.showToast('⚠ Could not save the catalog to the cloud — your change may be lost on reload', 'err', 5000);
+    }
+    return false;
+  }
 };
 
 // Rules-readable ownership map: { bookId: authorEmailLower }. Stored as PLAIN

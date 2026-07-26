@@ -539,9 +539,9 @@ async function saveBookFromModal() {
     prodCosts[b.id] = b.productionCost || 0;
     payLinks[b.id] = b.paymentLink || '';
   });
-  try { await window._fbSaveSettings('productionCosts', prodCosts); } catch (_) { }
+  await window._fbSaveSettings('productionCosts', prodCosts);
   localStorage.setItem('lm-production-costs', JSON.stringify(prodCosts));
-  try { await window._fbSaveSettings('paymentLinks', payLinks); } catch (_) { }
+  await window._fbSaveSettings('paymentLinks', payLinks);
   localStorage.setItem('lm-payment-links', JSON.stringify(payLinks));
 
   await saveCatalogWithDeletions();
@@ -1156,6 +1156,17 @@ function showToast(msg, type = 'ok', dur = 2800) {
 // Expose so modules loaded before main.js completes (firebase.js) can call back.
 window.showToast = showToast;
 
+// The two backends report a rules rejection differently: Firestore sets
+// code:'permission-denied' and a message of "Missing or insufficient
+// permissions", while the Realtime Database puts PERMISSION_DENIED in the
+// message text. The submission handlers only checked the RTDB spelling, so a
+// Firestore book's rejection fell through to the generic failure message.
+function isPermissionDenied(err) {
+  if (!err) return false;
+  if (err.code === 'permission-denied' || err.code === 'PERMISSION_DENIED') return true;
+  return typeof err.message === 'string' && err.message.includes('PERMISSION_DENIED');
+}
+
 // Styled replacement for window.confirm — returns a Promise<boolean>.
 // Falls back to native confirm() if the modal isn't present (e.g. very
 // early bootstrap or unit tests).
@@ -1422,8 +1433,20 @@ async function loadBook(bookId) {
       }
     });
   } catch (e) {
+    // A book that failed to load and a book with no data render identically —
+    // both are an empty ledger — so say which happened. The error itself was
+    // discarded entirely before this: no console line, no report, just a
+    // status pill reading "connection failed" next to what looks like a book
+    // with no sales in it.
+    console.error('loadBook failed', bookId, e);
+    reportClientError('load-book-failed', e && e.message, { stack: e && e.stack });
     states[bookId] = defaultState(BOOKS[bookId]);
+    // Mark the state so a later save can tell it apart from a genuinely empty
+    // book. Non-enumerable so it never reaches Firestore via JSON.stringify.
+    Object.defineProperty(states[bookId], '_loadFailed', { value: true, enumerable: false, configurable: true });
     setSyncState('error', '<b>Firestore</b> · connection failed');
+    const title = (BOOKS[bookId] && BOOKS[bookId].title) || bookId;
+    showToast(`⚠ Could not load ${title} — showing an empty book, not real data. Reload once you're back online.`, 'err', 7000);
   }
 }
 
@@ -7191,11 +7214,10 @@ async function submitExpense() {
       notifyPublisherSubmission('Expense', newExpense, `${cat}: ${desc} — ${fmt(amount, currency)}`);
     } catch (e) {
       console.error("Submission error:", e);
-      if (e.message && e.message.includes('PERMISSION_DENIED')) {
-        showToast('⚠ Permission denied by Firestore Rules', 'err');
-      } else {
-        showToast('⚠ Failed to submit expense', 'err');
-      }
+      reportClientError('submit-expense-failed', e && e.message, { stack: e && e.stack });
+      showToast(isPermissionDenied(e)
+        ? '⚠ Permission denied — this book is not linked to your account. Nothing was submitted.'
+        : '⚠ Could not submit the expense — nothing was recorded. Check your connection and try again.', 'err', 6000);
     }
   } else {
     const s = getState();
@@ -9361,11 +9383,10 @@ async function submitManual(ev) {
 
       } catch (e) {
         console.error("Submission error:", e);
-        if (e.message && e.message.includes('PERMISSION_DENIED')) {
-          showToast('⚠ Permission denied by Firestore Rules', 'err');
-        } else {
-          showToast('⚠ Failed to submit order', 'err');
-        }
+        reportClientError('submit-sale-failed', e && e.message, { stack: e && e.stack });
+        showToast(isPermissionDenied(e)
+          ? '⚠ Permission denied — this book is not linked to your account. Nothing was submitted.'
+          : '⚠ Could not submit the order — nothing was recorded. Check your connection and try again.', 'err', 6000);
       }
     } else {
       // Publisher direct route
@@ -12760,7 +12781,7 @@ async function connectSheets() {
   // Share the endpoint so artist sessions on other devices can send the
   // approval-needed email when they submit a payment/expense.
   notifyUrl = normalizedUrl; localStorage.setItem('lm-notify-url', normalizedUrl);
-  try { await window._fbSaveSettings('notifyEndpoint', { url: normalizedUrl }); } catch (_) { }
+  await window._fbSaveSettings('notifyEndpoint', { url: normalizedUrl });
   if (spreadUrl) {
     sheetsSpreadsheetUrl = spreadUrl;
     localStorage.setItem('lm-sheets-spreadsheet-url', spreadUrl);
@@ -12786,7 +12807,7 @@ async function disconnectSheets() {
   localStorage.removeItem('lm-sheets-spreadsheet-url');
   localStorage.removeItem('lm-sheets-secret');
   localStorage.removeItem('lm-notify-url');
-  try { await window._fbSaveSettings('notifyEndpoint', { url: '' }); } catch (_) { }
+  await window._fbSaveSettings('notifyEndpoint', { url: '' });
   $('sheets-setup-card').style.display = '';
   $('sheets-connected-card').style.display = 'none';
   const warningEl = $('sheets-version-warning');
@@ -14848,7 +14869,7 @@ async function applyBackupData(data) {
     setOrClear('lm-sheets-secret', ig.sheetsSecret);
     if (ig.sheetsSpreadsheetUrl) localStorage.setItem('lm-last-spreadsheet-url', ig.sheetsSpreadsheetUrl);
     if (ig.sheetsUrl) localStorage.setItem('lm-last-sheets-url', ig.sheetsUrl);
-    try { await window._fbSaveSettings('notifyEndpoint', { url: ig.notifyUrl || '' }); } catch (_) { }
+    await window._fbSaveSettings('notifyEndpoint', { url: ig.notifyUrl || '' });
   }
 }
 
@@ -15017,13 +15038,13 @@ async function applyBookRestore(bid) {
       const pc = JSON.parse(localStorage.getItem('lm-production-costs') || '{}');
       pc[bid] = snapshot.productionCosts[bid];
       localStorage.setItem('lm-production-costs', JSON.stringify(pc));
-      try { await window._fbSaveSettings('productionCosts', pc); } catch (_) { }
+      await window._fbSaveSettings('productionCosts', pc);
     }
     if (snapshot.paymentLinks && bid in snapshot.paymentLinks) {
       const pl = JSON.parse(localStorage.getItem('lm-payment-links') || '{}');
       pl[bid] = snapshot.paymentLinks[bid];
       localStorage.setItem('lm-payment-links', JSON.stringify(pl));
-      try { await window._fbSaveSettings('paymentLinks', pl); } catch (_) { }
+      await window._fbSaveSettings('paymentLinks', pl);
     }
 
     closeM('restore-book');
@@ -15249,10 +15270,10 @@ async function saveProductionCosts() {
     }
   });
   // Save to Firebase + localStorage fallback
-  try { await window._fbSaveSettings('productionCosts', stored); } catch (_) { }
+  await window._fbSaveSettings('productionCosts', stored);
   localStorage.setItem('lm-production-costs', JSON.stringify(stored));
   // Persist synced profitTiers so the threshold survives a page reload
-  try { await saveCatalogWithDeletions(); } catch (_) { }
+  await saveCatalogWithDeletions();
   showToast('✓ Break-even targets saved');
   if (activeBook && activeBook !== 'all') updateDash();
   else updateAllOverview();
@@ -15295,7 +15316,7 @@ async function savePaymentLinks() {
   const stored = {};
   BOOK_LIST.forEach(b => stored[b.id] = b.paymentLink || '');
   // Save to Firebase (syncs across all devices) + localStorage as fallback
-  try { await window._fbSaveSettings('paymentLinks', stored); } catch (_) { }
+  await window._fbSaveSettings('paymentLinks', stored);
   localStorage.setItem('lm-payment-links', JSON.stringify(stored));
   showToast('✓ Payment links saved');
   if (activeBook && activeBook !== 'all') renderArtistTransfers();
@@ -22029,7 +22050,7 @@ async function loadCustomerSuppression() {
 }
 async function _persistCustomerSuppression() {
   const emails = Array.from(_customerSuppress);
-  try { await window._fbSaveSettings('customerSuppress', { emails }); } catch (_) { }
+  await window._fbSaveSettings('customerSuppress', { emails });
   try { localStorage.setItem(CUSTOMER_SUPPRESS_KEY, JSON.stringify(emails)); } catch (_) { }
 }
 async function toggleCustomerSuppress(encEmail) {
@@ -22056,14 +22077,14 @@ function mailingListHas(email) { return !!MAILING_LIST.subs[_custEmailKey(email)
 
 async function loadMailingList() {
   let data = null;
-  try { data = await window._fbLoadSettings('mailingList'); } catch (_) { }
+  data = await window._fbLoadSettings('mailingList');
   if (!data) { try { data = JSON.parse(localStorage.getItem(MAILING_LIST_KEY) || 'null'); } catch (_) { } }
   if (data && typeof data === 'object') {
     MAILING_LIST = { subs: (data.subs && typeof data.subs === 'object') ? data.subs : {}, autoAdd: !!data.autoAdd };
   }
 }
 async function _persistMailingList() {
-  try { await window._fbSaveSettings('mailingList', MAILING_LIST); } catch (_) { }
+  await window._fbSaveSettings('mailingList', MAILING_LIST);
   try { localStorage.setItem(MAILING_LIST_KEY, JSON.stringify(MAILING_LIST)); } catch (_) { }
 }
 
@@ -22465,7 +22486,7 @@ let activeCustomersSubTab = 'audience';
 
 async function loadCampaigns() {
   let data = null;
-  try { data = await window._fbLoadSettings('campaigns'); } catch (_) { }
+  data = await window._fbLoadSettings('campaigns');
   if (!data) { try { data = JSON.parse(localStorage.getItem(CAMPAIGNS_KEY) || '[]'); } catch (_) { } }
   if (Array.isArray(data)) {
     CAMPAIGNS = data;
@@ -22475,7 +22496,7 @@ async function loadCampaigns() {
 }
 
 async function _persistCampaigns() {
-  try { await window._fbSaveSettings('campaigns', CAMPAIGNS); } catch (_) { }
+  await window._fbSaveSettings('campaigns', CAMPAIGNS);
   try { localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(CAMPAIGNS)); } catch (_) { }
 }
 
@@ -22490,7 +22511,7 @@ let ocFilterStage = '';
 
 async function loadOpenCalls() {
   let data = null;
-  try { data = await window._fbLoadSettings('openCalls'); } catch (_) { }
+  data = await window._fbLoadSettings('openCalls');
   if (!data) { try { data = JSON.parse(localStorage.getItem(OPENCALL_KEY)); } catch (_) { } }
   if (data && typeof data === 'object' && data.projects) {
     OPENCALL_DATA = data;
@@ -22537,7 +22558,7 @@ async function _persistOpenCalls() {
     proj.inbox = pruned.inbox;
     proj.outbox = pruned.outbox;
   });
-  try { await window._fbSaveSettings('openCalls', OPENCALL_DATA); } catch (_) { }
+  await window._fbSaveSettings('openCalls', OPENCALL_DATA);
   try { localStorage.setItem(OPENCALL_KEY, JSON.stringify(OPENCALL_DATA)); } catch (_) { }
   updateOpenCallBadges();
   ocScheduleSnapshotPush_();
