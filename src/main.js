@@ -5345,47 +5345,14 @@ window.expFileDrop = function (ev) {
   }
 };
 
+// Project-ledger receipt scan. The shared runner also fills category and ref,
+// which this form has but the old 3-key prompt never asked for.
 async function scanProjectReceiptWithAI() {
-  const fileInput = $('exp-file');
-  if (!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
-
-  const apiKey = TAX_CENTER.settings?.geminiKey;
-  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
-
-  const file = fileInput.files[0];
-  const btn = $('exp-ai-btn');
-  const oldText = btn.textContent;
-  btn.textContent = 'Scanning...'; btn.disabled = true;
-
-  try {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    await new Promise(r => reader.onload = r);
-    const base64Data = reader.result.split(',')[1];
-    const mimeType = file.type;
-
-    const parts = [
-      { text: "Extract these exact 3 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase). No markdown, just raw JSON." },
-      { inline_data: { mime_type: mimeType, data: base64Data } }
-    ];
-
-    let extractedJsonStr = (await _callGeminiForReceipts(apiKey, parts))?.text;
-    if (!extractedJsonStr) throw new Error("No text returned from AI");
-    extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-    const _jsonMatch = extractedJsonStr.match(/\{[\s\S]*\}/);
-    const extracted = JSON.parse(_jsonMatch ? _jsonMatch[0] : extractedJsonStr);
-
-    if (extracted.vendor) $('exp-desc').value = extracted.vendor;
-    if (extracted.date) $('exp-date').value = extracted.date;
-    if (extracted.amount) $('exp-amount').value = extracted.amount;
-    if (extracted.currency && $('exp-cur')) $('exp-cur').value = extracted.currency;
-
-    showToast('✓ Receipt data extracted');
-  } catch (e) {
-    console.error("AI Scan Error:", e);
-    showToast(`⚠ AI extraction failed: ${e.message}`, 'err');
-  }
-  btn.textContent = oldText; btn.disabled = false;
+  return _runReceiptScan({
+    fileId: 'exp-file', btnId: 'exp-ai-btn',
+    descId: 'exp-desc', dateId: 'exp-date', amountId: 'exp-amount',
+    curId: 'exp-cur', catId: 'exp-cat', refId: 'exp-ref'
+  });
 }
 
 // ── EMAIL RECEIPT IMPORT
@@ -6230,25 +6197,42 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal }
       );
       let res = await send();
-      // Retry once on transient overload / rate-limit / server errors.
-      if (!res.ok && (res.status === 429 || res.status >= 500)) {
-        await new Promise(r => setTimeout(r, 800));
+      // Retry transient overload / rate-limit / server errors with exponential
+      // backoff. A single flat 800ms retry lands right back inside the same
+      // congestion window that caused the 429, so the attempt was mostly
+      // wasted; jitter stops parallel email extractions from resonating.
+      for (let attempt = 0; attempt < 2 && !res.ok && (res.status === 429 || res.status >= 500); attempt++) {
+        const retryAfter = Number(res.headers?.get?.('retry-after'));
+        const wait = Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(retryAfter * 1000, 8000)
+          : (700 * Math.pow(2, attempt)) + Math.random() * 400;
+        await new Promise(r => setTimeout(r, wait));
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         res = await send();
       }
       if (!res.ok) {
         let detail = `HTTP ${res.status} from ${model}`;
-        let shouldStop = false;
+        // Escalating to another model only helps when THIS model is the
+        // problem. A rejected key or a malformed payload fails identically on
+        // every model, so probing the chain just re-uploads the image twice
+        // more before showing the same error.
+        let shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
         try {
           const err = await res.json();
           if (err?.error?.message) {
             detail = err.error.message;
-            if (res.status === 429 || /prepayment|credits|billing|quota/i.test(detail)) {
+            if (res.status === 429 || /prepayment|credits|billing|quota|API key/i.test(detail)) {
               shouldStop = true;
             }
           }
         } catch (_) { }
         lastErr = new Error(detail);
-        if (shouldStop) throw lastErr;
+        // `throw` here lands in this iteration's own catch below, which used to
+        // record it as just another failed model and move on — so the
+        // stop-on-billing/quota check never actually stopped anything and a
+        // dead key still paid to upload the image three times. Mark it so the
+        // catch re-throws instead of swallowing.
+        if (shouldStop) { lastErr.__fatal = true; throw lastErr; }
         continue;
       }
       const data = await res.json();
@@ -6271,6 +6255,8 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
     } catch (e) {
       // A cancel must never be mistaken for a model failure worth retrying.
       if (e && e.name === 'AbortError') throw e;
+      // Nor an error every model in the chain would give identically.
+      if (e && e.__fatal) throw e;
       lastErr = e;
     }
   }
@@ -6304,6 +6290,291 @@ const RECEIPT_EXTRACTION_SCHEMA = {
   },
   required: ['receipts']
 };
+
+// ── AI RECEIPT SCAN (single attached file → expense form)
+// The two "✨ AI Scan" buttons used to be near-duplicate functions that read a
+// phone photo straight to base64, asked for JSON in prose, then poked raw
+// strings into strict `number`/`date` inputs. Everything below exists to fix
+// one of those three steps.
+
+// A phone capture is 4–12 MB and base64 adds ~33% on top, so the upload was
+// the bulk of every scan's wall time — and anything over
+// GEMINI_SINGLE_ATTEMPT_BYTES silently forfeited the model fallback chain too.
+// 1600px on the long edge keeps receipt text comfortably legible for OCR while
+// typically taking a 6 MB capture under 400 KB.
+const RECEIPT_SCAN_MAX_EDGE = 1600;
+const RECEIPT_SCAN_JPEG_QUALITY = 0.82;
+// Under this, re-encoding costs more time than the smaller upload saves.
+const RECEIPT_SCAN_SKIP_DOWNSCALE_BYTES = 220_000;
+// A scan that never settles left the button reading "Scanning..." forever.
+const RECEIPT_SCAN_TIMEOUT_MS = 45_000;
+
+const RECEIPT_MIME_BY_EXT = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf'
+};
+
+// Some Android pickers and share targets hand over a File with an empty
+// `type`. That empty string went straight into `mime_type` and Gemini rejected
+// the request outright.
+function _receiptMimeFor(file) {
+  if (file && file.type) return file.type;
+  const ext = String(file?.name || '').split('.').pop().toLowerCase();
+  return RECEIPT_MIME_BY_EXT[ext] || 'application/octet-stream';
+}
+
+function _fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    // The old scan awaited `reader.onload` alone. A read failure (file removed
+    // from disk mid-scan, an iOS memory error, a revoked permission) never
+    // settled that promise, so the whole scan hung with no error and no way
+    // back except a reload.
+    r.onload = () => {
+      const s = String(r.result || '');
+      const comma = s.indexOf(',');
+      if (comma >= 0) resolve(s.slice(comma + 1));
+      else reject(new Error('Could not read that file'));
+    };
+    r.onerror = () => reject(r.error || new Error('Could not read that file'));
+    r.onabort = () => reject(new Error('File read cancelled'));
+    r.readAsDataURL(file);
+  });
+}
+
+// Returns { mime, base64, scaled, bytes }. Always resolves to *something*
+// uploadable: every downscale failure path (HEIC on a browser that can't
+// decode it, a canvas taint, an OOM on a huge scan) falls back to the
+// original bytes rather than failing the scan.
+async function _prepareReceiptUpload(file) {
+  const mime = _receiptMimeFor(file);
+  const raw = async () => ({ mime, base64: await _fileToBase64(file), scaled: false, bytes: file.size });
+  if (!/^image\//.test(mime) || file.size <= RECEIPT_SCAN_SKIP_DOWNSCALE_BYTES) return raw();
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return raw();
+
+  let bitmap = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, RECEIPT_SCAN_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return raw();
+    // Flatten onto white first: a PNG scan with an alpha channel composites
+    // transparent pixels as BLACK on JPEG, which turns a white receipt into an
+    // unreadable dark rectangle.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', RECEIPT_SCAN_JPEG_QUALITY));
+    // Re-encoding an already-tight JPEG can come out bigger; never ship the
+    // worse of the two.
+    if (!blob || blob.size >= file.size) return raw();
+    return { mime: 'image/jpeg', base64: await _fileToBase64(blob), scaled: true, bytes: blob.size };
+  } catch (_) {
+    return raw();
+  } finally {
+    try { bitmap?.close?.(); } catch (_) { /* not all browsers implement close */ }
+  }
+}
+
+// Prompt-only "return strict JSON" was the root of most bad scans: the model
+// fenced the output, added a preamble, returned "$1,234.56" as a string, or
+// invented a category outside the ledger's list. A response schema makes the
+// shape non-negotiable, so the regex salvage below is only a backstop.
+const RECEIPT_SCAN_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    vendor: { type: 'STRING' },
+    date: { type: 'STRING' },
+    amount: { type: 'NUMBER' },
+    currency: { type: 'STRING' },
+    description: { type: 'STRING' },
+    reference: { type: 'STRING' },
+    category: { type: 'STRING', enum: EXPENSE_CATEGORIES },
+    confidence: { type: 'NUMBER' }
+  },
+  required: ['vendor', 'date', 'amount', 'currency']
+};
+
+// "Extract these exact 4 keys" never said WHICH number to extract, so a
+// receipt with a subtotal, tax line and total was a coin flip.
+function _buildReceiptScanPrompt() {
+  return `You are reading ONE receipt or invoice for a book publisher's bookkeeping. Return JSON matching the schema.
+
+amount — the final grand total actually charged, including tax, tip and shipping. Never the subtotal, never a single line item, never the pre-discount figure. If the document shows "Balance due", "Amount paid", or "Total charged", use that number.
+currency — ISO 4217, uppercase. Take an explicit code if printed. Otherwise infer from the symbol plus locale cues: "$" alongside GST/HST/QST or a Canadian address is CAD; "$" alongside a US state or "Sales Tax" is USD; "A$" is AUD; "£" is GBP; "€" is EUR. Only fall back to CAD when nothing at all indicates otherwise.
+date — the purchase/transaction date as YYYY-MM-DD. Not the due date, print date, delivery date, or statement period. For an ambiguous NN/NN/YYYY, use the convention of the vendor's country.
+vendor — the merchant being paid. Not the customer, and not the payment processor unless the processor is itself the merchant.
+description — a short plain label for what was bought, 60 characters or less.
+reference — the invoice, order, or receipt number if one is printed, otherwise "".
+category — the single best fit from the allowed list.
+confidence — 0 to 1, covering how certain you are of the amount and date together.
+
+If the image is blurry, cropped, or partly unreadable, still return your best reading and set confidence below 0.4.`;
+}
+
+// A <select> silently ignores an assignment to a value it has no <option> for.
+// `cur.value = 'AUD'` on the Tax Center form (CAD/USD/EUR/GBP only) therefore
+// left the PREVIOUS currency selected and logged an Australian receipt as
+// Canadian — a wrong number in the ledger with nothing on screen to hint at
+// it. Report the mismatch instead of quietly getting the money wrong.
+function _applyScanCurrency(el, code) {
+  if (!el || !code) return null;
+  const want = String(code).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  if (!want) return null;
+  if (el.tagName === 'SELECT') {
+    const match = Array.from(el.options).find(o => (o.value || o.textContent || '').trim().toUpperCase() === want);
+    if (!match) return { ok: false, code: want };
+    el.value = match.value || match.textContent.trim();
+    return { ok: true, code: want };
+  }
+  el.value = want;
+  return { ok: true, code: want };
+}
+
+function _applyScanCategory(el, category, vendor, description) {
+  if (!el) return false;
+  const cat = EXPENSE_CATEGORIES.includes(category)
+    ? category
+    : inferReceiptCategory(vendor, description);
+  if (!cat) return false;
+  const match = Array.from(el.options || []).find(o => (o.value || o.textContent || '').trim() === cat);
+  if (!match) return false;
+  el.value = match.value || match.textContent.trim();
+  return true;
+}
+
+// In-flight scan, so a second click cancels instead of hitting a dead button.
+let _receiptScanAbort = null;
+
+// Single implementation behind both "✨ AI Scan" buttons. `cfg` names the form
+// field ids; everything else is shared so the two forms can't drift apart the
+// way their two hand-written prompts did.
+async function _runReceiptScan(cfg) {
+  const fileInput = $(cfg.fileId);
+  const btn = $(cfg.btnId);
+
+  if (_receiptScanAbort) { _receiptScanAbort.abort(); return; }
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    showToast('⚠ Please attach a file first', 'warn');
+    return;
+  }
+
+  const apiKey = TAX_CENTER.settings?.geminiKey
+    || (cfg.keyId && $(cfg.keyId)?.value.trim())
+    || '';
+  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+
+  const file = fileInput.files[0];
+  const oldText = btn ? btn.textContent : '';
+  const ac = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ac.abort(); }, RECEIPT_SCAN_TIMEOUT_MS);
+  _receiptScanAbort = ac;
+  // Deliberately NOT disabled — a disabled button can't receive the cancel
+  // click, which is how the old one became unrecoverable when a request hung.
+  if (btn) btn.textContent = 'Scanning… (tap to cancel)';
+
+  try {
+    const upload = await _prepareReceiptUpload(file);
+    if (ac.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    const out = await _callGeminiForReceipts(apiKey, [
+      { text: _buildReceiptScanPrompt() },
+      { inline_data: { mime_type: upload.mime, data: upload.base64 } }
+    ], {
+      signal: ac.signal,
+      schema: RECEIPT_SCAN_SCHEMA,
+      // One receipt's JSON is a few hundred tokens; the old 8192 default let a
+      // confused model ramble, which cost latency on every scan. Kept at 2048
+      // rather than tighter because these flash models spend part of the
+      // budget on thought parts before the answer.
+      maxOutputTokens: 2048
+    });
+
+    const parsed = _parseReceiptJson(out?.text || '') || {};
+    const applied = [];
+    const warnings = [];
+
+    const vendor = String(parsed.vendor || '').trim();
+    const description = String(parsed.description || '').trim();
+    const descEl = $(cfg.descId);
+    if (descEl && (vendor || description)) {
+      const both = vendor && description && !description.toLowerCase().includes(vendor.toLowerCase());
+      descEl.value = both ? `${vendor} — ${description}` : (vendor || description);
+      applied.push('vendor');
+    }
+
+    // Coerce before assigning: a number input rejects "1,234.56" outright and
+    // becomes an EMPTY string, so a comma-formatted total used to wipe the
+    // field and read as "the AI found nothing".
+    const amount = _parseReceiptAmount(parsed.amount);
+    const amtEl = $(cfg.amountId);
+    if (amtEl && amount > 0) { amtEl.value = amount.toFixed(2); applied.push('amount'); }
+    else warnings.push('amount');
+
+    // Same trap for `type="date"`: "Mar 4, 2025" or "03/04/2025" silently
+    // blanked the field.
+    const date = normalizeReceiptDate(parsed.date);
+    const dateEl = $(cfg.dateId);
+    if (dateEl && date) { dateEl.value = date; applied.push('date'); }
+    else warnings.push('date');
+
+    const cur = _applyScanCurrency($(cfg.curId), parsed.currency);
+    if (cur?.ok) applied.push('currency');
+    else if (cur) warnings.push(`${cur.code} not available here`);
+
+    // Only when there is something to categorise. inferReceiptCategory falls
+    // back to "Other", so running it on an empty extraction would set a field
+    // and make a scan that read nothing at all report partial success.
+    const haveSubject = vendor || description || EXPENSE_CATEGORIES.includes(parsed.category);
+    if (haveSubject && _applyScanCategory($(cfg.catId), parsed.category, vendor, description)) {
+      applied.push('category');
+    }
+
+    const refEl = cfg.refId && $(cfg.refId);
+    if (refEl && parsed.reference) { refEl.value = String(parsed.reference).trim(); applied.push('ref'); }
+
+    // Writing `.value` fires nothing, so both forms' FX preview kept showing
+    // the previous receipt's conversion until the user touched a field.
+    for (const id of [cfg.curId, cfg.amountId, cfg.descId]) {
+      const el = id && $(id);
+      if (!el) continue;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (!applied.length) {
+      showToast('⚠ Could not read that receipt — try a sharper, straighter photo', 'err');
+      return;
+    }
+    const conf = Number(parsed.confidence);
+    const lowConf = Number.isFinite(conf) && conf > 0 && conf < 0.5;
+    // The old blanket "✓ Receipt data extracted" fired even when three of four
+    // fields were empty, which is exactly when the user needed to look.
+    showToast(
+      `✓ Read ${applied.join(', ')}${warnings.length ? ` · check ${warnings.join(', ')}` : ''}${lowConf ? ' · low confidence' : ''}`,
+      (warnings.length || lowConf) ? 'warn' : 'ok',
+      (warnings.length || lowConf) ? 4200 : 2800
+    );
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      showToast(timedOut ? '⚠ Scan timed out — check your connection and retry' : 'Scan cancelled', 'warn');
+    } else {
+      console.error('AI Scan Error:', e);
+      showToast(`⚠ AI extraction failed: ${e.message || e}`, 'err', 4200);
+    }
+  } finally {
+    clearTimeout(timer);
+    _receiptScanAbort = null;
+    if (btn) { btn.textContent = oldText; btn.disabled = false; }
+  }
+}
 
 // In-flight extraction, so Cancel and closing the modal can actually stop it.
 let _emailExtractAbort = null;
@@ -16141,52 +16412,14 @@ async function saveTaxCenterSettings() {
   btn.textContent = oldText; btn.disabled = false;
 }
 
+// Tax Center receipt scan. `keyId` lets a first-time user scan with the key
+// still sitting unsaved in the Config box.
 async function scanReceiptWithAI() {
-  const fileInput = $('tc-exp-file');
-  if (!fileInput || fileInput.files.length === 0) { showToast('⚠ Please attach a file first', 'warn'); return; }
-
-  const apiKey = TAX_CENTER.settings?.geminiKey || document.getElementById('tc-api-key').value.trim();
-  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
-
-  const file = fileInput.files[0];
-  const btn = $('tc-ai-scan-btn');
-  const oldText = btn.textContent;
-  btn.textContent = 'Scanning...'; btn.disabled = true;
-
-  try {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    await new Promise(r => reader.onload = r);
-    const base64Data = reader.result.split(',')[1];
-    const mimeType = file.type;
-
-    const parts = [
-      { text: "Extract these exact 4 keys from this receipt into a very strict JSON format: 'vendor', 'date' (YYYY-MM-DD), 'amount' (number floats only), 'currency' (ISO 3-letter, uppercase, e.g., CAD, USD). No markdown, just raw JSON. If currency is not found, assume CAD." },
-      { inline_data: { mime_type: mimeType, data: base64Data } }
-    ];
-
-    let extractedJsonStr = (await _callGeminiForReceipts(apiKey, parts))?.text;
-    if (!extractedJsonStr) throw new Error("No text returned from AI");
-
-    extractedJsonStr = extractedJsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-
-    const _jsonMatch = extractedJsonStr.match(/\{[\s\S]*\}/);
-    const extracted = JSON.parse(_jsonMatch ? _jsonMatch[0] : extractedJsonStr);
-
-    if (extracted.vendor) $('tc-exp-desc').value = extracted.vendor;
-    if (extracted.date) $('tc-exp-date').value = extracted.date;
-    if (extracted.amount) $('tc-exp-amount').value = extracted.amount;
-    if (extracted.currency) $('tc-exp-cur').value = extracted.currency;
-
-    const ev = new Event('input');
-    $('tc-exp-desc').dispatchEvent(ev);
-
-    showToast('✓ Receipt data extracted');
-  } catch (e) {
-    console.error("AI Scan Error:", e);
-    showToast(`⚠ AI extraction failed: ${e.message}`, 'err');
-  }
-  btn.textContent = oldText; btn.disabled = false;
+  return _runReceiptScan({
+    fileId: 'tc-exp-file', btnId: 'tc-ai-scan-btn', keyId: 'tc-api-key',
+    descId: 'tc-exp-desc', dateId: 'tc-exp-date', amountId: 'tc-exp-amount',
+    curId: 'tc-exp-cur', catId: 'tc-exp-cat'
+  });
 }
 
 
@@ -21934,6 +22167,8 @@ function exposeLegacyInlineHandlers() {
     searchGmailEmails, renderGmailEmailsList, toggleEmailRowSelection, toggleAllGmailSelections,
     toggleEmailPreview, _emailBodyToReceiptFile, _selectedFileParts, renderEmailPreviewContent,
     _setEmailAttExcluded, _callGeminiForReceipts, extractReceiptsFromEmailText, _findDuplicateExpense,
+    _runReceiptScan, _prepareReceiptUpload, _receiptMimeFor, _fileToBase64,
+    _applyScanCurrency, _applyScanCategory, _buildReceiptScanPrompt, RECEIPT_SCAN_SCHEMA,
     _isLikelyDuplicateExpense, _expenseHasReceipt, renderEmailReceiptDrafts, toggleAllEmailDrafts,
     deselectDuplicateEmailDrafts, applyBulkCategoryToEmailDrafts, cancelEmailReceiptExtraction,
     retryFailedEmailExtractions,
