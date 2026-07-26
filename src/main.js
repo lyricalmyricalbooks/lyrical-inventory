@@ -1542,6 +1542,22 @@ export async function saveState(bookId) {
     setSyncState('error', '<b>Firestore</b> · missing state object');
     return;
   }
+  // This book's load failed, so `state` is the empty default standing in for
+  // data we never saw — not the book. Writing it would push an empty ledger
+  // over the real one. The three-way merge in _fbSave would treat the unknown
+  // base as empty and union the two, so nothing would actually be lost, but a
+  // save here still can't mean what the user intends: they are looking at a
+  // blank screen and any edit is reasoning about the wrong data.
+  //
+  // Self-clearing: _fbWatch replaces states[bookId] wholesale when real data
+  // arrives, and the marker is a property of the object it replaces.
+  if (state._loadFailed) {
+    const title = (BOOKS[bookId] && BOOKS[bookId].title) || bookId;
+    showToast(`⚠ Not saving — ${title} never loaded, so this screen isn't its real data. Reload first.`, 'err', 6000);
+    setSyncState('error', '<b>Firestore</b> · not saving · book failed to load');
+    return;
+  }
+
   const json = JSON.stringify(state);
   if (json === lastSavedHashes[bookId]) return;
   setSyncState('syncing', '<b>Firestore</b> · saving…');
@@ -2725,7 +2741,10 @@ export function switchTab(name) {
   if (name === 'history') renderHist();
   if (name === 'manual') updateManualForm();
   if (name === 'consignment') { renderStores(); renderLedger(); renderInvoices(); }
-  if (name === 'expenses') { renderExpenses(); updateExpenseForm(); }
+  // renderArtistReimburseBanner writes into this panel too, and used to arrive
+  // via renderAll()'s unconditional sweep. Now that the sweep is tab-aware,
+  // entering the tab has to render it.
+  if (name === 'expenses') { renderExpenses(); renderArtistReimburseBanner(); updateExpenseForm(); }
   if (name === 'opencall') renderOpenCall();
   if (name === 'reconcile') renderReconcile();
   if (name === 'customers') renderCustomers();
@@ -3984,10 +4003,39 @@ window.recordArtistPayout = recordArtistPayout;
 window.requestArtistPayout = requestArtistPayout;
 window.deleteArtistPayout = deleteArtistPayout;
 
+// Which renderers own which tab.
+//
+// Checked against index.html: every one of these writes only into the panel of
+// the tab it is listed under. renderArtistReimburseBanner appears twice because
+// it genuinely writes into both the dashboard and the expenses panel.
+//
+// Nothing else in the app renders into a book tab, so a tab that is not on
+// screen gains nothing from being rebuilt.
+const TAB_RENDERERS = {
+  dashboard: () => { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); },
+  consignment: () => { renderStores(); renderLedger(); renderInvoices(); },
+  history: () => { renderHist(); },
+  expenses: () => { renderExpenses(); renderArtistReimburseBanner(); },
+};
+
+// Read from the DOM rather than tracked in a variable, so it cannot drift from
+// the panel the user is actually looking at.
+function visibleTabName() {
+  const panel = document.querySelector('.tab-panel.active');
+  return panel && panel.id.startsWith('tab-') ? panel.id.slice(4) : '';
+}
+
 function renderAll() {
   _revMemo.clear();
   if (activeBook === 'all') { updateAllOverview(); updateHeader(); return; }
-  updateDash(); renderStores(); renderLedger(); renderInvoices(); renderHist(); renderExpenses(); renderArtistReimburseBanner(); renderPendingExpenses();
+  // Only the visible tab. This used to rebuild all eight panels on every state
+  // change, so recording a sale at a market walked the full history and the
+  // full consignment ledger to repaint panels nobody was looking at — on the
+  // POS tab, which is not in this map at all, every one of those eight was
+  // pure waste. switchTab() already renders a tab when you arrive at it, so
+  // the hidden ones lose nothing by being left alone.
+  const render = TAB_RENDERERS[visibleTabName()];
+  if (render) render();
 }
 
 function renderCurrent() {

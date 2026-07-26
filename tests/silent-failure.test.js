@@ -109,3 +109,44 @@ describe('loadBook distinguishes a failed load from an empty book', () => {
     expect(src).toMatch(/enumerable: false/);
   });
 });
+
+// ── A book that failed to load must not be saved over the real one ──────────
+//
+// loadBook() substitutes an empty default state when a load fails and marks it
+// _loadFailed, precisely so it can be told apart from a genuinely empty book.
+// Until now nothing read that marker, so the very next save wrote the empty
+// stand-in back to the cloud. _fbSave's three-way merge would union it against
+// an unknown base rather than delete rows, so this was not silent data loss —
+// but a save from a blank screen still cannot mean what the user intends.
+describe('saveState refuses to write a book that never loaded', () => {
+  const src = extractDecl('saveState');
+
+  it('checks the marker before anything is serialised or sent', () => {
+    // Anchored on the actual statements, not the bare identifiers: the comment
+    // above the guard names _fbSave, and matching that would measure prose.
+    const guardAt = src.indexOf('state._loadFailed');
+    const stringifyAt = src.indexOf('const json = JSON.stringify(state)');
+    const sendAt = src.indexOf('await window._fbSave(');
+    expect(guardAt).toBeGreaterThan(-1);
+    expect(stringifyAt).toBeGreaterThan(-1);
+    expect(sendAt).toBeGreaterThan(-1);
+    expect(guardAt).toBeLessThan(stringifyAt);
+    expect(guardAt).toBeLessThan(sendAt);
+  });
+
+  it('returns rather than queueing, so it cannot be retried later', () => {
+    // Queueing would just defer the same bad write to reconnection.
+    const guard = src.slice(src.indexOf('_loadFailed'), src.indexOf('JSON.stringify(state)'));
+    expect(guard).toContain('return;');
+    expect(guard).not.toContain('queueSync');
+  });
+
+  it('tells the user why nothing was saved', () => {
+    const guard = src.slice(src.indexOf('_loadFailed'), src.indexOf('JSON.stringify(state)'));
+    expect(guard).toContain('showToast');
+  });
+
+  it('is set by loadBook on the failure path', () => {
+    expect(extractDecl('loadBook')).toContain("'_loadFailed'");
+  });
+});
