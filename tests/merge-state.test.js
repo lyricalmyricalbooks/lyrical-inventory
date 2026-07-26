@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ALL_PARTS,
   LIST_PARTS,
+  assembleParts,
+  emptyPart,
   stableStringify,
   keyRows,
   mergeRows,
@@ -260,5 +263,72 @@ describe('mergePart dispatch', () => {
     const { value, conflicts } = mergePart('hist', rows, rows, rows);
     expect(value).toEqual(rows);
     expect(conflicts).toEqual([]);
+  });
+});
+
+// ── assembleParts ───────────────────────────────────────────────────────────
+//
+// _fbLoad and _fbWatch now read the whole books/{id}/data collection in one
+// call instead of eight per-document reads, so neither of them gets a snapshot
+// per expected part any more — they get whichever documents exist. This is the
+// piece that turns that sparse set back into a full state, and it is the only
+// part of that change that can be tested without a live Firestore: firebase.js
+// imports from gstatic and connects on load, so the suite cannot import it.
+describe('assembleParts', () => {
+  it('covers metadata plus every list part, in stitch order', () => {
+    expect(ALL_PARTS).toEqual(['metadata', ...LIST_PARTS]);
+  });
+
+  it('parses the parts that have a stored document', () => {
+    const { parts, present } = assembleParts({
+      metadata: JSON.stringify({ stock: 5 }),
+      hist: JSON.stringify([{ num: 'A1', qty: 2 }]),
+    });
+    expect(parts.metadata).toEqual({ stock: 5 });
+    expect(parts.hist).toEqual([{ num: 'A1', qty: 2 }]);
+    expect(present.sort()).toEqual(['hist', 'metadata']);
+  });
+
+  it('fills every absent part with its empty default', () => {
+    const { parts } = assembleParts({ metadata: JSON.stringify({ stock: 1 }) });
+    LIST_PARTS.forEach(p => expect(parts[p]).toEqual([]));
+    expect(parts.metadata).toEqual({ stock: 1 });
+  });
+
+  it('reports nothing present for a book with no documents at all', () => {
+    // This is what tells _fbLoad to fall back to the RTDB copy rather than
+    // treating an unmigrated book as empty and overwriting it.
+    const { parts, present } = assembleParts({});
+    expect(present).toEqual([]);
+    expect(stitchState(parts)).toEqual(stitchState(splitState({})));
+  });
+
+  it('ignores documents that are not known parts', () => {
+    const { parts, present } = assembleParts({
+      metadata: JSON.stringify({ stock: 1 }),
+      somethingElse: JSON.stringify({ nope: true }),
+    });
+    expect(Object.keys(parts).sort()).toEqual([...ALL_PARTS].sort());
+    expect(present).toEqual(['metadata']);
+  });
+
+  it('throws on a present-but-corrupt part instead of reading it as empty', () => {
+    // Deliberate: silently substituting [] for an unreadable ledger would let
+    // the next save treat every real row as deleted. A thrown error fails the
+    // load, which the caller already handles.
+    expect(() => assembleParts({ ledger: '{not json' })).toThrow();
+  });
+
+  it('round-trips a split state back to itself', () => {
+    const state = { stock: 5, hist: [{ num: 'A1' }], ledger: [{ id: 1 }] };
+    const raw = {};
+    const split = splitState(state);
+    Object.keys(split).forEach(k => { raw[k] = JSON.stringify(split[k]); });
+    expect(stitchState(assembleParts(raw).parts)).toEqual(stitchState(split));
+  });
+
+  it('gives metadata an object default and list parts an array default', () => {
+    expect(emptyPart('metadata')).toEqual({});
+    LIST_PARTS.forEach(p => expect(emptyPart(p)).toEqual([]));
   });
 });

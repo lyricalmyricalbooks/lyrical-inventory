@@ -25,6 +25,19 @@ export const LIST_PARTS = [
   'hist', 'ledger', 'expenses', 'stores', 'artistTransfers', 'artistPayouts', 'doneIds',
 ];
 
+// Every document a book's state is stored as, in the order stitchState emits.
+// _fbLoad, _fbWatch, _fbDeleteBook and _fbMassMigrate each used to carry their
+// own literal copy of this list; a part added to LIST_PARTS but missed in one
+// of those copies would sync fine and then silently survive a book deletion or
+// get skipped by the migration.
+export const ALL_PARTS = ['metadata', ...LIST_PARTS];
+
+// The empty value a part takes when its document doesn't exist yet: metadata is
+// an object of scalars, every other part is a row list.
+export function emptyPart(name) {
+  return name === 'metadata' ? {} : [];
+}
+
 // Parts whose rows carry a stable `id` (minted as Date.now() at creation).
 export const ID_KEYED_PARTS = new Set([
   'ledger', 'expenses', 'stores', 'artistTransfers', 'artistPayouts',
@@ -294,6 +307,37 @@ export function stitchState(parts) {
   // and hash comparisons don't report false differences.
   for (const key of LIST_PARTS) out[key] = Array.isArray(p[key]) ? p[key] : [];
   return out;
+}
+
+// Rebuilds the parts object from the raw per-part `data` strings a Firestore
+// read returned, filling in the empty default for any part with no document.
+//
+// _fbLoad and _fbWatch both read the whole `books/{id}/data` collection in one
+// round trip rather than eight per-document reads, which means neither of them
+// gets a snapshot per expected part any more — they get whichever documents
+// happen to exist. This turns that sparse set back into the full, fixed-order
+// parts object the rest of the sync path assumes.
+//
+// `raw` is keyed by part name; a key being ABSENT means "no document", which is
+// not the same as a document holding a bad value. A present-but-unparseable
+// part still throws, exactly as the per-document JSON.parse did, so a corrupt
+// document surfaces as a failed load instead of quietly reading as empty and
+// letting the next save treat real rows as deleted.
+//
+// Returns the parts object plus the names that actually had a stored document,
+// which is what the callers use to decide which merge-base hashes to advance.
+export function assembleParts(raw) {
+  const parts = {};
+  const present = [];
+  for (const name of ALL_PARTS) {
+    if (raw && Object.prototype.hasOwnProperty.call(raw, name)) {
+      parts[name] = JSON.parse(raw[name]);
+      present.push(name);
+    } else {
+      parts[name] = emptyPart(name);
+    }
+  }
+  return { parts, present };
 }
 
 // Dispatch for a single part name, so callers don't repeat the branch.

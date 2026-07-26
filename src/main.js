@@ -1686,8 +1686,12 @@ async function loadAllBooks() {
 async function forceSync() {
   if (isAuthor() && activeBook) { await loadBook(activeBook); renderCurrent(); }
   else {
+    // loadAllBooks() already awaits loadTaxCenter(). Calling it again here
+    // re-read the settings document, and on the first sync of a day it also
+    // re-fetched the FX rates: refreshDailyRates() marks the day done by
+    // calling saveTaxCenter() WITHOUT awaiting it, so the second read raced
+    // that write, usually won, and came back without lastRateSync set.
     await loadAllBooks();
-    await loadTaxCenter();
   }
 }
 
