@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,7 +14,7 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
   let extractBigCartelOrderItems;
 
   beforeEach(() => {
-    const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+    const mainContent = appSource;
 
     const matchFunc = mainContent.match(/function matchBigCartelOrderToCatalog\([^)]*\)\s*\{([\s\S]+?)\n\}/);
     const formatFunc = mainContent.match(/function formatBigCartelOrderAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
@@ -155,7 +156,7 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
     let extractBigCartelAddress;
 
     beforeEach(() => {
-      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      const mainContent = appSource;
       const countryCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);
       const extractFuncMatch = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
       const normCountryMatch = mainContent.match(/function normalizeCountryCode\([^)]*\)\s*\{([\s\S]+?)\n\}/);
@@ -220,7 +221,7 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
     let extractBigCartelAddress;
 
     beforeEach(() => {
-      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      const mainContent = appSource;
       const countryCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);
       const extractFuncMatch = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
       const normCountryMatch = mainContent.match(/function normalizeCountryCode\([^)]*\)\s*\{([\s\S]+?)\n\}/);
@@ -295,7 +296,7 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
   });
 
   describe('destination prefill wiring', () => {
-    const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+    const mainContent = appSource;
 
     it('passes the whole order (not just attributes) so relationships survive', () => {
       expect(mainContent).not.toContain('extractBigCartelAddress(o.attributes || {}, o.id)');

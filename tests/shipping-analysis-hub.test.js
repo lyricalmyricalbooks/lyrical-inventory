@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,7 +15,7 @@ describe('Shipping Analysis Hub Functions', () => {
   let downloadFilteredShippingLedgerCSV;
 
   beforeEach(() => {
-    const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+    const mainContent = appSource;
 
     // Extract helper functions
     const carrierMatch = mainContent.match(/function parseCarrierInfo\(desc\) \{([\s\S]+?)\n\}/);
@@ -99,7 +100,7 @@ describe('Shipping Analysis Hub Functions', () => {
   describe('dismiss and restore actions', () => {
     let dismissFn, restoreFn, batchDismissFn, mockStates, mockCalls, mockCheckboxes;
     beforeEach(() => {
-      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      const mainContent = appSource;
       
       const dismissMatch = mainContent.match(/async function dismissShippingAnalysisOrder\(bookId, orderIdentifier\) \{([\s\S]+?)\n\}/);
       const restoreMatch = mainContent.match(/async function restoreShippingAnalysisOrder\(bookId, orderIdentifier\) \{([\s\S]+?)\n\}/);
@@ -187,7 +188,7 @@ describe('Shipping Analysis Hub Functions', () => {
   describe('syncBigCartelShippingPaid', () => {
     let syncFn, mockStates, mockCalls, mockSheetsQueue;
     beforeEach(() => {
-      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      const mainContent = appSource;
       const syncMatch = mainContent.match(/async function syncBigCartelShippingPaid\(bcOrders\) \{([\s\S]+?)\n\}/);
       expect(syncMatch).not.toBeNull();
 
@@ -250,7 +251,7 @@ describe('Shipping Analysis Hub Functions', () => {
     let getSmartShippingRecommendations;
 
     beforeEach(() => {
-      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      const mainContent = appSource;
 
       const getPercentileMatch = mainContent.match(/function getPercentile\(arr, pct\) \{([\s\S]+?)\n\}/);
       const getMeanMatch = mainContent.match(/function getMean\(arr\) \{([\s\S]+?)\n\}/);
@@ -417,7 +418,7 @@ describe('Shipping Analysis Hub Functions', () => {
     let updateShippingSimulationFn;
 
     beforeEach(() => {
-      const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+      const mainContent = appSource;
 
       const getPercentileMatch = mainContent.match(/function getPercentile\(arr, pct\) \{([\s\S]+?)\n\}/);
       const getMeanMatch = mainContent.match(/function getMean\(arr\) \{([\s\S]+?)\n\}/);

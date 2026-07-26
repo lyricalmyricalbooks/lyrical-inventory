@@ -2,10 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { describe, expect, it } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
-const mainContent = fs.readFileSync(path.resolve(dirname, '../src/main.js'), 'utf8');
+const mainContent = appSource;
 const styleContent = fs.readFileSync(path.resolve(dirname, '../src/style.css'), 'utf8');
 
 describe('Shipping P&L dashboard redesign', () => {

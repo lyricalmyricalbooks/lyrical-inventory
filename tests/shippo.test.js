@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -15,7 +16,7 @@ describe('Shippo Customs & Country Helpers', () => {
 
   // We extract the functions statically so we don't have to load main.js's DOM dependencies
   beforeEach(() => {
-    const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+    const mainContent = appSource;
 
     // Extract SHIPPO_COUNTRY_CODES object
     const shippoCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);

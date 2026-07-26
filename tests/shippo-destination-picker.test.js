@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,7 +12,7 @@ describe('Custom Searchable Destination Picker UX/UI Suite', () => {
   const indexHtmlPath = path.resolve(__dirname, '../index.html');
   const styleCssPath = path.resolve(__dirname, '../src/style.css');
 
-  const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+  const mainContent = appSource;
   const indexContent = fs.readFileSync(indexHtmlPath, 'utf8');
   const styleContent = fs.readFileSync(styleCssPath, 'utf8');
 
