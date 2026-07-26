@@ -5,7 +5,28 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const MAIN_JS_PATH = path.resolve(__dirname, '../../src/main.js');
-export const mainJs = fs.readFileSync(MAIN_JS_PATH, 'utf8');
+
+// The app's source is main.js plus every feature module. Features were carved
+// out of main.js and their functions moved verbatim, so a suite that lifts a
+// declaration by name should keep finding it wherever it now lives — the point
+// of these tests is the behaviour, not the file it happens to sit in.
+//
+// Read from disk rather than listed, so a module added later is covered the
+// moment it exists.
+const FEATURES_DIR = path.resolve(__dirname, '../../src/features');
+export const FEATURE_PATHS = fs.existsSync(FEATURES_DIR)
+  ? fs.readdirSync(FEATURES_DIR).filter(f => f.endsWith('.js'))
+      .map(f => path.join(FEATURES_DIR, f))
+  : [];
+
+/** main.js and every feature module, concatenated. */
+export const appSource = [MAIN_JS_PATH, ...FEATURE_PATHS]
+  .map(p => fs.readFileSync(p, 'utf8'))
+  .join('\n');
+
+// Kept as the default source for extractDecl and as the export several suites
+// still read directly. It spans the feature modules for the reason above.
+export const mainJs = appSource;
 
 // src/main.js is a single ~30k-line module with top-level Firebase side effects,
 // so a test cannot import it. Testing anything in there means lifting the
@@ -33,30 +54,36 @@ function escapeRe(s) {
 export function extractDecl(name, source = mainJs) {
   const n = escapeRe(name);
 
-  const fnStart = source.match(new RegExp(`^(?:async\\s+)?function ${n}\\s*\\(`, 'm'));
+  // main.js now exports the helpers the feature modules import. The `export`
+  // keyword is illegal inside `new Function`, and it is not part of the
+  // declaration under test, so it is stripped from whatever is returned.
+  const bare = (text) => text.replace(/^export\s+/, '');
+
+  const fnStart = source.match(new RegExp(`^(?:export\\s+)?(?:async\\s+)?function ${n}\\s*\\(`, 'm'));
   if (fnStart) {
     const from = fnStart.index;
     const end = source.indexOf('\n}', from);
     if (end === -1) throw new Error(`extractDecl: no column-0 close brace after function ${name}`);
-    return source.slice(from, end + 2);
+    return bare(source.slice(from, end + 2));
   }
 
-  const constStart = source.match(new RegExp(`^(?:const|let) ${n}\\s*=`, 'm'));
+  const constStart = source.match(new RegExp(`^(?:export\\s+)?(?:const|let) ${n}\\s*=`, 'm'));
   if (constStart) {
     const from = constStart.index;
     // Multi-line object/array literal closes at column 0; otherwise one line.
     const multi = source.startsWith('{', source.indexOf('=', from) + 2)
-      || /^(?:const|let) [^=]+=\s*[{[]\s*$/m.test(source.slice(from, source.indexOf('\n', from)));
+      || /^(?:export\s+)?(?:const|let) [^=]+=\s*[{[]\s*$/m.test(source.slice(from, source.indexOf('\n', from)));
     if (multi) {
       const end = source.indexOf('\n};', from);
-      if (end !== -1) return source.slice(from, end + 3);
+      if (end !== -1) return bare(source.slice(from, end + 3));
     }
     const eol = source.indexOf('\n', from);
-    return source.slice(from, eol === -1 ? source.length : eol);
+    return bare(source.slice(from, eol === -1 ? source.length : eol));
   }
 
   throw new Error(
-    `extractDecl: no top-level declaration named "${name}" in src/main.js. ` +
+    `extractDecl: no top-level declaration named "${name}" in src/main.js ` +
+    'or any src/features module. ' +
     'If it was renamed or moved, update the test that depends on it.'
   );
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +18,7 @@ describe('Shippo reconciliation controls', () => {
   });
 
   it('supports dismissing imported expenses without removing them from the ledger', () => {
-    const main = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
+    const main = appSource;
 
     expect(main).toContain("expense.shippingMatchStatus !== 'dismissed'");
     expect(main).toContain("expense.shippingMatchStatus = 'dismissed'");

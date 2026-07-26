@@ -27,7 +27,7 @@ describe('main.js window binding verification', () => {
     expect(fs.existsSync(mainJsPath)).toBe(true);
 
     // Find the exposeLegacyInlineHandlers block
-    const blockMatch = mainContent.match(/function exposeLegacyInlineHandlers\(\)\s*\{([\s\S]+?)\n\}/);
+    const blockMatch = appSource.match(/function exposeLegacyInlineHandlers\(\)\s*\{([\s\S]+?)\n\}/);
     expect(blockMatch).not.toBeNull();
 
     // Extract inside Object.assign(window, { ... })
@@ -60,97 +60,100 @@ describe('main.js window binding verification', () => {
     expect(missingDefinitions).toEqual([]);
   });
 
+  // Shipping moved to src/features/shipping.js, so these assertions run against
+  // the whole app source rather than main.js alone. What they check — that the
+  // wiring exists — is unchanged.
   it('wires shipping income, reconciliation, and Shippo order metadata', () => {
-    expect(mainContent).toContain("type: 'Shipping income'");
-    expect(mainContent).toContain('function renderOrderShippingSummary');
-    expect(mainContent).toContain('function renderShippingReconciliationWorklist');
-    expect(mainContent).toContain('async function linkShippingExpense');
-    expect(mainContent).toContain('enrichShippoExpense(');
-    expect(mainContent).toContain('orderNumber: h.num');
-    expect(mainContent).toContain('payload.metadata = `order_number:${selectedOrderNumber.slice(0, 100)}`');
-    expect(mainContent).toContain('select.dataset.orderNumber');
-    expect(mainContent).toContain('selectedOrderNumber.slice(0, 100)');
-    expect(mainContent).toContain("select.dataset.orderNumber = ''");
+    expect(appSource).toContain("type: 'Shipping income'");
+    expect(appSource).toContain('function renderOrderShippingSummary');
+    expect(appSource).toContain('function renderShippingReconciliationWorklist');
+    expect(appSource).toContain('async function linkShippingExpense');
+    expect(appSource).toContain('enrichShippoExpense(');
+    expect(appSource).toContain('orderNumber: h.num');
+    expect(appSource).toContain('payload.metadata = `order_number:${selectedOrderNumber.slice(0, 100)}`');
+    expect(appSource).toContain('select.dataset.orderNumber');
+    expect(appSource).toContain('selectedOrderNumber.slice(0, 100)');
+    expect(appSource).toContain("select.dataset.orderNumber = ''");
   });
 
   it('renders Shipping P&L as an operational dashboard with a scoped ledger', () => {
-    expect(mainContent).toContain('shipping-pnl-dashboard');
-    expect(mainContent).toContain('shipping-pnl-attention');
-    expect(mainContent).toContain('shipping-pnl-ledger');
-    expect(mainContent).toContain('shipping-pnl-insights');
-    expect(mainContent).toContain('shipping-pnl-status');
-    expect(mainContent).toContain('Postage not linked');
+    expect(appSource).toContain('shipping-pnl-dashboard');
+    expect(appSource).toContain('shipping-pnl-attention');
+    expect(appSource).toContain('shipping-pnl-ledger');
+    expect(appSource).toContain('shipping-pnl-insights');
+    expect(appSource).toContain('shipping-pnl-status');
+    expect(appSource).toContain('Postage not linked');
   });
 
   it('includes a linked order number in Tax Center shipping expense exports', () => {
-    expect(mainContent).toContain('e.shippingOrderNumber ? `${e.ref || \'\'} · ${e.shippingOrderNumber}` : e.ref || \'\'');
+    expect(appSource).toContain('e.shippingOrderNumber ? `${e.ref || \'\'} · ${e.shippingOrderNumber}` : e.ref || \'\'');
   });
 
   it('adds customer-paid shipping to the Tax Center income ledger', () => {
-    expect(mainContent).toContain("type: 'Shipping income'");
-    expect(mainContent).toContain("sourceType: 'shippingIncome'");
-    expect(mainContent).toContain('Number(h.shippingPaid)');
+    expect(appSource).toContain("type: 'Shipping income'");
+    expect(appSource).toContain("sourceType: 'shippingIncome'");
+    expect(appSource).toContain('Number(h.shippingPaid)');
   });
 
   it('keeps Shippo references out of visible worklist copy', () => {
-    expect(mainContent).toContain('aria-label="Order for postage expense"');
-    expect(mainContent).not.toContain('<span class="sr-only"> for ${escapeHtml(expense.ref)}</span>');
+    expect(appSource).toContain('aria-label="Order for postage expense"');
+    expect(appSource).not.toContain('<span class="sr-only"> for ${escapeHtml(expense.ref)}</span>');
   });
 
   it('enriches existing Shippo expenses instead of duplicating them', () => {
-    expect(mainContent).toContain("const existingExpense = existingExpensesByRef.get(ref)");
-    expect(mainContent).toContain('stagedExistingEnrichments.push(staged)');
-    expect(mainContent).toContain('applyShippoExpenseEnrichments(stagedExistingEnrichments)');
-    expect(mainContent).toContain('fetchShippoContext(token, tx)');
-    expect(mainContent).toContain('enrichShippoExpense(');
+    expect(appSource).toContain("const existingExpense = existingExpensesByRef.get(ref)");
+    expect(appSource).toContain('stagedExistingEnrichments.push(staged)');
+    expect(appSource).toContain('applyShippoExpenseEnrichments(stagedExistingEnrichments)');
+    expect(appSource).toContain('fetchShippoContext(token, tx)');
+    expect(appSource).toContain('enrichShippoExpense(');
   });
 
   it('backfills parsed receipt financials onto applied website history', () => {
-    expect(mainContent).toContain("const financialFields = ['subtotal', 'discountCode', 'discountAmount'");
-    expect(mainContent).toContain('h.shippingPaid');
-    expect(mainContent).toContain('h.totalPaid');
-    expect(mainContent).toContain('const netPrice = Math.round((Number(match.merchandisePaid) / Number(h.qty)) * 100) / 100');
+    expect(appSource).toContain("const financialFields = ['subtotal', 'discountCode', 'discountAmount'");
+    expect(appSource).toContain('h.shippingPaid');
+    expect(appSource).toContain('h.totalPaid');
+    expect(appSource).toContain('const netPrice = Math.round((Number(match.merchandisePaid) / Number(h.qty)) * 100) / 100');
   });
 
   it('offers a safe reapply path for already-applied website orders', () => {
-    expect(mainContent).toContain('function reapplyOne');
-    expect(mainContent).toContain('onclick="reapplyOne');
-    expect(mainContent).toContain('does not decrement stock');
+    expect(appSource).toContain('function reapplyOne');
+    expect(appSource).toContain('onclick="reapplyOne');
+    expect(appSource).toContain('does not decrement stock');
   });
 
   it('offers cancel and restore paths for website orders', () => {
-    expect(mainContent).toContain('function cancelOrder');
-    expect(mainContent).toContain('function restoreOrder');
-    expect(mainContent).toContain('function unapplyOne');
-    expect(mainContent).toContain('onclick="cancelOrder');
-    expect(mainContent).toContain('onclick="restoreOrder');
-    expect(mainContent).toContain('onclick="unapplyOne');
-    expect(mainContent).toContain('show-all-orders-chk');
+    expect(appSource).toContain('function cancelOrder');
+    expect(appSource).toContain('function restoreOrder');
+    expect(appSource).toContain('function unapplyOne');
+    expect(appSource).toContain('onclick="cancelOrder');
+    expect(appSource).toContain('onclick="restoreOrder');
+    expect(appSource).toContain('onclick="unapplyOne');
+    expect(appSource).toContain('show-all-orders-chk');
   });
 
   it('displays the unit production cost on the book dashboard', () => {
-    expect(mainContent).toContain('d-stock-sub');
-    expect(mainContent).toContain('cost / printed');
-    expect(mainContent).toContain('/book');
+    expect(appSource).toContain('d-stock-sub');
+    expect(appSource).toContain('cost / printed');
+    expect(appSource).toContain('/book');
   });
 
   it('makes recent changes commits clickable in the Whats New modal', () => {
-    expect(mainContent).toContain('class="commit-item"');
-    expect(mainContent).toContain('fullSha');
-    expect(mainContent).toContain('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/');
+    expect(appSource).toContain('class="commit-item"');
+    expect(appSource).toContain('fullSha');
+    expect(appSource).toContain('https://github.com/lyricalmyricalbooks/lyrical-inventory/commit/');
   });
 
   it('supports percentage discount in recalcInvoiceTotals and saveInvoice', () => {
-    expect(mainContent).toContain("discountType: totals.discountType || 'flat'");
-    expect(mainContent).toContain("discountRate: totals.discountRate || 0");
-    expect(mainContent).toContain("function onDiscountTypeChange");
+    expect(appSource).toContain("discountType: totals.discountType || 'flat'");
+    expect(appSource).toContain("discountRate: totals.discountRate || 0");
+    expect(appSource).toContain("function onDiscountTypeChange");
   });
 
   it('supports local storage state persistence for shipping recommendation card controls', () => {
-    expect(mainContent).toContain("function getShipRecoMode");
-    expect(mainContent).toContain("function getShipWeightOverride");
-    expect(mainContent).toContain("function onShipInsightsToggle");
-    expect(mainContent).toContain("localStorage.setItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val)");
-    expect(mainContent).toContain("localStorage.setItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`, isOpen ? 'true' : 'false')");
+    expect(appSource).toContain("function getShipRecoMode");
+    expect(appSource).toContain("function getShipWeightOverride");
+    expect(appSource).toContain("function onShipInsightsToggle");
+    expect(appSource).toContain("localStorage.setItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val)");
+    expect(appSource).toContain("localStorage.setItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`, isOpen ? 'true' : 'false')");
   });
 });
