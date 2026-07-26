@@ -24,19 +24,14 @@ import {
   _fxRateCache,
   activeBook,
   addLog,
-  bigCartelData,
   closeM,
   confirmDialog,
-  extractBigCartelAddress,
   fetchHistoricalRate,
   fetchLiveRate,
   getAllStores,
-  getBigCartelIncluded,
   getBook,
   getState,
-  hydrateShippingDestinationPhone,
   isAuthor,
-  loadCachedBigCartelOrders,
   normalizeCountryCode,
   openM,
   orders,
@@ -52,6 +47,13 @@ import {
   states,
   today,
 } from '../main.js';
+import {
+  extractBigCartelAddress,
+  getBigCartelIncluded,
+  loadCachedBigCartelOrders,
+  hydrateShippingDestinationPhone,
+  bigCartelData,
+} from './bigcartel.js';
 import { escapeHtml } from '../lib/html.js';
 import { csvCell } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';

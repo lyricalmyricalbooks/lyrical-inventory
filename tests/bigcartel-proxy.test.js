@@ -1,11 +1,14 @@
 import fs from 'fs';
 import { describe, expect, it } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const source = fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8');
+// Big Cartel moved to src/features/bigcartel.js; appSource spans main.js and
+// every feature module, so this keeps checking the same code wherever it lives.
+const source = appSource;
 
 function functionSource(name) {
   const start = source.indexOf(`async function ${name}(`);
