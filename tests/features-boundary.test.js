@@ -12,6 +12,7 @@ const MAIN_IMPORT_BUDGET = {
   'opencall.js': 18,
   'shipping.js': 29,
   'bigcartel.js': 18,
+  'taxcentre.js': 23,
 };
 
 const featureFiles = fs.existsSync(featureDir)
@@ -111,6 +112,54 @@ describe('feature modules are the only home of what they own', () => {
         // Everything imported must actually be exported by that module.
         expect(imported.filter(n => !exported.includes(n))).toEqual([]);
       });
+    });
+  });
+});
+
+// Every name a module imports must actually be exported by the module it names.
+//
+// eslint's no-undef does not check this: the identifier *is* imported, so it is
+// defined as far as the linter is concerned, and the import only fails when the
+// bundler resolves it. Extracting the Tax Centre moved renderTaxCenter and
+// saveTaxCenter out of main.js while shipping.js still imported them from
+// there — lint stayed clean and `npm run build` failed. Tests run before the
+// build in CI, so this puts the failure where it can be read.
+describe('cross-module imports resolve', () => {
+  const exportsOf = (src) => {
+    const at = src.lastIndexOf('\nexport {');
+    if (at < 0) return null;
+    const block = src.slice(at).replace(/^[\s\S]*?\{/, '').replace(/\}[\s\S]*$/, '');
+    return new Set(block.split(',').map(s => s.trim()).filter(Boolean));
+  };
+
+  // main.js has no trailing export block; its exports are inline.
+  const mainExports = new Set([
+    ...[...mainJs.matchAll(/^export (?:async )?function ([A-Za-z_$][\w$]*)/gm)].map(m => m[1]),
+    ...[...mainJs.matchAll(/^export (?:const|let|var) ([A-Za-z_$][\w$]*)/gm)].map(m => m[1]),
+  ]);
+
+  const sources = Object.fromEntries(
+    featureFiles.map(f => [f, fs.readFileSync(path.join(featureDir, f), 'utf8')]));
+
+  featureFiles.forEach(file => {
+    const src = sources[file];
+
+    it(`${file}: every name it takes from main.js is exported there`, () => {
+      const m = src.match(/import\s*\{([^}]*)\}\s*from\s*'\.\.\/main\.js'/);
+      const names = m ? m[1].split(',').map(s => s.trim()).filter(Boolean) : [];
+      expect(names.filter(n => !mainExports.has(n))).toEqual([]);
+    });
+
+    it(`${file}: every name it takes from a sibling module is exported there`, () => {
+      const missing = [];
+      for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*'\.\/([\w.-]+)'/g)) {
+        const sibling = m[2].endsWith('.js') ? m[2] : `${m[2]}.js`;
+        const exported = sources[sibling] ? exportsOf(sources[sibling]) : null;
+        if (!exported) { missing.push(`${sibling} (no export block)`); continue; }
+        m[1].split(',').map(s => s.trim()).filter(Boolean)
+          .forEach(n => { if (!exported.has(n)) missing.push(`${n} from ${sibling}`); });
+      }
+      expect(missing).toEqual([]);
     });
   });
 });

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -9,7 +10,7 @@ const __dirname = path.dirname(__filename);
 describe('Test Book Sandbox Isolation & Google Sheets Protection', () => {
   const mainJsPath = path.resolve(__dirname, '../src/main.js');
   const indexHtmlPath = path.resolve(__dirname, '../index.html');
-  const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+  const mainContent = appSource;
   const indexContent = fs.readFileSync(indexHtmlPath, 'utf8');
 
   it('correctly defines isTestBook and isTestBookId helper functions', () => {
