@@ -20,6 +20,8 @@ import {
 } from './lib/money.js';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
+import { csvCell, csvRow, toCsv } from './lib/csv.js';
+import { downloadBlob, downloadText, downloadCsv } from './lib/download.js';
 import {
   OC_STAGES, ocNextAction, newContributor, parseContributorRows, findUnfilledMergeFields,
   ocProposalKey, ocProposalSummary, ocProposalsFromScan, ocApplyProposal,
@@ -10295,14 +10297,8 @@ function exportConsignmentLedgerCSV() {
       e.notes || ''
     ]);
   }
-  const csv = out.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
   const slug = String(book.id || book.title || 'book').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  a.href = url; a.download = `consignment-ledger-${slug}-${today()}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 500);
+  downloadCsv(toCsv(out), `consignment-ledger-${slug}-${today()}.csv`);
   showToast('✓ Consignment ledger exported');
 }
 
@@ -11509,12 +11505,7 @@ function downloadInvoiceHTML(opts) {
   const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
   if (!inv) return;
   const html = buildStandaloneInvoiceHTML(inv);
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `${inv.num}.html`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadText(html, `${inv.num}.html`, 'text/html');
   if (!(opts && opts.silent)) {
     showToast(effectivePaymentLink(inv)
       ? '✓ Invoice downloaded with the Stripe pay link embedded — attach it or print to PDF.'
@@ -14532,15 +14523,7 @@ async function exportToJSON(ev) {
     const savedToFolder = await writeBackupToChosenFolder(data, filename);
 
     if (!savedToFolder) {
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 500);
+      downloadText(JSON.stringify(data, null, 2), filename, 'application/json');
     }
 
     localStorage.setItem('lm-last-backup-ts', Date.now().toString());
@@ -15218,16 +15201,7 @@ function exportAllToCSV() {
 
   if (rows.length === 1) { showToast('No records to export', 'warn'); return; }
 
-  const csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `lyrical-records-export-${today()}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 500);
+  downloadCsv(toCsv(rows), `lyrical-records-export-${today()}.csv`);
   showToast('✓ CSV Export downloaded');
 }
 
@@ -16182,7 +16156,9 @@ function downloadTaxReport() {
 
         // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
         if (h.date && h.date.startsWith(yearStr)) {
-          csv += `${h.date},Order,${book.title},Sale,"${h.chan} Order #${h.num}",,${(h.qty * h.price).toFixed(2)},0,0,0,${(h.qty * h.price).toFixed(2)}\n`;
+          const gross = (h.qty * h.price).toFixed(2);
+          csv += csvRow([h.date, 'Order', book.title, 'Sale',
+            `${h.chan} Order #${h.num}`, '', gross, 0, 0, 0, gross]) + '\n';
         }
       }
     }
@@ -16190,7 +16166,8 @@ function downloadTaxReport() {
     (s.expenses || []).forEach(e => {
       // ⚡ Bolt Optimization: Use string prefix matching for "YYYY-MM-DD" formatted dates to avoid expensive Date parsing inside loops
       if (e.date && e.date.startsWith(yearStr)) {
-        csv += `${e.date},Expense,${book.title},${e.cat},"${e.desc}","${e.receipt || ''}",0,0,${e.amount.toFixed(2)},0,-${e.amount.toFixed(2)}\n`;
+        csv += csvRow([e.date, 'Expense', book.title, e.cat, e.desc, e.receipt || '',
+          0, 0, e.amount.toFixed(2), 0, -e.amount.toFixed(2)]) + '\n';
       }
     });
   });
@@ -16198,16 +16175,13 @@ function downloadTaxReport() {
   // Summary lines for COGS and Shares
   csv += `\nSUMMARY FOR ${year},,,,,,,,,\n`;
   fin.bookStats.forEach(bs => {
-    csv += `${year}-12-31,COGS Summary,${bs.title},COGS,Inventory Recovery,,0,${bs.cogs.toFixed(2)},0,0,-${bs.cogs.toFixed(2)}\n`;
-    csv += `${year}-12-31,Artist Share,${bs.title},Royalty,Tiered Payout,,0,0,0,${bs.shares.toFixed(2)},-${bs.shares.toFixed(2)}\n`;
+    csv += csvRow([`${year}-12-31`, 'COGS Summary', bs.title, 'COGS', 'Inventory Recovery', '',
+      0, bs.cogs.toFixed(2), 0, 0, -bs.cogs.toFixed(2)]) + '\n';
+    csv += csvRow([`${year}-12-31`, 'Artist Share', bs.title, 'Royalty', 'Tiered Payout', '',
+      0, 0, 0, bs.shares.toFixed(2), -bs.shares.toFixed(2)]) + '\n';
   });
 
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.setAttribute('href', url);
-  a.setAttribute('download', `Lyrical_Tax_Report_${year}.csv`);
-  a.click();
+  downloadCsv(csv, `Lyrical_Tax_Report_${year}.csv`);
 }
 
 // ── GOOGLE AUTHENTICATION
@@ -16863,33 +16837,22 @@ function exportTripCSV(tripName) {
   const { baseCurrency, byName } = detail;
   const { items } = byName[tripName];
 
-  const headers = ['Date', 'Description', 'Tax Category', 'Reference', 'Original Currency', 'Original Amount', `Base Amount (${baseCurrency})`, 'Receipt URL'];
-  const csvRows = [headers.join(',')];
-
-  items.forEach(item => {
-    const row = [
-      `"${(item.date || '').replace(/"/g, '""')}"`,
-      `"${(item.desc || '').replace(/"/g, '""')}"`,
-      `"${(item.cat || '').replace(/"/g, '""')}"`,
-      `"${(item.ref || '').replace(/"/g, '""')}"`,
-      `"${item.origCurrency || 'CAD'}"`,
+  const rows = [
+    ['Date', 'Description', 'Tax Category', 'Reference', 'Original Currency', 'Original Amount', `Base Amount (${baseCurrency})`, 'Receipt URL'],
+    ...items.map(item => [
+      item.date || '',
+      item.desc || '',
+      item.cat || '',
+      item.ref || '',
+      item.origCurrency || 'CAD',
       Number(item.origAmount || 0).toFixed(2),
       Number(item.baseAmount || 0).toFixed(2),
-      `"${(item.receipt || '').replace(/"/g, '""')}"`
-    ];
-    csvRows.push(row.join(','));
-  });
+      item.receipt || '',
+    ]),
+  ];
 
-  const csvString = csvRows.join('\n');
-  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
   const safeFilename = `trip_expenses_${tripName.replace(/[^a-zA-Z0-9_\-]/g, '_')}.csv`;
-  link.setAttribute('href', url);
-  link.setAttribute('download', safeFilename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadCsv(toCsv(rows), safeFilename);
   showToast(`✓ Exported ${items.length} expenses to ${safeFilename}`);
 }
 
@@ -18720,33 +18683,25 @@ function downloadTaxLedgerCSV() {
 
   if (!data.length) { showToast('Nothing to export for this filter'); return; }
 
-  // RFC-4180 escaping: wrap in quotes and double any embedded quotes.
-  const cell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-
-  const rows = [['Date', 'Type', 'Description', 'Category', 'Receipt/Ref', 'Orig Currency', 'Amount (Orig)', `Amount (${baseCurrency})`].map(cell)];
+  const rows = [['Date', 'Type', 'Description', 'Category', 'Receipt/Ref', 'Orig Currency', 'Amount (Orig)', `Amount (${baseCurrency})`]];
   for (const r of data) {
     // Sign the base-currency column so totals sum correctly in a spreadsheet.
     const signedBase = (r.isIncome ? 1 : -1) * Number(r.baseAmount || 0);
     rows.push([
-      cell(r.date || ''),
-      cell(r.type || ''),
-      cell(r.desc || ''),
-      cell(r.cat || ''),
-      cell([r.ref || '', r.invoiceNum ? `Invoice ${r.invoiceNum}` : ''].filter(Boolean).join(' · ')),
-      cell(r.origCurrency || ''),
-      cell(Number(r.origAmount || 0).toFixed(2)),
-      cell(signedBase.toFixed(2)),
+      r.date || '',
+      r.type || '',
+      r.desc || '',
+      r.cat || '',
+      [r.ref || '', r.invoiceNum ? `Invoice ${r.invoiceNum}` : ''].filter(Boolean).join(' · '),
+      r.origCurrency || '',
+      Number(r.origAmount || 0).toFixed(2),
+      signedBase.toFixed(2),
     ]);
   }
 
-  const csvStr = rows.map(r => r.join(',')).join('\r\n');
-  const blob = new Blob(['﻿' + csvStr], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Tax_Ledger_${today()}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  // BOM + CRLF preserved: this file is opened directly in Excel, where the BOM
+  // is what keeps a `·` or an accented description from arriving as mojibake.
+  downloadCsv(toCsv(rows, { bom: true, eol: '\r\n' }), `Tax_Ledger_${today()}.csv`);
 }
 
 // Smart categorization listener
@@ -20411,7 +20366,7 @@ function calculateInventoryValuationData() {
 
 function downloadInventoryValuationCSV() {
   const { items, totals } = calculateInventoryValuationData();
-  const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+  const esc = csvCell;
 
   let csv = 'Lyricalmyrical Book Inventory Valuation Report\n';
   csv += 'Generated on: ' + today() + '\n';
@@ -20426,13 +20381,7 @@ function downloadInventoryValuationCSV() {
 
   csv += `TOTALS,"Total Active Titles: ${totals.totalTitles}",,,${totals.totalPrintRun},${totals.totalStockOnHand},${totals.totalStockConsigned},${totals.totalUnsoldUnits},${totals.totalSoldUnits},CAD,,,,,,${totals.totalOnHandCostCAD.toFixed(2)},${totals.totalConsignedCostCAD.toFixed(2)},${totals.totalAssetValueCostCAD.toFixed(2)},${totals.totalAssetValueRetailCAD.toFixed(2)},${totals.totalPotentialGrossProfitCAD.toFixed(2)}\n`;
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.setAttribute('download', `Lyrical_Inventory_Valuation_${today()}.csv`);
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  downloadCsv(csv, `Lyrical_Inventory_Valuation_${today()}.csv`);
   showToast('✓ Comprehensive Inventory Valuation CSV exported');
 }
 
@@ -20599,7 +20548,7 @@ window.downloadFullTaxSeasonExport = function () {
   csv += 'Generated on: ' + today() + '\n';
   csv += 'Tax Year: ' + (isAllTime ? 'All Time' : year) + '\n\n';
 
-  const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+  const esc = csvCell;
   const getAmt = (e) => (parseFloat(e.baseAmount || e.amountCAD || e.amount || 0));
 
   // Track books exported with no saved CAD rate (fell back to 1.0 — a silently
@@ -20715,12 +20664,7 @@ window.downloadFullTaxSeasonExport = function () {
     rateWarnings.forEach(w => { csv += `${esc(w.title)},${esc(w.cur)},1.00\n`; });
   }
 
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.setAttribute('href', url);
-  a.setAttribute('download', `Lyrical_Tax_Season_${isAllTime ? 'AllTime' : year}_Export.csv`);
-  a.click();
+  downloadCsv('﻿' + csv, `Lyrical_Tax_Season_${isAllTime ? 'AllTime' : year}_Export.csv`);
 
   if (rateWarnings.size) {
     const names = Array.from(rateWarnings.values()).map(w => `${w.title} (${w.cur})`).join(', ');
@@ -21258,13 +21202,7 @@ function downloadStripeFeesAuditCSV() {
       r.source || '', r.description || ''
     ].map(esc).join(','));
   }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `stripe-balance-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadCsv(lines.join('\n'), `stripe-balance-transactions-${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -22271,13 +22209,7 @@ function exportMailingListCSV() {
   if (!subs.length) { showToast('No mailable subscribers to export', 'warn'); return; }
   const rows = [['Name', 'Email', 'Source', 'Added']];
   subs.forEach(s => rows.push([s.name || '', s.email, s.source || '', s.added || '']));
-  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `lyrical-mailing-list-${today()}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 500);
+  downloadCsv(toCsv(rows), `lyrical-mailing-list-${today()}.csv`);
   showToast(`✓ Exported ${subs.length} subscriber${subs.length === 1 ? '' : 's'}`);
 }
 
@@ -23752,13 +23684,7 @@ async function downloadOcAttachment(messageId, name, btnEl) {
     const byteArray = new Uint8Array(byteNumbers);
     const blob = new Blob([byteArray], { type: data.mime || 'application/octet-stream' });
 
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
+    downloadBlob(blob, name);
 
     showToast(`✓ Downloaded: ${name}`);
   } catch (err) {
@@ -23837,13 +23763,7 @@ function exportOpenCallCSV() {
     c.preorderSent ? 'Yes' : 'No',
     c.createdAt || ''
   ]));
-  const csv = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `opencall-${proj.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${today()}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 500);
+  downloadCsv(toCsv(rows), `opencall-${proj.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${today()}.csv`);
   showToast(`✓ Exported ${proj.contributors.length} contributor${proj.contributors.length === 1 ? '' : 's'}`);
 }
 
@@ -24608,13 +24528,7 @@ function exportCustomersCSV() {
     Array.from(r.books).join('; '), Array.from(r.channels).join('; '),
     r.first || '', r.last || '', _custSpendStr(r.spend), Array.from(r.sources).join('; '),
   ]));
-  const csv = rows.map(row => row.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `lyrical-customers-${today()}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 500);
+  downloadCsv(toCsv(rows), `lyrical-customers-${today()}.csv`);
   showToast(`✓ Exported ${list.length} customer${list.length === 1 ? '' : 's'}`);
 }
 
@@ -28796,7 +28710,7 @@ function downloadFilteredShippingLedgerCSV() {
   csv += 'Generated on: ' + today() + '\n';
   csv += `Active Filters: Book: ${shipAnalysisBookFilter}, Margin: ${shipAnalysisMarginFilter}, Carrier: ${shipAnalysisCarrierFilter}, Region: ${shipAnalysisRegionFilter}, Weight Band: ${shipAnalysisWeightFilter}\n\n`;
 
-  const esc = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+  const esc = csvCell;
 
   csv += 'Order Number,Recipient,Book Title,Qty,Weight (kg),Status,Customer Paid (CAD),Postage Cost (CAD),Margin (CAD),Carrier,Region,Shippo Ref\n';
 
@@ -28850,13 +28764,7 @@ function downloadFilteredShippingLedgerCSV() {
     csv += `${esc(o.num)},${esc(o.shipName || o.name || 'Anonymous')},${esc(book?.title || 'Unknown book')},${o.qty || 1},${weightKg.toFixed(3)},${esc(statusLabel)},${customerPaidBase.toFixed(2)},${postageCostCAD.toFixed(2)},${margin.toFixed(2)},${esc(carrier)},${esc(region)},${esc(ref)}\n`;
   });
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.setAttribute('download', `Lyrical_Shipping_Ledger_${today()}.csv`);
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  downloadCsv(csv, `Lyrical_Shipping_Ledger_${today()}.csv`);
   showToast('✓ Filtered shipping ledger CSV exported');
 }
 
