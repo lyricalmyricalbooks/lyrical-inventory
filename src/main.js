@@ -256,6 +256,46 @@ function isTestBookId(bid) {
 // Build the rules-readable ownership map from the live catalog. Keyed by book
 // id → owning author's (lowercased) Google email; books with no author are left
 // out so they stay publisher-only.
+// The test profile renders purple throughout, so a screen full of seeded mock
+// data is never mistaken for real sales.
+//
+// This used to be enforced by src/test-profile-tint-fix.js, a separate script
+// loaded after main.js that ran two MutationObservers: one watched
+// documentElement's style attribute and rewrote the accent variables just after
+// switchBook had set them, and one watched the whole of document.body with
+// subtree:true and re-coloured dots on every DOM change anywhere in the app —
+// in a UI that assigns innerHTML in 300-odd places, so it ran constantly.
+//
+// None of that is needed. Every accent variable and every coloured dot already
+// derives from book.accent, so normalising that single property once at load
+// time produces the same appearance with no observers and no repainting after
+// the fact.
+const TEST_BOOK_ACCENT = '#8b5cf6';
+const TEST_BOOK_ACCENT_BG = 'rgba(139, 92, 246, 0.1)';
+
+function normalizeTestBookAccents() {
+  Object.values(BOOKS || {}).forEach(b => {
+    if (isTestBook(b)) {
+      b.accent = TEST_BOOK_ACCENT;
+      b.accentBg = TEST_BOOK_ACCENT_BG;
+    }
+  });
+  BOOK_LIST = Object.values(BOOKS);
+}
+
+// A 6% wash of the active book's accent behind the whole page. Read by
+// `body{background:var(--body-bg-tint)}` in style.css.
+function applyBodyTint(bookId) {
+  const book = (bookId && bookId !== 'all') ? BOOKS[bookId] : null;
+  const accent = book && book.accent;
+  // hexToRgba expects #rrggbb; anything else (a CSS keyword, a var()) can't be
+  // faded, so fall back to no tint rather than emitting a broken colour.
+  const tint = (typeof accent === 'string' && /^#[0-9a-f]{6}$/i.test(accent))
+    ? hexToRgba(accent, 0.06)
+    : 'transparent';
+  document.documentElement.style.setProperty('--body-bg-tint', tint);
+}
+
 function ownersFromBooks() {
   const owners = {};
   Object.keys(BOOKS).forEach(id => {
@@ -298,12 +338,14 @@ async function loadCatalog() {
       });
       BOOKS = { ...filteredDefaults, ...storedBooks };
       BOOK_LIST = Object.values(BOOKS);
+      normalizeTestBookAccents();
       if (Object.keys(BOOKS).length > Object.keys(storedBooks).length) {
         await saveCatalogWithDeletions();
       }
     } else {
       BOOKS = { ...DEFAULT_BOOKS };
       BOOK_LIST = Object.values(BOOKS);
+      normalizeTestBookAccents();
       deletedDefaultIds = [];
       posExtraBooks = {};
       await saveCatalogWithDeletions();
@@ -312,6 +354,7 @@ async function loadCatalog() {
     console.error('Critical error loading catalog', e);
     BOOKS = { ...DEFAULT_BOOKS };
     BOOK_LIST = Object.values(BOOKS);
+    normalizeTestBookAccents();
     deletedDefaultIds = [];
     posExtraBooks = {};
   }
@@ -2358,6 +2401,7 @@ function switchBook(bookId) {
     document.documentElement.style.setProperty('--book-accent-light', 'var(--gold3)');
     document.documentElement.style.setProperty('--book-accent-text', 'var(--gold-text)');
     document.documentElement.style.setProperty('--book-accent-contrast', 'var(--ink)');
+    applyBodyTint('all');
     updateAllOverview();
     updateHeader();
   } else {
@@ -2369,6 +2413,7 @@ function switchBook(bookId) {
     document.documentElement.style.setProperty('--book-accent-light', lightenColor(book.accent, 0.25));
     document.documentElement.style.setProperty('--book-accent-text', getContrastSafeText(book.accent));
     document.documentElement.style.setProperty('--book-accent-contrast', getContrastColor(book.accent));
+    applyBodyTint(bookId);
     switchTab('dashboard');
     updateHeader();
   }
@@ -2437,9 +2482,6 @@ function switchTab(name) {
   // publisher redirected away from author-only myqr tab
   if (!isAuthor() && name === 'myqr') name = 'dashboard';
 
-  // Note: order exactly matches the tab-btn elements in index.html (excluding dashboard which isn't there, wait dashboard IS first!)
-  // In index.html the order is: dashboard, website, manual, consignment, history, expenses, financials, taxcenter, sheets, backups, qrcodes, myqr, pos, webanalytics, shipping
-  const names = ['dashboard', 'website', 'manual', 'consignment', 'history', 'expenses', 'opencall', 'reconcile', 'customers', 'financials', 'taxcenter', 'sheets', 'backups', 'qrcodes', 'myqr', 'pos', 'webanalytics', 'shipping', 'bigcartel'];
 
   // Selecting a destination closes any open header category menu (and the
   // sidebar footer account menu, if open).
@@ -5908,10 +5950,6 @@ function renderConsignHistRow(e, after) {
   return `<tr class="hist-row ${voided}"><td class="mono mono-num" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r mono-num">${e.voided ? '' : qtyCell}</td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r mono-num">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
 }
 
-function shippingRateToBase(currency) {
-  const code = normalizeCurrencyCode(currency, 'CAD');
-  return code === 'CAD' ? 1 : (_fxRateCache[`${code}_CAD`] || 0);
-}
 
 function getShippingReconciliationOrders() {
   const byNumber = new Map();
@@ -5926,7 +5964,9 @@ function getShippingReconciliationOrders() {
   return Array.from(byNumber.values());
 }
 
-function renderOrderShippingSummary(order, currency) {
+// No currency parameter on purpose: customer-paid shipping is natively CAD
+// and must never be FX-converted, so this formats as CAD unconditionally.
+function renderOrderShippingSummary(order) {
   const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => String(expense?.ref || '').startsWith('shippo:'));
   const summary = linkedShippingSummary(order, expenses, 1);
   const customerPaidVal = summary.customerPaid ?? Number(order.shippingPaid || order.shipping_total || 0);
@@ -6063,7 +6103,7 @@ function renderHist() {
         : '';
 
       const paymentInfo = paymentSummary(h.payment, book);
-      const shippingInfo = isWebsite ? renderOrderShippingSummary(h, cur) : '';
+      const shippingInfo = isWebsite ? renderOrderShippingSummary(h) : '';
       const notesText = escapeHtml(h.notes) || '—';
       const notesCell = [
         notesText,
@@ -6148,7 +6188,7 @@ function renderOrders() {
     const priceWarn = priceMismatch
       ? `<span style="font-size:10px;color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
       : '';
-    const shippingBadge = renderOrderShippingSummary(o, listCur);
+    const shippingBadge = renderOrderShippingSummary(o);
     const bookLabel = o.bookId && BOOKS[o.bookId]
       ? `<span style="font-size:10px;background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:100px;padding:2px 8px;margin-right:6px;">${escapeHtml(BOOKS[o.bookId].title)}</span>`
       : '';
@@ -26571,28 +26611,6 @@ async function calculateShippoRates() {
   }
 }
 
-async function editShippingPaid(bookId, orderIdentifier) {
-  const s = states[bookId];
-  if (!s || !s.hist) return;
-  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
-  if (!h) return;
-
-  const current = h.shippingPaid || 0;
-  const input = prompt(`Enter shipping paid by customer for order ${h.num} (in CAD):`, current);
-  if (input === null) return;
-
-  const val = Number(input);
-  if (isNaN(val) || val < 0) {
-    showToast('Invalid shipping amount', 'err');
-    return;
-  }
-
-  h.shippingPaid = val;
-  h.manualShippingPaid = true;
-  await window.saveState(bookId);
-  showToast('Shipping paid updated', 'ok');
-  renderShippingAnalysisHub();
-}
 
 async function editPostageCost(bookId, orderIdentifier) {
   const s = states[bookId];
@@ -26766,12 +26784,6 @@ function onShipAnalysisBookFilterChange() {
   renderShippingAnalysisHub();
 }
 
-function onShipAnalysisMarginFilterChange() {
-  const select = $('ship-analysis-margin-filter');
-  if (select) shipAnalysisMarginFilter = select.value;
-  shipAnalysisCurrentPage = 1;
-  renderShippingAnalysisHub();
-}
 
 function setShipAnalysisMarginFilter(val) {
   shipAnalysisMarginFilter = val;
@@ -27129,18 +27141,15 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses, optWeightOve
 
     let avgBase = null;
     let targetBase = null;
-    let p90Base = null;
     let avgInc = null;
 
     if (singleCosts.length > 0) {
       avgBase = getMean(singleCosts);
       targetBase = getPercentile(singleCosts, pct);
-      p90Base = getPercentile(singleCosts, 90);
     } else if (values.length > 0) {
       const perUnit = values.map(v => v.cost / v.qty);
       avgBase = getMean(perUnit);
       targetBase = getPercentile(perUnit, pct);
-      p90Base = getPercentile(perUnit, 90);
     }
 
     const multi = values.filter(v => v.qty > 1);
@@ -28133,7 +28142,6 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
 function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, splitTableHtml, weightTableHtml) {
   // Calculate smart shipping rate recommendations
   const s = getState();
-  const book = getBook();
   const recoData = getSmartShippingRecommendations(allOrders, shippoExpenses);
   const targetRates = s.shippingRates || {
     ON: { base: 16.00, addon: 10.00 },
@@ -28550,46 +28558,17 @@ function updateShippingSimulation() {
   else if (billedWeightKg > 1) weightBandLabel = '1 - 2 kg';
   else if (billedWeightKg >= 0.5) weightBandLabel = '0.5 - 1 kg';
 
-  // 1. Current Store Rate Setup
-  const s = getState();
-  const targetRates = s.shippingRates || {
-    ON: { base: 16.00, addon: 10.00 },
-    CA: { base: 20.00, addon: 10.00 },
-    US: { base: 25.00, addon: 10.00 },
-    intl: { base: 25.00, addon: 10.00 }
-  };
-  const currentRegion = targetRates[region] || { base: 0, addon: 0 };
-  const currentCharge = currentRegion.base + (qty - 1) * currentRegion.addon;
-
-  // 2. Recommended Rates for simulated total weight
-  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
-  const allOrders = [];
-  Object.keys(states).forEach(bId => {
-    const st = states[bId];
-    if (st && Array.isArray(st.hist)) {
-      st.hist.forEach(h => {
-        if (h && h.chan === 'Website' && !h.voided) {
-          allOrders.push(h);
-        }
-      });
-    }
-  });
-
-  const simRecoData = getSmartShippingRecommendations(allOrders, shippoExpenses, billedWeightKg.toString());
-  const simRecoRegion = simRecoData.results[region] || { recoBase: 0, recoAddon: 0 };
-  const recommendedCharge = simRecoRegion.recoBase + (qty - 1) * simRecoRegion.recoAddon;
-
-  // 3. Estimated Postage Cost
+  // The panel shows the estimated postage for the simulated parcel. Two further
+  // blocks used to sit here computing the current store charge and a
+  // recommended charge, and nothing ever read either one — the comparison they
+  // were for was never wired into the markup. The recommended side scanned
+  // every book's full sales history and ran getSmartShippingRecommendations()
+  // on every keystroke in the simulator to produce a number that was discarded.
+  // Estimated Postage Cost
   const fallback = getFallbackRates(region, billedWeightKg);
   const estimatedPostage = fallback.base;
   const postageCost = customPostage !== null && !isNaN(customPostage) ? customPostage : estimatedPostage;
 
-  // 4. Margins
-  const currentMargin = currentCharge - postageCost;
-  const recommendedMargin = recommendedCharge - postageCost;
-
-  const currentMarginClass = currentMargin >= 0 ? 'positive' : 'negative';
-  const recommendedMarginClass = recommendedMargin >= 0 ? 'positive' : 'negative';
 
   const formatCcy = (val) => `$${val.toFixed(2)} CAD`;
 
