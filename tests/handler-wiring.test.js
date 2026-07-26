@@ -8,6 +8,22 @@ const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
 
+// Feature modules are part of the app's source for this test's purposes: a
+// handler exposed on window may now be *defined* in src/features/ and imported
+// into main.js, and those modules render their own HTML strings containing
+// on*= handlers. Read from disk rather than listed, so a new feature module is
+// covered the moment it exists.
+const featureDir = path.join(root, 'src/features');
+const featureSources = fs.existsSync(featureDir)
+  ? fs.readdirSync(featureDir).filter(f => f.endsWith('.js'))
+      .map(f => fs.readFileSync(path.join(featureDir, f), 'utf8'))
+  : [];
+const appSources = [mainJs, ...featureSources];
+const union = (fn) => appSources.reduce((acc, src) => {
+  for (const name of fn(src)) acc.add(name);
+  return acc;
+}, new Set());
+
 // Why this file exists:
 //
 // src/main.js is served as <script type="module">, so its top-level function
@@ -121,11 +137,13 @@ function exposedNames(source) {
   return names;
 }
 
-/** Names main.js defines at module scope. */
+/** Names a module defines at module scope. */
 function definedNames(source) {
   const names = new Set();
-  for (const m of source.matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
-  for (const m of source.matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
+  // `export ` prefix is optional: main.js exports the handful of helpers the
+  // feature modules import, and those declarations are still definitions.
+  for (const m of source.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
+  for (const m of source.matchAll(/^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
   for (const m of source.matchAll(/(?:^|\s)window\.([A-Za-z_$][\w$]*)\s*=/g)) names.add(m[1]);
   return names;
 }
@@ -151,9 +169,9 @@ const KNOWN_DEAD_HANDLERS = [
 ];
 
 const exposed = exposedNames(mainJs);
-const defined = definedNames(mainJs);
+const defined = union(definedNames);
 const htmlHandlers = handlerNamesIn(html);
-const templateHandlers = handlerNamesIn(mainJs);
+const templateHandlers = union(handlerNamesIn);
 
 describe('inline handler wiring', () => {
   it('finds handlers to check in both index.html and main.js templates', () => {
