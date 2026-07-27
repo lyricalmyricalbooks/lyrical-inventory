@@ -31,8 +31,17 @@ service cloud.firestore {
     // The client already loads a single book in author mode (boot() →
     // loadBook(ACTIVE_BOOK_FORCED)), so this matches what the app actually
     // requests — it just stops the request working for anyone else.
-    // Publisher writes any part; the owning author may write ONLY the
-    // consignment parts (stores + ledger) of their own book.
+    // Publisher writes any part; the owning author may write the parts their
+    // consignment actions actually touch in one batch: confirmSale/
+    // confirmReturn/bulk-send in main.js update `stores` (outstanding/sold/
+    // amountOwed), `ledger` (the transaction row), `hist` (the order-history
+    // mirror) and `metadata` (book-level stock/sold/revenue/chStats) together.
+    // _fbSave commits all dirty parts as a single writeBatch, and Firestore
+    // rejects the WHOLE batch if any one document write is denied — so
+    // omitting any of these four here doesn't just block that field, it
+    // silently fails every consignment sale/return/shipment an author
+    // records (saveState treats permission-denied as retryable and queues it
+    // forever). Keep this list in sync with what those functions dirty.
     match /books/{bookId} {
       allow read: if isPublisher() || isBookAuthor(bookId);
       allow write: if isPublisher();
@@ -40,7 +49,8 @@ service cloud.firestore {
       match /data/{part} {
         allow read: if isPublisher() || isBookAuthor(bookId);
         allow write: if isPublisher()
-          || ((part == 'stores' || part == 'ledger') && isBookAuthor(bookId));
+          || (isBookAuthor(bookId)
+              && (part == 'stores' || part == 'ledger' || part == 'hist' || part == 'metadata'));
       }
     }
 
