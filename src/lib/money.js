@@ -10,6 +10,12 @@ export const CURRENCY_SYMBOL_TO_CODE = {
   '£': 'GBP',
   '¥': 'JPY',
   CHF: 'CHF',
+  // Mexican peso. Mexico writes the peso as a bare "$", which collides with the
+  // Canadian default above, so only the disambiguated forms map here — a bare
+  // "$" on a Mexican receipt still needs the code typed explicitly.
+  'MX$': 'MXN',
+  'MEX$': 'MXN',
+  '$MXN': 'MXN',
 };
 
 export const CODE_TO_SYMBOL = {
@@ -20,6 +26,7 @@ export const CODE_TO_SYMBOL = {
   JPY: '¥',
   CHF: 'CHF',
   AUD: 'A$',
+  MXN: 'MX$',
 };
 
 export const getSym = (c) => CODE_TO_SYMBOL[c] || c;
@@ -32,6 +39,7 @@ export function normalizeCurrencyCode(cur, fallback = 'CAD') {
   if (CURRENCY_SYMBOL_TO_CODE[raw]) return CURRENCY_SYMBOL_TO_CODE[raw];
   if (upper === 'CA$' || upper === 'C$') return 'CAD';
   if (upper === 'US$') return 'USD';
+  if (upper === 'MX$' || upper === 'MEX$' || upper === '$MXN') return 'MXN';
   if (upper === '€' || upper === 'EUR') return 'EUR';
   return /^[A-Z]{3}$/.test(upper) ? upper : fallback;
 }
