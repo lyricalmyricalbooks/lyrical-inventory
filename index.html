@@ -2411,6 +2411,18 @@
       Generates a printable tally sheet for in-person events. Pick the books you'll be selling, set the number of tally columns, and print.
     </div>
 
+    <div style="background:rgba(200,145,58,0.08);border:1px solid rgba(200,145,58,0.25);border-radius:var(--r2);padding:12px;margin-bottom:12px;">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-text,#8a5815);margin-bottom:8px;">Fair presets</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <select id="st-preset-select" aria-label="Saved fair preset" onchange="stPresetSelected(this.value)" style="flex:1;min-width:150px;font-size:12px;padding:5px 8px;">
+          <option value="">No saved fairs yet</option>
+        </select>
+        <button type="button" class="btn sm" onclick="stSaveFairPreset()">💾 Save…</button>
+        <button type="button" class="btn sm" id="st-preset-delete" onclick="stDeleteFairPreset()" disabled>Delete</button>
+      </div>
+      <div id="st-preset-note" style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;">Set the packing list up once, save it under the fair&rsquo;s name, and recall it next time.</div>
+    </div>
+
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group" style="margin:0;"><label for="st-event">Event name</label><input type="text" id="st-event" placeholder="e.g. Toronto Art Book Fair"></div>
       <div class="form-group" style="margin:0;"><label for="st-date">Date</label><input type="date" id="st-date"></div>
@@ -2448,12 +2460,14 @@
       <button type="button" class="btn sm" onclick="salesTrackerSelectAll(true)">Select all</button>
       <button type="button" class="btn sm" onclick="salesTrackerSelectAll(false)">Clear</button>
     </div>
+    <div id="st-pack-total" style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600;">Enter how many copies of each title you're bringing.</div>
     <div id="st-books-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;border:1px solid rgba(0,0,0,.12);border-radius:var(--r2);padding:10px;background:rgba(0,0,0,.03);"></div>
 
     <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin:14px 0 8px;">Add a book not in your inventory</div>
     <div style="display:flex;gap:6px;align-items:stretch;">
       <input type="text" id="st-custom-title" placeholder="Title" style="flex:2;min-width:0;">
       <input type="text" id="st-custom-author" placeholder="Author" style="flex:1.5;min-width:0;">
+      <input type="number" inputmode="numeric" id="st-custom-qty" placeholder="Qty" min="0" step="1" style="flex:0.6;min-width:0;">
       <button type="button" class="btn sm" onclick="salesTrackerAddCustom()">Add</button>
     </div>
     <div style="font-size:11px;color:var(--text3);margin-top:6px;">Books added here only appear on this tracker — they're not saved to your inventory.</div>
