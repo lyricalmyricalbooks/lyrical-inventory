@@ -31,6 +31,16 @@ import {
   qrPresetSummary,
 } from './lib/qr-presets.js';
 import {
+  loadStPresets,
+  saveStPresets,
+  upsertStPreset,
+  removeStPreset,
+  findStPreset,
+  stPresetId,
+  stPresetMissingBooks,
+  stPresetSummary,
+} from './lib/sales-tracker-presets.js';
+import {
   saveTaxCenter,
   processRecurringExpenses,
   tcExpenseRowDragOver,
@@ -16034,6 +16044,49 @@ window.posPrintReceipt = function () {
 
 // ── PRINTABLE SALES TRACKER ──
 let salesTrackerCustomBooks = [];
+// Copies of each catalog title the seller is packing for this fair, keyed by
+// book id. Kept separate from the catalog record itself (never written to
+// BOOKS) since "bringing" is a per-trip decision, not a stock fact.
+let salesTrackerQtyBrought = {};
+
+// Best-effort "on hand" hint shown next to the packing-quantity field, so the
+// seller has a ceiling in view without the field silently capping their entry.
+// Never throws: a POS-only extra book carries none of deriveOnHand's expected
+// fields, and a missing hint is fine where a broken modal is not.
+function _stOnHandHint(book) {
+  try {
+    const n = deriveOnHand(book, book);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function _stUpdatePackTotal() {
+  const el = document.getElementById('st-pack-total');
+  if (!el) return;
+  let total = 0;
+  document.querySelectorAll('.st-book-qty').forEach((input) => {
+    const n = parseInt(input.value, 10);
+    if (Number.isFinite(n) && n > 0) total += n;
+  });
+  el.textContent = total > 0
+    ? `📦 ${total} book${total === 1 ? '' : 's'} packed for this fair`
+    : 'Enter how many copies of each title you\'re bringing.';
+}
+
+window.salesTrackerQtyInput = function (el) {
+  const qty = parseInt(el.value, 10);
+  const clean = Number.isFinite(qty) && qty > 0 ? qty : 0;
+  if (el.dataset.bookId) {
+    if (clean > 0) salesTrackerQtyBrought[el.dataset.bookId] = clean;
+    else delete salesTrackerQtyBrought[el.dataset.bookId];
+  } else if (el.dataset.customIdx != null) {
+    const cb = salesTrackerCustomBooks[parseInt(el.dataset.customIdx, 10)];
+    if (cb) cb.qty = clean;
+  }
+  _stUpdatePackTotal();
+};
 
 function renderSalesTrackerBookList() {
   const list = document.getElementById('st-books-list');
@@ -16041,13 +16094,25 @@ function renderSalesTrackerBookList() {
   // posBooksMap() includes POS-only extras (publisher) or just the active book (author).
   const inventoryEntries = Object.values(posBooksMap());
 
-  const inventoryHtml = inventoryEntries.map((book) => `
+  const qtyRow = (labelText, inputAttrs, value) => `
+    <div style="display:flex;align-items:center;gap:8px;padding-left:26px;margin-top:2px;margin-bottom:2px;">
+      <span style="font-size:11px;color:#555;font-weight:500;">${labelText}:</span>
+      <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" ${inputAttrs} value="${value || ''}" placeholder="0" style="width:64px;padding:3px 6px;font-size:11px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#111;" oninput="salesTrackerQtyInput(this)">
+    </div>
+  `;
+
+  const inventoryHtml = inventoryEntries.map((book) => {
+    const onHand = _stOnHandHint(book);
+    const label = `Copies bringing${onHand != null ? ` (${onHand} on hand)` : ''}`;
+    return `
     <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);">
       <input type="checkbox" class="st-book-check" data-kind="inv" value="${book.id}" checked style="width:16px;height:16px;cursor:pointer;">
       <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
       <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
     </label>
-  `).join('');
+    ${qtyRow(label, `data-book-id="${book.id}"`, salesTrackerQtyBrought[book.id])}
+  `;
+  }).join('');
 
   const customHtml = salesTrackerCustomBooks.map((book, idx) => `
     <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(212,175,55,.12);border:1px dashed rgba(212,175,55,.5);">
@@ -16056,6 +16121,7 @@ function renderSalesTrackerBookList() {
       <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
       <button type="button" onclick="salesTrackerRemoveCustom(${idx})" style="background:none;border:none;color:#a00;cursor:pointer;font-size:14px;padding:0 4px;" title="Remove" aria-label="Remove">✕</button>
     </label>
+    ${qtyRow('Copies bringing', `data-custom-idx="${idx}"`, book.qty)}
   `).join('');
 
   if (!inventoryEntries.length && !salesTrackerCustomBooks.length) {
@@ -16063,12 +16129,167 @@ function renderSalesTrackerBookList() {
   } else {
     list.innerHTML = inventoryHtml + customHtml;
   }
+  _stUpdatePackTotal();
 }
+
+// ── SALES TRACKER FAIR PRESETS ──
+// Same idea as the QR sheet's fair presets: the whole tracker setup — layout,
+// currency, which titles, and how many copies of each are packed — saved
+// under a fair's name so a recurring event doesn't get rebuilt from scratch.
+// localStorage, not Firestore: a per-device packing list that has to work
+// with no signal.
+let salesTrackerFairPresets = [];
+let stActivePresetId = '';
+
+function _stPresetStore() {
+  try { return window.localStorage; } catch { return null; }
+}
+
+function _stReadPresetForm(name) {
+  const qtyBrought = {};
+  document.querySelectorAll('.st-book-qty[data-book-id]').forEach((el) => {
+    const qty = parseInt(el.value, 10);
+    if (el.dataset.bookId && Number.isFinite(qty) && qty > 0) qtyBrought[el.dataset.bookId] = qty;
+  });
+
+  const checkedCustomIdx = new Set(
+    Array.from(document.querySelectorAll('.st-book-check[data-kind="custom"]'))
+      .filter((el) => el.checked)
+      .map((el) => parseInt(el.value, 10))
+  );
+  const customBooks = salesTrackerCustomBooks.filter((_, idx) => checkedCustomIdx.has(idx));
+
+  return {
+    name,
+    cols: document.getElementById('st-cols')?.value,
+    currencyCode: document.getElementById('st-currency')?.value || 'EUR',
+    includeNotes: !!document.getElementById('st-notes')?.checked,
+    bookIds: Array.from(document.querySelectorAll('.st-book-check[data-kind="inv"]'))
+      .filter((el) => el.checked)
+      .map((el) => el.value),
+    qtyBrought,
+    customBooks,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function _stApplyPresetToForm(preset) {
+  if (!preset) return { missing: [] };
+
+  const colsEl = document.getElementById('st-cols');
+  if (colsEl) colsEl.value = String(preset.cols);
+
+  const curEl = document.getElementById('st-currency');
+  if (curEl) {
+    curEl.value = Array.from(curEl.options).some((o) => o.value === preset.currencyCode) ? preset.currencyCode : 'EUR';
+  }
+
+  const notesEl = document.getElementById('st-notes');
+  if (notesEl) notesEl.checked = !!preset.includeNotes;
+
+  // Custom titles aren't in the catalog, so restoring a preset recreates them
+  // wholesale rather than trying to look them up by id.
+  salesTrackerCustomBooks = preset.customBooks.map((b) => ({ ...b }));
+  salesTrackerQtyBrought = { ...preset.qtyBrought };
+
+  renderSalesTrackerBookList();
+
+  const wantedBooks = new Set(preset.bookIds);
+  document.querySelectorAll('.st-book-check[data-kind="inv"]').forEach((el) => {
+    el.checked = wantedBooks.has(el.value);
+  });
+  // Every custom title just restored from the preset is exactly what should print.
+  document.querySelectorAll('.st-book-check[data-kind="custom"]').forEach((el) => { el.checked = true; });
+
+  _stUpdatePackTotal();
+
+  return { missing: stPresetMissingBooks(preset, Object.keys(posBooksMap())) };
+}
+
+function renderStPresetPicker() {
+  const select = document.getElementById('st-preset-select');
+  if (!select) return;
+  if (!findStPreset(salesTrackerFairPresets, stActivePresetId)) stActivePresetId = '';
+
+  const options = salesTrackerFairPresets
+    .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
+    .join('');
+  select.innerHTML = `<option value="">${salesTrackerFairPresets.length ? 'Choose a saved fair…' : 'No saved fairs yet'}</option>${options}`;
+  select.value = stActivePresetId;
+
+  const deleteBtn = document.getElementById('st-preset-delete');
+  if (deleteBtn) deleteBtn.disabled = !stActivePresetId;
+
+  const note = document.getElementById('st-preset-note');
+  if (note) {
+    const active = findStPreset(salesTrackerFairPresets, stActivePresetId);
+    note.textContent = active
+      ? stPresetSummary(active)
+      : 'Set the packing list up once, save it under the fair\'s name, and recall it next time.';
+  }
+}
+
+window.stPresetSelected = function (id) {
+  const preset = findStPreset(salesTrackerFairPresets, id);
+  stActivePresetId = preset ? preset.id : '';
+  if (!preset) { renderStPresetPicker(); return; }
+
+  const { missing } = _stApplyPresetToForm(preset);
+  renderStPresetPicker();
+  if (missing.length) {
+    showToast(`Loaded "${preset.name}" — ${missing.length} saved title${missing.length === 1 ? '' : 's'} no longer in the catalog`, 'warn', 6000);
+  } else {
+    showToast(`✓ Loaded fair preset "${preset.name}"`, 'ok');
+  }
+};
+
+window.stSaveFairPreset = async function () {
+  const active = findStPreset(salesTrackerFairPresets, stActivePresetId);
+  const name = (await promptDialog(
+    'Name this fair setup so you can recall the whole packing list next time.',
+    active?.name || '',
+    { title: 'Save fair preset', okLabel: 'Save', placeholder: 'e.g. Mexico City Book Fair' }
+  ) || '').trim();
+  if (!name) return;
+
+  if (!stPresetId(name)) {
+    showToast('Give the preset a name with at least one letter or number', 'warn');
+    return;
+  }
+
+  const clash = findStPreset(salesTrackerFairPresets, stPresetId(name));
+  if (clash && !(await confirmDialog(`"${clash.name}" already exists. Replace it with the current setup?`, { okLabel: 'Replace' }))) {
+    return;
+  }
+
+  const snapshot = _stReadPresetForm(name);
+  if (!snapshot.bookIds.length && !snapshot.customBooks.length && !(await confirmDialog('No books are selected. Save this preset anyway?', { okLabel: 'Save' }))) {
+    return;
+  }
+
+  salesTrackerFairPresets = saveStPresets(_stPresetStore(), upsertStPreset(salesTrackerFairPresets, snapshot));
+  stActivePresetId = stPresetId(name);
+  renderStPresetPicker();
+  showToast(`✓ Saved fair preset "${name}"`, 'ok');
+};
+
+window.stDeleteFairPreset = async function () {
+  const preset = findStPreset(salesTrackerFairPresets, stActivePresetId);
+  if (!preset) return;
+  if (!(await confirmDialog(`Delete the fair preset "${preset.name}"?`, { danger: true, okLabel: 'Delete' }))) return;
+
+  salesTrackerFairPresets = saveStPresets(_stPresetStore(), removeStPreset(salesTrackerFairPresets, preset.id));
+  stActivePresetId = '';
+  renderStPresetPicker();
+  showToast(`Deleted "${preset.name}"`, 'ok');
+};
 
 window.openSalesTrackerModal = function () {
   const dateInput = document.getElementById('st-date');
   if (dateInput && !dateInput.value) dateInput.value = today();
+  salesTrackerFairPresets = loadStPresets(_stPresetStore());
   renderSalesTrackerBookList();
+  renderStPresetPicker();
   openM('sales-tracker');
 };
 
@@ -16079,16 +16300,19 @@ window.salesTrackerSelectAll = function (checked) {
 window.salesTrackerAddCustom = function () {
   const titleEl = document.getElementById('st-custom-title');
   const authorEl = document.getElementById('st-custom-author');
+  const qtyEl = document.getElementById('st-custom-qty');
   const title = (titleEl.value || '').trim();
   const author = (authorEl.value || '').trim();
+  const qty = parseInt(qtyEl?.value, 10);
   if (!title) {
     showToast('Enter a book title', 'warn');
     titleEl.focus();
     return;
   }
-  salesTrackerCustomBooks.push({ title, author });
+  salesTrackerCustomBooks.push({ title, author, qty: Number.isFinite(qty) && qty > 0 ? qty : 0 });
   titleEl.value = '';
   authorEl.value = '';
+  if (qtyEl) qtyEl.value = '';
   renderSalesTrackerBookList();
   titleEl.focus();
 };
@@ -16127,20 +16351,21 @@ window.printSalesTracker = function () {
 
   const colHeaders = Array.from({ length: cols }, (_, i) => `<th class="num">${i + 1}</th>`).join('');
 
-  const bookRows = selected.map((sel) => {
-    let title = '';
-    let author = '';
+  const selectedBooks = selected.map((sel) => {
     if (sel.kind === 'custom') {
       const cb = salesTrackerCustomBooks[parseInt(sel.value, 10)];
-      if (!cb) return '';
-      title = cb.title;
-      author = cb.author || '';
-    } else {
-      const book = posResolveBook(sel.value);
-      if (!book) return '';
-      title = book.title;
-      author = book.author || '';
+      if (!cb) return null;
+      return { title: cb.title, author: cb.author || '', qty: Number(cb.qty) || 0 };
     }
+    const book = posResolveBook(sel.value);
+    if (!book) return null;
+    return { title: book.title, author: book.author || '', qty: Number(salesTrackerQtyBrought[sel.value]) || 0 };
+  }).filter(Boolean);
+
+  const totalPacked = selectedBooks.reduce((sum, b) => sum + b.qty, 0);
+
+  const bookRows = selectedBooks.map(({ title, author, qty }) => {
+    const packedNote = qty > 0 ? `<div class="title-packed">Packed: ${qty}</div>` : '';
     const tallyCells = Array.from({ length: cols }, () => '<td class="tally"></td>').join('');
     if (includeNotes) {
       const priceCells = Array.from({ length: cols }, () => '<td class="price-paid"></td>').join('');
@@ -16149,6 +16374,7 @@ window.printSalesTracker = function () {
           <td class="title" rowspan="2">
             <div class="title-name">${escapeHtml(title)}</div>
             ${author ? `<div class="title-meta">${escapeHtml(author)}</div>` : ''}
+            ${packedNote}
           </td>
           ${tallyCells}
           <td class="total" rowspan="2"></td>
@@ -16163,6 +16389,7 @@ window.printSalesTracker = function () {
         <td class="title">
           <div class="title-name">${escapeHtml(title)}</div>
           ${author ? `<div class="title-meta">${escapeHtml(author)}</div>` : ''}
+          ${packedNote}
         </td>
         ${tallyCells}
         <td class="total"></td>
@@ -16191,6 +16418,7 @@ window.printSalesTracker = function () {
       td.title { padding: 8px 10px; vertical-align: middle; }
       td.title .title-name { font-weight: 700; font-size: 11.5pt; line-height: 1.2; }
       td.title .title-meta { font-size: 9pt; color: #555; margin-top: 2px; }
+      td.title .title-packed { font-size: 8.5pt; font-weight: 700; color: #8a5815; margin-top: 2px; }
       td.tally { background: #fff; }
       td.total { background: #fdf0c8; }
       td.price-paid { background: #fafafa; height: 28px; font-size: 9pt; color: #666; text-align: center; vertical-align: middle; }
@@ -16206,6 +16434,7 @@ window.printSalesTracker = function () {
       <div class="meta">
         <div class="meta-row"><span class="label">Event:</span><span class="value">${escapeHtml(eventName)}</span></div>
         <div class="meta-row"><span class="label">Date:</span><span class="value">${escapeHtml(dateLabel)}</span></div>
+        ${totalPacked > 0 ? `<div class="meta-row"><span class="label">Packed:</span><span class="value">${totalPacked} book${totalPacked === 1 ? '' : 's'}</span></div>` : ''}
       </div>
       <table>
         <thead>
@@ -21031,6 +21260,7 @@ function exposeLegacyInlineHandlers() {
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,
     codeToSymbol, posFormat, convertCurrency, getPOSCurrencies, buildPOSCartRows, renderPOS,
     _showPosQR, renderPOSFxStatus, _posItemToManualPayload, renderSalesTrackerBookList,
+    _stOnHandHint, _stUpdatePackTotal, _stReadPresetForm, _stApplyPresetToForm, renderStPresetPicker,
     renderQRPrintBookList, _qrpSelectedPriceCurrencies, _qrReadPresetForm,
     _qrApplyPresetToForm, renderQrPresetPicker, _posSlugId, renderPosBookModalQR, _stripeMinorToMajor,
     _stripeFriendlyType, _stripeFmtMoney, fetchStripeTransactions, aggregateStripeTransactions,
