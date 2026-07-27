@@ -20,6 +20,17 @@ import {
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 import {
+  QR_PRESET_PRICE_CURRENCIES,
+  loadQrPresets,
+  saveQrPresets,
+  upsertQrPreset,
+  removeQrPreset,
+  findQrPreset,
+  qrPresetId,
+  qrPresetMissingBooks,
+  qrPresetSummary,
+} from './lib/qr-presets.js';
+import {
   saveTaxCenter,
   processRecurringExpenses,
   tcExpenseRowDragOver,
@@ -15301,7 +15312,10 @@ let _posPriceEditId = null;
 let posPendingSale = null;
 const POS_FX_STORAGE_KEY = 'lm_pos_exchange_rates_v1';
 const POS_FX_FETCHED_AT_KEY = 'lm_pos_fx_fetched_at';
-const POS_DEFAULT_CAD_RATES = { CAD: 1, EUR: 1.47, USD: 1.36, GBP: 1.73 };
+// How many CAD one unit of each currency is worth. These are only the offline
+// seed values used until the seller taps "↻ FX Rates" — a stall with no signal
+// still totals a cart instead of showing "—" next to every price.
+const POS_DEFAULT_CAD_RATES = { CAD: 1, EUR: 1.47, USD: 1.36, GBP: 1.73, MXN: 0.075 };
 let posExchangeRates = loadPosExchangeRates();
 
 // ── POS-ONLY BOOK RESOLUTION ──
@@ -15368,9 +15382,14 @@ function convertCurrency(amount, fromCode, toCode) {
   return cadValue / toRate;
 }
 
+// Currencies offered as the POS transaction currency, and the set
+// posConfigureRates() fetches live rates for. Book currencies come first so a
+// title's own currency is always selectable; the fixed tail covers the
+// currencies taken at the table regardless of what the books are priced in
+// (MXN for Mexican fairs).
 function getPOSCurrencies() {
   const fromBooks = Object.values(posBooksMap()).map((b) => currencyToCode(b.currency));
-  const unique = Array.from(new Set([...fromBooks, 'EUR', 'CAD', 'USD']));
+  const unique = Array.from(new Set([...fromBooks, 'EUR', 'CAD', 'USD', 'MXN']));
   return unique.filter(Boolean);
 }
 
@@ -16217,6 +16236,21 @@ window.printSalesTracker = function () {
 };
 
 // ── PRINTABLE PAYMENT QR CODES ──
+
+// The price columns a QR card can print, paired with their checkbox ids. One
+// list drives the sheet, the preset snapshot and the preset restore, so adding
+// a currency here is the only edit needed to offer it everywhere.
+const QRP_PRICE_CHECKBOXES = QR_PRESET_PRICE_CURRENCIES.map((code) => ({
+  code,
+  id: `qrp-show-${code.toLowerCase()}`,
+}));
+
+function _qrpSelectedPriceCurrencies() {
+  return QRP_PRICE_CHECKBOXES
+    .filter(({ id }) => !!document.getElementById(id)?.checked)
+    .map(({ code }) => code);
+}
+
 function renderQRPrintBookList() {
   const list = document.getElementById('qrp-books-list');
   if (!list) return;
@@ -16255,7 +16289,9 @@ function renderQRPrintBookList() {
 }
 
 window.openQRPrintModal = function () {
+  qrFairPresets = loadQrPresets(_qrPresetStore());
   renderQRPrintBookList();
+  renderQrPresetPicker();
   openM('qr-print');
 };
 
@@ -16265,12 +16301,165 @@ window.qrPrintSelectAll = function (checked) {
   });
 };
 
+// ── QR FAIR PRESETS ──
+// A whole sheet setup — layout, base currency, price columns, selected titles
+// and their door prices — saved under a fair's name. Stored in localStorage
+// rather than Firestore because it's a per-device stall setup, and because the
+// modal has to work with no signal at the table.
+let qrFairPresets = [];
+let qrActivePresetId = '';
+
+function _qrPresetStore() {
+  try { return window.localStorage; } catch { return null; }
+}
+
+// Snapshot the modal exactly as it stands, including any override the seller
+// typed but hasn't printed yet.
+function _qrReadPresetForm(name) {
+  const overrides = {};
+  document.querySelectorAll('.qrp-override-input').forEach((el) => {
+    const amount = parseFloat(el.value);
+    if (el.dataset.bookId && Number.isFinite(amount) && amount > 0) {
+      overrides[el.dataset.bookId] = amount;
+    }
+  });
+  return {
+    name,
+    cols: document.getElementById('qrp-cols')?.value,
+    baseCur: document.getElementById('qrp-base-cur')?.value || 'auto',
+    currencies: _qrpSelectedPriceCurrencies(),
+    fitOnePage: !!document.getElementById('qrp-fit-one-page')?.checked,
+    bookIds: Array.from(document.querySelectorAll('.qrp-book-check'))
+      .filter((el) => el.checked)
+      .map((el) => el.value),
+    overrides,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function _qrApplyPresetToForm(preset) {
+  if (!preset) return { missing: [] };
+
+  const colsEl = document.getElementById('qrp-cols');
+  if (colsEl) colsEl.value = String(preset.cols);
+
+  // A preset saved with a base currency the select no longer offers would
+  // silently keep the previous selection, so fall back to per-book native
+  // rather than print prices in a currency nobody chose.
+  const baseEl = document.getElementById('qrp-base-cur');
+  if (baseEl) {
+    const wantedBase = preset.baseCur || 'auto';
+    baseEl.value = Array.from(baseEl.options).some((o) => o.value === wantedBase) ? wantedBase : 'auto';
+  }
+
+  QRP_PRICE_CHECKBOXES.forEach(({ code, id }) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = preset.currencies.includes(code);
+  });
+
+  const fitEl = document.getElementById('qrp-fit-one-page');
+  if (fitEl) fitEl.checked = !!preset.fitOnePage;
+
+  // Rebuild the list against the current base currency first, then impose the
+  // preset's selection on top — the fresh render defaults every book with a
+  // payment link to checked, which is not what the preset asked for.
+  renderQRPrintBookList();
+
+  const wantedBooks = new Set(preset.bookIds);
+  document.querySelectorAll('.qrp-book-check').forEach((el) => {
+    el.checked = wantedBooks.has(el.value);
+  });
+  document.querySelectorAll('.qrp-override-input').forEach((el) => {
+    const amount = preset.overrides[el.dataset.bookId];
+    el.value = Number.isFinite(amount) && amount > 0 ? String(amount) : '';
+  });
+
+  return { missing: qrPresetMissingBooks(preset, Object.keys(posBooksMap())) };
+}
+
+function renderQrPresetPicker() {
+  const select = document.getElementById('qrp-preset-select');
+  if (!select) return;
+  if (!findQrPreset(qrFairPresets, qrActivePresetId)) qrActivePresetId = '';
+
+  const options = qrFairPresets
+    .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
+    .join('');
+  select.innerHTML = `<option value="">${qrFairPresets.length ? 'Choose a saved fair…' : 'No saved fairs yet'}</option>${options}`;
+  select.value = qrActivePresetId;
+
+  const deleteBtn = document.getElementById('qrp-preset-delete');
+  if (deleteBtn) deleteBtn.disabled = !qrActivePresetId;
+
+  const note = document.getElementById('qrp-preset-note');
+  if (note) {
+    const active = findQrPreset(qrFairPresets, qrActivePresetId);
+    note.textContent = active
+      ? qrPresetSummary(active)
+      : 'Set the sheet up once, save it under the fair\'s name, and recall it next time.';
+  }
+}
+
+window.qrPresetSelected = function (id) {
+  const preset = findQrPreset(qrFairPresets, id);
+  qrActivePresetId = preset ? preset.id : '';
+  if (!preset) { renderQrPresetPicker(); return; }
+
+  const { missing } = _qrApplyPresetToForm(preset);
+  renderQrPresetPicker();
+  if (missing.length) {
+    showToast(`Loaded "${preset.name}" — ${missing.length} saved book${missing.length === 1 ? '' : 's'} no longer in the catalog`, 'warn', 6000);
+  } else {
+    showToast(`✓ Loaded fair preset "${preset.name}"`, 'ok');
+  }
+};
+
+window.qrSaveFairPreset = async function () {
+  const active = findQrPreset(qrFairPresets, qrActivePresetId);
+  const name = (await promptDialog(
+    'Name this fair setup so you can recall the whole sheet next time.',
+    active?.name || '',
+    { title: 'Save fair preset', okLabel: 'Save', placeholder: 'e.g. Mexico City Book Fair' }
+  ) || '').trim();
+  if (!name) return;
+
+  if (!qrPresetId(name)) {
+    showToast('Give the preset a name with at least one letter or number', 'warn');
+    return;
+  }
+
+  // Same name = same preset: overwriting is the intent, but it's destructive
+  // enough (someone else's door prices) to confirm first.
+  const clash = findQrPreset(qrFairPresets, qrPresetId(name));
+  if (clash && !(await confirmDialog(`"${clash.name}" already exists. Replace it with the current setup?`, { okLabel: 'Replace' }))) {
+    return;
+  }
+
+  const snapshot = _qrReadPresetForm(name);
+  if (!snapshot.bookIds.length && !(await confirmDialog('No books are selected. Save this preset anyway?', { okLabel: 'Save' }))) {
+    return;
+  }
+
+  qrFairPresets = saveQrPresets(_qrPresetStore(), upsertQrPreset(qrFairPresets, snapshot));
+  qrActivePresetId = qrPresetId(name);
+  renderQrPresetPicker();
+  showToast(`✓ Saved fair preset "${name}"`, 'ok');
+};
+
+window.qrDeleteFairPreset = async function () {
+  const preset = findQrPreset(qrFairPresets, qrActivePresetId);
+  if (!preset) return;
+  if (!(await confirmDialog(`Delete the fair preset "${preset.name}"?`, { danger: true, okLabel: 'Delete' }))) return;
+
+  qrFairPresets = saveQrPresets(_qrPresetStore(), removeQrPreset(qrFairPresets, preset.id));
+  qrActivePresetId = '';
+  renderQrPresetPicker();
+  showToast(`Deleted "${preset.name}"`, 'ok');
+};
+
 window.printPaymentQRCodes = async function () {
   const cols = Math.max(1, Math.min(6, parseInt(document.getElementById('qrp-cols').value, 10) || 3));
   const baseCur = document.getElementById('qrp-base-cur').value || 'auto';
-  const showEUR = !!document.getElementById('qrp-show-eur').checked;
-  const showCAD = !!document.getElementById('qrp-show-cad').checked;
-  const showUSD = !!document.getElementById('qrp-show-usd').checked;
 
   const selectedIds = Array.from(document.querySelectorAll('.qrp-book-check'))
     .filter((el) => el.checked)
@@ -16281,10 +16470,7 @@ window.printPaymentQRCodes = async function () {
     return;
   }
 
-  const currenciesShown = [];
-  if (showCAD) currenciesShown.push('CAD');
-  if (showEUR) currenciesShown.push('EUR');
-  if (showUSD) currenciesShown.push('USD');
+  const currenciesShown = _qrpSelectedPriceCurrencies();
 
   showToast('⌛ Preparing payment QR code sheet…');
 
@@ -20845,7 +21031,8 @@ function exposeLegacyInlineHandlers() {
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,
     codeToSymbol, posFormat, convertCurrency, getPOSCurrencies, buildPOSCartRows, renderPOS,
     _showPosQR, renderPOSFxStatus, _posItemToManualPayload, renderSalesTrackerBookList,
-    renderQRPrintBookList, _posSlugId, renderPosBookModalQR, _stripeMinorToMajor,
+    renderQRPrintBookList, _qrpSelectedPriceCurrencies, _qrReadPresetForm,
+    _qrApplyPresetToForm, renderQrPresetPicker, _posSlugId, renderPosBookModalQR, _stripeMinorToMajor,
     _stripeFriendlyType, _stripeFmtMoney, fetchStripeTransactions, aggregateStripeTransactions,
     renderStripeFeesCards, fetchStripeFeesByYear, insertStripeFeesIntoLedger,
     reconcileStripeAgainstSales, clearStoredStripeKey, downloadStripeFeesAuditCSV, getReconMemory,

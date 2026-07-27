@@ -1045,6 +1045,7 @@
             <option value="GBP">GBP £</option>
             <option value="CAD">CAD $</option>
             <option value="AUD">AUD $</option>
+            <option value="MXN">MXN MX$</option>
             <option value="CHF">CHF</option>
             <option value="JPY">JPY ¥</option>
             <option value="NOK">NOK kr</option>
@@ -1231,6 +1232,7 @@
                 <option value="EUR">EUR</option>
                 <option value="GBP">GBP</option>
                 <option value="AUD">AUD</option>
+                <option value="MXN">MXN</option>
               </select>
               <input type="number" inputmode="decimal" id="exp-amount" step="0.01" min="0" placeholder="0.00" oninput="calcExpenseFx()">
             </div>
@@ -1651,6 +1653,7 @@
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
             <option value="GBP">GBP</option>
+            <option value="MXN">MXN</option>
           </select>
           <input type="number" inputmode="decimal" id="tc-exp-amount" step="0.01" min="0" placeholder="0.00" style="flex:1;">
         </div>
@@ -1731,6 +1734,7 @@
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
             <option value="GBP">GBP</option>
+            <option value="MXN">MXN</option>
           </select>
           <input type="number" inputmode="numeric" id="tc-rec-amount" placeholder="0.00" style="flex:1;">
           <button class="btn gold" onclick="addRecurring()">Add</button>
@@ -2425,6 +2429,7 @@
           <option value="CAD">CA$ CAD</option>
           <option value="USD">$ USD</option>
           <option value="GBP">£ GBP</option>
+          <option value="MXN">MX$ MXN</option>
         </select>
         <div style="font-size:11px;color:var(--text3);margin-top:4px;">Used in price-paid cells.</div>
       </div>
@@ -2468,6 +2473,18 @@
       Generates an editorial-style printable sheet of payment QR codes for the books you select. Each card shows the QR, title, prices, and the underlying Stripe link.
     </div>
 
+    <div style="background:rgba(200,145,58,0.08);border:1px solid rgba(200,145,58,0.25);border-radius:var(--r2);padding:12px;margin-bottom:12px;">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-text,#8a5815);margin-bottom:8px;">Fair presets</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <select id="qrp-preset-select" aria-label="Saved fair preset" onchange="qrPresetSelected(this.value)" style="flex:1;min-width:150px;font-size:12px;padding:5px 8px;">
+          <option value="">No saved fairs yet</option>
+        </select>
+        <button type="button" class="btn sm" onclick="qrSaveFairPreset()">💾 Save…</button>
+        <button type="button" class="btn sm" id="qrp-preset-delete" onclick="qrDeleteFairPreset()" disabled>Delete</button>
+      </div>
+      <div id="qrp-preset-note" style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;">Set the sheet up once, save it under the fair&rsquo;s name, and recall it next time.</div>
+    </div>
+
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group" style="margin:0;">
         <label for="qrp-cols">Columns per row</label>
@@ -2481,6 +2498,7 @@
           <option value="CAD">CAD (CA$)</option>
           <option value="USD">USD ($)</option>
           <option value="GBP">GBP (£)</option>
+          <option value="MXN">MXN (MX$)</option>
         </select>
         <div style="font-size:11px;color:var(--text3);margin-top:4px;">Marked as the listed price; others are converted via your saved FX rates.</div>
       </div>
@@ -2497,6 +2515,10 @@
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:8px;">
       <input type="checkbox" id="qrp-show-usd" checked style="width:16px;height:16px;cursor:pointer;">
       <span style="font-size:13px;color:#111;font-weight:600;">Show USD price</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:8px;">
+      <input type="checkbox" id="qrp-show-mxn" style="width:16px;height:16px;cursor:pointer;">
+      <span style="font-size:13px;color:#111;font-weight:600;">Show MXN price</span>
     </label>
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(200,145,58,0.08);border:1px solid rgba(200,145,58,0.25);margin-bottom:12px;">
       <input type="checkbox" id="qrp-fit-one-page" checked style="width:16px;height:16px;cursor:pointer;">
@@ -3123,6 +3145,7 @@
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
             <option value="GBP">GBP</option>
+            <option value="MXN">MXN</option>
           </select>
           <input id="edit-exp-amount" type="number" inputmode="decimal" step="0.01" min="0" style="flex:1;">
         </div>
@@ -3183,6 +3206,7 @@
         <option value="USD">USD — US$</option>
         <option value="GBP">GBP — £</option>
         <option value="AUD">AUD — A$</option>
+        <option value="MXN">MXN — MX$</option>
         <option value="CHF">CHF — CHF</option>
         <option value="JPY">JPY — ¥</option>
       </select>
@@ -3510,6 +3534,7 @@
           <option value="USD">USD ($)</option>
           <option value="EUR">EUR (€)</option>
           <option value="GBP">GBP (£)</option>
+          <option value="MXN">MXN (MX$)</option>
         </select>
       </div>
       <div class="form-group" style="margin:0;">
