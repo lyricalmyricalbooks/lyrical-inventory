@@ -38,10 +38,8 @@ import {
   renderExpenses,
   renderHist,
   renderOrders,
-  renderTaxCenter,
   saveReceiptToLocalFile,
   saveState,
-  saveTaxCenter,
   sheetsUrl,
   showToast,
   states,
@@ -54,6 +52,7 @@ import {
   hydrateShippingDestinationPhone,
   bigCartelData,
 } from './bigcartel.js';
+import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
 import { escapeHtml } from '../lib/html.js';
 import { csvCell } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';

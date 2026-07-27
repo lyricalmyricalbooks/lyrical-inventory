@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { appSource } from './helpers/extract-decl.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -34,7 +35,7 @@ describe('Trip Combobox & Visualizer Unit Tests', () => {
 
   it('verifies trip functions are declared and exposed in main.js', () => {
     const jsPath = path.join(process.cwd(), 'src/main.js');
-    const js = fs.readFileSync(jsPath, 'utf8');
+    const js = appSource;
 
     expect(js).toContain('function tcSetTripsView');
     expect(js).toContain('function _tcGetTripsSummaryAll');
