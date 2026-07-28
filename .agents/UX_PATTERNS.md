@@ -284,6 +284,25 @@ it can enter and render all of them.
 
 ---
 
+## Decisions on record
+
+Reviewed against live specimens and settled. **These are not open questions.** Each one is a
+deliberate choice, and two of them look like bugs if you don't know the history — so confirm
+here before "fixing" anything in this list.
+
+| Decision | Ruling | Why it matters |
+| :-- | :-- | :-- |
+| **Shadows** | Keep the two-layer elevation scale. `--shadow`/`--shadow2` stay aliased onto `--elev-2`/`--elev-3`. | Reviewed on real cards and stat tiles. Prefer `--elev-*` directly in new code. |
+| **Button height** | `.btn` stays at ~33px. **Overrides AGENTS.md §3's 44px minimum.** | Raising it reflows every screen, and the density is wanted. Do *not* add `min-height` to `.btn`. Apply `.sys-target` to individual controls that genuinely need a full target. |
+| **Dark mode** | Groundwork only — semantic tokens stay, no theme block ships. | Components still name colours directly; enabling it now would leave most screens half-themed. Revisit after the migration, not before. |
+| **View transitions** | Helper stays available and unwired. | See §1 — shipped and reverted in PR #128/#129. |
+
+Two of these (button height, dark mode) are places where the codebase deliberately does *not*
+match `AGENTS.md`. That is intentional. If a future change makes one of them worth reopening,
+raise it with the user rather than silently converging on the written guideline.
+
+---
+
 ## Quick pre-flight before shipping any new list/dropdown/button
 1. Did I reuse `.btn`/`.pill`/`.tbl`/`.empty-state`/`.toast` instead of new ad-hoc classes?
 2. Does every new interactive element have hover **and** `:focus-visible` states, and a

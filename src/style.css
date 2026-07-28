@@ -1580,7 +1580,15 @@ tr.hist-row:hover {
 .pill.gold{background:var(--gold-bg);color:var(--gold-text);border:1px solid var(--gold-line);}
 
 /* BUTTONS — transitions use motion tokens, so they collapse automatically
-   under prefers-reduced-motion without a per-rule override. */
+   under prefers-reduced-motion without a per-rule override.
+
+   DELIBERATE EXCEPTION TO AGENTS.md §3 (44px minimum touch target):
+   .btn computes to roughly 33px and stays that way by an explicit reviewed
+   decision — raising it reflows every screen in the app, and the density is
+   wanted. Do NOT "fix" this by adding min-height to the base class.
+   Where a control genuinely needs a full-size target (icon-only buttons,
+   inline row actions), apply the .sys-target utility from system.css to that
+   control instead. See .agents/UX_PATTERNS.md § Decisions on record. */
 .btn{font-family:'Syne',sans-serif;font-size:var(--text-xs);font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;padding:8px 16px;border-radius:var(--r2);border:1px solid var(--border-default);background:var(--surface-sunken);color:var(--content-primary);cursor:pointer;transition:all var(--dur-fast) var(--ease-standard);white-space:nowrap;display:inline-flex;align-items:center;gap:6px;touch-action:manipulation;}
 .btn:hover{background:var(--surface-inset);}
 .btn.gold{background:var(--gold);color:var(--ink);border-color:var(--gold);}

@@ -106,3 +106,24 @@ describe('migrated core primitives', () => {
     expect(css).toMatch(/--shadow2:\s*var\(--elev-3\)/);
   });
 });
+
+// These two guards encode reviewed decisions that deliberately DIVERGE from
+// .agents/AGENTS.md, so they read as bugs to anyone following the written
+// guideline alone. See .agents/UX_PATTERNS.md § Decisions on record before
+// changing either — a failure here means a settled call is being reopened.
+describe('reviewed decisions that diverge from AGENTS.md', () => {
+  const styleCss = readFileSync(SCANNED_FILES[0], 'utf8');
+  const systemCss = readFileSync(SCANNED_FILES[1], 'utf8');
+
+  it('.btn keeps its ~33px height rather than AGENTS.md §3\'s 44px minimum', () => {
+    const btnRule = styleCss.match(/^\.btn\{[^}]*\}/m)?.[0] || '';
+    expect(btnRule).not.toContain('min-height');
+    // The opt-in utility remains available for controls that do need the target.
+    expect(systemCss).toContain('.sys-target');
+  });
+
+  it('dark mode stays groundwork-only — no theme block ships', () => {
+    expect(styleCss).not.toContain('prefers-color-scheme');
+    expect(systemCss).not.toContain('prefers-color-scheme');
+  });
+});
