@@ -1,0 +1,273 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LYRICAL DESIGN SYSTEM — FOUNDATION LAYER
+   ───────────────────────────────────────────────────────────────────────────
+   Phase 1 of the UX system described in .agents/UX_PATTERNS.md.
+
+   This file is ADDITIVE and imported BEFORE style.css. It introduces the
+   token vocabulary and the interaction baseline; it deliberately does not
+   restyle existing components. Legacy rules in style.css keep winning on
+   conflicts, so adopting this is incremental and non-breaking:
+
+     - New code MUST use these tokens.
+     - Existing rules migrate opportunistically, when you're already editing
+       them. Never do a big-bang rewrite of style.css.
+
+   Baseline it replaces (measured on the pre-system codebase):
+     47 distinct font sizes · 105 distinct raw hex colours · 139 ad-hoc
+     box-shadows · 8 easing curves across 157 transitions · 15 z-index values.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── TYPE SCALE ──────────────────────────────────────────────────────────
+     Replaces 47 ad-hoc px sizes. --text-3xs..2xs are the uppercase Syne
+     micro-labels this app leans on; body sits at --text-sm/--text-base. */
+  --text-3xs: 9px;
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 26px;
+  --text-3xl: clamp(28px, 1.4rem + 1.6vw, 40px);
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.45;
+  --leading-normal: 1.6;
+
+  /* Tracking — uppercase micro-labels need generous tracking to stay legible */
+  --tracking-label: 0.16em;
+  --tracking-caps: 0.09em;
+  --tracking-tight: -0.01em;
+
+  /* ── ELEVATION ───────────────────────────────────────────────────────────
+     Replaces 139 ad-hoc box-shadows. Multi-layered per AGENTS.md §1 —
+     a tight contact shadow plus a soft ambient one. */
+  --elev-0: none;
+  --elev-1: 0 1px 2px rgba(14, 12, 10, .05), 0 1px 3px rgba(14, 12, 10, .04);
+  --elev-2: 0 2px 4px rgba(14, 12, 10, .05), 0 4px 12px rgba(14, 12, 10, .07);
+  --elev-3: 0 4px 8px rgba(14, 12, 10, .05), 0 12px 28px rgba(14, 12, 10, .10);
+  --elev-4: 0 8px 16px rgba(14, 12, 10, .06), 0 24px 60px rgba(14, 12, 10, .16);
+  /* Lift applied on hover — pair with --elev-2/3, never with a raw shadow */
+  --elev-hover: 0 6px 14px rgba(14, 12, 10, .07), 0 16px 36px rgba(14, 12, 10, .11);
+
+  /* ── MOTION ──────────────────────────────────────────────────────────────
+     Replaces 8 bespoke curves. Any transition written with these tokens
+     automatically collapses under prefers-reduced-motion (see below) — that
+     is the whole reason to use them instead of literal durations. */
+  --dur-instant: 80ms;
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 360ms;
+
+  --ease-standard: cubic-bezier(.4, 0, .2, 1);   /* default for state changes */
+  --ease-entrance: cubic-bezier(.16, 1, .3, 1);  /* things arriving — decelerate */
+  --ease-exit: cubic-bezier(.4, 0, 1, 1);        /* things leaving — accelerate */
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);/* playful overshoot, use sparingly */
+
+  /* ── LAYERING ────────────────────────────────────────────────────────────
+     Replaces 15 magic z-index values (including a 9999). Never write a raw
+     z-index again — if a new stacking context is needed, add a token here. */
+  --z-base: 1;
+  --z-raised: 10;
+  --z-sticky: 100;
+  --z-dropdown: 300;
+  --z-overlay: 900;
+  --z-modal: 1000;
+  --z-toast: 1100;
+  --z-tooltip: 1200;
+
+  /* ── FOCUS ───────────────────────────────────────────────────────────────
+     One ring for the whole app. AGENTS.md §2 requires a designed focus state
+     on every interactive element; this is it. */
+  --focus-ring-width: 2px;
+  --focus-ring-color: var(--gold);
+  --focus-ring-offset: 2px;
+  --focus-ring-halo: 0 0 0 4px rgba(200, 145, 58, .18);
+
+  /* ── SEMANTIC SURFACES & CONTENT ─────────────────────────────────────────
+     Aliases over the existing palette. These exist so components stop
+     referencing raw --cream/--ink names: a surface is named for its ROLE,
+     not its colour, which is the prerequisite for ever shipping a dark
+     theme (see "Dark mode" note at the foot of this file). */
+  --surface-page: var(--cream);
+  --surface-sunken: var(--cream2);
+  --surface-raised: var(--surface-card);
+  --surface-inset: var(--cream3);
+  --surface-inverse: var(--ink);
+  --surface-inverse-raised: var(--ink2);
+
+  --content-primary: var(--text);
+  --content-secondary: var(--text2);
+  --content-muted: var(--text3);
+  --content-faint: var(--text4);
+  --content-on-inverse: var(--cream);
+
+  --border-subtle: var(--border2);
+  --border-default: var(--border);
+  --border-strong: var(--cream4);
+
+  /* Status roles — always reach for these over the raw colour tokens so the
+     amber=active / green=settled / red=error convention stays enforceable. */
+  --status-active: var(--amber);
+  --status-active-bg: var(--amber-bg);
+  --status-positive: var(--green);
+  --status-positive-bg: var(--green-bg);
+  --status-critical: var(--red);
+  --status-critical-bg: var(--red-bg);
+  --status-info: var(--blue);
+  --status-info-bg: var(--blue-bg);
+  --status-neutral: var(--text3);
+  --status-neutral-bg: var(--cream3);
+
+  /* ── TOUCH TARGETS (Fitts's Law, AGENTS.md §3) ──────────────────────────── */
+  --target-min: 44px;
+  --target-compact: 32px;
+}
+
+/* Motion tokens collapse for users who ask for reduced motion. Every
+   transition/animation authored with the tokens above becomes effectively
+   instant, with no per-rule opt-out needed. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 1ms;
+    --dur-fast: 1ms;
+    --dur-base: 1ms;
+    --dur-slow: 1ms;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTERACTION BASELINE
+   Placed in a cascade layer so unlayered legacy rules in style.css always
+   win a conflict. This can only add behaviour, never silently restyle.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@layer system {
+
+  /* ── Focus: one visible, designed ring everywhere ──────────────────────
+     Replaces the browser default outline. Applied to every natively
+     focusable control plus anything given an explicit role/tabindex. */
+  :where(a[href], button, input, select, textarea, summary,
+         [tabindex]:not([tabindex="-1"]), [role="button"],
+         [role="tab"], [role="menuitem"], [role="switch"]):focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+    border-radius: var(--r);
+  }
+
+  /* Never suppress focus without a replacement — this keeps a mouse click
+     from leaving a ring while keyboard focus stays obvious. */
+  :where(button, [role="button"]):focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ── Typography polish ─────────────────────────────────────────────────
+     One-liners with outsized payoff: no orphaned words in headings, no
+     single-word final lines in body copy. */
+  :where(h1, h2, h3, h4, .sect, .audience-summary-copy h3) {
+    text-wrap: balance;
+  }
+
+  :where(p, .section-subcopy, .field-note, .lead-note, .empty-state) {
+    text-wrap: pretty;
+  }
+
+  /* ── Layout stability ──────────────────────────────────────────────────
+     Reserves the scrollbar so content doesn't shift horizontally the moment
+     a list grows past the viewport. */
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  /* Textareas grow with their content — removes the need for JS autosize. */
+  :where(textarea) {
+    field-sizing: content;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SYSTEM UTILITIES
+   Opt-in classes. Deliberately few — this is not a utility framework.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Long-list performance without a virtualization dependency. Apply to rows of
+   tables that can reach hundreds of entries (order history, tax ledger,
+   reconciliation). The browser skips rendering off-screen rows entirely.
+   `contain-intrinsic-size` must approximate real row height or the scrollbar
+   will jump — measure before changing it. */
+.sys-long-list > tr,
+tbody.sys-long-list > tr {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
+}
+
+/* Marks a panel as a container-query root so its children can respond to the
+   PANEL's width rather than the viewport's — the correct signal for cards and
+   tables that render at different widths depending on where they're mounted. */
+.sys-container {
+  container-type: inline-size;
+}
+
+/* Standard hover lift for cards. Uses motion + elevation tokens, so it is
+   automatically reduced-motion safe. */
+.sys-lift {
+  transition:
+    transform var(--dur-base) var(--ease-entrance),
+    box-shadow var(--dur-base) var(--ease-entrance);
+}
+.sys-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--elev-hover);
+}
+
+/* Guarantees a Fitts's-Law-compliant tap target on controls that would
+   otherwise be visually small (icon buttons, inline row actions). */
+.sys-target {
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Optimistic / offline sync states ──────────────────────────────────────
+   The visual vocabulary for an offline-first mutation, per UX_PATTERNS.md §7.
+   A queued write renders IMMEDIATELY in its final position wearing .sys-pending,
+   then either clears or escalates to .sys-failed / .sys-conflict. */
+.sys-pending {
+  opacity: .7;
+  transition: opacity var(--dur-base) var(--ease-standard);
+}
+.sys-pending .pill,
+.pill.sys-pending {
+  background: var(--status-neutral-bg);
+  color: var(--status-neutral);
+}
+.sys-failed {
+  box-shadow: inset 3px 0 0 var(--status-critical);
+}
+.sys-conflict {
+  box-shadow: inset 3px 0 0 var(--status-active);
+}
+
+/* ── View Transitions ──────────────────────────────────────────────────────
+   Applies to re-renders wrapped in withViewTransition() (src/lib/motion.js).
+   Kept short and non-bouncy: this is a dense financial tool, so transitions
+   should reassure that content changed, not perform. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--dur-base);
+    animation-timing-function: var(--ease-standard);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DARK MODE — deliberately not shipped yet.
+   The semantic surface/content tokens above are the prerequisite. Once the
+   components in style.css consume --surface-* / --content-* instead of raw
+   --cream/--ink/--text names, dark mode becomes a single added block here
+   re-pointing those aliases. Shipping it before that migration would leave
+   most of the app half-themed, which is worse than light-only.
+   ═══════════════════════════════════════════════════════════════════════════ */

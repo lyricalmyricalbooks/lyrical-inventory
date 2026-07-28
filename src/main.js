@@ -1,3 +1,6 @@
+// Design system foundation (tokens + interaction baseline) loads first so that
+// unlayered legacy rules in style.css keep winning on any conflict.
+import './styles/system.css';
 import './style.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
@@ -2960,7 +2963,7 @@ function updateAllOverview() {
 function conAccountRowHtml(bookId, bookTitle, r, nested) {
   const jump = `switchBook('${bookId}'); setTimeout(()=>switchTab('consignment'), 50);`;
   const titleCell = nested ? `<td class="con-nested-spacer"></td>` : `<td style="font-weight:700;">${escapeHtml(bookTitle)}</td>`;
-  return `<tr class="${r.isActive ? 'is-active' : 'is-settled'}${nested ? ' con-nested-row' : ''}">${titleCell}<td><span class="store-name-cell">${escapeHtml(r.store)}</span></td><td class="r">${r.sent}</td><td class="r">${r.sold}</td><td class="r outstanding-cell">${r.outstanding}</td><td><div class="con-row-progress con-row-progress-link" role="button" tabindex="0" title="${r.pct}% sold-through — view ${escapeHtml(bookTitle)} consignment" onclick="${jump}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${jump}}"><div class="con-row-progress-bar" style="width:${r.pct}%;"></div></div></td><td>${r.isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td></tr>`;
+  return `<tr class="${r.isActive ? 'is-active' : 'is-settled'}${nested ? ' con-nested-row' : ''}">${titleCell}<td><span class="store-name-cell">${escapeHtml(r.store)}</span></td><td class="r col-sent">${r.sent}</td><td class="r">${r.sold}</td><td class="r outstanding-cell">${r.outstanding}</td><td class="col-sellthrough"><div class="con-row-progress con-row-progress-link" role="button" tabindex="0" title="${r.pct}% sold-through — view ${escapeHtml(bookTitle)} consignment" onclick="${jump}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${jump}}"><div class="con-row-progress-bar" style="width:${r.pct}%;"></div></div></td><td>${r.isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td></tr>`;
 }
 function renderConsignmentTable() {
   const body = $('all-con-body');
@@ -2983,12 +2986,16 @@ function renderConsignmentTable() {
     const isCollapsed = collapsed.has(b.id);
     const pct = b.totals.sent ? Math.round((b.totals.sold / b.totals.sent) * 100) : 0;
     const statusLabel = b.totals.active ? `${b.totals.active} active` : 'All settled';
-    const headerRow = `<tr class="con-group-row ${b.totals.active ? 'is-active' : 'is-settled'}" onclick="toggleConGroup('${b.id}')"><td colspan="2" style="font-weight:800;"><span class="con-group-chevron${isCollapsed ? '' : ' open'}">▸</span><span class="con-group-dot" style="background:${b.accent};"></span>${escapeHtml(b.title)}</td><td class="r">${b.totals.sent}</td><td class="r">${b.totals.sold}</td><td class="r outstanding-cell">${b.totals.outstanding}</td><td><div class="con-row-progress" title="${pct}% sold-through"><div class="con-row-progress-bar" style="width:${pct}%;"></div></div></td><td><span class="pill ${b.totals.active ? 'amber' : 'gray'}">${b.totals.active ? '● ' : '✓ '}${statusLabel}</span></td></tr>`;
+    const headerRow = `<tr class="con-group-row ${b.totals.active ? 'is-active' : 'is-settled'}" onclick="toggleConGroup('${b.id}')"><td colspan="2" style="font-weight:800;"><span class="con-group-chevron${isCollapsed ? '' : ' open'}">▸</span><span class="con-group-dot" style="background:${b.accent};"></span>${escapeHtml(b.title)}</td><td class="r col-sent">${b.totals.sent}</td><td class="r">${b.totals.sold}</td><td class="r outstanding-cell">${b.totals.outstanding}</td><td class="col-sellthrough"><div class="con-row-progress" title="${pct}% sold-through"><div class="con-row-progress-bar" style="width:${pct}%;"></div></div></td><td><span class="pill ${b.totals.active ? 'amber' : 'gray'}">${b.totals.active ? '● ' : '✓ '}${statusLabel}</span></td></tr>`;
     if (isCollapsed) return headerRow;
     const sortedRows = [...b.rows].sort((a, c) => (c.isActive - a.isActive));
     return headerRow + sortedRows.map(r => conAccountRowHtml(b.id, b.title, r, true)).join('');
   }).join('');
 }
+// NOTE: these re-renders are deliberately NOT wrapped in withViewTransition()
+// (src/lib/motion.js). View Transitions were shipped across switchTab/switchBook
+// in PR #128 and reverted in PR #129 seven minutes later; the helper is kept
+// available for opt-in but stays unwired until that call is revisited.
 function toggleConGroup(bookId) {
   const collapsed = window._allConCollapsed || (window._allConCollapsed = new Set());
   if (collapsed.has(bookId)) collapsed.delete(bookId); else collapsed.add(bookId);

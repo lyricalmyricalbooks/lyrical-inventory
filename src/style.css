@@ -14,8 +14,12 @@
   /* Spacing scale — use these instead of ad-hoc px so padding/margins stay
      consistent as new screens are added. Roughly a 1.5x step from 4px. */
   --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
-  --shadow:0 2px 12px rgba(14,12,10,.07);
-  --shadow2:0 8px 32px rgba(14,12,10,.12);
+  /* Legacy elevation names, now aliased onto the system's elevation scale
+     (src/styles/system.css) so their ~23 existing consumers pick up the
+     multi-layered shadows AGENTS.md §1 calls for. Prefer --elev-* directly
+     in new code; these two remain only so old rules keep resolving. */
+  --shadow:var(--elev-2);
+  --shadow2:var(--elev-3);
   --book-kpi-rail-width:37rem;
   /* Per-book accent - overridden by JS */
   --book-accent: var(--gold2);
@@ -1537,15 +1541,15 @@ tr.hist-row:hover {
 
 /* TABLES */
 .tbl-wrap{border-radius:var(--r2);overflow:hidden;border:1px solid var(--border);margin-bottom:1.5rem;box-shadow:var(--shadow);}
-.tbl{width:100%;border-collapse:collapse;font-size:13px;}
-.tbl thead{background:var(--ink);}
-.tbl th{padding:10px 16px;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.35);text-align:left;white-space:nowrap;}
+.tbl{width:100%;border-collapse:collapse;font-size:var(--text-base);}
+.tbl thead{background:var(--surface-inverse);}
+.tbl th{padding:10px 16px;font-size:var(--text-3xs);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.35);text-align:left;white-space:nowrap;}
 .tbl th.r{text-align:right;}
-.tbl td{padding:11px 16px;border-bottom:1px solid var(--border2);color:var(--text);vertical-align:middle;}
-.tbl td.r{text-align:right;font-family:'DM Mono',monospace;font-size:12px;}
+.tbl td{padding:11px 16px;border-bottom:1px solid var(--border-subtle);color:var(--content-primary);vertical-align:middle;}
+.tbl td.r{text-align:right;font-family:'DM Mono',monospace;font-size:var(--text-sm);}
 .tbl tbody tr:last-child td{border-bottom:none;}
-.tbl tbody tr{background:white;transition:background .12s;}
-.tbl tbody tr:hover td{background:var(--cream2);}
+.tbl tbody tr{background:var(--surface-raised);transition:background-color var(--dur-fast) var(--ease-standard);}
+.tbl tbody tr:hover td{background:var(--surface-sunken);}
 
 /* STOCK BLOCK */
 .stock-block{background:var(--ink);border-radius:var(--r3);padding:1.5rem;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.04);margin-bottom:1.5rem;}
@@ -1565,29 +1569,39 @@ tr.hist-row:hover {
 .stock-alert.warn{background:var(--amber-bg);color:var(--amber);border-left-color:var(--amber);}
 .stock-alert.danger{background:var(--red-bg);color:var(--red);border-left-color:var(--red-light);}
 
-/* PILLS */
-.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:600;letter-spacing:.04em;white-space:nowrap;}
-.pill.green{background:var(--green-bg);color:var(--green);}
-.pill.amber{background:var(--amber-bg);color:var(--amber);}
-.pill.red{background:var(--red-bg);color:var(--red);}
-.pill.gray{background:var(--cream3);color:var(--text3);}
-.pill.blue{background:var(--blue-bg);color:var(--blue);}
+/* PILLS — status vocabulary. Colours come from the --status-* semantic roles
+   so the amber=active / green=settled / red=error convention is enforceable. */
+.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:100px;font-size:var(--text-xs);font-weight:600;letter-spacing:.04em;white-space:nowrap;}
+.pill.green{background:var(--status-positive-bg);color:var(--status-positive);}
+.pill.amber{background:var(--status-active-bg);color:var(--status-active);}
+.pill.red{background:var(--status-critical-bg);color:var(--status-critical);}
+.pill.gray{background:var(--status-neutral-bg);color:var(--status-neutral);}
+.pill.blue{background:var(--status-info-bg);color:var(--status-info);}
 .pill.gold{background:var(--gold-bg);color:var(--gold-text);border:1px solid var(--gold-line);}
 
-/* BUTTONS */
-.btn{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:8px 16px;border-radius:var(--r2);border:1px solid var(--border);background:var(--cream2);color:var(--text);cursor:pointer;transition:all .14s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;touch-action:manipulation;}
-.btn:hover{background:var(--cream3);}
+/* BUTTONS — transitions use motion tokens, so they collapse automatically
+   under prefers-reduced-motion without a per-rule override.
+
+   DELIBERATE EXCEPTION TO AGENTS.md §3 (44px minimum touch target):
+   .btn computes to roughly 33px and stays that way by an explicit reviewed
+   decision — raising it reflows every screen in the app, and the density is
+   wanted. Do NOT "fix" this by adding min-height to the base class.
+   Where a control genuinely needs a full-size target (icon-only buttons,
+   inline row actions), apply the .sys-target utility from system.css to that
+   control instead. See .agents/UX_PATTERNS.md § Decisions on record. */
+.btn{font-family:'Syne',sans-serif;font-size:var(--text-xs);font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;padding:8px 16px;border-radius:var(--r2);border:1px solid var(--border-default);background:var(--surface-sunken);color:var(--content-primary);cursor:pointer;transition:all var(--dur-fast) var(--ease-standard);white-space:nowrap;display:inline-flex;align-items:center;gap:6px;touch-action:manipulation;}
+.btn:hover{background:var(--surface-inset);}
 .btn.gold{background:var(--gold);color:var(--ink);border-color:var(--gold);}
 .btn.gold:hover{background:var(--gold2);border-color:var(--gold2);}
-.btn.ink{background:var(--ink);color:var(--cream);border-color:var(--ink);}
+.btn.ink{background:var(--surface-inverse);color:var(--content-on-inverse);border-color:var(--surface-inverse);}
 .btn.ink:hover{background:var(--ink3);}
-.btn.danger-btn{background:var(--red-bg);color:var(--red);border-color:rgba(149,32,32,.2);}
+.btn.danger-btn{background:var(--status-critical-bg);color:var(--status-critical);border-color:rgba(149,32,32,.2);}
 .btn.danger-btn:hover{background:#f5c0c0;}
-.btn.sm{padding:5px 11px;font-size:10px;border-radius:var(--r);}
+.btn.sm{padding:5px 11px;font-size:var(--text-2xs);border-radius:var(--r);}
 .btn:disabled{opacity:.35;cursor:not-allowed;}
 
 /* CARDS */
-.card{background:white;border-radius:var(--r3);border:1px solid var(--border);padding:1.4rem;margin-bottom:1.1rem;box-shadow:var(--shadow);}
+.card{background:var(--surface-raised);border-radius:var(--r3);border:1px solid var(--border-default);padding:1.4rem;margin-bottom:1.1rem;box-shadow:var(--elev-2);}
 .form-group label{display:block;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;}
 .form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 13px;font-size:13px;font-family:'Syne',sans-serif;border:1px solid var(--border);border-radius:var(--r2);background:var(--cream);color:var(--text);transition:border-color .15s,box-shadow .15s,background-color .15s;outline:none;touch-action:manipulation;}
 .form-group select{appearance:none;-webkit-appearance:none;background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 12px center;background-size:14px;padding-right:36px;cursor:pointer;}
@@ -2666,6 +2680,24 @@ tr.hist-row:hover {
   .consignment-summary-panel{padding:var(--space-4);}
   .consignment-summary-head{flex-direction:column;}
   .consignment-stat-grid{grid-template-columns:1fr;}
+}
+
+/* Container-query responsiveness — the panel's own width is the right signal
+   here, not the viewport's (this panel is also mounted in narrower contexts).
+   `.sys-container` on the panel establishes the query root. */
+@container (max-width: 640px){
+  /* Drop the Sell-through bar: Book / Store / Outstanding / Status are the
+     columns that matter on a phone, and the bar's information is already
+     carried by the Sold and Outstanding numbers beside it.
+     Columns are targeted by class, NOT nth-child — the grouped header row
+     uses colspan="2" for its title cell, so positional selectors shift. */
+  .all-consignment-table .col-sellthrough{display:none;}
+  .con-table-controls{justify-content:stretch;}
+  .con-group-toggle-btn{flex:1;justify-content:center;min-height:var(--target-min);}
+}
+@container (max-width: 460px){
+  /* Sent is derivable from Sold + Outstanding — shed it last. */
+  .all-consignment-table .col-sent{display:none;}
 }
 
 /* Customers audience summary */
