@@ -1,0 +1,19 @@
+{
+  "_comment": [
+    "Accepted design-token debt in the stylesheets, as of the last regeneration.",
+    "check-tokens.mjs fails when a category exceeds its limit here, so this is a",
+    "RATCHET: pre-existing violations are tolerated, new ones are not.",
+    "After migrating rules onto tokens, re-run with --write-baseline to lock in",
+    "the lower numbers so the debt can never climb back:",
+    "  node scripts/check-tokens.mjs --write-baseline",
+    "Never raise a limit to make a build pass — tokenise the new CSS instead, or",
+    "mark a reviewed exception on the line with a /* token-ok */ comment."
+  ],
+  "limits": {
+    "raw-hex": 232,
+    "raw-zindex": 42,
+    "raw-font-size": 419,
+    "raw-easing": 97,
+    "raw-shadow": 87
+  }
+}

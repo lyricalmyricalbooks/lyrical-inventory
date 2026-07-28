@@ -16,6 +16,7 @@
     "dev:all": "sh -c \"npm run dev:backend & npm run dev\"",
     "lint": "eslint src --ext .js",
     "lint:contrast": "node scripts/check-contrast.mjs",
+    "lint:tokens": "node scripts/check-tokens.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
