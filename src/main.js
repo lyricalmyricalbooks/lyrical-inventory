@@ -14513,11 +14513,17 @@ async function boot(forcedBook) {
         setSyncState('ok', '<b>Firestore</b> · connected');
         updateSubheader(new Date().toLocaleTimeString());
         renderAll(); updateHeader(); updateRoleToggleButton(); syncRoleUI();
+        // Fire-and-forget: a stall with no signal must still finish booting,
+        // so this isn't awaited and its own failures are swallowed silently.
+        window.posConfigureRates({ silent: true });
       });
     } else {
       // Publisher
       activeBook = 'all';
-      loadAllBooks().then(() => { maybeRunDailyBackup(true); startDailyBackupWatcher(); });
+      loadAllBooks().then(() => {
+        maybeRunDailyBackup(true); startDailyBackupWatcher();
+        window.posConfigureRates({ silent: true });
+      });
       updateRoleToggleButton();
       syncRoleUI();
     }
@@ -15804,7 +15810,11 @@ window.posSetCurrency = function (code) {
 
 // Fetch live rates for all POS currencies (CAD-pivot) and populate both
 // posExchangeRates and _fxRateCache so Tax Center conversions stay correct.
-window.posConfigureRates = async function () {
+// `silent` is set for the automatic fetch on app load (boot(), below) so a
+// closed stall with no signal doesn't get a toast on every open — manual
+// clicks on the "↻ FX Rates" button (no args, so silent defaults false) keep
+// their existing success/warning feedback.
+window.posConfigureRates = async function ({ silent = false } = {}) {
   const currencies = getPOSCurrencies().filter(c => c !== 'CAD');
   const btn = document.querySelector('[onclick="posConfigureRates()"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Fetching…'; }
@@ -15842,6 +15852,7 @@ window.posConfigureRates = async function () {
   renderPOSFxStatus();
 
   if (btn) { btn.disabled = false; btn.textContent = 'FX Rates'; }
+  if (silent) return;
   if (failed.length) {
     showToast(`Rates updated (${fetched} live · ${failed.join(', ')} unavailable — using cached)`, 'warn');
   } else {
