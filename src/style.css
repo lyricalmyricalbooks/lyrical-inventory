@@ -2668,6 +2668,24 @@ tr.hist-row:hover {
   .consignment-stat-grid{grid-template-columns:1fr;}
 }
 
+/* Container-query responsiveness — the panel's own width is the right signal
+   here, not the viewport's (this panel is also mounted in narrower contexts).
+   `.sys-container` on the panel establishes the query root. */
+@container (max-width: 640px){
+  /* Drop the Sell-through bar: Book / Store / Outstanding / Status are the
+     columns that matter on a phone, and the bar's information is already
+     carried by the Sold and Outstanding numbers beside it.
+     Columns are targeted by class, NOT nth-child — the grouped header row
+     uses colspan="2" for its title cell, so positional selectors shift. */
+  .all-consignment-table .col-sellthrough{display:none;}
+  .con-table-controls{justify-content:stretch;}
+  .con-group-toggle-btn{flex:1;justify-content:center;min-height:var(--target-min);}
+}
+@container (max-width: 460px){
+  /* Sent is derivable from Sold + Outstanding — shed it last. */
+  .all-consignment-table .col-sent{display:none;}
+}
+
 /* Customers audience summary */
 .audience-summary-card{
   position:relative;
