@@ -131,6 +131,149 @@ sync, Stripe pulls, Gemini OCR) instead of a spinner GIF or a bare "Loading…" 
 
 ---
 
+# Modern platform capabilities — the current state of the art
+
+> [!IMPORTANT]
+> **Posture: progressive enhancement, never load-bearing.** Every item below must degrade to
+> the existing behaviour when unsupported. Feature-detect (`CSS.supports()`,
+> `'startViewTransition' in document`, `HTMLElement.prototype.hasOwnProperty('popover')`) rather
+> than assuming. All of these are native platform features — **none adds a runtime dependency**,
+> so they stay inside the vanilla-JS / thin-Vite constraint.
+>
+> Already adopted in this codebase: `color-mix()` (33 uses), `:focus-visible` (24),
+> `prefers-reduced-motion` (3), `aria-live` (4), `inert` (2). The items below are the gaps.
+
+## 1. View Transitions — kill the re-render snap
+**Highest-leverage item for this app.** `main.js` performs ~237 `innerHTML` assignments; every
+one of them repaints instantly with no continuity. Wrapping a re-render in
+`document.startViewTransition()` gives an automatic crossfade, and naming elements with
+`view-transition-name` makes them *morph* between states instead of popping.
+
+Prime candidates: `renderConsignmentTable()` (group/flat toggle and collapse/expand currently
+snap), `switchTab()` / `switchBook()` panel swaps, `renderChannelAnalytics()` currency toggle,
+and any paginated list (`showMoreHist`).
+
+```js
+// Helper worth adding once, then reusing everywhere.
+// Falls back to a plain call when unsupported or when the user wants reduced motion.
+function withViewTransition(update) {
+  if (!document.startViewTransition || _prefersReducedMotion()) return update();
+  return document.startViewTransition(update);
+}
+// `_prefersReducedMotion()` already exists in main.js (~line 10974) — reuse it, don't duplicate.
+
+function toggleConGrouping() {
+  window._allConGrouped = !window._allConGrouped;
+  withViewTransition(() => renderConsignmentTable());
+}
+```
+Support: same-document transitions ship in Chromium and Safari; Firefox is more recent. Because
+it is wrapped in a feature check, unsupported browsers simply get today's instant swap.
+
+## 2. Popover API + `<dialog>` — delete the hand-rolled overlay plumbing
+`#book-dropdown-menu` (`index.html:311`) currently hand-rolls `position:absolute`,
+`z-index:999`, and manual outside-click closing via `closeBookDropdown()`. `.modal`
+(`style.css:1714`) likewise hand-rolls its own backdrop and focus handling.
+
+The platform now does all of that natively:
+- **`popover`** → top layer (no z-index arms race), light-dismiss on outside click, Esc to
+  close, all free. Ideal for the book switcher, the header menu, and any future filter menu.
+- **`<dialog>` + `.showModal()`** → focus trap, `::backdrop`, Esc, and inert-background for
+  free. Ideal for `openM()` modals and `confirmDialog()`/`promptDialog()`.
+
+```html
+<button popovertarget="book-menu">All books</button>
+<div id="book-menu" popover>…</div>
+```
+Pair with `@starting-style` + `transition-behavior: allow-discrete` so they animate in/out from
+`display:none` **without JS timers**:
+```css
+#book-menu {
+  opacity: 0; translate: 0 -4px;
+  transition: opacity .18s, translate .18s, display .18s allow-discrete;
+}
+#book-menu:popover-open { opacity: 1; translate: 0 0; }
+@starting-style { #book-menu:popover-open { opacity: 0; translate: 0 -4px; } }
+```
+Migrate opportunistically — when you're already touching a menu or modal, not as a big-bang
+refactor.
+
+## 3. `:has()` — state on the parent, without JS class bookkeeping
+Currently row/card states are computed in JS and stamped as classes (`is-active`,
+`is-settled`, `needs-attention`). `:has()` removes a whole category of that bookkeeping:
+
+```css
+/* Row containing an active pill gets the accent bar — no is-active class needed */
+.tbl tbody tr:has(.pill.amber) td:first-child { box-shadow: inset 3px 0 0 var(--gold2); }
+/* Form group whose input is invalid, styled from the wrapper */
+.form-group:has(input:invalid) label { color: var(--red); }
+/* Card that ended up empty */
+.card:has(.empty-state) { background: var(--cream2); }
+```
+Prefer `:has()` for *derived visual* state. Keep explicit JS classes when the state carries
+domain meaning (a settled account is business state, not a styling artifact).
+
+## 4. Container queries — component-level responsive
+All responsiveness today is viewport `@media`. But `.consignment-stat-card`, `.kpi`, and
+`.card` render at very different widths depending on their host panel, so viewport width is the
+wrong signal. This is the correct fix for "the Sell-through column crowds on mobile":
+
+```css
+.consignment-summary-panel { container-type: inline-size; }
+@container (max-width: 640px) {
+  .consignment-stat-grid { grid-template-columns: 1fr; }
+  .all-consignment-table th:nth-child(6),
+  .all-consignment-table td:nth-child(6) { display: none; } /* Sell-through column */
+}
+```
+Rule going forward: **new components use `@container`; leave existing `@media` blocks alone**
+until you're already editing them.
+
+## 5. `content-visibility` — long-list performance with zero dependencies
+The no-runtime-deps constraint rules out virtualization libraries, but the platform has a
+one-line equivalent. For long ledger/history tables (order history, tax ledger, reconciliation):
+
+```css
+.tbl tbody tr { content-visibility: auto; contain-intrinsic-size: auto 44px; }
+```
+The browser skips rendering off-screen rows entirely. This is the answer to "will this jank at
+200+ rows" — reach for it before considering manual windowing.
+
+## 6. Typography & layout polish — one-liners with real payoff
+```css
+h1, h2, h3, .sect        { text-wrap: balance; }  /* no orphaned last word in headings */
+.section-subcopy, p      { text-wrap: pretty; }   /* no single-word final lines */
+html                     { scrollbar-gutter: stable; }  /* no layout shift when content grows */
+textarea                 { field-sizing: content; }     /* grows with input, no JS autosize */
+```
+
+## 7. Optimistic UI as a documented visual vocabulary
+This is the state-of-the-art *pattern* that matters most for an offline-first PWA, and it's a
+product decision, not just CSS: a queued mutation should render **immediately** in its final
+position with a visible "not yet synced" affordance, rather than blocking on the network.
+
+The app already has the sync queue; what it lacks is a consistent visual language for it.
+Standardise on:
+- **Pending** — `.pill.gray` with a `◌` glyph, row at ~70% opacity
+- **Failed / needs retry** — `.pill.red` plus an inline retry `.btn.sm`
+- **Conflict** — `.pill.amber` with an explicit "server changed this" reconcile action
+
+Never show a queued write as fully-committed, and never make the user wait on the network to
+see their own action land. When adding any new mutation path, decide which of these three states
+it can enter and render all of them.
+
+## 8. Deliberately *not* adopting yet
+- **CSS anchor positioning** (`anchor-name`/`position-anchor`) — genuinely the right model for
+  dropdown/tooltip placement, but support is still Chromium-led. Revisit; today the popover +
+  existing absolute positioning is the safer pairing.
+- **Scroll-driven animations** (`animation-timeline`) — attractive, but this is a dense
+  financial tool where scroll-jacking hurts more than it delights. Skip.
+- **`oklch()` colour tokens** — worth it only alongside a full palette migration; mixing
+  colour spaces piecemeal in `style.css` would make the tokens harder to reason about, not
+  easier.
+
+---
+
 ## Quick pre-flight before shipping any new list/dropdown/button
 1. Did I reuse `.btn`/`.pill`/`.tbl`/`.empty-state`/`.toast` instead of new ad-hoc classes?
 2. Does every new interactive element have hover **and** `:focus-visible` states, and a
@@ -141,3 +284,11 @@ sync, Stripe pulls, Gemini OCR) instead of a spinner GIF or a bare "Loading…" 
 5. Active/settled/error states — did I reuse the amber/green/gray/red pill convention instead
    of picking new colors?
 6. Empty state: rich (icon+CTA) if it's a panel's primary state, plain if it's a nested list.
+7. If I re-rendered a list via `innerHTML`, did I wrap it in `withViewTransition()` so it
+   crossfades instead of snapping? (§1)
+8. New component with width-dependent layout — did I use `@container` rather than a viewport
+   `@media` breakpoint? (§4)
+9. New menu or modal — did I reach for `popover`/`<dialog>` before hand-rolling z-index,
+   outside-click, and Esc handling? (§2)
+10. New mutation path — did I decide how its pending / failed / conflict states render, and is
+    it optimistic rather than network-blocking? (§7)
