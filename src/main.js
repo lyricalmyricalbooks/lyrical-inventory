@@ -2918,16 +2918,18 @@ function updateAllOverview() {
       conTotals.sent += st.sent || 0;
       conTotals.sold += st.sold || 0;
       conTotals.outstanding += st.outstanding || 0;
-      conRows.push(`<tr class="${isActive ? 'is-active' : 'is-settled'}"><td style="font-weight:700;">${escapeHtml(book.title)}</td><td><span class="store-name-cell">${escapeHtml(st.name)}</span></td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r outstanding-cell">${st.outstanding}</td><td>${isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td></tr>`);
+      const sent = st.sent || 0, sold = st.sold || 0;
+      const pct = sent ? Math.round((sold / sent) * 100) : 0;
+      conRows.push(`<tr class="${isActive ? 'is-active' : 'is-settled'}"><td style="font-weight:700;">${escapeHtml(book.title)}</td><td><span class="store-name-cell">${escapeHtml(st.name)}</span></td><td class="r">${sent}</td><td class="r">${sold}</td><td class="r outstanding-cell">${st.outstanding}</td><td><div class="con-row-progress" title="${pct}% sold-through"><div class="con-row-progress-bar" style="width:${pct}%;"></div></div></td><td>${isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td></tr>`);
     });
   });
   const sellThrough = conTotals.sent ? Math.round((conTotals.sold / conTotals.sent) * 100) : 0;
   const statsHost = $('all-con-stats');
   if (statsHost) {
     statsHost.innerHTML = `
-      <div class="consignment-stat-card focus"><span>Outstanding</span><strong>${conTotals.outstanding}</strong><em>copies still on shelves</em></div>
-      <div class="consignment-stat-card"><span>Active accounts</span><strong>${conTotals.active}</strong><em>${conTotals.settled} settled</em></div>
-      <div class="consignment-stat-card"><span>Sell-through</span><strong>${sellThrough}%</strong><em>${conTotals.sold} of ${conTotals.sent} sold</em></div>
+      <div class="consignment-stat-card focus"><div class="consignment-stat-icon">📦</div><span>Outstanding</span><strong>${conTotals.outstanding}</strong><em>copies still on shelves</em></div>
+      <div class="consignment-stat-card"><div class="consignment-stat-icon">🏬</div><span>Active accounts</span><strong>${conTotals.active}</strong><em>${conTotals.settled} settled</em></div>
+      <div class="consignment-stat-card"><div class="consignment-stat-icon">📈</div><span>Sell-through</span><strong>${sellThrough}%</strong><em>${conTotals.sold} of ${conTotals.sent} sold</em></div>
     `;
   }
   const statusChip = $('all-con-status-chip');
@@ -2935,7 +2937,7 @@ function updateAllOverview() {
     statusChip.className = `pill ${conTotals.active ? 'amber' : 'green'}`;
     statusChip.textContent = conTotals.accounts ? `${conTotals.accounts} account${conTotals.accounts === 1 ? '' : 's'}` : 'No accounts';
   }
-  $('all-con-body').innerHTML = conRows.length ? conRows.join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
+  $('all-con-body').innerHTML = conRows.length ? conRows.join('') : '<tr><td colspan="7"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
 
   renderGlobalPendingAlert();
 }
