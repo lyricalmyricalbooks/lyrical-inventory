@@ -64,6 +64,35 @@ describe('Mexican peso in the POS', () => {
   });
 });
 
+describe('Live FX rates fetch automatically on app load', () => {
+  // Waiting for a click on "↻ FX Rates" before a MXN cart is priced correctly
+  // means the first sale of the day runs on stale (or seed) rates. boot() now
+  // kicks off the same fetch posConfigureRates() does, once each branch knows
+  // which books (and therefore which currencies) it's dealing with.
+  it('fires posConfigureRates from both the author and publisher boot branches', () => {
+    const fn = mainJs.slice(mainJs.indexOf('async function boot('));
+    const body = fn.slice(0, fn.indexOf('\n// ── TAX CENTER'));
+    const calls = body.match(/window\.posConfigureRates\(\{\s*silent:\s*true\s*\}\)/g) || [];
+    expect(calls.length).toBe(2);
+  });
+
+  it('calls it through window. so it resolves as a global at runtime, not a module binding', () => {
+    // posConfigureRates only exists as window.posConfigureRates — an internal
+    // bare-name call would be a silent ReferenceError the first time boot()
+    // actually runs, since nothing at module scope declares that identifier.
+    expect(mainJs).not.toMatch(/[^.]\bposConfigureRates\(\{\s*silent:\s*true\s*\}\)/);
+  });
+
+  it('suppresses the toast on a silent fetch but keeps it for a manual click', () => {
+    const fn = mainJs.slice(mainJs.indexOf('window.posConfigureRates = async function'));
+    const body = fn.slice(0, fn.indexOf('\n// Render a small status line'));
+    expect(body).toMatch(/if\s*\(silent\)\s*return;/);
+    // The manual path (onclick="posConfigureRates()", no args) still defaults
+    // silent to false, so the existing success/warning toasts are untouched.
+    expect(body).toContain('silent = false');
+  });
+});
+
 describe('Mexican peso in the currency pickers', () => {
   const pickers = [
     ['pos-currency', null], // populated from getPOSCurrencies() at render time
