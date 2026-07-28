@@ -2640,6 +2640,27 @@ tr.hist-row:hover {
 .con-row-progress{width:64px;height:6px;border-radius:100px;background:var(--cream3);overflow:hidden;}
 .con-row-progress-bar{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--gold),var(--gold3));transition:width .2s ease;}
 .is-settled .con-row-progress-bar{background:var(--text3);}
+.con-row-progress-link{cursor:pointer;padding:6px 0;width:74px;background:transparent;position:relative;}
+.con-row-progress-link::before{content:'';position:absolute;inset:-4px -2px;}
+.con-row-progress-link:hover .con-row-progress-bar,.con-row-progress-link:focus-visible .con-row-progress-bar{filter:brightness(1.12);box-shadow:0 0 0 2px var(--gold-bg,rgba(212,168,74,.25));}
+.con-row-progress-link:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:100px;}
+
+.con-table-controls{display:flex;justify-content:flex-end;margin-bottom:10px;}
+.con-group-toggle-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;border:1px solid var(--border2);background:#fff;font-size:11px;font-weight:700;letter-spacing:.03em;color:var(--text2);cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease;}
+.con-group-toggle-btn:hover{border-color:var(--gold2);color:var(--text);}
+.con-group-toggle-btn.is-on{background:var(--gold-bg,rgba(212,168,74,.14));border-color:var(--gold2);color:var(--gold-text,var(--text));}
+.con-group-toggle-icon{font-size:12px;}
+
+.all-consignment-table .tbl tbody tr.con-group-row{cursor:pointer;background:var(--cream2,rgba(14,12,10,.03));}
+.all-consignment-table .tbl tbody tr.con-group-row:hover{background:var(--gold-bg,rgba(212,168,74,.1));}
+.all-consignment-table .tbl tbody tr.con-group-row td{font-size:13px;}
+.con-group-chevron{display:inline-block;margin-right:8px;font-size:10px;color:var(--text3);transition:transform .15s ease;}
+.con-group-chevron.open{transform:rotate(90deg);}
+.con-group-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:middle;}
+.all-consignment-table .tbl tbody tr.con-nested-row{background:rgba(14,12,10,.012);}
+.all-consignment-table .tbl tbody tr.con-nested-row:nth-child(even){background:rgba(14,12,10,.024);}
+.all-consignment-table .tbl tbody tr.con-nested-row .store-name-cell{padding-left:18px;}
+.con-nested-spacer{width:1px;}
 
 @media (max-width: 720px){
   .consignment-summary-panel{padding:var(--space-4);}

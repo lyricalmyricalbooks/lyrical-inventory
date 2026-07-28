@@ -2905,24 +2905,31 @@ function updateAllOverview() {
   if (!curKeys.includes(window._allChCur)) window._allChCur = curKeys[0] || null;
   renderChannelAnalytics();
 
-  // Combined consignment table
-  const conRows = [];
+  // Combined consignment table — data grouped per book so the view can render
+  // either a flat active-first list or collapsible per-book groups (renderConsignmentTable).
+  const conBookMap = new Map();
   const conTotals = { accounts: 0, active: 0, settled: 0, sent: 0, sold: 0, outstanding: 0 };
   allBooksVisible.forEach(book => {
     const s = states[book.id] || defaultState(book);
-    s.stores.forEach(st => {
+    if (!s.stores.length) return;
+    const rows = s.stores.map(st => {
       const isActive = st.outstanding > 0;
+      const sent = st.sent || 0, sold = st.sold || 0;
       conTotals.accounts += 1;
       conTotals.active += isActive ? 1 : 0;
       conTotals.settled += isActive ? 0 : 1;
-      conTotals.sent += st.sent || 0;
-      conTotals.sold += st.sold || 0;
+      conTotals.sent += sent;
+      conTotals.sold += sold;
       conTotals.outstanding += st.outstanding || 0;
-      const sent = st.sent || 0, sold = st.sold || 0;
-      const pct = sent ? Math.round((sold / sent) * 100) : 0;
-      conRows.push(`<tr class="${isActive ? 'is-active' : 'is-settled'}"><td style="font-weight:700;">${escapeHtml(book.title)}</td><td><span class="store-name-cell">${escapeHtml(st.name)}</span></td><td class="r">${sent}</td><td class="r">${sold}</td><td class="r outstanding-cell">${st.outstanding}</td><td><div class="con-row-progress" title="${pct}% sold-through"><div class="con-row-progress-bar" style="width:${pct}%;"></div></div></td><td>${isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td></tr>`);
+      return { store: st.name, sent, sold, outstanding: st.outstanding || 0, isActive, pct: sent ? Math.round((sold / sent) * 100) : 0 };
     });
+    const totals = rows.reduce((a, r) => { a.sent += r.sent; a.sold += r.sold; a.outstanding += r.outstanding; a.active += r.isActive ? 1 : 0; return a; }, { sent: 0, sold: 0, outstanding: 0, active: 0 });
+    conBookMap.set(book.id, { id: book.id, title: book.title, accent: book.accent || 'var(--gold2)', rows, totals });
   });
+  window._allConBooks = Array.from(conBookMap.values());
+  if (window._allConGrouped === undefined) {
+    try { window._allConGrouped = localStorage.getItem('allConGrouped') === '1'; } catch (_) { window._allConGrouped = false; }
+  }
   const sellThrough = conTotals.sent ? Math.round((conTotals.sold / conTotals.sent) * 100) : 0;
   const statsHost = $('all-con-stats');
   if (statsHost) {
@@ -2937,10 +2944,68 @@ function updateAllOverview() {
     statusChip.className = `pill ${conTotals.active ? 'amber' : 'green'}`;
     statusChip.textContent = conTotals.accounts ? `${conTotals.accounts} account${conTotals.accounts === 1 ? '' : 's'}` : 'No accounts';
   }
-  $('all-con-body').innerHTML = conRows.length ? conRows.join('') : '<tr><td colspan="7"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
+  const groupToggle = $('all-con-group-toggle');
+  if (groupToggle) {
+    groupToggle.classList.toggle('is-on', !!window._allConGrouped);
+    groupToggle.setAttribute('aria-pressed', window._allConGrouped ? 'true' : 'false');
+  }
+  renderConsignmentTable();
 
   renderGlobalPendingAlert();
 }
+
+// Renders #all-con-body from window._allConBooks, honoring the flat/grouped
+// toggle (window._allConGrouped) and per-book collapse state
+// (window._allConCollapsed) without recomputing the underlying totals.
+function conAccountRowHtml(bookId, bookTitle, r, nested) {
+  const jump = `switchBook('${bookId}'); setTimeout(()=>switchTab('consignment'), 50);`;
+  const titleCell = nested ? `<td class="con-nested-spacer"></td>` : `<td style="font-weight:700;">${escapeHtml(bookTitle)}</td>`;
+  return `<tr class="${r.isActive ? 'is-active' : 'is-settled'}${nested ? ' con-nested-row' : ''}">${titleCell}<td><span class="store-name-cell">${escapeHtml(r.store)}</span></td><td class="r">${r.sent}</td><td class="r">${r.sold}</td><td class="r outstanding-cell">${r.outstanding}</td><td><div class="con-row-progress con-row-progress-link" role="button" tabindex="0" title="${r.pct}% sold-through — view ${escapeHtml(bookTitle)} consignment" onclick="${jump}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${jump}}"><div class="con-row-progress-bar" style="width:${r.pct}%;"></div></div></td><td>${r.isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td></tr>`;
+}
+function renderConsignmentTable() {
+  const body = $('all-con-body');
+  if (!body) return;
+  const conBooks = window._allConBooks || [];
+  if (!conBooks.length) {
+    body.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
+    return;
+  }
+  if (!window._allConGrouped) {
+    const flat = [];
+    conBooks.forEach(b => b.rows.forEach(r => flat.push({ r, bookId: b.id, bookTitle: b.title })));
+    flat.sort((a, b) => (b.r.isActive - a.r.isActive));
+    body.innerHTML = flat.map(({ r, bookId, bookTitle }) => conAccountRowHtml(bookId, bookTitle, r)).join('');
+    return;
+  }
+  const collapsed = window._allConCollapsed || (window._allConCollapsed = new Set());
+  const sortedBooks = [...conBooks].sort((a, b) => (b.totals.active > 0) - (a.totals.active > 0));
+  body.innerHTML = sortedBooks.map(b => {
+    const isCollapsed = collapsed.has(b.id);
+    const pct = b.totals.sent ? Math.round((b.totals.sold / b.totals.sent) * 100) : 0;
+    const statusLabel = b.totals.active ? `${b.totals.active} active` : 'All settled';
+    const headerRow = `<tr class="con-group-row ${b.totals.active ? 'is-active' : 'is-settled'}" onclick="toggleConGroup('${b.id}')"><td colspan="2" style="font-weight:800;"><span class="con-group-chevron${isCollapsed ? '' : ' open'}">▸</span><span class="con-group-dot" style="background:${b.accent};"></span>${escapeHtml(b.title)}</td><td class="r">${b.totals.sent}</td><td class="r">${b.totals.sold}</td><td class="r outstanding-cell">${b.totals.outstanding}</td><td><div class="con-row-progress" title="${pct}% sold-through"><div class="con-row-progress-bar" style="width:${pct}%;"></div></div></td><td><span class="pill ${b.totals.active ? 'amber' : 'gray'}">${b.totals.active ? '● ' : '✓ '}${statusLabel}</span></td></tr>`;
+    if (isCollapsed) return headerRow;
+    const sortedRows = [...b.rows].sort((a, c) => (c.isActive - a.isActive));
+    return headerRow + sortedRows.map(r => conAccountRowHtml(b.id, b.title, r, true)).join('');
+  }).join('');
+}
+function toggleConGroup(bookId) {
+  const collapsed = window._allConCollapsed || (window._allConCollapsed = new Set());
+  if (collapsed.has(bookId)) collapsed.delete(bookId); else collapsed.add(bookId);
+  renderConsignmentTable();
+}
+function toggleConGrouping() {
+  window._allConGrouped = !window._allConGrouped;
+  try { localStorage.setItem('allConGrouped', window._allConGrouped ? '1' : '0'); } catch (_) { /* ignore */ }
+  const btn = $('all-con-group-toggle');
+  if (btn) {
+    btn.classList.toggle('is-on', window._allConGrouped);
+    btn.setAttribute('aria-pressed', window._allConGrouped ? 'true' : 'false');
+  }
+  renderConsignmentTable();
+}
+window.toggleConGroup = toggleConGroup;
+window.toggleConGrouping = toggleConGrouping;
 
 // Polished audience snapshot for the Customers tab.
 function renderCustomersStat(allCustomers) {
