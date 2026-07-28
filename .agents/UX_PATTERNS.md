@@ -143,15 +143,25 @@ sync, Stripe pulls, Gemini OCR) instead of a spinner GIF or a bare "Loading…" 
 > Already adopted in this codebase: `color-mix()` (33 uses), `:focus-visible` (24),
 > `prefers-reduced-motion` (3), `aria-live` (4), `inert` (2). The items below are the gaps.
 
-## 1. View Transitions — kill the re-render snap
-**Highest-leverage item for this app.** `main.js` performs ~237 `innerHTML` assignments; every
-one of them repaints instantly with no continuity. Wrapping a re-render in
-`document.startViewTransition()` gives an automatic crossfade, and naming elements with
-`view-transition-name` makes them *morph* between states instead of popping.
+## 1. View Transitions — available, but DO NOT wire without asking
 
-Prime candidates: `renderConsignmentTable()` (group/flat toggle and collapse/expand currently
-snap), `switchTab()` / `switchBook()` panel swaps, `renderChannelAnalytics()` currency toggle,
-and any paginated list (`showMoreHist`).
+> [!WARNING]
+> **Prior art: this was tried and rejected.** PR #128 shipped View Transitions across
+> `switchTab`/`switchBook`; PR #129 reverted them **seven minutes later**. Neither PR records
+> a reason, so the only durable fact is the outcome: app-wide navigation transitions were not
+> wanted here.
+>
+> `withViewTransition()` exists in `src/lib/motion.js` and the root crossfade rules exist in
+> `system.css`, but **nothing calls the helper** and that is deliberate. Do not wire it into a
+> render path on your own initiative — treat it as a product decision to raise with the user,
+> not a self-evident polish win. A narrow single-widget use may be fine; re-applying it to
+> navigation is re-litigating a settled call.
+
+The mechanics, for when it *is* wanted: `main.js` performs ~237 `innerHTML` assignments, each
+repainting instantly with no continuity. Wrapping one in `document.startViewTransition()` gives
+an automatic crossfade; naming elements with `view-transition-name` makes them *morph* rather
+than pop. The helper already feature-detects and honours reduced motion, falling back to a
+direct synchronous update.
 
 ```js
 // Helper worth adding once, then reusing everywhere.
@@ -284,8 +294,8 @@ it can enter and render all of them.
 5. Active/settled/error states — did I reuse the amber/green/gray/red pill convention instead
    of picking new colors?
 6. Empty state: rich (icon+CTA) if it's a panel's primary state, plain if it's a nested list.
-7. If I re-rendered a list via `innerHTML`, did I wrap it in `withViewTransition()` so it
-   crossfades instead of snapping? (§1)
+7. If I re-rendered a list via `innerHTML`, did I leave it un-transitioned? View Transitions
+   are available but intentionally unwired — check §1 before calling `withViewTransition()`.
 8. New component with width-dependent layout — did I use `@container` rather than a viewport
    `@media` breakpoint? (§4)
 9. New menu or modal — did I reach for `popover`/`<dialog>` before hand-rolling z-index,

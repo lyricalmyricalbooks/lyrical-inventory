@@ -3,7 +3,6 @@
 import './styles/system.css';
 import './style.css';
 import './firebase.js';
-import { withViewTransition } from './lib/motion.js';
 import { registerSW } from 'virtual:pwa-register';
 import {
   getSym,
@@ -2993,10 +2992,14 @@ function renderConsignmentTable() {
     return headerRow + sortedRows.map(r => conAccountRowHtml(b.id, b.title, r, true)).join('');
   }).join('');
 }
+// NOTE: these re-renders are deliberately NOT wrapped in withViewTransition()
+// (src/lib/motion.js). View Transitions were shipped across switchTab/switchBook
+// in PR #128 and reverted in PR #129 seven minutes later; the helper is kept
+// available for opt-in but stays unwired until that call is revisited.
 function toggleConGroup(bookId) {
   const collapsed = window._allConCollapsed || (window._allConCollapsed = new Set());
   if (collapsed.has(bookId)) collapsed.delete(bookId); else collapsed.add(bookId);
-  withViewTransition(() => renderConsignmentTable());
+  renderConsignmentTable();
 }
 function toggleConGrouping() {
   window._allConGrouped = !window._allConGrouped;
@@ -3006,7 +3009,7 @@ function toggleConGrouping() {
     btn.classList.toggle('is-on', window._allConGrouped);
     btn.setAttribute('aria-pressed', window._allConGrouped ? 'true' : 'false');
   }
-  withViewTransition(() => renderConsignmentTable());
+  renderConsignmentTable();
 }
 window.toggleConGroup = toggleConGroup;
 window.toggleConGrouping = toggleConGrouping;

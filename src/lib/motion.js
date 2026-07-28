@@ -10,6 +10,18 @@
  * Progressive enhancement, never load-bearing: when the View Transitions API
  * is unavailable, or the user has asked for reduced motion, the update runs
  * synchronously exactly as it does today.
+ *
+ * ── STATUS: AVAILABLE BUT DELIBERATELY UNWIRED ────────────────────────────
+ * Nothing in the app calls this today, and that is on purpose. View
+ * Transitions were previously shipped across switchTab/switchBook in PR #128
+ * and reverted in PR #129 *seven minutes later*, with no reason recorded on
+ * either PR. That earlier attempt wrapped all tab and book navigation — a far
+ * broader surface than any single control.
+ *
+ * Before wiring this to anything, confirm the intent: the prior revert is
+ * evidence that app-wide navigation transitions were not wanted. A narrow,
+ * single-widget use may well be fine, but it is an explicit decision rather
+ * than an obvious improvement. See .agents/UX_PATTERNS.md §1.
  */
 
 /** True when the user has asked the OS to minimise animation. */
