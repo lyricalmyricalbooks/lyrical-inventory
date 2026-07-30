@@ -1,6 +1,3 @@
 ## 2024-07-23 - Avoid Chained Array Iteration on Large Collections
 **Learning:** In frontend functions operating on state collections (like calculating aggregate values over `s.ledger` or `s.hist`), chaining `Array.prototype.filter().reduce()` allocates intermediate filtered arrays and iterates the collection multiple times. In a framework-less vanilla DOM architecture like this one where rendering cycles might be triggered often, this creates unnecessary overhead and GC pressure.
 **Action:** Collapse these into single imperative `for...of` passes, maintaining accumulator variables, to iterate only once and avoid array allocations.
-## 2024-07-30 - Avoid Function Object Allocation in Hot Loops (reduce)
-**Learning:** In frontend functions rendering the dashboard (like `updateHeader`), `Array.prototype.reduce` on arrays like `s.stores` creates closures for each iteration, and is measurably slower than a traditional `for` loop because of function object allocation, especially when triggered on every state update in a vanilla DOM architecture.
-**Action:** Replace `reduce()` with an imperative `for` loop when aggregating values in frequently called UI rendering loops (e.g. `s.stores` outstanding balances) to avoid function allocations and GC pressure.
