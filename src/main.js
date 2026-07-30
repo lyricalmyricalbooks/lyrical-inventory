@@ -2769,7 +2769,12 @@ function updateHeader() {
     Object.values(states).forEach(s => {
       totalStock += (s.stock || 0);
       totalRev += recognizedRevenueOf(s);
-      totalCon += s.stores.reduce((b, st) => b + st.outstanding, 0);
+      // ⚡ Bolt Optimization: Use for-loop instead of reduce to avoid function allocation
+      let storesCon = 0;
+      for (let i = 0; i < s.stores.length; i++) {
+        storesCon += s.stores[i].outstanding || 0;
+      }
+      totalCon += storesCon;
     });
     animateCountValue('h-stock', totalStock);
     animateCountValue('h-revenue', '~' + Math.round(totalRev).toLocaleString());
@@ -2779,7 +2784,12 @@ function updateHeader() {
     const cur = book.currency;
     animateCountValue('h-stock', s.stock);
     animateCountValue('h-revenue', fmt(recognizedRevenueOf(s), cur));
-    animateCountValue('h-consigned', s.stores.reduce((a, st) => a + st.outstanding, 0));
+    // ⚡ Bolt Optimization: Use for-loop instead of reduce to avoid function allocation
+    let storesCon = 0;
+    for (let i = 0; i < s.stores.length; i++) {
+      storesCon += s.stores[i].outstanding || 0;
+    }
+    animateCountValue('h-consigned', storesCon);
   }
 }
 
