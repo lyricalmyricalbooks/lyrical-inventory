@@ -2936,7 +2936,9 @@ function updateAllOverview() {
       conTotals.outstanding += st.outstanding || 0;
       return { store: st.name, sent, sold, outstanding: st.outstanding || 0, isActive, pct: sent ? Math.round((sold / sent) * 100) : 0 };
     });
-    const totals = rows.reduce((a, r) => { a.sent += r.sent; a.sold += r.sold; a.outstanding += r.outstanding; a.active += r.isActive ? 1 : 0; return a; }, { sent: 0, sold: 0, outstanding: 0, active: 0 });
+// ⚡ Bolt Optimization: Use for loop instead of reduce
+    let totals = { sent: 0, sold: 0, outstanding: 0, active: 0 };
+    for (let i = 0; i < rows.length; i++) { totals.sent += rows[i].sent; totals.sold += rows[i].sold; totals.outstanding += rows[i].outstanding; totals.active += rows[i].isActive ? 1 : 0; }
     conBookMap.set(book.id, { id: book.id, title: book.title, accent: book.accent || 'var(--gold2)', rows, totals });
   });
   window._allConBooks = Array.from(conBookMap.values());
