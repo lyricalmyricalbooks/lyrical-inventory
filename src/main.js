@@ -18996,7 +18996,11 @@ const MAILING_LIST_KEY = 'lm-mailing-list';
 let MAILING_LIST = { subs: {}, autoAdd: false };
 
 function mailingSubsArray() {
-  return Object.values(MAILING_LIST.subs || {}).sort((a, b) => (b.added || '').localeCompare(a.added || ''));
+  return Object.values(MAILING_LIST.subs || {}).sort((a, b) => {
+    // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting dates
+    const dA = a.added || ''; const dB = b.added || '';
+    return dA > dB ? -1 : (dA < dB ? 1 : 0);
+  });
 }
 export function mailingListHas(email) { return !!MAILING_LIST.subs[_custEmailKey(email)]; }
 
