@@ -13,6 +13,7 @@ describe('Shippo Customs & Country Helpers', () => {
   let isInternationalShipment;
   let buildShippoCustomsDeclaration;
   let readShippoCustomsValue;
+  let resolveShippoIncoterm;
 
   // We extract the functions statically so we don't have to load main.js's DOM dependencies
   beforeEach(() => {
@@ -26,12 +27,14 @@ describe('Shippo Customs & Country Helpers', () => {
     const normMatch = mainContent.match(/function normalizeCountryCode\(code\) \{([\s\S]+?)\n\}/);
     const interMatch = mainContent.match(/function isInternationalShipment\(fromCountry, toCountry\) \{([\s\S]+?)\n\}/);
     const readMatch = mainContent.match(/function readShippoCustomsValue\(id, fallback\) \{([\s\S]+?)\n\}/);
-    const declMatch = mainContent.match(/function buildShippoCustomsDeclaration\(\{ sfName, sfCountryCode, spWeight, spWeightUnit \}\) \{([\s\S]+?)\n\}/);
+    const declMatch = mainContent.match(/function buildShippoCustomsDeclaration\(\{ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit \}\) \{([\s\S]+?)\n\}/);
+    const incotermMatch = mainContent.match(/function resolveShippoIncoterm\(destCountryCode\) \{([\s\S]+?)\n\}/);
 
     expect(normMatch).not.toBeNull();
     expect(interMatch).not.toBeNull();
     expect(readMatch).not.toBeNull();
     expect(declMatch).not.toBeNull();
+    expect(incotermMatch).not.toBeNull();
 
     // Reconstruct them with new Function
     normalizeCountryCode = new Function('code', 
@@ -46,10 +49,15 @@ describe('Shippo Customs & Country Helpers', () => {
       readMatch[0] + '\nreturn readShippoCustomsValue(id, fallback);'
     );
 
+    resolveShippoIncoterm = new Function('$', 'normalizeCountryCode', 'destCountryCode',
+      incotermMatch[0] + '\nreturn resolveShippoIncoterm(destCountryCode);'
+    );
+
     buildShippoCustomsDeclaration = new Function('$', 'normalizeCountryCode', 'readShippoCustomsValue', 'params',
-      `const { sfName, sfCountryCode, spWeight, spWeightUnit } = params;\n` +
+      `const { sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit } = params;\n` +
+      incotermMatch[0] + '\n' +
       declMatch[0] + '\n' +
-      `return buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit });`
+      `return buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit });`
     );
   });
 
@@ -95,20 +103,75 @@ describe('Shippo Customs & Country Helpers', () => {
     });
   });
 
+  describe('resolveShippoIncoterm', () => {
+    const withSelection = (value) => (id) => (id === 'sp-incoterm' ? { value } : undefined);
+
+    it('auto-selects DDP for US destinations', () => {
+      // Canada Post rejects DDU labels to the US after 2025-08-29, and only at
+      // purchase time — the rate call succeeds either way.
+      expect(resolveShippoIncoterm(withSelection('auto'), normalizeCountryCode, 'US')).toBe('DDP');
+      expect(resolveShippoIncoterm(withSelection('auto'), normalizeCountryCode, 'United States')).toBe('DDP');
+      expect(resolveShippoIncoterm(withSelection('auto'), normalizeCountryCode, 'usa')).toBe('DDP');
+    });
+
+    it('auto-selects DDU for non-US destinations', () => {
+      expect(resolveShippoIncoterm(withSelection('auto'), normalizeCountryCode, 'GB')).toBe('DDU');
+      expect(resolveShippoIncoterm(withSelection('auto'), normalizeCountryCode, 'Poland')).toBe('DDU');
+    });
+
+    it('honours an explicit override over the auto rule', () => {
+      expect(resolveShippoIncoterm(withSelection('DDU'), normalizeCountryCode, 'US')).toBe('DDU');
+      expect(resolveShippoIncoterm(withSelection('DAP'), normalizeCountryCode, 'GB')).toBe('DAP');
+    });
+
+    it('defaults to auto when the select is absent', () => {
+      const noSelect = () => undefined;
+      expect(resolveShippoIncoterm(noSelect, normalizeCountryCode, 'US')).toBe('DDP');
+      expect(resolveShippoIncoterm(noSelect, normalizeCountryCode, 'GB')).toBe('DDU');
+    });
+  });
+
   describe('buildShippoCustomsDeclaration', () => {
+    it('declares DDP on the customs declaration for US destinations', () => {
+      const mockElements = {
+        'sp-qty': '3',
+        'sp-customs-description': 'Novels',
+        'sp-customs-value': '25.00',
+        'sp-customs-hs': '490199',
+        'sp-incoterm': 'auto'
+      };
+      const mock$ = (id) => ({ value: mockElements[id] });
+      const customsValHelper = (id, fallback) => readShippoCustomsValue(mock$, id, fallback);
+
+      const decl = buildShippoCustomsDeclaration(mock$, normalizeCountryCode, customsValHelper, {
+        sfName: 'Alice Sender',
+        sfCountryCode: 'CA',
+        stCountryCode: 'US',
+        spWeight: 3.6,
+        spWeightUnit: 'lb'
+      });
+
+      expect(decl.incoterm).toBe('DDP');
+      // value_amount is a line total: 3 copies at 25.00 each.
+      expect(decl.items[0].value_amount).toBe('75.00');
+      expect(decl.items[0].quantity).toBe(3);
+    });
+
     it('builds a valid customs declaration structure', () => {
       const mockElements = {
         'sp-qty': '2',
         'sp-customs-description': 'Novels',
         'sp-customs-value': '30.00',
-        'sp-customs-hs': '490199'
+        'sp-customs-hs': '490199',
+        'sp-incoterm': 'auto'
       };
-      
+
       const mock$ = (id) => ({ value: mockElements[id] });
 
       const params = {
         sfName: 'Alice Sender',
         sfCountryCode: 'CA',
+        stCountryCode: 'GB',
         spWeight: 1.5,
         spWeightUnit: 'lb'
       };
@@ -130,7 +193,7 @@ describe('Shippo Customs & Country Helpers', () => {
           quantity: 2,
           net_weight: '1.50',
           mass_unit: 'lb',
-          value_amount: '30.00',
+          value_amount: '60.00',
           value_currency: 'CAD',
           origin_country: 'CA',
           tariff_number: '490199'
@@ -143,14 +206,16 @@ describe('Shippo Customs & Country Helpers', () => {
         'sp-qty': 'invalid',
         'sp-customs-description': '',
         'sp-customs-value': 'invalid',
-        'sp-customs-hs': ''
+        'sp-customs-hs': '',
+        'sp-incoterm': 'auto'
       };
-      
+
       const mock$ = (id) => ({ value: mockElements[id] });
 
       const params = {
         sfName: 'Bob Sender',
         sfCountryCode: 'US',
+        stCountryCode: 'GB',
         spWeight: 0.8,
         spWeightUnit: 'oz'
       };

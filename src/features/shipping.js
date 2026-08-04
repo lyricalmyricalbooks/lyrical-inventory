@@ -834,37 +834,58 @@ async function importShippoShippingFromApi() {
 
 let shippoBaseSpecs = { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
 
-function getBookPresetSpecs(book) {
-  if (!book) return { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+const GENERIC_SHIP_SPECS = { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+
+// Measured specs for the catalog's own titles, keyed by book id. Keyed by id
+// rather than matched against the title, because a rename used to drop a book
+// silently back onto GENERIC_SHIP_SPECS and mis-rate every quote for it with no
+// visible sign. Anything saved on the book record itself still wins over this;
+// this is only the fallback for books whose ship fields were never filled in.
+const BOOK_SHIP_PRESETS = {
+  altrove: { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.1, weight_unit: 'lb' },
+  hound: { length: 12, width: 9, height: 1.2, dim_unit: 'in', weight: 2.2, weight_unit: 'lb' },
+  archaeology: { length: 9, width: 7, height: 0.6, dim_unit: 'in', weight: 0.9, weight_unit: 'lb' },
+  sistema: { length: 8, width: 6, height: 0.5, dim_unit: 'in', weight: 0.7, weight_unit: 'lb' },
+  nobody: { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.0, weight_unit: 'lb' },
+  collective: { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' },
+};
+
+// Legacy title matching, kept only as a tertiary hop so a book copied to a new
+// id under a known title still rates correctly. Never the reason a rename works.
+const LEGACY_TITLE_PRESET_IDS = ['altrove', 'hound', 'archaeology', 'sistema', 'nobody', 'collective'];
+
+// Returns the specs plus where they came from, so callers can tell the user when
+// a quote is running on generic numbers rather than this book's real dimensions.
+function resolveBookPresetSpecs(book) {
+  if (!book) return { specs: { ...GENERIC_SHIP_SPECS }, source: 'generic' };
 
   // Prioritize custom specifications saved on the book
   if (book.shipLength && book.shipWidth && book.shipHeight && book.shipWeight) {
     return {
-      length: book.shipLength,
-      width: book.shipWidth,
-      height: book.shipHeight,
-      dim_unit: book.shipDimUnit || 'in',
-      weight: book.shipWeight,
-      weight_unit: book.shipWeightUnit || 'lb'
+      source: 'book',
+      specs: {
+        length: book.shipLength,
+        width: book.shipWidth,
+        height: book.shipHeight,
+        dim_unit: book.shipDimUnit || 'in',
+        weight: book.shipWeight,
+        weight_unit: book.shipWeightUnit || 'lb'
+      },
     };
   }
 
-  const title = (book.title || '').toLowerCase();
+  const byId = BOOK_SHIP_PRESETS[book.id];
+  if (byId) return { specs: { ...byId }, source: 'preset' };
 
-  if (title.includes('altrove')) {
-    return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.1, weight_unit: 'lb' };
-  } else if (title.includes('hound')) {
-    return { length: 12, width: 9, height: 1.2, dim_unit: 'in', weight: 2.2, weight_unit: 'lb' };
-  } else if (title.includes('archaeology')) {
-    return { length: 9, width: 7, height: 0.6, dim_unit: 'in', weight: 0.9, weight_unit: 'lb' };
-  } else if (title.includes('sistema')) {
-    return { length: 8, width: 6, height: 0.5, dim_unit: 'in', weight: 0.7, weight_unit: 'lb' };
-  } else if (title.includes('nobody')) {
-    return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.0, weight_unit: 'lb' };
-  } else if (title.includes('collective')) {
-    return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
-  }
-  return { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+  const title = (book.title || '').toLowerCase();
+  const legacyId = LEGACY_TITLE_PRESET_IDS.find(id => title.includes(id));
+  if (legacyId) return { specs: { ...BOOK_SHIP_PRESETS[legacyId] }, source: 'preset' };
+
+  return { specs: { ...GENERIC_SHIP_SPECS }, source: 'generic' };
+}
+
+function getBookPresetSpecs(book) {
+  return resolveBookPresetSpecs(book).specs;
 }
 
 function initShippingTab() {
@@ -1028,6 +1049,8 @@ function initShippingTab() {
     weight_unit: $('sp-weight-unit').value || 'lb'
   };
   renderCustomShippoDestPicker();
+  loadShippoIncotermPreference($('st-country')?.value || '');
+  updateShippoCustomsTotalHint();
   renderShippingAnalysisHub();
 }
 
@@ -1283,6 +1306,7 @@ function clearShippoDestSelection(e) {
   $('st-state').value = '';
   $('st-zip').value = '';
   $('st-country').value = 'US';
+  onShippoDestCountryChange();
 }
 
 function getRecentShippingOrders() {
@@ -1371,6 +1395,7 @@ function onShippoPreFillDestChange() {
     $('st-state').value = addr.state || '';
     $('st-zip').value = addr.zip || '';
     $('st-country').value = addr.country || 'US';
+    onShippoDestCountryChange();
     showToast('✓ Destination populated');
 
     // Older cached orders were fetched without the contact resources, so the phone
@@ -1390,7 +1415,7 @@ function onShippoBookPresetChange() {
   const book = BOOKS[select.value];
   if (!book) return;
 
-  const specs = getBookPresetSpecs(book);
+  const { specs, source } = resolveBookPresetSpecs(book);
 
   // Set quantity back to 1
   const qtyInput = $('sp-qty');
@@ -1420,7 +1445,13 @@ function onShippoBookPresetChange() {
     weight_unit: specs.weight_unit
   };
 
-  showToast(`✓ Package preset loaded: ${book.title}`);
+  updateShippoCustomsTotalHint();
+
+  if (source === 'generic') {
+    showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor.`, 'warn', 6000);
+  } else {
+    showToast(`✓ Package preset loaded: ${book.title}`);
+  }
 }
 
 function isCanadaPostRate(rate) {
@@ -1521,10 +1552,87 @@ function readShippoCustomsValue(id, fallback) {
   return String(value || fallback).trim();
 }
 
-function buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit }) {
+// Canada Post stopped accepting DDU for US-bound shipments on 2025-08-29: the
+// rate call still returns Tracked Packet / Small Packet USA happily, and only
+// the label purchase fails with "Service not available to US for DDU
+// shipments". So the destination, not the rate list, has to pick the incoterm.
+function resolveShippoIncoterm(destCountryCode) {
+  const choice = String($('sp-incoterm')?.value || 'auto');
+  if (choice !== 'auto') return choice;
+  return normalizeCountryCode(destCountryCode) === 'US' ? 'DDP' : 'DDU';
+}
+
+const INCOTERM_PREF_PREFIX = 'lm-shippo-incoterm-';
+
+// A deliberate DDU choice for, say, the UK should survive a reload the same way
+// the saved origin does — but it is remembered per destination country, so it
+// can never silently carry a non-DDP choice over to a US shipment.
+function loadShippoIncotermPreference(destCountryCode) {
+  const country = normalizeCountryCode(destCountryCode);
+  if (!country) return;
+  const select = $('sp-incoterm');
+  if (!select) return;
+  let stored = '';
+  try { stored = localStorage.getItem(`${INCOTERM_PREF_PREFIX}${country}`) || ''; } catch (_) { /* private mode */ }
+  const allowed = Array.from(select.options).map(option => option.value);
+  select.value = allowed.includes(stored) ? stored : 'auto';
+  renderShippoIncotermHint();
+}
+
+function saveShippoIncotermPreference(destCountryCode) {
+  const country = normalizeCountryCode(destCountryCode);
+  const choice = String($('sp-incoterm')?.value || 'auto');
+  if (!country) return;
+  try { localStorage.setItem(`${INCOTERM_PREF_PREFIX}${country}`, choice); } catch (_) { /* private mode */ }
+}
+
+function onShippoDestCountryChange() {
+  loadShippoIncotermPreference($('st-country')?.value || '');
+}
+
+function onShippoIncotermChange() {
+  saveShippoIncotermPreference($('st-country')?.value || '');
+  renderShippoIncotermHint();
+}
+
+// The customs value input is per copy, but what Shippo declares is the line
+// total. Show that total so the declared amount is visible before purchase
+// rather than only discoverable in the API payload.
+function updateShippoCustomsTotalHint() {
+  const hint = $('sp-customs-total');
+  if (!hint) return;
+  const qty = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
+  const unitValue = Math.max(0.01, parseFloat($('sp-customs-value')?.value) || 25);
+  hint.textContent = qty === 1
+    ? `Declared to customs: ${unitValue.toFixed(2)} CAD`
+    : `Declared to customs: ${qty} × ${unitValue.toFixed(2)} = ${(unitValue * qty).toFixed(2)} CAD`;
+}
+
+function renderShippoIncotermHint() {
+  const hint = $('sp-incoterm-hint');
+  if (!hint) return;
+  const destCountry = normalizeCountryCode($('st-country')?.value || '');
+  const originCountry = normalizeCountryCode($('sf-country')?.value || 'CA');
+  if (!destCountry || !isInternationalShipment(originCountry, destCountry)) {
+    hint.textContent = '';
+    return;
+  }
+  const incoterm = resolveShippoIncoterm(destCountry);
+  if (destCountry === 'US' && incoterm !== 'DDP') {
+    hint.innerHTML = '<strong style="color:var(--red);">Canada Post rejects DDU labels to the US.</strong> Rates will still be quoted, but the purchase will fail — leave this on Auto or DDP for US destinations.';
+  } else if (incoterm === 'DDP') {
+    hint.textContent = 'DDP: duties and taxes are billed to you, not collected from the buyer on delivery.';
+  } else {
+    hint.textContent = `${incoterm}: the recipient pays any duties and taxes on delivery.`;
+  }
+}
+
+function buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit }) {
   const quantity = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
   const description = readShippoCustomsValue('sp-customs-description', 'Printed books');
-  const valueAmount = Math.max(0.01, parseFloat(readShippoCustomsValue('sp-customs-value', '25')) || 25);
+  // sp-customs-value is the value of a single copy; Shippo's items[].value_amount
+  // and net_weight are both totals for the line (quantity x per-unit).
+  const unitValue = Math.max(0.01, parseFloat(readShippoCustomsValue('sp-customs-value', '25')) || 25);
   const hsCode = readShippoCustomsValue('sp-customs-hs', '490199');
   const originCountry = normalizeCountryCode(sfCountryCode) || 'CA';
 
@@ -1534,14 +1642,14 @@ function buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeig
     contents_type: 'MERCHANDISE',
     contents_explanation: 'Printed books',
     non_delivery_option: 'RETURN',
-    incoterm: 'DDU',
+    incoterm: resolveShippoIncoterm(stCountryCode),
     eel_pfc: 'NOEEI_30_37_a',
     items: [{
       description,
       quantity,
       net_weight: Math.max(0.01, spWeight).toFixed(2),
       mass_unit: spWeightUnit,
-      value_amount: valueAmount.toFixed(2),
+      value_amount: (unitValue * quantity).toFixed(2),
       value_currency: 'CAD',
       origin_country: originCountry,
       tariff_number: hsCode
@@ -1682,23 +1790,68 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
       }
     }
 
-    // Auto-log as expense
-    const s = getState();
-    if (!s.expenses) s.expenses = [];
-    const newExp = {
-      id: 'exp-' + Date.now(),
-      date: today(),
-      desc: `Shipping Label: ${provider} ${serviceName} (${selectedOrderNumber || 'manual'})`,
-      cat: 'Shipping & Delivery',
-      ref: 'shippo:' + transactionId,
-      amount: Number(amount),
-      baseAmount: Number(amount),
-      received: true
-    };
-    s.expenses.push(newExp);
-    saveState(activeBook);
+    // Auto-log as expense. This has to land in TAX_CENTER.businessExpenses with
+    // the same shape processShippoTxToExpense produces: that is the only ledger
+    // the shipping P&L, carrier scorecard and reconciliation worklist read, and
+    // it is also what the Shippo API import dedupes against by `ref`. Writing
+    // to the per-book state.expenses instead left every in-app purchase
+    // invisible to the analysis hub until a later import re-added it as a
+    // second, duplicate line for the same transaction.
+    const ref = 'shippo:' + transactionId;
+    if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+    if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+    const alreadyLogged = TAX_CENTER.businessExpenses.some(e => String(e?.ref || '') === ref);
+
+    if (!alreadyLogged) {
+      const purchaseCurrency = String(currency || 'CAD').toUpperCase();
+      const purchaseAmount = Number(amount);
+      const date = today();
+
+      let fxRate = purchaseCurrency === 'CAD' ? 1 : 0;
+      if (purchaseCurrency !== 'CAD') {
+        try { fxRate = (await fetchHistoricalRate(purchaseCurrency, 'CAD', date))?.rate || 0; } catch (_) { /* continue */ }
+        if (!fxRate) {
+          try { fxRate = (await fetchLiveRate(purchaseCurrency, 'CAD'))?.rate || 0; } catch (_) { /* continue */ }
+        }
+        if (!fxRate) fxRate = _fxRateCache[`${purchaseCurrency}_CAD`] || 0;
+      }
+      const fxMissing = !fxRate;
+
+      const localReceipt = labelUrl ? await saveShippoLabelLocally(labelUrl, transactionId) : null;
+
+      const expense = {
+        id: Date.now(),
+        desc: `Shippo shipping label${trackingNumber ? ` #${trackingNumber}` : ''} — ${provider} ${serviceName}`,
+        cat: 'Shipping & Postage',
+        currency: purchaseCurrency,
+        amount: purchaseAmount,
+        origCurrency: purchaseCurrency,
+        origAmount: purchaseAmount,
+        fxRate: fxMissing ? null : fxRate,
+        baseAmount: fxMissing ? null : roundCents(purchaseAmount * fxRate),
+        fxMissing,
+        date,
+        ref,
+        receipt: localReceipt || labelUrl,
+        trackingUrl: data.tracking_url_provider || '',
+        trip: '',
+      };
+
+      // Reconcile against the order right here rather than waiting for the next
+      // API import to link it. The transaction echoes the shipment metadata,
+      // but the picker's own order number is the authoritative source, so pass
+      // it through as the shipment metadata enrichShippoExpense reads.
+      const shipmentContext = selectedOrderNumber ? { metadata: `order_number:${selectedOrderNumber}` } : {};
+      TAX_CENTER.businessExpenses.unshift(
+        enrichShippoExpense(expense, data, shipmentContext, {}, getShippingReconciliationOrders()),
+      );
+      TAX_CENTER.settings.shippoImportedObjectIds =
+        Array.from(new Set([...(TAX_CENTER.settings.shippoImportedObjectIds || []), transactionId])).slice(-10000);
+      await saveTaxCenter().catch(e => console.warn('Shippo label expense save failed', e));
+      renderTaxCenter();
+      renderShippingAnalysisHub();
+    }
     renderExpenses();
-    if (window.renderTaxCenter) window.renderTaxCenter();
 
     showToast(`✓ Label purchased! Tracking: ${trackingNumber || 'N/A'}`, 'ok', 6000);
   } catch (err) {
@@ -1829,7 +1982,7 @@ async function calculateShippoRates() {
     if (selectedOrderNumber) payload.metadata = `order_number:${selectedOrderNumber.slice(0, 100)}`;
 
     if (isInternational) {
-      payload.customs_declaration = buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit });
+      payload.customs_declaration = buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit });
     }
 
     const resp = await fetch('https://api.goshippo.com/shipments/', {
@@ -4162,6 +4315,7 @@ function onShippoQuantityChange() {
 
   $('sp-height').value = parseFloat(scaledHeight.toFixed(2));
   $('sp-weight').value = parseFloat(scaledWeight.toFixed(2));
+  updateShippoCustomsTotalHint();
 
   showToast(`✓ Scaled specs for ${qty} ${qty === 1 ? 'copy' : 'copies'}`);
 }
@@ -4209,6 +4363,14 @@ export {
   buildShippingChargePrediction,
   renderShippingChargePrediction,
   isInternationalShipment,
+  resolveShippoIncoterm,
+  renderShippoIncotermHint,
+  resolveBookPresetSpecs,
+  loadShippoIncotermPreference,
+  saveShippoIncotermPreference,
+  onShippoIncotermChange,
+  onShippoDestCountryChange,
+  updateShippoCustomsTotalHint,
   readShippoCustomsValue,
   buildShippoCustomsDeclaration,
   collectShippoMessages,
