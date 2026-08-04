@@ -1028,6 +1028,7 @@ function initShippingTab() {
     weight_unit: $('sp-weight-unit').value || 'lb'
   };
   renderCustomShippoDestPicker();
+  renderShippoIncotermHint();
   renderShippingAnalysisHub();
 }
 
@@ -1521,10 +1522,41 @@ function readShippoCustomsValue(id, fallback) {
   return String(value || fallback).trim();
 }
 
-function buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit }) {
+// Canada Post stopped accepting DDU for US-bound shipments on 2025-08-29: the
+// rate call still returns Tracked Packet / Small Packet USA happily, and only
+// the label purchase fails with "Service not available to US for DDU
+// shipments". So the destination, not the rate list, has to pick the incoterm.
+function resolveShippoIncoterm(destCountryCode) {
+  const choice = String($('sp-incoterm')?.value || 'auto');
+  if (choice !== 'auto') return choice;
+  return normalizeCountryCode(destCountryCode) === 'US' ? 'DDP' : 'DDU';
+}
+
+function renderShippoIncotermHint() {
+  const hint = $('sp-incoterm-hint');
+  if (!hint) return;
+  const destCountry = normalizeCountryCode($('st-country')?.value || '');
+  const originCountry = normalizeCountryCode($('sf-country')?.value || 'CA');
+  if (!destCountry || !isInternationalShipment(originCountry, destCountry)) {
+    hint.textContent = '';
+    return;
+  }
+  const incoterm = resolveShippoIncoterm(destCountry);
+  if (destCountry === 'US' && incoterm !== 'DDP') {
+    hint.innerHTML = '<strong style="color:var(--red);">Canada Post rejects DDU labels to the US.</strong> Rates will still be quoted, but the purchase will fail — leave this on Auto or DDP for US destinations.';
+  } else if (incoterm === 'DDP') {
+    hint.textContent = 'DDP: duties and taxes are billed to you, not collected from the buyer on delivery.';
+  } else {
+    hint.textContent = `${incoterm}: the recipient pays any duties and taxes on delivery.`;
+  }
+}
+
+function buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit }) {
   const quantity = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
   const description = readShippoCustomsValue('sp-customs-description', 'Printed books');
-  const valueAmount = Math.max(0.01, parseFloat(readShippoCustomsValue('sp-customs-value', '25')) || 25);
+  // sp-customs-value is the value of a single copy; Shippo's items[].value_amount
+  // and net_weight are both totals for the line (quantity x per-unit).
+  const unitValue = Math.max(0.01, parseFloat(readShippoCustomsValue('sp-customs-value', '25')) || 25);
   const hsCode = readShippoCustomsValue('sp-customs-hs', '490199');
   const originCountry = normalizeCountryCode(sfCountryCode) || 'CA';
 
@@ -1534,14 +1566,14 @@ function buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeig
     contents_type: 'MERCHANDISE',
     contents_explanation: 'Printed books',
     non_delivery_option: 'RETURN',
-    incoterm: 'DDU',
+    incoterm: resolveShippoIncoterm(stCountryCode),
     eel_pfc: 'NOEEI_30_37_a',
     items: [{
       description,
       quantity,
       net_weight: Math.max(0.01, spWeight).toFixed(2),
       mass_unit: spWeightUnit,
-      value_amount: valueAmount.toFixed(2),
+      value_amount: (unitValue * quantity).toFixed(2),
       value_currency: 'CAD',
       origin_country: originCountry,
       tariff_number: hsCode
@@ -1682,23 +1714,68 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
       }
     }
 
-    // Auto-log as expense
-    const s = getState();
-    if (!s.expenses) s.expenses = [];
-    const newExp = {
-      id: 'exp-' + Date.now(),
-      date: today(),
-      desc: `Shipping Label: ${provider} ${serviceName} (${selectedOrderNumber || 'manual'})`,
-      cat: 'Shipping & Delivery',
-      ref: 'shippo:' + transactionId,
-      amount: Number(amount),
-      baseAmount: Number(amount),
-      received: true
-    };
-    s.expenses.push(newExp);
-    saveState(activeBook);
+    // Auto-log as expense. This has to land in TAX_CENTER.businessExpenses with
+    // the same shape processShippoTxToExpense produces: that is the only ledger
+    // the shipping P&L, carrier scorecard and reconciliation worklist read, and
+    // it is also what the Shippo API import dedupes against by `ref`. Writing
+    // to the per-book state.expenses instead left every in-app purchase
+    // invisible to the analysis hub until a later import re-added it as a
+    // second, duplicate line for the same transaction.
+    const ref = 'shippo:' + transactionId;
+    if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+    if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+    const alreadyLogged = TAX_CENTER.businessExpenses.some(e => String(e?.ref || '') === ref);
+
+    if (!alreadyLogged) {
+      const purchaseCurrency = String(currency || 'CAD').toUpperCase();
+      const purchaseAmount = Number(amount);
+      const date = today();
+
+      let fxRate = purchaseCurrency === 'CAD' ? 1 : 0;
+      if (purchaseCurrency !== 'CAD') {
+        try { fxRate = (await fetchHistoricalRate(purchaseCurrency, 'CAD', date))?.rate || 0; } catch (_) { /* continue */ }
+        if (!fxRate) {
+          try { fxRate = (await fetchLiveRate(purchaseCurrency, 'CAD'))?.rate || 0; } catch (_) { /* continue */ }
+        }
+        if (!fxRate) fxRate = _fxRateCache[`${purchaseCurrency}_CAD`] || 0;
+      }
+      const fxMissing = !fxRate;
+
+      const localReceipt = labelUrl ? await saveShippoLabelLocally(labelUrl, transactionId) : null;
+
+      const expense = {
+        id: Date.now(),
+        desc: `Shippo shipping label${trackingNumber ? ` #${trackingNumber}` : ''} — ${provider} ${serviceName}`,
+        cat: 'Shipping & Postage',
+        currency: purchaseCurrency,
+        amount: purchaseAmount,
+        origCurrency: purchaseCurrency,
+        origAmount: purchaseAmount,
+        fxRate: fxMissing ? null : fxRate,
+        baseAmount: fxMissing ? null : roundCents(purchaseAmount * fxRate),
+        fxMissing,
+        date,
+        ref,
+        receipt: localReceipt || labelUrl,
+        trackingUrl: data.tracking_url_provider || '',
+        trip: '',
+      };
+
+      // Reconcile against the order right here rather than waiting for the next
+      // API import to link it. The transaction echoes the shipment metadata,
+      // but the picker's own order number is the authoritative source, so pass
+      // it through as the shipment metadata enrichShippoExpense reads.
+      const shipmentContext = selectedOrderNumber ? { metadata: `order_number:${selectedOrderNumber}` } : {};
+      TAX_CENTER.businessExpenses.unshift(
+        enrichShippoExpense(expense, data, shipmentContext, {}, getShippingReconciliationOrders()),
+      );
+      TAX_CENTER.settings.shippoImportedObjectIds =
+        Array.from(new Set([...(TAX_CENTER.settings.shippoImportedObjectIds || []), transactionId])).slice(-10000);
+      await saveTaxCenter().catch(e => console.warn('Shippo label expense save failed', e));
+      renderTaxCenter();
+      renderShippingAnalysisHub();
+    }
     renderExpenses();
-    if (window.renderTaxCenter) window.renderTaxCenter();
 
     showToast(`✓ Label purchased! Tracking: ${trackingNumber || 'N/A'}`, 'ok', 6000);
   } catch (err) {
@@ -1829,7 +1906,7 @@ async function calculateShippoRates() {
     if (selectedOrderNumber) payload.metadata = `order_number:${selectedOrderNumber.slice(0, 100)}`;
 
     if (isInternational) {
-      payload.customs_declaration = buildShippoCustomsDeclaration({ sfName, sfCountryCode, spWeight, spWeightUnit });
+      payload.customs_declaration = buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit });
     }
 
     const resp = await fetch('https://api.goshippo.com/shipments/', {
@@ -4209,6 +4286,8 @@ export {
   buildShippingChargePrediction,
   renderShippingChargePrediction,
   isInternationalShipment,
+  resolveShippoIncoterm,
+  renderShippoIncotermHint,
   readShippoCustomsValue,
   buildShippoCustomsDeclaration,
   collectShippoMessages,

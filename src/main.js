@@ -190,6 +190,7 @@ import {
   downloadFilteredShippingLedgerCSV,
   updateShippoBaseSpecsFromInputs,
   onShippoQuantityChange,
+  renderShippoIncotermHint,
 } from './features/shipping.js';
 import {
   ocList,
@@ -21395,6 +21396,7 @@ function exposeLegacyInlineHandlers() {
     moneyAmount, roundShippingCharge, buildShippingChargePrediction,
     renderShippingChargePrediction, collectShippoMessages, renderShippoDiagnostics,
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
+    renderShippoIncotermHint,
     buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV, openInventoryValuationModal, printInventoryValuationReport,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange, setShipAnalysisMarginFilter,
     onShipAnalysisSearch, onInlinePostageChange,
@@ -21465,6 +21467,7 @@ window.onShippoBookPresetChange = onShippoBookPresetChange;
 window.calculateShippoRates = calculateShippoRates;
 window.updateShippoBaseSpecsFromInputs = updateShippoBaseSpecsFromInputs;
 window.onShippoQuantityChange = onShippoQuantityChange;
+window.renderShippoIncotermHint = renderShippoIncotermHint;
 window.buyShippoLabel = buyShippoLabel;
 window.validateDestinationAddress = validateDestinationAddress;
 window.downloadInventoryValuationCSV = downloadInventoryValuationCSV;

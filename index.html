@@ -2111,7 +2111,7 @@
             <div class="form-group" style="margin-bottom:8px;"><label>Postal / Zip</label><input type="text" id="sf-zip" placeholder="M4B 1B3"></div>
             <div class="form-group" style="margin-bottom:8px;">
               <label>Country</label>
-              <select id="sf-country">
+              <select id="sf-country" onchange="renderShippoIncotermHint()">
                 <option value="CA">Canada</option>
                 <option value="US">United States</option>
                 <option disabled>──────────</option>
@@ -2172,7 +2172,7 @@
             <div class="form-group" style="margin-bottom:8px;"><label>Zip / Postal</label><input type="text" id="st-zip" placeholder="10001"></div>
             <div class="form-group" style="margin-bottom:8px;">
               <label>Country</label>
-              <select id="st-country">
+              <select id="st-country" onchange="renderShippoIncotermHint()">
                 <option value="US">United States</option>
                 <option value="CA">Canada</option>
                 <option disabled>──────────</option>
@@ -2259,16 +2259,26 @@
             <input type="text" id="sp-customs-description" value="Printed books" placeholder="Printed books">
           </div>
           <div class="form-group">
-            <label>Customs value (CAD)</label>
+            <label>Customs value per copy (CAD)</label>
             <input type="number" id="sp-customs-value" value="25" step="0.01" min="0.01">
           </div>
           <div class="form-group">
             <label>HS tariff code</label>
             <input type="text" id="sp-customs-hs" value="490199" placeholder="490199">
           </div>
+          <div class="form-group">
+            <label>Duties (incoterm)</label>
+            <select id="sp-incoterm" onchange="renderShippoIncotermHint()">
+              <option value="auto">Auto — DDP to the US, DDU elsewhere</option>
+              <option value="DDP">DDP — you prepay duties &amp; taxes</option>
+              <option value="DDU">DDU — recipient pays on delivery</option>
+              <option value="DAP">DAP — delivered at place</option>
+            </select>
+          </div>
         </div>
+        <div id="sp-incoterm-hint" style="font-size:11px;color:var(--text3);line-height:1.55;margin:-4px 0 12px;"></div>
         <div style="font-size:11px;color:var(--text3);line-height:1.55;margin:-4px 0 12px;">
-          International Shippo rates include this customs declaration automatically. If Canada Post still does not appear, connect or enable your Canada Post carrier account in Shippo.
+          International Shippo rates include this customs declaration automatically. The declared value is <strong>per copy</strong> and is multiplied by the quantity above. If Canada Post still does not appear, connect or enable your Canada Post carrier account in Shippo.
         </div>
 
         <div class="shipping-predictor-settings">
