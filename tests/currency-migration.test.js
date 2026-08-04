@@ -87,6 +87,21 @@ describe('collectNativeAmounts', () => {
     expect(collectNativeAmounts(s, book()).every(f => f.get() !== 18.5)).toBe(true);
   });
 
+  it('includes a legacy expense with no currency field, but not a self-describing one', () => {
+    const s = state({
+      expenses: [
+        { id: 1, desc: 'Gratuity: old backfill', amount: 8, date: '2026-01-01' },   // no `currency` — legacy
+        { id: 2, desc: 'Printer ink', amount: 25, currency: 'USD', date: '2026-02-01' }, // self-describing — skip
+      ],
+    });
+    const fields = collectNativeAmounts(s, book());
+    const legacy = fields.find(f => f.scope === 'expense');
+    expect(legacy).toBeTruthy();
+    expect(legacy.get()).toBe(8);
+    expect(legacy.curKey).toBe('currency');
+    expect(fields.some(f => f.scope === 'expense' && f.get() === 25)).toBe(false);
+  });
+
   it('skips zero and non-finite amounts', () => {
     const s = state({
       ledger: [{ id: 1, type: 'Shipment', storeName: 'Casa', date: '2026-01-01', qty: 5, amountDue: 0 }],
@@ -210,6 +225,27 @@ describe('applyCurrencyChange', () => {
     applyCurrencyChange(plan);
     expect(s.hist[0].price).toBe(32);
     expect(s.hist[0].cur).toBe('CAD');
+  });
+
+  it('restates a legacy expense onto its `currency` field, matching how the app already reads it', () => {
+    const s = state({
+      expenses: [{ id: 1, desc: 'Gratuity: Casa Bosques', amount: 8, date: '2026-01-01' }],
+    });
+    const plan = planCurrencyChange({ state: s, book: book({ listPrice: 0, productionCost: 0 }), from: 'EUR', to: 'CAD', rateFor: 1.5 });
+    applyCurrencyChange(plan);
+    expect(s.expenses[0].amount).toBe(12);
+    expect(s.expenses[0].currency).toBe('CAD');
+    expect(s.expenses[0].cur).toBeUndefined(); // stamp lives on the field the rest of the app already reads
+  });
+
+  it('leaves a self-describing (foreign-currency) expense alone entirely', () => {
+    const s = state({
+      expenses: [{ id: 1, desc: 'Printer ink', amount: 25, currency: 'USD', date: '2026-02-01' }],
+    });
+    const plan = planCurrencyChange({ state: s, book: book({ listPrice: 0, productionCost: 0 }), from: 'EUR', to: 'CAD', rateFor: 1.5 });
+    applyCurrencyChange(plan);
+    expect(s.expenses[0].amount).toBe(25);
+    expect(s.expenses[0].currency).toBe('USD');
   });
 
   it('converts a partially-migrated book without touching the done half', () => {

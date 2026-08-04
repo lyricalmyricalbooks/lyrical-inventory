@@ -62,14 +62,22 @@ export function codeToBookSymbol(code) {
   return CODE_TO_SYMBOL[c] || c;
 }
 
+// The property a field's stamp lives under. Almost everything uses `cur`, the
+// generic stamp this lib introduces — but expenses already had their own
+// self-describing `currency` field before this lib existed (see `e.currency ||
+// cur` throughout main.js), so a legacy expense missing THAT field is stamped
+// on `currency` too, to match what the rest of the app already reads.
+const curKeyOf = (f) => (f && f.curKey) || 'cur';
+const curOf = (f) => f.record[curKeyOf(f)];
+
 // True when every native-denominated record already declares its currency.
 // Until this is true, a currency change is silently destructive.
 export function isFullyStamped(state, book) {
-  return collectNativeAmounts(state, book).every(f => !!f.record.cur);
+  return collectNativeAmounts(state, book).every(f => !!curOf(f));
 }
 
-// Write `cur` onto every native-denominated record without touching a single
-// number. Two uses:
+// Write the currency stamp onto every native-denominated record without
+// touching a single number. Two uses:
 //   • Right before a conversion, to pin down what the numbers mean.
 //   • As the "relabel only" repair, when the stored numbers were always in the
 //     new currency and only the label was wrong.
@@ -78,7 +86,7 @@ export function stampNativeCurrency(state, book, code) {
   const cur = normalizeCurrencyCode(code, 'CAD');
   let stamped = 0;
   for (const f of collectNativeAmounts(state, book)) {
-    if (f.record.cur !== cur) { f.record.cur = cur; stamped++; }
+    if (curOf(f) !== cur) { f.record[curKeyOf(f)] = cur; stamped++; }
   }
   return stamped;
 }
@@ -90,20 +98,22 @@ export function stampNativeCurrency(state, book, code) {
 // "what a currency change has to move" — anything missing from it silently
 // keeps its old value and corrupts the books, so new money fields belong here.
 //
-// Each descriptor: { scope, label, date, record, get(), set(v) }
-//   record — the object carrying the `cur` stamp (grouped so one sale's price
-//            and its convertedTotal share a single stamp).
+// Each descriptor: { scope, label, date, record, curKey, get(), set(v) }
+//   record — the object carrying the currency stamp (grouped so one sale's
+//            price and its convertedTotal share a single stamp).
+//   curKey — property name the stamp lives under. Defaults to 'cur'; see
+//            curKeyOf() above for why expenses use 'currency' instead.
 //   date   — YYYY-MM-DD used to pick a historical rate; '' when undated.
 export function collectNativeAmounts(state, book) {
   const out = [];
   const s = state || {};
 
-  const push = (scope, label, record, key, date, holder) => {
+  const push = (scope, label, record, key, date, holder, curKey) => {
     const target = holder || record;
     const v = Number(target[key]);
     if (!Number.isFinite(v) || v === 0) return;
     out.push({
-      scope, label, record, date: date || '',
+      scope, label, record, date: date || '', curKey: curKey || 'cur',
       get: () => Number(target[key]) || 0,
       set: (n) => { target[key] = n; },
     });
@@ -149,6 +159,19 @@ export function collectNativeAmounts(state, book) {
     push('payout', `Artist payout ${p.date || ''}`, p, 'amount', p.date);
   }
 
+  // Expenses are normally self-describing (their own `currency` field, set at
+  // entry time) and deliberately excluded above — restating them would rewrite
+  // a cost that was genuinely paid in another currency. But rows created
+  // before that field existed (e.g. backfillGratuityExpenses on a legacy book)
+  // have none, and the rest of the app falls back to `e.currency || book
+  // currency` when reading them — the exact bare-number-plus-inferred-currency
+  // pattern this whole file exists to fix. Only THOSE rows are native amounts;
+  // anything with a `currency` already is left alone as foreign/self-describing.
+  for (const e of (s.expenses || [])) {
+    if (e.currency) continue;
+    push('expense', `Expense · ${e.desc || 'untitled'}`, e, 'amount', e.date, null, 'currency');
+  }
+
   // Rollups. Recomputed from history on the next recomputeAfters(), but
   // converting them keeps every screen correct in the interim.
   push('totals', 'Lifetime revenue', s, 'revenue', '');
@@ -181,7 +204,7 @@ export function planCurrencyChange({ state, book, from, to, rateFor, skip }) {
 
   for (const f of collectNativeAmounts(state, book)) {
     if (shouldSkip(f)) continue;
-    if (f.record.cur && normalizeCurrencyCode(f.record.cur, '') === toCode) {
+    if (curOf(f) && normalizeCurrencyCode(curOf(f), '') === toCode) {
       skipped.push(f);
       continue;
     }
@@ -220,14 +243,14 @@ export function applyCurrencyChange(plan, { at } = {}) {
     const rec = c.field.record;
     if (!touched.has(rec)) {
       touched.add(rec);
-      rec.cur = plan.to;
+      rec[curKeyOf(c.field)] = plan.to;
       rec._fx = { from: plan.from, to: plan.to, rate: c.rate, at: when };
     }
   }
   // Records that were already in the target currency still need the stamp, so a
   // later change can tell them apart from unstamped legacy rows.
   for (const f of plan.skipped) {
-    if (!f.record.cur) { f.record.cur = plan.to; touched.add(f.record); }
+    if (!curOf(f)) { f.record[curKeyOf(f)] = plan.to; touched.add(f.record); }
   }
 
   return { converted: plan.changes.length, stamped: touched.size };
@@ -280,7 +303,7 @@ export function detectCurrencyMismatch(state, book) {
 
   const stamped = new Map();
   for (const f of collectNativeAmounts(state, book)) {
-    const c = f.record.cur ? normalizeCurrencyCode(f.record.cur, '') : '';
+    const c = curOf(f) ? normalizeCurrencyCode(curOf(f), '') : '';
     if (c && c !== bookCode) stamped.set(c, (stamped.get(c) || 0) + 1);
   }
   if (stamped.size) {
