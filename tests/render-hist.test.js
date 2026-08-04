@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
 
 import { escapeHtml } from '../src/lib/html.js';
-import { fmt, fmtD, paymentSummary } from '../src/lib/money.js';
+import { fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary } from '../src/lib/money.js';
+import { bookCurrencyCode, detectCurrencyMismatch } from '../src/lib/currency-migration.js';
 import { buildOrderTimeline, inventoryBreakdown } from '../src/lib/inventory.js';
 import { reconcileConsignmentInvoiceLinks } from '../src/lib/consignment.js';
 import { linkedShippingSummary } from '../src/lib/shipping-reconciliation.js';
@@ -45,7 +46,8 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       window: { authorSubmissions: submissions, IS_PUBLISHER: isPublisher },
       TAX_CENTER: { businessExpenses: [] },
       // The real implementations — this is the logic worth exercising.
-      escapeHtml, fmt, fmtD, paymentSummary,
+      escapeHtml, fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary,
+      bookCurrencyCode, detectCurrencyMismatch,
       buildOrderTimeline, inventoryBreakdown,
       reconcileConsignmentInvoiceLinks, linkedShippingSummary,
     },
@@ -424,5 +426,108 @@ describe('renderHist — pagination', () => {
     h.renderHist();
     expect(rows()).toHaveLength(3);
     expect(document.querySelector('.hist-more-row')).toBeNull();
+  });
+});
+
+// The bug that prompted this: the book's currency was switched from € to CA$
+// mid-life, so every euro-era sale started rendering with a CA$ symbol against
+// its unchanged euro number. History is where a publisher reads those figures,
+// so this covers what the table actually puts on screen for a stranded row.
+describe('renderHist — currency drift', () => {
+  const eurSale = (over = {}) => ({
+    num: 'MAN-1', chan: 'Direct', qty: 1, price: 32, date: '2026-05-23', notes: '',
+    payment: { currency: 'EUR', amount: 32, rate: null, convertedTotal: 32 },
+    ...over,
+  });
+
+  it('renders a euro-era row in euros, not in the book\'s new currency', () => {
+    const h = makeHarness({
+      state: { stock: 99, hist: [eurSale({ cur: 'EUR' })], ledger: [], stores: [] },
+    });
+    h.renderHist();
+
+    const c = cells(rows()[0]);
+    expect(c[3]).toContain('€32.00');
+    expect(c[3]).not.toContain('CA$');
+    expect(c[4]).toContain('€32.00');
+  });
+
+  // The price cell carries the badge; every row also has an unrelated
+  // "entered by" pill, so scope the lookup to the price column.
+  const priceBadge = (tr) => tr.querySelectorAll('td')[3].querySelector('.chip-status');
+
+  it('badges the stranded row with the currency it was recorded in', () => {
+    const h = makeHarness({
+      state: { stock: 99, hist: [eurSale({ cur: 'EUR' })], ledger: [], stores: [] },
+    });
+    h.renderHist();
+    expect(priceBadge(rows()[0]).textContent).toBe('EUR');
+  });
+
+  it('leaves rows in the book\'s own currency unbadged', () => {
+    const h = makeHarness({
+      state: {
+        stock: 99,
+        hist: [{ num: 'MAN-2', chan: 'Direct', qty: 1, price: 40, date: '2026-07-01', cur: 'CAD' }],
+        ledger: [], stores: [],
+      },
+    });
+    h.renderHist();
+
+    const r = rows()[0];
+    expect(cells(r)[3]).toContain('CA$40.00');
+    expect(priceBadge(r)).toBeNull();
+  });
+
+  it('stops the payment note claiming a euro payment converted to the same CA$ figure', () => {
+    const h = makeHarness({
+      state: { stock: 99, hist: [eurSale({ cur: 'EUR' })], ledger: [], stores: [] },
+    });
+    h.renderHist();
+    // Paid in the row's own currency, so there is nothing to convert and no
+    // arrow at all — not "Paid EUR 32.00 → CA$32.00".
+    expect(rows()[0].textContent).toContain('Paid EUR 32.00');
+    expect(rows()[0].textContent).not.toContain('→ CA$32.00');
+  });
+
+  it('warns in the reconciliation strip and offers the restatement', () => {
+    const h = makeHarness({
+      state: { stock: 99, hist: [eurSale({ cur: 'EUR' })], ledger: [], stores: [] },
+    });
+    h.renderHist();
+
+    const warn = document.querySelector('#hist-recon .hist-currency-warn');
+    expect(warn).not.toBeNull();
+    expect(warn.textContent).toContain('EUR');
+    expect(warn.textContent).toContain('CAD');
+    expect(warn.querySelector('button').getAttribute('onclick')).toBe('restateBookCurrency()');
+  });
+
+  // The state this app is really in for a book switched before stamping
+  // existed: no `cur` anywhere, but the payment metadata still remembers.
+  it('spots the drift from legacy payment metadata alone, with no stamps', () => {
+    const h = makeHarness({
+      state: { stock: 99, hist: [eurSale(), eurSale({ num: 'MAN-2' })], ledger: [], stores: [] },
+    });
+    h.renderHist();
+
+    const warn = document.querySelector('#hist-recon .hist-currency-warn');
+    expect(warn).not.toBeNull();
+    expect(warn.textContent).toContain('2 sales');
+  });
+
+  it('stays quiet on a book whose history matches its currency', () => {
+    const h = makeHarness({
+      state: {
+        stock: 99,
+        hist: [{
+          num: 'MAN-3', chan: 'Direct', qty: 1, price: 40, date: '2026-07-01',
+          payment: { currency: 'CAD', amount: 40, rate: null, convertedTotal: 40 },
+        }],
+        ledger: [], stores: [],
+      },
+    });
+    h.renderHist();
+    expect(document.querySelector('#hist-recon .hist-currency-warn')).toBeNull();
   });
 });

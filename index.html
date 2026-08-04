@@ -3766,6 +3766,56 @@
   </div>
 </div>
 
+<!-- Currency restatement — shown whenever a book's currency changes, or on demand
+     to repair history that was recorded under a previous currency. -->
+<div class="overlay" id="m-currency-change" style="display:none;z-index:1250;">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:640px;">
+    <div class="modal-title" role="dialog" aria-modal="true" id="cc-title">Change book currency</div>
+    <p class="lead-note" id="cc-intro"></p>
+
+    <div class="cc-modes" id="cc-modes">
+      <label class="cc-mode" for="cc-mode-convert">
+        <input type="radio" name="cc-mode" id="cc-mode-convert" value="convert" checked onchange="onCurrencyModeChange()">
+        <span class="cc-mode-body">
+          <span class="cc-mode-title">Convert the amounts</span>
+          <span class="cc-mode-sub" id="cc-mode-convert-sub">Restate every stored figure at an exchange rate. Prices, totals, ledger and payouts all move together.</span>
+        </span>
+      </label>
+      <label class="cc-mode" for="cc-mode-relabel">
+        <input type="radio" name="cc-mode" id="cc-mode-relabel" value="relabel" onchange="onCurrencyModeChange()">
+        <span class="cc-mode-body">
+          <span class="cc-mode-title">Relabel only — the numbers were always right</span>
+          <span class="cc-mode-sub" id="cc-mode-relabel-sub">Leave every figure untouched and just correct the symbol. Use this when only the label was wrong.</span>
+        </span>
+      </label>
+    </div>
+
+    <div id="cc-rate-block">
+      <div class="g2" style="margin-bottom:4px;">
+        <div class="form-group">
+          <label for="cc-rate-mode">Which rate</label>
+          <select id="cc-rate-mode" onchange="onCurrencyRateModeChange()">
+            <option value="historical">Rate on each entry's own date (accurate)</option>
+            <option value="flat">One rate for everything (simple)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="cc-rate">Rate <span id="cc-rate-pair" class="muted-note"></span></label>
+          <input id="cc-rate" type="number" step="0.0001" inputmode="decimal" placeholder="1.5000" oninput="refreshCurrencyPreview()">
+        </div>
+      </div>
+      <p class="field-note" id="cc-rate-note"></p>
+    </div>
+
+    <div id="cc-preview" style="margin-top:14px;"></div>
+
+    <div class="modal-footer" role="dialog" aria-modal="true">
+      <button type="button" class="btn" id="cc-cancel">Cancel</button>
+      <button type="button" class="btn gold" id="cc-apply">Apply</button>
+    </div>
+  </div>
+</div>
+
 <!-- Styled text prompt (replaces browser prompt) -->
 <div class="overlay" id="m-prompt" style="display:none;z-index:1200;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">

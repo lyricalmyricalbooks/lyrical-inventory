@@ -70,14 +70,33 @@ export function getBookCurrencyCode(book) {
   return CURRENCY_SYMBOL_TO_CODE[c] || (String(c).length === 3 ? c : 'EUR');
 }
 
-export function paymentSummary(payment, book) {
+// The currency an entry's own amounts (price, convertedTotal, amountDue…) are
+// denominated in. Prefers the `cur` stamp written at entry time; falls back to
+// the book's current currency for legacy rows recorded before stamping existed.
+// That fallback is precisely what breaks when a book's currency is edited, so
+// anything relying on it should be restated via lib/currency-migration.js.
+export function entryNativeCode(entry, book) {
+  if (entry && entry.cur) return normalizeCurrencyCode(entry.cur, 'CAD');
+  return getBookCurrencyCode(book);
+}
+
+// `payment.convertedTotal` is denominated in the entry's OWN native currency —
+// frozen at the moment of sale — not in whatever the book's currency says
+// today. Reading it against the book's current currency is what turns a €32
+// sale into the nonsense line "Paid EUR 32.00 → CA$32.00" after a currency
+// change, so resolve the symbol from the entry's stamp when it has one.
+export function paymentSummary(payment, book, entry = null) {
   if (!payment || !payment.currency) return '';
-  const native = getBookCurrencyCode(book);
+  const native = entryNativeCode(entry, book);
   const amount = Number(payment.amount || 0);
   const converted = Number(payment.convertedTotal || 0);
-  if (payment.currency === native) return `Paid ${payment.currency} ${fmtNum(amount)}`;
-  const ratePart = payment.rate ? ` @ ${payment.rate}` : '';
-  return `Paid ${payment.currency} ${fmtNum(amount)}${ratePart} → ${fmt(converted, book && book.currency)}`;
+  if (normalizeCurrencyCode(payment.currency, '') === native) {
+    return `Paid ${payment.currency} ${fmtNum(amount)}`;
+  }
+  // Rates arrive from FX APIs at full float precision; 4dp is the most anyone
+  // quotes and keeps the note from running to 16 digits.
+  const ratePart = payment.rate ? ` @ ${Number(payment.rate).toFixed(4)}` : '';
+  return `Paid ${payment.currency} ${fmtNum(amount)}${ratePart} → ${fmt(converted, native)}`;
 }
 
 export function buildPaymentMeta({ book, qty, unitPrice, fxEnabled, fxCur, fxAmt, fxRate }) {

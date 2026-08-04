@@ -20,6 +20,16 @@ import {
   lightenColor,
   getContrastSafeText,
 } from './lib/money.js';
+import {
+  bookCurrencyCode,
+  collectNativeAmounts,
+  detectCurrencyMismatch,
+  planCurrencyChange,
+  applyCurrencyChange,
+  stampNativeCurrency,
+  appendCurrencyLog,
+  describePlan,
+} from './lib/currency-migration.js';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 import {
@@ -757,6 +767,283 @@ function updateUnsavedIndicator() {
 }
 window.updateUnsavedIndicator = updateUnsavedIndicator;
 
+// ── BOOK CURRENCY RESTATEMENT ────────────────────────────────────────────────
+// Changing a book's currency is not a cosmetic edit. Every monetary number on
+// the book is stored as a bare Number whose currency is inferred from
+// `book.currency` at render time, so flipping that field retroactively
+// re-denominates the entire history: a €32 sale becomes a CA$32 sale, revenue
+// and artist tiers shift by the FX gap, and nothing warns you. This dialog
+// stands in the way of that, and doubles as the repair tool for a book where it
+// already happened.
+
+let _ccCtx = null;
+
+// Rates keyed by the entry date they apply to. Populated on demand from the FX
+// APIs; '' is the key for undated records (rollups, list price, store balances).
+async function _ccFetchRates(from, to, dates) {
+  const out = {};
+  const live = await fetchLiveRate(from, to);
+  if (live && live.rate) out[''] = live.rate;
+  // Sequential and deduped: a book with 200 sales usually spans a few dozen
+  // distinct days, and firing them all at once gets us rate-limited.
+  for (const d of dates) {
+    const r = await fetchHistoricalRate(from, to, d);
+    out[d] = (r && r.rate) ? r.rate : (out[''] || 0);
+  }
+  return out;
+}
+
+function _ccRateFor(date) {
+  if (!_ccCtx) return 0;
+  if (_ccCtx.rateMode === 'flat') return _ccCtx.flatRate || 0;
+  const byDate = _ccCtx.rates || {};
+  // Undated records and any date the FX API couldn't serve fall back to the
+  // flat/live rate, so a weekend sale or an offline lookup never silently
+  // drops an amount out of the conversion.
+  return byDate[date || ''] || byDate[''] || _ccCtx.flatRate || 0;
+}
+
+// Build the plan for the current dialog state. Book-level fields the user
+// retyped in the same save are excluded: if they changed the currency AND typed
+// a new list price, that price is already in the new currency and converting it
+// would double the move.
+function _ccBuildPlan() {
+  if (!_ccCtx) return null;
+  const manual = _ccCtx.manualBookFields || [];
+  return planCurrencyChange({
+    state: _ccCtx.state,
+    book: _ccCtx.book,
+    from: _ccCtx.from,
+    to: _ccCtx.to,
+    rateFor: _ccRateFor,
+    skip: (f) => f.scope === 'book' && manual.includes(f.label),
+  });
+}
+
+export function onCurrencyModeChange() {
+  const relabel = $('cc-mode-relabel')?.checked;
+  const rateBlock = $('cc-rate-block');
+  if (rateBlock) rateBlock.style.display = relabel ? 'none' : '';
+  refreshCurrencyPreview();
+}
+
+export async function onCurrencyRateModeChange() {
+  if (!_ccCtx) return;
+  _ccCtx.rateMode = $('cc-rate-mode')?.value || 'historical';
+  const note = $('cc-rate-note');
+  if (_ccCtx.rateMode === 'historical' && !_ccCtx.ratesLoaded) {
+    if (note) note.textContent = 'Looking up the rate for each entry date…';
+    _ccCtx.rates = await _ccFetchRates(_ccCtx.from, _ccCtx.to, _ccCtx.dates);
+    _ccCtx.ratesLoaded = true;
+  }
+  _ccUpdateRateNote();
+  refreshCurrencyPreview();
+}
+
+function _ccUpdateRateNote() {
+  const note = $('cc-rate-note');
+  if (!note || !_ccCtx) return;
+  if (_ccCtx.rateMode === 'flat') {
+    note.textContent = `Every amount moves at the same rate. Good when you simply re-priced the book in ${_ccCtx.to}.`;
+    return;
+  }
+  const resolved = _ccCtx.dates.filter(d => (_ccCtx.rates || {})[d]).length;
+  note.textContent = resolved
+    ? `Each entry converts at the ${_ccCtx.from}→${_ccCtx.to} rate on its own date (${resolved} of ${_ccCtx.dates.length} dates found). The rate above covers undated figures and any date the lookup missed.`
+    : `No rates could be fetched — you may be offline. Type a rate above and every amount will use it.`;
+}
+
+export function refreshCurrencyPreview() {
+  const host = $('cc-preview');
+  if (!host || !_ccCtx) return;
+  const applyBtn = $('cc-apply');
+
+  if ($('cc-mode-relabel')?.checked) {
+    const count = collectNativeAmounts(_ccCtx.state, _ccCtx.book).length;
+    host.innerHTML = `<div class="cc-preview-empty">No number will change. ${count} amount${count === 1 ? '' : 's'} will simply be marked as already being in <strong>${escapeHtml(_ccCtx.to)}</strong>.</div>`;
+    if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Relabel'; }
+    return;
+  }
+
+  _ccCtx.flatRate = parseFloat($('cc-rate')?.value) || 0;
+  const plan = _ccBuildPlan();
+  _ccCtx.plan = plan;
+
+  if (!plan || plan.changes.length === 0) {
+    host.innerHTML = `<div class="cc-preview-empty">${escapeHtml(describePlan(plan) || 'Enter a rate to see what will change.')}</div>`;
+    if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = 'Convert'; }
+    return;
+  }
+
+  const MAX = 40;
+  const shown = plan.changes.slice(0, MAX);
+  const more = plan.changes.length - shown.length;
+  const fromSym = getSym(plan.from), toSym = getSym(plan.to);
+
+  host.innerHTML = `
+    <div class="cc-preview-head">
+      <span>${escapeHtml(describePlan(plan))}</span>
+      <strong>${escapeHtml(fmt(plan.totalBefore, fromSym))} → ${escapeHtml(fmt(plan.totalAfter, toSym))}</strong>
+    </div>
+    <div class="cc-preview-scroll">
+      <table class="cc-preview-tbl">
+        <thead><tr><th>What</th><th class="r">Rate</th><th class="r">Before</th><th class="r">After</th></tr></thead>
+        <tbody>
+          ${shown.map(c => `<tr>
+            <td>${escapeHtml(c.field.label)}${c.field.date ? ` <span class="muted-note">${escapeHtml(fmtD(c.field.date))}</span>` : ''}</td>
+            <td class="r muted-note">${c.rate.toFixed(4)}</td>
+            <td class="r cc-before">${escapeHtml(fmt(c.before, fromSym))}</td>
+            <td class="r cc-after">${escapeHtml(fmt(c.after, toSym))}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    ${more > 0 ? `<p class="field-note">…and ${more} more amount${more === 1 ? '' : 's'}.</p>` : ''}`;
+  if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Convert'; }
+}
+
+// Open the dialog and resolve with the chosen action, or null when cancelled.
+// Resolving does NOT mutate anything — the caller applies the result, so a
+// cancel at any point leaves the book exactly as it was.
+function openCurrencyChangeDialog({ book, state, from, to, manualBookFields = [], title, intro }) {
+  const fromCode = normalizeCurrencyCode(from, 'CAD');
+  const toCode = normalizeCurrencyCode(to, 'CAD');
+
+  const dates = [...new Set(
+    collectNativeAmounts(state, book).map(f => f.date).filter(Boolean)
+  )].sort();
+
+  _ccCtx = {
+    book, state, from: fromCode, to: toCode, manualBookFields,
+    dates, rates: {}, ratesLoaded: false, rateMode: 'historical', flatRate: 0, plan: null,
+  };
+
+  if ($('cc-title')) $('cc-title').textContent = title || 'Change book currency';
+  if ($('cc-intro')) $('cc-intro').textContent = intro || '';
+  if ($('cc-rate-pair')) $('cc-rate-pair').textContent = `${fromCode} → ${toCode}`;
+  if ($('cc-rate')) $('cc-rate').value = '';
+  if ($('cc-rate-mode')) $('cc-rate-mode').value = 'historical';
+  if ($('cc-mode-convert')) $('cc-mode-convert').checked = true;
+  if ($('cc-mode-relabel')) $('cc-mode-relabel').checked = false;
+  if ($('cc-mode-convert-sub')) {
+    $('cc-mode-convert-sub').textContent =
+      `Restate every ${fromCode} figure into ${toCode} at an exchange rate — prices, totals, ledger, store balances and payouts all move together.`;
+  }
+  if ($('cc-mode-relabel-sub')) {
+    $('cc-mode-relabel-sub').textContent =
+      `Leave every figure exactly as it is and just mark it as ${toCode}. Use this only when the amounts were always ${toCode} and the symbol was wrong.`;
+  }
+  onCurrencyModeChange();
+
+  return new Promise(resolve => {
+    const ok = $('cc-apply'), cancel = $('cc-cancel'), overlay = $('m-currency-change');
+    if (!ok || !cancel || !overlay) { resolve(null); return; }
+
+    const cleanup = (result) => {
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      overlay.removeEventListener('modal-close', onCancel);
+      closeM('currency-change');
+      resolve(result);
+    };
+    const onOk = () => {
+      if ($('cc-mode-relabel')?.checked) { cleanup({ mode: 'relabel', to: toCode, from: fromCode }); return; }
+      refreshCurrencyPreview();
+      const plan = _ccCtx && _ccCtx.plan;
+      if (!plan || plan.changes.length === 0) {
+        showToast('⚠ Enter an exchange rate first', 'warn');
+        $('cc-rate')?.focus();
+        return;
+      }
+      cleanup({ mode: 'convert', to: toCode, from: fromCode, plan });
+    };
+    const onCancel = () => cleanup(null);
+
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    overlay.addEventListener('modal-close', onCancel);
+
+    openM('currency-change');
+    // Prefill the live rate in the background so the common case is one click.
+    fetchLiveRate(fromCode, toCode).then(r => {
+      if (!_ccCtx || _ccCtx.from !== fromCode) return;   // dialog moved on
+      if (r && r.rate) {
+        _ccCtx.rates[''] = r.rate;
+        const el = $('cc-rate');
+        if (el && !el.value) { el.value = r.rate.toFixed(4); }
+        _ccCtx.flatRate = r.rate;
+      }
+      onCurrencyRateModeChange();
+    });
+  });
+}
+
+// Persist a dialog result onto a book + its state, including the audit log.
+function applyCurrencyResult(result, book, state) {
+  if (!result) return null;
+  if (result.mode === 'relabel') {
+    const stamped = stampNativeCurrency(state, book, result.to);
+    appendCurrencyLog(book, { from: result.from, to: result.to, mode: 'relabel', records: stamped });
+    return { converted: 0, stamped };
+  }
+  const applied = applyCurrencyChange(result.plan);
+  appendCurrencyLog(book, {
+    from: result.from, to: result.to, mode: 'convert',
+    records: applied.stamped, amounts: applied.converted,
+  });
+  return applied;
+}
+
+// Repair entry point for a book whose history is stranded in a previous
+// currency — the state this app lands in when the currency was changed before
+// this dialog existed. Reachable from the History tab's reconciliation strip.
+export async function restateBookCurrency() {
+  // A restatement rewrites one book's ledger, so it needs a book actually
+  // selected — the "All books" view has no single currency to restate into.
+  if (!activeBook || activeBook === 'all') {
+    showToast('⚠ Pick a single book first — a restatement applies to one book', 'warn');
+    return;
+  }
+  const book = getBook(), s = getState();
+  if (!book) return;
+  const toCode = bookCurrencyCode(book);
+  const { mismatched, code } = detectCurrencyMismatch(s, book);
+  const fromCode = code || (toCode === 'CAD' ? 'EUR' : 'CAD');
+
+  const result = await openCurrencyChangeDialog({
+    book, state: s, from: fromCode, to: toCode,
+    title: `Restate history · ${book.title}`,
+    intro: mismatched
+      ? `${mismatched} amount${mismatched === 1 ? ' is' : 's are'} still recorded in ${fromCode} while this book is now priced in ${toCode}. Restate them so every total, tier and payout is in one currency again.`
+      : `This book is priced in ${toCode}. If its history was actually recorded in ${fromCode} — because the currency was switched after those entries were made — restate it here so totals stop mixing two currencies.`,
+  });
+  if (!result) return;
+
+  const applied = applyCurrencyResult(result, book, s);
+  recomputeAfters(s, book);
+  await saveState(activeBook);
+  await saveCatalogWithDeletions();
+  renderAll(); updateDash(); renderCurrent();
+  showToast(result.mode === 'relabel'
+    ? `✓ ${applied.stamped} record${applied.stamped === 1 ? '' : 's'} relabelled as ${result.to}`
+    : `✓ ${applied.converted} amount${applied.converted === 1 ? '' : 's'} restated into ${result.to}`);
+
+  await offerSheetsResyncAfterRestate(result.to);
+}
+
+// The Google Sheet still holds the pre-restatement numbers, so leaving it be
+// means the app and the spreadsheet now disagree on every historical figure.
+// Offer the in-place resync that reconciles them.
+async function offerSheetsResyncAfterRestate(toCode) {
+  if (!sheetsUrl || typeof pushAllToSheets !== 'function') return;
+  const ok = await confirmDialog(
+    `Your Google Sheet still has the old amounts. Push the restated ${toCode} figures to it now? `
+    + `Rows are matched by their stable ids, so this updates them in place rather than adding duplicates.`,
+    { title: 'Update the Google Sheet', okLabel: 'Push to Sheets', cancelLabel: 'Later' }
+  );
+  if (ok) pushAllToSheets({ skipConfirm: true });
+}
+
 async function saveBookFromModal() {
   // Validate fields and automatically switch to the correct tab if validation fails
   const isValid = validateFields([
@@ -825,6 +1112,31 @@ async function saveBookFromModal() {
     if (shouldSyncThreshold) firstTier.revenueUpTo = val;
   }
 
+  // A currency change re-denominates every figure already on the books, so ask
+  // what to do with the history BEFORE committing the edit. Cancelling here
+  // aborts the whole save and leaves the modal open, so the book is never left
+  // half-changed. Book-level prices the user retyped in this same save are
+  // excluded from the conversion — those are already in the new currency.
+  const prevCurrency = currentBook.currency;
+  let currencyResult = null;
+  if (editingBookId && prevCurrency && prevCurrency !== book.currency) {
+    const targetState = states[editingBookId] || states[id];
+    const manualBookFields = [];
+    if ((currentBook.listPrice ?? null) !== book.listPrice) manualBookFields.push('List price');
+    if ((currentBook.productionCost ?? null) !== book.productionCost) manualBookFields.push('Production cost');
+
+    currencyResult = await openCurrencyChangeDialog({
+      book, state: targetState,
+      from: prevCurrency, to: book.currency, manualBookFields,
+      title: `Change currency · ${book.title}`,
+      intro: `This book's stored amounts are all in ${normalizeCurrencyCode(prevCurrency, 'EUR')}. `
+        + `Switching to ${normalizeCurrencyCode(book.currency, 'CAD')} without restating them would leave every past sale, `
+        + `total and payout carrying the new symbol but the old number.`
+        + (manualBookFields.length ? ` (${manualBookFields.join(' and ')} won't be converted — you just edited ${manualBookFields.length === 1 ? 'it' : 'them'} by hand.)` : ''),
+    });
+    if (!currencyResult) return;   // cancelled — nothing is saved
+  }
+
   if (editingBookId && editingBookId !== id) {
     delete BOOKS[editingBookId];
     if (states[editingBookId]) {
@@ -835,6 +1147,14 @@ async function saveBookFromModal() {
   BOOKS[id] = book;
   BOOK_LIST = Object.values(BOOKS);
   if (!states[id]) states[id] = defaultState(book);
+
+  if (currencyResult) {
+    applyCurrencyResult(currencyResult, book, states[id]);
+    // Rollups (revenue, chStats) are re-derived from the now-converted prices,
+    // so the headline figures agree with the individual rows.
+    recomputeAfters(states[id], book);
+    await saveState(id);
+  }
   // Re-adding a previously-deleted default removes it from the tombstone list.
   if (DEFAULT_BOOKS[id]) {
     const i = deletedDefaultIds.indexOf(id);
@@ -871,6 +1191,10 @@ async function saveBookFromModal() {
     document.documentElement.style.setProperty('--book-accent-bg', ab.accentBg);
   }
   renderCurrent();
+
+  // Asked last, once the book modal is out of the way, so the two dialogs
+  // don't stack.
+  if (currencyResult) await offerSheetsResyncAfterRestate(currencyResult.to);
 }
 
 function renderCatalogList() {
@@ -4011,7 +4335,8 @@ async function recordArtistPayout(bookId) {
     date: dateEl.value || today(),
     amount,
     method: (methodEl.value || '').trim(),
-    notes: (notesEl.value || '').trim()
+    notes: (notesEl.value || '').trim(),
+    cur: bookCurrencyCode(BOOKS[bookId])
   });
   await saveState(bookId);
   showToast(`✓ Recorded payout of ${fmt(amount, BOOKS[bookId].currency)}`);
@@ -4284,7 +4609,7 @@ function recordOrder(num, chan, qty, price, notes, payment = null) {
   }
 
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), payment, enteredBy, sheetsId });
+  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), payment, enteredBy, sheetsId, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
   renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
@@ -4343,6 +4668,7 @@ function renderConsignHistRow(e, after) {
 
 export function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
+  const bookCode = bookCurrencyCode(book);
   reconcileConsignmentInvoiceLinks(s);
 
   const pbSales = window.authorSubmissions[activeBook]?.sales || {};
@@ -4388,6 +4714,18 @@ export function renderHist() {
         ? `<div style="font-size:11px; font-weight:700; color:var(--red); margin-top:6px;">⚠️ ${Math.abs(bd.unaccounted)} unaccounted copies in reconciliation</div>`
         : '';
 
+      // History stranded in a previous currency makes every total below it a
+      // sum of two different currencies. Surface it where the numbers are read,
+      // with the one-click way out.
+      const mm = detectCurrencyMismatch(s, book);
+      const mmNoun = mm.source === 'payment' ? 'sale' : 'amount';
+      const curWarn = mm.mismatched
+        ? `<div class="hist-currency-warn">
+             <span><strong>${mm.mismatched} ${escapeHtml(mmNoun)}${mm.mismatched === 1 ? '' : 's'}</strong> ${mm.mismatched === 1 ? 'was' : 'were'} recorded in ${escapeHtml(mm.code)}, but this book is now priced in ${escapeHtml(bookCode)} — so those figures are being shown and summed as ${escapeHtml(bookCode)} without ever being converted.</span>
+             <button class="btn sm" onclick="restateBookCurrency()">Restate into ${escapeHtml(bookCode)}</button>
+           </div>`
+        : '';
+
       recon.style.display = '';
       recon.innerHTML = `
         <div class="hist-kpi-container">
@@ -4411,6 +4749,7 @@ export function renderHist() {
           <div class="hist-progress-bar-fill" style="width: ${Math.min(100, Math.max(0, sellThroughPct))}%;"></div>
         </div>
         ${warn}
+        ${curWarn}
       `;
     } else {
       recon.style.display = 'none';
@@ -4453,8 +4792,18 @@ export function renderHist() {
       const isPending = h.artistPending;
       
       const chanCell = isGrat ? `<span class="chip-status violet">🎁 Gratuity</span>` : isPending ? `${formatChannelBadge(h.chan)} <span class="chip-status amber">⏳ pending</span>` : formatChannelBadge(h.chan);
-      const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price, cur);
-      const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, cur)}</span>` : fmt(h.qty * h.price, cur);
+      // A row's amounts belong to the currency it was RECORDED in, not the one
+      // the book carries today. Formatting a €32 sale with the book's current
+      // CA$ makes it read as CA$32 — same digits, ~50% wrong. Rows stamped with
+      // another currency render in that currency and get a badge, so stranded
+      // history is visible instead of silently mixed into CAD totals.
+      const rowCode = h.cur ? normalizeCurrencyCode(h.cur, bookCode) : bookCode;
+      const rowCur = rowCode === bookCode ? cur : getSym(rowCode);
+      const foreignPill = rowCode !== bookCode
+        ? ` <span class="chip-status amber" title="Recorded in ${escapeHtml(rowCode)} — not yet restated into ${escapeHtml(bookCode)}">${escapeHtml(rowCode)}</span>`
+        : '';
+      const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
+      const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, rowCur)}</span>` : fmt(h.qty * h.price, rowCur);
       const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
       const isWebsite = (h.chan === 'Website' || h.chan === 'Big Cartel') && !isGrat && !h.voided;
       const labelBtn = isWebsite
@@ -4463,7 +4812,7 @@ export function renderHist() {
           : `<button class="btn-hist-action ship" onclick="openLabelModal(${i})" title="Print shipping label">📦 Ship</button>`)
         : '';
 
-      const paymentInfo = paymentSummary(h.payment, book);
+      const paymentInfo = paymentSummary(h.payment, book, h);
       const shippingInfo = isWebsite ? renderOrderShippingSummary(h) : '';
       const notesText = escapeHtml(h.notes) || '—';
       const notesCell = [
@@ -7915,9 +8264,9 @@ function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null
   // Add to history with pending flag. directToArtist marks this as cash the
   // artist collected directly (these only ever come from direct-to-artist sales).
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), artistPending: true, directToArtist: true, payment, sheetsId });
+  s.hist.unshift({ num, chan, qty, price, after: s.stock, notes: updatedNotes, date: today(), artistPending: true, directToArtist: true, payment, sheetsId, cur: bookCurrencyCode(book) });
   // Add to artistTransfers queue (share sheetsId so receipt updates the same sheet row)
-  s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: today(), payment, sheetsId });
+  s.artistTransfers.push({ id: Date.now(), num, chan, qty, price, total: qty * price, notes: updatedNotes, date: today(), payment, sheetsId, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
   renderHist(); updateDash(); saveState(activeBook);
   const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
@@ -8006,7 +8355,8 @@ async function settleArtistTransferKeepShare(transferId) {
       date: today(),
       amount: share,
       method: 'Kept from direct sale',
-      notes: `${t.num} — artist retained their share`
+      notes: `${t.num} — artist retained their share`,
+      cur: bookCurrencyCode(book)
     });
   }
 
@@ -8058,7 +8408,8 @@ async function settleArtistTransferKeepAll(transferId) {
     date: today(),
     amount: t.total,
     method: 'Kept from direct sale (full)',
-    notes: `${t.num} — artist retained full gross; publisher cut forgiven`
+    notes: `${t.num} — artist retained full gross; publisher cut forgiven`,
+    cur: bookCurrencyCode(book)
   });
 
   s.artistTransfers = s.artistTransfers.filter(x => x.id !== transferId);
@@ -8570,8 +8921,8 @@ function confirmSale() {
   // map to the SAME row in Sheets — editing or voiding either updates the
   // single underlying row instead of producing duplicates.
   const sheetsId = makeEventId();
-  s.hist.unshift({ num, chan: 'Consignment', qty, price: pub / qty, after: s.stock, notes: st.name, date, sheetsId, consignmentLink: true });
-  s.ledger.push({ id: Date.now(), storeId: st.id, storeName: st.name, type: 'Sale', date, qty, rate: st.rate, amountDue: pub, paid, notes, status: paid, sheetsId });
+  s.hist.unshift({ num, chan: 'Consignment', qty, price: pub / qty, after: s.stock, notes: st.name, date, sheetsId, consignmentLink: true, cur: bookCurrencyCode(book) });
+  s.ledger.push({ id: Date.now(), storeId: st.id, storeName: st.name, type: 'Sale', date, qty, rate: st.rate, amountDue: pub, paid, notes, status: paid, sheetsId, cur: bookCurrencyCode(book) });
   recomputeAfters(s, book);
   closeM('record-sale'); renderStores(); renderLedger(); renderHist(); updateDash(); saveState(activeBook);
   syncToSheets({ type: 'consignment', book: book.title, date, store: st.name, event: 'Sale', qty, rate: st.rate, amountDue: pub, notes, status: paid, sheetsId, currency: getBookCurrencyCode(book) });
@@ -8680,6 +9031,10 @@ async function markHistoryConsignmentPaid(num) {
 }
 function renderLedger() {
   const s = getState(), book = getBook(), cur = book.currency, b = $('ledger-body');
+  const ledgerBookCode = bookCurrencyCode(book);
+  // Same rule as the History table: an amount renders in the currency its row
+  // was recorded in, so a pre-change entry can't masquerade as the new one.
+  const ledgerCur = e => (e.cur && normalizeCurrencyCode(e.cur, ledgerBookCode) !== ledgerBookCode) ? getSym(e.cur) : cur;
   if (!s.ledger.length) { b.innerHTML = '<tr><td colspan="8"><div class="empty-state" style="padding:1rem;">No entries.</div></td></tr>'; return; }
   const pill = e => {
     if (e.voided) return '<span class="void-badge">Void</span>';
@@ -8697,7 +9052,7 @@ function renderLedger() {
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     // Cross-link Sale rows back to the invoice that bills them (absent id → '').
     const invBadge = e.type === 'Sale' ? invoiceBadgeHTML(e.invoiceId, e.invoiceNum) : '';
-    return `<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, cur) : '—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
+    return `<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
   }).join('');
 }
 
@@ -20357,6 +20712,7 @@ Object.assign(window, {
   generateBookStripeLink,
   logout, switchTab, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
   showMoreHist, showAllHist,
+  restateBookCurrency, onCurrencyModeChange, onCurrencyRateModeChange, refreshCurrencyPreview,
   renderOpenCall, ocAdd, ocToggle, ocDelete, ocCopyEmails, ocToggleImport, ocRunImport, checkOcEmailTypo, applyOcEmailCorrection,
   ocCreateProject, ocRenameProject, ocDeleteProject, ocSwitchProject, ocComposeStageEmail, ocSearch, ocFilterByStage, ocScanReplies, ocScanRepliesSingle, ocToggleInlineThread, ocSaveTemplates, exportOpenCallCSV, ocSetSort, ocSetTmplTab, ocUpdateTmplPreview, openOcBulkModal, closeOcBulkModal, onOcBulkStageChange, sendOcBulkEmails, ocBulkSelectAll, ocBulkUpdateCount, sendOcBulkTestEmail, cancelOcBulkSend, ocToggleResend, ocSaveResendConfig, ocSaveSenderConfig, ocLoadSenderAliases, insertFormattingTag, triggerOcCsvUpload, handleOcCsvUpload, handleOcCsvDragOver, handleOcCsvDragLeave, handleOcCsvDrop, handleOcPhotoKeydown, addOcPhotoChip, removeOcPhotoChip, ocAddPhotoToContributor, ocRemovePhotoFromContributor,
   openOcBulkRemoveModal, closeOcBulkRemoveModal, ocBulkRemoveSelectAll, ocBulkRemoveUpdateCount, ocBulkRemoveFilter, executeOcBulkRemove,
