@@ -147,7 +147,32 @@ describe('paymentSummary', () => {
       { currency: 'USD', amount: 13.5, rate: 1.07, convertedTotal: 12.62 },
       book
     );
-    expect(summary).toBe('Paid USD 13.50 @ 1.07 → €12.62');
+    expect(summary).toBe('Paid USD 13.50 @ 1.0700 → €12.62');
+  });
+  it('caps a full-precision API rate at 4dp instead of printing 16 digits', () => {
+    const summary = paymentSummary(
+      { currency: 'USD', amount: 36, rate: 1.4104292782551298, convertedTotal: 50.78 },
+      book
+    );
+    expect(summary).toBe('Paid USD 36.00 @ 1.4104 → €50.78');
+  });
+  it('reads convertedTotal in the entry\'s own currency, not the book\'s current one', () => {
+    // The reported bug: a EUR-era sale on a book since switched to CA$ was
+    // rendering "Paid EUR 32.00 → CA$32.00" — same number, wrong currency.
+    const summary = paymentSummary(
+      { currency: 'USD', amount: 40, rate: 0.85, convertedTotal: 34.17 },
+      { currency: 'CA$' },
+      { cur: 'EUR' }
+    );
+    expect(summary).toBe('Paid USD 40.00 @ 0.8500 → €34.17');
+  });
+  it('treats a payment in the entry\'s stamped currency as native', () => {
+    const summary = paymentSummary(
+      { currency: 'EUR', amount: 32, rate: null, convertedTotal: 32 },
+      { currency: 'CA$' },
+      { cur: 'EUR' }
+    );
+    expect(summary).toBe('Paid EUR 32.00');
   });
   it('skips the rate part when no rate is available', () => {
     const summary = paymentSummary(
