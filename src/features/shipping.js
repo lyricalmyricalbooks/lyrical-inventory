@@ -834,37 +834,58 @@ async function importShippoShippingFromApi() {
 
 let shippoBaseSpecs = { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
 
-function getBookPresetSpecs(book) {
-  if (!book) return { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+const GENERIC_SHIP_SPECS = { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+
+// Measured specs for the catalog's own titles, keyed by book id. Keyed by id
+// rather than matched against the title, because a rename used to drop a book
+// silently back onto GENERIC_SHIP_SPECS and mis-rate every quote for it with no
+// visible sign. Anything saved on the book record itself still wins over this;
+// this is only the fallback for books whose ship fields were never filled in.
+const BOOK_SHIP_PRESETS = {
+  altrove: { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.1, weight_unit: 'lb' },
+  hound: { length: 12, width: 9, height: 1.2, dim_unit: 'in', weight: 2.2, weight_unit: 'lb' },
+  archaeology: { length: 9, width: 7, height: 0.6, dim_unit: 'in', weight: 0.9, weight_unit: 'lb' },
+  sistema: { length: 8, width: 6, height: 0.5, dim_unit: 'in', weight: 0.7, weight_unit: 'lb' },
+  nobody: { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.0, weight_unit: 'lb' },
+  collective: { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' },
+};
+
+// Legacy title matching, kept only as a tertiary hop so a book copied to a new
+// id under a known title still rates correctly. Never the reason a rename works.
+const LEGACY_TITLE_PRESET_IDS = ['altrove', 'hound', 'archaeology', 'sistema', 'nobody', 'collective'];
+
+// Returns the specs plus where they came from, so callers can tell the user when
+// a quote is running on generic numbers rather than this book's real dimensions.
+function resolveBookPresetSpecs(book) {
+  if (!book) return { specs: { ...GENERIC_SHIP_SPECS }, source: 'generic' };
 
   // Prioritize custom specifications saved on the book
   if (book.shipLength && book.shipWidth && book.shipHeight && book.shipWeight) {
     return {
-      length: book.shipLength,
-      width: book.shipWidth,
-      height: book.shipHeight,
-      dim_unit: book.shipDimUnit || 'in',
-      weight: book.shipWeight,
-      weight_unit: book.shipWeightUnit || 'lb'
+      source: 'book',
+      specs: {
+        length: book.shipLength,
+        width: book.shipWidth,
+        height: book.shipHeight,
+        dim_unit: book.shipDimUnit || 'in',
+        weight: book.shipWeight,
+        weight_unit: book.shipWeightUnit || 'lb'
+      },
     };
   }
 
-  const title = (book.title || '').toLowerCase();
+  const byId = BOOK_SHIP_PRESETS[book.id];
+  if (byId) return { specs: { ...byId }, source: 'preset' };
 
-  if (title.includes('altrove')) {
-    return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.1, weight_unit: 'lb' };
-  } else if (title.includes('hound')) {
-    return { length: 12, width: 9, height: 1.2, dim_unit: 'in', weight: 2.2, weight_unit: 'lb' };
-  } else if (title.includes('archaeology')) {
-    return { length: 9, width: 7, height: 0.6, dim_unit: 'in', weight: 0.9, weight_unit: 'lb' };
-  } else if (title.includes('sistema')) {
-    return { length: 8, width: 6, height: 0.5, dim_unit: 'in', weight: 0.7, weight_unit: 'lb' };
-  } else if (title.includes('nobody')) {
-    return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.0, weight_unit: 'lb' };
-  } else if (title.includes('collective')) {
-    return { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
-  }
-  return { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+  const title = (book.title || '').toLowerCase();
+  const legacyId = LEGACY_TITLE_PRESET_IDS.find(id => title.includes(id));
+  if (legacyId) return { specs: { ...BOOK_SHIP_PRESETS[legacyId] }, source: 'preset' };
+
+  return { specs: { ...GENERIC_SHIP_SPECS }, source: 'generic' };
+}
+
+function getBookPresetSpecs(book) {
+  return resolveBookPresetSpecs(book).specs;
 }
 
 function initShippingTab() {
@@ -1028,7 +1049,8 @@ function initShippingTab() {
     weight_unit: $('sp-weight-unit').value || 'lb'
   };
   renderCustomShippoDestPicker();
-  renderShippoIncotermHint();
+  loadShippoIncotermPreference($('st-country')?.value || '');
+  updateShippoCustomsTotalHint();
   renderShippingAnalysisHub();
 }
 
@@ -1284,6 +1306,7 @@ function clearShippoDestSelection(e) {
   $('st-state').value = '';
   $('st-zip').value = '';
   $('st-country').value = 'US';
+  onShippoDestCountryChange();
 }
 
 function getRecentShippingOrders() {
@@ -1372,6 +1395,7 @@ function onShippoPreFillDestChange() {
     $('st-state').value = addr.state || '';
     $('st-zip').value = addr.zip || '';
     $('st-country').value = addr.country || 'US';
+    onShippoDestCountryChange();
     showToast('✓ Destination populated');
 
     // Older cached orders were fetched without the contact resources, so the phone
@@ -1391,7 +1415,7 @@ function onShippoBookPresetChange() {
   const book = BOOKS[select.value];
   if (!book) return;
 
-  const specs = getBookPresetSpecs(book);
+  const { specs, source } = resolveBookPresetSpecs(book);
 
   // Set quantity back to 1
   const qtyInput = $('sp-qty');
@@ -1421,7 +1445,13 @@ function onShippoBookPresetChange() {
     weight_unit: specs.weight_unit
   };
 
-  showToast(`✓ Package preset loaded: ${book.title}`);
+  updateShippoCustomsTotalHint();
+
+  if (source === 'generic') {
+    showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor.`, 'warn', 6000);
+  } else {
+    showToast(`✓ Package preset loaded: ${book.title}`);
+  }
 }
 
 function isCanadaPostRate(rate) {
@@ -1530,6 +1560,52 @@ function resolveShippoIncoterm(destCountryCode) {
   const choice = String($('sp-incoterm')?.value || 'auto');
   if (choice !== 'auto') return choice;
   return normalizeCountryCode(destCountryCode) === 'US' ? 'DDP' : 'DDU';
+}
+
+const INCOTERM_PREF_PREFIX = 'lm-shippo-incoterm-';
+
+// A deliberate DDU choice for, say, the UK should survive a reload the same way
+// the saved origin does — but it is remembered per destination country, so it
+// can never silently carry a non-DDP choice over to a US shipment.
+function loadShippoIncotermPreference(destCountryCode) {
+  const country = normalizeCountryCode(destCountryCode);
+  if (!country) return;
+  const select = $('sp-incoterm');
+  if (!select) return;
+  let stored = '';
+  try { stored = localStorage.getItem(`${INCOTERM_PREF_PREFIX}${country}`) || ''; } catch (_) { /* private mode */ }
+  const allowed = Array.from(select.options).map(option => option.value);
+  select.value = allowed.includes(stored) ? stored : 'auto';
+  renderShippoIncotermHint();
+}
+
+function saveShippoIncotermPreference(destCountryCode) {
+  const country = normalizeCountryCode(destCountryCode);
+  const choice = String($('sp-incoterm')?.value || 'auto');
+  if (!country) return;
+  try { localStorage.setItem(`${INCOTERM_PREF_PREFIX}${country}`, choice); } catch (_) { /* private mode */ }
+}
+
+function onShippoDestCountryChange() {
+  loadShippoIncotermPreference($('st-country')?.value || '');
+}
+
+function onShippoIncotermChange() {
+  saveShippoIncotermPreference($('st-country')?.value || '');
+  renderShippoIncotermHint();
+}
+
+// The customs value input is per copy, but what Shippo declares is the line
+// total. Show that total so the declared amount is visible before purchase
+// rather than only discoverable in the API payload.
+function updateShippoCustomsTotalHint() {
+  const hint = $('sp-customs-total');
+  if (!hint) return;
+  const qty = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
+  const unitValue = Math.max(0.01, parseFloat($('sp-customs-value')?.value) || 25);
+  hint.textContent = qty === 1
+    ? `Declared to customs: ${unitValue.toFixed(2)} CAD`
+    : `Declared to customs: ${qty} × ${unitValue.toFixed(2)} = ${(unitValue * qty).toFixed(2)} CAD`;
 }
 
 function renderShippoIncotermHint() {
@@ -4239,6 +4315,7 @@ function onShippoQuantityChange() {
 
   $('sp-height').value = parseFloat(scaledHeight.toFixed(2));
   $('sp-weight').value = parseFloat(scaledWeight.toFixed(2));
+  updateShippoCustomsTotalHint();
 
   showToast(`✓ Scaled specs for ${qty} ${qty === 1 ? 'copy' : 'copies'}`);
 }
@@ -4288,6 +4365,12 @@ export {
   isInternationalShipment,
   resolveShippoIncoterm,
   renderShippoIncotermHint,
+  resolveBookPresetSpecs,
+  loadShippoIncotermPreference,
+  saveShippoIncotermPreference,
+  onShippoIncotermChange,
+  onShippoDestCountryChange,
+  updateShippoCustomsTotalHint,
   readShippoCustomsValue,
   buildShippoCustomsDeclaration,
   collectShippoMessages,

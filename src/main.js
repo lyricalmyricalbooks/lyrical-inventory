@@ -191,6 +191,9 @@ import {
   updateShippoBaseSpecsFromInputs,
   onShippoQuantityChange,
   renderShippoIncotermHint,
+  onShippoIncotermChange,
+  onShippoDestCountryChange,
+  updateShippoCustomsTotalHint,
 } from './features/shipping.js';
 import {
   ocList,
@@ -21396,7 +21399,8 @@ function exposeLegacyInlineHandlers() {
     moneyAmount, roundShippingCharge, buildShippingChargePrediction,
     renderShippingChargePrediction, collectShippoMessages, renderShippoDiagnostics,
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
-    renderShippoIncotermHint,
+    renderShippoIncotermHint, onShippoIncotermChange, onShippoDestCountryChange,
+    updateShippoCustomsTotalHint,
     buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV, openInventoryValuationModal, printInventoryValuationReport,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange, setShipAnalysisMarginFilter,
     onShipAnalysisSearch, onInlinePostageChange,
@@ -21468,6 +21472,9 @@ window.calculateShippoRates = calculateShippoRates;
 window.updateShippoBaseSpecsFromInputs = updateShippoBaseSpecsFromInputs;
 window.onShippoQuantityChange = onShippoQuantityChange;
 window.renderShippoIncotermHint = renderShippoIncotermHint;
+window.onShippoIncotermChange = onShippoIncotermChange;
+window.onShippoDestCountryChange = onShippoDestCountryChange;
+window.updateShippoCustomsTotalHint = updateShippoCustomsTotalHint;
 window.buyShippoLabel = buyShippoLabel;
 window.validateDestinationAddress = validateDestinationAddress;
 window.downloadInventoryValuationCSV = downloadInventoryValuationCSV;
