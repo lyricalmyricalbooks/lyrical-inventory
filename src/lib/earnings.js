@@ -38,10 +38,12 @@ export function calcArtistEarnings(book, state) {
 
   const capOf = (t) => tierEffectiveCap(t, book.productionCost);
 
-  const sortedHist = [...(s.hist || [])].reverse()
-    .filter(h => !h.voided && !h.gratuity && h.qty > 0 && h.price > 0);
+  // ⚡ Bolt Optimization: Replace O(N) array allocations (spread, reverse, filter) with a backward imperative loop
+  const hist = s.hist || [];
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const h = hist[i];
+    if (h.voided || h.gratuity || !(h.qty > 0) || !(h.price > 0)) continue;
 
-  sortedHist.forEach(h => {
     const isHeld = !!h.artistPending;
     let revRemaining = roundCents(h.qty * h.price);
     if (isHeld) heldByArtistGross = roundCents(heldByArtistGross + revRemaining);
@@ -60,7 +62,7 @@ export function calcArtistEarnings(book, state) {
       cumulativeRevenue = roundCents(cumulativeRevenue + capacity);
       revRemaining = roundCents(revRemaining - capacity);
     }
-  });
+  }
 
   // ⚡ Bolt Optimization: Loop Fusion
   // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
