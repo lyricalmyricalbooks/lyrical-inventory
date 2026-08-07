@@ -588,7 +588,8 @@ function tcRenderQuickTripChips() {
   const tripSummary = _tcGetTripsSummaryAll();
   const sortedTrips = Object.keys(tripSummary)
     .map(name => ({ name, ...tripSummary[name] }))
-    .sort((a, b) => (b.latestDate || '').localeCompare(a.latestDate || ''))
+    // ⚡ Bolt: standard string inequality is much faster than localeCompare for YYYY-MM-DD
+    .sort((a, b) => (b.latestDate || '') < (a.latestDate || '') ? -1 : ((b.latestDate || '') > (a.latestDate || '') ? 1 : 0))
     .slice(0, 5);
 
   if (sortedTrips.length === 0) {
@@ -1312,7 +1313,8 @@ function _tcRenderSelectedCashFlowBucket() {
     return;
   }
 
-  const rows = _tcCashFlowBucketRows(key).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  // ⚡ Bolt: standard string inequality is much faster than localeCompare for YYYY-MM-DD
+  const rows = _tcCashFlowBucketRows(key).sort((a, b) => (a.date || '') < (b.date || '') ? -1 : ((a.date || '') > (b.date || '') ? 1 : 0));
   const expenseRows = rows.filter((r) => !r.isIncome);
   const incomeRows = rows.filter((r) => r.isIncome);
   const activeType = data.detailType === 'income' || data.detailType === 'expenses' ? data.detailType : 'all';
