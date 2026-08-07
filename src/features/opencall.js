@@ -784,9 +784,11 @@ function renderOpenCall() {
     } else if (ocSortBy === 'nameDesc') {
       return (b.name || '').localeCompare(a.name || '');
     } else if (ocSortBy === 'dateAsc') {
-      return (a.createdAt || '').localeCompare(b.createdAt || '');
+      // ⚡ Bolt: standard string inequality is much faster than localeCompare for YYYY-MM-DD
+      return (a.createdAt || '') < (b.createdAt || '') ? -1 : ((a.createdAt || '') > (b.createdAt || '') ? 1 : 0);
     } else if (ocSortBy === 'dateDesc') {
-      return (b.createdAt || '').localeCompare(a.createdAt || '');
+      // ⚡ Bolt: standard string inequality is much faster than localeCompare for YYYY-MM-DD
+      return (b.createdAt || '') < (a.createdAt || '') ? -1 : ((b.createdAt || '') > (a.createdAt || '') ? 1 : 0);
     } else if (ocSortBy === 'progressDesc' || ocSortBy === 'progressAsc') {
       const getProgress = (c) => OC_STAGES.filter(st => c[st.key]).length;
       return ocSortBy === 'progressDesc' ? getProgress(b) - getProgress(a) : getProgress(a) - getProgress(b);
