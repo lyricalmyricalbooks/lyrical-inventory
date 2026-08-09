@@ -93,6 +93,16 @@ import {
   saveNewTrip,
   deleteTripRecord,
   logExpenseForTrip,
+  openPendingExpense,
+  tcPendingValidate,
+  tcPendingRemindIn,
+  savePendingExpense,
+  deletePendingExpense,
+  snoozePendingExpense,
+  confirmPendingExpense,
+  _tcClearConfirmedPending,
+  _tcPendingList,
+  _tcRenderPendingPanel,
   exportTripPDF,
   _tcTripReportReceipts,
   _tcIsPdfName,
@@ -15674,9 +15684,16 @@ async function submitTaxExpense() {
   const trip = ($('tc-exp-trip')?.value || '').trim();
   TAX_CENTER.businessExpenses.unshift({ id: Date.now(), desc, cat, currency, amount, fxRate, baseAmount, date, ref: '', receipt: receiptUrl, trip });
 
+  // If this submit came from "Confirm & log" on a pending note, that note's
+  // job is done — clear it so the reminder doesn't fire again for an expense
+  // that is now actually in the ledger.
+  const clearedPending = _tcClearConfirmedPending();
+
   saveTaxCenter();
   renderTaxCenter();
-  showToast(trip ? `✓ Logged to trip: ${trip}` : '✓ Business Expense logged');
+  showToast(clearedPending
+    ? `✓ Logged — pending note cleared${trip ? ` · ${trip}` : ''}`
+    : (trip ? `✓ Logged to trip: ${trip}` : '✓ Business Expense logged'));
   $('tc-exp-desc').value = ''; $('tc-exp-amount').value = ''; $('tc-exp-date').value = today();
   if ($('tc-exp-trip')) $('tc-exp-trip').value = '';
   if (fileInput) fileInput.value = '';
@@ -21713,6 +21730,8 @@ function exposeLegacyInlineHandlers() {
     _tcTripRecords, _tcFindTripRecord, openNewTrip, openEditTripDetails,
     tcNewTripValidate, saveNewTrip, deleteTripRecord, logExpenseForTrip,
     exportTripPDF, _tcTripReportReceipts, _tcIsPdfName, _tcBlobToDataUrl,
+    openPendingExpense, tcPendingValidate, tcPendingRemindIn, savePendingExpense,
+    deletePendingExpense, snoozePendingExpense, confirmPendingExpense, _tcPendingList,
     _tcPdfToImages, _tcResolveReceiptImages, resolveLocalReceiptFile, ensurePdfJs,
     openEditTrip, saveTripAssignment, renderEditExpenseReceipts, relinkEditExpenseReceipt, removeEditExpenseReceipt,
     batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,

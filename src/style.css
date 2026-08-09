@@ -7462,6 +7462,226 @@ tr.hist-row:hover {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   PENDING / TO-CONFIRM EXPENSES — Tax Centre
+   Deliberately styled apart from the ledger: this is a to-do list of costs
+   that AREN'T money yet, so it reads as a reminder tray, not another table.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tc-pending-card {
+  border: 1px dashed var(--gold-line) !important;
+}
+
+.tc-pending-count {
+  display: inline-block;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  color: var(--content-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 2px 9px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.tc-pending-count.is-due {
+  color: var(--status-critical);
+  background: var(--status-critical-bg);
+  border-color: transparent;
+}
+
+.tc-pending-count.is-empty {
+  display: none;
+}
+
+.tc-pending-empty {
+  text-align: center;
+  padding: 30px 20px;
+  background: var(--surface-sunken);
+  border: 1px dashed var(--border-default);
+  border-radius: 12px;
+}
+
+.tc-pending-empty-icon {
+  font-size: var(--text-2xl);
+  margin-bottom: var(--space-2);
+}
+
+.tc-pending-empty-title {
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--content-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.tc-pending-empty-sub {
+  font-size: var(--text-sm);
+  color: var(--content-muted);
+  max-width: 46ch;
+  margin: 0 auto;
+  line-height: var(--leading-snug);
+}
+
+.tc-pending-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+  background: var(--surface-raised);
+  margin-bottom: var(--space-2);
+}
+
+.tc-pending-row.tc-due-overdue {
+  border-color: var(--status-critical);
+  background: var(--status-critical-bg);
+}
+
+.tc-pending-row.tc-due-today {
+  border-color: var(--gold-line);
+  background: var(--gold-bg);
+}
+
+.tc-pending-main {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.tc-pending-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tc-pending-desc {
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--content-primary);
+}
+
+.tc-due-badge {
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  color: var(--content-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+}
+
+.tc-due-badge.tc-due-overdue {
+  color: var(--content-on-inverse);
+  background: var(--status-critical);
+  border-color: transparent;
+}
+
+.tc-due-badge.tc-due-today {
+  color: var(--gold-text);
+  background: var(--gold-bg);
+  border-color: var(--gold-line);
+}
+
+.tc-due-badge.tc-due-soon {
+  color: var(--status-active);
+  background: var(--status-active-bg);
+  border-color: transparent;
+}
+
+.tc-pending-meta {
+  font-size: var(--text-xs);
+  color: var(--content-muted);
+  margin-top: 4px;
+}
+
+.tc-pending-note {
+  font-size: var(--text-xs);
+  color: var(--content-muted);
+  font-style: italic;
+  margin-top: 6px;
+  padding: 6px 9px;
+  background: var(--surface-sunken);
+  border-left: 2px solid var(--gold-line);
+  border-radius: 4px;
+  max-width: 60ch;
+}
+
+.tc-pending-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.tc-pending-amt {
+  font-weight: 700;
+  font-size: var(--text-base);
+  color: var(--content-primary);
+  white-space: nowrap;
+}
+
+.tc-pending-amt.is-unknown {
+  font-weight: 500;
+  font-style: italic;
+  font-size: var(--text-xs);
+  color: var(--content-muted);
+}
+
+.tc-pending-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tc-pending-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  color: var(--content-muted);
+}
+
+.tc-pending-quick {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.tc-pending-quick .btn {
+  font-size: var(--text-2xs);
+  padding: 3px 9px;
+  height: auto;
+}
+
+@media (max-width: 640px) {
+  .tc-pending-row {
+    flex-direction: column;
+  }
+  .tc-pending-right {
+    align-items: flex-start;
+    width: 100%;
+  }
+  .tc-pending-actions {
+    justify-content: flex-start;
+  }
+}
+
 .tc-trip-cat-bar {
   height: 7px;
   border-radius: 4px;

@@ -1291,6 +1291,7 @@
   <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn gold" onclick="logExpenseForTrip()">➕ Log expense to this trip</button>
+      <button class="btn" onclick="openPendingExpense(null, _tcOpenTripName)">🕑 Note a pending expense</button>
       <button class="btn" onclick="openEditTripDetails()">✎ Edit trip details</button>
       <button class="btn" onclick="renameTripPrompt()">✎ Rename trip</button>
       <button class="btn gold outline" onclick="exportTripPDF()">🖨 Trip report (PDF)</button>
@@ -1298,6 +1299,83 @@
       <button class="btn tag" onclick="setTripBudgetPrompt(_tcOpenTripName)">🎯 Set budget</button>
     </div>
     <button class="btn" onclick="closeM('tc-trip-detail')">Close</button>
+  </div>
+</div></div>
+
+<!-- PENDING EXPENSE MODAL -->
+<div class="overlay" id="m-tc-pending" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:600px;">
+  <div class="modal-title" role="dialog" aria-modal="true"><span id="tc-pending-heading">Note a pending expense</span></div>
+  <div class="tc-trip-form-intro">
+    For costs you know are coming but can't log yet. Only the description is required — fill in whatever you have, set a reminder, and confirm it later when the receipt or amount arrives. Pending notes never touch your ledger totals or tax exports.
+  </div>
+
+  <div class="tc-trip-form">
+    <div class="form-group tc-trip-form-full">
+      <label for="tc-pending-desc">What is it? <span class="tc-req">required</span></label>
+      <input type="text" id="tc-pending-desc" autocomplete="off" placeholder="e.g. Hotel invoice for Mexico City fair" oninput="tcPendingValidate()">
+    </div>
+
+    <div class="form-group">
+      <label for="tc-pending-cat">Tax category <span class="tc-opt">optional</span></label>
+      <select id="tc-pending-cat"></select>
+    </div>
+
+    <div class="form-group">
+      <label for="tc-pending-amount">Estimated amount <span class="tc-opt">optional</span></label>
+      <div class="price-wrap">
+        <select id="tc-pending-cur" style="flex:0 0 66px;margin-right:4px;">
+          <option value="CAD">CAD</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="MXN">MXN</option>
+        </select>
+        <input type="number" inputmode="decimal" id="tc-pending-amount" step="0.01" min="0" placeholder="0.00" style="flex:1;">
+      </div>
+      <div class="tc-field-hint">A rough figure is fine — it is shown as an estimate only.</div>
+    </div>
+
+    <div class="form-group">
+      <label for="tc-pending-date">Expected expense date <span class="tc-opt">optional</span></label>
+      <input type="date" id="tc-pending-date">
+    </div>
+
+    <div class="form-group">
+      <label for="tc-pending-remind">Remind me on <span class="tc-opt">optional</span></label>
+      <input type="date" id="tc-pending-remind">
+      <div class="tc-pending-quick">
+        <button type="button" class="btn tag" onclick="tcPendingRemindIn(1)">Tomorrow</button>
+        <button type="button" class="btn tag" onclick="tcPendingRemindIn(7)">In a week</button>
+        <button type="button" class="btn tag" onclick="tcPendingRemindIn(30)">In a month</button>
+        <button type="button" class="btn tx" onclick="tcPendingRemindIn(null)">Clear</button>
+      </div>
+    </div>
+
+    <div class="form-group tc-trip-form-full">
+      <label for="tc-pending-trip">Trip / Project <span class="tc-opt">optional</span></label>
+      <div class="tc-trip-picker-wrapper">
+        <div class="tc-trip-input-container">
+          <input type="text" id="tc-pending-trip" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025" onfocus="tcOpenTripDropdown('tc-pending-trip')" oninput="tcFilterTripDropdown('tc-pending-trip')">
+          <button class="tc-trip-dropdown-btn" type="button" onclick="tcToggleTripDropdown('tc-pending-trip')" tabindex="-1">▼</button>
+          <div id="tc-pending-trip-menu" class="tc-trip-dropdown-menu"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group tc-trip-form-full">
+      <label for="tc-pending-note">Note to self <span class="tc-opt">optional</span></label>
+      <textarea id="tc-pending-note" rows="2" placeholder="Who to chase, what you're waiting on, where the receipt will come from."></textarea>
+    </div>
+  </div>
+
+  <div class="tc-trip-form-err" id="tc-pending-err" style="display:none;"></div>
+
+  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:16px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <button class="btn danger-btn" id="tc-pending-delete" onclick="deletePendingExpense()" style="display:none;">🗑 Delete note</button>
+    <div style="display:flex;gap:8px;margin-left:auto;">
+      <button class="btn" onclick="closeM('tc-pending')">Cancel</button>
+      <button class="btn gold" id="tc-pending-save" onclick="savePendingExpense()">Save note</button>
+    </div>
   </div>
 </div></div>
 
@@ -1838,6 +1916,18 @@
         <button class="btn tx" style="font-size:12px;padding:4px 12px;color:var(--text3);" onclick="openEmailReceiptImportModal()" title="Import expenses from forwarded receipt emails">📧 Import from Email instead<span id="email-inbox-badge" style="display:none;background:#c79a3a;color:#1a1206;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700;margin-left:6px;vertical-align:middle;"></span></button>
       </div>
     </div>
+  </div>
+
+  <!-- PENDING / TO-CONFIRM EXPENSES -->
+  <div class="card tc-pending-card" style="margin-bottom:1.5rem;">
+    <div class="rec-head">
+      <div>
+        <div class="rec-card-title">Pending &amp; To Confirm <span class="tc-pending-count" id="tc-pending-count"></span></div>
+        <div class="rec-card-sub">Expenses you know about but can't log yet — no amount, no receipt, no final date. Kept out of your ledger totals until you confirm them.</div>
+      </div>
+      <button class="btn gold" onclick="openPendingExpense()">+ Note a pending expense</button>
+    </div>
+    <div id="tc-pending-list"></div>
   </div>
 
   <div class="card rec-card" style="margin-bottom:1.5rem;">
