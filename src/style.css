@@ -7353,6 +7353,18 @@ tr.hist-row:hover {
   line-height: var(--leading-snug);
 }
 
+/* Brief ring on the card the page just scrolled to, so the jump from a trip
+   into the expense logger lands somewhere obvious. */
+.tc-flash-target {
+  animation: tc-flash-ring var(--dur-slow) var(--ease-entrance) 2 alternate;
+  border-color: var(--gold-line) !important;
+}
+
+@keyframes tc-flash-ring {
+  from { box-shadow: var(--elev-1); }
+  to { box-shadow: var(--focus-ring-halo), var(--elev-2); }
+}
+
 /* Trips header actions: view toggle + the New trip button. */
 .tc-trips-actions {
   display: flex;

@@ -942,6 +942,200 @@ async function deleteTripRecord() {
   showToast(`✓ Trip "${name}" deleted`);
 }
 
+// Jump from a trip straight into the expense logger with the trip pre-filled.
+// Without this, a freshly created trip tells you to go assign an expense and
+// then leaves you to scroll up and retype its name — the one place the whole
+// flow could still lose the connection it just made.
+function logExpenseForTrip(tripName) {
+  const name = (tripName || _tcOpenTripName || '').trim();
+  if (!name) return;
+  closeM('tc-trip-detail');
+  tcSelectTripOption('tc-exp-trip', name);
+
+  const card = $('tc-expense-form-card');
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // A brief ring so it is obvious *which* card the page just jumped to.
+    card.classList.add('tc-flash-target');
+    setTimeout(() => card.classList.remove('tc-flash-target'), 1600);
+  }
+  setTimeout(() => $('tc-exp-desc')?.focus(), 400);
+  showToast(`Logging to “${name}” — fill in the expense below`);
+}
+
+// ── PRINTABLE TRIP REPORT ─────────────────────────────────────────────────
+// A standalone document (its own stylesheet, no app chrome) printed from a
+// popup, matching how invoices and the sales tracker already print. Remote
+// receipt URLs embed as thumbnails; local:// receipts live in the publisher's
+// own folder and can't be read from a detached document, so they are listed
+// by filename instead of silently printing as broken images.
+function _tcTripReportReceipts(items) {
+  const remote = [];
+  const local = [];
+  items.forEach(item => {
+    const files = (Array.isArray(item.receiptFiles) && item.receiptFiles.length)
+      ? item.receiptFiles
+      : (item.receipt ? [item.receipt] : []);
+    files.forEach(r => {
+      if (typeof r !== 'string' || !r) return;
+      if (r.startsWith('local://')) local.push({ name: r.replace('local://', '').split('/').pop(), desc: item.desc || '' });
+      else if (/^https?:\/\//i.test(r)) remote.push({ url: r, desc: item.desc || '', date: item.date || '' });
+    });
+  });
+  return { remote, local };
+}
+
+function exportTripPDF(tripName) {
+  const name = (tripName || _tcOpenTripName || '').trim();
+  const detail = window._tcTripDetail;
+  if (!name || !detail || !detail.byName || !detail.byName[name]) {
+    showToast('⚠ Trip details not found', 'warn');
+    return;
+  }
+
+  const { baseCurrency } = detail;
+  const { items, total, count, categories } = detail.byName[name];
+  const rec = _tcFindTripRecord(name);
+  const budget = TAX_CENTER.tripBudgets?.[name] || 0;
+
+  const sorted = items.slice().sort((a, b) => {
+    const dA = a.date || '';
+    const dB = b.date || '';
+    return dA > dB ? 1 : dA < dB ? -1 : 0;
+  });
+
+  const metaRows = [
+    rec?.destination ? ['Destination', rec.destination] : null,
+    (rec?.startDate || rec?.endDate) ? ['Dates', [rec.startDate, rec.endDate].filter(Boolean).join(' – ')] : null,
+    rec?.purpose ? ['Business purpose', rec.purpose] : null,
+    ['Expenses', `${count} item${count === 1 ? '' : 's'}`],
+    ['Reporting currency', baseCurrency],
+  ].filter(Boolean).map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join('');
+
+  let budgetLine = '';
+  if (budget > 0) {
+    const over = total > budget;
+    const delta = Math.abs(total - budget);
+    budgetLine = `<div class="budget ${over ? 'over' : 'under'}">
+      Budget ${fmt(budget, baseCurrency)} &nbsp;·&nbsp;
+      ${over ? `Over by ${fmt(delta, baseCurrency)}` : `${fmt(delta, baseCurrency)} remaining`}
+    </div>`;
+  }
+
+  const catRows = Object.entries(categories || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([cat, amt]) => `<tr>
+      <td>${escapeHtml(cat)}</td>
+      <td class="r">${total > 0 ? ((amt / total) * 100).toFixed(1) : '0.0'}%</td>
+      <td class="r">${fmt(amt, baseCurrency)}</td>
+    </tr>`).join('') || '<tr><td colspan="3" class="empty">No expenses assigned to this trip.</td></tr>';
+
+  const expenseRows = sorted.map(item => `<tr>
+      <td>${escapeHtml(item.date || '—')}</td>
+      <td>${escapeHtml(item.desc || '')}</td>
+      <td>${escapeHtml(item.cat || '')}</td>
+      <td class="r">${escapeHtml(getSym(item.origCurrency || 'CAD'))}${Number(item.origAmount || 0).toFixed(2)}</td>
+      <td class="r">${fmt(item.baseAmount, baseCurrency)}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="empty">No expenses assigned to this trip yet.</td></tr>';
+
+  const { remote, local } = _tcTripReportReceipts(sorted);
+  const thumbs = remote.map(r => `<figure class="thumb">
+      <img src="${escapeHtml(r.url)}" alt="${escapeHtml(r.desc)}">
+      <figcaption>${escapeHtml([r.date, r.desc].filter(Boolean).join(' · '))}</figcaption>
+    </figure>`).join('');
+  const localList = local.length
+    ? `<div class="local-note"><b>${local.length} receipt${local.length === 1 ? '' : 's'} stored in your local receipt folder</b> (not embedded):
+        ${local.map(l => escapeHtml(l.name)).join(', ')}</div>`
+    : '';
+  const receiptsSection = (thumbs || localList)
+    ? `<h2>Receipts</h2>${thumbs ? `<div class="thumbs">${thumbs}</div>` : ''}${localList}`
+    : '';
+
+  const printedOn = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>Trip report — ${escapeHtml(name)}</title>
+  <style>
+    @page { size: letter portrait; margin: 0.55in; }
+    * { box-sizing: border-box; }
+    html, body { background: #fff; color: #14110e; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10.5pt; line-height: 1.45; }
+    .head { border-bottom: 2px solid #14110e; padding-bottom: 12px; margin-bottom: 18px; }
+    .eyebrow { font-size: 8.5pt; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: #8a5815; }
+    h1 { margin: 6px 0 2px; font-size: 21pt; font-weight: 800; letter-spacing: -.01em; }
+    .sub { font-size: 9.5pt; color: #6b635c; }
+    .totals { display: flex; align-items: baseline; gap: 12px; margin: 16px 0 6px; }
+    .totals .amount { font-size: 20pt; font-weight: 800; }
+    .totals .label { font-size: 9pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #6b635c; }
+    .budget { display: inline-block; font-size: 9.5pt; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 14px; }
+    .budget.under { background: #e7f4ea; color: #1f6b36; }
+    .budget.over { background: #fbe9e6; color: #97281a; }
+    h2 { font-size: 11pt; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #8a5815; margin: 22px 0 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e3ddd3; vertical-align: top; }
+    thead th { font-size: 8.5pt; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6b635c; border-bottom: 1.5px solid #14110e; }
+    td.r, th.r { text-align: right; }
+    td.empty { text-align: center; color: #6b635c; font-style: italic; }
+    tfoot td { font-weight: 800; border-top: 1.5px solid #14110e; border-bottom: none; }
+    .meta th { width: 34%; font-weight: 700; color: #6b635c; }
+    .notes { margin-top: 10px; padding: 10px 12px; background: #faf7f1; border-left: 3px solid #c8913a; font-size: 9.5pt; }
+    .thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
+    .thumb { margin: 0; width: 30%; }
+    .thumb img { width: 100%; border: 1px solid #e3ddd3; border-radius: 4px; }
+    .thumb figcaption { font-size: 8pt; color: #6b635c; margin-top: 3px; }
+    .local-note { margin-top: 10px; font-size: 9pt; color: #6b635c; }
+    .foot { margin-top: 26px; padding-top: 10px; border-top: 1px solid #e3ddd3; font-size: 8.5pt; color: #6b635c; }
+    @media print { .thumb { break-inside: avoid; } tr { break-inside: avoid; } }
+  </style>
+  </head><body>
+    <div class="head">
+      <div class="eyebrow">Business trip report</div>
+      <h1>${escapeHtml(name)}</h1>
+      <div class="sub">Lyricalmyrical Books &nbsp;·&nbsp; prepared ${escapeHtml(printedOn)}</div>
+    </div>
+
+    <div class="totals">
+      <div class="amount">${fmt(total, baseCurrency)}</div>
+      <div class="label">Total deductible spend</div>
+    </div>
+    ${budgetLine}
+
+    <h2>Trip details</h2>
+    <table class="meta"><tbody>${metaRows}</tbody></table>
+    ${rec?.notes ? `<div class="notes">${escapeHtml(rec.notes)}</div>` : ''}
+
+    <h2>Spend by tax category</h2>
+    <table>
+      <thead><tr><th>Tax category</th><th class="r">Share</th><th class="r">Total (${escapeHtml(baseCurrency)})</th></tr></thead>
+      <tbody>${catRows}</tbody>
+      <tfoot><tr><td>Total</td><td class="r"></td><td class="r">${fmt(total, baseCurrency)}</td></tr></tfoot>
+    </table>
+
+    <h2>Expenses</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Description</th><th>Tax category</th><th class="r">Original</th><th class="r">${escapeHtml(baseCurrency)}</th></tr></thead>
+      <tbody>${expenseRows}</tbody>
+      <tfoot><tr><td colspan="4">Total</td><td class="r">${fmt(total, baseCurrency)}</td></tr></tfoot>
+    </table>
+
+    ${receiptsSection}
+
+    <div class="foot">Amounts converted to ${escapeHtml(baseCurrency)} at the rate stored with each expense. Generated by Lyrical Inventory.</div>
+  </body></html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=1000');
+  if (!win) {
+    showToast('Pop-up blocked — allow pop-ups to print the trip report', 'warn');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  // Give embedded receipt images a moment to load, or they print blank.
+  setTimeout(() => { try { win.print(); } catch (e) { } }, remote.length ? 900 : 350);
+  showToast('✓ Trip report ready — use “Save as PDF” in the print dialog');
+}
+
 function _tcRenderTripsPanel(selectedYear, baseCurrency) {
   const tripBody = $('tc-trip-body');
   const cardsGrid = $('tc-trip-cards-grid');
@@ -1828,6 +2022,9 @@ export {
   tcNewTripValidate,
   saveNewTrip,
   deleteTripRecord,
+  logExpenseForTrip,
+  exportTripPDF,
+  _tcTripReportReceipts,
   _tcRenderTripsPanel,
   _tcBuildLedger,
   _tcRenderStatusHeaders,

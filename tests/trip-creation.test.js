@@ -72,3 +72,55 @@ describe('_tcTripRecords / _tcFindTripRecord', () => {
     expect(_tcFindTripRecord(undefined)).toBe(null);
   });
 });
+
+describe('Trip expense shortcut & printable report', () => {
+  it('offers both actions from the trip detail modal', () => {
+    expect(html).toContain('onclick="logExpenseForTrip()"');
+    expect(html).toContain('onclick="exportTripPDF()"');
+    // The shortcut needs a scroll target on the expense form card.
+    expect(html).toContain('id="tc-expense-form-card"');
+  });
+
+  it('declares the shortcut and report functions', () => {
+    expect(appSource).toContain('function logExpenseForTrip');
+    expect(appSource).toContain('function exportTripPDF');
+    expect(appSource).toContain('function _tcTripReportReceipts');
+  });
+
+  it('styles the scroll-target flash', () => {
+    expect(css).toContain('.tc-flash-target');
+    expect(css).toContain('@keyframes tc-flash-ring');
+  });
+});
+
+describe('_tcTripReportReceipts', () => {
+  const _tcTripReportReceipts = new Function(
+    `${extractDecl('_tcTripReportReceipts')}\nreturn _tcTripReportReceipts;`,
+  )();
+
+  it('splits remote receipts (embeddable) from local ones (listed by name)', () => {
+    const { remote, local } = _tcTripReportReceipts([
+      { desc: 'Hotel', date: '2026-03-02', receipt: 'https://example.com/a.jpg' },
+      { desc: 'Booth', date: '2026-03-03', receipt: 'local://receipts/booth-fee.pdf' },
+    ]);
+    expect(remote).toEqual([{ url: 'https://example.com/a.jpg', desc: 'Hotel', date: '2026-03-02' }]);
+    expect(local).toEqual([{ name: 'booth-fee.pdf', desc: 'Booth' }]);
+  });
+
+  it('reads the multi-file receiptFiles array in preference to receipt', () => {
+    const { remote } = _tcTripReportReceipts([
+      { desc: 'Meals', receiptFiles: ['https://x.test/1.png', 'https://x.test/2.png'], receipt: 'https://x.test/ignored.png' },
+    ]);
+    expect(remote.map(r => r.url)).toEqual(['https://x.test/1.png', 'https://x.test/2.png']);
+  });
+
+  it('drops empty and non-http references rather than printing broken images', () => {
+    const { remote, local } = _tcTripReportReceipts([
+      { desc: 'A', receipt: '' },
+      { desc: 'B', receiptFiles: [null, 'javascript:alert(1)', 'ftp://x/y.png'] },
+      { desc: 'C' },
+    ]);
+    expect(remote).toEqual([]);
+    expect(local).toEqual([]);
+  });
+});
