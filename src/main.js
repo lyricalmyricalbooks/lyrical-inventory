@@ -2161,7 +2161,7 @@ async function toggleFirestoreMode() {
     }
 
   } else {
-    const anyOtherFSBook = Object.keys(BOOKS).filter(id => id !== activeBook).some(id => window._useFirestoreForBook(id));
+    const anyOtherFSBook = Object.keys(BOOKS).some(id => id !== activeBook && window._useFirestoreForBook(id));
 
     if (!(await confirmDialog(
       `Revert "${BOOKS[activeBook]?.title || activeBook}" back to Realtime Database?\n\n` +
@@ -13609,8 +13609,13 @@ let _bookRestoreCtx = null;
 // before/after diff in the restore confirmation.
 function _restoreBookStats(st) {
   st = st || {};
+  let salesCount = 0;
+  for (const h of (st.hist || [])) {
+    if (!h.voided) salesCount++;
+  }
+
   return {
-    sales: (st.hist || []).filter(h => !h.voided).length,
+    sales: salesCount,
     ledger: (st.ledger || []).length,
     stock: st.stock,
     hasData: !!((st.hist && st.hist.length) || (st.ledger && st.ledger.length) || (st.sold > 0))
