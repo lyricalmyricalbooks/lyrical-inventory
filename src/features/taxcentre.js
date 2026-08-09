@@ -34,6 +34,8 @@ import {
   isTestBookId,
   loadReceiptFolderHandle,
   loadTaxCenter,
+  openM,
+  closeM,
   openEditSale,
   saveReceiptToLocalFile,
   saveState,
@@ -558,8 +560,58 @@ const TC_TRIP_CAT_COLORS = {
   'Other': '#a8a29e'
 };
 
+// ── DECLARED TRIPS ────────────────────────────────────────────────────────
+// A trip used to exist only as a side effect of typing a name onto an expense,
+// so there was no way to create one up front. TAX_CENTER.trips holds the
+// declared records (name + destination + dates + purpose + notes); expenses
+// still carry the trip *name*, so the two stay joinable by name and every
+// pre-existing trip keeps working with no migration.
+function _tcTripRecords() {
+  if (!Array.isArray(TAX_CENTER.trips)) TAX_CENTER.trips = [];
+  return TAX_CENTER.trips;
+}
+
+function _tcFindTripRecord(name) {
+  const key = (name || '').trim().toLowerCase();
+  if (!key) return null;
+  return _tcTripRecords().find(t => (t.name || '').trim().toLowerCase() === key) || null;
+}
+
+// Meta line for a trip card / detail header: destination and planned dates.
+function _tcTripRecordMeta(rec) {
+  if (!rec) return '';
+  const bits = [];
+  if (rec.destination) bits.push(`📍 ${escapeHtml(rec.destination)}`);
+  if (rec.startDate || rec.endDate) {
+    const span = rec.startDate && rec.endDate && rec.startDate !== rec.endDate
+      ? `${rec.startDate} → ${rec.endDate}`
+      : (rec.startDate || rec.endDate);
+    bits.push(`🗓 ${escapeHtml(span)}`);
+  }
+  if (rec.purpose) bits.push(`🎯 ${escapeHtml(rec.purpose)}`);
+  return bits.join(' &nbsp;·&nbsp; ');
+}
+
+function _tcEmptyTripBucket(rec) {
+  return {
+    total: 0,
+    count: 0,
+    latestDate: (rec && (rec.endDate || rec.startDate)) || '',
+    minDate: (rec && rec.startDate) || '',
+    maxDate: (rec && rec.endDate) || '',
+    items: [],
+    categories: {},
+    record: rec || null,
+  };
+}
+
 function _tcGetTripsSummaryAll() {
   const tripSummary = {};
+  _tcTripRecords().forEach(rec => {
+    const name = (rec.name || '').trim();
+    if (!name) return;
+    tripSummary[name] = _tcEmptyTripBucket(rec);
+  });
   (TAX_CENTER.businessExpenses || []).forEach(e => {
     const t = (e.trip || '').trim();
     if (!t) return;
@@ -730,12 +782,184 @@ function tcSelectTripOption(inputId, tripName) {
   }
 }
 
+// ── CREATE / EDIT A TRIP ──────────────────────────────────────────────────
+// _tcTripEditingName is null for a brand-new trip and holds the original name
+// while editing, so a rename can carry the assigned expenses across with it.
+let _tcTripEditingName = null;
+
+function _tcSetTripFormError(msg) {
+  const box = $('tc-new-trip-err');
+  if (!box) return;
+  box.textContent = msg || '';
+  box.style.display = msg ? 'block' : 'none';
+}
+
+function _tcFillTripForm(rec) {
+  const set = (id, val) => { const el = $(id); if (el) el.value = val ?? ''; };
+  set('tc-new-trip-name', rec?.name);
+  set('tc-new-trip-dest', rec?.destination);
+  set('tc-new-trip-start', rec?.startDate);
+  set('tc-new-trip-end', rec?.endDate);
+  set('tc-new-trip-purpose', rec?.purpose);
+  set('tc-new-trip-notes', rec?.notes);
+  const budget = rec?.name ? (TAX_CENTER.tripBudgets?.[rec.name] || '') : '';
+  set('tc-new-trip-budget', budget);
+  _tcSetTripFormError('');
+}
+
+function openNewTrip(prefillName) {
+  _tcTripEditingName = null;
+  _tcFillTripForm(prefillName ? { name: prefillName } : null);
+  const heading = $('tc-new-trip-heading');
+  if (heading) heading.textContent = 'Create a business trip';
+  const saveBtn = $('tc-new-trip-save');
+  if (saveBtn) saveBtn.textContent = 'Create trip';
+  const delBtn = $('tc-new-trip-delete');
+  if (delBtn) delBtn.style.display = 'none';
+  openM('tc-new-trip');
+  setTimeout(() => $('tc-new-trip-name')?.focus(), 50);
+}
+
+// Opens the same form against the trip currently shown in the detail modal.
+function openEditTripDetails(tripName) {
+  const name = (tripName || _tcOpenTripName || '').trim();
+  if (!name) return;
+  _tcTripEditingName = name;
+  _tcFillTripForm(_tcFindTripRecord(name) || { name });
+  const heading = $('tc-new-trip-heading');
+  if (heading) heading.textContent = 'Edit trip details';
+  const saveBtn = $('tc-new-trip-save');
+  if (saveBtn) saveBtn.textContent = 'Save changes';
+  const delBtn = $('tc-new-trip-delete');
+  if (delBtn) delBtn.style.display = '';
+  closeM('tc-trip-detail');
+  openM('tc-new-trip');
+  setTimeout(() => $('tc-new-trip-name')?.focus(), 50);
+}
+
+// Live validation on the name field: blank and duplicate names are the only
+// two ways this form can be wrong, so say so before the user hits Save.
+function tcNewTripValidate() {
+  const name = ($('tc-new-trip-name')?.value || '').trim();
+  const saveBtn = $('tc-new-trip-save');
+  let err = '';
+  if (!name) {
+    err = '';
+  } else {
+    const clash = _tcFindTripRecord(name);
+    if (clash && (clash.name || '').trim().toLowerCase() !== (_tcTripEditingName || '').trim().toLowerCase()) {
+      err = `A trip called "${clash.name}" already exists.`;
+    }
+  }
+  _tcSetTripFormError(err);
+  if (saveBtn) saveBtn.disabled = !!err;
+  return !err && !!name;
+}
+
+async function saveNewTrip() {
+  const name = ($('tc-new-trip-name')?.value || '').trim();
+  if (!name) {
+    _tcSetTripFormError('Give the trip a name — that is what expenses get grouped under.');
+    $('tc-new-trip-name')?.focus();
+    return;
+  }
+  if (!tcNewTripValidate()) return;
+
+  const startDate = ($('tc-new-trip-start')?.value || '').trim();
+  const endDate = ($('tc-new-trip-end')?.value || '').trim();
+  if (startDate && endDate && endDate < startDate) {
+    _tcSetTripFormError('The end date falls before the start date.');
+    return;
+  }
+
+  const rec = {
+    id: _tcTripEditingName ? (_tcFindTripRecord(_tcTripEditingName)?.id || Date.now()) : Date.now(),
+    name,
+    destination: ($('tc-new-trip-dest')?.value || '').trim(),
+    startDate,
+    endDate,
+    purpose: ($('tc-new-trip-purpose')?.value || '').trim(),
+    notes: ($('tc-new-trip-notes')?.value || '').trim(),
+    created: _tcFindTripRecord(_tcTripEditingName || name)?.created || today(),
+  };
+
+  const records = _tcTripRecords();
+  const existingIdx = records.findIndex(t => (t.name || '').trim().toLowerCase() === (_tcTripEditingName || name).trim().toLowerCase());
+  if (existingIdx >= 0) records[existingIdx] = rec;
+  else records.push(rec);
+
+  // A rename has to follow the expenses, or the trip's spend silently detaches.
+  let moved = 0;
+  if (_tcTripEditingName && _tcTripEditingName !== name) {
+    (TAX_CENTER.businessExpenses || []).forEach(e => {
+      if ((e.trip || '').trim() === _tcTripEditingName) { e.trip = name; moved++; }
+    });
+    if (TAX_CENTER.tripBudgets?.[_tcTripEditingName] != null) {
+      TAX_CENTER.tripBudgets[name] = TAX_CENTER.tripBudgets[_tcTripEditingName];
+      delete TAX_CENTER.tripBudgets[_tcTripEditingName];
+    }
+  }
+
+  const budgetRaw = ($('tc-new-trip-budget')?.value || '').trim();
+  const budget = parseFloat(budgetRaw);
+  if (!TAX_CENTER.tripBudgets) TAX_CENTER.tripBudgets = {};
+  if (budgetRaw && !isNaN(budget) && budget > 0) TAX_CENTER.tripBudgets[name] = budget;
+  else delete TAX_CENTER.tripBudgets[name];
+
+  const wasEditing = _tcTripEditingName;
+  _tcTripEditingName = null;
+  closeM('tc-new-trip');
+  await saveTaxCenter();
+  renderTaxCenter();
+
+  if (wasEditing) {
+    showToast(moved ? `✓ Trip updated (${moved} expense${moved === 1 ? '' : 's'} moved)` : '✓ Trip updated');
+  } else {
+    showToast(`✓ Trip "${name}" created — assign expenses to it when you log them`);
+    // Pre-select the fresh trip in the expense logger so the next thing the
+    // user types lands on it.
+    tcSelectTripOption('tc-exp-trip', name);
+  }
+}
+
+async function deleteTripRecord() {
+  const name = _tcTripEditingName;
+  if (!name) return;
+  const assigned = (TAX_CENTER.businessExpenses || []).filter(e => (e.trip || '').trim() === name).length;
+  const msg = assigned
+    ? `Delete the trip "${name}"? The ${assigned} expense${assigned === 1 ? '' : 's'} assigned to it stay in your ledger but lose the trip grouping.`
+    : `Delete the trip "${name}"?`;
+  if (!(await confirmDialog(msg, { okLabel: 'Delete trip', danger: true }))) return;
+
+  TAX_CENTER.trips = _tcTripRecords().filter(t => (t.name || '').trim().toLowerCase() !== name.trim().toLowerCase());
+  (TAX_CENTER.businessExpenses || []).forEach(e => { if ((e.trip || '').trim() === name) e.trip = ''; });
+  if (TAX_CENTER.tripBudgets) delete TAX_CENTER.tripBudgets[name];
+
+  _tcTripEditingName = null;
+  closeM('tc-new-trip');
+  await saveTaxCenter();
+  renderTaxCenter();
+  showToast(`✓ Trip "${name}" deleted`);
+}
+
 function _tcRenderTripsPanel(selectedYear, baseCurrency) {
   const tripBody = $('tc-trip-body');
   const cardsGrid = $('tc-trip-cards-grid');
   const statsBar = $('tc-trip-stats-bar');
 
   const tripSummary = {};
+  // Declared trips show up even with zero expenses — that is the whole point of
+  // being able to create one before you have spent anything on it. A trip with
+  // dates outside the selected year is filtered out like its expenses would be.
+  _tcTripRecords().forEach(rec => {
+    const name = (rec.name || '').trim();
+    if (!name) return;
+    if (selectedYear !== 'all') {
+      const years = [rec.startDate, rec.endDate, rec.created].filter(Boolean).map(d => String(d).substring(0, 4));
+      if (years.length && !years.includes(selectedYear)) return;
+    }
+    tripSummary[name] = _tcEmptyTripBucket(rec);
+  });
   (TAX_CENTER.businessExpenses || []).forEach(e => {
     const eYear = e.date ? e.date.substring(0, 4) : '';
     if (selectedYear !== 'all' && eYear !== selectedYear) return;
@@ -798,21 +1022,23 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
         <div style="grid-column:1/-1;text-align:center;padding:40px 20px;background:rgba(28,25,23,0.4);border:1px dashed rgba(255,255,255,0.1);border-radius:12px;">
           <div style="font-size:28px;margin-bottom:8px;">✈</div>
           <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:4px;">No business trips logged yet</div>
-          <div style="font-size:12px;color:var(--text3);max-width:380px;margin:0 auto 14px;">Assign expenses to a Trip name (e.g. "Toronto Book Fair") when logging transactions to group them in this visual portfolio.</div>
+          <div style="font-size:12px;color:var(--text3);max-width:380px;margin:0 auto 14px;">Create a trip (e.g. "Toronto Book Fair") and every travel, lodging and booth expense you assign to it totals here, ready for your tax return.</div>
+          <button class="btn gold" onclick="openNewTrip()">✈ Create your first trip</button>
         </div>
       `;
     } else {
       cardsGrid.innerHTML = tripList.map(t => {
         const catEntries = Object.entries(t.categories);
         const catSegs = catEntries.map(([cat, amt]) => {
-          const pct = ((amt / t.total) * 100).toFixed(1);
+          const pct = t.total > 0 ? ((amt / t.total) * 100).toFixed(1) : '0.0';
           const color = TC_TRIP_CAT_COLORS[cat] || 'var(--gold)';
           return `<div class="tc-trip-cat-seg" style="width:${pct}%;background:${color};" title="${escapeHtml(cat)}: ${fmt(amt, baseCurrency)} (${pct}%)"></div>`;
         }).join('');
 
         const dateSpan = t.minDate && t.maxDate
           ? (t.minDate === t.maxDate ? t.minDate : `${t.minDate} &rarr; ${t.maxDate}`)
-          : 'Multiple Dates';
+          : (t.count === 0 ? 'Dates not set' : 'Multiple Dates');
+        const recMeta = _tcTripRecordMeta(t.record ?? _tcFindTripRecord(t.name));
 
         const targetBudget = TAX_CENTER.tripBudgets?.[t.name] || 0;
         let budgetHtml = '';
@@ -841,16 +1067,17 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
             <div>
               <div class="tc-trip-card-head">
                 <h4 class="tc-trip-card-title">✈ ${escapeHtml(t.name)}</h4>
-                <div class="tc-trip-card-total">-${fmt(t.total, baseCurrency)}</div>
+                <div class="tc-trip-card-total">${t.count === 0 ? '<span class="tc-trip-badge-new">Planned</span>' : `-${fmt(t.total, baseCurrency)}`}</div>
               </div>
               <div class="tc-trip-card-meta">
                 <span>📅 ${dateSpan}</span>
                 <span>•</span>
                 <span>📄 ${t.count} expense${t.count === 1 ? '' : 's'}</span>
               </div>
-              <div class="tc-trip-cat-bar" aria-label="Category breakdown bar">
-                ${catSegs}
-              </div>
+              ${recMeta ? `<div class="tc-trip-card-meta tc-trip-card-submeta">${recMeta}</div>` : ''}
+              ${t.count === 0
+                ? `<div class="tc-trip-card-empty">No expenses assigned yet — pick this trip when you log one.</div>`
+                : `<div class="tc-trip-cat-bar" aria-label="Category breakdown bar">${catSegs}</div>`}
               ${budgetHtml}
             </div>
             <div class="tc-trip-card-foot">
@@ -869,9 +1096,9 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
         <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${escapeHtml(t.name)}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count === 1 ? '' : 's'}">
           <td style="color:var(--gold);text-decoration:underline;">✈ ${escapeHtml(t.name)}</td>
           <td class="r">${t.count}</td>
-          <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(t.total, baseCurrency)}</td>
+          <td class="r" style="font-weight:bold;color:var(--red);">${t.count === 0 ? '<span style="color:var(--text3);font-weight:600;">Planned</span>' : `- ${fmt(t.total, baseCurrency)}`}</td>
         </tr>
-    `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;color:var(--text3);">No trips yet — add a Trip name when logging an expense to group them here.</td></tr>`;
+    `).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text3);">No trips yet — press <b>✈ New trip</b> above to create one.</td></tr>`;
   }
 
   // Sync current view mode toggle button states
@@ -1594,6 +1821,13 @@ export {
   tcToggleTripDropdown,
   tcFilterTripDropdown,
   tcSelectTripOption,
+  _tcTripRecords,
+  _tcFindTripRecord,
+  openNewTrip,
+  openEditTripDetails,
+  tcNewTripValidate,
+  saveNewTrip,
+  deleteTripRecord,
   _tcRenderTripsPanel,
   _tcBuildLedger,
   _tcRenderStatusHeaders,

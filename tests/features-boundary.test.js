@@ -12,7 +12,9 @@ const MAIN_IMPORT_BUDGET = {
   'opencall.js': 18,
   'shipping.js': 29,
   'bigcartel.js': 18,
-  'taxcentre.js': 23,
+  // +2 for openM/closeM: the trip create/edit modal lives in this module, and
+  // these are the same shared modal primitives shipping.js/bigcartel.js use.
+  'taxcentre.js': 25,
 };
 
 const featureFiles = fs.existsSync(featureDir)
