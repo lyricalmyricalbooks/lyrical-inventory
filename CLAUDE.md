@@ -19,9 +19,21 @@ Angles worth scanning each time: bug/edge case the change introduced · the next
 > - **Serverless Backend:** Firebase Firestore database and static hosting on GitHub Pages. No server or secret keys in client code.
 > - **Offline Resilience:** Must work fully offline (PWA) and synchronize local queue states later.
 
+> [!WARNING]
+> **Apps Script ↔ client copy must stay in sync.** Whenever [Code.gs](apps-script/Code.gs) changes, copy it **verbatim** (no HTML-escaping) into [gas-code.txt](public/gas-code.txt) — the "Connect your Google Sheet" tab lazy-fetches that file via `loadGasCode()` in [main.js](src/main.js). Don't re-embed the script inline in [index.html](index.html).
+
+> [!WARNING]
+> **Bump the script version whenever `Code.gs`'s behavior changes** (new action, changed response shape, changed email/side-effect logic — not comment-only or pure-refactor edits), moving all three together in the same commit:
+> 1. `scriptVersion`/`service` strings in the `doGet` capabilities response in [Code.gs](apps-script/Code.gs).
+> 2. `EXPECTED_SCRIPT_VERSION` in [main.js](src/main.js) (what flags an out-of-date deployment on the connection card).
+> 3. A new entry in the version-history comment block atop [Code.gs](apps-script/Code.gs).
+> Skipping this lets a publisher's deployed script silently diverge from what the client expects, with no warning surfaced anywhere.
+
 ## Pull Requests
 - When asked for "a new pull request", "new PR", or similar: **create it immediately** from the current branch.
 - Do NOT investigate merge status, git history, or ask clarifying questions.
+- **Exception — merged branch:** if the current branch's PR is already merged, treat the request as fresh work: restart the branch from the latest default branch (`git fetch origin <default> && git checkout -B <branch> origin/<default>`) before pushing. Never stack new commits onto merged history.
+- Before pushing, run `npm test` (and `npm run build` if the change touches build config or entry points); fix failures before opening the PR rather than after.
 - Action: Push branch with `git push -u origin <branch>` then create PR via GitHub MCP.
 - Use a descriptive PR title based on the feature/fix being implemented.
 - **After a PR is merged, start the next change on a brand-new branch and open a new PR** — never push commits onto a merged branch to revive it.
@@ -33,16 +45,6 @@ Angles worth scanning each time: bug/edge case the change introduced · the next
 
 ## Customizations & Style Guidelines
 - **Strict Guidelines:** Always adhere to the premium UX/UI, offline-first sync, financial ledger precision, role-based security, and spreadsheet integration rules defined in [.agents/AGENTS.md](.agents/AGENTS.md).
-
-> [!WARNING]
-> **Apps Script ↔ client copy must stay in sync.** Whenever [Code.gs](apps-script/Code.gs) changes, copy it **verbatim** (no HTML-escaping) into [gas-code.txt](public/gas-code.txt) — the "Connect your Google Sheet" tab lazy-fetches that file via `loadGasCode()` in [main.js](src/main.js). Don't re-embed the script inline in [index.html](index.html).
-
-> [!WARNING]
-> **Bump the script version whenever `Code.gs`'s behavior changes** (new action, changed response shape, changed email/side-effect logic — not comment-only or pure-refactor edits), moving all three together in the same commit:
-> 1. `scriptVersion`/`service` strings in the `doGet` capabilities response in [Code.gs](apps-script/Code.gs).
-> 2. `EXPECTED_SCRIPT_VERSION` in [main.js](src/main.js) (what flags an out-of-date deployment on the connection card).
-> 3. A new entry in the version-history comment block atop [Code.gs](apps-script/Code.gs).
-> Skipping this lets a publisher's deployed script silently diverge from what the client expects, with no warning surfaced anywhere.
 
 ### Visual Refactoring & UI Enhancement Guardrails
 > [!IMPORTANT]
