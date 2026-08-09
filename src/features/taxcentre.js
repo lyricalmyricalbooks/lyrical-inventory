@@ -995,6 +995,297 @@ function tcSelectTripOption(inputId, tripName) {
   }
 }
 
+// ── PENDING / TO-CONFIRM EXPENSES ─────────────────────────────────────────
+// Costs the publisher knows about but cannot log yet: the amount is unknown,
+// the receipt has not arrived, the date is not fixed. They live in their own
+// array and are NEVER read by the ledger, the category totals or any tax
+// export — a pending note is a reminder, not a transaction, and letting one
+// reach a deductible total would be a reporting error. Confirming one moves it
+// into businessExpenses through the normal expense form, which is the only
+// path that computes an FX rate and a base amount.
+let _tcPendingEditingId = null;
+// Set when the expense form was pre-filled from a pending note, so a successful
+// submit clears the note it came from instead of leaving a duplicate reminder.
+let _tcConfirmingPendingId = null;
+
+function _tcPendingList() {
+  if (!Array.isArray(TAX_CENTER.pendingExpenses)) TAX_CENTER.pendingExpenses = [];
+  return TAX_CENTER.pendingExpenses;
+}
+
+function _tcFindPending(id) {
+  return _tcPendingList().find(p => String(p.id) === String(id)) || null;
+}
+
+/** Whole days from today to an ISO date; negative is in the past. */
+function _tcDaysUntil(isoDate, todayStr = today()) {
+  if (!isoDate) return null;
+  const a = Date.parse(`${todayStr}T00:00:00`);
+  const b = Date.parse(`${isoDate}T00:00:00`);
+  if (isNaN(a) || isNaN(b)) return null;
+  return Math.round((b - a) / 86400000);
+}
+
+/** Reminder state for one pending note: drives its badge and sort position. */
+function _tcPendingDue(item, todayStr = today()) {
+  const days = _tcDaysUntil(item?.remindOn, todayStr);
+  if (days === null) return { state: 'none', days: null, label: 'No reminder' };
+  if (days < 0) return { state: 'overdue', days, label: `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue` };
+  if (days === 0) return { state: 'today', days, label: 'Due today' };
+  if (days <= 7) return { state: 'soon', days, label: `In ${days} day${days === 1 ? '' : 's'}` };
+  return { state: 'later', days, label: `In ${days} days` };
+}
+
+const _TC_DUE_ORDER = {
+  overdue: 0,
+  today: 1,
+  soon: 2,
+  later: 3,
+  none: 4,
+};
+
+/** Pending notes, most urgent first; undated notes sink to the bottom. */
+function _tcSortedPending(todayStr = today()) {
+  return _tcPendingList()
+    .map(item => ({ item, due: _tcPendingDue(item, todayStr) }))
+    .sort((a, b) => {
+      const rank = _TC_DUE_ORDER[a.due.state] - _TC_DUE_ORDER[b.due.state];
+      if (rank !== 0) return rank;
+      if (a.due.days !== null && b.due.days !== null && a.due.days !== b.due.days) return a.due.days - b.due.days;
+      const dA = a.item.expectedDate || '';
+      const dB = b.item.expectedDate || '';
+      return dA > dB ? 1 : dA < dB ? -1 : 0;
+    });
+}
+
+function _tcSetPendingError(msg) {
+  const box = $('tc-pending-err');
+  if (!box) return;
+  box.textContent = msg || '';
+  box.style.display = msg ? 'block' : 'none';
+}
+
+function tcPendingValidate() {
+  const ok = !!($('tc-pending-desc')?.value || '').trim();
+  if (ok) _tcSetPendingError('');
+  return ok;
+}
+
+/** Quick reminder chips: days from today, or null to clear the field. */
+function tcPendingRemindIn(days) {
+  const el = $('tc-pending-remind');
+  if (!el) return;
+  if (days === null || days === undefined) { el.value = ''; return; }
+  const d = new Date(`${today()}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  el.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function openPendingExpense(id, prefillTrip) {
+  const item = id ? _tcFindPending(id) : null;
+  _tcPendingEditingId = item ? item.id : null;
+
+  const catSelect = $('tc-pending-cat');
+  if (catSelect && !catSelect.options.length) {
+    catSelect.innerHTML = TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${escapeHtml(c)}</option>`).join('');
+  }
+
+  const set = (elId, val) => { const el = $(elId); if (el) el.value = val ?? ''; };
+  set('tc-pending-desc', item?.desc);
+  set('tc-pending-cat', item?.cat || 'Other');
+  set('tc-pending-cur', item?.currency || TAX_CENTER.settings?.baseCurrency || 'CAD');
+  set('tc-pending-amount', item?.estAmount || '');
+  set('tc-pending-date', item?.expectedDate);
+  set('tc-pending-remind', item?.remindOn);
+  set('tc-pending-trip', item?.trip ?? (typeof prefillTrip === 'string' ? prefillTrip : ''));
+  set('tc-pending-note', item?.note);
+  _tcSetPendingError('');
+
+  const heading = $('tc-pending-heading');
+  if (heading) heading.textContent = item ? 'Edit pending expense' : 'Note a pending expense';
+  const saveBtn = $('tc-pending-save');
+  if (saveBtn) saveBtn.textContent = item ? 'Save changes' : 'Save note';
+  const delBtn = $('tc-pending-delete');
+  if (delBtn) delBtn.style.display = item ? '' : 'none';
+
+  closeM('tc-trip-detail');
+  openM('tc-pending');
+  setTimeout(() => $('tc-pending-desc')?.focus(), 50);
+}
+
+async function savePendingExpense() {
+  const desc = ($('tc-pending-desc')?.value || '').trim();
+  if (!desc) {
+    _tcSetPendingError('Give the note a description — that is the part you need to recognise it later.');
+    $('tc-pending-desc')?.focus();
+    return;
+  }
+
+  const amountRaw = ($('tc-pending-amount')?.value || '').trim();
+  const estAmount = amountRaw ? parseFloat(amountRaw) : 0;
+  if (amountRaw && (isNaN(estAmount) || estAmount < 0)) {
+    _tcSetPendingError('The estimated amount has to be a positive number, or blank.');
+    return;
+  }
+
+  const record = {
+    id: _tcPendingEditingId || Date.now(),
+    desc,
+    cat: $('tc-pending-cat')?.value || 'Other',
+    currency: $('tc-pending-cur')?.value || 'CAD',
+    estAmount: estAmount > 0 ? estAmount : 0,
+    expectedDate: ($('tc-pending-date')?.value || '').trim(),
+    remindOn: ($('tc-pending-remind')?.value || '').trim(),
+    trip: ($('tc-pending-trip')?.value || '').trim(),
+    note: ($('tc-pending-note')?.value || '').trim(),
+    created: _tcFindPending(_tcPendingEditingId)?.created || today(),
+  };
+
+  const list = _tcPendingList();
+  const idx = list.findIndex(p => String(p.id) === String(record.id));
+  if (idx >= 0) list[idx] = record;
+  else list.unshift(record);
+
+  const wasEditing = !!_tcPendingEditingId;
+  _tcPendingEditingId = null;
+  closeM('tc-pending');
+  await saveTaxCenter();
+  renderTaxCenter();
+  showToast(wasEditing ? '✓ Pending note updated' : '✓ Noted — it will wait here until you confirm it');
+}
+
+async function deletePendingExpense(id) {
+  const targetId = id ?? _tcPendingEditingId;
+  const item = _tcFindPending(targetId);
+  if (!item) return;
+  if (!(await confirmDialog(`Delete the pending note “${item.desc}”?`, { okLabel: 'Delete note', danger: true }))) return;
+
+  TAX_CENTER.pendingExpenses = _tcPendingList().filter(p => String(p.id) !== String(targetId));
+  if (String(_tcPendingEditingId) === String(targetId)) _tcPendingEditingId = null;
+  closeM('tc-pending');
+  await saveTaxCenter();
+  renderTaxCenter();
+  showToast('✓ Pending note deleted');
+}
+
+/** Push a reminder out by N days from today, from the list row. */
+async function snoozePendingExpense(id, days = 7) {
+  const item = _tcFindPending(id);
+  if (!item) return;
+  const d = new Date(`${today()}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  item.remindOn = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  await saveTaxCenter();
+  renderTaxCenter();
+  showToast(`✓ Reminder moved to ${item.remindOn}`);
+}
+
+// Confirming does not write an expense itself: it pre-fills the logger with
+// whatever the note knows and lets the normal submit path do the FX maths and
+// the receipt handling. submitTaxExpense clears the note on success.
+function confirmPendingExpense(id) {
+  const item = _tcFindPending(id);
+  if (!item) return;
+  _tcConfirmingPendingId = item.id;
+
+  const set = (elId, val) => { const el = $(elId); if (el) el.value = val ?? ''; };
+  set('tc-exp-desc', item.desc);
+  set('tc-exp-cat', item.cat || 'Other');
+  set('tc-exp-cur', item.currency || 'CAD');
+  set('tc-exp-amount', item.estAmount || '');
+  set('tc-exp-date', item.expectedDate || today());
+  if ($('tc-exp-trip')) tcSelectTripOption('tc-exp-trip', item.trip || '');
+
+  closeM('tc-pending');
+  const card = $('tc-expense-form-card');
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('tc-flash-target');
+    setTimeout(() => card.classList.remove('tc-flash-target'), 1600);
+  }
+  setTimeout(() => $(item.estAmount ? 'tc-exp-amount' : 'tc-exp-desc')?.focus(), 400);
+  showToast('Confirm the details and log it — the note clears itself once saved');
+}
+
+/** Called by submitTaxExpense after a successful save. */
+function _tcClearConfirmedPending() {
+  if (_tcConfirmingPendingId === null) return null;
+  const item = _tcFindPending(_tcConfirmingPendingId);
+  TAX_CENTER.pendingExpenses = _tcPendingList().filter(p => String(p.id) !== String(_tcConfirmingPendingId));
+  _tcConfirmingPendingId = null;
+  return item;
+}
+
+function _tcRenderPendingPanel() {
+  const list = $('tc-pending-list');
+  const countEl = $('tc-pending-count');
+  if (!list) return;
+
+  const rows = _tcSortedPending();
+  const dueNow = rows.filter(r => r.due.state === 'overdue' || r.due.state === 'today').length;
+
+  if (countEl) {
+    countEl.textContent = rows.length ? `${rows.length}${dueNow ? ` · ${dueNow} due` : ''}` : '';
+    countEl.className = `tc-pending-count${dueNow ? ' is-due' : ''}${rows.length ? '' : ' is-empty'}`;
+  }
+
+  if (!rows.length) {
+    list.innerHTML = `<div class="tc-pending-empty">
+      <div class="tc-pending-empty-icon">🕑</div>
+      <div class="tc-pending-empty-title">Nothing pending</div>
+      <div class="tc-pending-empty-sub">Waiting on an invoice, or spent something you can't total yet? Note it here so it doesn't get lost before tax time.</div>
+    </div>`;
+    return;
+  }
+
+  const cur = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  const estTotal = rows.reduce((sum, r) => {
+    const amt = Number(r.item.estAmount) || 0;
+    if (!amt) return sum;
+    return sum + amt * (_fxRateCache[`${(r.item.currency || 'CAD')}_${cur}`] || _fxRateCache[`${(r.item.currency || 'CAD')}_CAD`] || 1);
+  }, 0);
+  const withoutAmount = rows.filter(r => !Number(r.item.estAmount)).length;
+
+  const body = rows.map(({ item, due }) => {
+    const safeId = String(item.id).replace(/'/g, "\\'");
+    const amount = Number(item.estAmount)
+      ? `<span class="tc-pending-amt">~${getSym(item.currency || 'CAD')}${Number(item.estAmount).toFixed(2)}</span>`
+      : `<span class="tc-pending-amt is-unknown">Amount unknown</span>`;
+    const bits = [
+      item.cat ? escapeHtml(item.cat) : '',
+      item.expectedDate ? `📅 ${escapeHtml(item.expectedDate)}` : '',
+      item.trip ? `✈ ${escapeHtml(item.trip)}` : '',
+    ].filter(Boolean).join(' &nbsp;·&nbsp; ');
+
+    return `<div class="tc-pending-row tc-due-${due.state}">
+      <div class="tc-pending-main">
+        <div class="tc-pending-top">
+          <span class="tc-pending-desc">${escapeHtml(item.desc)}</span>
+          <span class="tc-due-badge tc-due-${due.state}">${item.remindOn ? '⏰ ' : ''}${escapeHtml(due.label)}</span>
+        </div>
+        ${bits ? `<div class="tc-pending-meta">${bits}</div>` : ''}
+        ${item.note ? `<div class="tc-pending-note">${escapeHtml(item.note)}</div>` : ''}
+      </div>
+      <div class="tc-pending-right">
+        ${amount}
+        <div class="tc-pending-actions">
+          <button class="btn gold" onclick="confirmPendingExpense('${safeId}')" title="Pre-fill the expense form from this note">✓ Confirm &amp; log</button>
+          <button class="btn tag" onclick="snoozePendingExpense('${safeId}', 7)" title="Push the reminder out a week">⏰ +1w</button>
+          <button class="btn-icon" aria-label="Edit note" onclick="openPendingExpense('${safeId}')" title="Edit note">✏️</button>
+          <button class="btn-icon" aria-label="Delete note" onclick="deletePendingExpense('${safeId}')" title="Delete note">🗑️</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const foot = `<div class="tc-pending-foot">
+    <span>${rows.length} pending note${rows.length === 1 ? '' : 's'}${withoutAmount ? ` · ${withoutAmount} without an amount` : ''}</span>
+    ${estTotal > 0 ? `<span>Estimated, not yet in your ledger: <b>${fmt(estTotal, cur)}</b></span>` : ''}
+  </div>`;
+
+  list.innerHTML = body + foot;
+}
+
 // ── CREATE / EDIT A TRIP ──────────────────────────────────────────────────
 // _tcTripEditingName is null for a brand-new trip and holds the original name
 // while editing, so a rename can carry the assigned expenses across with it.
@@ -1162,6 +1453,9 @@ async function deleteTripRecord() {
 function logExpenseForTrip(tripName) {
   const name = (tripName || _tcOpenTripName || '').trim();
   if (!name) return;
+  // A different entry point into the same form — not a pending confirmation —
+  // so any confirm-flow link from an earlier, abandoned edit no longer applies.
+  _tcConfirmingPendingId = null;
   closeM('tc-trip-detail');
   tcSelectTripOption('tc-exp-trip', name);
 
@@ -1893,6 +2187,8 @@ function renderTaxCenter() {
   // Trips panel + autocomplete suggestions
   _tcRenderTripsPanel(selectedYear, baseCurrency);
 
+  _tcRenderPendingPanel();
+
   _tcRenderCategoryPanel(allLedger, baseCurrency);
 
   // ⚡ Bolt Optimization: Use string comparison instead of parsing to Date for sorting "YYYY-MM-DD" formatted dates
@@ -2560,6 +2856,16 @@ export {
   saveNewTrip,
   deleteTripRecord,
   logExpenseForTrip,
+  openPendingExpense,
+  tcPendingValidate,
+  tcPendingRemindIn,
+  savePendingExpense,
+  deletePendingExpense,
+  snoozePendingExpense,
+  confirmPendingExpense,
+  _tcClearConfirmedPending,
+  _tcPendingList,
+  _tcRenderPendingPanel,
   exportTripPDF,
   _tcTripReportReceipts,
   _tcIsPdfName,
