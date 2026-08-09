@@ -57,11 +57,67 @@ const str = (value) => String(value ?? '').trim();
  */
 export function addressValidationBlocker(address = {}) {
   if (!str(address.street1)) return 'Street address is required to verify.';
-  if (!str(address.country)) return 'Country is required to verify.';
+  const country = str(address.country);
+  if (!country) return 'Country is required to verify.';
+  // Shippo's country_code is an enum of ISO 3166 alpha-2 codes. Sending a
+  // display name ("Canada") returns a 422 whose body is a wall of every valid
+  // code — technically accurate, useless in a toast. Caught here instead.
+  if (!/^[A-Za-z]{2}$/.test(country)) {
+    return `“${country}” is not a 2-letter country code, which is what Shippo needs.`;
+  }
   if (!str(address.city) && !str(address.zip)) {
     return 'Add a city or a postal code — Shippo needs one of them to place the address.';
   }
   return '';
+}
+
+// Spellings that legitimately mean the United States. Anything else that comes
+// out of country normalization as 'US' was a silent fallback rather than a
+// match — see countryFallbackWarning.
+const US_ALIASES = new Set(['us', 'usa', 'u.s.', 'u.s.a.', 'united states', 'united states of america']);
+
+/**
+ * Catches a country that was defaulted rather than recognised.
+ *
+ * normalizeCountryCode answers 'US' for anything it cannot place, which is a
+ * safe default for a form the user is looking at and a dangerous one for a
+ * stored order: a British address checked against US postal data comes back
+ * "undeliverable", and the verdict looks authoritative. Better to refuse and
+ * name the value than to publish a confident wrong answer.
+ */
+export function countryFallbackWarning(rawCountry, resolvedCountry) {
+  const raw = str(rawCountry);
+  if (!raw || str(resolvedCountry).toUpperCase() !== 'US') return '';
+  if (US_ALIASES.has(raw.toLowerCase())) return '';
+  return `This order's country is saved as “${raw}”, which Shippo does not recognise. Fix the country on the order, then verify it.`;
+}
+
+/**
+ * Turns a Shippo error body into one readable line.
+ *
+ * v2 answers validation errors in FastAPI's shape — a `detail` array of
+ * {loc, msg} — and the enum message for country_code alone lists every country
+ * on earth. Dumping that raw into a toast is how an error stops being read.
+ */
+export function describeShippoError(status, bodyText) {
+  const body = str(bodyText);
+  let parsed = null;
+  try { parsed = JSON.parse(body); } catch (_) { /* not JSON; fall through */ }
+
+  const details = Array.isArray(parsed?.detail) ? parsed.detail : null;
+  if (details?.length) {
+    const lines = details.slice(0, 2).map(detail => {
+      const field = Array.isArray(detail?.loc) ? str(detail.loc[detail.loc.length - 1]) : '';
+      const message = str(detail?.msg) || 'was rejected';
+      const trimmed = message.length > 90 ? `${message.slice(0, 90)}…` : message;
+      return field ? `${field}: ${trimmed}` : trimmed;
+    });
+    const more = details.length > 2 ? ` (+${details.length - 2} more)` : '';
+    return `Shippo rejected the address (${status}) — ${lines.join('; ')}${more}`;
+  }
+
+  const fallback = str(parsed?.detail) || body;
+  return `Shippo validation failed (${status})${fallback ? `: ${fallback.slice(0, 140)}` : ''}`;
 }
 
 /**
@@ -360,13 +416,16 @@ export function persistableVerification(result, signature, at = new Date().toISO
 }
 
 /**
- * Whether a stored verification still describes the address on the record.
- * An order edited after it was checked reverts to unverified rather than
- * carrying a verdict that was never about this address.
+ * Whether a stored verification still describes an address.
+ *
+ * Takes the resolved address rather than the order it came from, deliberately:
+ * the caller normalizes the country before verifying, and a version of this
+ * that re-derived the address itself would compare an un-normalized signature
+ * against a normalized one and report every stored verdict as stale.
  */
-export function storedVerificationIsCurrent(stored, order) {
+export function storedVerificationIsCurrent(stored, address) {
   if (!stored?.signature) return false;
-  return stored.signature === addressSignature(addressFromOrder(order));
+  return stored.signature === addressSignature(address);
 }
 
 /** Human-readable address block, blank lines dropped. */

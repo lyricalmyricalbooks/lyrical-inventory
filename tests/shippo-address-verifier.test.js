@@ -13,6 +13,8 @@ import {
   addressValidationBlocker,
   buildAddressValidationQuery,
   buildLegacyValidationPayload,
+  countryFallbackWarning,
+  describeShippoError,
   isDeliverable,
   normalizeAddressVerification,
   orderAddressPatch,
@@ -134,6 +136,7 @@ function buildVerifier({ fetchImpl, taxCenter = { settings: { shippoKey: 'shippo
       addressValidationBlocker,
       buildAddressValidationQuery,
       buildLegacyValidationPayload,
+      describeShippoError,
       isDeliverable,
       normalizeAddressVerification,
       verificationVerdict,
@@ -410,6 +413,7 @@ function buildLedgerVerifier({ fetchImpl, states, saveState = vi.fn(async () => 
   const toasts = [];
   const harness = buildHarness({
     names: [
+      'ledgerOrderAddress',
       'findLedgerOrder',
       'fetchShippoAddressVerification',
       'verifyOrderAddressRecord',
@@ -437,9 +441,20 @@ function buildLedgerVerifier({ fetchImpl, states, saveState = vi.fn(async () => 
       addressValidationBlocker,
       buildAddressValidationQuery,
       buildLegacyValidationPayload,
+      countryFallbackWarning,
+      describeShippoError,
       isDeliverable,
       normalizeAddressVerification,
       orderAddressPatch,
+      // Stands in for main.js's map-backed version: same contract — always a
+      // 2-letter code, 'US' when it cannot place the value.
+      normalizeCountryCode: (code) => {
+        const raw = String(code || '').trim();
+        const known = { canada: 'CA', 'united kingdom': 'GB', 'united states': 'US', germany: 'DE' };
+        if (known[raw.toLowerCase()]) return known[raw.toLowerCase()];
+        if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
+        return 'US';
+      },
       persistableVerification,
       storedVerificationIsCurrent,
       verificationVerdict,
@@ -449,6 +464,7 @@ function buildLedgerVerifier({ fetchImpl, states, saveState = vi.fn(async () => 
       batchVerifyLedgerAddresses,
       applyLedgerAddressCorrections,
       renderLedgerVerifyCell,
+      ledgerOrderAddress,
     }`,
   });
   return { ...harness, toasts, saveState, confirmDialog };
@@ -616,7 +632,7 @@ describe('applying ledger corrections to the order record', () => {
     await verifier.applyLedgerAddressCorrections('collective', 'ord-1');
 
     expect(order.addrVerify.corrections).toEqual([]);
-    expect(storedVerificationIsCurrent(order.addrVerify, order)).toBe(true);
+    expect(storedVerificationIsCurrent(order.addrVerify, verifier.ledgerOrderAddress(order))).toBe(true);
   });
 
   it('refuses to apply a verdict the order has moved past', async () => {
@@ -697,6 +713,82 @@ describe('the ledger row’s verify cell', () => {
     const html = cellFor(ledgerOrder({ id: `x' onmouseover='alert(1)`, shipName: 'X' }));
     expect(html).not.toContain("onmouseover='alert(1)");
     expect(html).toContain('&#39;');
+  });
+});
+
+// Regression suite for the 422 that hit a real order: the ledger stored
+// "Canada" while Shippo's country_code is an ISO alpha-2 enum, and only the
+// Destination card was normalizing on the way in.
+describe('ledger country normalization', () => {
+  it('sends the ISO code when the order stores a country display name', async () => {
+    const order = ledgerOrder({ shipCountry: 'Canada', shipPostal: 'M6G 3H1', shipProvince: 'ON', shipCity: 'Toronto' });
+    const fetchImpl = vi.fn(async () => jsonResponse(V2_VALID_RESPONSE));
+    const verifier = buildLedgerVerifier({ fetchImpl, states: { collective: { hist: [order] } } });
+
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const query = new URL(fetchImpl.mock.calls[0][0]).searchParams;
+    expect(query.get('country_code')).toBe('CA');
+    expect(order.addrVerify.status).toBe('valid');
+  });
+
+  it('keeps the stored verdict current — the signature is normalized on both sides', async () => {
+    const order = ledgerOrder({ shipCountry: 'Canada' });
+    const verifier = buildLedgerVerifier({
+      fetchImpl: vi.fn(async () => jsonResponse(V2_VALID_RESPONSE)),
+      states: { collective: { hist: [order] } },
+    });
+
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+
+    // The bug this guards: comparing a normalized signature against a
+    // re-derived raw one made every verdict read as stale the instant it saved.
+    expect(storedVerificationIsCurrent(order.addrVerify, verifier.ledgerOrderAddress(order))).toBe(true);
+    expect(verifier.renderLedgerVerifyCell(order)).not.toContain('Re-verify address');
+  });
+
+  it('refuses rather than checking a UK address against US postal data', async () => {
+    const order = ledgerOrder({ shipCountry: 'Britain', shipCity: 'London', shipPostal: 'SW1A 1AA' });
+    const fetchImpl = vi.fn();
+    const verifier = buildLedgerVerifier({ fetchImpl, states: { collective: { hist: [order] } } });
+
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(order.addrVerify).toBeUndefined();
+    expect(verifier.toasts.at(-1).message).toMatch(/Britain/);
+    expect(verifier.toasts.at(-1).type).toBe('warn');
+  });
+
+  it('falls back to the legacy validator on a 422 instead of giving up', async () => {
+    const order = ledgerOrder();
+    const fetchImpl = vi.fn(async (url) => (
+      String(url).includes('/v2/')
+        ? jsonResponse({ detail: [{ type: 'enum', loc: ['query', 'country_code'], msg: 'Input should be ...' }] }, 422)
+        : jsonResponse({ validation_results: { is_valid: true, messages: [] } })
+    ));
+    const verifier = buildLedgerVerifier({ fetchImpl, states: { collective: { hist: [order] } } });
+
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(order.addrVerify.source).toBe('v1');
+  });
+
+  it('reports a readable error rather than a wall of country codes', async () => {
+    const order = ledgerOrder();
+    const enumBody = { detail: [{ type: 'enum', loc: ['query', 'country_code'], msg: `Input should be ${Array.from({ length: 200 }, (_, i) => `'C${i}'`).join(', ')}` }] };
+    const verifier = buildLedgerVerifier({
+      fetchImpl: vi.fn(async () => jsonResponse(enumBody, 422)),
+      states: { collective: { hist: [order] } },
+    });
+
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+
+    const message = verifier.toasts.at(-1).message;
+    expect(message).toContain('country_code');
+    expect(message.length).toBeLessThan(400);
   });
 });
 
