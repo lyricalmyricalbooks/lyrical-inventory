@@ -92,6 +92,9 @@ import {
   tcNewTripValidate,
   saveNewTrip,
   deleteTripRecord,
+  logExpenseForTrip,
+  exportTripPDF,
+  _tcTripReportReceipts,
   _tcRenderTripsPanel,
   _tcBuildLedger,
   _tcRenderStatusHeaders,
@@ -15476,7 +15479,10 @@ export function showTripDetail(tripName) {
     </div>
   `;
   $('tc-trip-detail-body').innerHTML = rows
-    || `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:26px 12px;font-size:12px;">No expenses assigned to this trip yet. Log one below and pick “${escapeHtml(tripName)}” in the Trip field.</td></tr>`;
+    || `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:26px 12px;font-size:12px;">
+          <div style="margin-bottom:10px;">No expenses assigned to this trip yet.</div>
+          <button class="btn gold" onclick="logExpenseForTrip()">➕ Log the first expense</button>
+        </td></tr>`;
   openM('tc-trip-detail');
 }
 
@@ -21682,7 +21688,8 @@ function exposeLegacyInlineHandlers() {
     tcClearSelectedTrip, tcOpenTripDropdown, tcCloseTripDropdown, tcToggleTripDropdown,
     tcFilterTripDropdown, tcSelectTripOption, exportTripCSV, setTripBudgetPrompt,
     _tcTripRecords, _tcFindTripRecord, openNewTrip, openEditTripDetails,
-    tcNewTripValidate, saveNewTrip, deleteTripRecord,
+    tcNewTripValidate, saveNewTrip, deleteTripRecord, logExpenseForTrip,
+    exportTripPDF, _tcTripReportReceipts,
     openEditTrip, saveTripAssignment, renderEditExpenseReceipts, relinkEditExpenseReceipt, removeEditExpenseReceipt,
     batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,

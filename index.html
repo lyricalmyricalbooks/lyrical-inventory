@@ -1290,8 +1290,10 @@
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
     <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn gold" onclick="logExpenseForTrip()">➕ Log expense to this trip</button>
       <button class="btn" onclick="openEditTripDetails()">✎ Edit trip details</button>
       <button class="btn" onclick="renameTripPrompt()">✎ Rename trip</button>
+      <button class="btn gold outline" onclick="exportTripPDF()">🖨 Trip report (PDF)</button>
       <button class="btn gold outline" onclick="exportTripCSV(_tcOpenTripName)">⬇ Export CSV</button>
       <button class="btn tag" onclick="setTripBudgetPrompt(_tcOpenTripName)">🎯 Set budget</button>
     </div>
@@ -1690,7 +1692,7 @@
     <div class="cf-chart-wrap" id="tc-cf-chart"></div>
   </div>
 
-  <div class="card" style="margin-bottom:1.5rem;">
+  <div class="card" id="tc-expense-form-card" style="margin-bottom:1.5rem;">
     <div class="section-hed" style="margin-bottom:1rem;">Log Business Expense</div>
     <div class="g2" style="margin-bottom:12px;">
       <div class="form-group"><label for="tc-exp-desc">Description (Auto-categorizes)</label><input type="text" id="tc-exp-desc" placeholder="e.g. Squarespace or Shopify"></div>
