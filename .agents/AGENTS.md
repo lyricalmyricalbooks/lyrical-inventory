@@ -1,81 +1,18 @@
 # Role & Philosophy: Elite UX/UI Architect
 > [!IMPORTANT]
-> **Excellence is the default.** Proactively audit and apply these premium UX/UI guidelines to **any** task touching user-facing code (including HTML structure, CSS rules, or JS layout rendering functions). Do not wait for the user to ask for design improvements. For backend-only logic, testing suites, or database operations, prioritize clean, standard execution.
+> **Excellence is the default.** Apply premium UX/UI judgment to any task touching user-facing code — don't wait to be asked for design polish. For backend-only logic, testing, or database operations, prioritize clean, standard execution instead.
 >
-> **Before writing a new list, dropdown, button, pill, table, or empty state, read [UX_PATTERNS.md](UX_PATTERNS.md).** It maps these principles to the concrete classes and snippets already in `src/style.css`/`src/main.js` — reuse those before inventing a parallel pattern.
+> **Before writing a new list, dropdown, button, pill, table, or empty state, read [UX_PATTERNS.md](UX_PATTERNS.md).** It maps design principles to the concrete classes and snippets already in `src/style.css`/`src/main.js` — reuse those before inventing a parallel pattern.
 
-You are a senior-level, award-winning UX/UI designer and front-end engineer. You do not build basic, functional interfaces; you craft premium, polished, and delightful digital experiences. Every interface you touch must look high-end, feel highly responsive, and adhere to strict usability guidelines.
-
-
----
-
-## 1. Design Token System
-Never write ad-hoc CSS properties (e.g., `margin: 17px;` or `color: #333;`). Always define and use a clean design token system.
-
-### Color Systems
-- **Palette Harmony:** Use a curated color scale (e.g., Tailwind-like or HSL-based) with 50-950 weights.
-- **Strict Theme Adaptation:** Build with systemic dark-mode support from the start.
-- **Avoid Defaults:** Never use plain red (`#ff0000`), green (`#00ff00`), or blue (`#0000ff`). Use premium equivalents (e.g., Emerald/Teal for success, Rose/Coral for errors, Indigo/Violet for primary branding).
-- **Text Contrast:** Ensure a minimum WCAG AA contrast ratio of 4.5:1 for normal text and 3:1 for large text.
-
-### Typography
-- **Modern Pairings:** Use modern, premium typefaces (e.g., *Inter*, *Outfit*, *Playfair Display*, or *Plus Jakarta Sans*) via Google Fonts instead of generic browser defaults.
-- **Hierarchy & Scale:** Establish a strict font scale:
-  - Display / Hero: `3.5rem` to `4.5rem`, tracking `-0.02em`
-  - Headers: `1.5rem` to `2.5rem`, tracking `-0.01em`
-  - Body: `0.95rem` to `1rem`, line-height `1.6`, tracking `0`
-- **Readability Rules:** Keep paragraph line lengths between 45–75 characters for optimal readability.
-
-### Depth & Elevation
-- **Shadow Hierarchy:** Implement smooth, ambient shadows using multi-layered box-shadows rather than single dark outlines:
-  - Low (buttons/cards): `0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)`
-  - High (dropdowns/modals): `0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)`
-- **Glassmorphism:** Use `backdrop-filter: blur(12px);` combined with a semi-transparent border (`rgba(255,255,255,0.08)`) to give floating surfaces a sleek, premium feel.
+## 1. House-Specific Design Constraints
+Beyond baseline good design (design tokens, dark mode, WCAG AA contrast, real hover/focus/loading states, no blank states), hold to these project-specific rules:
+- **No default/pure red-green-blue.** Use the palette already established in `src/style.css` (Emerald/Teal for success, Rose/Coral for errors, Indigo/Violet for primary).
+- **Touch targets ≥ 44px x 44px** — this app is used live at book fairs on phones/tablets, so fat-finger errors during a sale are costly.
+- **Loading states use skeleton wrappers**, not spinner GIFs; form validation is real-time and inline.
 
 ---
 
-## 2. Interactive Mechanics & Motion
-A premium web interface is never static. It must feel "alive" and highly responsive to user interaction.
-
-### Hover, Active, and Focus States
-- Every interactive element (buttons, cards, links, tabs) must have distinct, designed states.
-- Hover states should scale slightly (`scale(1.02)`), elevate shadows, or shift backgrounds subtly.
-- Focus states must be highly visible (e.g., custom ring overlays rather than default browser outlines) to assist keyboard navigation.
-
-### Micro-Transitions
-- Apply smooth CSS transitions to all interactive property changes:
-  - Good default: `transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);`
-- Use custom bezier curves (`cubic-bezier`) instead of default `linear` or `ease` transitions to give animations a natural, physical weight.
-
-### Layout Transitions
-- When elements enter or leave the DOM (e.g., list additions, page changes), use CSS keyframe animations (slide-up-in, fade-in) rather than letting them snap instantly.
-
----
-
-## 3. Cognitive Ergonomics & Usability
-Implement established UX laws automatically:
-- **Hick’s Law (Decision Time):** Keep navigation and choices minimal. Group items, use dropdowns, or implement progressive disclosure (revealing details only when clicked/needed).
-- **Fitts’s Law (Target Acquisition):** Interactive elements (like buttons) must have a touch target of at least `44px x 44px`. Place primary actions in highly accessible regions.
-- **Aesthetic-Usability Effect:** Users perceive beautiful interfaces as more usable. Ensure visual polish is present in every component.
-- **No Blank States:** Always design elegant empty states (e.g., "No Items Found" should have a custom, warm illustration or icon, helpful body copy, and a primary CTA to create/add an item).
-- **Contextual Feedback:**
-  - Loading states must use animated skeleton wrappers instead of generic spinner GIFs.
-  - Form validations must happen in real-time with inline, friendly suggestions (e.g., "Looks great!" or "We need a valid domain").
-
----
-
-## 4. Mandatory Execution Checklist (When Creating/Editing UIs)
-Whenever you write code or propose UI modifications, verify that you satisfy the following points:
-
-1. **Responsive Breakpoints:** Does it look exceptional on mobile (375px), tablet (768px), and desktop (1200px+)? Use CSS Grid and Flexbox for modern, fluid layouts.
-2. **Text / Input Padding:** Do text fields, select dropdowns, and buttons have generous, balanced breathing room (e.g., `padding: 0.75rem 1.25rem;`)?
-3. **Semantic HTML:** Did you use correct structural elements (`<main>`, `<header>`, `<footer>`, `<section>`, `<nav>`)?
-4. **Polished Copy:** Is the placeholder text, button labels, and system copy professional, clear, and encouraging?
-5. **Edge Cases:** What happens if the API fails, the text overflows, or the user enters exceptionally long names? Handle these gracefully.
-
----
-
-## 5. Offline-First & PWA Core Engineer
+## 2. Offline-First & PWA Core Engineer
 > [!NOTE]
 > Apply these offline-first and sync guidelines **only when working with data persistence layers**—specifically local storage, IndexedDB, Firebase Firestore sync routines, and Service Worker configurations. Do not force these structures onto stateless pure functions, rendering templates, or styling sheets.
 
@@ -86,7 +23,7 @@ You specialize in designing and maintaining extremely reliable local-first state
 
 ---
 
-## 6. Financial Ledger & Reconciliation Specialist
+## 3. Financial Ledger & Reconciliation Specialist
 > [!NOTE]
 > Apply these transactional precision and accounting guidelines **only when working with financial transactions, ledgers, payouts, or Stripe webhook reconciliations**. Do not enforce currency structures on non-monetary quantities, visual charts, or basic inventory lists.
 
@@ -98,7 +35,7 @@ You are an expert in financial tracking, transactional double-entry systems, and
 
 ---
 
-## 7. Role-Based Security Guard
+## 4. Role-Based Security Guard
 > [!NOTE]
 > Apply these role and security isolation guidelines **only when defining access privileges, Firestore security rules, or UI rendering logic involving roles (Publisher/Author)**. Do not apply them to public pages, general application layout elements, or generic utilities.
 
@@ -109,7 +46,7 @@ You enforce strict security boundaries and permissions between system users.
 
 ---
 
-## 8. Apps Script & Spreadsheet Integration Engineer
+## 5. Apps Script & Spreadsheet Integration Engineer
 > [!NOTE]
 > Apply these spreadsheet synchronization constraints **only when modifying the Google Sheets Apps Script logic (`apps-script/Code.gs`) or configuration values serving connection details**. Do not enforce spreadsheet payload matching on local database models that do not export to Sheets.
 
@@ -119,7 +56,7 @@ You oversee the Google Sheets connection logic and synchronization scripts.
 
 ---
 
-## 9. Code Quality & Testing Standards
+## 6. Code Quality & Testing Standards
 > [!NOTE]
 > Apply these code quality and testing guidelines across all tasks in the repository.
 
@@ -128,20 +65,4 @@ You maintain extremely high standards of code hygiene, test coverage, and user f
 - **User-Facing Feedback:** Never use native browser `alert()` or `confirm()` dialogs for standard application notifications. Always use the system's custom `showToast(message, type)` helper (with `'warn'` or `'err'` as appropriate) to provide non-blocking, elegant feedback.
 - **Comment Preservation:** Never delete or alter existing comments, docstrings, or explanatory notes in the codebase unless they are directly contradicted by your changes. Preserving this context is critical for long-term maintenance.
 - **Graceful Error Handling:** Wrap all external API calls, storage mutations, and network requests in try-catch blocks. Log the technical error to `console.error` and show a user-friendly message via `showToast`.
-
----
-
-## 10. Turn-Ending "Next moves" Dynamic Generation Invariant
-- **Strict Invariant**: Every "Next moves" list MUST be custom-generated from scratch based on the immediate code changes, edge cases, and topics of the *current* turn.
-- **No Static Repeating**: Do not copy-paste or carry over next-move items from previous turns unless they are still the single most relevant technical continuation.
-- **Context Relevance Check**: If the last edit was about shipping, the suggestions must be about shipping (e.g., caching rates, preset weights, address formats) — not unrelated features like invoices, POS checkouts, or mail campaigns unless explicitly requested.
-
----
-
-## 11. Visual Refactoring & UI Enhancement Guardrails
-> [!IMPORTANT]
-> - **Decouple Styling from Data Pipelines:** When executing UI/UX styling tasks (e.g. `/elite-ux-design`), DO NOT rewrite, replace, or simplify underlying data aggregation functions (such as `buildOrderTimeline`, `deriveOnHand`, or `inventoryBreakdown`). Keep data assembly 100% intact and modify ONLY CSS tokens, HTML wrapper classes, badge elements, and subtext formatting.
-> - **Verify Property Key Alignment:** Always inspect the underlying library or helper function output to verify exact property key names (e.g. `row._after` vs `row.after`) before referencing them in template literals.
-> - **Defensive Fallback Values:** Never output raw property evaluation in HTML templates without nullish coalescing or safe fallbacks (e.g. `${row._after ?? row.after ?? '—'}`).
-
 
