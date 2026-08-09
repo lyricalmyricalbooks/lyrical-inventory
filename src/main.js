@@ -95,6 +95,10 @@ import {
   logExpenseForTrip,
   exportTripPDF,
   _tcTripReportReceipts,
+  _tcIsPdfName,
+  _tcBlobToDataUrl,
+  _tcPdfToImages,
+  _tcResolveReceiptImages,
   _tcRenderTripsPanel,
   _tcBuildLedger,
   _tcRenderStatusHeaders,
@@ -10360,6 +10364,23 @@ async function ensurePdfLibs() {
   }
 }
 
+// pdf.js, lazily, for the one job nothing else can do: rasterising a PDF
+// receipt so it can be *seen* in a printed report. Same CDN-on-demand pattern
+// as ensurePdfLibs — it is never fetched on load, and offline it simply
+// rejects, which callers treat as "list this receipt instead of showing it".
+const PDFJS_VERSION = '3.11.174';
+export async function ensurePdfJs() {
+  if (!window.pdfjsLib) {
+    await loadExternalScript(`https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`);
+  }
+  if (!window.pdfjsLib) throw new Error('pdf.js unavailable');
+  try {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
+  } catch (e) { /* worker src is best-effort; pdf.js falls back to the main thread */ }
+  return window.pdfjsLib;
+}
+
 // One-click, true PDF download — no browser print dialog. The invoice is
 // rendered into an off-screen node inside THIS document so the app's already
 // loaded fonts apply (correct typography even offline), rasterized with
@@ -13085,6 +13106,48 @@ export function _localReceiptCell(item) {
   }).join(' · ');
 }
 
+// Find one receipt file inside the connected folder and hand back the File.
+// Three strategies, in order: the `receipts/` subfolder, the folder root, then
+// a deep search by basename — which is what makes a receipt survive the user
+// reorganising or renaming subfolders. Extracted so the printable trip report
+// can read the same files viewLocalReceipt opens; throws when nothing matches,
+// so callers decide whether that is fatal or just an omitted thumbnail.
+export async function resolveLocalReceiptFile(dirHandle, path) {
+  let fileHandle = null;
+  const baseFilename = path.split('/').pop();
+
+  try {
+    const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: false });
+    if (path.includes('/')) {
+      const [subfolder, filename] = path.split('/');
+      const subDir = await receiptsDir.getDirectoryHandle(subfolder, { create: false });
+      fileHandle = await subDir.getFileHandle(filename);
+    } else {
+      fileHandle = await receiptsDir.getFileHandle(path);
+    }
+  } catch (_) {
+    try {
+      if (path.includes('/')) {
+        const [subfolder, filename] = path.split('/');
+        const subDir = await dirHandle.getDirectoryHandle(subfolder, { create: false });
+        fileHandle = await subDir.getFileHandle(filename);
+      } else {
+        fileHandle = await dirHandle.getFileHandle(path);
+      }
+    } catch (_) {}
+  }
+
+  if (!fileHandle) {
+    fileHandle = await findFileHandleInDir(dirHandle, baseFilename);
+  }
+
+  if (!fileHandle) {
+    throw new Error(`File "${baseFilename}" not found in connected folder.`);
+  }
+
+  return fileHandle.getFile();
+}
+
 async function viewLocalReceipt(path) {
   let dirHandle = await loadReceiptFolderHandle();
   if (!dirHandle) {
@@ -13104,42 +13167,7 @@ async function viewLocalReceipt(path) {
     const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
     if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return;
 
-    let fileHandle = null;
-    const baseFilename = path.split('/').pop();
-
-    // Strategy 1: Direct lookup under 'receipts' subdirectory
-    try {
-      const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: false });
-      if (path.includes('/')) {
-        const [subfolder, filename] = path.split('/');
-        const subDir = await receiptsDir.getDirectoryHandle(subfolder, { create: false });
-        fileHandle = await subDir.getFileHandle(filename);
-      } else {
-        fileHandle = await receiptsDir.getFileHandle(path);
-      }
-    } catch (_) {
-      // Strategy 2: Direct lookup in root directory
-      try {
-        if (path.includes('/')) {
-          const [subfolder, filename] = path.split('/');
-          const subDir = await dirHandle.getDirectoryHandle(subfolder, { create: false });
-          fileHandle = await subDir.getFileHandle(filename);
-        } else {
-          fileHandle = await dirHandle.getFileHandle(path);
-        }
-      } catch (_) {}
-    }
-
-    // Strategy 3: Deep search across all subfolders (handles folder relocations & subfolder re-namings)
-    if (!fileHandle) {
-      fileHandle = await findFileHandleInDir(dirHandle, baseFilename);
-    }
-
-    if (!fileHandle) {
-      throw new Error(`File "${baseFilename}" not found in connected folder.`);
-    }
-
-    const file = await fileHandle.getFile();
+    const file = await resolveLocalReceiptFile(dirHandle, path);
     const url = URL.createObjectURL(file);
     window.open(url, '_blank');
   } catch (e) {
@@ -21689,7 +21717,8 @@ function exposeLegacyInlineHandlers() {
     tcFilterTripDropdown, tcSelectTripOption, exportTripCSV, setTripBudgetPrompt,
     _tcTripRecords, _tcFindTripRecord, openNewTrip, openEditTripDetails,
     tcNewTripValidate, saveNewTrip, deleteTripRecord, logExpenseForTrip,
-    exportTripPDF, _tcTripReportReceipts,
+    exportTripPDF, _tcTripReportReceipts, _tcIsPdfName, _tcBlobToDataUrl,
+    _tcPdfToImages, _tcResolveReceiptImages, resolveLocalReceiptFile, ensurePdfJs,
     openEditTrip, saveTripAssignment, renderEditExpenseReceipts, relinkEditExpenseReceipt, removeEditExpenseReceipt,
     batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,

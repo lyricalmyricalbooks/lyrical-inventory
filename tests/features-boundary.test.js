@@ -14,7 +14,10 @@ const MAIN_IMPORT_BUDGET = {
   'bigcartel.js': 18,
   // +2 for openM/closeM: the trip create/edit modal lives in this module, and
   // these are the same shared modal primitives shipping.js/bigcartel.js use.
-  'taxcentre.js': 25,
+  // +2 for resolveLocalReceiptFile/ensurePdfJs: the printable trip report reads
+  // the same local receipt files viewLocalReceipt opens, and rasterises PDF
+  // ones — both primitives stay in main.js next to the folder-handle plumbing.
+  'taxcentre.js': 27,
 };
 
 const featureFiles = fs.existsSync(featureDir)
