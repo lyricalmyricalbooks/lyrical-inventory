@@ -9,13 +9,9 @@ Each suggestion is one or two lines:
 
 Then offer to do the top one right away.
 
-### What makes a suggestion good here
-- **Highly adaptive and context-tied:** Tied to what just changed or the latest discussion in the conversation. First ask yourself: did this edit or the last conversation/pull request open an edge case, threaten offline sync, or leave an obvious next step? Lead with that. Propose suggestions that branch directly from recent edits.
-- **Dynamic, not static:** Do NOT output the same static list of suggestions across different turns. The recommendations must dynamically adapt to the immediate context of the conversation and recent commits/PRs. Avoid boilerplate or placeholder list filler.
-- **Specific:** Name the file, function, or screen.
-- **High-leverage:** Skip generic best-practice suggestions.
-- **Honest:** If nothing is genuinely worth doing, say "nothing pressing" and stop.
-- **No repeats:** Don't re-pitch anything already declined this session.
+Suggestions must be tied to what just changed or was just discussed — lead with any edge case, offline-sync risk, or obvious next step the edit opened. Regenerate from scratch each turn (never repeat a prior turn's list or anything already declined this session). Name the actual file/function/screen; skip generic best-practice advice. If nothing is genuinely worth doing, say "nothing pressing" and stop.
+
+Angles worth scanning each time: bug/edge case the change introduced · the next logical feature · offline & sync robustness · Firestore data integrity · the speed of a slow screen · keeping catalog and ledger consistent.
 
 ### Constraints every suggestion must respect
 > [!IMPORTANT]
@@ -23,12 +19,21 @@ Then offer to do the top one right away.
 > - **Serverless Backend:** Firebase Firestore database and static hosting on GitHub Pages. No server or secret keys in client code.
 > - **Offline Resilience:** Must work fully offline (PWA) and synchronize local queue states later.
 
-### Angles worth scanning each time
-Bug / edge case the change introduced · the next logical feature · offline & sync robustness · Firestore data integrity · the speed of a slow screen · keeping catalog and ledger consistent.
+> [!WARNING]
+> **Apps Script ↔ client copy must stay in sync.** Whenever [Code.gs](apps-script/Code.gs) changes, copy it **verbatim** (no HTML-escaping) into [gas-code.txt](public/gas-code.txt) — the "Connect your Google Sheet" tab lazy-fetches that file via `loadGasCode()` in [main.js](src/main.js). Don't re-embed the script inline in [index.html](index.html).
+
+> [!WARNING]
+> **Bump the script version whenever `Code.gs`'s behavior changes** (new action, changed response shape, changed email/side-effect logic — not comment-only or pure-refactor edits), moving all three together in the same commit:
+> 1. `scriptVersion`/`service` strings in the `doGet` capabilities response in [Code.gs](apps-script/Code.gs).
+> 2. `EXPECTED_SCRIPT_VERSION` in [main.js](src/main.js) (what flags an out-of-date deployment on the connection card).
+> 3. A new entry in the version-history comment block atop [Code.gs](apps-script/Code.gs).
+> Skipping this lets a publisher's deployed script silently diverge from what the client expects, with no warning surfaced anywhere.
 
 ## Pull Requests
 - When asked for "a new pull request", "new PR", or similar: **create it immediately** from the current branch.
 - Do NOT investigate merge status, git history, or ask clarifying questions.
+- **Exception — merged branch:** if the current branch's PR is already merged, treat the request as fresh work: restart the branch from the latest default branch (`git fetch origin <default> && git checkout -B <branch> origin/<default>`) before pushing. Never stack new commits onto merged history.
+- Before pushing, run `npm test` (and `npm run build` if the change touches build config or entry points); fix failures before opening the PR rather than after.
 - Action: Push branch with `git push -u origin <branch>` then create PR via GitHub MCP.
 - Use a descriptive PR title based on the feature/fix being implemented.
 - **After a PR is merged, start the next change on a brand-new branch and open a new PR** — never push commits onto a merged branch to revive it.
@@ -40,16 +45,6 @@ Bug / edge case the change introduced · the next logical feature · offline & s
 
 ## Customizations & Style Guidelines
 - **Strict Guidelines:** Always adhere to the premium UX/UI, offline-first sync, financial ledger precision, role-based security, and spreadsheet integration rules defined in [.agents/AGENTS.md](.agents/AGENTS.md).
-
-> [!WARNING]
-> **Always update the externalized Apps Script copy** whenever [Code.gs](apps-script/Code.gs) is modified: copy it **verbatim** (no HTML-escaping) to [gas-code.txt](public/gas-code.txt). The "Connect your Google Sheet" tab in [index.html](index.html) lazy-fetches this file via `loadGasCode()` in [main.js](src/main.js) the first time the tab opens. Do **not** re-embed the source inline in [index.html](index.html).
-
-> [!WARNING]
-> **Always bump the script version** whenever [Code.gs](apps-script/Code.gs)'s behavior changes (new action, changed response shape, changed email/side-effect logic — not comment-only or pure-refactor edits). Three places move together, in the same commit:
-> 1. `scriptVersion: 'vNN'` and the matching `service: 'lyrical-sheets-webhook-vNN'` string in the `doGet` capabilities response in [Code.gs](apps-script/Code.gs).
-> 2. `EXPECTED_SCRIPT_VERSION` in [main.js](src/main.js) — this is what the client compares against to flag an out-of-date deployment on the connection card.
-> 3. A new numbered entry in the version-history comment block at the top of [Code.gs](apps-script/Code.gs) describing what changed and, if relevant, which older deployments it flags as outdated.
-> Skipping this means the publisher's already-deployed script silently diverges from what the client expects, with no warning surfaced anywhere.
 
 ### Visual Refactoring & UI Enhancement Guardrails
 > [!IMPORTANT]
