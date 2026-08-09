@@ -65,6 +65,18 @@ import {
   persistManualShippingLink,
   stageShippoExpenseEnrichment,
 } from '../lib/shipping-reconciliation.js';
+import {
+  ADDRESS_FIELD_LABELS,
+  SHIPPO_ADDRESSES_V1_URL,
+  SHIPPO_VALIDATE_V2_URL,
+  addressSignature,
+  addressValidationBlocker,
+  buildAddressValidationQuery,
+  buildLegacyValidationPayload,
+  isDeliverable,
+  normalizeAddressVerification,
+  verificationVerdict,
+} from '../lib/address-verification.js';
 
 function getShippingReconciliationOrders() {
   const byNumber = new Map();
@@ -1049,6 +1061,8 @@ function initShippingTab() {
     weight_unit: $('sp-weight-unit').value || 'lb'
   };
   renderCustomShippoDestPicker();
+  bindDestinationVerificationWatchers();
+  renderDestinationVerification();
   loadShippoIncotermPreference($('st-country')?.value || '');
   updateShippoCustomsTotalHint();
   renderShippingAnalysisHub();
@@ -1307,6 +1321,7 @@ function clearShippoDestSelection(e) {
   $('st-zip').value = '';
   $('st-country').value = 'US';
   onShippoDestCountryChange();
+  dismissAddressVerification();
 }
 
 function getRecentShippingOrders() {
@@ -1396,6 +1411,8 @@ function onShippoPreFillDestChange() {
     $('st-zip').value = addr.zip || '';
     $('st-country').value = addr.country || 'US';
     onShippoDestCountryChange();
+    // A verdict belongs to one address; loading a different one retires it.
+    dismissAddressVerification();
     showToast('✓ Destination populated');
 
     // Older cached orders were fetched without the contact resources, so the phone
@@ -1406,6 +1423,306 @@ function onShippoPreFillDestChange() {
   } catch (e) {
     console.error('Failed to parse pre-fill address', e);
   }
+}
+
+// ─── Destination address verifier ─────────────────────────────────────────
+//
+// Backed by Shippo's address validation (the `ValidateAddress` operation in
+// Shippo's MCP tool catalogue). It answers a graded verdict rather than a
+// yes/no, so the UI shows the verdict, the reasons behind it, and the
+// standardized address as an *offer* the publisher applies — Shippo's
+// recommendation is authoritative about postal formatting, not about which
+// apartment the buyer actually lives in, so it is never written silently.
+//
+// The parsing lives in lib/address-verification.js; what is here is the call,
+// the DOM and the freshness rule.
+
+// Last verdict, tied to the exact address text it was produced from. Anything
+// that reads it must compare signatures first: a verdict for an address the
+// publisher has since edited is worse than no verdict, because it vouches for
+// text Shippo never saw.
+let _destVerification = null;
+
+/** Reads the destination form into the field names the verifier speaks. */
+function readShippoDestinationAddress() {
+  return {
+    name: $('st-name')?.value.trim() || '',
+    company: $('st-company')?.value.trim() || '',
+    street1: $('st-street1')?.value.trim() || '',
+    street2: $('st-street2')?.value.trim() || '',
+    city: $('st-city')?.value.trim() || '',
+    state: $('st-state')?.value.trim() || '',
+    zip: $('st-zip')?.value.trim() || '',
+    country: normalizeCountryCode($('st-country')?.value || '') || ($('st-country')?.value.trim() || ''),
+  };
+}
+
+/** The cached verdict, but only while it still describes what is in the form. */
+function currentDestinationVerification() {
+  if (!_destVerification) return null;
+  return _destVerification.signature === addressSignature(readShippoDestinationAddress())
+    ? _destVerification
+    : null;
+}
+
+/**
+ * Calls Shippo's v2 validator and falls back to the legacy endpoint.
+ *
+ * v2 is the richer answer and the one worth having, but not every Shippo token
+ * can reach it, and a verifier that simply fails on those accounts is a verifier
+ * the publisher stops trusting. The legacy `/addresses/` endpoint with
+ * `validate: true` has been answering for this app all along, so it is the
+ * fallback rather than the error path — normalizeAddressVerification flattens
+ * both into one shape, and the panel reports which one answered.
+ */
+async function fetchShippoAddressVerification(token, address) {
+  const headers = { 'Authorization': `ShippoToken ${token}`, 'Content-Type': 'application/json' };
+  const query = new URLSearchParams(buildAddressValidationQuery(address)).toString();
+  let v2Note = '';
+  // Held rather than thrown: a throw here would be caught by this function's
+  // own catch and turn an outage into a second request against the same
+  // service. It is rethrown below, past the fallback.
+  let outage = null;
+
+  try {
+    const resp = await fetch(`${SHIPPO_VALIDATE_V2_URL}?${query}`, { headers });
+    if (resp.ok) return normalizeAddressVerification(await resp.json(), address);
+    const text = await resp.text().catch(() => '');
+    // 401/403 = token not entitled to v2, 404/405 = endpoint not on this
+    // account's API version, 400/501 = v2 rejected the shape. Each of those is
+    // worth a second opinion from v1. Anything else (429, 5xx) is Shippo
+    // rate-limiting or down, and v1 is the same service behind the same
+    // limiter — retrying it would add load and report the outage twice.
+    if ([400, 401, 403, 404, 405, 501].includes(resp.status)) {
+      v2Note = `v2 validator unavailable (${resp.status})`;
+    } else {
+      outage = new Error(`Shippo validation failed (${resp.status})${text ? `: ${text.slice(0, 160)}` : ''}`);
+    }
+  } catch (error) {
+    v2Note = error.message || 'v2 validator unreachable';
+  }
+  if (outage) throw outage;
+
+  const legacyResp = await fetch(SHIPPO_ADDRESSES_V1_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(buildLegacyValidationPayload(address)),
+  });
+  if (!legacyResp.ok) {
+    const text = await legacyResp.text().catch(() => '');
+    throw new Error(`${v2Note}; legacy validator also failed (${legacyResp.status})${text ? `: ${text.slice(0, 140)}` : ''}`);
+  }
+  return normalizeAddressVerification(await legacyResp.json(), address);
+}
+
+const VERIFY_TONE_CLASS = {
+  ok: 'ok',
+  warn: 'warn',
+  err: 'err',
+};
+
+function renderVerificationReasons(reasons) {
+  if (!reasons.length) return '';
+  const REASON_TONE = { error: 'err', warning: 'warn', correction: 'note' };
+  return `<ul class="addr-verify-reasons">${reasons.map(reason => {
+    const tone = REASON_TONE[reason.type] || 'info';
+    return `<li class="addr-verify-reason ${tone}">
+      <span class="addr-verify-reason-tag">${escapeHtml(reason.type || 'info')}</span>
+      <span>${escapeHtml(reason.description)}</span>
+    </li>`;
+  }).join('')}</ul>`;
+}
+
+function renderVerificationCorrections(corrections) {
+  if (!corrections.length) return '';
+  return `<div class="addr-verify-corrections">
+    <div class="addr-verify-corrections-head">
+      <span>Shippo standardized ${corrections.length} field${corrections.length === 1 ? '' : 's'}</span>
+      <button type="button" class="btn gold sm" onclick="applyVerifiedAddressCorrections()">Apply corrections</button>
+    </div>
+    <ul>${corrections.map(correction => `<li>
+      <span class="addr-verify-field">${escapeHtml(correction.label)}</span>
+      <span class="addr-verify-from">${escapeHtml(correction.from || '—')}</span>
+      <span class="addr-verify-arrow" aria-hidden="true">→</span>
+      <span class="addr-verify-to">${escapeHtml(correction.to)}</span>
+    </li>`).join('')}</ul>
+  </div>`;
+}
+
+/**
+ * Draws whatever the verifier currently knows. Staleness is recomputed from the
+ * live form on every call rather than tracked with a flag, so there is no way
+ * for the panel to sit there claiming an edited address is deliverable.
+ */
+function renderDestinationVerification() {
+  const panel = $('ship-dest-verify-panel');
+  if (!panel) return;
+
+  if (!_destVerification) {
+    panel.hidden = true;
+    panel.innerHTML = '';
+    return;
+  }
+
+  if (_destVerification.pending) {
+    panel.hidden = false;
+    panel.className = 'addr-verify pending';
+    panel.innerHTML = `<div class="addr-verify-skeleton" role="status" aria-live="polite">
+      <span class="sr-only">Checking this address with Shippo…</span>
+      <span class="addr-verify-skeleton-bar wide"></span>
+      <span class="addr-verify-skeleton-bar"></span>
+      <span class="addr-verify-skeleton-bar narrow"></span>
+    </div>`;
+    return;
+  }
+
+  const { result } = _destVerification;
+  const verdict = verificationVerdict(result.status);
+  const tone = VERIFY_TONE_CLASS[verdict.tone] || 'warn';
+  const stale = _destVerification.signature !== addressSignature(readShippoDestinationAddress());
+
+  const meta = [
+    result.confidence?.score ? `${result.confidence.score} confidence` : '',
+    result.addressType && result.addressType !== 'unknown' ? result.addressType : '',
+    // Which validator answered matters when the verdicts differ in detail:
+    // the legacy endpoint cannot report confidence or address type at all.
+    result.source === 'v2' ? 'Shippo v2' : 'Shippo legacy',
+  ].filter(Boolean).join(' · ');
+
+  panel.hidden = false;
+  panel.className = `addr-verify ${tone}${stale ? ' stale' : ''}`;
+  panel.innerHTML = `
+    <div class="addr-verify-head">
+      <span class="addr-verify-badge ${tone}">${escapeHtml(verdict.icon)} ${escapeHtml(verdict.label)}</span>
+      <span class="addr-verify-meta">${escapeHtml(meta)}</span>
+      <button type="button" class="addr-verify-dismiss" onclick="dismissAddressVerification()" aria-label="Dismiss address check">×</button>
+    </div>
+    ${stale ? '<div class="addr-verify-stale-note">You have edited the address since this check — verify again before buying a label.</div>' : ''}
+    <p class="addr-verify-summary">${escapeHtml(verdict.summary)}</p>
+    ${renderVerificationReasons(result.reasons)}
+    ${stale ? '' : renderVerificationCorrections(result.corrections)}
+  `;
+}
+
+/** Re-renders so an edit flips the panel to its stale state as it is typed. */
+function markDestinationVerificationStale() {
+  if (_destVerification) renderDestinationVerification();
+}
+
+/**
+ * Watches the destination fields so the panel can never outlive its address.
+ * Bound once per element — initShippingTab runs on every visit to the tab.
+ */
+function bindDestinationVerificationWatchers() {
+  ADDRESS_FIELD_LABELS.forEach(([field]) => {
+    // The form's ids are the field names verbatim: st-name, st-street1, st-zip…
+    const input = $(`st-${field}`);
+    if (!input || input.dataset.verifyWatch === 'true') return;
+    input.dataset.verifyWatch = 'true';
+    input.addEventListener('input', markDestinationVerificationStale);
+    input.addEventListener('change', markDestinationVerificationStale);
+  });
+}
+
+/** Clears the panel — used by the dismiss button and by destination changes. */
+function dismissAddressVerification() {
+  _destVerification = null;
+  renderDestinationVerification();
+}
+
+async function verifyDestinationAddress() {
+  const shippoKey = TAX_CENTER.settings?.shippoKey || '';
+  if (!shippoKey) {
+    showToast('⚠️ Please configure your Shippo API Key first', 'warn');
+    return;
+  }
+
+  const address = readShippoDestinationAddress();
+  const blocker = addressValidationBlocker(address);
+  if (blocker) {
+    showToast(`⚠️ ${blocker}`, 'warn');
+    return;
+  }
+
+  const button = $('ship-verify-btn');
+  const priorLabel = button?.innerHTML;
+  if (button) { button.disabled = true; button.innerHTML = 'Checking…'; }
+
+  _destVerification = { signature: addressSignature(address), pending: true, result: null };
+  renderDestinationVerification();
+
+  try {
+    const result = await fetchShippoAddressVerification(shippoKey, address);
+    _destVerification = {
+      signature: addressSignature(address),
+      pending: false,
+      result,
+      address,
+      at: new Date().toISOString(),
+    };
+    renderDestinationVerification();
+
+    const verdict = verificationVerdict(result.status);
+    const correctionNote = result.corrections.length
+      ? ` — ${result.corrections.length} suggested correction${result.corrections.length === 1 ? '' : 's'}`
+      : '';
+    showToast(
+      `${verdict.icon} ${verdict.label}${correctionNote}`,
+      verdict.tone,
+      result.status === 'valid' ? 4000 : 7000,
+    );
+  } catch (error) {
+    console.error('Shippo address verification failed', error);
+    _destVerification = null;
+    renderDestinationVerification();
+    showToast(`❌ Could not verify the address: ${error.message}`, 'err', 7000);
+  } finally {
+    if (button) { button.disabled = false; button.innerHTML = priorLabel ?? '🔍 Verify Address'; }
+  }
+}
+
+/**
+ * Writes Shippo's standardized fields into the destination form.
+ *
+ * Only the fields Shippo actually changed are touched, and only while the form
+ * still holds the address that was verified — between rendering the panel and
+ * clicking the button the publisher may have typed something, and overwriting
+ * that with a stale recommendation would be a silent data loss.
+ */
+function applyVerifiedAddressCorrections() {
+  const record = currentDestinationVerification();
+  if (!record?.result?.corrections?.length) {
+    showToast('That address check is out of date — verify again', 'warn');
+    renderDestinationVerification();
+    return;
+  }
+
+  const applied = [];
+  record.result.corrections.forEach(correction => {
+    const input = $(`st-${correction.field}`);
+    if (!input) return;
+    input.value = correction.to;
+    applied.push(correction.label);
+  });
+
+  if (!applied.length) {
+    showToast('No fields to update on this form', 'warn');
+    return;
+  }
+
+  // The form now holds Shippo's own text, which is by definition what Shippo
+  // recommended — so the verdict is re-pinned to it and the corrections list
+  // collapses instead of offering the same changes a second time.
+  const updated = readShippoDestinationAddress();
+  _destVerification = {
+    ...record,
+    signature: addressSignature(updated),
+    address: updated,
+    result: { ...record.result, corrections: [], recommended: null },
+  };
+  onShippoDestCountryChange();
+  renderDestinationVerification();
+  showToast(`✓ Applied Shippo's standardized ${applied.length === 1 ? 'field' : 'fields'}: ${applied.join(', ')}`);
 }
 
 function onShippoBookPresetChange() {
@@ -1731,6 +2048,21 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
   if (!shippoKey) {
     showToast('⚠️ Please configure your Shippo API Key first', 'warn');
     return;
+  }
+
+  // A label bought for an address Shippo has already called undeliverable is
+  // money spent on a parcel that comes back. The check only fires when the
+  // publisher actually verified *this* address and Shippo rejected it — an
+  // unverified destination buys as it always did, so the verifier adds a guard
+  // rather than a gate.
+  const verification = currentDestinationVerification();
+  if (verification?.result && !isDeliverable(verification.result)) {
+    const reason = verification.result.reasons[0]?.description || 'Shippo could not find this address.';
+    const overridden = await confirmDialog(
+      `Shippo says this destination is undeliverable.\n\n${reason}\n\nBuy the label anyway?`,
+      { title: 'Undeliverable address', okLabel: 'Buy anyway', cancelLabel: 'Go back', danger: true },
+    );
+    if (!overridden) return;
   }
 
   const confirmed = await confirmDialog(`Confirm purchasing shipping label?\n\nCarrier: ${provider}\nService: ${serviceName}\nCost: ${amount} ${currency}`, {
@@ -4432,4 +4764,9 @@ export {
   getWeightInKg,
   updateShippoBaseSpecsFromInputs,
   onShippoQuantityChange,
+  verifyDestinationAddress,
+  applyVerifiedAddressCorrections,
+  dismissAddressVerification,
+  readShippoDestinationAddress,
+  renderDestinationVerification,
 };

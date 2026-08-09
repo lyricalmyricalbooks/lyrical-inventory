@@ -204,6 +204,9 @@ import {
   onShippoIncotermChange,
   onShippoDestCountryChange,
   updateShippoCustomsTotalHint,
+  verifyDestinationAddress,
+  applyVerifiedAddressCorrections,
+  dismissAddressVerification,
 } from './features/shipping.js';
 import {
   ocList,
@@ -21456,67 +21459,6 @@ document.addEventListener('click', (e) => {
 
 
 
-async function validateDestinationAddress() {
-  const shippoKey = TAX_CENTER.settings?.shippoKey || '';
-  if (!shippoKey) {
-    showToast('⚠️ Please configure your Shippo API Key first', 'warn');
-    return;
-  }
-
-  const stName = $('st-name').value.trim();
-  const stStreet1 = $('st-street1').value.trim();
-  const stCity = $('st-city').value.trim();
-  const stState = $('st-state').value.trim();
-  const stZip = $('st-zip').value.trim();
-  const stCountry = $('st-country').value;
-  const stCountryCode = normalizeCountryCode(stCountry);
-
-  if (!stStreet1 || !stCity || !stZip || !stCountryCode) {
-    showToast('⚠️ Street Address, City, Zip, and Country are required to validate.', 'warn');
-    return;
-  }
-
-  showToast('🔍 Validating recipient address...');
-
-  try {
-    const payload = {
-      name: stName || 'Recipient',
-      street1: stStreet1,
-      city: stCity,
-      state: stState,
-      zip: stZip,
-      country: stCountryCode,
-      validate: true
-    };
-
-    const resp = await fetch('https://api.goshippo.com/addresses/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `ShippoToken ${shippoKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => null);
-      throw new Error(err ? JSON.stringify(err) : `API Error ${resp.status}`);
-    }
-
-    const data = await resp.json();
-    const results = data.validation_results || {};
-
-    if (results.is_valid) {
-      showToast('✓ Address is VALID and deliverable!', 'ok', 5000);
-    } else {
-      const messages = (results.messages || []).map(m => m.text).join('; ') || 'Invalid address layout.';
-      showToast(`⚠️ Address invalid: ${messages}`, 'warn', 8000);
-    }
-  } catch (err) {
-    console.error('Address validation failed:', err);
-    showToast(`❌ Validation error: ${err.message}`, 'err');
-  }
-}
 
 
 
@@ -21777,7 +21719,8 @@ function exposeLegacyInlineHandlers() {
     calculateShippoRates, updateShippoBaseSpecsFromInputs, onShippoQuantityChange,
     renderShippoIncotermHint, onShippoIncotermChange, onShippoDestCountryChange,
     updateShippoCustomsTotalHint,
-    buyShippoLabel, validateDestinationAddress, downloadInventoryValuationCSV, openInventoryValuationModal, printInventoryValuationReport,
+    buyShippoLabel, verifyDestinationAddress, applyVerifiedAddressCorrections,
+    dismissAddressVerification, downloadInventoryValuationCSV, openInventoryValuationModal, printInventoryValuationReport,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange, setShipAnalysisMarginFilter,
     onShipAnalysisSearch, onInlinePostageChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
@@ -21852,7 +21795,9 @@ window.onShippoIncotermChange = onShippoIncotermChange;
 window.onShippoDestCountryChange = onShippoDestCountryChange;
 window.updateShippoCustomsTotalHint = updateShippoCustomsTotalHint;
 window.buyShippoLabel = buyShippoLabel;
-window.validateDestinationAddress = validateDestinationAddress;
+window.verifyDestinationAddress = verifyDestinationAddress;
+window.applyVerifiedAddressCorrections = applyVerifiedAddressCorrections;
+window.dismissAddressVerification = dismissAddressVerification;
 window.downloadInventoryValuationCSV = downloadInventoryValuationCSV;
 window.renderShippingAnalysisHub = renderShippingAnalysisHub;
 window.changeShipAnalysisPage = changeShipAnalysisPage;
