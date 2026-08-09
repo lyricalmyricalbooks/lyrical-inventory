@@ -1387,6 +1387,78 @@
   </div>
 </div></div>
 
+<!-- RECURRING SUBSCRIPTION EDITOR — shared by "+ Add subscription" and row Edit -->
+<div class="overlay" id="m-rec-edit" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:640px;max-height:92vh;overflow-y:auto;">
+  <div class="modal-title" id="rec-edit-title">Add a recurring subscription</div>
+  <div class="rec-edit-history" id="rec-edit-history"></div>
+
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group">
+      <label for="rec-edit-desc">Description</label>
+      <input type="text" id="rec-edit-desc" placeholder="e.g. Big Cartel Website" oninput="updateRecurringPreview()">
+    </div>
+    <div class="form-group">
+      <label for="rec-edit-vendor">Vendor <span class="tc-opt">optional</span></label>
+      <input type="text" id="rec-edit-vendor" placeholder="e.g. Adobe Inc." oninput="updateRecurringPreview()">
+    </div>
+  </div>
+
+  <div class="g2" style="margin-bottom:12px;">
+    <div class="form-group">
+      <label for="rec-edit-cat">Tax category</label>
+      <select id="rec-edit-cat" onchange="updateRecurringPreview()"></select>
+    </div>
+    <div class="form-group">
+      <label for="rec-edit-freq">Billing cadence</label>
+      <select id="rec-edit-freq" onchange="updateRecurringPreview()"></select>
+    </div>
+  </div>
+
+  <div class="g3" style="margin-bottom:12px;">
+    <div class="form-group">
+      <label for="rec-edit-amount">Amount per period</label>
+      <div style="display:flex;gap:4px;">
+        <select id="rec-edit-cur" style="flex:0 0 78px;" onchange="updateRecurringPreview()">
+          <option value="CAD">CAD</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="MXN">MXN</option>
+        </select>
+        <input type="number" inputmode="decimal" step="0.01" min="0" id="rec-edit-amount" placeholder="0.00" style="flex:1;" oninput="updateRecurringPreview()">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="rec-edit-start">First charge</label>
+      <input type="date" id="rec-edit-start" onchange="updateRecurringPreview()">
+    </div>
+    <div class="form-group">
+      <label for="rec-edit-end">Ends <span class="tc-opt">optional</span></label>
+      <input type="date" id="rec-edit-end" onchange="updateRecurringPreview()">
+    </div>
+  </div>
+
+  <div class="form-group" style="margin-bottom:12px;">
+    <label for="rec-edit-notes">Notes <span class="tc-opt">optional</span></label>
+    <input type="text" id="rec-edit-notes" placeholder="e.g. billed to the business card ending 4021" oninput="updateRecurringPreview()">
+  </div>
+
+  <label class="rec-pause-toggle" for="rec-edit-paused">
+    <input type="checkbox" id="rec-edit-paused" onchange="updateRecurringPreview()">
+    <span>
+      <strong>Pause this subscription</strong>
+      <em>Keeps the record and its history, but stops posting charges to the ledger.</em>
+    </span>
+  </label>
+
+  <div class="rec-preview" id="rec-edit-preview" aria-live="polite"></div>
+
+  <div class="modal-footer" style="margin-top:14px;">
+    <button class="btn" onclick="closeM('rec-edit')">Cancel</button>
+    <button class="btn gold" id="rec-edit-save" onclick="saveRecurringEditor()">Add subscription</button>
+  </div>
+</div></div>
+
 <!-- TAX CENTER CATEGORY DETAIL MODAL -->
 <div class="overlay" id="m-tc-cat-detail" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:980px;">
   <div class="modal-title" role="dialog" aria-modal="true">Transactions: <span id="tc-cat-detail-title"></span></div>
@@ -1768,53 +1840,24 @@
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:1.5rem;">
-    <div style="font-family:'Playfair Display',serif;font-size:18px;margin-bottom:1rem;">Recurring Subscriptions</div>
-    <div class="tbl-wrap" style="margin-bottom:1rem;"><table class="tbl">
-      <thead><tr><th>Description</th><th>Category</th><th>Amount (Monthly)</th><th>Start Date</th><th>Last Injected</th><th></th></tr></thead>
+  <div class="card rec-card" style="margin-bottom:1.5rem;">
+    <div class="rec-head">
+      <div>
+        <div class="rec-card-title">Recurring Subscriptions</div>
+        <div class="rec-card-sub">Standing costs that post themselves to the ledger each period — hosting, software, rent, phone.</div>
+      </div>
+      <button class="btn gold" onclick="openRecurringEditor()">+ Add subscription</button>
+    </div>
+    <div id="tc-recurring-summary" class="rec-summary"></div>
+    <div id="tc-recurring-filters" class="rec-filters"></div>
+    <div id="tc-recurring-empty"></div>
+    <div class="tbl-wrap rec-tbl-wrap" id="tc-recurring-tbl-wrap" style="margin-bottom:0;"><table class="tbl rec-tbl">
+      <thead><tr>
+        <th>Subscription</th><th>Cadence</th><th class="r">Amount</th><th class="r">Per month</th>
+        <th>Next charge</th><th>Status</th><th class="r">Actions</th>
+      </tr></thead>
       <tbody id="tc-recurring-body"></tbody>
     </table></div>
-    <div class="g4">
-      <div class="form-group"><label for="tc-rec-desc">Description</label><input type="text" id="tc-rec-desc" placeholder="e.g. Hosting"></div>
-      <div class="form-group">
-        <label for="tc-rec-cat">Category</label>
-        <select id="tc-rec-cat">
-          <option>Software & Subscriptions</option>
-          <option>Marketing & Advertising</option>
-          <option>Printing & Production</option>
-          <option>Editorial & Proofreading</option>
-          <option>Illustration & Photography</option>
-          <option>Rights & Permissions</option>
-          <option>ISBN, Barcodes & Cataloging</option>
-          <option>Shipping & Postage</option>
-          <option>Warehousing & Fulfillment</option>
-          <option>Packaging Materials</option>
-          <option>Office Supplies</option>
-          <option>Home Office</option>
-          <option>Travel & Meals</option>
-          <option>Professional Services</option>
-          <option>Sales Processing Fees</option>
-          <option>Books, Research & Reference</option>
-          <option>Events & Exhibitions</option>
-          <option>Other</option>
-        </select>
-      </div>
-      <div class="form-group"><label for="tc-rec-start">Date Started</label><input type="date" id="tc-rec-start"></div>
-      <div class="form-group">
-        <label>Monthly Amount</label>
-        <div style="display:flex;gap:4px;">
-          <select id="tc-rec-cur" style="flex:0 0 60px;">
-            <option value="CAD">CAD</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
-            <option value="MXN">MXN</option>
-          </select>
-          <input type="number" inputmode="numeric" id="tc-rec-amount" placeholder="0.00" style="flex:1;">
-          <button class="btn gold" onclick="addRecurring()">Add</button>
-        </div>
-      </div>
-    </div>
   </div>
 
   <div class="card" style="margin-bottom:1.5rem; padding: 1.5rem;">

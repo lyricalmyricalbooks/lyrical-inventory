@@ -52,6 +52,19 @@ import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
 import { reconcileConsignmentInvoiceLinks } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
+import {
+  RECURRING_FREQUENCIES,
+  frequencyLabel,
+  frequencySuffix,
+  monthlyEquivalent,
+  newRecurringId,
+  nextRecurringDate,
+  normalizeRecurring,
+  recurringDueCharges,
+  recurringStatus,
+  relativeDayLabel,
+  summarizeRecurring,
+} from '../lib/recurring.js';
 
 async function saveTaxCenter({ rethrow = false } = {}) {
   if (isAuthor()) return;
@@ -65,57 +78,58 @@ async function saveTaxCenter({ rethrow = false } = {}) {
   }
 }
 
+/**
+ * Give every subscription a stable id, in place, so the editor and the row
+ * actions can address one by identity instead of by array index. Index-based
+ * addressing was the source of the fuzzy desc+amount+date re-lookup in
+ * removeRecurring: two tabs open, one add, and the index you clicked no longer
+ * points at the row you saw. Returns true when something was assigned, so the
+ * caller can persist the migration once.
+ */
+function _tcEnsureRecurringIds() {
+  let changed = false;
+  (TAX_CENTER.recurring || []).forEach(sub => {
+    if (!sub.id) { sub.id = newRecurringId(); changed = true; }
+  });
+  return changed;
+}
+
+/** Look a subscription up by its stable id. */
+function _tcFindRecurring(id) {
+  return (TAX_CENTER.recurring || []).find(s => String(s.id) === String(id)) || null;
+}
+
 function processRecurringExpenses() {
   if (isAuthor() || !TAX_CENTER.recurring || TAX_CENTER.recurring.length === 0) return;
   const now = new Date();
-  const _currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
 
-  let modified = false;
+  let modified = _tcEnsureRecurringIds();
   TAX_CENTER.recurring.forEach(sub => {
-    const startDate = sub.startDate || today();
-    const start = new Date(startDate);
-    const startDay = start.getDate();
+    // recurringDueCharges honours cadence, the end date and the paused flag,
+    // and refuses to log a charge whose date hasn't arrived yet.
+    recurringDueCharges(sub, now).forEach(charge => {
+      if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+      const origCur = sub.currency || 'CAD';
+      const fxRate = _fxRateCache[`${origCur}_CAD`] || 1;
+      const baseAmount = (parseFloat(sub.amount) || 0) * fxRate;
 
-    // Start checking from the month of startDate
-    let checkDate = new Date(start.getFullYear(), start.getMonth(), 1);
-    const todayMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      TAX_CENTER.businessExpenses.unshift({
+        id: Date.now() + Math.random(),
+        desc: sub.desc + ' (Recurring)',
+        cat: sub.cat,
+        currency: origCur,
+        amount: parseFloat(sub.amount) || 0,
+        fxRate: fxRate,
+        baseAmount: baseAmount,
+        date: charge.date,
+        ref: 'Auto-Injected',
+        recurringId: sub.id || '',
+        receipt: ''
+      });
 
-    while (checkDate <= todayMonth) {
-      const mStr = checkDate.getFullYear() + '-' + String(checkDate.getMonth() + 1).padStart(2, '0');
-
-      // Inject if this month is after lastInjected (YYYY-MM comparison)
-      if (mStr > (sub.lastInjected || '')) {
-        const lastDayInMonth = new Date(checkDate.getFullYear(), checkDate.getMonth() + 1, 0).getDate();
-        const injectionDay = Math.min(startDay, lastDayInMonth);
-        const injectionDateStr = checkDate.getFullYear() + '-' +
-          String(checkDate.getMonth() + 1).padStart(2, '0') + '-' +
-          String(injectionDay).padStart(2, '0');
-
-        if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-        const origCur = sub.currency || 'CAD';
-        const fxRate = _fxRateCache[`${origCur}_CAD`] || 1;
-        const baseAmount = (parseFloat(sub.amount) || 0) * fxRate;
-
-        TAX_CENTER.businessExpenses.unshift({
-          id: Date.now() + Math.random(),
-          desc: sub.desc + ' (Recurring)',
-          cat: sub.cat,
-          currency: origCur,
-          amount: parseFloat(sub.amount) || 0,
-          fxRate: fxRate,
-          baseAmount: baseAmount,
-          date: injectionDateStr,
-          ref: 'Auto-Injected',
-          receipt: ''
-        });
-
-        sub.lastInjected = mStr;
-        modified = true;
-      }
-
-      // Advance by one month
-      checkDate.setMonth(checkDate.getMonth() + 1);
-    }
+      sub.lastInjected = charge.monthKey;
+      modified = true;
+    });
   });
 
   if (modified) {
@@ -334,20 +348,217 @@ function _tcApplyLedgerFilter(rows) {
   return out;
 }
 
+// ── Recurring subscriptions ─────────────────────────────────────────────────
+// The panel is a small ledger of its own: each row is a standing commitment,
+// and the numbers people actually want off this screen are "what do these cost
+// me a month" and "what lands next". Both were previously absent — the table
+// listed a raw amount and the YYYY-MM of the last injection and stopped there.
+
+/** Which lifecycle bucket the table is filtered to. */
+let _tcRecurringFilter = 'all';
+
+const REC_STATUS_META = {
+  active: { cls: 'green', glyph: '●', label: 'Active' },
+  scheduled: { cls: 'blue', glyph: '◷', label: 'Scheduled' },
+  paused: { cls: 'gray', glyph: '❚❚', label: 'Paused' },
+  ended: { cls: 'gray', glyph: '✓', label: 'Ended' },
+  invalid: { cls: 'red', glyph: '⚠', label: 'Needs a date' },
+};
+
+function tcSetRecurringFilter(f) {
+  _tcRecurringFilter = ['active', 'paused', 'ended'].includes(f) ? f : 'all';
+  _tcRenderRecurringSubscriptions();
+}
+
+/** How many ledger expenses this subscription has posted so far. */
+function _tcRecurringChargeCount(sub) {
+  const legacyDesc = `${sub.desc} (Recurring)`;
+  return (TAX_CENTER.businessExpenses || []).filter(e =>
+    (sub.id && e.recurringId === sub.id) || (!e.recurringId && e.desc === legacyDesc)
+  ).length;
+}
+
+/**
+ * Jump the ledger below to just this subscription's posted charges. The whole
+ * point of the "12 charges" link — the injected expenses are the evidence, and
+ * they were previously three scrolls and a guessed search term away.
+ */
+function tcShowRecurringCharges(id) {
+  const sub = _tcFindRecurring(id);
+  if (!sub) return;
+  const yearSel = $('tc-year-ledger') || $('tc-year');
+  if (yearSel && Array.from(yearSel.options).some(o => o.value === 'all')) tcYearChange('all');
+  const typeSel = $('tc-ledger-type');
+  if (typeSel) typeSel.value = 'expenses';
+  tcLedgerTypeFilter('expenses');
+  const searchEl = $('tc-ledger-search');
+  if (searchEl) searchEl.value = sub.desc;
+  tcLedgerSearchInput(sub.desc);
+  $('tc-ledger-search')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function _tcRecurringRowHtml(raw, now, baseCurrency) {
+  const s = normalizeRecurring(raw);
+  const status = recurringStatus(s, now);
+  const meta = REC_STATUS_META[status] || REC_STATUS_META.active;
+  const cur = s.currency || baseCurrency;
+  const rate = cur === baseCurrency ? 1 : Number(_fxRateCache[`${cur}_${baseCurrency}`]) || 0;
+  const perMonth = monthlyEquivalent(s);
+  const inactive = status === 'paused' || status === 'ended';
+
+  // Per-month column: converted where a rate is known, flagged with ≈ where it
+  // isn't, rather than silently reporting a USD figure as if it were CAD.
+  const perMonthCell = inactive
+    ? '<span class="rec-dim">—</span>'
+    : rate
+      ? `${fmt(perMonth * rate, baseCurrency)}`
+      : `<span class="rec-approx" title="No ${cur}→${baseCurrency} rate cached yet — shown unconverted.">≈ ${fmt(perMonth, cur)}</span>`;
+
+  const next = nextRecurringDate(s, now);
+  const nextCell = next
+    ? `<div class="rec-next-date">${escapeHtml(next)}</div><div class="rec-next-rel">${escapeHtml(relativeDayLabel(next, now))}</div>`
+    : status === 'paused'
+      ? '<span class="rec-dim">Held</span>'
+      : status === 'ended'
+        ? `<span class="rec-dim">Ended ${escapeHtml(s.endDate || '')}</span>`
+        : '<span class="rec-dim">—</span>';
+
+  const charges = _tcRecurringChargeCount(s);
+  const chargeLink = charges
+    ? `<button type="button" class="rec-charge-link" onclick="tcShowRecurringCharges('${escapeHtml(s.id)}')" title="Show these ${charges} posted charges in the ledger below">${charges} charge${charges === 1 ? '' : 's'} logged →</button>`
+    : '<span class="rec-dim">Nothing posted yet</span>';
+
+  const subline = [s.vendor, s.cat].filter(Boolean).map(escapeHtml).join(' · ');
+
+  return `
+    <tr class="rec-row${inactive ? ' is-inactive' : ''}">
+      <td>
+        <div class="rec-name">${escapeHtml(s.desc || 'Untitled')}</div>
+        <div class="rec-meta">${subline}</div>
+        <div class="rec-meta">${chargeLink}</div>
+        ${s.notes ? `<div class="rec-note">${escapeHtml(s.notes)}</div>` : ''}
+      </td>
+      <td><span class="pill gray">${escapeHtml(frequencyLabel(s.frequency))}</span>
+        <div class="rec-meta">from ${escapeHtml(s.startDate || '—')}${s.endDate ? ` → ${escapeHtml(s.endDate)}` : ''}</div>
+      </td>
+      <td class="r rec-amount-cell">${fmt(s.amount, cur)}<span class="rec-per">${escapeHtml(frequencySuffix(s.frequency))}</span></td>
+      <td class="r rec-amount-cell">${perMonthCell}</td>
+      <td>${nextCell}</td>
+      <td><span class="pill ${meta.cls}">${meta.glyph} ${meta.label}</span></td>
+      <td class="r">
+        <div class="rec-actions">
+          <button class="btn sm" onclick="openRecurringEditor('${escapeHtml(s.id)}')" title="Edit this subscription">Edit</button>
+          ${status === 'ended' ? '' : `<button class="btn sm" onclick="toggleRecurringPause('${escapeHtml(s.id)}')" title="${s.paused ? 'Resume billing from this month' : 'Stop posting charges without deleting the record'}">${s.paused ? 'Resume' : 'Pause'}</button>`}
+          <button class="btn sm danger-btn" onclick="removeRecurring('${escapeHtml(s.id)}')" title="Delete this subscription">Remove</button>
+        </div>
+      </td>
+    </tr>`;
+}
+
+function _tcRenderRecurringSummary(subs, summary, baseCurrency) {
+  const el = $('tc-recurring-summary');
+  if (!el) return;
+  if (!subs.length) { el.innerHTML = ''; return; }
+
+  const approx = summary.unconverted.length
+    ? `<div class="rec-stat-note" title="No cached rate for ${summary.unconverted.join(', ')} — those lines are counted at 1:1 until a rate is fetched.">≈ excludes ${escapeHtml(summary.unconverted.join(', '))} conversion</div>`
+    : '';
+  const nextUp = summary.nextUp
+    ? `<div class="rec-stat-val">${escapeHtml(relativeDayLabel(summary.nextUp.date))}</div>
+       <div class="rec-stat-lbl">Next charge · ${escapeHtml(summary.nextUp.sub.desc || '')}</div>`
+    : `<div class="rec-stat-val">—</div><div class="rec-stat-lbl">Next charge</div>`;
+
+  el.innerHTML = `
+    <div class="rec-stat">
+      <div class="rec-stat-val">${fmt(summary.monthlyBase, baseCurrency)}</div>
+      <div class="rec-stat-lbl">Committed per month</div>
+      ${approx}
+    </div>
+    <div class="rec-stat">
+      <div class="rec-stat-val">${fmt(summary.annualBase, baseCurrency)}</div>
+      <div class="rec-stat-lbl">Annualised run rate</div>
+    </div>
+    <div class="rec-stat">${nextUp}</div>
+    <div class="rec-stat">
+      <div class="rec-stat-val">${summary.activeCount + summary.scheduledCount}</div>
+      <div class="rec-stat-lbl">Live${summary.pausedCount ? ` · ${summary.pausedCount} paused` : ''}${summary.endedCount ? ` · ${summary.endedCount} ended` : ''}</div>
+    </div>`;
+}
+
+function _tcRenderRecurringFilters(counts) {
+  const el = $('tc-recurring-filters');
+  if (!el) return;
+  const total = counts.all;
+  if (!total) { el.innerHTML = ''; return; }
+  const tabs = [
+    ['all', 'All', counts.all],
+    ['active', 'Active', counts.active],
+    ['paused', 'Paused', counts.paused],
+    ['ended', 'Ended', counts.ended],
+  ].filter(([id, , n]) => id === 'all' || n > 0);
+  el.innerHTML = tabs.map(([id, label, n]) => `
+    <button type="button" class="rec-filter${_tcRecurringFilter === id ? ' is-on' : ''}"
+      aria-pressed="${_tcRecurringFilter === id}" onclick="tcSetRecurringFilter('${id}')">
+      ${label}<span class="rec-filter-count">${n}</span>
+    </button>`).join('');
+}
+
 function _tcRenderRecurringSubscriptions() {
   const recBody = $('tc-recurring-body');
-  if (recBody) {
-    recBody.innerHTML = (TAX_CENTER.recurring || []).map((sub, i) => `
-        <tr>
-            <td>${escapeHtml(sub.desc)}</td>
-            <td>${escapeHtml(sub.cat)}</td>
-            <td>${fmt(sub.amount, sub.currency || 'CAD')}</td>
-            <td>${escapeHtml(sub.startDate || '-')}</td>
-            <td>${escapeHtml(sub.lastInjected || 'Never')}</td>
-            <td><button class="btn tx" onclick="removeRecurring(${i})">Remove</button></td>
-        </tr>
-      `).join('') || `<tr><td colspan="5" class="r" style="text-align:center;">No active subscriptions</td></tr>`;
+  if (!recBody) return;
+
+  const now = new Date();
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  const subs = TAX_CENTER.recurring || [];
+
+  const summary = summarizeRecurring(subs, _fxRateCache, baseCurrency, now);
+  _tcRenderRecurringSummary(subs, summary, baseCurrency);
+  _tcRenderRecurringFilters({
+    all: subs.length,
+    active: summary.activeCount + summary.scheduledCount,
+    paused: summary.pausedCount,
+    ended: summary.endedCount,
+  });
+
+  // Soonest charge first so the panel reads as a calendar; paused and ended
+  // rows sink to the bottom where they don't compete with live commitments.
+  const rows = subs
+    .map(s => ({ s, status: recurringStatus(s, now), next: nextRecurringDate(s, now) }))
+    .filter(r => {
+      if (_tcRecurringFilter === 'all') return true;
+      if (_tcRecurringFilter === 'active') return r.status === 'active' || r.status === 'scheduled' || r.status === 'invalid';
+      return r.status === _tcRecurringFilter;
+    })
+    .sort((a, b) => {
+      const rank = (r) => (r.status === 'paused' ? 1 : r.status === 'ended' ? 2 : 0);
+      if (rank(a) !== rank(b)) return rank(a) - rank(b);
+      return (a.next || '9999').localeCompare(b.next || '9999');
+    });
+
+  const wrap = $('tc-recurring-tbl-wrap');
+  const empty = $('tc-recurring-empty');
+  if (!subs.length) {
+    if (wrap) wrap.style.display = 'none';
+    if (empty) {
+      empty.style.display = '';
+      empty.innerHTML = `
+        <div class="empty-state">
+          <div class="e-icon">🔁</div>
+          No recurring costs tracked yet. Add hosting, software or rent once and it
+          posts itself to the ledger every period.
+          <div style="margin-top:12px;">
+            <button class="btn gold" onclick="openRecurringEditor()">+ Add subscription</button>
+          </div>
+        </div>`;
+    }
+    recBody.innerHTML = '';
+    return;
   }
+  if (wrap) wrap.style.display = '';
+  if (empty) { empty.style.display = 'none'; empty.innerHTML = ''; }
+
+  recBody.innerHTML = rows.map(r => _tcRecurringRowHtml(r.s, now, baseCurrency)).join('')
+    || `<tr><td colspan="7"><div class="empty-state" style="padding:1rem;">Nothing in this view. <button type="button" class="rec-charge-link" onclick="tcSetRecurringFilter('all')">Show all →</button></div></td></tr>`;
 }
 
 function _tcRenderLedgerPagination(filteredLedger, pageStart, totalPages) {
@@ -1929,24 +2140,229 @@ async function saveTaxCenterSettings() {
   btn.textContent = oldText; btn.disabled = false;
 }
 
-async function removeRecurring(idx) {
-  const itemToRemove = TAX_CENTER.recurring[idx];
-  if (!itemToRemove) return;
+// ── Recurring subscription editor ───────────────────────────────────────────
+// One modal serves both "add" and "edit"; _tcEditingRecurring holds the id of
+// the record being edited, or '' while adding.
 
-  await loadTaxCenter();
+let _tcEditingRecurring = '';
 
-  const freshIdx = TAX_CENTER.recurring.findIndex(sub =>
-    sub.desc === itemToRemove.desc &&
-    sub.amount === itemToRemove.amount &&
-    sub.startDate === itemToRemove.startDate &&
-    sub.cat === itemToRemove.cat
-  );
-
-  if (freshIdx !== -1) {
-    TAX_CENTER.recurring.splice(freshIdx, 1);
-  } else {
-    TAX_CENTER.recurring.splice(idx, 1);
+/**
+ * Open the add/edit sheet. Called with no argument to add, or with a
+ * subscription id to edit that record.
+ */
+function openRecurringEditor(id = '') {
+  const record = id ? _tcFindRecurring(id) : null;
+  if (id && !record) {
+    showToast('⚠ Subscription not found', 'err');
+    return;
   }
+  const sub = record ? normalizeRecurring(record) : null;
+  _tcEditingRecurring = id ? String(id) : '';
+
+  const catSel = $('rec-edit-cat');
+  if (catSel) {
+    catSel.innerHTML = TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
+    // A record saved under a category that has since been retired keeps it
+    // rather than being silently reassigned to Other on the next save.
+    if (sub?.cat && !TC_CATEGORIES.includes(sub.cat)) {
+      catSel.innerHTML += `<option value="${sub.cat.replace(/"/g, '&quot;')}">${sub.cat}</option>`;
+    }
+    catSel.value = sub?.cat || 'Software & Subscriptions';
+  }
+  const freqSel = $('rec-edit-freq');
+  if (freqSel) {
+    freqSel.innerHTML = RECURRING_FREQUENCIES
+      .map(f => `<option value="${f.id}">${f.label}</option>`).join('');
+    freqSel.value = sub?.frequency || 'monthly';
+  }
+
+  $('rec-edit-desc').value = sub?.desc || '';
+  $('rec-edit-vendor').value = sub?.vendor || '';
+  $('rec-edit-cur').value = sub?.currency || 'CAD';
+  $('rec-edit-amount').value = sub ? sub.amount : '';
+  $('rec-edit-start').value = sub?.startDate || today();
+  $('rec-edit-end').value = sub?.endDate || '';
+  $('rec-edit-notes').value = sub?.notes || '';
+  const pausedEl = $('rec-edit-paused');
+  if (pausedEl) pausedEl.checked = !!sub?.paused;
+
+  const title = $('rec-edit-title');
+  if (title) title.textContent = id ? 'Edit subscription' : 'Add a recurring subscription';
+  const saveBtn = $('rec-edit-save');
+  if (saveBtn) saveBtn.textContent = id ? 'Save changes' : 'Add subscription';
+  const histEl = $('rec-edit-history');
+  if (histEl) {
+    histEl.innerHTML = sub
+      ? `Posted ${_tcRecurringChargeCount(sub)} charge(s) so far · last period logged: ${escapeHtml(sub.lastInjected || 'none')}`
+      : 'Charges are posted to the ledger automatically, from the start date onward.';
+  }
+
+  openM('rec-edit');
+  updateRecurringPreview();
+}
+
+/**
+ * Live read-out under the form: cadence, monthly equivalent, annual run rate
+ * and the next charge date, recomputed from the fields as they're typed.
+ * The old inline form gave no feedback at all until after the record saved.
+ */
+function updateRecurringPreview() {
+  const el = $('rec-edit-preview');
+  if (!el) return;
+  const draft = _tcReadRecurringForm();
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  if (!draft.amount || !draft.startDate) {
+    el.innerHTML = '<span class="rec-dim">Enter an amount and a start date to see the running cost.</span>';
+    return;
+  }
+  const rate = draft.currency === baseCurrency ? 1 : Number(_fxRateCache[`${draft.currency}_${baseCurrency}`]) || 0;
+  const perMonth = monthlyEquivalent(draft);
+  const money = rate
+    ? `${fmt(perMonth * rate, baseCurrency)}/mo · ${fmt(perMonth * rate * 12, baseCurrency)}/yr`
+    : `≈ ${fmt(perMonth, draft.currency)}/mo · ${fmt(perMonth * 12, draft.currency)}/yr (no ${draft.currency}→${baseCurrency} rate cached)`;
+
+  const next = nextRecurringDate({ ...draft, lastInjected: '' });
+  const status = recurringStatus(draft);
+  const when = draft.paused
+    ? 'Paused — nothing will post until you resume.'
+    : status === 'ended'
+      ? `Ended ${escapeHtml(draft.endDate)} — no further charges.`
+      : next ? `Next charge ${escapeHtml(next)} (${escapeHtml(relativeDayLabel(next))}).` : 'No upcoming charge.';
+
+  // Backfill warning: a start date in the past means the ledger gets every
+  // missed period at once on save. Better said here than discovered after.
+  const missed = recurringDueCharges({ ...draft, lastInjected: _tcEditingRecurring ? (_tcFindRecurring(_tcEditingRecurring)?.lastInjected || '') : '' }).length;
+  const backfill = missed
+    ? `<div class="rec-preview-warn">⚠ ${missed} past charge${missed === 1 ? '' : 's'} will be posted to the ledger immediately.</div>`
+    : '';
+
+  el.innerHTML = `<div class="rec-preview-money">${money}</div>
+    <div class="rec-preview-when">${escapeHtml(frequencyLabel(draft.frequency))} · ${when}</div>${backfill}`;
+}
+
+/** Read the editor fields into a subscription-shaped draft. */
+function _tcReadRecurringForm() {
+  return normalizeRecurring({
+    desc: ($('rec-edit-desc')?.value || '').trim(),
+    vendor: ($('rec-edit-vendor')?.value || '').trim(),
+    cat: $('rec-edit-cat')?.value || 'Other',
+    currency: $('rec-edit-cur')?.value || 'CAD',
+    amount: parseFloat($('rec-edit-amount')?.value) || 0,
+    startDate: $('rec-edit-start')?.value || '',
+    endDate: $('rec-edit-end')?.value || '',
+    frequency: $('rec-edit-freq')?.value || 'monthly',
+    paused: !!$('rec-edit-paused')?.checked,
+    notes: ($('rec-edit-notes')?.value || '').trim(),
+  });
+}
+
+async function saveRecurringEditor() {
+  const draft = _tcReadRecurringForm();
+  if (!draft.desc) { showToast('⚠ Give the subscription a description', 'warn'); $('rec-edit-desc')?.focus(); return; }
+  if (!(draft.amount > 0)) { showToast('⚠ Enter an amount above zero', 'warn'); $('rec-edit-amount')?.focus(); return; }
+  if (!draft.startDate) { showToast('⚠ Pick a start date', 'warn'); $('rec-edit-start')?.focus(); return; }
+  if (draft.endDate && draft.endDate < draft.startDate) {
+    showToast('⚠ The end date is before the start date', 'warn'); $('rec-edit-end')?.focus(); return;
+  }
+
+  const btn = $('rec-edit-save');
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    await loadTaxCenter();
+    if (!TAX_CENTER.recurring) TAX_CENTER.recurring = [];
+    _tcEnsureRecurringIds();
+
+    if (_tcEditingRecurring) {
+      const existing = _tcFindRecurring(_tcEditingRecurring);
+      if (!existing) {
+        showToast('⚠ That subscription was removed elsewhere', 'err');
+        closeM('rec-edit');
+        return;
+      }
+      // lastInjected is deliberately preserved: editing the price of a
+      // subscription must not re-post periods the ledger already has.
+      Object.assign(existing, draft, { id: existing.id, lastInjected: existing.lastInjected || '' });
+    } else {
+      const clash = TAX_CENTER.recurring.find(s =>
+        (s.desc || '').toLowerCase() === draft.desc.toLowerCase() && !s.paused);
+      if (clash && !(await confirmDialog(
+        `"${draft.desc}" is already tracked as a recurring cost (${fmt(clash.amount, clash.currency || 'CAD')} ${frequencyLabel(clash.frequency)}).\n\nAdd a second one anyway? Both will post charges to the ledger.`,
+        { title: 'Possible duplicate', okLabel: 'Add anyway' }))) {
+        return;
+      }
+      TAX_CENTER.recurring.push({ ...draft, id: newRecurringId(), lastInjected: '' });
+    }
+
+    await saveTaxCenter();
+    // Post anything the new/changed schedule already owes, then repaint — so
+    // adding a subscription that started in March lands its back-charges now.
+    processRecurringExpenses();
+    await saveTaxCenter();
+    closeM('rec-edit');
+    renderTaxCenter();
+    showToast(_tcEditingRecurring ? '✓ Subscription updated' : '✓ Subscription added');
+    _tcEditingRecurring = '';
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Could not save the subscription', 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
+/**
+ * Pause or resume without deleting. Resuming rolls `lastInjected` forward to
+ * the month before this one, so the ledger doesn't get a lump of back-charges
+ * for a period the subscription was explicitly not billing.
+ */
+async function toggleRecurringPause(id) {
+  await loadTaxCenter();
+  _tcEnsureRecurringIds();
+  const sub = _tcFindRecurring(id);
+  if (!sub) { showToast('⚠ Subscription not found', 'err'); return; }
+
+  if (sub.paused) {
+    const now = new Date();
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevKey = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`;
+    if ((sub.lastInjected || '') < prevKey) sub.lastInjected = prevKey;
+    sub.paused = false;
+  } else {
+    sub.paused = true;
+  }
+
+  await saveTaxCenter();
+  if (!sub.paused) processRecurringExpenses();
+  await saveTaxCenter();
+  renderTaxCenter();
+  showToast(sub.paused ? '⏸ Subscription paused' : '▶ Subscription resumed');
+}
+
+async function removeRecurring(id) {
+  await loadTaxCenter();
+  _tcEnsureRecurringIds();
+
+  // Older callers passed the array index; ids are strings like 'rec_…', so a
+  // numeric argument can still be resolved positionally for one release.
+  let sub = _tcFindRecurring(id);
+  if (!sub && typeof id === 'number') sub = (TAX_CENTER.recurring || [])[id] || null;
+  if (!sub) { showToast('⚠ Subscription not found', 'err'); return; }
+
+  const posted = _tcRecurringChargeCount(sub);
+  const ok = await confirmDialog(
+    `Remove "${sub.desc}" from recurring costs?\n\n` +
+    (posted
+      ? `The ${posted} charge${posted === 1 ? '' : 's'} it already posted stay in the ledger — only the schedule stops.`
+      : 'Nothing has been posted from it yet.') +
+    `\n\nTo stop it temporarily and keep the record, use Pause instead.`,
+    { title: 'Remove subscription', okLabel: 'Remove', danger: true }
+  );
+  if (!ok) return;
+
+  const at = TAX_CENTER.recurring.indexOf(sub);
+  if (at !== -1) TAX_CENTER.recurring.splice(at, 1);
   await saveTaxCenter();
   renderTaxCenter();
   showToast('✓ Subscription removed');
@@ -2040,6 +2456,12 @@ export {
   _tcBuildCashFlowChart,
   openEditArtistPayout,
   saveTaxCenterSettings,
+  openRecurringEditor,
+  saveRecurringEditor,
+  updateRecurringPreview,
+  toggleRecurringPause,
+  tcSetRecurringFilter,
+  tcShowRecurringCharges,
   removeRecurring,
   downloadTaxLedgerCSV,
 };

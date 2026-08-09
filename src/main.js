@@ -110,6 +110,12 @@ import {
   _tcBuildCashFlowChart,
   openEditArtistPayout,
   saveTaxCenterSettings,
+  openRecurringEditor,
+  saveRecurringEditor,
+  updateRecurringPreview,
+  toggleRecurringPause,
+  tcSetRecurringFilter,
+  tcShowRecurringCharges,
   removeRecurring,
   downloadTaxLedgerCSV,
 } from './features/taxcentre.js';
@@ -15651,23 +15657,10 @@ async function submitTaxExpense() {
   _pendingWebcamReceipt = null;
 }
 
-async function addRecurring() {
-  const desc = ($('tc-rec-desc').value || '').trim();
-  const cat = $('tc-rec-cat').value;
-  const currency = $('tc-rec-cur').value || 'CAD';
-  const amount = parseFloat($('tc-rec-amount').value) || 0;
-  const startDate = $('tc-rec-start').value || today();
-
-  if (!desc || !amount) { showToast('⚠ Details required', 'warn'); return; }
-
-  await loadTaxCenter();
-  if (!TAX_CENTER.recurring) TAX_CENTER.recurring = [];
-  TAX_CENTER.recurring.push({ desc, cat, currency, amount, startDate, lastInjected: '' });
-  await saveTaxCenter();
-  renderTaxCenter();
-  showToast('✓ Subscription added');
-  $('tc-rec-desc').value = ''; $('tc-rec-amount').value = ''; $('tc-rec-start').value = '';
-}
+// addRecurring() used to live here, reading a five-field inline form. Both the
+// add and the edit path now go through the shared editor sheet in
+// src/features/taxcentre.js (openRecurringEditor / saveRecurringEditor), which
+// is where the cadence, end-date and pause fields it never had are validated.
 
 
 
@@ -20797,7 +20790,9 @@ Object.assign(window, {
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
-  submitTaxExpense, importShippoShippingFromApi, addRecurring, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
+  submitTaxExpense, importShippoShippingFromApi, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
+  openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
+  tcSetRecurringFilter, tcShowRecurringCharges,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
   tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcYearChange, tcClearLedgerFilters,
@@ -21698,7 +21693,9 @@ function exposeLegacyInlineHandlers() {
     fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
     processShippoTxToExpense, renderShippingReconciliationWorklist, linkShippingExpense,
     closeShippingReconciliation, openShippingReconciliation, clearShippingReconciliationList,
-    importShippoShippingFromApi, submitTaxExpense, addRecurring,
+    importShippoShippingFromApi, submitTaxExpense,
+    openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
+    tcSetRecurringFilter, tcShowRecurringCharges,
     removeRecurring, downloadTaxLedgerCSV, posBooksMap, posResolveBook, isPosOnlyBook,
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,
     codeToSymbol, posFormat, convertCurrency, getPOSCurrencies, buildPOSCartRows, renderPOS,

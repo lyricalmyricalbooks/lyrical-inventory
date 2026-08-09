@@ -7974,3 +7974,134 @@ tr.hist-row:hover {
 .hist-currency-warn span{flex:1 1 260px;}
 .hist-currency-warn strong{font-weight:700;}
 .hist-currency-warn .btn{flex:none;white-space:nowrap;}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RECURRING SUBSCRIPTIONS — Tax Centre
+   The panel is a commitments calendar, not just a list of rows: the header
+   answers "what do these cost me" before the table answers "which ones".
+   ═══════════════════════════════════════════════════════════════════════════ */
+.rec-head{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:var(--space-4);flex-wrap:wrap;margin-bottom:var(--space-4);
+}
+.rec-card-title{font-family:'Playfair Display',serif;font-size:var(--text-lg);color:var(--content-primary);}
+.rec-card-sub{
+  font-size:var(--text-sm);color:var(--content-secondary);
+  margin-top:var(--space-1);max-width:52ch;line-height:var(--leading-snug);
+}
+.rec-head .btn{flex:none;}
+
+/* Summary strip — mirrors .tc-trip-stat-card so the Tax Centre reads as one
+   screen rather than two differently-styled panels. */
+.rec-summary{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:var(--space-3);margin-bottom:var(--space-4);
+}
+.rec-summary:empty{display:none;}
+.rec-stat{
+  background:var(--surface-raised);border:1px solid var(--border-default);
+  border-radius:var(--r2);padding:var(--space-3) var(--space-4);
+  box-shadow:var(--elev-1);
+  transition:transform var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard);
+}
+.rec-stat:hover{transform:translateY(-1px);box-shadow:var(--elev-2);}
+.rec-stat-val{
+  font-family:'DM Mono',monospace;font-size:var(--text-md);font-weight:700;
+  color:var(--gold-text);letter-spacing:var(--tracking-tight);
+}
+.rec-stat-lbl{
+  font-size:var(--text-xs);font-weight:600;color:var(--content-secondary);
+  margin-top:var(--space-1);line-height:var(--leading-snug);
+}
+.rec-stat-note{font-size:var(--text-2xs);color:var(--status-active);margin-top:var(--space-1);}
+
+/* Lifecycle filter — same pill/is-on grammar as .con-group-toggle-btn. */
+.rec-filters{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3);}
+.rec-filters:empty{display:none;}
+.rec-filter{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 12px;border-radius:100px;cursor:pointer;
+  border:1px solid var(--border-default);background:var(--surface-sunken);
+  color:var(--content-secondary);
+  font-family:'Syne',sans-serif;font-size:var(--text-xs);font-weight:700;
+  letter-spacing:var(--tracking-caps);text-transform:uppercase;
+  transition:background-color var(--dur-fast) var(--ease-standard),border-color var(--dur-fast) var(--ease-standard),color var(--dur-fast) var(--ease-standard);
+}
+.rec-filter:hover{background:var(--surface-inset);color:var(--content-primary);}
+.rec-filter.is-on{background:var(--gold-bg);border-color:var(--gold);color:var(--gold-text);}
+.rec-filter-count{
+  font-family:'DM Mono',monospace;font-size:var(--text-2xs);
+  padding:0 6px;border-radius:100px;background:var(--surface-raised);color:var(--content-muted);
+}
+.rec-filter.is-on .rec-filter-count{background:var(--surface-raised);color:var(--gold-text);}
+
+.rec-tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.rec-tbl td{vertical-align:top;}
+.rec-name{font-weight:700;color:var(--content-primary);line-height:var(--leading-snug);}
+.rec-meta{font-size:var(--text-xs);color:var(--content-muted);margin-top:2px;line-height:var(--leading-snug);}
+.rec-note{
+  font-size:var(--text-xs);color:var(--content-secondary);margin-top:var(--space-1);
+  padding-left:var(--space-2);border-left:2px solid var(--gold-line);line-height:var(--leading-snug);
+}
+.rec-dim{color:var(--content-muted);}
+.rec-approx{color:var(--status-active);cursor:help;}
+.rec-per{font-size:var(--text-2xs);color:var(--content-muted);margin-left:2px;}
+.rec-next-date{font-family:'DM Mono',monospace;font-size:var(--text-sm);color:var(--content-primary);}
+.rec-next-rel{font-size:var(--text-xs);color:var(--content-muted);margin-top:2px;}
+
+/* Paused/ended rows stay legible but visibly stand down, so the live
+   commitments above them keep the eye. Deliberately scoped to the data cells:
+   dimming the actions column too would make Resume — the one thing you open a
+   paused row to do — the faintest control on it. */
+.rec-row.is-inactive .rec-name,
+.rec-row.is-inactive .rec-amount-cell{opacity:.62;}
+
+.rec-charge-link{
+  background:none;border:none;padding:0;cursor:pointer;
+  font-family:inherit;font-size:var(--text-xs);color:var(--gold-text);
+  text-decoration:underline;text-underline-offset:2px;
+}
+.rec-charge-link:hover{color:var(--gold);}
+.rec-actions{display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+
+/* ── Editor sheet ─────────────────────────────────────────────────────────── */
+.rec-edit-history{
+  font-size:var(--text-xs);color:var(--content-muted);
+  margin-bottom:var(--space-4);line-height:var(--leading-snug);
+}
+.rec-pause-toggle{
+  display:flex;align-items:flex-start;gap:var(--space-3);cursor:pointer;
+  padding:var(--space-3);border:1px solid var(--border-default);border-radius:var(--r2);
+  background:var(--surface-sunken);
+  transition:border-color var(--dur-fast) var(--ease-standard);
+}
+.rec-pause-toggle:hover{border-color:var(--gold3);}
+.rec-pause-toggle input{margin-top:2px;width:16px;height:16px;accent-color:var(--gold);flex:none;}
+.rec-pause-toggle strong{display:block;font-size:var(--text-base);color:var(--content-primary);}
+.rec-pause-toggle em{
+  display:block;font-style:normal;font-size:var(--text-xs);
+  color:var(--content-secondary);margin-top:2px;line-height:var(--leading-snug);
+}
+
+/* Live cost read-out. The whole reason the editor is a sheet and not four
+   inline inputs: you see the annual commitment before you agree to it. */
+.rec-preview{
+  margin-top:var(--space-4);padding:var(--space-3) var(--space-4);
+  border-radius:var(--r2);border:1px dashed var(--gold-line);background:var(--gold-bg);
+  font-size:var(--text-sm);color:var(--content-secondary);line-height:var(--leading-snug);
+}
+.rec-preview-money{
+  font-family:'DM Mono',monospace;font-size:var(--text-md);font-weight:700;
+  color:var(--gold-text);letter-spacing:var(--tracking-tight);
+}
+.rec-preview-when{margin-top:var(--space-1);color:var(--content-secondary);}
+.rec-preview-warn{
+  margin-top:var(--space-2);padding-top:var(--space-2);
+  border-top:1px solid var(--gold-line);color:var(--status-active);font-weight:600;
+}
+
+@media (max-width:768px){
+  .rec-head .btn{width:100%;justify-content:center;}
+  .rec-actions{justify-content:flex-start;}
+  .rec-summary{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));}
+}
