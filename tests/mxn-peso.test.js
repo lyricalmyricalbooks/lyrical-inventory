@@ -103,7 +103,9 @@ describe('Mexican peso in the currency pickers', () => {
     ['m-price-cur', 'MXN'],
     ['exp-cur', 'MXN'],
     ['tc-exp-cur', 'MXN'],
-    ['tc-rec-cur', 'MXN'],
+    // Recurring subscriptions moved from the inline #tc-rec-* form to the
+    // shared add/edit sheet (#rec-edit-*) — same picker, new home.
+    ['rec-edit-cur', 'MXN'],
     ['edit-exp-cur', 'MXN'],
   ];
 
