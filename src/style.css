@@ -5943,6 +5943,82 @@ tr.hist-row:hover {
   color: var(--red);
 }
 
+/* ─── Address verification inside the shipping ledger ─────────────────── */
+/* Sits in the Recipient cell of the P&L ledger, so it has to stay quiet enough
+   not to compete with the row's own status column. Scoped to the hub so the
+   table's tighter type scale applies here too. */
+#ship-analysis-hub .ship-verify-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+#ship-analysis-hub .ship-verify-mini {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text3);
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: .04em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--dur-base) var(--ease-standard),
+    color var(--dur-base) var(--ease-standard),
+    background var(--dur-base) var(--ease-standard);
+}
+#ship-analysis-hub .ship-verify-mini:hover {
+  border-style: solid;
+  border-color: var(--gold);
+  color: var(--text);
+  background: var(--cream2);
+}
+#ship-analysis-hub .ship-verify-mini:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+/* The one action that changes stored data reads as an action, not a hint. */
+#ship-analysis-hub .ship-verify-mini.fix {
+  border-style: solid;
+  border-color: var(--gold);
+  color: var(--amber);
+  background: var(--amber-bg);
+}
+#ship-analysis-hub .ship-verify-cell .ship-verify-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+#ship-analysis-hub .ship-verify-cell .ship-verify-pill.ok { background: var(--green-bg); color: var(--green); }
+#ship-analysis-hub .ship-verify-cell .ship-verify-pill.warn { background: var(--amber-bg); color: var(--amber); }
+#ship-analysis-hub .ship-verify-cell .ship-verify-pill.err { background: var(--red-bg); color: var(--red); }
+#ship-analysis-hub .ship-verify-cell .ship-verify-pill.none,
+#ship-analysis-hub .ship-verify-cell .ship-verify-pill.checking {
+  background: var(--cream3);
+  color: var(--text3);
+  font-style: italic;
+}
+#ship-analysis-hub .ship-verify-cell .ship-verify-pill.checking { animation: shipVerifyPulse 1.1s var(--ease-standard) infinite; }
+@keyframes shipVerifyPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ship-analysis-hub .ship-verify-cell .ship-verify-pill.checking { animation: none; }
+}
+
 /* ─── Shippo destination address verifier ─────────────────────────────── */
 /* The verdict panel under the Destination card. Tone lives on the panel itself
    (.ok / .warn / .err) and reaches the children through the --verify-* pair, so

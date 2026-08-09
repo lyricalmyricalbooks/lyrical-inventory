@@ -69,12 +69,16 @@ import {
   ADDRESS_FIELD_LABELS,
   SHIPPO_ADDRESSES_V1_URL,
   SHIPPO_VALIDATE_V2_URL,
+  addressFromOrder,
   addressSignature,
   addressValidationBlocker,
   buildAddressValidationQuery,
   buildLegacyValidationPayload,
   isDeliverable,
   normalizeAddressVerification,
+  orderAddressPatch,
+  persistableVerification,
+  storedVerificationIsCurrent,
   verificationVerdict,
 } from '../lib/address-verification.js';
 
@@ -3605,6 +3609,231 @@ ${margin.toFixed(2)} CAD</td>
   return weightTableHtml;
 }
 
+// ─── Address verification from the shipping ledger ────────────────────────
+//
+// The same Shippo check as the Destination card, reachable from the worklist
+// where undeliverable addresses actually surface. Two differences from the
+// rate-form verifier, both because a ledger row is a stored order rather than
+// a scratch form:
+//
+//   1. The verdict is persisted on the history entry, so it survives a reload
+//      and the worklist can be worked through over days rather than in one
+//      sitting. persistableVerification decides what is small enough to store.
+//   2. Corrections write back to the order's own shipAddr* fields, which is
+//      what makes the fix stick — the rate form's copy is discarded on reload.
+//
+// A stored verdict is keyed to the address it was produced from, so editing an
+// order silently reverts it to unverified rather than leaving a stale ✓.
+
+/** Finds the live history entry behind a ledger row. */
+function findLedgerOrder(bookId, orderIdentifier) {
+  const state = states[bookId];
+  if (!state || !Array.isArray(state.hist)) return null;
+  return state.hist.find(h => h.id === orderIdentifier || h.num === orderIdentifier) || null;
+}
+
+/**
+ * Verifies one order and writes the verdict onto it.
+ *
+ * `save` is opt-out so the batch path can persist every touched book once at
+ * the end rather than once per order — the same shape backfillShipping uses.
+ */
+async function verifyOrderAddressRecord(token, order, { save = true, bookId = '' } = {}) {
+  const address = addressFromOrder(order);
+  const blocker = addressValidationBlocker(address);
+  if (blocker) return { skipped: true, blocker };
+
+  const result = await fetchShippoAddressVerification(token, address);
+  order.addrVerify = persistableVerification(result, addressSignature(address));
+  if (save && bookId) await saveState(bookId);
+  return { skipped: false, result };
+}
+
+async function verifyLedgerOrderAddress(bookId, orderIdentifier) {
+  const token = TAX_CENTER.settings?.shippoKey || '';
+  if (!token) {
+    showToast('⚠️ Please configure your Shippo API Key first', 'warn');
+    return;
+  }
+  const order = findLedgerOrder(bookId, orderIdentifier);
+  if (!order) { showToast('That order could not be found', 'err'); return; }
+
+  const cell = document.querySelector(`[data-verify-cell="${CSS.escape(`${bookId}|${orderIdentifier}`)}"]`);
+  if (cell) cell.innerHTML = '<span class="ship-verify-pill checking">Checking…</span>';
+
+  try {
+    const { skipped, blocker, result } = await verifyOrderAddressRecord(token, order, { save: true, bookId });
+    if (skipped) {
+      showToast(`⚠️ ${order.num || 'Order'}: ${blocker}`, 'warn', 6000);
+      renderShippingAnalysisHub();
+      return;
+    }
+    const verdict = verificationVerdict(result.status);
+    showToast(`${verdict.icon} ${order.num || 'Order'}: ${verdict.label}`, verdict.tone, result.status === 'valid' ? 4000 : 7000);
+  } catch (error) {
+    console.error('Ledger address verification failed', error);
+    showToast(`❌ Could not verify ${order.num || 'this order'}: ${error.message}`, 'err', 7000);
+  }
+  renderShippingAnalysisHub();
+}
+
+/**
+ * Verifies every selected row.
+ *
+ * Chunked rather than fired all at once: Shippo rate-limits, and a worklist
+ * selection can easily be fifty orders. Failures are counted and reported
+ * instead of aborting the run — one unreachable address should not cost the
+ * publisher the other forty-nine verdicts.
+ */
+async function batchVerifyLedgerAddresses() {
+  const token = TAX_CENTER.settings?.shippoKey || '';
+  if (!token) {
+    showToast('⚠️ Please configure your Shippo API Key first', 'warn');
+    return;
+  }
+
+  const selected = Array.from(document.querySelectorAll('.ship-order-checkbox:checked'))
+    .map(checkbox => {
+      const [bookId, orderIdentifier] = checkbox.value.split('|');
+      return { bookId, order: findLedgerOrder(bookId, orderIdentifier) };
+    })
+    .filter(entry => entry.order);
+  if (!selected.length) { showToast('Select the orders you want to verify first', 'warn'); return; }
+
+  const status = $('ship-analysis-batch-verify');
+  const priorLabel = status?.innerHTML;
+  if (status) { status.disabled = true; }
+
+  const touchedBooks = new Set();
+  let verified = 0;
+  let skipped = 0;
+  let failed = 0;
+  let undeliverable = 0;
+  const CHUNK_SIZE = 5;
+
+  for (let i = 0; i < selected.length; i += CHUNK_SIZE) {
+    if (status) status.innerHTML = `Verifying ${Math.min(i + CHUNK_SIZE, selected.length)}/${selected.length}…`;
+    const chunk = selected.slice(i, i + CHUNK_SIZE);
+    // Sequential by design: the awaits are the rate limiter.
+    const outcomes = await Promise.all(chunk.map(async ({ bookId, order }) => {
+      try {
+        const outcome = await verifyOrderAddressRecord(token, order, { save: false });
+        return { ...outcome, bookId };
+      } catch (error) {
+        console.warn(`Address verification failed for ${order.num}`, error);
+        return { failed: true, bookId };
+      }
+    }));
+    outcomes.forEach(outcome => {
+      if (outcome.failed) { failed++; return; }
+      if (outcome.skipped) { skipped++; return; }
+      verified++;
+      touchedBooks.add(outcome.bookId);
+      if (!isDeliverable(outcome.result)) undeliverable++;
+    });
+  }
+
+  try {
+    await Promise.all(Array.from(touchedBooks).map(bookId => saveState(bookId)));
+  } catch (error) {
+    console.error('Saving batch address verifications failed', error);
+    showToast('Verified, but the results could not be saved. Please try again.', 'err');
+  }
+
+  if (status) { status.disabled = false; status.innerHTML = priorLabel ?? '⌖ Verify addresses'; }
+
+  const notes = [
+    `Verified ${verified} address${verified === 1 ? '' : 'es'}`,
+    undeliverable ? `${undeliverable} undeliverable` : '',
+    skipped ? `${skipped} missing an address` : '',
+    failed ? `${failed} failed` : '',
+  ].filter(Boolean);
+  showToast(notes.join(' · '), undeliverable || failed ? 'warn' : 'ok', 7000);
+  renderShippingAnalysisHub();
+}
+
+/** Applies Shippo's standardized fields to the order record itself. */
+async function applyLedgerAddressCorrections(bookId, orderIdentifier) {
+  const order = findLedgerOrder(bookId, orderIdentifier);
+  const stored = order?.addrVerify;
+  if (!order || !stored?.corrections?.length) {
+    showToast('There are no corrections to apply for that order', 'warn');
+    return;
+  }
+  // The verdict is only about the address it was produced from. If the order
+  // was edited since, the stored corrections describe text that is no longer
+  // there, and applying them would reintroduce it.
+  if (!storedVerificationIsCurrent(stored, order)) {
+    showToast('That address changed since it was checked — verify it again', 'warn');
+    renderShippingAnalysisHub();
+    return;
+  }
+
+  const preview = stored.corrections.map(c => `  ${c.label}: ${c.from || '—'} → ${c.to}`).join('\n');
+  const accepted = await confirmDialog(
+    `Apply Shippo's standardized address to ${order.num || 'this order'}?\n\n${preview}`,
+    { title: 'Apply address corrections', okLabel: 'Apply to order' },
+  );
+  if (!accepted) return;
+
+  const patch = orderAddressPatch(stored.corrections);
+  Object.assign(order, patch);
+  // The address now matches what Shippo recommended, so the verdict is re-pinned
+  // to it and the corrections are spent rather than offered again.
+  order.addrVerify = {
+    ...stored,
+    signature: addressSignature(addressFromOrder(order)),
+    corrections: [],
+  };
+
+  try {
+    await saveState(bookId);
+  } catch (error) {
+    console.error('Saving corrected order address failed', error);
+    showToast('Could not save the corrected address. Please try again.', 'err');
+    return;
+  }
+  renderHist();
+  renderShippingAnalysisHub();
+  showToast(`✓ Updated ${Object.keys(patch).length} field${Object.keys(patch).length === 1 ? '' : 's'} on ${order.num || 'the order'}`);
+}
+
+/** The verify affordance for one ledger row: button, verdict pill, or both. */
+function renderLedgerVerifyCell(order) {
+  const key = `${order.bookId}|${order.id || order.num}`;
+  const args = `'${escapeHtml(order.bookId)}', '${escapeHtml(order.id || order.num)}'`;
+  const stored = order.addrVerify;
+  const current = storedVerificationIsCurrent(stored, order);
+  // aria-label as well as title: the re-check control is a bare ↻ glyph, which
+  // a screen reader would otherwise announce as nothing useful.
+  const verifyBtn = (label, title) =>
+    `<button type="button" class="ship-verify-mini" onclick="verifyLedgerOrderAddress(${args})" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(label)}</button>`;
+
+  // Always inside .ship-verify-cell: the Recipient cell styles bare <span>s as
+  // truncating block lines, which would flatten a pill into an ellipsised row.
+  if (!addressFromOrder(order).street1) {
+    return `<div class="ship-verify-cell" data-verify-cell="${escapeHtml(key)}"><span class="ship-verify-pill none" title="This order has no street address to check">No address</span></div>`;
+  }
+
+  let body;
+  if (!stored || !current) {
+    body = verifyBtn(
+      stored ? '⌖ Re-verify address' : '⌖ Verify address',
+      stored ? 'The address changed since it was last checked' : 'Check this address with Shippo',
+    );
+  } else {
+    const verdict = verificationVerdict(stored.status);
+    const tone = { ok: 'ok', warn: 'warn', err: 'err' }[verdict.tone] || 'warn';
+    const reasons = (stored.reasons || []).map(reason => reason.description).join(' · ');
+    const pill = `<span class="ship-verify-pill ${tone}" title="${escapeHtml(reasons || verdict.summary)}">${escapeHtml(verdict.icon)} ${escapeHtml(verdict.label)}</span>`;
+    const fixBtn = stored.corrections?.length
+      ? `<button type="button" class="ship-verify-mini fix" onclick="applyLedgerAddressCorrections(${args})" aria-label="Apply ${stored.corrections.length} address correction${stored.corrections.length === 1 ? '' : 's'}" title="${escapeHtml(stored.corrections.map(c => `${c.label}: ${c.from || '—'} → ${c.to}`).join('\n'))}">Fix ${stored.corrections.length}</button>`
+      : '';
+    body = `${pill}${fixBtn}${verifyBtn('↻', 'Check this address with Shippo again')}`;
+  }
+  return `<div class="ship-verify-cell" data-verify-cell="${escapeHtml(key)}">${body}</div>`;
+}
+
 function buildShippingLedgerHtml(allOrders, shippoExpenses) {
   // ── 5. Side-by-Side Shipping Ledger Pagination ──
   // Apply all interactive filters before pagination
@@ -3798,6 +4027,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         <td class="shipping-pnl-recipient" data-label="Recipient">
           <strong>${escapeHtml(o.shipName || o.name || 'Anonymous')}</strong>
           <span>${escapeHtml(book?.title || 'Unknown book')} (qty: ${o.qty || 1})</span>
+          ${renderLedgerVerifyCell(o)}
         </td>
         <td data-label="Status">
           <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
@@ -3868,7 +4098,10 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       <div class="shipping-pnl-table-wrap">
         <div id="ship-analysis-batch-actions" style="display:none; padding:8px 12px; background:var(--card-bg); border-bottom:1px solid var(--border); align-items:center; justify-content:space-between; gap:12px;">
           <span style="font-size:12px; font-weight:600; color:var(--text);"><span id="ship-analysis-batch-count">0</span> orders selected</span>
-          <button class="btn sm ghost" onclick="batchDismissShippingAnalysisOrders()" style="color:var(--text3); border:1px solid var(--border);">✕ Dismiss Selected</button>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button class="btn sm" id="ship-analysis-batch-verify" onclick="batchVerifyLedgerAddresses()" title="Check every selected address with Shippo">⌖ Verify addresses</button>
+            <button class="btn sm ghost" onclick="batchDismissShippingAnalysisOrders()" style="color:var(--text3); border:1px solid var(--border);">✕ Dismiss Selected</button>
+          </div>
         </div>
         <table class="shipping-pnl-ledger-table">
           <thead>
@@ -4769,4 +5002,8 @@ export {
   dismissAddressVerification,
   readShippoDestinationAddress,
   renderDestinationVerification,
+  verifyLedgerOrderAddress,
+  batchVerifyLedgerAddresses,
+  applyLedgerAddressCorrections,
+  renderLedgerVerifyCell,
 };
