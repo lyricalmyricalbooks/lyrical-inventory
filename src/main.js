@@ -15784,6 +15784,37 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
+// ── Integrations & API Configuration: collapsible sections, state remembered per browser ──
+const INTEGRATION_SECTION_KEYS = ['gemini', 'shippo', 'stripe'];
+
+function applyIntegrationSectionState(key, collapsed) {
+  const body = document.getElementById(`tc-integration-body-${key}`);
+  const chevron = document.getElementById(`tc-integration-chevron-${key}`);
+  if (!body || !chevron) return;
+  body.style.display = collapsed ? 'none' : (body.dataset.openDisplay || 'flex');
+  chevron.textContent = collapsed ? '▸' : '▾';
+  const head = chevron.closest('.oc-collapse-head');
+  if (head) head.setAttribute('aria-expanded', String(!collapsed));
+}
+
+function toggleIntegrationSection(key) {
+  const collapsed = localStorage.getItem(`lm-integrations-collapsed-${key}`) === '1';
+  const next = !collapsed;
+  localStorage.setItem(`lm-integrations-collapsed-${key}`, next ? '1' : '0');
+  applyIntegrationSectionState(key, next);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  INTEGRATION_SECTION_KEYS.forEach((key) => {
+    const body = document.getElementById(`tc-integration-body-${key}`);
+    if (!body) return;
+    body.dataset.openDisplay = body.style.display || 'flex';
+    if (localStorage.getItem(`lm-integrations-collapsed-${key}`) === '1') {
+      applyIntegrationSectionState(key, true);
+    }
+  });
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   const numericIds = ['nb-max', 'nb-price', 'nb-thresh', 'nb-prod', 'm-qty', 'm-price', 'sale-qty', 'sale-price', 'sent-qty', 'exp-amt', 'tc-exp-amt'];
   numericIds.forEach((id) => {
@@ -21811,7 +21842,8 @@ function exposeLegacyInlineHandlers() {
     syncBigCartelShippingPaid, triggerBigCartelShippingSync,
     toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV,
     updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange, onShipRecoModeChange, onShipInsightsToggle,
-    getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation
+    getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
+    toggleIntegrationSection
   });
 }
 
