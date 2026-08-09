@@ -74,6 +74,8 @@ import {
   addressValidationBlocker,
   buildAddressValidationQuery,
   buildLegacyValidationPayload,
+  countryFallbackWarning,
+  describeShippoError,
   isDeliverable,
   normalizeAddressVerification,
   orderAddressPatch,
@@ -1497,10 +1499,12 @@ async function fetchShippoAddressVerification(token, address) {
     // worth a second opinion from v1. Anything else (429, 5xx) is Shippo
     // rate-limiting or down, and v1 is the same service behind the same
     // limiter — retrying it would add load and report the outage twice.
-    if ([400, 401, 403, 404, 405, 501].includes(resp.status)) {
-      v2Note = `v2 validator unavailable (${resp.status})`;
+    if ([400, 401, 403, 404, 405, 422, 501].includes(resp.status)) {
+      // 422 included: v2's enum validation is stricter than v1's, so an input
+      // v2 rejects outright is exactly the case worth a legacy second opinion.
+      v2Note = describeShippoError(resp.status, text);
     } else {
-      outage = new Error(`Shippo validation failed (${resp.status})${text ? `: ${text.slice(0, 160)}` : ''}`);
+      outage = new Error(describeShippoError(resp.status, text));
     }
   } catch (error) {
     v2Note = error.message || 'v2 validator unreachable';
@@ -1514,7 +1518,7 @@ async function fetchShippoAddressVerification(token, address) {
   });
   if (!legacyResp.ok) {
     const text = await legacyResp.text().catch(() => '');
-    throw new Error(`${v2Note}; legacy validator also failed (${legacyResp.status})${text ? `: ${text.slice(0, 140)}` : ''}`);
+    throw new Error(`${v2Note}; legacy validator also failed — ${describeShippoError(legacyResp.status, text)}`);
   }
   return normalizeAddressVerification(await legacyResp.json(), address);
 }
@@ -3625,6 +3629,22 @@ ${margin.toFixed(2)} CAD</td>
 // A stored verdict is keyed to the address it was produced from, so editing an
 // order silently reverts it to unverified rather than leaving a stale ✓.
 
+/**
+ * A ledger order's address, with the country resolved to the ISO code Shippo's
+ * country_code enum requires.
+ *
+ * Orders store whatever the Gmail parser or Big Cartel gave them — "Canada",
+ * "United Kingdom" — while the Destination card normalizes on the way in. That
+ * asymmetry is what made the ledger verifier 422 on real orders. Every read of
+ * a ledger address goes through here so the signature that is stored, the one
+ * that is compared, and the one that is sent are the same string.
+ */
+function ledgerOrderAddress(order) {
+  const address = addressFromOrder(order);
+  address.country = normalizeCountryCode(address.country);
+  return address;
+}
+
 /** Finds the live history entry behind a ledger row. */
 function findLedgerOrder(bookId, orderIdentifier) {
   const state = states[bookId];
@@ -3639,8 +3659,9 @@ function findLedgerOrder(bookId, orderIdentifier) {
  * the end rather than once per order — the same shape backfillShipping uses.
  */
 async function verifyOrderAddressRecord(token, order, { save = true, bookId = '' } = {}) {
-  const address = addressFromOrder(order);
-  const blocker = addressValidationBlocker(address);
+  const address = ledgerOrderAddress(order);
+  const blocker = countryFallbackWarning(order.shipCountry, address.country)
+    || addressValidationBlocker(address);
   if (blocker) return { skipped: true, blocker };
 
   const result = await fetchShippoAddressVerification(token, address);
@@ -3763,7 +3784,7 @@ async function applyLedgerAddressCorrections(bookId, orderIdentifier) {
   // The verdict is only about the address it was produced from. If the order
   // was edited since, the stored corrections describe text that is no longer
   // there, and applying them would reintroduce it.
-  if (!storedVerificationIsCurrent(stored, order)) {
+  if (!storedVerificationIsCurrent(stored, ledgerOrderAddress(order))) {
     showToast('That address changed since it was checked — verify it again', 'warn');
     renderShippingAnalysisHub();
     return;
@@ -3782,7 +3803,7 @@ async function applyLedgerAddressCorrections(bookId, orderIdentifier) {
   // to it and the corrections are spent rather than offered again.
   order.addrVerify = {
     ...stored,
-    signature: addressSignature(addressFromOrder(order)),
+    signature: addressSignature(ledgerOrderAddress(order)),
     corrections: [],
   };
 
@@ -3803,7 +3824,8 @@ function renderLedgerVerifyCell(order) {
   const key = `${order.bookId}|${order.id || order.num}`;
   const args = `'${escapeHtml(order.bookId)}', '${escapeHtml(order.id || order.num)}'`;
   const stored = order.addrVerify;
-  const current = storedVerificationIsCurrent(stored, order);
+  const address = ledgerOrderAddress(order);
+  const current = storedVerificationIsCurrent(stored, address);
   // aria-label as well as title: the re-check control is a bare ↻ glyph, which
   // a screen reader would otherwise announce as nothing useful.
   const verifyBtn = (label, title) =>
@@ -3811,7 +3833,7 @@ function renderLedgerVerifyCell(order) {
 
   // Always inside .ship-verify-cell: the Recipient cell styles bare <span>s as
   // truncating block lines, which would flatten a pill into an ellipsised row.
-  if (!addressFromOrder(order).street1) {
+  if (!address.street1) {
     return `<div class="ship-verify-cell" data-verify-cell="${escapeHtml(key)}"><span class="ship-verify-pill none" title="This order has no street address to check">No address</span></div>`;
   }
 

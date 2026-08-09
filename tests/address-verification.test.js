@@ -7,6 +7,8 @@ import {
   addressValidationBlocker,
   buildAddressValidationQuery,
   buildLegacyValidationPayload,
+  countryFallbackWarning,
+  describeShippoError,
   formatAddressLines,
   isDeliverable,
   normalizeAddressVerification,
@@ -99,6 +101,20 @@ describe('addressValidationBlocker', () => {
     expect(addressValidationBlocker({ country: 'US', zip: '10001' })).toMatch(/street/i);
     expect(addressValidationBlocker({ street1: '1 A St', zip: '10001' })).toMatch(/country/i);
     expect(addressValidationBlocker({ street1: '1 A St', country: 'US' })).toMatch(/city or a postal code/i);
+  });
+
+  // Regression: a display name here is what produced the 422 whose body was a
+  // list of every ISO country code.
+  it('refuses a country display name before Shippo has to', () => {
+    expect(addressValidationBlocker({ street1: '1 A St', country: 'Canada', zip: 'M6G 3H1' }))
+      .toMatch(/2-letter country code/);
+    expect(addressValidationBlocker({ street1: '1 A St', country: 'United Kingdom', city: 'London' }))
+      .toMatch(/United Kingdom/);
+  });
+
+  it('accepts a 2-letter code in either case', () => {
+    expect(addressValidationBlocker({ street1: '1 A St', country: 'ca', zip: 'M6G 3H1' })).toBe('');
+    expect(addressValidationBlocker({ street1: '1 A St', country: 'CA', zip: 'M6G 3H1' })).toBe('');
   });
 
   it('treats whitespace-only fields as missing', () => {
@@ -383,21 +399,94 @@ describe('storedVerificationIsCurrent', () => {
   );
 
   it('holds while the order still has the address that was checked', () => {
-    expect(storedVerificationIsCurrent(stored, ORDER)).toBe(true);
+    expect(storedVerificationIsCurrent(stored, addressFromOrder(ORDER))).toBe(true);
   });
 
   it('lapses the moment any address field on the order changes', () => {
-    expect(storedVerificationIsCurrent(stored, { ...ORDER, shipPostal: '94104' })).toBe(false);
-    expect(storedVerificationIsCurrent(stored, { ...ORDER, shipAddr2: '' })).toBe(false);
+    expect(storedVerificationIsCurrent(stored, addressFromOrder({ ...ORDER, shipPostal: '94104' }))).toBe(false);
+    expect(storedVerificationIsCurrent(stored, addressFromOrder({ ...ORDER, shipAddr2: '' }))).toBe(false);
   });
 
   it('ignores changes to fields that are not part of the address', () => {
-    expect(storedVerificationIsCurrent(stored, { ...ORDER, qty: 99, shippingPaid: 0 })).toBe(true);
+    expect(storedVerificationIsCurrent(stored, addressFromOrder({ ...ORDER, qty: 99, shippingPaid: 0 }))).toBe(true);
   });
 
   it('is false for an order that was never checked', () => {
-    expect(storedVerificationIsCurrent(null, ORDER)).toBe(false);
-    expect(storedVerificationIsCurrent({}, ORDER)).toBe(false);
+    expect(storedVerificationIsCurrent(null, addressFromOrder(ORDER))).toBe(false);
+    expect(storedVerificationIsCurrent({}, addressFromOrder(ORDER))).toBe(false);
+  });
+
+  // It takes a resolved address rather than the order precisely so a caller
+  // that normalizes the country cannot end up comparing two different strings.
+  it('compares the resolved address, not a re-derived one', () => {
+    const resolved = { ...addressFromOrder(ORDER), country: 'US' };
+    const fromDisplayName = { ...addressFromOrder({ ...ORDER, shipCountry: 'United States' }), country: 'US' };
+    expect(addressSignature(resolved)).toBe(addressSignature(fromDisplayName));
+  });
+});
+
+describe('countryFallbackWarning', () => {
+  it('flags a country that was defaulted to US rather than recognised', () => {
+    expect(countryFallbackWarning('Kanada', 'US')).toMatch(/Kanada/);
+    expect(countryFallbackWarning('Britain', 'US')).toMatch(/does not recognise/);
+  });
+
+  it('stays quiet for every real spelling of the United States', () => {
+    ['US', 'us', 'USA', 'United States', 'united states of america', 'U.S.'].forEach(raw => {
+      expect(countryFallbackWarning(raw, 'US')).toBe('');
+    });
+  });
+
+  it('stays quiet when the country resolved to anything other than US', () => {
+    expect(countryFallbackWarning('Canada', 'CA')).toBe('');
+    expect(countryFallbackWarning('Kanada', 'DE')).toBe('');
+  });
+
+  it('stays quiet for an order with no country at all, which the blocker handles', () => {
+    expect(countryFallbackWarning('', 'US')).toBe('');
+  });
+});
+
+describe('describeShippoError', () => {
+  // The body that actually reached a toast in production: technically precise,
+  // and every country on earth wide.
+  const ENUM_422 = JSON.stringify({
+    detail: [{
+      type: 'enum',
+      loc: ['query', 'country_code'],
+      msg: `Input should be ${Array.from({ length: 200 }, (_, i) => `'C${i}'`).join(', ')}`,
+    }],
+  });
+
+  it('names the offending field and truncates the wall of valid values', () => {
+    const message = describeShippoError(422, ENUM_422);
+    expect(message).toContain('country_code');
+    expect(message).toContain('422');
+    expect(message.length).toBeLessThan(160);
+  });
+
+  it('summarises several problems without listing them all', () => {
+    const body = JSON.stringify({
+      detail: [
+        { loc: ['query', 'country_code'], msg: 'bad country' },
+        { loc: ['query', 'postal_code'], msg: 'bad postcode' },
+        { loc: ['query', 'city_locality'], msg: 'bad city' },
+      ],
+    });
+    const message = describeShippoError(422, body);
+    expect(message).toContain('country_code');
+    expect(message).toContain('postal_code');
+    expect(message).toContain('+1 more');
+  });
+
+  it('falls back to the raw body when it is not the shape we expect', () => {
+    expect(describeShippoError(500, 'upstream exploded')).toContain('upstream exploded');
+    expect(describeShippoError(503, '')).toContain('503');
+    expect(describeShippoError(400, '<html>gateway</html>')).toContain('gateway');
+  });
+
+  it('reads a plain string detail', () => {
+    expect(describeShippoError(401, JSON.stringify({ detail: 'Invalid token.' }))).toContain('Invalid token.');
   });
 });
 
