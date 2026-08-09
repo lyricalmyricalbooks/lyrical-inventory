@@ -3357,9 +3357,18 @@ function renderCustomersStat(allCustomers) {
   const host = $('customer-audience-summary');
   if (!host) return;
   const buyers = allCustomers || buildCustomerList();
-  const repeat = buyers.filter(r => r.orders >= 2).length;
-  const onList = mailingSubsArray().filter(s => !_isCustomerSuppressed(s.email)).length;
-  const unsubscribed = buyers.filter(r => _isCustomerSuppressed(r.email)).length;
+  let repeat = 0;
+  for (const r of buyers) {
+    if (r.orders >= 2) repeat++;
+  }
+  let onList = 0;
+  for (const s of mailingSubsArray()) {
+    if (!_isCustomerSuppressed(s.email)) onList++;
+  }
+  let unsubscribed = 0;
+  for (const r of buyers) {
+    if (_isCustomerSuppressed(r.email)) unsubscribed++;
+  }
   const mailable = Math.max(0, onList - unsubscribed);
   const conversion = buyers.length ? Math.round((onList / buyers.length) * 100) : 0;
   const stat = (label, val, hint, tone = '') => `<div class="audience-stat ${tone}"><span>${label}</span><strong>${val}</strong><em>${hint}</em></div>`;
@@ -9493,7 +9502,10 @@ function onDiscountTypeChange() {
     $('inv-discount-percent-wrap').style.display = 'flex';
     $('inv-discount-label-text').textContent = 'Discount (percent, optional)';
     // Convert current flat value to percent of subtotal (best effort)
-    const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
+    let subtotal = 0;
+    for (const it of invoiceCtx.items) {
+      subtotal += (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0);
+    }
     const flatVal = parseFloat($('inv-discount').value) || 0;
     if (subtotal > 0 && flatVal > 0) {
       $('inv-discount-percent').value = parseFloat(((flatVal / subtotal) * 100).toFixed(2));
@@ -9505,7 +9517,10 @@ function onDiscountTypeChange() {
     $('inv-discount-percent-wrap').style.display = 'none';
     $('inv-discount-label-text').textContent = 'Discount (flat, optional)';
     // Convert current percent value to flat amount (best effort)
-    const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
+    let subtotal = 0;
+    for (const it of invoiceCtx.items) {
+      subtotal += (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0);
+    }
     const percentVal = parseFloat($('inv-discount-percent').value) || 0;
     if (subtotal > 0 && percentVal > 0) {
       $('inv-discount').value = parseFloat(((subtotal * percentVal) / 100).toFixed(2));
@@ -9518,7 +9533,10 @@ function onDiscountTypeChange() {
 
 function recalcInvoiceTotals() {
   const cur = getSym(getInvoiceCurrency());
-  const subtotal = invoiceCtx.items.reduce((a, it) => a + (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0), 0);
+  let subtotal = 0;
+  for (const it of invoiceCtx.items) {
+    subtotal += (parseFloat(it.qty) || 0) * (parseFloat(it.unitPrice) || 0);
+  }
   
   const type = $('inv-discount-type') ? $('inv-discount-type').value : 'flat';
   let discount = 0;
