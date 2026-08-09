@@ -7242,6 +7242,138 @@ tr.hist-row:hover {
   margin-bottom: 14px;
 }
 
+/* Secondary meta row on a trip card: destination / planned dates / purpose. */
+.tc-trip-card-submeta {
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--content-muted) !important;
+  margin-top: -8px;
+  margin-bottom: 12px;
+}
+
+/* A declared trip that has no expenses assigned to it yet. */
+.tc-trip-badge-new {
+  display: inline-block;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--gold-text);
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-line);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+.tc-trip-card-empty {
+  font-size: var(--text-xs);
+  color: var(--content-muted) !important;
+  background: var(--surface-sunken);
+  border: 1px dashed var(--gold-line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin-bottom: 14px;
+  line-height: var(--leading-snug);
+}
+
+/* Trips header actions: view toggle + the New trip button. */
+.tc-trips-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Create / edit trip modal form. */
+.tc-trip-form-intro {
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.tc-trip-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.tc-trip-form .form-group {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.tc-trip-form-full {
+  grid-column: 1 / -1;
+}
+
+.tc-trip-form label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tc-trip-form input,
+.tc-trip-form select,
+.tc-trip-form textarea {
+  width: 100%;
+}
+
+.tc-trip-form textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.tc-req,
+.tc-opt {
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 7px;
+  line-height: var(--leading-tight);
+}
+
+.tc-req {
+  color: var(--gold-text);
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-line);
+}
+
+.tc-opt {
+  color: var(--content-muted);
+  background: transparent;
+  border: 1px solid var(--border-default);
+}
+
+.tc-field-hint {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  margin-top: 5px;
+}
+
+.tc-trip-form-err {
+  margin-top: 14px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--status-critical);
+  background: var(--status-critical-bg);
+  border: 1px solid var(--gold-line);
+  border-radius: 8px;
+  padding: 9px 12px;
+}
+
+@media (max-width: 560px) {
+  .tc-trip-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .tc-trip-cat-bar {
   height: 7px;
   border-radius: 4px;

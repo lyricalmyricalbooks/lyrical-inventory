@@ -85,6 +85,13 @@ import {
   tcToggleTripDropdown,
   tcFilterTripDropdown,
   tcSelectTripOption,
+  _tcTripRecords,
+  _tcFindTripRecord,
+  openNewTrip,
+  openEditTripDetails,
+  tcNewTripValidate,
+  saveNewTrip,
+  deleteTripRecord,
   _tcRenderTripsPanel,
   _tcBuildLedger,
   _tcRenderStatusHeaders,
@@ -15450,14 +15457,23 @@ export function showTripDetail(tripName) {
       </tr>`;
   }).join('');
 
+  const rec = _tcFindTripRecord(tripName);
+  const recBits = [];
+  if (rec?.destination) recBits.push(`📍 ${escapeHtml(rec.destination)}`);
+  if (rec?.startDate || rec?.endDate) recBits.push(`🗓 ${escapeHtml([rec.startDate, rec.endDate].filter(Boolean).join(' → '))}`);
+  if (rec?.purpose) recBits.push(`🎯 ${escapeHtml(rec.purpose)}`);
+
   $('tc-trip-detail-title').textContent = `✈ ${tripName}`;
   $('tc-trip-detail-summary').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:8px;">
       <div>${count} expense${count === 1 ? '' : 's'} &bull; <span style="color:var(--red-light);font-weight:bold;">Trip total: -${fmt(total, baseCurrency)}</span></div>
+      ${recBits.length ? `<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--text3);">${recBits.join('<span>·</span>')}</div>` : ''}
+      ${rec?.notes ? `<div style="font-size:12px;color:var(--text3);font-style:italic;">${escapeHtml(rec.notes)}</div>` : ''}
       ${catPills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">${catPills}</div>` : ''}
     </div>
   `;
-  $('tc-trip-detail-body').innerHTML = rows;
+  $('tc-trip-detail-body').innerHTML = rows
+    || `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:26px 12px;font-size:12px;">No expenses assigned to this trip yet. Log one below and pick “${escapeHtml(tripName)}” in the Trip field.</td></tr>`;
   openM('tc-trip-detail');
 }
 
@@ -15469,7 +15485,15 @@ function renameTripPrompt() {
   (TAX_CENTER.businessExpenses || []).forEach(e => {
     if ((e.trip || '') === _tcOpenTripName) { e.trip = next; changed++; }
   });
-  if (changed === 0) return;
+  // A declared trip can have zero expenses, so the record — not the expense
+  // count — decides whether the rename actually happened.
+  const rec = _tcFindTripRecord(_tcOpenTripName);
+  if (rec) rec.name = next;
+  if (TAX_CENTER.tripBudgets?.[_tcOpenTripName] != null) {
+    TAX_CENTER.tripBudgets[next] = TAX_CENTER.tripBudgets[_tcOpenTripName];
+    delete TAX_CENTER.tripBudgets[_tcOpenTripName];
+  }
+  if (changed === 0 && !rec) return;
   saveTaxCenter();
   closeM('tc-trip-detail');
   _tcOpenTripName = null;
@@ -21654,6 +21678,8 @@ function exposeLegacyInlineHandlers() {
     tcSetTripsView, _tcGetTripsSummaryAll, tcRenderQuickTripChips, tcUpdateTripSelectedPreview,
     tcClearSelectedTrip, tcOpenTripDropdown, tcCloseTripDropdown, tcToggleTripDropdown,
     tcFilterTripDropdown, tcSelectTripOption, exportTripCSV, setTripBudgetPrompt,
+    _tcTripRecords, _tcFindTripRecord, openNewTrip, openEditTripDetails,
+    tcNewTripValidate, saveNewTrip, deleteTripRecord,
     openEditTrip, saveTripAssignment, renderEditExpenseReceipts, relinkEditExpenseReceipt, removeEditExpenseReceipt,
     batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,

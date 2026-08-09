@@ -1290,11 +1290,78 @@
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
     <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn" onclick="openEditTripDetails()">✎ Edit trip details</button>
       <button class="btn" onclick="renameTripPrompt()">✎ Rename trip</button>
       <button class="btn gold outline" onclick="exportTripCSV(_tcOpenTripName)">⬇ Export CSV</button>
       <button class="btn tag" onclick="setTripBudgetPrompt(_tcOpenTripName)">🎯 Set budget</button>
     </div>
     <button class="btn" onclick="closeM('tc-trip-detail')">Close</button>
+  </div>
+</div></div>
+
+<!-- TAX CENTER NEW / EDIT TRIP MODAL -->
+<div class="overlay" id="m-tc-new-trip" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:600px;">
+  <div class="modal-title" role="dialog" aria-modal="true"><span id="tc-new-trip-heading">Create a business trip</span></div>
+  <div class="tc-trip-form-intro" id="tc-new-trip-intro">
+    Name the trip once, then assign expenses to it as you log them. Travel, lodging and meals stay grouped under one deductible event.
+  </div>
+
+  <div class="tc-trip-form">
+    <div class="form-group tc-trip-form-full">
+      <label for="tc-new-trip-name">Trip name <span class="tc-req">required</span></label>
+      <input type="text" id="tc-new-trip-name" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025" oninput="tcNewTripValidate()">
+      <div class="tc-field-hint" id="tc-new-trip-name-hint">This is the label shown on the trip card and in the expense picker.</div>
+    </div>
+
+    <div class="form-group tc-trip-form-full">
+      <label for="tc-new-trip-dest">Destination <span class="tc-opt">optional</span></label>
+      <input type="text" id="tc-new-trip-dest" autocomplete="off" placeholder="e.g. Toronto, ON">
+    </div>
+
+    <div class="form-group">
+      <label for="tc-new-trip-start">Start date <span class="tc-opt">optional</span></label>
+      <input type="date" id="tc-new-trip-start">
+    </div>
+
+    <div class="form-group">
+      <label for="tc-new-trip-end">End date <span class="tc-opt">optional</span></label>
+      <input type="date" id="tc-new-trip-end">
+    </div>
+
+    <div class="form-group">
+      <label for="tc-new-trip-budget">Target budget (CAD) <span class="tc-opt">optional</span></label>
+      <input type="number" id="tc-new-trip-budget" min="0" step="0.01" placeholder="0.00">
+      <div class="tc-field-hint">Drives the progress bar and the over-budget warning on the trip card.</div>
+    </div>
+
+    <div class="form-group">
+      <label for="tc-new-trip-purpose">Business purpose <span class="tc-opt">optional</span></label>
+      <select id="tc-new-trip-purpose">
+        <option value="">— Select —</option>
+        <option>Book fair / festival</option>
+        <option>Author event / reading</option>
+        <option>School or library visit</option>
+        <option>Retailer &amp; consignment visits</option>
+        <option>Conference / training</option>
+        <option>Production / printing</option>
+        <option>Other business travel</option>
+      </select>
+    </div>
+
+    <div class="form-group tc-trip-form-full">
+      <label for="tc-new-trip-notes">Notes <span class="tc-opt">optional</span></label>
+      <textarea id="tc-new-trip-notes" rows="2" placeholder="Who you met, what was sold, anything the CRA would want context on."></textarea>
+    </div>
+  </div>
+
+  <div class="tc-trip-form-err" id="tc-new-trip-err" style="display:none;"></div>
+
+  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:16px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <button class="btn danger-btn" id="tc-new-trip-delete" onclick="deleteTripRecord()" style="display:none;">🗑 Delete trip</button>
+    <div style="display:flex;gap:8px;margin-left:auto;">
+      <button class="btn" onclick="closeM('tc-new-trip')">Cancel</button>
+      <button class="btn gold" id="tc-new-trip-save" onclick="saveNewTrip()">Create trip</button>
+    </div>
   </div>
 </div></div>
 
@@ -1844,9 +1911,12 @@
       <div class="section-hed" style="margin-bottom:2px;">Business Trips & Event Portfolio</div>
       <div style="font-size:11px;color:var(--text3);">Group multi-expense business trips & fairs while maintaining tax-deductible category totals.</div>
     </div>
-    <div class="tc-trips-view-toggle">
-      <button class="tc-trips-view-btn active" id="tc-trips-btn-cards" onclick="tcSetTripsView('cards')">🖼 Cards</button>
-      <button class="tc-trips-view-btn" id="tc-trips-btn-table" onclick="tcSetTripsView('table')">📋 Table</button>
+    <div class="tc-trips-actions">
+      <div class="tc-trips-view-toggle">
+        <button class="tc-trips-view-btn active" id="tc-trips-btn-cards" onclick="tcSetTripsView('cards')">🖼 Cards</button>
+        <button class="tc-trips-view-btn" id="tc-trips-btn-table" onclick="tcSetTripsView('table')">📋 Table</button>
+      </div>
+      <button class="btn gold" id="tc-new-trip-btn" onclick="openNewTrip()" title="Create a business trip you can assign expenses to">✈ New trip</button>
     </div>
   </div>
 
