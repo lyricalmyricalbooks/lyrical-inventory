@@ -33,6 +33,8 @@ import {
   isTestBook,
   isTestBookId,
   loadReceiptFolderHandle,
+  resolveLocalReceiptFile,
+  ensurePdfJs,
   loadTaxCenter,
   openM,
   closeM,
@@ -970,28 +972,141 @@ function logExpenseForTrip(tripName) {
 // own folder and can't be read from a detached document, so they are listed
 // by filename instead of silently printing as broken images.
 function _tcTripReportReceipts(items) {
-  const remote = [];
-  const local = [];
+  const refs = [];
   items.forEach(item => {
     const files = (Array.isArray(item.receiptFiles) && item.receiptFiles.length)
       ? item.receiptFiles
       : (item.receipt ? [item.receipt] : []);
     files.forEach(r => {
       if (typeof r !== 'string' || !r) return;
-      if (r.startsWith('local://')) local.push({ name: r.replace('local://', '').split('/').pop(), desc: item.desc || '' });
-      else if (/^https?:\/\//i.test(r)) remote.push({ url: r, desc: item.desc || '', date: item.date || '' });
+      const meta = { desc: item.desc || '', date: item.date || '' };
+      if (r.startsWith('local://')) {
+        const path = r.replace('local://', '');
+        refs.push({ ...meta, source: 'local', path, name: path.split('/').pop() });
+      } else if (/^https?:\/\//i.test(r)) {
+        refs.push({ ...meta, source: 'remote', url: r, name: r.split('/').pop().split('?')[0] || 'receipt' });
+      }
     });
   });
-  return { remote, local };
+  return refs;
 }
 
-function exportTripPDF(tripName) {
+/** True when a filename/URL looks like a PDF rather than an image. */
+function _tcIsPdfName(name) {
+  return /\.pdf(?:$|[?#])/i.test(name || '');
+}
+
+function _tcBlobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = () => reject(fr.error || new Error('read failed'));
+    fr.readAsDataURL(blob);
+  });
+}
+
+// Rasterise a PDF receipt's pages to PNG data URLs. A printed <embed>/<iframe>
+// of a PDF renders blank in every engine, so the only way to actually SHOW a
+// PDF receipt on the page is to draw it. pdf.js is fetched on demand and this
+// rejects offline, which the caller downgrades to a filename listing.
+async function _tcPdfToImages(blob, maxPages = 3) {
+  const pdfjsLib = await ensurePdfJs();
+  const buf = await blob.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+  const pages = [];
+  const count = Math.min(doc.numPages, maxPages);
+  for (let n = 1; n <= count; n++) {
+    const page = await doc.getPage(n);
+    // 1.8× gives a thumbnail that still reads when printed at ~30% width.
+    const viewport = page.getViewport({ scale: 1.8 });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    pages.push({ dataUrl: canvas.toDataURL('image/png'), page: n, total: doc.numPages });
+  }
+  return pages;
+}
+
+// Turn every receipt reference into something printable. Local files are read
+// through the connected folder handle; remote ones are fetched so they can be
+// inlined as data URLs (a remote <img> often fails to load in time for the
+// print dialog, and a cross-origin PDF can't be rasterised any other way).
+// Anything that can't be resolved comes back in `missing` with a reason, so
+// the report says why instead of silently dropping a receipt.
+async function _tcResolveReceiptImages(refs) {
+  const resolved = [];
+  const missing = [];
+  if (!refs.length) return { resolved, missing };
+
+  let dirHandle = null;
+  let folderReason = 'receipt folder not connected';
+  if (refs.some(r => r.source === 'local')) {
+    try { dirHandle = await loadReceiptFolderHandle(); } catch (e) { dirHandle = null; }
+    // A stored handle can still be un-permissioned after a browser restart, so
+    // ask once here rather than failing every file with a misleading reason.
+    if (dirHandle?.queryPermission) {
+      try {
+        let perm = await dirHandle.queryPermission({ mode: 'read' });
+        if (perm !== 'granted' && dirHandle.requestPermission) {
+          perm = await dirHandle.requestPermission({ mode: 'read' });
+        }
+        if (perm !== 'granted') { dirHandle = null; folderReason = 'folder access not granted'; }
+      } catch (e) { /* older engines without the permission API — just try the read */ }
+    }
+  }
+
+  for (const ref of refs) {
+    try {
+      let blob = null;
+      if (ref.source === 'local') {
+        if (!dirHandle) { missing.push({ ...ref, reason: folderReason }); continue; }
+        blob = await resolveLocalReceiptFile(dirHandle, ref.path);
+      } else {
+        const res = await fetch(ref.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        blob = await res.blob();
+      }
+
+      const isPdf = _tcIsPdfName(ref.name) || (blob.type || '').includes('pdf');
+      if (isPdf) {
+        const pages = await _tcPdfToImages(blob);
+        if (!pages.length) throw new Error('no pages rendered');
+        pages.forEach(p => resolved.push({
+          ...ref,
+          dataUrl: p.dataUrl,
+          pageLabel: p.total > 1 ? `page ${p.page} of ${p.total}` : '',
+        }));
+      } else {
+        resolved.push({ ...ref, dataUrl: await _tcBlobToDataUrl(blob) });
+      }
+    } catch (e) {
+      missing.push({ ...ref, reason: _tcIsPdfName(ref.name) ? 'PDF could not be rendered' : 'file could not be read' });
+    }
+  }
+  return { resolved, missing };
+}
+
+async function exportTripPDF(tripName) {
   const name = (tripName || _tcOpenTripName || '').trim();
   const detail = window._tcTripDetail;
   if (!name || !detail || !detail.byName || !detail.byName[name]) {
     showToast('⚠ Trip details not found', 'warn');
     return;
   }
+
+  // The window has to open in the click's own turn — a window.open() after an
+  // await is treated as an unsolicited popup and blocked. It holds a placeholder
+  // while the receipts are read, then gets the finished document written into it.
+  const win = window.open('', '_blank', 'width=900,height=1000');
+  if (!win) {
+    showToast('Pop-up blocked — allow pop-ups to print the trip report', 'warn');
+    return;
+  }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Trip report — ${escapeHtml(name)}</title></head>
+    <body style="font-family:-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;padding:40px;color:#6b635c;">
+    Preparing the trip report and its receipts…</body></html>`);
+  win.document.close();
 
   const { baseCurrency } = detail;
   const { items, total, count, categories } = detail.byName[name];
@@ -1038,17 +1153,26 @@ function exportTripPDF(tripName) {
       <td class="r">${fmt(item.baseAmount, baseCurrency)}</td>
     </tr>`).join('') || '<tr><td colspan="5" class="empty">No expenses assigned to this trip yet.</td></tr>';
 
-  const { remote, local } = _tcTripReportReceipts(sorted);
-  const thumbs = remote.map(r => `<figure class="thumb">
-      <img src="${escapeHtml(r.url)}" alt="${escapeHtml(r.desc)}">
-      <figcaption>${escapeHtml([r.date, r.desc].filter(Boolean).join(' · '))}</figcaption>
+  // Receipts are read/rasterised before the document is written, so the print
+  // window opens with every image already inlined as a data URL.
+  const refs = _tcTripReportReceipts(sorted);
+  let resolved = [];
+  let missing = [];
+  if (refs.length) {
+    showToast(`Preparing ${refs.length} receipt${refs.length === 1 ? '' : 's'} for the report…`);
+    ({ resolved, missing } = await _tcResolveReceiptImages(refs));
+  }
+
+  const thumbs = resolved.map(r => `<figure class="thumb">
+      <img src="${r.dataUrl}" alt="${escapeHtml(r.desc || r.name)}">
+      <figcaption>${escapeHtml([r.date, r.desc, r.pageLabel].filter(Boolean).join(' · '))}</figcaption>
     </figure>`).join('');
-  const localList = local.length
-    ? `<div class="local-note"><b>${local.length} receipt${local.length === 1 ? '' : 's'} stored in your local receipt folder</b> (not embedded):
-        ${local.map(l => escapeHtml(l.name)).join(', ')}</div>`
+  const missingList = missing.length
+    ? `<div class="local-note"><b>${missing.length} receipt${missing.length === 1 ? '' : 's'} could not be shown:</b>
+        ${missing.map(m => `${escapeHtml(m.name)} (${escapeHtml(m.reason)})`).join(', ')}</div>`
     : '';
-  const receiptsSection = (thumbs || localList)
-    ? `<h2>Receipts</h2>${thumbs ? `<div class="thumbs">${thumbs}</div>` : ''}${localList}`
+  const receiptsSection = (thumbs || missingList)
+    ? `<h2>Receipts</h2>${thumbs ? `<div class="thumbs">${thumbs}</div>` : ''}${missingList}`
     : '';
 
   const printedOn = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
@@ -1123,16 +1247,13 @@ function exportTripPDF(tripName) {
     <div class="foot">Amounts converted to ${escapeHtml(baseCurrency)} at the rate stored with each expense. Generated by Lyrical Inventory.</div>
   </body></html>`;
 
-  const win = window.open('', '_blank', 'width=900,height=1000');
-  if (!win) {
-    showToast('Pop-up blocked — allow pop-ups to print the trip report', 'warn');
-    return;
-  }
+  if (win.closed) return;
+  win.document.open();
   win.document.write(html);
   win.document.close();
   win.focus();
-  // Give embedded receipt images a moment to load, or they print blank.
-  setTimeout(() => { try { win.print(); } catch (e) { } }, remote.length ? 900 : 350);
+  // Images are inline data URLs, so they only need a paint before printing.
+  setTimeout(() => { try { win.print(); } catch (e) { } }, resolved.length ? 600 : 350);
   showToast('✓ Trip report ready — use “Save as PDF” in the print dialog');
 }
 
@@ -2025,6 +2146,10 @@ export {
   logExpenseForTrip,
   exportTripPDF,
   _tcTripReportReceipts,
+  _tcIsPdfName,
+  _tcBlobToDataUrl,
+  _tcPdfToImages,
+  _tcResolveReceiptImages,
   _tcRenderTripsPanel,
   _tcBuildLedger,
   _tcRenderStatusHeaders,

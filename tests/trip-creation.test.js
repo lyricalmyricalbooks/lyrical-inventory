@@ -93,34 +93,75 @@ describe('Trip expense shortcut & printable report', () => {
   });
 });
 
-describe('_tcTripReportReceipts', () => {
-  const _tcTripReportReceipts = new Function(
-    `${extractDecl('_tcTripReportReceipts')}\nreturn _tcTripReportReceipts;`,
+describe('_tcTripReportReceipts / _tcIsPdfName', () => {
+  const { _tcTripReportReceipts, _tcIsPdfName } = new Function(
+    `${extractDecl('_tcTripReportReceipts')}\n${extractDecl('_tcIsPdfName')}\n` +
+    'return { _tcTripReportReceipts, _tcIsPdfName };',
   )();
 
-  it('splits remote receipts (embeddable) from local ones (listed by name)', () => {
-    const { remote, local } = _tcTripReportReceipts([
+  it('tags local and remote receipts with everything needed to fetch them', () => {
+    const refs = _tcTripReportReceipts([
       { desc: 'Hotel', date: '2026-03-02', receipt: 'https://example.com/a.jpg' },
-      { desc: 'Booth', date: '2026-03-03', receipt: 'local://receipts/booth-fee.pdf' },
+      { desc: 'Booth', date: '2026-03-03', receipt: 'local://Business/booth-fee.pdf' },
     ]);
-    expect(remote).toEqual([{ url: 'https://example.com/a.jpg', desc: 'Hotel', date: '2026-03-02' }]);
-    expect(local).toEqual([{ name: 'booth-fee.pdf', desc: 'Booth' }]);
+    expect(refs).toEqual([
+      { source: 'remote', url: 'https://example.com/a.jpg', name: 'a.jpg', desc: 'Hotel', date: '2026-03-02' },
+      { source: 'local', path: 'Business/booth-fee.pdf', name: 'booth-fee.pdf', desc: 'Booth', date: '2026-03-03' },
+    ]);
+  });
+
+  it('strips a query string off a remote receipt name', () => {
+    const [ref] = _tcTripReportReceipts([{ desc: 'X', receipt: 'https://cdn.test/r/scan.pdf?token=abc' }]);
+    expect(ref.name).toBe('scan.pdf');
+    expect(_tcIsPdfName(ref.name)).toBe(true);
   });
 
   it('reads the multi-file receiptFiles array in preference to receipt', () => {
-    const { remote } = _tcTripReportReceipts([
+    const refs = _tcTripReportReceipts([
       { desc: 'Meals', receiptFiles: ['https://x.test/1.png', 'https://x.test/2.png'], receipt: 'https://x.test/ignored.png' },
     ]);
-    expect(remote.map(r => r.url)).toEqual(['https://x.test/1.png', 'https://x.test/2.png']);
+    expect(refs.map(r => r.url)).toEqual(['https://x.test/1.png', 'https://x.test/2.png']);
   });
 
   it('drops empty and non-http references rather than printing broken images', () => {
-    const { remote, local } = _tcTripReportReceipts([
+    const refs = _tcTripReportReceipts([
       { desc: 'A', receipt: '' },
       { desc: 'B', receiptFiles: [null, 'javascript:alert(1)', 'ftp://x/y.png'] },
       { desc: 'C' },
     ]);
-    expect(remote).toEqual([]);
-    expect(local).toEqual([]);
+    expect(refs).toEqual([]);
+  });
+
+  it('detects PDFs by extension, including with a query or fragment', () => {
+    expect(_tcIsPdfName('2026-05-11_Invoice429.pdf')).toBe(true);
+    expect(_tcIsPdfName('scan.PDF')).toBe(true);
+    expect(_tcIsPdfName('a.pdf?x=1')).toBe(true);
+    expect(_tcIsPdfName('receipt.jpg')).toBe(false);
+    expect(_tcIsPdfName('pdf-notes.png')).toBe(false);
+    expect(_tcIsPdfName('')).toBe(false);
+    expect(_tcIsPdfName(undefined)).toBe(false);
+  });
+});
+
+describe('receipt embedding wiring', () => {
+  it('rasterises PDFs and inlines images instead of listing filenames', () => {
+    expect(appSource).toContain('function _tcPdfToImages');
+    expect(appSource).toContain('function _tcResolveReceiptImages');
+    expect(appSource).toContain('function _tcBlobToDataUrl');
+    // The shared folder lookup viewLocalReceipt uses, now reusable.
+    expect(appSource).toContain('function resolveLocalReceiptFile');
+    expect(appSource).toContain('function ensurePdfJs');
+  });
+
+  it('opens the print window before awaiting, so the popup is not blocked', () => {
+    const fn = extractDecl('exportTripPDF');
+    expect(fn.indexOf('window.open')).toBeLessThan(fn.indexOf('await _tcResolveReceiptImages'));
+  });
+
+  it('names every unshowable receipt with a reason', () => {
+    const fn = extractDecl('_tcResolveReceiptImages');
+    expect(fn).toContain('receipt folder not connected');
+    expect(fn).toContain('PDF could not be rendered');
+    expect(fn).toContain('file could not be read');
   });
 });
