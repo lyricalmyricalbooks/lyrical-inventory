@@ -69,6 +69,27 @@ describe('Pending / to-confirm expenses — wiring', () => {
     // note A even though the user never touched it again.
     expect(extractDecl('logExpenseForTrip')).toContain('_tcConfirmingPendingId = null');
   });
+
+  it('escapes an id so a trailing backslash cannot break out of the onclick string (CodeQL: incomplete escaping)', () => {
+    // The id is embedded as onclick="confirmPendingExpense('${safeId}')". If
+    // only quotes are escaped (not backslashes first), an id ending in a
+    // backslash consumes the following escaped quote and breaks out of the
+    // single-quoted JS string — exactly what CodeQL flagged here.
+    const fn = extractDecl('_tcRenderPendingPanel');
+    const line = fn.match(/const safeId = [^\n]+;/)?.[0];
+    expect(line).toBeTruthy();
+    const buildSafeId = new Function('item', `${line}\nreturn safeId;`);
+
+    const malicious = "1\\";
+    const safe = buildSafeId({ id: malicious });
+    const attrValue = `confirmPendingExpense('${safe}')`;
+
+    let capturedArg;
+    const confirmPendingExpense = (arg) => { capturedArg = arg; };
+    // eslint-disable-next-line no-new-func
+    new Function('confirmPendingExpense', attrValue)(confirmPendingExpense);
+    expect(capturedArg).toBe(malicious);
+  });
 });
 
 describe('_tcPendingList / _tcFindPending', () => {

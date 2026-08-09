@@ -1247,7 +1247,7 @@ function _tcRenderPendingPanel() {
   const withoutAmount = rows.filter(r => !Number(r.item.estAmount)).length;
 
   const body = rows.map(({ item, due }) => {
-    const safeId = String(item.id).replace(/'/g, "\\'");
+    const safeId = String(item.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const amount = Number(item.estAmount)
       ? `<span class="tc-pending-amt">~${getSym(item.currency || 'CAD')}${Number(item.estAmount).toFixed(2)}</span>`
       : `<span class="tc-pending-amt is-unknown">Amount unknown</span>`;
