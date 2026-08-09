@@ -214,6 +214,9 @@ import {
   verifyDestinationAddress,
   applyVerifiedAddressCorrections,
   dismissAddressVerification,
+  verifyLedgerOrderAddress,
+  batchVerifyLedgerAddresses,
+  applyLedgerAddressCorrections,
 } from './features/shipping.js';
 import {
   ocList,
@@ -21746,7 +21749,8 @@ function exposeLegacyInlineHandlers() {
     renderShippoIncotermHint, onShippoIncotermChange, onShippoDestCountryChange,
     updateShippoCustomsTotalHint,
     buyShippoLabel, verifyDestinationAddress, applyVerifiedAddressCorrections,
-    dismissAddressVerification, downloadInventoryValuationCSV, openInventoryValuationModal, printInventoryValuationReport,
+    dismissAddressVerification, verifyLedgerOrderAddress, batchVerifyLedgerAddresses,
+    applyLedgerAddressCorrections, downloadInventoryValuationCSV, openInventoryValuationModal, printInventoryValuationReport,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange, setShipAnalysisMarginFilter,
     onShipAnalysisSearch, onInlinePostageChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
@@ -21824,6 +21828,9 @@ window.buyShippoLabel = buyShippoLabel;
 window.verifyDestinationAddress = verifyDestinationAddress;
 window.applyVerifiedAddressCorrections = applyVerifiedAddressCorrections;
 window.dismissAddressVerification = dismissAddressVerification;
+window.verifyLedgerOrderAddress = verifyLedgerOrderAddress;
+window.batchVerifyLedgerAddresses = batchVerifyLedgerAddresses;
+window.applyLedgerAddressCorrections = applyLedgerAddressCorrections;
 window.downloadInventoryValuationCSV = downloadInventoryValuationCSV;
 window.renderShippingAnalysisHub = renderShippingAnalysisHub;
 window.changeShipAnalysisPage = changeShipAnalysisPage;

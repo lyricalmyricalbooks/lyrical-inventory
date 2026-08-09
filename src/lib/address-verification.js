@@ -284,6 +284,91 @@ export function addressSignature(address = {}) {
     .join('|');
 }
 
+// ─── Order records ────────────────────────────────────────────────────────
+//
+// The Shipping tab's form, the shipments payload and the verifier all speak
+// street1/city/zip. An order in the ledger does not — history entries have
+// carried shipAddr1/shipProvince/shipPostal since long before any of this. The
+// two mappings are kept apart on purpose: this one is about the *stored record*
+// and V2_FIELD_MAP is about the *wire format*, and conflating them is how a
+// field ends up silently blank on one side.
+
+/** A history record's own field names for a shipping address. */
+export const ORDER_ADDRESS_FIELDS = {
+  name: 'shipName',
+  // Orders have never stored a company separately from the recipient name;
+  // mapped anyway so the shape is complete and a future field just works.
+  company: 'shipCompany',
+  street1: 'shipAddr1',
+  street2: 'shipAddr2',
+  city: 'shipCity',
+  state: 'shipProvince',
+  zip: 'shipPostal',
+  country: 'shipCountry',
+};
+
+/** Reads an order/history record into the shape the verifier speaks. */
+export function addressFromOrder(order = {}) {
+  const out = {};
+  for (const [local, stored] of Object.entries(ORDER_ADDRESS_FIELDS)) {
+    out[local] = str(order[stored]);
+  }
+  return out;
+}
+
+/**
+ * Turns accepted corrections into a patch keyed by the record's own field
+ * names, ready to assign onto a history entry. Only the corrected fields
+ * appear, so nothing else on the order is touched.
+ */
+export function orderAddressPatch(corrections = []) {
+  const patch = {};
+  corrections.forEach(correction => {
+    const stored = ORDER_ADDRESS_FIELDS[correction?.field];
+    if (stored && str(correction.to)) patch[stored] = str(correction.to);
+  });
+  return patch;
+}
+
+/**
+ * The slice of a verification worth writing to Firestore alongside the order.
+ *
+ * Not the whole result: `recommended` is dropped because `corrections` already
+ * carries every from/to pair the UI needs, and the reason list is capped so a
+ * chatty response can't bloat a book document that syncs on every save.
+ */
+export function persistableVerification(result, signature, at = new Date().toISOString()) {
+  if (!result) return null;
+  return {
+    signature,
+    at,
+    status: str(result.status) || 'unknown',
+    source: str(result.source) || 'v2',
+    addressType: str(result.addressType),
+    reasons: (result.reasons || []).slice(0, 4).map(reason => ({
+      code: str(reason.code),
+      type: str(reason.type),
+      description: str(reason.description).slice(0, 240),
+    })),
+    corrections: (result.corrections || []).map(correction => ({
+      field: str(correction.field),
+      label: str(correction.label),
+      from: str(correction.from),
+      to: str(correction.to),
+    })),
+  };
+}
+
+/**
+ * Whether a stored verification still describes the address on the record.
+ * An order edited after it was checked reverts to unverified rather than
+ * carrying a verdict that was never about this address.
+ */
+export function storedVerificationIsCurrent(stored, order) {
+  if (!stored?.signature) return false;
+  return stored.signature === addressSignature(addressFromOrder(order));
+}
+
 /** Human-readable address block, blank lines dropped. */
 export function formatAddressLines(address = {}) {
   const cityLine = [str(address.city), str(address.state)].filter(Boolean).join(', ');

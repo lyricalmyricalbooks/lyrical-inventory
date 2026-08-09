@@ -8,12 +8,16 @@ import {
   ADDRESS_FIELD_LABELS,
   SHIPPO_ADDRESSES_V1_URL,
   SHIPPO_VALIDATE_V2_URL,
+  addressFromOrder,
   addressSignature,
   addressValidationBlocker,
   buildAddressValidationQuery,
   buildLegacyValidationPayload,
   isDeliverable,
   normalizeAddressVerification,
+  orderAddressPatch,
+  persistableVerification,
+  storedVerificationIsCurrent,
   verificationVerdict,
 } from '../src/lib/address-verification.js';
 
@@ -73,6 +77,16 @@ const V2_INVALID = {
       reasons: [{ code: 'zip_post_code_not_found', type: 'error', description: 'The ZIP Code could not be found.' }],
     },
     address_type: 'unknown',
+  },
+};
+
+const V2_VALID_RESPONSE = {
+  analysis: {
+    validation_result: {
+      value: 'valid',
+      reasons: [{ code: 'address_found', type: 'info', description: 'The entire address is present in the database.' }],
+    },
+    address_type: 'residential',
   },
 };
 
@@ -387,6 +401,302 @@ describe('destination address verifier — applying corrections', () => {
     expect(document.getElementById('st-street1').value).toBe('900 Somewhere Else Ave');
     expect(document.getElementById('st-zip').value).toBe('94103');
     expect(verifier.toasts.at(-1).type).toBe('warn');
+  });
+});
+
+// ─── Verifying from the shipping ledger ───────────────────────────────────
+
+function buildLedgerVerifier({ fetchImpl, states, saveState = vi.fn(async () => {}), confirmDialog = vi.fn(async () => true) }) {
+  const toasts = [];
+  const harness = buildHarness({
+    names: [
+      'findLedgerOrder',
+      'fetchShippoAddressVerification',
+      'verifyOrderAddressRecord',
+      'verifyLedgerOrderAddress',
+      'batchVerifyLedgerAddresses',
+      'applyLedgerAddressCorrections',
+      'renderLedgerVerifyCell',
+    ],
+    deps: {
+      $: (id) => document.getElementById(id),
+      fetch: fetchImpl,
+      states,
+      saveState,
+      confirmDialog,
+      TAX_CENTER: { settings: { shippoKey: 'shippo_test_token' } },
+      showToast: (message, type = 'ok') => { toasts.push({ message, type }); },
+      escapeHtml,
+      console: { error: () => {}, warn: () => {} },
+      renderHist: vi.fn(),
+      renderShippingAnalysisHub: vi.fn(),
+      SHIPPO_ADDRESSES_V1_URL,
+      SHIPPO_VALIDATE_V2_URL,
+      addressFromOrder,
+      addressSignature,
+      addressValidationBlocker,
+      buildAddressValidationQuery,
+      buildLegacyValidationPayload,
+      isDeliverable,
+      normalizeAddressVerification,
+      orderAddressPatch,
+      persistableVerification,
+      storedVerificationIsCurrent,
+      verificationVerdict,
+    },
+    returns: `{
+      verifyLedgerOrderAddress,
+      batchVerifyLedgerAddresses,
+      applyLedgerAddressCorrections,
+      renderLedgerVerifyCell,
+    }`,
+  });
+  return { ...harness, toasts, saveState, confirmDialog };
+}
+
+function ledgerOrder(overrides = {}) {
+  return {
+    id: 'ord-1', num: '#DTWO-539860', bookId: 'collective',
+    // Matches V2_PARTIALLY_VALID's recommended_address.name: Shippo echoes the
+    // name it was sent, so a mismatch here would fake a correction.
+    shipName: 'Wilson', shipAddr1: '731 Market Street', shipAddr2: '#200',
+    shipCity: 'San Francisco', shipProvince: 'CA', shipPostal: '94103', shipCountry: 'US',
+    ...overrides,
+  };
+}
+
+describe('verifying an address from the shipping ledger', () => {
+  it('writes the verdict onto the order and saves the book once', async () => {
+    const order = ledgerOrder();
+    const verifier = buildLedgerVerifier({
+      fetchImpl: vi.fn(async () => jsonResponse(V2_PARTIALLY_VALID)),
+      states: { collective: { hist: [order] } },
+    });
+
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+
+    expect(order.addrVerify.status).toBe('partially_valid');
+    expect(order.addrVerify.corrections.map(c => c.field)).toEqual(['street1', 'street2', 'zip']);
+    expect(verifier.saveState).toHaveBeenCalledTimes(1);
+    expect(verifier.saveState).toHaveBeenCalledWith('collective');
+  });
+
+  it('does not call Shippo for an order with no street address', async () => {
+    const order = ledgerOrder({ shipAddr1: '' });
+    const fetchImpl = vi.fn();
+    const verifier = buildLedgerVerifier({ fetchImpl, states: { collective: { hist: [order] } } });
+
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(order.addrVerify).toBeUndefined();
+    expect(verifier.saveState).not.toHaveBeenCalled();
+    expect(verifier.toasts.at(-1).type).toBe('warn');
+  });
+
+  it('leaves the order untouched when Shippo cannot be reached', async () => {
+    const order = ledgerOrder();
+    const verifier = buildLedgerVerifier({
+      fetchImpl: vi.fn(async () => { throw new Error('offline'); }),
+      states: { collective: { hist: [order] } },
+    });
+
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+
+    expect(order.addrVerify).toBeUndefined();
+    expect(verifier.saveState).not.toHaveBeenCalled();
+    expect(verifier.toasts.at(-1).type).toBe('err');
+  });
+});
+
+describe('batch verifying selected ledger rows', () => {
+  function mountSelection(values) {
+    document.body.innerHTML = `
+      <div id="ship-analysis-batch-actions"><button id="ship-analysis-batch-verify">⌖ Verify addresses</button></div>
+      ${values.map(v => `<input type="checkbox" class="ship-order-checkbox" value="${v}" checked>`).join('')}
+    `;
+  }
+
+  it('verifies every selected order but saves each book only once', async () => {
+    const a = ledgerOrder({ id: 'a', num: '#A' });
+    const b = ledgerOrder({ id: 'b', num: '#B' });
+    const c = ledgerOrder({ id: 'c', num: '#C' });
+    mountSelection(['collective|a', 'collective|b', 'hound|c']);
+    const fetchImpl = vi.fn(async () => jsonResponse(V2_VALID_RESPONSE));
+    const verifier = buildLedgerVerifier({
+      fetchImpl,
+      states: { collective: { hist: [a, b] }, hound: { hist: [c] } },
+    });
+
+    await verifier.batchVerifyLedgerAddresses();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect([a, b, c].every(o => o.addrVerify?.status === 'valid')).toBe(true);
+    expect(verifier.saveState).toHaveBeenCalledTimes(2);
+    expect(verifier.saveState.mock.calls.flat().sort()).toEqual(['collective', 'hound']);
+  });
+
+  it('finishes the run when one address fails, and counts it', async () => {
+    const a = ledgerOrder({ id: 'a', num: '#A', shipPostal: '00001' });
+    const b = ledgerOrder({ id: 'b', num: '#B', shipPostal: '94103' });
+    mountSelection(['collective|a', 'collective|b']);
+    const verifier = buildLedgerVerifier({
+      // Fails on both endpoints for order A: a thrown v2 call is a fallback
+      // trigger, so failing only the first request would still succeed via v1.
+      fetchImpl: vi.fn(async (url, init) => {
+        const payload = `${url} ${init?.body || ''}`;
+        if (payload.includes('00001')) throw new Error('boom');
+        return jsonResponse(V2_VALID_RESPONSE);
+      }),
+      states: { collective: { hist: [a, b] } },
+    });
+
+    await verifier.batchVerifyLedgerAddresses();
+
+    const summary = verifier.toasts.at(-1).message;
+    expect(summary).toMatch(/Verified 1 address/);
+    expect(summary).toMatch(/1 failed/);
+    expect(verifier.saveState).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports undeliverable addresses in the summary', async () => {
+    const a = ledgerOrder({ id: 'a', num: '#A' });
+    mountSelection(['collective|a']);
+    const verifier = buildLedgerVerifier({
+      fetchImpl: vi.fn(async () => jsonResponse(V2_INVALID)),
+      states: { collective: { hist: [a] } },
+    });
+
+    await verifier.batchVerifyLedgerAddresses();
+
+    expect(verifier.toasts.at(-1).message).toMatch(/1 undeliverable/);
+    expect(verifier.toasts.at(-1).type).toBe('warn');
+  });
+
+  it('says so rather than calling Shippo when nothing is selected', async () => {
+    document.body.innerHTML = '<div id="ship-analysis-batch-actions"></div>';
+    const fetchImpl = vi.fn();
+    const verifier = buildLedgerVerifier({ fetchImpl, states: {} });
+
+    await verifier.batchVerifyLedgerAddresses();
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(verifier.toasts.at(-1).type).toBe('warn');
+  });
+});
+
+describe('applying ledger corrections to the order record', () => {
+  async function verified(overrides) {
+    const order = ledgerOrder(overrides);
+    const verifier = buildLedgerVerifier({
+      fetchImpl: vi.fn(async () => jsonResponse(V2_PARTIALLY_VALID)),
+      states: { collective: { hist: [order] } },
+    });
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+    verifier.saveState.mockClear();
+    return { order, verifier };
+  }
+
+  it('writes Shippo’s standardized text to the stored shipAddr fields', async () => {
+    const { order, verifier } = await verified();
+
+    await verifier.applyLedgerAddressCorrections('collective', 'ord-1');
+
+    expect(order.shipAddr1).toBe('731 Market St');
+    expect(order.shipAddr2).toBe('Ste 200');
+    expect(order.shipPostal).toBe('94103-2005');
+    // Not part of the recommendation, so not rewritten.
+    expect(order.shipCity).toBe('San Francisco');
+    expect(verifier.saveState).toHaveBeenCalledWith('collective');
+  });
+
+  it('spends the corrections so the same fix is not offered twice', async () => {
+    const { order, verifier } = await verified();
+
+    await verifier.applyLedgerAddressCorrections('collective', 'ord-1');
+
+    expect(order.addrVerify.corrections).toEqual([]);
+    expect(storedVerificationIsCurrent(order.addrVerify, order)).toBe(true);
+  });
+
+  it('refuses to apply a verdict the order has moved past', async () => {
+    const { order, verifier } = await verified();
+    order.shipAddr1 = '900 Somewhere Else Ave';
+
+    await verifier.applyLedgerAddressCorrections('collective', 'ord-1');
+
+    expect(order.shipAddr1).toBe('900 Somewhere Else Ave');
+    expect(order.shipPostal).toBe('94103');
+    expect(verifier.saveState).not.toHaveBeenCalled();
+    expect(verifier.toasts.at(-1).type).toBe('warn');
+  });
+
+  it('writes nothing when the confirmation is declined', async () => {
+    const order = ledgerOrder();
+    const verifier = buildLedgerVerifier({
+      fetchImpl: vi.fn(async () => jsonResponse(V2_PARTIALLY_VALID)),
+      states: { collective: { hist: [order] } },
+      confirmDialog: vi.fn(async () => false),
+    });
+    await verifier.verifyLedgerOrderAddress('collective', 'ord-1');
+    verifier.saveState.mockClear();
+
+    await verifier.applyLedgerAddressCorrections('collective', 'ord-1');
+
+    expect(order.shipAddr1).toBe('731 Market Street');
+    expect(verifier.saveState).not.toHaveBeenCalled();
+  });
+});
+
+describe('the ledger row’s verify cell', () => {
+  function cellFor(order) {
+    const verifier = buildLedgerVerifier({ fetchImpl: vi.fn(), states: {} });
+    return verifier.renderLedgerVerifyCell(order);
+  }
+
+  it('offers a verify button on an unchecked order', () => {
+    const html = cellFor(ledgerOrder());
+    expect(html).toContain('verifyLedgerOrderAddress(');
+    expect(html).toContain('Verify address');
+  });
+
+  it('says so instead of offering a check it cannot run', () => {
+    const html = cellFor(ledgerOrder({ shipAddr1: '' }));
+    expect(html).toContain('No address');
+    expect(html).not.toContain('verifyLedgerOrderAddress(');
+    // Wrapped, or the Recipient cell's span rule truncates it to an ellipsis.
+    expect(html.startsWith('<div class="ship-verify-cell"')).toBe(true);
+  });
+
+  it('shows the stored verdict and a fix button when corrections are pending', () => {
+    const order = ledgerOrder();
+    order.addrVerify = persistableVerification(
+      normalizeAddressVerification(V2_PARTIALLY_VALID, addressFromOrder(order)),
+      addressSignature(addressFromOrder(order)),
+    );
+    const html = cellFor(order);
+    expect(html).toContain('Needs corrections');
+    expect(html).toContain('applyLedgerAddressCorrections(');
+    expect(html).toContain('Fix 3');
+  });
+
+  it('falls back to re-verify once the order is edited past its verdict', () => {
+    const order = ledgerOrder();
+    order.addrVerify = persistableVerification(
+      normalizeAddressVerification(V2_PARTIALLY_VALID, addressFromOrder(order)),
+      addressSignature(addressFromOrder(order)),
+    );
+    const edited = { ...order, shipPostal: '94104' };
+    const html = cellFor(edited);
+    expect(html).toContain('Re-verify address');
+    expect(html).not.toContain('applyLedgerAddressCorrections(');
+    expect(html).not.toContain('Needs corrections');
+  });
+
+  it('escapes an order number rather than letting it break the handler', () => {
+    const html = cellFor(ledgerOrder({ id: `x' onmouseover='alert(1)`, shipName: 'X' }));
+    expect(html).not.toContain("onmouseover='alert(1)");
+    expect(html).toContain('&#39;');
   });
 });
 

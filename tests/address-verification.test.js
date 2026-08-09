@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ADDRESS_FIELD_LABELS,
   addressCorrections,
+  addressFromOrder,
   addressSignature,
   addressValidationBlocker,
   buildAddressValidationQuery,
@@ -9,6 +10,9 @@ import {
   formatAddressLines,
   isDeliverable,
   normalizeAddressVerification,
+  orderAddressPatch,
+  persistableVerification,
+  storedVerificationIsCurrent,
   verificationVerdict,
 } from '../src/lib/address-verification.js';
 
@@ -279,6 +283,121 @@ describe('addressSignature', () => {
     for (const [field] of ADDRESS_FIELD_LABELS) {
       expect(addressSignature({ ...TORONTO, [field]: 'edited-value' })).not.toBe(base);
     }
+  });
+});
+
+// A history entry as the ledger actually stores one: shipAddr1 / shipProvince /
+// shipPostal, not street1 / state / zip.
+const ORDER = {
+  num: '#DTWO-539860',
+  shipName: 'Guilherme Farinha',
+  shipAddr1: '731 Market Street',
+  shipAddr2: '#200',
+  shipCity: 'San Francisco',
+  shipProvince: 'CA',
+  shipPostal: '94103',
+  shipCountry: 'US',
+  qty: 2,
+  shippingPaid: 37,
+};
+
+describe('addressFromOrder', () => {
+  it('reads the ledger’s own field names into the verifier’s shape', () => {
+    expect(addressFromOrder(ORDER)).toEqual({
+      name: 'Guilherme Farinha', company: '', street1: '731 Market Street', street2: '#200',
+      city: 'San Francisco', state: 'CA', zip: '94103', country: 'US',
+    });
+  });
+
+  it('produces a complete shape for an order with no address at all', () => {
+    const empty = addressFromOrder({ num: '#X' });
+    expect(Object.keys(empty).sort()).toEqual(
+      ['city', 'company', 'country', 'name', 'state', 'street1', 'street2', 'zip'],
+    );
+    expect(Object.values(empty).every(v => v === '')).toBe(true);
+  });
+
+  it('round-trips against the form field names, so signatures are comparable', () => {
+    // Same address typed into the Destination form must sign identically to the
+    // stored order, or a verdict could never be shared between the two screens.
+    expect(addressSignature(addressFromOrder(ORDER)))
+      .toBe(addressSignature({ ...MARKET_ST, name: 'Guilherme Farinha' }));
+  });
+});
+
+describe('orderAddressPatch', () => {
+  it('keys corrections back onto the record’s own field names', () => {
+    expect(orderAddressPatch([
+      { field: 'street1', label: 'Street address', from: '731 Market Street', to: '731 Market St' },
+      { field: 'zip', label: 'Zip / Postal', from: '94103', to: '94103-2005' },
+    ])).toEqual({ shipAddr1: '731 Market St', shipPostal: '94103-2005' });
+  });
+
+  it('patches nothing when there is nothing to change', () => {
+    expect(orderAddressPatch([])).toEqual({});
+    expect(orderAddressPatch()).toEqual({});
+  });
+
+  it('never emits a blanking patch or an unknown field', () => {
+    expect(orderAddressPatch([
+      { field: 'street2', to: '' },
+      { field: 'notAField', to: 'x' },
+    ])).toEqual({});
+  });
+});
+
+describe('persistableVerification', () => {
+  const result = normalizeAddressVerification(V2_PARTIALLY_VALID, MARKET_ST);
+
+  it('keeps the verdict, reasons and corrections', () => {
+    const stored = persistableVerification(result, 'sig', '2026-08-09T00:00:00Z');
+    expect(stored).toMatchObject({ signature: 'sig', at: '2026-08-09T00:00:00Z', status: 'partially_valid', source: 'v2', addressType: 'commercial' });
+    expect(stored.corrections.map(c => c.field)).toEqual(['street1', 'street2', 'zip']);
+    expect(stored.reasons).toHaveLength(2);
+  });
+
+  it('drops the recommended address, which corrections already carry', () => {
+    expect(persistableVerification(result, 'sig')).not.toHaveProperty('recommended');
+  });
+
+  it('caps a chatty response so a book document cannot bloat', () => {
+    const noisy = {
+      status: 'invalid',
+      reasons: Array.from({ length: 12 }, (_, i) => ({ code: `c${i}`, type: 'error', description: 'x'.repeat(500) })),
+      corrections: [],
+    };
+    const stored = persistableVerification(noisy, 'sig');
+    expect(stored.reasons).toHaveLength(4);
+    expect(stored.reasons[0].description).toHaveLength(240);
+  });
+
+  it('is null for a missing result rather than an empty husk', () => {
+    expect(persistableVerification(null, 'sig')).toBeNull();
+  });
+});
+
+describe('storedVerificationIsCurrent', () => {
+  const stored = persistableVerification(
+    normalizeAddressVerification(V2_VALID, addressFromOrder(ORDER)),
+    addressSignature(addressFromOrder(ORDER)),
+  );
+
+  it('holds while the order still has the address that was checked', () => {
+    expect(storedVerificationIsCurrent(stored, ORDER)).toBe(true);
+  });
+
+  it('lapses the moment any address field on the order changes', () => {
+    expect(storedVerificationIsCurrent(stored, { ...ORDER, shipPostal: '94104' })).toBe(false);
+    expect(storedVerificationIsCurrent(stored, { ...ORDER, shipAddr2: '' })).toBe(false);
+  });
+
+  it('ignores changes to fields that are not part of the address', () => {
+    expect(storedVerificationIsCurrent(stored, { ...ORDER, qty: 99, shippingPaid: 0 })).toBe(true);
+  });
+
+  it('is false for an order that was never checked', () => {
+    expect(storedVerificationIsCurrent(null, ORDER)).toBe(false);
+    expect(storedVerificationIsCurrent({}, ORDER)).toBe(false);
   });
 });
 
