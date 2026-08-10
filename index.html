@@ -1844,61 +1844,76 @@
 
   <div class="card" id="tc-expense-form-card" style="margin-bottom:1.5rem;">
     <div class="section-hed" style="margin-bottom:1rem;">Log Business Expense</div>
-    <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label for="tc-exp-desc">Description (Auto-categorizes)</label><input type="text" id="tc-exp-desc" placeholder="e.g. Squarespace or Shopify"></div>
-      <div class="form-group"><label for="tc-exp-cat">Tax Category</label>
-        <select id="tc-exp-cat">
-          <option>Software & Subscriptions</option>
-          <option>Marketing & Advertising</option>
-          <option>Printing & Production</option>
-          <option>Editorial & Proofreading</option>
-          <option>Illustration & Photography</option>
-          <option>Rights & Permissions</option>
-          <option>ISBN, Barcodes & Cataloging</option>
-          <option>Shipping & Postage</option>
-          <option>Warehousing & Fulfillment</option>
-          <option>Packaging Materials</option>
-          <option>Office Supplies</option>
-          <option>Home Office</option>
-          <option>Travel & Meals</option>
-          <option>Professional Services</option>
-          <option>Sales Processing Fees</option>
-          <option>Books, Research & Reference</option>
-          <option>Events & Exhibitions</option>
-          <option>Other</option>
-        </select>
-      </div>
-    </div>
-    <div class="g3">
-      <div class="form-group"><label>Amount</label>
-        <div class="price-wrap">
-          <select id="tc-exp-cur" style="flex:0 0 60px;margin-right:4px;">
-            <option value="CAD">CAD</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
-            <option value="MXN">MXN</option>
-          </select>
-          <input type="number" inputmode="decimal" id="tc-exp-amount" step="0.01" min="0" placeholder="0.00" style="flex:1;">
+    <div class="expense-grid">
+      <div class="expense-fields">
+        <div class="form-group"><label for="tc-exp-desc">Description (Auto-categorizes)</label><input type="text" id="tc-exp-desc" placeholder="e.g. Squarespace or Shopify"></div>
+        <div class="g2">
+          <div class="form-group"><label for="tc-exp-cat">Tax Category</label>
+            <select id="tc-exp-cat">
+              <option>Software & Subscriptions</option>
+              <option>Marketing & Advertising</option>
+              <option>Printing & Production</option>
+              <option>Editorial & Proofreading</option>
+              <option>Illustration & Photography</option>
+              <option>Rights & Permissions</option>
+              <option>ISBN, Barcodes & Cataloging</option>
+              <option>Shipping & Postage</option>
+              <option>Warehousing & Fulfillment</option>
+              <option>Packaging Materials</option>
+              <option>Office Supplies</option>
+              <option>Home Office</option>
+              <option>Travel & Meals</option>
+              <option>Professional Services</option>
+              <option>Sales Processing Fees</option>
+              <option>Books, Research & Reference</option>
+              <option>Events & Exhibitions</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="form-group"><label for="tc-exp-date">Date</label><input type="date" id="tc-exp-date"></div>
+        </div>
+        <div class="form-group amount-field"><label>Amount</label>
+          <div class="price-wrap">
+            <select id="tc-exp-cur" style="flex:0 0 66px;margin-right:4px;">
+              <option value="CAD">CAD</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="MXN">MXN</option>
+            </select>
+            <input type="number" inputmode="decimal" id="tc-exp-amount" step="0.01" min="0" placeholder="0.00" style="flex:1;">
+          </div>
         </div>
       </div>
-      <div class="form-group"><label for="tc-exp-date">Date</label><input type="date" id="tc-exp-date"></div>
-      <div class="form-group" id="tc-exp-file-group"><label>Receipt</label>
-        <div style="display:flex;gap:4px;flex-wrap:wrap;">
-          <input type="file" id="tc-exp-file" accept="image/*,.pdf" style="font-size: 11px; margin-top: 6px;flex:1;min-width:140px;">
-          <button class="btn gold outline" style="padding: 0 8px; font-size:12px; margin-top: 6px;" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
-          <button class="btn gold" style="padding: 0 8px; font-size:12px; margin-top: 6px;" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn">✨ AI Scan</button>
+      <div class="receipt-panel" id="tc-exp-file-group">
+        <div class="panel-label">Receipt <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);">(optional)</span></div>
+        <label class="dropzone" id="tc-exp-dropzone" ondragover="tcExpFileDragOver(event)" ondragleave="tcExpFileDragLeave(event)" ondrop="tcExpFileDrop(event)">
+          <div class="dz-icon">🧾</div>
+          <div class="dz-title">Add a receipt</div>
+          <div class="dz-sub">Drop an image or PDF, or <span class="dz-link">browse</span></div>
+          <input type="file" id="tc-exp-file" accept="image/*,.pdf" hidden onchange="tcExpFileChosen()">
+        </label>
+        <div class="dz-file" id="tc-exp-file-chip">
+          <div class="dz-thumb">📄</div>
+          <div class="dz-fname" id="tc-exp-file-name"></div>
+          <button class="dz-remove" type="button" title="Remove file" onclick="tcExpFileClear(event)">×</button>
         </div>
-        <div id="tc-exp-file-preview" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
-        <div id="tc-exp-storage-row" style="font-size:11px;color:var(--text3);margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="tc-receipt-scan-actions">
+          <button class="btn gold outline sm" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
+          <button class="btn gold sm" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn">✨ AI Scan</button>
+        </div>
+        <div id="tc-exp-file-preview" class="tc-field-hint"></div>
+        <div id="tc-exp-storage-row" class="tc-storage-row">
           <span id="tc-exp-storage-status">Storage: Cloud (Firestore)</span>
-          <button class="btn tx" type="button" onclick="setupReceiptFolder()" style="padding:2px 8px;font-size:11px;">📁 Choose folder…</button>
-          <button class="btn tx" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="padding:2px 8px;font-size:11px;background:var(--gold3);color:black;display:none;">Authorize access</button>
-          <button class="btn tx" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" style="padding:2px 8px;font-size:11px;color:var(--gold);" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link All Receipts</button>
+          <div class="tc-storage-actions">
+            <button class="btn tx sm" type="button" onclick="setupReceiptFolder()">📁 Choose folder…</button>
+            <button class="btn tx sm" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="background:var(--gold3);color:black;display:none;">Authorize access</button>
+            <button class="btn tx sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" style="color:var(--gold);" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
+          </div>
         </div>
       </div>
     </div>
-    <div class="form-group" style="margin-top:8px;">
+    <div class="form-group" style="margin-top:14px;">
       <label for="tc-exp-trip">Trip / Project (optional — groups expenses for a single business trip)</label>
       <div class="tc-trip-picker-wrapper">
         <div id="tc-trip-quick-chips" class="tc-trip-quick-chips"></div>
