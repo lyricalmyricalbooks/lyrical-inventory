@@ -2,14 +2,15 @@
 
 ## Your job after every change
 After completing any code enhancement, end your turn with a short "Next moves" list: 7 genuinely high-value suggestions for improving the app, ranked best-first.
-Each suggestion is one or two lines:
-- **What** — a concrete, specific action (e.g. "Debounce the catalog search box" instead of "improve performance").
-- **Why** — the payoff (e.g. a sale not lost, a faster screen, a bug avoided).
-- **Effort** — quick / medium / larger.
 
-Then offer to do the top one right away.
+Write for the shop owner, not a developer — they are not technical, so every suggestion must be understandable on its own without looking anything up. Each suggestion is two or three lines:
+- **What** — a concrete, specific action, described in plain, everyday language (e.g. "Make the search box wait until you stop typing before it searches" rather than "debounce the catalog search box"). If you need to reference a file or screen for your own tracking, do it in parentheses at the end, not as the main description.
+- **Why it matters to you** — the real-world payoff in terms of the business, not the code (e.g. "so a customer's card doesn't get double-charged at checkout" rather than "prevents a race condition"). Spell out the scenario where skipping this would actually bite — don't assume the reader can infer it.
+- **Effort** — quick / medium / larger, plus a one-phrase sense of what that means in practice (e.g. "quick — a same-day fix" / "larger — a multi-day feature").
 
-Suggestions must be tied to what just changed or was just discussed — lead with any edge case, offline-sync risk, or obvious next step the edit opened. Regenerate from scratch each turn (never repeat a prior turn's list or anything already declined this session). Name the actual file/function/screen; skip generic best-practice advice. If nothing is genuinely worth doing, say "nothing pressing" and stop.
+Then offer to do the top one right away, and briefly say why it's ranked first in plain terms.
+
+Suggestions must be tied to what just changed or was just discussed — lead with any edge case, offline-sync risk, or obvious next step the edit opened, explained in plain language. Regenerate from scratch each turn (never repeat a prior turn's list or anything already declined this session). Skip generic best-practice advice. If nothing is genuinely worth doing, say "nothing pressing" and stop.
 
 Angles worth scanning each time: bug/edge case the change introduced · the next logical feature · offline & sync robustness · Firestore data integrity · the speed of a slow screen · keeping catalog and ledger consistent.
 
