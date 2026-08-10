@@ -1240,8 +1240,7 @@ async function saveBookFromModal() {
     const ab = BOOKS[activeBook];
     const lbl = $('book-dropdown-label'); if (lbl) lbl.textContent = ab.title;
     const dt = $('book-dropdown-dot'); if (dt) dt.style.background = ab.accent;
-    document.documentElement.style.setProperty('--book-accent', ab.accent);
-    document.documentElement.style.setProperty('--book-accent-bg', ab.accentBg);
+    applyBookAccentTokens(activeBook);
   }
   renderCurrent();
 
@@ -1561,8 +1560,9 @@ function renderAuthorQRPage() {
   if (titleEl) titleEl.textContent = book.title;
   if (metaEl) metaEl.textContent = (book.author || '') + (book.author ? ' · ' : '') + book.currency + book.listPrice;
 
-  // Set accent colour
-  document.documentElement.style.setProperty('--book-accent', book.accent);
+  // Set accent colour (the whole family, so --book-accent-text can't go stale
+  // against --book-accent on the author's QR page).
+  applyBookAccentTokens(activeBook);
 
   // Clear previous QR and re-render
   const canvas = $('author-qr-canvas');
@@ -1920,6 +1920,9 @@ export function setThemePreference(preference, { announce = true } = {}) {
   const resolved = applyThemeToDocument(next);
   resolvedTheme = resolved;
   const stored = writeThemePreference(next);
+  // --book-accent-text was derived for the OLD surface; re-derive it.
+  // Skipped before a book is active — switchBook() will set it correctly.
+  if (activeBook) applyBookAccentTokens(activeBook);
   renderThemeControls();
   if (announce && changed) {
     showToast(stored
@@ -1954,6 +1957,7 @@ function initTheme() {
     media?.addEventListener?.('change', (e) => {
       if (themePreference !== 'system') return;
       resolvedTheme = applyThemeToDocument('system', { prefersDark: e.matches });
+      if (activeBook) applyBookAccentTokens(activeBook);
       // Repaint so the toggle's icon follows the OS flip too.
       renderThemeControls();
     });
@@ -1976,6 +1980,38 @@ function initTheme() {
 // main.js is a deferred module, so the document is fully parsed by the time
 // this runs — the controls' host markup exists and needs no DOMContentLoaded.
 initTheme();
+
+/**
+ * Writes the --book-accent-* custom properties for a book (or the all-books
+ * gold default).
+ *
+ * One function for all three call sites — switchBook, the post-edit refresh and
+ * the author-mode boot — because the DERIVED members (-light/-text/-contrast)
+ * were only ever written by switchBook. Editing a book's accent left a stale
+ * --book-accent-text behind, and an author session never got one at all.
+ *
+ * --book-accent-text is baked into a custom property rather than computed in
+ * CSS, so it cannot follow the cascade: setThemePreference() calls this again on
+ * every theme change, or a publisher who switches to dark keeps the colour that
+ * was chosen to read on cream.
+ */
+function applyBookAccentTokens(bookId) {
+  const root = document.documentElement;
+  const book = bookId && bookId !== 'all' ? BOOKS[bookId] : null;
+  if (!book) {
+    root.style.setProperty('--book-accent', 'var(--gold2)');
+    root.style.setProperty('--book-accent-bg', 'var(--gold-bg)');
+    root.style.setProperty('--book-accent-light', 'var(--gold3)');
+    root.style.setProperty('--book-accent-text', 'var(--gold-text)');
+    root.style.setProperty('--book-accent-contrast', 'var(--ink)');
+    return;
+  }
+  root.style.setProperty('--book-accent', book.accent);
+  root.style.setProperty('--book-accent-bg', book.accentBg);
+  root.style.setProperty('--book-accent-light', lightenColor(book.accent, 0.25));
+  root.style.setProperty('--book-accent-text', getContrastSafeText(book.accent, resolvedTheme === 'dark'));
+  root.style.setProperty('--book-accent-contrast', getContrastColor(book.accent));
+}
 
 // The two backends report a rules rejection differently: Firestore sets
 // code:'permission-denied' and a message of "Missing or insufficient
@@ -3121,23 +3157,15 @@ function switchBook(bookId) {
     document.querySelectorAll('.snav.active').forEach(b => b.classList.remove('active'));
     const shellTitle = $('shell-page-title');
     if (shellTitle) shellTitle.textContent = 'All books';
-    document.documentElement.style.setProperty('--book-accent', 'var(--gold2)');
-    document.documentElement.style.setProperty('--book-accent-bg', 'var(--gold-bg)');
-    document.documentElement.style.setProperty('--book-accent-light', 'var(--gold3)');
-    document.documentElement.style.setProperty('--book-accent-text', 'var(--gold-text)');
-    document.documentElement.style.setProperty('--book-accent-contrast', 'var(--ink)');
+    applyBookAccentTokens('all');
     applyBodyTint('all');
     updateAllOverview();
     updateHeader();
   } else {
     $('tab-bar').style.display = '';
-    const book = BOOKS[bookId];
-    // Set CSS accent
-    document.documentElement.style.setProperty('--book-accent', book.accent);
-    document.documentElement.style.setProperty('--book-accent-bg', book.accentBg);
-    document.documentElement.style.setProperty('--book-accent-light', lightenColor(book.accent, 0.25));
-    document.documentElement.style.setProperty('--book-accent-text', getContrastSafeText(book.accent));
-    document.documentElement.style.setProperty('--book-accent-contrast', getContrastColor(book.accent));
+    // Set CSS accent (reads BOOKS[bookId] itself, and re-derives the text
+    // colour from the current theme).
+    applyBookAccentTokens(bookId);
     applyBodyTint(bookId);
     switchTab('dashboard');
     updateHeader();
@@ -15181,8 +15209,7 @@ async function boot(forcedBook) {
       activeBook = forcedBook;
       const book = BOOKS[forcedBook];
       if (!book) { showToast('Book not found', 'err'); return; }
-      document.documentElement.style.setProperty('--book-accent', book.accent);
-      document.documentElement.style.setProperty('--book-accent-bg', book.accentBg);
+      applyBookAccentTokens(forcedBook);
       $('tab-all-overview').style.display = 'none';
       $('tab-all-overview').classList.remove('active');
       $('tab-bar').style.display = '';

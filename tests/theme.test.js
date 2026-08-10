@@ -8,7 +8,9 @@ import {
   resolveTheme, systemPrefersDark, applyThemeToDocument, nextThemePreference,
   oppositeThemePreference,
 } from '../src/lib/theme.js';
-import { parseRootVars, makeColorResolver, contrastRatio } from '../scripts/check-contrast.mjs';
+import {
+  parseRootVars, makeColorResolver, contrastRatio, findSurfaceTokenTextMisuse, paletteFor,
+} from '../scripts/check-contrast.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const styleCss = readFileSync(join(root, 'src/style.css'), 'utf8');
@@ -327,6 +329,52 @@ describe('dark palette', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The mirror image of the --cream rule, and the one that actually shipped:
+// .book-strip-title was `color:var(--ink)` and rendered near-black on a dark
+// card. --ink is a SURFACE and flips; as a text colour it is only correct on a
+// fill that stays light in both themes.
+// ---------------------------------------------------------------------------
+
+describe('surface tokens are never text colours on a flipping surface', () => {
+  const darkVars = paletteFor('dark', styleCss, darkCss);
+
+  it.each([
+    ['src/style.css', styleCss],
+    ['src/styles/theme-dark.css', darkCss],
+  ])('%s is clean', (_name, css) => {
+    const misuse = findSurfaceTokenTextMisuse(css, darkVars);
+    const detail = misuse.map(f => `  :${f.line} ${f.selector} color:var(--${f.token}) — ${f.reason}`).join('\n');
+    expect(misuse, `Surface token used as text colour:\n${detail}`).toEqual([]);
+  });
+
+  it('would have caught .book-strip-title as it shipped', () => {
+    // Guards the guard: zero findings above must mean "clean", not "blind".
+    const shipped = '.book-strip-title { font-family: serif; color: var(--ink); }';
+    expect(findSurfaceTokenTextMisuse(shipped, darkVars)).toHaveLength(1);
+  });
+
+  it('accepts a surface token on a fill that stays light', () => {
+    expect(findSurfaceTokenTextMisuse('.x{background:var(--gold);color:var(--ink);}', darkVars)).toEqual([]);
+  });
+
+  it('rejects a gradient whose far stop goes dark', () => {
+    // Text has to read across the whole fill, not just at the light end.
+    expect(findSurfaceTokenTextMisuse(
+      '.x{background:linear-gradient(90deg,var(--gold),var(--ink3));color:var(--ink);}', darkVars,
+    )).toHaveLength(1);
+  });
+
+  it('does not read prose in comments as a rule', () => {
+    expect(findSurfaceTokenTextMisuse('/* never write color:var(--cream) */\n.x{color:var(--text);}', darkVars))
+      .toEqual([]);
+  });
+
+  it('ignores :root, where surface tokens are defined rather than used', () => {
+    expect(findSurfaceTokenTextMisuse(':root{--content-on-inverse:var(--on-inverse);}', darkVars)).toEqual([]);
+  });
+});
+
 describe('dark palette contrast (WCAG AA)', () => {
   const resolve = makeColorResolver(darkVars);
   const rgb = (token) => {
@@ -418,6 +466,45 @@ describe('appearance control', () => {
     const rule = styleCss.match(/\.theme-seg-opt\{[^}]*\}/)[0];
     expect(rule).toContain('min-height:var(--target-min)');
     expect(rule).toContain('min-width:44px');
+  });
+});
+
+describe('per-book accent follows the theme', () => {
+  // --book-accent-text is DERIVED and baked into a custom property, so unlike
+  // every other token it cannot follow the cascade. If it isn't recomputed on a
+  // theme change, a publisher who switches to dark keeps the colour that was
+  // chosen to read on cream — which is how .book-strip-title became unreadable.
+  it('derives --book-accent-text from the resolved theme', () => {
+    expect(mainJs).toContain("getContrastSafeText(book.accent, resolvedTheme === 'dark')");
+  });
+
+  it('recomputes the accent when the preference changes', () => {
+    const fn = mainJs.slice(
+      mainJs.indexOf('export function setThemePreference'),
+      mainJs.indexOf('export function cycleThemePreference'),
+    );
+    expect(fn).toContain('applyBookAccentTokens(activeBook)');
+  });
+
+  it('recomputes the accent when the OS flips under "system"', () => {
+    const handler = mainJs.slice(
+      mainJs.indexOf('media?.addEventListener'),
+      mainJs.indexOf('} catch (_) { /* matchMedia'),
+    );
+    expect(handler).toContain('applyBookAccentTokens(activeBook)');
+  });
+
+  it('writes every derived member from one place', () => {
+    // Three call sites used to set --book-accent/-bg only, leaving -light,
+    // -text and -contrast stale from whatever ran last: editing a book's accent
+    // kept the old text colour, and an author session never got one at all.
+    const raw = mainJs.match(/setProperty\('--book-accent(-[\w-]+)?'/g) ?? [];
+    const insideHelper = mainJs.slice(
+      mainJs.indexOf('function applyBookAccentTokens'),
+      mainJs.indexOf('function applyBookAccentTokens') + 1400,
+    ).match(/setProperty\('--book-accent(-[\w-]+)?'/g) ?? [];
+    expect(raw.length, 'all --book-accent-* writes must live in applyBookAccentTokens')
+      .toBe(insideHelper.length);
   });
 });
 
