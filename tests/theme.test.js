@@ -6,6 +6,7 @@ import {
   THEME_STORAGE_KEY, THEME_PREFERENCES, THEME_COLORS, THEME_LABELS,
   normalizeThemePreference, readThemePreference, writeThemePreference,
   resolveTheme, systemPrefersDark, applyThemeToDocument, nextThemePreference,
+  oppositeThemePreference,
 } from '../src/lib/theme.js';
 import { parseRootVars, makeColorResolver, contrastRatio } from '../scripts/check-contrast.mjs';
 
@@ -88,6 +89,27 @@ describe('nextThemePreference', () => {
     expect(nextThemePreference('system')).toBe('light');
     expect(nextThemePreference('light')).toBe('dark');
     expect(nextThemePreference('dark')).toBe('system');
+  });
+});
+
+describe('oppositeThemePreference', () => {
+  it('flips relative to what is on screen', () => {
+    expect(oppositeThemePreference('dark')).toBe('light');
+    expect(oppositeThemePreference('light')).toBe('dark');
+  });
+
+  // The bug this prevents: keying the toggle off the stored PREFERENCE instead
+  // of the resolved theme. Under 'system' on a dark phone the preference is
+  // 'system', so a preference-keyed toggle would send someone already looking
+  // at a dark screen to... dark.
+  it('never returns "system", so a tap is not undone at sunset', () => {
+    for (const resolved of ['light', 'dark', 'system', undefined, null]) {
+      expect(oppositeThemePreference(resolved)).not.toBe('system');
+    }
+  });
+
+  it('treats anything that is not dark as light-on-screen', () => {
+    expect(oppositeThemePreference(undefined)).toBe('dark');
   });
 });
 
@@ -396,5 +418,49 @@ describe('appearance control', () => {
     const rule = styleCss.match(/\.theme-seg-opt\{[^}]*\}/)[0];
     expect(rule).toContain('min-height:var(--target-min)');
     expect(rule).toContain('min-width:44px');
+  });
+});
+
+describe('one-tap theme toggle', () => {
+  it('is in the header, reachable without opening a menu', () => {
+    expect(indexHtml).toContain('id="theme-toggle-btn"');
+    // Must sit in .header-right, not inside a .header-menu-panel — the whole
+    // point is that it needs no menu.
+    const headerRight = indexHtml.slice(
+      indexHtml.indexOf('<div class="header-right">'),
+      indexHtml.indexOf('</header>'),
+    );
+    expect(headerRight).toContain('id="theme-toggle-btn"');
+    expect(headerRight).toContain('onclick="toggleTheme()"');
+  });
+
+  it('exposes toggleTheme to the inline handler layer', () => {
+    // main.js is a module, so an inline onclick resolves off window at click
+    // time. Missing here = a button that silently does nothing.
+    expect(mainJs).toMatch(/setThemePreference,\s*cycleThemePreference,\s*toggleTheme/);
+  });
+
+  it('drives the toggle from the RESOLVED theme, not the preference', () => {
+    expect(mainJs).toContain('oppositeThemePreference(resolvedTheme)');
+    expect(mainJs).toMatch(/resolvedTheme = applyThemeToDocument/);
+  });
+
+  it('repaints when the OS flips under a "system" preference', () => {
+    // Otherwise the icon keeps advertising the wrong destination after a
+    // scheduled night-mode switch.
+    const handler = mainJs.slice(mainJs.indexOf("media?.addEventListener"), mainJs.indexOf('} catch (_) { /* matchMedia'));
+    expect(handler).toContain('renderThemeControls()');
+  });
+
+  it('carries an accessible name and pressed state', () => {
+    expect(indexHtml).toMatch(/id="theme-toggle-btn"[\s\S]{0,240}aria-pressed=/);
+    expect(indexHtml).toMatch(/id="theme-toggle-btn"[\s\S]{0,240}aria-label=/);
+  });
+
+  it('keeps a 44px target without growing the 34px chip', () => {
+    const rule = styleCss.match(/\.theme-toggle-btn\{[^}]*\}/)[0];
+    expect(rule).toContain('width:34px');
+    const after = styleCss.match(/\.theme-toggle-btn::after\{[^}]*\}/)[0];
+    expect(after).toContain('var(--target-min)');
   });
 });

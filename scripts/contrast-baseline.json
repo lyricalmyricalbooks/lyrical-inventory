@@ -6,7 +6,8 @@
     "accent labels/links, low-opacity rgba() captions on dark cards, etc).",
     "Recorded here so npm run lint:contrast / tests/contrast.test.js gate on NEW",
     "regressions instead of failing on every pre-existing screen. \"count\" is how",
-    "many places in index.html use this exact resolved colour pairing as of the",
+    "many places (across index.html and the rendered HTML in src/) use this exact",
+    "resolved colour pairing as of the",
     "last regeneration — informational only, not enforced.",
     "",
     "Keyed per THEME: index.html is swept once against the light palette and",
@@ -34,11 +35,39 @@
           "count": 1
         },
         {
+          "key": "#e5a93f::#efe9dc",
+          "textColor": "var(--gold2)",
+          "bgColor": "(inherited)",
+          "ratio": 1.72,
+          "count": 1
+        },
+        {
+          "key": "#b8b0a5::#efe9dc",
+          "textColor": "var(--text4)",
+          "bgColor": "(inherited)",
+          "ratio": 1.77,
+          "count": 1
+        },
+        {
+          "key": "#e5a93f::#ffffff",
+          "textColor": "var(--gold2)",
+          "bgColor": "(inherited)",
+          "ratio": 2.08,
+          "count": 3
+        },
+        {
+          "key": "#c5a880::#ffffff",
+          "textColor": "#c5a880",
+          "bgColor": "(inherited)",
+          "ratio": 2.26,
+          "count": 1
+        },
+        {
           "key": "#c8913a::#efe9dc",
           "textColor": "var(--gold)",
           "bgColor": "(inherited)",
           "ratio": 2.29,
-          "count": 6
+          "count": 8
         },
         {
           "key": "#c8913a::#f2e8d8",
@@ -62,6 +91,13 @@
           "count": 4
         },
         {
+          "key": "#c8913a::#faf4eb",
+          "textColor": "var(--gold)",
+          "bgColor": "var(--gold-bg)",
+          "ratio": 2.54,
+          "count": 1
+        },
+        {
           "key": "#c8913a::#fafafa",
           "textColor": "var(--gold)",
           "bgColor": "(inherited)",
@@ -69,25 +105,53 @@
           "count": 2
         },
         {
+          "key": "#64646d::#22222e",
+          "textColor": "rgba(255,255,255,0.3)",
+          "bgColor": "#22222e",
+          "ratio": 2.69,
+          "count": 1
+        },
+        {
+          "key": "#616167::#1d1d26",
+          "textColor": "rgba(255,255,255,0.3)",
+          "bgColor": "#1d1d26",
+          "ratio": 2.71,
+          "count": 1
+        },
+        {
           "key": "#c8913a::#ffffff",
           "textColor": "var(--gold)",
           "bgColor": "(inherited)",
           "ratio": 2.78,
-          "count": 6
+          "count": 7
+        },
+        {
+          "key": "#999999::#ffffff",
+          "textColor": "#999",
+          "bgColor": "(inherited)",
+          "ratio": 2.85,
+          "count": 1
         },
         {
           "key": "#8a8078::#e5ddd0",
           "textColor": "var(--text3)",
           "bgColor": "var(--cream3)",
           "ratio": 2.87,
-          "count": 2
+          "count": 8
+        },
+        {
+          "key": "#9b9184::#ffffff",
+          "textColor": "#9b9184",
+          "bgColor": "(inherited)",
+          "ratio": 3.1,
+          "count": 8
         },
         {
           "key": "#8a8078::#efe9dc",
           "textColor": "var(--text3)",
           "bgColor": "(inherited)",
           "ratio": 3.19,
-          "count": 12
+          "count": 29
         },
         {
           "key": "#8a8078::#f5f0e7",
@@ -111,6 +175,13 @@
           "count": 1
         },
         {
+          "key": "#888888::#ffffff",
+          "textColor": "#888",
+          "bgColor": "(inherited)",
+          "ratio": 3.54,
+          "count": 1
+        },
+        {
           "key": "#8a8078::#fafafa",
           "textColor": "var(--text3)",
           "bgColor": "(inherited)",
@@ -122,12 +193,62 @@
           "textColor": "var(--text3)",
           "bgColor": "(inherited)",
           "ratio": 3.86,
-          "count": 45
+          "count": 62
         }
       ]
     },
     "dark": {
-      "accepted": []
+      "accepted": [
+        {
+          "key": "#edb85c::#ffffff",
+          "textColor": "var(--gold2)",
+          "bgColor": "(inherited)",
+          "ratio": 1.81,
+          "count": 1
+        },
+        {
+          "key": "#64646d::#22222e",
+          "textColor": "rgba(255,255,255,0.3)",
+          "bgColor": "#22222e",
+          "ratio": 2.69,
+          "count": 1
+        },
+        {
+          "key": "#616167::#1d1d26",
+          "textColor": "rgba(255,255,255,0.3)",
+          "bgColor": "#1d1d26",
+          "ratio": 2.71,
+          "count": 1
+        },
+        {
+          "key": "#999999::#ffffff",
+          "textColor": "#999",
+          "bgColor": "(inherited)",
+          "ratio": 2.85,
+          "count": 1
+        },
+        {
+          "key": "#9b9184::#ffffff",
+          "textColor": "#9b9184",
+          "bgColor": "(inherited)",
+          "ratio": 3.1,
+          "count": 8
+        },
+        {
+          "key": "#736a5b::#1c1813",
+          "textColor": "var(--text4)",
+          "bgColor": "(inherited)",
+          "ratio": 3.31,
+          "count": 1
+        },
+        {
+          "key": "#888888::#ffffff",
+          "textColor": "#888",
+          "bgColor": "(inherited)",
+          "ratio": 3.54,
+          "count": 1
+        }
+      ]
     }
   }
 }
