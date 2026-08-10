@@ -20,7 +20,9 @@
      dark-on-dark the moment the theme switches. */
   --on-inverse:#f7f2e9;
   --on-inverse-2:rgba(247,242,233,.72);
-  --on-inverse-3:rgba(247,242,233,.45);
+  /* .55, not .45: this tier is used for 9-11px uppercase micro-labels on ink,
+     and AA judges those as normal text. .45 measured 3.6:1. */
+  --on-inverse-3:rgba(247,242,233,.55);
   /* Text/iconography on a FIXED saturated fill — one that is the same colour
      in both themes (the red alert band, the violet update badge). White in
      both themes, because the fill carries the contrast. */
