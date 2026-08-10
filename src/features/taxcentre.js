@@ -54,6 +54,7 @@ import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
 import { reconcileConsignmentInvoiceLinks } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
+import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import {
   RECURRING_FREQUENCIES,
   frequencyLabel,
@@ -709,8 +710,15 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
   }
 }
 
+// Rank-based dot colors for the category breakdown — matches the hues already
+// used for trip category bars (TC_TRIP_CAT_COLORS) so the two "which bucket
+// is this" visual languages stay consistent. Only the top few ranks get a
+// distinct hue; the long tail shares a single muted dot.
+const TC_CATEGORY_RANK_DOTS = ['var(--gold3)', '#f43f5e', '#6366f1', '#14b8a6'];
+
 function _tcRenderCategoryPanel(allLedger, baseCurrency) {
   const catBody = $('tc-category-body');
+  const catFoot = $('tc-category-foot');
   if (catBody) {
     const expenses = allLedger.filter(item => !item.isIncome);
     const catSummary = {};
@@ -729,13 +737,47 @@ function _tcRenderCategoryPanel(allLedger, baseCurrency) {
       byName: catSummary
     };
 
-    catBody.innerHTML = catList.map(c => `
-          <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${escapeHtml(c.name)}" style="cursor:pointer;" title="Click to view ${c.count} transaction${c.count === 1 ? '' : 's'}">
-            <td style="color:var(--gold3);text-decoration:underline;">${escapeHtml(c.name)}</td>
+    const grandTotal = catList.reduce((sum, c) => sum + c.total, 0);
+    const totalTxns = catList.reduce((sum, c) => sum + c.count, 0);
+
+    catBody.innerHTML = catList.map((c, i) => {
+      const pct = grandTotal > 0 ? (c.total / grandTotal) * 100 : 0;
+      // Clamp so a real-but-tiny share (e.g. 0.04%) still renders a sliver instead of vanishing.
+      const barWidth = pct > 0 ? Math.max(pct, 1.5) : 0;
+      // A category worth $11 out of $31k rounds to "0.0%", which reads as an
+      // error rather than a rounding artifact — say "<0.1%" instead.
+      const pctLabel = pct >= 10 ? `${pct.toFixed(0)}%` : (pct > 0 && pct < 0.1 ? '&lt;0.1%' : `${pct.toFixed(1)}%`);
+      const dotColor = TC_CATEGORY_RANK_DOTS[i] || 'var(--text4)';
+      const txnLabel = `${c.count} transaction${c.count === 1 ? '' : 's'}`;
+      // The row carries the click for a fat mouse/touch target, but the
+      // keyboard path and the accessible name live on a real <button> in the
+      // first cell — putting role="button" on the <tr> would strip the row out
+      // of the table semantics screen readers rely on to read the other cells.
+      return `
+          <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${escapeHtml(c.name)}" style="cursor:pointer;" title="${escapeHtml(c.name)} — ${txnLabel}, ${pctLabel} of total deductible spend">
+            <td><span class="tc-cat-name"><span class="con-group-dot" style="background:${dotColor};"></span><button type="button" class="tc-cat-link" onclick="event.stopPropagation();showCategoryDetail('${escapeHtml(c.name).replace(/'/g, '&#39;')}')">${escapeHtml(c.name)}</button></span></td>
             <td class="r">${c.count}</td>
-            <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}</td>
+            <td class="r">
+              <span class="tc-cat-pct" role="img" aria-label="${pctLabel} of total">
+                <span class="con-row-progress"><span class="con-row-progress-bar" style="width:${barWidth}%;"></span></span>
+                <span class="tc-cat-pct-label" aria-hidden="true">${pctLabel}</span>
+              </span>
+            </td>
+            <td class="r" style="font-weight:bold;color:var(--red);">- ${fmt(c.total, baseCurrency)}<span class="tc-cat-chevron" aria-hidden="true">›</span></td>
           </tr>
-      `).join('') || `<tr><td colspan="3" class="r" style="text-align:center;">No deductible expenses recorded</td></tr>`;
+      `;
+    }).join('') || `<tr><td colspan="4"><div class="empty-state" style="padding:1rem;">No deductible expenses recorded</div></td></tr>`;
+
+    if (catFoot) {
+      catFoot.innerHTML = catList.length ? `
+        <tr class="tc-cat-foot-row">
+          <td>${catList.length} categor${catList.length === 1 ? 'y' : 'ies'}</td>
+          <td class="r">${totalTxns}</td>
+          <td class="r tc-cat-foot-pct">100%</td>
+          <td class="r" style="color:var(--red);">- ${fmt(grandTotal, baseCurrency)}</td>
+        </tr>
+      ` : '';
+    }
   }
 }
 
@@ -2031,7 +2073,7 @@ function _tcBuildLedger(selectedYear) {
         date: e.date,
         type: 'Expense',
         desc: e.desc + ` (${b.title})`,
-        cat: e.cat || 'Project Expense',
+        cat: canonicalExpenseCategory(e.cat, 'Project Expense'),
         ref: e.shippingOrderNumber ? `${e.ref || ''} · ${e.shippingOrderNumber}` : e.ref || '',
         receipt: e.receipt || '',
         origCurrency: displayOrigCur,
@@ -2093,7 +2135,7 @@ function _tcBuildLedger(selectedYear) {
       date: e.date,
       type: 'Business Exp.',
       desc: e.desc,
-      cat: e.cat || 'Other',
+      cat: canonicalExpenseCategory(e.cat),
       ref: e.ref || '',
       receipt: e.receipt || '',
       receiptFiles: e.receiptFiles || [],

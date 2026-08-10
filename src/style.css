@@ -7202,6 +7202,34 @@ tr.hist-row:hover {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
+/* Expense Categorization table ("Ledger Plus") — % of total column with a
+   reused .con-row-progress bar, a reveal-on-hover chevron for the existing
+   row click affordance, and a pinned totals row. */
+.tc-cat-name{display:flex;align-items:baseline;gap:8px;}
+.tc-cat-name .con-group-dot{margin-right:0;flex:none;transform:translateY(-1px);}
+.tc-cat-link{font:inherit;color:var(--gold3);background:none;border:none;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-align:left;}
+.tc-cat-link:hover{color:var(--gold-text);}
+/* Keeps each clickable row at the >=44px touch target AGENTS.md requires —
+   these rows are tapped on a phone at book fairs, not just clicked. */
+.tc-cat-tbl tbody td{padding-top:15px;padding-bottom:15px;}
+.tc-cat-pct{display:inline-flex;align-items:center;gap:8px;}
+.tc-cat-pct .con-row-progress{display:inline-block;flex:none;}
+.tc-cat-pct .con-row-progress-bar{display:block;}
+.tc-cat-pct-label{font-family:'DM Mono',monospace;font-size:var(--text-2xs);color:var(--text3);min-width:32px;text-align:right;}
+.tc-cat-chevron{display:inline-block;margin-left:6px;opacity:0;color:var(--text3);font-weight:400;transition:opacity var(--dur-fast,140ms) var(--ease-standard,ease);}
+.tc-cat-tbl tbody tr:hover .tc-cat-chevron,
+.tc-cat-tbl tbody tr:focus-within .tc-cat-chevron{opacity:1;}
+.tc-cat-tbl tfoot .tc-cat-foot-row td{border-top:2px solid var(--text);padding-top:12px;padding-bottom:12px;font-weight:700;color:var(--text);}
+.tc-cat-tbl tfoot .tc-cat-foot-pct{font-family:'DM Mono',monospace;color:var(--text3)!important;font-weight:600;}
+
+/* On a phone the deductible total is the column that matters; drop the bar
+   track (the number carries the same information) so the money column stays
+   on screen instead of being pushed into the horizontal scroll. */
+@media (max-width:720px){
+  .tc-cat-pct .con-row-progress{display:none;}
+  .tc-cat-pct-label{min-width:0;}
+}
+
 .tc-trip-stats-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
