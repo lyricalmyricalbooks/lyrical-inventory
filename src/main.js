@@ -4884,7 +4884,7 @@ function renderConsignHistRow(e, after) {
   const voided = e.voided ? ' voided' : '';
   const voidPill = e.voided ? '<span class="void-badge">Void</span>' : '';
   const manageBtn = `<button class="edit-btn" onclick="switchTab('consignment')" title="Manage in the Consignment tab" aria-label="Manage in Consignment">→</button>`;
-  return `<tr class="hist-row ${voided}"><td class="mono mono-num" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r mono-num">${e.voided ? '' : qtyCell}</td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;">—</span></td><td class="r mono-num">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
+  return `<tr class="hist-row ${voided}"><td class="mono mono-num" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r mono-num">${e.voided ? '' : qtyCell}</td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
 }
 
 
@@ -5028,7 +5028,7 @@ export function renderHist() {
       const foreignPill = rowCode !== bookCode
         ? ` <span class="chip-status amber" title="Recorded in ${escapeHtml(rowCode)} — not yet restated into ${escapeHtml(bookCode)}">${escapeHtml(rowCode)}</span>`
         : '';
-      const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
+      const priceCell = isGrat ? '<span style="color:var(--text3);font-size:11px;">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
       const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, rowCur)}</span>` : fmt(h.qty * h.price, rowCur);
       const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:var(--amber-bg);"' : '';
       const isWebsite = (h.chan === 'Website' || h.chan === 'Big Cartel') && !isGrat && !h.voided;
@@ -5043,7 +5043,7 @@ export function renderHist() {
       const notesText = escapeHtml(h.notes) || '—';
       const notesCell = [
         notesText,
-        paymentInfo ? `<span style="font-size:11px;color:var(--text4);">${escapeHtml(paymentInfo)}</span>` : '',
+        paymentInfo ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(paymentInfo)}</span>` : '',
         shippingInfo,
       ].filter(Boolean).join('<br>');
       const enteredBy = h.enteredBy || (h.artistPending ? 'Artist' : 'Publisher');
@@ -6819,7 +6819,7 @@ function renderEmailPreviewContent(msgId, container) {
       </div>
     `;
   } else {
-    attachmentsHtml = `<div style="margin-top:6px;font-size:10px;color:var(--text4);font-style:italic;">No PDF or image attachments found.</div>`;
+    attachmentsHtml = `<div style="margin-top:6px;font-size:10px;color:var(--text3);font-style:italic;">No PDF or image attachments found.</div>`;
   }
 
   container.innerHTML = `
@@ -8065,14 +8065,14 @@ export function renderExpenses() {
       ? '<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — not reimbursed to the author">Publisher expense</span>'
       : e.received
         ? '<span class="pill green" style="font-size:10px;">✓ Received</span>'
-        : '<span style="font-size:11px;color:var(--text4);">Pending</span>';
+        : '<span style="font-size:11px;color:var(--text3);">Pending</span>';
     const actionCell = (!e.received && !isAuthor() && !isGratuityExpense(e))
       ? `<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>` : '';
     const baseReceiptLink = e.receipt ? (
       e.receipt.startsWith('local://')
         ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
         : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
-    ) : `<span style="font-size:11px;color:var(--text4); font-weight: 500;">Missing</span>`;
+    ) : `<span style="font-size:11px;color:var(--text3); font-weight: 500;">Missing</span>`;
     const trackLink = e.trackingUrl
       ? ` <a href="${e.trackingUrl}" target="_blank" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
       : '';
@@ -8742,7 +8742,7 @@ function renderArtistTransfers() {
   const fullPayLink = payLink.startsWith('http') ? payLink : payLink ? 'https://' + payLink : '';
   const payHtml = fullPayLink
     ? `<a href="${fullPayLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<span style="font-size:10px;color:var(--text4);font-family:'DM Mono',monospace;">No payment link set</span>`;
+    : `<span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">No payment link set</span>`;
 
   list.innerHTML = transfers.map(t => `
     <div style="background:var(--surface-card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;opacity: ${t.status === 'pending' ? '.6' : '1'};">
@@ -8793,7 +8793,7 @@ function renderPendingExpenses() {
   const fullLink = artistLink ? (artistLink.startsWith('http') ? artistLink : 'https://' + artistLink) : '';
   const payHtml = fullLink
     ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
-    : `<span style="font-size:10px;color:var(--text4);font-family:'DM Mono',monospace;">No payment link set</span>`;
+    : `<span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">No payment link set</span>`;
   list.innerHTML = pending.map(e => `
     <div style="background:var(--surface-card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
       <div>
@@ -10348,8 +10348,8 @@ function buildInvoiceEmailHTML(inv) {
   const billedTo = [inv.storeContact, inv.storeEmail, inv.storePhone, inv.storeAddress, [inv.storeCity, inv.storeRegion, inv.storePostal].filter(Boolean).join(', '), inv.storeCountry]
     .filter(Boolean).map(escapeHTML).join('<br>');
   const notes = [
-    inv.notes ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:4px;">Notes</div><div style="white-space:pre-wrap;">${escapeHTML(inv.notes)}</div></div>` : '',
-    inv.terms ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:4px;">Terms</div><div style="white-space:pre-wrap;">${escapeHTML(inv.terms)}</div></div>` : '',
+    inv.notes ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:4px;">Notes</div><div style="white-space:pre-wrap;">${escapeHTML(inv.notes)}</div></div>` : '',
+    inv.terms ? `<div style="margin-top:16px;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:4px;">Terms</div><div style="white-space:pre-wrap;">${escapeHTML(inv.terms)}</div></div>` : '',
   ].join('');
   return `
 <div style="margin:0;padding:0;background:#f7f2e9;color:#1a1814;font-family:Arial,Helvetica,sans-serif;">
@@ -10373,13 +10373,13 @@ function buildInvoiceEmailHTML(inv) {
         </table>
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border-top:1px solid #eadfca;border-bottom:1px solid #eadfca;margin-bottom:22px;">
           <tr>
-            <td style="padding:16px 12px 16px 0;vertical-align:top;width:45%;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Billed to</div><div style="font-weight:700;">${escapeHTML(inv.storeName || '—')}</div><div style="font-size:12px;line-height:1.5;color:#756e64;margin-top:4px;">${billedTo}</div></td>
-            <td style="padding:16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Issue date</div><div style="font-weight:700;">${fmtD(inv.date)}</div>${inv.dueDate ? `<div style="font-size:12px;color:#756e64;margin-top:4px;">Due ${fmtD(inv.dueDate)}</div>` : ''}</td>
-            <td align="right" style="padding:16px 0 16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9b9184;font-weight:700;margin-bottom:6px;">Amount due</div><div style="font-size:22px;font-weight:800;color:#0e0c0a;">${fmt(inv.total || 0, cur)}</div></td>
+            <td style="padding:16px 12px 16px 0;vertical-align:top;width:45%;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:6px;">Billed to</div><div style="font-weight:700;">${escapeHTML(inv.storeName || '—')}</div><div style="font-size:12px;line-height:1.5;color:#756e64;margin-top:4px;">${billedTo}</div></td>
+            <td style="padding:16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:6px;">Issue date</div><div style="font-weight:700;">${fmtD(inv.date)}</div>${inv.dueDate ? `<div style="font-size:12px;color:#756e64;margin-top:4px;">Due ${fmtD(inv.dueDate)}</div>` : ''}</td>
+            <td align="right" style="padding:16px 0 16px 12px;vertical-align:top;"><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6459;font-weight:700;margin-bottom:6px;">Amount due</div><div style="font-size:22px;font-weight:800;color:#0e0c0a;">${fmt(inv.total || 0, cur)}</div></td>
           </tr>
         </table>
         <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:18px;">
-          <thead><tr><th align="left" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9b9184;">Description</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9b9184;">Qty</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9b9184;">Unit price</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9b9184;">Amount</th></tr></thead>
+          <thead><tr><th align="left" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Description</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Qty</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Unit price</th><th align="right" style="padding:0 10px 9px;border-bottom:1px solid #eadfca;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6b6459;">Amount</th></tr></thead>
           <tbody>${items}</tbody>
         </table>
         <table role="presentation" align="right" width="300" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:22px;">
@@ -10389,9 +10389,9 @@ function buildInvoiceEmailHTML(inv) {
           <tr><td style="padding:14px 12px;background:#0e0c0a;color:#f7f2e9;border-radius:6px 0 0 6px;font-weight:800;">Total due</td><td align="right" style="padding:14px 12px;background:#0e0c0a;color:#f0c060;border-radius:0 6px 6px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:800;">${fmt(inv.total || 0, cur)}</td></tr>
         </table>
         <div style="clear:both;"></div>
-        ${payUrl ? `<div style="background:#faf6ec;border:1px solid #eadfca;border-radius:10px;padding:18px 20px;margin:16px 0 20px;"><div style="font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Pay this invoice</div><div style="font-size:13px;line-height:1.5;color:#675f55;margin-bottom:14px;">Pay <strong>${fmt(inv.total || 0, cur)}</strong> securely online${isDynamicStripeLink(inv) ? ' via Stripe Checkout' : ''}.</div><a href="${payUrl}" style="display:inline-block;background:#0e0c0a;color:#f0c060;text-decoration:none;border-radius:999px;padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;">Pay ${fmt(inv.total || 0, cur)} →</a><div style="font-size:11px;line-height:1.4;color:#8c8378;margin-top:10px;word-break:break-all;">${escapeHTML(payUrl)}</div></div>` : ''}
+        ${payUrl ? `<div style="background:#faf6ec;border:1px solid #eadfca;border-radius:10px;padding:18px 20px;margin:16px 0 20px;"><div style="font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Pay this invoice</div><div style="font-size:13px;line-height:1.5;color:#675f55;margin-bottom:14px;">Pay <strong>${fmt(inv.total || 0, cur)}</strong> securely online${isDynamicStripeLink(inv) ? ' via Stripe Checkout' : ''}.</div><a href="${payUrl}" style="display:inline-block;background:#0e0c0a;color:#f0c060;text-decoration:none;border-radius:999px;padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;">Pay ${fmt(inv.total || 0, cur)} →</a><div style="font-size:11px;line-height:1.4;color:#6b6459;margin-top:10px;word-break:break-all;">${escapeHTML(payUrl)}</div></div>` : ''}
         ${notes}
-        <div style="text-align:center;font-size:12px;color:#9b9184;margin-top:24px;font-style:italic;">${escapeHTML(settings.footer || 'Thank you for stocking our books.')}</div>
+        <div style="text-align:center;font-size:12px;color:#6b6459;margin-top:24px;font-style:italic;">${escapeHTML(settings.footer || 'Thank you for stocking our books.')}</div>
       </div>
     </div>
     <p style="font-size:15px;line-height:1.55;margin:22px 0 0;">Thank you,<br>${escapeHTML(settings.name || 'Lyricalmyrical Books')}</p>
@@ -19788,10 +19788,10 @@ function renderMailingList() {
     ? subs.map(s => {
       const sup = _isCustomerSuppressed(s.email);
       const emailCell = sup
-        ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(s.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
+        ? `<span style="text-decoration:line-through;color:var(--text3);">${escapeHtml(s.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
         : `<a href="mailto:${escapeHtml(s.email)}" style="color:var(--gold2);">${escapeHtml(s.email)}</a>`;
       return `<tr${sup ? ' style="opacity:.55;"' : ''}>
-          <td>${escapeHtml(s.name) || '<span style="color:var(--text4);">—</span>'}</td>
+          <td>${escapeHtml(s.name) || '<span style="color:var(--text4);/* faint-ok: em-dash placeholder */">—</span>'}</td>
           <td>${emailCell}</td>
           <td style="font-size:12px;color:var(--text3);">${s.added ? fmtD(s.added) : '—'}</td>
           <td><span class="pill gray" style="font-size:10px;">${escapeHtml(s.source || 'Manual')}</span></td>
@@ -20330,7 +20330,7 @@ function renderCustomersAudience() {
     ? list.map(r => {
       const sup = _isCustomerSuppressed(r.email);
       const emailCell = sup
-        ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(r.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
+        ? `<span style="text-decoration:line-through;color:var(--text3);">${escapeHtml(r.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
         : `<a href="mailto:${escapeHtml(r.email)}" style="color:var(--gold2);">${escapeHtml(r.email)}</a>`;
       const onList = mailingListHas(r.email);
       const listBtn = sup
@@ -20340,7 +20340,7 @@ function renderCustomersAudience() {
           : `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(r.email)}')" title="Add to your mailing list">＋ List</button>`);
       const supBtn = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
       return `<tr${sup ? ' style="opacity:.55;"' : ''}>
-        <td>${escapeHtml(r.name) || '<span style="color:var(--text4);">—</span>'}</td>
+        <td>${escapeHtml(r.name) || '<span style="color:var(--text4);/* faint-ok: em-dash placeholder */">—</span>'}</td>
         <td>${emailCell}</td>
         <td class="r">${r.orders}</td>
         <td class="r">${r.units || '—'}</td>
@@ -20474,15 +20474,15 @@ function updateCampaignPreview() {
   previewPane.innerHTML = `
     <div style="font-family: 'Outfit', 'Plus Jakarta Sans', 'Inter', sans-serif; background: #faf9f6; padding: 20px; border-radius: 8px;">
       <div style="background: white; border: 1px solid var(--border); border-radius: 8px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
-        <div style="font-size: 13px; color: #888; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 16px;">
+        <div style="font-size: 13px; color: #63605c; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 16px;">
           <strong>Subject:</strong> ${escapeHtml(subject)}
         </div>
         <div style="font-size: 15px; color: #333; line-height: 1.6; min-height: 150px; white-space: pre-line;">
           ${formattedBody}
         </div>
-        <div style="font-size: 11px; color: #999; border-top: 1px dashed #eee; margin-top: 24px; padding-top: 12px; line-height: 1.4;">
+        <div style="font-size: 11px; color: #63605c; border-top: 1px dashed #eee; margin-top: 24px; padding-top: 12px; line-height: 1.4;">
           You are receiving this email because you are a valued customer of Lyricalmyrical Books.<br>
-          <a href="#" style="color: var(--gold2); text-decoration: underline;">Unsubscribe</a> from this list.
+          <a href="#" style="color: #8a5815; text-decoration: underline;">Unsubscribe</a> from this list.
         </div>
       </div>
     </div>

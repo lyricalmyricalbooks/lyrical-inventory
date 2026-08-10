@@ -646,6 +646,125 @@ export function findSurfaceTokenTextMisuse(css, darkVars) {
 }
 
 // ---------------------------------------------------------------------------
+// The faint tier
+//
+// --text4 measures 1.92:1 on the page in light mode. That is below every WCAG
+// threshold including the 3:1 floor for non-text, so it cannot legibly hold
+// anything a publisher has to READ. It exists for decoration: an em-dash
+// placeholder, a chevron on a row that already has a label, a zero in an empty
+// funnel segment.
+//
+// This does not ban it — a faint tier is a real design need. It forces the
+// decision to be explicit, using the same reviewed-exception convention as
+// `contrast-ok` and `token-ok` elsewhere in this repo.
+// ---------------------------------------------------------------------------
+
+const FAINT_MARKER = /faint-ok/;
+
+/**
+ * Flags `color: var(--text4)` that isn't marked as a reviewed decorative use.
+ *
+ * Scans both stylesheets and rendered-HTML fragments, since the tier leaked
+ * into both. Markers go in a CSS comment or inside the inline style attribute.
+ */
+export function findFaintTierMisuse(files) {
+  const findings = [];
+  const FAINT = /(?<!-)color:\s*var\(\s*--text4\s*\)/g;
+
+  for (const { file, source } of files) {
+    const lines = source.split('\n');
+    lines.forEach((line, i) => {
+      for (const m of line.matchAll(FAINT)) {
+        // A marker on the line itself, or anywhere in the comment immediately
+        // above it — a justification worth writing rarely fits on one line.
+        const context = [lines[i - 3], lines[i - 2], lines[i - 1], line]
+          .filter((l) => l !== undefined).join('\n');
+        if (FAINT_MARKER.test(context)) continue;
+        findings.push({
+          file,
+          line: i + 1,
+          snippet: line.trim().slice(Math.max(0, m.index - 40), m.index + 60).trim().slice(0, 100),
+        });
+      }
+    });
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Theme-blind literal text colours in rendered HTML
+//
+// A hardcoded dark `color:` cannot follow the theme. On a surface that flips it
+// is invisible in dark mode, and unlike a token there is no cascade to save it.
+// The only place one is correct is a permanently-light DOCUMENT — a printed
+// sheet, an invoice email, an email preview — which is why this is an allowlist
+// of builders rather than a heuristic. A new one has to be named to be allowed.
+// ---------------------------------------------------------------------------
+
+/**
+ * Functions whose HTML is a document or a fixed-dark console, not app chrome.
+ * Their colours are deliberately literal: an invoice a store receives is ink on
+ * white whatever the operator's screen is set to, and `var()` does not survive
+ * a mail client at all.
+ */
+export const DOCUMENT_BUILDERS = new Set([
+  'buildInvoiceEmailHTML',        // outgoing invoice email
+  'invoiceEmailPlainText',        // its plain-text twin
+  '_emailBodyToReceiptFile',      // receipt saved to disk
+  'updateCampaignPreview',        // in-app mock of an outgoing email
+  'openOcEmailPreviewModal',      // open-call email preview
+  'sendOcBulkEmails',             // open-call email body + send log
+  'exportTripPDF',                // printed trip report
+  'printInventoryValuationReport',// printed valuation report
+  'renderQrPresetPicker',         // printed sales-tracker sheet
+  'renderStPresetPicker',         // printed sales-tracker sheet
+  'renderOpenCall',               // fixed-dark diagnostics console
+  'sendNextCampaignEmail',        // fixed-dark send log
+]);
+
+/** Nearest preceding top-level declaration name, for attributing a fragment. */
+function enclosingTopLevelName(lines, lineNumber) {
+  for (let i = lineNumber - 1; i >= 0; i--) {
+    const m = lines[i].match(
+      /^(?:export\s+)?(?:async\s+)?function\s+([\w$]+)|^(?:export\s+)?(?:const|let|var)\s+([\w$]+)\s*=/,
+    );
+    if (m) return m[1] || m[2];
+  }
+  return '(top-level)';
+}
+
+/** Relative luminance of a resolved colour. */
+function luminanceOf({ r, g, b }) {
+  const ch = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+}
+
+/**
+ * Flags hardcoded DARK text colours in rendered HTML outside the document
+ * builders. Threshold is luminance < 0.5 — a colour that light or darker cannot
+ * read against the dark theme's #14110d page under any circumstances.
+ */
+export function findThemeBlindTextColours(sources, cssVars) {
+  const resolve = makeColorResolver(cssVars);
+  const findings = [];
+
+  for (const { file, source } of sources) {
+    const lines = source.split('\n');
+    for (const { fragment, line } of htmlFragments(source)) {
+      for (const m of fragment.matchAll(/(?<!-)color:\s*(#[0-9a-fA-F]{3,8})\b/g)) {
+        const colour = resolve(m[1]);
+        if (!colour || luminanceOf(colour) >= 0.5) continue;
+        const at = line + fragment.slice(0, m.index).split('\n').length - 1;
+        const owner = enclosingTopLevelName(lines, at);
+        if (DOCUMENT_BUILDERS.has(owner)) continue;
+        findings.push({ file, line: at, colour: m[1], owner });
+      }
+    }
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
 // Baseline — pre-existing, accepted colour pairings (e.g. this app's
 // established muted/secondary-text palette) recorded by resolved RGB pair
 // so the checker gates on *new* regressions without relitigating every
@@ -760,8 +879,35 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ...findSurfaceTokenTextMisuse(darkCss, darkVars).map(f => ({ ...f, file: 'src/styles/theme-dark.css' })),
   ];
 
-  let failed = misuse.length > 0;
+  const faint = findFaintTierMisuse([
+    { file: 'src/style.css', source: styleCss },
+    { file: 'src/styles/theme-dark.css', source: darkCss },
+    ...jsSources,
+  ]);
+  const themeBlind = findThemeBlindTextColours(jsSources, darkVars);
+
+  let failed = misuse.length > 0 || faint.length > 0 || themeBlind.length > 0;
   const notes = [];
+
+  if (faint.length) {
+    console.error(`✗ check-contrast: ${faint.length} unreviewed use(s) of the faint tier (--text4):`);
+    for (const f of faint) console.error(`  ${f.file}:${f.line}  ${f.snippet}`);
+    console.error('');
+    console.error('--text4 measures 1.92:1 on the page — below every WCAG threshold, including');
+    console.error('the 3:1 floor for non-text. It cannot hold anything that has to be read.');
+    console.error('Move content to --text3, or mark a genuinely decorative use `faint-ok`.');
+    console.error('');
+  }
+
+  if (themeBlind.length) {
+    console.error(`✗ check-contrast: ${themeBlind.length} hardcoded dark text colour(s) in rendered HTML:`);
+    for (const f of themeBlind) console.error(`  ${f.file}:${f.line}  color:${f.colour}  (in ${f.owner})`);
+    console.error('');
+    console.error('A literal dark colour cannot follow the theme, so it vanishes on the dark');
+    console.error('surface. Use --text/--text2/--text3, or — if this really is a printed sheet');
+    console.error('or an outgoing email — add the function to DOCUMENT_BUILDERS with a reason.');
+    console.error('');
+  }
 
   if (misuse.length) {
     console.error(`✗ check-contrast: ${misuse.length} rule(s) use a surface token as a text colour:`);
