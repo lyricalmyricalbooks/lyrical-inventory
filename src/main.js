@@ -5489,7 +5489,11 @@ async function fetchOrders() {
   if (orders.length === 0) {
     addLog(log, `📭 No orders found in Gmail since ${sinceDate}.`, 'warn');
   } else {
-    const byBook = orders.reduce((acc, o) => { acc[o.bookId] = (acc[o.bookId] || 0) + 1; return acc; }, {});
+    // ⚡ Bolt Optimization: Use for...of instead of reduce to avoid function allocation
+    const byBook = {};
+    for (const o of orders) {
+      byBook[o.bookId] = (byBook[o.bookId] || 0) + 1;
+    }
     const summary = Object.entries(byBook).map(([id, n]) => `${BOOKS[id]?.title || id} ×${n}`).join(', ');
     addLog(log, `✓ Found ${orders.length} order(s): ${summary}`, 'ok');
     if (already > 0) addLog(log, `↩ ${already} already recorded (skipped)`, 'warn');
