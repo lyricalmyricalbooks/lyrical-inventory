@@ -630,7 +630,7 @@ function _tcRenderLedgerFoot(filteredLedger, baseCurrency) {
           <td colspan="8" style="padding:10px 12px;background:var(--cream2);border-top:2px solid var(--gold-line);">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;">
               <span style="color:var(--text3);">${filteredLedger.length} ${filteredLedger.length === 1 ? 'entry' : 'entries'}${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? ' (filtered)' : ''}</span>
-              <div style="display:flex;gap:18px;flex-wrap:wrap;">
+              <div style="display:flex;gap:18px;flex-wrap:wrap;" class="num">
                 <span>Income <strong style="color:var(--green);">+${fmt(fIncome, baseCurrency)}</strong></span>
                 <span>Expenses <strong style="color:var(--red);">-${fmt(fExpense, baseCurrency)}</strong></span>
                 <span>Net <strong style="color:${netColor};">${fmt(fNet, baseCurrency)}</strong></span>
@@ -669,7 +669,7 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
       const cadDisplay = `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}`;
 
       const catCell = item.sourceType === 'businessExpense'
-        ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:11px;padding:2px 4px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,.15);border-radius:4px;max-width:170px;" title="Change category">
+        ? `<select class="tc-ledger-cat-select" onchange="changeExpenseCategory('${item.itemId}', this.value)" title="Change category">
               ${TC_CATEGORIES.map(c => `<option value="${c.replace(/"/g, '&quot;')}"${c === item.cat ? ' selected' : ''}>${c}</option>`).join('')}
               ${TC_CATEGORIES.includes(item.cat) ? '' : `<option value="${(item.cat || '').replace(/"/g, '&quot;')}" selected>${item.cat || ''}</option>`}
             </select>`
@@ -678,35 +678,35 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
       let descCell = item.desc || '';
       if (item.sourceType === 'businessExpense') {
         const tripPill = item.trip
-          ? `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Edit trip">✈ ${item.trip}</span>`
-          : `<span onclick="event.stopPropagation();openEditTrip('${item.itemId}')" style="display:inline-block;margin-top:3px;font-size:10px;color:var(--text3);border:1px dashed var(--border);border-radius:10px;padding:1px 8px;cursor:pointer;" title="Assign to a trip">+ trip</span>`;
+          ? `<span class="tc-ledger-trip-chip is-set" onclick="event.stopPropagation();openEditTrip('${item.itemId}')" title="Edit trip">✈ ${item.trip}</span>`
+          : `<span class="tc-ledger-trip-chip is-unset" onclick="event.stopPropagation();openEditTrip('${item.itemId}')" title="Assign to a trip">+ trip</span>`;
         descCell = `<div>${item.desc || ''}</div>${tripPill}`;
       }
 
       return `
-        <tr style="color:${item.isIncome ? 'var(--green)' : 'var(--red)'};transition:all 0.2s;" ondragover="tcExpenseRowDragOver(event, this)" ondragleave="tcExpenseRowDragLeave(event, this)" ondrop="tcExpenseRowDrop(event, this, '${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')">
+        <tr class="tc-ledger-row" ondragover="tcExpenseRowDragOver(event, this)" ondragleave="tcExpenseRowDragLeave(event, this)" ondrop="tcExpenseRowDrop(event, this, '${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')">
             <td style="font-size:12px;">${item.date || '—'}</td>
             <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${item.type}</span></td>
             <td style="font-size:12px;">${descCell}</td>
             <td style="font-size:12px;">${catCell}</td>
             <td style="font-size:12px;">${refCell}</td>
-            <td class="r" style="font-size:12px;">${origDisplay}</td>
-            <td class="r" style="font-weight:600;">${cadDisplay}</td>
+            <td class="r" style="font-size:12px;color:var(--text3);">${origDisplay}</td>
+            <td class="r tc-ledger-amt ${item.isIncome ? 'in' : 'out'}">${cadDisplay}</td>
             <td class="r">
               ${(item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense')
-          ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+          ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
           : (item.sourceType === 'sale'
-            ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditSale('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+            ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditSale('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
             : (item.sourceType === 'artistPayout'
-              ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>`
+              ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
               : ''
             )
           )
         }
-              ${item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : ''}
+              ${item.itemId ? `<button class="edit-btn" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Delete entry" style="opacity:1;color:var(--red);">✕</button>` : ''}
             </td>
         </tr>`;
-    }).join('') || `<tr><td colspan="8" style="text-align:center;padding:1rem;color:var(--text3);">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</td></tr>`;
+    }).join('') || `<tr><td colspan="8"><div class="empty-state" style="padding:1rem;">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</div></td></tr>`;
   }
 }
 

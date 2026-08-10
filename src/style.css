@@ -7391,6 +7391,33 @@ tr.hist-row:hover {
   .tc-cat-pct-label{min-width:0;}
 }
 
+/* Master Ledger (Sales + Expenses) — visual polish pass. Colour used to live
+   on the whole <tr> (every cell — date, description, ref — inherited
+   green/red), which read as a wall of colour across 25 rows of 8 columns;
+   now only the Type pill and the CAD amount carry it; everything else sits
+   in calm ink so the eye has one place to look for "money in vs. money
+   out." Row padding matches the >=44px tap-target treatment already given
+   to the category table above — AGENTS.md §1's general accuracy/accessibility
+   floor, not an event-specific one. */
+.tc-ledger-tbl tbody td{padding-top:13px;padding-bottom:13px;}
+.tc-ledger-tbl tbody tr:nth-child(even) td{background:var(--cream2);}
+.tc-ledger-tbl tbody tr:hover td{background:var(--gold-bg,rgba(200,145,58,.08));}
+.tc-ledger-row{transition:background-color var(--dur-fast,140ms) var(--ease-standard,ease);}
+.tc-ledger-amt{font-weight:700;}
+.tc-ledger-amt.in{color:var(--green);}
+.tc-ledger-amt.out{color:var(--red);}
+
+/* Was `border:1px solid rgba(255,255,255,.15)` — a border tuned for a dark
+   row background this table hasn't had since the row-level colour above
+   was removed, so it was effectively invisible. */
+.tc-ledger-cat-select{font-size:var(--text-2xs,11px);padding:3px 6px;border-radius:var(--r,5px);background:var(--cream);color:var(--text2);border:1px solid var(--border);max-width:170px;transition:border-color var(--dur-fast,140ms) var(--ease-standard,ease);}
+.tc-ledger-cat-select:hover{border-color:var(--gold-line);}
+
+.tc-ledger-trip-chip{display:inline-block;margin-top:4px;font-size:var(--text-2xs,10px);border-radius:10px;padding:1px 8px;cursor:pointer;transition:opacity var(--dur-fast,140ms) var(--ease-standard,ease);}
+.tc-ledger-trip-chip.is-set{background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-line);}
+.tc-ledger-trip-chip.is-unset{color:var(--text3);border:1px dashed var(--border);}
+.tc-ledger-trip-chip:hover{opacity:.72;}
+
 .tc-trip-stats-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
