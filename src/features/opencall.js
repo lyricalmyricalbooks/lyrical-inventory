@@ -1404,7 +1404,9 @@ function renderOpenCall() {
 
   // ── Review inbox: scan findings awaiting the owner's approval ──
   if (activeProj) ocEnsureQueues_(activeProj);
-  const inboxItems = activeProj ? activeProj.inbox.filter(p => activeProj.contributors.some(c => c.id === p.contributorId)) : [];
+  // ⚡ Bolt Optimization: Use Set instead of Array.prototype.some() for O(1) lookups
+  const contributorIds = activeProj ? new Set(activeProj.contributors.map(c => c.id)) : new Set();
+  const inboxItems = activeProj ? activeProj.inbox.filter(p => contributorIds.has(p.contributorId)) : [];
   const inboxTypeLabels = { creditReceived: '✍️ Credit-name reply detected', filesReceived: '📎 High-res files attachment detected', undeliverable: '⚠ Email bounced (undeliverable)' };
   const inboxRows = inboxItems.map(p => {
     const c = activeProj.contributors.find(x => x.id === p.contributorId);
@@ -1437,7 +1439,8 @@ function renderOpenCall() {
     </div>` : '';
 
   // ── Ready-to-send outbox: next-stage emails queued for one approved batch ──
-  const outboxItems = activeProj ? activeProj.outbox.filter(e => activeProj.contributors.some(c => c.id === e.contributorId)) : [];
+  // ⚡ Bolt Optimization: Use Set instead of Array.prototype.some() for O(1) lookups
+  const outboxItems = activeProj ? activeProj.outbox.filter(e => contributorIds.has(e.contributorId)) : [];
   const outboxStageLabels = { cmykSent: 'Request Files', preorderSent: 'Pre-order' };
   const outboxDl = localStorage.getItem('lm-oc-last-deadline') || '';
   const outboxRows = outboxItems.map(e => {
