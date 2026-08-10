@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
 import { getBookCurrencyCode } from '../src/lib/money.js';
 import { reconcileConsignmentInvoiceLinks } from '../src/lib/consignment.js';
+import { canonicalExpenseCategory } from '../src/lib/expense-categories.js';
 
 // The Tax Centre had no behavioural coverage at all — before the extraction or
 // after it. Everything guarding it was structural: that its functions exist,
@@ -65,6 +66,7 @@ function buildLedger(year) {
       defaultState: () => ({ hist: [], expenses: [], stores: [], ledger: [] }),
       getBookCurrencyCode,
       reconcileConsignmentInvoiceLinks,
+      canonicalExpenseCategory,
       today: () => '2026-07-27',
     },
     returns: '_tcBuildLedger',
@@ -132,6 +134,15 @@ describe('Tax Centre ledger', () => {
     // 2025 adds a 20 CAD sale and a 40 CAD booth fee.
     expect(all.totalGrossSales).toBeCloseTo(y2026.totalGrossSales + 20, 6);
     expect(all.totalOperatingExpenses).toBeCloseTo(y2026.totalOperatingExpenses + 40, 6);
+  });
+
+  it('folds a legacy expense category onto its canonical name in the ledger row', () => {
+    // hound's book expense is stored with cat 'Printing' (a pre-rename
+    // spelling) — the ledger row must carry the canonical category so it
+    // lands in the same category-panel bucket as 'Printing & Production'.
+    const { allLedger } = buildLedger('2026');
+    const printRun = allLedger.find(r => (r.desc || '').includes('Print run'));
+    expect(printRun.cat).toBe('Printing & Production');
   });
 
   it('does not mutate the state it was given', () => {

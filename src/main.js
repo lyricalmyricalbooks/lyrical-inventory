@@ -8714,7 +8714,7 @@ async function submitGratuity(ev) {
       s.expenses.unshift({
         id: Date.now(),
         desc: `Gratuity: ${ref || notes || 'Gifted copy'}`,
-        cat: 'Marketing',
+        cat: 'Marketing & Advertising',
         amount: totalExp,
         currency: currency,
         origAmount: totalExp,
@@ -8780,7 +8780,7 @@ window.backfillGratuityExpenses = function () {
       s.expenses.push({
         id: Date.now() + Math.floor(Math.random() * 1000) + added,
         desc: `Gratuity: ${h.notes || 'Gifted copy'}`,
-        cat: 'Marketing',
+        cat: 'Marketing & Advertising',
         amount: amount,
         currency: currency,
         origAmount: amount,
