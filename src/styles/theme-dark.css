@@ -1,0 +1,440 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LYRICAL DESIGN SYSTEM — DARK THEME
+   ───────────────────────────────────────────────────────────────────────────
+   Loaded AFTER system.css and style.css so it wins on the component overrides
+   at the foot of this file. Everything above those is pure token re-pointing:
+   the app is already ~95% var()-driven, so redefining the primitives flips
+   almost every screen at once.
+
+   HOW THE THEME IS SELECTED
+     <html data-theme="dark">   — explicit dark, chosen by the user
+     <html data-theme="light">  — explicit light, chosen by the user
+     <html> (no attribute)      — follow the OS via prefers-color-scheme
+   `initTheme()` in src/main.js owns the attribute; an inline bootstrap in
+   index.html sets it before first paint so there is no light flash.
+
+   THE ONE RULE THAT KEEPS THIS WORKING
+     --cream* and --ink* are SURFACES. They both flip here. Text that sits on
+     a permanently dark surface (header, KPI banners, toast, sidebar) must use
+     --on-inverse / --on-accent, never --cream. See the note in style.css's
+     :root. Every `color:var(--cream)` in the codebase was migrated to
+     --on-inverse when this theme landed, and tests/theme.test.js keeps it
+     that way.
+
+   PALETTE INTENT
+     Not a grey inversion. The light theme is warm cream paper with espresso
+     ink and antique gold; the dark theme is the same press at night — warm
+     near-black with an umber cast, so the gold still reads as gold and the
+     Playfair/Syne/DM Mono type keeps its printed feel. Every text token below
+     is verified against its surface at WCAG AA by tests/theme.test.js.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Explicit dark ─────────────────────────────────────────────────────────
+   Scoped to `screen` on purpose. Browsers drop backgrounds when printing but
+   keep text colour, so a dark theme that reached the print stylesheet would
+   put near-white text on blank paper — every printed page silently blank. Leaving
+   the theme out of `print` means the light :root in style.css governs there,
+   which is what a page, an invoice or a QR sheet should be anyway. */
+@media screen {
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* SURFACES — page → sunken → inset, warm charcoal rather than neutral grey.
+     Steps are ~4-6% apart in luminance: enough to separate a card from the
+     page without the "floating grey slab" look. */
+  --cream: #14110d;
+  --cream2: #1c1813;
+  --cream3: #262119;
+  --cream4: #342d22;
+  --surface-card: #1a1611;
+
+  /* INVERSE SURFACES — the header, ink KPI banners, toasts and the publisher
+     sidebar. In light mode these are the only dark things on screen; in dark
+     mode they go DEEPER than the page so the chrome still reads as a well
+     rather than dissolving into the content area. */
+  --ink: #0a0806;
+  --ink2: #14110e;
+  --ink3: #1f1a14;
+  --ink4: #2c2519;
+
+  /* CONTENT — warm off-white, never pure #fff (pure white on near-black
+     vibrates and is fatiguing at book-fair brightness). */
+  --text: #f4efe3;
+  --text2: #c8bfae;
+  --text3: #9d9382;
+  --text4: #736a5b;
+
+  /* GOLD — the brand accent. Lifted ~2 steps because #c8913a sits at 3.1:1 on
+     this page colour; these clear AA as label and link text. */
+  --gold: #dda548;
+  --gold2: #edb85c;
+  --gold3: #f6d391;
+  --gold-text: #f2cd85;
+  --gold-bg: rgba(221, 165, 72, .14);
+  --gold-line: rgba(221, 165, 72, .32);
+
+  /* STATUS — the light theme's deep, low-luminance status colours are text on
+     a pale tint. That inverts here: the tint stays low-alpha (so it composites
+     dark) and the ink becomes the light element. */
+  --green: #5fcf90;
+  --green-light: #86e5ad;
+  --green-bg: rgba(95, 207, 144, .14);
+  --red: #f2907f;
+  --red-light: #ffa596;
+  --red-bg: rgba(242, 144, 127, .15);
+  --amber: #e3ae5b;
+  --amber-bg: rgba(227, 174, 91, .15);
+  --blue: #93bff2;
+  --blue-bg: rgba(147, 191, 242, .16);
+
+  /* ACCENT FAMILIES — same roles as light, re-pointed. `-deep`/`-ink` were the
+     "dark ink on a pale tint" members, so they become the LIGHTEST members
+     here; `-bright`/`-soft` were already tuned for ink surfaces and barely
+     move. `--rose-pale` is a destructive-hover FILL, so it becomes a tint. */
+  --emerald: #34d399;
+  --emerald-deep: #6ee7b7;
+  --emerald-soft: #86efac;
+  --emerald-bright: #4ade80;
+  --rose: #f87171;
+  --rose-deep: #fca5a5;
+  --rose-soft: #fca5a5;
+  --rose-mist: #f8a4a4;
+  --rose-pale: rgba(248, 113, 113, .22);
+  --orange: #fca55c;
+  --orange-deep: #fbbf6b;
+  --orange-ink: #f5cb8e;
+  --violet: #a78bfa;
+  --violet-deep: #c9b8fd;
+  --violet-soft: #c4b5fd;
+  --slate: #a9b7c9;
+
+  /* BORDERS — hairlines have to invert or they read as gouges in the surface. */
+  --border: rgba(247, 242, 233, .12);
+  --border2: rgba(247, 242, 233, .07);
+
+  /* --green/--red/--amber are light inks here, so a solid status fill needs a
+     DARK label. (--on-accent stays white: it is only used on fills that do not
+     flip.) */
+  --on-status: var(--ink);
+
+  /* Tokens that only ever existed as var(--x, #fallback) fallbacks in
+     style.css. Defining them here is what makes those ~30 call sites follow
+     the theme; light mode still resolves to its inline fallback. */
+  --card-bg: #1a1611;
+  --bg2: #1a1611;
+  --input-bg: #15120e;
+  --shadow-high: var(--elev-4);
+
+  /* The shared select chevron bakes its stroke colour into a data URI, so it
+     needs its own dark copy (%239d9382 = --text3, %23dda548 = --gold). */
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239d9382' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dda548' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+  /* ELEVATION — a warm-grey shadow is invisible on near-black. Depth on dark
+     comes from a much darker, wider shadow plus the surface step above. */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, .44), 0 1px 3px rgba(0, 0, 0, .32);
+  --elev-2: 0 2px 4px rgba(0, 0, 0, .44), 0 4px 12px rgba(0, 0, 0, .38);
+  --elev-3: 0 4px 8px rgba(0, 0, 0, .46), 0 12px 28px rgba(0, 0, 0, .48);
+  --elev-4: 0 8px 16px rgba(0, 0, 0, .48), 0 24px 60px rgba(0, 0, 0, .60);
+  --elev-hover: 0 6px 14px rgba(0, 0, 0, .46), 0 16px 36px rgba(0, 0, 0, .52);
+  --focus-ring-halo: 0 0 0 4px rgba(221, 165, 72, .28);
+}
+}
+
+/* ── Follow the OS when the user has not chosen ──────────────────────────── */
+@media screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --cream: #14110d;
+    --cream2: #1c1813;
+    --cream3: #262119;
+    --cream4: #342d22;
+    --surface-card: #1a1611;
+
+    --ink: #0a0806;
+    --ink2: #14110e;
+    --ink3: #1f1a14;
+    --ink4: #2c2519;
+
+    --text: #f4efe3;
+    --text2: #c8bfae;
+    --text3: #9d9382;
+    --text4: #736a5b;
+
+    --gold: #dda548;
+    --gold2: #edb85c;
+    --gold3: #f6d391;
+    --gold-text: #f2cd85;
+    --gold-bg: rgba(221, 165, 72, .14);
+    --gold-line: rgba(221, 165, 72, .32);
+
+    --green: #5fcf90;
+    --green-light: #86e5ad;
+    --green-bg: rgba(95, 207, 144, .14);
+    --red: #f2907f;
+    --red-light: #ffa596;
+    --red-bg: rgba(242, 144, 127, .15);
+    --amber: #e3ae5b;
+    --amber-bg: rgba(227, 174, 91, .15);
+    --blue: #93bff2;
+    --blue-bg: rgba(147, 191, 242, .16);
+
+    --emerald: #34d399;
+    --emerald-deep: #6ee7b7;
+    --emerald-soft: #86efac;
+    --emerald-bright: #4ade80;
+    --rose: #f87171;
+    --rose-deep: #fca5a5;
+    --rose-soft: #fca5a5;
+    --rose-mist: #f8a4a4;
+    --rose-pale: rgba(248, 113, 113, .22);
+    --orange: #fca55c;
+    --orange-deep: #fbbf6b;
+    --orange-ink: #f5cb8e;
+    --violet: #a78bfa;
+    --violet-deep: #c9b8fd;
+    --violet-soft: #c4b5fd;
+    --slate: #a9b7c9;
+
+    --border: rgba(247, 242, 233, .12);
+    --border2: rgba(247, 242, 233, .07);
+
+    --on-status: var(--ink);
+
+    --card-bg: #1a1611;
+    --bg2: #1a1611;
+    --input-bg: #15120e;
+    --shadow-high: var(--elev-4);
+
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239d9382' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dda548' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+    --elev-1: 0 1px 2px rgba(0, 0, 0, .44), 0 1px 3px rgba(0, 0, 0, .32);
+    --elev-2: 0 2px 4px rgba(0, 0, 0, .44), 0 4px 12px rgba(0, 0, 0, .38);
+    --elev-3: 0 4px 8px rgba(0, 0, 0, .46), 0 12px 28px rgba(0, 0, 0, .48);
+    --elev-4: 0 8px 16px rgba(0, 0, 0, .48), 0 24px 60px rgba(0, 0, 0, .60);
+    --elev-hover: 0 6px 14px rgba(0, 0, 0, .46), 0 16px 36px rgba(0, 0, 0, .52);
+    --focus-ring-halo: 0 0 0 4px rgba(221, 165, 72, .28);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COMPONENT CORRECTIONS
+   Only for rules that could not be expressed as a token: baked-in gradients,
+   one-off literals, and a handful of places where the light design leans on
+   a white fill that has no dark equivalent. Scoped through .theme-dark, a
+   class initTheme() mirrors onto <html> alongside data-theme, so a single
+   selector covers both the explicit and the follow-the-OS case.
+   Also `screen`-only, for the same reason as the palette above.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media screen {
+
+/* The paper-grain overlay is a light-mode conceit — at full strength on
+   near-black it reads as sensor noise. Halved, it keeps the tactile feel. */
+.theme-dark body::before { opacity: .22; }
+
+/* Native form controls, scrollbars and autofill follow color-scheme, but
+   Chrome's autofill still paints its own canary fill; the inset shadow trick
+   is the only way to override it. */
+.theme-dark input:-webkit-autofill,
+.theme-dark input:-webkit-autofill:hover,
+.theme-dark input:-webkit-autofill:focus,
+.theme-dark textarea:-webkit-autofill,
+.theme-dark select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--cream2) inset;
+  caret-color: var(--text);
+}
+
+.theme-dark ::selection { background: var(--gold-line); color: var(--text); }
+
+/* Checkboxes, radios and range thumbs render in the UA accent unless told
+   otherwise — a stab of Chrome blue in an otherwise gold-and-cream app. */
+.theme-dark { accent-color: var(--gold); }
+
+/* A floor for controls that never got a component class. `:where()` carries no
+   specificity, so this is (0,1,0) — every real rule in style.css still wins,
+   and only the genuinely unstyled controls (the POS transaction-currency
+   select, ad-hoc inputs inside rendered HTML strings) pick it up instead of
+   falling back to the browser's own light chrome. */
+.theme-dark :where(select, textarea,
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"])) {
+  background-color: var(--input-bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+.theme-dark :where(option, optgroup) { background-color: var(--cream2); color: var(--text); }
+.theme-dark :where(input, textarea)::placeholder { color: var(--text4); }
+
+/* ── Gradients that bake in a light stop ─────────────────────────────────── */
+
+/* Website-orders hero: cream → tan wash. Re-cut from the ink ramp with the
+   same gold bloom, so the hero keeps its warmth instead of going flat. */
+.theme-dark .web-orders-hero {
+  background: linear-gradient(135deg, #1e1912 0%, #191510 48%, #14110d 100%);
+  border-color: var(--gold-line);
+  box-shadow: var(--elev-3);
+}
+
+/* Audience summary card: white → cream diagonal with a gold radial. */
+.theme-dark .audience-summary-card {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(229, 169, 63, .16), transparent 34%),
+    linear-gradient(135deg, #1f1a13 0%, #16120e 100%);
+  box-shadow: var(--elev-3);
+}
+
+/* Connected-Sheets card: mint → white. */
+.theme-dark .sheets-setup.connected {
+  background: linear-gradient(135deg, rgba(52, 211, 153, .10), var(--surface-card));
+  border-color: rgba(52, 211, 153, .24);
+}
+
+/* Skeletons: the shimmer has to be lighter than the surface, not darker. */
+.theme-dark .skeleton-line {
+  background: linear-gradient(90deg,
+    rgba(247, 242, 233, .04) 25%,
+    rgba(247, 242, 233, .10) 50%,
+    rgba(247, 242, 233, .04) 75%);
+  background-size: 200% 100%;
+}
+
+/* `.plan-badge.platinum/.gold/.diamond` are deliberately left alone: they are
+   metallic tier medals (silver / yellow-gold / sky), and a bright medal with
+   dark engraving reads correctly on either surface. Darkening them would just
+   make three award badges look disabled. */
+
+/* ── Frosted-white washes ────────────────────────────────────────────────────
+   A recurring light-mode device: `rgba(255,255,255,α)` over a cream page to
+   lift a panel half a step. The INTENT is "slightly lighter than what's behind
+   me", so on dark the same intent is a low-alpha LIGHT wash — not a dark one,
+   which would push the panel backwards instead of forwards. Alphas drop by
+   roughly an order of magnitude: .72 white on cream is a whisper; .72 light on
+   near-black is a spotlight.
+
+   These are single-declaration overrides on purpose. Rewriting the light rules
+   to use a shared token would change 15 shipped screens in light mode too, and
+   this change is meant to add a theme, not restyle the app. */
+.theme-dark .ch-panel {
+  background: linear-gradient(135deg, rgba(247, 242, 233, .055), rgba(247, 242, 233, .025));
+  border-color: var(--border);
+}
+.theme-dark .ch-metric { background: rgba(247, 242, 233, .045); border-color: var(--border2); }
+.theme-dark .ch-bar-row { background: rgba(247, 242, 233, .04); }
+.theme-dark .cf-detail-totals span { background: rgba(247, 242, 233, .045); }
+.theme-dark .cf-detail-filter { background: rgba(247, 242, 233, .04); }
+.theme-dark .web-order-steps span { background: rgba(247, 242, 233, .05); }
+.theme-dark .web-stat { background: rgba(247, 242, 233, .05); box-shadow: var(--elev-1); }
+.theme-dark .web-empty {
+  background: linear-gradient(180deg, rgba(247, 242, 233, .04), rgba(247, 242, 233, .015));
+}
+.theme-dark .web-empty.success {
+  background: linear-gradient(180deg, rgba(52, 211, 153, .10), rgba(247, 242, 233, .02));
+}
+.theme-dark .consignment-summary-panel {
+  background: linear-gradient(135deg, rgba(247, 242, 233, .05), rgba(247, 242, 233, .02));
+}
+.theme-dark .audience-stat { background: rgba(247, 242, 233, .05); }
+.theme-dark .audience-stat.focus {
+  background: linear-gradient(180deg, rgba(221, 165, 72, .18), rgba(247, 242, 233, .03));
+}
+.theme-dark .oc-hero-stat { background: rgba(247, 242, 233, .05); }
+.theme-dark .oc-funnel-seg { background: rgba(247, 242, 233, .04); }
+.theme-dark .oc-contributor-card {
+  background: linear-gradient(180deg, rgba(247, 242, 233, .055), rgba(247, 242, 233, .025)) !important;
+}
+.theme-dark .oc-empty-state {
+  background:
+    radial-gradient(circle at center 16%, rgba(229, 169, 63, .16), transparent 32%),
+    rgba(247, 242, 233, .03) !important;
+}
+/* The active POS book card: gold wash into the card fill. The white stop is
+   opaque here, so it has to become the dark card colour, not a light wash. */
+.theme-dark .pos-card.is-active {
+  background: linear-gradient(135deg, rgba(221, 165, 72, .16), var(--surface-card)) !important;
+}
+
+/* ── One-off literals with no token home ─────────────────────────────────── */
+
+.theme-dark .sheets-log-tbl tbody tr:nth-child(even) { background: rgba(247, 242, 233, .03); }
+.theme-dark .sheets-log-tbl tbody tr:hover { background: rgba(221, 165, 72, .08); }
+.theme-dark .sheets-log-tbl th { background: var(--cream2); }
+
+.theme-dark .sheets-status.ok { color: var(--green); }
+.theme-dark .sheets-status.syncing { color: var(--amber); }
+.theme-dark .sheets-status.err { color: var(--red); }
+
+.theme-dark .bc-match-pill.matched {
+  background: var(--green-bg) !important;
+  color: var(--green) !important;
+  border-color: rgba(95, 207, 144, .28) !important;
+}
+.theme-dark .bc-match-pill.unmatched {
+  background: var(--amber-bg) !important;
+  color: var(--amber) !important;
+  border-color: rgba(227, 174, 91, .30) !important;
+}
+
+.theme-dark .custom-dest-item-badge.stores { color: var(--blue); }
+
+.theme-dark .bsk-val.warn,
+.theme-dark .sk-v.warn { color: var(--orange); }
+
+.theme-dark #ship-analysis-hub {
+  --shipping-pnl-success: var(--green);
+  --shipping-pnl-warning: var(--amber);
+  --shipping-pnl-danger: var(--red);
+}
+.theme-dark #ship-analysis-hub .shipping-pnl-status.suggested {
+  background: var(--gold-bg);
+  color: var(--gold-text);
+}
+
+/* Inline-save confirmation flash on postage inputs. */
+.theme-dark .inline-postage-input.saved-success { animation-name: save-flash-dark; }
+@keyframes save-flash-dark {
+  0% {
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(95, 207, 144, .30);
+    background: rgba(95, 207, 144, .14);
+  }
+  100% {
+    border-color: var(--border);
+    box-shadow: none;
+    background: var(--cream2);
+  }
+}
+
+/* The toggle knob is a raised chip, so it stays light on both themes — but it
+   needs a rim on dark or it bleeds into the gold "on" track. */
+.theme-dark .switch .track::before,
+.theme-dark .pm-switch .pm-track::before {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5), 0 0 0 1px rgba(0, 0, 0, .25);
+}
+
+/* History rows tint gold on hover; the light-mode 4% wash is invisible here. */
+.theme-dark tr.hist-row:hover { background: rgba(221, 165, 72, .07) !important; }
+.theme-dark .hist-kpi-card:hover { box-shadow: var(--elev-hover); }
+
+} /* end @media screen — component corrections */
+
+/* Belt and braces: the pre-paint bootstrap in index.html paints <html> inline
+   before applyThemeToDocument() can clear it, and an inline style outranks any
+   stylesheet rule. On the off chance a print is triggered in that window, put
+   the paper back. */
+@media print {
+  html { background: #fff !important; } /* token-ok: paper is white, not a palette colour */
+}
+
+/* ── Deliberately NOT themed ─────────────────────────────────────────────────
+   These stay exactly as they are in light mode, on purpose:
+     .invoice-paper  — a printable document. An invoice a store receives is
+                       ink on white whatever the operator's screen is set to.
+     .composer-preview-pane — renders the real outgoing email; it must show
+                       what the recipient will see, not what the author prefers.
+     #pw-gate        — the sign-in poster is already a black/cream art piece.
+     .send-log-console, .mock-sheets-* — terminal and spreadsheet skeuomorphs
+                       that are dark in both themes by design.
+     .publisher-action-banner — a fixed red alert band; it must not soften.
+   ═══════════════════════════════════════════════════════════════════════════ */

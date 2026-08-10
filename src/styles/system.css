@@ -102,7 +102,9 @@
   --content-secondary: var(--text2);
   --content-muted: var(--text3);
   --content-faint: var(--text4);
-  --content-on-inverse: var(--cream);
+  /* NOT var(--cream): --cream is a surface and the dark theme flips it, which
+     would turn every "light text on an ink panel" into dark-on-dark. */
+  --content-on-inverse: var(--on-inverse);
 
   --border-subtle: var(--border2);
   --border-default: var(--border);
@@ -264,10 +266,23 @@ tbody.sys-long-list > tr {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   DARK MODE — deliberately not shipped yet.
-   The semantic surface/content tokens above are the prerequisite. Once the
-   components in style.css consume --surface-* / --content-* instead of raw
-   --cream/--ink/--text names, dark mode becomes a single added block here
-   re-pointing those aliases. Shipping it before that migration would leave
-   most of the app half-themed, which is worse than light-only.
+   DARK MODE — shipped, and it lives in src/styles/theme-dark.css.
+   ───────────────────────────────────────────────────────────────────────────
+   The plan recorded here was to migrate every component onto --surface-* /
+   --content-* first and only then add a theme block. What actually shipped
+   re-points the PRIMITIVES (--cream*, --ink*, --text*, --gold*, the status
+   families) instead, because the aliases above are defined in terms of those
+   primitives — so flipping the primitives carries the semantic layer with it
+   and the migration stops being a prerequisite.
+
+   The one thing that migration WAS load-bearing for is the dual role --cream
+   played: page surface *and* light-text-on-ink. Those two meanings cannot
+   flip together. So --on-inverse / --on-accent were added to style.css's
+   :root, every `color:var(--cream)` was moved onto them, and
+   tests/theme.test.js fails the build if one comes back.
+
+   Adding a new component? Use the semantic surface/content aliases (or the
+   primitives) and it themes itself. Only reach into theme-dark.css when a
+   value cannot be a token — a baked gradient stop, or a fill with no dark
+   equivalent.
    ═══════════════════════════════════════════════════════════════════════════ */

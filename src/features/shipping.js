@@ -4225,12 +4225,12 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
     let statusBadgeHtml = '';
     let borderStyle = 'border: 1px solid var(--border);';
     if (data.N === 0) {
-      statusBadgeHtml = `<span style="background:rgba(107,102,94,0.08); color:#6b665e; font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(107,102,94,0.15);">Default</span>`;
+      statusBadgeHtml = `<span style="background:rgba(107,102,94,0.08); color:var(--text3); font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(107,102,94,0.15);">Default</span>`;
     } else if (currentBase < recoBase) {
-      statusBadgeHtml = `<span style="background:rgba(201,75,50,0.08); color:#c94b32; font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(201,75,50,0.15);">⚠️ Undercharged</span>`;
+      statusBadgeHtml = `<span style="background:rgba(201,75,50,0.08); color:var(--red); font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(201,75,50,0.15);">⚠️ Undercharged</span>`;
       borderStyle = 'border: 1px solid rgba(201,75,50,0.3); box-shadow: 0 4px 15px rgba(201,75,50,0.04);';
     } else {
-      statusBadgeHtml = `<span style="background:rgba(29,122,74,0.08); color:#1d7a4a; font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(29,122,74,0.15);">✓ Optimized</span>`;
+      statusBadgeHtml = `<span style="background:rgba(29,122,74,0.08); color:var(--green); font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(29,122,74,0.15);">✓ Optimized</span>`;
     }
 
     const confidenceColor = data.confidence === 'High' ? '#1d7a4a' : data.confidence === 'Medium' ? '#c8913a' : '#6b665e';
@@ -4247,7 +4247,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             ${statusBadgeHtml}
           </div>
 
-          <div style="background:#fff; border:1px solid var(--border); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">
+          <div style="background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">
             <label style="font-size:9px; font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:4px;">Recommended Rate</label>
             <div style="display:flex; justify-content:space-between; align-items:baseline;">
               <span style="font-size:18px; font-weight:800; color:var(--gold);">$${recoBase.toFixed(2)} <span style="font-size:10px; font-weight:400; color:var(--text3);">base</span></span>
@@ -4282,13 +4282,13 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
               <span style="font-size:9px; color:var(--text4); display:block; margin-bottom:2px;">Base ($)</span>
               <input type="number" step="0.50" min="0" value="${currentBase.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'base', this.value)"
-                style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
+                style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
             </div>
             <div style="flex:1;">
               <span style="font-size:9px; color:var(--text4); display:block; margin-bottom:2px;">Add-on ($)</span>
               <input type="number" step="0.50" min="0" value="${currentAddon.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'addon', this.value)"
-                style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
+                style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
             </div>
           </div>
           <button class="btn sm ghost" onclick="applySmartShippingRates('${meta.key}', ${recoBase}, ${recoAddon})" 
@@ -4339,7 +4339,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
         <div style="display:flex; flex-direction:column; gap:12px;">
           <div class="form-group" style="margin:0;">
             <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Select Book</label>
-            <select id="sim-book-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+            <select id="sim-book-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
               ${bookOptionsHtml}
             </select>
           </div>
@@ -4347,11 +4347,11 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           <div style="display:flex; gap:12px;">
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Quantity</label>
-              <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+              <input type="number" id="sim-qty-input" value="1" min="1" max="100" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
             </div>
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Destination</label>
-              <select id="sim-region-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+              <select id="sim-region-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
                 <option value="ON">Ontario 🍁</option>
                 <option value="CA">Rest of Canada 🇨🇦</option>
                 <option value="US">United States 🇺🇸</option>
@@ -4363,7 +4363,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           <div style="display:flex; gap:12px;">
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">Packaging Tare</label>
-              <select id="sim-tare-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer;">
+              <select id="sim-tare-select" onchange="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer;">
                 <option value="0">None (0 g)</option>
                 <option value="0.05" selected>Bubble Mailer (+50 g)</option>
                 <option value="0.15">Cardboard Box (+150 g)</option>
@@ -4374,7 +4374,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
                 Manual Weight <span style="font-weight:400; text-transform:none; color:var(--text4);">(kg)</span>
               </label>
-              <input type="number" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+              <input type="number" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
             </div>
           </div>
 
@@ -4382,12 +4382,12 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
               Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text4);">(optional)</span>
             </label>
-            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
+            <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
           </div>
         </div>
 
         <!-- Results -->
-        <div id="sim-results-panel" style="background:#fff; border:1px solid var(--border); border-radius:var(--r2); padding:16px; min-height:190px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 4px 10px rgba(0,0,0,0.01);">
+        <div id="sim-results-panel" style="background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r2); padding:16px; min-height:190px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 4px 10px rgba(0,0,0,0.01);">
           <!-- Will be populated dynamically via updateShippingSimulation() -->
         </div>
       </div>
@@ -4404,7 +4404,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
         <span class="shipping-pnl-disclosure">Show analysis ▼</span>
       </summary>
 
-      <section class="shipping-reco-container" style="background:#fff; border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin:20px; box-shadow:0 8px 30px rgba(0,0,0,0.04);">
+      <section class="shipping-reco-container" style="background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r3); padding:20px; margin:20px; box-shadow:0 8px 30px rgba(0,0,0,0.04);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
           <div>
             <h3 style="font-family:'Playfair Display',serif; font-size:20px; color:var(--text); margin:0; display:flex; align-items:center; gap:8px; font-weight:700;">
@@ -4417,7 +4417,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           <div style="background:var(--cream2); padding:8px 12px; border-radius:var(--r2); border:1px solid var(--border); font-size:11px; color:var(--text2); display:flex; align-items:center; gap:12px; font-weight:600; flex-wrap:wrap;">
             <div style="display:flex; align-items:center; gap:4px;">
               <span style="font-size:13px;">⚖️</span> Weight Profile:
-              <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+              <select id="ship-reco-weight-select" onchange="onShipRecoWeightSelectChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
                 <option value="default" ${weightOverride === 'default' ? 'selected' : ''}>Book Weight (${bookWeightKg.toFixed(2)} kg)</option>
                 <option value="under_0.5" ${weightOverride === 'under_0.5' ? 'selected' : ''}>Under 0.5 kg (0.3 kg)</option>
                 <option value="0.5_1" ${weightOverride === '0.5_1' ? 'selected' : ''}>0.5 - 1 kg (0.8 kg)</option>
@@ -4435,7 +4435,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             
             <div style="display:flex; align-items:center; gap:4px;">
               <span style="font-size:13px;">⚙️</span> Methodology:
-              <select id="ship-reco-mode-select" onchange="onShipRecoModeChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
+              <select id="ship-reco-mode-select" onchange="onShipRecoModeChange(this.value)" style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:pointer; margin-left:4px;">
                 <option value="blended" ${recoMode === 'blended' ? 'selected' : ''}>Blended (History + CP)</option>
                 <option value="cpost" ${recoMode === 'cpost' ? 'selected' : ''}>Canada Post Only</option>
               </select>
@@ -4445,7 +4445,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
 
             <div style="display:flex; align-items:center; gap:4px; opacity:${recoMode === 'cpost' ? '0.5' : '1'};">
               <span style="font-size:13px;">🎯</span> Risk Profile:
-              <select id="ship-reco-percentile-select" onchange="onShipRecoPercentileChange(this.value)" ${recoMode === 'cpost' ? 'disabled' : ''} style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:#fff; color:var(--text); outline:none; font-weight:600; cursor:${recoMode === 'cpost' ? 'not-allowed' : 'pointer'}; margin-left:4px;">
+              <select id="ship-reco-percentile-select" onchange="onShipRecoPercentileChange(this.value)" ${recoMode === 'cpost' ? 'disabled' : ''} style="padding:4px 8px; font-size:11px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; font-weight:600; cursor:${recoMode === 'cpost' ? 'not-allowed' : 'pointer'}; margin-left:4px;">
                 <option value="90" ${recoPercentile === 90 ? 'selected' : ''}>Conservative (90th %)</option>
                 <option value="75" ${recoPercentile === 75 ? 'selected' : ''}>Balanced (75th %)</option>
                 <option value="50" ${recoPercentile === 50 ? 'selected' : ''}>Aggressive (50th %)</option>
