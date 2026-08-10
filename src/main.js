@@ -5818,6 +5818,34 @@ window.expFileDrop = function (ev) {
   }
 };
 
+// Same dropzone treatment for the Tax Center's Log Business Expense receipt
+// field (#tc-exp-file). Kept separate from expFileChosen/etc above since
+// that pair is wired to the plain ledger expense form's #exp-file ids.
+window.tcExpFileChosen = function () {
+  const input = $('tc-exp-file'), chip = $('tc-exp-file-chip'), nameEl = $('tc-exp-file-name'), dz = $('tc-exp-dropzone');
+  const hasFile = input && input.files && input.files.length > 0;
+  if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
+  if (chip) chip.style.display = hasFile ? 'flex' : 'none';
+  if (dz) dz.style.display = hasFile ? 'none' : 'flex';
+};
+window.tcExpFileClear = function (ev) {
+  if (ev) ev.preventDefault();
+  const input = $('tc-exp-file');
+  if (input) input.value = '';
+  window.tcExpFileChosen();
+};
+window.tcExpFileDragOver = function (ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.add('drag'); };
+window.tcExpFileDragLeave = function (ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag'); };
+window.tcExpFileDrop = function (ev) {
+  ev.preventDefault();
+  const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag');
+  const input = $('tc-exp-file');
+  if (input && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
+    try { input.files = ev.dataTransfer.files; } catch (e) { /* older browsers: ignore */ }
+    window.tcExpFileChosen();
+  }
+};
+
 // Project-ledger receipt scan. The shared runner also fills category and ref,
 // which this form has but the old 3-key prompt never asked for.
 async function scanProjectReceiptWithAI() {
@@ -15697,6 +15725,7 @@ async function submitTaxExpense() {
   $('tc-exp-desc').value = ''; $('tc-exp-amount').value = ''; $('tc-exp-date').value = today();
   if ($('tc-exp-trip')) $('tc-exp-trip').value = '';
   if (fileInput) fileInput.value = '';
+  if (typeof window.tcExpFileChosen === 'function') window.tcExpFileChosen();
   const filePreview = $('tc-exp-file-preview');
   if (filePreview) filePreview.textContent = '';
   _pendingWebcamReceipt = null;
