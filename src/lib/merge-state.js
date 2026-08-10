@@ -4,7 +4,7 @@
 // and used to write every dirty part with a plain setDoc — a whole-array
 // replace. Each document carried a `ts`, but nothing ever read it back, so
 // there was no divergence check at all. Two devices editing the same book while
-// offline (the laptop at home and the phone at a book fair — the app's actual
+// offline (the desktop at the shop and a laptop elsewhere — the app's actual
 // use case) both replayed their full local array on reconnect, and whichever
 // synced second silently erased the other's sales. Nothing surfaced: no error,
 // no conflict prompt, just a ledger quietly missing rows.
