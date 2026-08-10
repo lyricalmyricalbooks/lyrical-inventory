@@ -32,6 +32,7 @@ const ROOT = join(__dirname, '..');
 export const SCANNED_FILES = [
   join(ROOT, 'src', 'style.css'),
   join(ROOT, 'src', 'styles', 'system.css'),
+  join(ROOT, 'src', 'styles', 'theme-dark.css'),
 ];
 export const BASELINE_JSON = join(__dirname, 'token-baseline.json');
 
@@ -39,9 +40,16 @@ export const BASELINE_JSON = join(__dirname, 'token-baseline.json');
  * Blanks out every `:root { … }` block while preserving line numbering, so
  * token *definitions* are never reported as token *violations*.
  * :root blocks don't nest, so a non-greedy brace match is sufficient.
+ *
+ * Qualified forms count too — `:root[data-theme="dark"]` and
+ * `:root:not([data-theme="light"])` are how src/styles/theme-dark.css defines
+ * the dark palette. Without this the entire theme would read as ~90 raw-hex
+ * violations, and the only way to land a theme would be to raise the baseline,
+ * which the ratchet exists to prevent.
  */
 export function stripRootBlocks(css) {
-  return css.replace(/:root\s*\{[^}]*\}/g, (block) => block.replace(/[^\n]/g, ' '));
+  const ROOT_BLOCK = /:root(?:\s*(?:\[[^\]]*\]|:not\([^)]*\)|\.[\w-]+))*\s*\{[^}]*\}/g;
+  return css.replace(ROOT_BLOCK, (block) => block.replace(/[^\n]/g, ' '));
 }
 
 /** Pure-white / pure-black rgba() — a compositing scrim, not a palette colour. */

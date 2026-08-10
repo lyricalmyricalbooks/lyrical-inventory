@@ -2,6 +2,9 @@
 // unlayered legacy rules in style.css keep winning on any conflict.
 import './styles/system.css';
 import './style.css';
+// Dark theme loads LAST: it re-points the primitives every rule above resolves
+// against, and its component corrections have to out-specify style.css.
+import './styles/theme-dark.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import {
@@ -31,6 +34,15 @@ import {
   describePlan,
 } from './lib/currency-migration.js';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
+import {
+  THEME_PREFERENCES,
+  THEME_LABELS,
+  normalizeThemePreference,
+  readThemePreference,
+  writeThemePreference,
+  applyThemeToDocument,
+  nextThemePreference,
+} from './lib/theme.js';
 import { escapeHtml } from './lib/html.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
@@ -1479,7 +1491,7 @@ function renderAllQRCodes() {
     header.innerHTML = `
       <div style="width:10px;height:10px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
       <div style="flex:1;">
-        <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--cream);">${escapeHtml(book.title)}</div>
+        <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--on-inverse);">${escapeHtml(book.title)}</div>
         <div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px;">${escapeHtml(book.author) || '—'} · ${book.currency}${book.listPrice}</div>
       </div>`;
     card.appendChild(header);
@@ -1495,7 +1507,7 @@ function renderAllQRCodes() {
     if (url && typeof QRCode !== 'undefined') {
       new QRCode(qrEl, { text: url, width: 168, height: 168, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
     } else {
-      qrEl.innerHTML = `<div style="color:#aaa;font-size:11px;text-align:center;padding:1rem;">${url ? 'QR library not ready' : 'No Stripe link set.<br>Edit this book to add one.'}</div>`;
+      qrEl.innerHTML = `<div style="color:var(--text3);font-size:11px;text-align:center;padding:1rem;">${url ? 'QR library not ready' : 'No Stripe link set.<br>Edit this book to add one.'}</div>`;
     }
 
     // Link display + actions
@@ -1828,6 +1840,113 @@ export function showToast(msg, type = 'ok', dur = 2800) {
 }
 // Expose so modules loaded before main.js completes (firebase.js) can call back.
 window.showToast = showToast;
+
+// ── APPEARANCE (light / dark) ─────────────────────────────────────────────
+// Preference logic lives in src/lib/theme.js; this is the wiring: render the
+// segmented control wherever it appears, keep it in sync, and re-resolve when
+// the OS flips while the app is open.
+let themePreference = readThemePreference();
+
+const THEME_OPTION_ICONS = { system: '◐', light: '☀', dark: '☾' };
+const THEME_SUB_COPY = {
+  system: 'Following your device',
+  light: 'Always light',
+  dark: 'Always dark',
+};
+
+/**
+ * (Re)renders every [data-theme-seg] radiogroup on the page. There are two —
+ * the header account panel and the publisher sidebar — and both must reflect
+ * the same state, so this always paints all of them rather than the one that
+ * was clicked.
+ */
+function renderThemeControls() {
+  const groups = document.querySelectorAll('[data-theme-seg]');
+  groups.forEach((group) => {
+    const index = THEME_PREFERENCES.indexOf(themePreference);
+    group.style.setProperty('--tseg-index', String(Math.max(0, index)));
+    // Rebuild only on first paint; afterwards just update state, so a click
+    // never destroys the element the user is still interacting with.
+    if (!group.children.length) {
+      group.innerHTML = THEME_PREFERENCES.map((pref) => `
+        <button type="button" class="theme-seg-opt" role="radio"
+                data-theme-opt="${pref}" onclick="setThemePreference('${pref}')"
+                title="${THEME_SUB_COPY[pref]}">
+          <span class="tso-ico" aria-hidden="true">${THEME_OPTION_ICONS[pref]}</span
+          ><span class="tso-txt">${THEME_LABELS[pref]}</span>
+        </button>`).join('');
+    }
+    group.querySelectorAll('[data-theme-opt]').forEach((btn) => {
+      const on = btn.dataset.themeOpt === themePreference;
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+      // Roving tabindex: one stop for the whole group, arrows move within it.
+      btn.tabIndex = on ? 0 : -1;
+    });
+  });
+  document.querySelectorAll('#theme-sub-header, #theme-sub-side').forEach((el) => {
+    el.textContent = THEME_SUB_COPY[themePreference];
+  });
+}
+
+/**
+ * Sets the appearance preference, persists it, and repaints the controls.
+ * Exposed on window for the inline handlers above.
+ */
+export function setThemePreference(preference, { announce = true } = {}) {
+  const next = normalizeThemePreference(preference);
+  const changed = next !== themePreference;
+  themePreference = next;
+  const resolved = applyThemeToDocument(next);
+  const stored = writeThemePreference(next);
+  renderThemeControls();
+  if (announce && changed) {
+    showToast(stored
+      ? `Appearance: ${THEME_LABELS[next]}`
+      : `Appearance: ${THEME_LABELS[next]} — couldn't save the preference`,
+    stored ? 'ok' : 'warn');
+  }
+  return resolved;
+}
+
+/** Auto → Light → Dark → Auto. Bound to the header control's keyboard path. */
+export function cycleThemePreference() {
+  return setThemePreference(nextThemePreference(themePreference));
+}
+
+/**
+ * Boot: apply the stored preference, then keep following the OS for as long as
+ * the preference is 'system'. matchMedia fires while the app is open, which is
+ * the case that matters — a phone crossing into its scheduled night mode
+ * mid-event should not leave the operator on a white screen.
+ */
+function initTheme() {
+  applyThemeToDocument(themePreference);
+  renderThemeControls();
+  try {
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    media?.addEventListener?.('change', (e) => {
+      if (themePreference !== 'system') return;
+      applyThemeToDocument('system', { prefersDark: e.matches });
+    });
+  } catch (_) { /* matchMedia unavailable — the stored preference still applies */ }
+
+  // Arrow-key navigation inside the segmented control, per the radiogroup role.
+  document.addEventListener('keydown', (e) => {
+    if (!['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    const opt = e.target?.closest?.('[data-theme-opt]');
+    if (!opt) return;
+    e.preventDefault();
+    const step = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
+    const i = THEME_PREFERENCES.indexOf(themePreference);
+    const next = THEME_PREFERENCES[(i + step + THEME_PREFERENCES.length) % THEME_PREFERENCES.length];
+    setThemePreference(next);
+    opt.closest('[data-theme-seg]')?.querySelector(`[data-theme-opt="${next}"]`)?.focus();
+  });
+}
+
+// main.js is a deferred module, so the document is fully parsed by the time
+// this runs — the controls' host markup exists and needs no DOMContentLoaded.
+initTheme();
 
 // The two backends report a rules rejection differently: Firestore sets
 // code:'permission-denied' and a message of "Missing or insufficient
@@ -3574,7 +3693,7 @@ function renderGlobalPendingAlert() {
         <div style="font-size:13px; color:var(--text3); margin-bottom:12px;">The following books have new sales or expenses awaiting your approval:</div>
         <div style="display:flex; flex-direction:column; gap:8px;">
           ${pendingBooks.map(b => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:white; padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-card); padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
               <div>
                 <strong style="color:var(--text2);">${escapeHtml(b.title)}</strong>
                 <span style="font-size:12px; color:var(--text3); margin-left:8px;">
@@ -3595,7 +3714,7 @@ function renderGlobalPendingAlert() {
         </div>
         <div style="display:flex; flex-direction:column; gap:8px;">
           ${openCallBooks.map(b => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:white; padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-card); padding:8px 12px; border-radius:var(--r1); border:1px solid var(--border);">
               <div>
                 <strong style="color:var(--text2);">${escapeHtml(b.title)}</strong>
                 <span style="font-size:12px; color:var(--text3); margin-left:8px;">${b.waiting} contributor${b.waiting > 1 ? 's' : ''} awaiting next step</span>
@@ -3742,7 +3861,7 @@ function renderBookPendingAlert() {
     }
 
     alertDiv.innerHTML = `
-      <div style="background:white; border:1px solid var(--border); border-left:4px solid var(--amber); border-radius:var(--r2); padding:1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+      <div style="background:var(--surface-card); border:1px solid var(--border); border-left:4px solid var(--amber); border-radius:var(--r2); padding:1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
         <div>
           <div style="font-weight:600; color:var(--text2); margin-bottom:4px; display:flex; align-items:center; gap:8px;">
             <span class="pill amber">Pending</span> Author Submissions
@@ -4833,7 +4952,7 @@ export function renderHist() {
         const actionCell = window.IS_PUBLISHER
           ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
           : `<span class="chip-status amber">Awaiting Publisher</span>`;
-        return `<tr class="hist-row" style="opacity:0.8;background:#fffcede3;"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num" style="font-weight:600;">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
+        return `<tr class="hist-row" style="opacity:0.8;background:var(--amber-bg);"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num" style="font-weight:600;">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
       }
       const voided = h.voided ? ' voided' : '';
       const voidPill = h.voided ? '<span class="void-badge">Void</span>' : '';
@@ -4854,7 +4973,7 @@ export function renderHist() {
         : '';
       const priceCell = isGrat ? '<span style="color:var(--text4);font-size:11px;">gifted</span>' : fmt(h.price, rowCur) + foreignPill;
       const totalCell = isGrat ? '—' : isPending ? `<span style="color:var(--amber);">${fmt(h.qty * h.price, rowCur)}</span>` : fmt(h.qty * h.price, rowCur);
-      const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:#fef9ec;"' : '';
+      const rowStyle = isGrat ? ' style="font-style:italic;"' : isPending ? ' style="background:var(--amber-bg);"' : '';
       const isWebsite = (h.chan === 'Website' || h.chan === 'Big Cartel') && !isGrat && !h.voided;
       const labelBtn = isWebsite
         ? (h.shipped
@@ -4963,7 +5082,7 @@ export function renderOrders() {
     const statusPill = done
       ? '<span class="pill gray">Applied</span>'
       : cancelled
-        ? '<span class="pill red" style="background:#fbe9e7;color:#b3261e;border:1px solid #ffccbc;">Cancelled</span>'
+        ? '<span class="pill red" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-bg);">Cancelled</span>'
         : '<span class="pill gold">New</span>';
 
     let actionsHtml = viewEmailBtn;
@@ -6637,7 +6756,7 @@ function renderEmailPreviewContent(msgId, container) {
     attachmentsHtml = `
       <div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;">
         <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:var(--text2);">Include attachments in AI Scan (${email.fileParts.length}):</div>
-        <div style="background:white;padding:6px 12px;border:1px solid var(--border2);border-radius:var(--r);max-height:100px;overflow-y:auto;">
+        <div style="background:var(--surface-card);padding:6px 12px;border:1px solid var(--border2);border-radius:var(--r);max-height:100px;overflow-y:auto;">
           ${listItems}
         </div>
       </div>
@@ -7871,7 +7990,7 @@ export function renderExpenses() {
       const actionCell = window.IS_PUBLISHER
         ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', '${e._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', '${e._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
         : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
-      return `<tr style="opacity:0.8;background:#fffcede3;">
+      return `<tr style="opacity:0.8;background:var(--amber-bg);">
         ${showSelectCol ? '<td></td>' : ''}
         <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
         <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
@@ -8569,7 +8688,7 @@ function renderArtistTransfers() {
     : `<span style="font-size:10px;color:var(--text4);font-family:'DM Mono',monospace;">No payment link set</span>`;
 
   list.innerHTML = transfers.map(t => `
-    <div style="background:white;border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;opacity: ${t.status === 'pending' ? '.6' : '1'};">
+    <div style="background:var(--surface-card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;opacity: ${t.status === 'pending' ? '.6' : '1'};">
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
           <span class="pill amber">⏳ Awaiting transfer</span>
@@ -8619,7 +8738,7 @@ function renderPendingExpenses() {
     ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : `<span style="font-size:10px;color:var(--text4);font-family:'DM Mono',monospace;">No payment link set</span>`;
   list.innerHTML = pending.map(e => `
-    <div style="background:white;border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div style="background:var(--surface-card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
           <span class="pill amber">⏳ Awaiting payment</span>
@@ -9939,11 +10058,11 @@ function renderInvoicePaperHTML(inv) {
 
   const settlesLine = '';
   const divergedNote = inv.ledgerDivergedAt
-    ? `<div class="inv-meta-sub" style="margin-top:6px;color:#a13a1b;font-weight:600;">⚠ ledger changed since invoiced — reopen to re-import amounts</div>`
+    ? `<div class="inv-meta-sub" style="margin-top:6px;color:var(--red);font-weight:600;">⚠ ledger changed since invoiced — reopen to re-import amounts</div>`
     : '';
 
   const dyn = isDynamicStripeLink(inv);
-  const testBadge = (dyn && inv.stripe.livemode === false) ? `<span style="display:inline-block;margin-left:8px;background:#fde6e0;color:#a13a1b;font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:3px 8px;border-radius:99px;">Test mode</span>` : '';
+  const testBadge = (dyn && inv.stripe.livemode === false) ? `<span style="display:inline-block;margin-left:8px;background:var(--red-bg);color:var(--red);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;padding:3px 8px;border-radius:99px;">Test mode</span>` : '';
   const dynBadge = dyn ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#0e0c0a;color:#f0c060;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:5px 12px;border-radius:99px;margin-bottom:10px;">✓ Stripe checkout · exact amount${testBadge ? ' ' : ''}${testBadge}</div>` : '';
   const payCopy = dyn
     ? `Click below to pay <strong>${fmt(inv.total || 0, cur)}</strong> via Stripe Checkout.`
@@ -13761,12 +13880,12 @@ function renderBookRestorePicker() {
       : '<span class="pill amber" style="font-size:10px;">In catalog · will be overwritten</span>';
     const stat = empty
       ? '<span style="color:var(--text3);">No recorded activity in this snapshot</span>'
-      : `<strong style="color:var(--cream);">${escapeHtml(_restoreStatLine(s))}</strong>`;
+      : `<strong style="color:var(--on-inverse);">${escapeHtml(_restoreStatLine(s))}</strong>`;
     return `
       <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r2);background:rgba(255,255,255,.03);${empty ? 'opacity:.5;' : ''}">
         <div style="width:8px;height:8px;border-radius:50%;background:${book.accent || 'var(--gold3)'};flex-shrink:0;"></div>
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:13px;color:var(--cream);">${escapeHtml(book.title || bid)}</div>
+          <div style="font-weight:700;font-size:13px;color:var(--on-inverse);">${escapeHtml(book.title || bid)}</div>
           <div style="font-size:12px;margin-top:2px;">${stat}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px;">${escapeHtml(book.author || '—')} · ${badge}</div>
         </div>
@@ -14670,7 +14789,7 @@ function psRenderSummary(book, cur, productionCost) {
         <div class="settings-metric-label" style="color:rgba(255,255,255,.5);">Earnings split simulator</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:11px;color:rgba(255,255,255,.55);">If gross revenue is</span>
-          <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--cream);outline:none;">
+          <input id="ps-sim-input" type="number" value="${gross}" style="width:120px;padding:6px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid rgba(255,255,255,.14);border-radius:var(--r);background:rgba(255,255,255,.06);color:var(--on-inverse);outline:none;">
           <span style="font-size:11px;color:rgba(255,255,255,.55);">${escapeHtml(cur)}</span>
         </div>
       </div>
@@ -16097,7 +16216,7 @@ function renderPOS() {
     (b.author || '').toLowerCase().includes(posSearchQuery)
   );
   if (!booksArr.length && posSearchQuery) {
-    grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--text3);font-size:13px;">No books match <strong style="color:var(--cream);">&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<br><span style="font-size:11px;">Press <kbd style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:4px;">Esc</kbd> to clear.</span></div>`;
+    grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--text3);font-size:13px;">No books match <strong style="color:var(--on-inverse);">&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<br><span style="font-size:11px;">Press <kbd style="background:rgba(255,255,255,.1);padding:2px 6px;border-radius:4px;">Esc</kbd> to clear.</span></div>`;
   } else {
     grid.innerHTML = booksArr.map((book) => {
       const qty = posCart[book.id] || 0;
@@ -16142,8 +16261,8 @@ function renderPOS() {
     }).join('') + (allowPosOnly && !posSearchQuery ? `
       <button type="button" class="card pos-card" onclick="openPosBookModal()" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:1.1rem;border:1.5px dashed var(--gold-line);background:transparent;cursor:pointer;color:var(--gold-text,#8a5815);min-height:140px;">
         <div style="font-size:28px;line-height:1;">＋</div>
-        <div style="font-size:13px;font-weight:700;color:#0e0c0a;">Add POS-only book</div>
-        <div style="font-size:11px;color:#4a4540;text-align:center;">Guest / consignment titles. Stays out of your catalog & ledger.</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text);">Add POS-only book</div>
+        <div style="font-size:11px;color:var(--text2);text-align:center;">Guest / consignment titles. Stays out of your catalog & ledger.</div>
       </button>
     ` : '');
   } // end search-filter else
@@ -16152,25 +16271,25 @@ function renderPOS() {
   if (cartItemsEl) {
     cartItemsEl.innerHTML = cartRows.length ? cartRows.map((row) => {
       const unitLabel = row.overridden
-        ? `<span style="text-decoration:line-through;color:#8a8078;">${posFormat(row.listUnit, row.sourceCode)}</span> <span style="color:var(--gold-text,#8a5815);font-weight:700;">${posFormat(row.sourceUnit, row.sourceCode)}</span> <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-text,#8a5815);">Adj</span>`
+        ? `<span style="text-decoration:line-through;color:var(--text3);">${posFormat(row.listUnit, row.sourceCode)}</span> <span style="color:var(--gold-text,#8a5815);font-weight:700;">${posFormat(row.sourceUnit, row.sourceCode)}</span> <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-text,#8a5815);">Adj</span>`
         : posFormat(row.sourceUnit, row.sourceCode);
       return `
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid rgba(14,12,10,.08);">
         <div>
-          <div style="font-size:13px;color:#0e0c0a;font-weight:700;">${escapeHtml(row.book.title)}</div>
-          <div style="font-size:11px;color:#4a4540;font-weight:500;">${row.qty} × ${unitLabel}</div>
+          <div style="font-size:13px;color:var(--text);font-weight:700;">${escapeHtml(row.book.title)}</div>
+          <div style="font-size:11px;color:var(--text2);font-weight:500;">${row.qty} × ${unitLabel}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:13px;color:#0e0c0a;font-weight:700;">${row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency)}</div>
+          <div style="font-size:13px;color:var(--text);font-weight:700;">${row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency)}</div>
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:3px;">
             <button class="btn sm" style="padding:2px 7px;font-size:11px;" onclick="openPosPriceModal('${row.book.id}')">Adjust</button>
             <button class="btn sm" style="padding:2px 7px;font-size:11px;" onclick="posGenerateLineQR('${row.book.id}')" title="Payment QR for this line">QR</button>
-            <button class="btn sm" style="padding:2px 7px;font-size:11px;color:#a63a2b;" onclick="posRemoveItem('${row.book.id}')">Remove</button>
+            <button class="btn sm" style="padding:2px 7px;font-size:11px;color:var(--red);" onclick="posRemoveItem('${row.book.id}')">Remove</button>
           </div>
         </div>
       </div>
     `;
-    }).join('') : '<div style="font-size:12px;color:#8a8078;padding:10px 0;text-align:center;">Cart is empty.</div>';
+    }).join('') : '<div style="font-size:12px;color:var(--text3);padding:10px 0;text-align:center;">Cart is empty.</div>';
   }
 
   if (subtotalEl) {
@@ -16295,7 +16414,7 @@ function _showPosQR(url, amountLabel, sub) {
   if (url && typeof QRCode !== 'undefined') {
     new QRCode(wrap, { text: url, width: 220, height: 220, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
   } else {
-    wrap.innerHTML = '<div style="color:#aaa;font-size:12px;">QR library not ready.</div>';
+    wrap.innerHTML = '<div style="color:var(--text3);font-size:12px;">QR library not ready.</div>';
   }
   openM('pos-qr');
 }
@@ -16684,8 +16803,8 @@ function renderSalesTrackerBookList() {
 
   const qtyRow = (labelText, inputAttrs, value) => `
     <div style="display:flex;align-items:center;gap:8px;padding-left:26px;margin-top:2px;margin-bottom:2px;">
-      <span style="font-size:11px;color:#555;font-weight:500;">${labelText}:</span>
-      <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" ${inputAttrs} value="${value || ''}" placeholder="0" style="width:64px;padding:3px 6px;font-size:11px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#111;" oninput="salesTrackerQtyInput(this)">
+      <span style="font-size:11px;color:var(--text2);font-weight:500;">${labelText}:</span>
+      <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" ${inputAttrs} value="${value || ''}" placeholder="0" style="width:64px;padding:3px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface-card);color:var(--text);" oninput="salesTrackerQtyInput(this)">
     </div>
   `;
 
@@ -16695,8 +16814,8 @@ function renderSalesTrackerBookList() {
     return `
     <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);">
       <input type="checkbox" class="st-book-check" data-kind="inv" value="${book.id}" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
-      <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
+      <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(book.title)}</span>
+      <span style="font-size:11px;color:var(--text2);">${escapeHtml(book.author || '')}</span>
     </label>
     ${qtyRow(label, `data-book-id="${book.id}"`, salesTrackerQtyBrought[book.id])}
   `;
@@ -16705,9 +16824,9 @@ function renderSalesTrackerBookList() {
   const customHtml = salesTrackerCustomBooks.map((book, idx) => `
     <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(212,175,55,.12);border:1px dashed rgba(212,175,55,.5);">
       <input type="checkbox" class="st-book-check" data-kind="custom" value="${idx}" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
-      <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
-      <button type="button" onclick="salesTrackerRemoveCustom(${idx})" style="background:none;border:none;color:#a00;cursor:pointer;font-size:14px;padding:0 4px;" title="Remove" aria-label="Remove">✕</button>
+      <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(book.title)}</span>
+      <span style="font-size:11px;color:var(--text2);">${escapeHtml(book.author || '')}</span>
+      <button type="button" onclick="salesTrackerRemoveCustom(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0 4px;" title="Remove" aria-label="Remove">✕</button>
     </label>
     ${qtyRow('Copies bringing', `data-custom-idx="${idx}"`, book.qty)}
   `).join('');
@@ -17093,12 +17212,12 @@ function renderQRPrintBookList() {
       <div style="display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:6px;background:rgba(0,0,0,.03);margin-bottom:4px;">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;${hasUrl ? '' : 'opacity:.75;'}">
           <input type="checkbox" class="qrp-book-check" value="${book.id}" ${hasUrl ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;">
-          <span style="flex:1;font-size:13px;color:#111;font-weight:600;">${escapeHtml(book.title)}</span>
-          <span style="font-size:11px;color:#555;">${escapeHtml(book.author || '')}</span>
+          <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(book.title)}</span>
+          <span style="font-size:11px;color:var(--text2);">${escapeHtml(book.author || '')}</span>
         </label>
         <div style="display:flex;align-items:center;gap:8px;padding-left:26px;margin-top:2px;">
-          <span style="font-size:11px;color:#555;font-weight:500;">Manual price override (${escapeHtml(targetCode)}):</span>
-          <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="e.g. ${defaultPrice.toFixed(2)}" style="width:110px;padding:3px 6px;font-size:11px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#111;">
+          <span style="font-size:11px;color:var(--text2);font-weight:500;">Manual price override (${escapeHtml(targetCode)}):</span>
+          <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="e.g. ${defaultPrice.toFixed(2)}" style="width:110px;padding:3px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface-card);color:var(--text);">
         </div>
       </div>
     `;
@@ -17583,7 +17702,7 @@ function renderPosBookModalQR() {
   wrap.innerHTML = '';
   _posBookQR = null;
   if (!url) {
-    wrap.innerHTML = '<div style="color:#aaa;font-size:11px;text-align:center;padding:1rem;">Add or generate a payment link to preview its QR.</div>';
+    wrap.innerHTML = '<div style="color:var(--text3);font-size:11px;text-align:center;padding:1rem;">Add or generate a payment link to preview its QR.</div>';
     if (note) note.textContent = '';
     return;
   }
@@ -17591,7 +17710,7 @@ function renderPosBookModalQR() {
     _posBookQR = new QRCode(wrap, { text: url, width: 180, height: 180, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
     if (note) note.textContent = 'Customers scan this to pay via Stripe.';
   } else {
-    wrap.innerHTML = '<div style="color:#aaa;font-size:11px;">QR library not ready.</div>';
+    wrap.innerHTML = '<div style="color:var(--text3);font-size:11px;">QR library not ready.</div>';
   }
 }
 window.renderPosBookModalQR = renderPosBookModalQR;
@@ -17934,7 +18053,7 @@ function printInventoryValuationReport() {
       <td style="text-align:right;">${curSym}${item.unitCost.toFixed(2)}</td>
       <td style="text-align:right;">${curSym}${item.listPrice.toFixed(2)}</td>
       <td style="text-align:right;font-weight:bold;">$${item.totalCostCAD.toFixed(2)} CAD</td>
-      <td style="text-align:right;font-weight:bold;color:#15803d;">$${item.totalRetailCAD.toFixed(2)} CAD</td>
+      <td style="text-align:right;font-weight:bold;color:var(--green);">$${item.totalRetailCAD.toFixed(2)} CAD</td>
     </tr>
   `;
   }).join('');
@@ -18612,7 +18731,7 @@ async function reconcileStripeAgainstSales() {
       <td class="r" style="font-family:'DM Mono',monospace;">${fmtCad(stripe)}</td>
       <td class="r" style="font-family:'DM Mono',monospace;">${fmtCad(recorded)}</td>
       <td class="r" style="font-family:'DM Mono',monospace;color:${diffColor};">${diff >= 0 ? '+' : ''}${fmtCad(diff)}</td>
-      <td class="r">${aligned ? '<span class="pill green" style="font-size:10px;">✓ Aligned</span>' : '<span class="pill" style="font-size:10px;background:var(--amber);color:#3a2a05;">Review</span>'}</td>
+      <td class="r">${aligned ? '<span class="pill green" style="font-size:10px;">✓ Aligned</span>' : '<span class="pill" style="font-size:10px;background:var(--amber);color:var(--on-status);">Review</span>'}</td>
     </tr>`;
   }).join('');
 
@@ -18991,7 +19110,7 @@ function _reconMeta(p) {
 // One needs-review card.
 function _reconNeedCard(p, c) {
   const idSafe = p.id.replace(/[^A-Za-z0-9_]/g, '');
-  const disputed = p.disputed ? ` <span class="pill" style="font-size:10px;background:#fbe9e7;color:#b3261e;">⚠ Disputed</span>` : '';
+  const disputed = p.disputed ? ` <span class="pill" style="font-size:10px;background:var(--red-bg);color:var(--red);">⚠ Disputed</span>` : '';
 
   // Invoice not yet marked paid → send her to the proper invoice flow.
   if (c.kind === 'invoice') {
@@ -19000,7 +19119,7 @@ function _reconNeedCard(p, c) {
       : `<span style="font-size:11px;color:var(--amber);">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
     return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
       <div class="row-between" style="align-items:flex-start;">
-        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:10px;background:#e8eef9;color:#27508f;">Invoice</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:10px;background:var(--blue-bg);color:var(--blue);">Invoice</span>${disputed}</div>${_reconMeta(p)}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">${goBtn}
           <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale">Dismiss</button></div>
       </div></div>`;
@@ -19010,7 +19129,7 @@ function _reconNeedCard(p, c) {
   if (c.kind === 'bigcartel' && c.scanned) {
     return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
       <div class="row-between" style="align-items:flex-start;">
-        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:10px;background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}</div>${_reconMeta(p)}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
           <button class="btn gold sm" onclick="reconcileApplyBigCartel('${idSafe}')">Apply order</button>
           <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')">Dismiss</button></div>
@@ -19019,7 +19138,7 @@ function _reconNeedCard(p, c) {
 
   // Direct sale (bare pi_…) or Big Cartel order we never scanned → pick a book.
   const kindPill = c.kind === 'bigcartel'
-    ? `<span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel ${escapeHtml(c.ref)}</span>`
+    ? `<span class="pill" style="font-size:10px;background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>`
     : `<span class="pill gold" style="font-size:10px;">Direct sale</span>`;
   const suggest = c.bookId ? `<span style="font-size:10px;color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
   const recDisabled = c.bookId ? '' : ' disabled';
@@ -19045,7 +19164,7 @@ function _reconNeedCard(p, c) {
 function _reconGroupCard(items, gi) {
   const p = items[0].p, c = items[0].c, n = items.length;
   const kindPill = c.kind === 'bigcartel'
-    ? `<span class="pill" style="font-size:10px;background:#eaf7ee;color:#1f7a3d;">Big Cartel</span>`
+    ? `<span class="pill" style="font-size:10px;background:var(--green-bg);color:var(--green);">Big Cartel</span>`
     : `<span class="pill gold" style="font-size:10px;">Direct sale</span>`;
   const suggest = c.bookId ? `<span style="font-size:10px;color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
   const total = _stripeFmtMoney(items.reduce((s, it) => s + it.p.amount, 0), p.currency);
@@ -21872,7 +21991,8 @@ function exposeLegacyInlineHandlers() {
     toggleShipAnalysisCarrierFilter, toggleShipAnalysisRegionFilter, toggleShipAnalysisWeightFilter, clearAllShipAnalysisFilters, downloadFilteredShippingLedgerCSV,
     updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange, onShipRecoModeChange, onShipInsightsToggle,
     getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
-    toggleIntegrationSection
+    toggleIntegrationSection,
+    setThemePreference, cycleThemePreference
   });
 }
 

@@ -24,6 +24,36 @@
 <meta name="apple-mobile-web-app-title" content="Lyrical-Inv">
 <meta name="theme-color" content="#0e0c0a">
 
+<!-- THEME BOOTSTRAP — must run before first paint, and before the module
+     bundle loads, or a publisher on dark gets a full-screen cream flash on
+     every launch. Deliberately duplicates the small amount of logic in
+     src/lib/theme.js (applyThemeToDocument) rather than importing it: an
+     ES module import is deferred by definition and would paint first.
+     tests/theme.test.js asserts the two stay in agreement. -->
+<script>
+  (function () {
+    try {
+      var pref = localStorage.getItem('lm-theme');
+      if (pref !== 'light' && pref !== 'dark') pref = 'system';
+      var dark = pref === 'dark' || (pref === 'system'
+        && window.matchMedia
+        && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var root = document.documentElement;
+      if (pref === 'system') root.removeAttribute('data-theme');
+      else root.setAttribute('data-theme', pref);
+      root.classList.toggle('theme-dark', dark);
+      root.classList.toggle('theme-light', !dark);
+      if (dark) {
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', '#0a0806');
+        // The stylesheet has not loaded yet, so paint the page colour on the
+        // root element directly — this is the pixel the flash would show.
+        root.style.backgroundColor = '#14110d';
+      }
+    } catch (e) { /* appearance is never worth blocking boot over */ }
+  })();
+</script>
+
 <style>
   /* ─── INVOICE PAPER (sharp, printable) ─────────────────────────────── */
   .invoice-paper{
@@ -268,6 +298,16 @@
     </button>
     <div class="pub-side-menu" id="side-acct-menu" role="menu">
       <a class="pub-side-item" id="side-sheets-open" href="#" target="_blank" role="menuitem" style="display:none;"><span class="pub-side-ico">↗</span>Open Google Sheet</a>
+      <!-- Same control as the header account panel; the shell hides the header
+           account menu, so without this copy the sidebar has no way to reach it. -->
+      <div class="theme-seg-row">
+        <span class="tsr-label">
+          <span class="tsr-title">Appearance</span>
+          <span class="tsr-sub" id="theme-sub-side">Following your device</span>
+        </span>
+        <div class="theme-seg" role="radiogroup" aria-label="Appearance" data-theme-seg></div>
+      </div>
+      <div class="pub-side-msep"></div>
       <button type="button" class="pub-side-item" role="menuitem" onclick="forceSync()"><span class="pub-side-ico">↺</span>Refresh sync</button>
       <div class="pub-side-msep"></div>
       <button type="button" class="pub-side-item danger" role="menuitem" onclick="logout()"><span class="pub-side-ico">⏻</span>Log out</button>
@@ -301,7 +341,7 @@
   <div id="book-switcher-wrap">
     <div class="book-switcher" id="book-switcher" style="position:relative;">
       <div id="book-dropdown" style="position:relative;display:inline-block;">
-        <button id="book-dropdown-btn" onclick="toggleBookDropdown()" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);color:var(--cream);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;outline:none;min-width:150px;justify-content:space-between;">
+        <button id="book-dropdown-btn" onclick="toggleBookDropdown()" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);color:var(--on-inverse);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;outline:none;min-width:150px;justify-content:space-between;">
           <div style="display:flex;align-items:center;gap:8px;">
             <div id="book-dropdown-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);flex-shrink:0;"></div>
             <span id="book-dropdown-label">All books</span>
@@ -397,6 +437,17 @@
             <a id="sheets-open-link" href="#" target="_blank" style="display:none;font-family:'DM Mono',monospace;font-size:10px;color:var(--gold2);text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">↗ Open</a>
           </div>
           <span class="author-watermark" id="author-watermark" style="display:none;"></span>
+        </div>
+        <div class="header-menu-sep"></div>
+        <!-- Appearance. radiogroup (not three buttons) so arrow keys move
+             between options and screen readers announce "2 of 3". Options are
+             rendered/kept in sync by renderThemeControls() in src/main.js. -->
+        <div class="theme-seg-row">
+          <span class="tsr-label">
+            <span class="tsr-title">Appearance</span>
+            <span class="tsr-sub" id="theme-sub-header">Following your device</span>
+          </span>
+          <div class="theme-seg" role="radiogroup" aria-label="Appearance" data-theme-seg></div>
         </div>
         <div class="header-menu-sep"></div>
         <button class="header-menu-item" onclick="forceSync()"><span class="hmi-ico">↺</span><span class="hmi-txt"><span class="hmi-label">Refresh sync</span><span class="hmi-sub">Pull the latest from Firestore</span></span></button>
@@ -672,7 +723,7 @@
   </div>
 
   <div class="sect" id="danger-zone-sect" style="display:none;">Danger zone</div>
-  <div id="danger-zone-block" style="display:none;background:white;border-radius:var(--r3);border:1px solid var(--border);padding:1.25rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1.25rem;">
+  <div id="danger-zone-block" style="display:none;background:var(--surface-card);border-radius:var(--r3);border:1px solid var(--border);padding:1.25rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:1.25rem;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
       <div style="flex:1;min-width:200px;"><div style="font-weight:700;font-size:13px;margin-bottom:3px;">Reset all sales data for this book</div><div style="font-size:12px;color:var(--text3);">Clears orders, history and consignment for this book only. Your Google Sheet is untouched.</div></div>
       <button class="btn danger-btn" onclick="resetBookData()">⚠ Reset book data</button>
@@ -1208,12 +1259,12 @@
 
   <!-- ARTIST PAYMENT LINK (author mode only) -->
   <div id="artist-payment-link-card" style="display:none;margin-bottom:1.5rem;background:var(--ink);border-radius:var(--r3);border:1px solid rgba(255,255,255,.08);padding:1.25rem 1.5rem;">
-    <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:8px;">Your payment link</div>
+    <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--on-inverse-3);margin-bottom:8px;">Your payment link</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <input type="text" id="artist-pay-link-input" placeholder="https://paypal.me/yourname or your Interac email" style="flex:1;min-width:220px;padding:9px 13px;font-size:13px;font-family:'Syne',sans-serif;border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);background:rgba(255,255,255,.07);color:var(--cream);outline:none;">
+      <input type="text" id="artist-pay-link-input" placeholder="https://paypal.me/yourname or your Interac email" style="flex:1;min-width:220px;padding:9px 13px;font-size:13px;font-family:'Syne',sans-serif;border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);background:rgba(255,255,255,.07);color:var(--on-inverse);outline:none;">
       <button class="btn gold" onclick="saveArtistPaymentLink()">Save</button>
     </div>
-    <div style="font-size:11px;color:rgba(255,255,255,.25);margin-top:8px;">When the publisher approves a reimbursement, they'll use this link to pay you.</div>
+    <div style="font-size:11px;color:var(--on-inverse-2);margin-top:8px;">When the publisher approves a reimbursement, they'll use this link to pay you.</div>
   </div>
 
   <div class="section-hed" style="margin-bottom:1.1rem;">Log an expense</div>
@@ -1774,7 +1825,7 @@
 
     <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
       <button type="button" class="btn" onclick="closeM('inventory-writeoff-modal')">Cancel</button>
-      <button type="submit" class="btn gold" style="background:var(--red); border-color:var(--red); color:#fff;">📉 Record Tax Write-Off</button>
+      <button type="submit" class="btn gold" style="background:var(--red); border-color:var(--red); color:var(--on-status);">📉 Record Tax Write-Off</button>
     </div>
   </form>
 </div></div>
@@ -2621,23 +2672,23 @@
       <div id="pos-fx-status" style="font-size:11px;font-weight:500;color:var(--amber,#b45309);margin-bottom:10px;">Using saved rates — click ↻ FX Rates to refresh</div>
 
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;background:var(--cream2,#efe9dc);padding:6px 10px;border-radius:8px;">
-        <label style="font-size:11px;font-weight:600;color:#4a4540;">Txn Currency:</label>
-        <select id="pos-currency" onchange="posSetCurrency(this.value)" style="max-width:120px;font-weight:700;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid #ccc;">
+        <label style="font-size:11px;font-weight:600;color:var(--text2);">Txn Currency:</label>
+        <select id="pos-currency" onchange="posSetCurrency(this.value)" style="max-width:120px;font-weight:700;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--border);">
           <option value="EUR">EUR</option>
         </select>
       </div>
-      <div id="pos-total" style="font-family:'Syne',sans-serif;font-size:34px;font-weight:800;color:#2e7d32;line-height:1.1;">€0.00</div>
-      <div id="pos-total-note" style="font-size:11px;font-weight:500;color:#4a4540;margin-top:4px;margin-bottom:12px;">Transaction currency: EUR</div>
+      <div id="pos-total" style="font-family:'Syne',sans-serif;font-size:34px;font-weight:800;color:var(--green);line-height:1.1;">€0.00</div>
+      <div id="pos-total-note" style="font-size:11px;font-weight:500;color:var(--text2);margin-top:4px;margin-bottom:12px;">Transaction currency: EUR</div>
 
       <div style="border:1px solid rgba(14,12,10,.08);border-radius:10px;padding:4px 10px;background:rgba(14,12,10,.02);margin-bottom:12px;max-height:220px;overflow-y:auto;">
         <div id="pos-cart-items"></div>
       </div>
 
-      <div style="font-size:11px;font-weight:600;color:#4a4540;margin-bottom:4px;">Itemized Subtotal</div>
-      <div id="pos-subtotal-lines" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:#0e0c0a;margin-bottom:14px;background:var(--cream2,#efe9dc);padding:6px 10px;border-radius:6px;">—</div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px;">Itemized Subtotal</div>
+      <div id="pos-subtotal-lines" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--text);margin-bottom:14px;background:var(--cream2,#efe9dc);padding:6px 10px;border-radius:6px;">—</div>
 
       <div class="form-group" style="margin-bottom:12px;">
-        <label for="pos-payment-method" style="font-size:11px;font-weight:600;color:#4a4540;">Payment Method</label>
+        <label for="pos-payment-method" style="font-size:11px;font-weight:600;color:var(--text2);">Payment Method</label>
         <select id="pos-payment-method" style="font-size:12px;padding:7px 10px;border-radius:8px;">
           <option value="Cash">Cash</option>
           <option value="Card">Card</option>
@@ -2653,7 +2704,7 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h3v1h-3zM20 17h1v4h-4v-1"></path></svg>
         Pay by QR (this total)
       </button>
-      <div style="font-size:10px;color:#8a8078;margin-top:8px;text-align:center;line-height:1.5;">Charges the exact total above, discounts included. Needs internet + your saved Stripe key.</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:8px;text-align:center;line-height:1.5;">Charges the exact total above, discounts included. Needs internet + your saved Stripe key.</div>
     </div>
   </div>
 </div>
@@ -2705,8 +2756,8 @@
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:12px;">
       <input type="checkbox" id="st-notes" style="width:16px;height:16px;cursor:pointer;">
       <div style="flex:1;">
-        <div style="font-size:13px;color:#111;font-weight:600;">Include price paid row under each tally</div>
-        <div style="font-size:11px;color:#555;line-height:1.4;">Adds a small cell underneath each tally column to record the price paid for that sale — useful for tracking discounts.</div>
+        <div style="font-size:13px;color:var(--text);font-weight:600;">Include price paid row under each tally</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.4;">Adds a small cell underneath each tally column to record the price paid for that sale — useful for tracking discounts.</div>
       </div>
     </label>
 
@@ -2775,19 +2826,19 @@
 
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:6px;">
       <input type="checkbox" id="qrp-show-eur" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="font-size:13px;color:#111;font-weight:600;">Show EUR price</span>
+      <span style="font-size:13px;color:var(--text);font-weight:600;">Show EUR price</span>
     </label>
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:6px;">
       <input type="checkbox" id="qrp-show-cad" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="font-size:13px;color:#111;font-weight:600;">Show CAD price</span>
+      <span style="font-size:13px;color:var(--text);font-weight:600;">Show CAD price</span>
     </label>
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:8px;">
       <input type="checkbox" id="qrp-show-usd" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="font-size:13px;color:#111;font-weight:600;">Show USD price</span>
+      <span style="font-size:13px;color:var(--text);font-weight:600;">Show USD price</span>
     </label>
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:8px;">
       <input type="checkbox" id="qrp-show-mxn" style="width:16px;height:16px;cursor:pointer;">
-      <span style="font-size:13px;color:#111;font-weight:600;">Show MXN price</span>
+      <span style="font-size:13px;color:var(--text);font-weight:600;">Show MXN price</span>
     </label>
     <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(200,145,58,0.08);border:1px solid rgba(200,145,58,0.25);margin-bottom:12px;">
       <input type="checkbox" id="qrp-fit-one-page" checked style="width:16px;height:16px;cursor:pointer;">
@@ -2947,7 +2998,7 @@
         <div>
           <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span>Test Book Catalog</span>
-            <span style="font-size:10px;font-family:sans-serif;background:rgba(109,40,217,0.1);color:#6d28d9;padding:2px 8px;border-radius:12px;font-weight:600;letter-spacing:0.5px;border:1px solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
+            <span style="font-size:10px;font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:12px;font-weight:600;letter-spacing:0.5px;border:1px solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
           </div>
           <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage test books in an isolated sandbox environment. Test book activity is strictly blocked from syncing to Google Sheets and excluded from financial ledgers.</div>
         </div>
@@ -3031,7 +3082,7 @@
             <div style="width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--gold3);font-family:'DM Mono',monospace;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
             <div style="flex:1;">
               <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Paste this code exactly → Deploy → <span style="color:var(--gold);">New deployment</span> → Web App → Execute as: Me → Who has access: Anyone</div>
-              <div style="font-size:11.5px;color:var(--cream);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;line-height:1.4;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
+              <div style="font-size:11.5px;color:var(--on-status);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;line-height:1.4;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
               <div class="gas-code-container">
                 <div class="gas-code-header">
                   <span class="gas-code-lang">Google Apps Script</span>
@@ -3157,7 +3208,7 @@
     </div>
   </div>
 </div>
-<div class="tab-panel" id="tab-backups" style="color:var(--cream);/* contrast-ok: default text colour for the dark ink cards inside this panel */">
+<div class="tab-panel" id="tab-backups" style="color:var(--on-inverse);/* contrast-ok: default text colour for the dark ink cards inside this panel */">
   <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.25rem;border-radius:var(--r3);margin-bottom:1rem;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
       <div>
@@ -3188,12 +3239,12 @@
     <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
         <div style="width:36px;height:36px;border-radius:10px;background:rgba(212,175,55,.1);color:var(--gold3);display:flex;align-items:center;justify-content:center;font-size:18px;">💾</div>
-        <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--cream);">JSON Snapshot</h3>
+        <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--on-inverse);">JSON Snapshot</h3>
       </div>
       <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Download a complete backup of your entire database (Catalog, Inventory, History, and Settings). This file can be used to restore your app at any time.</p>
       <div style="display:flex;flex-direction:column;gap:12px;">
         <button class="btn gold" style="width:100%;" onclick="exportToJSON(event)">Download JSON Backup</button>
-        <button class="btn sm" style="width:100%;background:rgba(255,255,255,.06);color:var(--cream);border-color:rgba(255,255,255,.25);" onclick="chooseBackupFolder()">Choose Backup Folder</button>
+        <button class="btn sm" style="width:100%;background:rgba(255,255,255,.06);color:var(--on-inverse);border-color:rgba(255,255,255,.25);" onclick="chooseBackupFolder()">Choose Backup Folder</button>
         <div id="backup-folder-display" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Backup folder: Browser Downloads (default)</div>
         <div id="last-backup-display" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Last backup: Never</div>
       </div>
@@ -3202,11 +3253,11 @@
     <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
         <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--text2);display:flex;align-items:center;justify-content:center;font-size:18px;">📤</div>
-        <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--cream);">Restore from Backup</h3>
+        <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--on-inverse);">Restore from Backup</h3>
       </div>
       <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Upload a previously downloaded JSON snapshot from your computer to restore your data.</p>
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <div style="font-size:12px;font-weight:700;color:var(--cream);">Restore one book</div>
+        <div style="font-size:12px;font-weight:700;color:var(--on-inverse);">Restore one book</div>
         <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;">Pick the file, then choose a single book. Every other book and all your settings stay untouched. A safety backup is saved first.</div>
         <label for="import-one-book-file" class="btn sm gold" style="width:100%;text-align:center;cursor:pointer;">Restore one book from file…</label>
         <input type="file" id="import-one-book-file" accept=".json" style="display:none;" onchange="handleBookRestoreImportFile(event)">
@@ -3214,9 +3265,9 @@
 
         <div style="border-top:1px solid rgba(255,255,255,.08);margin:8px 0 4px;"></div>
 
-        <div style="font-size:12px;font-weight:700;color:var(--cream);">Restore everything</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:#ff6b6b;">Warning: overwrites your entire database</strong> with the file's contents.</div>
-        <label for="import-file" class="btn sm" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);color:var(--cream);">Choose file &amp; overwrite all</label>
+        <div style="font-size:12px;font-weight:700;color:var(--on-inverse);">Restore everything</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.62);line-height:1.5;margin-bottom:2px;"><strong style="color:var(--red-light);">Warning: overwrites your entire database</strong> with the file's contents.</div>
+        <label for="import-file" class="btn sm" style="width:100%;text-align:center;cursor:pointer;background:rgba(255,255,255,.05);color:var(--on-inverse);">Choose file &amp; overwrite all</label>
         <input type="file" id="import-file" accept=".json" style="display:none;" onchange="handleBackupImportFile(event)">
         <div id="import-info" style="font-size:11px;color:rgba(255,255,255,.62);text-align:center;">Select a .json backup file</div>
       </div>
@@ -3225,10 +3276,10 @@
     <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
         <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--text2);display:flex;align-items:center;justify-content:center;font-size:18px;">📊</div>
-        <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--cream);">CSV Export</h3>
+        <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--on-inverse);">CSV Export</h3>
       </div>
       <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.5rem;">Download all historical records (Sales, Consignments, and Expenses) as a flat CSV file for use in spreadsheet software.</p>
-      <button class="btn sm" style="width:100%;background:transparent;border-color:rgba(255,255,255,.3);color:var(--cream);" onclick="exportAllToCSV()">Download CSV Report</button>
+      <button class="btn sm" style="width:100%;background:transparent;border-color:rgba(255,255,255,.3);color:var(--on-inverse);" onclick="exportAllToCSV()">Download CSV Report</button>
     </div>
   </div>
 </div>
@@ -3552,9 +3603,9 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- INVOICE VIEW MODAL  (sharp, printable)                  -->
 <!-- ═══════════════════════════════════════════════════════ -->
-<div class="overlay" id="m-invoice-view" style="display:none;"><div class="modal invoice-view-modal" role="dialog" aria-modal="true" style="max-width:880px;max-height:94vh;overflow:hidden;padding:0;background:#f0ece4;">
+<div class="overlay" id="m-invoice-view" style="display:none;"><div class="modal invoice-view-modal" role="dialog" aria-modal="true" style="max-width:880px;max-height:94vh;overflow:hidden;padding:0;background:var(--cream2);">
 
-  <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 22px;background:var(--ink);color:var(--cream);border-radius:var(--r3) var(--r3) 0 0;flex-wrap:wrap;">
+  <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 22px;background:var(--ink);color:var(--on-inverse);border-radius:var(--r3) var(--r3) 0 0;flex-wrap:wrap;">
     <div style="font-family:'Playfair Display',serif;font-size:15px;">Invoice preview</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ink" onclick="editInvoiceFromView()">✎ Edit</button>
@@ -3569,7 +3620,7 @@
     </div>
   </div>
 
-  <div style="overflow:auto;max-height:calc(94vh - 68px);padding:24px;background:#f0ece4;">
+  <div style="overflow:auto;max-height:calc(94vh - 68px);padding:24px;background:var(--cream2);">
     <div id="invoice-print-area" class="invoice-paper"></div>
   </div>
 </div></div>
@@ -3655,7 +3706,7 @@
       <div class="form-group" style="margin:0;"><label for="sl-country">Country</label><input type="text" id="sl-country" placeholder="e.g. Canada" value="Canada"></div>
     </div>
 
-    <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:6px;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;"></div>
+    <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:6px;background:var(--green-bg);color:var(--green);border:1px solid var(--green-bg);"></div>
 
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="closeM('shipping-label')">Cancel</button>

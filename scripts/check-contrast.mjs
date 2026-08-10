@@ -8,6 +8,15 @@
  * point where the ratio drops below the WCAG AA threshold (4.5:1 normal
  * text, 3:1 large text — see isLargeText below).
  *
+ * BOTH THEMES ARE SWEPT. index.html is walked once per shipped palette:
+ * light, and light-with-`:root[data-theme="dark"]`-overlaid from
+ * src/styles/theme-dark.css. A single light-only sweep was correct when light
+ * was the only palette; it stopped being correct the moment dark mode landed,
+ * because an inline `color:var(--text3)` resolves to a different RGB pair per
+ * theme and can clear AA on cream while failing on charcoal. Findings are
+ * keyed by RESOLVED colour, so the two sweeps produce disjoint keys and carry
+ * separate baselines — a light exemption can never silence dark markup.
+ *
  * This catches the bug class found in PR #303/#304 generally, not just the
  * exact light-on-cream shape: any tag that explicitly sets its own `color`
  * is checked against its real resolved background (inherited through
@@ -45,7 +54,11 @@ import { dirname, join } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const INDEX_HTML = join(__dirname, '..', 'index.html');
 export const STYLE_CSS = join(__dirname, '..', 'src', 'style.css');
+export const THEME_DARK_CSS = join(__dirname, '..', 'src', 'styles', 'theme-dark.css');
 export const BASELINE_JSON = join(__dirname, 'contrast-baseline.json');
+
+/** Palettes this script sweeps index.html against. Both ship, so both gate. */
+export const THEMES = ['light', 'dark'];
 
 const WCAG_AA_NORMAL = 4.5;
 const WCAG_AA_LARGE = 3.0;
@@ -54,16 +67,38 @@ const WCAG_AA_LARGE = 3.0;
 // :root custom-property resolution
 // ---------------------------------------------------------------------------
 
+/** Parses declarations out of a `<selector> { … }` body into a name -> value map. */
+function parseDeclarations(body, into = new Map()) {
+  for (const decl of body.split(';')) {
+    const m = decl.match(/--([\w-]+)\s*:\s*(.+)/s);
+    if (m) into.set(m[1].trim(), m[2].trim());
+  }
+  return into;
+}
+
 export function parseRootVars(css) {
   const rootMatch = css.match(/:root\s*\{([^}]*)\}/);
-  const vars = new Map();
-  if (!rootMatch) return vars;
-  const decls = rootMatch[1].split(';');
-  for (const decl of decls) {
-    const m = decl.match(/--([\w-]+)\s*:\s*(.+)/s);
-    if (m) vars.set(m[1].trim(), m[2].trim());
-  }
-  return vars;
+  return rootMatch ? parseDeclarations(rootMatch[1]) : new Map();
+}
+
+/**
+ * The dark palette, as the browser resolves it: the light `:root` from
+ * style.css with `:root[data-theme="dark"]` from theme-dark.css layered on top.
+ *
+ * Overlaying rather than reading the dark block alone is what makes this
+ * faithful — the dark block only re-points the tokens it changes, and anything
+ * it deliberately leaves alone (--on-inverse, --on-accent, the radii) must keep
+ * resolving to its light value, exactly as the cascade does at runtime.
+ */
+export function parseDarkVars(styleCss, darkCss) {
+  const vars = parseRootVars(styleCss);
+  const block = darkCss.match(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/);
+  return block ? parseDeclarations(block[1], vars) : vars;
+}
+
+/** name -> value map for a theme, ready to hand to findLowContrastText. */
+export function paletteFor(theme, styleCss, darkCss) {
+  return theme === 'dark' ? parseDarkVars(styleCss, darkCss) : parseRootVars(styleCss);
 }
 
 function resolveVarChain(name, vars, seen = new Set()) {
@@ -174,12 +209,27 @@ export function contrastRatio(c1, c2) {
 // ---------------------------------------------------------------------------
 
 const DARK_BG_CLASSES = new Set(['app-header', 'kpi', 'gas-code-container', 'metric-banner']);
-const CLASS_BG = { 'gas-code-header': 'var(--ink2)', card: 'white', 'sheets-setup': 'white', modal: 'var(--cream)' };
+// Every entry is a TOKEN, never a literal — a literal would resolve to the same
+// colour in both palettes and quietly make the dark sweep check a fiction.
+const CLASS_BG = {
+  'gas-code-header': 'var(--ink2)',
+  card: 'var(--surface-card)',
+  'sheets-setup': 'var(--surface-card)',
+  modal: 'var(--cream)',
+};
 
 // className -> { color, modifiers: { modifierClass -> color } }
+// `.kpi-value`/`.metric-banner-value` sit on an --ink banner in both themes, so
+// their base is --on-inverse (NOT --cream, which flips out from under them).
 const CLASS_TEXT_TOKENS = {
-  'kpi-value': { base: 'var(--cream)', modifiers: { gold: 'var(--gold3)', warn: '#fb923c', danger: '#f87171' } },
-  'metric-banner-value': { base: 'var(--cream)', modifiers: { gold: 'var(--gold3)', green: '#6ee7a8', danger: '#f87171' } },
+  'kpi-value': {
+    base: 'var(--on-inverse)',
+    modifiers: { gold: 'var(--gold3)', warn: 'var(--orange)', danger: 'var(--rose-soft)' },
+  },
+  'metric-banner-value': {
+    base: 'var(--on-inverse)',
+    modifiers: { gold: 'var(--gold3)', green: 'var(--emerald-soft)', danger: 'var(--rose-soft)' },
+  },
 };
 
 // className -> { modifierClass -> {background, color} }, for self-contained
@@ -195,7 +245,7 @@ const CLASS_PAIRS = {
   },
   btn: {
     gold: { background: 'var(--gold)', color: 'var(--ink)' },
-    ink: { background: 'var(--ink)', color: 'var(--cream)' },
+    ink: { background: 'var(--ink)', color: 'var(--on-inverse)' },
     __default: { background: 'var(--cream2)', color: 'var(--text)' },
   },
 };
@@ -379,10 +429,15 @@ export function findLowContrastText(html, cssVars) {
 // already-shipped screen. See scripts/contrast-baseline.json.
 // ---------------------------------------------------------------------------
 
-export function loadBaseline(path = BASELINE_JSON) {
+export function loadBaseline(path = BASELINE_JSON, theme = 'light') {
   try {
     const data = JSON.parse(readFileSync(path, 'utf8'));
-    return new Set((data.accepted ?? []).map(e => e.key));
+    // `themes.<name>.accepted` is the current shape; a bare top-level
+    // `accepted` is the pre-dark-mode file and is read as the light baseline,
+    // so an un-regenerated checkout degrades to the old behaviour rather than
+    // silently accepting everything.
+    const accepted = data.themes?.[theme]?.accepted ?? (theme === 'light' ? data.accepted ?? [] : []);
+    return new Set(accepted.map(e => e.key));
   } catch {
     return new Set();
   }
@@ -396,23 +451,45 @@ export function partitionFindings(findings, baselineKeys) {
   return { fresh, known };
 }
 
+/**
+ * Sweeps index.html once per shipped theme.
+ *
+ * A single light-only sweep was true when light was the only palette. It stopped
+ * being true the moment theme-dark.css landed: an inline `color:var(--text3)`
+ * resolves to a different RGB pair per theme, so a rule can clear AA on cream
+ * and fail on charcoal with nothing to catch it. Findings are keyed by RESOLVED
+ * colour, so the two sweeps produce disjoint keys and need separate baselines.
+ */
+export function scanThemes(html, styleCss, darkCss, themes = THEMES) {
+  return themes.map((theme) => ({
+    theme,
+    findings: findLowContrastText(html, paletteFor(theme, styleCss, darkCss)),
+  }));
+}
+
+/** Collapses findings to one entry per resolved pairing, for the baseline file. */
+function toAcceptedEntries(findings) {
+  const byKey = new Map();
+  for (const f of findings) {
+    if (!byKey.has(f.key)) {
+      byKey.set(f.key, { key: f.key, textColor: f.textColor, bgColor: f.bgColor, ratio: f.ratio, count: 0 });
+    }
+    byKey.get(f.key).count++;
+  }
+  return [...byKey.values()].sort((a, b) => a.ratio - b.ratio);
+}
+
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const html = readFileSync(INDEX_HTML, 'utf8');
-  const css = readFileSync(STYLE_CSS, 'utf8');
-  const cssVars = parseRootVars(css);
-  const findings = findLowContrastText(html, cssVars);
+  const styleCss = readFileSync(STYLE_CSS, 'utf8');
+  const darkCss = readFileSync(THEME_DARK_CSS, 'utf8');
+  const sweeps = scanThemes(html, styleCss, darkCss);
 
   if (process.argv.includes('--write-baseline')) {
-    const byKey = new Map();
-    for (const f of findings) {
-      if (!byKey.has(f.key)) byKey.set(f.key, { key: f.key, textColor: f.textColor, bgColor: f.bgColor, ratio: f.ratio, count: 0 });
-      byKey.get(f.key).count++;
-    }
-    const accepted = [...byKey.values()].sort((a, b) => a.ratio - b.ratio);
     const out = {
       _comment: [
         "Pre-existing colour pairings that fail strict WCAG AA (4.5:1 normal / 3:1 large)",
@@ -423,31 +500,51 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         'regressions instead of failing on every pre-existing screen. "count" is how',
         "many places in index.html use this exact resolved colour pairing as of the",
         "last regeneration — informational only, not enforced.",
+        "",
+        "Keyed per THEME: index.html is swept once against the light palette and",
+        "once against src/styles/theme-dark.css, and an inline colour resolves to a",
+        "different RGB pair in each — so the two sweeps never share a key and an",
+        "entry accepted for light does not silence the same markup on dark.",
         "Regenerate after an intentional palette change with:",
         "  node scripts/check-contrast.mjs --write-baseline",
       ],
-      accepted,
+      themes: Object.fromEntries(
+        sweeps.map(({ theme, findings }) => [theme, { accepted: toAcceptedEntries(findings) }]),
+      ),
     };
     writeFileSync(BASELINE_JSON, JSON.stringify(out, null, 2) + '\n');
-    console.log(`Wrote ${accepted.length} baseline entries (covering ${findings.length} current findings) to scripts/contrast-baseline.json`);
+    for (const { theme, findings } of sweeps) {
+      const n = out.themes[theme].accepted.length;
+      console.log(`  ${theme.padEnd(5)} ${String(n).padStart(4)} baseline entries (covering ${findings.length} findings)`);
+    }
+    console.log('Wrote scripts/contrast-baseline.json');
     process.exit(0);
   }
 
-  const baseline = loadBaseline();
-  const { fresh, known } = partitionFindings(findings, baseline);
+  let failed = false;
+  const notes = [];
+  for (const { theme, findings } of sweeps) {
+    const { fresh, known } = partitionFindings(findings, loadBaseline(BASELINE_JSON, theme));
+    if (fresh.length === 0) {
+      notes.push(`${theme}: ok${known.length ? ` (${known.length} accepted)` : ''}`);
+      continue;
+    }
+    failed = true;
+    console.error(`✗ check-contrast [${theme}]: ${fresh.length} new contrast failure(s) in index.html (WCAG AA):`);
+    for (const f of fresh) {
+      console.error(
+        `  index.html:${f.line}  <${f.tag}> color:${f.textColor} on background:${f.bgColor}` +
+        `  ratio=${f.ratio}:1 (needs ${f.required}:1)`
+      );
+    }
+    console.error('');
+  }
 
-  if (fresh.length === 0) {
-    const note = known.length ? ` (${known.length} pre-existing, accepted via scripts/contrast-baseline.json)` : '';
-    console.log(`✓ check-contrast: no new WCAG AA contrast failures in index.html${note}`);
+  if (!failed) {
+    console.log(`✓ check-contrast: no new WCAG AA contrast failures in index.html — ${notes.join(', ')}`);
     process.exit(0);
   }
-  console.error(`✗ check-contrast: ${fresh.length} new contrast failure(s) in index.html (WCAG AA):`);
-  for (const f of fresh) {
-    console.error(
-      `  index.html:${f.line}  <${f.tag}> color:${f.textColor} on background:${f.bgColor}` +
-      `  ratio=${f.ratio}:1 (needs ${f.required}:1)`
-    );
-  }
-  console.error('\nFix the colour, add it to scripts/contrast-baseline.json if it matches an already-accepted pairing, or mark a reviewed exception with `/* contrast-ok */`.');
+  console.error('Fix the colour, add it to scripts/contrast-baseline.json if it matches an already-accepted pairing, or mark a reviewed exception with `/* contrast-ok */`.');
+  console.error('A failure under [dark] only means the markup needs a token that flips — see src/styles/theme-dark.css.');
   process.exit(1);
 }

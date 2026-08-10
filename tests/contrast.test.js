@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  findLowContrastText, parseRootVars, contrastRatio, makeColorResolver,
-  loadBaseline, partitionFindings, INDEX_HTML, STYLE_CSS,
+  findLowContrastText, parseRootVars, parseDarkVars, paletteFor, scanThemes,
+  contrastRatio, makeColorResolver, loadBaseline, partitionFindings,
+  INDEX_HTML, STYLE_CSS, THEME_DARK_CSS, THEMES,
 } from '../scripts/check-contrast.mjs';
 
 const css = readFileSync(STYLE_CSS, 'utf8');
+const darkCss = readFileSync(THEME_DARK_CSS, 'utf8');
 const cssVars = parseRootVars(css);
 
 describe('contrastRatio', () => {
@@ -82,22 +84,66 @@ describe('findLowContrastText', () => {
   });
 });
 
+describe('dark palette resolution', () => {
+  it('overlays the dark :root onto the light one', () => {
+    const darkVars = parseDarkVars(css, darkCss);
+    const resolve = makeColorResolver(darkVars);
+    // Re-pointed by the dark block.
+    expect(resolve('var(--cream)')).toEqual({ r: 0x14, g: 0x11, b: 0x0d, a: 1 });
+    // NOT re-pointed — must still resolve, inherited from the light :root.
+    // If the overlay were replaced by a straight read of the dark block, these
+    // would come back null and every check touching them would silently skip.
+    expect(resolve('var(--on-inverse)')).toEqual({ r: 0xf7, g: 0xf2, b: 0xe9, a: 1 });
+    expect(resolve('var(--on-accent)')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
+  });
+
+  it('gives the two palettes genuinely different values', () => {
+    expect(paletteFor('dark', css, darkCss).get('cream'))
+      .not.toBe(paletteFor('light', css, darkCss).get('cream'));
+  });
+});
+
 describe('contrast baseline', () => {
   const html = readFileSync(INDEX_HTML, 'utf8');
-  const allFindings = findLowContrastText(html, cssVars);
-  const baseline = loadBaseline();
-  const { fresh, known } = partitionFindings(allFindings, baseline);
+  const sweeps = scanThemes(html, css, darkCss);
 
-  it('keeps index.html free of NEW WCAG AA contrast failures', () => {
+  it('sweeps every shipped theme', () => {
+    expect(sweeps.map(s => s.theme)).toEqual([...THEMES]);
+  });
+
+  it.each(THEMES)('keeps index.html free of NEW WCAG AA contrast failures [%s]', (theme) => {
+    const { findings } = sweeps.find(s => s.theme === theme);
+    const { fresh } = partitionFindings(findings, loadBaseline(undefined, theme));
     const detail = fresh
       .map(f => `index.html:${f.line} <${f.tag}> color:${f.textColor} on ${f.bgColor} = ${f.ratio}:1 (needs ${f.required}:1)`)
       .join('\n');
-    expect(fresh, `New contrast failures (not in scripts/contrast-baseline.json):\n${detail}`).toHaveLength(0);
+    expect(fresh, `New ${theme} contrast failures (not in scripts/contrast-baseline.json):\n${detail}`).toHaveLength(0);
   });
 
-  it('accounts for every pre-existing failure via the baseline (none silently swallowed)', () => {
+  it.each(THEMES)('accounts for every pre-existing failure via the baseline [%s]', (theme) => {
     // Guards against the baseline going stale: every currently-failing pairing
     // in index.html must have an entry in contrast-baseline.json, or be fixed.
-    expect(known.length).toBe(allFindings.length);
+    const { findings } = sweeps.find(s => s.theme === theme);
+    const { known } = partitionFindings(findings, loadBaseline(undefined, theme));
+    expect(known.length).toBe(findings.length);
+  });
+
+  // The dark sweep currently reports ZERO failures, which is the right result
+  // (the dark palette was tuned against AA from the start, unlike the legacy
+  // light one) but is indistinguishable from a sweep that silently resolves
+  // nothing. Mutating a dark token must break it.
+  it('the dark sweep actually reads the dark palette', () => {
+    const broken = darkCss.replace('--text3: #9d9382;', '--text3: #2a2620;');
+    expect(broken, 'anchor moved — update this mutation').not.toBe(darkCss);
+    const findings = findLowContrastText(html, paletteFor('dark', css, broken));
+    expect(findings.length).toBeGreaterThan(50);
+  });
+
+  it('keeps the light and dark baselines separate', () => {
+    // Keys are RESOLVED colour pairs, so the two sweeps can never share one.
+    // A shared key would mean a light exemption is silencing dark markup.
+    const light = loadBaseline(undefined, 'light');
+    const dark = loadBaseline(undefined, 'dark');
+    expect([...dark].filter(k => light.has(k))).toEqual([]);
   });
 });

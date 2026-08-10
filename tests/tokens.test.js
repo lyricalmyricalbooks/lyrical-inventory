@@ -24,6 +24,23 @@ describe('stripRootBlocks', () => {
     const found = scanCss(css, 'f.css');
     expect(found.map((f) => f.sample)).toEqual(['#abc']);
   });
+
+  // src/styles/theme-dark.css defines the dark palette in a QUALIFIED :root.
+  // If these didn't count as definitions the theme would read as ~90 raw-hex
+  // violations and could only land by raising the baseline.
+  it('treats qualified :root selectors as token definitions too', () => {
+    const css = ':root[data-theme="dark"]{--gold:#dda548;}\n.x{color:#abc;}';
+    expect(scanCss(css, 'f.css').map((f) => f.sample)).toEqual(['#abc']);
+  });
+
+  it('treats the follow-the-OS :root:not() block as definitions', () => {
+    const css = '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--gold:#dda548;}}';
+    expect(scanCss(css, 'f.css')).toEqual([]);
+  });
+
+  it('still flags a plain class block that merely mentions root', () => {
+    expect(scanCss('.root-ish{color:#bada55;}', 'f.css').map((f) => f.sample)).toEqual(['#bada55']);
+  });
 });
 
 describe('scanCss rules', () => {
@@ -122,8 +139,16 @@ describe('reviewed decisions that diverge from AGENTS.md', () => {
     expect(systemCss).toContain('.sys-target');
   });
 
-  it('dark mode stays groundwork-only — no theme block ships', () => {
+  // SUPERSEDED (was: "dark mode stays groundwork-only — no theme block ships").
+  // Dark mode shipped; see .agents/UX_PATTERNS.md § Decisions on record. What
+  // survives of the original ruling is the reason it was made: the theme must
+  // live in ONE place, not be sprinkled through style.css as per-rule
+  // `@media (prefers-color-scheme)` blocks, which is how a half-themed app
+  // happens. tests/theme.test.js covers the palette itself.
+  it('keeps the theme confined to src/styles/theme-dark.css', () => {
     expect(styleCss).not.toContain('prefers-color-scheme');
     expect(systemCss).not.toContain('prefers-color-scheme');
+    expect(styleCss).not.toContain('[data-theme=');
+    expect(systemCss).not.toContain('[data-theme=');
   });
 });

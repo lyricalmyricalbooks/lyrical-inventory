@@ -294,12 +294,24 @@ here before "fixing" anything in this list.
 | :-- | :-- | :-- |
 | **Shadows** | Keep the two-layer elevation scale. `--shadow`/`--shadow2` stay aliased onto `--elev-2`/`--elev-3`. | Reviewed on real cards and stat tiles. Prefer `--elev-*` directly in new code. |
 | **Button height** | `.btn` stays at ~33px. **Overrides AGENTS.md §3's 44px minimum.** | Raising it reflows every screen, and the density is wanted. Do *not* add `min-height` to `.btn`. Apply `.sys-target` to individual controls that genuinely need a full target. |
-| **Dark mode** | Groundwork only — semantic tokens stay, no theme block ships. | Components still name colours directly; enabling it now would leave most screens half-themed. Revisit after the migration, not before. |
+| **Dark mode** | **Shipped** (supersedes the earlier groundwork-only ruling). Lives entirely in [src/styles/theme-dark.css](../src/styles/theme-dark.css). | Re-points the PRIMITIVES rather than waiting on the semantic migration — the aliases are defined in terms of them, so flipping the primitives carries the whole system. Add a `@media (prefers-color-scheme)` block to `style.css` and you are back to half-themed; `tests/tokens.test.js` blocks it. |
 | **View transitions** | Helper stays available and unwired. | See §1 — shipped and reverted in PR #128/#129. |
 
-Two of these (button height, dark mode) are places where the codebase deliberately does *not*
-match `AGENTS.md`. That is intentional. If a future change makes one of them worth reopening,
-raise it with the user rather than silently converging on the written guideline.
+Button height is a place where the codebase deliberately does *not* match `AGENTS.md`. That is
+intentional. If a future change makes it worth reopening, raise it with the user rather than
+silently converging on the written guideline. (Dark mode used to be the second such divergence;
+the user asked for it and it now ships — the row above records what replaced the old ruling.)
+
+### Working in a themed codebase
+1. **`--cream*` and `--ink*` are surfaces, and both flip.** Text on a permanently dark surface
+   (header, KPI banners, toast, sidebar) uses `--on-inverse`; text on a saturated accent fill
+   uses `--on-accent`. Never `color:var(--cream)` — `tests/theme.test.js` fails on it.
+2. **Reach for a token before a literal.** The accent families (`--emerald`, `--rose`,
+   `--orange`, `--violet`, `--slate`) exist so a status colour themes itself. A new hardcoded
+   hex is a rule that will be wrong in one of the two themes.
+3. **Deliberately light things stay light.** The invoice paper, the email composer preview, and
+   the carrier logo plates are documents and artwork, not chrome — the foot of
+   `theme-dark.css` lists them and why.
 
 ---
 
