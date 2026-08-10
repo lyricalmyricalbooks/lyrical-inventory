@@ -63,7 +63,7 @@ Angles worth scanning each time: bug/edge case the change introduced · the next
 
 ## App Overview & Architecture
 
-Lyrical Inventory is a Progressive Web App (PWA) designed for Lyricalmyrical Books to manage book catalogs, sales inventory, consignment partners, invoices, expenses, and event checkouts (POS).
+Lyrical Inventory is a Progressive Web App (PWA) designed for Lyricalmyrical Books to manage book catalogs, sales inventory, consignment partners, invoices, expenses, and in-person checkouts (POS).
 
 ### Key Modules & Capabilities
 
@@ -71,6 +71,6 @@ Lyrical Inventory is a Progressive Web App (PWA) designed for Lyricalmyrical Boo
 | :--- | :--- | :--- |
 | **Catalog & Stock** | Book inventory management | Tracks list price, native currency, print runs, and stock statuses (`on-hand`, `consigned`, `sold`, etc.) |
 | **Consignment** | Store partnership ledger | Handles store commissions, shipments, returns, sales, invoice drafts, and artist payout settlements |
-| **POS Checkout** | Live book fairs & checkouts | Event-ready checkout panel supporting multi-currency totals, FX rate conversion, and Stripe QR codes |
+| **POS Checkout** | In-person & online sales | Checkout panel supporting multi-currency totals, FX rate conversion, and Stripe QR codes |
 | **Order History** | Timeline & stock auditing | Filterable, paginated transaction lists matching direct sales against ledger records |
 | **Tax & Expenses** | Cash flow & operations | Tracks operating costs, business trips, subscription schedules, and receipt OCR scans via Gemini API |

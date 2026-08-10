@@ -9,8 +9,8 @@
  *   'light' / 'dark'   — explicit. data-theme pins the theme and the media
  *                        query is deliberately written to lose
  *                        (`:root:not([data-theme="light"])`), so a publisher
- *                        who wants the light UI at a book fair under bright
- *                        lights keeps it even on a phone set to dark.
+ *                        who wants the light UI under bright lighting keeps
+ *                        it even on a device set to dark.
  *
  * A `.theme-dark` class is mirrored onto <html> alongside the attribute. CSS
  * cannot say "matches [data-theme=dark] OR (no attribute AND OS is dark)" in

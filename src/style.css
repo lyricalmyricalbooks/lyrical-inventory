@@ -449,8 +449,9 @@ tr.hist-row:hover {
    override — the reason the theme toggle itself can't flip out from under you
    while you're using it.
 
-   The row is 44px tall per AGENTS.md §3 (used one-handed at book fairs); the
-   three segments share it, so each is a full-height target. */
+   The row is 44px tall per AGENTS.md §1 (touch-target minimum for accurate,
+   accessible clicks/taps); the three segments share it, so each is a
+   full-height target. */
 .theme-seg-row{
   display:flex;align-items:center;justify-content:space-between;gap:10px;
   padding:7px 11px;
@@ -7370,7 +7371,7 @@ tr.hist-row:hover {
 .tc-cat-link{font:inherit;color:var(--gold3);background:none;border:none;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-align:left;}
 .tc-cat-link:hover{color:var(--gold-text);}
 /* Keeps each clickable row at the >=44px touch target AGENTS.md requires —
-   these rows are tapped on a phone at book fairs, not just clicked. */
+   easy to click/tap accurately, not just clicked with a precise mouse. */
 .tc-cat-tbl tbody td{padding-top:15px;padding-bottom:15px;}
 .tc-cat-pct{display:inline-flex;align-items:center;gap:8px;}
 .tc-cat-pct .con-row-progress{display:inline-block;flex:none;}

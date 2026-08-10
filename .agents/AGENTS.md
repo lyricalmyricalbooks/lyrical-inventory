@@ -7,7 +7,7 @@
 ## 1. House-Specific Design Constraints
 Beyond baseline good design (design tokens, dark mode, WCAG AA contrast, real hover/focus/loading states, no blank states), hold to these project-specific rules:
 - **No default/pure red-green-blue.** Use the palette already established in `src/style.css` (Emerald/Teal for success, Rose/Coral for errors, Indigo/Violet for primary).
-- **Touch targets ≥ 44px x 44px** — this app is used live at book fairs on phones/tablets, so fat-finger errors during a sale are costly.
+- **Touch targets ≥ 44px x 44px** — keeps buttons and interactive elements easy to hit accurately for all users (including those with limited dexterity or using a trackpad), so misclicks during a checkout or ledger edit don't turn into costly mistakes.
 - **Loading states use skeleton wrappers**, not spinner GIFs; form validation is real-time and inline.
 
 ---
