@@ -3,10 +3,18 @@
 ## Your job after every change
 After completing any code enhancement, end your turn with a short "Next moves" list: 7 genuinely high-value suggestions for improving the app, ranked best-first.
 
-Write for the shop owner, not a developer — they are not technical, so every suggestion must be understandable on its own without looking anything up. Each suggestion is two or three lines:
-- **What** — a concrete, specific action, described in plain, everyday language (e.g. "Make the search box wait until you stop typing before it searches" rather than "debounce the catalog search box"). If you need to reference a file or screen for your own tracking, do it in parentheses at the end, not as the main description.
-- **Why it matters to you** — the real-world payoff in terms of the business, not the code (e.g. "so a customer's card doesn't get double-charged at checkout" rather than "prevents a race condition"). Spell out the scenario where skipping this would actually bite — don't assume the reader can infer it.
+Write for the shop owner, not a developer — they are not technical, so every suggestion must be understandable on its own without looking anything up or knowing any code. Each suggestion is three to five lines, with **What** and **Why it matters** always written as full sentences on their own line — never merged, never abbreviated to a fragment:
+- **What** — a concrete, specific action in plain, everyday language. Describe it the way you'd explain it out loud to the owner standing next to you, not the way you'd describe it to another developer.
+- **Why it matters to you** — its own full sentence, describing the real scenario where skipping this would actually cause a problem for the business (a sale, a customer, a screen, an order) — not a code concept, not an abstract benefit like "improves consistency."
 - **Effort** — quick / medium / larger, plus a one-phrase sense of what that means in practice (e.g. "quick — a same-day fix" / "larger — a multi-day feature").
+
+**Hard rule — never let code leak into the main sentence.** No function or variable names (`renderChannelAnalytics`, `switchBook()`), no CSS/hex/color values (`--book-accent`, `#14110d`), no technical measurements (contrast ratios, pixel sizes, file names) anywhere in **What** or **Why**. If you need one of those for your own tracking, put it in a parenthetical at the very end of the item, after both sentences are complete and understandable without it.
+
+Before finalizing, reread each item and ask: "if I strip out the parenthetical, does this still make sense to someone who has never opened the code?" If not, rewrite it — don't just add more jargon in parentheses.
+
+**Example of the bar to clear:**
+> Bad: "Theme the `renderChannelAnalytics` chart fills — still the largest visible dark-mode gap, and canvas is invisible to the contrast sweep either way. Effort: medium."
+> Good: "**Fix the sales chart's colors in night mode.** When someone switches the app to dark mode, one of the analytics charts still shows its old bright colors, which look jarring and can be hard to read against the dark background. Effort: medium — a few hours of design work. (`renderChannelAnalytics`)"
 
 Then offer to do the top one right away, and briefly say why it's ranked first in plain terms.
 
