@@ -1,5 +1,5 @@
 /**
- * check-contrast.mjs — static guard against low-contrast text in index.html.
+ * check-contrast.mjs — static guard against low-contrast text in the app's markup.
  *
  * Computes real WCAG 2.1 contrast ratios (not a light/dark guess): it walks
  * the markup tracking the *resolved* effective background and text colour
@@ -44,12 +44,19 @@
  * the checker gates on new regressions rather than failing on every
  * already-shipped screen — see loadBaseline()/partitionFindings() below.
  *
+ * RENDERED HTML IS SWEPT TOO. index.html is only the app's skeleton; the
+ * screens a publisher reads during a sale — POS cart rows, order history, the
+ * expense ledger — are built as template literals in src/main.js and
+ * src/features/*.js and never appear in it. Those fragments are extracted and
+ * walked with an UNKNOWN root background, so a tag is checked only once the
+ * fragment itself establishes one (see scanJsSources).
+ *
  * Run standalone (`node scripts/check-contrast.mjs`) or via the Vitest
  * suite (test/contrast.test.js).
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const INDEX_HTML = join(__dirname, '..', 'index.html');
@@ -354,14 +361,20 @@ function resolveText(raw, ownBg, resolveColor) {
   return compositeOver(parsed, ownBg);
 }
 
-/** Returns an array of { line, tag, ratio, required, textColor, bgColor } findings. */
-export function findLowContrastText(html, cssVars) {
+/**
+ * Returns an array of { line, tag, ratio, required, textColor, bgColor } findings.
+ *
+ * `rootBg`/`rootText` seed the ancestry. index.html gets the real page colours,
+ * because it IS the page. A fragment lifted out of a template literal gets
+ * `null` instead — see scanJsSources for why that distinction is load-bearing.
+ */
+export function findLowContrastText(html, cssVars, { rootBg, rootText } = {}) {
   const resolveColor = makeColorResolver(cssVars);
   const findings = [];
 
-  const rootBg = resolveColor('var(--cream)');
-  const rootText = resolveColor('var(--text)');
-  const stack = [{ bg: rootBg, text: rootText }];
+  const seedBg = rootBg === undefined ? resolveColor('var(--cream)') : rootBg;
+  const seedText = rootText === undefined ? resolveColor('var(--text)') : rootText;
+  const stack = [{ bg: seedBg, text: seedText }];
 
   let m;
   TAG_RE.lastIndex = 0;
@@ -423,6 +436,137 @@ export function findLowContrastText(html, cssVars) {
 }
 
 // ---------------------------------------------------------------------------
+// Rendered HTML — the template literals in src/main.js and src/features/*.js
+//
+// index.html is the app's skeleton. The screens a publisher actually reads
+// during a sale — POS cart rows, order history, the expense ledger, consignment
+// tables — are built as HTML strings in JS and never appear in it. Checking
+// only index.html left the larger half of the app's inline styles unverified.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every template literal in a JS source, with its offset.
+ *
+ * Hand-rolled rather than regex because interpolations nest: `${xs.map(x =>
+ * `<td>${x}</td>`).join('')}` contains a whole second literal, and a regex that
+ * stops at the first backtick would truncate the outer one mid-tag and invent
+ * unbalanced markup. Tracks backtick depth, `${` depth, and escapes.
+ */
+export function extractTemplateLiterals(js) {
+  const out = [];
+  let i = 0;
+  while (i < js.length) {
+    if (js[i] === '\\') { i += 2; continue; }
+    // Skip over line and block comments, and over quoted strings, so a
+    // backtick inside one of them cannot open a phantom literal.
+    if (js.startsWith('//', i)) { const nl = js.indexOf('\n', i); i = nl === -1 ? js.length : nl; continue; }
+    if (js.startsWith('/*', i)) { const end = js.indexOf('*/', i + 2); i = end === -1 ? js.length : end + 2; continue; }
+    if (js[i] === '"' || js[i] === "'") {
+      const quote = js[i];
+      i += 1;
+      while (i < js.length && js[i] !== quote) { i += js[i] === '\\' ? 2 : 1; }
+      i += 1;
+      continue;
+    }
+    if (js[i] !== '`') { i += 1; continue; }
+
+    const start = i;
+    i += 1;
+    let depth = 0; // ${ } nesting inside this literal
+    while (i < js.length) {
+      const c = js[i];
+      if (c === '\\') { i += 2; continue; }
+      if (c === '$' && js[i + 1] === '{') { depth += 1; i += 2; continue; }
+      if (c === '}' && depth > 0) { depth -= 1; i += 1; continue; }
+      if (c === '`' && depth === 0) { i += 1; break; }
+      // A nested literal inside an interpolation: let the outer scan run
+      // through it, and pick it up separately on its own pass.
+      i += 1;
+    }
+    out.push({ text: js.slice(start, i), index: start });
+  }
+  return out;
+}
+
+/** A literal is worth walking only if it opens a real tag. */
+const HTML_LITERAL_RE = /<\s*(div|span|td|tr|th|tbody|thead|table|button|p|h[1-6]|label|input|select|option|section|a|ul|ol|li|strong|b|em|small|img|svg)\b/i;
+
+/**
+ * Blanks `${…}` interpolations, preserving length and newlines.
+ *
+ * The value of an interpolation is unknowable statically, so blanking is the
+ * honest move: `style="color:${c}"` becomes an unresolvable colour, which the
+ * walker already treats as "unknown" and skips rather than guessing. Preserving
+ * length and newlines keeps reported line numbers exact.
+ */
+export function blankInterpolations(text) {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === '$' && text[i + 1] === '{') {
+      let depth = 1;
+      let j = i + 2;
+      while (j < text.length && depth > 0) {
+        if (text[j] === '{') depth += 1;
+        else if (text[j] === '}') depth -= 1;
+        j += 1;
+      }
+      out += text.slice(i, j).replace(/[^\n]/g, ' ');
+      i = j;
+      continue;
+    }
+    out += text[i];
+    i += 1;
+  }
+  return out;
+}
+
+/** { fragment, line } for every HTML-ish template literal in a JS source. */
+export function htmlFragments(js) {
+  return extractTemplateLiterals(js)
+    .filter(({ text }) => HTML_LITERAL_RE.test(text))
+    .map(({ text, index }) => ({
+      fragment: blankInterpolations(text),
+      line: js.slice(0, index).split('\n').length,
+    }));
+}
+
+/**
+ * Walks the rendered-HTML fragments of the given sources.
+ *
+ * Seeded with an UNKNOWN root background, which is the whole design of this
+ * sweep. A fragment's real parent lives somewhere else entirely — a POS cart row
+ * is injected into a card, a header menu item into an ink panel — and assuming
+ * the page background would flag every light-on-dark label in the app as broken.
+ * With an unknown root, a tag is only checked once the fragment ITSELF
+ * establishes a background, so what survives is the genuinely self-contained
+ * bug: a `style="background:…;color:…"` pair that is wrong on its own terms.
+ */
+export function scanJsSources(sources, cssVars) {
+  const findings = [];
+  for (const { file, source } of sources) {
+    for (const { fragment, line } of htmlFragments(source)) {
+      for (const f of findLowContrastText(fragment, cssVars, { rootBg: null, rootText: null })) {
+        findings.push({ ...f, file, line: line + f.line - 1 });
+      }
+    }
+  }
+  return findings;
+}
+
+/** The JS sources that render HTML, read off disk so a new module is covered. */
+export function jsRenderSources(root = join(__dirname, '..')) {
+  const files = [join(root, 'src', 'main.js')];
+  const featureDir = join(root, 'src', 'features');
+  if (existsSync(featureDir)) {
+    for (const f of readdirSync(featureDir).filter(n => n.endsWith('.js')).sort()) {
+      files.push(join(featureDir, f));
+    }
+  }
+  return files.map(file => ({ file: relative(root, file), source: readFileSync(file, 'utf8') }));
+}
+
+// ---------------------------------------------------------------------------
 // Baseline — pre-existing, accepted colour pairings (e.g. this app's
 // established muted/secondary-text palette) recorded by resolved RGB pair
 // so the checker gates on *new* regressions without relitigating every
@@ -460,11 +604,17 @@ export function partitionFindings(findings, baselineKeys) {
  * and fail on charcoal with nothing to catch it. Findings are keyed by RESOLVED
  * colour, so the two sweeps produce disjoint keys and need separate baselines.
  */
-export function scanThemes(html, styleCss, darkCss, themes = THEMES) {
-  return themes.map((theme) => ({
-    theme,
-    findings: findLowContrastText(html, paletteFor(theme, styleCss, darkCss)),
-  }));
+export function scanThemes(html, styleCss, darkCss, themes = THEMES, jsSources = jsRenderSources()) {
+  return themes.map((theme) => {
+    const palette = paletteFor(theme, styleCss, darkCss);
+    return {
+      theme,
+      findings: [
+        ...findLowContrastText(html, palette).map(f => ({ ...f, file: 'index.html' })),
+        ...scanJsSources(jsSources, palette),
+      ],
+    };
+  });
 }
 
 /** Collapses findings to one entry per resolved pairing, for the baseline file. */
@@ -487,7 +637,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const html = readFileSync(INDEX_HTML, 'utf8');
   const styleCss = readFileSync(STYLE_CSS, 'utf8');
   const darkCss = readFileSync(THEME_DARK_CSS, 'utf8');
-  const sweeps = scanThemes(html, styleCss, darkCss);
+  const jsSources = jsRenderSources();
+  const sweeps = scanThemes(html, styleCss, darkCss, THEMES, jsSources);
 
   if (process.argv.includes('--write-baseline')) {
     const out = {
@@ -498,7 +649,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         "accent labels/links, low-opacity rgba() captions on dark cards, etc).",
         "Recorded here so npm run lint:contrast / tests/contrast.test.js gate on NEW",
         'regressions instead of failing on every pre-existing screen. "count" is how',
-        "many places in index.html use this exact resolved colour pairing as of the",
+        "many places (across index.html and the rendered HTML in src/) use this exact",
+        "resolved colour pairing as of the",
         "last regeneration — informational only, not enforced.",
         "",
         "Keyed per THEME: index.html is swept once against the light palette and",
@@ -515,7 +667,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     writeFileSync(BASELINE_JSON, JSON.stringify(out, null, 2) + '\n');
     for (const { theme, findings } of sweeps) {
       const n = out.themes[theme].accepted.length;
-      console.log(`  ${theme.padEnd(5)} ${String(n).padStart(4)} baseline entries (covering ${findings.length} findings)`);
+      const fromJs = findings.filter(f => f.file !== 'index.html').length;
+      console.log(`  ${theme.padEnd(5)} ${String(n).padStart(4)} baseline entries (covering ${findings.length} findings: ${findings.length - fromJs} index.html, ${fromJs} rendered)`);
     }
     console.log('Wrote scripts/contrast-baseline.json');
     process.exit(0);
@@ -530,10 +683,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       continue;
     }
     failed = true;
-    console.error(`✗ check-contrast [${theme}]: ${fresh.length} new contrast failure(s) in index.html (WCAG AA):`);
+    console.error(`✗ check-contrast [${theme}]: ${fresh.length} new contrast failure(s) (WCAG AA):`);
     for (const f of fresh) {
       console.error(
-        `  index.html:${f.line}  <${f.tag}> color:${f.textColor} on background:${f.bgColor}` +
+        `  ${f.file ?? 'index.html'}:${f.line}  <${f.tag}> color:${f.textColor} on background:${f.bgColor}` +
         `  ratio=${f.ratio}:1 (needs ${f.required}:1)`
       );
     }
@@ -541,7 +694,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   if (!failed) {
-    console.log(`✓ check-contrast: no new WCAG AA contrast failures in index.html — ${notes.join(', ')}`);
+    console.log(`✓ check-contrast: no new WCAG AA contrast failures — ${notes.join(', ')}`);
     process.exit(0);
   }
   console.error('Fix the colour, add it to scripts/contrast-baseline.json if it matches an already-accepted pairing, or mark a reviewed exception with `/* contrast-ok */`.');

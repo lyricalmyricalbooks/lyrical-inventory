@@ -398,6 +398,50 @@ tr.hist-row:hover {
 .header-menu-item.active .hmi-label{color:var(--gold3);}
 .header-menu-item .hmi-sub{font-size:10px;color:rgba(255,255,255,.42);letter-spacing:.01em;white-space:nowrap;}
 
+/* ── ONE-TAP THEME TOGGLE ──────────────────────────────────────────────────
+   Sits in the header rail next to the account avatar. Lives on the ink header
+   in BOTH themes, so like the segmented control below it needs no dark
+   override — it is styled once against dark chrome.
+
+   Deliberately 34px to line up with .acct-avatar, but padded out to a 44px
+   hit area (AGENTS.md §3) with an ::after overlay rather than a bigger box, so
+   the header rail's rhythm is unchanged. */
+.theme-toggle-btn{
+  position:relative;
+  flex-shrink:0;
+  width:34px;height:34px;
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:50%;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.14);
+  color:var(--gold3);
+  cursor:pointer;
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+.theme-toggle-btn::after{
+  /* Invisible 44px target centred on the 34px chip. */
+  content:'';position:absolute;
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  width:var(--target-min);height:var(--target-min);
+}
+.theme-toggle-btn:hover{
+  background:rgba(255,255,255,.12);
+  border-color:var(--gold);
+  color:var(--gold2);
+}
+.theme-toggle-btn .ttb-ico{
+  font-size:var(--text-md);
+  line-height:1;
+  /* The glyph swaps between ☾ and ☀ on click; a short rotate makes the change
+     legible as a state change rather than a flicker. */
+  transition:transform var(--dur-base) var(--ease-spring);
+}
+.theme-toggle-btn:hover .ttb-ico{transform:rotate(-18deg) scale(1.08);}
+.theme-toggle-btn:active .ttb-ico{transform:scale(.9);}
+
 /* ── APPEARANCE CONTROL ────────────────────────────────────────────────────
    Auto / Light / Dark, rendered inside the account dropdown and the publisher
    sidebar's account menu. Both hosts are ink panels in BOTH themes, so this

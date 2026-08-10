@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import {
   findLowContrastText, parseRootVars, parseDarkVars, paletteFor, scanThemes,
   contrastRatio, makeColorResolver, loadBaseline, partitionFindings,
+  extractTemplateLiterals, blankInterpolations, htmlFragments,
+  scanJsSources, jsRenderSources,
   INDEX_HTML, STYLE_CSS, THEME_DARK_CSS, THEMES,
 } from '../scripts/check-contrast.mjs';
 
@@ -103,12 +105,110 @@ describe('dark palette resolution', () => {
   });
 });
 
+describe('extractTemplateLiterals', () => {
+  it('pulls a simple literal', () => {
+    expect(extractTemplateLiterals('const a = `<div>hi</div>`;').map(l => l.text))
+      .toEqual(['`<div>hi</div>`']);
+  });
+
+  // The reason this is hand-rolled rather than a regex: a regex stopping at the
+  // first backtick truncates the outer literal mid-tag and invents markup.
+  it('keeps a nested literal inside an interpolation with its outer literal', () => {
+    const js = 'x = `<ul>${xs.map(x => `<li>${x}</li>`).join("")}</ul>`;';
+    const [outer] = extractTemplateLiterals(js);
+    expect(outer.text.startsWith('`<ul>')).toBe(true);
+    expect(outer.text.endsWith('</ul>`')).toBe(true);
+  });
+
+  it('ignores backticks inside strings and comments', () => {
+    expect(extractTemplateLiterals('const s = "a ` b"; // ` trailing')).toEqual([]);
+    expect(extractTemplateLiterals('/* ` */ const s = 1;')).toEqual([]);
+  });
+
+  it('reports each literal\'s offset so line numbers can be recovered', () => {
+    const js = 'a;\nb;\nconst t = `<p>x</p>`;';
+    expect(js.slice(0, extractTemplateLiterals(js)[0].index).split('\n').length).toBe(3);
+  });
+});
+
+describe('blankInterpolations', () => {
+  it('blanks ${…} but preserves length and newlines so lines stay exact', () => {
+    const src = '`a${ x\ny }b`';
+    const out = blankInterpolations(src);
+    expect(out).toBe('`a    \n   b`');
+    expect(out).toHaveLength(src.length);
+    expect(out.split('\n')).toHaveLength(src.split('\n').length);
+  });
+
+  it('handles nested braces inside an interpolation', () => {
+    expect(blankInterpolations('${ {a:1} }x').trim()).toBe('x');
+  });
+
+  // Blanking is the honest move: the value is unknowable statically, and an
+  // unresolvable colour is already treated as "unknown" and skipped.
+  it('turns an interpolated colour into something unresolvable', () => {
+    const frag = blankInterpolations('<div style="color:${c};background:#fff">t</div>');
+    expect(findLowContrastText(frag, cssVars, { rootBg: null, rootText: null })).toEqual([]);
+  });
+});
+
+describe('htmlFragments', () => {
+  it('keeps HTML-ish literals and drops the rest', () => {
+    const js = 'const a = `just text`; const b = `<div style="color:red">x</div>`;';
+    expect(htmlFragments(js).map(f => f.fragment)).toEqual(['`<div style="color:red">x</div>`']);
+  });
+});
+
+describe('scanJsSources', () => {
+  const scan = (source) => scanJsSources([{ file: 'f.js', source }], cssVars);
+
+  it('flags a self-contained bad pairing inside one fragment', () => {
+    expect(scan('x = `<div style="background:var(--cream);color:var(--cream)">t</div>`;'))
+      .toHaveLength(1);
+  });
+
+  // The design decision this pins down. A fragment's real parent lives
+  // elsewhere — a POS row is injected into a card, a menu item into an ink
+  // panel — so assuming the page background would flag every light-on-dark
+  // label in the app. Unknown root means "only judge what the fragment itself
+  // establishes".
+  it('does NOT guess at a background the fragment never sets', () => {
+    expect(scan('x = `<div style="color:var(--on-inverse)">on some dark panel</div>`;'))
+      .toEqual([]);
+  });
+
+  it('inherits a background set higher up in the SAME fragment', () => {
+    expect(scan('x = `<div style="background:var(--surface-card)"><span style="color:var(--cream)">t</span></div>`;'))
+      .toHaveLength(1);
+  });
+
+  it('reports the line in the original file, not in the fragment', () => {
+    // Anchors to where the TAG opens (line 4), not where the style attribute
+    // continues onto line 5 — matches how the index.html sweep reports.
+    const js = '\n\n\nx = `<div\n  style="background:var(--cream);color:var(--cream)">t</div>`;';
+    expect(scan(js)[0].line).toBe(4);
+  });
+
+  it('covers main.js and every feature module', () => {
+    const files = jsRenderSources().map(s => s.file);
+    expect(files).toContain('src/main.js');
+    expect(files.filter(f => f.startsWith('src/features/')).length).toBeGreaterThan(2);
+  });
+});
+
 describe('contrast baseline', () => {
   const html = readFileSync(INDEX_HTML, 'utf8');
   const sweeps = scanThemes(html, css, darkCss);
 
   it('sweeps every shipped theme', () => {
     expect(sweeps.map(s => s.theme)).toEqual([...THEMES]);
+  });
+
+  it('covers the rendered HTML, not just index.html', () => {
+    // index.html is the skeleton; the POS cart, order history and expense
+    // ledger are template literals that never appear in it.
+    const files = new Set(sweeps.flatMap(s => s.findings).map(f => f.file));
+    expect([...files].some(f => f && f.startsWith('src/'))).toBe(true);
   });
 
   it.each(THEMES)('keeps index.html free of NEW WCAG AA contrast failures [%s]', (theme) => {
@@ -139,11 +239,28 @@ describe('contrast baseline', () => {
     expect(findings.length).toBeGreaterThan(50);
   });
 
-  it('keeps the light and dark baselines separate', () => {
-    // Keys are RESOLVED colour pairs, so the two sweeps can never share one.
-    // A shared key would mean a light exemption is silencing dark markup.
+  it('only shares a baseline key where the markup is theme-independent', () => {
+    // Keys are RESOLVED colour pairs. Token-driven markup therefore resolves
+    // differently per theme and can never share a key — a shared key would mean
+    // a light exemption silencing dark markup.
+    //
+    // The exception, and the reason this isn't simply "disjoint": the rendered
+    // sweep also covers markup that is deliberately theme-independent — the
+    // invoice and email templates (printed/emailed documents) and the
+    // mock-spreadsheet skeuomorph. Those are literal-on-literal, identical in
+    // both themes, and legitimately resolve to the same pair twice.
     const light = loadBaseline(undefined, 'light');
     const dark = loadBaseline(undefined, 'dark');
-    expect([...dark].filter(k => light.has(k))).toEqual([]);
+    const shared = [...dark].filter(k => light.has(k));
+
+    const byKey = new Map();
+    for (const { findings } of sweeps) for (const f of findings) byKey.set(f.key, f);
+    for (const key of shared) {
+      const f = byKey.get(key);
+      expect(
+        `${f.textColor} on ${f.bgColor}`,
+        `shared key ${key} uses a token, so it should differ per theme`,
+      ).not.toContain('var(--');
+    }
   });
 });

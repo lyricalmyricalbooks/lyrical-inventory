@@ -4279,13 +4279,13 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           <label style="font-size:9px; font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:8px;">Current Store Setup</label>
           <div style="display:flex; gap:6px; align-items:center; margin-bottom:10px;">
             <div style="flex:1;">
-              <span style="font-size:9px; color:var(--text4); display:block; margin-bottom:2px;">Base ($)</span>
+              <span style="font-size:9px; color:var(--text2); display:block; margin-bottom:2px;">Base ($)</span>
               <input type="number" step="0.50" min="0" value="${currentBase.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'base', this.value)"
                 style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
             </div>
             <div style="flex:1;">
-              <span style="font-size:9px; color:var(--text4); display:block; margin-bottom:2px;">Add-on ($)</span>
+              <span style="font-size:9px; color:var(--text2); display:block; margin-bottom:2px;">Add-on ($)</span>
               <input type="number" step="0.50" min="0" value="${currentAddon.toFixed(2)}" 
                 onblur="updateManualShippingRates('${meta.key}', 'addon', this.value)"
                 style="width:100%; padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:'DM Mono',monospace; outline:none;" />
@@ -4372,7 +4372,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             </div>
             <div class="form-group" style="flex:1; margin:0;">
               <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
-                Manual Weight <span style="font-weight:400; text-transform:none; color:var(--text4);">(kg)</span>
+                Manual Weight <span style="font-weight:400; text-transform:none; color:var(--text3);">(kg)</span>
               </label>
               <input type="number" id="sim-weight-override" placeholder="Auto-calculated" step="0.05" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
             </div>

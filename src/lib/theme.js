@@ -125,10 +125,28 @@ export function applyThemeToDocument(preference, { document: doc = globalThis.do
 export const THEME_LABELS = { system: 'Auto', light: 'Light', dark: 'Dark' };
 
 /**
- * Order used by the one-tap cycle (the keyboard shortcut and the header
- * button): Auto → Light → Dark → Auto.
+ * Order used by the three-way cycle: Auto → Light → Dark → Auto.
  */
 export function nextThemePreference(preference) {
   const i = THEME_PREFERENCES.indexOf(normalizeThemePreference(preference));
   return THEME_PREFERENCES[(i + 1) % THEME_PREFERENCES.length];
+}
+
+/**
+ * What the one-tap header button should set, given the theme currently ON
+ * SCREEN (not the stored preference).
+ *
+ * Two decisions are baked in here rather than at the call site, because both
+ * are easy to get wrong and neither is obvious from the outside:
+ *
+ *  - It reads the RESOLVED theme. Under a 'system' preference the stored value
+ *    is 'system', which says nothing about what the user is looking at; a
+ *    toggle keyed off the preference would flip to 'light' for someone already
+ *    staring at a dark screen.
+ *  - It always returns an EXPLICIT preference, never 'system'. Tapping a
+ *    light/dark button IS a choice; handing control back to the OS would quietly
+ *    undo it at sunset. 'Auto' stays reachable in the three-way control.
+ */
+export function oppositeThemePreference(resolvedTheme) {
+  return resolvedTheme === 'dark' ? 'light' : 'dark';
 }

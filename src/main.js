@@ -42,6 +42,7 @@ import {
   writeThemePreference,
   applyThemeToDocument,
   nextThemePreference,
+  oppositeThemePreference,
 } from './lib/theme.js';
 import { escapeHtml } from './lib/html.js';
 import {
@@ -1846,6 +1847,10 @@ window.showToast = showToast;
 // segmented control wherever it appears, keep it in sync, and re-resolve when
 // the OS flips while the app is open.
 let themePreference = readThemePreference();
+// The theme actually RENDERED. Distinct from themePreference: under 'system'
+// it is whatever the OS says, and the header toggle has to flip relative to
+// what's on screen, not relative to the stored preference.
+let resolvedTheme = 'light';
 
 const THEME_OPTION_ICONS = { system: '◐', light: '☀', dark: '☾' };
 const THEME_SUB_COPY = {
@@ -1886,6 +1891,22 @@ function renderThemeControls() {
   document.querySelectorAll('#theme-sub-header, #theme-sub-side').forEach((el) => {
     el.textContent = THEME_SUB_COPY[themePreference];
   });
+
+  // The one-tap toggle advertises its DESTINATION, not the current state — a
+  // moon means "go dark", which is what a user reaching for it wants to know.
+  const toggle = document.getElementById('theme-toggle-btn');
+  if (toggle) {
+    const goingDark = resolvedTheme !== 'dark';
+    const label = goingDark ? 'Switch to dark mode' : 'Switch to light mode';
+    const icon = toggle.querySelector('.ttb-ico');
+    if (icon) icon.textContent = goingDark ? '☾' : '☀';
+    toggle.title = label;
+    toggle.setAttribute('aria-label', label);
+    // aria-pressed reports the STATE (dark is on), which is the opposite of
+    // what the icon shows — screen readers announce state, sighted users read
+    // the destination.
+    toggle.setAttribute('aria-pressed', resolvedTheme === 'dark' ? 'true' : 'false');
+  }
 }
 
 /**
@@ -1897,6 +1918,7 @@ export function setThemePreference(preference, { announce = true } = {}) {
   const changed = next !== themePreference;
   themePreference = next;
   const resolved = applyThemeToDocument(next);
+  resolvedTheme = resolved;
   const stored = writeThemePreference(next);
   renderThemeControls();
   if (announce && changed) {
@@ -1913,6 +1935,11 @@ export function cycleThemePreference() {
   return setThemePreference(nextThemePreference(themePreference));
 }
 
+/** The header button: flip to the opposite of what is on screen. */
+export function toggleTheme() {
+  return setThemePreference(oppositeThemePreference(resolvedTheme));
+}
+
 /**
  * Boot: apply the stored preference, then keep following the OS for as long as
  * the preference is 'system'. matchMedia fires while the app is open, which is
@@ -1920,13 +1947,15 @@ export function cycleThemePreference() {
  * mid-event should not leave the operator on a white screen.
  */
 function initTheme() {
-  applyThemeToDocument(themePreference);
+  resolvedTheme = applyThemeToDocument(themePreference);
   renderThemeControls();
   try {
     const media = window.matchMedia?.('(prefers-color-scheme: dark)');
     media?.addEventListener?.('change', (e) => {
       if (themePreference !== 'system') return;
-      applyThemeToDocument('system', { prefersDark: e.matches });
+      resolvedTheme = applyThemeToDocument('system', { prefersDark: e.matches });
+      // Repaint so the toggle's icon follows the OS flip too.
+      renderThemeControls();
     });
   } catch (_) { /* matchMedia unavailable — the stored preference still applies */ }
 
@@ -8696,7 +8725,7 @@ function renderArtistTransfers() {
           ${t.status === 'pending' ? `<span class="pill gray" style="font-size:10px;">Pending Approval</span>` : ''}
         </div>
         <div style="font-size:12px;color:var(--text3);">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong style="color:var(--amber);">${fmt(t.total, cur)} held</strong></div>
-        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${escapeHtml(t.notes) || '—'}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">${escapeHtml(t.notes) || '—'}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${payHtml}
@@ -8745,7 +8774,7 @@ function renderPendingExpenses() {
           <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${fmt(e.amount, cur)}</span>
         </div>
         <div style="font-size:12px;color:var(--text3);">${fmtD(e.date)} · <span style="background:var(--cream3);padding:1px 7px;border-radius:100px;font-size:10px;">${escapeHtml(e.cat)}</span> · <strong style="color:var(--text2);">${escapeHtml(e.desc)}</strong></div>
-        <div style="font-size:11px;color:var(--text4);margin-top:3px;">${escapeHtml(e.ref) || ''}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">${escapeHtml(e.ref) || ''}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${payHtml}
@@ -21992,7 +22021,7 @@ function exposeLegacyInlineHandlers() {
     updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange, onShipRecoModeChange, onShipInsightsToggle,
     getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
     toggleIntegrationSection,
-    setThemePreference, cycleThemePreference
+    setThemePreference, cycleThemePreference, toggleTheme
   });
 }
 

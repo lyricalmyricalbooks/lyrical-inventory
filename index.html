@@ -423,6 +423,16 @@
     </div>
     <div class="hsep" id="kpi-hsep"></div>
 
+    <!-- One-tap light/dark. The Auto option lives in the account menu's
+         three-way control; this is the fast path, so it flips straight between
+         the two explicit themes without opening anything. Icon, title and
+         aria-label are all set by renderThemeControls(). -->
+    <button type="button" class="theme-toggle-btn" id="theme-toggle-btn"
+            onclick="toggleTheme()" aria-pressed="false"
+            title="Switch to dark mode" aria-label="Switch to dark mode">
+      <span class="ttb-ico" aria-hidden="true">☾</span>
+    </button>
+
     <!-- Account avatar + sync status (corner dot reflects sync state) -->
     <div class="header-menu" id="hmenu-account">
       <button type="button" class="header-menu-trigger acct-trigger" onclick="toggleHeaderMenu('account')" aria-haspopup="true" aria-expanded="false" title="Account &amp; sync status">
