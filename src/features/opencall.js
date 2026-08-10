@@ -1138,7 +1138,7 @@ function renderOpenCall() {
 
     const emailCell = c.email
       ? (_isCustomerSuppressed(c.email)
-        ? `<span style="text-decoration:line-through;color:var(--text4);">${escapeHtml(c.email)}</span>`
+        ? `<span style="text-decoration:line-through;color:var(--text3);">${escapeHtml(c.email)}</span>`
         : `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>`)
       : '<span>no email</span>';
 

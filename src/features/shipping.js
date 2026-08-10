@@ -4380,7 +4380,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
 
           <div class="form-group" style="margin:0;">
             <label style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--text3); margin-bottom:4px; display:block;">
-              Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text4);">(optional)</span>
+              Custom Postage Override <span style="font-weight:400; text-transform:none; color:var(--text3);">(optional)</span>
             </label>
             <input type="number" id="sim-postage-override" placeholder="Use default band fallback" step="0.50" min="0" oninput="updateShippingSimulation()" style="width:100%; padding:8px 12px; font-size:12px; border:1px solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); outline:none; text-align:right; font-family:'DM Mono',monospace;" />
           </div>

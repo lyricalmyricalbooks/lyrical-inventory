@@ -5,6 +5,7 @@ import {
   contrastRatio, makeColorResolver, loadBaseline, partitionFindings,
   extractTemplateLiterals, blankInterpolations, htmlFragments,
   scanJsSources, jsRenderSources,
+  findFaintTierMisuse, findThemeBlindTextColours, DOCUMENT_BUILDERS,
   INDEX_HTML, STYLE_CSS, THEME_DARK_CSS, THEMES,
 } from '../scripts/check-contrast.mjs';
 
@@ -193,6 +194,79 @@ describe('scanJsSources', () => {
     const files = jsRenderSources().map(s => s.file);
     expect(files).toContain('src/main.js');
     expect(files.filter(f => f.startsWith('src/features/')).length).toBeGreaterThan(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The faint tier (--text4) measures 1.92:1 on the page — below every WCAG
+// threshold, including the 3:1 floor for non-text. It cannot hold anything a
+// publisher has to read; it exists for em-dashes and chevrons.
+// ---------------------------------------------------------------------------
+
+describe('faint tier is reviewed, not sprayed', () => {
+  const sources = () => [
+    { file: 'src/style.css', source: css },
+    { file: 'src/styles/theme-dark.css', source: darkCss },
+    ...jsRenderSources(),
+  ];
+
+  it('has no unreviewed --text4 text anywhere', () => {
+    const found = findFaintTierMisuse(sources());
+    const detail = found.map(f => `  ${f.file}:${f.line} ${f.snippet}`).join('\n');
+    expect(found, `Unreviewed faint-tier text:\n${detail}`).toEqual([]);
+  });
+
+  it('catches an unmarked use', () => {
+    // Guards the guard — zero above must mean reviewed, not unseen.
+    expect(findFaintTierMisuse([{ file: 'x.css', source: '.a{color:var(--text4);}' }])).toHaveLength(1);
+  });
+
+  it('accepts a marked one, on the line or in the comment above', () => {
+    expect(findFaintTierMisuse([{ file: 'x.css', source: '.a{color:var(--text4); /* faint-ok */}' }])).toEqual([]);
+    expect(findFaintTierMisuse([{ file: 'x.css', source: '/* faint-ok: a chevron */\n.a{\ncolor:var(--text4);}' }])).toEqual([]);
+  });
+
+  it('does not confuse --text4 with the tiers that may hold content', () => {
+    expect(findFaintTierMisuse([{ file: 'x.css', source: '.a{color:var(--text3);}' }])).toEqual([]);
+    expect(findFaintTierMisuse([{ file: 'x.css', source: '.a{border-color:var(--text4);}' }])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A hardcoded dark colour cannot follow the theme. Unlike a token there is no
+// cascade to save it, so on a flipping surface it simply vanishes.
+// ---------------------------------------------------------------------------
+
+describe('rendered HTML carries no theme-blind dark text', () => {
+  const darkVars = paletteFor('dark', css, darkCss);
+
+  it('is clean outside the document builders', () => {
+    const found = findThemeBlindTextColours(jsRenderSources(), darkVars);
+    const detail = found.map(f => `  ${f.file}:${f.line} color:${f.colour} in ${f.owner}`).join('\n');
+    expect(found, `Theme-blind dark text in app UI:\n${detail}`).toEqual([]);
+  });
+
+  it('catches a dark literal in an unlisted function', () => {
+    const src = 'function renderThing() {\n  return `<div style="color:#111">x</div>`;\n}';
+    expect(findThemeBlindTextColours([{ file: 'f.js', source: src }], darkVars)).toHaveLength(1);
+  });
+
+  it('allows one inside a named document builder', () => {
+    // An invoice a store receives is ink on white whatever the operator's
+    // screen is set to, and var() does not survive a mail client at all.
+    const src = 'function buildInvoiceEmailHTML() {\n  return `<div style="color:#111">x</div>`;\n}';
+    expect(findThemeBlindTextColours([{ file: 'f.js', source: src }], darkVars)).toEqual([]);
+  });
+
+  it('ignores a LIGHT literal, which reads on the dark surface', () => {
+    const src = 'function renderThing() {\n  return `<div style="color:#f0c060">x</div>`;\n}';
+    expect(findThemeBlindTextColours([{ file: 'f.js', source: src }], darkVars)).toEqual([]);
+  });
+
+  it('keeps the allowlist to real document and console builders', () => {
+    // If this grows, something is being excused rather than fixed.
+    expect(DOCUMENT_BUILDERS.size).toBeLessThanOrEqual(14);
+    expect(DOCUMENT_BUILDERS.has('buildInvoiceEmailHTML')).toBe(true);
   });
 });
 
