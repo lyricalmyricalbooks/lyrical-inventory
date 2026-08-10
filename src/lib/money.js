@@ -206,20 +206,39 @@ export function darkenColor(hex, percent) {
   return `#${rHex}${gHex}${bHex}`;
 }
 
-export function getContrastSafeText(hex) {
-  if (!hex) return 'var(--ink)';
+/**
+ * A book's accent colour, adjusted so it stays readable as TEXT on the app's
+ * page/card surface.
+ *
+ * `onDark` is which surface it will sit on, and it inverts the whole rule.
+ * The light-mode job is "a pale accent would wash out, so darken it"; the
+ * dark-mode job is the exact opposite — a deep navy or maroon cover accent
+ * disappears against a near-black card and has to be LIGHTENED instead.
+ * Getting this wrong is silent: the text renders, it just cannot be read.
+ *
+ * Callers pass the resolved theme (see --book-accent-text in src/main.js),
+ * and must recompute when the theme changes — the value is baked into a custom
+ * property, so it does not follow the cascade on its own.
+ */
+export function getContrastSafeText(hex, onDark = false) {
+  if (!hex) return onDark ? 'var(--on-inverse)' : 'var(--ink)';
   const color = hex.charAt(0) === '#' ? hex.substring(1) : hex;
-  if (color.length !== 6) return 'var(--ink)';
+  if (color.length !== 6) return onDark ? 'var(--on-inverse)' : 'var(--ink)';
   const r = parseInt(color.substring(0, 2), 16);
   const g = parseInt(color.substring(2, 4), 16);
   const b = parseInt(color.substring(4, 6), 16);
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
+  if (onDark) {
+    // Lift anything that isn't already bright enough to read on charcoal. The
+    // threshold is higher than the light-mode one because mid-tones fail
+    // against near-black long before they fail against cream.
+    return luminance < 0.62 ? lightenColor(hex, 0.55) : hex;
+  }
   if (luminance > 0.5) {
     return darkenColor(hex, 0.35);
-  } else {
-    return hex;
   }
+  return hex;
 }
 
 

@@ -357,19 +357,60 @@ describe('darkenColor', () => {
 });
 
 describe('getContrastSafeText', () => {
-  it('returns a darkened color for light accents', () => {
-    const result = getContrastSafeText('#c8913a');
-    expect(result).not.toBe('#c8913a');
-    expect(result.startsWith('#')).toBe(true);
+  // Relative luminance, for asserting on direction rather than exact hexes.
+  const lum = (hex) => {
+    const c = hex.replace('#', '');
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(c.slice(i, i + 2), 16));
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  };
+
+  describe('on a light surface (default)', () => {
+    it('returns a darkened color for light accents', () => {
+      const result = getContrastSafeText('#c8913a');
+      expect(result).not.toBe('#c8913a');
+      expect(result.startsWith('#')).toBe(true);
+    });
+
+    it('returns the same color for dark accents', () => {
+      expect(getContrastSafeText('#3a7cc8')).toBe('#3a7cc8');
+    });
+
+    it('handles edge cases gracefully', () => {
+      expect(getContrastSafeText('')).toBe('var(--ink)');
+      expect(getContrastSafeText(null)).toBe('var(--ink)');
+    });
   });
 
-  it('returns the same color for dark accents', () => {
-    expect(getContrastSafeText('#3a7cc8')).toBe('#3a7cc8');
+  describe('on a dark surface', () => {
+    // The rule inverts. Light mode says "a pale accent washes out, darken it";
+    // dark mode says the opposite — a deep cover accent disappears against
+    // charcoal and has to be lifted. .book-strip-title shipped unreadable
+    // because this distinction didn't exist.
+    it('LIGHTENS a dark accent instead of leaving it', () => {
+      const out = getContrastSafeText('#3a7cc8', true);
+      expect(out).not.toBe('#3a7cc8');
+      expect(lum(out)).toBeGreaterThan(lum('#3a7cc8'));
+    });
+
+    it('lifts even a near-black accent clear of the surface', () => {
+      expect(lum(getContrastSafeText('#0e0c0a', true))).toBeGreaterThan(0.4);
+    });
+
+    it('leaves an already-bright accent alone', () => {
+      expect(getContrastSafeText('#f7d68e', true)).toBe('#f7d68e');
+    });
+
+    it('falls back to light-on-dark text for a missing accent', () => {
+      expect(getContrastSafeText('', true)).toBe('var(--on-inverse)');
+      expect(getContrastSafeText(null, true)).toBe('var(--on-inverse)');
+    });
   });
 
-  it('handles edge cases gracefully', () => {
-    expect(getContrastSafeText('')).toBe('var(--ink)');
-    expect(getContrastSafeText(null)).toBe('var(--ink)');
+  it('leaves light-mode output byte-identical (onDark defaults to false)', () => {
+    // The dark path must be additive: every existing caller is unchanged.
+    for (const hex of ['#c8913a', '#3a7cc8', '#e91e8c', '#f7d68e', '#1e5631']) {
+      expect(getContrastSafeText(hex)).toBe(getContrastSafeText(hex, false));
+    }
   });
 });
 

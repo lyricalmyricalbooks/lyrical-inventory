@@ -567,6 +567,85 @@ export function jsRenderSources(root = join(__dirname, '..')) {
 }
 
 // ---------------------------------------------------------------------------
+// Surface tokens used as text colours
+//
+// --ink* / --cream* / --surface-card name a SURFACE, and both families flip
+// between themes. As a TEXT colour one is correct only on a fill that stays
+// light in both — a gold button, an accent chip. On anything that flips, the
+// text inverts with its own background and becomes invisible: `.book-strip-title`
+// shipped as `color:var(--ink)` and rendered near-black on a dark card.
+//
+// The walker above cannot catch this — it reads inline styles and a small class
+// table, not arbitrary CSS rules. This is a separate, rule-level check.
+// ---------------------------------------------------------------------------
+
+const SURFACE_TOKEN_RE = /^(ink[2-4]?|cream[2-4]?|surface-card|surface-page|surface-sunken|surface-raised|surface-inset)$/;
+
+/** Strips comments so prose about a rule isn't mistaken for the rule. */
+function stripCssComments(css) {
+  return css.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '));
+}
+
+/**
+ * Flags rules that use a surface token as `color` without naming, in the SAME
+ * rule, a background that stays readable in the dark palette.
+ *
+ * Requiring the background to be co-located is deliberate. It could instead be
+ * resolved through the cascade, but then a rule's correctness would depend on
+ * another rule somewhere else in an 8,000-line stylesheet — which is exactly
+ * how the bug got in. Repeating the fill is one line and makes the rule true on
+ * its own terms.
+ *
+ * Worst-case across a gradient's stops: text has to read along the whole fill,
+ * not just at the light end.
+ */
+export function findSurfaceTokenTextMisuse(css, darkVars) {
+  const resolve = makeColorResolver(darkVars);
+  const source = stripCssComments(css);
+  const findings = [];
+
+  for (const m of source.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+    const [, rawSelector, body] = m;
+    const selector = rawSelector.trim().split('\n').pop().trim();
+    if (selector.startsWith(':root')) continue; // definitions, not usage
+
+    for (const c of body.matchAll(/(?<!-)color\s*:\s*var\(\s*--([\w-]+)\s*\)/g)) {
+      const token = c[1];
+      if (!SURFACE_TOKEN_RE.test(token)) continue;
+
+      const line = css.slice(0, m.index).split('\n').length;
+      const text = resolve(`var(--${token})`);
+      const bgDecl = body.match(/background(?:-color)?\s*:\s*([^;]+)/)?.[1];
+
+      if (!bgDecl) {
+        findings.push({
+          line, selector, token, reason: 'no background in the same rule',
+        });
+        continue;
+      }
+
+      // Every colour the fill is built from — a gradient has several.
+      const stops = [...bgDecl.matchAll(/var\(\s*--[\w-]+\s*\)|#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g)]
+        .map(s => resolve(s[0]))
+        .filter(Boolean);
+
+      if (!stops.length) {
+        findings.push({ line, selector, token, reason: `background does not resolve: ${bgDecl.trim()}` });
+        continue;
+      }
+      const worst = Math.min(...stops.map(stop => contrastRatio(text, stop)));
+      if (worst < WCAG_AA_NORMAL) {
+        findings.push({
+          line, selector, token,
+          reason: `fill is not light in dark mode (worst stop ${Math.round(worst * 100) / 100}:1)`,
+        });
+      }
+    }
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
 // Baseline — pre-existing, accepted colour pairings (e.g. this app's
 // established muted/secondary-text palette) recorded by resolved RGB pair
 // so the checker gates on *new* regressions without relitigating every
@@ -674,8 +753,28 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   }
 
-  let failed = false;
+  // Rule-level guard, dark palette only — that's the theme the misuse breaks in.
+  const darkVars = paletteFor('dark', styleCss, darkCss);
+  const misuse = [
+    ...findSurfaceTokenTextMisuse(styleCss, darkVars).map(f => ({ ...f, file: 'src/style.css' })),
+    ...findSurfaceTokenTextMisuse(darkCss, darkVars).map(f => ({ ...f, file: 'src/styles/theme-dark.css' })),
+  ];
+
+  let failed = misuse.length > 0;
   const notes = [];
+
+  if (misuse.length) {
+    console.error(`✗ check-contrast: ${misuse.length} rule(s) use a surface token as a text colour:`);
+    for (const f of misuse) {
+      console.error(`  ${f.file}:${f.line}  ${f.selector}  color:var(--${f.token}) — ${f.reason}`);
+    }
+    console.error('');
+    console.error('--ink*/--cream* name a SURFACE and flip between themes. As a text colour they');
+    console.error('are correct only on a fill that stays light in BOTH (a gold button, an accent');
+    console.error('chip) — and the rule must name that fill itself. On a surface that flips, use');
+    console.error('--text / --text2 (identical in light mode) or --on-inverse for ink panels.');
+    console.error('');
+  }
   for (const { theme, findings } of sweeps) {
     const { fresh, known } = partitionFindings(findings, loadBaseline(BASELINE_JSON, theme));
     if (fresh.length === 0) {
