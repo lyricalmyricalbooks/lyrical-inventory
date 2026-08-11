@@ -568,7 +568,11 @@ tr.hist-row:hover {
 .sync-label b{color:rgba(255,255,255,.55);}
 .sync-time{color:rgba(255,255,255,.18);font-size:10px;}
 .sheets-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:100px;font-size:10px;font-weight:600;letter-spacing:.04em;background:rgba(74,222,128,.12);color:var(--emerald-bright);border:1px solid rgba(74,222,128,.2);white-space:nowrap;}
-.sheets-badge.off{background:rgba(255,255,255,.05);color:rgba(255,255,255,.3);border-color:rgba(255,255,255,.08);}
+.sheets-badge.off{background:var(--status-neutral-bg);color:var(--status-neutral);border-color:var(--border);}
+/* The account panel is an ink surface in both themes, so the header copy of
+   this badge keeps a white-alpha treatment — the token version would put a
+   pale chip on dark chrome. */
+.acct-status .sheets-badge.off{background:rgba(255,255,255,.1);color:rgba(255,255,255,.62);border-color:rgba(255,255,255,.16);}
 
 /* Custom Filter Pills & Segmented Controls */
 .shipping-pnl-toolbar {
@@ -3337,8 +3341,8 @@ tr.hist-row:hover {
   .pub-shell .pub-tag{font-size:8.5px;font-weight:600;color:var(--gold2);letter-spacing:.2em;text-transform:uppercase;}
 
   .pub-shell .pub-nav{display:flex;flex-direction:column;gap:2px;}
-  .pub-shell .o3-grouplabel{font-size:8.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.28);padding:12px 10px 6px;}
-  .pub-shell .o3-subgrouplabel{font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.2);padding:8px 10px 3px;}
+  .pub-shell .o3-grouplabel{font-size:8.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.52);padding:12px 10px 6px;}
+  .pub-shell .o3-subgrouplabel{font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5);padding:8px 10px 3px;}
 
   .pub-shell .snav{
     display:flex;align-items:center;gap:11px;width:100%;
@@ -5620,7 +5624,7 @@ tr.hist-row:hover {
 .profile-tab {
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.58);
   font-family: 'Syne', sans-serif;
   font-size: 11px;
   font-weight: 700;
