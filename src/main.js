@@ -9303,15 +9303,17 @@ function renderLedger() {
     if (e.status === 'written off') return '<span class="pill red">Written off</span>';
     return `<span class="pill gray">${e.status}</span>`;
   };
-  // Map ledger indices so edit buttons can reference them correctly (ledger is displayed reversed)
-  const indexed = s.ledger.map((e, i) => ({ e, i }));
-  b.innerHTML = [...indexed].reverse().map(({ e, i }) => {
+  // ⚡ Bolt Optimization: Use backward loop to avoid multiple array allocations from .map().reverse().map()
+  let html = '';
+  for (let i = s.ledger.length - 1; i >= 0; i--) {
+    const e = s.ledger[i];
     const voided = e.voided ? ' voided' : '';
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     // Cross-link Sale rows back to the invoice that bills them (absent id → '').
     const invBadge = e.type === 'Sale' ? invoiceBadgeHTML(e.invoiceId, e.invoiceNum) : '';
-    return `<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
-  }).join('');
+    html += `<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
+  }
+  b.innerHTML = html;
 }
 
 // Export the current book's consignment ledger (shipments, sales, returns) as a
