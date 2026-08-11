@@ -375,6 +375,39 @@ describe('surface tokens are never text colours on a flipping surface', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Open Call ships its own scoped design system: #opencall-body defines --oc-*
+// and every card in that layer consumes it. It was the last screen rendering as
+// a stack of white cards on charcoal, and re-pointing this one block fixed all
+// eight panels at once — which is exactly why it needs a guard. A new --oc-*
+// token added to the light block and forgotten here puts a light island back.
+// ---------------------------------------------------------------------------
+
+describe('Open Call scoped tokens are themed', () => {
+  const lightBlock = styleCss.match(/#opencall-body\s*\{([^}]*)\}/)?.[1] ?? '';
+  const darkBlock = darkCss.match(/\.theme-dark #opencall-body\s*\{([^}]*)\}/)?.[1] ?? '';
+  const names = (block) => [...block.matchAll(/--(oc-[\w-]+)\s*:/g)].map((m) => m[1]).sort();
+
+  it('defines a scoped block in both themes', () => {
+    expect(lightBlock, '#opencall-body must define --oc-* in style.css').toBeTruthy();
+    expect(darkBlock, '.theme-dark #opencall-body must re-point them').toBeTruthy();
+  });
+
+  it('re-points every --oc-* token the light block defines', () => {
+    const missing = names(lightBlock).filter((n) => !names(darkBlock).includes(n));
+    expect(missing, `dark theme is missing: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('makes the surfaces dark rather than near-white', () => {
+    // The light values are rgba(255,255,255,.78/.94) — opaque enough to read as
+    // white panels. On dark they must be a low-alpha LIGHT wash instead.
+    const surfaces = [...darkBlock.matchAll(/--oc-surface[\w-]*:\s*rgba\([^)]*,\s*([\d.]+)\s*\)/g)]
+      .map((m) => parseFloat(m[1]));
+    expect(surfaces.length).toBeGreaterThanOrEqual(2);
+    for (const alpha of surfaces) expect(alpha).toBeLessThan(0.2);
+  });
+});
+
 describe('dark palette contrast (WCAG AA)', () => {
   const resolve = makeColorResolver(darkVars);
   const rgb = (token) => {
