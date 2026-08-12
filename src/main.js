@@ -3734,7 +3734,10 @@ function renderGlobalPendingAlert() {
   Object.keys(states || {}).forEach(bookId => {
     const list = states[bookId]?.openCall;
     if (!Array.isArray(list) || !list.length) return;
-    const waiting = list.filter(c => OC_STAGES.some(st => !c[st.key])).length;
+    let waiting = 0;
+    for (const c of list) {
+      if (OC_STAGES.some(st => !c[st.key])) waiting++;
+    }
     if (waiting > 0) {
       openCallBooks.push({ bookId, waiting, title: BOOKS[bookId]?.title || bookId });
     }
