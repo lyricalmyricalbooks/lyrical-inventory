@@ -1969,8 +1969,10 @@
           <div class="tc-storage-actions">
             <button class="btn tx sm" type="button" onclick="setupReceiptFolder()">📁 Choose folder…</button>
             <button class="btn tx sm" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="background:var(--gold3);color:black;display:none;">Authorize access</button>
+            <button class="btn tx sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" style="color:var(--gold);display:none;" title="Download every receipt waiting in the cloud into your local folder, then remove the cloud copies">☁️ Move cloud receipts to my folder</button>
             <button class="btn tx sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" style="color:var(--gold);" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
           </div>
+          <div id="tc-cloud-backlog" class="tc-cloud-backlog" style="display:none;"></div>
         </div>
       </div>
     </div>
