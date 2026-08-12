@@ -368,6 +368,15 @@ import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
+import {
+  cloudReceiptRefs,
+  isCloudReceipt,
+  receiptOwners,
+  receiptRefsOf,
+  toLocalRef,
+  uniqueFileName,
+  writeReceiptRefs,
+} from './lib/receipt-storage.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -5881,32 +5890,30 @@ async function submitExpense() {
 
   const fileInput = $('exp-file');
   let receiptUrl = '';
+  let receiptStorage = 'none';
   if (fileInput && fileInput.files.length > 0) {
     const file = fileInput.files[0];
     const submitBtn = $('submit-exp-btn');
     const oldText = submitBtn.textContent;
 
     if (window.IS_PUBLISHER) {
-      submitBtn.textContent = 'Saving locally...'; submitBtn.disabled = true;
-      try {
-        const localUrl = await saveReceiptToLocalFile(file, book.title);
-        if (localUrl) receiptUrl = localUrl;
-      } catch (e) {
-        console.error(e);
-        showToast('⚠ Error saving receipt locally', 'err');
+      // Folder first, cloud as the safety net — same deal as the Tax Centre.
+      // A publisher on a machine with no folder connected used to lose the
+      // receipt here without a word.
+      submitBtn.textContent = 'Saving receipt…'; submitBtn.disabled = true;
+      const saved = await saveReceiptBestEffort(file, book.title);
+      receiptUrl = saved.ref;
+      receiptStorage = saved.storage;
+      if (receiptStorage === 'cloud') {
+        showToast('Receipt saved to the cloud — it moves to your folder when it\'s available', 'warn', 5000);
+      } else if (receiptStorage === 'none') {
+        showToast('⚠ Receipt could not be saved — logging the expense without it', 'err', 5000);
       }
     } else {
       submitBtn.textContent = 'Uploading to cloud...'; submitBtn.disabled = true;
       try {
-        const stamp = new Date().getTime();
-        const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
-        const path = `${activeBook}/${stamp}_${cleanName}`;
-        // Add a 30s timeout so the button never hangs forever
-        const uploadPromise = window._fbUploadReceipt(file, path);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Upload timed out')), 30000)
-        );
-        receiptUrl = await Promise.race([uploadPromise, timeoutPromise]);
+        receiptUrl = await uploadReceiptToCloud(file, activeBook);
+        receiptStorage = receiptUrl ? 'cloud' : 'none';
       } catch (e) {
         console.error(e);
         showToast('⚠ Cloud upload failed — submitting without receipt', 'err');
@@ -5926,6 +5933,8 @@ async function submitExpense() {
   const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
   const baseAmount = cadRate ? (amount * cadRate) : amount;
   const newExpense = { id: Date.now(), desc: finalDesc, cat, amount, currency, origAmount, origCurrency, date, ref, receipt: receiptUrl, fxRate: _expenseFxRate, baseAmount };
+  // Starts the clock the Tax Centre reads when it counts what's waiting.
+  if (receiptStorage === 'cloud') newExpense.receiptCloudAt = new Date().toISOString();
 
   if (isAuthor()) {
     try {
@@ -13289,7 +13298,19 @@ export async function saveReceiptToLocalFile(file, subfolderName = '') {
 
     const stamp = new Date().toISOString().split('T')[0];
     const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
-    const filename = `${stamp}_${cleanName}`;
+    // Two receipts saved the same day from files with the same name would land
+    // on the same path, and `create: true` + createWritable() truncates rather
+    // than refusing — the first receipt would be gone with nothing to show for
+    // it. Suffix instead, which matters most during a reclaim (a whole backlog
+    // written in one pass, where repeated names like "receipt.jpg" are normal).
+    const filename = await uniqueFileName(`${stamp}_${cleanName}`, async (name) => {
+      try {
+        await targetDir.getFileHandle(name, { create: false });
+        return true;
+      } catch (_) {
+        return false;
+      }
+    });
 
     const fileHandle = await targetDir.getFileHandle(filename, { create: true });
     const writable = await fileHandle.createWritable();
@@ -13301,6 +13322,60 @@ export async function saveReceiptToLocalFile(file, subfolderName = '') {
     await handleFolderError(e, 'Error Saving Receipt', 'Receipt file save failed. The folder may have been moved or disconnected.');
     return null;
   }
+}
+
+/**
+ * Park a receipt in cloud storage — the fallback when the local folder can't be
+ * reached at save time.
+ *
+ * The alternative used to be dropping the file silently: the expense saved, the
+ * receipt didn't, and nothing said so. An expense with no receipt is the one an
+ * accountant disallows, so the bytes go somewhere no matter what, and
+ * reclaimCloudReceipts() brings them down to the folder afterwards.
+ *
+ * Resolves to a download URL, or throws — callers decide what a failure means.
+ */
+export async function uploadReceiptToCloud(file, subfolderName = 'General') {
+  if (typeof window._fbUploadReceipt !== 'function') {
+    throw new Error('Cloud receipt storage is unavailable');
+  }
+  const stamp = new Date().getTime();
+  const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+  const safeFolder = (subfolderName || 'General').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  // Bound it so the submit button can never hang on a stalled upload.
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Upload timed out')), 30000)
+  );
+  return Promise.race([
+    window._fbUploadReceipt(file, `${safeFolder}/${stamp}_${cleanName}`),
+    timeout,
+  ]);
+}
+
+/**
+ * Save one receipt the best way currently available: the connected folder if it
+ * can be reached, the cloud if it can't.
+ *
+ * Returns `{ ref, storage }` where storage is 'local' | 'cloud' | 'none', so the
+ * caller can stamp receiptCloudAt and say something truthful in its toast.
+ */
+export async function saveReceiptBestEffort(file, subfolderName = 'General') {
+  let localRef = null;
+  try {
+    localRef = await saveReceiptToLocalFile(file, subfolderName);
+  } catch (e) {
+    console.error('Local receipt save failed', e);
+    localRef = null;
+  }
+  if (localRef) return { ref: localRef, storage: 'local' };
+
+  try {
+    const url = await uploadReceiptToCloud(file, subfolderName);
+    if (url) return { ref: url, storage: 'cloud' };
+  } catch (e) {
+    console.error('Cloud receipt fallback failed', e);
+  }
+  return { ref: '', storage: 'none' };
 }
 
 // Build the ledger's receipt cell from an expense/ledger item. Supports the
@@ -13412,96 +13487,182 @@ async function initializeBackupFolderDisplay() {
     const dirHandle = await loadBackupFolderHandle();
     updateBackupFolderDisplay(dirHandle ? `Backup folder: ${dirHandle.name}` : 'Backup folder: Browser Downloads (default)');
 
-    // Auto-sync receipts if publisher and folder connected
-    if (window.IS_PUBLISHER && dirHandle) {
-      setTimeout(() => syncAllReceipts(), 2000); // Wait for initial app load
+    // Bring any cloud-parked receipts down to the folder now that we're back on
+    // the publisher's machine. Quiet on the way through — a startup pass that
+    // finds nothing should say nothing.
+    if (window.IS_PUBLISHER) {
+      setTimeout(() => reclaimCloudReceipts({ interactive: false }), 2000); // Wait for initial app load
     }
   } catch (e) {
     updateBackupFolderDisplay('Backup folder: Browser Downloads (default)');
   }
 }
 
-async function syncAllReceipts() {
-  if (!window.IS_PUBLISHER) return;
-  const dirHandle = await loadReceiptFolderHandle();
-  if (!dirHandle) return;
+/**
+ * Every expense the reclaim walks, bound to this app's live data.
+ *
+ * Reads the in-memory `states` rather than re-fetching each book: writing back
+ * through saveState() then merges with whatever else is on screen, instead of
+ * racing a stale copy over an edit the owner just made somewhere else.
+ */
+function cloudReceiptOwners() {
+  return receiptOwners(TAX_CENTER.businessExpenses, states, BOOKS);
+}
 
-  let totalSynced = 0;
+/**
+ * Fetch one cloud receipt down into the connected folder and drop the cloud
+ * copy. Returns the new `local://` reference, or null if anything went wrong.
+ *
+ * Order matters and is the whole point: the cloud copy is deleted only once the
+ * local write has come back clean. A failed fetch (offline, expired URL) leaves
+ * the receipt exactly where it was, so a reclaim that runs at a bad moment
+ * costs nothing but a retry.
+ */
+async function reclaimOneReceipt(url, subfolderName) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
 
-  // 1. Sync Tax Center Business Expenses
-  if (TAX_CENTER.businessExpenses) {
-    // ⚡ Bolt Optimization: Parallelize Asynchronous I/O
-    // Replaced sequential for...of loop with Promise.all to download tax center receipts concurrently.
-    await Promise.all(TAX_CENTER.businessExpenses.map(async (exp) => {
-      if (exp.receipt && exp.receipt.startsWith('http')) {
-        const localPath = await downloadAndLocalizeReceipt(exp.receipt, 'Business');
-        if (localPath) {
-          exp.receipt = localPath;
-          totalSynced++;
-        }
-      }
-    }));
-    if (totalSynced > 0) saveTaxCenter();
-  }
+    // Firebase download URLs encode the object path, so the last %2F segment is
+    // the stored filename; the query string carries the access token.
+    const raw = url.split('%2F').pop().split('?')[0];
+    let filename = 'receipt';
+    try { filename = decodeURIComponent(raw) || 'receipt'; } catch (_) { filename = raw || 'receipt'; }
 
-  // 2. Sync Per-Book Expenses
-  const bookIds = Object.keys(BOOKS);
-  const states = await Promise.all(bookIds.map(bid => window._fbLoad(bid)));
+    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+    const localRef = await saveReceiptToLocalFile(file, subfolderName.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
+    if (!localRef) return null;
 
-  const savePromises = [];
-
-  // ⚡ Bolt Optimization: Parallelize Asynchronous I/O
-  // Replaced sequential loops with Promise.all to download per-book receipts concurrently.
-  await Promise.all(bookIds.map(async (bid, i) => {
-    const book = BOOKS[bid];
-    const state = states[i];
-    if (!state || !state.expenses) return;
-
-    let bookSynced = 0;
-    await Promise.all(state.expenses.map(async (exp) => {
-      if (exp.receipt && exp.receipt.startsWith('http')) {
-        const localPath = await downloadAndLocalizeReceipt(exp.receipt, book.title || bid);
-        if (localPath) {
-          exp.receipt = localPath;
-          bookSynced++;
-          totalSynced++;
-        }
-      }
-    }));
-    if (bookSynced > 0) {
-      savePromises.push(window._fbSave(bid, JSON.stringify(state)));
-    }
-  }));
-
-  await Promise.all(savePromises);
-
-  if (totalSynced > 0) {
-    showToast(`✓ Synced ${totalSynced} receipts to local folder`);
-    renderTaxCenter();
+    // Safely on disk — now let go of the cloud copy.
+    await window._fbDeleteReceipt(url);
+    return toLocalRef(localRef);
+  } catch (e) {
+    console.error('Receipt reclaim failed for', url, e);
+    return null;
   }
 }
 
-async function downloadAndLocalizeReceipt(url, projectName) {
+/**
+ * Walk every receipt currently parked in the cloud back down into the connected
+ * folder, deleting each cloud copy as it lands.
+ *
+ * Runs quietly at startup and loudly from the Tax Centre button. Deliberately
+ * sequential: these writes share directory handles and a filename-collision
+ * check, and a reclaim is a rare batch of a few dozen files at most — ordering
+ * them costs nothing measurable and removes any chance of two writes racing for
+ * the same name.
+ */
+async function reclaimCloudReceipts({ interactive = false } = {}) {
+  if (!window.IS_PUBLISHER) {
+    if (interactive) showToast('⚠ Only the publisher account files receipts locally', 'warn');
+    return { moved: 0, failed: 0 };
+  }
+
+  let dirHandle = await loadReceiptFolderHandle();
+  if (!dirHandle) {
+    if (!interactive) return { moved: 0, failed: 0 };
+    if (!('showDirectoryPicker' in window)) {
+      showToast('⚠ This browser can\'t save to a local folder — receipts stay in the cloud', 'warn', 5000);
+      return { moved: 0, failed: 0 };
+    }
+    const connect = await confirmDialog(
+      'No receipt folder is connected yet. Choose the folder your receipts should live in, and any waiting in the cloud will be moved into it now.',
+      { title: 'Move receipts to your folder', okLabel: 'Choose folder…', cancelLabel: 'Cancel' }
+    );
+    if (!connect) return { moved: 0, failed: 0 };
+    dirHandle = await setupReceiptFolder();
+    if (!dirHandle) return { moved: 0, failed: 0 };
+  }
+
+  // A handle restored from IndexedDB comes back without permission after a
+  // browser restart, and the grant prompt needs a user gesture — so ask only on
+  // the interactive path and let the startup pass wait for a click.
   try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-
-    // Create a pseudo-file object for our saver
-    const filename = url.split('%2F').pop().split('?')[0];
-    const file = new File([blob], filename, { type: blob.type });
-
-    // Save locally
-    const localRef = await saveReceiptToLocalFile(file, projectName.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
-
-    if (localRef) {
-      // DELETE from cloud now that it's safe locally
-      await window._fbDeleteReceipt(url);
-      return localRef.replace('local://', '');
+    let perm = await dirHandle.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') {
+      if (!interactive) return { moved: 0, failed: 0 };
+      perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        showToast('⚠ Folder access denied — receipts stay in the cloud for now', 'warn', 5000);
+        return { moved: 0, failed: 0 };
+      }
     }
   } catch (e) {
-    console.error("Sync failed for", url, e);
+    console.error('Receipt folder permission check failed', e);
+    if (interactive) showToast('⚠ Could not reach the receipt folder', 'err');
+    return { moved: 0, failed: 0 };
   }
-  return null;
+
+  const owners = cloudReceiptOwners().filter(o => cloudReceiptRefs(o.exp).length);
+  if (!owners.length) {
+    if (interactive) showToast('✓ Nothing waiting — every receipt is already in your folder', 'ok');
+    return { moved: 0, failed: 0 };
+  }
+
+  const btn = $('tc-reclaim-btn');
+  const btnText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Moving…'; }
+
+  let moved = 0;
+  let failed = 0;
+  let taxTouched = false;
+  const booksTouched = new Set();
+
+  for (const { exp, subfolder, scope, bid } of owners) {
+    const refs = receiptRefsOf(exp);
+    const next = [];
+    let changed = false;
+
+    for (const ref of refs) {
+      if (!isCloudReceipt(ref)) { next.push(ref); continue; }
+      const localRef = await reclaimOneReceipt(ref, subfolder);
+      if (localRef) {
+        next.push(localRef);
+        changed = true;
+        moved++;
+      } else {
+        // Keep the cloud reference — a receipt that didn't come down is still
+        // reachable where it is, and the next reclaim will try again.
+        next.push(ref);
+        failed++;
+      }
+    }
+
+    if (!changed) continue;
+    writeReceiptRefs(exp, next);
+    // Once nothing of this expense is left in the cloud, its wait is over and
+    // the age stamp would otherwise keep ageing forever.
+    if (!cloudReceiptRefs(exp).length) delete exp.receiptCloudAt;
+    if (scope === 'tax') taxTouched = true;
+    else booksTouched.add(bid);
+  }
+
+  if (taxTouched) await saveTaxCenter();
+  for (const bid of booksTouched) await saveState(bid);
+
+  if (btn) { btn.disabled = false; btn.textContent = btnText; }
+
+  if (moved > 0) {
+    renderTaxCenter();
+    const where = dirHandle.name ? ` in ${dirHandle.name}` : '';
+    showToast(
+      failed > 0
+        ? `✓ Moved ${moved} receipt${moved === 1 ? '' : 's'}${where} · ${failed} couldn't be moved yet`
+        : `✓ Moved ${moved} receipt${moved === 1 ? '' : 's'} into your folder${where} and cleared the cloud copies`,
+      failed > 0 ? 'warn' : 'ok',
+      5000
+    );
+  } else if (interactive) {
+    showToast(`⚠ Could not move ${failed} receipt${failed === 1 ? '' : 's'} — check your connection and try again`, 'err', 5000);
+  }
+
+  return { moved, failed };
+}
+
+/** Tax Centre button target — the reclaim, with prompts and a spoken result. */
+async function reclaimCloudReceiptsNow() {
+  return reclaimCloudReceipts({ interactive: true });
 }
 
 async function exportToJSON(ev) {
@@ -15858,6 +16019,7 @@ async function submitTaxExpense() {
 
   const fileInput = $('tc-exp-file');
   let receiptUrl = '';
+  let receiptStorage = 'none';
   if (fileInput && fileInput.files.length > 0) {
     const file = fileInput.files[0];
     // Webcam captures are written to the local folder immediately on
@@ -15865,21 +16027,28 @@ async function submitTaxExpense() {
     // a second time (which would create a duplicate file).
     if (_pendingWebcamReceipt && _pendingWebcamReceipt.name === file.name && _pendingWebcamReceipt.size === file.size) {
       receiptUrl = _pendingWebcamReceipt.url;
+      receiptStorage = 'local';
     } else {
       const submitBtn = $('tc-submit-exp-btn');
       const oldText = submitBtn.textContent;
-      submitBtn.textContent = 'Saving locally...'; submitBtn.disabled = true;
-      try {
-        // For Tax Centre, use a "General" subfolder or the project name if applicable
-        const localUrl = await saveReceiptToLocalFile(file, 'General');
-        if (localUrl) receiptUrl = localUrl;
-      } catch (e) {
-        console.error(e);
-        showToast('⚠ Error saving receipt', 'err');
-        submitBtn.textContent = oldText; submitBtn.disabled = false;
-        return;
-      }
+      submitBtn.textContent = 'Saving receipt…'; submitBtn.disabled = true;
+      // Folder first, cloud second. The folder is unreachable more often than
+      // it looks — permission lapses on every browser restart, and a phone or
+      // a borrowed laptop has no folder at all. Before this fallback the
+      // expense saved and the receipt quietly went nowhere.
+      const saved = await saveReceiptBestEffort(file, 'General');
       submitBtn.textContent = oldText; submitBtn.disabled = false;
+
+      receiptUrl = saved.ref;
+      receiptStorage = saved.storage;
+
+      if (receiptStorage === 'none') {
+        const proceed = await confirmDialog(
+          'The receipt could not be saved to your folder or to the cloud — most likely there\'s no connection right now.\n\nLog the expense without it? You can attach the receipt later from the ledger.',
+          { title: 'Receipt could not be saved', okLabel: 'Log without receipt', cancelLabel: 'Cancel' }
+        );
+        if (!proceed) return;
+      }
     }
   }
 
@@ -15889,7 +16058,11 @@ async function submitTaxExpense() {
 
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
   const trip = ($('tc-exp-trip')?.value || '').trim();
-  TAX_CENTER.businessExpenses.unshift({ id: Date.now(), desc, cat, currency, amount, fxRate, baseAmount, date, ref: '', receipt: receiptUrl, trip });
+  const entry = { id: Date.now(), desc, cat, currency, amount, fxRate, baseAmount, date, ref: '', receipt: receiptUrl, trip };
+  // Stamped only on the cloud path, and it is what tells the Tax Centre how
+  // long this receipt has been waiting to come home.
+  if (receiptStorage === 'cloud') entry.receiptCloudAt = new Date().toISOString();
+  TAX_CENTER.businessExpenses.unshift(entry);
 
   // If this submit came from "Confirm & log" on a pending note, that note's
   // job is done — clear it so the reminder doesn't fire again for an expense
@@ -15898,9 +16071,15 @@ async function submitTaxExpense() {
 
   saveTaxCenter();
   renderTaxCenter();
-  showToast(clearedPending
-    ? `✓ Logged — pending note cleared${trip ? ` · ${trip}` : ''}`
-    : (trip ? `✓ Logged to trip: ${trip}` : '✓ Business Expense logged'));
+  if (receiptStorage === 'cloud') {
+    // Say it plainly rather than letting a "✓ Logged" imply the receipt is
+    // filed where the owner expects to find it.
+    showToast('✓ Logged — receipt saved to the cloud until your folder is available', 'ok', 5000);
+  } else {
+    showToast(clearedPending
+      ? `✓ Logged — pending note cleared${trip ? ` · ${trip}` : ''}`
+      : (trip ? `✓ Logged to trip: ${trip}` : '✓ Business Expense logged'));
+  }
   $('tc-exp-desc').value = ''; $('tc-exp-amount').value = ''; $('tc-exp-date').value = today();
   if ($('tc-exp-trip')) $('tc-exp-trip').value = '';
   if (fileInput) fileInput.value = '';
@@ -21078,6 +21257,7 @@ Object.assign(window, {
   openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
   tcSetRecurringFilter, tcShowRecurringCharges,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
+  reclaimCloudReceiptsNow,
   batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
   tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcYearChange, tcClearLedgerFilters,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
@@ -21943,8 +22123,9 @@ function exposeLegacyInlineHandlers() {
     saveReceiptFolderHandle, loadReceiptFolderHandle, setupReceiptFolder, _setReceiptCamStatus,
     openReceiptCameraModal, _stopReceiptCamStream, closeReceiptCameraModal, captureReceiptPhoto,
     retakeReceiptPhoto, useReceiptPhoto, authorizeReceiptFolder, saveReceiptToLocalFile,
-    _localReceiptCell, viewLocalReceipt, initializeBackupFolderDisplay, syncAllReceipts,
-    downloadAndLocalizeReceipt, exportToJSON, maybeAutoDownloadDailyBackup,
+    uploadReceiptToCloud, saveReceiptBestEffort, cloudReceiptOwners,
+    _localReceiptCell, viewLocalReceipt, initializeBackupFolderDisplay, reclaimCloudReceipts,
+    reclaimOneReceipt, reclaimCloudReceiptsNow, exportToJSON, maybeAutoDownloadDailyBackup,
     updateLastBackupDisplay, checkDailyBackup, buildBackupPayload, saveSystemBackups,
     loadSystemBackups, renderSystemBackups, gotoSysBackupPage, createSystemBackup,
     ensureDailySystemBackup, maybeRunDailyBackup, startDailyBackupWatcher, createSystemBackupNow,
