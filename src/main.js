@@ -1492,7 +1492,7 @@ function renderAllQRCodes() {
       <div style="width:10px;height:10px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
       <div style="flex:1;">
         <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--on-inverse);">${escapeHtml(book.title)}</div>
-        <div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px;">${escapeHtml(book.author) || '—'} · ${book.currency}${book.listPrice}</div>
+        <div style="font-size:10px;color:var(--on-inverse-3);margin-top:2px;">${escapeHtml(book.author) || '—'} · ${book.currency}${book.listPrice}</div>
       </div>`;
     card.appendChild(header);
 
@@ -1514,7 +1514,7 @@ function renderAllQRCodes() {
     const linkRow = document.createElement('div');
     linkRow.style.cssText = 'width:100%;display:flex;flex-direction:column;gap:8px;';
     linkRow.innerHTML = `
-      <div style="font-size:10px;color:rgba(255,255,255,.3);font-family:'DM Mono',monospace;word-break:break-all;text-align:center;min-height:14px;">${url || 'No link configured'}</div>
+      <div style="font-size:10px;color:var(--on-inverse-3);font-family:'DM Mono',monospace;word-break:break-all;text-align:center;min-height:14px;">${url || 'No link configured'}</div>
       <div style="display:flex;gap:8px;">
         <button class="btn ink" style="flex:1;font-size:11px;" onclick="window.copyBookQR('${book.id}','${url.replace(/'/g, "\\'")}')">Copy link</button>
         <button class="btn gold" style="flex:1;font-size:11px;" ${url ? '' : 'disabled'} onclick="window.downloadBookQR('${book.id}')">Download</button>
@@ -1994,6 +1994,17 @@ initTheme();
  * CSS, so it cannot follow the cascade: setThemePreference() calls this again on
  * every theme change, or a publisher who switches to dark keeps the colour that
  * was chosen to read on cream.
+ *
+ * --book-accent-text-on-ink is a second, theme-independent derivation for the
+ * handful of spots (the dashboard's .stock-block pill and stock-alert) that
+ * are an --ink panel in BOTH themes. --book-accent-text assumes the "typical"
+ * surface for whichever theme is active — cream in light mode, near-black in
+ * dark mode — so in dark mode it already happens to read fine on ink, but in
+ * light mode a book with a mid/dark cover accent (most of them) computes a
+ * colour tuned for cream and is close to unreadable on that permanently-dark
+ * card. This one always runs the ink-safe half of getContrastSafeText(),
+ * regardless of theme, so it stays correct without needing to know which
+ * elements are asking for it.
  */
 function applyBookAccentTokens(bookId) {
   const root = document.documentElement;
@@ -2003,6 +2014,7 @@ function applyBookAccentTokens(bookId) {
     root.style.setProperty('--book-accent-bg', 'var(--gold-bg)');
     root.style.setProperty('--book-accent-light', 'var(--gold3)');
     root.style.setProperty('--book-accent-text', 'var(--gold-text)');
+    root.style.setProperty('--book-accent-text-on-ink', 'var(--gold3)');
     root.style.setProperty('--book-accent-contrast', 'var(--ink)');
     return;
   }
@@ -2010,6 +2022,7 @@ function applyBookAccentTokens(bookId) {
   root.style.setProperty('--book-accent-bg', book.accentBg);
   root.style.setProperty('--book-accent-light', lightenColor(book.accent, 0.25));
   root.style.setProperty('--book-accent-text', getContrastSafeText(book.accent, resolvedTheme === 'dark'));
+  root.style.setProperty('--book-accent-text-on-ink', getContrastSafeText(book.accent, true));
   root.style.setProperty('--book-accent-contrast', getContrastColor(book.accent));
 }
 
@@ -4113,10 +4126,10 @@ function updateDash() {
         $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
         $('d-exp-body').innerHTML = unreceivedExp.map(e => `
           <tr>
-            <td style="padding:6px 0;color:rgba(255,255,255,.35);white-space:nowrap;">${fmtD(e.date)}</td>
+            <td style="padding:6px 0;color:var(--on-inverse-3);white-space:nowrap;">${fmtD(e.date)}</td>
             <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
-            <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.4);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
-            <td style="padding:6px 8px;color:rgba(255,255,255,.25);">${escapeHtml(e.ref) || '—'}</td>
+            <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
+            <td style="padding:6px 8px;color:var(--on-inverse-3);">${escapeHtml(e.ref) || '—'}</td>
             <td style="padding:6px 0;text-align:right;color:#f87171;font-weight:500;">${fmt(e.amount, cur)}</td>
           </tr>`).join('');
         // Payment button
@@ -5798,7 +5811,7 @@ function renderArtistReimburseBanner() {
   $('arb-hint').textContent = 'These expenses have been settled';
   $('arb-items').innerHTML = received.map(e => `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-      <div style="font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.35);">
+      <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--on-inverse-3);">
         ${escapeHtml(e.desc)} · ${fmtD(e.date)} · <span style="font-size:9px;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:100px;">${escapeHtml(e.cat)}</span>
       </div>
       <div style="font-family:'DM Mono',monospace;font-size:13px;color:#6ee7a8;font-weight:500;">${fmt(e.amount, cur)}</div>
@@ -8728,7 +8741,7 @@ function renderArtistTransfers() {
       }
       $('apb-transfers').innerHTML = transfers.map(t => `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap; opacity: ${t.status === 'pending' ? '.6' : '1'}">
-          <div style="font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.35);">
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--on-inverse-3);">
             ${escapeHtml(t.num)} · ${fmtD(t.date)} · ${t.qty}× ${t.status === 'pending' ? ' (Pending Approval)' : ''}
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--gold2);font-weight:500;">${fmt(t.total, cur)}</div>
@@ -13313,7 +13326,7 @@ export function _localReceiptCell(item) {
     : (item.receipt ? [item.receipt] : []);
   if (!files.length) {
     if (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense') {
-      return `<button class="btn sm outline" type="button" onclick="attachReceiptToExpenseRow('${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')" style="font-size:10px;padding:1px 6px;color:var(--gold);" title="Attach receipt file">📎 Attach</button>`;
+      return `<button class="btn sm outline" type="button" onclick="attachReceiptToExpenseRow('${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')" style="font-size:10px;padding:1px 6px;color:var(--gold-text);" title="Attach receipt file">📎 Attach</button>`;
     }
     return '';
   }

@@ -283,7 +283,7 @@
 .theme-dark .audience-summary-card {
   background:
     radial-gradient(circle at 8% 0%, rgba(229, 169, 63, .16), transparent 34%),
-    linear-gradient(135deg, #1f1a13 0%, #16120e 100%);
+    linear-gradient(135deg, #1f1a13 0%, #16120e 100%); /* token-ok: bespoke gradient stops, not a reusable palette colour */
   box-shadow: var(--elev-3);
 }
 

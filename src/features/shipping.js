@@ -4233,7 +4233,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
       statusBadgeHtml = `<span style="background:rgba(29,122,74,0.08); color:var(--green); font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; border:1px solid rgba(29,122,74,0.15);">✓ Optimized</span>`;
     }
 
-    const confidenceColor = data.confidence === 'High' ? '#1d7a4a' : data.confidence === 'Medium' ? '#c8913a' : '#6b665e';
+    const confidenceColor = data.confidence === 'High' ? '#1d7a4a' : data.confidence === 'Medium' ? 'var(--gold-text)' : '#6b665e';
     const avgCostStr = data.avgCost !== null ? `$${data.avgCost.toFixed(2)} CAD` : '—';
     const p90CostStr = data.p90Cost !== null ? `$${data.p90Cost.toFixed(2)} CAD` : '—';
 
@@ -4250,7 +4250,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
           <div style="background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r); padding:10px 12px; margin-bottom:14px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.02);">
             <label style="font-size:9px; font-weight:700; letter-spacing: 0.05em; text-transform:uppercase; color:var(--text3); display:block; margin-bottom:4px;">Recommended Rate</label>
             <div style="display:flex; justify-content:space-between; align-items:baseline;">
-              <span style="font-size:18px; font-weight:800; color:var(--gold);">$${recoBase.toFixed(2)} <span style="font-size:10px; font-weight:400; color:var(--text3);">base</span></span>
+              <span style="font-size:18px; font-weight:800; color:var(--gold-text);">$${recoBase.toFixed(2)} <span style="font-size:10px; font-weight:400; color:var(--text3);">base</span></span>
               <span style="font-size:13px; font-weight:600; color:var(--text2);">+$${recoAddon.toFixed(2)} <span style="font-size:10px; font-weight:400; color:var(--text3);">add-on</span></span>
             </div>
           </div>

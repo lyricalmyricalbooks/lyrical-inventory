@@ -4,10 +4,10 @@
   --surface-card:#fff;
   --gold:#c8913a; --gold2:#e5a93f; --gold3:#f0c060; --gold-text:#8a5815;
   --gold-bg:rgba(200,145,58,.1); --gold-line:rgba(200,145,58,.25);
-  --text:#0e0c0a; --text2:#4a4540; --text3:#8a8078; --text4:#b8b0a5;
+  --text:#0e0c0a; --text2:#4a4540; --text3:#665c54; --text4:#b8b0a5;
   --green:#1e5631; --green-light:#3ba75c; --green-bg:rgba(30, 86, 49, 0.08);
   --red:#a63a2b; --red-light:#e05e4d; --red-bg:rgba(166, 58, 43, 0.08);
-  --amber:#8c5b00; --amber-bg:rgba(140, 91, 0, 0.08);
+  --amber:#7e5200; --amber-bg:rgba(140, 91, 0, 0.08);
   --blue:#1a4472; --blue-bg:#dbe8f5;
   --border:rgba(14,12,10,.09); --border2:rgba(14,12,10,.05);
 
@@ -692,10 +692,12 @@ tr.hist-row:hover {
    One chevron, one set of states, two shapes: a rounded field for forms
    (`.form-group select` below) and a full pill for filters/toolbars
    (`.pill-select-input`, used in Book Filter and similar). Both share the
-   same SVG chevron (--text3, #8a8078) so every dropdown in the app reads
-   as one component instead of a mix of native and custom styles. */
+   same SVG chevron (--text3, #665c54) so every dropdown in the app reads
+   as one component instead of a mix of native and custom styles. An SVG
+   data URI can't reference a CSS custom property, so this stroke has to be
+   kept in lockstep by hand whenever --text3 changes. */
 :root {
-  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8078' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23665c54' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c8913a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
@@ -853,7 +855,7 @@ tr.hist-row:hover {
   --shipping-pnl-surface: var(--card-bg, #fffdf8);
   --shipping-pnl-surface-quiet: color-mix(in srgb, var(--card-bg, #fffdf8) 91%, var(--accent-color, #c8913a));
   --shipping-pnl-success: #176b46;
-  --shipping-pnl-warning: #9a5b14;
+  --shipping-pnl-warning: #8b5212;
   --shipping-pnl-danger: #a33c43;
   --shipping-pnl-radius: 18px;
   --shipping-pnl-space-1: 0.5rem;
@@ -1721,6 +1723,19 @@ tr.hist-row:hover {
 .stock-alert.ok{background:var(--green-bg);color:var(--green);border-left-color:var(--green-light);}
 .stock-alert.warn{background:var(--amber-bg);color:var(--amber);border-left-color:var(--amber);}
 .stock-alert.danger{background:var(--red-bg);color:var(--red);border-left-color:var(--red-light);}
+/* .stock-alert's default `color` is tuned for a LIGHT parent (dark ink text
+   on a pale tint) but it always renders inside .stock-block, which is always
+   an --ink panel. Same bug shape as the historic --cream-as-text one, just
+   the other way round: a light-surface token landing on a permanently dark
+   surface. Scoped overrides swap in the bright sibling each status already
+   has elsewhere in the app — .kpi-value.warn uses --orange for exactly this
+   "value on ink" pairing, so warn follows that precedent rather than
+   inventing a new one (--amber has no bright variant to reach for).
+   .ok and .pill.gold are fixed further down instead: a DYNAMIC BOOK ACCENT
+   rule recolors both to the viewed book's cover accent with !important, so
+   it always wins here and these two statuses never actually got this color. */
+.stock-block .stock-alert.warn{color:var(--orange);}
+.stock-block .stock-alert.danger{color:var(--red-light);}
 
 /* PILLS — status vocabulary. Colours come from the --status-* semantic roles
    so the amber=active / green=settled / red=error convention is enforceable. */
@@ -1827,7 +1842,7 @@ tr.hist-row:hover {
 .dz-icon{font-size:28px;line-height:1;}
 .dz-title{font-size:13px;font-weight:600;color:var(--text);}
 .dz-sub{font-size:11px;color:var(--text3);line-height:1.5;}
-.dz-link{color:var(--gold);font-weight:700;text-decoration:underline;}
+.dz-link{color:var(--gold-text);font-weight:700;text-decoration:underline;}
 .dz-file{display:none;align-items:center;gap:10px;padding:10px 12px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r2);}
 .dz-thumb{width:34px;height:34px;border-radius:6px;background:var(--gold-bg);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
 .dz-fname{flex:1;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -1853,7 +1868,7 @@ tr.hist-row:hover {
 .sk{background:var(--cream);border-radius:var(--r2);padding:9px 11px;border:1px solid var(--border2);}
 .sk-l{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;}
 .sk-v{font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--text);}
-.sk-v.warn{color:#c05e00;}
+.sk-v.warn{color:#ad5500;}
 .store-actions{display:flex;gap:8px;flex-wrap:wrap;}
 
 /* ORDER CARDS */
@@ -2641,7 +2656,7 @@ tr.hist-row:hover {
 .cf-title{font-family:'Playfair Display',serif;font-size:18px;color:var(--text);}
 .cf-head select#tc-year{appearance:none;-webkit-appearance:none;font-family:'Syne',sans-serif;font-size:13px;padding:5px 28px 5px 10px;border-radius:var(--r);border:1px solid var(--gold-line);background-color:var(--cream2);background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 8px center;background-size:12px;color:var(--text);cursor:pointer;min-width:90px;}
 .cf-head select#tc-year:focus{outline:none;border-color:var(--gold);background-image:var(--select-arrow-gold);box-shadow:0 0 0 3px rgba(200,145,58,.12);}
-.cf-cad-badge{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:1px solid var(--gold-line);padding:3px 10px;border-radius:99px;}
+.cf-cad-badge{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-text);background:var(--gold-bg);border:1px solid var(--gold-line);padding:3px 10px;border-radius:99px;}
 
 /* Headline stat cards */
 .cf-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px;}
@@ -2945,11 +2960,11 @@ tr.hist-row:hover {
   min-height: 44px;
 }
 .settings-sub-tab:hover {
-  color: var(--gold);
+  color: var(--gold-text);
   background: rgba(200, 145, 58, 0.05);
 }
 .settings-sub-tab.active {
-  color: var(--gold);
+  color: var(--gold-text);
   border-bottom-color: var(--gold);
   background: rgba(200, 145, 58, 0.08);
 }
@@ -3515,7 +3530,11 @@ tr.hist-row:hover {
 
 /* ── Accepted Payment Methods Config (AGENTS.md styled) ──────────────── */
 .payment-methods-card {
-  background: rgba(28, 25, 23, 0.65) !important;
+  /* .82, not the original .65: at .65 this composited too light for the
+     gold3/on-inverse-2 text inside it to clear AA — see .pm-toggle-desc and
+     .payment-methods-title below. Verified against both the light page
+     (#f7f2e9) and the dark one (#14110d): comfortably dark in both. */
+  background: rgba(28, 25, 23, 0.82) !important;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -3595,7 +3614,11 @@ tr.hist-row:hover {
 
 .pm-toggle-desc {
   font-size: 10.5px;
-  color: var(--text3);
+  /* --on-inverse-2, not --text3: this sits on .payment-methods-card, a
+     permanently-dark frosted panel in BOTH themes (rgba(28,25,23,*), not a
+     token that flips), so it needs the theme-stable "text on dark" family,
+     not a light-surface muted tone. */
+  color: var(--on-inverse-2);
 }
 
 .pm-switch {
@@ -4083,7 +4106,7 @@ tr.hist-row:hover {
 }
 .oc-step:hover .oc-step-circle {
   border-color: var(--gold);
-  color: var(--gold);
+  color: var(--gold-text);
   transform: scale(1.08);
 }
 .oc-step.done .oc-step-circle {
@@ -4094,7 +4117,7 @@ tr.hist-row:hover {
 }
 .oc-step.active .oc-step-circle {
   border-color: var(--gold);
-  color: var(--gold);
+  color: var(--gold-text);
   background: var(--cream);
   box-shadow: 0 0 12px rgba(200, 145, 58, 0.35);
 }
@@ -5723,6 +5746,24 @@ tr.hist-row:hover {
   border: 1px solid var(--book-accent-bg, var(--gold-line)) !important;
 }
 
+/* The dashboard's ISBN pill and "stock is healthy" message are the one place
+   the two rules above land on .stock-block, an --ink panel in both themes —
+   everywhere else .pill.gold/.stock-alert.ok sit on a normal light/cream
+   surface, where --book-accent-text (tuned per-theme, not per-surface) is
+   correct. Verified against every current book: on .stock-block the default
+   computation ranges 2.6-4.3:1 (need 4.5:1), because most cover accents are
+   mid/dark and light mode only lightens colours that are ALREADY light.
+   --book-accent-text-on-ink runs the same accent through the ink-safe half
+   of getContrastSafeText() unconditionally, so it still tracks the book's
+   colour instead of falling back to plain gold. One extra class beats the
+   rule above's specificity so this doesn't depend on source order. */
+.tab-panel .stock-block .pill.gold {
+  color: var(--book-accent-text-on-ink, var(--gold3)) !important;
+}
+.tab-panel .stock-block .stock-alert.ok {
+  color: var(--book-accent-text-on-ink, var(--green-light)) !important;
+}
+
 /* KPI and Card hover scales and dynamic color shadows */
 .tab-panel .kpi {
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s !important;
@@ -7317,7 +7358,7 @@ tr.hist-row:hover {
 .tc-trip-selected-preview .clear-btn {
   background: none;
   border: none;
-  color: var(--text3, #8a8078);
+  color: var(--text3, #665c54);
   cursor: pointer;
   font-size: 13px;
   padding: 2px 6px;
@@ -7377,7 +7418,7 @@ tr.hist-row:hover {
    row click affordance, and a pinned totals row. */
 .tc-cat-name{display:flex;align-items:baseline;gap:8px;}
 .tc-cat-name .con-group-dot{margin-right:0;flex:none;transform:translateY(-1px);}
-.tc-cat-link{font:inherit;color:var(--gold3);background:none;border:none;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-align:left;}
+.tc-cat-link{font:inherit;color:var(--gold-text);background:none;border:none;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-align:left;}
 .tc-cat-link:hover{color:var(--gold-text);}
 /* Keeps each clickable row at the >=44px touch target AGENTS.md requires —
    easy to click/tap accurately, not just clicked with a precise mouse. */
@@ -7928,7 +7969,7 @@ tr.hist-row:hover {
   padding-top: 12px;
   border-top: 1px solid var(--border2, rgba(14, 12, 10, 0.06)) !important;
   font-size: 12px;
-  color: var(--text3, #8a8078) !important;
+  color: var(--text3, #665c54) !important;
 }
 
 /* ── Point of Sale (POS) Premium UX Redesign ─────────────────────── */
