@@ -2381,7 +2381,7 @@ async function toggleFirestoreMode() {
     }
 
   } else {
-    const anyOtherFSBook = Object.keys(BOOKS).filter(id => id !== activeBook).some(id => window._useFirestoreForBook(id));
+    const anyOtherFSBook = Object.keys(BOOKS).some(id => id !== activeBook && window._useFirestoreForBook(id));
 
     if (!(await confirmDialog(
       `Revert "${BOOKS[activeBook]?.title || activeBook}" back to Realtime Database?\n\n` +
