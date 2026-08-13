@@ -52,7 +52,7 @@ import { escapeHtml } from '../lib/html.js';
 import { csvRow, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
-import { reconcileConsignmentInvoiceLinks } from '../lib/consignment.js';
+import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeCloudBacklog } from '../lib/receipt-storage.js';
@@ -230,6 +230,10 @@ function downloadTaxReport() {
   BOOK_LIST.forEach(book => {
     if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
+    // The sale rows below are read off the History mirrors, so re-derive them
+    // from the consignment ledger first — otherwise a sale whose commission or
+    // price was corrected exports at its original amount.
+    reconcileConsignmentMirrors(s);
 
     // ⚡ Bolt Optimization: Use imperative loop to avoid array allocation from .filter()
     if (s.hist && s.hist.length > 0) {
@@ -1995,9 +1999,11 @@ function _tcBuildLedger(selectedYear) {
     const s = states[bid] || defaultState(BOOKS[bid]);
     const b = BOOKS[bid];
     const cur = getBookCurrencyCode(b);
-    // Keep consignment Sale mirrors pointed at their live invoice number so a
-    // rename reflects in this ledger's Receipt/Ref column.
-    reconcileConsignmentInvoiceLinks(s);
+    // Re-derive consignment Sale mirrors from their canonical ledger rows, so a
+    // sale corrected in the Consignment tab reports its NEW amount here (and in
+    // the CSV export built from these rows) rather than the amount it was first
+    // recorded at, and so an invoice rename reaches the Receipt/Ref column.
+    reconcileConsignmentMirrors(s);
 
     // Determine conversion to CAD for sales
     const hRate = _fxRateCache[`${cur}_CAD`] || 1;
