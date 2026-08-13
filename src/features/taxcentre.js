@@ -2247,10 +2247,52 @@ function _tcRenderStatusHeaders() {
  * The folder-unreachable banner and the offline-copies readout are rendered by
  * main.js, which owns the folder handle and the cache.
  */
+export const DISMISSED_NOTICES_KEY = 'lm-dismissed-receipt-notices';
+
+export function getDismissedReceiptNotices() {
+  try {
+    return JSON.parse(localStorage.getItem(DISMISSED_NOTICES_KEY) || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+export function isReceiptNoticeDismissed(key) {
+  const map = getDismissedReceiptNotices();
+  return !!map[key];
+}
+
+export function dismissReceiptNotice(key) {
+  try {
+    const map = getDismissedReceiptNotices();
+    map[key] = true;
+    localStorage.setItem(DISMISSED_NOTICES_KEY, JSON.stringify(map));
+    _tcRenderReceiptStorage();
+    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+      window.showToast('Notice dismissed', 'ok', 3000);
+    }
+  } catch (e) {
+    console.error('Failed to dismiss notice', e);
+  }
+}
+
+export function resetDismissedReceiptNotices() {
+  try {
+    localStorage.removeItem(DISMISSED_NOTICES_KEY);
+    _tcRenderReceiptStorage();
+    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
+      window.showToast('✓ Dismissed notices restored', 'ok', 3000);
+    }
+  } catch (e) {
+    console.error('Failed to reset notices', e);
+  }
+}
+
 function _tcRenderReceiptStorage() {
   const el = $('tc-cloud-backlog');
   const viewBtn = $('tc-view-cloud-btn');
   const exportBtn = $('tc-export-receipts-btn');
+  const resetBtn = $('tc-reset-notices-btn');
   if (!el) return;
 
   const owners = receiptOwners(TAX_CENTER.businessExpenses, states, BOOKS);
@@ -2323,29 +2365,37 @@ function _tcRenderReceiptStorage() {
     `);
   }
 
-  // Actionable advisory alerts
+  // Actionable advisory alerts (dismissible)
   const notices = [];
-  if (s.withoutReceipts) {
+  const dismissed = getDismissedReceiptNotices();
+
+  if (s.withoutReceipts && !dismissed.missing) {
     notices.push(`
-      <div class="tc-receipt-alert is-warn">
+      <div class="tc-receipt-alert is-warn" id="tc-notice-missing">
         <span class="tc-alert-glyph">⚠️</span>
         <div class="tc-alert-info">
           <strong>${s.withoutReceipts} expense${s.withoutReceipts === 1 ? '' : 's'} without a receipt attached.</strong>
           <span>Attach digital receipts or supplier invoices to maintain full audit compliance for tax filing.</span>
         </div>
+        <button class="tc-alert-dismiss" type="button" onclick="dismissReceiptNotice('missing')" title="Dismiss this notice" aria-label="Dismiss notice">✕</button>
       </div>
     `);
   }
-  if (s.linkOnlyExpenses) {
+  if (s.linkOnlyExpenses && !dismissed.shippo) {
     notices.push(`
-      <div class="tc-receipt-alert is-info">
+      <div class="tc-receipt-alert is-info" id="tc-notice-shippo">
         <span class="tc-alert-glyph">🏷️</span>
         <div class="tc-alert-info">
           <strong>${s.linkOnlyExpenses} expense${s.linkOnlyExpenses === 1 ? ' has' : 's have'} only a shipping label link.</strong>
           <span>A shipping label confirms a parcel was sent, not that you paid for it. Import your Shippo invoices or receipts for official proof of payment.</span>
         </div>
+        <button class="tc-alert-dismiss" type="button" onclick="dismissReceiptNotice('shippo')" title="Dismiss this notice" aria-label="Dismiss notice">✕</button>
       </div>
     `);
+  }
+
+  if (resetBtn) {
+    resetBtn.style.display = (dismissed.missing || dismissed.shippo) ? '' : 'none';
   }
 
   el.className = (s.withoutReceipts || s.linkOnlyExpenses) ? 'tc-cloud-backlog is-stale' : 'tc-cloud-backlog';

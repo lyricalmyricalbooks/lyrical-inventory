@@ -417,4 +417,13 @@ describe('cloud fallback wiring', () => {
     // The old catch-all message must be gone.
     expect(appSource).not.toContain('check your connection and try again');
   });
+
+  it('supports dismissing and restoring receipt advisory notices', () => {
+    expect(appSource).toContain('export function dismissReceiptNotice');
+    expect(appSource).toContain('export function resetDismissedReceiptNotices');
+    expect(appSource).toContain('export function isReceiptNoticeDismissed');
+    expect(html).toContain('id="tc-reset-notices-btn"');
+    expect(css).toContain('.tc-alert-dismiss');
+  });
 });
+
