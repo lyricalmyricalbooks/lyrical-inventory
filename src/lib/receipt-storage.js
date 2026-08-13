@@ -32,7 +32,40 @@
 // reports. The old CLOUD_RECEIPT_REMINDER_DAYS threshold is gone with the model
 // that needed it.
 
-/** A receipt parked in cloud storage rather than the publisher's folder. */
+// WHY THERE ARE TWO KINDS OF WEB LINK
+// Treating every https:// reference as "a receipt sitting in our cloud, waiting
+// to be moved" was wrong, and it produced a very confusing failure: 40 Shippo
+// shipping labels were counted as a backlog, and every attempt to move them
+// failed with `TypeError: Failed to fetch`.
+//
+// They were never in our storage. They are links to files on Shippo's servers,
+// and a browser is not permitted to read another site's files directly — it can
+// open them in a tab, but it cannot download the bytes. So no amount of retrying
+// could ever have worked, and counting them as a backlog meant the app nagged
+// about something it was incapable of doing.
+//
+// So: a receipt we hold in our own cloud storage can be downloaded, moved and
+// deleted. An external link is somebody else's file — viewable, never movable.
+
+/** A file in our own cloud storage: downloadable, movable, ours to delete. */
+export function isOurCloudReceipt(ref) {
+  return typeof ref === 'string' && /^https?:\/\//i.test(ref) && /firebasestorage/i.test(ref);
+}
+
+/**
+ * Somebody else's file, linked rather than held — a Shippo label, a vendor's
+ * invoice page. Openable in a tab; never downloadable by the browser.
+ */
+export function isExternalLink(ref) {
+  return typeof ref === 'string' && /^https?:\/\//i.test(ref) && !/firebasestorage/i.test(ref);
+}
+
+/**
+ * Any web link, ours or not.
+ *
+ * Kept for the places that only need "is this a file on disk or not", but
+ * anything that intends to *download* must use isOurCloudReceipt instead.
+ */
 export function isCloudReceipt(ref) {
   return typeof ref === 'string' && /^https?:\/\//i.test(ref);
 }
@@ -72,14 +105,37 @@ export function writeReceiptRefs(item, refs) {
   return item;
 }
 
-/** Just the cloud-held references on an expense. */
+/**
+ * The references this app can actually download and move — ours alone.
+ *
+ * Deliberately excludes external links. The reclaim walks this list, and
+ * including a Shippo label here is what made 40 receipts fail identically and
+ * for ever.
+ */
 export function cloudReceiptRefs(item) {
-  return receiptRefsOf(item).filter(isCloudReceipt);
+  return receiptRefsOf(item).filter(isOurCloudReceipt);
 }
 
-/** True when any of this expense's receipts is still waiting in the cloud. */
+/** Links to files held elsewhere — viewable, not movable. */
+export function externalLinkRefs(item) {
+  return receiptRefsOf(item).filter(isExternalLink);
+}
+
+/** True when any of this expense's receipts is held in our cloud storage. */
 export function hasCloudReceipt(item) {
-  return receiptRefsOf(item).some(isCloudReceipt);
+  return receiptRefsOf(item).some(isOurCloudReceipt);
+}
+
+/**
+ * An expense whose only proof is a link to somebody else's file.
+ *
+ * Worth surfacing on its own: a Shippo *label* proves a parcel was sent, not
+ * that it was paid for, so these are the expenses most likely to be questioned
+ * and the ones the Shippo invoice import exists to fix.
+ */
+export function hasOnlyExternalLinks(item) {
+  const refs = receiptRefsOf(item);
+  return refs.length > 0 && refs.every(isExternalLink);
 }
 
 /**
@@ -167,6 +223,8 @@ export function summarizeReceiptStorage(items) {
   let cloudExpenses = 0;
   let cloudFiles = 0;
   let localFiles = 0;
+  let linkedFiles = 0;
+  let linkOnlyExpenses = 0;
   let withReceipts = 0;
   let withoutReceipts = 0;
 
@@ -174,13 +232,20 @@ export function summarizeReceiptStorage(items) {
     const refs = receiptRefsOf(item);
     if (!refs.length) { withoutReceipts++; return; }
     withReceipts++;
-    const cloud = refs.filter(isCloudReceipt);
+    const cloud = refs.filter(isOurCloudReceipt);
     if (cloud.length) cloudExpenses++;
     cloudFiles += cloud.length;
     localFiles += refs.filter(isLocalReceipt).length;
+    linkedFiles += refs.filter(isExternalLink).length;
+    if (hasOnlyExternalLinks(item)) linkOnlyExpenses++;
   });
 
-  return { cloudExpenses, cloudFiles, localFiles, withReceipts, withoutReceipts, totalFiles: cloudFiles + localFiles };
+  return {
+    cloudExpenses, cloudFiles, localFiles, linkedFiles, linkOnlyExpenses,
+    withReceipts, withoutReceipts,
+    // Files we actually hold. A link is not a file we have.
+    totalFiles: cloudFiles + localFiles,
+  };
 }
 
 /**

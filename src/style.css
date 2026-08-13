@@ -1886,6 +1886,7 @@ tr.hist-row:hover {
 .cloud-receipt-age{font-size:var(--text-2xs);color:var(--text3);white-space:nowrap;}
 .cloud-receipt-age.is-stale{color:var(--amber);font-weight:600;}
 .cloud-receipt-open{color:var(--gold3);text-decoration:underline;font-size:var(--text-xs);white-space:nowrap;}
+.cloud-receipt-external{color:var(--amber);}
 .cloud-receipt-empty{padding:20px;text-align:center;color:var(--text3);font-size:var(--text-sm);}
 
 /* Receipt organizer — the review table shown before anything is copied. */

@@ -370,8 +370,11 @@ import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirect
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload } from './lib/consignment.js';
 import {
   cloudReceiptRefs,
+  externalLinkRefs,
   isCloudReceipt,
+  isExternalLink,
   isLocalReceipt,
+  isOurCloudReceipt,
   localRefPath,
   receiptOwners,
   receiptRefsOf,
@@ -14151,7 +14154,10 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
     };
 
     for (const ref of refs) {
-      if (!isCloudReceipt(ref)) { next.push(ref); continue; }
+      // Only our own stored files can be downloaded. An external link — a
+      // Shippo label, a vendor's invoice page — belongs to another site, and a
+      // browser cannot read its bytes however many times we ask.
+      if (!isOurCloudReceipt(ref)) { next.push(ref); continue; }
       const localRef = await reclaimOneReceipt(ref, { ...meta, index: next.length }, problems);
       if (localRef) {
         next.push(localRef);
@@ -14326,7 +14332,7 @@ async function readReceiptBytes(ref, dirHandle) {
     return null;
   }
 
-  if (isCloudReceipt(ref)) {
+  if (isOurCloudReceipt(ref)) {
     try {
       const res = await fetch(ref);
       if (res.ok) return { blob: await res.blob(), source: 'cloud' };
@@ -14335,6 +14341,11 @@ async function readReceiptBytes(ref, dirHandle) {
       return { error: `${e.name || 'Error'}: ${e.message || 'download failed'}` };
     }
   }
+
+  // An external link is somebody else's file. It cannot go in the export, so
+  // the manifest records the link instead — which is still what an accountant
+  // needs to go and look at it.
+  if (isCloudReceipt(ref)) return { error: 'external link — kept in the summary sheet', link: ref };
   return null;
 }
 
@@ -14375,7 +14386,9 @@ async function exportReceiptsZip(year = null) {
       manifest.push([
         row.exp.date || '', vendor, row.exp.desc || '', row.exp.cat || '', row.book,
         String(row.meta.amount ?? ''), row.meta.currency || '',
-        '(not retrievable)', got && got.error ? got.error : 'missing',
+        // A link is more useful in the sheet than the words "not retrievable".
+        got && got.link ? got.link : '(not retrievable)',
+        got && got.error ? got.error : 'missing',
       ]);
       continue;
     }
@@ -14714,7 +14727,11 @@ async function runReceiptOrganizer() {
 function cloudReceiptQueue(now = new Date()) {
   const rows = [];
   cloudReceiptOwners().forEach(({ exp, subfolder, scope }) => {
-    const refs = cloudReceiptRefs(exp);
+    // Both kinds, labelled — the owner needs to see that a Shippo label is a
+    // link to someone else's file, not a receipt we hold.
+    const ours = cloudReceiptRefs(exp);
+    const links = externalLinkRefs(exp);
+    const refs = [...ours, ...links];
     if (!refs.length) return;
     rows.push({
       id: String(exp.id || ''),
@@ -14745,12 +14762,12 @@ function receiptWaitingDays(exp, now = new Date()) {
 }
 
 /**
- * Show what is waiting in the cloud, before deciding to move it.
+ * Show every receipt held outside the local folder, and say plainly which kind
+ * each one is.
  *
- * The backlog line says "40 receipts are waiting" and that is the natural next
- * question — which forty, and are they anything I still care about. Each row
- * opens its receipt directly, so this doubles as the way to read a receipt that
- * has never been near the local folder.
+ * The distinction is the point. A file in our own storage can be downloaded and
+ * filed. A link to a Shippo label is somebody else's file: openable in a tab,
+ * never downloadable, and not proof of payment in any case.
  */
 function openCloudReceiptsModal() {
   const rows = cloudReceiptQueue();
@@ -14759,28 +14776,36 @@ function openCloudReceiptsModal() {
   const countEl = $('cloud-receipts-count');
   if (!modal || !body) return;
 
+  const ourFiles = rows.reduce((n, r) => n + r.urls.filter(isOurCloudReceipt).length, 0);
+  const linked = rows.reduce((n, r) => n + r.urls.filter(isExternalLink).length, 0);
+
   if (countEl) {
-    const files = rows.reduce((n, r) => n + r.urls.length, 0);
-    countEl.textContent = rows.length
-      ? `${files} receipt${files === 1 ? '' : 's'} across ${rows.length} expense${rows.length === 1 ? '' : 's'}`
-      : 'Nothing waiting';
+    const bits = [];
+    if (ourFiles) bits.push(`${ourFiles} stored file${ourFiles === 1 ? '' : 's'}`);
+    if (linked) bits.push(`${linked} link${linked === 1 ? '' : 's'} to files on other websites`);
+    countEl.textContent = bits.length ? bits.join(' · ') : 'Nothing stored outside your folder';
   }
 
   body.innerHTML = rows.length
     ? rows.map(r => {
-      const links = r.urls.map((u, i) => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener" class="cloud-receipt-open">${r.urls.length > 1 ? `Open ${i + 1}` : 'Open'}</a>`).join(' · ');
-      const age = r.waitingDays >= 1 ? `${r.waitingDays} day${r.waitingDays === 1 ? '' : 's'}` : 'today';
-      const stale = r.waitingDays >= 14;
+      const links = r.urls.map((u, i) => {
+        const external = isExternalLink(u);
+        const label = r.urls.length > 1 ? `Open ${i + 1}` : 'Open';
+        return `<a href="${escapeHtml(u)}" target="_blank" rel="noopener" class="cloud-receipt-open">${label}${external ? ' ↗' : ''}</a>`;
+      }).join(' · ');
+
+      const allExternal = r.urls.every(isExternalLink);
+      const note = allExternal
+        ? '<span class="cloud-receipt-external">On another website — can be opened, but not saved into your folder</span>'
+        : `Will file into <strong>${escapeHtml(r.destination)}</strong>`;
+
       return `<div class="cloud-receipt-row">
         <div class="cloud-receipt-main">
           <div class="cloud-receipt-desc">${escapeHtml(r.desc)}</div>
           <div class="cloud-receipt-meta">${escapeHtml(r.date || '—')} · ${escapeHtml(r.cat)}${r.book ? ` · ${escapeHtml(r.book)}` : ''} · ${escapeHtml(fmt(r.amount, r.currency))}</div>
-          <div class="cloud-receipt-dest">Will file into <strong>${escapeHtml(r.destination)}</strong></div>
+          <div class="cloud-receipt-dest">${note}</div>
         </div>
-        <div class="cloud-receipt-side">
-          <span class="cloud-receipt-age${stale ? ' is-stale' : ''}">${escapeHtml(age)}</span>
-          ${links}
-        </div>
+        <div class="cloud-receipt-side">${links}</div>
       </div>`;
     }).join('')
     : '<div class="cloud-receipt-empty">Every receipt is already filed in your folder.</div>';
