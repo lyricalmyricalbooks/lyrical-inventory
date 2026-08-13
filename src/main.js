@@ -13741,9 +13741,14 @@ function renderReceiptFolderAlert() {
     el.innerHTML = '';
     return;
   }
-  el.innerHTML = '⚠ <strong>Your receipts folder can\'t be found.</strong> It was probably moved or renamed. '
-    + 'Receipts still open from the copies saved on this device, and anything new is saved to the cloud until you reconnect. '
-    + '<button class="btn tx sm" type="button" onclick="setupReceiptFolder()" style="color:var(--gold-text);padding:0 4px;">Reconnect it now</button>';
+  el.innerHTML = `<div class="tc-folder-alert-inner">`
+    + `<span class="tc-folder-alert-icon">⚠️</span>`
+    + `<div class="tc-folder-alert-text">`
+    + `<strong>Your receipts folder can't be found.</strong> It was probably moved or renamed. `
+    + `Receipts still open from offline device cache, and new uploads save to cloud until you reconnect.`
+    + `</div>`
+    + `<button class="btn sm gold" type="button" onclick="setupReceiptFolder()">Reconnect Folder</button>`
+    + `</div>`;
   el.style.display = '';
 }
 
@@ -13753,13 +13758,16 @@ async function renderReceiptCacheStatus() {
   if (!el) return;
   const { count, bytes, previews } = cacheStats(await listCachedReceiptMeta());
   if (!count) {
-    el.textContent = 'No receipts saved on this device yet — save them so they still open if the folder moves.';
+    el.innerHTML = `<div class="tc-cache-bar"><span class="tc-cache-badge">💾 Device Cache</span> <span class="tc-cache-desc">No receipts saved on this device yet — save them so they still open if your folder moves or you go offline.</span></div>`;
     el.style.display = '';
     return;
   }
-  el.innerHTML = `💾 <strong>${count} receipt${count === 1 ? '' : 's'}</strong> saved on this device (${escapeHtml(formatCacheSize(bytes))})`
-    + (previews ? ` · ${previews} stored as smaller previews` : '')
-    + ' — these keep opening even if your folder moves.';
+  el.innerHTML = `<div class="tc-cache-bar is-cached">`
+    + `<span class="tc-cache-badge">💾 Device Cache</span> `
+    + `<span class="tc-cache-desc"><strong>${count} receipt${count === 1 ? '' : 's'}</strong> (${escapeHtml(formatCacheSize(bytes))}) saved on this device`
+    + (previews ? ` · ${previews} stored as compact previews` : '')
+    + ` — ready for instant offline viewing even if folders move.</span>`
+    + `</div>`;
   el.style.display = '';
 }
 
@@ -14236,10 +14244,15 @@ function renderReceiptProblemPanel() {
     return;
   }
   const groups = summarizeReceiptProblems(_lastReceiptProblems);
-  el.innerHTML = `<div class="tc-problem-head">⚠ <strong>${_lastReceiptProblems.length} receipt${_lastReceiptProblems.length === 1 ? '' : 's'} could not be moved.</strong> Here is exactly why:</div>`
+  el.innerHTML = `<div class="tc-problem-head">`
+    + `<span class="tc-problem-icon">⚠️</span>`
+    + `<div><strong>${_lastReceiptProblems.length} receipt${_lastReceiptProblems.length === 1 ? '' : 's'} could not be moved:</strong></div>`
+    + `</div>`
     + `<ul class="tc-problem-list">${groups.map(g =>
       `<li><strong>${g.count}×</strong> ${escapeHtml(g.reason)}</li>`).join('')}</ul>`
-    + `<button class="btn tx sm" type="button" onclick="copyReceiptDiagnostic()" style="color:var(--gold-text);">📋 Copy details</button>`;
+    + `<div class="tc-problem-action">`
+    + `<button class="btn sm" type="button" onclick="copyReceiptDiagnostic()">📋 Copy diagnostic report</button>`
+    + `</div>`;
   el.style.display = '';
 }
 
