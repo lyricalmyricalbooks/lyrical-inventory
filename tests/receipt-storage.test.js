@@ -5,6 +5,10 @@ import { appSource, buildHarness } from './helpers/extract-decl.js';
 import {
   cloudPendingSince,
   cloudReceiptRefs,
+  externalLinkRefs,
+  hasOnlyExternalLinks,
+  isExternalLink,
+  isOurCloudReceipt,
   daysWaiting,
   hasCloudReceipt,
   isCloudReceipt,
@@ -47,8 +51,8 @@ describe('receipt reference shapes', () => {
 
   it('keeps both shapes in step when writing back', () => {
     const exp = { receipt: 'old.jpg', receiptFiles: ['old.jpg'] };
-    writeReceiptRefs(exp, ['local://General/new.jpg', 'https://cloud/x.jpg']);
-    expect(exp.receiptFiles).toEqual(['local://General/new.jpg', 'https://cloud/x.jpg']);
+    writeReceiptRefs(exp, ['local://General/new.jpg', 'https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg']);
+    expect(exp.receiptFiles).toEqual(['local://General/new.jpg', 'https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg']);
     // Screens that still read the single field must not see a stale receipt.
     expect(exp.receipt).toBe('local://General/new.jpg');
 
@@ -68,8 +72,8 @@ describe('receipt reference shapes', () => {
   });
 
   it('picks out only the cloud-held references', () => {
-    const exp = { receiptFiles: ['local://a.jpg', 'https://cloud/b.jpg', 'https://cloud/c.jpg'] };
-    expect(cloudReceiptRefs(exp)).toEqual(['https://cloud/b.jpg', 'https://cloud/c.jpg']);
+    const exp = { receiptFiles: ['local://a.jpg', 'https://firebasestorage.googleapis.com/v0/b/x/o/b.jpg', 'https://firebasestorage.googleapis.com/v0/b/x/o/c.jpg'] };
+    expect(cloudReceiptRefs(exp)).toEqual(['https://firebasestorage.googleapis.com/v0/b/x/o/b.jpg', 'https://firebasestorage.googleapis.com/v0/b/x/o/c.jpg']);
     expect(hasCloudReceipt(exp)).toBe(true);
     expect(hasCloudReceipt({ receiptFiles: ['local://a.jpg'] })).toBe(false);
   });
@@ -79,12 +83,12 @@ describe('how long a receipt has been waiting in the cloud', () => {
   const now = new Date('2026-08-12T12:00:00Z');
 
   it('counts from the stamp written when the fallback happened', () => {
-    const exp = { receipt: 'https://cloud/x.jpg', receiptCloudAt: '2026-08-01T12:00:00Z' };
+    const exp = { receipt: 'https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg', receiptCloudAt: '2026-08-01T12:00:00Z' };
     expect(daysWaiting(exp, now)).toBe(11);
   });
 
   it('falls back to the expense date for receipts that predate the stamp', () => {
-    const exp = { receipt: 'https://cloud/x.jpg', date: '2026-07-29' };
+    const exp = { receipt: 'https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg', date: '2026-07-29' };
     expect(cloudPendingSince(exp)).toBeInstanceOf(Date);
     expect(daysWaiting(exp, now)).toBe(14);
   });
@@ -95,8 +99,48 @@ describe('how long a receipt has been waiting in the cloud', () => {
   });
 
   it('survives an unparseable date instead of reporting a nonsense age', () => {
-    expect(daysWaiting({ receipt: 'https://cloud/x.jpg', receiptCloudAt: 'not a date' }, now)).toBe(0);
-    expect(daysWaiting({ receipt: 'https://cloud/x.jpg' }, now)).toBe(0);
+    expect(daysWaiting({ receipt: 'https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg', receiptCloudAt: 'not a date' }, now)).toBe(0);
+    expect(daysWaiting({ receipt: 'https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg' }, now)).toBe(0);
+  });
+});
+
+describe('our stored files versus links to other websites', () => {
+  // The real failure this encodes: 40 Shippo shipping labels were counted as
+  // "receipts waiting in the cloud", and every attempt to move them failed with
+  // `TypeError: Failed to fetch`. They were never in our storage — they are
+  // links to Shippo's servers, and a browser cannot read another site's files.
+  const SHIPPO = 'https://shippo-delivery-east.s3.amazonaws.com/abc123.pdf';
+  const OURS = 'https://firebasestorage.googleapis.com/v0/b/x/o/receipts%2Fa.jpg?alt=media&token=t';
+
+  it('recognises a file in our own storage', () => {
+    expect(isOurCloudReceipt(OURS)).toBe(true);
+    expect(isExternalLink(OURS)).toBe(false);
+  });
+
+  it('recognises a Shippo label as somebody else\'s file', () => {
+    expect(isExternalLink(SHIPPO)).toBe(true);
+    expect(isOurCloudReceipt(SHIPPO)).toBe(false);
+  });
+
+  it('treats a local file as neither', () => {
+    expect(isOurCloudReceipt('local://a.jpg')).toBe(false);
+    expect(isExternalLink('local://a.jpg')).toBe(false);
+  });
+
+  it('never offers an external link to the mover', () => {
+    // This is the fix. cloudReceiptRefs drives the reclaim, so a label appearing
+    // here is what made 40 receipts fail identically and for ever.
+    const exp = { receiptFiles: [OURS, SHIPPO] };
+    expect(cloudReceiptRefs(exp)).toEqual([OURS]);
+    expect(externalLinkRefs(exp)).toEqual([SHIPPO]);
+  });
+
+  it('flags an expense whose only proof is a link to a label', () => {
+    // A shipping label proves a parcel was sent, not that it was paid for.
+    expect(hasOnlyExternalLinks({ receipt: SHIPPO })).toBe(true);
+    expect(hasOnlyExternalLinks({ receiptFiles: [SHIPPO, OURS] })).toBe(false);
+    expect(hasOnlyExternalLinks({ receipt: 'local://a.jpg' })).toBe(false);
+    expect(hasOnlyExternalLinks({})).toBe(false);
   });
 });
 
@@ -104,10 +148,12 @@ describe('receipt storage summary', () => {
   // Reframed from the old "backlog" summary. Receipts held in the cloud are the
   // permanent, healthy state now, so nothing here counts them as overdue — the
   // only number worth flagging is an expense with no receipt at all.
+  const OURS = 'https://firebasestorage.googleapis.com/v0/b/x/o/a.jpg?alt=media';
+
   it('counts cloud and local files separately', () => {
     const items = [
-      { receiptFiles: ['https://cloud/a.jpg', 'https://cloud/b.jpg'] },
-      { receipt: 'https://cloud/c.jpg' },
+      { receiptFiles: [OURS, `${OURS}&b=1`] },
+      { receipt: OURS },
       { receipt: 'local://filed.jpg' },
       { receipt: '' },
     ];
@@ -116,6 +162,17 @@ describe('receipt storage summary', () => {
     expect(s.cloudFiles).toBe(3);
     expect(s.localFiles).toBe(1);
     expect(s.totalFiles).toBe(4);
+  });
+
+  it('counts links separately and does not call them files we hold', () => {
+    const s = summarizeReceiptStorage([
+      { receipt: 'https://shippo-delivery-east.s3.amazonaws.com/label.pdf' },
+      { receipt: OURS },
+    ]);
+    expect(s.linkedFiles).toBe(1);
+    expect(s.linkOnlyExpenses).toBe(1);
+    // A link is not a file in our possession.
+    expect(s.totalFiles).toBe(1);
   });
 
   it('counts expenses that have no receipt at all — the actionable number', () => {
@@ -225,7 +282,7 @@ describe('reclaiming one receipt from the cloud', () => {
   it('keeps the cloud copy when the local write fails', async () => {
     // The whole safety property: deleting first would destroy the only copy.
     const h = harness({ fetchImpl: okFetch, saveImpl: async () => null });
-    const ref = await h.run('https://cloud/x.jpg', 'General');
+    const ref = await h.run('https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg', 'General');
     expect(ref).toBeNull();
     expect(h.deleted).toEqual([]);
   });
@@ -235,14 +292,14 @@ describe('reclaiming one receipt from the cloud', () => {
       fetchImpl: async () => { throw new Error('offline'); },
       saveImpl: async () => 'local://General/x.jpg',
     });
-    expect(await h.run('https://cloud/x.jpg', 'General')).toBeNull();
+    expect(await h.run('https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg', 'General')).toBeNull();
     expect(h.deleted).toEqual([]);
   });
 
   it('keeps the cloud copy on a non-OK response', async () => {
     const saveImpl = vi.fn(async () => 'local://General/x.jpg');
     const h = harness({ fetchImpl: async () => ({ ok: false, status: 404 }), saveImpl });
-    expect(await h.run('https://cloud/x.jpg', 'General')).toBeNull();
+    expect(await h.run('https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg', 'General')).toBeNull();
     expect(saveImpl).not.toHaveBeenCalled();
     expect(h.deleted).toEqual([]);
   });
@@ -273,20 +330,20 @@ describe('reclaiming one receipt from the cloud', () => {
       fetchImpl: async () => { throw Object.assign(new Error('Failed to fetch'), { name: 'TypeError' }); },
       saveImpl: async () => null,
     });
-    await h.run('https://cloud/x.jpg', {}, problems);
+    await h.run('https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg', {}, problems);
     expect(problems[0].detail).toMatch(/TypeError: Failed to fetch/);
   });
 
   it('records a save failure as a different stage than a download failure', async () => {
     const problems = [];
     const h = harness({ fetchImpl: okFetch, saveImpl: async () => null });
-    await h.run('https://cloud/x.jpg', {}, problems);
+    await h.run('https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg', {}, problems);
     expect(problems[0].stage).toBe('save');
   });
 
   it('returns a prefixed reference even if the saver hands back a bare path', async () => {
     const h = harness({ fetchImpl: okFetch, saveImpl: async () => 'General/x.jpg' });
-    expect(await h.run('https://cloud/x.jpg', 'General')).toBe('local://General/x.jpg');
+    expect(await h.run('https://firebasestorage.googleapis.com/v0/b/x/o/x.jpg', 'General')).toBe('local://General/x.jpg');
   });
 });
 

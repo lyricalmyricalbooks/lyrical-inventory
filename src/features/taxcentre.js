@@ -2268,14 +2268,24 @@ function _tcRenderReceiptStorage() {
   const parts = [];
   if (s.cloudFiles) parts.push(`<strong>${s.cloudFiles}</strong> kept safely in the cloud`);
   if (s.localFiles) parts.push(`<strong>${s.localFiles}</strong> filed in your folder`);
+  if (s.linkedFiles) parts.push(`<strong>${s.linkedFiles}</strong> linked on another website`);
 
-  // The genuinely actionable number, and the only one shown in a warning tone.
-  const missing = s.withoutReceipts
-    ? ` <em>${s.withoutReceipts} expense${s.withoutReceipts === 1 ? '' : 's'} still ${s.withoutReceipts === 1 ? 'has' : 'have'} no receipt attached.</em>`
-    : '';
+  // Two genuinely actionable numbers, and the only ones shown in a warning tone.
+  //
+  // "Link only" matters as much as "no receipt": a Shippo shipping label proves
+  // a parcel was sent, not that it was paid for, and the file lives on Shippo's
+  // servers rather than anywhere we control.
+  const notes = [];
+  if (s.withoutReceipts) {
+    notes.push(`${s.withoutReceipts} expense${s.withoutReceipts === 1 ? '' : 's'} still ${s.withoutReceipts === 1 ? 'has' : 'have'} no receipt attached.`);
+  }
+  if (s.linkOnlyExpenses) {
+    notes.push(`${s.linkOnlyExpenses} ${s.linkOnlyExpenses === 1 ? 'has' : 'have'} only a link to a shipping label — that proves a parcel was sent, not that you paid for it. Import your Shippo invoices to attach the real proof of payment.`);
+  }
 
-  el.className = s.withoutReceipts ? 'tc-cloud-backlog is-stale' : 'tc-cloud-backlog';
-  el.innerHTML = (parts.length ? `🧾 ${parts.join(' · ')}.` : '🧾 No receipts stored yet.') + missing;
+  el.className = notes.length ? 'tc-cloud-backlog is-stale' : 'tc-cloud-backlog';
+  el.innerHTML = (parts.length ? `🧾 ${parts.join(' · ')}.` : '🧾 No receipts stored yet.')
+    + (notes.length ? ` <em>${notes.join(' ')}</em>` : '');
   el.style.display = '';
 }
 
