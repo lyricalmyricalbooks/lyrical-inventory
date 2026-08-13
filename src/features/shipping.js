@@ -66,6 +66,14 @@ import {
   stageShippoExpenseEnrichment,
 } from '../lib/shipping-reconciliation.js';
 import {
+  describeInvoiceAvailability,
+  invoiceIndexByTransaction,
+  isSettledRefund,
+  parseInvoiceItem,
+  parseRefund,
+  refundExpense,
+} from '../lib/shippo-invoices.js';
+import {
   ADDRESS_FIELD_LABELS,
   SHIPPO_ADDRESSES_V1_URL,
   SHIPPO_VALIDATE_V2_URL,
@@ -458,6 +466,63 @@ async function fetchShippoTransactionsPageAPI(token, page) {
   return resp.json();
 }
 
+/**
+ * Read the invoices behind the labels — the documents that actually prove
+ * payment. Beta endpoint, so this is best-effort by design: any failure returns
+ * an empty index plus a reason, and the caller carries on importing labels.
+ */
+async function fetchShippoInvoiceItems(token) {
+  const items = [];
+  let page = 1;
+  try {
+    while (page <= 50) {
+      const resp = await fetch(`https://api.goshippo.com/invoices/items/?page=${page}&results=100`, {
+        headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' },
+      });
+      if (!resp.ok) {
+        return { index: new Map(), unavailable: describeInvoiceAvailability(resp.status), status: resp.status };
+      }
+      const json = await resp.json();
+      const rows = Array.isArray(json?.results) ? json.results : [];
+      rows.forEach(r => { const it = parseInvoiceItem(r); if (it) items.push(it); });
+      if (!json?.next || !rows.length) break;
+      page++;
+    }
+  } catch (e) {
+    console.warn('Shippo invoice items unavailable', e);
+    return { index: new Map(), unavailable: describeInvoiceAvailability(0), status: 0 };
+  }
+  return { index: invoiceIndexByTransaction(items), unavailable: '', status: 200, count: items.length };
+}
+
+/**
+ * Refunds, so a refunded label stops being counted as postage.
+ *
+ * Nothing read these before, which meant a label refunded after import stayed
+ * in the ledger at full price indefinitely.
+ */
+async function fetchShippoRefunds(token) {
+  const refunds = [];
+  let page = 1;
+  try {
+    while (page <= 50) {
+      const resp = await fetch(`https://api.goshippo.com/refunds/?page=${page}&results=100`, {
+        headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' },
+      });
+      if (!resp.ok) return { refunds: [], unavailable: `Refunds could not be read (${resp.status}).` };
+      const json = await resp.json();
+      const rows = Array.isArray(json?.results) ? json.results : [];
+      rows.forEach(r => { const rf = parseRefund(r); if (rf && isSettledRefund(rf)) refunds.push(rf); });
+      if (!json?.next || !rows.length) break;
+      page++;
+    }
+  } catch (e) {
+    console.warn('Shippo refunds unavailable', e);
+    return { refunds: [], unavailable: 'Refunds could not be read just now.' };
+  }
+  return { refunds, unavailable: '' };
+}
+
 async function fetchShippoObject(token, resource, id) {
   if (!id) return {};
   const resp = await fetch(`https://api.goshippo.com/${resource}/${encodeURIComponent(id)}`, {
@@ -616,7 +681,7 @@ async function linkShippingExpense(ref) {
   showToast(`Postage linked to ${number}`);
 }
 
-async function processShippoTxToExpense(tx, token, txId, ref, importedCount, context, knownOrders) {
+async function processShippoTxToExpense(tx, token, txId, ref, importedCount, context, knownOrders, invoiceIndex = null) {
   const { amount, currency } = await getShippoTxCost(tx, token);
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
@@ -635,6 +700,12 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount, con
 
   const labelUrl = tx.label_url || '';
   const localReceipt = labelUrl ? await saveShippoLabelLocally(labelUrl, txId) : null;
+  const label = localReceipt || labelUrl;
+
+  // The label is supporting evidence, not the receipt of record. The invoice is
+  // what proves the money left the account, so when we know which invoice
+  // billed this label, that reference goes first and the label follows.
+  const invoiceItem = invoiceIndex ? invoiceIndex.get(txId) : null;
 
   const expense = {
     id: Date.now() + importedCount + 1,
@@ -649,11 +720,47 @@ async function processShippoTxToExpense(tx, token, txId, ref, importedCount, con
     fxMissing,
     date,
     ref,
-    receipt: localReceipt || labelUrl,
+    receipt: label,
+    // Kept separate so the ledger can show what each document actually is.
+    supportingFiles: label ? [label] : [],
+    invoiceId: invoiceItem?.invoiceId || '',
     trackingUrl: tx.tracking_url_provider || '',
     trip: '',
   };
   return enrichShippoExpense(expense, tx, context.shipment, context.shippoOrder, knownOrders);
+}
+
+/**
+ * Add a cancelling entry for every refunded label that doesn't already have one.
+ *
+ * Deliberately additive rather than editing or deleting the original expense:
+ * the original charge did happen, and an audit trail that shows the charge and
+ * the credit is the honest record. It also makes the operation idempotent —
+ * re-running the import cannot double-credit, because each refund carries its
+ * own reference.
+ */
+function applyShippoRefunds(refunds) {
+  if (!Array.isArray(refunds) || !refunds.length) return 0;
+
+  const expenses = TAX_CENTER.businessExpenses || [];
+  const byRef = new Map(expenses
+    .filter(e => String(e?.ref || '').startsWith('shippo:'))
+    .map(e => [String(e.ref), e]));
+  const alreadyCredited = new Set(expenses
+    .map(e => String(e?.ref || ''))
+    .filter(r => r.startsWith('shippo-refund:')));
+
+  let added = 0;
+  refunds.forEach((refund, i) => {
+    if (alreadyCredited.has(`shippo-refund:${refund.id}`)) return;
+    const original = byRef.get(`shippo:${refund.transactionId}`);
+    if (!original) return; // never imported the label, so nothing to reverse
+    const entry = refundExpense(refund, original, Date.now() + 500000 + i);
+    if (!entry) return;
+    expenses.unshift(entry);
+    added++;
+  });
+  return added;
 }
 
 async function importShippoShippingFromApi() {
@@ -692,6 +799,15 @@ async function importShippoShippingFromApi() {
   let totalUsd = 0;
   let page = 1;
   let hasMore = true;
+
+  // Pull the money records first so each label can be tied to the invoice that
+  // billed it. Both are best-effort: an unavailable beta endpoint must not stop
+  // the postage import that already worked.
+  if (statusEl) statusEl.textContent = 'Fetching Shippo invoices…';
+  const invoiceResult = await fetchShippoInvoiceItems(token);
+  const invoiceIndex = invoiceResult.index;
+  if (statusEl) statusEl.textContent = 'Fetching Shippo refunds…';
+  const refundResult = await fetchShippoRefunds(token);
 
   try {
     while (hasMore && page <= 200) {
@@ -745,7 +861,7 @@ async function importShippoShippingFromApi() {
           }
 
           const expense = await processShippoTxToExpense(
-            tx, token, txId, ref, imported + i + chunkIdx, context, knownOrders,
+            tx, token, txId, ref, imported + i + chunkIdx, context, knownOrders, invoiceIndex,
           );
 
           if (!expense) {
@@ -824,6 +940,12 @@ async function importShippoShippingFromApi() {
 
     applyShippoExpenseEnrichments(stagedExistingEnrichments);
     if (pendingExpenses.length > 0) TAX_CENTER.businessExpenses.unshift(...pendingExpenses.reverse());
+
+    // Cancel out anything Shippo refunded. A refunded label that was imported
+    // before the refund happened stayed in the ledger at full price, which
+    // overstates postage and understates profit for as long as nobody notices.
+    const refundsAdded = applyShippoRefunds(refundResult.refunds);
+
     TAX_CENTER.settings.shippoImportedObjectIds = Array.from(importedIds).slice(-10000);
     TAX_CENTER.settings.shippoLastImportAt = new Date().toISOString();
     await saveTaxCenter();
@@ -831,7 +953,13 @@ async function importShippoShippingFromApi() {
     const dupNote = alreadyImported ? ` ${alreadyImported} already imported.` : '';
     const enrichNote = enrichedCount ? ` ${enrichedCount} existing expense${enrichedCount === 1 ? '' : 's'} reconciled.` : '';
     const contextNote = contextFailureCount ? ` ${contextFailureCount} label${contextFailureCount === 1 ? '' : 's'} still need review because Shippo details could not load.` : '';
-    const reconciliationNote = `${enrichNote}${contextNote}`;
+    const refundNote = refundsAdded ? ` ${refundsAdded} refund${refundsAdded === 1 ? '' : 's'} credited back.` : '';
+    // Say plainly when the money receipts could not be read, rather than
+    // leaving the owner to assume the labels are proof of payment.
+    const invoiceNote = invoiceResult.unavailable
+      ? ` ${invoiceResult.unavailable}`
+      : (invoiceResult.count ? ` Matched ${invoiceResult.count} invoice line${invoiceResult.count === 1 ? '' : 's'}.` : '');
+    const reconciliationNote = `${enrichNote}${contextNote}${refundNote}${invoiceNote}`;
     if (statusEl) statusEl.textContent = imported
       ? `Imported ${imported} new Shippo transactions.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${totalUsd ? ` USD imported: ${totalUsd.toFixed(2)}.` : ''}${reconciliationNote}`
       : `No new Shippo transactions to import.${dupNote}${skipped ? ` ${skipped} skipped.` : ''}${reconciliationNote}`;

@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appSource, buildHarness } from './helpers/extract-decl.js';
 import {
-  CLOUD_RECEIPT_REMINDER_DAYS,
   cloudPendingSince,
   cloudReceiptRefs,
   daysWaiting,
@@ -13,7 +12,7 @@ import {
   localRefPath,
   receiptOwners,
   receiptRefsOf,
-  summarizeCloudBacklog,
+  summarizeReceiptStorage,
   toLocalRef,
   uniqueFileName,
   writeReceiptRefs,
@@ -101,41 +100,43 @@ describe('how long a receipt has been waiting in the cloud', () => {
   });
 });
 
-describe('cloud backlog summary', () => {
-  const now = new Date('2026-08-12T12:00:00Z');
-
-  it('counts expenses and files separately', () => {
+describe('receipt storage summary', () => {
+  // Reframed from the old "backlog" summary. Receipts held in the cloud are the
+  // permanent, healthy state now, so nothing here counts them as overdue — the
+  // only number worth flagging is an expense with no receipt at all.
+  it('counts cloud and local files separately', () => {
     const items = [
-      { receiptFiles: ['https://cloud/a.jpg', 'https://cloud/b.jpg'], receiptCloudAt: '2026-08-10T12:00:00Z' },
-      { receipt: 'https://cloud/c.jpg', receiptCloudAt: '2026-08-11T12:00:00Z' },
+      { receiptFiles: ['https://cloud/a.jpg', 'https://cloud/b.jpg'] },
+      { receipt: 'https://cloud/c.jpg' },
       { receipt: 'local://filed.jpg' },
       { receipt: '' },
     ];
-    const s = summarizeCloudBacklog(items, now);
-    expect(s.expenses).toBe(2);
-    expect(s.files).toBe(3);
-    expect(s.oldestDays).toBe(2);
-    expect(s.overdue).toBe(0);
+    const s = summarizeReceiptStorage(items);
+    expect(s.cloudExpenses).toBe(2);
+    expect(s.cloudFiles).toBe(3);
+    expect(s.localFiles).toBe(1);
+    expect(s.totalFiles).toBe(4);
   });
 
-  it('flags the ones past the reminder threshold', () => {
-    const items = [
-      { receipt: 'https://cloud/old.jpg', receiptCloudAt: '2026-07-01T12:00:00Z' },
-      { receipt: 'https://cloud/new.jpg', receiptCloudAt: '2026-08-11T12:00:00Z' },
-    ];
-    const s = summarizeCloudBacklog(items, now);
-    expect(s.overdue).toBe(1);
-    expect(s.oldestDays).toBe(42);
-    expect(s.thresholdDays).toBe(CLOUD_RECEIPT_REMINDER_DAYS);
+  it('counts expenses that have no receipt at all — the actionable number', () => {
+    const s = summarizeReceiptStorage([
+      { receipt: 'https://cloud/a.jpg' },
+      { receipt: '' },
+      {},
+    ]);
+    expect(s.withReceipts).toBe(1);
+    expect(s.withoutReceipts).toBe(2);
   });
 
-  it('is empty and quiet when everything is already filed', () => {
-    const s = summarizeCloudBacklog([{ receipt: 'local://a.jpg' }, {}], now);
-    expect(s).toMatchObject({ expenses: 0, files: 0, oldestDays: 0, overdue: 0 });
+  it('never reports an age or an overdue count', () => {
+    // The old summary drove a "95 days waiting" nag about a healthy state.
+    const s = summarizeReceiptStorage([{ receipt: 'https://cloud/a.jpg', receiptCloudAt: '2020-01-01' }]);
+    expect(s.oldestDays).toBeUndefined();
+    expect(s.overdue).toBeUndefined();
   });
 
   it('handles a missing list without throwing', () => {
-    expect(summarizeCloudBacklog(undefined, now).expenses).toBe(0);
+    expect(summarizeReceiptStorage(undefined).totalFiles).toBe(0);
   });
 });
 
@@ -202,7 +203,7 @@ describe('reclaiming one receipt from the cloud', () => {
           window: {
             _fbDeleteReceipt: deleteImpl || (async (url) => { deleted.push(url); }),
           },
-          console: { error: () => {} },
+          console: { error: () => {}, warn: () => {} },
         },
         returns: 'reclaimOneReceipt',
       }),
@@ -244,6 +245,43 @@ describe('reclaiming one receipt from the cloud', () => {
     expect(await h.run('https://cloud/x.jpg', 'General')).toBeNull();
     expect(saveImpl).not.toHaveBeenCalled();
     expect(h.deleted).toEqual([]);
+  });
+
+  it('records why a download failed, not just that it did', async () => {
+    // The whole point of the diagnostic: 40 receipts failing identically is one
+    // problem with one fix, and "check your connection" hid which one.
+    const problems = [];
+    const h = harness({ fetchImpl: async () => ({ ok: false, status: 404 }), saveImpl: async () => null });
+    await h.run('https://cloud/gone.jpg', { desc: 'Uber' }, problems);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].stage).toBe('download');
+    expect(problems[0].detail).toMatch(/404/);
+    expect(problems[0].detail).toMatch(/no longer in cloud storage/i);
+    expect(problems[0].desc).toBe('Uber');
+  });
+
+  it('distinguishes access denied from a missing file', async () => {
+    const problems = [];
+    const h = harness({ fetchImpl: async () => ({ ok: false, status: 403 }), saveImpl: async () => null });
+    await h.run('https://cloud/denied.jpg', {}, problems);
+    expect(problems[0].detail).toMatch(/access denied/i);
+  });
+
+  it('records a network rejection separately from a bad status', async () => {
+    const problems = [];
+    const h = harness({
+      fetchImpl: async () => { throw Object.assign(new Error('Failed to fetch'), { name: 'TypeError' }); },
+      saveImpl: async () => null,
+    });
+    await h.run('https://cloud/x.jpg', {}, problems);
+    expect(problems[0].detail).toMatch(/TypeError: Failed to fetch/);
+  });
+
+  it('records a save failure as a different stage than a download failure', async () => {
+    const problems = [];
+    const h = harness({ fetchImpl: okFetch, saveImpl: async () => null });
+    await h.run('https://cloud/x.jpg', {}, problems);
+    expect(problems[0].stage).toBe('save');
   });
 
   it('returns a prefixed reference even if the saver hands back a bare path', async () => {
@@ -290,14 +328,36 @@ describe('cloud fallback wiring', () => {
     expect(html).toContain('onclick="reclaimCloudReceiptsNow()"');
   });
 
-  it('shows the waiting-receipts prompt in the Tax Centre', () => {
+  it('shows a neutral storage readout in the Tax Centre', () => {
     expect(html).toContain('id="tc-cloud-backlog"');
-    expect(appSource).toContain('function _tcRenderCloudBacklog');
+    expect(appSource).toContain('function _tcRenderReceiptStorage');
     expect(css).toContain('.tc-cloud-backlog');
-    expect(css).toContain('.tc-cloud-backlog.is-stale');
   });
 
   it('runs a quiet reclaim at startup rather than nagging on load', () => {
     expect(appSource).toContain('reclaimCloudReceipts({ interactive: false })');
+  });
+
+  it('keeps receipt management out of the single-expense form', () => {
+    // These bulk actions used to sit inside #tc-exp-file-group, which is for
+    // logging one expense. They belong to the receipt library.
+    const formStart = html.indexOf('id="tc-exp-file-group"');
+    const formEnd = html.indexOf('id="tc-exp-trip"');
+    const form = html.slice(formStart, formEnd);
+    ['cacheAllReceiptsNow()', 'batchScanAndRelinkReceipts()', 'reclaimCloudReceiptsNow()', 'openCloudReceiptsModal()']
+      .forEach(handler => expect(form).not.toContain(handler));
+    expect(html).toContain('tc-receipts-card');
+  });
+
+  it('explains a failed batch instead of blaming the connection', () => {
+    expect(appSource).toContain('export function summarizeReceiptProblems');
+    expect(appSource).toContain('export function formatReceiptDiagnostic');
+    expect(appSource).toContain('function renderReceiptProblemPanel');
+    expect(html).toContain('id="tc-receipt-problems"');
+    // The button is rendered with the panel, so it lives in the source rather
+    // than in the static markup.
+    expect(appSource).toContain('onclick="copyReceiptDiagnostic()"');
+    // The old catch-all message must be gone.
+    expect(appSource).not.toContain('check your connection and try again');
   });
 });

@@ -18,8 +18,19 @@
 // and a `receiptFiles` array — so everything here reads both and writes both.
 // Callers never have to know which vintage an expense is.
 
-/** Days a receipt may sit in the cloud before the Tax Centre starts nagging. */
-export const CLOUD_RECEIPT_REMINDER_DAYS = 14;
+// NOTE ON THE MODEL CHANGE
+// This module used to treat cloud storage as a waiting room that had to be
+// drained into the local folder, and counted anything sitting there as a
+// "backlog" worth nagging about after two weeks. That was backwards, and the
+// nagging was the visible symptom: a receipt held safely in the cloud is not a
+// problem to be fixed, and the banner reported the normal, healthy state as a
+// 95-day failure.
+//
+// The cloud is now the permanent home. The local folder is an export target the
+// owner fills on demand. So what matters is no longer "how long has this waited"
+// but "is every receipt actually reachable" — which is what summarizeReceiptStorage
+// reports. The old CLOUD_RECEIPT_REMINDER_DAYS threshold is gone with the model
+// that needed it.
 
 /** A receipt parked in cloud storage rather than the publisher's folder. */
 export function isCloudReceipt(ref) {
@@ -145,27 +156,31 @@ export function receiptOwners(taxExpenses, bookStates, books) {
 }
 
 /**
- * Roll a list of expenses up into what the Tax Centre shows above the receipt
- * box: how many are waiting, how many files that is, and how long the most
- * patient one has been there.
+ * Where the receipts actually are, as a neutral readout.
+ *
+ * Reports counts, not a verdict: receipts held in the cloud are safe, and
+ * receipts filed locally are safe. The only genuinely bad state — an expense
+ * with no receipt reference at all — is counted separately, because that is the
+ * one an accountant will ask about.
  */
-export function summarizeCloudBacklog(items, now = new Date(), thresholdDays = CLOUD_RECEIPT_REMINDER_DAYS) {
-  let expenses = 0;
-  let files = 0;
-  let oldestDays = 0;
-  let overdue = 0;
+export function summarizeReceiptStorage(items) {
+  let cloudExpenses = 0;
+  let cloudFiles = 0;
+  let localFiles = 0;
+  let withReceipts = 0;
+  let withoutReceipts = 0;
 
   (items || []).forEach(item => {
-    const refs = cloudReceiptRefs(item);
-    if (!refs.length) return;
-    expenses++;
-    files += refs.length;
-    const age = daysWaiting(item, now);
-    if (age > oldestDays) oldestDays = age;
-    if (age >= thresholdDays) overdue++;
+    const refs = receiptRefsOf(item);
+    if (!refs.length) { withoutReceipts++; return; }
+    withReceipts++;
+    const cloud = refs.filter(isCloudReceipt);
+    if (cloud.length) cloudExpenses++;
+    cloudFiles += cloud.length;
+    localFiles += refs.filter(isLocalReceipt).length;
   });
 
-  return { expenses, files, oldestDays, overdue, thresholdDays };
+  return { cloudExpenses, cloudFiles, localFiles, withReceipts, withoutReceipts, totalFiles: cloudFiles + localFiles };
 }
 
 /**

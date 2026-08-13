@@ -55,7 +55,7 @@ import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
-import { receiptOwners, summarizeCloudBacklog } from '../lib/receipt-storage.js';
+import { receiptOwners, summarizeReceiptStorage } from '../lib/receipt-storage.js';
 import {
   RECURRING_FREQUENCIES,
   frequencyLabel,
@@ -2210,7 +2210,7 @@ function _tcRenderStatusHeaders() {
     };
     if (!handle) {
       setInline('Storage: <strong>Cloud</strong> — receipts are kept safely online until you pick a folder to file them in', 'var(--text3)', false);
-      _tcRenderCloudBacklog();
+      _tcRenderReceiptStorage();
       return;
     }
     const perm = typeof handle.queryPermission === 'function'
@@ -2224,58 +2224,59 @@ function _tcRenderStatusHeaders() {
     } else {
       setInline(`⚠ Access needed for folder: <strong>${escapeHtml(handle.name)}</strong> — receipts go to the cloud until you allow it`, 'var(--amber)', true);
     }
-    _tcRenderCloudBacklog();
+    _tcRenderReceiptStorage();
   }).catch(e => {
     // A browser with no IndexedDB (private mode) or no folder API rejects here.
     // The backlog prompt is the one thing that must still render — it is what
     // tells the owner receipts are piling up somewhere other than their folder.
     console.warn('Receipt folder status unavailable', e);
-    _tcRenderCloudBacklog();
+    _tcRenderReceiptStorage();
   });
 }
 
 /**
- * The "waiting in the cloud" line under the receipt box.
+ * Where the receipts live, stated neutrally.
  *
- * Hidden entirely when nothing is waiting — this is a prompt to act, not a
- * permanent status readout, and a row that always says "0" trains the eye to
- * skip the row on the day it finally says something.
+ * This used to nag: "40 receipts waiting to be filed, the oldest 95 days,
+ * anything past 14 days is worth bringing down now." That framing came from
+ * treating the local folder as the real home and the cloud as a queue to drain.
+ * With the cloud as the permanent home, receipts held there are simply stored,
+ * and the only thing worth flagging is an expense with no receipt at all — the
+ * one an accountant will actually ask about.
+ *
+ * The folder-unreachable banner and the offline-copies readout are rendered by
+ * main.js, which owns the folder handle and the cache.
  */
-// The folder-unreachable banner and the offline-copies readout are rendered by
-// main.js, which owns the folder handle and the cache. Both write to their own
-// static elements in the storage row, so nothing here needs to touch them.
-function _tcRenderCloudBacklog() {
+function _tcRenderReceiptStorage() {
   const el = $('tc-cloud-backlog');
-  const btn = $('tc-reclaim-btn');
   const viewBtn = $('tc-view-cloud-btn');
-  if (viewBtn) viewBtn.style.display = 'none';
+  const exportBtn = $('tc-export-receipts-btn');
   if (!el) return;
 
-  // Same list the reclaim walks, so the count here can never advertise a
-  // backlog the button would then decline to move.
   const owners = receiptOwners(TAX_CENTER.businessExpenses, states, BOOKS);
-  const { expenses, files, oldestDays, overdue, thresholdDays } = summarizeCloudBacklog(owners.map(o => o.exp));
-  if (!expenses) {
+  const s = summarizeReceiptStorage(owners.map(o => o.exp));
+
+  if (viewBtn) viewBtn.style.display = s.cloudFiles ? '' : 'none';
+  if (exportBtn) exportBtn.style.display = s.totalFiles ? '' : 'none';
+
+  if (!s.totalFiles && !s.withoutReceipts) {
     el.style.display = 'none';
     el.innerHTML = '';
-    if (btn) btn.style.display = 'none';
     return;
   }
 
-  const noun = files === 1 ? 'receipt is' : 'receipts are';
-  const age = oldestDays >= 1
-    ? ` The oldest has been there ${oldestDays} day${oldestDays === 1 ? '' : 's'}.`
-    : '';
-  // Past the threshold this stops being informational: a tax record that has
-  // sat online for a fortnight is one the owner has forgotten about.
-  const stale = overdue > 0;
+  const parts = [];
+  if (s.cloudFiles) parts.push(`<strong>${s.cloudFiles}</strong> kept safely in the cloud`);
+  if (s.localFiles) parts.push(`<strong>${s.localFiles}</strong> filed in your folder`);
 
-  el.className = stale ? 'tc-cloud-backlog is-stale' : 'tc-cloud-backlog';
-  el.innerHTML = `${stale ? '⏳' : '☁️'} <strong>${files} ${noun}</strong> saved in the cloud, waiting to be filed in your folder.${age}`
-    + (stale ? ` <em>Anything past ${thresholdDays} days is worth bringing down now.</em>` : '');
+  // The genuinely actionable number, and the only one shown in a warning tone.
+  const missing = s.withoutReceipts
+    ? ` <em>${s.withoutReceipts} expense${s.withoutReceipts === 1 ? '' : 's'} still ${s.withoutReceipts === 1 ? 'has' : 'have'} no receipt attached.</em>`
+    : '';
+
+  el.className = s.withoutReceipts ? 'tc-cloud-backlog is-stale' : 'tc-cloud-backlog';
+  el.innerHTML = (parts.length ? `🧾 ${parts.join(' · ')}.` : '🧾 No receipts stored yet.') + missing;
   el.style.display = '';
-  if (btn) btn.style.display = '';
-  if (viewBtn) viewBtn.style.display = '';
 }
 
 function renderTaxCenter() {

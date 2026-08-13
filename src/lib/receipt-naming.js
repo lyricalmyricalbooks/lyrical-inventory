@@ -140,6 +140,36 @@ export function cleanDescription(desc) {
     .trim();
 }
 
+/**
+ * The vendor, pulled out of a free-text expense description.
+ *
+ * Descriptions are written for a ledger, not a filename: "Staples order #4471",
+ * "Shippo shipping label #9405511899", "Adobe CC (Recurring)". The useful part
+ * for finding a receipt later is who it was paid to, so take the leading words
+ * and stop at the first thing that looks like a reference number, a quantity or
+ * a separator. Returns '' when nothing sensible survives, and callers fall back
+ * to the full description.
+ */
+export function vendorFrom(desc, maxWords = 3) {
+  const cleaned = cleanDescription(desc);
+  if (!cleaned) return '';
+
+  const words = [];
+  for (const raw of cleaned.split(/[\s,;:]+/)) {
+    if (!raw) continue;
+    // Stop at an order/invoice reference or anything mostly digits — those
+    // differ per purchase and make every filename unique but unsearchable.
+    if (/^[#(]/.test(raw)) break;
+    if (/\d/.test(raw) && /^[\W\d]*\d[\W\d]*$/.test(raw)) break;
+    if (/^(order|invoice|receipt|ref|no|number|payment|charge|for|from|to|the|a|an)$/i.test(raw) && words.length) break;
+
+    words.push(raw);
+    if (words.length >= maxWords) break;
+  }
+
+  return safeSegment(words.join(' '), 40);
+}
+
 /** `CAD-24.99`, the amount as it belongs in a filename. */
 export function amountPart(amount, currency) {
   const n = Number(amount);
@@ -164,8 +194,12 @@ export function receiptFileName(meta = {}, now = new Date()) {
 
   const parts = [datePart(date, now)];
 
-  const description = safeSegment(cleanDescription(desc), 60);
-  if (description) parts.push(description);
+  // Vendor first, falling back to the whole description. "2026-07-30_Uber" is
+  // findable; "2026-07-30_Uber-trip-to-the-printer-downtown" is not.
+  const who = meta.vendor
+    ? safeSegment(meta.vendor, 40)
+    : (vendorFrom(desc) || safeSegment(cleanDescription(desc), 60));
+  if (who) parts.push(who);
 
   const money = amountPart(amount, currency);
   if (money) parts.push(money);

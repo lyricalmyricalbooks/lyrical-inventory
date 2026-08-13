@@ -364,13 +364,15 @@ import {
   exportOpenCallCSV,
 } from './features/opencall.js';
 import { csvCell, toCsv } from './lib/csv.js';
-import { downloadText, downloadCsv } from './lib/download.js';
+import { downloadBlob, downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload } from './lib/consignment.js';
 import {
   cloudReceiptRefs,
   isCloudReceipt,
+  isLocalReceipt,
+  localRefPath,
   receiptOwners,
   receiptRefsOf,
   toLocalRef,
@@ -392,7 +394,10 @@ import {
   describeDestination,
   receiptFileName,
   receiptFolderPath,
+  vendorFrom,
 } from './lib/receipt-naming.js';
+import { createZip, textEntry } from './lib/zip.js';
+import { planFile } from './lib/receipt-match.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -13974,10 +13979,35 @@ function cloudReceiptOwners() {
  * the receipt exactly where it was, so a reclaim that runs at a bad moment
  * costs nothing but a retry.
  */
-async function reclaimOneReceipt(url, meta) {
+async function reclaimOneReceipt(url, meta, problems = null) {
+  // Record why this one failed rather than collapsing every cause into null.
+  // A whole batch failing identically is the signature of a systemic problem —
+  // an object that no longer exists, revoked access, a blocked request — and
+  // "check your connection" actively misdirects when that happens.
+  const note = (stage, detail) => {
+    if (problems) problems.push({ url, stage, detail, desc: meta && meta.desc });
+    console.warn(`Receipt reclaim failed [${stage}]`, detail, url);
+    return null;
+  };
+
+  let response;
   try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    response = await fetch(url);
+  } catch (e) {
+    // A network-layer rejection: offline, DNS, or the request being blocked
+    // before a status ever comes back.
+    return note('download', `${e.name || 'Error'}: ${e.message || 'request failed'}`);
+  }
+  if (!response.ok) {
+    const hint = response.status === 404
+      ? 'the file is no longer in cloud storage'
+      : response.status === 403
+        ? 'access denied — the link may have been revoked'
+        : 'unexpected response from cloud storage';
+    return note('download', `HTTP ${response.status} — ${hint}`);
+  }
+
+  try {
     const blob = await response.blob();
 
     // Firebase download URLs encode the object path, so the last %2F segment is
@@ -13991,15 +14021,51 @@ async function reclaimOneReceipt(url, meta) {
     // "2026/Office Supplies/2026-05-10_Staples_CAD-24.99.jpg" rather than
     // whatever the phone or the email attachment happened to call it.
     const localRef = await saveReceiptToLocalFile(file, '', { ...meta, originalName: filename });
-    if (!localRef) return null;
+    if (!localRef) {
+      return note('save', 'downloaded fine, but could not be written to the folder');
+    }
 
     // Safely on disk — now let go of the cloud copy.
     await window._fbDeleteReceipt(url);
     return toLocalRef(localRef);
   } catch (e) {
-    console.error('Receipt reclaim failed for', url, e);
-    return null;
+    return note('save', `${e.name || 'Error'}: ${e.message || 'could not save the file'}`);
   }
+}
+
+/**
+ * Turn a batch of reclaim failures into something the owner can hand back.
+ *
+ * Groups by the actual reason, because forty receipts failing the same way is a
+ * single problem with one fix, not forty problems.
+ */
+export function summarizeReceiptProblems(problems) {
+  const groups = new Map();
+  (problems || []).forEach(p => {
+    const key = `${p.stage}: ${p.detail}`;
+    if (!groups.has(key)) groups.set(key, { reason: key, count: 0, examples: [] });
+    const g = groups.get(key);
+    g.count++;
+    if (g.examples.length < 3) g.examples.push(p.desc || p.url);
+  });
+  return [...groups.values()].sort((a, b) => b.count - a.count);
+}
+
+/** Plain-text diagnostic for the clipboard. */
+export function formatReceiptDiagnostic(problems, context = {}) {
+  const groups = summarizeReceiptProblems(problems);
+  const lines = [
+    'Lyrical Inventory — receipt move diagnostic',
+    `When: ${new Date().toISOString()}`,
+    `Attempted: ${problems.length} receipt${problems.length === 1 ? '' : 's'}`,
+  ];
+  if (context.folder) lines.push(`Folder: ${context.folder}`);
+  lines.push('', 'Reasons:');
+  groups.forEach(g => {
+    lines.push(`  ${g.count}x  ${g.reason}`);
+    g.examples.forEach(e => lines.push(`        e.g. ${e}`));
+  });
+  return lines.join('\n');
 }
 
 /**
@@ -14067,6 +14133,7 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
   let failed = 0;
   let taxTouched = false;
   const booksTouched = new Set();
+  const problems = [];
 
   for (const { exp, subfolder, scope, bid } of owners) {
     const refs = receiptRefsOf(exp);
@@ -14085,7 +14152,7 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
 
     for (const ref of refs) {
       if (!isCloudReceipt(ref)) { next.push(ref); continue; }
-      const localRef = await reclaimOneReceipt(ref, { ...meta, index: next.length });
+      const localRef = await reclaimOneReceipt(ref, { ...meta, index: next.length }, problems);
       if (localRef) {
         next.push(localRef);
         changed = true;
@@ -14112,6 +14179,11 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
 
   if (btn) { btn.disabled = false; btn.textContent = btnText; }
 
+  // Keep the last batch's failures so the Receipts panel can explain them and
+  // hand the owner something to paste back.
+  _lastReceiptProblems = problems;
+  _lastReceiptProblemContext = { folder: dirHandle.name || '' };
+
   if (moved > 0) {
     renderTaxCenter();
     const where = dirHandle.name ? ` in ${dirHandle.name}` : '';
@@ -14123,15 +14195,516 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
       5000
     );
   } else if (interactive) {
-    showToast(`⚠ Could not move ${failed} receipt${failed === 1 ? '' : 's'} — check your connection and try again`, 'err', 5000);
+    // Say the actual reason. The old message blamed the connection for every
+    // cause, which sent the owner chasing a problem they did not have.
+    const groups = summarizeReceiptProblems(problems);
+    const top = groups[0];
+    showToast(
+      top
+        ? `⚠ Could not move ${failed} receipt${failed === 1 ? '' : 's'} — ${top.reason}`
+        : `⚠ Could not move ${failed} receipt${failed === 1 ? '' : 's'}`,
+      'err',
+      7000
+    );
   }
+  if (interactive) renderReceiptProblemPanel();
 
-  return { moved, failed };
+  return { moved, failed, problems };
+}
+
+// The failures from the most recent move, for the diagnostic panel.
+let _lastReceiptProblems = [];
+let _lastReceiptProblemContext = {};
+
+/**
+ * Explain the last batch of failures, grouped by cause, with a button that puts
+ * the detail on the clipboard. This is the instrument that answers "why did all
+ * forty fail" without asking a non-technical owner to open devtools.
+ */
+function renderReceiptProblemPanel() {
+  const el = $('tc-receipt-problems');
+  if (!el) return;
+  if (!_lastReceiptProblems.length) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  const groups = summarizeReceiptProblems(_lastReceiptProblems);
+  el.innerHTML = `<div class="tc-problem-head">⚠ <strong>${_lastReceiptProblems.length} receipt${_lastReceiptProblems.length === 1 ? '' : 's'} could not be moved.</strong> Here is exactly why:</div>`
+    + `<ul class="tc-problem-list">${groups.map(g =>
+      `<li><strong>${g.count}×</strong> ${escapeHtml(g.reason)}</li>`).join('')}</ul>`
+    + `<button class="btn tx sm" type="button" onclick="copyReceiptDiagnostic()" style="color:var(--gold-text);">📋 Copy details</button>`;
+  el.style.display = '';
+}
+
+async function copyReceiptDiagnostic() {
+  const text = formatReceiptDiagnostic(_lastReceiptProblems, _lastReceiptProblemContext);
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('✓ Details copied — paste them to whoever is helping you', 'ok', 4000);
+  } catch (_) {
+    // Clipboard can be blocked; fall back to something selectable.
+    const win = window.open('', '_blank');
+    if (win) win.document.write(`<pre>${escapeHtml(text)}</pre>`);
+    else showToast('⚠ Could not copy — check the browser console for details', 'warn');
+  }
 }
 
 /** Tax Centre button target — the reclaim, with prompts and a spoken result. */
 async function reclaimCloudReceiptsNow() {
   return reclaimCloudReceipts({ interactive: true });
+}
+
+// ── RECEIPT EXPORT
+// Handing someone an organized folder of receipts, without depending on the
+// File System Access API. A zip download works in every browser including a
+// phone, needs no permission, and cannot be broken by moving a folder — which
+// is the whole reason the old "keep the folder in sync" model kept failing.
+
+/**
+ * Every receipt that should appear in an export, with the expense it belongs to.
+ * Optionally narrowed to one tax year.
+ */
+export function receiptsForExport(year = null) {
+  const rows = [];
+  cloudReceiptOwners().forEach(({ exp, subfolder, scope }) => {
+    const refs = receiptRefsOf(exp);
+    if (!refs.length) return;
+    const expYear = String(exp.date || '').slice(0, 4);
+    if (year && expYear !== String(year)) return;
+
+    refs.forEach((ref, index) => {
+      rows.push({
+        ref,
+        index,
+        exp,
+        book: scope === 'book' ? subfolder : '',
+        meta: {
+          date: exp.date,
+          desc: exp.desc,
+          cat: exp.cat,
+          amount: exp.origAmount ?? exp.amount,
+          currency: exp.origCurrency || exp.currency,
+          book: scope === 'book' ? subfolder : '',
+          index,
+        },
+      });
+    });
+  });
+  return rows;
+}
+
+/** The tax years that actually have receipts, newest first. */
+export function receiptExportYears() {
+  const years = new Set();
+  receiptsForExport().forEach(r => {
+    const y = String(r.exp.date || '').slice(0, 4);
+    if (/^\d{4}$/.test(y)) years.add(y);
+  });
+  return [...years].sort().reverse();
+}
+
+/**
+ * Get the bytes for one receipt, wherever they happen to be.
+ *
+ * Three sources in order of fidelity: the folder (originals), the cloud
+ * (originals), then the on-device cache (which may hold a downscaled preview).
+ * The cache is last because a preview is a worse artifact for an accountant —
+ * but it beats a gap in the export.
+ */
+async function readReceiptBytes(ref, dirHandle) {
+  if (isLocalReceipt(ref)) {
+    const path = localRefPath(ref);
+    if (dirHandle) {
+      try {
+        const file = await resolveLocalReceiptFile(dirHandle, path);
+        return { blob: file, source: 'folder' };
+      } catch (_) { /* fall through to the cache */ }
+    }
+    const cached = await readCachedReceipt(path);
+    if (cached) return { blob: cached.blob, source: cached.kind === 'preview' ? 'preview' : 'device' };
+    return null;
+  }
+
+  if (isCloudReceipt(ref)) {
+    try {
+      const res = await fetch(ref);
+      if (res.ok) return { blob: await res.blob(), source: 'cloud' };
+      return { error: `HTTP ${res.status}` };
+    } catch (e) {
+      return { error: `${e.name || 'Error'}: ${e.message || 'download failed'}` };
+    }
+  }
+  return null;
+}
+
+/**
+ * Build and download an organized zip of receipts.
+ *
+ * The manifest is the part an accountant actually works from — it ties every
+ * file back to a ledger line, so the folder is auditable without opening each
+ * PDF. Anything that could not be retrieved is listed in the manifest too,
+ * rather than quietly missing.
+ */
+async function exportReceiptsZip(year = null) {
+  const rows = receiptsForExport(year);
+  if (!rows.length) {
+    showToast('⚠ No receipts to export for that year', 'warn');
+    return { exported: 0, missing: 0 };
+  }
+
+  const btn = $('tc-export-run-btn');
+  const oldText = btn ? btn.textContent : '';
+  const progress = $('tc-export-progress');
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+
+  const dirHandle = await loadReceiptFolderHandle().catch(() => null);
+  const files = [];
+  const manifest = [['Date', 'Vendor', 'Description', 'Category', 'Book', 'Amount', 'Currency', 'File', 'Source']];
+  let missing = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (progress) progress.textContent = `Collecting ${i + 1} of ${rows.length}…`;
+
+    const got = await readReceiptBytes(row.ref, dirHandle);
+    const vendor = vendorFrom(row.exp.desc) || '';
+
+    if (!got || !got.blob) {
+      missing++;
+      manifest.push([
+        row.exp.date || '', vendor, row.exp.desc || '', row.exp.cat || '', row.book,
+        String(row.meta.amount ?? ''), row.meta.currency || '',
+        '(not retrievable)', got && got.error ? got.error : 'missing',
+      ]);
+      continue;
+    }
+
+    const name = receiptFileName({ ...row.meta, vendor, originalName: localRefPath(row.ref).split('/').pop(), mimeType: got.blob.type });
+    const path = [...receiptFolderPath(row.meta), name].join('/');
+    files.push({ name: path, data: new Uint8Array(await got.blob.arrayBuffer()), date: new Date(row.exp.date || Date.now()) });
+    manifest.push([
+      row.exp.date || '', vendor, row.exp.desc || '', row.exp.cat || '', row.book,
+      String(row.meta.amount ?? ''), row.meta.currency || '', path, got.source,
+    ]);
+  }
+
+  if (progress) progress.textContent = 'Building the zip…';
+  files.push(textEntry('manifest.csv', toCsv(manifest)));
+
+  const label = year ? `-${year}` : '';
+  downloadBlob(createZip(files), `Lyricalmyrical-Receipts${label}.zip`);
+
+  if (btn) { btn.disabled = false; btn.textContent = oldText; }
+  if (progress) progress.textContent = '';
+  closeM('export-receipts');
+
+  showToast(
+    missing
+      ? `✓ Exported ${files.length - 1} receipt${files.length - 1 === 1 ? '' : 's'} · ${missing} could not be retrieved (listed in the summary sheet)`
+      : `✓ Exported ${files.length - 1} receipt${files.length - 1 === 1 ? '' : 's'} with a summary sheet`,
+    missing ? 'warn' : 'ok',
+    6000
+  );
+  return { exported: files.length - 1, missing };
+}
+
+function openExportReceiptsModal() {
+  const sel = $('tc-export-year');
+  if (sel) {
+    const years = receiptExportYears();
+    sel.innerHTML = `<option value="">All years</option>`
+      + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    // Default to the most recent year with receipts — the usual reason to
+    // export is the tax year just finished.
+    if (years.length) sel.value = years[0];
+  }
+  const progress = $('tc-export-progress');
+  if (progress) progress.textContent = '';
+  openM('export-receipts');
+}
+
+function closeExportReceiptsModal() { closeM('export-receipts'); }
+
+async function runReceiptExport() {
+  const year = ($('tc-export-year')?.value || '').trim();
+  return exportReceiptsZip(year || null);
+}
+
+// ── RECEIPT ORGANIZER
+// A one-time tidy-up for a folder that already exists: fifty-odd PDFs named by
+// whatever produced them, sitting flat in "General receipts".
+//
+// Non-destructive by construction. Files are *copied* into a new destination
+// folder, and the originals are never renamed, moved or deleted. These are tax
+// records — the cost of a wrong guess is losing a deduction, so nothing here
+// touches the only copy, and nothing is written until the owner has seen the
+// plan and pressed the button.
+
+let _organizerFiles = [];   // { handle, name, size }
+let _organizerPlans = [];   // planFile() output, one per file, editable
+let _organizerSource = null;
+let _organizerDest = null;
+
+/** Every file in a directory tree, depth-limited so a stray huge folder can't hang. */
+async function listFilesRecursive(dirHandle, prefix = '', depth = 0) {
+  const out = [];
+  if (depth > 3) return out;
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'file') {
+      // Only things that can plausibly be a receipt.
+      if (!/\.(pdf|jpe?g|png|webp|heic|heif|gif)$/i.test(entry.name)) continue;
+      out.push({ handle: entry, name: entry.name, path: prefix ? `${prefix}/${entry.name}` : entry.name });
+    } else if (entry.kind === 'directory') {
+      out.push(...await listFilesRecursive(entry, prefix ? `${prefix}/${entry.name}` : entry.name, depth + 1));
+    }
+  }
+  return out;
+}
+
+/** Every expense the organizer can match against, across the Tax Centre and books. */
+function organizerCandidateExpenses() {
+  return cloudReceiptOwners().map(o => ({
+    ...o.exp,
+    _book: o.scope === 'book' ? o.subfolder : '',
+  }));
+}
+
+async function openReceiptOrganizer() {
+  if (!('showDirectoryPicker' in window)) {
+    showToast('⚠ Tidying a folder needs Chrome or Edge on a computer', 'warn', 5000);
+    return;
+  }
+  _organizerFiles = [];
+  _organizerPlans = [];
+  _organizerSource = null;
+  _organizerDest = null;
+  const body = $('organizer-body');
+  if (body) body.innerHTML = '<div class="organizer-empty">Choose the folder your receipts are in to begin. Nothing is changed until you say so.</div>';
+  const status = $('organizer-status');
+  if (status) status.textContent = '';
+  const runBtn = $('organizer-run-btn');
+  if (runBtn) runBtn.style.display = 'none';
+  openM('receipt-organizer');
+}
+
+function closeReceiptOrganizer() { closeM('receipt-organizer'); }
+
+/** Pick the messy folder and build the plan. */
+async function chooseOrganizerSource() {
+  try {
+    _organizerSource = await window.showDirectoryPicker({ mode: 'read' });
+  } catch (e) {
+    if (e?.name !== 'AbortError') showToast('Could not open that folder', 'err');
+    return;
+  }
+
+  const status = $('organizer-status');
+  if (status) status.textContent = 'Reading the folder…';
+
+  _organizerFiles = await listFilesRecursive(_organizerSource);
+  if (!_organizerFiles.length) {
+    if (status) status.textContent = '';
+    showToast('No receipt files found in that folder', 'warn');
+    return;
+  }
+
+  const expenses = organizerCandidateExpenses();
+  _organizerPlans = _organizerFiles.map(f => ({
+    ...planFile({ name: f.name }, expenses, TAX_CATEGORIES),
+    source: f,
+  }));
+
+  renderOrganizerTable();
+  if (status) {
+    const needing = _organizerPlans.filter(p => p.needsOcr).length;
+    status.textContent = `${_organizerFiles.length} file${_organizerFiles.length === 1 ? '' : 's'} found in "${_organizerSource.name}".`
+      + (needing ? ` ${needing} need${needing === 1 ? 's' : ''} a closer look — use Read the unclear ones to have them read automatically.` : '');
+  }
+  const runBtn = $('organizer-run-btn');
+  if (runBtn) runBtn.style.display = '';
+}
+
+/**
+ * Read the files the filename couldn't explain, using the receipt OCR that
+ * already exists for the expense form. Bounded and sequential — this costs real
+ * API calls, so it runs only on the files that need it.
+ */
+async function organizerReadUnclear() {
+  const apiKey = TAX_CENTER.settings?.geminiKey || '';
+  if (!apiKey) { showToast('⚠ Add a Gemini API key in Config first', 'err', 5000); return; }
+
+  const todo = _organizerPlans.filter(p => p.needsOcr);
+  if (!todo.length) { showToast('✓ Nothing needs reading — every file was understood from its name', 'ok'); return; }
+
+  const btn = $('organizer-ocr-btn');
+  const status = $('organizer-status');
+  const oldText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; }
+
+  const expenses = organizerCandidateExpenses();
+  let read = 0;
+  for (let i = 0; i < todo.length; i++) {
+    const plan = todo[i];
+    if (btn) btn.textContent = `Reading ${i + 1}/${todo.length}…`;
+    if (status) status.textContent = `Reading ${plan.source.name}…`;
+    try {
+      const file = await plan.source.handle.getFile();
+      const upload = await _prepareReceiptUpload(file);
+      const out = await _callGeminiForReceipts(apiKey, [
+        { text: _buildReceiptScanPrompt() },
+        { inline_data: { mime_type: upload.mime, data: upload.base64 } },
+      ], { schema: RECEIPT_SCAN_SCHEMA, maxOutputTokens: 2048 });
+      const parsed = _parseReceiptJson(out?.text || '') || {};
+
+      // Re-plan with what the file itself says, which usually turns an
+      // unmatched file into a confident one.
+      const enriched = {
+        name: plan.source.name,
+        date: parsed.date || '',
+        vendor: parsed.vendor || parsed.merchant || parsed.desc || '',
+        amount: Number(parsed.amount) || undefined,
+        currency: parsed.currency || '',
+        cat: parsed.category && TC_CATEGORIES.includes(parsed.category) ? parsed.category : '',
+      };
+      Object.assign(plan, planFile(enriched, expenses, TAX_CATEGORIES), { source: plan.source, ocr: true });
+      read++;
+    } catch (e) {
+      console.warn('Could not read receipt', plan.source.name, e);
+      plan.ocrFailed = true;
+    }
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = oldText; }
+  if (status) status.textContent = `Read ${read} of ${todo.length}.`;
+  renderOrganizerTable();
+}
+
+function renderOrganizerTable() {
+  const body = $('organizer-body');
+  if (!body) return;
+  if (!_organizerPlans.length) {
+    body.innerHTML = '<div class="organizer-empty">Nothing to show yet.</div>';
+    return;
+  }
+
+  body.innerHTML = `<table class="organizer-table"><thead><tr>
+      <th>File</th><th>Goes to</th><th>Matched expense</th><th></th>
+    </tr></thead><tbody>${_organizerPlans.map((p, i) => {
+    const dest = p.meta.date && p.meta.cat
+      ? `${escapeHtml(receiptFolderPath(p.meta).join(' › '))}<br><span class="organizer-name">${escapeHtml(receiptFileName({ ...p.meta, originalName: p.source.name }))}</span>`
+      : '<span class="organizer-warn">Not enough information yet</span>';
+    const matched = p.matched
+      ? `${escapeHtml(p.match.desc || '')}<br><span class="organizer-why">${escapeHtml(p.reasons.join(', '))}</span>`
+      : (p.ambiguous
+        ? '<span class="organizer-warn">Matches more than one expense</span>'
+        : '<span class="organizer-why">No match — filed by its own details</span>');
+    return `<tr class="${p.needsReview ? 'needs-review' : ''}">
+        <td><span class="organizer-src">${escapeHtml(p.source.name)}</span></td>
+        <td>${dest}</td>
+        <td>${matched}</td>
+        <td><label class="organizer-skip"><input type="checkbox" ${p.skip ? 'checked' : ''} onchange="toggleOrganizerSkip(${i}, this.checked)"> Skip</label></td>
+      </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function toggleOrganizerSkip(index, skip) {
+  if (_organizerPlans[index]) _organizerPlans[index].skip = !!skip;
+}
+
+/**
+ * Copy every planned file into a fresh destination folder.
+ *
+ * Copies — never moves. The source folder is left exactly as it was, so if the
+ * result is wrong the owner still has everything, and can simply delete the new
+ * folder and try again.
+ */
+async function runReceiptOrganizer() {
+  const usable = _organizerPlans.filter(p => !p.skip && p.meta.date && p.meta.cat);
+  if (!usable.length) {
+    showToast('⚠ Nothing is ready to file yet — read the unclear ones first', 'warn', 5000);
+    return;
+  }
+
+  const proceed = await confirmDialog(
+    `Copy ${usable.length} receipt${usable.length === 1 ? '' : 's'} into a new, organized folder?\n\n`
+    + 'Your existing folder is left exactly as it is — nothing is renamed, moved or deleted there. '
+    + 'Choose an empty folder for the tidy copy.',
+    { title: 'Tidy receipts into a new folder', okLabel: 'Choose destination…', cancelLabel: 'Cancel' }
+  );
+  if (!proceed) return;
+
+  try {
+    _organizerDest = await window.showDirectoryPicker({ mode: 'readwrite' });
+  } catch (e) {
+    if (e?.name !== 'AbortError') showToast('Could not open that folder', 'err');
+    return;
+  }
+  if (_organizerDest === _organizerSource) {
+    showToast('⚠ Pick a different folder from the original', 'warn', 5000);
+    return;
+  }
+
+  const btn = $('organizer-run-btn');
+  const status = $('organizer-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Copying…'; }
+
+  const manifest = [['Original file', 'New location', 'Date', 'Vendor', 'Category', 'Amount', 'Currency', 'Matched expense']];
+  let copied = 0;
+  let failed = 0;
+
+  for (let i = 0; i < usable.length; i++) {
+    const plan = usable[i];
+    if (status) status.textContent = `Copying ${i + 1} of ${usable.length}…`;
+    try {
+      const file = await plan.source.handle.getFile();
+      const segments = receiptFolderPath(plan.meta);
+      let dir = _organizerDest;
+      for (const seg of segments) dir = await dir.getDirectoryHandle(seg, { create: true });
+
+      const desired = receiptFileName({ ...plan.meta, originalName: plan.source.name, mimeType: file.type });
+      const filename = await uniqueFileName(desired, async (n) => {
+        try { await dir.getFileHandle(n, { create: false }); return true; } catch (_) { return false; }
+      });
+
+      const handle = await dir.getFileHandle(filename, { create: true });
+      const writable = await handle.createWritable();
+      await writable.write(file);
+      await writable.close();
+
+      manifest.push([
+        plan.source.name, [...segments, filename].join('/'), plan.meta.date,
+        plan.meta.vendor || '', plan.meta.cat, String(plan.meta.amount ?? ''), plan.meta.currency || '',
+        plan.matched ? (plan.match.desc || '') : '',
+      ]);
+      copied++;
+    } catch (e) {
+      console.error('Could not copy', plan.source.name, e);
+      failed++;
+    }
+  }
+
+  // A summary sheet next to the copies, so the result is auditable without
+  // opening every file.
+  try {
+    const mHandle = await _organizerDest.getFileHandle('receipts-index.csv', { create: true });
+    const w = await mHandle.createWritable();
+    await w.write(new Blob([toCsv(manifest)], { type: 'text/csv' }));
+    await w.close();
+  } catch (e) {
+    console.warn('Could not write the index', e);
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '🗃 Copy into a tidy folder'; }
+  if (status) status.textContent = '';
+  closeReceiptOrganizer();
+  showToast(
+    failed
+      ? `✓ Copied ${copied} receipt${copied === 1 ? '' : 's'} · ${failed} could not be copied · originals untouched`
+      : `✓ Copied ${copied} receipt${copied === 1 ? '' : 's'} into "${_organizerDest.name}", sorted by year and category. Your original folder is unchanged.`,
+    failed ? 'warn' : 'ok',
+    7000
+  );
 }
 
 /**
@@ -21812,6 +22385,9 @@ Object.assign(window, {
   tcSetRecurringFilter, tcShowRecurringCharges,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   reclaimCloudReceiptsNow, cacheAllReceiptsNow, openCloudReceiptsModal, closeCloudReceiptsModal,
+  copyReceiptDiagnostic, openExportReceiptsModal, closeExportReceiptsModal, runReceiptExport,
+  openReceiptOrganizer, closeReceiptOrganizer, chooseOrganizerSource, organizerReadUnclear,
+  toggleOrganizerSkip, runReceiptOrganizer,
   batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
   tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcYearChange, tcClearLedgerFilters,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
@@ -22682,6 +23258,12 @@ function exposeLegacyInlineHandlers() {
     evictReceiptCacheToBudget, deleteCachedReceipt, makeReceiptPreview, openBlobInTab,
     checkReceiptFolderHealth, receiptFolderReachable, backfillReceiptCache, cacheAllReceiptsNow,
     cloudReceiptQueue, receiptWaitingDays, openCloudReceiptsModal, closeCloudReceiptsModal,
+    summarizeReceiptProblems, formatReceiptDiagnostic, renderReceiptProblemPanel, copyReceiptDiagnostic,
+    receiptsForExport, receiptExportYears, readReceiptBytes, exportReceiptsZip,
+    openExportReceiptsModal, closeExportReceiptsModal, runReceiptExport,
+    listFilesRecursive, organizerCandidateExpenses, openReceiptOrganizer, closeReceiptOrganizer,
+    chooseOrganizerSource, organizerReadUnclear, renderOrganizerTable, toggleOrganizerSkip,
+    runReceiptOrganizer,
     _localReceiptCell, viewLocalReceipt, initializeBackupFolderDisplay, reclaimCloudReceipts,
     reclaimOneReceipt, reclaimCloudReceiptsNow, exportToJSON, maybeAutoDownloadDailyBackup,
     updateLastBackupDisplay, checkDailyBackup, buildBackupPayload, saveSystemBackups,
