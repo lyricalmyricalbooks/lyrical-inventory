@@ -377,6 +377,22 @@ import {
   uniqueFileName,
   writeReceiptRefs,
 } from './lib/receipt-storage.js';
+import {
+  PREVIEW_MAX_EDGE,
+  PREVIEW_QUALITY,
+  cacheKeyFor,
+  cachePlanFor,
+  cacheStats,
+  formatCacheSize,
+  planEviction,
+  previewDimensions,
+  uncachedRefs,
+} from './lib/receipt-cache.js';
+import {
+  describeDestination,
+  receiptFileName,
+  receiptFolderPath,
+} from './lib/receipt-naming.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -1729,6 +1745,9 @@ const BACKUP_FOLDER_KEY = 'preferred-folder';
 const RECEIPT_FOLDER_DB = 'lm-receipt-folder-db';
 const RECEIPT_FOLDER_STORE = 'handles';
 const RECEIPT_FOLDER_KEY = 'preferred-receipt-folder';
+// Standby copies of receipt files, so a moved folder can't blank the ledger.
+const RECEIPT_CACHE_DB = 'lm-receipt-cache-db';
+const RECEIPT_CACHE_STORE = 'blobs';
 
 let _syncRetryTimer = null;
 let _syncRetryAttempt = 0;
@@ -5917,7 +5936,9 @@ async function submitExpense() {
       // A publisher on a machine with no folder connected used to lose the
       // receipt here without a word.
       submitBtn.textContent = 'Saving receipt…'; submitBtn.disabled = true;
-      const saved = await saveReceiptBestEffort(file, book.title);
+      const saved = await saveReceiptBestEffort(file, book.title, {
+        date, desc: finalDesc, cat, amount: rawAmount, currency: cur, book: book.title,
+      });
       receiptUrl = saved.ref;
       receiptStorage = saved.storage;
       if (receiptStorage === 'cloud') {
@@ -13340,7 +13361,169 @@ async function handleFolderError(e, title, message) {
   return false;
 }
 
-export async function saveReceiptToLocalFile(file, subfolderName = '') {
+// ── RECEIPT CACHE
+// The standby copy of every filed receipt, held in IndexedDB and reachable with
+// no folder handle involved. See src/lib/receipt-cache.js for why this exists:
+// a moved folder invalidates the stored handle, and every lookup strategy runs
+// through that handle, so they all fail together and the whole ledger stops
+// rendering at once.
+async function openReceiptCacheDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(RECEIPT_CACHE_DB, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(RECEIPT_CACHE_STORE)) {
+        req.result.createObjectStore(RECEIPT_CACHE_STORE, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function _cacheTx(db, mode) {
+  return db.transaction(RECEIPT_CACHE_STORE, mode).objectStore(RECEIPT_CACHE_STORE);
+}
+
+function _reqPromise(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Shrink an oversized receipt photo to something worth keeping as a standby.
+ * Returns null when the image can't be decoded or is already small enough, in
+ * which case the caller decides whether to store the original or skip it.
+ */
+async function makeReceiptPreview(blob) {
+  if (typeof createImageBitmap !== 'function') return null;
+  let bitmap = null;
+  try {
+    bitmap = await createImageBitmap(blob);
+    const { width, height, scaled } = previewDimensions(bitmap.width, bitmap.height, PREVIEW_MAX_EDGE);
+    if (!scaled) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
+    return await new Promise(res => canvas.toBlob(res, 'image/jpeg', PREVIEW_QUALITY));
+  } catch (e) {
+    console.warn('Receipt preview failed', e);
+    return null;
+  } finally {
+    if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+  }
+}
+
+/**
+ * Keep a standby copy of one receipt. Never throws and never blocks the caller's
+ * real work — a receipt that failed to cache is still filed on disk, and the
+ * backfill will pick it up on a later pass.
+ */
+async function cacheReceiptFile(ref, file, { kindHint = '' } = {}) {
+  const key = cacheKeyFor(ref);
+  if (!key || !file) return false;
+
+  try {
+    const plan = cachePlanFor({ size: file.size, type: file.type, name: file.name });
+    let blob = file;
+    let kind = 'original';
+
+    if (plan.store === 'preview') {
+      const preview = await makeReceiptPreview(file);
+      if (preview) {
+        blob = preview;
+        kind = 'preview';
+      } else if (file.size > 12 * 1024 * 1024) {
+        // Undecodable and very large — filing it would crowd out receipts that
+        // can actually be shown.
+        return false;
+      }
+    } else if (plan.store === 'skip') {
+      return false;
+    }
+
+    const db = await openReceiptCacheDb();
+    const now = new Date().toISOString();
+    await _reqPromise(_cacheTx(db, 'readwrite').put({
+      key,
+      blob,
+      kind: kindHint || kind,
+      name: file.name || key.split('/').pop(),
+      type: blob.type || file.type || '',
+      size: blob.size || 0,
+      cachedAt: now,
+      lastSeenAt: now,
+    }));
+    db.close();
+    await evictReceiptCacheToBudget();
+    return true;
+  } catch (e) {
+    console.warn('Receipt cache write failed', e);
+    return false;
+  }
+}
+
+/** The standby copy, if there is one. Bumps recency so eviction spares it. */
+async function readCachedReceipt(ref) {
+  const key = cacheKeyFor(ref);
+  if (!key) return null;
+  try {
+    const db = await openReceiptCacheDb();
+    const entry = await _reqPromise(_cacheTx(db, 'readonly').get(key));
+    if (entry && entry.blob) {
+      entry.lastSeenAt = new Date().toISOString();
+      try { await _reqPromise(_cacheTx(db, 'readwrite').put(entry)); } catch (_) { /* recency is best-effort */ }
+    }
+    db.close();
+    return entry && entry.blob ? entry : null;
+  } catch (e) {
+    console.warn('Receipt cache read failed', e);
+    return null;
+  }
+}
+
+/** Entry metadata without the blobs, for eviction planning and the readout. */
+async function listCachedReceiptMeta() {
+  try {
+    const db = await openReceiptCacheDb();
+    const all = await _reqPromise(_cacheTx(db, 'readonly').getAll());
+    db.close();
+    return (all || []).map(({ key, kind, name, type, size, cachedAt, lastSeenAt }) =>
+      ({ key, kind, name, type, size, cachedAt, lastSeenAt }));
+  } catch (e) {
+    return [];
+  }
+}
+
+async function evictReceiptCacheToBudget() {
+  try {
+    const entries = await listCachedReceiptMeta();
+    const doomed = planEviction(entries);
+    if (!doomed.length) return 0;
+    const db = await openReceiptCacheDb();
+    const store = _cacheTx(db, 'readwrite');
+    await Promise.all(doomed.map(key => _reqPromise(store.delete(key))));
+    db.close();
+    return doomed.length;
+  } catch (e) {
+    console.warn('Receipt cache eviction failed', e);
+    return 0;
+  }
+}
+
+async function deleteCachedReceipt(ref) {
+  const key = cacheKeyFor(ref);
+  if (!key) return;
+  try {
+    const db = await openReceiptCacheDb();
+    await _reqPromise(_cacheTx(db, 'readwrite').delete(key));
+    db.close();
+  } catch (_) { /* a stale cache entry is harmless */ }
+}
+
+export async function saveReceiptToLocalFile(file, subfolderName = '', meta = null) {
   const dirHandle = await loadReceiptFolderHandle();
   if (!dirHandle) return null;
   try {
@@ -13349,19 +13532,28 @@ export async function saveReceiptToLocalFile(file, subfolderName = '') {
 
     const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: true });
 
+    // With expense details to hand, file by tax year and category and name the
+    // file after what it was for. Without them — the email importer, shipping
+    // labels — keep the flat subfolder the caller asked for.
+    const segments = meta
+      ? receiptFolderPath({ ...meta, book: meta.book || subfolderName })
+      : (subfolderName ? [subfolderName] : []);
+
     let targetDir = receiptsDir;
-    if (subfolderName) {
-      targetDir = await receiptsDir.getDirectoryHandle(subfolderName, { create: true });
+    for (const segment of segments) {
+      targetDir = await targetDir.getDirectoryHandle(segment, { create: true });
     }
 
-    const stamp = new Date().toISOString().split('T')[0];
-    const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+    const desiredName = meta
+      ? receiptFileName({ ...meta, originalName: file.name, mimeType: file.type })
+      : `${new Date().toISOString().split('T')[0]}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
+
     // Two receipts saved the same day from files with the same name would land
     // on the same path, and `create: true` + createWritable() truncates rather
     // than refusing — the first receipt would be gone with nothing to show for
     // it. Suffix instead, which matters most during a reclaim (a whole backlog
     // written in one pass, where repeated names like "receipt.jpg" are normal).
-    const filename = await uniqueFileName(`${stamp}_${cleanName}`, async (name) => {
+    const filename = await uniqueFileName(desiredName, async (name) => {
       try {
         await targetDir.getFileHandle(name, { create: false });
         return true;
@@ -13375,7 +13567,11 @@ export async function saveReceiptToLocalFile(file, subfolderName = '') {
     await writable.write(file);
     await writable.close();
 
-    return subfolderName ? `local://${subfolderName}/${filename}` : `local://${filename}`;
+    const relative = [...segments, filename].join('/');
+    // Cache before returning, so a receipt is viewable even if the folder moves
+    // between now and the next time the owner looks for it.
+    await cacheReceiptFile(relative, file);
+    return `local://${relative}`;
   } catch (e) {
     await handleFolderError(e, 'Error Saving Receipt', 'Receipt file save failed. The folder may have been moved or disconnected.');
     return null;
@@ -13417,10 +13613,10 @@ export async function uploadReceiptToCloud(file, subfolderName = 'General') {
  * Returns `{ ref, storage }` where storage is 'local' | 'cloud' | 'none', so the
  * caller can stamp receiptCloudAt and say something truthful in its toast.
  */
-export async function saveReceiptBestEffort(file, subfolderName = 'General') {
+export async function saveReceiptBestEffort(file, subfolderName = 'General', meta = null) {
   let localRef = null;
   try {
-    localRef = await saveReceiptToLocalFile(file, subfolderName);
+    localRef = await saveReceiptToLocalFile(file, subfolderName, meta);
   } catch (e) {
     console.error('Local receipt save failed', e);
     localRef = null;
@@ -13505,35 +13701,227 @@ export async function resolveLocalReceiptFile(dirHandle, path) {
   return fileHandle.getFile();
 }
 
-async function viewLocalReceipt(path) {
-  let dirHandle = await loadReceiptFolderHandle();
+// Whether the connected folder answered last time we asked. Drives the one
+// banner in the Tax Centre, so a moved folder is reported once rather than as a
+// dialog per receipt the owner clicks.
+let _receiptFolderReachable = true;
+
+function _noteReceiptFolderHealth(reachable) {
+  if (_receiptFolderReachable === reachable) return;
+  _receiptFolderReachable = reachable;
+  renderReceiptFolderAlert();
+}
+
+export function receiptFolderReachable() {
+  return _receiptFolderReachable;
+}
+
+/**
+ * The folder-has-vanished banner.
+ *
+ * Rendered here rather than from the Tax Centre module because this file owns
+ * the folder handle and the cache, and the element is static markup nothing else
+ * rewrites. Shown once instead of raising a reconnect dialog every time the
+ * owner clicks a receipt — which is exactly what moving the folder used to feel
+ * like.
+ */
+function renderReceiptFolderAlert() {
+  const el = $('tc-folder-alert');
+  if (!el) return;
+  if (_receiptFolderReachable) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = '⚠ <strong>Your receipts folder can\'t be found.</strong> It was probably moved or renamed. '
+    + 'Receipts still open from the copies saved on this device, and anything new is saved to the cloud until you reconnect. '
+    + '<button class="btn tx sm" type="button" onclick="setupReceiptFolder()" style="color:var(--gold-text);padding:0 4px;">Reconnect it now</button>';
+  el.style.display = '';
+}
+
+/** How many receipts have a standby copy on this device, and how much space. */
+async function renderReceiptCacheStatus() {
+  const el = $('tc-cache-status');
+  if (!el) return;
+  const { count, bytes, previews } = cacheStats(await listCachedReceiptMeta());
+  if (!count) {
+    el.textContent = 'No receipts saved on this device yet — save them so they still open if the folder moves.';
+    el.style.display = '';
+    return;
+  }
+  el.innerHTML = `💾 <strong>${count} receipt${count === 1 ? '' : 's'}</strong> saved on this device (${escapeHtml(formatCacheSize(bytes))})`
+    + (previews ? ` · ${previews} stored as smaller previews` : '')
+    + ' — these keep opening even if your folder moves.';
+  el.style.display = '';
+}
+
+/**
+ * Ask the folder whether it is still there.
+ *
+ * A stale handle usually still reports its permission happily and only fails
+ * when something is actually read, so this opens the `receipts/` directory —
+ * cheap, and it is the one directory the app knows it created.
+ */
+async function checkReceiptFolderHealth() {
+  const dirHandle = await loadReceiptFolderHandle().catch(() => null);
   if (!dirHandle) {
-    const reconnect = await confirmDialog(
-      'Receipt folder not connected. Would you like to connect it now?',
-      { title: 'Folder Not Connected', okLabel: 'Choose Folder', cancelLabel: 'Cancel' }
-    );
-    if (reconnect) {
-      const handle = await setupReceiptFolder();
-      if (!handle) return;
-      dirHandle = handle;
-    } else {
-      return;
-    }
+    _noteReceiptFolderHealth(true); // nothing connected is not "broken"
+    return { connected: false, reachable: true, handle: null };
   }
   try {
-    const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
-    if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return;
-
-    const file = await resolveLocalReceiptFile(dirHandle, path);
-    const url = URL.createObjectURL(file);
-    window.open(url, '_blank');
+    const perm = await dirHandle.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') {
+      // Needs a click to regrant; not the same as a folder that has vanished.
+      _noteReceiptFolderHealth(true);
+      return { connected: true, reachable: true, needsPermission: true, handle: dirHandle };
+    }
+    await dirHandle.getDirectoryHandle('receipts', { create: false });
+    _noteReceiptFolderHealth(true);
+    return { connected: true, reachable: true, handle: dirHandle };
   } catch (e) {
-    const reconnected = await handleFolderError(e, 'Error Opening Receipt', 'Could not open local file. The folder may have been moved or disconnected.');
-    if (reconnected) {
-      // Auto-retry immediately with newly reconnected folder!
-      viewLocalReceipt(path);
+    // NotFoundError on `receipts/` can also mean a fresh folder that has never
+    // been written to, so only a hard failure counts as unreachable.
+    try {
+      for await (const _ of dirHandle.values()) break;
+      _noteReceiptFolderHealth(true);
+      return { connected: true, reachable: true, empty: true, handle: dirHandle };
+    } catch (inner) {
+      console.warn('Receipt folder unreachable', inner);
+      _noteReceiptFolderHealth(false);
+      return { connected: true, reachable: false, handle: dirHandle };
     }
   }
+}
+
+/**
+ * Give every local receipt a standby copy, for the ones filed before the cache
+ * existed — precisely the receipts most exposed to a folder move.
+ *
+ * Bounded per pass so opening the app never turns into a long disk crawl; the
+ * next startup continues where this one stopped.
+ */
+async function backfillReceiptCache({ limit = 40, interactive = false } = {}) {
+  if (!window.IS_PUBLISHER) return { cached: 0, missing: 0, remaining: 0 };
+
+  const health = await checkReceiptFolderHealth();
+  if (!health.connected || !health.reachable || health.needsPermission) {
+    if (interactive) {
+      showToast(health.connected
+        ? '⚠ Your receipts folder isn\'t reachable — reconnect it first'
+        : '⚠ Connect a receipts folder first', 'warn', 5000);
+    }
+    return { cached: 0, missing: 0, remaining: 0 };
+  }
+
+  const refs = cloudReceiptOwners()
+    .flatMap(o => receiptRefsOf(o.exp))
+    .filter(r => typeof r === 'string' && r.startsWith('local://'));
+
+  const cachedKeys = (await listCachedReceiptMeta()).map(e => e.key);
+  const todo = uncachedRefs(refs, cachedKeys);
+  if (!todo.length) {
+    if (interactive) showToast('✓ Every receipt already has an offline copy', 'ok');
+    return { cached: 0, missing: 0, remaining: 0 };
+  }
+
+  const batch = todo.slice(0, limit);
+  let cached = 0;
+  let missing = 0;
+
+  for (const ref of batch) {
+    try {
+      const file = await resolveLocalReceiptFile(health.handle, cacheKeyFor(ref));
+      if (await cacheReceiptFile(ref, file)) cached++;
+    } catch (_) {
+      // Already unreachable on disk — the re-link tool is the cure for that.
+      missing++;
+    }
+  }
+
+  if (interactive) {
+    const remaining = todo.length - batch.length;
+    showToast(
+      `✓ ${cached} receipt${cached === 1 ? '' : 's'} saved for offline viewing` +
+      (missing ? ` · ${missing} not found on disk` : '') +
+      (remaining ? ` · ${remaining} to go` : ''),
+      missing ? 'warn' : 'ok',
+      5000
+    );
+    renderTaxCenter();
+    renderReceiptCacheStatus();
+  }
+
+  return { cached, missing, remaining: todo.length - batch.length };
+}
+
+/** Tax Centre button target for the backfill. */
+async function cacheAllReceiptsNow() {
+  return backfillReceiptCache({ limit: 500, interactive: true });
+}
+
+/** Open a blob in a new tab, revoking the object URL once it has loaded. */
+function openBlobInTab(blob) {
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  // Revoke late: revoking immediately can beat the new tab to the bytes.
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return win;
+}
+
+/**
+ * Show a receipt, from the folder if it is reachable and from the standby copy
+ * if it is not.
+ *
+ * The folder stays the preferred source — it holds the original bytes and the
+ * cache may hold a downscaled preview. But the folder failing is no longer the
+ * end of the road: this used to raise a reconnect dialog per receipt, so moving
+ * the folder meant every receipt in the ledger stopped opening and the owner got
+ * a dialog for each one they tried.
+ */
+async function viewLocalReceipt(path) {
+  const dirHandle = await loadReceiptFolderHandle().catch(() => null);
+
+  if (dirHandle) {
+    try {
+      const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
+      if (permission === 'granted' || await dirHandle.requestPermission({ mode: 'readwrite' }) === 'granted') {
+        const file = await resolveLocalReceiptFile(dirHandle, path);
+        openBlobInTab(file);
+        _noteReceiptFolderHealth(true);
+        // Refresh the standby copy while the real file is in hand.
+        cacheReceiptFile(path, file);
+        return;
+      }
+    } catch (e) {
+      console.warn('Receipt not reachable in folder, trying cached copy', e);
+    }
+  }
+
+  const cached = await readCachedReceipt(path);
+  if (cached) {
+    openBlobInTab(cached.blob);
+    _noteReceiptFolderHealth(false);
+    showToast(
+      cached.kind === 'preview'
+        ? 'Showing a saved copy — reconnect your receipts folder for the original'
+        : 'Showing a saved copy — your receipts folder isn\'t reachable right now',
+      'warn',
+      5000
+    );
+    return;
+  }
+
+  // Nothing on disk and nothing cached: now a reconnect is genuinely the only
+  // way forward, so it is worth asking.
+  _noteReceiptFolderHealth(false);
+  const reconnected = await handleFolderError(
+    new Error(`Receipt "${path}" not found`),
+    'Receipt Not Found',
+    dirHandle
+      ? 'That receipt isn\'t in the connected folder and no saved copy is stored on this device. The folder may have been moved.'
+      : 'No receipts folder is connected on this device, and no saved copy of this receipt is stored here.'
+  );
+  if (reconnected) viewLocalReceipt(path);
 }
 
 async function initializeBackupFolderDisplay() {
@@ -13549,7 +13937,17 @@ async function initializeBackupFolderDisplay() {
     // the publisher's machine. Quiet on the way through — a startup pass that
     // finds nothing should say nothing.
     if (window.IS_PUBLISHER) {
-      setTimeout(() => reclaimCloudReceipts({ interactive: false }), 2000); // Wait for initial app load
+      setTimeout(async () => {
+        // Health first: it sets the banner, and both passes below need to know
+        // whether the folder is answering before they touch it.
+        await checkReceiptFolderHealth();
+        await reclaimCloudReceipts({ interactive: false });
+        // Then give anything filed before the cache existed a standby copy, a
+        // batch at a time — those are the receipts a folder move would strand.
+        await backfillReceiptCache({ interactive: false });
+        renderReceiptFolderAlert();
+        renderReceiptCacheStatus();
+      }, 2000); // Wait for initial app load
     }
   } catch (e) {
     updateBackupFolderDisplay('Backup folder: Browser Downloads (default)');
@@ -13576,7 +13974,7 @@ function cloudReceiptOwners() {
  * the receipt exactly where it was, so a reclaim that runs at a bad moment
  * costs nothing but a retry.
  */
-async function reclaimOneReceipt(url, subfolderName) {
+async function reclaimOneReceipt(url, meta) {
   try {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -13589,7 +13987,10 @@ async function reclaimOneReceipt(url, subfolderName) {
     try { filename = decodeURIComponent(raw) || 'receipt'; } catch (_) { filename = raw || 'receipt'; }
 
     const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-    const localRef = await saveReceiptToLocalFile(file, subfolderName.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
+    // Named and filed from the expense, so what lands on disk reads as
+    // "2026/Office Supplies/2026-05-10_Staples_CAD-24.99.jpg" rather than
+    // whatever the phone or the email attachment happened to call it.
+    const localRef = await saveReceiptToLocalFile(file, '', { ...meta, originalName: filename });
     if (!localRef) return null;
 
     // Safely on disk — now let go of the cloud copy.
@@ -13671,10 +14072,20 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
     const refs = receiptRefsOf(exp);
     const next = [];
     let changed = false;
+    // Book expenses file under their title; Tax Centre ones don't need the
+    // extra level, since 'General' would only ever be one folder.
+    const meta = {
+      date: exp.date,
+      desc: exp.desc,
+      cat: exp.cat,
+      amount: exp.origAmount ?? exp.amount,
+      currency: exp.origCurrency || exp.currency,
+      book: scope === 'book' ? subfolder : '',
+    };
 
     for (const ref of refs) {
       if (!isCloudReceipt(ref)) { next.push(ref); continue; }
-      const localRef = await reclaimOneReceipt(ref, subfolder);
+      const localRef = await reclaimOneReceipt(ref, { ...meta, index: next.length });
       if (localRef) {
         next.push(localRef);
         changed = true;
@@ -13721,6 +14132,91 @@ async function reclaimCloudReceipts({ interactive = false } = {}) {
 /** Tax Centre button target — the reclaim, with prompts and a spoken result. */
 async function reclaimCloudReceiptsNow() {
   return reclaimCloudReceipts({ interactive: true });
+}
+
+/**
+ * The receipts currently waiting in the cloud, oldest first, with everything the
+ * viewer needs to describe each one.
+ */
+function cloudReceiptQueue(now = new Date()) {
+  const rows = [];
+  cloudReceiptOwners().forEach(({ exp, subfolder, scope }) => {
+    const refs = cloudReceiptRefs(exp);
+    if (!refs.length) return;
+    rows.push({
+      id: String(exp.id || ''),
+      desc: exp.desc || 'Expense',
+      cat: exp.cat || 'Uncategorised',
+      date: exp.date || '',
+      amount: exp.origAmount ?? exp.amount ?? 0,
+      currency: exp.origCurrency || exp.currency || 'CAD',
+      book: scope === 'book' ? subfolder : '',
+      urls: refs,
+      waitingDays: receiptWaitingDays(exp, now),
+      destination: describeDestination({
+        date: exp.date,
+        cat: exp.cat,
+        book: scope === 'book' ? subfolder : '',
+      }),
+    });
+  });
+  return rows.sort((a, b) => b.waitingDays - a.waitingDays);
+}
+
+function receiptWaitingDays(exp, now = new Date()) {
+  const raw = exp.receiptCloudAt || exp.date || '';
+  if (!raw) return 0;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return 0;
+  return Math.max(0, Math.floor((now.getTime() - d.getTime()) / 86400000));
+}
+
+/**
+ * Show what is waiting in the cloud, before deciding to move it.
+ *
+ * The backlog line says "40 receipts are waiting" and that is the natural next
+ * question — which forty, and are they anything I still care about. Each row
+ * opens its receipt directly, so this doubles as the way to read a receipt that
+ * has never been near the local folder.
+ */
+function openCloudReceiptsModal() {
+  const rows = cloudReceiptQueue();
+  const modal = $('m-cloud-receipts');
+  const body = $('cloud-receipts-body');
+  const countEl = $('cloud-receipts-count');
+  if (!modal || !body) return;
+
+  if (countEl) {
+    const files = rows.reduce((n, r) => n + r.urls.length, 0);
+    countEl.textContent = rows.length
+      ? `${files} receipt${files === 1 ? '' : 's'} across ${rows.length} expense${rows.length === 1 ? '' : 's'}`
+      : 'Nothing waiting';
+  }
+
+  body.innerHTML = rows.length
+    ? rows.map(r => {
+      const links = r.urls.map((u, i) => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener" class="cloud-receipt-open">${r.urls.length > 1 ? `Open ${i + 1}` : 'Open'}</a>`).join(' · ');
+      const age = r.waitingDays >= 1 ? `${r.waitingDays} day${r.waitingDays === 1 ? '' : 's'}` : 'today';
+      const stale = r.waitingDays >= 14;
+      return `<div class="cloud-receipt-row">
+        <div class="cloud-receipt-main">
+          <div class="cloud-receipt-desc">${escapeHtml(r.desc)}</div>
+          <div class="cloud-receipt-meta">${escapeHtml(r.date || '—')} · ${escapeHtml(r.cat)}${r.book ? ` · ${escapeHtml(r.book)}` : ''} · ${escapeHtml(fmt(r.amount, r.currency))}</div>
+          <div class="cloud-receipt-dest">Will file into <strong>${escapeHtml(r.destination)}</strong></div>
+        </div>
+        <div class="cloud-receipt-side">
+          <span class="cloud-receipt-age${stale ? ' is-stale' : ''}">${escapeHtml(age)}</span>
+          ${links}
+        </div>
+      </div>`;
+    }).join('')
+    : '<div class="cloud-receipt-empty">Every receipt is already filed in your folder.</div>';
+
+  openM('cloud-receipts');
+}
+
+function closeCloudReceiptsModal() {
+  closeM('cloud-receipts');
 }
 
 async function exportToJSON(ev) {
@@ -16094,7 +16590,7 @@ async function submitTaxExpense() {
       // it looks — permission lapses on every browser restart, and a phone or
       // a borrowed laptop has no folder at all. Before this fallback the
       // expense saved and the receipt quietly went nowhere.
-      const saved = await saveReceiptBestEffort(file, 'General');
+      const saved = await saveReceiptBestEffort(file, 'General', { date, desc, cat, amount, currency });
       submitBtn.textContent = oldText; submitBtn.disabled = false;
 
       receiptUrl = saved.ref;
@@ -21315,7 +21811,7 @@ Object.assign(window, {
   openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
   tcSetRecurringFilter, tcShowRecurringCharges,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
-  reclaimCloudReceiptsNow,
+  reclaimCloudReceiptsNow, cacheAllReceiptsNow, openCloudReceiptsModal, closeCloudReceiptsModal,
   batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
   tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcYearChange, tcClearLedgerFilters,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
@@ -22182,6 +22678,10 @@ function exposeLegacyInlineHandlers() {
     openReceiptCameraModal, _stopReceiptCamStream, closeReceiptCameraModal, captureReceiptPhoto,
     retakeReceiptPhoto, useReceiptPhoto, authorizeReceiptFolder, saveReceiptToLocalFile,
     uploadReceiptToCloud, saveReceiptBestEffort, cloudReceiptOwners,
+    openReceiptCacheDb, cacheReceiptFile, readCachedReceipt, listCachedReceiptMeta,
+    evictReceiptCacheToBudget, deleteCachedReceipt, makeReceiptPreview, openBlobInTab,
+    checkReceiptFolderHealth, receiptFolderReachable, backfillReceiptCache, cacheAllReceiptsNow,
+    cloudReceiptQueue, receiptWaitingDays, openCloudReceiptsModal, closeCloudReceiptsModal,
     _localReceiptCell, viewLocalReceipt, initializeBackupFolderDisplay, reclaimCloudReceipts,
     reclaimOneReceipt, reclaimCloudReceiptsNow, exportToJSON, maybeAutoDownloadDailyBackup,
     updateLastBackupDisplay, checkDailyBackup, buildBackupPayload, saveSystemBackups,

@@ -2241,9 +2241,14 @@ function _tcRenderStatusHeaders() {
  * permanent status readout, and a row that always says "0" trains the eye to
  * skip the row on the day it finally says something.
  */
+// The folder-unreachable banner and the offline-copies readout are rendered by
+// main.js, which owns the folder handle and the cache. Both write to their own
+// static elements in the storage row, so nothing here needs to touch them.
 function _tcRenderCloudBacklog() {
   const el = $('tc-cloud-backlog');
   const btn = $('tc-reclaim-btn');
+  const viewBtn = $('tc-view-cloud-btn');
+  if (viewBtn) viewBtn.style.display = 'none';
   if (!el) return;
 
   // Same list the reclaim walks, so the count here can never advertise a
@@ -2270,6 +2275,7 @@ function _tcRenderCloudBacklog() {
     + (stale ? ` <em>Anything past ${thresholdDays} days is worth bringing down now.</em>` : '');
   el.style.display = '';
   if (btn) btn.style.display = '';
+  if (viewBtn) viewBtn.style.display = '';
 }
 
 function renderTaxCenter() {
