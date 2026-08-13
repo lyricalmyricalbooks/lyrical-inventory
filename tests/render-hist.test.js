@@ -5,7 +5,7 @@ import { escapeHtml } from '../src/lib/html.js';
 import { fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary } from '../src/lib/money.js';
 import { bookCurrencyCode, detectCurrencyMismatch } from '../src/lib/currency-migration.js';
 import { buildOrderTimeline, inventoryBreakdown } from '../src/lib/inventory.js';
-import { reconcileConsignmentInvoiceLinks } from '../src/lib/consignment.js';
+import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
 import { linkedShippingSummary } from '../src/lib/shipping-reconciliation.js';
 
 // Order History is where a mis-rendered row reads as a sale that didn't happen
@@ -13,7 +13,7 @@ import { linkedShippingSummary } from '../src/lib/shipping-reconciliation.js';
 // screen rather than what src/main.js says.
 //
 // The aggregation underneath (buildOrderTimeline, inventoryBreakdown,
-// reconcileConsignmentInvoiceLinks, the money formatters) is imported for real
+// reconcileConsignmentMirrors, the money formatters) is imported for real
 // — only the handful of main.js-local collaborators are supplied by the
 // harness, and even those are the genuine extracted source. What's stubbed is
 // just the ambient state renderHist reads: the book, the state, and the DOM
@@ -49,7 +49,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       escapeHtml, fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary,
       bookCurrencyCode, detectCurrencyMismatch,
       buildOrderTimeline, inventoryBreakdown,
-      reconcileConsignmentInvoiceLinks, linkedShippingSummary,
+      reconcileConsignmentMirrors, linkedShippingSummary,
     },
     moduleState: `
       let histChanFilter = null;

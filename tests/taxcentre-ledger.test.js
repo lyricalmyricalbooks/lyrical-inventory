@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
 import { getBookCurrencyCode } from '../src/lib/money.js';
-import { reconcileConsignmentInvoiceLinks } from '../src/lib/consignment.js';
+import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
 import { canonicalExpenseCategory } from '../src/lib/expense-categories.js';
 
 // The Tax Centre had no behavioural coverage at all — before the extraction or
@@ -65,7 +65,7 @@ function buildLedger(year) {
       _fxRateCache,
       defaultState: () => ({ hist: [], expenses: [], stores: [], ledger: [] }),
       getBookCurrencyCode,
-      reconcileConsignmentInvoiceLinks,
+      reconcileConsignmentMirrors,
       canonicalExpenseCategory,
       today: () => '2026-07-27',
     },
@@ -146,7 +146,7 @@ describe('Tax Centre ledger', () => {
   });
 
   it('does not mutate the state it was given', () => {
-    // It calls reconcileConsignmentInvoiceLinks on each book, so this checks
+    // It calls reconcileConsignmentMirrors on each book, so this checks
     // the ledger view cannot corrupt the data it is only meant to read.
     const snapshot = JSON.stringify(states);
     buildLedger('2026');

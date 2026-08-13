@@ -367,7 +367,7 @@ import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
-import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentInvoiceLinks, consignmentSyncPayload } from './lib/consignment.js';
+import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload } from './lib/consignment.js';
 import {
   cloudReceiptRefs,
   isCloudReceipt,
@@ -4920,7 +4920,7 @@ function renderConsignHistRow(e, after) {
 export function renderHist() {
   const s = getState(), book = getBook(), cur = book.currency;
   const bookCode = bookCurrencyCode(book);
-  reconcileConsignmentInvoiceLinks(s);
+  reconcileConsignmentMirrors(s);
 
   const pbSales = window.authorSubmissions[activeBook]?.sales || {};
   const pendingSales = Object.keys(pbSales).map(k => {
@@ -9235,9 +9235,10 @@ function confirmReturn() {
 // invoiceId/paidState/ledgerDivergedAt stay LOCAL-ONLY. invoiceNum is the one
 // exception: it is mirrored to the Google Sheet's "Invoice" column on every
 // consignment row sync (see consignmentSyncPayload) so the sheet tracks renames.
-// histMirrorForLedger / stampLedgerInvoiceLink / reconcileConsignmentInvoiceLinks
-// / consignmentSyncPayload are pure and live in ./lib/consignment.js (tested
-// there); they're imported at the top of this module.
+// histMirrorForLedger / stampLedgerInvoiceLink / reconcileConsignmentMirrors /
+// syncHistMirrorFromLedger / ledgerSaleIndexForHistMirror / consignmentSyncPayload
+// are pure and live in ./lib/consignment.js (tested there); they're imported at
+// the top of this module.
 
 // Canonical "mark this sale paid": guards pending/non-voided, reduces the store's
 // owed, flips ledger + hist mirror state. Returns true if it actually changed.
@@ -9349,7 +9350,7 @@ function exportConsignmentLedgerCSV() {
   if (!rows.length) { showToast('No ledger entries to export', 'warn'); return; }
   // Refresh each Sale's invoice number from its live invoice before exporting so
   // accountants reconciling the CSV see which invoice billed each sale.
-  reconcileConsignmentInvoiceLinks(s);
+  reconcileConsignmentMirrors(s);
   const curCode = getBookCurrencyCode(book);
   const header = ['Date', 'Store', 'Type', 'Qty', 'Commission %', 'Due to you', 'Currency', 'Status', 'Voided', 'Invoice', 'Notes'];
   // Chronological order (the on-screen table shows newest first; a CSV reads
@@ -10771,6 +10772,15 @@ async function convertKeptAllToReceived() {
 function openEditHist(idx) {
   const s = getState(), book = getBook(), h = s.hist[idx];
   if (!h) return;
+  // A consignment sale shown here is a mirror of its ledger row, and the ledger
+  // row is the record that reaches the Google Sheet and gets re-derived on every
+  // recompute. Editing the mirror directly would be overwritten, so send the
+  // publisher to the editor that actually owns the numbers — the same redirect
+  // the Tax Center's edit button already performs.
+  if (h.consignmentLink) {
+    const lIdx = ledgerSaleIndexForHistMirror(s, h);
+    if (lIdx !== -1) { openEditLedger(lIdx); return; }
+  }
   editCtx = { kind: 'hist', idx, snapshot: JSON.parse(JSON.stringify(h)) };
   $('edit-modal-title').textContent = 'Edit order entry';
   $('edit-modal-type-badge').textContent = h.chan + ' order';
@@ -10917,6 +10927,10 @@ function saveEntryEdit() {
     // reconciled against on-hand stock and the store's counters so the
     // ledger, the store card, and inventory never drift apart.
     const e = s.ledger[editCtx.idx];
+    // Resolve the History mirror FIRST: for a legacy pair whose sheetsIds were
+    // split, the only join left is the row's shape (store + date + qty + due),
+    // and the edit below is about to change exactly those fields.
+    const mirror = histMirrorForLedger(s, e);
     e.date = $('edit-l-date').value || e.date;
     e.notes = $('edit-l-notes').value.trim();
     // qty and rate — update display only, reverse/reapply amountDue if sale
@@ -10973,6 +10987,12 @@ function saveEntryEdit() {
     e.rate = newRate;
     e.edited = true;
 
+    // Carry the corrected figures onto the History mirror. That mirror — not
+    // the ledger row — is what the Tax Center ledger, its Excel export and the
+    // tax report CSV read, so skipping this leaves the sale showing its old
+    // amount everywhere outside the Consignment tab.
+    syncHistMirrorFromLedger(s, e, mirror);
+
     // Sync ledger edit to sheets. A voided entry is removed; otherwise upsert.
     if (sheetsUrl && e.sheetsId) {
       if (e.voided) {
@@ -10980,6 +11000,11 @@ function saveEntryEdit() {
       } else {
         syncToSheets(consignmentSyncPayload(book, e));
       }
+    } else if (sheetsUrl) {
+      // No stable id means there's no row we can safely target: writing one
+      // would append a duplicate instead of replacing the original. Say so,
+      // rather than letting the sheet keep the old amount with no warning.
+      showToast('Saved here, but this older entry has no link to your Google Sheet — run "Repair legacy rows" on the Sheets tab to update it there.', 'warn', 6000);
     }
   }
 
@@ -11073,6 +11098,12 @@ function reconcileStores(s) {
 function recomputeAfters(s, book) {
   const bk = book || (typeof getBook === 'function' ? getBook() : null);
   deduplicateDirectConsignmentSales(s);
+  // Re-derive consignment mirrors from their canonical ledger rows BEFORE the
+  // stats are rebuilt below — recalculateBookStatsFromHistory reads s.hist, so
+  // a mirror still carrying a sale's pre-edit amount would book that stale
+  // figure as revenue (and the Tax Center would report it) even though the
+  // ledger, the store card and the Google Sheet all show the corrected one.
+  reconcileConsignmentMirrors(s);
   recalculateBookStatsFromHistory(s);
   if (bk && Number.isFinite(bk.maxPrint)) {
     s.stock = deriveOnHand(s, bk);
@@ -11212,6 +11243,10 @@ function voidEntry() {
     const e = s.ledger[editCtx.idx];
     if (!e) return;
     const st = s.stores.find(st => st.id === e.storeId);
+    // Captured before the flip so the mirror can follow it either way — a
+    // voided sale that stayed live in the mirror kept counting as income in
+    // the Tax Center and as revenue in the Consignment channel total.
+    const mirror = histMirrorForLedger(s, e);
     if (!e.voided) {
       // VOID consignment entry
       if (e.type === 'Shipment' && st) { st.sent = Math.max(0, st.sent - e.qty); st.outstanding = Math.max(0, st.outstanding - e.qty); s.stock += e.qty; }
@@ -11233,6 +11268,11 @@ function voidEntry() {
       syncLedgerVoid(e, false);
       showToast('Consignment entry unvoided — effects restored (Sheets row restore queued)');
     }
+    syncHistMirrorFromLedger(s, e, mirror);
+    // The mirror's void state just moved, so re-derive the figures that are
+    // rebuilt from history (revenue, channel totals, stock-after). The hist
+    // branch above already does this inside each arm.
+    recomputeAfters(s, book);
   }
 
   closeM('edit-entry');
@@ -11609,7 +11649,7 @@ async function confirmRestoreBookDataFromSheets() {
 
     s.stock = deriveOnHand(s, book);
     recomputeAfters(s, book);
-    reconcileConsignmentInvoiceLinks(s);
+    reconcileConsignmentMirrors(s);
 
     await saveState(activeBook);
     renderAll();
@@ -15688,7 +15728,7 @@ export function openEditSale(bid, itemId) {
   if (idx !== -1) {
     const h = s.hist[idx];
     if (h.consignmentLink) {
-      const lIdx = s.ledger.findIndex(e => e.sheetsId === h.sheetsId || (e.date === h.date && e.storeName === h.notes && e.qty === h.qty));
+      const lIdx = ledgerSaleIndexForHistMirror(s, h);
       if (lIdx !== -1) {
         openEditLedger(lIdx);
         return;

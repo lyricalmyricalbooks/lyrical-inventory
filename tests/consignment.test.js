@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   histMirrorForLedger,
   stampLedgerInvoiceLink,
-  reconcileConsignmentInvoiceLinks,
+  reconcileConsignmentMirrors,
+  syncHistMirrorFromLedger,
+  ledgerSaleIndexForHistMirror,
   consignmentSyncPayload,
 } from '../src/lib/consignment.js';
 
@@ -67,6 +69,110 @@ describe('histMirrorForLedger', () => {
     const s = { ledger: [e], hist: [histMirror({ sheetsId: 'evt-y' })] };
     expect(histMirrorForLedger(s, e)).toBeNull();
   });
+
+  it('skips a mirror another ledger row already claimed', () => {
+    // Two identical sales at the same store on the same day are indistinguishable
+    // to the shape fallback, so without the claimed set both bind to one mirror
+    // and the second sale's amount silently overwrites the first's.
+    const e1 = ledgerSale({ id: 1 });
+    const e2 = ledgerSale({ id: 2 });
+    const h1 = histMirror({ num: 'CON-ROONE-0001' });
+    const h2 = histMirror({ num: 'CON-ROONE-0002' });
+    const s = { ledger: [e1, e2], hist: [h1, h2] };
+    const claimed = new Set([h1]);
+    expect(histMirrorForLedger(s, e1)).toBe(h1);
+    expect(histMirrorForLedger(s, e2, claimed)).toBe(h2);
+  });
+});
+
+// The reported bug: the Consignment ledger showed a sale corrected to CA$33.00
+// while the Tax Center ledger (and the CSV that Excel opens) still reported the
+// CA$53.35 it was first recorded at, because both read the mirror and nothing
+// re-derived the mirror from the ledger row that was actually edited.
+describe('syncHistMirrorFromLedger', () => {
+  it('carries a corrected amount onto the mirror', () => {
+    const e = ledgerSale({ sheetsId: 'evt-aaa', qty: 1, rate: 40, amountDue: 33 });
+    const h = histMirror({ sheetsId: 'evt-aaa', qty: 1, price: 53.35 });
+    expect(syncHistMirrorFromLedger({ ledger: [e], hist: [h] }, e)).toBe(true);
+    expect(h.price).toBeCloseTo(33, 6);
+    expect(h.qty).toBe(1);
+  });
+
+  it('splits the amount due across the units it covers', () => {
+    const e = ledgerSale({ sheetsId: 'evt-aaa', qty: 4, amountDue: 90 });
+    const h = histMirror({ sheetsId: 'evt-aaa' });
+    syncHistMirrorFromLedger({ ledger: [e], hist: [h] }, e);
+    expect(h.qty).toBe(4);
+    expect(h.price).toBeCloseTo(22.5, 6);
+  });
+
+  it('follows a corrected date so the sale lands in the right tax year', () => {
+    const e = ledgerSale({ sheetsId: 'evt-aaa', date: '2026-01-04' });
+    const h = histMirror({ sheetsId: 'evt-aaa', date: '2025-12-28' });
+    syncHistMirrorFromLedger({ ledger: [e], hist: [h] }, e);
+    expect(h.date).toBe('2026-01-04');
+  });
+
+  it('propagates void and unvoid so a reversed sale stops counting as income', () => {
+    const e = ledgerSale({ sheetsId: 'evt-aaa', voided: true });
+    const h = histMirror({ sheetsId: 'evt-aaa' });
+    const s = { ledger: [e], hist: [h] };
+    syncHistMirrorFromLedger(s, e);
+    expect(h.voided).toBe(true);
+    e.voided = false;
+    syncHistMirrorFromLedger(s, e);
+    expect(h.voided).toBe(false);
+  });
+
+  it('accepts a mirror resolved before the edit, and heals the split sheetsId', () => {
+    // The legacy split-id case: the caller grabs the mirror by shape BEFORE
+    // mutating the row, because the edit is about to invalidate that very shape.
+    const e = ledgerSale({ sheetsId: 'evt-aaa' });
+    const h = histMirror({ sheetsId: 'evt-DIFFERENT' });
+    const s = { ledger: [e], hist: [h] };
+    const mirror = histMirrorForLedger(s, e);
+    e.qty = 4; e.amountDue = 90; e.date = '2026-07-01';
+    expect(histMirrorForLedger(s, e)).toBeNull();      // shape join is gone
+    syncHistMirrorFromLedger(s, e, mirror);
+    expect(h.price).toBeCloseTo(22.5, 6);
+    expect(h.sheetsId).toBe('evt-aaa');                 // future lookups are O(1)
+  });
+
+  it('leaves the mirror alone when nothing changed, and never touches its notes', () => {
+    const e = ledgerSale({ sheetsId: 'evt-aaa', notes: 'Paid by e-transfer' });
+    const h = histMirror({ sheetsId: 'evt-aaa' });
+    // The mirror's notes are the store name — the History "Notes" column and the
+    // fallback join both key on it, so the ledger's own free text must not land here.
+    expect(syncHistMirrorFromLedger({ ledger: [e], hist: [h] }, e)).toBe(false);
+    expect(h.notes).toBe('Rooneys');
+  });
+
+  it('ignores non-Sale rows and an orphaned mirror', () => {
+    const shipment = { id: 9, type: 'Shipment', storeName: 'Rooneys', date: '2026-06-23', qty: 10, sheetsId: 'evt-aaa' };
+    expect(syncHistMirrorFromLedger({ ledger: [shipment], hist: [] }, shipment)).toBe(false);
+    expect(syncHistMirrorFromLedger({ ledger: [], hist: [] }, ledgerSale())).toBe(false);
+  });
+});
+
+describe('ledgerSaleIndexForHistMirror', () => {
+  it('finds the ledger row behind a mirror by shared sheetsId', () => {
+    const s = {
+      ledger: [ledgerSale({ id: 1, sheetsId: 'evt-other' }), ledgerSale({ id: 2, sheetsId: 'evt-aaa' })],
+      hist: [],
+    };
+    expect(ledgerSaleIndexForHistMirror(s, histMirror({ sheetsId: 'evt-aaa' }))).toBe(1);
+  });
+
+  it('falls back to store + date + qty when the ids were split', () => {
+    const s = { ledger: [ledgerSale({ sheetsId: 'evt-aaa' })], hist: [] };
+    expect(ledgerSaleIndexForHistMirror(s, histMirror({ sheetsId: 'evt-zzz' }))).toBe(0);
+  });
+
+  it('returns -1 for an orphan mirror or a plain direct sale', () => {
+    expect(ledgerSaleIndexForHistMirror({ ledger: [] }, histMirror())).toBe(-1);
+    const direct = { num: 'A1', chan: 'Direct', date: '2026-06-23', qty: 10, price: 20 };
+    expect(ledgerSaleIndexForHistMirror({ ledger: [ledgerSale()] }, direct)).toBe(-1);
+  });
 });
 
 describe('stampLedgerInvoiceLink', () => {
@@ -128,14 +234,14 @@ describe('stampLedgerInvoiceLink', () => {
   });
 });
 
-describe('reconcileConsignmentInvoiceLinks', () => {
+describe('reconcileConsignmentMirrors', () => {
   it('propagates an invoice rename to a mirror whose link was previously broken', () => {
     // The ledger entry was stamped (badge shows it) but the split sheetsId kept
     // the rename from ever reaching the mirror — the exact reported bug.
     const e = ledgerSale({ sheetsId: 'evt-aaa', invoiceId: 'inv-1', invoiceNum: 'INV-2026-222' });
     const h = histMirror({ sheetsId: 'evt-DIFFERENT', invoiceId: null, invoiceNum: null });
     const s = { ledger: [e], hist: [h], invoices: [invoice({ id: 'inv-1', num: 'INV-2026-223' })] };
-    reconcileConsignmentInvoiceLinks(s);
+    reconcileConsignmentMirrors(s);
     expect(e.invoiceNum).toBe('INV-2026-223'); // refreshed from the live invoice
     expect(h.invoiceNum).toBe('INV-2026-223'); // now reflected on the mirror
     expect(h.sheetsId).toBe('evt-aaa');         // and the link is healed
@@ -145,7 +251,7 @@ describe('reconcileConsignmentInvoiceLinks', () => {
     const e = ledgerSale({ sheetsId: 'evt-aaa', invoiceId: 'gone', invoiceNum: 'INV-OLD' });
     const h = histMirror({ sheetsId: 'evt-aaa', invoiceId: 'gone', invoiceNum: 'INV-OLD' });
     const s = { ledger: [e], hist: [h], invoices: [] };
-    reconcileConsignmentInvoiceLinks(s);
+    reconcileConsignmentMirrors(s);
     expect(e.invoiceId).toBeNull();
     expect(e.invoiceNum).toBeNull();
     expect(h.invoiceNum).toBeNull();
@@ -154,9 +260,40 @@ describe('reconcileConsignmentInvoiceLinks', () => {
   it('leaves un-invoiced sales untouched and tolerates a missing ledger', () => {
     const e = ledgerSale({ sheetsId: 'evt-aaa' });
     const s = { ledger: [e], hist: [histMirror({ sheetsId: 'evt-aaa' })], invoices: [] };
-    reconcileConsignmentInvoiceLinks(s);
+    reconcileConsignmentMirrors(s);
     expect(e.invoiceNum == null || e.invoiceNum === '').toBe(true);
-    expect(() => reconcileConsignmentInvoiceLinks({})).not.toThrow();
+    expect(() => reconcileConsignmentMirrors({})).not.toThrow();
+  });
+
+  it('heals a mirror left behind by an earlier edit, without a re-save', () => {
+    // Sales edited before the mirror was kept in sync are already persisted
+    // diverged, so the reconcile has to repair them on read — this is what makes
+    // the Tax Center agree with the Consignment ledger for existing records.
+    const e = ledgerSale({ sheetsId: 'evt-aaa', qty: 1, rate: 40, amountDue: 33 });
+    const h = histMirror({ sheetsId: 'evt-aaa', qty: 1, price: 53.35 });
+    reconcileConsignmentMirrors({ ledger: [e], hist: [h], invoices: [] });
+    expect(h.price).toBeCloseTo(33, 6);
+  });
+
+  it('marks a mirror voided when its ledger sale was reversed', () => {
+    const e = ledgerSale({ sheetsId: 'evt-aaa', voided: true });
+    const h = histMirror({ sheetsId: 'evt-aaa' });
+    reconcileConsignmentMirrors({ ledger: [e], hist: [h], invoices: [] });
+    expect(h.voided).toBe(true);
+  });
+
+  it('pairs two identical same-day sales with a mirror each', () => {
+    // Two single-copy sales at the same store, same day, same price look alike
+    // to the shape fallback. Unguarded, both ledger rows resolve to the first
+    // mirror — so the second sale's invoice lands on the first sale's row and
+    // the second row is left unbilled.
+    const e1 = ledgerSale({ id: 1, qty: 1, amountDue: 30 });
+    const e2 = ledgerSale({ id: 2, qty: 1, amountDue: 30, invoiceId: 'inv-1', invoiceNum: 'INV-2026-223' });
+    const h1 = histMirror({ num: 'CON-ROONE-0001', qty: 1, price: 30 });
+    const h2 = histMirror({ num: 'CON-ROONE-0002', qty: 1, price: 30 });
+    reconcileConsignmentMirrors({ ledger: [e1, e2], hist: [h1, h2], invoices: [invoice()] });
+    expect(h1.invoiceNum).toBeNull();
+    expect(h2.invoiceNum).toBe('INV-2026-223');
   });
 });
 

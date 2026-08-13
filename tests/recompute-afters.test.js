@@ -6,6 +6,7 @@ import {
   deduplicateDirectConsignmentSales,
   recalculateBookStatsFromHistory,
 } from '../src/lib/inventory.js';
+import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
 
 // recomputeAfters is the function every stock and balance figure in the app
 // depends on. It runs on every book load, after every sync merge, and before
@@ -29,6 +30,7 @@ const harness = () => buildHarness({
     buildOrderTimeline,
     deduplicateDirectConsignmentSales,
     recalculateBookStatsFromHistory,
+    reconcileConsignmentMirrors,
     getBook: () => book,
   },
   returns: 'recomputeAfters',
