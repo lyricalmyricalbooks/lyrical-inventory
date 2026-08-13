@@ -2404,8 +2404,33 @@ function _tcRenderReceiptStorage() {
   el.style.display = '';
 }
 
+let activeTaxCenterSubTab = 'ledger';
+
+function switchTaxCenterSubTab(subTabName) {
+  activeTaxCenterSubTab = subTabName || 'ledger';
+  const subTabs = ['ledger', 'receipts', 'integrations'];
+  subTabs.forEach(tab => {
+    const btn = document.getElementById('btn-tctab-' + tab);
+    const sec = document.getElementById('tc-sec-' + tab);
+    if (btn && sec) {
+      if (tab === activeTaxCenterSubTab) {
+        btn.classList.add('active');
+        sec.style.display = '';
+      } else {
+        btn.classList.remove('active');
+        sec.style.display = 'none';
+      }
+    }
+  });
+  if (activeTaxCenterSubTab === 'receipts') {
+    _tcRenderReceiptStorage();
+  }
+}
+
 function renderTaxCenter() {
   if (isAuthor()) return;
+  // Preserve active subtab state
+  switchTaxCenterSubTab(activeTaxCenterSubTab);
   // Restore the saved ledger view (year + search + type) before reading the year.
   _tcRestoreLedgerPrefs();
   _tcRenderStatusHeaders();
@@ -3140,4 +3165,5 @@ export {
   dismissReceiptNotice,
   resetDismissedReceiptNotices,
   isReceiptNoticeDismissed,
+  switchTaxCenterSubTab,
 };
