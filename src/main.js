@@ -2390,7 +2390,7 @@ async function toggleFirestoreMode() {
     }
 
   } else {
-    const anyOtherFSBook = Object.keys(BOOKS).filter(id => id !== activeBook).some(id => window._useFirestoreForBook(id));
+    const anyOtherFSBook = Object.keys(BOOKS).some(id => id !== activeBook && window._useFirestoreForBook(id));
 
     if (!(await confirmDialog(
       `Revert "${BOOKS[activeBook]?.title || activeBook}" back to Realtime Database?\n\n` +
@@ -3743,7 +3743,10 @@ function renderGlobalPendingAlert() {
   Object.keys(states || {}).forEach(bookId => {
     const list = states[bookId]?.openCall;
     if (!Array.isArray(list) || !list.length) return;
-    const waiting = list.filter(c => OC_STAGES.some(st => !c[st.key])).length;
+    let waiting = 0;
+    for (const c of list) {
+      if (OC_STAGES.some(st => !c[st.key])) waiting++;
+    }
     if (waiting > 0) {
       openCallBooks.push({ bookId, waiting, title: BOOKS[bookId]?.title || bookId });
     }

@@ -85,9 +85,12 @@ function splitDelimitedRecords(raw) {
     return fields;
   };
 
-  return records
-    .map(rec => splitFields(rec, rec.includes('\t') ? '\t' : ','))
-    .filter(fields => fields.some(f => f !== ''));
+  const result = [];
+  for (const rec of records) {
+    const fields = splitFields(rec, rec.includes('\t') ? '\t' : ',');
+    if (fields.some(f => f !== '')) result.push(fields);
+  }
+  return result;
 }
 
 // Parse pasted spreadsheet rows or CSV file contents — "Name, Email, Photo,
