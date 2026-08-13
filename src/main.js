@@ -21138,7 +21138,15 @@ function renderMailingList() {
 
 // Email / copy helpers shared by the derived segment and the curated list.
 function _uniqueMailable(records) {
-  return Array.from(new Set(records.filter(r => !_isCustomerSuppressed(r.email)).map(r => r.email)));
+  // ⚡ Bolt Optimization: Loop Fusion
+  // Combined .filter() and .map() into a single pass to eliminate intermediate array allocations
+  const emails = new Set();
+  for (const r of records) {
+    if (!_isCustomerSuppressed(r.email)) {
+      emails.add(r.email);
+    }
+  }
+  return Array.from(emails);
 }
 // Open Gmail's web compose with the addresses pre-filled as BCC. Chunks past a
 // safe URL length so a big list opens what it can and copies the rest.
@@ -22306,10 +22314,19 @@ async function customerPullStripe() {
   if (status) status.textContent = `Fetching buyers from Stripe (up to ${_customerStripeDepth * 100} most recent payments)…`;
   try {
     const payments = await fetchStripePaymentsForReconcile(_customerStripeDepth);
-    const slim = payments.filter(p => _custEmailKey(p.email)).map(p => ({
-      email: p.email, customer: p.customer || '', amount: p.amount,
-      currency: p.currency, date: p.date, refunded: !!p.refunded,
-    }));
+
+    // ⚡ Bolt Optimization: Loop Fusion
+    // Combined .filter() and .map() into a single pass to eliminate intermediate array allocations
+    const slim = [];
+    for (const p of payments) {
+      if (_custEmailKey(p.email)) {
+        slim.push({
+          email: p.email, customer: p.customer || '', amount: p.amount,
+          currency: p.currency, date: p.date, refunded: !!p.refunded,
+        });
+      }
+    }
+
     _saveCustomerStripeCache(slim);
     // If we filled the page budget, older payments probably remain.
     _customerStripeMaybeMore = payments.length >= _customerStripeDepth * 100 && _customerStripeDepth < 50;
