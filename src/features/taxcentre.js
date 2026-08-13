@@ -1895,10 +1895,10 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
   if (cardsGrid) {
     if (tripList.length === 0) {
       cardsGrid.innerHTML = `
-        <div style="grid-column:1/-1;text-align:center;padding:40px 20px;background:rgba(28,25,23,0.4);border:1px dashed rgba(255,255,255,0.1);border-radius:12px;">
-          <div style="font-size:28px;margin-bottom:8px;">✈</div>
-          <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:4px;">No business trips logged yet</div>
-          <div style="font-size:12px;color:var(--text3);max-width:380px;margin:0 auto 14px;">Create a trip (e.g. "Toronto Book Fair") and every travel, lodging and booth expense you assign to it totals here, ready for your tax return.</div>
+        <div style="grid-column:1/-1;text-align:center;padding:40px 20px;background:rgba(28,25,23,0.82);border:1px dashed rgba(255,255,255,0.1);border-radius:12px;">
+          <div style="font-size:28px;margin-bottom:8px;color:var(--on-inverse);">✈</div>
+          <div style="font-size:14px;font-weight:600;color:var(--on-inverse);margin-bottom:4px;">No business trips logged yet</div>
+          <div style="font-size:12px;color:var(--on-inverse-2);max-width:380px;margin:0 auto 14px;">Create a trip (e.g. "Toronto Book Fair") and every travel, lodging and booth expense you assign to it totals here, ready for your tax return.</div>
           <button class="btn gold" onclick="openNewTrip()">✈ Create your first trip</button>
         </div>
       `;

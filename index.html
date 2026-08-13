@@ -1970,7 +1970,7 @@
             <button class="btn tx sm" type="button" onclick="setupReceiptFolder()">📁 Choose folder…</button>
             <button class="btn tx sm" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="background:var(--gold3);color:black;display:none;">Authorize access</button>
             <button class="btn tx sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" style="color:var(--gold);display:none;" title="Download every receipt waiting in the cloud into your local folder, then remove the cloud copies">☁️ Move cloud receipts to my folder</button>
-            <button class="btn tx sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" style="color:var(--gold);" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
+            <button class="btn tx sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" style="color:var(--gold-text);" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
           </div>
           <div id="tc-cloud-backlog" class="tc-cloud-backlog" style="display:none;"></div>
         </div>
@@ -2105,7 +2105,7 @@
             <strong style="font-size:13px;color:var(--text1);">💳 Stripe Processing Fees</strong>
             <div style="font-size:11px;color:var(--text3);">
               Fetch annual balance transactions processing fees.
-               <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold);">Create restricted key in Stripe →</a>
+               <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-text);">Create restricted key in Stripe →</a>
             </div>
           </div>
           <span class="oc-collapse-chevron" id="tc-integration-chevron-stripe">▾</span>
@@ -2181,7 +2181,7 @@
         <option value="2023">2023</option>
       </select>
       <button class="btn tag" onclick="downloadTaxLedgerCSV()">Export Ledger CSV</button>
-      <button class="btn tag" onclick="openInventoryValuationModal()" style="color:var(--gold); border-color:var(--gold-line);" title="Open comprehensive Inventory Valuation Asset Report & Export">📦 Inventory Valuation</button>
+      <button class="btn tag" onclick="openInventoryValuationModal()" style="color:var(--gold-text); border-color:var(--gold-line);" title="Open comprehensive Inventory Valuation Asset Report & Export">📦 Inventory Valuation</button>
       <button class="btn gold" onclick="downloadFullTaxSeasonExport()">📦 Tax Season Export</button>
     </div>
   </div>
@@ -3264,7 +3264,7 @@
 
     <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--text2);display:flex;align-items:center;justify-content:center;font-size:18px;">📤</div>
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:18px;">📤</div>
         <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--on-inverse);">Restore from Backup</h3>
       </div>
       <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.25rem;">Upload a previously downloaded JSON snapshot from your computer to restore your data.</p>
@@ -3287,7 +3287,7 @@
 
     <div class="sheets-setup" style="background:var(--ink2);border:1px solid var(--border);padding:1.5rem;border-radius:var(--r3);">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
-        <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--text2);display:flex;align-items:center;justify-content:center;font-size:18px;">📊</div>
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--on-inverse);display:flex;align-items:center;justify-content:center;font-size:18px;">📊</div>
         <h3 style="margin:0;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--on-inverse);">CSV Export</h3>
       </div>
       <p style="font-size:12px;color:rgba(255,255,255,.74);line-height:1.6;margin-bottom:1.5rem;">Download all historical records (Sales, Consignments, and Expenses) as a flat CSV file for use in spreadsheet software.</p>

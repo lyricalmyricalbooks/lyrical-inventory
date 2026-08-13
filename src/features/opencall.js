@@ -260,7 +260,7 @@ function renderOcBulkModalContent(retryMode = false) {
     <div class="card" style="width:94%;max-width:660px;max-height:90vh;overflow-y:auto;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
       <button onclick="closeOcBulkModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
       
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:4px;">✉ Send Bulk Pipeline Emails</div>
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✉ Send Bulk Pipeline Emails</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Personalize and send stage emails to selected contributors.</div>
 
       <!-- Stage + Re-send Row -->
@@ -917,7 +917,7 @@ function renderOpenCall() {
   const templatesEditor = activeProj ? `
     <div class="card oc-collapse-card ${tmplOpen ? 'open' : ''}" style="margin-top:0;padding:20px;">
       <div class="row-between oc-collapse-head" onclick="if (event.target.closest('button')) return; ocToggleSection('tmpl')" style="${tmplOpen ? 'border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:15px;' : ''}flex-wrap:wrap;gap:8px;">
-        <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--gold2);">✉ Email Template Designer</div>
+        <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--gold-text);">✉ Email Template Designer</div>
         <div style="display:flex;gap:4px;align-items:center;">
           ${tmplOpen ? `
           <button class="btn sm ${activeTmplTab === 'selectionSent' ? 'gold' : ''}" onclick="ocSetTmplTab('selectionSent')">Selection</button>
@@ -1041,7 +1041,7 @@ function renderOpenCall() {
           Paste rows from the spreadsheet — one contributor per line, columns separated by tab or comma:
           <strong>Name, Email, Photo file, Credit Name, Notes</strong>. A header row is skipped automatically; existing emails are not duplicated.
           <br>
-          <a href="opencall-template.csv" download="opencall-template.csv" style="color:var(--gold2);text-decoration:underline;display:inline-block;margin-top:4px;font-weight:600;">📥 Download Excel / CSV Template</a>
+          <a href="opencall-template.csv" download="opencall-template.csv" style="color:var(--gold-text);text-decoration:underline;display:inline-block;margin-top:4px;font-weight:600;">📥 Download Excel / CSV Template</a>
         </div>
         <textarea id="oc-import-text" rows="4" placeholder="Jeremy Ackman, ackmanj@gmail.com, Jeremy_ackman_5.jpg, Jeremy Ackman, Selected" style="font-family:'DM Mono',monospace;"></textarea>
         
@@ -1281,7 +1281,7 @@ function renderOpenCall() {
   const resendOpen = ocUiOpen_('resend', false);
   const resendConfigCard = `
     <div class="card oc-resend-card oc-collapse-card ${resendOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
-      <div class="oc-collapse-head" onclick="ocToggleSection('resend')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);display:flex;justify-content:space-between;align-items:center;">
+      <div class="oc-collapse-head" onclick="ocToggleSection('resend')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold-text);display:flex;justify-content:space-between;align-items:center;">
         <span>⚡ Resend API Email</span>
         <span style="display:flex;align-items:center;gap:8px;">
           <span class="oc-collapse-status">${useResend ? 'on' : 'off'}</span>
@@ -1311,7 +1311,7 @@ function renderOpenCall() {
   const senderOpen = ocUiOpen_('sender', false);
   const senderConfigCard = `
     <div class="card oc-collapse-card ${senderOpen ? 'open' : ''}" style="margin-bottom:0;padding:15px;display:flex;flex-direction:column;gap:8px;">
-      <div class="oc-collapse-head" onclick="ocToggleSection('sender')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold2);display:flex;justify-content:space-between;align-items:center;">
+      <div class="oc-collapse-head" onclick="ocToggleSection('sender')" style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:var(--gold-text);display:flex;justify-content:space-between;align-items:center;">
         <span>✉ Open Call Sender</span>
         <span style="display:flex;align-items:center;gap:8px;">
           <span class="oc-collapse-status">${escapeHtml(ocFromAlias || 'your Gmail')}</span>
@@ -2480,7 +2480,7 @@ function openOcEmailPreviewModal(cId, stageKey, subject, body, c) {
   modal.innerHTML = `
     <div class="card" style="max-width:650px;width:90%;margin:0 auto;display:flex;flex-direction:column;box-shadow:var(--shadow2);border:1px solid var(--border);">
       <div class="row-between" style="border-bottom:1px solid var(--border);padding:14px 20px;background:var(--cream2);">
-        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--gold2);">✉ Review Email to ${escapeHtml(c.name)}</div>
+        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--gold-text);">✉ Review Email to ${escapeHtml(c.name)}</div>
         <button class="btn sm" onclick="closeOcEmailPreviewModal()" style="padding:4px 8px;font-size:12px;">✕</button>
       </div>
       
@@ -2755,7 +2755,7 @@ function renderOcImportGmailModal() {
   modal.innerHTML = `
     <div class="card" style="width:94%;max-width:620px;max-height:90vh;overflow-y:auto;padding:24px;position:relative;" onclick="event.stopPropagation()">
       <button onclick="closeOcImportGmailModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;">✕</button>
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:4px;">📨 Import Submissions from Gmail</div>
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">📨 Import Submissions from Gmail</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Find the artists' original submission emails and add them as contributors — each one's thread is captured so every stage email replies into it.</div>
 
       <label style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;display:block;margin-bottom:4px;">Gmail search</label>
@@ -3037,7 +3037,7 @@ function renderOcEditModalContent(cId) {
     <div class="card" style="width:94%;max-width:500px;background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--r3);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);position:relative;" onclick="event.stopPropagation()">
       <button onclick="closeOcEditModal()" style="position:absolute;top:15px;right:15px;background:transparent;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;">✕</button>
       
-      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold2);margin-bottom:4px;">✎ Edit Contributor</div>
+      <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--gold-text);margin-bottom:4px;">✎ Edit Contributor</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px;">Update artist details and internal notes.</div>
       
       <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">

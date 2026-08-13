@@ -58,10 +58,12 @@ describe('findLowContrastText', () => {
   });
 
   it('relaxes the threshold for large text', () => {
-    // var(--text3) on var(--cream) is ~3.46:1 — fails normal-text AA (4.5)
-    // but clears large-text AA (3.0).
-    const small = `<div style="color:var(--text3);background:var(--cream);">small</div>`;
-    const large = `<div style="color:var(--text3);background:var(--cream);font-size:28px;">large</div>`;
+    // A synthetic mid-grey on var(--cream) at ~3.46:1 — fails normal-text AA
+    // (4.5) but clears large-text AA (3.0). Not var(--text3): that token was
+    // the light-mode audit's fix (light-mode-contrast-audit branch), tuned to
+    // clear 4.5:1 outright, so it's no longer a borderline case to probe with.
+    const small = `<div style="color:#8a8078;background:var(--cream);">small</div>`;
+    const large = `<div style="color:#8a8078;background:var(--cream);font-size:28px;">large</div>`;
     expect(findLowContrastText(small, cssVars)).toHaveLength(1);
     expect(findLowContrastText(large, cssVars)).toHaveLength(0);
   });
