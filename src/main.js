@@ -145,6 +145,8 @@ import {
   tcShowRecurringCharges,
   removeRecurring,
   downloadTaxLedgerCSV,
+  dismissReceiptNotice,
+  resetDismissedReceiptNotices,
 } from './features/taxcentre.js';
 import {
   reconcileApplyBigCartel,
@@ -22423,6 +22425,7 @@ Object.assign(window, {
   tcSetRecurringFilter, tcShowRecurringCharges,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   reclaimCloudReceiptsNow, cacheAllReceiptsNow, openCloudReceiptsModal, closeCloudReceiptsModal,
+  dismissReceiptNotice, resetDismissedReceiptNotices,
   copyReceiptDiagnostic, openExportReceiptsModal, closeExportReceiptsModal, runReceiptExport,
   openReceiptOrganizer, closeReceiptOrganizer, chooseOrganizerSource, organizerReadUnclear,
   toggleOrganizerSkip, runReceiptOrganizer,
@@ -23297,6 +23300,7 @@ function exposeLegacyInlineHandlers() {
     checkReceiptFolderHealth, receiptFolderReachable, backfillReceiptCache, cacheAllReceiptsNow,
     cloudReceiptQueue, receiptWaitingDays, openCloudReceiptsModal, closeCloudReceiptsModal,
     summarizeReceiptProblems, formatReceiptDiagnostic, renderReceiptProblemPanel, copyReceiptDiagnostic,
+    dismissReceiptNotice, resetDismissedReceiptNotices,
     receiptsForExport, receiptExportYears, readReceiptBytes, exportReceiptsZip,
     openExportReceiptsModal, closeExportReceiptsModal, runReceiptExport,
     listFilesRecursive, organizerCandidateExpenses, openReceiptOrganizer, closeReceiptOrganizer,
