@@ -2265,27 +2265,92 @@ function _tcRenderReceiptStorage() {
     return;
   }
 
-  const parts = [];
-  if (s.cloudFiles) parts.push(`<strong>${s.cloudFiles}</strong> kept safely in the cloud`);
-  if (s.localFiles) parts.push(`<strong>${s.localFiles}</strong> filed in your folder`);
-  if (s.linkedFiles) parts.push(`<strong>${s.linkedFiles}</strong> linked on another website`);
+  // Stat grid tiles
+  const tiles = [];
+  tiles.push(`
+    <div class="tc-receipt-tile">
+      <div class="tc-tile-icon">📁</div>
+      <div class="tc-tile-body">
+        <div class="tc-tile-num">${s.localFiles}</div>
+        <div class="tc-tile-label">Local Folder</div>
+      </div>
+    </div>
+  `);
 
-  // Two genuinely actionable numbers, and the only ones shown in a warning tone.
-  //
-  // "Link only" matters as much as "no receipt": a Shippo shipping label proves
-  // a parcel was sent, not that it was paid for, and the file lives on Shippo's
-  // servers rather than anywhere we control.
-  const notes = [];
+  tiles.push(`
+    <div class="tc-receipt-tile ${s.cloudFiles ? 'is-active' : ''}">
+      <div class="tc-tile-icon">☁️</div>
+      <div class="tc-tile-body">
+        <div class="tc-tile-num">${s.cloudFiles}</div>
+        <div class="tc-tile-label">Cloud Backup</div>
+      </div>
+    </div>
+  `);
+
+  if (s.linkedFiles) {
+    tiles.push(`
+      <div class="tc-receipt-tile">
+        <div class="tc-tile-icon">🔗</div>
+        <div class="tc-tile-body">
+          <div class="tc-tile-num">${s.linkedFiles}</div>
+          <div class="tc-tile-label">External Links</div>
+        </div>
+      </div>
+    `);
+  }
+
   if (s.withoutReceipts) {
-    notes.push(`${s.withoutReceipts} expense${s.withoutReceipts === 1 ? '' : 's'} still ${s.withoutReceipts === 1 ? 'has' : 'have'} no receipt attached.`);
+    tiles.push(`
+      <div class="tc-receipt-tile is-warning">
+        <div class="tc-tile-icon">⚠️</div>
+        <div class="tc-tile-body">
+          <div class="tc-tile-num">${s.withoutReceipts}</div>
+          <div class="tc-tile-label">No Receipt</div>
+        </div>
+      </div>
+    `);
+  }
+
+  if (s.linkOnlyExpenses) {
+    tiles.push(`
+      <div class="tc-receipt-tile is-notice">
+        <div class="tc-tile-icon">🏷️</div>
+        <div class="tc-tile-body">
+          <div class="tc-tile-num">${s.linkOnlyExpenses}</div>
+          <div class="tc-tile-label">Label Only</div>
+        </div>
+      </div>
+    `);
+  }
+
+  // Actionable advisory alerts
+  const notices = [];
+  if (s.withoutReceipts) {
+    notices.push(`
+      <div class="tc-receipt-alert is-warn">
+        <span class="tc-alert-glyph">⚠️</span>
+        <div class="tc-alert-info">
+          <strong>${s.withoutReceipts} expense${s.withoutReceipts === 1 ? '' : 's'} without a receipt attached.</strong>
+          <span>Attach digital receipts or supplier invoices to maintain full audit compliance for tax filing.</span>
+        </div>
+      </div>
+    `);
   }
   if (s.linkOnlyExpenses) {
-    notes.push(`${s.linkOnlyExpenses} ${s.linkOnlyExpenses === 1 ? 'has' : 'have'} only a link to a shipping label — that proves a parcel was sent, not that you paid for it. Import your Shippo invoices to attach the real proof of payment.`);
+    notices.push(`
+      <div class="tc-receipt-alert is-info">
+        <span class="tc-alert-glyph">🏷️</span>
+        <div class="tc-alert-info">
+          <strong>${s.linkOnlyExpenses} expense${s.linkOnlyExpenses === 1 ? ' has' : 's have'} only a shipping label link.</strong>
+          <span>A shipping label confirms a parcel was sent, not that you paid for it. Import your Shippo invoices or receipts for official proof of payment.</span>
+        </div>
+      </div>
+    `);
   }
 
-  el.className = notes.length ? 'tc-cloud-backlog is-stale' : 'tc-cloud-backlog';
-  el.innerHTML = (parts.length ? `🧾 ${parts.join(' · ')}.` : '🧾 No receipts stored yet.')
-    + (notes.length ? ` <em>${notes.join(' ')}</em>` : '');
+  el.className = (s.withoutReceipts || s.linkOnlyExpenses) ? 'tc-cloud-backlog is-stale' : 'tc-cloud-backlog';
+  el.innerHTML = `<div class="tc-receipt-stat-grid">${tiles.join('')}</div>`
+    + (notices.length ? `<div class="tc-receipt-alert-stack">${notices.join('')}</div>` : '');
   el.style.display = '';
 }
 

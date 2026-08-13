@@ -2047,8 +2047,18 @@
   <!-- RECEIPT LIBRARY — storage, export and tidying live here, not in the
        expense form, which is for logging a single expense. -->
   <div class="card tc-receipts-card" style="margin-bottom:1.5rem;">
-    <div class="card-title">🗂 Receipts</div>
-    <div class="tc-receipts-sub">Your receipts are kept safely in the cloud. Export them into an organized folder whenever you need them — at tax time, or for your accountant.</div>
+    <div class="rec-head tc-receipts-head">
+      <div class="tc-receipts-head-info">
+        <div class="rec-card-title tc-receipts-title">
+          <span class="tc-receipts-title-icon">🗂</span>
+          <span>Receipts &amp; Proof of Payment</span>
+        </div>
+        <div class="rec-card-sub tc-receipts-sub">Your receipts are kept safely in the cloud and cached locally for offline access. Export audit-ready tax archives or manage local folders.</div>
+      </div>
+      <div class="tc-receipts-head-action">
+        <button class="btn gold tc-hero-export-btn" type="button" onclick="openExportReceiptsModal()" id="tc-export-receipts-btn" style="display:none;" title="Download every receipt, sorted into folders by year and category, with a summary sheet">⬇ Export receipts…</button>
+      </div>
+    </div>
 
     <div id="tc-cloud-backlog" class="tc-cloud-backlog" style="display:none;"></div>
     <div id="tc-folder-alert" class="tc-folder-alert" style="display:none;"></div>
@@ -2056,19 +2066,26 @@
     <div id="tc-cache-status" class="tc-cache-status" style="display:none;"></div>
 
     <div class="tc-receipts-actions">
-      <button class="btn gold" type="button" onclick="openExportReceiptsModal()" id="tc-export-receipts-btn" style="display:none;" title="Download every receipt, sorted into folders by year and category, with a summary sheet">⬇ Export receipts…</button>
-      <button class="btn tx sm" type="button" onclick="openReceiptOrganizer()" id="tc-organize-btn" style="color:var(--gold-text);" title="Sort and rename an existing folder of receipts into year and category folders">🗃 Tidy an existing folder…</button>
-      <button class="btn tx sm" type="button" onclick="openCloudReceiptsModal()" id="tc-view-cloud-btn" style="color:var(--gold-text);display:none;" title="See every receipt currently stored in the cloud">👁 See stored receipts</button>
-      <button class="btn tx sm" type="button" onclick="cacheAllReceiptsNow()" id="tc-cache-btn" style="color:var(--gold-text);" title="Keep a copy of every receipt on this device so they still open offline">💾 Save for offline viewing</button>
+      <button class="btn sm" type="button" onclick="cacheAllReceiptsNow()" id="tc-cache-btn" title="Keep a copy of every receipt on this device so they still open offline">💾 Save for offline viewing</button>
+      <button class="btn sm" type="button" onclick="openCloudReceiptsModal()" id="tc-view-cloud-btn" style="display:none;" title="See every receipt currently stored in the cloud">👁 See stored receipts</button>
+      <button class="btn sm" type="button" onclick="openReceiptOrganizer()" id="tc-organize-btn" title="Sort and rename an existing folder of receipts into year and category folders">🗃 Tidy an existing folder…</button>
     </div>
 
     <details class="tc-receipts-advanced">
-      <summary>Folder settings</summary>
-      <div class="tc-storage-actions">
-        <button class="btn tx sm" type="button" onclick="setupReceiptFolder()">📁 Choose folder…</button>
-        <button class="btn tx sm" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="background:var(--gold3);color:black;display:none;">Authorize access</button>
-        <button class="btn tx sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" style="color:var(--gold-text);" title="Also write cloud receipts into your local folder">☁️ Copy cloud receipts to my folder</button>
-        <button class="btn tx sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" style="color:var(--gold-text);" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
+      <summary class="tc-folder-summary">
+        <span class="tc-folder-summary-left">
+          <span class="tc-folder-summary-icon">📁</span>
+          <span>Local folder settings &amp; maintenance</span>
+        </span>
+        <span class="tc-folder-summary-chevron">▾</span>
+      </summary>
+      <div class="tc-folder-drawer">
+        <div class="tc-storage-actions">
+          <button class="btn sm" type="button" onclick="setupReceiptFolder()">📁 Choose folder…</button>
+          <button class="btn gold sm" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="display:none;">Authorize access</button>
+          <button class="btn sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" title="Also write cloud receipts into your local folder">☁️ Copy cloud receipts to my folder</button>
+          <button class="btn sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
+        </div>
       </div>
     </details>
   </div>
