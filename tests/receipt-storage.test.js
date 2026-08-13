@@ -256,9 +256,12 @@ describe('cloud fallback wiring', () => {
   it('saves a receipt to the folder first and the cloud second', () => {
     expect(appSource).toContain('export async function uploadReceiptToCloud');
     expect(appSource).toContain('export async function saveReceiptBestEffort');
-    // Both expense entry points go through the shared best-effort saver.
-    expect(appSource).toContain("await saveReceiptBestEffort(file, 'General')");
-    expect(appSource).toContain('await saveReceiptBestEffort(file, book.title)');
+    // Every place a receipt is attached goes through the shared best-effort
+    // saver: the Tax Centre form, the per-book form, and the row drag-drop.
+    const callSites = appSource.match(/await saveReceiptBestEffort\(/g) || [];
+    expect(callSites.length).toBe(3);
+    expect(appSource).toContain("saveReceiptBestEffort(file, 'General', { date, desc, cat, amount, currency })");
+    expect(appSource).toContain('await saveReceiptBestEffort(file, book.title, {');
     expect(appSource).toContain('await saveReceiptBestEffort(file, subfolder)');
   });
 

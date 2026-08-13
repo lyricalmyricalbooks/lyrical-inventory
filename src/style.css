@@ -1856,6 +1856,23 @@ tr.hist-row:hover {
 .tc-cloud-backlog{font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--text3);background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:var(--r2);padding:7px 10px;}
 .tc-cloud-backlog.is-stale{color:var(--amber);background:var(--amber-bg);border-color:var(--amber);}
 .tc-cloud-backlog em{font-style:normal;font-weight:600;}
+/* The folder itself has gone missing — louder than the cloud backlog, because
+   nothing new can be filed until it is reconnected. */
+.tc-folder-alert{font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--red);background:var(--red-bg);border:1px solid var(--red);border-radius:var(--r2);padding:8px 10px;}
+.tc-folder-alert strong{font-weight:700;}
+.tc-cache-status{font-size:var(--text-2xs);line-height:var(--leading-snug);color:var(--text3);}
+
+/* Waiting-receipts viewer */
+.cloud-receipts-list{max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;}
+.cloud-receipt-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r2);background:var(--surface-card);}
+.cloud-receipt-desc{font-weight:600;color:var(--text);font-size:var(--text-sm);}
+.cloud-receipt-meta{font-size:var(--text-xs);color:var(--text3);margin-top:3px;}
+.cloud-receipt-dest{font-size:var(--text-2xs);color:var(--text3);margin-top:4px;}
+.cloud-receipt-side{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.cloud-receipt-age{font-size:var(--text-2xs);color:var(--text3);white-space:nowrap;}
+.cloud-receipt-age.is-stale{color:var(--amber);font-weight:600;}
+.cloud-receipt-open{color:var(--gold3);text-decoration:underline;font-size:var(--text-xs);white-space:nowrap;}
+.cloud-receipt-empty{padding:20px;text-align:center;color:var(--text3);font-size:var(--text-sm);}
 
 /* LOG */
 .log-console{background:var(--ink);border-radius:var(--r2);padding:10px 14px;font-size:11px;font-family:'DM Mono',monospace;max-height:90px;overflow-y:auto;line-height:2;display:none;margin-top:1rem;border:1px solid rgba(255,255,255,.05);}

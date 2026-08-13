@@ -1715,6 +1715,22 @@
   </div>
 </div></div>
 
+<!-- CLOUD RECEIPTS WAITING MODAL -->
+<div class="overlay" id="m-cloud-receipts" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:860px; width:95vw;">
+  <div class="modal-title" style="display:flex; justify-content:space-between; align-items:center;">
+    <span>☁️ Receipts waiting in the cloud</span>
+    <button class="btn tx" onclick="closeCloudReceiptsModal()" style="font-size:16px; padding:2px 8px;" aria-label="Close">✕</button>
+  </div>
+  <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:14px;">
+    <span id="cloud-receipts-count"></span> — these are saved online and open in a new tab. Moving them files each one into your receipts folder by year and category, then clears the cloud copy.
+  </div>
+  <div id="cloud-receipts-body" class="cloud-receipts-list"></div>
+  <div class="modal-footer" role="dialog" aria-modal="true">
+    <button class="btn" onclick="closeCloudReceiptsModal()">Close</button>
+    <button class="btn gold" onclick="closeCloudReceiptsModal(); reclaimCloudReceiptsNow();">☁️ Move them all to my folder</button>
+  </div>
+</div></div>
+
 <!-- INVENTORY VALUATION ASSET REPORT MODAL -->
 <div class="overlay" id="m-inventory-valuation-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:960px; width:95vw;">
   <div class="modal-title" style="display:flex; justify-content:space-between; align-items:center;">
@@ -1969,9 +1985,13 @@
           <div class="tc-storage-actions">
             <button class="btn tx sm" type="button" onclick="setupReceiptFolder()">📁 Choose folder…</button>
             <button class="btn tx sm" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="background:var(--gold3);color:black;display:none;">Authorize access</button>
-            <button class="btn tx sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" style="color:var(--gold);display:none;" title="Download every receipt waiting in the cloud into your local folder, then remove the cloud copies">☁️ Move cloud receipts to my folder</button>
+            <button class="btn tx sm" type="button" onclick="openCloudReceiptsModal()" id="tc-view-cloud-btn" style="color:var(--gold-text);display:none;" title="See every receipt currently waiting in the cloud">👁 See what's waiting</button>
+            <button class="btn tx sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" style="color:var(--gold-text);display:none;" title="Download every receipt waiting in the cloud into your local folder, then remove the cloud copies">☁️ Move cloud receipts to my folder</button>
+            <button class="btn tx sm" type="button" onclick="cacheAllReceiptsNow()" id="tc-cache-btn" style="color:var(--gold-text);" title="Keep a copy of every receipt on this device so they still open if the folder moves">💾 Save receipts for offline viewing</button>
             <button class="btn tx sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" style="color:var(--gold-text);" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
           </div>
+          <div id="tc-folder-alert" class="tc-folder-alert" style="display:none;"></div>
+          <div id="tc-cache-status" class="tc-cache-status" style="display:none;"></div>
           <div id="tc-cloud-backlog" class="tc-cloud-backlog" style="display:none;"></div>
         </div>
       </div>
