@@ -24,7 +24,7 @@ describe('artist payout request', () => {
   });
 
   it('refuses to send a request when nothing is owed', () => {
-    const fn = mainJs.match(/async function requestArtistPayout\([\s\S]*?\n\}\n/)[0];
+    const fn = mainJs.match(/async function requestArtistPayout\([\s\S]*?\r?\n\}\r?\n/)[0];
     expect(fn).toMatch(/if \(!\(owed > 0\.01\)\)/);
     // The request must be persisted before the email goes out, so an offline
     // artist keeps the record instead of losing it with the failed POST.
@@ -32,7 +32,7 @@ describe('artist payout request', () => {
   });
 
   it('notifies the publisher with a Payout Request kind', () => {
-    expect(mainJs).toContain("notifyPublisherSubmission(\n      'Payout Request',");
+    expect(mainJs).toMatch(/notifyPublisherSubmission\(\s*'Payout Request',/);
   });
 
   it('exposes requestArtistPayout for the inline onclick handler', () => {

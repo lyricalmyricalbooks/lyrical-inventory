@@ -32,7 +32,7 @@ function loadPromptDialog() {
 // Mount the actual dialog markup rather than a hand-written copy, so renaming
 // an id in index.html fails this test instead of silently bypassing it.
 function mountPromptMarkup() {
-  const m = indexHtml.match(/<div class="overlay" id="m-prompt"[\s\S]*?\n<\/div>\n/);
+  const m = indexHtml.match(/<div class="overlay" id="m-prompt"[\s\S]*?\r?\n<\/div>\r?\n/);
   if (!m) throw new Error('m-prompt markup not found in index.html');
   document.body.innerHTML = m[0];
 }

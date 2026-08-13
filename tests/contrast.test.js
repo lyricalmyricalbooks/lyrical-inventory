@@ -193,7 +193,7 @@ describe('scanJsSources', () => {
   });
 
   it('covers main.js and every feature module', () => {
-    const files = jsRenderSources().map(s => s.file);
+    const files = jsRenderSources().map(s => s.file.replace(/\\/g, '/'));
     expect(files).toContain('src/main.js');
     expect(files.filter(f => f.startsWith('src/features/')).length).toBeGreaterThan(2);
   });
@@ -283,7 +283,7 @@ describe('contrast baseline', () => {
   it('covers the rendered HTML, not just index.html', () => {
     // index.html is the skeleton; the POS cart, order history and expense
     // ledger are template literals that never appear in it.
-    const files = new Set(sweeps.flatMap(s => s.findings).map(f => f.file));
+    const files = new Set(sweeps.flatMap(s => s.findings).map(f => f.file ? f.file.replace(/\\/g, '/') : f.file));
     expect([...files].some(f => f && f.startsWith('src/'))).toBe(true);
   });
 

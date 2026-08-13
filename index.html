@@ -1902,7 +1902,10 @@
     <div><div class="book-context-title">Tax Center</div><div class="book-context-meta">Publisher Bookkeeping</div></div>
   </div>
 
-  <div class="card cf-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+  <div class="tc-dashboard-layout">
+    <!-- MAIN WORKFLOW COLUMN: Cash Flow, Expense Logger, Subscriptions, Trips, Categories, Ledger -->
+    <div class="tc-main-column">
+      <div class="card cf-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
     <div class="cf-head">
         <div class="cf-head-left">
             <span class="cf-title">Cash Flow Summary</span>
@@ -2044,53 +2047,6 @@
     </div>
   </div>
 
-  <!-- RECEIPT LIBRARY — storage, export and tidying live here, not in the
-       expense form, which is for logging a single expense. -->
-  <div class="card tc-receipts-card" style="margin-bottom:1.5rem;">
-    <div class="rec-head tc-receipts-head">
-      <div class="tc-receipts-head-info">
-        <div class="rec-card-title tc-receipts-title">
-          <span class="tc-receipts-title-icon">🗂</span>
-          <span>Receipts &amp; Proof of Payment</span>
-        </div>
-        <div class="rec-card-sub tc-receipts-sub">Your receipts are kept safely in the cloud and cached locally for offline access. Export audit-ready tax archives or manage local folders.</div>
-      </div>
-      <div class="tc-receipts-head-action">
-        <button class="btn gold tc-hero-export-btn" type="button" onclick="openExportReceiptsModal()" id="tc-export-receipts-btn" style="display:none;" title="Download every receipt, sorted into folders by year and category, with a summary sheet">⬇ Export receipts…</button>
-      </div>
-    </div>
-
-    <div id="tc-cloud-backlog" class="tc-cloud-backlog" style="display:none;"></div>
-    <div id="tc-folder-alert" class="tc-folder-alert" style="display:none;"></div>
-    <div id="tc-receipt-problems" class="tc-receipt-problems" style="display:none;"></div>
-    <div id="tc-cache-status" class="tc-cache-status" style="display:none;"></div>
-
-    <div class="tc-receipts-actions">
-      <button class="btn sm" type="button" onclick="cacheAllReceiptsNow()" id="tc-cache-btn" title="Keep a copy of every receipt on this device so they still open offline">💾 Save for offline viewing</button>
-      <button class="btn sm" type="button" onclick="openCloudReceiptsModal()" id="tc-view-cloud-btn" style="display:none;" title="See every receipt currently stored in the cloud">👁 See stored receipts</button>
-      <button class="btn sm" type="button" onclick="openReceiptOrganizer()" id="tc-organize-btn" title="Sort and rename an existing folder of receipts into year and category folders">🗃 Tidy an existing folder…</button>
-    </div>
-
-    <details class="tc-receipts-advanced">
-      <summary class="tc-folder-summary">
-        <span class="tc-folder-summary-left">
-          <span class="tc-folder-summary-icon">📁</span>
-          <span>Local folder settings &amp; maintenance</span>
-        </span>
-        <span class="tc-folder-summary-chevron">▾</span>
-      </summary>
-      <div class="tc-folder-drawer">
-        <div class="tc-storage-actions">
-          <button class="btn sm" type="button" onclick="setupReceiptFolder()">📁 Choose folder…</button>
-          <button class="btn gold sm" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="display:none;">Authorize access</button>
-          <button class="btn sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" title="Also write cloud receipts into your local folder">☁️ Copy cloud receipts to my folder</button>
-          <button class="btn sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
-          <button class="btn sm" type="button" onclick="resetDismissedReceiptNotices()" id="tc-reset-notices-btn" style="display:none;" title="Restore dismissed receipt alert notices">↺ Restore dismissed notices</button>
-        </div>
-      </div>
-    </details>
-  </div>
-
   <!-- PENDING / TO-CONFIRM EXPENSES -->
   <div class="card tc-pending-card" style="margin-bottom:1.5rem;">
     <div class="rec-head">
@@ -2121,112 +2077,6 @@
       </tr></thead>
       <tbody id="tc-recurring-body"></tbody>
     </table></div>
-  </div>
-
-  <div class="card" style="margin-bottom:1.5rem; padding: 1.5rem;">
-    <div style="font-family:'Playfair Display',serif;font-size:20px;margin-bottom:0.25rem;">🔌 Integrations &amp; API Configuration</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem;">
-      Connect and sync external services to automate expense scanning, shipping logs, and processing fee reconciliation.
-    </div>
-    
-    <div style="display:flex;flex-direction:column;gap:1.5rem;">
-      
-      <!-- Gemini API Section -->
-      <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
-        <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-gemini" onclick="toggleIntegrationSection('gemini')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('gemini');}">
-          <div>
-            <strong style="font-size:13px;color:var(--text1);">♊ Gemini AI Assistant</strong>
-            <div style="font-size:11px;color:var(--text3);">Used to analyze and automatically categorize receipt photos during upload.</div>
-          </div>
-          <span class="oc-collapse-chevron" id="tc-integration-chevron-gemini">▾</span>
-        </div>
-        <div class="oc-collapse-body" id="tc-integration-body-gemini" style="display:flex;flex-direction:column;gap:0.75rem;">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-            <div class="form-group" style="flex:2;min-width:240px;margin-bottom:0;">
-              <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Gemini API Key</label>
-              <input type="password" id="tc-api-key" placeholder="AI Studio key (AI_KEY)..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-            </div>
-            <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0;">
-              <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Base Currency</label>
-              <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled style="width:100%;font-size:12px;height:35px;background:rgba(255,255,255,0.03);">
-                <option value="CAD">CAD (Default)</option>
-              </select>
-            </div>
-            <button id="tc-save-config-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Shippo API Section -->
-      <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
-        <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-shippo" onclick="toggleIntegrationSection('shippo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('shippo');}">
-          <div>
-            <strong style="font-size:13px;color:var(--text1);">📦 Shippo Live Import</strong>
-            <div style="font-size:11px;color:var(--text3);">Syncs non-refunded transaction rates straight into your Shipping &amp; Postage ledger.</div>
-          </div>
-          <span class="oc-collapse-chevron" id="tc-integration-chevron-shippo">▾</span>
-        </div>
-        <div class="oc-collapse-body" id="tc-integration-body-shippo" style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-            <div class="form-group" style="flex:1;min-width:240px;margin-bottom:0;">
-              <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Shippo Live API Key</label>
-              <input type="password" id="tc-shippo-key" placeholder="shippo_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-            </div>
-            <button class="btn gold outline" id="tc-shippo-btn" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="importShippoShippingFromApi()">Import Shippo Shipping</button>
-          </div>
-          <div id="tc-shippo-status" style="font-size:11px;color:var(--text3);">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
-          <section class="shipping-reconciliation" aria-labelledby="shipping-reconciliation-title">
-            <div class="shipping-reconciliation-head">
-              <div>
-                <strong id="shipping-reconciliation-title">Shipping reconciliation</strong>
-                <p>Link paid postage to its website order. Suggested matches always need your confirmation.</p>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-                <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
-                <button class="btn sm" id="shipping-reconciliation-clear" type="button" onclick="clearShippingReconciliationList()">Clear list</button>
-                <button class="btn sm" id="shipping-reconciliation-close" type="button" onclick="closeShippingReconciliation()" aria-label="Close shipping reconciliation">Close</button>
-              </div>
-            </div>
-            <div id="shipping-reconciliation-list" aria-live="polite"></div>
-          </section>
-          <button class="btn sm" id="shipping-reconciliation-open" type="button" onclick="openShippingReconciliation()" style="display:none;justify-self:start;">Open reconciliation</button>
-        </div>
-      </div>
-
-      <!-- Stripe API Section -->
-      <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
-        <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
-          <div>
-            <strong style="font-size:13px;color:var(--text1);">💳 Stripe Processing Fees</strong>
-            <div style="font-size:11px;color:var(--text3);">
-              Fetch annual balance transactions processing fees.
-               <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-text);">Create restricted key in Stripe →</a>
-            </div>
-          </div>
-          <span class="oc-collapse-chevron" id="tc-integration-chevron-stripe">▾</span>
-        </div>
-        <div class="oc-collapse-body" id="tc-integration-body-stripe" style="display:flex;flex-direction:column;gap:0.75rem;">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-            <div class="form-group" style="flex:1;min-width:240px;margin-bottom:0;">
-              <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Restricted Stripe API Key</label>
-              <input type="password" id="stripe-fees-key" placeholder="rk_live_... or sk_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-            </div>
-            <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn" style="height:35px;padding:0 16px;font-size:12px;">Fetch Stripe Fees</button>
-          </div>
-          <div id="stripe-fees-status" style="font-size:11px;color:var(--text3);min-height:16px;"></div>
-          <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
-          <div id="stripe-fees-results-wrap" style="display:none;"></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
-            <select id="stripe-fees-year" style="display:none;height:34px;font-size:12px;background:rgba(255,255,255,0.03);"><option value="all">All years</option></select>
-            <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;font-size:11px;height:34px;padding:0 12px;">➕ Insert fees into ledger</button>
-            <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⚖ Reconcile against sales</button>
-            <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⬇ Download audit CSV</button>
-            <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;font-size:11px;height:34px;padding:0 12px;">Forget key</button>
-          </div>
-        </div>
-      </div>
-
-    </div>
   </div>
 
   <div class="tc-trips-header">
@@ -2295,6 +2145,171 @@
     <tfoot id="tc-ledger-foot"></tfoot>
   </table></div>
   <div id="tc-ledger-pagination"></div>
+    </div> <!-- /.tc-main-column -->
+
+    <!-- SIDE PANEL COLUMN: Receipt Library Vault & API Integrations -->
+    <div class="tc-side-column">
+      <!-- RECEIPT LIBRARY & ARCHIVES -->
+      <div class="card tc-receipts-card" style="margin-bottom:1.5rem;">
+        <div class="rec-head tc-receipts-head">
+          <div class="tc-receipts-head-info">
+            <div class="rec-card-title tc-receipts-title">
+              <span class="tc-receipts-title-icon">🗂</span>
+              <span>Receipts &amp; Proof of Payment</span>
+            </div>
+            <div class="rec-card-sub tc-receipts-sub">Your receipts are kept safely in the cloud and cached locally for offline access. Export audit-ready tax archives or manage local folders.</div>
+          </div>
+          <div class="tc-receipts-head-action">
+            <button class="btn gold tc-hero-export-btn" type="button" onclick="openExportReceiptsModal()" id="tc-export-receipts-btn" style="display:none;" title="Download every receipt, sorted into folders by year and category, with a summary sheet">⬇ Export receipts…</button>
+          </div>
+        </div>
+
+        <div id="tc-cloud-backlog" class="tc-cloud-backlog" style="display:none;"></div>
+        <div id="tc-folder-alert" class="tc-folder-alert" style="display:none;"></div>
+        <div id="tc-receipt-problems" class="tc-receipt-problems" style="display:none;"></div>
+        <div id="tc-cache-status" class="tc-cache-status" style="display:none;"></div>
+
+        <div class="tc-receipts-actions">
+          <button class="btn sm" type="button" onclick="cacheAllReceiptsNow()" id="tc-cache-btn" title="Keep a copy of every receipt on this device so they still open offline">💾 Save for offline viewing</button>
+          <button class="btn sm" type="button" onclick="openCloudReceiptsModal()" id="tc-view-cloud-btn" style="display:none;" title="See every receipt currently stored in the cloud">👁 See stored receipts</button>
+          <button class="btn sm" type="button" onclick="openReceiptOrganizer()" id="tc-organize-btn" title="Sort and rename an existing folder of receipts into year and category folders">🗃 Tidy an existing folder…</button>
+        </div>
+
+        <details class="tc-receipts-advanced">
+          <summary class="tc-folder-summary">
+            <span class="tc-folder-summary-left">
+              <span class="tc-folder-summary-icon">📁</span>
+              <span>Local folder settings &amp; maintenance</span>
+            </span>
+            <span class="tc-folder-summary-chevron">▾</span>
+          </summary>
+          <div class="tc-folder-drawer">
+            <div class="tc-storage-actions">
+              <button class="btn sm" type="button" onclick="setupReceiptFolder()">📁 Choose folder…</button>
+              <button class="btn gold sm" type="button" id="tc-exp-storage-auth-btn" onclick="authorizeReceiptFolder()" style="display:none;">Authorize access</button>
+              <button class="btn sm" type="button" onclick="reclaimCloudReceiptsNow()" id="tc-reclaim-btn" title="Also write cloud receipts into your local folder">☁️ Copy cloud receipts to my folder</button>
+              <button class="btn sm" type="button" onclick="batchScanAndRelinkReceipts()" id="tc-relink-batch-btn" title="Scan and automatically repair mislinked receipt files across all expenses">🔍 Re-link all receipts</button>
+              <button class="btn sm" type="button" onclick="resetDismissedReceiptNotices()" id="tc-reset-notices-btn" style="display:none;" title="Restore dismissed receipt alert notices">↺ Restore dismissed notices</button>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- INTEGRATIONS & API SERVICES -->
+      <div class="card tc-integrations-card" style="margin-bottom:1.5rem;">
+        <div class="rec-head tc-integrations-head">
+          <div>
+            <div class="rec-card-title tc-integrations-title">
+              <span class="tc-integrations-icon">🔌</span>
+              <span>Integrations &amp; API Services</span>
+            </div>
+            <div class="rec-card-sub tc-integrations-sub">
+              Connect external services to automate expense scanning, shipping logs, and processing fee reconciliation.
+            </div>
+          </div>
+        </div>
+        
+        <div style="display:flex;flex-direction:column;gap:1.25rem;">
+          
+          <!-- Gemini API Section -->
+          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-gemini" onclick="toggleIntegrationSection('gemini')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('gemini');}">
+              <div>
+                <strong style="font-size:13px;color:var(--text1);">♊ Gemini AI Assistant</strong>
+                <div style="font-size:11px;color:var(--text3);">Used to analyze and automatically categorize receipt photos during upload.</div>
+              </div>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-gemini">▾</span>
+            </div>
+            <div class="oc-collapse-body" id="tc-integration-body-gemini" style="display:flex;flex-direction:column;gap:0.75rem;">
+              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Gemini API Key</label>
+                  <input type="password" id="tc-api-key" placeholder="AI Studio key (AI_KEY)..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+                </div>
+                <div class="form-group" style="flex:1;min-width:120px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Base Currency</label>
+                  <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled style="width:100%;font-size:12px;height:35px;background:rgba(255,255,255,0.03);">
+                    <option value="CAD">CAD (Default)</option>
+                  </select>
+                </div>
+                <button id="tc-save-config-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shippo API Section -->
+          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-shippo" onclick="toggleIntegrationSection('shippo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('shippo');}">
+              <div>
+                <strong style="font-size:13px;color:var(--text1);">📦 Shippo Live Import</strong>
+                <div style="font-size:11px;color:var(--text3);">Syncs non-refunded transaction rates straight into your Shipping &amp; Postage ledger.</div>
+              </div>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-shippo">▾</span>
+            </div>
+            <div class="oc-collapse-body" id="tc-integration-body-shippo" style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
+              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Shippo Live API Key</label>
+                  <input type="password" id="tc-shippo-key" placeholder="shippo_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+                </div>
+                <button class="btn gold outline" id="tc-shippo-btn" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="importShippoShippingFromApi()">Import Shippo Shipping</button>
+              </div>
+              <div id="tc-shippo-status" style="font-size:11px;color:var(--text3);">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
+              <section class="shipping-reconciliation" aria-labelledby="shipping-reconciliation-title">
+                <div class="shipping-reconciliation-head">
+                  <div>
+                    <strong id="shipping-reconciliation-title">Shipping reconciliation</strong>
+                    <p>Link paid postage to its website order. Suggested matches always need your confirmation.</p>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                    <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
+                    <button class="btn sm" id="shipping-reconciliation-clear" type="button" onclick="clearShippingReconciliationList()">Clear list</button>
+                    <button class="btn sm" id="shipping-reconciliation-close" type="button" onclick="closeShippingReconciliation()" aria-label="Close shipping reconciliation">Close</button>
+                  </div>
+                </div>
+                <div id="shipping-reconciliation-list" aria-live="polite"></div>
+              </section>
+              <button class="btn sm" id="shipping-reconciliation-open" type="button" onclick="openShippingReconciliation()" style="display:none;justify-self:start;">Open reconciliation</button>
+            </div>
+          </div>
+
+          <!-- Stripe API Section -->
+          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
+            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
+              <div>
+                <strong style="font-size:13px;color:var(--text1);">💳 Stripe Processing Fees</strong>
+                <div style="font-size:11px;color:var(--text3);">
+                  Fetch annual balance transactions processing fees.
+                   <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-text);">Create restricted key in Stripe →</a>
+                </div>
+              </div>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-stripe">▾</span>
+            </div>
+            <div class="oc-collapse-body" id="tc-integration-body-stripe" style="display:flex;flex-direction:column;gap:0.75rem;">
+              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Restricted Stripe API Key</label>
+                  <input type="password" id="stripe-fees-key" placeholder="rk_live_... or sk_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+                </div>
+                <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn" style="height:35px;padding:0 16px;font-size:12px;">Fetch Stripe Fees</button>
+              </div>
+              <div id="stripe-fees-status" style="font-size:11px;color:var(--text3);min-height:16px;"></div>
+              <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
+              <div id="stripe-fees-results-wrap" style="display:none;"></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
+                <select id="stripe-fees-year" style="display:none;height:34px;font-size:12px;background:rgba(255,255,255,0.03);"><option value="all">All years</option></select>
+                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;font-size:11px;height:34px;padding:0 12px;">➕ Insert fees into ledger</button>
+                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⚖ Reconcile against sales</button>
+                <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⬇ Download audit CSV</button>
+                <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;font-size:11px;height:34px;padding:0 12px;">Forget key</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div> <!-- /.tc-side-column -->
+  </div> <!-- /.tc-dashboard-layout -->
 </div>
 
 <!-- BIG CARTEL DASHBOARD -->

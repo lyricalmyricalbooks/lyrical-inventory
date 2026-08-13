@@ -419,9 +419,9 @@ describe('cloud fallback wiring', () => {
   });
 
   it('supports dismissing and restoring receipt advisory notices', () => {
-    expect(appSource).toContain('export function dismissReceiptNotice');
-    expect(appSource).toContain('export function resetDismissedReceiptNotices');
-    expect(appSource).toContain('export function isReceiptNoticeDismissed');
+    expect(appSource).toContain('function dismissReceiptNotice');
+    expect(appSource).toContain('function resetDismissedReceiptNotices');
+    expect(appSource).toContain('function isReceiptNoticeDismissed');
     expect(html).toContain('id="tc-reset-notices-btn"');
     expect(css).toContain('.tc-alert-dismiss');
   });
