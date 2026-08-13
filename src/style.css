@@ -1851,6 +1851,11 @@ tr.hist-row:hover {
 .tc-receipt-scan-actions{display:flex;gap:8px;flex-wrap:wrap;}
 .tc-storage-row{display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:var(--text3);margin-top:2px;}
 .tc-storage-actions{display:flex;gap:6px;flex-wrap:wrap;}
+/* Receipts parked in the cloud, waiting for the local folder. Both tones use
+   theme-aware tokens so the row stays readable in dark mode. */
+.tc-cloud-backlog{font-size:var(--text-xs);line-height:var(--leading-snug);color:var(--text3);background:var(--gold-bg);border:1px solid var(--gold-line);border-radius:var(--r2);padding:7px 10px;}
+.tc-cloud-backlog.is-stale{color:var(--amber);background:var(--amber-bg);border-color:var(--amber);}
+.tc-cloud-backlog em{font-style:normal;font-weight:600;}
 
 /* LOG */
 .log-console{background:var(--ink);border-radius:var(--r2);padding:10px 14px;font-size:11px;font-family:'DM Mono',monospace;max-height:90px;overflow-y:auto;line-height:2;display:none;margin-top:1rem;border:1px solid rgba(255,255,255,.05);}

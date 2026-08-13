@@ -39,7 +39,7 @@ import {
   openM,
   closeM,
   openEditSale,
-  saveReceiptToLocalFile,
+  saveReceiptBestEffort,
   saveState,
   showToast,
   states,
@@ -55,6 +55,7 @@ import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
 import { reconcileConsignmentInvoiceLinks } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
+import { receiptOwners, summarizeCloudBacklog } from '../lib/receipt-storage.js';
 import {
   RECURRING_FREQUENCIES,
   frequencyLabel,
@@ -189,12 +190,19 @@ async function tcExpenseRowDrop(e, row, sourceType, sourceId, itemId) {
     return;
   }
 
-  const localUrl = await saveReceiptToLocalFile(file, subfolder);
-  const targetUrl = localUrl || `local://${file.name}`;
+  // Folder first, cloud second. The old fallback here invented a
+  // `local://<name>` reference for a file that had never been written, so the
+  // ledger showed a "View Local" link that could only ever fail to open.
+  const saved = await saveReceiptBestEffort(file, subfolder);
+  if (saved.storage === 'none') {
+    showToast(`⚠ Could not save "${file.name}" — nothing was attached`, 'err', 5000);
+    return;
+  }
 
   if (!Array.isArray(exp.receiptFiles)) exp.receiptFiles = exp.receipt ? [exp.receipt] : [];
-  exp.receiptFiles.push(targetUrl);
+  exp.receiptFiles.push(saved.ref);
   exp.receipt = exp.receiptFiles[0] || '';
+  if (saved.storage === 'cloud' && !exp.receiptCloudAt) exp.receiptCloudAt = new Date().toISOString();
 
   if (sourceType === 'businessExpense') {
     await saveTaxCenter();
@@ -203,7 +211,13 @@ async function tcExpenseRowDrop(e, row, sourceType, sourceId, itemId) {
   }
 
   renderTaxCenter();
-  showToast(`✓ Attached receipt "${file.name}" to "${exp.desc || 'Expense'}"`, 'ok');
+  showToast(
+    saved.storage === 'cloud'
+      ? `✓ Attached "${file.name}" — saved to the cloud until your folder is available`
+      : `✓ Attached receipt "${file.name}" to "${exp.desc || 'Expense'}"`,
+    'ok',
+    saved.storage === 'cloud' ? 5000 : undefined
+  );
 }
 
 function downloadTaxReport() {
@@ -2189,19 +2203,67 @@ function _tcRenderStatusHeaders() {
       if (inlineAuthBtn) inlineAuthBtn.style.display = showAuth ? '' : 'none';
     };
     if (!handle) {
-      setInline('Storage: <strong>Cloud (Firestore)</strong> — pick a local folder to save receipts as files', 'var(--text3)', false);
+      setInline('Storage: <strong>Cloud</strong> — receipts are kept safely online until you pick a folder to file them in', 'var(--text3)', false);
+      _tcRenderCloudBacklog();
       return;
     }
-    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    const perm = typeof handle.queryPermission === 'function'
+      ? await handle.queryPermission({ mode: 'readwrite' })
+      : 'prompt';
     if (perm === 'granted') {
       // Use a chevron between the chosen folder and the sub-path so a
       // folder that happens to be named "receipts" doesn't read as the
       // confusing "receipts/receipts/General/".
       setInline(`Saving to: <strong>${escapeHtml(handle.name)}</strong> › receipts/General`, 'var(--green)', false);
     } else {
-      setInline(`⚠ Access needed for folder: <strong>${escapeHtml(handle.name)}</strong>`, 'var(--amber)', true);
+      setInline(`⚠ Access needed for folder: <strong>${escapeHtml(handle.name)}</strong> — receipts go to the cloud until you allow it`, 'var(--amber)', true);
     }
+    _tcRenderCloudBacklog();
+  }).catch(e => {
+    // A browser with no IndexedDB (private mode) or no folder API rejects here.
+    // The backlog prompt is the one thing that must still render — it is what
+    // tells the owner receipts are piling up somewhere other than their folder.
+    console.warn('Receipt folder status unavailable', e);
+    _tcRenderCloudBacklog();
   });
+}
+
+/**
+ * The "waiting in the cloud" line under the receipt box.
+ *
+ * Hidden entirely when nothing is waiting — this is a prompt to act, not a
+ * permanent status readout, and a row that always says "0" trains the eye to
+ * skip the row on the day it finally says something.
+ */
+function _tcRenderCloudBacklog() {
+  const el = $('tc-cloud-backlog');
+  const btn = $('tc-reclaim-btn');
+  if (!el) return;
+
+  // Same list the reclaim walks, so the count here can never advertise a
+  // backlog the button would then decline to move.
+  const owners = receiptOwners(TAX_CENTER.businessExpenses, states, BOOKS);
+  const { expenses, files, oldestDays, overdue, thresholdDays } = summarizeCloudBacklog(owners.map(o => o.exp));
+  if (!expenses) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+
+  const noun = files === 1 ? 'receipt is' : 'receipts are';
+  const age = oldestDays >= 1
+    ? ` The oldest has been there ${oldestDays} day${oldestDays === 1 ? '' : 's'}.`
+    : '';
+  // Past the threshold this stops being informational: a tax record that has
+  // sat online for a fortnight is one the owner has forgotten about.
+  const stale = overdue > 0;
+
+  el.className = stale ? 'tc-cloud-backlog is-stale' : 'tc-cloud-backlog';
+  el.innerHTML = `${stale ? '⏳' : '☁️'} <strong>${files} ${noun}</strong> saved in the cloud, waiting to be filed in your folder.${age}`
+    + (stale ? ` <em>Anything past ${thresholdDays} days is worth bringing down now.</em>` : '');
+  el.style.display = '';
+  if (btn) btn.style.display = '';
 }
 
 function renderTaxCenter() {
