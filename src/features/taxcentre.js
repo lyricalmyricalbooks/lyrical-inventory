@@ -2257,12 +2257,12 @@ export function getDismissedReceiptNotices() {
   }
 }
 
-export function isReceiptNoticeDismissed(key) {
+function isReceiptNoticeDismissed(key) {
   const map = getDismissedReceiptNotices();
   return !!map[key];
 }
 
-export function dismissReceiptNotice(key) {
+function dismissReceiptNotice(key) {
   try {
     const map = getDismissedReceiptNotices();
     map[key] = true;
@@ -2276,7 +2276,7 @@ export function dismissReceiptNotice(key) {
   }
 }
 
-export function resetDismissedReceiptNotices() {
+function resetDismissedReceiptNotices() {
   try {
     localStorage.removeItem(DISMISSED_NOTICES_KEY);
     _tcRenderReceiptStorage();
@@ -3137,4 +3137,7 @@ export {
   tcShowRecurringCharges,
   removeRecurring,
   downloadTaxLedgerCSV,
+  dismissReceiptNotice,
+  resetDismissedReceiptNotices,
+  isReceiptNoticeDismissed,
 };

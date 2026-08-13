@@ -103,7 +103,7 @@ describe('Customs declared-total hint', () => {
   it('is wired to the quantity and value inputs in index.html', () => {
     expect(indexContent).toContain('id="sp-customs-total"');
     expect(indexContent).toContain('oninput="updateShippoCustomsTotalHint()"');
-    expect(appSource).toMatch(/updateShippoCustomsTotalHint\(\);\n\n  showToast\(`✓ Scaled specs/);
+    expect(appSource).toMatch(/updateShippoCustomsTotalHint\(\);[\r\n]+  showToast\(`✓ Scaled specs/);
   });
 });
 
