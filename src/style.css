@@ -1853,15 +1853,10 @@ tr.hist-row:hover {
 .tc-storage-actions{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center;}
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   TAX CENTRE DASHBOARD & SIDEBAR LAYOUT
+   TAX CENTRE SUB-NAVIGATION & SECTION PANELS
    ═══════════════════════════════════════════════════════════════════════════ */
-.tc-dashboard-layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(340px,1fr);gap:var(--space-4);align-items:start;}
-.tc-main-column{min-width:0;display:flex;flex-direction:column;gap:0;}
-.tc-side-column{min-width:0;display:flex;flex-direction:column;gap:0;position:sticky;top:1rem;}
-
-@media (max-width:1080px){
-  .tc-dashboard-layout{grid-template-columns:1fr;}
-  .tc-side-column{position:static;}
+.tc-sub-nav {
+  margin-bottom: var(--space-4);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

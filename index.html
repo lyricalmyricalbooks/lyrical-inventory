@@ -1902,10 +1902,16 @@
     <div><div class="book-context-title">Tax Center</div><div class="book-context-meta">Publisher Bookkeeping</div></div>
   </div>
 
-  <div class="tc-dashboard-layout">
-    <!-- MAIN WORKFLOW COLUMN: Cash Flow, Expense Logger, Subscriptions, Trips, Categories, Ledger -->
-    <div class="tc-main-column">
-      <div class="card cf-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
+  <!-- Tax Center Sub-navigation -->
+  <div class="settings-sub-nav tc-sub-nav">
+    <button class="settings-sub-tab active" id="btn-tctab-ledger" onclick="switchTaxCenterSubTab('ledger')">📊 Expenses &amp; Ledger</button>
+    <button class="settings-sub-tab" id="btn-tctab-receipts" onclick="switchTaxCenterSubTab('receipts')">🗂️ Receipts Vault</button>
+    <button class="settings-sub-tab" id="btn-tctab-integrations" onclick="switchTaxCenterSubTab('integrations')">🔌 Integrations &amp; APIs</button>
+  </div>
+
+  <!-- 1. EXPENSES & LEDGER SECTION -->
+  <div id="tc-sec-ledger" class="tc-section settings-section">
+    <div class="card cf-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
     <div class="cf-head">
         <div class="cf-head-left">
             <span class="cf-title">Cash Flow Summary</span>
@@ -2145,12 +2151,12 @@
     <tfoot id="tc-ledger-foot"></tfoot>
   </table></div>
   <div id="tc-ledger-pagination"></div>
-    </div> <!-- /.tc-main-column -->
+  </div> <!-- /#tc-sec-ledger -->
 
-    <!-- SIDE PANEL COLUMN: Receipt Library Vault & API Integrations -->
-    <div class="tc-side-column">
-      <!-- RECEIPT LIBRARY & ARCHIVES -->
-      <div class="card tc-receipts-card" style="margin-bottom:1.5rem;">
+  <!-- 2. RECEIPTS VAULT SECTION -->
+  <div id="tc-sec-receipts" class="tc-section settings-section" style="display:none;">
+    <!-- RECEIPT LIBRARY & ARCHIVES -->
+    <div class="card tc-receipts-card" style="margin-bottom:1.5rem;">
         <div class="rec-head tc-receipts-head">
           <div class="tc-receipts-head-info">
             <div class="rec-card-title tc-receipts-title">
@@ -2194,10 +2200,13 @@
           </div>
         </details>
       </div>
+  </div> <!-- /#tc-sec-receipts -->
 
-      <!-- INTEGRATIONS & API SERVICES -->
-      <div class="card tc-integrations-card" style="margin-bottom:1.5rem;">
-        <div class="rec-head tc-integrations-head">
+  <!-- 3. INTEGRATIONS & APIS SECTION -->
+  <div id="tc-sec-integrations" class="tc-section settings-section" style="display:none;">
+    <!-- INTEGRATIONS & API SERVICES -->
+    <div class="card tc-integrations-card" style="margin-bottom:1.5rem;">
+      <div class="rec-head tc-integrations-head">
           <div>
             <div class="rec-card-title tc-integrations-title">
               <span class="tc-integrations-icon">🔌</span>
@@ -2308,8 +2317,7 @@
 
         </div>
       </div>
-    </div> <!-- /.tc-side-column -->
-  </div> <!-- /.tc-dashboard-layout -->
+  </div> <!-- /#tc-sec-integrations -->
 </div>
 
 <!-- BIG CARTEL DASHBOARD -->
