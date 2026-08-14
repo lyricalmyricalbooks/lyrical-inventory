@@ -159,6 +159,49 @@ export function refundExpense(refund, original, idSeed = Date.now()) {
   };
 }
 
+// LABEL URLS EXPIRE — WHY A STORED ONE IS NOT A RECEIPT
+//
+// A Shippo label_url is a signed CloudFront link:
+//
+//   https://deliver.goshippo.com/<id>.pdf?Expires=1806787827&Signature=…
+//
+// Checked against a real transaction: created 2026-04-03T21:30:24Z, signature
+// expiring 2027-04-03T21:30:27Z — one year to the second. So a label URL stored
+// in the ledger is a link that dies on its own first birthday, silently, long
+// before the six years of records the CRA expects.
+//
+// The transaction id is already kept on every imported expense as
+// `ref: "shippo:<id>"`, so a fresh link can be minted on demand instead. That
+// is what shippoTxIdFromRef exists for.
+
+/** The transaction id behind an imported Shippo expense, or ''. */
+export function shippoTxIdFromRef(ref) {
+  const m = String(ref || '').match(/^shippo:([A-Za-z0-9]+)$/);
+  return m ? m[1] : '';
+}
+
+/** A signed Shippo label link — the kind that expires. */
+export function isExpiringLabelUrl(url) {
+  return typeof url === 'string'
+    && /deliver\.goshippo\.com/i.test(url)
+    && /[?&]Expires=\d+/.test(url);
+}
+
+/** When a signed label link stops working, or null if it isn't one. */
+export function labelUrlExpiry(url) {
+  if (!isExpiringLabelUrl(url)) return null;
+  const m = String(url).match(/[?&]Expires=(\d+)/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]) * 1000);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** True once a stored label link can no longer be opened. */
+export function isLabelUrlExpired(url, now = new Date()) {
+  const expiry = labelUrlExpiry(url);
+  return !!expiry && expiry.getTime() <= now.getTime();
+}
+
 /**
  * What to tell the owner when invoices can't be read.
  *
