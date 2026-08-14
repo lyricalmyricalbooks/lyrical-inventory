@@ -21,6 +21,8 @@ import {
   uniqueFileName,
   writeReceiptRefs,
   isRentExpense,
+  isGratuityExpense,
+  isReceiptExemptExpense,
 } from '../src/lib/receipt-storage.js';
 
 const html = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
@@ -209,6 +211,27 @@ describe('receipt storage summary', () => {
     expect(isRentExpense({ receiptExempt: true })).toBe(true);
     expect(isRentExpense({ desc: 'Coffee beans', cat: 'Office Supplies' })).toBe(false);
     expect(isRentExpense(null)).toBe(false);
+  });
+
+  it('identifies gratuity expenses and receipt-exempt expenses accurately', () => {
+    expect(isGratuityExpense({ gratuity: true })).toBe(true);
+    expect(isGratuityExpense({ ref: 'GRAT-143338' })).toBe(true);
+    expect(isGratuityExpense({ desc: 'Gratuity: Camilla Marraccini' })).toBe(true);
+    expect(isGratuityExpense({ desc: 'Standard Office Supplies' })).toBe(false);
+    expect(isGratuityExpense(null)).toBe(false);
+
+    expect(isReceiptExemptExpense({ gratuity: true })).toBe(true);
+    expect(isReceiptExemptExpense({ cat: 'Rent' })).toBe(true);
+    expect(isReceiptExemptExpense({ desc: 'Printing 500 copies' })).toBe(false);
+  });
+
+  it('exempts gratuity copies from withoutReceipts in summarizeReceiptStorage', () => {
+    const items = [
+      { desc: 'Gratuity: Harley', ref: 'GRAT-143338', gratuity: true, receipt: '' },
+      { desc: 'Marketing flyers', cat: 'Marketing', receipt: '' },
+    ];
+    const s = summarizeReceiptStorage(items);
+    expect(s.withoutReceipts).toBe(1); // only Marketing flyers
   });
 
   it('never reports an age or an overdue count', () => {

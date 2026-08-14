@@ -8153,20 +8153,23 @@ export function renderExpenses() {
       </tr>`;
     }
 
-    const statusCell = isGratuityExpense(e)
-      ? '<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — not reimbursed to the author">Publisher expense</span>'
+    const isGratuity = isGratuityExpense(e);
+    const statusCell = isGratuity
+      ? '<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — publisher absorbed, not reimbursed to author">Publisher expense</span>'
       : e.received
         ? '<span class="pill green" style="font-size:10px;">✓ Received</span>'
         : '<span style="font-size:11px;color:var(--text3);">Pending</span>';
-    const actionCell = (!e.received && !isAuthor() && !isGratuityExpense(e))
+    const actionCell = (!e.received && !isAuthor() && !isGratuity)
       ? `<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>` : '';
     const baseReceiptLink = e.receipt ? (
       e.receipt.startsWith('local://')
         ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
         : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
-    ) : isRentExpense(e)
-      ? `<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — verified via lease agreement & bank record)">Lease record</span>`
-      : `<span style="font-size:11px;color:var(--text3); font-weight: 500;">Missing</span>`;
+    ) : isGratuity
+      ? `<span class="pill gray" style="font-size:10px;" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>`
+      : isRentExpense(e)
+        ? `<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — verified via lease agreement & bank record)">Lease record</span>`
+        : `<span style="font-size:11px;color:var(--text3); font-weight: 500;">Missing</span>`;
     const trackLink = e.trackingUrl
       ? ` <a href="${e.trackingUrl}" target="_blank" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
       : '';
@@ -8174,7 +8177,7 @@ export function renderExpenses() {
 
     // Calculate multi-currency stuff
     const eCur = e.currency || cur;
-    const isBase = eCur === 'CAD';
+    const isBase = eCur === 'CAD' || normalizeCcy(eCur) === 'CAD';
     let baseAmountText = '';
     let baseAmountTitle = '';
 
@@ -8183,6 +8186,8 @@ export function renderExpenses() {
         baseAmountText = '-';
       } else if (e.baseAmount) {
         baseAmountText = fmt(e.baseAmount, 'CAD');
+      } else if (Number(e.fxRate) > 0) {
+        baseAmountText = fmt(e.amount * Number(e.fxRate), 'CAD');
       } else if (_fxRateCache[`${eCur}_CAD`]) {
         baseAmountText = fmt(e.amount * _fxRateCache[`${eCur}_CAD`], 'CAD');
       } else {
@@ -8201,14 +8206,15 @@ export function renderExpenses() {
         : '<td></td>')
       : '';
 
-    return `<tr style="${e.received ? 'opacity:.5;' : ''}">
+    const isSettledReimbursable = e.received && !isGratuity;
+    return `<tr style="${isSettledReimbursable ? 'opacity:.5;' : ''}">
       ${selectCell}
       <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
       <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
       <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
       <td style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
       <td>${receiptCell}</td>
-      <td class="r" style="color:${e.received ? 'var(--text4)' : 'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount, eCur)}</td>
+      <td class="r" style="color:${isSettledReimbursable ? 'var(--text4)' : 'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount, eCur)}</td>
       ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
       <td>${statusCell}</td>
       <td>${actionCell}</td>
@@ -13681,6 +13687,9 @@ export function _localReceiptCell(item) {
     ? item.receiptFiles
     : (item.receipt ? [item.receipt] : []);
   if (!files.length) {
+    if (isGratuityExpense(item)) {
+      return '<span class="pill gray" style="font-size:10px;" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>';
+    }
     if (isRentExpense(item)) {
       return '<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — documented via tenancy lease & bank statement)">Lease record</span>';
     }

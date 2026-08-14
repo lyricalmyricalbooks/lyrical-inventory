@@ -231,11 +231,27 @@ export function isRentExpense(item) {
 }
 
 /**
+ * Whether this expense is a publisher's gifted/promotional copy cost (gratuity),
+ * which is deducted directly from inventory without requiring a 3rd-party cash receipt.
+ */
+export function isGratuityExpense(item) {
+  if (!item || typeof item !== 'object') return false;
+  return !!(item.gratuity === true || (typeof item.ref === 'string' && item.ref.startsWith('GRAT-')) || (typeof item.desc === 'string' && item.desc.toLowerCase().startsWith('gratuity:')));
+}
+
+/**
+ * Returns true if an expense does not require a digital store receipt (e.g. rent/lease or gratuity copies).
+ */
+export function isReceiptExemptExpense(item) {
+  return isRentExpense(item) || isGratuityExpense(item);
+}
+
+/**
  * Where the receipts actually are, as a neutral readout.
  *
  * Reports counts, not a verdict: receipts held in the cloud are safe, and
  * receipts filed locally are safe. The only genuinely bad state — an expense
- * with no receipt reference at all (excluding rent/lease payments) — is counted
+ * with no receipt reference at all (excluding rent/lease and gratuity expenses) — is counted
  * separately, because that is the one an accountant will ask about.
  */
 export function summarizeReceiptStorage(items) {
@@ -253,6 +269,9 @@ export function summarizeReceiptStorage(items) {
     if (!refs.length) {
       if (isRentExpense(item)) {
         rentExpenses++;
+        return;
+      }
+      if (isGratuityExpense(item)) {
         return;
       }
       withoutReceipts++;
