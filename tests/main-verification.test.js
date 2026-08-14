@@ -156,4 +156,9 @@ describe('main.js window binding verification', () => {
     expect(appSource).toContain("localStorage.setItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val)");
     expect(appSource).toContain("localStorage.setItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`, isOpen ? 'true' : 'false')");
   });
+
+  it('renders gratuity copies as receipt-exempt and does not dim publisher expenses in renderExpenses', () => {
+    expect(appSource).toContain('isSettledReimbursable = e.received && !isGratuity');
+    expect(appSource).toContain('title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>');
+  });
 });
