@@ -13225,38 +13225,30 @@ async function authorizeReceiptFolder() {
   }
 }
 
-async function findFileHandleInDir(dirHandle, targetFilename) {
+/**
+ * Find a file by name anywhere under a directory.
+ *
+ * Was three levels of hand-unrolled loops, which stopped exactly one level too
+ * shallow once receipts were filed under year, category and book — the deepest
+ * receipts became unfindable by the very fallback meant to rescue them.
+ * Breadth-first so the common shallow case still returns immediately, with a
+ * depth cap so an unexpected folder tree cannot hang the app.
+ */
+async function findFileHandleInDir(dirHandle, targetFilename, maxDepth = 6) {
   if (!dirHandle || !targetFilename) return null;
-  try {
-    // Top-level direct file check
-    for await (const entry of dirHandle.values()) {
-      if (entry.kind === 'file' && entry.name === targetFilename) {
-        return entry;
-      }
+  let level = [dirHandle];
+
+  for (let depth = 0; depth <= maxDepth && level.length; depth++) {
+    const next = [];
+    for (const dir of level) {
+      try {
+        for await (const entry of dir.values()) {
+          if (entry.kind === 'file' && entry.name === targetFilename) return entry;
+          if (entry.kind === 'directory') next.push(entry);
+        }
+      } catch (_) { /* skip a folder we cannot read */ }
     }
-    // Deep search in 1st & 2nd level subdirectories
-    for await (const entry of dirHandle.values()) {
-      if (entry.kind === 'directory') {
-        try {
-          for await (const subEntry of entry.values()) {
-            if (subEntry.kind === 'file' && subEntry.name === targetFilename) {
-              return subEntry;
-            }
-            if (subEntry.kind === 'directory') {
-              try {
-                for await (const deepEntry of subEntry.values()) {
-                  if (deepEntry.kind === 'file' && deepEntry.name === targetFilename) {
-                    return deepEntry;
-                  }
-                }
-              } catch (_) {}
-            }
-          }
-        } catch (_) {}
-      }
-    }
-  } catch (e) {
-    console.warn('Receipt file deep lookup error', e);
+    level = next;
   }
   return null;
 }
@@ -13541,16 +13533,20 @@ export async function saveReceiptToLocalFile(file, subfolderName = '', meta = nu
     const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
     if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return null;
 
-    const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: true });
-
-    // With expense details to hand, file by tax year and category and name the
-    // file after what it was for. Without them — the email importer, shipping
-    // labels — keep the flat subfolder the caller asked for.
+    // The folder the owner picked IS the receipts folder. This used to nest a
+    // `receipts/` directory inside it, which produced paths like
+    // "…/receipts/General receipts/receipts/2026/Office Supplies/General/" —
+    // four levels of app-invented nesting inside a folder already named for
+    // receipts. Files go straight into the chosen folder now.
+    //
+    // `subfolderName` is a flat legacy destination (email-imports, Shippo). It
+    // is NOT a book title, and passing it as one is what appended that stray
+    // "General" level to every Tax Centre receipt.
     const segments = meta
-      ? receiptFolderPath({ ...meta, book: meta.book || subfolderName })
+      ? receiptFolderPath(meta)
       : (subfolderName ? [subfolderName] : []);
 
-    let targetDir = receiptsDir;
+    let targetDir = dirHandle;
     for (const segment of segments) {
       targetDir = await targetDir.getDirectoryHandle(segment, { create: true });
     }
@@ -13676,31 +13672,49 @@ export function _localReceiptCell(item) {
 // reorganising or renaming subfolders. Extracted so the printable trip report
 // can read the same files viewLocalReceipt opens; throws when nothing matches,
 // so callers decide whether that is fatal or just an omitted thumbnail.
+/**
+ * Walk a full folder-relative path from a starting directory.
+ *
+ * The previous version destructured `path.split('/')` into exactly
+ * `[subfolder, filename]`, so it only ever handled one level of nesting. Once
+ * receipts were filed under year and category, "2026/Office Supplies/x.pdf"
+ * resolved subfolder="2026" and filename="Office Supplies" and always failed —
+ * every organised receipt fell through to the slow basename search, and
+ * anything deeper than that search's limit could not be opened at all.
+ */
+async function fileHandleAtPath(dirHandle, path) {
+  const parts = String(path || '').split('/').filter(Boolean);
+  if (!parts.length) return null;
+  const filename = parts.pop();
+  let dir = dirHandle;
+  for (const segment of parts) {
+    dir = await dir.getDirectoryHandle(segment, { create: false });
+  }
+  return dir.getFileHandle(filename);
+}
+
 export async function resolveLocalReceiptFile(dirHandle, path) {
   let fileHandle = null;
-  const baseFilename = path.split('/').pop();
+  const baseFilename = String(path || '').split('/').pop();
 
-  try {
-    const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: false });
-    if (path.includes('/')) {
-      const [subfolder, filename] = path.split('/');
-      const subDir = await receiptsDir.getDirectoryHandle(subfolder, { create: false });
-      fileHandle = await subDir.getFileHandle(filename);
-    } else {
-      fileHandle = await receiptsDir.getFileHandle(path);
-    }
-  } catch (_) {
+  // The chosen folder is the root. Receipts filed before that was true live
+  // under a nested `receipts/`, so that stays as a fallback rather than
+  // stranding everything saved earlier.
+  for (const attempt of [
+    () => fileHandleAtPath(dirHandle, path),
+    async () => {
+      const legacy = await dirHandle.getDirectoryHandle('receipts', { create: false });
+      return fileHandleAtPath(legacy, path);
+    },
+  ]) {
     try {
-      if (path.includes('/')) {
-        const [subfolder, filename] = path.split('/');
-        const subDir = await dirHandle.getDirectoryHandle(subfolder, { create: false });
-        fileHandle = await subDir.getFileHandle(filename);
-      } else {
-        fileHandle = await dirHandle.getFileHandle(path);
-      }
-    } catch (_) {}
+      fileHandle = await attempt();
+      if (fileHandle) break;
+    } catch (_) { /* try the next location */ }
   }
 
+  // Last resort: find it by name anywhere in the tree, which is what lets a
+  // receipt survive the owner reorganising their folders by hand.
   if (!fileHandle) {
     fileHandle = await findFileHandleInDir(dirHandle, baseFilename);
   }
@@ -13794,21 +13808,16 @@ async function checkReceiptFolderHealth() {
       _noteReceiptFolderHealth(true);
       return { connected: true, reachable: true, needsPermission: true, handle: dirHandle };
     }
-    await dirHandle.getDirectoryHandle('receipts', { create: false });
+    // Reading the folder is the test. It used to open a `receipts/`
+    // subdirectory, which no longer exists now the chosen folder is the root —
+    // and a missing subfolder was never good evidence that a folder had gone.
+    for await (const _ of dirHandle.values()) break;
     _noteReceiptFolderHealth(true);
     return { connected: true, reachable: true, handle: dirHandle };
   } catch (e) {
-    // NotFoundError on `receipts/` can also mean a fresh folder that has never
-    // been written to, so only a hard failure counts as unreachable.
-    try {
-      for await (const _ of dirHandle.values()) break;
-      _noteReceiptFolderHealth(true);
-      return { connected: true, reachable: true, empty: true, handle: dirHandle };
-    } catch (inner) {
-      console.warn('Receipt folder unreachable', inner);
-      _noteReceiptFolderHealth(false);
-      return { connected: true, reachable: false, handle: dirHandle };
-    }
+    console.warn('Receipt folder unreachable', e);
+    _noteReceiptFolderHealth(false);
+    return { connected: true, reachable: false, handle: dirHandle };
   }
 }
 

@@ -2217,10 +2217,10 @@ function _tcRenderStatusHeaders() {
       ? await handle.queryPermission({ mode: 'readwrite' })
       : 'prompt';
     if (perm === 'granted') {
-      // Use a chevron between the chosen folder and the sub-path so a
-      // folder that happens to be named "receipts" doesn't read as the
-      // confusing "receipts/receipts/General/".
-      setInline(`Saving to: <strong>${escapeHtml(handle.name)}</strong> › receipts/General`, 'var(--green)', false);
+      // Says what will actually be created: the chosen folder, then a year and
+      // a category. It used to claim "receipts/General", which was both an
+      // extra folder level and a stray one.
+      setInline(`Saving to: <strong>${escapeHtml(handle.name)}</strong> › ${new Date().getFullYear()} › category`, 'var(--green)', false);
     } else {
       setInline(`⚠ Access needed for folder: <strong>${escapeHtml(handle.name)}</strong> — receipts go to the cloud until you allow it`, 'var(--amber)', true);
     }

@@ -157,6 +157,21 @@ describe('receipt folders', () => {
     expect(receiptFolderPath({ date: '2026-05-10' }, now)).toEqual(['2026', 'Uncategorised']);
   });
 
+  it('stays two levels deep for an expense with no book', () => {
+    // The reported bug: a Tax Centre receipt landed in
+    // "…/receipts/General receipts/receipts/2026/Office Supplies/General/".
+    // The path the app contributes must be exactly year + category.
+    const segments = receiptFolderPath({ date: '2026-05-10', cat: 'Office Supplies' }, now);
+    expect(segments).toHaveLength(2);
+    expect(segments).not.toContain('General');
+    expect(segments).not.toContain('receipts');
+  });
+
+  it('adds a third level only for a real book title', () => {
+    expect(receiptFolderPath({ date: '2026-05-10', cat: 'Office Supplies', book: '' }, now)).toHaveLength(2);
+    expect(receiptFolderPath({ date: '2026-05-10', cat: 'Office Supplies', book: 'The Quiet Hour' }, now)).toHaveLength(3);
+  });
+
   it('describes the destination the way the owner would say it', () => {
     expect(describeDestination({ date: '2026-05-10', cat: 'Office Supplies' }, now))
       .toBe('2026 › Office Supplies');
@@ -333,6 +348,70 @@ describe('viewing a receipt when the folder has moved', () => {
   });
 });
 
+describe('finding a receipt nested under year and category', () => {
+  /** Minimal stand-in for a FileSystemDirectoryHandle tree. */
+  function dir(tree) {
+    return {
+      kind: 'directory',
+      async getDirectoryHandle(name, opts) {
+        const child = tree[name];
+        if (!child || typeof child !== 'object' || child.__file) {
+          if (opts?.create) { tree[name] = {}; return dir(tree[name]); }
+          throw Object.assign(new Error('NotFound'), { name: 'NotFoundError' });
+        }
+        return dir(child);
+      },
+      async getFileHandle(name) {
+        const f = tree[name];
+        if (!f || !f.__file) throw Object.assign(new Error('NotFound'), { name: 'NotFoundError' });
+        return { kind: 'file', name, getFile: async () => f.__file };
+      },
+      async *values() {
+        for (const [name, v] of Object.entries(tree)) {
+          if (v && v.__file) yield { kind: 'file', name, getFile: async () => v.__file };
+          else yield Object.assign(dir(v), { kind: 'directory', name });
+        }
+      },
+    };
+  }
+
+  const harness = () => buildHarness({
+    names: ['fileHandleAtPath', 'findFileHandleInDir', 'resolveLocalReceiptFile'],
+    deps: {},
+    returns: 'resolveLocalReceiptFile',
+  });
+
+  it('walks a full year/category path', async () => {
+    // The old code destructured split('/') into exactly two parts, so this
+    // resolved subfolder="2026", filename="Office Supplies" and always failed.
+    const root = dir({ 2026: { 'Office Supplies': { 'a.pdf': { __file: 'BYTES' } } } });
+    expect(await harness()(root, '2026/Office Supplies/a.pdf')).toBe('BYTES');
+  });
+
+  it('still finds receipts filed under the old nested receipts/ folder', async () => {
+    const root = dir({ receipts: { 2026: { 'Office Supplies': { 'a.pdf': { __file: 'OLD' } } } } });
+    expect(await harness()(root, '2026/Office Supplies/a.pdf')).toBe('OLD');
+  });
+
+  it('finds a receipt by name even when the owner has reorganised it', async () => {
+    const root = dir({ Archive: { Deep: { Deeper: { 'a.pdf': { __file: 'MOVED' } } } } });
+    expect(await harness()(root, '2026/Office Supplies/a.pdf')).toBe('MOVED');
+  });
+
+  it('reaches deeper than the old three-level limit', async () => {
+    // "receipts/2026/Office Supplies/General/a.pdf" is four levels down — the
+    // exact shape the reported bug produced, and one level past what the old
+    // hand-unrolled search could see.
+    const root = dir({ receipts: { 2026: { 'Office Supplies': { General: { 'a.pdf': { __file: 'DEEP' } } } } } });
+    expect(await harness()(root, 'anything/a.pdf')).toBe('DEEP');
+  });
+
+  it('throws a named error when the file genuinely is not there', async () => {
+    const root = dir({ 2026: {} });
+    await expect(harness()(root, '2026/Office Supplies/missing.pdf')).rejects.toThrow(/missing\.pdf/);
+  });
+});
+
 describe('resilience wiring', () => {
   it('keeps a standby copy whenever a receipt is filed locally', () => {
     expect(appSource).toContain('async function cacheReceiptFile');
@@ -367,7 +446,7 @@ describe('resilience wiring', () => {
   });
 
   it('files reclaimed receipts by year and category', () => {
-    expect(appSource).toContain('receiptFolderPath({ ...meta, book: meta.book || subfolderName })');
+    expect(appSource).toContain('receiptFolderPath(meta)');
     expect(appSource).toContain('receiptFileName({ ...meta, originalName: file.name, mimeType: file.type })');
   });
 
