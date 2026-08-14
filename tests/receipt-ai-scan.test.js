@@ -51,7 +51,7 @@ function scanHarness({ reply, prepare, apiKey = 'k-test' } = {}) {
     calls,
     run: buildHarness({
       names: [
-        '_runReceiptScan', '_applyScanCurrency', '_applyScanCategory',
+        '_runReceiptScan', '_extractReceiptFromFile', '_applyScanCurrency', '_applyScanCategory',
         '_buildReceiptScanPrompt', 'RECEIPT_SCAN_SCHEMA', 'RECEIPT_SCAN_TIMEOUT_MS'
       ],
       deps: {
