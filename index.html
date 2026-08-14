@@ -1613,6 +1613,57 @@
   </div>
 </div></div>
 
+<!-- TAX SEASON PRE-FLIGHT AUDIT MODAL -->
+<div class="overlay" id="m-tc-preflight" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:680px;">
+  <div class="modal-title">📦 Tax Season Audit Pre-Flight Check</div>
+  <div id="tc-preflight-content" style="margin-top:12px;">
+    <!-- Populated by openTaxSeasonPreflightModal() -->
+  </div>
+  <div class="modal-footer" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <button class="btn" type="button" onclick="closeM('tc-preflight')">Cancel</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn tag" type="button" id="tc-preflight-fix-btn" onclick="tcJumpToFixPreflightIssues()" style="display:none;">🔍 Review &amp; Fix Missing Receipts</button>
+      <button class="btn gold" type="button" id="tc-preflight-export-btn" onclick="executeFullTaxSeasonExport()">⬇ Download Tax Season Export</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- TAX CENTER RECEIPT LIGHTBOX MODAL -->
+<div class="overlay" id="m-tc-receipt-lightbox" style="display:none;"><div class="modal tc-lightbox-modal" role="dialog" aria-modal="true" style="max-width:960px;width:95vw;max-height:90vh;display:flex;flex-direction:column;">
+  <div class="tc-lightbox-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap;">
+    <div>
+      <div class="tc-lightbox-title" id="tc-lightbox-title" style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--content-primary);">Receipt Preview</div>
+      <div class="tc-lightbox-meta" id="tc-lightbox-meta" style="font-size:12px;color:var(--content-secondary);margin-top:3px;"></div>
+    </div>
+    <div class="tc-lightbox-actions" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button class="btn sm" type="button" onclick="tcLightboxZoom(-0.25)" title="Zoom Out" aria-label="Zoom out">🔍−</button>
+      <button class="btn sm" type="button" onclick="tcLightboxZoom(0.25)" title="Zoom In" aria-label="Zoom in">🔍+</button>
+      <button class="btn sm" type="button" onclick="tcLightboxRotate()" title="Rotate 90°" aria-label="Rotate 90 degrees">↻ Rotate</button>
+      <button class="btn sm" type="button" onclick="tcLightboxReset()" title="Reset Zoom &amp; Rotation">↺ Reset</button>
+      <a class="btn sm" id="tc-lightbox-open-external" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;" title="Open in new window">↗ Open</a>
+      <button class="btn sm" type="button" onclick="closeM('tc-receipt-lightbox')" aria-label="Close lightbox">✕</button>
+    </div>
+  </div>
+  <div class="tc-lightbox-body" id="tc-lightbox-body" style="flex:1;min-height:360px;max-height:60vh;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--surface-sunken);border-radius:var(--r2);padding:16px;position:relative;">
+    <div class="tc-lightbox-viewport" id="tc-lightbox-viewport" style="display:flex;align-items:center;justify-content:center;transition:transform 0.2s ease;">
+      <img id="tc-lightbox-img" src="" alt="Receipt preview" style="max-width:100%;max-height:56vh;object-fit:contain;border-radius:4px;box-shadow:var(--elev-2);display:none;">
+      <canvas id="tc-lightbox-canvas" style="max-width:100%;max-height:56vh;border-radius:4px;box-shadow:var(--elev-2);display:none;"></canvas>
+      <div id="tc-lightbox-loading" class="empty-state" style="padding:40px 20px;">
+        <div class="e-icon">⏳</div>
+        <div>Loading receipt preview…</div>
+      </div>
+    </div>
+  </div>
+  <div class="tc-lightbox-footer" style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap;gap:8px;">
+    <div class="tc-lightbox-nav" style="display:flex;align-items:center;gap:8px;">
+      <button class="btn sm" type="button" id="tc-lightbox-prev-btn" onclick="tcLightboxNav(-1)">‹ Previous</button>
+      <span id="tc-lightbox-counter" style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;min-width:60px;text-align:center;"></span>
+      <button class="btn sm" type="button" id="tc-lightbox-next-btn" onclick="tcLightboxNav(1)">Next ›</button>
+    </div>
+    <button class="btn" type="button" onclick="closeM('tc-receipt-lightbox')">Close</button>
+  </div>
+</div></div>
+
 <div class="overlay" id="m-email-receipt-import-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:820px;">
   <div class="modal-title" role="dialog" aria-modal="true">📧 Import Receipts from Email</div>
   
@@ -1903,14 +1954,14 @@
   </div>
 
   <!-- Tax Center Sub-navigation -->
-  <div class="settings-sub-nav tc-sub-nav">
-    <button class="settings-sub-tab active" id="btn-tctab-ledger" onclick="switchTaxCenterSubTab('ledger')">📊 Expenses &amp; Ledger</button>
-    <button class="settings-sub-tab" id="btn-tctab-receipts" onclick="switchTaxCenterSubTab('receipts')">🗂️ Receipts Vault</button>
-    <button class="settings-sub-tab" id="btn-tctab-integrations" onclick="switchTaxCenterSubTab('integrations')">🔌 Integrations &amp; APIs</button>
+  <div class="settings-sub-nav tc-sub-nav" role="tablist" aria-label="Tax Centre Navigation" onkeydown="tcSubNavKeydown(event)">
+    <button class="settings-sub-tab active" id="btn-tctab-ledger" role="tab" aria-selected="true" aria-controls="tc-sec-ledger" tabindex="0" onclick="switchTaxCenterSubTab('ledger')">📊 Expenses &amp; Ledger</button>
+    <button class="settings-sub-tab" id="btn-tctab-receipts" role="tab" aria-selected="false" aria-controls="tc-sec-receipts" tabindex="-1" onclick="switchTaxCenterSubTab('receipts')">🗂️ Receipts Vault</button>
+    <button class="settings-sub-tab" id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations" tabindex="-1" onclick="switchTaxCenterSubTab('integrations')">🔌 Integrations &amp; APIs</button>
   </div>
 
   <!-- 1. EXPENSES & LEDGER SECTION -->
-  <div id="tc-sec-ledger" class="tc-section settings-section">
+  <div id="tc-sec-ledger" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-ledger">
     <div class="card cf-card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
     <div class="cf-head">
         <div class="cf-head-left">
@@ -2025,7 +2076,7 @@
         </div>
         <div class="tc-receipt-scan-actions">
           <button class="btn gold outline sm" onclick="openReceiptCameraModal()" id="tc-cam-btn" title="Take a photo of the receipt with your webcam">📷 Camera</button>
-          <button class="btn gold sm" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn">✨ AI Scan</button>
+          <button class="btn gold sm" onclick="scanReceiptWithAI()" id="tc-ai-scan-btn" disabled title="Select or capture a receipt first to enable AI scanning">✨ AI Scan</button>
         </div>
         <div id="tc-exp-file-preview" class="tc-field-hint"></div>
         <div id="tc-exp-storage-row" class="tc-storage-row">
@@ -2133,7 +2184,7 @@
       </select>
       <button class="btn tag" onclick="downloadTaxLedgerCSV()">Export Ledger CSV</button>
       <button class="btn tag" onclick="openInventoryValuationModal()" style="color:var(--gold-text); border-color:var(--gold-line);" title="Open comprehensive Inventory Valuation Asset Report & Export">📦 Inventory Valuation</button>
-      <button class="btn gold" onclick="downloadFullTaxSeasonExport()">📦 Tax Season Export</button>
+      <button class="btn gold" onclick="openTaxSeasonPreflightModal()">📦 Tax Season Export</button>
     </div>
   </div>
   <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
@@ -2154,16 +2205,24 @@
   </div> <!-- /#tc-sec-ledger -->
 
   <!-- 2. RECEIPTS VAULT SECTION -->
-  <div id="tc-sec-receipts" class="tc-section settings-section" style="display:none;">
-    <!-- RECEIPT LIBRARY & ARCHIVES -->
-    <div class="card tc-receipts-card" style="margin-bottom:1.5rem;">
+  <div id="tc-sec-receipts" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-receipts" style="display:none;">
+    <!-- View Switcher -->
+    <div class="tc-vault-view-switch" style="display:flex;gap:8px;margin-bottom:1.25rem;">
+      <button type="button" class="btn sm active" id="btn-vault-view-overview" onclick="tcSetVaultView('overview')">🗂 Overview &amp; Storage</button>
+      <button type="button" class="btn sm" id="btn-vault-view-gallery" onclick="tcSetVaultView('gallery')">🖼 Receipt Gallery (<span id="tc-vault-gallery-count">0</span>)</button>
+    </div>
+
+    <!-- Overview View -->
+    <div id="tc-vault-overview-view">
+      <!-- RECEIPT LIBRARY & ARCHIVES -->
+      <div class="card tc-receipts-card" style="margin-bottom:1.5rem;">
         <div class="rec-head tc-receipts-head">
           <div class="tc-receipts-head-info">
             <div class="rec-card-title tc-receipts-title">
               <span class="tc-receipts-title-icon">🗂</span>
               <span>Receipts &amp; Proof of Payment</span>
             </div>
-            <div class="rec-card-sub tc-receipts-sub">Your receipts are kept safely in the cloud and cached locally for offline access. Export audit-ready tax archives or manage local folders.</div>
+            <div class="rec-card-sub tc-receipts-sub">Your receipts are kept safely in the cloud and cached locally for offline access. Export audit-ready tax archives or manage local folders. Click any storage metric tile below to filter the ledger.</div>
           </div>
           <div class="tc-receipts-head-action">
             <button class="btn gold tc-hero-export-btn" type="button" onclick="openExportReceiptsModal()" id="tc-export-receipts-btn" style="display:none;" title="Download every receipt, sorted into folders by year and category, with a summary sheet">⬇ Export receipts…</button>
@@ -2200,10 +2259,31 @@
           </div>
         </details>
       </div>
+    </div>
+
+    <!-- Visual Gallery View -->
+    <div id="tc-vault-gallery-view" style="display:none;">
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="row-between" style="margin-bottom:1rem;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div class="section-hed">Visual Receipt Vault</div>
+            <div style="font-size:11px;color:var(--text3);">Scan and audit all proof-of-payment receipts, invoices, and cloud documents across your books.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="search" id="tc-gallery-search" placeholder="Search description, trip, vendor…" oninput="tcGallerySearchInput(this.value)" style="padding:6px 12px;font-size:12px;border:1px solid var(--border);border-radius:var(--r2);background:var(--cream2);color:var(--text1);min-width:220px;">
+            <select id="tc-gallery-category" class="btn tag" onchange="tcGalleryFilterChange()" style="font-size:12px;background:var(--cream2);border:1px solid var(--border);color:var(--text1);cursor:pointer;">
+              <option value="all">All Categories</option>
+            </select>
+          </div>
+        </div>
+        <div id="tc-gallery-grid" class="tc-gallery-grid"></div>
+        <div id="tc-gallery-pagination" style="margin-top:1rem;"></div>
+      </div>
+    </div>
   </div> <!-- /#tc-sec-receipts -->
 
   <!-- 3. INTEGRATIONS & APIS SECTION -->
-  <div id="tc-sec-integrations" class="tc-section settings-section" style="display:none;">
+  <div id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations" style="display:none;">
     <!-- INTEGRATIONS & API SERVICES -->
     <div class="card tc-integrations-card" style="margin-bottom:1.5rem;">
       <div class="rec-head tc-integrations-head">
