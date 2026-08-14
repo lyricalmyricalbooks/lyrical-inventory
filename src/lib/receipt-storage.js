@@ -212,12 +212,31 @@ export function receiptOwners(taxExpenses, bookStates, books) {
 }
 
 /**
+ * Whether this expense is a rent or lease payment that does not require
+ * digital store receipts (governed instead by a lease agreement & bank records).
+ */
+export function isRentExpense(item) {
+  if (!item || typeof item !== 'object') return false;
+  if (item.isRent || item.receiptExempt) return true;
+  const desc = String(item.desc || '').toLowerCase();
+  const cat = String(item.cat || '').toLowerCase();
+  const ref = String(item.ref || '').toLowerCase();
+
+  if (cat === 'rent' || cat === 'studio rent' || cat === 'office rent' || cat === 'workspace rent') {
+    return true;
+  }
+
+  const rentPattern = /\b(rent|rents|rental|lease|leases|leasing|tenancy|landlord)\b/i;
+  return rentPattern.test(desc) || rentPattern.test(ref) || rentPattern.test(cat);
+}
+
+/**
  * Where the receipts actually are, as a neutral readout.
  *
  * Reports counts, not a verdict: receipts held in the cloud are safe, and
  * receipts filed locally are safe. The only genuinely bad state — an expense
- * with no receipt reference at all — is counted separately, because that is the
- * one an accountant will ask about.
+ * with no receipt reference at all (excluding rent/lease payments) — is counted
+ * separately, because that is the one an accountant will ask about.
  */
 export function summarizeReceiptStorage(items) {
   let cloudExpenses = 0;
@@ -227,10 +246,18 @@ export function summarizeReceiptStorage(items) {
   let linkOnlyExpenses = 0;
   let withReceipts = 0;
   let withoutReceipts = 0;
+  let rentExpenses = 0;
 
   (items || []).forEach(item => {
     const refs = receiptRefsOf(item);
-    if (!refs.length) { withoutReceipts++; return; }
+    if (!refs.length) {
+      if (isRentExpense(item)) {
+        rentExpenses++;
+        return;
+      }
+      withoutReceipts++;
+      return;
+    }
     withReceipts++;
     const cloud = refs.filter(isOurCloudReceipt);
     if (cloud.length) cloudExpenses++;
@@ -242,7 +269,7 @@ export function summarizeReceiptStorage(items) {
 
   return {
     cloudExpenses, cloudFiles, localFiles, linkedFiles, linkOnlyExpenses,
-    withReceipts, withoutReceipts,
+    withReceipts, withoutReceipts, rentExpenses,
     // Files we actually hold. A link is not a file we have.
     totalFiles: cloudFiles + localFiles,
   };

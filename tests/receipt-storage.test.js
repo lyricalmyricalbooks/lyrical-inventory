@@ -20,6 +20,7 @@ import {
   toLocalRef,
   uniqueFileName,
   writeReceiptRefs,
+  isRentExpense,
 } from '../src/lib/receipt-storage.js';
 
 const html = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
@@ -183,6 +184,31 @@ describe('receipt storage summary', () => {
     ]);
     expect(s.withReceipts).toBe(1);
     expect(s.withoutReceipts).toBe(2);
+  });
+
+  it('exempts rent and lease payments from the withoutReceipts missing count', () => {
+    const items = [
+      { desc: 'Monthly Studio Rent', cat: 'Home Office', receipt: '' },
+      { desc: 'Office Lease Payment', cat: 'Rent', receipt: '' },
+      { desc: 'Packaging boxes', cat: 'Packaging Materials', receipt: '' },
+      { desc: 'Adobe Creative Cloud', cat: 'Software & Subscriptions', receipt: 'https://cloud/adobe.pdf' },
+    ];
+    const s = summarizeReceiptStorage(items);
+    expect(s.withReceipts).toBe(1);
+    expect(s.rentExpenses).toBe(2);
+    expect(s.withoutReceipts).toBe(1); // only Packaging boxes is counted as withoutReceipts
+  });
+
+  it('identifies rent expenses accurately via isRentExpense helper', () => {
+    expect(isRentExpense({ cat: 'Rent' })).toBe(true);
+    expect(isRentExpense({ cat: 'Studio Rent' })).toBe(true);
+    expect(isRentExpense({ desc: 'Studio rent for September' })).toBe(true);
+    expect(isRentExpense({ desc: 'Monthly office lease' })).toBe(true);
+    expect(isRentExpense({ desc: 'Landlord e-transfer' })).toBe(true);
+    expect(isRentExpense({ isRent: true })).toBe(true);
+    expect(isRentExpense({ receiptExempt: true })).toBe(true);
+    expect(isRentExpense({ desc: 'Coffee beans', cat: 'Office Supplies' })).toBe(false);
+    expect(isRentExpense(null)).toBe(false);
   });
 
   it('never reports an age or an overdue count', () => {
