@@ -55,7 +55,7 @@ import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
-import { receiptOwners, summarizeReceiptStorage, isRentExpense } from '../lib/receipt-storage.js';
+import { receiptOwners, summarizeReceiptStorage, isRentExpense, isGratuityExpense, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import {
   RECURRING_FREQUENCIES,
   frequencyLabel,
@@ -378,7 +378,7 @@ function _tcApplyLedgerFilter(rows) {
 
   if (_tcLedgerSpecialFilter) {
     if (_tcLedgerSpecialFilter === 'missing') {
-      out = out.filter(r => !r.isIncome && !isRentExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref))));
+      out = out.filter(r => !r.isIncome && !isReceiptExemptExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref))));
     } else if (_tcLedgerSpecialFilter === 'cloud') {
       out = out.filter(r => !r.isIncome && (r.receiptCloudAt || (typeof r.receipt === 'string' && r.receipt.startsWith('cloud://')) || (Array.isArray(r.receiptFiles) && r.receiptFiles.some(f => f && f.startsWith('cloud://')))));
     } else if (_tcLedgerSpecialFilter === 'local') {
@@ -2510,9 +2510,9 @@ function openTaxSeasonPreflightModal() {
 
   const { totalGrossSales, totalOperatingExpenses, allLedger } = _tcBuildLedger(year);
 
-  // Check 1: Missing receipts (excluding rent / lease payments which are documented via tenancy agreement & bank records)
+  // Check 1: Missing receipts (excluding rent / lease payments and gratuity copies which are exempt)
   const expenseEntries = allLedger.filter(r => !r.isIncome);
-  const missingReceipts = expenseEntries.filter(r => !isRentExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref)))).length;
+  const missingReceipts = expenseEntries.filter(r => !isReceiptExemptExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref)))).length;
 
   // Check 2: Foreign currency rate fallback warnings
   const rateWarnings = [];
