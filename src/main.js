@@ -186,6 +186,7 @@ import {
   linkShippingExpense,
   processShippoTxToExpense,
   importShippoShippingFromApi,
+  openShippoLabel,
   getBookPresetSpecs,
   initShippingTab,
   getFallbackShippingPhone,
@@ -403,6 +404,7 @@ import {
   vendorFrom,
 } from './lib/receipt-naming.js';
 import { createZip, textEntry } from './lib/zip.js';
+import { isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef } from './lib/shippo-invoices.js';
 import { planFile } from './lib/receipt-match.js';
 
 // ─────────────────────────────────────────────
@@ -13661,8 +13663,18 @@ export function _localReceiptCell(item) {
       const label = multi ? `View ${idx + 1}` : 'View Local';
       return `<a href="#" title="${escapeHtml(base)}" onclick="event.preventDefault(); viewLocalReceipt('${fn.replace(/'/g, "\\'")}')" style="color:var(--gold3);text-decoration:underline;">${label}</a>`;
     }
+    // A stored Shippo label link is signed and expires a year after the label
+    // was created, so linking to it directly hands the owner a link that dies
+    // on its own. The transaction id is on the expense, so mint a fresh one
+    // when they actually click.
+    const shippoTx = shippoTxIdFromRef(item.ref);
+    if (shippoTx && isExpiringLabelUrl(r)) {
+      const expired = isLabelUrlExpired(r);
+      const label = multi ? `Label ${idx + 1}` : 'Label';
+      return `<a href="#" title="${expired ? 'This saved link has expired — opens a fresh one from Shippo' : 'Opens a fresh link from Shippo'}" onclick="event.preventDefault(); openShippoLabel('${escapeHtml(String(item.ref))}')" style="color:var(--gold3);text-decoration:underline;">${label}${expired ? ' ↻' : ''}</a>`;
+    }
     const label = multi ? `Receipt ${idx + 1}` : 'Receipt';
-    return `<a href="${r}" target="_blank" style="color:var(--gold3);">${label}</a>`;
+    return `<a href="${r}" target="_blank" rel="noopener" style="color:var(--gold3);">${label}</a>`;
   }).join(' · ');
 }
 
@@ -22430,7 +22442,7 @@ Object.assign(window, {
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
-  submitTaxExpense, importShippoShippingFromApi, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
+  submitTaxExpense, importShippoShippingFromApi, openShippoLabel, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
   tcSetRecurringFilter, tcShowRecurringCharges,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
@@ -23353,7 +23365,7 @@ function exposeLegacyInlineHandlers() {
     fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
     processShippoTxToExpense, renderShippingReconciliationWorklist, linkShippingExpense,
     closeShippingReconciliation, openShippingReconciliation, clearShippingReconciliationList,
-    importShippoShippingFromApi, submitTaxExpense,
+    importShippoShippingFromApi, openShippoLabel, submitTaxExpense,
     openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
     tcSetRecurringFilter, tcShowRecurringCharges,
     removeRecurring, downloadTaxLedgerCSV, posBooksMap, posResolveBook, isPosOnlyBook,
