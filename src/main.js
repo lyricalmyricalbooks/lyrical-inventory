@@ -401,6 +401,7 @@ import {
   uniqueFileName,
   writeReceiptRefs,
   isRentExpense,
+  isReceiptExemptExpense,
 } from './lib/receipt-storage.js';
 import {
   PREVIEW_MAX_EDGE,
@@ -5834,7 +5835,7 @@ function saveArtistPaymentLink() {
 // never reimbursed to the author, so they must be excluded from every "owed /
 // reimbursement" surface. Legacy records (pre-flag) are detected by their GRAT- ref.
 function isGratuityExpense(e) {
-  return !!(e && (e.gratuity === true || (typeof e.ref === 'string' && e.ref.startsWith('GRAT-'))));
+  return !!(e && (e.gratuity === true || (typeof e.ref === 'string' && e.ref.startsWith('GRAT-')) || (typeof e.desc === 'string' && e.desc.toLowerCase().startsWith('gratuity:'))));
 }
 
 function renderArtistReimburseBanner() {
@@ -8177,7 +8178,7 @@ export function renderExpenses() {
 
     // Calculate multi-currency stuff
     const eCur = e.currency || cur;
-    const isBase = eCur === 'CAD' || normalizeCcy(eCur) === 'CAD';
+    const isBase = !eCur || eCur === 'CAD' || eCur === 'CA$' || normalizeCurrencyCode(eCur) === 'CAD';
     let baseAmountText = '';
     let baseAmountTitle = '';
 
