@@ -55,7 +55,7 @@ import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
-import { receiptOwners, summarizeReceiptStorage } from '../lib/receipt-storage.js';
+import { receiptOwners, summarizeReceiptStorage, isRentExpense } from '../lib/receipt-storage.js';
 import {
   RECURRING_FREQUENCIES,
   frequencyLabel,
@@ -378,7 +378,7 @@ function _tcApplyLedgerFilter(rows) {
 
   if (_tcLedgerSpecialFilter) {
     if (_tcLedgerSpecialFilter === 'missing') {
-      out = out.filter(r => !r.isIncome && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref))));
+      out = out.filter(r => !r.isIncome && !isRentExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref))));
     } else if (_tcLedgerSpecialFilter === 'cloud') {
       out = out.filter(r => !r.isIncome && (r.receiptCloudAt || (typeof r.receipt === 'string' && r.receipt.startsWith('cloud://')) || (Array.isArray(r.receiptFiles) && r.receiptFiles.some(f => f && f.startsWith('cloud://')))));
     } else if (_tcLedgerSpecialFilter === 'local') {
@@ -2510,9 +2510,9 @@ function openTaxSeasonPreflightModal() {
 
   const { totalGrossSales, totalOperatingExpenses, allLedger } = _tcBuildLedger(year);
 
-  // Check 1: Missing receipts
+  // Check 1: Missing receipts (excluding rent / lease payments which are documented via tenancy agreement & bank records)
   const expenseEntries = allLedger.filter(r => !r.isIncome);
-  const missingReceipts = expenseEntries.filter(r => !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref)))).length;
+  const missingReceipts = expenseEntries.filter(r => !isRentExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref)))).length;
 
   // Check 2: Foreign currency rate fallback warnings
   const rateWarnings = [];
@@ -2571,8 +2571,8 @@ function openTaxSeasonPreflightModal() {
         <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${missingReceipts > 0 ? 'rgba(180,120,20,.08)' : 'var(--cream2)'};border:1px solid ${missingReceipts > 0 ? 'var(--amber)' : 'var(--border)'};">
           <span style="font-size:16px;line-height:1.2;">${missingReceipts > 0 ? '⚠️' : '✓'}</span>
           <div style="flex:1;font-size:12px;">
-            <strong>${missingReceipts > 0 ? `${missingReceipts} expense(s) without attached receipts` : 'All expenses have proof-of-payment attached'}</strong>
-            <div style="color:var(--text2);margin-top:2px;">${missingReceipts > 0 ? 'Digital receipts or supplier invoices are recommended for tax audit compliance.' : 'Complete paper trail ready for tax archiving.'}</div>
+            <strong>${missingReceipts > 0 ? `${missingReceipts} expense(s) without attached receipts` : 'All eligible expenses have proof-of-payment attached'}</strong>
+            <div style="color:var(--text2);margin-top:2px;">${missingReceipts > 0 ? 'Digital receipts or supplier invoices are recommended for audit compliance (rent/lease payments exempt).' : 'Complete paper trail ready for tax archiving (rent/lease payments verified via bank records).'}</div>
           </div>
           ${missingReceipts > 0 ? `<button class="btn sm tag" onclick="tcJumpToFixPreflightIssues()" type="button" style="white-space:nowrap;">Inspect →</button>` : ''}
         </div>

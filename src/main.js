@@ -400,6 +400,7 @@ import {
   toLocalRef,
   uniqueFileName,
   writeReceiptRefs,
+  isRentExpense,
 } from './lib/receipt-storage.js';
 import {
   PREVIEW_MAX_EDGE,
@@ -8163,7 +8164,9 @@ export function renderExpenses() {
       e.receipt.startsWith('local://')
         ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
         : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
-    ) : `<span style="font-size:11px;color:var(--text3); font-weight: 500;">Missing</span>`;
+    ) : isRentExpense(e)
+      ? `<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — verified via lease agreement & bank record)">Lease record</span>`
+      : `<span style="font-size:11px;color:var(--text3); font-weight: 500;">Missing</span>`;
     const trackLink = e.trackingUrl
       ? ` <a href="${e.trackingUrl}" target="_blank" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
       : '';
@@ -13678,6 +13681,9 @@ export function _localReceiptCell(item) {
     ? item.receiptFiles
     : (item.receipt ? [item.receipt] : []);
   if (!files.length) {
+    if (isRentExpense(item)) {
+      return '<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — documented via tenancy lease & bank statement)">Lease record</span>';
+    }
     if (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense') {
       return `<button class="btn sm outline" type="button" onclick="attachReceiptToExpenseRow('${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')" style="font-size:10px;padding:1px 6px;color:var(--gold-text);" title="Attach receipt file">📎 Attach</button>`;
     }
