@@ -345,9 +345,12 @@ function tcLedgerYearChange() {
   tcYearChange(el ? el.value : 'all');
 }
 
+let _tcLedgerSpecialFilter = ''; // '' | 'missing' | 'cloud' | 'local' | 'linked' | 'label'
+
 function tcClearLedgerFilters() {
   _tcLedgerSearch = '';
   _tcLedgerType = 'all';
+  _tcLedgerSpecialFilter = '';
   _tcLedgerPage = 0;
   const sEl = $('tc-ledger-search'); if (sEl) sEl.value = '';
   const tEl = $('tc-ledger-type'); if (tEl) tEl.value = 'all';
@@ -355,10 +358,38 @@ function tcClearLedgerFilters() {
   renderTaxCenter();
 }
 
+function tcFilterLedgerByReceiptStorage(storageType) {
+  _tcLedgerSpecialFilter = (_tcLedgerSpecialFilter === storageType) ? '' : storageType;
+  _tcLedgerPage = 0;
+  switchTaxCenterSubTab('ledger');
+  renderTaxCenter();
+  const target = $('tc-ledger-search') || $('tc-sec-ledger');
+  if (target && _tcLedgerSpecialFilter) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.classList.add('tc-flash-target');
+    setTimeout(() => target.classList.remove('tc-flash-target'), 1500);
+  }
+}
+
 function _tcApplyLedgerFilter(rows) {
   let out = rows;
   if (_tcLedgerType === 'sales') out = out.filter(r => r.isIncome);
   else if (_tcLedgerType === 'expenses') out = out.filter(r => !r.isIncome);
+
+  if (_tcLedgerSpecialFilter) {
+    if (_tcLedgerSpecialFilter === 'missing') {
+      out = out.filter(r => !r.isIncome && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref))));
+    } else if (_tcLedgerSpecialFilter === 'cloud') {
+      out = out.filter(r => !r.isIncome && (r.receiptCloudAt || (typeof r.receipt === 'string' && r.receipt.startsWith('cloud://')) || (Array.isArray(r.receiptFiles) && r.receiptFiles.some(f => f && f.startsWith('cloud://')))));
+    } else if (_tcLedgerSpecialFilter === 'local') {
+      out = out.filter(r => !r.isIncome && ((typeof r.receipt === 'string' && r.receipt.startsWith('local://')) || (typeof r.ref === 'string' && r.ref.includes('local://')) || (Array.isArray(r.receiptFiles) && r.receiptFiles.some(f => f && f.startsWith('local://')))));
+    } else if (_tcLedgerSpecialFilter === 'linked') {
+      out = out.filter(r => !r.isIncome && ((typeof r.receipt === 'string' && /^https?:\/\//i.test(r.receipt) && !r.receipt.includes('shippo')) || (Array.isArray(r.receiptFiles) && r.receiptFiles.some(f => /^https?:\/\//i.test(f) && !f.includes('shippo')))));
+    } else if (_tcLedgerSpecialFilter === 'label') {
+      out = out.filter(r => !r.isIncome && ((typeof r.receipt === 'string' && r.receipt.includes('shippo')) || (typeof r.ref === 'string' && r.ref.includes('shippo'))));
+    }
+  }
+
   const q = _tcLedgerSearch.trim().toLowerCase();
   if (q) {
     out = out.filter(r => {
@@ -622,6 +653,11 @@ function _tcRenderLedgerFilterChip() {
     const parts = [];
     if (_tcLedgerType === 'sales') parts.push('Sales only');
     else if (_tcLedgerType === 'expenses') parts.push('Expenses only');
+    if (_tcLedgerSpecialFilter === 'missing') parts.push('⚠️ Missing receipts only');
+    else if (_tcLedgerSpecialFilter === 'cloud') parts.push('☁️ Cloud storage receipts');
+    else if (_tcLedgerSpecialFilter === 'local') parts.push('📁 Local folder receipts');
+    else if (_tcLedgerSpecialFilter === 'linked') parts.push('🔗 External link receipts');
+    else if (_tcLedgerSpecialFilter === 'label') parts.push('🏷️ Shipping labels only');
     const q = _tcLedgerSearch.trim();
     if (q) parts.push(`“${escapeHtml(q)}”`);
     filterChip.innerHTML = parts.length
@@ -2301,16 +2337,21 @@ function _tcRenderReceiptStorage() {
   if (viewBtn) viewBtn.style.display = s.cloudFiles ? '' : 'none';
   if (exportBtn) exportBtn.style.display = s.totalFiles ? '' : 'none';
 
+  const countBadge = $('tc-vault-gallery-count');
+  if (countBadge) countBadge.textContent = String(s.totalFiles || 0);
+
   if (!s.totalFiles && !s.withoutReceipts) {
     el.style.display = 'none';
     el.innerHTML = '';
     return;
   }
 
+  const isSelected = (type) => _tcLedgerSpecialFilter === type ? ' is-selected-filter' : '';
+
   // Stat grid tiles
   const tiles = [];
   tiles.push(`
-    <div class="tc-receipt-tile">
+    <div class="tc-receipt-tile${isSelected('local')}" role="button" tabindex="0" onclick="tcFilterLedgerByReceiptStorage('local')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcFilterLedgerByReceiptStorage('local');}" title="Click to filter ledger to expenses stored in your local folder">
       <div class="tc-tile-icon">📁</div>
       <div class="tc-tile-body">
         <div class="tc-tile-num">${s.localFiles}</div>
@@ -2320,7 +2361,7 @@ function _tcRenderReceiptStorage() {
   `);
 
   tiles.push(`
-    <div class="tc-receipt-tile ${s.cloudFiles ? 'is-active' : ''}">
+    <div class="tc-receipt-tile ${s.cloudFiles ? 'is-active' : ''}${isSelected('cloud')}" role="button" tabindex="0" onclick="tcFilterLedgerByReceiptStorage('cloud')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcFilterLedgerByReceiptStorage('cloud');}" title="Click to filter ledger to expenses saved in cloud backup">
       <div class="tc-tile-icon">☁️</div>
       <div class="tc-tile-body">
         <div class="tc-tile-num">${s.cloudFiles}</div>
@@ -2331,7 +2372,7 @@ function _tcRenderReceiptStorage() {
 
   if (s.linkedFiles) {
     tiles.push(`
-      <div class="tc-receipt-tile">
+      <div class="tc-receipt-tile${isSelected('linked')}" role="button" tabindex="0" onclick="tcFilterLedgerByReceiptStorage('linked')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcFilterLedgerByReceiptStorage('linked');}" title="Click to filter ledger to expenses with external receipt links">
         <div class="tc-tile-icon">🔗</div>
         <div class="tc-tile-body">
           <div class="tc-tile-num">${s.linkedFiles}</div>
@@ -2343,7 +2384,7 @@ function _tcRenderReceiptStorage() {
 
   if (s.withoutReceipts) {
     tiles.push(`
-      <div class="tc-receipt-tile is-warning">
+      <div class="tc-receipt-tile is-warning${isSelected('missing')}" role="button" tabindex="0" onclick="tcFilterLedgerByReceiptStorage('missing')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcFilterLedgerByReceiptStorage('missing');}" title="Click to filter ledger to expenses missing receipts">
         <div class="tc-tile-icon">⚠️</div>
         <div class="tc-tile-body">
           <div class="tc-tile-num">${s.withoutReceipts}</div>
@@ -2355,7 +2396,7 @@ function _tcRenderReceiptStorage() {
 
   if (s.linkOnlyExpenses) {
     tiles.push(`
-      <div class="tc-receipt-tile is-notice">
+      <div class="tc-receipt-tile is-notice${isSelected('label')}" role="button" tabindex="0" onclick="tcFilterLedgerByReceiptStorage('label')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcFilterLedgerByReceiptStorage('label');}" title="Click to filter ledger to expenses with shipping labels only">
         <div class="tc-tile-icon">🏷️</div>
         <div class="tc-tile-body">
           <div class="tc-tile-num">${s.linkOnlyExpenses}</div>
@@ -2415,15 +2456,524 @@ function switchTaxCenterSubTab(subTabName) {
     if (btn && sec) {
       if (tab === activeTaxCenterSubTab) {
         btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        btn.setAttribute('tabindex', '0');
         sec.style.display = '';
       } else {
         btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false');
+        btn.setAttribute('tabindex', '-1');
         sec.style.display = 'none';
       }
     }
   });
   if (activeTaxCenterSubTab === 'receipts') {
-    _tcRenderReceiptStorage();
+    if (_tcVaultViewMode === 'gallery') {
+      _tcRenderReceiptGallery();
+    } else {
+      _tcRenderReceiptStorage();
+    }
+  }
+}
+
+function tcSubNavKeydown(e) {
+  const subTabs = ['ledger', 'receipts', 'integrations'];
+  const currentIdx = subTabs.indexOf(activeTaxCenterSubTab);
+  if (currentIdx === -1) return;
+
+  let nextIdx = -1;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    nextIdx = (currentIdx + 1) % subTabs.length;
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    nextIdx = (currentIdx - 1 + subTabs.length) % subTabs.length;
+  } else if (e.key === 'Home') {
+    nextIdx = 0;
+  } else if (e.key === 'End') {
+    nextIdx = subTabs.length - 1;
+  }
+
+  if (nextIdx !== -1) {
+    e.preventDefault();
+    const nextTab = subTabs[nextIdx];
+    switchTaxCenterSubTab(nextTab);
+    const targetBtn = document.getElementById('btn-tctab-' + nextTab);
+    if (targetBtn) targetBtn.focus();
+  }
+}
+
+// ── Tax Season Pre-Flight Audit Modal ───────────────────────────────────────
+function openTaxSeasonPreflightModal() {
+  const yearSelect = $('tc-year') || $('tc-year-ledger');
+  const year = yearSelect ? yearSelect.value : 'all';
+  const isAllTime = (year === 'all');
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+
+  const { totalGrossSales, totalOperatingExpenses, allLedger } = _tcBuildLedger(year);
+
+  // Check 1: Missing receipts
+  const expenseEntries = allLedger.filter(r => !r.isIncome);
+  const missingReceipts = expenseEntries.filter(r => !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref)))).length;
+
+  // Check 2: Foreign currency rate fallback warnings
+  const rateWarnings = [];
+  BOOK_LIST.forEach(book => {
+    if (isTestBook(book) || isTestBookId(book.id)) return;
+    const cur = getBookCurrencyCode(book);
+    if (cur && cur !== 'CAD' && !_fxRateCache[`${cur}_CAD`]) {
+      rateWarnings.push({ title: book.title, cur });
+    }
+  });
+  const hasRateErrors = allLedger.some(r => r.hasRateError) || rateWarnings.length > 0;
+
+  // Check 3: Pending notes
+  const pendingList = _tcPendingList();
+  const pendingInYear = isAllTime ? pendingList.length : pendingList.filter(p => !p.expectedDate || p.expectedDate.startsWith(year)).length;
+
+  // Compute readiness score (0 - 100)
+  let score = 100;
+  if (missingReceipts > 0) score -= Math.min(25, missingReceipts * 3);
+  if (hasRateErrors) score -= 20;
+  if (pendingInYear > 0) score -= Math.min(15, pendingInYear * 5);
+  score = Math.max(20, Math.min(100, score));
+
+  const scoreColor = score >= 90 ? 'var(--green)' : score >= 70 ? 'var(--gold)' : 'var(--red)';
+  const scoreBadge = score === 100 ? '✓ 100% Audit Ready' : `${score}% Audit Ready`;
+
+  const container = $('tc-preflight-content');
+  if (container) {
+    container.innerHTML = `
+      <div style="background:var(--surface-sunken);border:1px solid var(--border-default);border-radius:var(--r2);padding:14px 16px;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);font-weight:700;">Tax Reporting Period</span>
+            <div style="font-size:16px;font-weight:700;color:var(--text1);">${isAllTime ? 'All Time (Full Historical Export)' : `Calendar Year ${escapeHtml(year)}`}</div>
+          </div>
+          <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:${scoreColor};background:var(--cream2);border:1px solid ${scoreColor};padding:4px 12px;border-radius:99px;">
+            ${scoreBadge}
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;font-size:12px;padding-top:10px;border-top:1px solid var(--border-subtle);">
+          <div><span style="color:var(--text3);">Gross Sales:</span><br><strong style="color:var(--green);font-family:'DM Mono',monospace;">+${fmt(totalGrossSales, baseCurrency)}</strong></div>
+          <div><span style="color:var(--text3);">Operating Exp:</span><br><strong style="color:var(--red);font-family:'DM Mono',monospace;">-${fmt(totalOperatingExpenses, baseCurrency)}</strong></div>
+          <div><span style="color:var(--text3);">Net Cash Flow:</span><br><strong style="color:var(--gold);font-family:'DM Mono',monospace;">${fmt(totalGrossSales - totalOperatingExpenses, baseCurrency)}</strong></div>
+        </div>
+      </div>
+
+      <div class="tc-preflight-checklist" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${hasRateErrors ? 'rgba(180,40,40,.08)' : 'var(--cream2)'};border:1px solid ${hasRateErrors ? 'var(--red)' : 'var(--border)'};">
+          <span style="font-size:16px;line-height:1.2;">${hasRateErrors ? '⚠️' : '✓'}</span>
+          <div style="flex:1;font-size:12px;">
+            <strong>${hasRateErrors ? 'Foreign Currency Exchange Rates Incomplete' : 'Foreign Currency Rates Verified'}</strong>
+            <div style="color:var(--text2);margin-top:2px;">${hasRateErrors ? `${rateWarnings.length || 'Some'} book(s) or entries use fallback 1.0 FX rate. Refresh rates to ensure tax totals match CRA/IRS filings.` : 'All foreign transactions properly converted to CAD base currency.'}</div>
+          </div>
+        </div>
+
+        <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${missingReceipts > 0 ? 'rgba(180,120,20,.08)' : 'var(--cream2)'};border:1px solid ${missingReceipts > 0 ? 'var(--amber)' : 'var(--border)'};">
+          <span style="font-size:16px;line-height:1.2;">${missingReceipts > 0 ? '⚠️' : '✓'}</span>
+          <div style="flex:1;font-size:12px;">
+            <strong>${missingReceipts > 0 ? `${missingReceipts} expense(s) without attached receipts` : 'All expenses have proof-of-payment attached'}</strong>
+            <div style="color:var(--text2);margin-top:2px;">${missingReceipts > 0 ? 'Digital receipts or supplier invoices are recommended for tax audit compliance.' : 'Complete paper trail ready for tax archiving.'}</div>
+          </div>
+          ${missingReceipts > 0 ? `<button class="btn sm tag" onclick="tcJumpToFixPreflightIssues()" type="button" style="white-space:nowrap;">Inspect →</button>` : ''}
+        </div>
+
+        <div class="tc-preflight-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:var(--r2);background:${pendingInYear > 0 ? 'var(--gold-bg)' : 'var(--cream2)'};border:1px solid ${pendingInYear > 0 ? 'var(--gold-line)' : 'var(--border)'};">
+          <span style="font-size:16px;line-height:1.2;">${pendingInYear > 0 ? 'ℹ️' : '✓'}</span>
+          <div style="flex:1;font-size:12px;">
+            <strong>${pendingInYear > 0 ? `${pendingInYear} pending expense note(s) in review` : 'No unconfirmed pending notes'}</strong>
+            <div style="color:var(--text2);margin-top:2px;">${pendingInYear > 0 ? 'Pending notes are kept out of ledger totals until confirmed.' : 'All known expenses are logged into the ledger.'}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const fixBtn = $('tc-preflight-fix-btn');
+  if (fixBtn) fixBtn.style.display = missingReceipts > 0 ? '' : 'none';
+
+  openM('tc-preflight');
+}
+
+function tcJumpToFixPreflightIssues() {
+  closeM('tc-preflight');
+  tcFilterLedgerByReceiptStorage('missing');
+}
+
+function executeFullTaxSeasonExport() {
+  closeM('tc-preflight');
+  if (typeof window.downloadFullTaxSeasonExportDirect === 'function') {
+    window.downloadFullTaxSeasonExportDirect();
+  } else if (typeof window.downloadFullTaxSeasonExport === 'function') {
+    window.downloadFullTaxSeasonExport();
+  }
+}
+
+// ── Receipts Vault Visual Gallery & Lightbox ────────────────────────────────
+let _tcVaultViewMode = 'overview';
+let _tcGallerySearch = '';
+let _tcGalleryCategory = 'all';
+let _tcGalleryPage = 0;
+const TC_GALLERY_PAGE_SIZE = 12;
+
+function tcSetVaultView(mode) {
+  _tcVaultViewMode = mode === 'gallery' ? 'gallery' : 'overview';
+  const btnOverview = $('btn-vault-view-overview');
+  const btnGallery = $('btn-vault-view-gallery');
+  const secOverview = $('tc-vault-overview-view');
+  const secGallery = $('tc-vault-gallery-view');
+
+  if (btnOverview && btnGallery && secOverview && secGallery) {
+    if (_tcVaultViewMode === 'gallery') {
+      btnGallery.classList.add('active');
+      btnOverview.classList.remove('active');
+      secGallery.style.display = '';
+      secOverview.style.display = 'none';
+      _tcRenderReceiptGallery();
+    } else {
+      btnOverview.classList.add('active');
+      btnGallery.classList.remove('active');
+      secOverview.style.display = '';
+      secGallery.style.display = 'none';
+      _tcRenderReceiptStorage();
+    }
+  }
+}
+
+function tcGallerySearchInput(v) {
+  _tcGallerySearch = (v || '').trim().toLowerCase();
+  _tcGalleryPage = 0;
+  _tcRenderReceiptGallery();
+}
+
+function tcGalleryFilterChange() {
+  const catSel = $('tc-gallery-category');
+  _tcGalleryCategory = catSel ? catSel.value : 'all';
+  _tcGalleryPage = 0;
+  _tcRenderReceiptGallery();
+}
+
+function _tcAllReceiptItems() {
+  const items = [];
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+
+  // Business Expenses
+  (TAX_CENTER.businessExpenses || []).forEach(e => {
+    const files = (Array.isArray(e.receiptFiles) && e.receiptFiles.length) ? e.receiptFiles : (e.receipt ? [e.receipt] : []);
+    files.forEach(ref => {
+      if (!ref || typeof ref !== 'string') return;
+      items.push({
+        sourceType: 'businessExpense',
+        id: e.id,
+        desc: e.desc || 'Expense',
+        date: e.date || '',
+        cat: e.cat || 'Other',
+        amount: e.baseAmount != null ? e.baseAmount : (e.amount || 0),
+        currency: baseCurrency,
+        origAmount: e.amount || 0,
+        origCurrency: e.currency || 'CAD',
+        receiptRef: ref,
+        trip: e.trip || ''
+      });
+    });
+  });
+
+  // Book Expenses
+  Object.keys(BOOKS).forEach(bid => {
+    if (isTestBookId(bid)) return;
+    const s = states[bid];
+    if (!s || !s.expenses) return;
+    const bTitle = BOOKS[bid]?.title || '';
+    s.expenses.forEach(e => {
+      const files = (Array.isArray(e.receiptFiles) && e.receiptFiles.length) ? e.receiptFiles : (e.receipt ? [e.receipt] : []);
+      files.forEach(ref => {
+        if (!ref || typeof ref !== 'string') return;
+        items.push({
+          sourceType: 'bookExpense',
+          bookId: bid,
+          id: e.id,
+          desc: `${e.desc || 'Expense'} (${bTitle})`,
+          date: e.date || '',
+          cat: e.cat || 'Project Expense',
+          amount: e.baseAmount != null ? e.baseAmount : (e.amount || 0),
+          currency: baseCurrency,
+          origAmount: e.origAmount != null ? e.origAmount : (e.amount || 0),
+          origCurrency: e.origCurrency || e.currency || 'CAD',
+          receiptRef: ref,
+          trip: ''
+        });
+      });
+    });
+  });
+
+  // Sort latest date first
+  items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return items;
+}
+
+function _tcRenderReceiptGallery() {
+  const grid = $('tc-gallery-grid');
+  const countBadge = $('tc-vault-gallery-count');
+  if (!grid) return;
+
+  const allItems = _tcAllReceiptItems();
+  if (countBadge) countBadge.textContent = String(allItems.length);
+
+  // Populate category select options if empty
+  const catSel = $('tc-gallery-category');
+  if (catSel && catSel.options.length <= 1) {
+    const cats = Array.from(new Set(allItems.map(i => i.cat).filter(Boolean))).sort();
+    catSel.innerHTML = '<option value="all">All Categories</option>' + cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  }
+
+  // Filter items
+  let filtered = allItems;
+  if (_tcGalleryCategory && _tcGalleryCategory !== 'all') {
+    filtered = filtered.filter(i => i.cat === _tcGalleryCategory);
+  }
+  if (_tcGallerySearch) {
+    filtered = filtered.filter(i => `${i.desc} ${i.cat} ${i.trip} ${i.date} ${i.receiptRef}`.toLowerCase().includes(_tcGallerySearch));
+  }
+
+  const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  const totalPages = Math.max(1, Math.ceil(filtered.length / TC_GALLERY_PAGE_SIZE));
+  if (_tcGalleryPage >= totalPages) _tcGalleryPage = totalPages - 1;
+  if (_tcGalleryPage < 0) _tcGalleryPage = 0;
+
+  const pageStart = _tcGalleryPage * TC_GALLERY_PAGE_SIZE;
+  const pageItems = filtered.slice(pageStart, pageStart + TC_GALLERY_PAGE_SIZE);
+
+  window._tcGalleryRenderedItems = filtered;
+
+  if (pageItems.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:40px 20px;">
+      <div class="e-icon">🗂</div>
+      <div>${_tcGallerySearch || _tcGalleryCategory !== 'all' ? 'No receipts match your search filter' : 'No receipts attached yet. Drop receipts when logging expenses.'}</div>
+    </div>`;
+    const pg = $('tc-gallery-pagination');
+    if (pg) pg.innerHTML = '';
+    return;
+  }
+
+  grid.innerHTML = pageItems.map((item, idx) => {
+    const isPdf = _tcIsPdfName(item.receiptRef);
+    const globalIdx = pageStart + idx;
+    const isCloud = item.receiptRef.startsWith('cloud://');
+    const isLocal = item.receiptRef.startsWith('local://');
+    const storageBadge = isCloud
+      ? '<span class="pill blue" style="font-size:10px;">☁️ Cloud</span>'
+      : isLocal
+        ? '<span class="pill green" style="font-size:10px;">📁 Local</span>'
+        : '<span class="pill gray" style="font-size:10px;">🔗 Link</span>';
+
+    const thumbHtml = isPdf
+      ? `<div class="tc-gallery-pdf-badge"><span style="font-size:28px;">📄</span><span style="font-size:10px;font-weight:700;margin-top:4px;">PDF DOCUMENT</span></div>`
+      : `<div class="tc-gallery-img-thumb"><span style="font-size:28px;">🧾</span></div>`;
+
+    return `
+      <div class="tc-gallery-card" role="button" tabindex="0" onclick="openReceiptLightbox(${globalIdx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openReceiptLightbox(${globalIdx});}" title="Click to preview receipt: ${escapeHtml(item.desc)}">
+        <div class="tc-gallery-thumb-wrap">
+          ${thumbHtml}
+          <div class="tc-gallery-card-badges">
+            ${storageBadge}
+          </div>
+        </div>
+        <div class="tc-gallery-card-body">
+          <div class="tc-gallery-card-title">${escapeHtml(item.desc)}</div>
+          <div class="tc-gallery-card-meta">
+            <span>📅 ${escapeHtml(item.date || '—')}</span>
+            <span>•</span>
+            <span style="color:var(--red);font-weight:700;">-${fmt(item.amount, baseCurrency)}</span>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">${escapeHtml(item.cat)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Render pagination controls
+  const pgWrap = $('tc-gallery-pagination');
+  if (pgWrap) {
+    if (totalPages <= 1) {
+      pgWrap.innerHTML = '';
+    } else {
+      pgWrap.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text3);">
+          <span>Showing ${pageStart + 1}–${Math.min(pageStart + TC_GALLERY_PAGE_SIZE, filtered.length)} of ${filtered.length} receipts</span>
+          <div style="display:flex;gap:6px;">
+            <button class="btn sm" type="button" onclick="setTcGalleryPage(${_tcGalleryPage - 1})" ${_tcGalleryPage === 0 ? 'disabled' : ''}>‹ Prev</button>
+            <span style="padding:4px 8px;font-family:'DM Mono',monospace;">${_tcGalleryPage + 1} / ${totalPages}</span>
+            <button class="btn sm" type="button" onclick="setTcGalleryPage(${_tcGalleryPage + 1})" ${_tcGalleryPage === totalPages - 1 ? 'disabled' : ''}>Next ›</button>
+          </div>
+        </div>
+      `;
+    }
+  }
+}
+
+function setTcGalleryPage(p) {
+  _tcGalleryPage = p;
+  _tcRenderReceiptGallery();
+}
+
+// Lightbox state
+let _tcLightboxState = {
+  items: [],
+  index: 0,
+  zoom: 1,
+  rotate: 0,
+};
+
+async function openReceiptLightbox(index) {
+  const items = window._tcGalleryRenderedItems || _tcAllReceiptItems();
+  if (!items || !items[index]) return;
+
+  _tcLightboxState = {
+    items,
+    index,
+    zoom: 1,
+    rotate: 0,
+  };
+
+  openM('tc-receipt-lightbox');
+  await _tcRenderLightboxContent();
+}
+
+async function _tcRenderLightboxContent() {
+  const { items, index, zoom, rotate } = _tcLightboxState;
+  const item = items[index];
+  if (!item) return;
+
+  const titleEl = $('tc-lightbox-title');
+  const metaEl = $('tc-lightbox-meta');
+  const counterEl = $('tc-lightbox-counter');
+  if (titleEl) titleEl.textContent = item.desc || 'Receipt Preview';
+  if (metaEl) {
+    metaEl.innerHTML = `
+      <span>📅 ${escapeHtml(item.date || '—')}</span> &nbsp;·&nbsp;
+      <span>🏷️ ${escapeHtml(item.cat || '')}</span> &nbsp;·&nbsp;
+      <strong style="color:var(--red);font-family:'DM Mono',monospace;">-${fmt(item.amount, item.currency || 'CAD')}</strong>
+    `;
+  }
+  if (counterEl) counterEl.textContent = `${index + 1} / ${items.length}`;
+
+  const prevBtn = $('tc-lightbox-prev-btn');
+  const nextBtn = $('tc-lightbox-next-btn');
+  if (prevBtn) prevBtn.disabled = (index <= 0);
+  if (nextBtn) nextBtn.disabled = (index >= items.length - 1);
+
+  const imgEl = $('tc-lightbox-img');
+  const canvasEl = $('tc-lightbox-canvas');
+  const loadEl = $('tc-lightbox-loading');
+  const extLink = $('tc-lightbox-open-external');
+  const viewport = $('tc-lightbox-viewport');
+
+  if (viewport) {
+    viewport.style.transform = `scale(${zoom}) rotate(${rotate}deg)`;
+  }
+
+  if (loadEl) loadEl.style.display = 'block';
+  if (imgEl) imgEl.style.display = 'none';
+  if (canvasEl) canvasEl.style.display = 'none';
+
+  const ref = item.receiptRef;
+  const isPdf = _tcIsPdfName(ref);
+
+  try {
+    let resolvedUrl = '';
+    let blob = null;
+
+    if (ref.startsWith('local://')) {
+      const path = ref.replace('local://', '');
+      const handle = await loadReceiptFolderHandle();
+      if (handle) {
+        blob = await resolveLocalReceiptFile(handle, path);
+        if (blob) resolvedUrl = URL.createObjectURL(blob);
+      }
+    } else if (ref.startsWith('cloud://')) {
+      if (typeof window._fbGetCloudReceiptUrl === 'function') {
+        resolvedUrl = await window._fbGetCloudReceiptUrl(ref);
+      }
+    } else if (/^https?:\/\//i.test(ref)) {
+      resolvedUrl = ref;
+    }
+
+    if (extLink) {
+      extLink.href = resolvedUrl || '#';
+      extLink.style.display = resolvedUrl ? '' : 'none';
+    }
+
+    if (isPdf) {
+      if (!blob && resolvedUrl) {
+        const res = await fetch(resolvedUrl);
+        blob = await res.blob();
+      }
+      if (blob) {
+        const pdfjsLib = await ensurePdfJs();
+        const buf = await blob.arrayBuffer();
+        const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+        const page = await doc.getPage(1);
+        const vp = page.getViewport({ scale: 1.5 });
+        if (canvasEl) {
+          canvasEl.width = vp.width;
+          canvasEl.height = vp.height;
+          await page.render({ canvasContext: canvasEl.getContext('2d'), viewport: vp }).promise;
+          canvasEl.style.display = 'block';
+        }
+        if (loadEl) loadEl.style.display = 'none';
+      } else {
+        throw new Error('PDF file could not be retrieved');
+      }
+    } else if (resolvedUrl) {
+      if (imgEl) {
+        imgEl.src = resolvedUrl;
+        imgEl.onload = () => {
+          if (loadEl) loadEl.style.display = 'none';
+          imgEl.style.display = 'block';
+        };
+        imgEl.onerror = () => {
+          if (loadEl) {
+            loadEl.style.display = 'block';
+            loadEl.innerHTML = '<div class="e-icon">⚠️</div><div>Image preview could not be displayed</div>';
+          }
+        };
+      }
+    } else {
+      throw new Error('No receipt resource available');
+    }
+  } catch (err) {
+    if (loadEl) {
+      loadEl.style.display = 'block';
+      loadEl.innerHTML = `<div class="e-icon">⚠️</div><div>Could not load preview (${escapeHtml(err.message || 'File offline')})</div>`;
+    }
+  }
+}
+
+function tcLightboxZoom(delta) {
+  _tcLightboxState.zoom = Math.max(0.5, Math.min(3.0, _tcLightboxState.zoom + delta));
+  const viewport = $('tc-lightbox-viewport');
+  if (viewport) viewport.style.transform = `scale(${_tcLightboxState.zoom}) rotate(${_tcLightboxState.rotate}deg)`;
+}
+
+function tcLightboxRotate() {
+  _tcLightboxState.rotate = (_tcLightboxState.rotate + 90) % 360;
+  const viewport = $('tc-lightbox-viewport');
+  if (viewport) viewport.style.transform = `scale(${_tcLightboxState.zoom}) rotate(${_tcLightboxState.rotate}deg)`;
+}
+
+function tcLightboxReset() {
+  _tcLightboxState.zoom = 1;
+  _tcLightboxState.rotate = 0;
+  const viewport = $('tc-lightbox-viewport');
+  if (viewport) viewport.style.transform = `scale(1) rotate(0deg)`;
+}
+
+function tcLightboxNav(dir) {
+  const newIndex = _tcLightboxState.index + dir;
+  if (newIndex >= 0 && newIndex < _tcLightboxState.items.length) {
+    _tcLightboxState.index = newIndex;
+    _tcLightboxState.zoom = 1;
+    _tcLightboxState.rotate = 0;
+    _tcRenderLightboxContent();
   }
 }
 
@@ -3166,4 +3716,20 @@ export {
   resetDismissedReceiptNotices,
   isReceiptNoticeDismissed,
   switchTaxCenterSubTab,
+  tcSubNavKeydown,
+  tcFilterLedgerByReceiptStorage,
+  openTaxSeasonPreflightModal,
+  tcJumpToFixPreflightIssues,
+  executeFullTaxSeasonExport,
+  tcSetVaultView,
+  tcGallerySearchInput,
+  tcGalleryFilterChange,
+  _tcRenderReceiptGallery,
+  setTcGalleryPage,
+  openReceiptLightbox,
+  tcLightboxZoom,
+  tcLightboxRotate,
+  tcLightboxReset,
+  tcLightboxNav,
+  _tcAllReceiptItems,
 };

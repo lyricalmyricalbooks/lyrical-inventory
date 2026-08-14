@@ -148,6 +148,21 @@ import {
   dismissReceiptNotice,
   resetDismissedReceiptNotices,
   switchTaxCenterSubTab,
+  tcSubNavKeydown,
+  tcFilterLedgerByReceiptStorage,
+  openTaxSeasonPreflightModal,
+  tcJumpToFixPreflightIssues,
+  executeFullTaxSeasonExport,
+  tcSetVaultView,
+  tcGallerySearchInput,
+  tcGalleryFilterChange,
+  _tcRenderReceiptGallery,
+  setTcGalleryPage,
+  openReceiptLightbox,
+  tcLightboxZoom,
+  tcLightboxRotate,
+  tcLightboxReset,
+  tcLightboxNav,
 } from './features/taxcentre.js';
 import {
   reconcileApplyBigCartel,
@@ -6062,15 +6077,21 @@ window.expFileDrop = function (ev) {
 // that pair is wired to the plain ledger expense form's #exp-file ids.
 window.tcExpFileChosen = function () {
   const input = $('tc-exp-file'), chip = $('tc-exp-file-chip'), nameEl = $('tc-exp-file-name'), dz = $('tc-exp-dropzone');
-  const hasFile = input && input.files && input.files.length > 0;
-  if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
+  const hasFile = (input && input.files && input.files.length > 0) || !!window._pendingWebcamReceipt;
+  if (nameEl && hasFile) nameEl.textContent = input?.files?.[0]?.name || window._pendingWebcamReceipt?.name || 'receipt';
   if (chip) chip.style.display = hasFile ? 'flex' : 'none';
   if (dz) dz.style.display = hasFile ? 'none' : 'flex';
+  const aiBtn = $('tc-ai-scan-btn');
+  if (aiBtn) {
+    aiBtn.disabled = !hasFile;
+    aiBtn.title = hasFile ? 'Scan receipt with Gemini AI' : 'Select or capture a receipt first to enable AI scanning';
+  }
 };
 window.tcExpFileClear = function (ev) {
   if (ev) ev.preventDefault();
   const input = $('tc-exp-file');
   if (input) input.value = '';
+  window._pendingWebcamReceipt = null;
   window.tcExpFileChosen();
 };
 window.tcExpFileDragOver = function (ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.add('drag'); };
@@ -7220,6 +7241,10 @@ async function _runReceiptScan(cfg) {
   // click, which is how the old one became unrecoverable when a request hung.
   if (btn) btn.textContent = 'Scanning… (tap to cancel)';
 
+  const shimmerFields = [cfg.descId, cfg.amountId, cfg.dateId, cfg.catId, cfg.curId]
+    .map(id => id && $(id)).filter(Boolean);
+  shimmerFields.forEach(el => el.classList.add('tc-field-shimmer'));
+
   try {
     const upload = await _prepareReceiptUpload(file);
     if (ac.signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -7282,11 +7307,13 @@ async function _runReceiptScan(cfg) {
 
     // Writing `.value` fires nothing, so both forms' FX preview kept showing
     // the previous receipt's conversion until the user touched a field.
-    for (const id of [cfg.curId, cfg.amountId, cfg.descId]) {
+    for (const id of [cfg.curId, cfg.amountId, cfg.descId, cfg.dateId, cfg.catId, cfg.refId]) {
       const el = id && $(id);
       if (!el) continue;
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.classList.add('tc-field-extracted');
+      setTimeout(() => el.classList.remove('tc-field-extracted'), 2200);
     }
 
     if (!applied.length) {
@@ -7312,6 +7339,7 @@ async function _runReceiptScan(cfg) {
   } finally {
     clearTimeout(timer);
     _receiptScanAbort = null;
+    shimmerFields.forEach(el => el.classList.remove('tc-field-shimmer'));
     if (btn) { btn.textContent = oldText; btn.disabled = false; }
   }
 }
@@ -19682,6 +19710,7 @@ window.downloadFullTaxSeasonExport = function () {
     showToast(`⚠ Exported, but ${rateWarnings.size} book${rateWarnings.size === 1 ? '' : 's'} had no CAD rate — shown unconverted: ${names}. Refresh FX rates and re-export.`, 'warn', 7000);
   }
 };
+window.downloadFullTaxSeasonExportDirect = window.downloadFullTaxSeasonExport;
 
 // ── STRIPE FEES BY YEAR
 const _STRIPE_ZERO_DECIMAL = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
@@ -22448,6 +22477,9 @@ Object.assign(window, {
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   reclaimCloudReceiptsNow, cacheAllReceiptsNow, openCloudReceiptsModal, closeCloudReceiptsModal,
   dismissReceiptNotice, resetDismissedReceiptNotices, switchTaxCenterSubTab,
+  tcSubNavKeydown, tcFilterLedgerByReceiptStorage, openTaxSeasonPreflightModal, tcJumpToFixPreflightIssues, executeFullTaxSeasonExport,
+  tcSetVaultView, tcGallerySearchInput, tcGalleryFilterChange, _tcRenderReceiptGallery, setTcGalleryPage,
+  openReceiptLightbox, tcLightboxZoom, tcLightboxRotate, tcLightboxReset, tcLightboxNav,
   copyReceiptDiagnostic, openExportReceiptsModal, closeExportReceiptsModal, runReceiptExport,
   openReceiptOrganizer, closeReceiptOrganizer, chooseOrganizerSource, organizerReadUnclear,
   toggleOrganizerSkip, runReceiptOrganizer,
