@@ -18298,8 +18298,10 @@ function renderFairKitBookList() {
       <div class="fk-book">
         <div class="fk-book-head">
           <input type="checkbox" id="fk-pick-${book.id}" class="fk-book-check st-book-check qrp-book-check" data-kind="inv" value="${book.id}" checked onchange="fairKitSelectionChanged()">
-          <label class="fk-book-title" for="fk-pick-${book.id}">${escapeHtml(book.title)}</label>
-          <span class="fk-book-author">${escapeHtml(book.author || '')}</span>
+          <span class="fk-book-id">
+            <label class="fk-book-title" for="fk-pick-${book.id}">${escapeHtml(book.title)}</label>
+            ${book.author ? `<span class="fk-book-meta">${escapeHtml(book.author)}</span>` : ''}
+          </span>
           ${tag}
         </div>
         <div class="fk-book-fields">
@@ -18320,8 +18322,10 @@ function renderFairKitBookList() {
     <div class="fk-book fk-book-custom">
       <div class="fk-book-head">
         <input type="checkbox" id="fk-pick-custom-${idx}" class="fk-book-check st-book-check" data-kind="custom" value="${idx}" checked onchange="fairKitSelectionChanged()">
-        <label class="fk-book-title" for="fk-pick-custom-${idx}">${escapeHtml(book.title)}</label>
-        <span class="fk-book-author">${escapeHtml(book.author || '')}</span>
+        <span class="fk-book-id">
+          <label class="fk-book-title" for="fk-pick-custom-${idx}">${escapeHtml(book.title)}</label>
+          ${book.author ? `<span class="fk-book-meta">${escapeHtml(book.author)}</span>` : ''}
+        </span>
         <span class="fk-tag">Tally only</span>
         <button type="button" class="fk-book-remove" onclick="salesTrackerRemoveCustom(${idx})" title="Remove" aria-label="Remove ${escapeHtml(book.title)}">✕</button>
       </div>
