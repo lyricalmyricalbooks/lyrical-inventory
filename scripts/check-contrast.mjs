@@ -716,8 +716,9 @@ export const DOCUMENT_BUILDERS = new Set([
   'sendOcBulkEmails',             // open-call email body + send log
   'exportTripPDF',                // printed trip report
   'printInventoryValuationReport',// printed valuation report
-  'renderQrPresetPicker',         // printed sales-tracker sheet
-  'renderStPresetPicker',         // printed sales-tracker sheet
+  'printSalesTracker',            // printed fair tally sheet
+  'printPaymentQRCodes',          // printed payment QR sheet
+  '_fkOpenQrPrintWindow',         // the QR sheet's print window while it loads
   'renderOpenCall',               // fixed-dark diagnostics console
   'sendNextCampaignEmail',        // fixed-dark send log
 ]);

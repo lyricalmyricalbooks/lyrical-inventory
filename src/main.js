@@ -51,8 +51,6 @@ import {
   saveQrPresets,
   upsertQrPreset,
   removeQrPreset,
-  findQrPreset,
-  qrPresetId,
   qrPresetMissingBooks,
   qrPresetSummary,
 } from './lib/qr-presets.js';
@@ -61,7 +59,6 @@ import {
   saveStPresets,
   upsertStPreset,
   removeStPreset,
-  findStPreset,
   stPresetId,
   stPresetMissingBooks,
   stPresetSummary,
@@ -148,6 +145,21 @@ import {
   dismissReceiptNotice,
   resetDismissedReceiptNotices,
   switchTaxCenterSubTab,
+  tcSubNavKeydown,
+  tcFilterLedgerByReceiptStorage,
+  openTaxSeasonPreflightModal,
+  tcJumpToFixPreflightIssues,
+  executeFullTaxSeasonExport,
+  tcSetVaultView,
+  tcGallerySearchInput,
+  tcGalleryFilterChange,
+  _tcRenderReceiptGallery,
+  setTcGalleryPage,
+  openReceiptLightbox,
+  tcLightboxZoom,
+  tcLightboxRotate,
+  tcLightboxReset,
+  tcLightboxNav,
 } from './features/taxcentre.js';
 import {
   reconcileApplyBigCartel,
@@ -186,6 +198,7 @@ import {
   linkShippingExpense,
   processShippoTxToExpense,
   importShippoShippingFromApi,
+  openShippoLabel,
   getBookPresetSpecs,
   initShippingTab,
   getFallbackShippingPhone,
@@ -384,6 +397,8 @@ import {
   toLocalRef,
   uniqueFileName,
   writeReceiptRefs,
+  isRentExpense,
+  isReceiptExemptExpense,
 } from './lib/receipt-storage.js';
 import {
   PREVIEW_MAX_EDGE,
@@ -403,6 +418,7 @@ import {
   vendorFrom,
 } from './lib/receipt-naming.js';
 import { createZip, textEntry } from './lib/zip.js';
+import { isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef } from './lib/shippo-invoices.js';
 import { planFile } from './lib/receipt-match.js';
 
 // ─────────────────────────────────────────────
@@ -5816,7 +5832,7 @@ function saveArtistPaymentLink() {
 // never reimbursed to the author, so they must be excluded from every "owed /
 // reimbursement" surface. Legacy records (pre-flag) are detected by their GRAT- ref.
 function isGratuityExpense(e) {
-  return !!(e && (e.gratuity === true || (typeof e.ref === 'string' && e.ref.startsWith('GRAT-'))));
+  return !!(e && (e.gratuity === true || (typeof e.ref === 'string' && e.ref.startsWith('GRAT-')) || (typeof e.desc === 'string' && e.desc.toLowerCase().startsWith('gratuity:'))));
 }
 
 function renderArtistReimburseBanner() {
@@ -6060,15 +6076,21 @@ window.expFileDrop = function (ev) {
 // that pair is wired to the plain ledger expense form's #exp-file ids.
 window.tcExpFileChosen = function () {
   const input = $('tc-exp-file'), chip = $('tc-exp-file-chip'), nameEl = $('tc-exp-file-name'), dz = $('tc-exp-dropzone');
-  const hasFile = input && input.files && input.files.length > 0;
-  if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
+  const hasFile = (input && input.files && input.files.length > 0) || !!window._pendingWebcamReceipt;
+  if (nameEl && hasFile) nameEl.textContent = input?.files?.[0]?.name || window._pendingWebcamReceipt?.name || 'receipt';
   if (chip) chip.style.display = hasFile ? 'flex' : 'none';
   if (dz) dz.style.display = hasFile ? 'none' : 'flex';
+  const aiBtn = $('tc-ai-scan-btn');
+  if (aiBtn) {
+    aiBtn.disabled = !hasFile;
+    aiBtn.title = hasFile ? 'Scan receipt with Gemini AI' : 'Select or capture a receipt first to enable AI scanning';
+  }
 };
 window.tcExpFileClear = function (ev) {
   if (ev) ev.preventDefault();
   const input = $('tc-exp-file');
   if (input) input.value = '';
+  window._pendingWebcamReceipt = null;
   window.tcExpFileChosen();
 };
 window.tcExpFileDragOver = function (ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.add('drag'); };
@@ -7243,6 +7265,10 @@ async function _runReceiptScan(cfg) {
   // click, which is how the old one became unrecoverable when a request hung.
   if (btn) btn.textContent = 'Scanning… (tap to cancel)';
 
+  const shimmerFields = [cfg.descId, cfg.amountId, cfg.dateId, cfg.catId, cfg.curId]
+    .map(id => id && $(id)).filter(Boolean);
+  shimmerFields.forEach(el => el.classList.add('tc-field-shimmer'));
+
   try {
     const parsed = await _extractReceiptFromFile(apiKey, file, { signal: ac.signal });
     const applied = [];
@@ -7289,11 +7315,13 @@ async function _runReceiptScan(cfg) {
 
     // Writing `.value` fires nothing, so both forms' FX preview kept showing
     // the previous receipt's conversion until the user touched a field.
-    for (const id of [cfg.curId, cfg.amountId, cfg.descId]) {
+    for (const id of [cfg.curId, cfg.amountId, cfg.descId, cfg.dateId, cfg.catId, cfg.refId]) {
       const el = id && $(id);
       if (!el) continue;
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.classList.add('tc-field-extracted');
+      setTimeout(() => el.classList.remove('tc-field-extracted'), 2200);
     }
 
     if (!applied.length) {
@@ -7319,6 +7347,7 @@ async function _runReceiptScan(cfg) {
   } finally {
     clearTimeout(timer);
     _receiptScanAbort = null;
+    shimmerFields.forEach(el => el.classList.remove('tc-field-shimmer'));
     if (btn) { btn.textContent = oldText; btn.disabled = false; }
   }
 }
@@ -9016,18 +9045,23 @@ export function renderExpenses() {
       </tr>`;
     }
 
-    const statusCell = isGratuityExpense(e)
-      ? '<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — not reimbursed to the author">Publisher expense</span>'
+    const isGratuity = isGratuityExpense(e);
+    const statusCell = isGratuity
+      ? '<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — publisher absorbed, not reimbursed to author">Publisher expense</span>'
       : e.received
         ? '<span class="pill green" style="font-size:10px;">✓ Received</span>'
         : '<span style="font-size:11px;color:var(--text3);">Pending</span>';
-    const actionCell = (!e.received && !isAuthor() && !isGratuityExpense(e))
+    const actionCell = (!e.received && !isAuthor() && !isGratuity)
       ? `<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>` : '';
     const baseReceiptLink = e.receipt ? (
       e.receipt.startsWith('local://')
         ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
         : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
-    ) : `<span style="font-size:11px;color:var(--text3); font-weight: 500;">Missing</span>`;
+    ) : isGratuity
+      ? `<span class="pill gray" style="font-size:10px;" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>`
+      : isRentExpense(e)
+        ? `<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — verified via lease agreement & bank record)">Lease record</span>`
+        : `<span style="font-size:11px;color:var(--text3); font-weight: 500;">Missing</span>`;
     const trackLink = e.trackingUrl
       ? ` <a href="${e.trackingUrl}" target="_blank" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
       : '';
@@ -9035,7 +9069,7 @@ export function renderExpenses() {
 
     // Calculate multi-currency stuff
     const eCur = e.currency || cur;
-    const isBase = eCur === 'CAD';
+    const isBase = !eCur || eCur === 'CAD' || eCur === 'CA$' || normalizeCurrencyCode(eCur) === 'CAD';
     let baseAmountText = '';
     let baseAmountTitle = '';
 
@@ -9044,6 +9078,8 @@ export function renderExpenses() {
         baseAmountText = '-';
       } else if (e.baseAmount) {
         baseAmountText = fmt(e.baseAmount, 'CAD');
+      } else if (Number(e.fxRate) > 0) {
+        baseAmountText = fmt(e.amount * Number(e.fxRate), 'CAD');
       } else if (_fxRateCache[`${eCur}_CAD`]) {
         baseAmountText = fmt(e.amount * _fxRateCache[`${eCur}_CAD`], 'CAD');
       } else {
@@ -9062,14 +9098,15 @@ export function renderExpenses() {
         : '<td></td>')
       : '';
 
-    return `<tr style="${e.received ? 'opacity:.5;' : ''}">
+    const isSettledReimbursable = e.received && !isGratuity;
+    return `<tr style="${isSettledReimbursable ? 'opacity:.5;' : ''}">
       ${selectCell}
       <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
       <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
       <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
       <td style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
       <td>${receiptCell}</td>
-      <td class="r" style="color:${e.received ? 'var(--text4)' : 'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount, eCur)}</td>
+      <td class="r" style="color:${isSettledReimbursable ? 'var(--text4)' : 'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount, eCur)}</td>
       ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
       <td>${statusCell}</td>
       <td>${actionCell}</td>
@@ -14119,38 +14156,30 @@ async function authorizeReceiptFolder() {
   }
 }
 
-async function findFileHandleInDir(dirHandle, targetFilename) {
+/**
+ * Find a file by name anywhere under a directory.
+ *
+ * Was three levels of hand-unrolled loops, which stopped exactly one level too
+ * shallow once receipts were filed under year, category and book — the deepest
+ * receipts became unfindable by the very fallback meant to rescue them.
+ * Breadth-first so the common shallow case still returns immediately, with a
+ * depth cap so an unexpected folder tree cannot hang the app.
+ */
+async function findFileHandleInDir(dirHandle, targetFilename, maxDepth = 6) {
   if (!dirHandle || !targetFilename) return null;
-  try {
-    // Top-level direct file check
-    for await (const entry of dirHandle.values()) {
-      if (entry.kind === 'file' && entry.name === targetFilename) {
-        return entry;
-      }
+  let level = [dirHandle];
+
+  for (let depth = 0; depth <= maxDepth && level.length; depth++) {
+    const next = [];
+    for (const dir of level) {
+      try {
+        for await (const entry of dir.values()) {
+          if (entry.kind === 'file' && entry.name === targetFilename) return entry;
+          if (entry.kind === 'directory') next.push(entry);
+        }
+      } catch (_) { /* skip a folder we cannot read */ }
     }
-    // Deep search in 1st & 2nd level subdirectories
-    for await (const entry of dirHandle.values()) {
-      if (entry.kind === 'directory') {
-        try {
-          for await (const subEntry of entry.values()) {
-            if (subEntry.kind === 'file' && subEntry.name === targetFilename) {
-              return subEntry;
-            }
-            if (subEntry.kind === 'directory') {
-              try {
-                for await (const deepEntry of subEntry.values()) {
-                  if (deepEntry.kind === 'file' && deepEntry.name === targetFilename) {
-                    return deepEntry;
-                  }
-                }
-              } catch (_) {}
-            }
-          }
-        } catch (_) {}
-      }
-    }
-  } catch (e) {
-    console.warn('Receipt file deep lookup error', e);
+    level = next;
   }
   return null;
 }
@@ -14435,16 +14464,20 @@ export async function saveReceiptToLocalFile(file, subfolderName = '', meta = nu
     const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
     if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return null;
 
-    const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: true });
-
-    // With expense details to hand, file by tax year and category and name the
-    // file after what it was for. Without them — the email importer, shipping
-    // labels — keep the flat subfolder the caller asked for.
+    // The folder the owner picked IS the receipts folder. This used to nest a
+    // `receipts/` directory inside it, which produced paths like
+    // "…/receipts/General receipts/receipts/2026/Office Supplies/General/" —
+    // four levels of app-invented nesting inside a folder already named for
+    // receipts. Files go straight into the chosen folder now.
+    //
+    // `subfolderName` is a flat legacy destination (email-imports, Shippo). It
+    // is NOT a book title, and passing it as one is what appended that stray
+    // "General" level to every Tax Centre receipt.
     const segments = meta
-      ? receiptFolderPath({ ...meta, book: meta.book || subfolderName })
+      ? receiptFolderPath(meta)
       : (subfolderName ? [subfolderName] : []);
 
-    let targetDir = receiptsDir;
+    let targetDir = dirHandle;
     for (const segment of segments) {
       targetDir = await targetDir.getDirectoryHandle(segment, { create: true });
     }
@@ -14546,6 +14579,12 @@ export function _localReceiptCell(item) {
     ? item.receiptFiles
     : (item.receipt ? [item.receipt] : []);
   if (!files.length) {
+    if (isGratuityExpense(item)) {
+      return '<span class="pill gray" style="font-size:10px;" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>';
+    }
+    if (isRentExpense(item)) {
+      return '<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — documented via tenancy lease & bank statement)">Lease record</span>';
+    }
     if (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense') {
       return `<button class="btn sm outline" type="button" onclick="attachReceiptToExpenseRow('${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')" style="font-size:10px;padding:1px 6px;color:var(--gold-text);" title="Attach receipt file">📎 Attach</button>`;
     }
@@ -14559,8 +14598,18 @@ export function _localReceiptCell(item) {
       const label = multi ? `View ${idx + 1}` : 'View Local';
       return `<a href="#" title="${escapeHtml(base)}" onclick="event.preventDefault(); viewLocalReceipt('${fn.replace(/'/g, "\\'")}')" style="color:var(--gold3);text-decoration:underline;">${label}</a>`;
     }
+    // A stored Shippo label link is signed and expires a year after the label
+    // was created, so linking to it directly hands the owner a link that dies
+    // on its own. The transaction id is on the expense, so mint a fresh one
+    // when they actually click.
+    const shippoTx = shippoTxIdFromRef(item.ref);
+    if (shippoTx && isExpiringLabelUrl(r)) {
+      const expired = isLabelUrlExpired(r);
+      const label = multi ? `Label ${idx + 1}` : 'Label';
+      return `<a href="#" title="${expired ? 'This saved link has expired — opens a fresh one from Shippo' : 'Opens a fresh link from Shippo'}" onclick="event.preventDefault(); openShippoLabel('${escapeHtml(String(item.ref))}')" style="color:var(--gold3);text-decoration:underline;">${label}${expired ? ' ↻' : ''}</a>`;
+    }
     const label = multi ? `Receipt ${idx + 1}` : 'Receipt';
-    return `<a href="${r}" target="_blank" style="color:var(--gold3);">${label}</a>`;
+    return `<a href="${r}" target="_blank" rel="noopener" style="color:var(--gold3);">${label}</a>`;
   }).join(' · ');
 }
 
@@ -14570,31 +14619,49 @@ export function _localReceiptCell(item) {
 // reorganising or renaming subfolders. Extracted so the printable trip report
 // can read the same files viewLocalReceipt opens; throws when nothing matches,
 // so callers decide whether that is fatal or just an omitted thumbnail.
+/**
+ * Walk a full folder-relative path from a starting directory.
+ *
+ * The previous version destructured `path.split('/')` into exactly
+ * `[subfolder, filename]`, so it only ever handled one level of nesting. Once
+ * receipts were filed under year and category, "2026/Office Supplies/x.pdf"
+ * resolved subfolder="2026" and filename="Office Supplies" and always failed —
+ * every organised receipt fell through to the slow basename search, and
+ * anything deeper than that search's limit could not be opened at all.
+ */
+async function fileHandleAtPath(dirHandle, path) {
+  const parts = String(path || '').split('/').filter(Boolean);
+  if (!parts.length) return null;
+  const filename = parts.pop();
+  let dir = dirHandle;
+  for (const segment of parts) {
+    dir = await dir.getDirectoryHandle(segment, { create: false });
+  }
+  return dir.getFileHandle(filename);
+}
+
 export async function resolveLocalReceiptFile(dirHandle, path) {
   let fileHandle = null;
-  const baseFilename = path.split('/').pop();
+  const baseFilename = String(path || '').split('/').pop();
 
-  try {
-    const receiptsDir = await dirHandle.getDirectoryHandle('receipts', { create: false });
-    if (path.includes('/')) {
-      const [subfolder, filename] = path.split('/');
-      const subDir = await receiptsDir.getDirectoryHandle(subfolder, { create: false });
-      fileHandle = await subDir.getFileHandle(filename);
-    } else {
-      fileHandle = await receiptsDir.getFileHandle(path);
-    }
-  } catch (_) {
+  // The chosen folder is the root. Receipts filed before that was true live
+  // under a nested `receipts/`, so that stays as a fallback rather than
+  // stranding everything saved earlier.
+  for (const attempt of [
+    () => fileHandleAtPath(dirHandle, path),
+    async () => {
+      const legacy = await dirHandle.getDirectoryHandle('receipts', { create: false });
+      return fileHandleAtPath(legacy, path);
+    },
+  ]) {
     try {
-      if (path.includes('/')) {
-        const [subfolder, filename] = path.split('/');
-        const subDir = await dirHandle.getDirectoryHandle(subfolder, { create: false });
-        fileHandle = await subDir.getFileHandle(filename);
-      } else {
-        fileHandle = await dirHandle.getFileHandle(path);
-      }
-    } catch (_) {}
+      fileHandle = await attempt();
+      if (fileHandle) break;
+    } catch (_) { /* try the next location */ }
   }
 
+  // Last resort: find it by name anywhere in the tree, which is what lets a
+  // receipt survive the owner reorganising their folders by hand.
   if (!fileHandle) {
     fileHandle = await findFileHandleInDir(dirHandle, baseFilename);
   }
@@ -14688,21 +14755,16 @@ async function checkReceiptFolderHealth() {
       _noteReceiptFolderHealth(true);
       return { connected: true, reachable: true, needsPermission: true, handle: dirHandle };
     }
-    await dirHandle.getDirectoryHandle('receipts', { create: false });
+    // Reading the folder is the test. It used to open a `receipts/`
+    // subdirectory, which no longer exists now the chosen folder is the root —
+    // and a missing subfolder was never good evidence that a folder had gone.
+    for await (const _ of dirHandle.values()) break;
     _noteReceiptFolderHealth(true);
     return { connected: true, reachable: true, handle: dirHandle };
   } catch (e) {
-    // NotFoundError on `receipts/` can also mean a fresh folder that has never
-    // been written to, so only a hard failure counts as unreachable.
-    try {
-      for await (const _ of dirHandle.values()) break;
-      _noteReceiptFolderHealth(true);
-      return { connected: true, reachable: true, empty: true, handle: dirHandle };
-    } catch (inner) {
-      console.warn('Receipt folder unreachable', inner);
-      _noteReceiptFolderHealth(false);
-      return { connected: true, reachable: false, handle: dirHandle };
-    }
+    console.warn('Receipt folder unreachable', e);
+    _noteReceiptFolderHealth(false);
+    return { connected: true, reachable: false, handle: dirHandle };
   }
 }
 
@@ -19073,11 +19135,7 @@ function _stOnHandHint(book) {
 function _stUpdatePackTotal() {
   const el = document.getElementById('st-pack-total');
   if (!el) return;
-  let total = 0;
-  document.querySelectorAll('.st-book-qty').forEach((input) => {
-    const n = parseInt(input.value, 10);
-    if (Number.isFinite(n) && n > 0) total += n;
-  });
+  const total = _fkPackedTotal();
   el.textContent = total > 0
     ? `📦 ${total} book${total === 1 ? '' : 's'} packed for this fair`
     : 'Enter how many copies of each title you\'re bringing.';
@@ -19096,49 +19154,198 @@ window.salesTrackerQtyInput = function (el) {
   _stUpdatePackTotal();
 };
 
-function renderSalesTrackerBookList() {
-  const list = document.getElementById('st-books-list');
+// ── FAIR KIT BOOK LIST ──
+// The tally sheet and the payment QR sheet are packed off the same box of
+// books, so they share one list here. Each inventory row carries both marker
+// classes (.st-book-check and .qrp-book-check) and both per-book fields — the
+// copies-packed count the tally sheet prints, and the door price the QR card
+// charges — so every path that used to query two separate lists still selects
+// exactly the books it prints, without knowing they now come from one place.
+function renderFairKitBookList() {
+  const list = document.getElementById('fk-books-list');
   if (!list) return;
   // posBooksMap() includes POS-only extras (publisher) or just the active book (author).
   const inventoryEntries = Object.values(posBooksMap());
-
-  const qtyRow = (labelText, inputAttrs, value) => `
-    <div style="display:flex;align-items:center;gap:8px;padding-left:26px;margin-top:2px;margin-bottom:2px;">
-      <span style="font-size:11px;color:var(--text2);font-weight:500;">${labelText}:</span>
-      <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" ${inputAttrs} value="${value || ''}" placeholder="0" style="width:64px;padding:3px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface-card);color:var(--text);" oninput="salesTrackerQtyInput(this)">
-    </div>
-  `;
+  const baseCur = document.getElementById('qrp-base-cur')?.value || 'auto';
+  const hasStripeKey = !!getReconStripeKey();
 
   const inventoryHtml = inventoryEntries.map((book) => {
     const onHand = _stOnHandHint(book);
-    const label = `Copies bringing${onHand != null ? ` (${onHand} on hand)` : ''}`;
+    const nativeCode = currencyToCode(book.currency);
+    const targetCode = baseCur === 'auto' ? nativeCode : baseCur;
+    const defaultPrice = baseCur === 'auto'
+      ? (book.listPrice || 0)
+      : convertCurrency(book.listPrice || 0, nativeCode, targetCode);
+    const existingOverride = book.priceOverrides?.[targetCode] || '';
+
+    // A title with no saved payment link still belongs on the tally sheet, so
+    // it stays selectable — the row says up front why no QR card will come out
+    // for it, rather than the seller finding a dead square at the table.
+    const hasLink = !!(book.stripeLink || book.paymentLink);
+    const tag = hasLink
+      ? ''
+      : hasStripeKey
+        ? '<span class="fk-tag">QR needs a door price</span>'
+        : '<span class="fk-tag fk-tag-warn">Tally only · no link</span>';
+
     return `
-    <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);">
-      <input type="checkbox" class="st-book-check" data-kind="inv" value="${book.id}" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(book.title)}</span>
-      <span style="font-size:11px;color:var(--text2);">${escapeHtml(book.author || '')}</span>
-    </label>
-    ${qtyRow(label, `data-book-id="${book.id}"`, salesTrackerQtyBrought[book.id])}
-  `;
+      <div class="fk-book">
+        <div class="fk-book-head">
+          <input type="checkbox" id="fk-pick-${book.id}" class="fk-book-check st-book-check qrp-book-check" data-kind="inv" value="${book.id}" checked onchange="fairKitSelectionChanged()">
+          <label class="fk-book-title" for="fk-pick-${book.id}">${escapeHtml(book.title)}</label>
+          <span class="fk-book-author">${escapeHtml(book.author || '')}</span>
+          ${tag}
+        </div>
+        <div class="fk-book-fields">
+          <div class="fk-field">
+            <label for="fk-qty-${book.id}">Copies bringing${onHand != null ? ` (${onHand} on hand)` : ''}</label>
+            <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" id="fk-qty-${book.id}" data-book-id="${book.id}" value="${salesTrackerQtyBrought[book.id] || ''}" placeholder="0" oninput="salesTrackerQtyInput(this)">
+          </div>
+          <div class="fk-field fk-field-price">
+            <label for="qrp-override-${book.id}">Door price (${escapeHtml(targetCode)})</label>
+            <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="${defaultPrice.toFixed(2)}" oninput="fairKitSelectionChanged()">
+          </div>
+        </div>
+      </div>
+    `;
   }).join('');
 
   const customHtml = salesTrackerCustomBooks.map((book, idx) => `
-    <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(212,175,55,.12);border:1px dashed rgba(212,175,55,.5);">
-      <input type="checkbox" class="st-book-check" data-kind="custom" value="${idx}" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(book.title)}</span>
-      <span style="font-size:11px;color:var(--text2);">${escapeHtml(book.author || '')}</span>
-      <button type="button" onclick="salesTrackerRemoveCustom(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0 4px;" title="Remove" aria-label="Remove">✕</button>
-    </label>
-    ${qtyRow('Copies bringing', `data-custom-idx="${idx}"`, book.qty)}
+    <div class="fk-book fk-book-custom">
+      <div class="fk-book-head">
+        <input type="checkbox" id="fk-pick-custom-${idx}" class="fk-book-check st-book-check" data-kind="custom" value="${idx}" checked onchange="fairKitSelectionChanged()">
+        <label class="fk-book-title" for="fk-pick-custom-${idx}">${escapeHtml(book.title)}</label>
+        <span class="fk-book-author">${escapeHtml(book.author || '')}</span>
+        <span class="fk-tag">Tally only</span>
+        <button type="button" class="fk-book-remove" onclick="salesTrackerRemoveCustom(${idx})" title="Remove" aria-label="Remove ${escapeHtml(book.title)}">✕</button>
+      </div>
+      <div class="fk-book-fields">
+        <div class="fk-field">
+          <label for="fk-qty-custom-${idx}">Copies bringing</label>
+          <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" id="fk-qty-custom-${idx}" data-custom-idx="${idx}" value="${book.qty || ''}" placeholder="0" oninput="salesTrackerQtyInput(this)">
+        </div>
+      </div>
+    </div>
   `).join('');
 
   if (!inventoryEntries.length && !salesTrackerCustomBooks.length) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available. Add a custom book below.</div>';
+    list.innerHTML = '<div class="fk-note">No books available. Add a title below.</div>';
   } else {
     list.innerHTML = inventoryHtml + customHtml;
   }
-  _stUpdatePackTotal();
+  fairKitSelectionChanged();
 }
+
+// Both sheets render from the same list now. The two old names stay because the
+// preset-restore paths and the base-currency selector call them by name, and
+// each still means "rebuild the list the sheet I print from reads".
+function renderSalesTrackerBookList() { renderFairKitBookList(); }
+function renderQRPrintBookList() { renderFairKitBookList(); }
+
+// ── WHAT THE KIT IS ABOUT TO PRINT ──
+function fairKitMode() {
+  const picked = document.querySelector('input[name="fk-mode"]:checked');
+  return picked ? picked.value : 'both';
+}
+
+// A selected title only yields a QR card if something can actually be charged:
+// a saved payment link, or a door price this device's Stripe key can mint a
+// link for. Counting checkboxes instead would promise cards that never print.
+function _fkBookPrintsQR(book, id, hasStripeKey) {
+  // A row whose title has since left the catalog can't be priced or charged —
+  // and would throw building the card, taking the whole sheet down with it.
+  if (!book) return false;
+  if (book.stripeLink || book.paymentLink) return true;
+  const amount = parseFloat(document.getElementById(`qrp-override-${id}`)?.value);
+  return hasStripeKey && Number.isFinite(amount) && amount > 0;
+}
+
+function _fkSelectionCounts() {
+  const checked = (kind) => Array.from(document.querySelectorAll(`.st-book-check[data-kind="${kind}"]`)).filter((el) => el.checked);
+  const inv = checked('inv');
+  const custom = checked('custom');
+  const hasStripeKey = !!getReconStripeKey();
+  const qrCards = inv.filter((el) => _fkBookPrintsQR(posResolveBook(el.value), el.value, hasStripeKey)).length;
+  return {
+    titles: inv.length + custom.length,
+    qrCards,
+    // Custom titles have no catalog record and no payment link, so they are
+    // always part of the "tally sheet only" remainder.
+    noCard: (inv.length - qrCards) + custom.length,
+  };
+}
+
+function _fkPackedTotal() {
+  let total = 0;
+  document.querySelectorAll('.st-book-qty').forEach((input) => {
+    const n = parseInt(input.value, 10);
+    if (Number.isFinite(n) && n > 0) total += n;
+  });
+  return total;
+}
+
+function _fkUpdateSummary() {
+  const el = document.getElementById('fk-summary');
+  const btn = document.getElementById('fk-print-btn');
+  if (!el) return;
+
+  const mode = fairKitMode();
+  const { titles, qrCards, noCard } = _fkSelectionCounts();
+  const packed = _fkPackedTotal();
+
+  const parts = [];
+  if (mode !== 'qr') {
+    parts.push(`<strong>Tally sheet</strong> — ${titles} title${titles === 1 ? '' : 's'}${packed > 0 ? `, ${packed} cop${packed === 1 ? 'y' : 'ies'} packed` : ''}`);
+  }
+  if (mode !== 'tracker') {
+    const skipped = noCard > 0 ? ` · ${noCard} title${noCard === 1 ? '' : 's'} without a payment link` : '';
+    parts.push(`<strong>QR sheet</strong> — ${qrCards} card${qrCards === 1 ? '' : 's'}${skipped}`);
+  }
+
+  const nothingToPrint = mode === 'qr' ? qrCards === 0 : titles === 0;
+  el.innerHTML = nothingToPrint
+    ? (mode === 'qr'
+      ? 'None of the selected titles has a payment link or a door price yet.'
+      : 'Select at least one book to print.')
+    : parts.join('<br>');
+  if (btn) btn.disabled = nothingToPrint;
+}
+
+// Every checkbox, quantity and door price in the dialog funnels through here so
+// the footer's read-out is never a step behind what will actually print.
+function fairKitSelectionChanged() {
+  _stUpdatePackTotal();
+  _fkUpdateSummary();
+}
+window.fairKitSelectionChanged = fairKitSelectionChanged;
+
+function fairKitModeChanged() {
+  const mode = fairKitMode();
+  const trackerOpts = document.getElementById('fk-opts-tracker');
+  const qrOpts = document.getElementById('fk-opts-qr');
+  // Hide the settings for a sheet that isn't being printed rather than dimming
+  // them: a visible-but-inert control is the one people fill in and then wonder
+  // why nothing changed.
+  if (trackerOpts) trackerOpts.hidden = mode === 'qr';
+  if (qrOpts) qrOpts.hidden = mode === 'tracker';
+
+  // Same rule inside the book list: a door price means nothing on a tally-only
+  // print, and copies packed means nothing on a QR-only one.
+  const list = document.getElementById('fk-books-list');
+  if (list) {
+    list.classList.toggle('fk-hide-price', mode === 'tracker');
+    list.classList.toggle('fk-hide-qty', mode === 'qr');
+  }
+
+  const btn = document.getElementById('fk-print-btn');
+  if (btn) {
+    btn.textContent = mode === 'both'
+      ? '🖨 Print both sheets'
+      : mode === 'tracker' ? '🖨 Print tally sheet' : '🖨 Print QR sheet';
+  }
+  _fkUpdateSummary();
+}
+window.fairKitModeChanged = fairKitModeChanged;
 
 // ── SALES TRACKER FAIR PRESETS ──
 // Same idea as the QR sheet's fair presets: the whole tracker setup — layout,
@@ -19147,7 +19354,6 @@ function renderSalesTrackerBookList() {
 // localStorage, not Firestore: a per-device packing list that has to work
 // with no signal.
 let salesTrackerFairPresets = [];
-let stActivePresetId = '';
 
 function _stPresetStore() {
   try { return window.localStorage; } catch { return null; }
@@ -19214,95 +19420,26 @@ function _stApplyPresetToForm(preset) {
   return { missing: stPresetMissingBooks(preset, Object.keys(posBooksMap())) };
 }
 
-function renderStPresetPicker() {
-  const select = document.getElementById('st-preset-select');
-  if (!select) return;
-  if (!findStPreset(salesTrackerFairPresets, stActivePresetId)) stActivePresetId = '';
-
-  const options = salesTrackerFairPresets
-    .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
-    .join('');
-  select.innerHTML = `<option value="">${salesTrackerFairPresets.length ? 'Choose a saved fair…' : 'No saved fairs yet'}</option>${options}`;
-  select.value = stActivePresetId;
-
-  const deleteBtn = document.getElementById('st-preset-delete');
-  if (deleteBtn) deleteBtn.disabled = !stActivePresetId;
-
-  const note = document.getElementById('st-preset-note');
-  if (note) {
-    const active = findStPreset(salesTrackerFairPresets, stActivePresetId);
-    note.textContent = active
-      ? stPresetSummary(active)
-      : 'Set the packing list up once, save it under the fair\'s name, and recall it next time.';
-  }
-}
-
-window.stPresetSelected = function (id) {
-  const preset = findStPreset(salesTrackerFairPresets, id);
-  stActivePresetId = preset ? preset.id : '';
-  if (!preset) { renderStPresetPicker(); return; }
-
-  const { missing } = _stApplyPresetToForm(preset);
-  renderStPresetPicker();
-  if (missing.length) {
-    showToast(`Loaded "${preset.name}" — ${missing.length} saved title${missing.length === 1 ? '' : 's'} no longer in the catalog`, 'warn', 6000);
-  } else {
-    showToast(`✓ Loaded fair preset "${preset.name}"`, 'ok');
-  }
-};
-
-window.stSaveFairPreset = async function () {
-  const active = findStPreset(salesTrackerFairPresets, stActivePresetId);
-  const name = (await promptDialog(
-    'Name this fair setup so you can recall the whole packing list next time.',
-    active?.name || '',
-    { title: 'Save fair preset', okLabel: 'Save', placeholder: 'e.g. Mexico City Book Fair' }
-  ) || '').trim();
-  if (!name) return;
-
-  if (!stPresetId(name)) {
-    showToast('Give the preset a name with at least one letter or number', 'warn');
-    return;
-  }
-
-  const clash = findStPreset(salesTrackerFairPresets, stPresetId(name));
-  if (clash && !(await confirmDialog(`"${clash.name}" already exists. Replace it with the current setup?`, { okLabel: 'Replace' }))) {
-    return;
-  }
-
-  const snapshot = _stReadPresetForm(name);
-  if (!snapshot.bookIds.length && !snapshot.customBooks.length && !(await confirmDialog('No books are selected. Save this preset anyway?', { okLabel: 'Save' }))) {
-    return;
-  }
-
-  salesTrackerFairPresets = saveStPresets(_stPresetStore(), upsertStPreset(salesTrackerFairPresets, snapshot));
-  stActivePresetId = stPresetId(name);
-  renderStPresetPicker();
-  showToast(`✓ Saved fair preset "${name}"`, 'ok');
-};
-
-window.stDeleteFairPreset = async function () {
-  const preset = findStPreset(salesTrackerFairPresets, stActivePresetId);
-  if (!preset) return;
-  if (!(await confirmDialog(`Delete the fair preset "${preset.name}"?`, { danger: true, okLabel: 'Delete' }))) return;
-
-  salesTrackerFairPresets = saveStPresets(_stPresetStore(), removeStPreset(salesTrackerFairPresets, preset.id));
-  stActivePresetId = '';
-  renderStPresetPicker();
-  showToast(`Deleted "${preset.name}"`, 'ok');
-};
-
-window.openSalesTrackerModal = function () {
+window.openFairKitModal = function () {
   const dateInput = document.getElementById('st-date');
   if (dateInput && !dateInput.value) dateInput.value = today();
   salesTrackerFairPresets = loadStPresets(_stPresetStore());
-  renderSalesTrackerBookList();
-  renderStPresetPicker();
-  openM('sales-tracker');
+  qrFairPresets = loadQrPresets(_qrPresetStore());
+  renderFairKitBookList();
+  renderFairKitPresetPicker();
+  fairKitModeChanged();
+  openM('fair-kit');
 };
 
-window.salesTrackerSelectAll = function (checked) {
+// The two printables used to have a button each. Anything still pointing at
+// either one lands on the combined dialog rather than a modal that no longer
+// exists.
+window.openSalesTrackerModal = window.openFairKitModal;
+window.openQRPrintModal = window.openFairKitModal;
+
+window.fairKitSelectAll = function (checked) {
   document.querySelectorAll('.st-book-check').forEach((el) => { el.checked = !!checked; });
+  fairKitSelectionChanged();
 };
 
 window.salesTrackerAddCustom = function () {
@@ -19332,7 +19469,11 @@ window.salesTrackerRemoveCustom = function (idx) {
 
 // escapeHtml is imported from ./lib/html.js
 
-window.printSalesTracker = function () {
+// Returns true once the sheet is on its way to a print window, false if it
+// bailed — printFairKit() needs to know, so a tally sheet that never opened
+// doesn't leave a stray blank QR window behind it.
+function printSalesTracker(opts = {}) {
+  const closeModal = opts.closeModal !== false;
   const eventName = (document.getElementById('st-event').value || '').trim();
   const dateValue = (document.getElementById('st-date').value || '').trim();
   let cols = parseInt(document.getElementById('st-cols').value, 10);
@@ -19348,7 +19489,7 @@ window.printSalesTracker = function () {
 
   if (!selected.length) {
     showToast('Select at least one book to include', 'warn');
-    return;
+    return false;
   }
 
   const includeNotes = !!document.getElementById('st-notes').checked;
@@ -19463,14 +19604,16 @@ window.printSalesTracker = function () {
   const win = window.open('', '_blank', 'width=1100,height=800');
   if (!win) {
     showToast('Pop-up blocked — allow pop-ups to print', 'warn');
-    return;
+    return false;
   }
   win.document.write(html);
   win.document.close();
   win.focus();
   setTimeout(() => { win.print(); }, 350);
-  closeM('sales-tracker');
-};
+  if (closeModal) closeM('fair-kit');
+  return true;
+}
+window.printSalesTracker = printSalesTracker;
 
 // ── PRINTABLE PAYMENT QR CODES ──
 
@@ -19488,63 +19631,13 @@ function _qrpSelectedPriceCurrencies() {
     .map(({ code }) => code);
 }
 
-function renderQRPrintBookList() {
-  const list = document.getElementById('qrp-books-list');
-  if (!list) return;
-  // posBooksMap() includes POS-only extras (publisher) or just the active book (author).
-  const entries = Object.values(posBooksMap());
-  if (!entries.length) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available.</div>';
-    return;
-  }
-  const baseCur = document.getElementById('qrp-base-cur')?.value || 'auto';
-
-  list.innerHTML = entries.map((book) => {
-    const url = book.stripeLink || book.paymentLink || '';
-    const hasUrl = !!url;
-    const nativeCode = currencyToCode(book.currency);
-    const targetCode = baseCur === 'auto' ? nativeCode : baseCur;
-    const defaultPrice = baseCur === 'auto'
-      ? (book.listPrice || 0)
-      : convertCurrency(book.listPrice || 0, nativeCode, targetCode);
-    const existingOverride = book.priceOverrides?.[targetCode] || '';
-
-    return `
-      <div style="display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:6px;background:rgba(0,0,0,.03);margin-bottom:4px;">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;${hasUrl ? '' : 'opacity:.75;'}">
-          <input type="checkbox" class="qrp-book-check" value="${book.id}" ${hasUrl ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;">
-          <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(book.title)}</span>
-          <span style="font-size:11px;color:var(--text2);">${escapeHtml(book.author || '')}</span>
-        </label>
-        <div style="display:flex;align-items:center;gap:8px;padding-left:26px;margin-top:2px;">
-          <span style="font-size:11px;color:var(--text2);font-weight:500;">Manual price override (${escapeHtml(targetCode)}):</span>
-          <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="e.g. ${defaultPrice.toFixed(2)}" style="width:110px;padding:3px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface-card);color:var(--text);">
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-window.openQRPrintModal = function () {
-  qrFairPresets = loadQrPresets(_qrPresetStore());
-  renderQRPrintBookList();
-  renderQrPresetPicker();
-  openM('qr-print');
-};
-
-window.qrPrintSelectAll = function (checked) {
-  document.querySelectorAll('.qrp-book-check').forEach((el) => {
-    if (!el.disabled) el.checked = !!checked;
-  });
-};
-
 // ── QR FAIR PRESETS ──
-// A whole sheet setup — layout, base currency, price columns, selected titles
-// and their door prices — saved under a fair's name. Stored in localStorage
-// rather than Firestore because it's a per-device stall setup, and because the
-// modal has to work with no signal at the table.
+// The QR half of a saved fair — layout, base currency, price columns, selected
+// titles and their door prices. Stored in localStorage rather than Firestore
+// because it's a per-device stall setup, and because the modal has to work with
+// no signal at the table. Its tally-sheet twin lives above; the fair-kit preset
+// functions further down save, load and delete the pair as one named fair.
 let qrFairPresets = [];
-let qrActivePresetId = '';
 
 function _qrPresetStore() {
   try { return window.localStorage; } catch { return null; }
@@ -19614,102 +19707,184 @@ function _qrApplyPresetToForm(preset) {
   return { missing: qrPresetMissingBooks(preset, Object.keys(posBooksMap())) };
 }
 
-function renderQrPresetPicker() {
-  const select = document.getElementById('qrp-preset-select');
-  if (!select) return;
-  if (!findQrPreset(qrFairPresets, qrActivePresetId)) qrActivePresetId = '';
+// ── FAIR KIT PRESETS ──
+// One name, both sheets. The two stores stay separate on disk — each still
+// normalizes and repairs its own shape, and fairs saved before the sheets were
+// merged still load — but the dialog saves, recalls and deletes them as a
+// single fair, because that's the only way the seller ever thought of them.
+let fkActivePresetId = '';
 
-  const options = qrFairPresets
+// Pair the two stores up by id. A fair saved from this dialog has both halves;
+// one saved by an older build has whichever half it was set up in, and still
+// restores that half rather than being hidden or dropped.
+function fairKitPresets() {
+  const byId = new Map();
+  salesTrackerFairPresets.forEach((p) => byId.set(p.id, { id: p.id, name: p.name, st: p, qr: null }));
+  qrFairPresets.forEach((p) => {
+    const entry = byId.get(p.id);
+    if (entry) entry.qr = p;
+    else byId.set(p.id, { id: p.id, name: p.name, st: null, qr: p });
+  });
+  return Array.from(byId.values())
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+function findFairKitPreset(id) {
+  const target = stPresetId(id);
+  if (!target) return null;
+  return fairKitPresets().find((p) => p.id === target) || null;
+}
+
+// "9 titles · 64 packed · EUR · 10 cols" for the tally half, the QR half on its
+// own line, so a fair that only ever had one of them says so plainly.
+function fairKitPresetSummary(entry) {
+  if (!entry) return '';
+  const lines = [];
+  if (entry.st) lines.push(`Tally: ${stPresetSummary(entry.st)}`);
+  if (entry.qr) lines.push(`QR: ${qrPresetSummary(entry.qr)}`);
+  return lines.join(' · ');
+}
+
+function renderFairKitPresetPicker() {
+  const select = document.getElementById('fk-preset-select');
+  if (!select) return;
+
+  const presets = fairKitPresets();
+  if (!presets.some((p) => p.id === fkActivePresetId)) fkActivePresetId = '';
+
+  const options = presets
     .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
     .join('');
-  select.innerHTML = `<option value="">${qrFairPresets.length ? 'Choose a saved fair…' : 'No saved fairs yet'}</option>${options}`;
-  select.value = qrActivePresetId;
+  select.innerHTML = `<option value="">${presets.length ? 'Choose a saved fair…' : 'No saved fairs yet'}</option>${options}`;
+  select.value = fkActivePresetId;
 
-  const deleteBtn = document.getElementById('qrp-preset-delete');
-  if (deleteBtn) deleteBtn.disabled = !qrActivePresetId;
+  const deleteBtn = document.getElementById('fk-preset-delete');
+  if (deleteBtn) deleteBtn.disabled = !fkActivePresetId;
 
-  const note = document.getElementById('qrp-preset-note');
+  const note = document.getElementById('fk-preset-note');
   if (note) {
-    const active = findQrPreset(qrFairPresets, qrActivePresetId);
+    const active = presets.find((p) => p.id === fkActivePresetId);
     note.textContent = active
-      ? qrPresetSummary(active)
-      : 'Set the sheet up once, save it under the fair\'s name, and recall it next time.';
+      ? fairKitPresetSummary(active)
+      : 'Set the whole kit up once, save it under the fair\'s name, and recall it next time.';
   }
 }
 
-window.qrPresetSelected = function (id) {
-  const preset = findQrPreset(qrFairPresets, id);
-  qrActivePresetId = preset ? preset.id : '';
-  if (!preset) { renderQrPresetPicker(); return; }
+window.fkPresetSelected = function (id) {
+  const entry = findFairKitPreset(id);
+  fkActivePresetId = entry ? entry.id : '';
+  if (!entry) { renderFairKitPresetPicker(); return; }
 
-  const { missing } = _qrApplyPresetToForm(preset);
-  renderQrPresetPicker();
-  if (missing.length) {
-    showToast(`Loaded "${preset.name}" — ${missing.length} saved book${missing.length === 1 ? '' : 's'} no longer in the catalog`, 'warn', 6000);
+  // Tally first, QR second. Both halves of a fair saved here hold the same book
+  // selection, and the QR half is the one that re-renders the list against its
+  // own base currency and then puts the door prices back.
+  const missing = new Set();
+  if (entry.st) _stApplyPresetToForm(entry.st).missing.forEach((bookId) => missing.add(bookId));
+  if (entry.qr) _qrApplyPresetToForm(entry.qr).missing.forEach((bookId) => missing.add(bookId));
+
+  renderFairKitPresetPicker();
+  fairKitSelectionChanged();
+
+  if (missing.size) {
+    showToast(`Loaded "${entry.name}" — ${missing.size} saved title${missing.size === 1 ? '' : 's'} no longer in the catalog`, 'warn', 6000);
   } else {
-    showToast(`✓ Loaded fair preset "${preset.name}"`, 'ok');
+    showToast(`✓ Loaded fair "${entry.name}"`, 'ok');
   }
 };
 
-window.qrSaveFairPreset = async function () {
-  const active = findQrPreset(qrFairPresets, qrActivePresetId);
+window.fkSaveFairPreset = async function () {
+  const active = findFairKitPreset(fkActivePresetId);
   const name = (await promptDialog(
-    'Name this fair setup so you can recall the whole sheet next time.',
+    'Name this fair so you can recall the whole kit next time — the titles, how many copies you packed, the door prices and both sheet layouts.',
     active?.name || '',
-    { title: 'Save fair preset', okLabel: 'Save', placeholder: 'e.g. Mexico City Book Fair' }
+    { title: 'Save fair', okLabel: 'Save', placeholder: 'e.g. Mexico City Book Fair' }
   ) || '').trim();
   if (!name) return;
 
-  if (!qrPresetId(name)) {
-    showToast('Give the preset a name with at least one letter or number', 'warn');
+  if (!stPresetId(name)) {
+    showToast('Give the fair a name with at least one letter or number', 'warn');
     return;
   }
 
-  // Same name = same preset: overwriting is the intent, but it's destructive
-  // enough (someone else's door prices) to confirm first.
-  const clash = findQrPreset(qrFairPresets, qrPresetId(name));
+  // Same name = same fair: overwriting is the intent, but it's destructive
+  // enough (last year's door prices) to confirm first.
+  const clash = findFairKitPreset(name);
   if (clash && !(await confirmDialog(`"${clash.name}" already exists. Replace it with the current setup?`, { okLabel: 'Replace' }))) {
     return;
   }
 
-  const snapshot = _qrReadPresetForm(name);
-  if (!snapshot.bookIds.length && !(await confirmDialog('No books are selected. Save this preset anyway?', { okLabel: 'Save' }))) {
+  const stSnapshot = _stReadPresetForm(name);
+  const qrSnapshot = _qrReadPresetForm(name);
+  if (!stSnapshot.bookIds.length && !stSnapshot.customBooks.length
+    && !(await confirmDialog('No books are selected. Save this fair anyway?', { okLabel: 'Save' }))) {
     return;
   }
 
-  qrFairPresets = saveQrPresets(_qrPresetStore(), upsertQrPreset(qrFairPresets, snapshot));
-  qrActivePresetId = qrPresetId(name);
-  renderQrPresetPicker();
-  showToast(`✓ Saved fair preset "${name}"`, 'ok');
+  salesTrackerFairPresets = saveStPresets(_stPresetStore(), upsertStPreset(salesTrackerFairPresets, stSnapshot));
+  qrFairPresets = saveQrPresets(_qrPresetStore(), upsertQrPreset(qrFairPresets, qrSnapshot));
+  fkActivePresetId = stPresetId(name);
+  renderFairKitPresetPicker();
+  showToast(`✓ Saved fair "${name}"`, 'ok');
 };
 
-window.qrDeleteFairPreset = async function () {
-  const preset = findQrPreset(qrFairPresets, qrActivePresetId);
-  if (!preset) return;
-  if (!(await confirmDialog(`Delete the fair preset "${preset.name}"?`, { danger: true, okLabel: 'Delete' }))) return;
+window.fkDeleteFairPreset = async function () {
+  const entry = findFairKitPreset(fkActivePresetId);
+  if (!entry) return;
+  if (!(await confirmDialog(`Delete the saved fair "${entry.name}"?`, { danger: true, okLabel: 'Delete' }))) return;
 
-  qrFairPresets = saveQrPresets(_qrPresetStore(), removeQrPreset(qrFairPresets, preset.id));
-  qrActivePresetId = '';
-  renderQrPresetPicker();
-  showToast(`Deleted "${preset.name}"`, 'ok');
+  // Delete both halves under this name, including a stray half left behind by a
+  // build that only knew about one of the sheets.
+  salesTrackerFairPresets = saveStPresets(_stPresetStore(), removeStPreset(salesTrackerFairPresets, entry.id));
+  qrFairPresets = saveQrPresets(_qrPresetStore(), removeQrPreset(qrFairPresets, entry.id));
+  fkActivePresetId = '';
+  renderFairKitPresetPicker();
+  showToast(`Deleted "${entry.name}"`, 'ok');
 };
 
-window.printPaymentQRCodes = async function () {
+// Opens the window the QR sheet will be written into. Split out because in the
+// combined flow it has to happen inside the click, before any await: a
+// window.open() after an await is a pop-up the browser can't trace back to a
+// user gesture, and it gets blocked.
+function _fkOpenQrPrintWindow() {
+  const win = window.open('', '_blank', 'width=1100,height=800');
+  if (!win) return null;
+  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Preparing payment QR codes…</title></head><body style="font-family:-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;background:#faf8f4;color:#1c1814;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;"><div style="font-size:15px;letter-spacing:.08em;text-transform:uppercase;">Preparing payment QR codes…</div><div style="font-size:12px;color:#8b6f47;margin-top:8px;">Keep this tab open.</div></div></body></html>');
+  win.document.close();
+  return win;
+}
+
+async function printPaymentQRCodes(opts = {}) {
+  const closeModal = opts.closeModal !== false;
   const cols = Math.max(1, Math.min(6, parseInt(document.getElementById('qrp-cols').value, 10) || 3));
   const baseCur = document.getElementById('qrp-base-cur').value || 'auto';
 
-  const selectedIds = Array.from(document.querySelectorAll('.qrp-book-check'))
-    .filter((el) => el.checked)
+  const bail = (message) => {
+    showToast(message, 'warn');
+    if (opts.win) opts.win.close();
+    return false;
+  };
+
+  const hasStripeKey = !!getReconStripeKey();
+  const checked = Array.from(document.querySelectorAll('.qrp-book-check')).filter((el) => el.checked);
+  if (!checked.length) return bail('Select at least one book for the payment QR sheet');
+
+  // The book list is shared with the tally sheet, where a title with no way to
+  // take payment is perfectly valid. Those can't become a card, so they're
+  // dropped here (and counted) instead of printing a QR that scans to nothing.
+  const selectedIds = checked
+    .filter((el) => _fkBookPrintsQR(posResolveBook(el.value), el.value, hasStripeKey))
     .map((el) => el.value);
+  const droppedCount = checked.length - selectedIds.length;
 
   if (!selectedIds.length) {
-    showToast('Select at least one book for the payment QR sheet', 'warn');
-    return;
+    return bail('No selected book has a payment link or a door price to charge — nothing to put on the QR sheet');
   }
 
   const currenciesShown = _qrpSelectedPriceCurrencies();
 
-  showToast('⌛ Preparing payment QR code sheet…');
+  showToast(droppedCount
+    ? `⌛ Preparing payment QR sheet — skipping ${droppedCount} title${droppedCount === 1 ? '' : 's'} with no payment link`
+    : '⌛ Preparing payment QR code sheet…');
 
   const booksData = await Promise.all(selectedIds.map(async (id) => {
     const book = posResolveBook(id);
@@ -19946,16 +20121,59 @@ renderQRs();
 </body>
 </html>`;
 
-  const win = window.open('', '_blank', 'width=1100,height=800');
+  // In the combined flow the window was opened back when the button was
+  // clicked, so it's already sitting there showing "Preparing…".
+  const win = opts.win || window.open('', '_blank', 'width=1100,height=800');
   if (!win) {
     showToast('Pop-up blocked — allow pop-ups to print', 'warn');
-    return;
+    return false;
   }
+  win.document.open();
   win.document.write(html);
   win.document.close();
   win.focus();
-  closeM('qr-print');
-};
+  if (closeModal) closeM('fair-kit');
+  return true;
+}
+window.printPaymentQRCodes = printPaymentQRCodes;
+
+// ── PRINT THE KIT ──
+// One setup, one click, both sheets. The tally sheet opens and sends itself to
+// the printer; the QR sheet opens alongside it and waits on its own Print
+// button, because minting Stripe links for any door prices can take a moment
+// and a print dialog that fires mid-render prints half a page of blank squares.
+async function printFairKit() {
+  const mode = fairKitMode();
+
+  if (mode === 'tracker') {
+    printSalesTracker();
+    return;
+  }
+  if (mode === 'qr') {
+    await printPaymentQRCodes();
+    return;
+  }
+
+  const qrWin = _fkOpenQrPrintWindow();
+  if (!qrWin) {
+    showToast('Pop-up blocked — allow pop-ups to print both sheets', 'warn');
+    return;
+  }
+
+  // If the tally sheet bails (nothing selected, its own pop-up blocked), don't
+  // leave the placeholder QR window stranded.
+  if (!printSalesTracker({ closeModal: false })) {
+    qrWin.close();
+    return;
+  }
+
+  const qrPrinted = await printPaymentQRCodes({ closeModal: false, win: qrWin });
+  closeM('fair-kit');
+  if (qrPrinted) {
+    showToast('Tally sheet is printing — the QR sheet opened in its own tab, print it when the codes have drawn', 'ok', 7000);
+  }
+}
+window.printFairKit = printFairKit;
 
 // ─────────────────────────────────────────────────────────────────────────
 // POS-ONLY BOOKS — add / edit / remove + instant Stripe link & QR
@@ -20555,6 +20773,7 @@ window.downloadFullTaxSeasonExport = function () {
     showToast(`⚠ Exported, but ${rateWarnings.size} book${rateWarnings.size === 1 ? '' : 's'} had no CAD rate — shown unconverted: ${names}. Refresh FX rates and re-export.`, 'warn', 7000);
   }
 };
+window.downloadFullTaxSeasonExportDirect = window.downloadFullTaxSeasonExport;
 
 // ── STRIPE FEES BY YEAR
 const _STRIPE_ZERO_DECIMAL = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
@@ -23315,12 +23534,15 @@ Object.assign(window, {
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
   renderFinancials, downloadTaxReport, createSystemBackupNow, restoreSystemBackup, restoreBookFromBackup, applyBookRestore, gotoSysBackupPage, handleBackupImportFile, handleBookRestoreImportFile,
   chooseBackupFolder, exportToJSON, exportAllToCSV,
-  submitTaxExpense, importShippoShippingFromApi, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
+  submitTaxExpense, importShippoShippingFromApi, openShippoLabel, removeRecurring, downloadTaxLedgerCSV, renderTaxCenter,
   openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
   tcSetRecurringFilter, tcShowRecurringCharges,
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   reclaimCloudReceiptsNow, cacheAllReceiptsNow, openCloudReceiptsModal, closeCloudReceiptsModal,
   dismissReceiptNotice, resetDismissedReceiptNotices, switchTaxCenterSubTab,
+  tcSubNavKeydown, tcFilterLedgerByReceiptStorage, openTaxSeasonPreflightModal, tcJumpToFixPreflightIssues, executeFullTaxSeasonExport,
+  tcSetVaultView, tcGallerySearchInput, tcGalleryFilterChange, _tcRenderReceiptGallery, setTcGalleryPage,
+  openReceiptLightbox, tcLightboxZoom, tcLightboxRotate, tcLightboxReset, tcLightboxNav,
   copyReceiptDiagnostic, openExportReceiptsModal, closeExportReceiptsModal, runReceiptExport,
   openReceiptOrganizer, closeReceiptOrganizer, chooseOrganizerSource, organizerReadUnclear,
   toggleOrganizerSkip, runReceiptOrganizer,
@@ -24245,16 +24467,19 @@ function exposeLegacyInlineHandlers() {
     fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
     processShippoTxToExpense, renderShippingReconciliationWorklist, linkShippingExpense,
     closeShippingReconciliation, openShippingReconciliation, clearShippingReconciliationList,
-    importShippoShippingFromApi, submitTaxExpense,
+    importShippoShippingFromApi, openShippoLabel, submitTaxExpense,
     openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
     tcSetRecurringFilter, tcShowRecurringCharges,
     removeRecurring, downloadTaxLedgerCSV, posBooksMap, posResolveBook, isPosOnlyBook,
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,
     codeToSymbol, posFormat, convertCurrency, getPOSCurrencies, buildPOSCartRows, renderPOS,
     _showPosQR, renderPOSFxStatus, _posItemToManualPayload, renderSalesTrackerBookList,
-    _stOnHandHint, _stUpdatePackTotal, _stReadPresetForm, _stApplyPresetToForm, renderStPresetPicker,
+    _stOnHandHint, _stUpdatePackTotal, _stReadPresetForm, _stApplyPresetToForm,
     renderQRPrintBookList, _qrpSelectedPriceCurrencies, _qrReadPresetForm,
-    _qrApplyPresetToForm, renderQrPresetPicker, _posSlugId, renderPosBookModalQR, _stripeMinorToMajor,
+    _qrApplyPresetToForm, renderFairKitBookList, renderFairKitPresetPicker, fairKitPresets,
+    findFairKitPreset, fairKitPresetSummary, fairKitMode, _fkBookPrintsQR, _fkSelectionCounts,
+    _fkPackedTotal, _fkUpdateSummary, _fkOpenQrPrintWindow,
+    _posSlugId, renderPosBookModalQR, _stripeMinorToMajor,
     _stripeFriendlyType, _stripeFmtMoney, fetchStripeTransactions, aggregateStripeTransactions,
     renderStripeFeesCards, fetchStripeFeesByYear, insertStripeFeesIntoLedger,
     reconcileStripeAgainstSales, clearStoredStripeKey, downloadStripeFeesAuditCSV, getReconMemory,

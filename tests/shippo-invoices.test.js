@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { appSource } from './helpers/extract-decl.js';
 import {
   describeInvoiceAvailability,
+  isExpiringLabelUrl,
+  isLabelUrlExpired,
+  labelUrlExpiry,
+  shippoTxIdFromRef,
   invoiceIndexByTransaction,
   isSettledRefund,
   isoDate,
@@ -128,6 +132,44 @@ describe('refunds', () => {
   });
 });
 
+describe('label links expire — verified against a real transaction', () => {
+  // Taken from the live account: transaction created 2026-04-03T21:30:24Z,
+  // signature expiring 2027-04-03T21:30:27Z. One year to the second. A label
+  // URL stored in the ledger therefore dies on its own first birthday, well
+  // inside the six years of records the CRA expects.
+  const REAL = 'https://deliver.goshippo.com/3ac1ecda2e9745a4a2e5ff5cb10456b4.pdf?Expires=1806787827&Signature=abc~def&Key-Pair-Id=APKAJRICFXQ2S4YUQRSQ';
+
+  it('recognises a signed label link', () => {
+    expect(isExpiringLabelUrl(REAL)).toBe(true);
+    expect(isExpiringLabelUrl('https://firebasestorage.googleapis.com/x.pdf')).toBe(false);
+    expect(isExpiringLabelUrl('https://deliver.goshippo.com/x.pdf')).toBe(false); // no Expires
+  });
+
+  it('reads the expiry, one year after the label was created', () => {
+    expect(labelUrlExpiry(REAL).toISOString()).toBe('2027-04-03T21:30:27.000Z');
+  });
+
+  it('knows whether a stored link still works', () => {
+    expect(isLabelUrlExpired(REAL, new Date('2026-08-14T00:00:00Z'))).toBe(false);
+    expect(isLabelUrlExpired(REAL, new Date('2027-06-01T00:00:00Z'))).toBe(true);
+  });
+
+  it('recovers the transaction id so a fresh link can be minted', () => {
+    // This is what makes the fix possible with no data migration — every
+    // imported Shippo expense already carries its transaction id.
+    expect(shippoTxIdFromRef('shippo:3ac1ecda2e9745a4a2e5ff5cb10456b4'))
+      .toBe('3ac1ecda2e9745a4a2e5ff5cb10456b4');
+    expect(shippoTxIdFromRef('shippo-refund:abc')).toBe('');
+    expect(shippoTxIdFromRef('manual-entry')).toBe('');
+    expect(shippoTxIdFromRef(null)).toBe('');
+  });
+
+  it('returns nothing rather than throwing on a non-label URL', () => {
+    expect(labelUrlExpiry('not a url')).toBeNull();
+    expect(isLabelUrlExpired('not a url')).toBe(false);
+  });
+});
+
 describe('degrading when invoices are unavailable', () => {
   it('explains a 404 as "not on this account" and points at the dashboard', () => {
     // Beta endpoint: unavailable is an expected outcome, not a fault.
@@ -169,5 +211,10 @@ describe('wiring', () => {
   it('keeps the label as supporting evidence, not the receipt of record', () => {
     expect(appSource).toContain('labelUrl');
     expect(appSource).toContain('supportingFiles');
+  });
+
+  it('opens labels by minting a fresh link rather than a stored expiring one', () => {
+    expect(appSource).toContain('async function openShippoLabel');
+    expect(appSource).toContain("onclick=\"event.preventDefault(); openShippoLabel(");
   });
 });

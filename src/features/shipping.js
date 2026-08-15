@@ -72,6 +72,7 @@ import {
   parseInvoiceItem,
   parseRefund,
   refundExpense,
+  shippoTxIdFromRef,
 } from '../lib/shippo-invoices.js';
 import {
   ADDRESS_FIELD_LABELS,
@@ -434,6 +435,37 @@ async function getShippoTxCost(tx, token) {
     } catch (_) { /* fall through to NaN */ }
   }
   return { amount: NaN, currency: 'USD' };
+}
+
+/**
+ * Open a Shippo label by minting a fresh signed link.
+ *
+ * The stored `label_url` is signed and expires a year after the label was
+ * created, so a link kept in the ledger stops working on its own — silently,
+ * and long before records stop being needed. The transaction id is on the
+ * expense already (`ref: "shippo:<id>"`), so asking Shippo for the transaction
+ * again returns a newly signed URL that works today.
+ */
+async function openShippoLabel(ref) {
+  const txId = shippoTxIdFromRef(ref);
+  if (!txId) { showToast('⚠ No Shippo reference on this expense', 'warn'); return; }
+
+  const token = (TAX_CENTER.settings?.shippoKey || '').trim();
+  if (!token) { showToast('⚠ Add your Shippo API token in Config first', 'err', 5000); return; }
+
+  showToast('Getting a fresh link from Shippo…');
+  try {
+    const tx = await fetchShippoObject(token, 'transactions', txId);
+    const url = tx?.label_url;
+    if (!url) {
+      showToast('⚠ Shippo has no label for this shipment any more', 'warn', 5000);
+      return;
+    }
+    window.open(url, '_blank', 'noopener');
+  } catch (e) {
+    console.error('Could not refresh Shippo label', e);
+    showToast(`⚠ Could not get the label from Shippo — ${describeShippoError(e)}`, 'err', 6000);
+  }
 }
 
 async function saveShippoLabelLocally(labelUrl, txId) {
@@ -5057,6 +5089,7 @@ export {
   linkShippingExpense,
   processShippoTxToExpense,
   importShippoShippingFromApi,
+  openShippoLabel,
   getBookPresetSpecs,
   initShippingTab,
   getFallbackShippingPhone,

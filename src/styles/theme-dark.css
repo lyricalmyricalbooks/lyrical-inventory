@@ -467,6 +467,26 @@
 .theme-dark tr.hist-row:hover { background: rgba(221, 165, 72, .07) !important; }
 .theme-dark .hist-kpi-card:hover { box-shadow: var(--elev-hover); }
 
+/* Tax Centre Receipts & Preflight dark elevations */
+.theme-dark .tc-receipt-tile:hover {
+  box-shadow: var(--elev-2);
+}
+.theme-dark .tc-gallery-card {
+  background: var(--surface-sunken);
+  border-color: var(--border);
+}
+.theme-dark .tc-gallery-card:hover {
+  border-color: var(--gold-line);
+  box-shadow: var(--elev-3);
+}
+.theme-dark .tc-gallery-thumb-wrap {
+  background: rgba(0, 0, 0, .25);
+}
+.theme-dark .tc-lightbox-modal {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+}
+
 } /* end @media screen — component corrections */
 
 /* Belt and braces: the pre-paint bootstrap in index.html paints <html> inline

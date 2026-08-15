@@ -20,6 +20,9 @@ import {
   toLocalRef,
   uniqueFileName,
   writeReceiptRefs,
+  isRentExpense,
+  isGratuityExpense,
+  isReceiptExemptExpense,
 } from '../src/lib/receipt-storage.js';
 
 const html = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
@@ -183,6 +186,52 @@ describe('receipt storage summary', () => {
     ]);
     expect(s.withReceipts).toBe(1);
     expect(s.withoutReceipts).toBe(2);
+  });
+
+  it('exempts rent and lease payments from the withoutReceipts missing count', () => {
+    const items = [
+      { desc: 'Monthly Studio Rent', cat: 'Home Office', receipt: '' },
+      { desc: 'Office Lease Payment', cat: 'Rent', receipt: '' },
+      { desc: 'Packaging boxes', cat: 'Packaging Materials', receipt: '' },
+      { desc: 'Adobe Creative Cloud', cat: 'Software & Subscriptions', receipt: 'https://cloud/adobe.pdf' },
+    ];
+    const s = summarizeReceiptStorage(items);
+    expect(s.withReceipts).toBe(1);
+    expect(s.rentExpenses).toBe(2);
+    expect(s.withoutReceipts).toBe(1); // only Packaging boxes is counted as withoutReceipts
+  });
+
+  it('identifies rent expenses accurately via isRentExpense helper', () => {
+    expect(isRentExpense({ cat: 'Rent' })).toBe(true);
+    expect(isRentExpense({ cat: 'Studio Rent' })).toBe(true);
+    expect(isRentExpense({ desc: 'Studio rent for September' })).toBe(true);
+    expect(isRentExpense({ desc: 'Monthly office lease' })).toBe(true);
+    expect(isRentExpense({ desc: 'Landlord e-transfer' })).toBe(true);
+    expect(isRentExpense({ isRent: true })).toBe(true);
+    expect(isRentExpense({ receiptExempt: true })).toBe(true);
+    expect(isRentExpense({ desc: 'Coffee beans', cat: 'Office Supplies' })).toBe(false);
+    expect(isRentExpense(null)).toBe(false);
+  });
+
+  it('identifies gratuity expenses and receipt-exempt expenses accurately', () => {
+    expect(isGratuityExpense({ gratuity: true })).toBe(true);
+    expect(isGratuityExpense({ ref: 'GRAT-143338' })).toBe(true);
+    expect(isGratuityExpense({ desc: 'Gratuity: Camilla Marraccini' })).toBe(true);
+    expect(isGratuityExpense({ desc: 'Standard Office Supplies' })).toBe(false);
+    expect(isGratuityExpense(null)).toBe(false);
+
+    expect(isReceiptExemptExpense({ gratuity: true })).toBe(true);
+    expect(isReceiptExemptExpense({ cat: 'Rent' })).toBe(true);
+    expect(isReceiptExemptExpense({ desc: 'Printing 500 copies' })).toBe(false);
+  });
+
+  it('exempts gratuity copies from withoutReceipts in summarizeReceiptStorage', () => {
+    const items = [
+      { desc: 'Gratuity: Harley', ref: 'GRAT-143338', gratuity: true, receipt: '' },
+      { desc: 'Marketing flyers', cat: 'Marketing', receipt: '' },
+    ];
+    const s = summarizeReceiptStorage(items);
+    expect(s.withoutReceipts).toBe(1); // only Marketing flyers
   });
 
   it('never reports an age or an overdue count', () => {
