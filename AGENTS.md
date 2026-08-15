@@ -54,7 +54,41 @@ Bug / edge case the change introduced · the next logical feature · offline & s
 - Only ask clarifying questions if the request is genuinely ambiguous.
 
 ## Customizations & Style Guidelines
-- **Strict Guidelines:** Always adhere to the premium UX/UI, offline-first sync, financial ledger precision, role-based security, and spreadsheet integration rules defined in [.agents/AGENTS.md](.agents/AGENTS.md).
+- **Strict Guidelines:** Always adhere to the premium UX/UI, offline-first sync, financial ledger precision, role-based security, and spreadsheet integration rules defined in [.agents/AGENTS.md](.agents/AGENTS.md) and [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md).
+- **Pattern Reference:** Before writing a new list, dropdown, button, pill, table, or empty state, read [.agents/UX_PATTERNS.md](.agents/UX_PATTERNS.md) to reuse existing classes and design patterns before inventing new ones.
+
+### State-of-the-Art UX/UI Architecture & Design Engineering
+Any user-facing interface, component, or style change MUST follow the design standards in [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md):
+
+1. **Perceptual Color Science (OKLCH & P3 Gamut):**
+   - Never use raw RGB, plain browser defaults (pure red, blue, green), or legacy HSL.
+   - Use **OKLCH** (`oklch(L C H / alpha)`) for mathematically uniform perceptual lightness across light and dark themes.
+   - Respect semantic tokens: Emerald/Teal for success, Rose/Coral for danger/errors, Amber for warnings, Indigo/Violet for primary branding.
+   - Maintain strict WCAG 2.2 AAA / APCA contrast hierarchy: primary text (≥ 7:1), secondary text (≥ 4.5:1), subtle borders (`oklch(1 0 0 / 0.08)`).
+   - Use multi-layered glassmorphism (`backdrop-filter: blur(20px) saturate(190%)`) with diffuse ambient glows instead of harsh solid shadows.
+
+2. **Modern Layout Engine (Container Queries, Subgrid & Popover API):**
+   - **Container Queries:** Components must adapt to their immediate parent container (`container-type: inline-size`), not viewport media queries.
+   - **CSS Subgrid:** Align columns across distinct cards or nested rows using `grid-template-columns: subgrid`.
+   - **Native Popover API & `:has()`:** Use native HTML `popover="auto"` and `popovertarget` for tooltips, dropdowns, and menus to eliminate z-index bugs; use `:has()` for parent-aware component states.
+
+3. **Liquid Motion & Spring Physics:**
+   - **View Transitions:** Use `document.startViewTransition()` for smooth layout morphing during tab switches, filtering, and modal launches.
+   - **Spring Physics:** Never use linear animations. Apply physical spring curves (`--ease-spring: cubic-bezier(0.16, 1, 0.3, 1)` and `--ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1)`).
+   - **Micro-Interactions:** Interactive elements must have fluid hover (`translateY(-2px)`), active (`scale(0.975)`), and `:focus-visible` feedback.
+   - **Accessibility:** Always wrap motion in `@media (prefers-reduced-motion: reduce)` with instant transitions.
+
+4. **Cognitive Ergonomics & Human Interface Science:**
+   - **Fitts's Law:** Minimum interactive bounding box of **≥ 44px × 44px** with generous hit padding (`padding: 10px 18px`).
+   - **Miller's Chunking:** Segment dense data/ledgers into scannable cards with distinct section headings.
+   - **Doherty Threshold & Zero Perceived Latency:** Use optimistic UI updates and custom shimmer skeleton loaders matching exact content dimensions (never use generic spinner GIFs).
+   - **Zero Blank States:** Empty tables and lists must include custom iconography, helpful conversational context, and an explicit call-to-action button.
+
+5. **Financial & Data Engineering Invariants:**
+   - **Tabular Figures (`tnum`):** All monetary figures, quantities, stock balances, and timestamps must use monospace tabular numbers (`font-feature-settings: "tnum" 1, "zero" 1` or `font-family: 'DM Mono', monospace`) for perfect vertical alignment.
+   - **Decouple Styling from Data Pipelines:** DO NOT rewrite, simplify, or refactor underlying data aggregation functions (`buildOrderTimeline`, `deriveOnHand`, `inventoryBreakdown`). Keep data assembly 100% intact and modify ONLY CSS tokens, HTML wrapper classes, badge elements, and subtext formatting.
+   - **Defensive Fallbacks:** Always wrap dynamic template outputs with nullish coalescing (`${row.after ?? row._after ?? '—'}`) to prevent `'undefined'` text rendering.
+   - **Property Alignment:** Always verify exact property key names against underlying models before referencing them in template literals.
 
 > [!WARNING]
 > **Always update the externalized Apps Script copy** whenever [Code.gs](apps-script/Code.gs) is modified: copy it **verbatim** (no HTML-escaping) to [gas-code.txt](public/gas-code.txt). The "Connect your Google Sheet" tab in [index.html](index.html) lazy-fetches this file via `loadGasCode()` in [main.js](src/main.js) the first time the tab opens. Do **not** re-embed the source inline in [index.html](index.html).
@@ -65,12 +99,6 @@ Bug / edge case the change introduced · the next logical feature · offline & s
 > 2. `EXPECTED_SCRIPT_VERSION` in [main.js](src/main.js) — this is what the client compares against to flag an out-of-date deployment on the connection card.
 > 3. A new numbered entry in the version-history comment block at the top of [Code.gs](apps-script/Code.gs) describing what changed and, if relevant, which older deployments it flags as outdated.
 > Skipping this means the publisher's already-deployed script silently diverges from what the client expects, with no warning surfaced anywhere.
-
-### Visual Refactoring & UI Enhancement Guardrails
-> [!IMPORTANT]
-> - **Decouple Styling from Data Pipelines:** When executing UI/UX styling tasks (e.g. `/elite-ux-design`), DO NOT rewrite, replace, or simplify underlying data aggregation functions (such as `buildOrderTimeline`, `deriveOnHand`, or `inventoryBreakdown`). Keep data assembly 100% intact and modify ONLY CSS tokens, HTML wrapper classes, badge elements, and subtext formatting.
-> - **Verify Property Key Alignment:** Always inspect the underlying library or helper function output to verify exact property key names (e.g. `row._after` vs `row.after`) before referencing them in template literals.
-> - **Defensive Fallback Values:** Never output raw property evaluation in HTML templates without nullish coalescing or safe fallbacks (e.g. `${row._after ?? row.after ?? '—'}`).
 
 ## App Overview & Architecture
 
