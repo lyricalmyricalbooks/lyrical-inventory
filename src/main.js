@@ -51,8 +51,6 @@ import {
   saveQrPresets,
   upsertQrPreset,
   removeQrPreset,
-  findQrPreset,
-  qrPresetId,
   qrPresetMissingBooks,
   qrPresetSummary,
 } from './lib/qr-presets.js';
@@ -61,7 +59,6 @@ import {
   saveStPresets,
   upsertStPreset,
   removeStPreset,
-  findStPreset,
   stPresetId,
   stPresetMissingBooks,
   stPresetSummary,
@@ -18244,11 +18241,7 @@ function _stOnHandHint(book) {
 function _stUpdatePackTotal() {
   const el = document.getElementById('st-pack-total');
   if (!el) return;
-  let total = 0;
-  document.querySelectorAll('.st-book-qty').forEach((input) => {
-    const n = parseInt(input.value, 10);
-    if (Number.isFinite(n) && n > 0) total += n;
-  });
+  const total = _fkPackedTotal();
   el.textContent = total > 0
     ? `📦 ${total} book${total === 1 ? '' : 's'} packed for this fair`
     : 'Enter how many copies of each title you\'re bringing.';
@@ -18267,49 +18260,198 @@ window.salesTrackerQtyInput = function (el) {
   _stUpdatePackTotal();
 };
 
-function renderSalesTrackerBookList() {
-  const list = document.getElementById('st-books-list');
+// ── FAIR KIT BOOK LIST ──
+// The tally sheet and the payment QR sheet are packed off the same box of
+// books, so they share one list here. Each inventory row carries both marker
+// classes (.st-book-check and .qrp-book-check) and both per-book fields — the
+// copies-packed count the tally sheet prints, and the door price the QR card
+// charges — so every path that used to query two separate lists still selects
+// exactly the books it prints, without knowing they now come from one place.
+function renderFairKitBookList() {
+  const list = document.getElementById('fk-books-list');
   if (!list) return;
   // posBooksMap() includes POS-only extras (publisher) or just the active book (author).
   const inventoryEntries = Object.values(posBooksMap());
-
-  const qtyRow = (labelText, inputAttrs, value) => `
-    <div style="display:flex;align-items:center;gap:8px;padding-left:26px;margin-top:2px;margin-bottom:2px;">
-      <span style="font-size:11px;color:var(--text2);font-weight:500;">${labelText}:</span>
-      <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" ${inputAttrs} value="${value || ''}" placeholder="0" style="width:64px;padding:3px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface-card);color:var(--text);" oninput="salesTrackerQtyInput(this)">
-    </div>
-  `;
+  const baseCur = document.getElementById('qrp-base-cur')?.value || 'auto';
+  const hasStripeKey = !!getReconStripeKey();
 
   const inventoryHtml = inventoryEntries.map((book) => {
     const onHand = _stOnHandHint(book);
-    const label = `Copies bringing${onHand != null ? ` (${onHand} on hand)` : ''}`;
+    const nativeCode = currencyToCode(book.currency);
+    const targetCode = baseCur === 'auto' ? nativeCode : baseCur;
+    const defaultPrice = baseCur === 'auto'
+      ? (book.listPrice || 0)
+      : convertCurrency(book.listPrice || 0, nativeCode, targetCode);
+    const existingOverride = book.priceOverrides?.[targetCode] || '';
+
+    // A title with no saved payment link still belongs on the tally sheet, so
+    // it stays selectable — the row says up front why no QR card will come out
+    // for it, rather than the seller finding a dead square at the table.
+    const hasLink = !!(book.stripeLink || book.paymentLink);
+    const tag = hasLink
+      ? ''
+      : hasStripeKey
+        ? '<span class="fk-tag">QR needs a door price</span>'
+        : '<span class="fk-tag fk-tag-warn">Tally only · no link</span>';
+
     return `
-    <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);">
-      <input type="checkbox" class="st-book-check" data-kind="inv" value="${book.id}" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(book.title)}</span>
-      <span style="font-size:11px;color:var(--text2);">${escapeHtml(book.author || '')}</span>
-    </label>
-    ${qtyRow(label, `data-book-id="${book.id}"`, salesTrackerQtyBrought[book.id])}
-  `;
+      <div class="fk-book">
+        <div class="fk-book-head">
+          <input type="checkbox" id="fk-pick-${book.id}" class="fk-book-check st-book-check qrp-book-check" data-kind="inv" value="${book.id}" checked onchange="fairKitSelectionChanged()">
+          <label class="fk-book-title" for="fk-pick-${book.id}">${escapeHtml(book.title)}</label>
+          <span class="fk-book-author">${escapeHtml(book.author || '')}</span>
+          ${tag}
+        </div>
+        <div class="fk-book-fields">
+          <div class="fk-field">
+            <label for="fk-qty-${book.id}">Copies bringing${onHand != null ? ` (${onHand} on hand)` : ''}</label>
+            <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" id="fk-qty-${book.id}" data-book-id="${book.id}" value="${salesTrackerQtyBrought[book.id] || ''}" placeholder="0" oninput="salesTrackerQtyInput(this)">
+          </div>
+          <div class="fk-field fk-field-price">
+            <label for="qrp-override-${book.id}">Door price (${escapeHtml(targetCode)})</label>
+            <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="${defaultPrice.toFixed(2)}" oninput="fairKitSelectionChanged()">
+          </div>
+        </div>
+      </div>
+    `;
   }).join('');
 
   const customHtml = salesTrackerCustomBooks.map((book, idx) => `
-    <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;background:rgba(212,175,55,.12);border:1px dashed rgba(212,175,55,.5);">
-      <input type="checkbox" class="st-book-check" data-kind="custom" value="${idx}" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(book.title)}</span>
-      <span style="font-size:11px;color:var(--text2);">${escapeHtml(book.author || '')}</span>
-      <button type="button" onclick="salesTrackerRemoveCustom(${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0 4px;" title="Remove" aria-label="Remove">✕</button>
-    </label>
-    ${qtyRow('Copies bringing', `data-custom-idx="${idx}"`, book.qty)}
+    <div class="fk-book fk-book-custom">
+      <div class="fk-book-head">
+        <input type="checkbox" id="fk-pick-custom-${idx}" class="fk-book-check st-book-check" data-kind="custom" value="${idx}" checked onchange="fairKitSelectionChanged()">
+        <label class="fk-book-title" for="fk-pick-custom-${idx}">${escapeHtml(book.title)}</label>
+        <span class="fk-book-author">${escapeHtml(book.author || '')}</span>
+        <span class="fk-tag">Tally only</span>
+        <button type="button" class="fk-book-remove" onclick="salesTrackerRemoveCustom(${idx})" title="Remove" aria-label="Remove ${escapeHtml(book.title)}">✕</button>
+      </div>
+      <div class="fk-book-fields">
+        <div class="fk-field">
+          <label for="fk-qty-custom-${idx}">Copies bringing</label>
+          <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" id="fk-qty-custom-${idx}" data-custom-idx="${idx}" value="${book.qty || ''}" placeholder="0" oninput="salesTrackerQtyInput(this)">
+        </div>
+      </div>
+    </div>
   `).join('');
 
   if (!inventoryEntries.length && !salesTrackerCustomBooks.length) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available. Add a custom book below.</div>';
+    list.innerHTML = '<div class="fk-note">No books available. Add a title below.</div>';
   } else {
     list.innerHTML = inventoryHtml + customHtml;
   }
-  _stUpdatePackTotal();
+  fairKitSelectionChanged();
 }
+
+// Both sheets render from the same list now. The two old names stay because the
+// preset-restore paths and the base-currency selector call them by name, and
+// each still means "rebuild the list the sheet I print from reads".
+function renderSalesTrackerBookList() { renderFairKitBookList(); }
+function renderQRPrintBookList() { renderFairKitBookList(); }
+
+// ── WHAT THE KIT IS ABOUT TO PRINT ──
+function fairKitMode() {
+  const picked = document.querySelector('input[name="fk-mode"]:checked');
+  return picked ? picked.value : 'both';
+}
+
+// A selected title only yields a QR card if something can actually be charged:
+// a saved payment link, or a door price this device's Stripe key can mint a
+// link for. Counting checkboxes instead would promise cards that never print.
+function _fkBookPrintsQR(book, id, hasStripeKey) {
+  // A row whose title has since left the catalog can't be priced or charged —
+  // and would throw building the card, taking the whole sheet down with it.
+  if (!book) return false;
+  if (book.stripeLink || book.paymentLink) return true;
+  const amount = parseFloat(document.getElementById(`qrp-override-${id}`)?.value);
+  return hasStripeKey && Number.isFinite(amount) && amount > 0;
+}
+
+function _fkSelectionCounts() {
+  const checked = (kind) => Array.from(document.querySelectorAll(`.st-book-check[data-kind="${kind}"]`)).filter((el) => el.checked);
+  const inv = checked('inv');
+  const custom = checked('custom');
+  const hasStripeKey = !!getReconStripeKey();
+  const qrCards = inv.filter((el) => _fkBookPrintsQR(posResolveBook(el.value), el.value, hasStripeKey)).length;
+  return {
+    titles: inv.length + custom.length,
+    qrCards,
+    // Custom titles have no catalog record and no payment link, so they are
+    // always part of the "tally sheet only" remainder.
+    noCard: (inv.length - qrCards) + custom.length,
+  };
+}
+
+function _fkPackedTotal() {
+  let total = 0;
+  document.querySelectorAll('.st-book-qty').forEach((input) => {
+    const n = parseInt(input.value, 10);
+    if (Number.isFinite(n) && n > 0) total += n;
+  });
+  return total;
+}
+
+function _fkUpdateSummary() {
+  const el = document.getElementById('fk-summary');
+  const btn = document.getElementById('fk-print-btn');
+  if (!el) return;
+
+  const mode = fairKitMode();
+  const { titles, qrCards, noCard } = _fkSelectionCounts();
+  const packed = _fkPackedTotal();
+
+  const parts = [];
+  if (mode !== 'qr') {
+    parts.push(`<strong>Tally sheet</strong> — ${titles} title${titles === 1 ? '' : 's'}${packed > 0 ? `, ${packed} cop${packed === 1 ? 'y' : 'ies'} packed` : ''}`);
+  }
+  if (mode !== 'tracker') {
+    const skipped = noCard > 0 ? ` · ${noCard} title${noCard === 1 ? '' : 's'} without a payment link` : '';
+    parts.push(`<strong>QR sheet</strong> — ${qrCards} card${qrCards === 1 ? '' : 's'}${skipped}`);
+  }
+
+  const nothingToPrint = mode === 'qr' ? qrCards === 0 : titles === 0;
+  el.innerHTML = nothingToPrint
+    ? (mode === 'qr'
+      ? 'None of the selected titles has a payment link or a door price yet.'
+      : 'Select at least one book to print.')
+    : parts.join('<br>');
+  if (btn) btn.disabled = nothingToPrint;
+}
+
+// Every checkbox, quantity and door price in the dialog funnels through here so
+// the footer's read-out is never a step behind what will actually print.
+function fairKitSelectionChanged() {
+  _stUpdatePackTotal();
+  _fkUpdateSummary();
+}
+window.fairKitSelectionChanged = fairKitSelectionChanged;
+
+function fairKitModeChanged() {
+  const mode = fairKitMode();
+  const trackerOpts = document.getElementById('fk-opts-tracker');
+  const qrOpts = document.getElementById('fk-opts-qr');
+  // Hide the settings for a sheet that isn't being printed rather than dimming
+  // them: a visible-but-inert control is the one people fill in and then wonder
+  // why nothing changed.
+  if (trackerOpts) trackerOpts.hidden = mode === 'qr';
+  if (qrOpts) qrOpts.hidden = mode === 'tracker';
+
+  // Same rule inside the book list: a door price means nothing on a tally-only
+  // print, and copies packed means nothing on a QR-only one.
+  const list = document.getElementById('fk-books-list');
+  if (list) {
+    list.classList.toggle('fk-hide-price', mode === 'tracker');
+    list.classList.toggle('fk-hide-qty', mode === 'qr');
+  }
+
+  const btn = document.getElementById('fk-print-btn');
+  if (btn) {
+    btn.textContent = mode === 'both'
+      ? '🖨 Print both sheets'
+      : mode === 'tracker' ? '🖨 Print tally sheet' : '🖨 Print QR sheet';
+  }
+  _fkUpdateSummary();
+}
+window.fairKitModeChanged = fairKitModeChanged;
 
 // ── SALES TRACKER FAIR PRESETS ──
 // Same idea as the QR sheet's fair presets: the whole tracker setup — layout,
@@ -18318,7 +18460,6 @@ function renderSalesTrackerBookList() {
 // localStorage, not Firestore: a per-device packing list that has to work
 // with no signal.
 let salesTrackerFairPresets = [];
-let stActivePresetId = '';
 
 function _stPresetStore() {
   try { return window.localStorage; } catch { return null; }
@@ -18385,95 +18526,26 @@ function _stApplyPresetToForm(preset) {
   return { missing: stPresetMissingBooks(preset, Object.keys(posBooksMap())) };
 }
 
-function renderStPresetPicker() {
-  const select = document.getElementById('st-preset-select');
-  if (!select) return;
-  if (!findStPreset(salesTrackerFairPresets, stActivePresetId)) stActivePresetId = '';
-
-  const options = salesTrackerFairPresets
-    .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
-    .join('');
-  select.innerHTML = `<option value="">${salesTrackerFairPresets.length ? 'Choose a saved fair…' : 'No saved fairs yet'}</option>${options}`;
-  select.value = stActivePresetId;
-
-  const deleteBtn = document.getElementById('st-preset-delete');
-  if (deleteBtn) deleteBtn.disabled = !stActivePresetId;
-
-  const note = document.getElementById('st-preset-note');
-  if (note) {
-    const active = findStPreset(salesTrackerFairPresets, stActivePresetId);
-    note.textContent = active
-      ? stPresetSummary(active)
-      : 'Set the packing list up once, save it under the fair\'s name, and recall it next time.';
-  }
-}
-
-window.stPresetSelected = function (id) {
-  const preset = findStPreset(salesTrackerFairPresets, id);
-  stActivePresetId = preset ? preset.id : '';
-  if (!preset) { renderStPresetPicker(); return; }
-
-  const { missing } = _stApplyPresetToForm(preset);
-  renderStPresetPicker();
-  if (missing.length) {
-    showToast(`Loaded "${preset.name}" — ${missing.length} saved title${missing.length === 1 ? '' : 's'} no longer in the catalog`, 'warn', 6000);
-  } else {
-    showToast(`✓ Loaded fair preset "${preset.name}"`, 'ok');
-  }
-};
-
-window.stSaveFairPreset = async function () {
-  const active = findStPreset(salesTrackerFairPresets, stActivePresetId);
-  const name = (await promptDialog(
-    'Name this fair setup so you can recall the whole packing list next time.',
-    active?.name || '',
-    { title: 'Save fair preset', okLabel: 'Save', placeholder: 'e.g. Mexico City Book Fair' }
-  ) || '').trim();
-  if (!name) return;
-
-  if (!stPresetId(name)) {
-    showToast('Give the preset a name with at least one letter or number', 'warn');
-    return;
-  }
-
-  const clash = findStPreset(salesTrackerFairPresets, stPresetId(name));
-  if (clash && !(await confirmDialog(`"${clash.name}" already exists. Replace it with the current setup?`, { okLabel: 'Replace' }))) {
-    return;
-  }
-
-  const snapshot = _stReadPresetForm(name);
-  if (!snapshot.bookIds.length && !snapshot.customBooks.length && !(await confirmDialog('No books are selected. Save this preset anyway?', { okLabel: 'Save' }))) {
-    return;
-  }
-
-  salesTrackerFairPresets = saveStPresets(_stPresetStore(), upsertStPreset(salesTrackerFairPresets, snapshot));
-  stActivePresetId = stPresetId(name);
-  renderStPresetPicker();
-  showToast(`✓ Saved fair preset "${name}"`, 'ok');
-};
-
-window.stDeleteFairPreset = async function () {
-  const preset = findStPreset(salesTrackerFairPresets, stActivePresetId);
-  if (!preset) return;
-  if (!(await confirmDialog(`Delete the fair preset "${preset.name}"?`, { danger: true, okLabel: 'Delete' }))) return;
-
-  salesTrackerFairPresets = saveStPresets(_stPresetStore(), removeStPreset(salesTrackerFairPresets, preset.id));
-  stActivePresetId = '';
-  renderStPresetPicker();
-  showToast(`Deleted "${preset.name}"`, 'ok');
-};
-
-window.openSalesTrackerModal = function () {
+window.openFairKitModal = function () {
   const dateInput = document.getElementById('st-date');
   if (dateInput && !dateInput.value) dateInput.value = today();
   salesTrackerFairPresets = loadStPresets(_stPresetStore());
-  renderSalesTrackerBookList();
-  renderStPresetPicker();
-  openM('sales-tracker');
+  qrFairPresets = loadQrPresets(_qrPresetStore());
+  renderFairKitBookList();
+  renderFairKitPresetPicker();
+  fairKitModeChanged();
+  openM('fair-kit');
 };
 
-window.salesTrackerSelectAll = function (checked) {
+// The two printables used to have a button each. Anything still pointing at
+// either one lands on the combined dialog rather than a modal that no longer
+// exists.
+window.openSalesTrackerModal = window.openFairKitModal;
+window.openQRPrintModal = window.openFairKitModal;
+
+window.fairKitSelectAll = function (checked) {
   document.querySelectorAll('.st-book-check').forEach((el) => { el.checked = !!checked; });
+  fairKitSelectionChanged();
 };
 
 window.salesTrackerAddCustom = function () {
@@ -18503,7 +18575,11 @@ window.salesTrackerRemoveCustom = function (idx) {
 
 // escapeHtml is imported from ./lib/html.js
 
-window.printSalesTracker = function () {
+// Returns true once the sheet is on its way to a print window, false if it
+// bailed — printFairKit() needs to know, so a tally sheet that never opened
+// doesn't leave a stray blank QR window behind it.
+function printSalesTracker(opts = {}) {
+  const closeModal = opts.closeModal !== false;
   const eventName = (document.getElementById('st-event').value || '').trim();
   const dateValue = (document.getElementById('st-date').value || '').trim();
   let cols = parseInt(document.getElementById('st-cols').value, 10);
@@ -18519,7 +18595,7 @@ window.printSalesTracker = function () {
 
   if (!selected.length) {
     showToast('Select at least one book to include', 'warn');
-    return;
+    return false;
   }
 
   const includeNotes = !!document.getElementById('st-notes').checked;
@@ -18634,14 +18710,16 @@ window.printSalesTracker = function () {
   const win = window.open('', '_blank', 'width=1100,height=800');
   if (!win) {
     showToast('Pop-up blocked — allow pop-ups to print', 'warn');
-    return;
+    return false;
   }
   win.document.write(html);
   win.document.close();
   win.focus();
   setTimeout(() => { win.print(); }, 350);
-  closeM('sales-tracker');
-};
+  if (closeModal) closeM('fair-kit');
+  return true;
+}
+window.printSalesTracker = printSalesTracker;
 
 // ── PRINTABLE PAYMENT QR CODES ──
 
@@ -18659,63 +18737,13 @@ function _qrpSelectedPriceCurrencies() {
     .map(({ code }) => code);
 }
 
-function renderQRPrintBookList() {
-  const list = document.getElementById('qrp-books-list');
-  if (!list) return;
-  // posBooksMap() includes POS-only extras (publisher) or just the active book (author).
-  const entries = Object.values(posBooksMap());
-  if (!entries.length) {
-    list.innerHTML = '<div style="font-size:12px;color:var(--text3);">No books available.</div>';
-    return;
-  }
-  const baseCur = document.getElementById('qrp-base-cur')?.value || 'auto';
-
-  list.innerHTML = entries.map((book) => {
-    const url = book.stripeLink || book.paymentLink || '';
-    const hasUrl = !!url;
-    const nativeCode = currencyToCode(book.currency);
-    const targetCode = baseCur === 'auto' ? nativeCode : baseCur;
-    const defaultPrice = baseCur === 'auto'
-      ? (book.listPrice || 0)
-      : convertCurrency(book.listPrice || 0, nativeCode, targetCode);
-    const existingOverride = book.priceOverrides?.[targetCode] || '';
-
-    return `
-      <div style="display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:6px;background:rgba(0,0,0,.03);margin-bottom:4px;">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;${hasUrl ? '' : 'opacity:.75;'}">
-          <input type="checkbox" class="qrp-book-check" value="${book.id}" ${hasUrl ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;">
-          <span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(book.title)}</span>
-          <span style="font-size:11px;color:var(--text2);">${escapeHtml(book.author || '')}</span>
-        </label>
-        <div style="display:flex;align-items:center;gap:8px;padding-left:26px;margin-top:2px;">
-          <span style="font-size:11px;color:var(--text2);font-weight:500;">Manual price override (${escapeHtml(targetCode)}):</span>
-          <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="e.g. ${defaultPrice.toFixed(2)}" style="width:110px;padding:3px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface-card);color:var(--text);">
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-window.openQRPrintModal = function () {
-  qrFairPresets = loadQrPresets(_qrPresetStore());
-  renderQRPrintBookList();
-  renderQrPresetPicker();
-  openM('qr-print');
-};
-
-window.qrPrintSelectAll = function (checked) {
-  document.querySelectorAll('.qrp-book-check').forEach((el) => {
-    if (!el.disabled) el.checked = !!checked;
-  });
-};
-
 // ── QR FAIR PRESETS ──
-// A whole sheet setup — layout, base currency, price columns, selected titles
-// and their door prices — saved under a fair's name. Stored in localStorage
-// rather than Firestore because it's a per-device stall setup, and because the
-// modal has to work with no signal at the table.
+// The QR half of a saved fair — layout, base currency, price columns, selected
+// titles and their door prices. Stored in localStorage rather than Firestore
+// because it's a per-device stall setup, and because the modal has to work with
+// no signal at the table. Its tally-sheet twin lives above; the fair-kit preset
+// functions further down save, load and delete the pair as one named fair.
 let qrFairPresets = [];
-let qrActivePresetId = '';
 
 function _qrPresetStore() {
   try { return window.localStorage; } catch { return null; }
@@ -18785,102 +18813,184 @@ function _qrApplyPresetToForm(preset) {
   return { missing: qrPresetMissingBooks(preset, Object.keys(posBooksMap())) };
 }
 
-function renderQrPresetPicker() {
-  const select = document.getElementById('qrp-preset-select');
-  if (!select) return;
-  if (!findQrPreset(qrFairPresets, qrActivePresetId)) qrActivePresetId = '';
+// ── FAIR KIT PRESETS ──
+// One name, both sheets. The two stores stay separate on disk — each still
+// normalizes and repairs its own shape, and fairs saved before the sheets were
+// merged still load — but the dialog saves, recalls and deletes them as a
+// single fair, because that's the only way the seller ever thought of them.
+let fkActivePresetId = '';
 
-  const options = qrFairPresets
+// Pair the two stores up by id. A fair saved from this dialog has both halves;
+// one saved by an older build has whichever half it was set up in, and still
+// restores that half rather than being hidden or dropped.
+function fairKitPresets() {
+  const byId = new Map();
+  salesTrackerFairPresets.forEach((p) => byId.set(p.id, { id: p.id, name: p.name, st: p, qr: null }));
+  qrFairPresets.forEach((p) => {
+    const entry = byId.get(p.id);
+    if (entry) entry.qr = p;
+    else byId.set(p.id, { id: p.id, name: p.name, st: null, qr: p });
+  });
+  return Array.from(byId.values())
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+function findFairKitPreset(id) {
+  const target = stPresetId(id);
+  if (!target) return null;
+  return fairKitPresets().find((p) => p.id === target) || null;
+}
+
+// "9 titles · 64 packed · EUR · 10 cols" for the tally half, the QR half on its
+// own line, so a fair that only ever had one of them says so plainly.
+function fairKitPresetSummary(entry) {
+  if (!entry) return '';
+  const lines = [];
+  if (entry.st) lines.push(`Tally: ${stPresetSummary(entry.st)}`);
+  if (entry.qr) lines.push(`QR: ${qrPresetSummary(entry.qr)}`);
+  return lines.join(' · ');
+}
+
+function renderFairKitPresetPicker() {
+  const select = document.getElementById('fk-preset-select');
+  if (!select) return;
+
+  const presets = fairKitPresets();
+  if (!presets.some((p) => p.id === fkActivePresetId)) fkActivePresetId = '';
+
+  const options = presets
     .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
     .join('');
-  select.innerHTML = `<option value="">${qrFairPresets.length ? 'Choose a saved fair…' : 'No saved fairs yet'}</option>${options}`;
-  select.value = qrActivePresetId;
+  select.innerHTML = `<option value="">${presets.length ? 'Choose a saved fair…' : 'No saved fairs yet'}</option>${options}`;
+  select.value = fkActivePresetId;
 
-  const deleteBtn = document.getElementById('qrp-preset-delete');
-  if (deleteBtn) deleteBtn.disabled = !qrActivePresetId;
+  const deleteBtn = document.getElementById('fk-preset-delete');
+  if (deleteBtn) deleteBtn.disabled = !fkActivePresetId;
 
-  const note = document.getElementById('qrp-preset-note');
+  const note = document.getElementById('fk-preset-note');
   if (note) {
-    const active = findQrPreset(qrFairPresets, qrActivePresetId);
+    const active = presets.find((p) => p.id === fkActivePresetId);
     note.textContent = active
-      ? qrPresetSummary(active)
-      : 'Set the sheet up once, save it under the fair\'s name, and recall it next time.';
+      ? fairKitPresetSummary(active)
+      : 'Set the whole kit up once, save it under the fair\'s name, and recall it next time.';
   }
 }
 
-window.qrPresetSelected = function (id) {
-  const preset = findQrPreset(qrFairPresets, id);
-  qrActivePresetId = preset ? preset.id : '';
-  if (!preset) { renderQrPresetPicker(); return; }
+window.fkPresetSelected = function (id) {
+  const entry = findFairKitPreset(id);
+  fkActivePresetId = entry ? entry.id : '';
+  if (!entry) { renderFairKitPresetPicker(); return; }
 
-  const { missing } = _qrApplyPresetToForm(preset);
-  renderQrPresetPicker();
-  if (missing.length) {
-    showToast(`Loaded "${preset.name}" — ${missing.length} saved book${missing.length === 1 ? '' : 's'} no longer in the catalog`, 'warn', 6000);
+  // Tally first, QR second. Both halves of a fair saved here hold the same book
+  // selection, and the QR half is the one that re-renders the list against its
+  // own base currency and then puts the door prices back.
+  const missing = new Set();
+  if (entry.st) _stApplyPresetToForm(entry.st).missing.forEach((bookId) => missing.add(bookId));
+  if (entry.qr) _qrApplyPresetToForm(entry.qr).missing.forEach((bookId) => missing.add(bookId));
+
+  renderFairKitPresetPicker();
+  fairKitSelectionChanged();
+
+  if (missing.size) {
+    showToast(`Loaded "${entry.name}" — ${missing.size} saved title${missing.size === 1 ? '' : 's'} no longer in the catalog`, 'warn', 6000);
   } else {
-    showToast(`✓ Loaded fair preset "${preset.name}"`, 'ok');
+    showToast(`✓ Loaded fair "${entry.name}"`, 'ok');
   }
 };
 
-window.qrSaveFairPreset = async function () {
-  const active = findQrPreset(qrFairPresets, qrActivePresetId);
+window.fkSaveFairPreset = async function () {
+  const active = findFairKitPreset(fkActivePresetId);
   const name = (await promptDialog(
-    'Name this fair setup so you can recall the whole sheet next time.',
+    'Name this fair so you can recall the whole kit next time — the titles, how many copies you packed, the door prices and both sheet layouts.',
     active?.name || '',
-    { title: 'Save fair preset', okLabel: 'Save', placeholder: 'e.g. Mexico City Book Fair' }
+    { title: 'Save fair', okLabel: 'Save', placeholder: 'e.g. Mexico City Book Fair' }
   ) || '').trim();
   if (!name) return;
 
-  if (!qrPresetId(name)) {
-    showToast('Give the preset a name with at least one letter or number', 'warn');
+  if (!stPresetId(name)) {
+    showToast('Give the fair a name with at least one letter or number', 'warn');
     return;
   }
 
-  // Same name = same preset: overwriting is the intent, but it's destructive
-  // enough (someone else's door prices) to confirm first.
-  const clash = findQrPreset(qrFairPresets, qrPresetId(name));
+  // Same name = same fair: overwriting is the intent, but it's destructive
+  // enough (last year's door prices) to confirm first.
+  const clash = findFairKitPreset(name);
   if (clash && !(await confirmDialog(`"${clash.name}" already exists. Replace it with the current setup?`, { okLabel: 'Replace' }))) {
     return;
   }
 
-  const snapshot = _qrReadPresetForm(name);
-  if (!snapshot.bookIds.length && !(await confirmDialog('No books are selected. Save this preset anyway?', { okLabel: 'Save' }))) {
+  const stSnapshot = _stReadPresetForm(name);
+  const qrSnapshot = _qrReadPresetForm(name);
+  if (!stSnapshot.bookIds.length && !stSnapshot.customBooks.length
+    && !(await confirmDialog('No books are selected. Save this fair anyway?', { okLabel: 'Save' }))) {
     return;
   }
 
-  qrFairPresets = saveQrPresets(_qrPresetStore(), upsertQrPreset(qrFairPresets, snapshot));
-  qrActivePresetId = qrPresetId(name);
-  renderQrPresetPicker();
-  showToast(`✓ Saved fair preset "${name}"`, 'ok');
+  salesTrackerFairPresets = saveStPresets(_stPresetStore(), upsertStPreset(salesTrackerFairPresets, stSnapshot));
+  qrFairPresets = saveQrPresets(_qrPresetStore(), upsertQrPreset(qrFairPresets, qrSnapshot));
+  fkActivePresetId = stPresetId(name);
+  renderFairKitPresetPicker();
+  showToast(`✓ Saved fair "${name}"`, 'ok');
 };
 
-window.qrDeleteFairPreset = async function () {
-  const preset = findQrPreset(qrFairPresets, qrActivePresetId);
-  if (!preset) return;
-  if (!(await confirmDialog(`Delete the fair preset "${preset.name}"?`, { danger: true, okLabel: 'Delete' }))) return;
+window.fkDeleteFairPreset = async function () {
+  const entry = findFairKitPreset(fkActivePresetId);
+  if (!entry) return;
+  if (!(await confirmDialog(`Delete the saved fair "${entry.name}"?`, { danger: true, okLabel: 'Delete' }))) return;
 
-  qrFairPresets = saveQrPresets(_qrPresetStore(), removeQrPreset(qrFairPresets, preset.id));
-  qrActivePresetId = '';
-  renderQrPresetPicker();
-  showToast(`Deleted "${preset.name}"`, 'ok');
+  // Delete both halves under this name, including a stray half left behind by a
+  // build that only knew about one of the sheets.
+  salesTrackerFairPresets = saveStPresets(_stPresetStore(), removeStPreset(salesTrackerFairPresets, entry.id));
+  qrFairPresets = saveQrPresets(_qrPresetStore(), removeQrPreset(qrFairPresets, entry.id));
+  fkActivePresetId = '';
+  renderFairKitPresetPicker();
+  showToast(`Deleted "${entry.name}"`, 'ok');
 };
 
-window.printPaymentQRCodes = async function () {
+// Opens the window the QR sheet will be written into. Split out because in the
+// combined flow it has to happen inside the click, before any await: a
+// window.open() after an await is a pop-up the browser can't trace back to a
+// user gesture, and it gets blocked.
+function _fkOpenQrPrintWindow() {
+  const win = window.open('', '_blank', 'width=1100,height=800');
+  if (!win) return null;
+  win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Preparing payment QR codes…</title></head><body style="font-family:-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;background:#faf8f4;color:#1c1814;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><div style="text-align:center;"><div style="font-size:15px;letter-spacing:.08em;text-transform:uppercase;">Preparing payment QR codes…</div><div style="font-size:12px;color:#8b6f47;margin-top:8px;">Keep this tab open.</div></div></body></html>');
+  win.document.close();
+  return win;
+}
+
+async function printPaymentQRCodes(opts = {}) {
+  const closeModal = opts.closeModal !== false;
   const cols = Math.max(1, Math.min(6, parseInt(document.getElementById('qrp-cols').value, 10) || 3));
   const baseCur = document.getElementById('qrp-base-cur').value || 'auto';
 
-  const selectedIds = Array.from(document.querySelectorAll('.qrp-book-check'))
-    .filter((el) => el.checked)
+  const bail = (message) => {
+    showToast(message, 'warn');
+    if (opts.win) opts.win.close();
+    return false;
+  };
+
+  const hasStripeKey = !!getReconStripeKey();
+  const checked = Array.from(document.querySelectorAll('.qrp-book-check')).filter((el) => el.checked);
+  if (!checked.length) return bail('Select at least one book for the payment QR sheet');
+
+  // The book list is shared with the tally sheet, where a title with no way to
+  // take payment is perfectly valid. Those can't become a card, so they're
+  // dropped here (and counted) instead of printing a QR that scans to nothing.
+  const selectedIds = checked
+    .filter((el) => _fkBookPrintsQR(posResolveBook(el.value), el.value, hasStripeKey))
     .map((el) => el.value);
+  const droppedCount = checked.length - selectedIds.length;
 
   if (!selectedIds.length) {
-    showToast('Select at least one book for the payment QR sheet', 'warn');
-    return;
+    return bail('No selected book has a payment link or a door price to charge — nothing to put on the QR sheet');
   }
 
   const currenciesShown = _qrpSelectedPriceCurrencies();
 
-  showToast('⌛ Preparing payment QR code sheet…');
+  showToast(droppedCount
+    ? `⌛ Preparing payment QR sheet — skipping ${droppedCount} title${droppedCount === 1 ? '' : 's'} with no payment link`
+    : '⌛ Preparing payment QR code sheet…');
 
   const booksData = await Promise.all(selectedIds.map(async (id) => {
     const book = posResolveBook(id);
@@ -19117,16 +19227,59 @@ renderQRs();
 </body>
 </html>`;
 
-  const win = window.open('', '_blank', 'width=1100,height=800');
+  // In the combined flow the window was opened back when the button was
+  // clicked, so it's already sitting there showing "Preparing…".
+  const win = opts.win || window.open('', '_blank', 'width=1100,height=800');
   if (!win) {
     showToast('Pop-up blocked — allow pop-ups to print', 'warn');
-    return;
+    return false;
   }
+  win.document.open();
   win.document.write(html);
   win.document.close();
   win.focus();
-  closeM('qr-print');
-};
+  if (closeModal) closeM('fair-kit');
+  return true;
+}
+window.printPaymentQRCodes = printPaymentQRCodes;
+
+// ── PRINT THE KIT ──
+// One setup, one click, both sheets. The tally sheet opens and sends itself to
+// the printer; the QR sheet opens alongside it and waits on its own Print
+// button, because minting Stripe links for any door prices can take a moment
+// and a print dialog that fires mid-render prints half a page of blank squares.
+async function printFairKit() {
+  const mode = fairKitMode();
+
+  if (mode === 'tracker') {
+    printSalesTracker();
+    return;
+  }
+  if (mode === 'qr') {
+    await printPaymentQRCodes();
+    return;
+  }
+
+  const qrWin = _fkOpenQrPrintWindow();
+  if (!qrWin) {
+    showToast('Pop-up blocked — allow pop-ups to print both sheets', 'warn');
+    return;
+  }
+
+  // If the tally sheet bails (nothing selected, its own pop-up blocked), don't
+  // leave the placeholder QR window stranded.
+  if (!printSalesTracker({ closeModal: false })) {
+    qrWin.close();
+    return;
+  }
+
+  const qrPrinted = await printPaymentQRCodes({ closeModal: false, win: qrWin });
+  closeM('fair-kit');
+  if (qrPrinted) {
+    showToast('Tally sheet is printing — the QR sheet opened in its own tab, print it when the codes have drawn', 'ok', 7000);
+  }
+}
+window.printFairKit = printFairKit;
 
 // ─────────────────────────────────────────────────────────────────────────
 // POS-ONLY BOOKS — add / edit / remove + instant Stripe link & QR
@@ -23420,9 +23573,12 @@ function exposeLegacyInlineHandlers() {
     _getPosDefaultCurrency, loadPosExchangeRates, savePosExchangeRates, currencyToCode,
     codeToSymbol, posFormat, convertCurrency, getPOSCurrencies, buildPOSCartRows, renderPOS,
     _showPosQR, renderPOSFxStatus, _posItemToManualPayload, renderSalesTrackerBookList,
-    _stOnHandHint, _stUpdatePackTotal, _stReadPresetForm, _stApplyPresetToForm, renderStPresetPicker,
+    _stOnHandHint, _stUpdatePackTotal, _stReadPresetForm, _stApplyPresetToForm,
     renderQRPrintBookList, _qrpSelectedPriceCurrencies, _qrReadPresetForm,
-    _qrApplyPresetToForm, renderQrPresetPicker, _posSlugId, renderPosBookModalQR, _stripeMinorToMajor,
+    _qrApplyPresetToForm, renderFairKitBookList, renderFairKitPresetPicker, fairKitPresets,
+    findFairKitPreset, fairKitPresetSummary, fairKitMode, _fkBookPrintsQR, _fkSelectionCounts,
+    _fkPackedTotal, _fkUpdateSummary, _fkOpenQrPrintWindow,
+    _posSlugId, renderPosBookModalQR, _stripeMinorToMajor,
     _stripeFriendlyType, _stripeFmtMoney, fetchStripeTransactions, aggregateStripeTransactions,
     renderStripeFeesCards, fetchStripeFeesByYear, insertStripeFeesIntoLedger,
     reconcileStripeAgainstSales, clearStoredStripeKey, downloadStripeFeesAuditCSV, getReconMemory,

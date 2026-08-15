@@ -235,13 +235,15 @@ describe('QR fair preset wiring', () => {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
 
-  it('exposes the preset controls in the QR print modal', () => {
-    expect(html).toContain('id="qrp-preset-select"');
-    expect(html).toContain('id="qrp-preset-delete"');
-    expect(html).toContain('id="qrp-preset-note"');
-    expect(html).toContain('qrSaveFairPreset()');
-    expect(html).toContain('qrDeleteFairPreset()');
-    expect(html).toContain('qrPresetSelected(this.value)');
+  // Both sheets are set up in one dialog now, so the QR sheet's preset controls
+  // are the fair kit's — one saved fair carries both halves.
+  it('exposes the preset controls in the fair kit modal', () => {
+    expect(html).toContain('id="fk-preset-select"');
+    expect(html).toContain('id="fk-preset-delete"');
+    expect(html).toContain('id="fk-preset-note"');
+    expect(html).toContain('fkSaveFairPreset()');
+    expect(html).toContain('fkDeleteFairPreset()');
+    expect(html).toContain('fkPresetSelected(this.value)');
   });
 
   it('has a checkbox for every price column the presets can restore', () => {
@@ -251,7 +253,7 @@ describe('QR fair preset wiring', () => {
   });
 
   it('loads presets when the modal opens, so a fair survives a page reload', () => {
-    expect(mainJs).toMatch(/window\.openQRPrintModal[\s\S]{0,200}loadQrPresets/);
+    expect(mainJs).toMatch(/window\.openFairKitModal[\s\S]{0,300}loadQrPresets/);
   });
 
   it('re-renders the book list before imposing a preset selection on it', () => {

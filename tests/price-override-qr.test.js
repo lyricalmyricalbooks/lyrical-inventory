@@ -7,9 +7,9 @@ describe('Manual Price Override & Payment QR Code Integration Tests', () => {
     const htmlPath = path.join(process.cwd(), 'index.html');
     const html = fs.readFileSync(htmlPath, 'utf8');
 
-    expect(html).toContain('id="m-qr-print"');
+    expect(html).toContain('id="m-fair-kit"');
     expect(html).toContain('id="qrp-base-cur"');
-    expect(html).toContain('id="qrp-books-list"');
+    expect(html).toContain('id="fk-books-list"');
     expect(html).toContain('id="m-payment-qr"');
     expect(html).toContain('id="pqr-currency"');
     expect(html).toContain('id="pqr-override-price"');
@@ -23,6 +23,7 @@ describe('Manual Price Override & Payment QR Code Integration Tests', () => {
     expect(js).toContain('function updateSingleBookPaymentQR');
     expect(js).toContain('function generateSingleBookStripeQR');
     expect(js).toContain('function renderQRPrintBookList');
+    expect(js).toContain('function renderFairKitBookList');
     expect(js).toContain('printPaymentQRCodes');
     expect(js).toContain('createStripePaymentLinkForAmount');
   });

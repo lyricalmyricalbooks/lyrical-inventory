@@ -2852,13 +2852,9 @@
       <div style="font-size:12px;color:var(--text3);">Fast checkout for in-person and online sales with controlled currency handling and itemized checkout review.</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-      <button class="btn" onclick="openSalesTrackerModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px;">
+      <button class="btn gold outline" onclick="openFairKitModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-        Print sales tracker
-      </button>
-      <button class="btn" onclick="openQRPrintModal()" style="white-space:nowrap;display:flex;align-items:center;gap:6px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h3v1h-3zM20 17h1v4h-4v-1"></path></svg>
-        Print payment QR codes
+        Print fair kit
       </button>
     </div>
   </div>
@@ -2919,152 +2915,148 @@
   </div>
 </div>
 
-<!-- SALES TRACKER MODAL -->
-<div class="overlay" id="m-sales-tracker" style="display:none;">
-  <div class="modal" role="dialog" aria-modal="true" style="max-width:560px;">
-    <div class="modal-title" role="dialog" aria-modal="true">🖨 Printable book sales tracker</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.5;">
-      Generates a printable tally sheet for in-person events. Pick the books you'll be selling, set the number of tally columns, and print.
+<!-- FAIR PRINT KIT MODAL — one setup, both stall printables -->
+<!-- The tally sheet and the payment QR sheet are always taken to the same
+     table, off the same box of books, so they share one book list, one set of
+     door prices and one saved fair preset here. `printFairKit()` in main.js
+     fans that single setup out to the two print windows. -->
+<div class="overlay" id="m-fair-kit" style="display:none;">
+  <div class="modal fk-modal" role="dialog" aria-modal="true" aria-labelledby="fk-title" style="max-width:780px;">
+    <div class="modal-title" id="fk-title">🖨 Fair print kit</div>
+    <div class="fk-sub">Pick your books once, then print the paper tally sheet and the scan-to-pay QR sheet together — same titles, same prices, no second trip through this screen.</div>
+
+    <div class="fk-modes" role="radiogroup" aria-label="What to print">
+      <label class="fk-mode">
+        <input type="radio" name="fk-mode" value="both" checked onchange="fairKitModeChanged()">
+        <span class="fk-mode-body">
+          <span class="fk-mode-title">Both sheets</span>
+          <span class="fk-mode-note">Tally sheet + QR sheet</span>
+        </span>
+      </label>
+      <label class="fk-mode">
+        <input type="radio" name="fk-mode" value="tracker" onchange="fairKitModeChanged()">
+        <span class="fk-mode-body">
+          <span class="fk-mode-title">Tally sheet only</span>
+          <span class="fk-mode-note">Paper sales tally</span>
+        </span>
+      </label>
+      <label class="fk-mode">
+        <input type="radio" name="fk-mode" value="qr" onchange="fairKitModeChanged()">
+        <span class="fk-mode-body">
+          <span class="fk-mode-title">QR sheet only</span>
+          <span class="fk-mode-note">Scan-to-pay cards</span>
+        </span>
+      </label>
     </div>
 
-    <div style="background:rgba(200,145,58,0.08);border:1px solid rgba(200,145,58,0.25);border-radius:var(--r2);padding:12px;margin-bottom:12px;">
-      <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-text,#8a5815);margin-bottom:8px;">Fair presets</div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <select id="st-preset-select" aria-label="Saved fair preset" onchange="stPresetSelected(this.value)" style="flex:1;min-width:150px;font-size:12px;padding:5px 8px;">
+    <div class="fk-card fk-card-gold">
+      <div class="fk-eyebrow gold">Fair presets</div>
+      <div class="fk-preset-row">
+        <select id="fk-preset-select" aria-label="Saved fair preset" onchange="fkPresetSelected(this.value)">
           <option value="">No saved fairs yet</option>
         </select>
-        <button type="button" class="btn sm" onclick="stSaveFairPreset()">💾 Save…</button>
-        <button type="button" class="btn sm" id="st-preset-delete" onclick="stDeleteFairPreset()" disabled>Delete</button>
+        <button type="button" class="btn sm" onclick="fkSaveFairPreset()">💾 Save…</button>
+        <button type="button" class="btn sm" id="fk-preset-delete" onclick="fkDeleteFairPreset()" disabled>Delete</button>
       </div>
-      <div id="st-preset-note" style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;">Set the packing list up once, save it under the fair&rsquo;s name, and recall it next time.</div>
+      <div id="fk-preset-note" class="fk-note">Set the whole kit up once, save it under the fair&rsquo;s name, and recall it next time.</div>
     </div>
 
-    <div class="g2" style="margin-bottom:12px;">
+    <div class="g2 fk-row">
       <div class="form-group" style="margin:0;"><label for="st-event">Event name</label><input type="text" id="st-event" placeholder="e.g. Toronto Art Book Fair"></div>
       <div class="form-group" style="margin:0;"><label for="st-date">Date</label><input type="date" id="st-date"></div>
     </div>
 
-    <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group" style="margin:0;">
-        <label for="st-cols">Tally columns per book</label>
-        <input type="number" inputmode="numeric" id="st-cols" value="10" min="1" max="30">
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Each column is one sale.</div>
+    <div class="fk-card">
+      <div class="fk-card-head">
+        <div class="fk-eyebrow">Books to include</div>
+        <div class="fk-card-actions">
+          <button type="button" class="btn sm" onclick="fairKitSelectAll(true)">Select all</button>
+          <button type="button" class="btn sm" onclick="fairKitSelectAll(false)">Clear</button>
+        </div>
       </div>
-      <div class="form-group" style="margin:0;">
-        <label for="st-currency">Currency</label>
-        <select id="st-currency">
-          <option value="EUR">€ EUR</option>
-          <option value="CAD">CA$ CAD</option>
-          <option value="USD">$ USD</option>
-          <option value="GBP">£ GBP</option>
-          <option value="MXN">MX$ MXN</option>
-        </select>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Used in price-paid cells.</div>
+      <div id="st-pack-total" class="fk-note fk-pack-total">Enter how many copies of each title you&rsquo;re bringing.</div>
+      <div id="fk-books-list" class="fk-books"></div>
+
+      <div class="fk-eyebrow fk-eyebrow-inline">Add a book not in your inventory</div>
+      <div class="fk-custom-row">
+        <input type="text" id="st-custom-title" placeholder="Title" aria-label="Title of book not in inventory">
+        <input type="text" id="st-custom-author" placeholder="Author" aria-label="Author of book not in inventory">
+        <input type="number" inputmode="numeric" id="st-custom-qty" placeholder="Qty" min="0" step="1" aria-label="Copies bringing">
+        <button type="button" class="btn sm" onclick="salesTrackerAddCustom()">Add</button>
       </div>
+      <div class="fk-note">These titles print on the tally sheet only — they aren&rsquo;t saved to your inventory and have no payment link to build a QR code from.</div>
     </div>
 
-    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:12px;">
-      <input type="checkbox" id="st-notes" style="width:16px;height:16px;cursor:pointer;">
-      <div style="flex:1;">
-        <div style="font-size:13px;color:var(--text);font-weight:600;">Include price paid row under each tally</div>
-        <div style="font-size:11px;color:var(--text2);line-height:1.4;">Adds a small cell underneath each tally column to record the price paid for that sale — useful for tracking discounts.</div>
+    <div class="fk-opts">
+      <div class="fk-card" id="fk-opts-tracker">
+        <div class="fk-eyebrow">Tally sheet</div>
+        <div class="form-group" style="margin:0 0 10px;">
+          <label for="st-cols">Tally columns per book</label>
+          <input type="number" inputmode="numeric" id="st-cols" value="10" min="1" max="30">
+          <div class="fk-hint">Each column is one sale.</div>
+        </div>
+        <div class="form-group" style="margin:0 0 10px;">
+          <label for="st-currency">Currency</label>
+          <select id="st-currency">
+            <option value="EUR">€ EUR</option>
+            <option value="CAD">CA$ CAD</option>
+            <option value="USD">$ USD</option>
+            <option value="GBP">£ GBP</option>
+            <option value="MXN">MX$ MXN</option>
+          </select>
+          <div class="fk-hint">Used in price-paid cells.</div>
+        </div>
+        <label class="fk-check fk-check-block">
+          <input type="checkbox" id="st-notes">
+          <span>
+            <span class="fk-check-title">Include a price-paid row</span>
+            <span class="fk-check-note">Adds a cell under each tally column to record what that copy actually sold for — useful for tracking discounts.</span>
+          </span>
+        </label>
       </div>
-    </label>
 
-    <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Books to include</div>
-    <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:8px;">
-      <button type="button" class="btn sm" onclick="salesTrackerSelectAll(true)">Select all</button>
-      <button type="button" class="btn sm" onclick="salesTrackerSelectAll(false)">Clear</button>
-    </div>
-    <div id="st-pack-total" style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600;">Enter how many copies of each title you're bringing.</div>
-    <div id="st-books-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;border:1px solid rgba(0,0,0,.12);border-radius:var(--r2);padding:10px;background:rgba(0,0,0,.03);"></div>
-
-    <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin:14px 0 8px;">Add a book not in your inventory</div>
-    <div style="display:flex;gap:6px;align-items:stretch;">
-      <input type="text" id="st-custom-title" placeholder="Title" style="flex:2;min-width:0;">
-      <input type="text" id="st-custom-author" placeholder="Author" style="flex:1.5;min-width:0;">
-      <input type="number" inputmode="numeric" id="st-custom-qty" placeholder="Qty" min="0" step="1" style="flex:0.6;min-width:0;">
-      <button type="button" class="btn sm" onclick="salesTrackerAddCustom()">Add</button>
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:6px;">Books added here only appear on this tracker — they're not saved to your inventory.</div>
-
-    <div class="modal-footer" role="dialog" aria-modal="true">
-      <button class="btn" onclick="closeM('sales-tracker')">Cancel</button>
-      <button class="btn gold" onclick="printSalesTracker()">🖨 Print tracker</button>
-    </div>
-  </div>
-</div>
-
-<!-- QR CODES PRINT MODAL -->
-<div class="overlay" id="m-qr-print" style="display:none;">
-  <div class="modal" role="dialog" aria-modal="true" style="max-width:560px;">
-    <div class="modal-title" role="dialog" aria-modal="true">📱 Printable payment QR codes</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.5;">
-      Generates an editorial-style printable sheet of payment QR codes for the books you select. Each card shows the QR, title, prices, and the underlying Stripe link.
-    </div>
-
-    <div style="background:rgba(200,145,58,0.08);border:1px solid rgba(200,145,58,0.25);border-radius:var(--r2);padding:12px;margin-bottom:12px;">
-      <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-text,#8a5815);margin-bottom:8px;">Fair presets</div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <select id="qrp-preset-select" aria-label="Saved fair preset" onchange="qrPresetSelected(this.value)" style="flex:1;min-width:150px;font-size:12px;padding:5px 8px;">
-          <option value="">No saved fairs yet</option>
-        </select>
-        <button type="button" class="btn sm" onclick="qrSaveFairPreset()">💾 Save…</button>
-        <button type="button" class="btn sm" id="qrp-preset-delete" onclick="qrDeleteFairPreset()" disabled>Delete</button>
-      </div>
-      <div id="qrp-preset-note" style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;">Set the sheet up once, save it under the fair&rsquo;s name, and recall it next time.</div>
-    </div>
-
-    <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group" style="margin:0;">
-        <label for="qrp-cols">Columns per row</label>
-        <input type="number" inputmode="numeric" id="qrp-cols" value="3" min="1" max="6">
-      </div>
-      <div class="form-group" style="margin:0;">
-        <label for="qrp-base-cur">Base currency</label>
-        <select id="qrp-base-cur" onchange="renderQRPrintBookList()">
-          <option value="auto" selected>Per-book native</option>
-          <option value="EUR">EUR (€)</option>
-          <option value="CAD">CAD (CA$)</option>
-          <option value="USD">USD ($)</option>
-          <option value="GBP">GBP (£)</option>
-          <option value="MXN">MXN (MX$)</option>
-        </select>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Marked as the listed price; others are converted via your saved FX rates.</div>
+      <div class="fk-card" id="fk-opts-qr">
+        <div class="fk-eyebrow">Payment QR sheet</div>
+        <div class="form-group" style="margin:0 0 10px;">
+          <label for="qrp-cols">Columns per row</label>
+          <input type="number" inputmode="numeric" id="qrp-cols" value="3" min="1" max="6">
+          <div class="fk-hint">How many QR cards sit side by side.</div>
+        </div>
+        <div class="form-group" style="margin:0 0 10px;">
+          <label for="qrp-base-cur">Base currency</label>
+          <select id="qrp-base-cur" onchange="renderQRPrintBookList()">
+            <option value="auto" selected>Per-book native</option>
+            <option value="EUR">EUR (€)</option>
+            <option value="CAD">CAD (CA$)</option>
+            <option value="USD">USD ($)</option>
+            <option value="GBP">GBP (£)</option>
+            <option value="MXN">MXN (MX$)</option>
+          </select>
+          <div class="fk-hint">Marked as the listed price; others are converted via your saved FX rates.</div>
+        </div>
+        <div class="fk-eyebrow fk-eyebrow-inline">Price columns on each card</div>
+        <div class="fk-checks">
+          <label class="fk-check"><input type="checkbox" id="qrp-show-eur" checked><span>EUR</span></label>
+          <label class="fk-check"><input type="checkbox" id="qrp-show-cad" checked><span>CAD</span></label>
+          <label class="fk-check"><input type="checkbox" id="qrp-show-usd" checked><span>USD</span></label>
+          <label class="fk-check"><input type="checkbox" id="qrp-show-mxn"><span>MXN</span></label>
+        </div>
+        <label class="fk-check fk-check-block fk-check-gold">
+          <input type="checkbox" id="qrp-fit-one-page" checked>
+          <span>
+            <span class="fk-check-title">📄 Fit every card onto one page</span>
+            <span class="fk-check-note">Shrinks the cards so the whole stall fits on a single sheet.</span>
+          </span>
+        </label>
       </div>
     </div>
 
-    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:6px;">
-      <input type="checkbox" id="qrp-show-eur" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="font-size:13px;color:var(--text);font-weight:600;">Show EUR price</span>
-    </label>
-    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:6px;">
-      <input type="checkbox" id="qrp-show-cad" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="font-size:13px;color:var(--text);font-weight:600;">Show CAD price</span>
-    </label>
-    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:8px;">
-      <input type="checkbox" id="qrp-show-usd" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="font-size:13px;color:var(--text);font-weight:600;">Show USD price</span>
-    </label>
-    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(0,0,0,.03);margin-bottom:8px;">
-      <input type="checkbox" id="qrp-show-mxn" style="width:16px;height:16px;cursor:pointer;">
-      <span style="font-size:13px;color:var(--text);font-weight:600;">Show MXN price</span>
-    </label>
-    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;background:rgba(200,145,58,0.08);border:1px solid rgba(200,145,58,0.25);margin-bottom:12px;">
-      <input type="checkbox" id="qrp-fit-one-page" checked style="width:16px;height:16px;cursor:pointer;">
-      <span style="font-size:13px;color:var(--text);font-weight:600;">📄 Fit all QR cards onto 1 single printed page</span>
-    </label>
-
-    <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Books to include</div>
-    <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:8px;">
-      <button type="button" class="btn sm" onclick="qrPrintSelectAll(true)">Select all</button>
-      <button type="button" class="btn sm" onclick="qrPrintSelectAll(false)">Clear</button>
-    </div>
-    <div id="qrp-books-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;border:1px solid rgba(0,0,0,.12);border-radius:var(--r2);padding:10px;background:rgba(0,0,0,.03);"></div>
-
-    <div class="modal-footer" role="dialog" aria-modal="true">
-      <button class="btn" onclick="closeM('qr-print')">Cancel</button>
-      <button class="btn gold" onclick="printPaymentQRCodes()">🖨 Print QR sheet</button>
+    <div class="modal-footer fk-footer">
+      <div id="fk-summary" class="fk-summary" aria-live="polite"></div>
+      <div class="fk-footer-actions">
+        <button class="btn" onclick="closeM('fair-kit')">Cancel</button>
+        <button class="btn gold" id="fk-print-btn" onclick="printFairKit()">🖨 Print both sheets</button>
+      </div>
     </div>
   </div>
 </div>
