@@ -3547,7 +3547,14 @@ function updateAllOverview() {
       conTotals.outstanding += st.outstanding || 0;
       return { store: st.name, sent, sold, outstanding: st.outstanding || 0, isActive, pct: sent ? Math.round((sold / sent) * 100) : 0 };
     });
-    const totals = rows.reduce((a, r) => { a.sent += r.sent; a.sold += r.sold; a.outstanding += r.outstanding; a.active += r.isActive ? 1 : 0; return a; }, { sent: 0, sold: 0, outstanding: 0, active: 0 });
+    // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
+  const totals = { sent: 0, sold: 0, outstanding: 0, active: 0 };
+    for (const r of rows) {
+      totals.sent += r.sent;
+      totals.sold += r.sold;
+      totals.outstanding += r.outstanding;
+      if (r.isActive) totals.active += 1;
+    }
     conBookMap.set(book.id, { id: book.id, title: book.title, accent: book.accent || 'var(--gold2)', rows, totals });
   });
   window._allConBooks = Array.from(conBookMap.values());
@@ -8807,7 +8814,11 @@ function renderArtistTransfers() {
   const banner = $('author-payment-banner');
   if (banner) {
     if (isAuthor() && transfers.length > 0) {
-      const totalOwed = transfers.reduce((a, t) => a + t.total, 0);
+      // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
+  let totalOwed = 0;
+      for (const t of transfers) {
+        totalOwed += t.total;
+      }
       banner.style.display = '';
       $('apb-amount').textContent = fmt(totalOwed, cur);
       $('apb-detail').textContent = `${transfers.length} transfer${transfers.length > 1 ? 's' : ''} from sales collected on your end (incl. pending)`;
@@ -14857,8 +14868,20 @@ function openCloudReceiptsModal() {
   const countEl = $('cloud-receipts-count');
   if (!modal || !body) return;
 
-  const ourFiles = rows.reduce((n, r) => n + r.urls.filter(isOurCloudReceipt).length, 0);
-  const linked = rows.reduce((n, r) => n + r.urls.filter(isExternalLink).length, 0);
+  let ourFiles = 0;
+  for (const r of rows) {
+    if (!r.urls) continue;
+    for (const u of r.urls) {
+      if (isOurCloudReceipt(u)) ourFiles++;
+    }
+  }
+  let linked = 0;
+  for (const r of rows) {
+    if (!r.urls) continue;
+    for (const u of r.urls) {
+      if (isExternalLink(u)) linked++;
+    }
+  }
 
   if (countEl) {
     const bits = [];
@@ -18541,7 +18564,11 @@ window.printSalesTracker = function () {
     return { title: book.title, author: book.author || '', qty: Number(salesTrackerQtyBrought[sel.value]) || 0 };
   }).filter(Boolean);
 
-  const totalPacked = selectedBooks.reduce((sum, b) => sum + b.qty, 0);
+  // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
+  let totalPacked = 0;
+  for (const b of selectedBooks) {
+    totalPacked += b.qty;
+  }
 
   const bookRows = selectedBooks.map(({ title, author, qty }) => {
     const packedNote = qty > 0 ? `<div class="title-packed">Packed: ${qty}</div>` : '';
@@ -19318,12 +19345,24 @@ function calculateInventoryValuationData() {
       }))
       .filter(x => x.onHand > 0);
 
-    const stockConsigned = storeBreakdown.reduce((sum, st) => sum + st.onHand, 0);
+    // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
+  let stockConsigned = 0;
+    for (const st of storeBreakdown) {
+      stockConsigned += st.onHand;
+    }
 
     const totalUnsold = stockOnHand + stockConsigned;
 
-    const totalSold = (s.hist || []).reduce((acc, h) => acc + (parseInt(h.qty, 10) || 0), 0)
-      + storesList.reduce((acc, l) => acc + (parseInt(l.sold, 10) || 0), 0);
+    // ⚡ Bolt: Imperative loops instead of .reduce() avoid array allocations in rendering functions
+  let totalSold = 0;
+    if (s.hist) {
+      for (const h of s.hist) {
+        totalSold += (parseInt(h.qty, 10) || 0);
+      }
+    }
+    for (const l of storesList) {
+      totalSold += (parseInt(l.sold, 10) || 0);
+    }
 
     const printRun = parseInt(book.maxPrint || book.totalPrinted || 0, 10) || (totalUnsold + totalSold);
     const compsDamaged = Math.max(0, printRun - totalUnsold - totalSold);

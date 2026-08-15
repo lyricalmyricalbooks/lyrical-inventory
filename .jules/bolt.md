@@ -5,3 +5,7 @@
 ## 2025-02-12 - Date String Sorting Optimization
 **Learning:** `String.prototype.localeCompare()` is significantly slower than standard string comparison operators (`<`, `>`). Since the application stores dates as ISO-like 'YYYY-MM-DD' strings, we can safely replace `localeCompare()` with `<` and `>` when sorting arrays by date. This avoids locale-aware comparison overhead while maintaining correct chronological ordering.
 **Action:** Always prefer standard string inequality operators (`<`, `>`) when sorting standard ISO-like date strings. Reserve `localeCompare()` for sorting names or other strings where locale-specific sorting rules (like accents or capitalization) are actually required.
+
+## 2025-02-23 - Replace reduce with for loops
+**Learning:** In hot loops, replacing array methods like reduce with imperative for loops avoids intermediate allocations and reduces Garbage Collection (GC) overhead.
+**Action:** Use direct imperative iteration for scalar accumulation in frequently updated computations to improve speed.
