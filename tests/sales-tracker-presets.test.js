@@ -227,13 +227,27 @@ describe('Sales tracker fair preset wiring', () => {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
 
-  it('exposes the preset controls in the sales tracker modal', () => {
-    expect(html).toContain('id="st-preset-select"');
-    expect(html).toContain('id="st-preset-delete"');
-    expect(html).toContain('id="st-preset-note"');
-    expect(html).toContain('stSaveFairPreset()');
-    expect(html).toContain('stDeleteFairPreset()');
-    expect(html).toContain('stPresetSelected(this.value)');
+  // The tally sheet and the QR sheet share one dialog and one saved fair, so
+  // the tracker's preset controls are the fair kit's preset controls.
+  it('exposes the preset controls in the fair kit modal', () => {
+    expect(html).toContain('id="fk-preset-select"');
+    expect(html).toContain('id="fk-preset-delete"');
+    expect(html).toContain('id="fk-preset-note"');
+    expect(html).toContain('fkSaveFairPreset()');
+    expect(html).toContain('fkDeleteFairPreset()');
+    expect(html).toContain('fkPresetSelected(this.value)');
+  });
+
+  it('saves and deletes the tally half of a fair alongside its QR half', () => {
+    const save = mainJs.slice(mainJs.indexOf('window.fkSaveFairPreset'));
+    const saveBody = save.slice(0, save.indexOf('\nwindow.'));
+    expect(saveBody).toContain('_stReadPresetForm(name)');
+    expect(saveBody).toContain('_qrReadPresetForm(name)');
+
+    const del = mainJs.slice(mainJs.indexOf('window.fkDeleteFairPreset'));
+    const delBody = del.slice(0, del.indexOf('\n};'));
+    expect(delBody).toContain('removeStPreset');
+    expect(delBody).toContain('removeQrPreset');
   });
 
   it('exposes a packing-quantity field per book and a running total', () => {
@@ -244,7 +258,7 @@ describe('Sales tracker fair preset wiring', () => {
   });
 
   it('loads presets when the modal opens, so a fair survives a page reload', () => {
-    expect(mainJs).toMatch(/window\.openSalesTrackerModal[\s\S]{0,300}loadStPresets/);
+    expect(mainJs).toMatch(/window\.openFairKitModal[\s\S]{0,300}loadStPresets/);
   });
 
   it('re-renders the book list before imposing a preset selection on it', () => {
@@ -258,8 +272,8 @@ describe('Sales tracker fair preset wiring', () => {
   });
 
   it('prints the packed quantity and a packed total on the sheet', () => {
-    const fn = mainJs.slice(mainJs.indexOf('window.printSalesTracker = function'));
-    const body = fn.slice(0, fn.indexOf('\nwindow.'));
+    const fn = mainJs.slice(mainJs.indexOf('function printSalesTracker('));
+    const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
     expect(body).toContain('title-packed');
     expect(body).toContain('totalPacked');
   });
