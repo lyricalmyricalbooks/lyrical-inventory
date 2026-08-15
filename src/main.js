@@ -7508,15 +7508,37 @@ function renderBatchExpenseModal() {
   const options = batchExpenseDestinations();
   const destWrap = $('bx-dest');
   if (destWrap) {
-    // With only one place to post, a picker is just a control that can't be
-    // used — say where it's going instead.
-    destWrap.innerHTML = options.length < 2
-      ? `<div class="bx-dest-single">Logging to <strong>${escapeHtml(options[0]?.label || '')}</strong> · ${escapeHtml(options[0]?.sub || '')}</div>`
-      : options.map(o => `
-        <button type="button" class="bx-dest-btn${o.id === _batchExpenseDest ? ' active' : ''}" onclick="setBatchExpenseDest('${o.id}')">
-          <span class="bx-dest-label">${escapeHtml(o.label)}</span>
-          <span class="bx-dest-sub">${escapeHtml(o.sub)}</span>
-        </button>`).join('');
+    // Built with DOM calls rather than an innerHTML template, because the one
+    // value here that isn't ours is the book's own title. Going through
+    // textContent means a title containing a quote or an angle bracket is
+    // never markup at any point, instead of relying on an escape being applied
+    // at every interpolation forever.
+    destWrap.textContent = '';
+    if (options.length < 2) {
+      const one = options[0] || { label: '', sub: '' };
+      const line = document.createElement('div');
+      line.className = 'bx-dest-single';
+      line.append('Logging to ');
+      const name = document.createElement('strong');
+      name.textContent = one.label;
+      line.append(name, ` · ${one.sub}`);
+      destWrap.append(line);
+    } else {
+      options.forEach(o => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bx-dest-btn' + (o.id === _batchExpenseDest ? ' active' : '');
+        const label = document.createElement('span');
+        label.className = 'bx-dest-label';
+        label.textContent = o.label;
+        const sub = document.createElement('span');
+        sub.className = 'bx-dest-sub';
+        sub.textContent = o.sub;
+        btn.append(label, sub);
+        btn.addEventListener('click', () => setBatchExpenseDest(o.id));
+        destWrap.append(btn);
+      });
+    }
   }
 
   // Trips group a whole batch far more often than a single receipt — a fair,
