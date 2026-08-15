@@ -336,6 +336,17 @@ describe('fair kit wiring', () => {
     }
   });
 
+  // A panel with its own scrollbar hides rows behind an edge nobody notices —
+  // and on a packing list, a hidden row is a book left at home.
+  it('leaves the dialog itself as the only scrolling surface', () => {
+    const modal = html.slice(html.indexOf('id="m-fair-kit"'), html.indexOf('<!-- WEB ANALYTICS'));
+    expect(modal).not.toMatch(/overflow|max-height/);
+
+    const css = fs.readFileSync(path.join(process.cwd(), 'src/style.css'), 'utf8');
+    const section = css.slice(css.indexOf('FAIR PRINT KIT MODAL'));
+    expect(section).not.toMatch(/overflow|max-height/);
+  });
+
   it('sends both print paths at the same modal, so neither can strand the other', () => {
     expect(mainJs).not.toContain("closeM('sales-tracker')");
     expect(mainJs).not.toContain("closeM('qr-print')");

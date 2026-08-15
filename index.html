@@ -3048,12 +3048,12 @@
     <div class="fk-opts">
       <div class="fk-card" id="fk-opts-tracker">
         <div class="fk-eyebrow">Tally sheet</div>
-        <div class="form-group" style="margin:0 0 10px;">
+        <div class="form-group fk-opt-group">
           <label for="st-cols">Tally columns per book</label>
           <input type="number" inputmode="numeric" id="st-cols" value="10" min="1" max="30">
           <div class="fk-hint">Each column is one sale.</div>
         </div>
-        <div class="form-group" style="margin:0 0 10px;">
+        <div class="form-group fk-opt-group">
           <label for="st-currency">Currency</label>
           <select id="st-currency">
             <option value="EUR">€ EUR</option>
@@ -3075,12 +3075,12 @@
 
       <div class="fk-card" id="fk-opts-qr">
         <div class="fk-eyebrow">Payment QR sheet</div>
-        <div class="form-group" style="margin:0 0 10px;">
+        <div class="form-group fk-opt-group">
           <label for="qrp-cols">Columns per row</label>
           <input type="number" inputmode="numeric" id="qrp-cols" value="3" min="1" max="6">
           <div class="fk-hint">How many QR cards sit side by side.</div>
         </div>
-        <div class="form-group" style="margin:0 0 10px;">
+        <div class="form-group fk-opt-group">
           <label for="qrp-base-cur">Base currency</label>
           <select id="qrp-base-cur" onchange="renderQRPrintBookList()">
             <option value="auto" selected>Per-book native</option>
