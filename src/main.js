@@ -7209,6 +7209,31 @@ function _applyScanCategory(el, category, vendor, description) {
   return true;
 }
 
+// Read ONE receipt file and return the parsed fields. The single "✨ AI Scan"
+// buttons and the batch scanner all go through here, so a prompt or schema
+// change lands on every screen at once — the same reason the two hand-written
+// prompts were collapsed into one in the first place.
+async function _extractReceiptFromFile(apiKey, file, opts = {}) {
+  const { signal } = opts;
+  const upload = await _prepareReceiptUpload(file);
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+  const out = await _callGeminiForReceipts(apiKey, [
+    { text: _buildReceiptScanPrompt() },
+    { inline_data: { mime_type: upload.mime, data: upload.base64 } }
+  ], {
+    signal,
+    schema: RECEIPT_SCAN_SCHEMA,
+    // One receipt's JSON is a few hundred tokens; the old 8192 default let a
+    // confused model ramble, which cost latency on every scan. Kept at 2048
+    // rather than tighter because these flash models spend part of the
+    // budget on thought parts before the answer.
+    maxOutputTokens: 2048
+  });
+
+  return _parseReceiptJson(out?.text || '') || {};
+}
+
 // In-flight scan, so a second click cancels instead of hitting a dead button.
 let _receiptScanAbort = null;
 
@@ -7245,23 +7270,7 @@ async function _runReceiptScan(cfg) {
   shimmerFields.forEach(el => el.classList.add('tc-field-shimmer'));
 
   try {
-    const upload = await _prepareReceiptUpload(file);
-    if (ac.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-
-    const out = await _callGeminiForReceipts(apiKey, [
-      { text: _buildReceiptScanPrompt() },
-      { inline_data: { mime_type: upload.mime, data: upload.base64 } }
-    ], {
-      signal: ac.signal,
-      schema: RECEIPT_SCAN_SCHEMA,
-      // One receipt's JSON is a few hundred tokens; the old 8192 default let a
-      // confused model ramble, which cost latency on every scan. Kept at 2048
-      // rather than tighter because these flash models spend part of the
-      // budget on thought parts before the answer.
-      maxOutputTokens: 2048
-    });
-
-    const parsed = _parseReceiptJson(out?.text || '') || {};
+    const parsed = await _extractReceiptFromFile(apiKey, file, { signal: ac.signal });
     const applied = [];
     const warnings = [];
 
@@ -7341,6 +7350,891 @@ async function _runReceiptScan(cfg) {
     shimmerFields.forEach(el => el.classList.remove('tc-field-shimmer'));
     if (btn) { btn.textContent = oldText; btn.disabled = false; }
   }
+}
+
+// ── BATCH EXPENSE ENTRY
+// One-at-a-time is the right shape for a single subscription charge. It is the
+// wrong shape for coming home from a book fair with fourteen receipts in a
+// pocket: fourteen trips through the form, fourteen scans, fourteen chances to
+// lose one. Everything below is that same pile handled as one queue — drop them
+// all in, scan them together, fix the few the reader got wrong, post once.
+
+// Rows currently staged in the batch sheet. Addressed by `uid`, never by index:
+// a scan finishing while the owner deletes a row would otherwise write the
+// scanned values into whichever row slid up into that slot.
+let _batchExpenseRows = [];
+// 'business' = the Tax Centre operating ledger, 'project' = the active book's.
+let _batchExpenseDest = 'business';
+let _batchExpenseUid = 0;
+// In-flight batch scan, so the button can cancel the whole run.
+let _batchScanAbort = null;
+// True while scanning or logging — blocks a second run over the same rows.
+let _batchExpenseBusy = false;
+
+const BATCH_EXPENSE_CURRENCIES = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'MXN', 'JPY', 'CHF'];
+
+// Receipts read in parallel. Three keeps a pile of a dozen moving without
+// tripping Gemini's rate limiter — and a 429 costs more time than it saves,
+// because the retry re-uploads the whole image.
+const BATCH_SCAN_CONCURRENCY = 3;
+
+/** Where a batch can currently be posted, in the order they're offered. */
+function batchExpenseDestinations() {
+  const out = [];
+  // The Tax Centre ledger is publisher-only: saveTaxCenter() no-ops for an
+  // author, so offering it would silently drop the whole batch.
+  if (!isAuthor()) out.push({ id: 'business', label: 'Business ledger', sub: 'Tax Centre operating costs' });
+  if (activeBook && getBook()) {
+    out.push({ id: 'project', label: getBook().title || 'This book', sub: "This project's expense ledger" });
+  }
+  return out;
+}
+
+/** The currency a fresh row starts in for the current destination. */
+function _batchExpenseDefaultCurrency() {
+  if (_batchExpenseDest === 'project') {
+    const book = getBook();
+    if (book) return getBookCurrencyCode(book);
+  }
+  return (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
+}
+
+/**
+ * The categories the batch offers for the current destination.
+ *
+ * The business side is deliberately the union of both lists. The Tax Centre's
+ * own picker and TC_CATEGORIES have never quite agreed — the picker offers
+ * "Sales Processing Fees", TC_CATEGORIES offers "Artist Royalties" — and the
+ * AI reads receipts against EXPENSE_CATEGORIES. Offering only one of the three
+ * means a correctly-read category silently lands in the row as blank.
+ */
+function _batchExpenseCategories() {
+  if (_batchExpenseDest === 'project') return EXPENSE_CATEGORIES;
+  return TC_CATEGORIES.concat(EXPENSE_CATEGORIES.filter(c => !TC_CATEGORIES.includes(c)));
+}
+
+/**
+ * The currencies a row can be held in.
+ *
+ * The destination's own currency is always included: a book priced in a
+ * currency outside the standard list would otherwise have no option to select,
+ * and a <select> silently ignores a value it has no option for — so the row
+ * would show, and log, whatever happened to be first in the list instead.
+ */
+function _batchExpenseCurrencies() {
+  const own = _batchExpenseDefaultCurrency();
+  return BATCH_EXPENSE_CURRENCIES.includes(own)
+    ? BATCH_EXPENSE_CURRENCIES
+    : [own, ...BATCH_EXPENSE_CURRENCIES];
+}
+
+function _batchExpenseNewRow(file) {
+  return {
+    uid: `bx${++_batchExpenseUid}`,
+    file: file || null,
+    fileName: file ? file.name : '',
+    include: true,
+    // ready → scanning → scanned | failed. 'manual' is a row typed by hand,
+    // which has nothing to scan and must never be reported as a scan failure.
+    status: file ? 'ready' : 'manual',
+    error: '',
+    confidence: null,
+    vendor: '',
+    description: '',
+    date: today(),
+    amount: '',
+    currency: _batchExpenseDefaultCurrency(),
+    // Only if it's still one of this ledger's categories — a remembered value
+    // the dropdown has no option for would show blank and log as itself.
+    category: _batchExpenseCategories().includes(localStorage.getItem('lastExpenseCategory'))
+      ? localStorage.getItem('lastExpenseCategory')
+      : '',
+    reference: ''
+  };
+}
+
+function _batchExpenseRow(uid) {
+  return _batchExpenseRows.find(r => r.uid === uid) || null;
+}
+
+/**
+ * The single description line a row will be logged under.
+ * When the description already names the vendor ("Lulu print run") that string
+ * is the more useful of the two, so it wins — repeating the vendor in front of
+ * it only pads the ledger, and dropping it loses what was actually bought.
+ */
+function _batchExpenseDescription(row) {
+  const vendor = String(row.vendor || '').trim();
+  const desc = String(row.description || '').trim();
+  if (vendor && desc && !desc.toLowerCase().includes(vendor.toLowerCase())) return `${vendor} — ${desc}`;
+  return desc || vendor;
+}
+
+/**
+ * Why a row looks like something already recorded, or ''.
+ * 'ledger' — matches an expense already in the destination ledger.
+ * 'batch'  — matches an earlier row in this same pile, which is what dropping
+ *            the same photo in twice looks like.
+ * Matched on date + amount + currency, the same test the email import uses.
+ */
+function _batchExpenseDuplicate(row) {
+  const amount = Number(row.amount) || 0;
+  if (!amount || !row.date) return '';
+  const cur = String(row.currency || '').toUpperCase();
+
+  const twin = _batchExpenseRows.find(r =>
+    r !== row && r.include !== false &&
+    r.date === row.date &&
+    Math.abs((Number(r.amount) || 0) - amount) < 0.005 &&
+    String(r.currency || '').toUpperCase() === cur
+  );
+  // Only the later of a matched pair is flagged, so a genuine pair of
+  // identical charges doesn't light up both rows and read as four.
+  if (twin && _batchExpenseRows.indexOf(twin) < _batchExpenseRows.indexOf(row)) return 'batch';
+
+  if (_batchExpenseDest === 'business') {
+    return _findDuplicateExpense({ date: row.date, amount, currency: cur }) ? 'ledger' : '';
+  }
+  const hit = (getState().expenses || []).some(e =>
+    e.date === row.date &&
+    Math.abs(((e.origAmount ?? e.amount) || 0) - amount) < 0.005 &&
+    String(e.origCurrency || e.currency || '').toUpperCase() === cur
+  );
+  return hit ? 'ledger' : '';
+}
+
+function openBatchExpenseModal(dest) {
+  // Reopening mid-run would clear the rows the running batch is still walking.
+  if (_batchExpenseBusy) { showToast('⚠ The batch is still working — give it a moment', 'warn'); return; }
+  const options = batchExpenseDestinations();
+  if (!options.length) { showToast('⚠ Pick a book first', 'warn'); return; }
+  _batchExpenseDest = options.some(o => o.id === dest) ? dest : options[0].id;
+  _batchExpenseRows = [];
+  const fileInput = $('bx-files');
+  if (fileInput) fileInput.value = '';
+  if ($('bx-trip')) $('bx-trip').value = '';
+  _batchExpenseProgress(0, 0, '');
+  renderBatchExpenseModal();
+  // Esc and a backdrop tap route through closeM, not through the Cancel
+  // button, so the abort has to hang off the close event or a cancelled modal
+  // would leave a scan burning API calls against rows nobody can see.
+  const overlay = $('m-batch-expense');
+  if (overlay) overlay.addEventListener('modal-close', _onBatchExpenseModalClose, { once: true });
+  openM('batch-expense');
+}
+
+function _onBatchExpenseModalClose() {
+  if (_batchScanAbort) { _batchScanAbort.abort(); _batchScanAbort = null; }
+}
+
+function closeBatchExpenseModal() {
+  if (_batchScanAbort) { _batchScanAbort.abort(); _batchScanAbort = null; }
+  closeM('batch-expense');
+}
+
+/** Destination picker, trip field and category dropdown for the chosen ledger. */
+function renderBatchExpenseModal() {
+  const options = batchExpenseDestinations();
+  const destWrap = $('bx-dest');
+  if (destWrap) {
+    // Built with DOM calls rather than an innerHTML template, because the one
+    // value here that isn't ours is the book's own title. Going through
+    // textContent means a title containing a quote or an angle bracket is
+    // never markup at any point, instead of relying on an escape being applied
+    // at every interpolation forever.
+    destWrap.textContent = '';
+    if (options.length < 2) {
+      const one = options[0] || { label: '', sub: '' };
+      const line = document.createElement('div');
+      line.className = 'bx-dest-single';
+      line.append('Logging to ');
+      const name = document.createElement('strong');
+      name.textContent = one.label;
+      line.append(name, ` · ${one.sub}`);
+      destWrap.append(line);
+    } else {
+      options.forEach(o => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bx-dest-btn' + (o.id === _batchExpenseDest ? ' active' : '');
+        const label = document.createElement('span');
+        label.className = 'bx-dest-label';
+        label.textContent = o.label;
+        const sub = document.createElement('span');
+        sub.className = 'bx-dest-sub';
+        sub.textContent = o.sub;
+        btn.append(label, sub);
+        btn.addEventListener('click', () => setBatchExpenseDest(o.id));
+        destWrap.append(btn);
+      });
+    }
+  }
+
+  // Trips group a whole batch far more often than a single receipt — a fair,
+  // a signing weekend — so it is asked once for the pile, not once per row.
+  const tripWrap = $('bx-trip-wrap');
+  if (tripWrap) tripWrap.style.display = _batchExpenseDest === 'business' ? '' : 'none';
+  const tripList = $('bx-trip-options');
+  if (tripList) {
+    const trips = Array.from(new Set((TAX_CENTER.businessExpenses || []).map(e => e.trip).filter(Boolean)));
+    tripList.innerHTML = trips.map(t => `<option value="${escapeHtml(t)}"></option>`).join('');
+  }
+
+  const bulkCat = $('bx-bulk-cat');
+  if (bulkCat) {
+    bulkCat.innerHTML = `<option value="">Set category…</option>`
+      + _batchExpenseCategories().map(c => `<option>${escapeHtml(c)}</option>`).join('');
+  }
+
+  // Scanning needs a key, and an author has no Tax Centre to keep one in.
+  const canScan = !!(TAX_CENTER.settings?.geminiKey) && !isAuthor();
+  const scanBtn = $('bx-scan-btn');
+  if (scanBtn) scanBtn.style.display = canScan ? '' : 'none';
+  const scanHint = $('bx-scan-hint');
+  if (scanHint) {
+    scanHint.textContent = canScan
+      ? 'Reads the vendor, date, total, currency and category off every receipt you added.'
+      : 'Add a Gemini API key in the Tax Centre config to read receipts automatically.';
+  }
+
+  renderBatchExpenseRows();
+}
+
+function setBatchExpenseDest(dest) {
+  if (_batchExpenseBusy) { showToast('⚠ Finish the batch first', 'warn'); return; }
+  if (dest === _batchExpenseDest) return;
+  _batchExpenseDest = dest;
+  // The two ledgers keep money in different currencies and use different
+  // category lists, so re-point anything still holding the old defaults.
+  const fallbackCur = _batchExpenseDefaultCurrency();
+  const cats = _batchExpenseCategories();
+  _batchExpenseRows.forEach(r => {
+    if (!r.currency) r.currency = fallbackCur;
+    if (r.category && !cats.includes(r.category)) r.category = '';
+  });
+  renderBatchExpenseModal();
+}
+
+function _batchExpenseAddFiles(files) {
+  const added = Array.from(files || []).filter(Boolean);
+  if (!added.length) return;
+  added.forEach(f => _batchExpenseRows.push(_batchExpenseNewRow(f)));
+  renderBatchExpenseRows();
+  showToast(`Added ${added.length} receipt${added.length > 1 ? 's' : ''}`);
+}
+
+window.batchExpenseFilesChosen = function () {
+  const input = $('bx-files');
+  if (!input || !input.files) return;
+  _batchExpenseAddFiles(input.files);
+  // Cleared so re-picking the same file still fires `change` — the rows own
+  // the File objects now, the input is only a doorway.
+  input.value = '';
+};
+window.batchExpenseDragOver = function (ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.add('drag'); };
+window.batchExpenseDragLeave = function (ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.remove('drag'); };
+window.batchExpenseDrop = function (ev) {
+  ev.preventDefault();
+  const dz = $('bx-dropzone'); if (dz) dz.classList.remove('drag');
+  if (ev.dataTransfer && ev.dataTransfer.files) _batchExpenseAddFiles(ev.dataTransfer.files);
+};
+
+function batchExpenseAddBlankRow() {
+  _batchExpenseRows.push(_batchExpenseNewRow(null));
+  renderBatchExpenseRows();
+  const el = document.querySelector(`[data-bx-uid="${_batchExpenseRows[_batchExpenseRows.length - 1].uid}"][data-bx-field="vendor"]`);
+  if (el) el.focus();
+}
+
+function removeBatchExpenseRow(uid) {
+  const row = _batchExpenseRow(uid);
+  if (!row) return;
+  if (row.status === 'scanning') { showToast('⚠ That receipt is still being read', 'warn'); return; }
+  _batchExpenseRows = _batchExpenseRows.filter(r => r.uid !== uid);
+  renderBatchExpenseRows();
+}
+
+function toggleAllBatchExpenses(on) {
+  _batchExpenseRows.forEach(r => { r.include = !!on; });
+  renderBatchExpenseRows();
+}
+
+function deselectDuplicateBatchExpenses() {
+  let n = 0;
+  // Snapshot first: unticking as we go changes what _batchExpenseDuplicate
+  // sees for the rows after it, so a run of three copies would only lose one.
+  const flagged = _batchExpenseRows.filter(r => r.include !== false && _batchExpenseDuplicate(r));
+  flagged.forEach(r => { r.include = false; n++; });
+  renderBatchExpenseRows();
+  showToast(n ? `Deselected ${n} likely duplicate${n > 1 ? 's' : ''}` : 'No duplicates flagged', n ? 'ok' : 'warn');
+}
+
+/** Apply the toolbar's category (or date) to every selected row at once. */
+function applyBatchExpenseBulk(field) {
+  const src = field === 'date' ? $('bx-bulk-date') : $('bx-bulk-cat');
+  const value = src?.value || '';
+  if (!value) { showToast(`⚠ Choose a ${field === 'date' ? 'date' : 'category'} first`, 'warn'); return; }
+  let n = 0;
+  _batchExpenseRows.forEach(r => {
+    if (r.include === false) return;
+    if (field === 'date') r.date = value; else r.category = value;
+    n++;
+  });
+  renderBatchExpenseRows();
+  showToast(n ? `Applied to ${n} row${n > 1 ? 's' : ''}` : 'No rows selected', n ? 'ok' : 'warn');
+}
+
+const BATCH_STATUS_LABEL = {
+  ready: '⏳ Not read yet',
+  scanning: '✨ Reading…',
+  scanned: '✓ Read',
+  failed: '⚠ Could not read',
+  manual: 'Typed in'
+};
+
+function _batchExpenseStatusCell(row) {
+  const dup = _batchExpenseDuplicate(row);
+  const conf = Number(row.confidence);
+  const bits = [`<span class="bx-status bx-status-${row.status}">${BATCH_STATUS_LABEL[row.status] || ''}</span>`];
+  if (row.status === 'scanned' && Number.isFinite(conf) && conf > 0 && conf < 0.5) {
+    bits.push(`<span class="bx-flag">low confidence — check the total</span>`);
+  }
+  if (dup === 'ledger') bits.push(`<span class="bx-flag bx-flag-warn">already in the ledger</span>`);
+  if (dup === 'batch') bits.push(`<span class="bx-flag bx-flag-warn">same as a row above</span>`);
+  if (row.error) bits.push(`<span class="bx-flag bx-flag-bad">${escapeHtml(row.error)}</span>`);
+  return bits.join('');
+}
+
+function renderBatchExpenseRows() {
+  const wrap = $('bx-rows');
+  if (!wrap) return;
+  const rows = _batchExpenseRows;
+
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="empty-state bx-empty">Nothing staged yet. Drop your receipts above, or add a row to type one in by hand.</div>`;
+    _updateBatchExpenseSummary();
+    return;
+  }
+
+  const cats = _batchExpenseCategories();
+  const catOptions = (sel) => `<option value="">Category…</option>`
+    + cats.map(c => `<option${c === sel ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+  const currencies = _batchExpenseCurrencies();
+  const curOptions = (sel) => (currencies.includes(sel) ? currencies : [sel, ...currencies])
+    .filter(Boolean)
+    .map(c => `<option${c === sel ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+
+  wrap.innerHTML = `
+    <div class="tbl-wrap bx-tbl-wrap">
+      <table class="tbl bx-tbl">
+        <thead><tr>
+          <th class="bx-col-check"></th>
+          <th>Receipt</th><th>Date</th><th>Vendor / what it was</th><th>Category</th><th>Ref</th>
+          <th class="r bx-col-amount">Amount</th><th class="bx-col-actions"></th>
+        </tr></thead>
+        <tbody>
+        ${rows.map(r => `
+          <tr data-bx-row="${r.uid}"${_batchExpenseDuplicate(r) ? ' class="bx-dup"' : ''}>
+            <td class="bx-col-check"><input type="checkbox" data-bx-include="${r.uid}" ${r.include !== false ? 'checked' : ''} aria-label="Include this expense"></td>
+            <td class="bx-cell-file">
+              <div class="bx-fname" title="${escapeHtml(r.fileName || 'No receipt attached')}">${r.file ? `🧾 ${escapeHtml(r.fileName)}` : '<span class="bx-nofile">no receipt</span>'}</div>
+              <div class="bx-status-wrap" data-bx-status="${r.uid}">${_batchExpenseStatusCell(r)}</div>
+            </td>
+            <td><input type="date" data-bx-uid="${r.uid}" data-bx-field="date" value="${escapeHtml(r.date || '')}" aria-label="Date"></td>
+            <td class="bx-cell-desc">
+              <input type="text" data-bx-uid="${r.uid}" data-bx-field="vendor" value="${escapeHtml(r.vendor || '')}" placeholder="Vendor" aria-label="Vendor">
+              <input type="text" data-bx-uid="${r.uid}" data-bx-field="description" value="${escapeHtml(r.description || '')}" placeholder="What it was" aria-label="Description">
+            </td>
+            <td><select data-bx-uid="${r.uid}" data-bx-field="category" aria-label="Category">${catOptions(r.category)}</select></td>
+            <td><input type="text" data-bx-uid="${r.uid}" data-bx-field="reference" value="${escapeHtml(r.reference || '')}" placeholder="—" aria-label="Reference"></td>
+            <td class="r bx-cell-amount">
+              <select data-bx-uid="${r.uid}" data-bx-field="currency" aria-label="Currency">${curOptions(r.currency)}</select>
+              <input type="number" step="0.01" min="0" data-bx-uid="${r.uid}" data-bx-field="amount" value="${r.amount === '' ? '' : escapeHtml(String(r.amount))}" placeholder="0.00" aria-label="Amount">
+            </td>
+            <td class="bx-col-actions">
+              ${r.file ? `<button class="btn sm" type="button" title="Read this receipt again" aria-label="Read this receipt again" onclick="rescanBatchExpenseRow('${r.uid}')">✨</button>` : ''}
+              <button class="btn sm" type="button" title="Remove this row" aria-label="Remove this row" onclick="removeBatchExpenseRow('${r.uid}')">🗑️</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  wrap.querySelectorAll('[data-bx-field]').forEach(el => {
+    el.addEventListener('change', () => {
+      const row = _batchExpenseRow(el.getAttribute('data-bx-uid'));
+      if (!row) return;
+      const field = el.getAttribute('data-bx-field');
+      let v = el.value;
+      if (field === 'currency') v = String(v).toUpperCase();
+      if (field === 'date') v = normalizeReceiptDate(v) || v;
+      row[field] = v;
+      // Editing a row is how a wrongly-flagged duplicate gets cleared, and how
+      // a mistyped amount creates a new one — so the flags follow every edit.
+      row.error = '';
+      _repaintBatchExpenseStatuses();
+      _updateBatchExpenseSummary();
+    });
+  });
+  wrap.querySelectorAll('[data-bx-include]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const row = _batchExpenseRow(cb.getAttribute('data-bx-include'));
+      if (row) row.include = !!cb.checked;
+      _repaintBatchExpenseStatuses();
+      _updateBatchExpenseSummary();
+    });
+  });
+
+  _updateBatchExpenseSummary();
+}
+
+/**
+ * Refresh only the status/flag cells and the duplicate tint.
+ * A full re-render here would throw away whatever the owner is mid-way through
+ * typing in another row, which is exactly when a scan tends to land.
+ */
+function _repaintBatchExpenseStatuses() {
+  _batchExpenseRows.forEach(row => {
+    const cell = document.querySelector(`[data-bx-status="${row.uid}"]`);
+    if (cell) cell.innerHTML = _batchExpenseStatusCell(row);
+    const tr = document.querySelector(`[data-bx-row="${row.uid}"]`);
+    if (tr) tr.classList.toggle('bx-dup', !!_batchExpenseDuplicate(row));
+  });
+}
+
+/** Push a scanned row's values back into its inputs without redrawing the table. */
+function _paintBatchExpenseRow(row) {
+  const set = (field, value) => {
+    const el = document.querySelector(`[data-bx-uid="${row.uid}"][data-bx-field="${field}"]`);
+    if (!el) return;
+    // A <select> silently ignores a value it has no <option> for, which is how
+    // an AUD receipt used to end up logged as Canadian. Leave the field alone
+    // and let the row's own warning say so instead.
+    if (el.tagName === 'SELECT' && !Array.from(el.options).some(o => (o.value || o.textContent).trim() === value)) return;
+    el.value = value;
+  };
+  set('date', row.date || '');
+  set('vendor', row.vendor || '');
+  set('description', row.description || '');
+  set('category', row.category || '');
+  set('reference', row.reference || '');
+  set('currency', row.currency || '');
+  set('amount', row.amount === '' ? '' : String(row.amount));
+  _repaintBatchExpenseStatuses();
+  _updateBatchExpenseSummary();
+}
+
+/** Selected-row count and per-currency totals, so the pile can be sanity-checked. */
+function _updateBatchExpenseSummary() {
+  const el = $('bx-summary');
+  const submit = $('bx-submit-btn');
+  const selected = _batchExpenseRows.filter(r => r.include !== false);
+  const totals = {};
+  selected.forEach(r => {
+    const amt = Number(r.amount) || 0;
+    if (!amt) return;
+    const cur = String(r.currency || '').toUpperCase() || _batchExpenseDefaultCurrency();
+    totals[cur] = (totals[cur] || 0) + amt;
+  });
+  // Currency code spelled out: two of these share a "$", and a batch summary
+  // that reads "$340.19 + $55.00" hides which pile is which.
+  const parts = Object.keys(totals).sort().map(c => `${fmt(totals[c], c)} ${c}`);
+  if (el) {
+    el.textContent = selected.length
+      ? `${selected.length} selected${parts.length ? ` · ${parts.join(' + ')}` : ''}`
+      : 'Nothing selected';
+  }
+  if (submit) {
+    submit.disabled = !selected.length || _batchExpenseBusy;
+    if (!_batchExpenseBusy) {
+      submit.textContent = selected.length
+        ? `Log ${selected.length} expense${selected.length > 1 ? 's' : ''}`
+        : 'Log expenses';
+    }
+  }
+  const unscanned = _batchExpenseRows.filter(r => r.file && r.status !== 'scanned').length;
+  const scanBtn = $('bx-scan-btn');
+  if (scanBtn && !_batchExpenseBusy) {
+    scanBtn.textContent = unscanned ? `✨ AI Scan ${unscanned} receipt${unscanned > 1 ? 's' : ''}` : '✨ AI Scan';
+    scanBtn.disabled = !unscanned;
+  }
+}
+
+function _batchExpenseProgress(done, total, label) {
+  const wrap = $('bx-progress');
+  const bar = $('bx-progress-bar');
+  const text = $('bx-progress-text');
+  if (!wrap) return;
+  if (total <= 0) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  if (bar) bar.style.width = `${Math.round((done / total) * 100)}%`;
+  if (text) text.textContent = `${label} ${done} of ${total}`;
+}
+
+/** Copy one Gemini reading onto a row, keeping whatever it couldn't determine. */
+function _applyBatchScanResult(row, parsed) {
+  const vendor = String(parsed.vendor || '').trim();
+  const description = String(parsed.description || '').trim();
+  const amount = _parseReceiptAmount(parsed.amount);
+  const date = normalizeReceiptDate(parsed.date);
+  const warn = [];
+
+  if (vendor) row.vendor = vendor;
+  if (description) row.description = description;
+  if (amount > 0) row.amount = amount.toFixed(2); else warn.push('amount');
+  if (date) row.date = date; else warn.push('date');
+
+  const want = String(parsed.currency || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  if (want && _batchExpenseCurrencies().includes(want)) row.currency = want;
+  else if (want) warn.push(`currency (${want})`);
+
+  const cats = _batchExpenseCategories();
+  const cat = cats.includes(parsed.category) ? parsed.category : inferReceiptCategory(vendor, description);
+  if (cat && cats.includes(cat)) row.category = cat;
+
+  if (parsed.reference) row.reference = String(parsed.reference).trim();
+
+  const conf = Number(parsed.confidence);
+  row.confidence = Number.isFinite(conf) ? conf : null;
+  // Nothing usable came back at all — say so on the row rather than leaving it
+  // looking scanned-and-empty, which reads as "the receipt had no total".
+  if (!vendor && !description && amount <= 0 && !date) {
+    row.status = 'failed';
+    row.error = 'Nothing readable — try a sharper photo, or type it in';
+    return;
+  }
+  row.status = 'scanned';
+  row.error = warn.length ? `check ${warn.join(', ')}` : '';
+}
+
+async function scanAllBatchExpenses(force) {
+  if (_batchScanAbort) { _batchScanAbort.abort(); return; }
+  const targets = _batchExpenseRows.filter(r => r.file && (force || r.status !== 'scanned'));
+  if (!targets.length) { showToast('⚠ No receipts left to read', 'warn'); return; }
+
+  const apiKey = TAX_CENTER.settings?.geminiKey || '';
+  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+
+  const btn = $('bx-scan-btn');
+  const ac = new AbortController();
+  _batchScanAbort = ac;
+  _batchExpenseBusy = true;
+  // A whole pile takes as long as it takes, so the only bound worth having is
+  // the owner's — the button stays live so it can cancel.
+  if (btn) { btn.textContent = 'Reading… (tap to cancel)'; btn.disabled = false; }
+
+  targets.forEach(r => { r.status = 'scanning'; r.error = ''; });
+  _repaintBatchExpenseStatuses();
+
+  let done = 0;
+  _batchExpenseProgress(0, targets.length, 'Read');
+
+  try {
+    const results = await _runExtractionPool(targets, BATCH_SCAN_CONCURRENCY, async (row) => {
+      const parsed = await _extractReceiptFromFile(apiKey, row.file, { signal: ac.signal });
+      _applyBatchScanResult(row, parsed);
+      _paintBatchExpenseRow(row);
+      _batchExpenseProgress(++done, targets.length, 'Read');
+      return true;
+    });
+
+    const failed = results.filter(r => r && !r.ok);
+    failed.forEach(r => {
+      r.item.status = 'failed';
+      r.item.error = (r.error?.message || 'Could not read this one').slice(0, 90);
+    });
+    _repaintBatchExpenseStatuses();
+
+    const ok = targets.length - failed.length;
+    showToast(
+      failed.length
+        ? `Read ${ok} of ${targets.length} — ${failed.length} need${failed.length > 1 ? '' : 's'} typing in by hand`
+        : `✓ Read all ${ok} receipt${ok > 1 ? 's' : ''} — check the totals before logging`,
+      failed.length ? 'warn' : 'ok',
+      failed.length ? 5200 : 3600
+    );
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      // Rows still queued behind the cancel never got a reading; put them back
+      // rather than leaving them stuck reading forever.
+      _batchExpenseRows.forEach(r => { if (r.status === 'scanning') r.status = 'ready'; });
+      _repaintBatchExpenseStatuses();
+      showToast('Scan cancelled', 'warn');
+    } else {
+      console.error('Batch scan error:', e);
+      showToast(`⚠ AI scan failed: ${e.message || e}`, 'err', 4200);
+    }
+  } finally {
+    _batchScanAbort = null;
+    _batchExpenseBusy = false;
+    _batchExpenseProgress(0, 0, '');
+    if (btn) btn.disabled = false;
+    _updateBatchExpenseSummary();
+  }
+}
+
+async function rescanBatchExpenseRow(uid) {
+  const row = _batchExpenseRow(uid);
+  if (!row || !row.file) return;
+  if (_batchScanAbort) { showToast('⚠ A scan is already running', 'warn'); return; }
+  const apiKey = TAX_CENTER.settings?.geminiKey || '';
+  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+
+  const ac = new AbortController();
+  _batchScanAbort = ac;
+  row.status = 'scanning'; row.error = '';
+  _repaintBatchExpenseStatuses();
+  try {
+    _applyBatchScanResult(row, await _extractReceiptFromFile(apiKey, row.file, { signal: ac.signal }));
+    _paintBatchExpenseRow(row);
+  } catch (e) {
+    row.status = 'failed';
+    row.error = (e && e.name === 'AbortError') ? 'Cancelled' : String(e?.message || e).slice(0, 90);
+    _repaintBatchExpenseStatuses();
+  } finally {
+    _batchScanAbort = null;
+  }
+}
+
+/** Warm every rate the batch will need in one go, instead of one await per row. */
+async function _warmBatchExpenseRates(currencies, target) {
+  const to = String(target || 'CAD').toUpperCase();
+  const needed = Array.from(new Set(currencies.map(c => String(c || to).toUpperCase())))
+    .filter(c => c !== to && !_fxRateCache[`${c}_${to}`]);
+  if (!needed.length) return;
+  await Promise.all(needed.map(c => fetchLiveRate(c, to).catch(() => null)));
+}
+
+async function submitBatchExpenses() {
+  if (_batchExpenseBusy) { showToast('⚠ Still working — hang on', 'warn'); return; }
+  const rows = _batchExpenseRows.filter(r => r.include !== false);
+  if (!rows.length) { showToast('⚠ Nothing selected to log', 'warn'); return; }
+
+  // An expense with no amount or no name is one the owner can't find again.
+  // Refuse the batch and point at the rows rather than quietly dropping them.
+  const invalid = rows.filter(r => !(Number(r.amount) > 0) || !_batchExpenseDescription(r));
+  if (invalid.length) {
+    invalid.forEach(r => { r.error = 'Needs a description and an amount'; });
+    _repaintBatchExpenseStatuses();
+    showToast(`⚠ ${invalid.length} row${invalid.length > 1 ? 's need' : ' needs'} a description and an amount`, 'warn', 4600);
+    return;
+  }
+
+  const dupes = rows.filter(r => _batchExpenseDuplicate(r) === 'ledger');
+  if (dupes.length) {
+    const proceed = await confirmDialog(
+      `${dupes.length} of these already look like expenses in your ledger (same date, same amount). Log them again anyway?`,
+      { title: 'Possible duplicates', okLabel: 'Log them all', cancelLabel: 'Let me deselect them' }
+    );
+    if (!proceed) return;
+  }
+
+  _batchExpenseBusy = true;
+  const submit = $('bx-submit-btn');
+  if (submit) { submit.disabled = true; submit.textContent = 'Logging…'; }
+  let posted;
+  try {
+    posted = _batchExpenseDest === 'business'
+      ? await _postBatchToBusinessLedger(rows)
+      : await _postBatchToProjectLedger(rows);
+  } catch (e) {
+    // Anything the per-row handling didn't catch — a failed ledger write, a
+    // dead connection. The rows stay staged so the batch can be retried
+    // rather than retyped from the receipts all over again.
+    console.error('Batch expense logging failed:', e);
+    reportClientError('batch-expense-log-failed', e && e.message, { stack: e && e.stack });
+    _batchExpenseBusy = false;
+    _batchExpenseProgress(0, 0, '');
+    renderBatchExpenseRows();
+    showToast('⚠ Could not log this batch — nothing was lost, try again', 'err', 6000);
+    return;
+  }
+  _batchExpenseBusy = false;
+
+  const bits = [];
+  if (posted.logged) bits.push(`✓ Logged ${posted.logged} expense${posted.logged > 1 ? 's' : ''}${posted.pending ? ' for approval' : ''}`);
+  if (posted.failed) bits.push(`${posted.failed} could not be saved`);
+  showToast(bits.join(' · ') || 'Nothing logged', posted.failed ? 'err' : 'ok', posted.failed ? 6000 : 3200);
+
+  // Receipts are the part an accountant asks for, so never let a "✓ Logged"
+  // imply they all landed. The expenses are in either way — say which ones
+  // still need a file, and where to attach it.
+  if (posted.receiptsLost) {
+    showToast(
+      `⚠ ${posted.receiptsLost} receipt${posted.receiptsLost > 1 ? 's' : ''} could not be saved — the expense${posted.receiptsLost > 1 ? 's are' : ' is'} logged, attach the file from the ledger row`,
+      'err', 7000
+    );
+  }
+
+  if (posted.failed) {
+    // Keep only what didn't make it, so a retry can't double-post the rest.
+    _batchExpenseRows = _batchExpenseRows.filter(r => posted.failedUids.has(r.uid));
+    _batchExpenseProgress(0, 0, '');
+    renderBatchExpenseRows();
+    if (submit) submit.disabled = false;
+    return;
+  }
+  _batchExpenseProgress(0, 0, '');
+  closeBatchExpenseModal();
+}
+
+/** Post the batch into the Tax Centre's operating ledger. Publisher only. */
+async function _postBatchToBusinessLedger(rows) {
+  const base = (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
+  await _warmBatchExpenseRates(rows.map(r => r.currency), base);
+
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  const trip = ($('bx-trip')?.value || '').trim();
+  let logged = 0, receiptsLost = 0, done = 0;
+  const entries = [];
+  // One base per batch plus the row's own offset. A bare Date.now() per row
+  // collides whenever two saves land in the same millisecond, and every ledger
+  // action — edit, delete, attach a receipt — addresses a row by this id.
+  const idBase = Date.now() + Math.floor(Math.random() * 100000);
+
+  for (const row of rows) {
+    _batchExpenseProgress(done, rows.length, 'Logged');
+    const currency = String(row.currency || base).toUpperCase();
+    const amount = Number(row.amount) || 0;
+    const desc = _batchExpenseDescription(row);
+    const cat = row.category || 'Other';
+
+    let receipt = '';
+    if (row.file) {
+      const saved = await saveReceiptBestEffort(row.file, 'General', { date: row.date, desc, cat, amount, currency });
+      receipt = saved.ref;
+      if (saved.storage === 'none') receiptsLost++;
+      else if (saved.storage === 'cloud') row._cloud = true;
+    }
+
+    const fxRate = currency === base ? 1 : (_fxRateCache[`${currency}_${base}`] || 1);
+    const entry = {
+      id: idBase + logged,
+      desc, cat, currency, amount, fxRate,
+      baseAmount: amount * fxRate,
+      date: row.date || today(),
+      ref: row.reference || '',
+      receipt,
+      trip
+    };
+    // What the Tax Centre reads when it counts receipts still waiting to come
+    // down from the cloud into the folder.
+    if (row._cloud) entry.receiptCloudAt = new Date().toISOString();
+    entries.push(entry);
+    logged++;
+    done++;
+    _batchExpenseProgress(done, rows.length, 'Logged');
+  }
+
+  // Newest-first, matching how a single submit lands them.
+  entries.reverse().forEach(e => TAX_CENTER.businessExpenses.unshift(e));
+  await saveTaxCenter();
+  if (typeof renderTaxCenter === 'function') renderTaxCenter();
+  return { logged, failed: 0, failedUids: new Set(), receiptsLost, pending: false };
+}
+
+/** Post the batch into the active book's own expense ledger. */
+async function _postBatchToProjectLedger(rows) {
+  const book = getBook();
+  const native = getBookCurrencyCode(book);
+  await _warmBatchExpenseRates(rows.map(r => r.currency), native);
+  await _warmBatchExpenseRates([native, ...rows.map(r => r.currency)], 'CAD');
+
+  const author = isAuthor();
+  const s = getState();
+  if (!s.expenses) s.expenses = [];
+
+  let logged = 0, receiptsLost = 0, done = 0;
+  const failedUids = new Set();
+  const entries = [];
+  const idBase = Date.now() + Math.floor(Math.random() * 100000);
+
+  for (const row of rows) {
+    _batchExpenseProgress(done, rows.length, 'Logged');
+    const origCurrency = String(row.currency || native).toUpperCase();
+    const origAmount = Number(row.amount) || 0;
+    const cat = row.category || 'Other';
+
+    // Same conversion the single-expense form does: convert into the book's
+    // own currency when a rate is available, and keep the currency actually
+    // paid in the description so the ledger still shows what left the account.
+    let amount = origAmount;
+    let currency = native;
+    let fxNote = '';
+    let fxRate = null;
+    if (origCurrency !== native) {
+      const rate = _fxRateCache[`${origCurrency}_${native}`];
+      if (rate) { amount = origAmount * rate; fxRate = rate; fxNote = ` (Paid ${origCurrency} ${origAmount.toFixed(2)})`; }
+      else { currency = origCurrency; }
+    }
+    const desc = _batchExpenseDescription(row) + fxNote;
+
+    let receipt = '';
+    if (row.file) {
+      if (author) {
+        try {
+          receipt = await uploadReceiptToCloud(row.file, activeBook);
+        } catch (e) {
+          console.error('Batch receipt upload failed', e);
+        }
+      } else {
+        const saved = await saveReceiptBestEffort(row.file, book.title, {
+          date: row.date, desc, cat, amount: origAmount, currency: origCurrency, book: book.title
+        });
+        receipt = saved.ref;
+        if (saved.storage === 'cloud') row._cloud = true;
+      }
+      if (!receipt) receiptsLost++;
+    }
+
+    const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
+    const entry = {
+      id: idBase + logged,
+      desc, cat, amount, currency, origAmount, origCurrency,
+      date: row.date || today(),
+      ref: row.reference || '',
+      receipt,
+      fxRate,
+      baseAmount: cadRate ? amount * cadRate : amount
+    };
+    if (row._cloud || (author && receipt)) entry.receiptCloudAt = new Date().toISOString();
+
+    if (author) {
+      try {
+        await window._fbSubmitActivity(activeBook, 'expenses', entry);
+        addLog('log-expenses', `${cat}: ${desc} — ${fmt(amount, currency)} (Submitted)`, 'ok');
+        logged++;
+      } catch (e) {
+        console.error('Batch submission error:', e);
+        reportClientError('batch-expense-submit-failed', e && e.message, { stack: e && e.stack });
+        failedUids.add(row.uid);
+      }
+    } else {
+      entries.push(entry);
+      addLog('log-expenses', `${cat}: ${desc} — ${fmt(amount, currency)}`, 'ok');
+      logged++;
+    }
+    done++;
+    _batchExpenseProgress(done, rows.length, 'Logged');
+  }
+
+  if (entries.length) {
+    entries.reverse().forEach(e => s.expenses.unshift(e));
+    await saveState(activeBook);
+  }
+  if (author && logged) {
+    // One alert for the pile. Sending the publisher an email per receipt is
+    // how a batch of fourteen turns into fourteen ignored notifications.
+    const cats = Array.from(new Set(rows.map(r => r.category || 'Other')));
+    await notifyPublisherSubmission('Expense approval', {
+      batch: `${logged} expenses`,
+      categories: cats,
+      dates: `${rows.map(r => r.date).sort()[0]} → ${rows.map(r => r.date).sort().slice(-1)[0]}`
+    }, `${logged} expenses submitted for approval`);
+  }
+  renderExpenses();
+  updateDash();
+  return { logged, failed: failedUids.size, failedUids, receiptsLost, pending: author };
 }
 
 // In-flight extraction, so Cancel and closing the modal can actually stop it.
@@ -22656,6 +23550,9 @@ Object.assign(window, {
   tcLedgerSearchInput, tcLedgerTypeFilter, tcLedgerYearChange, tcYearChange, tcClearLedgerFilters,
   openReceiptCameraModal, closeReceiptCameraModal, captureReceiptPhoto, retakeReceiptPhoto, useReceiptPhoto,
   saveTaxCenterSettings, scanReceiptWithAI, scanProjectReceiptWithAI,
+  openBatchExpenseModal, closeBatchExpenseModal, setBatchExpenseDest, batchExpenseAddBlankRow,
+  removeBatchExpenseRow, rescanBatchExpenseRow, toggleAllBatchExpenses, deselectDuplicateBatchExpenses,
+  applyBatchExpenseBulk, scanAllBatchExpenses, submitBatchExpenses,
   openEmailReceiptImportModal, closeEmailReceiptImportModal, extractReceiptsFromEmailText, importEmailReceiptDrafts, toggleAllEmailDrafts,
   switchEmailImportTab, searchGmailEmails, applyGmailPresetQuery, toggleEmailPreview, toggleEmailRowSelection, toggleAllGmailSelections,
   showCategoryDetail, changeExpenseCategory, tcSelectCashFlowBucket, tcSetCashFlowDetailType, tcClearCashFlowBucket,
@@ -23473,8 +24370,12 @@ function exposeLegacyInlineHandlers() {
     searchGmailEmails, renderGmailEmailsList, toggleEmailRowSelection, toggleAllGmailSelections,
     toggleEmailPreview, _emailBodyToReceiptFile, _selectedFileParts, renderEmailPreviewContent,
     _setEmailAttExcluded, _callGeminiForReceipts, extractReceiptsFromEmailText, _findDuplicateExpense,
-    _runReceiptScan, _prepareReceiptUpload, _receiptMimeFor, _fileToBase64,
+    _runReceiptScan, _extractReceiptFromFile, _prepareReceiptUpload, _receiptMimeFor, _fileToBase64,
     _applyScanCurrency, _applyScanCategory, _buildReceiptScanPrompt, RECEIPT_SCAN_SCHEMA,
+    openBatchExpenseModal, closeBatchExpenseModal, renderBatchExpenseModal, setBatchExpenseDest,
+    batchExpenseDestinations, batchExpenseAddBlankRow, removeBatchExpenseRow, rescanBatchExpenseRow,
+    toggleAllBatchExpenses, deselectDuplicateBatchExpenses, applyBatchExpenseBulk,
+    renderBatchExpenseRows, scanAllBatchExpenses, submitBatchExpenses,
     _isLikelyDuplicateExpense, _expenseHasReceipt, renderEmailReceiptDrafts, toggleAllEmailDrafts,
     deselectDuplicateEmailDrafts, applyBulkCategoryToEmailDrafts, cancelEmailReceiptExtraction,
     retryFailedEmailExtractions,

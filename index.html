@@ -1324,7 +1324,10 @@
     </div>
     <div class="card-actions">
       <div class="field-note">Logged to this project's ledger. Reimbursable expenses can be claimed from the publisher later.</div>
-      <button class="btn gold lg" onclick="submitExpense()" id="submit-exp-btn">Log expense</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button class="btn outline" onclick="openBatchExpenseModal('project')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
+        <button class="btn gold lg" onclick="submitExpense()" id="submit-exp-btn">Log expense</button>
+      </div>
     </div>
   </div>
   <div class="log-console" id="log-expenses"></div>
@@ -1610,6 +1613,60 @@
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
     <button class="btn" onclick="closeM('tc-cat-detail')">Close</button>
+  </div>
+</div></div>
+
+<!-- BATCH EXPENSE ENTRY — a whole pile of receipts logged in one pass -->
+<div class="overlay" id="m-batch-expense" style="display:none;"><div class="modal bx-modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true">🧾 Log several expenses at once</div>
+  <div class="bx-dest" id="bx-dest"></div>
+
+  <div class="bx-intake">
+    <label class="dropzone bx-dropzone" id="bx-dropzone" ondragover="batchExpenseDragOver(event)" ondragleave="batchExpenseDragLeave(event)" ondrop="batchExpenseDrop(event)">
+      <div class="dz-icon">🧾</div>
+      <div class="dz-title">Drop the whole pile of receipts here</div>
+      <div class="dz-sub">Photos or PDFs — pick as many at once as you like, or <span class="dz-link">browse</span></div>
+      <input type="file" id="bx-files" accept="image/*,.pdf" multiple hidden onchange="batchExpenseFilesChosen()">
+    </label>
+    <div class="bx-intake-side">
+      <button class="btn gold" type="button" id="bx-scan-btn" onclick="scanAllBatchExpenses()">✨ AI Scan</button>
+      <div class="bx-hint" id="bx-scan-hint"></div>
+      <button class="btn outline" type="button" onclick="batchExpenseAddBlankRow()">➕ Add a row with no receipt</button>
+      <div class="bx-hint">For anything you paid without getting a receipt — parking, a market table fee, a cash purchase.</div>
+    </div>
+  </div>
+
+  <div class="bx-progress" id="bx-progress" style="display:none;">
+    <div class="bx-progress-track"><div class="bx-progress-bar" id="bx-progress-bar"></div></div>
+    <div class="bx-progress-text" id="bx-progress-text"></div>
+  </div>
+
+  <div class="bx-toolbar">
+    <div class="bx-toolbar-group">
+      <button class="btn sm" type="button" onclick="toggleAllBatchExpenses(true)">Select all</button>
+      <button class="btn sm" type="button" onclick="toggleAllBatchExpenses(false)">Select none</button>
+      <button class="btn sm" type="button" onclick="deselectDuplicateBatchExpenses()" title="Untick every row that matches something already recorded">Deselect duplicates</button>
+    </div>
+    <div class="bx-toolbar-group">
+      <select id="bx-bulk-cat" aria-label="Category to apply to the selected rows"></select>
+      <button class="btn sm" type="button" onclick="applyBatchExpenseBulk('category')">Apply</button>
+      <input type="date" id="bx-bulk-date" aria-label="Date to apply to the selected rows">
+      <button class="btn sm" type="button" onclick="applyBatchExpenseBulk('date')">Apply</button>
+    </div>
+  </div>
+
+  <div class="bx-toolbar bx-toolbar-trip" id="bx-trip-wrap">
+    <label for="bx-trip">Trip / project <span class="bx-opt">optional — applied to every expense in this batch</span></label>
+    <input type="text" id="bx-trip" list="bx-trip-options" autocomplete="off" placeholder="e.g. Toronto Book Fair · Oct 2025">
+    <datalist id="bx-trip-options"></datalist>
+  </div>
+
+  <div id="bx-rows"></div>
+
+  <div class="modal-footer bx-footer" role="dialog" aria-modal="true">
+    <div class="bx-summary" id="bx-summary"></div>
+    <button class="btn" type="button" onclick="closeBatchExpenseModal()">Cancel</button>
+    <button class="btn gold" type="button" id="bx-submit-btn" onclick="submitBatchExpenses()">Log expenses</button>
   </div>
 </div></div>
 
@@ -2098,7 +2155,8 @@
     </div>
     <div style="margin-top:16px;">
       <button class="btn gold" style="width:100%;height:48px;font-size:15px;font-weight:600;letter-spacing:.02em;" onclick="submitTaxExpense()" id="tc-submit-exp-btn">Log Business Expense</button>
-      <div style="margin-top:8px;text-align:center;">
+      <div style="margin-top:8px;text-align:center;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
+        <button class="btn tx" style="font-size:12px;padding:4px 12px;color:var(--text3);" onclick="openBatchExpenseModal('business')" title="Drop in a whole pile of receipts, scan them together and log them in one pass">🧾 Log several at once</button>
         <button class="btn tx" style="font-size:12px;padding:4px 12px;color:var(--text3);" onclick="openEmailReceiptImportModal()" title="Import expenses from forwarded receipt emails">📧 Import from Email instead<span id="email-inbox-badge" style="display:none;background:#c79a3a;color:#1a1206;border-radius:10px;padding:0 6px;font-size:10px;font-weight:700;margin-left:6px;vertical-align:middle;"></span></button>
       </div>
     </div>

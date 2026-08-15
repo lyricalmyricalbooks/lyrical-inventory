@@ -1853,6 +1853,74 @@ tr.hist-row:hover {
 .tc-storage-actions{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center;}
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   BATCH EXPENSE SHEET — a whole pile of receipts staged, scanned and logged
+   in one pass. Deliberately a wide modal: the point of the screen is seeing
+   every row's date, total and category side by side before any of it lands in
+   the ledger, and a narrow column forces exactly the row-by-row squinting the
+   batch flow exists to remove.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.bx-modal{max-width:min(1120px, 96vw);}
+.bx-dest{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4);}
+.bx-dest-single{font-size:var(--text-sm);color:var(--content-secondary);}
+.bx-dest-btn{flex:1 1 200px;text-align:left;padding:var(--space-3) var(--space-4);border:1px solid var(--border-default);border-radius:var(--r2);background:var(--surface-sunken);cursor:pointer;transition:border-color var(--dur-fast) var(--ease-standard),background var(--dur-fast) var(--ease-standard);}
+.bx-dest-btn:hover{border-color:var(--gold-line);}
+.bx-dest-btn.active{border-color:var(--gold);background:var(--gold-bg);}
+.bx-dest-label{display:block;font-size:var(--text-base);font-weight:600;color:var(--content-primary);}
+.bx-dest-sub{display:block;font-size:var(--text-xs);color:var(--content-muted);margin-top:2px;}
+
+.bx-intake{display:grid;grid-template-columns:1fr 280px;gap:var(--space-4);align-items:stretch;margin-bottom:var(--space-4);}
+.bx-dropzone{min-height:120px;}
+.bx-intake-side{display:flex;flex-direction:column;gap:var(--space-2);justify-content:center;}
+.bx-hint{font-size:var(--text-xs);color:var(--content-muted);line-height:var(--leading-snug);}
+
+.bx-progress{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3);}
+.bx-progress-track{flex:1;height:6px;border-radius:999px;background:var(--surface-inset);overflow:hidden;}
+.bx-progress-bar{height:100%;width:0;background:var(--gold);transition:width var(--dur-base) var(--ease-standard);}
+.bx-progress-text{font-size:var(--text-xs);color:var(--content-muted);white-space:nowrap;}
+
+.bx-toolbar{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap;padding:var(--space-2) 0;border-top:1px dashed var(--border-default);}
+.bx-toolbar-group{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;}
+.bx-toolbar select,.bx-toolbar input[type=date],.bx-toolbar input[type=text]{font-size:var(--text-sm);padding:5px 9px;height:auto;margin:0;}
+.bx-toolbar-trip label{font-size:var(--text-sm);font-weight:600;color:var(--content-secondary);margin:0;}
+.bx-toolbar-trip input[type=text]{flex:1 1 260px;}
+.bx-opt{font-weight:400;color:var(--content-muted);font-size:var(--text-xs);}
+
+.bx-tbl-wrap{max-height:min(46vh,460px);overflow:auto;border:1px solid var(--border-default);border-radius:var(--r2);margin-top:var(--space-3);}
+.bx-tbl{font-size:var(--text-sm);}
+.bx-tbl th{position:sticky;top:0;z-index:var(--z-base);background:var(--surface-raised);}
+.bx-tbl td{vertical-align:top;}
+.bx-tbl input,.bx-tbl select{font-size:var(--text-sm);padding:4px 7px;height:auto;margin:0;width:100%;}
+.bx-col-check{width:34px;}
+.bx-col-actions{width:78px;white-space:nowrap;}
+.bx-col-actions .btn{padding:3px 7px;min-width:0;}
+.bx-col-amount{min-width:150px;}
+.bx-cell-file{min-width:150px;max-width:190px;}
+.bx-cell-desc{min-width:190px;}
+.bx-cell-desc input + input{margin-top:3px;}
+.bx-cell-amount{display:flex;gap:var(--space-1);align-items:flex-start;}
+.bx-cell-amount select{flex:0 0 66px;}
+.bx-cell-amount input{text-align:right;}
+.bx-fname{font-size:var(--text-xs);color:var(--content-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.bx-nofile{color:var(--content-faint);font-style:italic;}
+.bx-status-wrap{display:flex;flex-direction:column;gap:2px;margin-top:3px;}
+.bx-status{font-size:var(--text-2xs);font-weight:600;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--content-muted);}
+.bx-status-scanning{color:var(--gold-text);}
+.bx-status-scanned{color:var(--status-positive);}
+.bx-status-failed{color:var(--status-critical);}
+.bx-flag{font-size:var(--text-2xs);color:var(--content-muted);line-height:var(--leading-snug);}
+.bx-flag-warn{color:var(--status-active);}
+.bx-flag-bad{color:var(--status-critical);}
+.bx-tbl tr.bx-dup{background:var(--status-active-bg);}
+.bx-empty{padding:var(--space-5);font-size:var(--text-sm);color:var(--content-muted);text-align:center;}
+.bx-footer{align-items:center;}
+.bx-summary{flex:1;font-size:var(--text-sm);color:var(--content-secondary);font-weight:600;}
+
+@media (max-width:900px){
+  .bx-intake{grid-template-columns:1fr;}
+  .bx-tbl-wrap{max-height:none;}
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    TAX CENTRE SUB-NAVIGATION & SECTION PANELS
    ═══════════════════════════════════════════════════════════════════════════ */
 .tc-sub-nav {
