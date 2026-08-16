@@ -25,18 +25,14 @@ import {
   TAX_CENTER,
   TC_CATEGORIES,
   _fxRateCache,
-  _localReceiptCell,
   calculateFinancials,
   defaultState,
   isAuthor,
   isTestBook,
   isTestBookId,
-  loadReceiptFolderHandle,
-  resolveLocalReceiptFile,
   ensurePdfJs,
   loadTaxCenter,
   openEditSale,
-  saveReceiptBestEffort,
   saveState,
   showToast,
   states,
@@ -44,6 +40,7 @@ import {
   _tcEditTripId,
   _tcOpenTripName,
 } from '../main.js';
+import { _localReceiptCell, loadReceiptFolderHandle, resolveLocalReceiptFile, saveReceiptBestEffort } from './receipts.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import { renderShippingReconciliationWorklist } from './shipping.js';
 import { escapeHtml } from '../lib/html.js';
