@@ -3636,6 +3636,33 @@
 
 <div class="overlay" id="m-add-store" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
   <div class="modal-title" role="dialog" aria-modal="true">Add consignment store</div>
+  <div id="add-store-preset-wrap" class="add-store-preset-box" style="display:none;">
+    <div class="add-store-preset-header">
+      <div class="add-store-preset-label">
+        <span class="preset-icon" aria-hidden="true">🏪</span>
+        <span>Choose from existing catalogue stores</span>
+      </div>
+      <span id="add-store-count-pill" class="pill gold">0 stores</span>
+    </div>
+    <div class="form-group" style="margin-bottom:8px;">
+      <label for="ns-existing-store-select" class="sr-only">Select an existing store</label>
+      <select id="ns-existing-store-select" onchange="handleSelectExistingStore(this.value)">
+        <option value="">— Select an existing store to auto-fill —</option>
+      </select>
+    </div>
+    <div id="add-store-chips-wrap" class="add-store-chips-wrap">
+      <div class="add-store-chips-label">Quick select:</div>
+      <div id="add-store-quick-chips" class="add-store-chips-list" role="list"></div>
+    </div>
+    <div id="add-store-selected-banner" class="add-store-banner" style="display:none;">
+      <div class="add-store-banner-copy">
+        <span class="add-store-banner-icon">✓</span>
+        <span id="add-store-banner-text">Auto-filled details</span>
+      </div>
+      <button type="button" class="btn sm" onclick="clearAddStoreForm()" title="Clear form to enter a new store">Clear / New</button>
+    </div>
+    <div id="add-store-warning-banner" class="add-store-warning" style="display:none;"></div>
+  </div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-name">Store name *</label><input id="ns-name" placeholder="e.g. Libreria Feltrinelli"></div><div class="form-group"><label for="ns-contact">Contact person</label><input id="ns-contact" placeholder="e.g. Maria Rossi"></div></div>
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-email">Email</label><input id="ns-email" type="email" placeholder="store@email.com"></div><div class="form-group"><label for="ns-phone">Phone</label><input id="ns-phone" placeholder="e.g. +1 416-539-9595"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="ns-address">Street address</label><input id="ns-address" placeholder="e.g. 80 Spadina Ave, Suite 205"></div>
