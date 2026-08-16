@@ -19466,7 +19466,7 @@ export function switchPOSSubTab(subTabName) {
 }
 window.switchPOSSubTab = switchPOSSubTab;
 
-window.fairKitSearchFilter = function (query) {
+export function fairKitSearchFilter(query) {
   const q = (query || '').toLowerCase().trim();
   document.querySelectorAll('#fk-books-list .fk-book').forEach((card) => {
     const title = card.querySelector('.fk-book-title')?.textContent?.toLowerCase() || '';
@@ -19474,7 +19474,8 @@ window.fairKitSearchFilter = function (query) {
     const match = !q || title.includes(q) || meta.includes(q);
     card.style.display = match ? '' : 'none';
   });
-};
+}
+window.fairKitSearchFilter = fairKitSearchFilter;
 
 window.openFairKitModal = function () {
   const dateInput = document.getElementById('st-date');
