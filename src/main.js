@@ -3364,7 +3364,7 @@ export function switchTab(name) {
   if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); if (typeof updateSheetsTabUI === 'function') updateSheetsTabUI(); }
   if (name === 'qrcodes') renderAllQRCodes();
   if (name === 'myqr') renderAuthorQRPage();
-  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); }
+  if (name === 'pos') { renderPOS(); renderPOSFxStatus(); switchPOSSubTab(activePOSSubTab); }
   if (name === 'webanalytics') renderWebAnalytics();
   if (name === 'shipping') { initShippingTab(); }
   if (name === 'bigcartel') { renderBigCartelTab(); }
@@ -12667,6 +12667,7 @@ export function closeM(id) {
     try { _modalReturnFocus.focus(); } catch { }
   }
   _modalReturnFocus = null;
+  if (el.classList.contains('fk-workspace') || el.closest('.pos-subpanel')) return;
   if (el.classList.contains('closing')) return;
   if (_prefersReducedMotion()) { el.style.display = 'none'; clearFieldErrors(el); return; }
   el.classList.add('closing');
@@ -19424,6 +19425,57 @@ function _stApplyPresetToForm(preset) {
   return { missing: stPresetMissingBooks(preset, Object.keys(posBooksMap())) };
 }
 
+let activePOSSubTab = 'register';
+
+export function switchPOSSubTab(subTabName) {
+  activePOSSubTab = subTabName || 'register';
+  const subTabs = ['register', 'fairkit'];
+  subTabs.forEach((tab) => {
+    const btn = document.getElementById('btn-pos-subtab-' + tab);
+    const sec = document.getElementById('pos-subpanel-' + tab);
+    if (btn && sec) {
+      if (tab === activePOSSubTab) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        btn.setAttribute('tabindex', '0');
+        sec.style.display = 'block';
+      } else {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false');
+        btn.setAttribute('tabindex', '-1');
+        sec.style.display = 'none';
+      }
+    }
+  });
+
+  const mFk = document.getElementById('m-fair-kit');
+  if (mFk) {
+    mFk.style.display = 'block';
+    mFk.classList.remove('closing');
+  }
+
+  if (activePOSSubTab === 'fairkit') {
+    const dateInput = document.getElementById('st-date');
+    if (dateInput && !dateInput.value) dateInput.value = today();
+    salesTrackerFairPresets = loadStPresets(_stPresetStore());
+    qrFairPresets = loadQrPresets(_qrPresetStore());
+    renderFairKitBookList();
+    renderFairKitPresetPicker();
+    fairKitModeChanged();
+  }
+}
+window.switchPOSSubTab = switchPOSSubTab;
+
+window.fairKitSearchFilter = function (query) {
+  const q = (query || '').toLowerCase().trim();
+  document.querySelectorAll('#fk-books-list .fk-book').forEach((card) => {
+    const title = card.querySelector('.fk-book-title')?.textContent?.toLowerCase() || '';
+    const meta = card.querySelector('.fk-book-meta')?.textContent?.toLowerCase() || '';
+    const match = !q || title.includes(q) || meta.includes(q);
+    card.style.display = match ? '' : 'none';
+  });
+};
+
 window.openFairKitModal = function () {
   const dateInput = document.getElementById('st-date');
   if (dateInput && !dateInput.value) dateInput.value = today();
@@ -19432,6 +19484,8 @@ window.openFairKitModal = function () {
   renderFairKitBookList();
   renderFairKitPresetPicker();
   fairKitModeChanged();
+  switchTab('pos');
+  switchPOSSubTab('fairkit');
   openM('fair-kit');
 };
 
@@ -24428,7 +24482,7 @@ function exposeLegacyInlineHandlers() {
     checkReceiptFolderHealth, receiptFolderReachable, backfillReceiptCache, cacheAllReceiptsNow,
     cloudReceiptQueue, receiptWaitingDays, openCloudReceiptsModal, closeCloudReceiptsModal,
     summarizeReceiptProblems, formatReceiptDiagnostic, renderReceiptProblemPanel, copyReceiptDiagnostic,
-    dismissReceiptNotice, resetDismissedReceiptNotices, switchTaxCenterSubTab,
+    dismissReceiptNotice, resetDismissedReceiptNotices, switchTaxCenterSubTab, switchPOSSubTab, fairKitSearchFilter,
     receiptsForExport, receiptExportYears, readReceiptBytes, exportReceiptsZip,
     openExportReceiptsModal, closeExportReceiptsModal, runReceiptExport,
     listFilesRecursive, organizerCandidateExpenses, openReceiptOrganizer, closeReceiptOrganizer,
