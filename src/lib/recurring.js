@@ -25,6 +25,16 @@
  * Cadence, an end date, and a paused flag all now live on the record; the ledger
  * behaviour for an existing monthly subscription with none of those fields set
  * is unchanged apart from the timezone fix.
+ *
+ * `rateChanges` is the fourth field, and the reason is the same shape of
+ * problem: a standing cost's price moves (rent goes up in September, a plan
+ * re-prices at renewal), and the only way to record that was to overwrite
+ * `amount`. That is wrong in both directions — a backfill after the edit posts
+ * old periods at the new price, and the record loses any memory of what the
+ * cost used to be. A subscription now carries `amount` as the price it started
+ * at plus a dated list of adjustments, and every charge is priced by the date it
+ * falls on, so history stays exactly as it was billed and a rise can be entered
+ * before it takes effect.
  */
 
 /** Supported billing cadences, in the order the editor lists them. */
@@ -104,6 +114,7 @@ export function normalizeRecurring(sub) {
   const s = sub || {};
   return {
     ...s,
+    rateChanges: normalizeRateChanges(s.rateChanges),
     id: s.id || '',
     desc: String(s.desc || '').trim(),
     cat: s.cat || 'Other',
@@ -117,6 +128,78 @@ export function normalizeRecurring(sub) {
     notes: String(s.notes || '').trim(),
     lastInjected: s.lastInjected || '',
   };
+}
+
+/**
+ * Clean a stored price-adjustment list into the shape the rest of the module
+ * assumes: dated, positive, sorted oldest-first, one entry per date (a later
+ * entry for the same day wins, which is what re-saving a corrected figure in
+ * the editor means). Anything undated or non-positive is dropped rather than
+ * kept as a landmine — a change with no date can't price a charge.
+ */
+export function normalizeRateChanges(list) {
+  const byDate = new Map();
+  (Array.isArray(list) ? list : [])
+    .map(r => ({
+      effectiveFrom: String(r?.effectiveFrom || '').trim(),
+      amount: Number(r?.amount) || 0,
+      note: String(r?.note || '').trim(),
+    }))
+    .filter(r => parseYmd(r.effectiveFrom) && r.amount > 0)
+    .forEach(r => byDate.set(r.effectiveFrom, r));
+  return [...byDate.values()].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+}
+
+/** Price in force on `dateStr`, from an already-normalized record. */
+function amountAt(s, dateStr) {
+  let amount = s.amount;
+  for (const r of s.rateChanges) {
+    if (r.effectiveFrom <= dateStr) amount = r.amount;
+    else break;
+  }
+  return amount;
+}
+
+/**
+ * What this subscription costs for a charge dated `dateStr` — the starting
+ * amount until the first adjustment takes effect, then each adjustment from its
+ * own effective date onward. This is what prices both the backfill and any
+ * future charge, so a September rent rise never touches an August charge.
+ */
+export function amountOnDate(sub, dateStr) {
+  return amountAt(normalizeRecurring(sub), dateStr);
+}
+
+/** The price being charged today. */
+export function currentAmount(sub, now = new Date()) {
+  return amountOnDate(sub, localYmd(now));
+}
+
+/**
+ * The next scheduled adjustment, or null when the price is settled.
+ * `from` is the price in force today, `to` the price it becomes, and `delta`
+ * the difference — enough for a row to read "→ CA$350.00 from 2026-09-01".
+ */
+export function nextRateChange(sub, now = new Date()) {
+  const s = normalizeRecurring(sub);
+  const todayStr = localYmd(now);
+  const upcoming = s.rateChanges.find(r => r.effectiveFrom > todayStr);
+  if (!upcoming) return null;
+  const from = amountAt(s, todayStr);
+  return { ...upcoming, from, to: upcoming.amount, delta: upcoming.amount - from };
+}
+
+/**
+ * The full price history as display rows, oldest first: the opening amount
+ * followed by every adjustment. Used by the editor so the owner can see what
+ * the cost used to be, not just what it is now.
+ */
+export function rateSchedule(sub) {
+  const s = normalizeRecurring(sub);
+  return [
+    { effectiveFrom: s.startDate || '', amount: s.amount, note: '', opening: true },
+    ...s.rateChanges.map(r => ({ ...r, opening: false })),
+  ].sort((a, b) => String(a.effectiveFrom).localeCompare(String(b.effectiveFrom)));
 }
 
 /**
@@ -147,18 +230,41 @@ function walkCharges(sub, visit) {
  *     bills on the 28th doesn't inflate the current month from the 1st;
  *   - a paused subscription owes nothing, and resuming does not backfill the
  *     gap (resumeRecurring in taxcentre.js rolls `lastInjected` forward).
+ *
+ * Each charge carries the `amount` in force on its own date, so a run of missed
+ * periods spanning a price change posts each one at what it actually cost.
  */
 export function recurringDueCharges(sub, now = new Date()) {
   const s = normalizeRecurring(sub);
   const due = [];
-  if (s.paused || !s.amount) return due;
+  if (s.paused || (!s.amount && !s.rateChanges.length)) return due;
   const todayStr = localYmd(now);
   walkCharges(s, (dateStr, key) => {
     if (dateStr > todayStr) return false;
-    if (key > s.lastInjected) due.push({ date: dateStr, monthKey: key });
+    const amount = amountAt(s, dateStr);
+    if (key > s.lastInjected && amount > 0) due.push({ date: dateStr, monthKey: key, amount });
     return true;
   });
   return due;
+}
+
+/**
+ * The billing date of the most recent period already posted to the ledger, or
+ * '' when nothing has been. `lastInjected` is stored at month granularity, so
+ * the day is re-derived from the schedule — which is what lets the editor tell
+ * the difference between a price change that lands on an untouched charge and
+ * one backdated behind a charge the ledger already has.
+ */
+export function lastPostedChargeDate(sub) {
+  const s = normalizeRecurring(sub);
+  if (!s.lastInjected) return '';
+  let last = '';
+  walkCharges(s, (dateStr, key) => {
+    if (key > s.lastInjected) return false;
+    last = dateStr;
+    return true;
+  });
+  return last;
 }
 
 /**
@@ -198,10 +304,20 @@ export function recurringStatus(sub, now = new Date()) {
   return 'active';
 }
 
-/** Cost per month in the subscription's own currency (yearly ÷ 12, etc.). */
-export function monthlyEquivalent(sub) {
+/**
+ * Cost per month in the subscription's own currency (yearly ÷ 12, etc.), at the
+ * price in force on `now` — an adjustment dated next month doesn't inflate this
+ * month's committed total.
+ */
+export function monthlyEquivalent(sub, now = new Date()) {
   const s = normalizeRecurring(sub);
-  return s.amount / frequencyMonths(s.frequency);
+  return amountAt(s, localYmd(now)) / frequencyMonths(s.frequency);
+}
+
+/** Cost per month priced as of a given 'YYYY-MM-DD'. */
+export function monthlyEquivalentOn(sub, dateStr) {
+  const s = normalizeRecurring(sub);
+  return amountAt(s, dateStr) / frequencyMonths(s.frequency);
 }
 
 /** Whether a subscription is still costing money as of `now`. */
@@ -222,8 +338,10 @@ export function summarizeRecurring(subs, rates = {}, base = 'CAD', now = new Dat
     monthlyBase: 0, annualBase: 0,
     activeCount: 0, pausedCount: 0, endedCount: 0, scheduledCount: 0,
     unconverted: [], nextUp: null,
+    upcomingChange: null, monthlyBaseAfterChange: 0,
   };
   const seenMissing = new Set();
+  const live = [];
   (subs || []).forEach(raw => {
     const s = normalizeRecurring(raw);
     const status = recurringStatus(s, now);
@@ -240,12 +358,32 @@ export function summarizeRecurring(subs, rates = {}, base = 'CAD', now = new Dat
         if (cached > 0) rate = cached;
         else if (!seenMissing.has(cur)) { seenMissing.add(cur); out.unconverted.push(cur); }
       }
-      out.monthlyBase += monthlyEquivalent(s) * rate;
+      live.push({ sub: s, rate });
+      out.monthlyBase += monthlyEquivalent(s, now) * rate;
+
+      // The soonest price rise or cut across the whole panel, so the header can
+      // warn about it before the ledger does.
+      const change = nextRateChange(s, now);
+      if (change && (!out.upcomingChange || change.effectiveFrom < out.upcomingChange.date)) {
+        out.upcomingChange = {
+          date: change.effectiveFrom, sub: s,
+          from: change.from, to: change.to, delta: change.delta,
+        };
+      }
     }
 
     const next = nextRecurringDate(s, now);
-    if (next && (!out.nextUp || next < out.nextUp.date)) out.nextUp = { date: next, sub: s };
+    if (next && (!out.nextUp || next < out.nextUp.date)) {
+      out.nextUp = { date: next, sub: s, amount: amountAt(s, next) };
+    }
   });
+
+  // What the monthly commitment becomes once that change lands — everything
+  // else held constant, so the two figures are comparable.
+  if (out.upcomingChange) {
+    const after = live.reduce((sum, l) => sum + monthlyEquivalentOn(l.sub, out.upcomingChange.date) * l.rate, 0);
+    out.monthlyBaseAfterChange = Math.round((after + Number.EPSILON) * 100) / 100;
+  }
   out.monthlyBase = Math.round((out.monthlyBase + Number.EPSILON) * 100) / 100;
   out.annualBase = Math.round((out.monthlyBase * 12 + Number.EPSILON) * 100) / 100;
   return out;

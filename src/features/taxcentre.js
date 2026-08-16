@@ -59,12 +59,18 @@ import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import {
   RECURRING_FREQUENCIES,
+  currentAmount,
   frequencyLabel,
+  frequencyMonths,
   frequencySuffix,
+  lastPostedChargeDate,
+  localYmd,
   monthlyEquivalent,
   newRecurringId,
+  nextRateChange,
   nextRecurringDate,
   normalizeRecurring,
+  rateSchedule,
   recurringDueCharges,
   recurringStatus,
   relativeDayLabel,
@@ -111,19 +117,22 @@ function processRecurringExpenses() {
   let modified = _tcEnsureRecurringIds();
   TAX_CENTER.recurring.forEach(sub => {
     // recurringDueCharges honours cadence, the end date and the paused flag,
-    // and refuses to log a charge whose date hasn't arrived yet.
+    // and refuses to log a charge whose date hasn't arrived yet. Each charge
+    // carries the price in force on its own date, so a backfill that straddles
+    // a rent increase posts the old rate for the old months.
     recurringDueCharges(sub, now).forEach(charge => {
       if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
       const origCur = sub.currency || 'CAD';
       const fxRate = _fxRateCache[`${origCur}_CAD`] || 1;
-      const baseAmount = (parseFloat(sub.amount) || 0) * fxRate;
+      const chargeAmount = Number(charge.amount) || 0;
+      const baseAmount = chargeAmount * fxRate;
 
       TAX_CENTER.businessExpenses.unshift({
         id: Date.now() + Math.random(),
         desc: sub.desc + ' (Recurring)',
         cat: sub.cat,
         currency: origCur,
-        amount: parseFloat(sub.amount) || 0,
+        amount: chargeAmount,
         fxRate: fxRate,
         baseAmount: baseAmount,
         date: charge.date,
@@ -456,8 +465,29 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
   const meta = REC_STATUS_META[status] || REC_STATUS_META.active;
   const cur = s.currency || baseCurrency;
   const rate = cur === baseCurrency ? 1 : Number(_fxRateCache[`${cur}_${baseCurrency}`]) || 0;
-  const perMonth = monthlyEquivalent(s);
+  const perMonth = monthlyEquivalent(s, now);
   const inactive = status === 'paused' || status === 'ended';
+  const liveAmount = currentAmount(s, now);
+
+  // The amount column carries the price story: what it costs today, what it
+  // becomes if a rise is already scheduled, and a way in to schedule one. An
+  // increase used to mean overwriting the amount and hoping no backfill ran.
+  const change = nextRateChange(s, now);
+  const priceNote = status === 'ended'
+    ? ''
+    : change
+      ? `<button type="button" class="rec-rate-chip${change.delta < 0 ? ' is-down' : ''}"
+           onclick="openRecurringEditor('${escapeHtml(s.id)}', 'rates')"
+           title="Scheduled price change — charges before ${escapeHtml(change.effectiveFrom)} keep ${escapeHtml(fmt(change.from, cur))}">
+           ${change.delta < 0 ? '↓' : '↑'} ${escapeHtml(fmt(change.to, cur))} from ${escapeHtml(change.effectiveFrom)}
+         </button>`
+      : `<button type="button" class="rec-charge-link"
+           onclick="openRecurringEditor('${escapeHtml(s.id)}', 'rates')"
+           title="Record a new price from a date you choose — charges already posted keep the old one">Adjust price →</button>`;
+  const priorChanges = s.rateChanges.filter(r => r.effectiveFrom <= localYmd(now)).length;
+  const priceHistory = priorChanges
+    ? `<div class="rec-meta rec-dim" title="${escapeHtml(rateSchedule(s).map(r => `${r.effectiveFrom || '—'}: ${fmt(r.amount, cur)}`).join(' · '))}">${priorChanges} past change${priorChanges === 1 ? '' : 's'}</div>`
+    : '';
 
   // Per-month column: converted where a rate is known, flagged with ≈ where it
   // isn't, rather than silently reporting a USD figure as if it were CAD.
@@ -494,7 +524,10 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
       <td><span class="pill gray">${escapeHtml(frequencyLabel(s.frequency))}</span>
         <div class="rec-meta">from ${escapeHtml(s.startDate || '—')}${s.endDate ? ` → ${escapeHtml(s.endDate)}` : ''}</div>
       </td>
-      <td class="r rec-amount-cell">${fmt(s.amount, cur)}<span class="rec-per">${escapeHtml(frequencySuffix(s.frequency))}</span></td>
+      <td class="r rec-amount-cell">${fmt(liveAmount, cur)}<span class="rec-per">${escapeHtml(frequencySuffix(s.frequency))}</span>
+        ${priceNote ? `<div class="rec-rate-line">${priceNote}</div>` : ''}
+        ${priceHistory}
+      </td>
       <td class="r rec-amount-cell">${perMonthCell}</td>
       <td>${nextCell}</td>
       <td><span class="pill ${meta.cls}">${meta.glyph} ${meta.label}</span></td>
@@ -521,11 +554,19 @@ function _tcRenderRecurringSummary(subs, summary, baseCurrency) {
        <div class="rec-stat-lbl">Next charge · ${escapeHtml(summary.nextUp.sub.desc || '')}</div>`
     : `<div class="rec-stat-val">—</div><div class="rec-stat-lbl">Next charge</div>`;
 
+  // A scheduled rise changes the number this card exists to report, so say so
+  // here rather than letting it appear unannounced on the day it takes effect.
+  const change = summary.upcomingChange;
+  const changeNote = change
+    ? `<div class="rec-stat-note rec-stat-change" title="${escapeHtml(change.sub.desc || '')} goes from ${escapeHtml(fmt(change.from, change.sub.currency || baseCurrency))} to ${escapeHtml(fmt(change.to, change.sub.currency || baseCurrency))} on ${escapeHtml(change.date)}">${change.delta < 0 ? '↓' : '↑'} ${escapeHtml(fmt(summary.monthlyBaseAfterChange, baseCurrency))} from ${escapeHtml(change.date)} · ${escapeHtml(change.sub.desc || 'a subscription')}</div>`
+    : '';
+
   el.innerHTML = `
     <div class="rec-stat">
       <div class="rec-stat-val">${fmt(summary.monthlyBase, baseCurrency)}</div>
       <div class="rec-stat-lbl">Committed per month</div>
       ${approx}
+      ${changeNote}
     </div>
     <div class="rec-stat">
       <div class="rec-stat-val">${fmt(summary.annualBase, baseCurrency)}</div>
@@ -3381,11 +3422,97 @@ async function saveTaxCenterSettings() {
 
 let _tcEditingRecurring = '';
 
+// ── Price changes inside the editor ─────────────────────────────────────────
+// The rows are the source of truth while the sheet is open: add/remove re-reads
+// what's on screen and re-renders it, so a half-typed row survives its
+// neighbour being deleted. Nothing is normalized until save.
+
+/** One dated price-adjustment row. */
+function _tcRateRowHtml(row = {}) {
+  const cur = $('rec-edit-cur')?.value || 'CAD';
+  const amount = row.amount === 0 || row.amount ? String(row.amount) : '';
+  return `
+    <div class="rec-rate-row">
+      <div class="rec-rate-field">
+        <label>Starts on</label>
+        <input type="date" class="rec-rate-date" value="${escapeHtml(row.effectiveFrom || '')}" onchange="updateRecurringPreview()">
+      </div>
+      <div class="rec-rate-field">
+        <label>New amount</label>
+        <div class="rec-rate-amount-wrap">
+          <span class="rec-rate-cur">${escapeHtml(cur)}</span>
+          <input type="number" inputmode="decimal" step="0.01" min="0" class="rec-rate-amount"
+            value="${escapeHtml(amount)}" placeholder="0.00" oninput="updateRecurringPreview()">
+        </div>
+      </div>
+      <div class="rec-rate-field rec-rate-field-note">
+        <label>Note <span class="tc-opt">optional</span></label>
+        <input type="text" class="rec-rate-note" value="${escapeHtml(row.note || '')}"
+          placeholder="e.g. 2026 rent increase" oninput="updateRecurringPreview()">
+      </div>
+      <button type="button" class="btn sm danger-btn rec-rate-del" aria-label="Delete this price change"
+        title="Delete this price change" onclick="removeRecurringRateChange(this)">✕</button>
+    </div>`;
+}
+
+/** Repaint the whole list from a plain array of rows. */
+function _tcRenderRateRows(list) {
+  const wrap = $('rec-edit-rates');
+  if (!wrap) return;
+  const rows = Array.isArray(list) ? list : [];
+  wrap.innerHTML = rows.length
+    ? rows.map(r => _tcRateRowHtml(r)).join('')
+    : `<div class="rec-rate-empty">No price changes — the amount above applies to every charge.</div>`;
+}
+
+/** Read the rows exactly as typed, blanks included, for validation and redraws. */
+function _tcReadRateRows() {
+  return Array.from(document.querySelectorAll('#rec-edit-rates .rec-rate-row')).map(row => ({
+    effectiveFrom: row.querySelector('.rec-rate-date')?.value || '',
+    amount: row.querySelector('.rec-rate-amount')?.value || '',
+    note: (row.querySelector('.rec-rate-note')?.value || '').trim(),
+  }));
+}
+
+/**
+ * Add a blank change, dated at the next charge by default — a rent rise almost
+ * always starts on a billing date, and typing the date is the fiddly part.
+ */
+function addRecurringRateChange(prefillDate = '') {
+  const rows = _tcReadRateRows();
+  rows.push({ effectiveFrom: prefillDate || '', amount: '', note: '' });
+  _tcRenderRateRows(rows);
+  const dates = document.querySelectorAll('#rec-edit-rates .rec-rate-date');
+  const last = dates[dates.length - 1];
+  // showPicker throws outside a user gesture in some browsers; the focus above
+  // is the part that has to work, so never let the convenience break the add.
+  if (last) { last.focus(); if (!prefillDate) { try { last.showPicker?.(); } catch { /* no picker */ } } }
+  updateRecurringPreview();
+}
+
+function removeRecurringRateChange(btn) {
+  const row = btn?.closest?.('.rec-rate-row');
+  if (!row) return;
+  const rows = _tcReadRateRows();
+  const at = Array.from(document.querySelectorAll('#rec-edit-rates .rec-rate-row')).indexOf(row);
+  if (at !== -1) rows.splice(at, 1);
+  _tcRenderRateRows(rows);
+  updateRecurringPreview();
+}
+
+/** Keep the currency chip on each row honest when the currency select moves. */
+function _tcSyncRateCurrency() {
+  const cur = $('rec-edit-cur')?.value || 'CAD';
+  document.querySelectorAll('#rec-edit-rates .rec-rate-cur').forEach(el => { el.textContent = cur; });
+}
+
 /**
  * Open the add/edit sheet. Called with no argument to add, or with a
- * subscription id to edit that record.
+ * subscription id to edit that record. Pass `focus` as 'rates' to land on the
+ * price-change section with a fresh row ready — that's the path the "Adjust
+ * price" link in the table takes.
  */
-function openRecurringEditor(id = '') {
+function openRecurringEditor(id = '', focus = '') {
   const record = id ? _tcFindRecurring(id) : null;
   if (id && !record) {
     showToast('⚠ Subscription not found', 'err');
@@ -3421,6 +3548,10 @@ function openRecurringEditor(id = '') {
   const pausedEl = $('rec-edit-paused');
   if (pausedEl) pausedEl.checked = !!sub?.paused;
 
+  _tcRenderRateRows(sub?.rateChanges || []);
+  const amountLbl = $('rec-edit-amount-label');
+  if (amountLbl) amountLbl.textContent = sub?.rateChanges?.length ? 'Starting amount' : 'Amount per period';
+
   const title = $('rec-edit-title');
   if (title) title.textContent = id ? 'Edit subscription' : 'Add a recurring subscription';
   const saveBtn = $('rec-edit-save');
@@ -3433,6 +3564,17 @@ function openRecurringEditor(id = '') {
   }
 
   openM('rec-edit');
+
+  // "Adjust price" opens straight onto a new row, dated at the next charge —
+  // the answer to "my rent goes up next month" in two fields.
+  if (focus === 'rates' && sub) {
+    const suggested = nextRecurringDate(sub) || '';
+    addRecurringRateChange(suggested);
+    requestAnimationFrame(() => {
+      $('rec-edit-rates-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
   updateRecurringPreview();
 }
 
@@ -3444,8 +3586,11 @@ function openRecurringEditor(id = '') {
 function updateRecurringPreview() {
   const el = $('rec-edit-preview');
   if (!el) return;
+  _tcSyncRateCurrency();
   const draft = _tcReadRecurringForm();
   const baseCurrency = TAX_CENTER.settings?.baseCurrency || 'CAD';
+  const amountLbl = $('rec-edit-amount-label');
+  if (amountLbl) amountLbl.textContent = draft.rateChanges.length ? 'Starting amount' : 'Amount per period';
   if (!draft.amount || !draft.startDate) {
     el.innerHTML = '<span class="rec-dim">Enter an amount and a start date to see the running cost.</span>';
     return;
@@ -3466,13 +3611,23 @@ function updateRecurringPreview() {
 
   // Backfill warning: a start date in the past means the ledger gets every
   // missed period at once on save. Better said here than discovered after.
-  const missed = recurringDueCharges({ ...draft, lastInjected: _tcEditingRecurring ? (_tcFindRecurring(_tcEditingRecurring)?.lastInjected || '') : '' }).length;
+  const dueNow = recurringDueCharges({ ...draft, lastInjected: _tcEditingRecurring ? (_tcFindRecurring(_tcEditingRecurring)?.lastInjected || '') : '' });
+  const missed = dueNow.length;
+  const missedTotal = dueNow.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
   const backfill = missed
-    ? `<div class="rec-preview-warn">⚠ ${missed} past charge${missed === 1 ? '' : 's'} will be posted to the ledger immediately.</div>`
+    ? `<div class="rec-preview-warn">⚠ ${missed} past charge${missed === 1 ? '' : 's'} (${escapeHtml(fmt(missedTotal, draft.currency))}) will be posted to the ledger immediately.</div>`
+    : '';
+
+  // The scheduled-change line: the whole point of the section below the form is
+  // that you can see the new price and the date before you commit to it.
+  const change = nextRateChange(draft);
+  const perMonthAfter = change ? change.to / frequencyMonths(draft.frequency) : 0;
+  const changeLine = change
+    ? `<div class="rec-preview-change">${change.delta < 0 ? '↓' : '↑'} ${escapeHtml(fmt(change.from, draft.currency))} → <strong>${escapeHtml(fmt(change.to, draft.currency))}</strong>${escapeHtml(frequencySuffix(draft.frequency))} from ${escapeHtml(change.effectiveFrom)} (${escapeHtml(relativeDayLabel(change.effectiveFrom))})${draft.frequency === 'monthly' ? '' : ` · ${escapeHtml(fmt(perMonthAfter, draft.currency))}/mo`}<br><span class="rec-dim">Charges dated before then keep ${escapeHtml(fmt(change.from, draft.currency))}.</span></div>`
     : '';
 
   el.innerHTML = `<div class="rec-preview-money">${money}</div>
-    <div class="rec-preview-when">${escapeHtml(frequencyLabel(draft.frequency))} · ${when}</div>${backfill}`;
+    <div class="rec-preview-when">${escapeHtml(frequencyLabel(draft.frequency))} · ${when}</div>${changeLine}${backfill}`;
 }
 
 /** Read the editor fields into a subscription-shaped draft. */
@@ -3488,6 +3643,9 @@ function _tcReadRecurringForm() {
     frequency: $('rec-edit-freq')?.value || 'monthly',
     paused: !!$('rec-edit-paused')?.checked,
     notes: ($('rec-edit-notes')?.value || '').trim(),
+    // normalizeRecurring sorts these, drops the blanks and de-duplicates dates,
+    // so the preview never has to reason about a half-typed row.
+    rateChanges: _tcReadRateRows(),
   });
 }
 
@@ -3498,6 +3656,42 @@ async function saveRecurringEditor() {
   if (!draft.startDate) { showToast('⚠ Pick a start date', 'warn'); $('rec-edit-start')?.focus(); return; }
   if (draft.endDate && draft.endDate < draft.startDate) {
     showToast('⚠ The end date is before the start date', 'warn'); $('rec-edit-end')?.focus(); return;
+  }
+
+  // Price changes are validated against the rows as typed, not the normalized
+  // copy — a row missing its date has to be pointed at, not silently discarded.
+  const rateRows = Array.from(document.querySelectorAll('#rec-edit-rates .rec-rate-row'));
+  for (const row of rateRows) {
+    const dateEl = row.querySelector('.rec-rate-date');
+    const amtEl = row.querySelector('.rec-rate-amount');
+    const date = dateEl?.value || '';
+    const amt = parseFloat(amtEl?.value);
+    if (!date && !(amt > 0)) continue; // an untouched blank row just goes away
+    if (!date) { showToast('⚠ Give every price change the date it starts', 'warn'); dateEl?.focus(); return; }
+    if (!(amt > 0)) { showToast('⚠ Enter the new amount for every price change', 'warn'); amtEl?.focus(); return; }
+    if (date <= draft.startDate) {
+      showToast('⚠ A price change has to start after the first charge — edit the amount above instead', 'warn', 5000);
+      dateEl?.focus(); return;
+    }
+    if (draft.endDate && date > draft.endDate) {
+      showToast('⚠ That price change starts after this subscription ends', 'warn');
+      dateEl?.focus(); return;
+    }
+  }
+
+  // A change backdated behind a charge the ledger already has cannot rewrite
+  // that charge — posted expenses are real records. Say so plainly instead of
+  // leaving the owner to find the old figure still sitting in the ledger.
+  const existingRecord = _tcEditingRecurring ? _tcFindRecurring(_tcEditingRecurring) : null;
+  const lastPosted = existingRecord
+    ? lastPostedChargeDate({ ...normalizeRecurring(existingRecord), ...draft, lastInjected: existingRecord.lastInjected || '' })
+    : '';
+  const retro = lastPosted ? draft.rateChanges.filter(r => r.effectiveFrom <= lastPosted) : [];
+  if (retro.length && !(await confirmDialog(
+    `${retro.length === 1 ? 'A price change starts' : `${retro.length} price changes start`} on or before ${lastPosted}, which has already been posted to the ledger.\n\n` +
+    `Charges that are already posted keep the amount they were posted at — this only prices the charges that haven't been posted yet. Edit those ledger entries directly if the old ones need correcting.`,
+    { title: 'Charges already posted', okLabel: 'Save anyway' }))) {
+    return;
   }
 
   const btn = $('rec-edit-save');
@@ -3523,7 +3717,7 @@ async function saveRecurringEditor() {
       const clash = TAX_CENTER.recurring.find(s =>
         (s.desc || '').toLowerCase() === draft.desc.toLowerCase() && !s.paused);
       if (clash && !(await confirmDialog(
-        `"${draft.desc}" is already tracked as a recurring cost (${fmt(clash.amount, clash.currency || 'CAD')} ${frequencyLabel(clash.frequency)}).\n\nAdd a second one anyway? Both will post charges to the ledger.`,
+        `"${draft.desc}" is already tracked as a recurring cost (${fmt(currentAmount(clash), clash.currency || 'CAD')} ${frequencyLabel(clash.frequency)}).\n\nAdd a second one anyway? Both will post charges to the ledger.`,
         { title: 'Possible duplicate', okLabel: 'Add anyway' }))) {
         return;
       }
@@ -3725,12 +3919,14 @@ export {
   openEditArtistPayout,
   openEditTripDetails,
   openNewTrip,
+  addRecurringRateChange,
   openPendingExpense,
   openReceiptLightbox,
   openRecurringEditor,
   openTaxSeasonPreflightModal,
   processRecurringExpenses,
   removeRecurring,
+  removeRecurringRateChange,
   renderTaxCenter,
   resetDismissedReceiptNotices,
   saveNewTrip,
