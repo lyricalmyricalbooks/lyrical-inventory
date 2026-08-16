@@ -56,7 +56,7 @@ import { fmt, getSym, getBookCurrencyCode, roundCents } from '../lib/money.js';
 import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
-import { receiptOwners, summarizeReceiptStorage, isRentExpense, isGratuityExpense, isReceiptExemptExpense } from '../lib/receipt-storage.js';
+import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import {
   RECURRING_FREQUENCIES,
   frequencyLabel,

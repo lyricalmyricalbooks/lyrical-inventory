@@ -534,8 +534,8 @@ import {
 import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores } from './lib/consignment.js';
-import { isReceiptExemptExpense } from './lib/receipt-storage.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
