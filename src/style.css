@@ -9015,6 +9015,24 @@ tr.hist-row:hover {
   text-decoration:underline;text-underline-offset:2px;
 }
 .rec-charge-link:hover{color:var(--gold);}
+.rec-charge-link:focus-visible,.rec-rate-chip:focus-visible{
+  outline:2px solid var(--gold);outline-offset:2px;border-radius:4px;
+}
+
+/* A scheduled price change is news, so it gets a chip rather than another line
+   of grey meta — amber, the same "needs attention" register as the pills. */
+.rec-rate-line{margin-top:var(--space-1);}
+.rec-rate-chip{
+  display:inline-flex;align-items:center;gap:4px;cursor:pointer;
+  padding:2px 8px;border-radius:100px;
+  border:1px solid var(--status-active);background:transparent;
+  font-family:'DM Mono',monospace;font-size:var(--text-2xs);
+  color:var(--status-active);line-height:1.5;
+  transition:background-color var(--dur-fast) var(--ease-standard);
+}
+.rec-rate-chip:hover{background:var(--status-active-bg);}
+.rec-rate-chip.is-down{border-color:var(--status-positive);color:var(--status-positive);}
+.rec-rate-chip.is-down:hover{background:var(--status-positive-bg);}
 .rec-actions{display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
 
 /* ── Editor sheet ─────────────────────────────────────────────────────────── */
@@ -9036,6 +9054,55 @@ tr.hist-row:hover {
   color:var(--content-secondary);margin-top:2px;line-height:var(--leading-snug);
 }
 
+/* Price-change schedule. Its own bordered block because it is a small ledger
+   inside the form — dated rows, not another pair of fields. The container query
+   (not a viewport one) is what lets the same block sit in a narrow sheet on a
+   phone and a 640px modal on a desktop. */
+.rec-rates{
+  container-type:inline-size;
+  margin-bottom:12px;padding:var(--space-3);
+  border:1px solid var(--border-default);border-radius:var(--r2);
+  background:var(--surface-sunken);
+}
+.rec-rates-head{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:var(--space-3);margin-bottom:var(--space-3);
+}
+.rec-rates-head strong{display:block;font-size:var(--text-base);color:var(--content-primary);}
+.rec-rates-head em{
+  display:block;font-style:normal;font-size:var(--text-xs);
+  color:var(--content-secondary);margin-top:2px;line-height:var(--leading-snug);
+}
+.rec-rates-head .btn{flex:none;}
+.rec-rate-list{display:flex;flex-direction:column;gap:var(--space-2);}
+.rec-rate-empty{
+  font-size:var(--text-xs);color:var(--content-muted);
+  padding:var(--space-2) 0;line-height:var(--leading-snug);
+}
+.rec-rate-row{
+  display:grid;grid-template-columns:minmax(120px,1fr) minmax(120px,1fr) minmax(140px,1.4fr) auto;
+  gap:var(--space-2);align-items:end;
+  padding:var(--space-2);border-radius:var(--r2);
+  background:var(--surface-raised);border:1px solid var(--border-subtle);
+}
+.rec-rate-field{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.rec-rate-field label{
+  font-family:'Syne',sans-serif;font-size:var(--text-2xs);font-weight:700;
+  letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--content-muted);
+}
+.rec-rate-field input{width:100%;}
+.rec-rate-amount-wrap{display:flex;gap:4px;align-items:center;}
+.rec-rate-cur{
+  font-family:'DM Mono',monospace;font-size:var(--text-2xs);
+  color:var(--content-muted);flex:none;
+}
+.rec-rate-del{align-self:end;}
+@container (max-width:460px){
+  .rec-rate-row{grid-template-columns:1fr 1fr;}
+  .rec-rate-field-note{grid-column:1 / -1;}
+  .rec-rate-del{grid-column:1 / -1;justify-self:end;}
+}
+
 /* Live cost read-out. The whole reason the editor is a sheet and not four
    inline inputs: you see the annual commitment before you agree to it. */
 .rec-preview{
@@ -9052,6 +9119,13 @@ tr.hist-row:hover {
   margin-top:var(--space-2);padding-top:var(--space-2);
   border-top:1px solid var(--gold-line);color:var(--status-active);font-weight:600;
 }
+.rec-preview-change{
+  margin-top:var(--space-2);padding-top:var(--space-2);
+  border-top:1px solid var(--gold-line);
+  font-family:'DM Mono',monospace;font-size:var(--text-xs);
+  color:var(--content-primary);line-height:var(--leading-snug);
+}
+.rec-stat-change{color:var(--status-active);font-family:'DM Mono',monospace;}
 
 @media (max-width:768px){
   .rec-head .btn{width:100%;justify-content:center;}

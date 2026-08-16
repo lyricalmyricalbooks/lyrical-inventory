@@ -1558,7 +1558,7 @@
 
   <div class="g3" style="margin-bottom:12px;">
     <div class="form-group">
-      <label for="rec-edit-amount">Amount per period</label>
+      <label for="rec-edit-amount" id="rec-edit-amount-label">Amount per period</label>
       <div style="display:flex;gap:4px;">
         <select id="rec-edit-cur" style="flex:0 0 78px;" onchange="updateRecurringPreview()">
           <option value="CAD">CAD</option>
@@ -1578,6 +1578,17 @@
       <label for="rec-edit-end">Ends <span class="tc-opt">optional</span></label>
       <input type="date" id="rec-edit-end" onchange="updateRecurringPreview()">
     </div>
+  </div>
+
+  <div class="rec-rates" id="rec-edit-rates-wrap">
+    <div class="rec-rates-head">
+      <div>
+        <strong>Price changes</strong>
+        <em>Rent going up, or a plan re-pricing? Add the new amount and the date it starts. Every charge before that date keeps the old price — including ones still to be posted.</em>
+      </div>
+      <button type="button" class="btn sm" id="rec-edit-rate-add" onclick="addRecurringRateChange()">+ Add price change</button>
+    </div>
+    <div class="rec-rate-list" id="rec-edit-rates"></div>
   </div>
 
   <div class="form-group" style="margin-bottom:12px;">

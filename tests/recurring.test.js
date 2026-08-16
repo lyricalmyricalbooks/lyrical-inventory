@@ -4,12 +4,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   RECURRING_FREQUENCIES,
+  amountOnDate,
+  currentAmount,
   frequencyMonths,
   frequencyLabel,
+  lastPostedChargeDate,
   monthlyEquivalent,
+  monthlyEquivalentOn,
+  nextRateChange,
   nextRecurringDate,
+  normalizeRateChanges,
   normalizeRecurring,
   parseYmd,
+  rateSchedule,
   recurringDueCharges,
   recurringStatus,
   relativeDayLabel,
@@ -49,6 +56,93 @@ describe('normalizeRecurring', () => {
       expect(frequencyLabel(f.id)).toBeTruthy();
       expect(frequencyMonths(f.id)).toBe(f.months);
     });
+  });
+});
+
+// The rent case this was built for: CA$300/mo from January, going to CA$350 on
+// 1 Sep 2026. Everything before September has to stay at CA$300.
+const rent = (over = {}) => sub({
+  desc: 'Rent (30% of space)', amount: 300, startDate: '2026-01-01',
+  rateChanges: [{ effectiveFrom: '2026-09-01', amount: 350, note: '2026 increase' }], ...over,
+});
+
+describe('normalizeRateChanges', () => {
+  it('sorts, drops the unusable rows and keeps the last entry for a date', () => {
+    const cleaned = normalizeRateChanges([
+      { effectiveFrom: '2027-01-01', amount: 400 },
+      { effectiveFrom: '2026-09-01', amount: 340 },
+      { effectiveFrom: '2026-09-01', amount: 350 }, // a corrected figure wins
+      { effectiveFrom: '', amount: 999 },           // undated — cannot price a charge
+      { effectiveFrom: '2026-10-01', amount: 0 },   // no amount
+      { effectiveFrom: 'later', amount: 500 },      // not a date
+    ]);
+    expect(cleaned.map(r => [r.effectiveFrom, r.amount]))
+      .toEqual([['2026-09-01', 350], ['2027-01-01', 400]]);
+  });
+
+  it('normalizes onto the record, and leaves a record without changes empty', () => {
+    expect(normalizeRecurring(rent()).rateChanges).toHaveLength(1);
+    expect(normalizeRecurring(sub()).rateChanges).toEqual([]);
+    expect(normalizeRecurring({ rateChanges: 'nonsense' }).rateChanges).toEqual([]);
+  });
+});
+
+describe('amountOnDate', () => {
+  it('prices a charge by the day it falls on', () => {
+    expect(amountOnDate(rent(), '2026-08-01')).toBe(300);
+    expect(amountOnDate(rent(), '2026-08-31')).toBe(300);
+    expect(amountOnDate(rent(), '2026-09-01')).toBe(350); // effective from, inclusive
+    expect(amountOnDate(rent(), '2027-06-01')).toBe(350);
+  });
+
+  it('steps through several changes in order', () => {
+    const s = rent({ rateChanges: [
+      { effectiveFrom: '2027-01-01', amount: 400 },
+      { effectiveFrom: '2026-09-01', amount: 350 },
+    ] });
+    expect(amountOnDate(s, '2026-12-31')).toBe(350);
+    expect(amountOnDate(s, '2027-01-01')).toBe(400);
+  });
+
+  it('reports today’s price and the coming one separately', () => {
+    expect(currentAmount(rent(), NOW)).toBe(300);
+    const change = nextRateChange(rent(), NOW);
+    expect(change).toMatchObject({ effectiveFrom: '2026-09-01', from: 300, to: 350, delta: 50 });
+    // Once it has taken effect it is no longer "next".
+    expect(nextRateChange(rent(), new Date(2026, 8, 2))).toBeNull();
+    expect(currentAmount(rent(), new Date(2026, 8, 2))).toBe(350);
+    expect(nextRateChange(sub(), NOW)).toBeNull();
+  });
+
+  it('lists the opening amount alongside the changes', () => {
+    expect(rateSchedule(rent()).map(r => [r.effectiveFrom, r.amount, r.opening]))
+      .toEqual([['2026-01-01', 300, true], ['2026-09-01', 350, false]]);
+  });
+});
+
+describe('recurringDueCharges with a price change', () => {
+  it('posts each backfilled month at the price in force that month', () => {
+    // Entered late: the whole year lands at once, and the ledger must not get
+    // twelve charges at the new rate.
+    const due = recurringDueCharges(rent(), new Date(2026, 10, 15)); // 15 Nov 2026
+    const bySeptember = Object.fromEntries(due.map(d => [d.date, d.amount]));
+    expect(bySeptember['2026-08-01']).toBe(300);
+    expect(bySeptember['2026-09-01']).toBe(350);
+    expect(bySeptember['2026-10-01']).toBe(350);
+    expect(bySeptember['2026-11-01']).toBe(350);
+  });
+
+  it('leaves charges already posted alone when the change is entered in advance', () => {
+    // August is logged; entering the September rise now owes nothing today.
+    expect(recurringDueCharges(rent({ lastInjected: '2026-08' }), NOW)).toEqual([]);
+  });
+
+  it('still bills when the starting amount is zero but a later price is set', () => {
+    const due = recurringDueCharges(
+      sub({ amount: 0, startDate: '2026-06-01', rateChanges: [{ effectiveFrom: '2026-07-01', amount: 20 }] }),
+      NOW,
+    );
+    expect(due.map(d => [d.date, d.amount])).toEqual([['2026-07-01', 20], ['2026-08-01', 20]]);
   });
 });
 
@@ -147,6 +241,19 @@ describe('nextRecurringDate', () => {
   });
 });
 
+describe('lastPostedChargeDate', () => {
+  it('re-derives the day of the last posted period from the schedule', () => {
+    expect(lastPostedChargeDate(sub({ startDate: '2026-01-05', lastInjected: '2026-07' }))).toBe('2026-07-05');
+    expect(lastPostedChargeDate(sub({ startDate: '2026-01-31', lastInjected: '2026-02' }))).toBe('2026-02-28');
+    // A quarterly subscription's July is not a billing month; June is.
+    expect(lastPostedChargeDate(sub({ startDate: '2026-03-10', frequency: 'quarterly', lastInjected: '2026-07' }))).toBe('2026-06-10');
+  });
+
+  it('is empty when nothing has been posted', () => {
+    expect(lastPostedChargeDate(sub({ lastInjected: '' }))).toBe('');
+  });
+});
+
 describe('recurringStatus', () => {
   it('classifies the lifecycle', () => {
     expect(recurringStatus(sub(), NOW)).toBe('active');
@@ -166,6 +273,12 @@ describe('monthlyEquivalent', () => {
     expect(monthlyEquivalent(sub({ amount: 120, frequency: 'annual' }))).toBe(10);
     expect(monthlyEquivalent(sub({ amount: 30, frequency: 'quarterly' }))).toBe(10);
     expect(monthlyEquivalent(sub({ amount: 15 }))).toBe(15);
+  });
+
+  it('costs a scheduled rise only from the day it takes effect', () => {
+    expect(monthlyEquivalent(rent(), NOW)).toBe(300);
+    expect(monthlyEquivalent(rent(), new Date(2026, 8, 1))).toBe(350);
+    expect(monthlyEquivalentOn(rent(), '2026-09-01')).toBe(350);
   });
 });
 
@@ -215,6 +328,27 @@ describe('summarizeRecurring', () => {
     const s = summarizeRecurring([], rates, 'CAD', NOW);
     expect(s.monthlyBase).toBe(0);
     expect(s.nextUp).toBeNull();
+    expect(s.upcomingChange).toBeNull();
+  });
+
+  it('counts today’s price and names what the total becomes after a rise', () => {
+    const s = summarizeRecurring([rent(), sub({ id: 'b', amount: 45.2 })], rates, 'CAD', NOW);
+    expect(s.monthlyBase).toBe(345.2);              // still the old rent
+    expect(s.upcomingChange).toMatchObject({ date: '2026-09-01', from: 300, to: 350, delta: 50 });
+    expect(s.upcomingChange.sub.desc).toBe('Rent (30% of space)');
+    expect(s.monthlyBaseAfterChange).toBe(395.2);   // what September looks like
+  });
+
+  it('ignores a change on a paused subscription in the run rate', () => {
+    const s = summarizeRecurring([rent({ paused: true })], rates, 'CAD', NOW);
+    expect(s.monthlyBase).toBe(0);
+    expect(s.upcomingChange).toBeNull();
+  });
+
+  it('reports the next charge at the price it will actually bill', () => {
+    const s = summarizeRecurring([rent({ lastInjected: '2026-08' })], rates, 'CAD', NOW);
+    expect(s.nextUp.date).toBe('2026-09-01');
+    expect(s.nextUp.amount).toBe(350);
   });
 });
 
@@ -258,5 +392,22 @@ describe('recurring subscriptions panel markup', () => {
         expect(html, `${id} missing from index.html`).toContain(`id="${id}"`);
         expect(taxcentre, `${id} never read`).toContain(`'${id}'`);
       });
+  });
+
+  // The price-change rows are built by the renderer and read back out of the
+  // DOM, so the container id and the row classes have to agree across the two
+  // files or a saved change silently reads as empty.
+  it('keeps the price-change section wired to its renderer', () => {
+    ['rec-edit-rates-wrap', 'rec-edit-rates'].forEach(id => {
+      expect(html, `${id} missing from index.html`).toContain(`id="${id}"`);
+      expect(taxcentre, `${id} never referenced`).toContain(id);
+    });
+    ['rec-rate-date', 'rec-rate-amount', 'rec-rate-note', 'rec-rate-row'].forEach(cls => {
+      expect(taxcentre, `.${cls} written but never read`)
+        .toContain(`.${cls}`);
+    });
+    expect(html).toContain('addRecurringRateChange()');
+    expect(taxcentre).toContain('function addRecurringRateChange');
+    expect(taxcentre).toContain('function removeRecurringRateChange');
   });
 });
