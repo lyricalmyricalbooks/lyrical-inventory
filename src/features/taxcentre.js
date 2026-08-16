@@ -27,7 +27,6 @@ import {
   _fxRateCache,
   _localReceiptCell,
   calculateFinancials,
-  confirmDialog,
   defaultState,
   isAuthor,
   isTestBook,
@@ -36,8 +35,6 @@ import {
   resolveLocalReceiptFile,
   ensurePdfJs,
   loadTaxCenter,
-  openM,
-  closeM,
   openEditSale,
   saveReceiptBestEffort,
   saveState,
@@ -47,6 +44,7 @@ import {
   _tcEditTripId,
   _tcOpenTripName,
 } from '../main.js';
+import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import { renderShippingReconciliationWorklist } from './shipping.js';
 import { escapeHtml } from '../lib/html.js';
 import { csvRow, toCsv } from '../lib/csv.js';

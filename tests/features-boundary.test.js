@@ -8,16 +8,17 @@ const root = path.resolve(__dirname, '..');
 const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
 const featureDir = path.join(root, 'src/features');
 // Recorded seam size per feature module — see the assertion below.
+// Lowered across the board when the modal primitives moved to src/lib/modal.js:
+// openM/closeM/confirmDialog are now imported from that leaf module instead of
+// from main.js, so they no longer count against any feature's seam.
 const MAIN_IMPORT_BUDGET = {
-  'opencall.js': 18,
-  'shipping.js': 29,
-  'bigcartel.js': 18,
-  // +2 for openM/closeM: the trip create/edit modal lives in this module, and
-  // these are the same shared modal primitives shipping.js/bigcartel.js use.
+  'opencall.js': 17,
+  'shipping.js': 24,
+  'bigcartel.js': 16,
   // +2 for resolveLocalReceiptFile/ensurePdfJs: the printable trip report reads
   // the same local receipt files viewLocalReceipt opens, and rasterises PDF
   // ones — both primitives stay in main.js next to the folder-handle plumbing.
-  'taxcentre.js': 27,
+  'taxcentre.js': 24,
 };
 
 const featureFiles = fs.existsSync(featureDir)
