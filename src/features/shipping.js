@@ -35,13 +35,13 @@ import {
   renderExpenses,
   renderHist,
   renderOrders,
-  saveReceiptToLocalFile,
   saveState,
   sheetsUrl,
   showToast,
   states,
   today,
 } from '../main.js';
+import { saveReceiptToLocalFile } from './receipts.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {
   extractBigCartelAddress,

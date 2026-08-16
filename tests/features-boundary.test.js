@@ -13,12 +13,18 @@ const featureDir = path.join(root, 'src/features');
 // from main.js, so they no longer count against any feature's seam.
 const MAIN_IMPORT_BUDGET = {
   'opencall.js': 17,
-  'shipping.js': 24,
+  'shipping.js': 23,
   'bigcartel.js': 16,
-  // +2 for resolveLocalReceiptFile/ensurePdfJs: the printable trip report reads
-  // the same local receipt files viewLocalReceipt opens, and rasterises PDF
-  // ones — both primitives stay in main.js next to the folder-handle plumbing.
-  'taxcentre.js': 24,
+  // +1 for ensurePdfJs: the printable trip report rasterises PDF receipts, and
+  // that primitive stays in main.js. The receipt-file primitives it used to
+  // take from main.js now come from receipts.js instead, which is why this
+  // dropped by four.
+  'taxcentre.js': 20,
+  // Five of these (RECEIPT_SCAN_SCHEMA, _buildReceiptScanPrompt,
+  // _callGeminiForReceipts, _parseReceiptJson, _prepareReceiptUpload) are the
+  // AI scanner the organiser calls. They only cross the seam because receipt
+  // CAPTURE has not moved yet, and stop counting once it joins this module.
+  'receipts.js': 15,
 };
 
 const featureFiles = fs.existsSync(featureDir)

@@ -398,8 +398,12 @@ describe('reclaiming one receipt from the cloud', () => {
 
 describe('cloud fallback wiring', () => {
   it('saves a receipt to the folder first and the cloud second', () => {
-    expect(appSource).toContain('export async function uploadReceiptToCloud');
-    expect(appSource).toContain('export async function saveReceiptBestEffort');
+    // These moved to src/features/receipts.js, where the module exports its
+    // whole surface in one trailing block rather than marking each
+    // declaration. The function still has to exist; the `export` keyword on
+    // the declaration line is no longer how that is expressed.
+    expect(appSource).toContain('async function uploadReceiptToCloud');
+    expect(appSource).toContain('async function saveReceiptBestEffort');
     // Every place a receipt is attached goes through the shared best-effort
     // saver: the Tax Centre form, the per-book form, the row drag-drop, and
     // the batch sheet's two destinations.
@@ -457,8 +461,12 @@ describe('cloud fallback wiring', () => {
   });
 
   it('explains a failed batch instead of blaming the connection', () => {
-    expect(appSource).toContain('export function summarizeReceiptProblems');
-    expect(appSource).toContain('export function formatReceiptDiagnostic');
+    // These moved to src/features/receipts.js, where the module exports its
+    // whole surface in one trailing block rather than marking each
+    // declaration. The function still has to exist; the `export` keyword on
+    // the declaration line is no longer how that is expressed.
+    expect(appSource).toContain('function summarizeReceiptProblems');
+    expect(appSource).toContain('function formatReceiptDiagnostic');
     expect(appSource).toContain('function renderReceiptProblemPanel');
     expect(html).toContain('id="tc-receipt-problems"');
     // The button is rendered with the panel, so it lives in the source rather
