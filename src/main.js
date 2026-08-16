@@ -5969,38 +5969,45 @@ function voidExpense(id) {
 // Reflects the chosen file into a chip and toggles the dropzone prompt. The
 // underlying #exp-file input stays the single source of truth that
 // submitExpense / scanProjectReceiptWithAI read from.
-window.expFileChosen = function () {
+function expFileChosen() {
   const input = $('exp-file'), chip = $('exp-file-chip'), nameEl = $('exp-file-name'), dz = $('exp-dropzone');
   const hasFile = input && input.files && input.files.length > 0;
   if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
   if (chip) chip.style.display = hasFile ? 'flex' : 'none';
   if (dz) dz.style.display = hasFile ? 'none' : 'flex';
-};
-window.expFileClear = function (ev) {
+}
+function expFileClear(ev) {
   if (ev) ev.preventDefault();
   const input = $('exp-file');
   if (input) input.value = '';
-  window.expFileChosen();
-};
-window.expFileDragOver = function (ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.add('drag'); };
-window.expFileDragLeave = function (ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag'); };
-window.expFileDrop = function (ev) {
+  expFileChosen();
+}
+function expFileDragOver(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.add('drag'); }
+function expFileDragLeave(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag'); }
+function expFileDrop(ev) {
   ev.preventDefault();
   const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag');
   const input = $('exp-file');
   if (input && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
     try { input.files = ev.dataTransfer.files; } catch (e) { /* older browsers: ignore */ }
-    window.expFileChosen();
+    expFileChosen();
   }
-};
+}
 
 // Same dropzone treatment for the Tax Center's Log Business Expense receipt
 // field (#tc-exp-file). Kept separate from expFileChosen/etc above since
 // that pair is wired to the plain ledger expense form's #exp-file ids.
-window.tcExpFileChosen = function () {
+// These three sites used to read and write `window._pendingWebcamReceipt`,
+// which is a DIFFERENT property from the module-scoped `_pendingWebcamReceipt`
+// that useReceiptPhoto() sets and that submitExpense/saveExpenseEdit read.
+// Nothing ever wrote the window one, so the read was always falsy and the write
+// cleared nothing. They now go through the accessors, which is plainly what the
+// code was written to do: clearing the receipt field clears the pending capture.
+function tcExpFileChosen() {
   const input = $('tc-exp-file'), chip = $('tc-exp-file-chip'), nameEl = $('tc-exp-file-name'), dz = $('tc-exp-dropzone');
-  const hasFile = (input && input.files && input.files.length > 0) || !!window._pendingWebcamReceipt;
-  if (nameEl && hasFile) nameEl.textContent = input?.files?.[0]?.name || window._pendingWebcamReceipt?.name || 'receipt';
+  const pending = getPendingWebcamReceipt();
+  const hasFile = (input && input.files && input.files.length > 0) || !!pending;
+  if (nameEl && hasFile) nameEl.textContent = input?.files?.[0]?.name || pending?.name || 'receipt';
   if (chip) chip.style.display = hasFile ? 'flex' : 'none';
   if (dz) dz.style.display = hasFile ? 'none' : 'flex';
   const aiBtn = $('tc-ai-scan-btn');
@@ -6008,25 +6015,25 @@ window.tcExpFileChosen = function () {
     aiBtn.disabled = !hasFile;
     aiBtn.title = hasFile ? 'Scan receipt with Gemini AI' : 'Select or capture a receipt first to enable AI scanning';
   }
-};
-window.tcExpFileClear = function (ev) {
+}
+function tcExpFileClear(ev) {
   if (ev) ev.preventDefault();
   const input = $('tc-exp-file');
   if (input) input.value = '';
-  window._pendingWebcamReceipt = null;
-  window.tcExpFileChosen();
-};
-window.tcExpFileDragOver = function (ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.add('drag'); };
-window.tcExpFileDragLeave = function (ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag'); };
-window.tcExpFileDrop = function (ev) {
+  setPendingWebcamReceipt(null);
+  tcExpFileChosen();
+}
+function tcExpFileDragOver(ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.add('drag'); }
+function tcExpFileDragLeave(ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag'); }
+function tcExpFileDrop(ev) {
   ev.preventDefault();
   const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag');
   const input = $('tc-exp-file');
   if (input && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
     try { input.files = ev.dataTransfer.files; } catch (e) { /* older browsers: ignore */ }
-    window.tcExpFileChosen();
+    tcExpFileChosen();
   }
-};
+}
 
 // Project-ledger receipt scan. The shared runner also fills category and ref,
 // which this form has but the old 3-key prompt never asked for.
@@ -7546,21 +7553,21 @@ function _batchExpenseAddFiles(files) {
   showToast(`Added ${added.length} receipt${added.length > 1 ? 's' : ''}`);
 }
 
-window.batchExpenseFilesChosen = function () {
+function batchExpenseFilesChosen() {
   const input = $('bx-files');
   if (!input || !input.files) return;
   _batchExpenseAddFiles(input.files);
   // Cleared so re-picking the same file still fires `change` — the rows own
   // the File objects now, the input is only a doorway.
   input.value = '';
-};
-window.batchExpenseDragOver = function (ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.add('drag'); };
-window.batchExpenseDragLeave = function (ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.remove('drag'); };
-window.batchExpenseDrop = function (ev) {
+}
+function batchExpenseDragOver(ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.add('drag'); }
+function batchExpenseDragLeave(ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.remove('drag'); }
+function batchExpenseDrop(ev) {
   ev.preventDefault();
   const dz = $('bx-dropzone'); if (dz) dz.classList.remove('drag');
   if (ev.dataTransfer && ev.dataTransfer.files) _batchExpenseAddFiles(ev.dataTransfer.files);
-};
+}
 
 function batchExpenseAddBlankRow() {
   _batchExpenseRows.push(_batchExpenseNewRow(null));
@@ -8910,7 +8917,10 @@ async function importEmailReceiptDrafts() {
 
 // Rows the author can select for a bulk reimbursement request (unreceived,
 // approved, non-gratuity expenses). Persists selection across re-renders.
-window._expReimburseSelection = window._expReimburseSelection || new Set();
+// Plain module state rather than a window property: nothing outside this file
+// reads it, and a column-0 `window.x = …` runs at import time, which a feature
+// module may not do (see tests/features-boundary.test.js).
+const _expReimburseSelection = new Set();
 
 export function renderExpenses() {
   const s = getState(), book = getBook(), cur = book.currency;
@@ -8928,7 +8938,7 @@ export function renderExpenses() {
   // Selection can only ever contain currently-eligible ids; drop anything
   // that got received/voided elsewhere since the last render.
   const eligibleIds = new Set(combined.filter(e => !e.received && !e.pendingAuth && !isGratuityExpense(e)).map(e => e.id));
-  for (const id of window._expReimburseSelection) if (!eligibleIds.has(id)) window._expReimburseSelection.delete(id);
+  for (const id of _expReimburseSelection) if (!eligibleIds.has(id)) _expReimburseSelection.delete(id);
 
   if (!combined.length) {
     body.innerHTML = `<tr><td colspan="${window.IS_PUBLISHER ? 9 : (showSelectCol ? 9 : 8)}"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>`;
@@ -9017,7 +9027,7 @@ export function renderExpenses() {
 
     const selectCell = showSelectCol
       ? (eligibleIds.has(e.id)
-        ? `<td><input type="checkbox" onchange="toggleExpenseReimburseSelect(${e.id}, this.checked)" ${window._expReimburseSelection.has(e.id) ? 'checked' : ''}></td>`
+        ? `<td><input type="checkbox" onchange="toggleExpenseReimburseSelect(${e.id}, this.checked)" ${_expReimburseSelection.has(e.id) ? 'checked' : ''}></td>`
         : '<td></td>')
       : '';
 
@@ -9045,8 +9055,8 @@ export function renderExpenses() {
 }
 
 function toggleExpenseReimburseSelect(id, checked) {
-  if (checked) window._expReimburseSelection.add(id);
-  else window._expReimburseSelection.delete(id);
+  if (checked) _expReimburseSelection.add(id);
+  else _expReimburseSelection.delete(id);
   updateBulkReimburseButton();
 }
 
@@ -9054,7 +9064,7 @@ function updateBulkReimburseButton() {
   const btn = $('exp-bulk-reimburse-btn');
   const countEl = $('exp-bulk-reimburse-count');
   if (!btn) return;
-  const n = window._expReimburseSelection.size;
+  const n = _expReimburseSelection.size;
   if (countEl) countEl.textContent = n;
   btn.style.display = n > 0 ? '' : 'none';
 }
@@ -9063,12 +9073,12 @@ function updateBulkReimburseButton() {
 // publisher for every expense the author checked, instead of chasing each
 // one down individually.
 async function requestBulkReimbursement() {
-  const ids = Array.from(window._expReimburseSelection);
+  const ids = Array.from(_expReimburseSelection);
   if (!ids.length) return;
   const s = getState(), book = getBook(), cur = book.currency;
   const idSet = new Set(ids);
   const items = (s.expenses || []).filter(e => idSet.has(e.id));
-  if (!items.length) { window._expReimburseSelection.clear(); updateBulkReimburseButton(); return; }
+  if (!items.length) { _expReimburseSelection.clear(); updateBulkReimburseButton(); return; }
 
   const total = items.reduce((sum, e) => sum + (e.amount || 0), 0);
   const summary = `Reimbursement requested for ${items.length} expense${items.length !== 1 ? 's' : ''} — ${fmt(total, cur)}`;
@@ -9078,7 +9088,7 @@ async function requestBulkReimbursement() {
   try {
     await notifyPublisherSubmission('Reimbursement request', items, summary);
     showToast(`✓ Requested reimbursement for ${items.length} expense${items.length !== 1 ? 's' : ''}`);
-    window._expReimburseSelection.clear();
+    _expReimburseSelection.clear();
     renderExpenses();
   } catch (e) {
     console.error(e);
@@ -13798,6 +13808,13 @@ let _receiptCamBlob = null;
 // receipts folder, so submitTaxExpense() reuses the path instead of
 // re-saving the same file (which would create a duplicate).
 let _pendingWebcamReceipt = null;
+// Read and written from both sides of the coming receipts/expenses split (the
+// capture sets it here; submitTaxExpense and saveExpenseEdit read and clear it).
+// An ES import is read-only, so once this declaration moves into a feature
+// module the far side cannot assign to it — the accessors are what keep that
+// working. Introduced ahead of the move so the move itself stays mechanical.
+function getPendingWebcamReceipt() { return _pendingWebcamReceipt; }
+function setPendingWebcamReceipt(v) { _pendingWebcamReceipt = v; }
 
 function _setReceiptCamStatus(msg) {
   const s = $('receipt-cam-status');
@@ -17709,8 +17726,9 @@ async function saveExpenseEdit() {
     let newReceiptUrl = '';
     if (fileInput && fileInput.files.length > 0) {
       const file = fileInput.files[0];
-      if (_pendingWebcamReceipt && _pendingWebcamReceipt.name === file.name && _pendingWebcamReceipt.size === file.size) {
-        newReceiptUrl = _pendingWebcamReceipt.url;
+      const pendingCam = getPendingWebcamReceipt();
+      if (pendingCam && pendingCam.name === file.name && pendingCam.size === file.size) {
+        newReceiptUrl = pendingCam.url;
       } else {
         const subfolder = type === 'bookExpense' && BOOKS[bid] ? BOOKS[bid].title : 'General';
         const localUrl = await saveReceiptToLocalFile(file, subfolder.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
@@ -17791,7 +17809,7 @@ async function saveExpenseEdit() {
   } finally {
     submitBtn.textContent = oldText; submitBtn.disabled = false;
     _editingExpense = null;
-    _pendingWebcamReceipt = null;
+    setPendingWebcamReceipt(null);
   }
 }
 
@@ -17983,8 +18001,9 @@ async function submitTaxExpense() {
     // Webcam captures are written to the local folder immediately on
     // "Use Photo", so reuse that path instead of writing the same bytes
     // a second time (which would create a duplicate file).
-    if (_pendingWebcamReceipt && _pendingWebcamReceipt.name === file.name && _pendingWebcamReceipt.size === file.size) {
-      receiptUrl = _pendingWebcamReceipt.url;
+    const pendingCam = getPendingWebcamReceipt();
+    if (pendingCam && pendingCam.name === file.name && pendingCam.size === file.size) {
+      receiptUrl = pendingCam.url;
       receiptStorage = 'local';
     } else {
       const submitBtn = $('tc-submit-exp-btn');
@@ -18044,7 +18063,7 @@ async function submitTaxExpense() {
   if (typeof window.tcExpFileChosen === 'function') window.tcExpFileChosen();
   const filePreview = $('tc-exp-file-preview');
   if (filePreview) filePreview.textContent = '';
-  _pendingWebcamReceipt = null;
+  setPendingWebcamReceipt(null);
 }
 
 // addRecurring() used to live here, reading a five-field inline form. Both the
@@ -24383,6 +24402,13 @@ function exposeLegacyInlineHandlers() {
     _applyScanCurrency, _applyScanCategory, _buildReceiptScanPrompt, RECEIPT_SCAN_SCHEMA,
     openBatchExpenseModal, closeBatchExpenseModal, renderBatchExpenseModal, setBatchExpenseDest,
     batchExpenseDestinations, batchExpenseAddBlankRow, removeBatchExpenseRow, rescanBatchExpenseRow,
+    // Receipt dropzone handlers. These were `window.x = function …` at column 0,
+    // which runs at import time — not allowed once they move into a feature
+    // module. They are plain declarations now and reach the inline on*=
+    // attributes in index.html the same way every other handler here does.
+    expFileChosen, expFileClear, expFileDragOver, expFileDragLeave, expFileDrop,
+    tcExpFileChosen, tcExpFileClear, tcExpFileDragOver, tcExpFileDragLeave, tcExpFileDrop,
+    batchExpenseFilesChosen, batchExpenseDragOver, batchExpenseDragLeave, batchExpenseDrop,
     toggleAllBatchExpenses, deselectDuplicateBatchExpenses, applyBatchExpenseBulk,
     renderBatchExpenseRows, scanAllBatchExpenses, submitBatchExpenses,
     _isLikelyDuplicateExpense, _expenseHasReceipt, renderEmailReceiptDrafts, toggleAllEmailDrafts,

@@ -89,7 +89,16 @@ describe('Tax Centre UX Enhancements Suite (#2, #3, #10, #15, #18, #19)', () => 
 
     it('toggles disabled state in tcExpFileChosen and tcExpFileClear', () => {
       expect(mainJs).toContain('aiBtn.disabled = !hasFile');
-      expect(mainJs).toContain('window._pendingWebcamReceipt = null;');
+      // Clearing the receipt field must also drop any pending webcam capture,
+      // or the next submit could reuse it. This used to be asserted as the
+      // literal `window._pendingWebcamReceipt = null;`, which was a no-op: that
+      // window property is not the module-scoped `_pendingWebcamReceipt` the
+      // capture actually sets, and nothing ever wrote it. The clear now goes
+      // through the accessor, so this pins the behaviour rather than the typo.
+      expect(mainJs).toContain('setPendingWebcamReceipt(null)');
+      // Assignment specifically — the comment above the fix names the old
+      // property on purpose, so a bare substring check would match the prose.
+      expect(mainJs).not.toContain('window._pendingWebcamReceipt =');
     });
 
     it('adds and removes tc-field-shimmer and tc-field-extracted in _runReceiptScan', () => {
