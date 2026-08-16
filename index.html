@@ -2990,155 +2990,191 @@
   <!-- SUBPANEL 2: FAIR PRINT KIT WORKSPACE -->
   <div class="pos-subpanel" id="pos-subpanel-fairkit" role="tabpanel" aria-labelledby="btn-pos-subtab-fairkit" style="display:none;">
     <div class="fk-workspace" id="m-fair-kit">
-      <div class="fk-hero-card">
-        <div>
-          <div class="section-hed" id="fk-title" style="font-size:24px;display:flex;align-items:center;gap:8px;">
-            🖨️ Fair Print Kit &amp; Stall Prep
-          </div>
-          <div class="fk-sub" style="margin-top:4px;margin-bottom:0;">
-            Pick your books once, then print the paper tally sheet and the scan-to-pay QR sheet together — same titles, same prices, no second trip through this screen.
-          </div>
+      <div class="fk-top">
+        <div class="fk-top-id">
+          <div class="section-hed fk-title" id="fk-title">🖨️ Fair Print Kit</div>
+          <div class="fk-sub">Pick your titles once — the paper tally sheet and the scan-to-pay QR sheet both print from this one list.</div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <button type="button" class="btn outline sm" onclick="switchPOSSubTab('register')">← Back to Register</button>
-        </div>
+        <button type="button" class="btn outline sm" onclick="switchPOSSubTab('register')">← Back to Register</button>
       </div>
 
-      <div class="fk-modes" role="radiogroup" aria-label="What to print">
-        <label class="fk-mode">
-          <input type="radio" name="fk-mode" value="both" checked onchange="fairKitModeChanged()">
-          <span class="fk-mode-body">
-            <span class="fk-mode-title">Both sheets</span>
-            <span class="fk-mode-note">Tally sheet + QR sheet</span>
-          </span>
-        </label>
-        <label class="fk-mode">
-          <input type="radio" name="fk-mode" value="tracker" onchange="fairKitModeChanged()">
-          <span class="fk-mode-body">
-            <span class="fk-mode-title">Tally sheet only</span>
-            <span class="fk-mode-note">Paper sales tally</span>
-          </span>
-        </label>
-        <label class="fk-mode">
-          <input type="radio" name="fk-mode" value="qr" onchange="fairKitModeChanged()">
-          <span class="fk-mode-body">
-            <span class="fk-mode-title">QR sheet only</span>
-            <span class="fk-mode-note">Scan-to-pay cards</span>
-          </span>
-        </label>
-      </div>
+      <!-- TOOLBAR — what to print, which fair, and the saved-fair recall, on one line.
+           These three decisions are made once per trip and then left alone; the list
+           below is what actually gets worked on. -->
+      <div class="fk-toolbar">
+        <div class="fk-seg" role="radiogroup" aria-label="What to print">
+          <label class="fk-seg-opt">
+            <input type="radio" name="fk-mode" value="both" checked onchange="fairKitModeChanged()">
+            <span>Both sheets</span>
+          </label>
+          <label class="fk-seg-opt">
+            <input type="radio" name="fk-mode" value="tracker" onchange="fairKitModeChanged()">
+            <span>Tally only</span>
+          </label>
+          <label class="fk-seg-opt">
+            <input type="radio" name="fk-mode" value="qr" onchange="fairKitModeChanged()">
+            <span>QR only</span>
+          </label>
+        </div>
 
-      <div class="fk-card fk-card-gold">
-        <div class="fk-eyebrow gold">Fair presets</div>
-        <div class="fk-preset-row">
+        <div class="fk-inline-field">
+          <label for="st-event">Event</label>
+          <input type="text" id="st-event" placeholder="e.g. Toronto Art Book Fair">
+        </div>
+        <div class="fk-inline-field">
+          <label for="st-date">Date</label>
+          <input type="date" id="st-date">
+        </div>
+
+        <button type="button" class="btn sm fk-preset-btn" popovertarget="fk-presets-pop">🗂 Saved fairs</button>
+        <div id="fk-presets-pop" class="fk-pop" popover>
+          <div class="fk-pop-head">
+            <span class="fk-eyebrow gold">Saved fairs</span>
+            <button type="button" class="fk-pop-close" popovertarget="fk-presets-pop" popovertargetaction="hide" aria-label="Close saved fairs">✕</button>
+          </div>
           <select id="fk-preset-select" aria-label="Saved fair preset" onchange="fkPresetSelected(this.value)">
             <option value="">No saved fairs yet</option>
           </select>
-          <button type="button" class="btn sm" onclick="fkSaveFairPreset()">💾 Save…</button>
-          <button type="button" class="btn sm" id="fk-preset-delete" onclick="fkDeleteFairPreset()" disabled>Delete</button>
-        </div>
-        <div id="fk-preset-note" class="fk-note">Set the whole kit up once, save it under the fair&rsquo;s name, and recall it next time.</div>
-      </div>
-
-      <div class="g2 fk-row">
-        <div class="form-group" style="margin:0;"><label for="st-event">Event name</label><input type="text" id="st-event" placeholder="e.g. Toronto Art Book Fair"></div>
-        <div class="form-group" style="margin:0;"><label for="st-date">Date</label><input type="date" id="st-date"></div>
-      </div>
-
-      <div class="fk-card">
-        <div class="fk-card-head">
-          <div class="fk-eyebrow">Books to include</div>
-          <div class="fk-card-actions">
-            <button type="button" class="btn sm" onclick="fairKitSelectAll(true)">Select all</button>
-            <button type="button" class="btn sm" onclick="fairKitSelectAll(false)">Clear</button>
+          <div class="fk-pop-actions">
+            <button type="button" class="btn sm" onclick="fkSaveFairPreset()">💾 Save this setup…</button>
+            <button type="button" class="btn sm" id="fk-preset-delete" onclick="fkDeleteFairPreset()" disabled>Delete</button>
           </div>
-        </div>
-        <div class="fk-filter-row" style="margin-bottom:12px;">
-          <input type="search" id="fk-search-input" class="fk-search-input" placeholder="Search titles to pack or price..." oninput="fairKitSearchFilter(this.value)">
-        </div>
-        <div id="st-pack-total" class="fk-note fk-pack-total">Enter how many copies of each title you&rsquo;re bringing.</div>
-        <div id="fk-books-list" class="fk-books"></div>
-
-        <div class="fk-eyebrow fk-eyebrow-inline">Add a book not in your inventory</div>
-        <div class="fk-custom-row">
-          <input type="text" id="st-custom-title" placeholder="Title" aria-label="Title of book not in inventory">
-          <input type="text" id="st-custom-author" placeholder="Author" aria-label="Author of book not in inventory">
-          <input type="number" inputmode="numeric" id="st-custom-qty" placeholder="Qty" min="0" step="1" aria-label="Copies bringing">
-          <button type="button" class="btn sm" onclick="salesTrackerAddCustom()">Add</button>
-        </div>
-        <div class="fk-note">These titles print on the tally sheet only — they aren&rsquo;t saved to your inventory and have no payment link to build a QR code from.</div>
-      </div>
-
-      <div class="fk-opts">
-        <div class="fk-card" id="fk-opts-tracker">
-          <div class="fk-eyebrow">Tally sheet</div>
-          <div class="form-group fk-opt-group">
-            <label for="st-cols">Tally columns per book</label>
-            <input type="number" inputmode="numeric" id="st-cols" value="10" min="1" max="30">
-            <div class="fk-hint">Each column is one sale.</div>
-          </div>
-          <div class="form-group fk-opt-group">
-            <label for="st-currency">Currency</label>
-            <select id="st-currency">
-              <option value="EUR">€ EUR</option>
-              <option value="CAD">CA$ CAD</option>
-              <option value="USD">$ USD</option>
-              <option value="GBP">£ GBP</option>
-              <option value="MXN">MX$ MXN</option>
-            </select>
-            <div class="fk-hint">Used in price-paid cells.</div>
-          </div>
-          <label class="fk-check fk-check-block">
-            <input type="checkbox" id="st-notes">
-            <span>
-              <span class="fk-check-title">Include a price-paid row</span>
-              <span class="fk-check-note">Adds a cell under each tally column to record what that copy actually sold for — useful for tracking discounts.</span>
-            </span>
-          </label>
-        </div>
-
-        <div class="fk-card" id="fk-opts-qr">
-          <div class="fk-eyebrow">Payment QR sheet</div>
-          <div class="form-group fk-opt-group">
-            <label for="qrp-cols">Columns per row</label>
-            <input type="number" inputmode="numeric" id="qrp-cols" value="3" min="1" max="6">
-            <div class="fk-hint">How many QR cards sit side by side.</div>
-          </div>
-          <div class="form-group fk-opt-group">
-            <label for="qrp-base-cur">Base currency</label>
-            <select id="qrp-base-cur" onchange="renderQRPrintBookList()">
-              <option value="auto" selected>Per-book native</option>
-              <option value="EUR">EUR (€)</option>
-              <option value="CAD">CAD (CA$)</option>
-              <option value="USD">USD ($)</option>
-              <option value="GBP">GBP (£)</option>
-              <option value="MXN">MXN (MX$)</option>
-            </select>
-            <div class="fk-hint">Marked as the listed price; others are converted via your saved FX rates.</div>
-          </div>
-          <div class="fk-eyebrow fk-eyebrow-inline">Price columns on each card</div>
-          <div class="fk-checks">
-            <label class="fk-check"><input type="checkbox" id="qrp-show-eur" checked><span>EUR</span></label>
-            <label class="fk-check"><input type="checkbox" id="qrp-show-cad" checked><span>CAD</span></label>
-            <label class="fk-check"><input type="checkbox" id="qrp-show-usd" checked><span>USD</span></label>
-            <label class="fk-check"><input type="checkbox" id="qrp-show-mxn"><span>MXN</span></label>
-          </div>
-          <label class="fk-check fk-check-block fk-check-gold">
-            <input type="checkbox" id="qrp-fit-one-page" checked>
-            <span>
-              <span class="fk-check-title">📄 Fit every card onto one page</span>
-              <span class="fk-check-note">Shrinks the cards so the whole stall fits on a single sheet.</span>
-            </span>
-          </label>
+          <div id="fk-preset-note" class="fk-note">Set the whole kit up once, save it under the fair&rsquo;s name, and recall it next time.</div>
         </div>
       </div>
 
-      <div class="modal-footer fk-footer">
-        <div id="fk-summary" class="fk-summary" aria-live="polite"></div>
-        <div class="fk-footer-actions">
-          <button type="button" class="btn" onclick="switchPOSSubTab('register')">Back to Register</button>
-          <button type="button" class="btn gold" id="fk-print-btn" onclick="printFairKit()">🖨 Print both sheets</button>
+      <div class="fk-body">
+        <!-- THE LIST IS THE SCREEN. One row per title, one column per decision,
+             so seven books read as seven lines instead of seven cards. The column
+             tracks are declared once on the shell and inherited by the header row
+             and every book row via subgrid, so nothing drifts out of line when a
+             column is hidden for a single-sheet print. -->
+        <div class="fk-main">
+          <div class="fk-list-shell">
+            <div class="fk-list-head">
+              <input type="search" id="fk-search-input" class="fk-search-input" placeholder="Search titles…" aria-label="Search titles" oninput="fairKitSearchFilter(this.value)">
+              <div class="fk-list-actions">
+                <button type="button" class="btn sm" onclick="fairKitSelectAll(true)">Select all</button>
+                <button type="button" class="btn sm" onclick="fairKitSelectAll(false)">Clear</button>
+              </div>
+            </div>
+
+            <div class="fk-cols" aria-hidden="true">
+              <span></span>
+              <span>Title</span>
+              <span class="fk-col-num fk-col-qty">On hand</span>
+              <span class="fk-col-num fk-col-qty">Copies</span>
+              <span class="fk-col-num fk-col-price">Door price</span>
+              <span class="fk-col-price">QR card</span>
+            </div>
+
+            <div id="fk-books-list" class="fk-books"></div>
+
+            <div class="fk-list-foot">
+              <div id="st-pack-total" class="fk-pack-total">Enter how many copies of each title you&rsquo;re bringing.</div>
+            </div>
+          </div>
+
+          <details class="fk-custom">
+            <summary>+ Add a title that isn&rsquo;t in your catalog</summary>
+            <div class="fk-custom-body">
+              <div class="fk-custom-row">
+                <input type="text" id="st-custom-title" placeholder="Title" aria-label="Title of book not in inventory">
+                <input type="text" id="st-custom-author" placeholder="Author" aria-label="Author of book not in inventory">
+                <input type="number" inputmode="numeric" id="st-custom-qty" placeholder="Qty" min="0" step="1" aria-label="Copies bringing">
+                <button type="button" class="btn sm" onclick="salesTrackerAddCustom()">Add</button>
+              </div>
+              <div class="fk-note">These titles print on the tally sheet only — they aren&rsquo;t saved to your inventory and have no payment link to build a QR code from.</div>
+            </div>
+          </details>
         </div>
+
+        <!-- THE RAIL. Sticks to the top of the screen so the count of what is about
+             to come out of the printer, and the button that prints it, are never
+             scrolled away from — however long the packing list runs. -->
+        <aside class="fk-rail">
+          <div class="fk-preview">
+            <div class="fk-eyebrow">Coming out of the printer</div>
+            <div class="fk-sheets" aria-hidden="true">
+              <div class="fk-sheet" id="fk-sheet-tally">
+                <span class="fk-sheet-art fk-sheet-art-tally"></span>
+                <span class="fk-sheet-cap">Tally sheet</span>
+              </div>
+              <div class="fk-sheet" id="fk-sheet-qr">
+                <span class="fk-sheet-art fk-sheet-art-qr"></span>
+                <span class="fk-sheet-cap">QR sheet</span>
+              </div>
+            </div>
+            <div id="fk-summary" class="fk-summary" aria-live="polite"></div>
+            <button type="button" class="btn gold fk-print-btn" id="fk-print-btn" onclick="printFairKit()">🖨 Print both sheets</button>
+          </div>
+
+          <details class="fk-acc" id="fk-opts-tracker">
+            <summary>Tally sheet settings</summary>
+            <div class="fk-acc-body">
+              <div class="form-group fk-opt-group">
+                <label for="st-cols">Tally columns per book</label>
+                <input type="number" inputmode="numeric" id="st-cols" value="10" min="1" max="30">
+                <div class="fk-hint">Each column is one sale.</div>
+              </div>
+              <div class="form-group fk-opt-group">
+                <label for="st-currency">Currency</label>
+                <select id="st-currency">
+                  <option value="EUR">€ EUR</option>
+                  <option value="CAD">CA$ CAD</option>
+                  <option value="USD">$ USD</option>
+                  <option value="GBP">£ GBP</option>
+                  <option value="MXN">MX$ MXN</option>
+                </select>
+                <div class="fk-hint">Used in price-paid cells.</div>
+              </div>
+              <label class="fk-check fk-check-block">
+                <input type="checkbox" id="st-notes">
+                <span>
+                  <span class="fk-check-title">Include a price-paid row</span>
+                  <span class="fk-check-note">Adds a cell under each tally column to record what that copy actually sold for — useful for tracking discounts.</span>
+                </span>
+              </label>
+            </div>
+          </details>
+
+          <details class="fk-acc" id="fk-opts-qr">
+            <summary>QR sheet settings</summary>
+            <div class="fk-acc-body">
+              <div class="form-group fk-opt-group">
+                <label for="qrp-cols">Cards across the page</label>
+                <input type="number" inputmode="numeric" id="qrp-cols" value="3" min="1" max="6">
+                <div class="fk-hint">How many QR cards sit side by side.</div>
+              </div>
+              <div class="form-group fk-opt-group">
+                <label for="qrp-base-cur">Base currency</label>
+                <select id="qrp-base-cur" onchange="renderQRPrintBookList()">
+                  <option value="auto" selected>Per-book native</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="CAD">CAD (CA$)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="MXN">MXN (MX$)</option>
+                </select>
+                <div class="fk-hint">Marked as the listed price; others are converted via your saved FX rates.</div>
+              </div>
+              <div class="fk-eyebrow fk-eyebrow-inline">Price columns on each card</div>
+              <div class="fk-checks">
+                <label class="fk-check"><input type="checkbox" id="qrp-show-eur" checked><span>EUR</span></label>
+                <label class="fk-check"><input type="checkbox" id="qrp-show-cad" checked><span>CAD</span></label>
+                <label class="fk-check"><input type="checkbox" id="qrp-show-usd" checked><span>USD</span></label>
+                <label class="fk-check"><input type="checkbox" id="qrp-show-mxn"><span>MXN</span></label>
+              </div>
+              <label class="fk-check fk-check-block fk-check-gold">
+                <input type="checkbox" id="qrp-fit-one-page" checked>
+                <span>
+                  <span class="fk-check-title">📄 Fit every card onto one page</span>
+                  <span class="fk-check-note">Shrinks the cards so the whole stall fits on a single sheet.</span>
+                </span>
+              </label>
+            </div>
+          </details>
+        </aside>
       </div>
     </div>
   </div>

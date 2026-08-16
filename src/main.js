@@ -19206,58 +19206,72 @@ function renderFairKitBookList() {
     // it stays selectable — the row says up front why no QR card will come out
     // for it, rather than the seller finding a dead square at the table.
     const hasLink = !!(book.stripeLink || book.paymentLink);
+    // The status column answers one question per row — "will this title get a
+    // scan-to-pay square?" — in words, so a gap is legible on the row it belongs
+    // to rather than only as a number in the footer.
     const tag = hasLink
-      ? ''
+      ? '<span class="fk-tag fk-tag-ok">Ready</span>'
       : hasStripeKey
-        ? '<span class="fk-tag">QR needs a door price</span>'
+        ? '<span class="fk-tag fk-tag-gap">QR needs a door price</span>'
         : '<span class="fk-tag fk-tag-warn">Tally only · no link</span>';
 
     return `
       <div class="fk-book">
-        <div class="fk-book-head">
+        <label class="fk-book-pick">
           <input type="checkbox" id="fk-pick-${book.id}" class="fk-book-check st-book-check qrp-book-check" data-kind="inv" value="${book.id}" checked onchange="fairKitSelectionChanged()">
-          <span class="fk-book-id">
-            <label class="fk-book-title" for="fk-pick-${book.id}">${escapeHtml(book.title)}</label>
-            ${book.author ? `<span class="fk-book-meta">${escapeHtml(book.author)}</span>` : ''}
-          </span>
-          ${tag}
-        </div>
-        <div class="fk-book-fields">
-          <div class="fk-field">
-            <label for="fk-qty-${book.id}">Copies bringing${onHand != null ? ` (${onHand} on hand)` : ''}</label>
-            <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" id="fk-qty-${book.id}" data-book-id="${book.id}" value="${salesTrackerQtyBrought[book.id] || ''}" placeholder="0" oninput="salesTrackerQtyInput(this)">
-          </div>
-          <div class="fk-field fk-field-price">
-            <label for="qrp-override-${book.id}">Door price (${escapeHtml(targetCode)})</label>
-            <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="${defaultPrice.toFixed(2)}" oninput="fairKitSelectionChanged()">
-          </div>
-        </div>
+        </label>
+        <span class="fk-book-id">
+          <label class="fk-book-title" for="fk-pick-${book.id}">${escapeHtml(book.title)}</label>
+          ${book.author ? `<span class="fk-book-meta">${escapeHtml(book.author)}</span>` : ''}
+        </span>
+        <span class="fk-cell fk-field fk-cell-onhand">
+          <span class="fk-cell-lab">On hand</span>
+          <span class="fk-onhand">${onHand != null ? onHand : '—'}</span>
+        </span>
+        <span class="fk-cell fk-field fk-cell-qty">
+          <label class="fk-cell-lab" for="fk-qty-${book.id}">Copies bringing</label>
+          <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" id="fk-qty-${book.id}" data-book-id="${book.id}" value="${salesTrackerQtyBrought[book.id] || ''}" placeholder="0" oninput="salesTrackerQtyInput(this)">
+        </span>
+        <span class="fk-cell fk-field fk-field-price">
+          <label class="fk-cell-lab" for="qrp-override-${book.id}">Door price (${escapeHtml(targetCode)})</label>
+          <input type="number" step="0.01" min="0" class="qrp-override-input" id="qrp-override-${book.id}" data-book-id="${book.id}" value="${existingOverride}" placeholder="${defaultPrice.toFixed(2)}" oninput="fairKitSelectionChanged()">
+        </span>
+        <span class="fk-cell fk-cell-status">${tag}</span>
       </div>
     `;
   }).join('');
 
   const customHtml = salesTrackerCustomBooks.map((book, idx) => `
     <div class="fk-book fk-book-custom">
-      <div class="fk-book-head">
+      <label class="fk-book-pick">
         <input type="checkbox" id="fk-pick-custom-${idx}" class="fk-book-check st-book-check" data-kind="custom" value="${idx}" checked onchange="fairKitSelectionChanged()">
-        <span class="fk-book-id">
-          <label class="fk-book-title" for="fk-pick-custom-${idx}">${escapeHtml(book.title)}</label>
-          ${book.author ? `<span class="fk-book-meta">${escapeHtml(book.author)}</span>` : ''}
-        </span>
+      </label>
+      <span class="fk-book-id">
+        <label class="fk-book-title" for="fk-pick-custom-${idx}">${escapeHtml(book.title)}</label>
+        ${book.author ? `<span class="fk-book-meta">${escapeHtml(book.author)}</span>` : ''}
+      </span>
+      <span class="fk-cell fk-field fk-cell-onhand">
+        <span class="fk-cell-lab">On hand</span>
+        <span class="fk-onhand">—</span>
+      </span>
+      <span class="fk-cell fk-field fk-cell-qty">
+        <label class="fk-cell-lab" for="fk-qty-custom-${idx}">Copies bringing</label>
+        <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" id="fk-qty-custom-${idx}" data-custom-idx="${idx}" value="${book.qty || ''}" placeholder="0" oninput="salesTrackerQtyInput(this)">
+      </span>
+      <span class="fk-cell fk-cell-status">
         <span class="fk-tag">Tally only</span>
         <button type="button" class="fk-book-remove" onclick="salesTrackerRemoveCustom(${idx})" title="Remove" aria-label="Remove ${escapeHtml(book.title)}">✕</button>
-      </div>
-      <div class="fk-book-fields">
-        <div class="fk-field">
-          <label for="fk-qty-custom-${idx}">Copies bringing</label>
-          <input type="number" inputmode="numeric" min="0" step="1" class="st-book-qty" id="fk-qty-custom-${idx}" data-custom-idx="${idx}" value="${book.qty || ''}" placeholder="0" oninput="salesTrackerQtyInput(this)">
-        </div>
-      </div>
+      </span>
     </div>
   `).join('');
 
   if (!inventoryEntries.length && !salesTrackerCustomBooks.length) {
-    list.innerHTML = '<div class="fk-note">No books available. Add a title below.</div>';
+    list.innerHTML = `
+      <div class="fk-empty">
+        <span class="fk-empty-art" aria-hidden="true">📦</span>
+        <span class="fk-empty-title">Nothing to pack yet</span>
+        <span class="fk-empty-note">Your catalog is empty for this account. Use <b>Add a title that isn&rsquo;t in your catalog</b> just below to put a book on the tally sheet.</span>
+      </div>`;
   } else {
     list.innerHTML = inventoryHtml + customHtml;
   }
@@ -19321,21 +19335,47 @@ function _fkUpdateSummary() {
   const { titles, qrCards, noCard } = _fkSelectionCounts();
   const packed = _fkPackedTotal();
 
+  // One stat block per sheet rather than a run-on sentence: the number that
+  // decides whether the print is right — titles, copies, cards — is the thing
+  // the eye lands on, with the sheet it belongs to labelled above it.
+  const stat = (label, value, note) => `
+    <div class="fk-stat">
+      <span class="fk-stat-lab">${label}</span>
+      <b class="fk-stat-val">${value}</b>
+      ${note ? `<span class="fk-stat-note">${note}</span>` : ''}
+    </div>`;
+
   const parts = [];
   if (mode !== 'qr') {
-    parts.push(`<strong>Tally sheet</strong> — ${titles} title${titles === 1 ? '' : 's'}${packed > 0 ? `, ${packed} cop${packed === 1 ? 'y' : 'ies'} packed` : ''}`);
+    parts.push(stat(
+      'Tally sheet',
+      `${titles} title${titles === 1 ? '' : 's'}`,
+      packed > 0
+        ? `${packed} cop${packed === 1 ? 'y' : 'ies'} packed`
+        : 'No copies entered yet',
+    ));
   }
   if (mode !== 'tracker') {
-    const skipped = noCard > 0 ? ` · ${noCard} title${noCard === 1 ? '' : 's'} without a payment link` : '';
-    parts.push(`<strong>QR sheet</strong> — ${qrCards} card${qrCards === 1 ? '' : 's'}${skipped}`);
+    parts.push(stat('QR sheet', `${qrCards} card${qrCards === 1 ? '' : 's'}`, ''));
+    // Named on the spot, with a way to jump straight to the row that needs
+    // fixing — a count on its own leaves the seller hunting the list for it.
+    if (noCard > 0) {
+      parts.push(`
+        <div class="fk-flag">
+          <span aria-hidden="true">⚠</span>
+          <span>${noCard} title${noCard === 1 ? '' : 's'} without a payment link or a door price won’t get a card.
+            <button type="button" class="fk-flag-link" onclick="fkFocusFirstGap()">Show me</button>
+          </span>
+        </div>`);
+    }
   }
 
   const nothingToPrint = mode === 'qr' ? qrCards === 0 : titles === 0;
   el.innerHTML = nothingToPrint
-    ? (mode === 'qr'
+    ? `<div class="fk-stat-empty">${mode === 'qr'
       ? 'None of the selected titles has a payment link or a door price yet.'
-      : 'Select at least one book to print.')
-    : parts.join('<br>');
+      : 'Select at least one book to print.'}</div>`
+    : parts.join('');
   if (btn) btn.disabled = nothingToPrint;
 }
 
@@ -19358,12 +19398,24 @@ function fairKitModeChanged() {
   if (qrOpts) qrOpts.hidden = mode === 'tracker';
 
   // Same rule inside the book list: a door price means nothing on a tally-only
-  // print, and copies packed means nothing on a QR-only one.
+  // print, and copies packed means nothing on a QR-only one. The shell carries
+  // the same two classes so the column headings drop out with their columns.
   const list = document.getElementById('fk-books-list');
   if (list) {
     list.classList.toggle('fk-hide-price', mode === 'tracker');
     list.classList.toggle('fk-hide-qty', mode === 'qr');
   }
+  const shell = document.querySelector('.fk-list-shell');
+  if (shell) {
+    shell.classList.toggle('fk-hide-price', mode === 'tracker');
+    shell.classList.toggle('fk-hide-qty', mode === 'qr');
+  }
+
+  // The preview only shows the sheets that are actually coming out.
+  const tallySheet = document.getElementById('fk-sheet-tally');
+  const qrSheet = document.getElementById('fk-sheet-qr');
+  if (tallySheet) tallySheet.hidden = mode === 'qr';
+  if (qrSheet) qrSheet.hidden = mode === 'tracker';
 
   const btn = document.getElementById('fk-print-btn');
   if (btn) {
@@ -19522,6 +19574,24 @@ window.openQRPrintModal = window.openFairKitModal;
 window.fairKitSelectAll = function (checked) {
   document.querySelectorAll('.st-book-check').forEach((el) => { el.checked = !!checked; });
   fairKitSelectionChanged();
+};
+
+// "2 titles won't get a card" is only useful if the seller can find them. This
+// walks the list in the order it is printed and puts the cursor in the first
+// door-price box that would fix one, so the gap is repaired where it was read.
+window.fkFocusFirstGap = function () {
+  const hasStripeKey = !!getReconStripeKey();
+  const gap = Array.from(document.querySelectorAll('.st-book-check[data-kind="inv"]'))
+    .find((el) => el.checked && !_fkBookPrintsQR(posResolveBook(el.value), el.value, hasStripeKey));
+  const row = gap?.closest('.fk-book');
+  if (!row) return;
+
+  const field = document.getElementById(`qrp-override-${gap.value}`);
+  row.scrollIntoView({ block: 'center' });
+  (field || gap).focus({ preventScroll: true });
+
+  row.classList.add('fk-book-flagged');
+  setTimeout(() => row.classList.remove('fk-book-flagged'), 2000);
 };
 
 window.salesTrackerAddCustom = function () {
