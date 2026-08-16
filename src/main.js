@@ -9374,115 +9374,6 @@ async function confirmRestoreBookDataFromSheets() {
   }
 }
 window.confirmRestoreBookDataFromSheets = confirmRestoreBookDataFromSheets;
-
-// ── MODAL HELPERS
-// Snapshot of a modal's field values, taken when it opens — used by the
-// backdrop/Esc close guard to detect unsaved edits.
-let _modalSnapshots = {};
-function _modalFieldSig(id) {
-  const el = $('m-' + id); if (!el) return '';
-  return Array.from(el.querySelectorAll('input,select,textarea'))
-    .map(f => (f.type === 'checkbox' || f.type === 'radio') ? (f.checked ? '1' : '0') : (f.value || ''))
-    .join(' ');
-}
-function _prefersReducedMotion() {
-  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-}
-let _modalReturnFocus = null;
-export function openM(id) {
-  const el = $('m-' + id); if (!el) return;
-  el.classList.remove('closing');
-  clearFieldErrors(el);
-  el.style.display = 'flex';
-  const d = id === 'send-books' ? 'send-date' : id === 'record-sale' ? 'sale-date' : 'ret-date';
-  if ($(d)) $(d).value = today();
-  if (id === 'add-store') {
-    populateAddStoreDirectory();
-  }
-  // Snapshot AFTER open* helpers and date defaults have populated fields, so a
-  // later mismatch means the *user* changed something.
-  _modalSnapshots[id] = _modalFieldSig(id);
-  // Move keyboard focus into the dialog and remember where to send it back, so
-  // keyboard/screen-reader users aren't stranded on the (now-inert) page behind.
-  _modalReturnFocus = document.activeElement;
-  const focusable = el.querySelector('input:not([type=hidden]),select,textarea,button,[tabindex]:not([tabindex="-1"])');
-  if (focusable) setTimeout(() => { try { focusable.focus(); } catch { } }, 0);
-}
-export function closeM(id) {
-  const el = $('m-' + id); if (!el) return;
-  el.dispatchEvent(new Event('modal-close'));
-  delete _modalSnapshots[id];
-  // Restore focus to whatever opened the modal (if it's still around).
-  if (_modalReturnFocus && el.contains(document.activeElement)) {
-    try { _modalReturnFocus.focus(); } catch { }
-  }
-  _modalReturnFocus = null;
-  if (el.classList.contains('fk-workspace') || el.closest('.pos-subpanel')) return;
-  if (el.classList.contains('closing')) return;
-  if (_prefersReducedMotion()) { el.style.display = 'none'; clearFieldErrors(el); return; }
-  el.classList.add('closing');
-  let t;
-  const done = () => {
-    el.style.display = 'none';
-    el.classList.remove('closing');
-    clearFieldErrors(el);
-    el.removeEventListener('animationend', done);
-    clearTimeout(t);
-  };
-  t = setTimeout(done, 240); // fallback if animationend doesn't fire
-  el.addEventListener('animationend', done);
-}
-// Close a modal, but if the user has unsaved edits, confirm first. Used by the
-// backdrop-click and Esc handlers so a stray tap can't silently lose data.
-async function attemptCloseModal(id) {
-  if (_modalSnapshots[id] !== undefined && _modalFieldSig(id) !== _modalSnapshots[id]) {
-    if (!(await confirmDialog('Discard your unsaved changes?',
-      { okLabel: 'Discard', cancelLabel: 'Keep editing', danger: true }))) return;
-  }
-  closeM(id);
-}
-
-// ── INLINE FORM VALIDATION ──────────────────────────────────────────────
-function fieldError(id, msg) {
-  const el = $(id); if (!el) return;
-  const fg = el.closest('.form-group') || el.parentElement;
-  if (fg) {
-    fg.classList.add('invalid');
-    let e = fg.querySelector('.field-error');
-    if (!e) { e = document.createElement('div'); e.className = 'field-error'; fg.appendChild(e); }
-    e.textContent = msg;
-  }
-  el.setAttribute('aria-invalid', 'true');
-}
-function clearFieldError(el) {
-  const fg = el && el.closest && el.closest('.form-group');
-  if (fg) {
-    fg.classList.remove('invalid');
-    const e = fg.querySelector('.field-error'); if (e) e.remove();
-  }
-  if (el && el.removeAttribute) el.removeAttribute('aria-invalid');
-}
-function clearFieldErrors(scope) {
-  const root = scope || document;
-  root.querySelectorAll('.form-group.invalid').forEach(fg => {
-    fg.classList.remove('invalid');
-    const e = fg.querySelector('.field-error'); if (e) e.remove();
-  });
-  root.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
-}
-// rules: [{ id, test:(value, el)=>bool, msg }]. Multiple rules may target the
-// same field; the first failing rule wins and later ones for it are skipped.
-// Returns true when every field passes.
-function validateFields(rules) {
-  let firstBad = null; const failed = new Set();
-  rules.forEach(r => {
-    const el = $(r.id); if (!el || failed.has(r.id)) return;
-    if (r.test(el.value, el)) { clearFieldError(el); }
-    else { fieldError(r.id, r.msg); failed.add(r.id); if (!firstBad) firstBad = el; }
-  });
-  if (firstBad && firstBad.focus) firstBad.focus();
-  return failed.size === 0;
-}
 // ── BUTTON LOADING STATE ────────────────────────────────────────────────
 // Disables the clicked button and shows a spinner while an async op runs, so
 // users can't double-submit. Pass the click event; safe to call with none.
@@ -13210,6 +13101,9 @@ configureModals({
   prepareOpen: (id) => {
     const d = id === 'send-books' ? 'send-date' : id === 'record-sale' ? 'sale-date' : 'ret-date';
     if ($(d)) $(d).value = today();
+    if (id === 'add-store') {
+      populateAddStoreDirectory();
+    }
   },
 });
 
