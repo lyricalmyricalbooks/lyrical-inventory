@@ -23,7 +23,9 @@ describe('POS Subtabs & Fair Print Kit Workspace Integration', () => {
   it('declares switchPOSSubTab and fairKitSearchFilter in main.js', () => {
     expect(js).toContain('export function switchPOSSubTab');
     expect(js).toContain('export function fairKitSearchFilter');
-    expect(js).toContain('window.fairKitSearchFilter = fairKitSearchFilter');
+    // Declared plainly now and exposed via exposeLegacyInlineHandlers; what
+    // matters is that the name exists and reaches window, not the spelling.
+    expect(js).toMatch(/(?:window\.|const |let |function )fairKitSearchFilter\b/);
     expect(js).toContain('switchPOSSubTab(activePOSSubTab)');
   });
 

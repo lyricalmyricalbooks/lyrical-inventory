@@ -15,6 +15,11 @@ import {
   qrPresetMissingBooks,
   qrPresetSummary,
 } from '../src/lib/qr-presets.js';
+// The Event POS handlers were `window.x = function …` at column 0, which runs
+// at import time — not allowed once this domain moves into a feature module.
+// They are plain declarations now, so these assertions locate them by name
+// through the shared helper rather than by how their export is spelled.
+import { bodyOfFunction } from './helpers/extract-decl.js';
 
 // Minimal localStorage stand-in: the real one is a browser API, and the point
 // of injecting storage is that these rules can be tested without a DOM.
@@ -253,7 +258,7 @@ describe('QR fair preset wiring', () => {
   });
 
   it('loads presets when the modal opens, so a fair survives a page reload', () => {
-    expect(mainJs).toMatch(/window\.openFairKitModal[\s\S]{0,300}loadQrPresets/);
+    expect(bodyOfFunction('openFairKitModal', mainJs)).toContain('loadQrPresets');
   });
 
   it('re-renders the book list before imposing a preset selection on it', () => {

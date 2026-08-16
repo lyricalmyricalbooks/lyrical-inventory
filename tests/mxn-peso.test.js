@@ -9,6 +9,11 @@ import {
   normalizeCurrencyCode,
   getBookCurrencyCode,
 } from '../src/lib/money.js';
+// The Event POS handlers were `window.x = function …` at column 0, which runs
+// at import time — not allowed once this domain moves into a feature module.
+// They are plain declarations now, so these assertions locate them by name
+// through the shared helper rather than by how their export is spelled.
+import { bodyOfFunction } from './helpers/extract-decl.js';
 
 const root = process.cwd();
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -77,15 +82,14 @@ describe('Live FX rates fetch automatically on app load', () => {
   });
 
   it('calls it through window. so it resolves as a global at runtime, not a module binding', () => {
-    // posConfigureRates only exists as window.posConfigureRates — an internal
+    // The boot branches call it through window on purpose — an internal
     // bare-name call would be a silent ReferenceError the first time boot()
     // actually runs, since nothing at module scope declares that identifier.
     expect(mainJs).not.toMatch(/[^.]\bposConfigureRates\(\{\s*silent:\s*true\s*\}\)/);
   });
 
   it('suppresses the toast on a silent fetch but keeps it for a manual click', () => {
-    const fn = mainJs.slice(mainJs.indexOf('window.posConfigureRates = async function'));
-    const body = fn.slice(0, fn.indexOf('\n// Render a small status line'));
+    const body = bodyOfFunction('posConfigureRates', mainJs);
     expect(body).toMatch(/if\s*\(silent\)\s*return;/);
     // The manual path (onclick="posConfigureRates()", no args) still defaults
     // silent to false, so the existing success/warning toasts are untouched.

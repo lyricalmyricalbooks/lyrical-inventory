@@ -100,6 +100,44 @@ export function extractDecl(name, source = mainJs) {
 }
 
 /**
+ * Source text of a function, whichever way it happens to be declared:
+ * `function f() {}`, `const f = function () {}`, `window.f = async function () {}`.
+ *
+ * Several suites pin behaviour by slicing a function's body out of the source
+ * and asserting on what it contains. They used to anchor on the literal string
+ * `window.f = function`, which broke the moment a domain was prepared for
+ * extraction — a `window.x = …` at column 0 runs at import time, which a feature
+ * module may not do, so those handlers become plain declarations. The behaviour
+ * being pinned does not change, so the anchor should not be what decides whether
+ * the test passes.
+ */
+export function bodyOfFunction(name, source = appSource) {
+  const n = escapeRe(name);
+
+  const assigned = source.match(new RegExp(
+    `(?:window\\.|(?:export\\s+)?(?:const|let|var)\\s+)${n}\\s*=\\s*(?:async\\s+)?function\\b`));
+  if (assigned) {
+    const from = assigned.index;
+    const end = source.indexOf('\n};', from);
+    if (end === -1) throw new Error(`bodyOfFunction: no column-0 close for ${name}`);
+    return source.slice(from, end + 3);
+  }
+
+  const declared = source.match(new RegExp(
+    `^(?:export\\s+)?(?:async\\s+)?function\\s+${n}\\s*\\(`, 'm'));
+  if (declared) {
+    const from = declared.index;
+    const end = source.indexOf('\n}', from);
+    if (end === -1) throw new Error(`bodyOfFunction: no column-0 close for ${name}`);
+    return source.slice(from, end + 2);
+  }
+
+  throw new Error(
+    `bodyOfFunction: no function named "${name}" in src/main.js, src/features or src/lib. ` +
+    'If it was renamed or moved, update the test that depends on it.');
+}
+
+/**
  * Compose several extracted declarations into one runnable unit.
  *
  * `deps` are injected as parameters. `moduleState` holds the module-level

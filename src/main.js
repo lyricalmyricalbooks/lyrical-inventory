@@ -722,14 +722,6 @@ let pmSelectedBookId = '';
 // IDs of DEFAULT_BOOKS that the user has explicitly removed. Persisted in the
 // catalog Firebase doc so the merge below doesn't resurrect them on next load.
 let deletedDefaultIds = [];
-// POS-only books. These live entirely outside BOOKS so they never touch the
-// catalog, inventory, ledger, financials, or history (all of which iterate
-// BOOKS). They surface only at the Point of Sale, the printable sales tracker,
-// and the printable payment-QR sheet. Keyed by id. Each carries an isolated
-// `sold`/`revenue` tally updated at checkout. Persisted in the catalog doc
-// under `_posExtra` so it syncs across devices and survives offline.
-let posExtraBooks = {};
-let editingPosBookId = null;
 
 export function isTestBook(b) {
   if (!b) return false;
@@ -1875,6 +1867,12 @@ const localDayKey = () => localDayFromTs(Date.now());
 export let states = {};
 window.authorSubmissions = {}; // Tracks pending expenses/sales by Authors
 export let activeBook = null;   // currently viewed bookId, or 'all'
+// POS checkout retargets activeBook for the duration of each cart line, so
+// recordOrder's getState()/getBook() resolve to the book being sold, then puts
+// it back. That code is moving into a feature module, and an ES import is
+// read-only, so the write has to go through here rather than across the seam.
+// Callers inside main.js keep assigning directly; only the seam needs this.
+export function setActiveBook(id) { activeBook = id; }
 export let orders = [], activeId = null;
 let fbReady = false, lastSavedHashes = {}, lastSaveTimes = {};
 let syncQueue = JSON.parse(localStorage.getItem('lm-sync-queue') || '[]');
@@ -13008,6 +13006,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── EVENT POS ──
+// POS-only books. These live entirely outside BOOKS so they never touch the
+// catalog, inventory, ledger, financials, or history (all of which iterate
+// BOOKS). They surface only at the Point of Sale, the printable sales tracker,
+// and the printable payment-QR sheet. Keyed by id. Each carries an isolated
+// `sold`/`revenue` tally updated at checkout. Persisted in the catalog doc
+// under `_posExtra` so it syncs across devices and survives offline.
+let posExtraBooks = {};
+let editingPosBookId = null;
+
 let posCart = {};
 // Per-book custom unit price (in the book's native currency), keyed by book id.
 // Set via the "Adjust price" control on a cart line. Lets the seller discount
@@ -13047,7 +13054,18 @@ function _getPosDefaultCurrency() {
   const firstBook = Object.values(posBooksMap())[0];
   return firstBook ? currencyToCode(firstBook.currency) : 'EUR';
 }
-let posTransactionCurrency = _getPosDefaultCurrency();
+// Resolved on first use, not at import. _getPosDefaultCurrency() reads BOOKS,
+// activeBook and isAuthor() — all of which live in main.js. main.js and the
+// feature modules import each other, so evaluating this at import time from
+// inside a feature module would read an uninitialised binding and throw during
+// page load, and only in dev: the production build flattens the graph and hides
+// it. The accessor is what keeps that from being possible.
+let _posTransactionCurrency = null;
+function posTxnCurrency() {
+  if (_posTransactionCurrency === null) _posTransactionCurrency = _getPosDefaultCurrency();
+  return _posTransactionCurrency;
+}
+function setPosTxnCurrency(code) { _posTransactionCurrency = code; }
 
 function loadPosExchangeRates() {
   try {
@@ -13109,7 +13127,7 @@ function buildPOSCartRows() {
     const listUnit = book.listPrice || 0;
     const hasOverride = Object.prototype.hasOwnProperty.call(posPriceOverrides, bookId);
     const unit = hasOverride ? posPriceOverrides[bookId] : listUnit;
-    const convertedUnit = convertCurrency(unit, sourceCode, posTransactionCurrency);
+    const convertedUnit = convertCurrency(unit, sourceCode, posTxnCurrency());
     items.push({
       book,
       qty,
@@ -13127,10 +13145,10 @@ function buildPOSCartRows() {
 
 // ── #2: POS keyboard search state ─────────────────────────────────────
 let posSearchQuery = '';
-window.posSearchFilter = function (val) {
+function posSearchFilter(val) {
   posSearchQuery = (val || '').toLowerCase().trim();
   renderPOS();
-};
+}
 
 // ── #2: POS keyboard shortcuts ─────────────────────────────────────────
 // /         → focus POS search input
@@ -13185,11 +13203,11 @@ function renderPOS() {
   const totalNoteEl = $('pos-total-note');
   const selectorEl = $('pos-currency');
   const currencyOptions = getPOSCurrencies();
-  if (!currencyOptions.includes(posTransactionCurrency)) posTransactionCurrency = currencyOptions[0] || 'EUR';
+  if (!currencyOptions.includes(posTxnCurrency())) setPosTxnCurrency(currencyOptions[0] || 'EUR');
 
   if (selectorEl) {
     selectorEl.innerHTML = currencyOptions.map((code) => `<option value="${code}">${code}</option>`).join('');
-    selectorEl.value = posTransactionCurrency;
+    selectorEl.value = posTxnCurrency();
   }
 
   let convertedTotal = 0;
@@ -13215,10 +13233,10 @@ function renderPOS() {
     grid.innerHTML = booksArr.map((book) => {
       const qty = posCart[book.id] || 0;
       const sourceCode = currencyToCode(book.currency);
-      const converted = convertCurrency(book.listPrice || 0, sourceCode, posTransactionCurrency);
+      const converted = convertCurrency(book.listPrice || 0, sourceCode, posTxnCurrency());
       const convertedLabel = converted === null
         ? `No FX rate → ${posFormat(book.listPrice || 0, sourceCode)}`
-        : `${posFormat(converted, posTransactionCurrency)} (${sourceCode})`;
+        : `${posFormat(converted, posTxnCurrency())} (${sourceCode})`;
       const posOnly = isPosOnlyBook(book.id);
       const idAttr = escapeHtml(book.id);
       const badge = posOnly
@@ -13273,7 +13291,7 @@ function renderPOS() {
           <div style="font-size:11px;color:var(--text2);font-weight:500;">${row.qty} × ${unitLabel}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:13px;color:var(--text);font-weight:700;">${row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency)}</div>
+          <div style="font-size:13px;color:var(--text);font-weight:700;">${row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTxnCurrency())}</div>
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:3px;">
             <button class="btn sm" style="padding:2px 7px;font-size:11px;" onclick="openPosPriceModal('${row.book.id}')">Adjust</button>
             <button class="btn sm" style="padding:2px 7px;font-size:11px;" onclick="posGenerateLineQR('${row.book.id}')" title="Payment QR for this line">QR</button>
@@ -13293,32 +13311,32 @@ function renderPOS() {
   if (totalEl) {
     totalEl.textContent = hasMissingFx
       ? Object.entries(mixedTotals).map(([code, amount]) => `${codeToSymbol(code)}${amount.toFixed(2)}`).join(' + ')
-      : posFormat(convertedTotal, posTransactionCurrency);
+      : posFormat(convertedTotal, posTxnCurrency());
   }
   if (totalNoteEl) {
     totalNoteEl.textContent = hasMissingFx
       ? 'Mixed currency total: configure FX rates or finish in native currencies.'
-      : `Transaction currency: ${posTransactionCurrency}`;
+      : `Transaction currency: ${posTxnCurrency()}`;
   }
 }
 
-window.posUpdateQty = function (bookId, delta) {
+function posUpdateQty(bookId, delta) {
   posCart[bookId] = Math.max(0, (posCart[bookId] || 0) + delta);
   if (posCart[bookId] === 0) delete posCart[bookId];
   renderPOS();
-};
+}
 
-window.posRemoveItem = function (bookId) {
+function posRemoveItem(bookId) {
   delete posCart[bookId];
   delete posPriceOverrides[bookId];
   renderPOS();
-};
+}
 
 // ── PER-LINE PRICE / DISCOUNT OVERRIDE ──
 // Opens a compact editor for one cart line so the seller can hand-price a book
 // or apply a quick discount. Prices are edited in the book's native currency
 // (what flows into revenue/ledger); the cart converts to the txn currency.
-window.openPosPriceModal = function (bookId) {
+function openPosPriceModal(bookId) {
   const book = posResolveBook(bookId);
   if (!book) return;
   _posPriceEditId = bookId;
@@ -13337,19 +13355,19 @@ window.openPosPriceModal = function (bookId) {
   openM('pos-price');
   // Select the field so a one-handed edit is immediate.
   setTimeout(() => { input.focus(); input.select(); }, 60);
-};
+}
 
 // Quick discount buttons: set the field to a percentage off the list price.
-window.posPriceQuick = function (pct) {
+function posPriceQuick(pct) {
   const book = posResolveBook(_posPriceEditId);
   if (!book) return;
   const list = book.listPrice || 0;
   const val = Math.max(0, list * (1 - (pct / 100)));
   $('pp-price').value = val.toFixed(2);
   window.posPricePreview();
-};
+}
 
-window.posPricePreview = function () {
+function posPricePreview() {
   const book = posResolveBook(_posPriceEditId);
   if (!book) return;
   const list = book.listPrice || 0;
@@ -13365,9 +13383,9 @@ window.posPricePreview = function () {
   } else {
     note.innerHTML = `New price <strong>${posFormat(val, code)}</strong>`;
   }
-};
+}
 
-window.savePosPrice = function () {
+function savePosPrice() {
   const book = posResolveBook(_posPriceEditId);
   if (!book) return;
   const val = parseFloat($('pp-price').value);
@@ -13381,15 +13399,15 @@ window.savePosPrice = function () {
   _posPriceEditId = null;
   renderPOS();
   showToast('✓ Price updated');
-};
+}
 
-window.posResetPrice = function () {
+function posResetPrice() {
   if (_posPriceEditId) delete posPriceOverrides[_posPriceEditId];
   closeM('pos-price');
   _posPriceEditId = null;
   renderPOS();
   showToast('Reset to list price');
-};
+}
 
 // ── PAYMENT QR FOR THE EXACT (DISCOUNTED) AMOUNT ──
 // Mint a Stripe Payment Link for what the customer actually owes — either the
@@ -13412,14 +13430,14 @@ function _showPosQR(url, amountLabel, sub) {
   openM('pos-qr');
 }
 
-window.copyPosQRLink = function () {
+function copyPosQRLink() {
   if (!_posQRLink) { showToast('No link yet', 'warn'); return; }
   navigator.clipboard.writeText(_posQRLink).then(() => showToast('Payment link copied')).catch(() => {
     const ta = document.createElement('textarea'); ta.value = _posQRLink; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Payment link copied');
   });
-};
+}
 
-window.downloadPosQR = function () {
+function downloadPosQR() {
   const canvas = document.querySelector('#pos-qr-canvas canvas');
   if (!canvas) { showToast('QR not ready', 'warn'); return; }
   const a = document.createElement('a');
@@ -13427,15 +13445,15 @@ window.downloadPosQR = function () {
   a.download = `pos-payment-qr.png`;
   a.click();
   showToast('Downloading QR Code image');
-};
+}
 
 // QR for the whole cart at the exact total (discounts included), in the
 // transaction currency the customer is paying.
-window.posGenerateSaleQR = async function () {
+async function posGenerateSaleQR() {
   const rows = buildPOSCartRows();
   if (!rows.length) { showToast('Cart is empty', 'warn'); return; }
   if (rows.some((r) => r.convertedLine === null)) {
-    showToast('Set FX rates first — some lines have no rate for ' + posTransactionCurrency, 'warn', 5000);
+    showToast('Set FX rates first — some lines have no rate for ' + posTxnCurrency(), 'warn', 5000);
     return;
   }
 
@@ -13456,46 +13474,46 @@ window.posGenerateSaleQR = async function () {
   try {
     const url = await createStripePaymentLinkForAmount({
       amountMajor: total,
-      currencyCode: posTransactionCurrency,
+      currencyCode: posTxnCurrency(),
       description: desc,
       metadata: { source: 'pos_sale', sku: rows.length === 1 ? rows[0].book.id : 'pos-multi' },
     });
-    _showPosQR(url, posFormat(total, posTransactionCurrency), desc);
+    _showPosQR(url, posFormat(total, posTxnCurrency()), desc);
     showToast('✓ Payment QR ready');
   } catch (e) {
     showToast('Stripe: ' + (e.message || e), 'err', 6000);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = restore; }
   }
-};
+}
 
 // QR for a single cart line at its adjusted price, in the transaction currency.
-window.posGenerateLineQR = async function (bookId) {
+async function posGenerateLineQR(bookId) {
   const row = buildPOSCartRows().find((r) => r.book.id === bookId);
   if (!row) { showToast('Item not in cart', 'warn'); return; }
   if (row.convertedLine === null) {
-    showToast('Set FX rates first — no rate for ' + posTransactionCurrency, 'warn', 5000);
+    showToast('Set FX rates first — no rate for ' + posTxnCurrency(), 'warn', 5000);
     return;
   }
   const desc = `${row.book.title}${row.qty > 1 ? ` ×${row.qty}` : ''}`;
   try {
     const url = await createStripePaymentLinkForAmount({
       amountMajor: row.convertedLine,
-      currencyCode: posTransactionCurrency,
+      currencyCode: posTxnCurrency(),
       description: desc,
       metadata: { source: 'pos_line', book_id: row.book.id, sku: row.book.id },
     });
-    _showPosQR(url, posFormat(row.convertedLine, posTransactionCurrency), desc);
+    _showPosQR(url, posFormat(row.convertedLine, posTxnCurrency()), desc);
     showToast('✓ Payment QR ready');
   } catch (e) {
     showToast('Stripe: ' + (e.message || e), 'err', 6000);
   }
-};
+}
 
-window.posSetCurrency = function (code) {
-  posTransactionCurrency = code || posTransactionCurrency;
+function posSetCurrency(code) {
+  setPosTxnCurrency(code || posTxnCurrency());
   renderPOS();
-};
+}
 
 // Fetch live rates for all POS currencies (CAD-pivot) and populate both
 // posExchangeRates and _fxRateCache so Tax Center conversions stay correct.
@@ -13503,7 +13521,7 @@ window.posSetCurrency = function (code) {
 // closed stall with no signal doesn't get a toast on every open — manual
 // clicks on the "↻ FX Rates" button (no args, so silent defaults false) keep
 // their existing success/warning feedback.
-window.posConfigureRates = async function ({ silent = false } = {}) {
+async function posConfigureRates({ silent = false } = {}) {
   const currencies = getPOSCurrencies().filter(c => c !== 'CAD');
   const btn = document.querySelector('[onclick="posConfigureRates()"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Fetching…'; }
@@ -13547,7 +13565,7 @@ window.posConfigureRates = async function ({ silent = false } = {}) {
   } else {
     showToast(`✓ Live FX rates updated for ${fetched} currencies`, 'ok');
   }
-};
+}
 
 // Render a small status line below the FX button showing rate freshness
 function renderPOSFxStatus() {
@@ -13594,7 +13612,7 @@ function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode
   return { num, chan, qty, price: basePrice, notes, payment };
 }
 
-window.posCheckout = function () {
+function posCheckout() {
   const method = $('pos-payment-method').value;
   const rows = buildPOSCartRows();
 
@@ -13606,7 +13624,7 @@ window.posCheckout = function () {
   const hasMissingFx = rows.some((row) => row.convertedLine === null);
   const totalCharged = hasMissingFx
     ? rows.map((row) => `${row.sourceCode} ${row.sourceLine.toFixed(2)}`).join(' + ')
-    : posFormat(rows.reduce((sum, row) => sum + (row.convertedLine || 0), 0), posTransactionCurrency);
+    : posFormat(rows.reduce((sum, row) => sum + (row.convertedLine || 0), 0), posTxnCurrency());
 
   const timestamp = new Date();
   const localeTs = timestamp.toLocaleString('en-CA');
@@ -13615,13 +13633,13 @@ window.posCheckout = function () {
     rows,
     hasMissingFx,
     totalCharged,
-    currency: posTransactionCurrency,
+    currency: posTxnCurrency(),
     timestampIso: timestamp.toISOString(),
     timestampLabel: localeTs
   };
 
   $('pos-confirm-items').innerHTML = rows.map((row) => {
-    const lineDisplay = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency);
+    const lineDisplay = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTxnCurrency());
     const adj = row.overridden
       ? ` <span style="font-size:11px;color:var(--gold);">(was ${posFormat(row.listUnit, row.sourceCode)} ea)</span>`
       : '';
@@ -13631,9 +13649,9 @@ window.posCheckout = function () {
   $('pos-confirm-timestamp').textContent = localeTs;
   $('pos-confirm-total').textContent = totalCharged;
   openM('pos-sale-confirm');
-};
+}
 
-window.posConfirmSale = async function () {
+async function posConfirmSale() {
   if (!posPendingSale) return;
   await syncCatalog();
   const previousBook = activeBook;
@@ -13688,7 +13706,7 @@ window.posConfirmSale = async function () {
     }
 
     // Temporarily set activeBook so recordOrder's getState()/getBook() resolve correctly
-    activeBook = book.id;
+    setActiveBook(book.id);
 
     // Record a price adjustment (custom price / discount) in the ledger note.
     const priceNote = row.overridden
@@ -13705,7 +13723,7 @@ window.posConfirmSale = async function () {
     recordOrder(num, chan, qty, basePrice, notes, payment);
   }
 
-  activeBook = previousBook;
+  setActiveBook(previousBook);
 
   if (posExtraTouched) { try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only tally save failed', e); } }
 
@@ -13717,9 +13735,9 @@ window.posConfirmSale = async function () {
   if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
   updateHeader();
   showToast('✓ Sale complete', 'ok');
-};
+}
 
-window.posPrintReceipt = function () {
+function posPrintReceipt() {
   if (!posPendingSale) return;
   const rowsHtml = posPendingSale.rows.map((row) => {
     const line = row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posPendingSale.currency);
@@ -13740,7 +13758,7 @@ window.posPrintReceipt = function () {
   win.document.close();
   win.focus();
   win.print();
-};
+}
 
 // ── PRINTABLE SALES TRACKER ──
 let salesTrackerCustomBooks = [];
@@ -13771,7 +13789,7 @@ function _stUpdatePackTotal() {
     : 'Enter how many copies of each title you\'re bringing.';
 }
 
-window.salesTrackerQtyInput = function (el) {
+function salesTrackerQtyInput(el) {
   const qty = parseInt(el.value, 10);
   const clean = Number.isFinite(qty) && qty > 0 ? qty : 0;
   if (el.dataset.bookId) {
@@ -13782,7 +13800,7 @@ window.salesTrackerQtyInput = function (el) {
     if (cb) cb.qty = clean;
   }
   _stUpdatePackTotal();
-};
+}
 
 // ── FAIR KIT BOOK LIST ──
 // The tally sheet and the payment QR sheet are packed off the same box of
@@ -13991,7 +14009,6 @@ function fairKitSelectionChanged() {
   _stUpdatePackTotal();
   _fkUpdateSummary();
 }
-window.fairKitSelectionChanged = fairKitSelectionChanged;
 
 function fairKitModeChanged() {
   const mode = fairKitMode();
@@ -14031,7 +14048,6 @@ function fairKitModeChanged() {
   }
   _fkUpdateSummary();
 }
-window.fairKitModeChanged = fairKitModeChanged;
 
 // ── SALES TRACKER FAIR PRESETS ──
 // Same idea as the QR sheet's fair presets: the whole tracker setup — layout,
@@ -14145,7 +14161,6 @@ export function switchPOSSubTab(subTabName) {
     fairKitModeChanged();
   }
 }
-window.switchPOSSubTab = switchPOSSubTab;
 
 export function fairKitSearchFilter(query) {
   const q = (query || '').toLowerCase().trim();
@@ -14156,9 +14171,12 @@ export function fairKitSearchFilter(query) {
     card.style.display = match ? '' : 'none';
   });
 }
-window.fairKitSearchFilter = fairKitSearchFilter;
 
-window.openFairKitModal = function () {
+// The fair kit replaced two separate dialogs. Both old names are still reached
+// by inline handlers in rendered markup so they stay as thin forwarders.
+function openSalesTrackerModal() { return openFairKitModal(); }
+function openQRPrintModal() { return openFairKitModal(); }
+function openFairKitModal() {
   const dateInput = document.getElementById('st-date');
   if (dateInput && !dateInput.value) dateInput.value = today();
   salesTrackerFairPresets = loadStPresets(_stPresetStore());
@@ -14169,23 +14187,21 @@ window.openFairKitModal = function () {
   switchTab('pos');
   switchPOSSubTab('fairkit');
   openM('fair-kit');
-};
+}
 
 // The two printables used to have a button each. Anything still pointing at
 // either one lands on the combined dialog rather than a modal that no longer
 // exists.
-window.openSalesTrackerModal = window.openFairKitModal;
-window.openQRPrintModal = window.openFairKitModal;
 
-window.fairKitSelectAll = function (checked) {
+function fairKitSelectAll(checked) {
   document.querySelectorAll('.st-book-check').forEach((el) => { el.checked = !!checked; });
   fairKitSelectionChanged();
-};
+}
 
 // "2 titles won't get a card" is only useful if the seller can find them. This
 // walks the list in the order it is printed and puts the cursor in the first
 // door-price box that would fix one, so the gap is repaired where it was read.
-window.fkFocusFirstGap = function () {
+function fkFocusFirstGap() {
   const hasStripeKey = !!getReconStripeKey();
   const gap = Array.from(document.querySelectorAll('.st-book-check[data-kind="inv"]'))
     .find((el) => el.checked && !_fkBookPrintsQR(posResolveBook(el.value), el.value, hasStripeKey));
@@ -14198,9 +14214,9 @@ window.fkFocusFirstGap = function () {
 
   row.classList.add('fk-book-flagged');
   setTimeout(() => row.classList.remove('fk-book-flagged'), 2000);
-};
+}
 
-window.salesTrackerAddCustom = function () {
+function salesTrackerAddCustom() {
   const titleEl = document.getElementById('st-custom-title');
   const authorEl = document.getElementById('st-custom-author');
   const qtyEl = document.getElementById('st-custom-qty');
@@ -14218,12 +14234,12 @@ window.salesTrackerAddCustom = function () {
   if (qtyEl) qtyEl.value = '';
   renderSalesTrackerBookList();
   titleEl.focus();
-};
+}
 
-window.salesTrackerRemoveCustom = function (idx) {
+function salesTrackerRemoveCustom(idx) {
   salesTrackerCustomBooks.splice(idx, 1);
   renderSalesTrackerBookList();
-};
+}
 
 // escapeHtml is imported from ./lib/html.js
 
@@ -14375,7 +14391,6 @@ function printSalesTracker(opts = {}) {
   if (closeModal) closeM('fair-kit');
   return true;
 }
-window.printSalesTracker = printSalesTracker;
 
 // ── PRINTABLE PAYMENT QR CODES ──
 
@@ -14532,7 +14547,7 @@ function renderFairKitPresetPicker() {
   }
 }
 
-window.fkPresetSelected = function (id) {
+function fkPresetSelected(id) {
   const entry = findFairKitPreset(id);
   fkActivePresetId = entry ? entry.id : '';
   if (!entry) { renderFairKitPresetPicker(); return; }
@@ -14552,9 +14567,9 @@ window.fkPresetSelected = function (id) {
   } else {
     showToast(`✓ Loaded fair "${entry.name}"`, 'ok');
   }
-};
+}
 
-window.fkSaveFairPreset = async function () {
+async function fkSaveFairPreset() {
   const active = findFairKitPreset(fkActivePresetId);
   const name = (await promptDialog(
     'Name this fair so you can recall the whole kit next time — the titles, how many copies you packed, the door prices and both sheet layouts.',
@@ -14587,9 +14602,9 @@ window.fkSaveFairPreset = async function () {
   fkActivePresetId = stPresetId(name);
   renderFairKitPresetPicker();
   showToast(`✓ Saved fair "${name}"`, 'ok');
-};
+}
 
-window.fkDeleteFairPreset = async function () {
+async function fkDeleteFairPreset() {
   const entry = findFairKitPreset(fkActivePresetId);
   if (!entry) return;
   if (!(await confirmDialog(`Delete the saved fair "${entry.name}"?`, { danger: true, okLabel: 'Delete' }))) return;
@@ -14601,7 +14616,7 @@ window.fkDeleteFairPreset = async function () {
   fkActivePresetId = '';
   renderFairKitPresetPicker();
   showToast(`Deleted "${entry.name}"`, 'ok');
-};
+}
 
 // Opens the window the QR sheet will be written into. Split out because in the
 // combined flow it has to happen inside the click, before any await: a
@@ -14897,7 +14912,6 @@ renderQRs();
   if (closeModal) closeM('fair-kit');
   return true;
 }
-window.printPaymentQRCodes = printPaymentQRCodes;
 
 // ── PRINT THE KIT ──
 // One setup, one click, both sheets. The tally sheet opens and sends itself to
@@ -14935,7 +14949,6 @@ async function printFairKit() {
     showToast('Tally sheet is printing — the QR sheet opened in its own tab, print it when the codes have drawn', 'ok', 7000);
   }
 }
-window.printFairKit = printFairKit;
 
 // ─────────────────────────────────────────────────────────────────────────
 // POS-ONLY BOOKS — add / edit / remove + instant Stripe link & QR
@@ -14955,7 +14968,7 @@ function _posSlugId(title) {
   return id;
 }
 
-window.openPosBookModal = function (id) {
+function openPosBookModal(id) {
   editingPosBookId = id || null;
   const book = id ? posExtraBooks[id] : null;
   $('pb-modal-title').textContent = book ? `Edit POS-only book · ${book.title}` : 'Add POS-only book';
@@ -14971,9 +14984,9 @@ window.openPosBookModal = function (id) {
   renderPosBookModalQR();
   updateModalAccentPreview($('pb-accent'));
   openM('pos-book');
-};
+}
 
-window.closePosBookModal = function () { closeM('pos-book'); editingPosBookId = null; };
+function closePosBookModal() { closeM('pos-book'); editingPosBookId = null; }
 
 function renderPosBookModalQR() {
   const wrap = $('pb-qr-canvas');
@@ -14994,9 +15007,8 @@ function renderPosBookModalQR() {
     wrap.innerHTML = '<div style="color:var(--text3);font-size:11px;">QR library not ready.</div>';
   }
 }
-window.renderPosBookModalQR = renderPosBookModalQR;
 
-window.generatePosBookStripeLink = async function () {
+async function generatePosBookStripeLink() {
   const btn = $('pb-gen-stripe-btn');
   const title = ($('pb-title')?.value || '').trim();
   const listPrice = parseFloat($('pb-price')?.value) || 0;
@@ -15015,17 +15027,17 @@ window.generatePosBookStripeLink = async function () {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '⚡ Generate Stripe link'; }
   }
-};
+}
 
-window.copyPosBookLink = function () {
+function copyPosBookLink() {
   const url = ($('pb-paylink')?.value || '').trim();
   if (!url) { showToast('No link to copy', 'warn'); return; }
   navigator.clipboard.writeText(url).then(() => showToast('Link copied')).catch(() => {
     const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Link copied');
   });
-};
+}
 
-window.downloadPosBookQR = function () {
+function downloadPosBookQR() {
   const canvas = document.querySelector('#pb-qr-canvas canvas');
   if (!canvas) { showToast('Generate or add a link first', 'warn'); return; }
   const a = document.createElement('a');
@@ -15033,9 +15045,9 @@ window.downloadPosBookQR = function () {
   a.download = `${editingPosBookId || _posSlugId($('pb-title')?.value || 'book')}-payment-qr.png`;
   a.click();
   showToast('Downloading QR Code image');
-};
+}
 
-window.savePosBook = async function () {
+async function savePosBook() {
   const title = ($('pb-title')?.value || '').trim();
   if (!title) { showToast('Title is required', 'warn'); $('pb-title')?.focus(); return; }
   const listPrice = parseFloat($('pb-price')?.value) || 0;
@@ -15070,11 +15082,11 @@ window.savePosBook = async function () {
   editingPosBookId = null;
   closeM('pos-book');
   renderPOS();
-};
+}
 
-window.removeCurrentPosBook = function () { if (editingPosBookId) window.removePosBook(editingPosBookId); };
+function removeCurrentPosBook() { if (editingPosBookId) window.removePosBook(editingPosBookId); }
 
-window.removePosBook = async function (id) {
+async function removePosBook(id) {
   const book = posExtraBooks[id];
   if (!book) return;
   if (!(await confirmDialog(`Remove POS-only book "${book.title}"?\n\nIt will disappear from the POS, the sales tracker, and the QR sheet. Its isolated sales tally is discarded.`, { danger: true, okLabel: 'Remove' }))) return;
@@ -15087,7 +15099,7 @@ window.removePosBook = async function (id) {
   if (editingPosBookId === id) { editingPosBookId = null; closeM('pos-book'); }
   showToast('POS-only book removed');
   renderPOS();
-};
+}
 
 function calculateInventoryValuationData() {
   const items = [];
@@ -18986,6 +18998,21 @@ document.addEventListener('click', (e) => {
 // legacy entry points available so every visible button can invoke its action.
 function exposeLegacyInlineHandlers() {
   Object.assign(window, {
+    // Event POS handlers. These used to be assigned onto window at column 0.
+    // That runs at import time which a feature module may not do. They are
+    // plain declarations now and reach the inline on*= attributes through this
+    // block like every other handler.
+    posSearchFilter, posUpdateQty, posRemoveItem, openPosPriceModal,
+    posPriceQuick, posPricePreview, savePosPrice, posResetPrice,
+    copyPosQRLink, downloadPosQR, posGenerateSaleQR, posGenerateLineQR,
+    posSetCurrency, posConfigureRates, posCheckout, posConfirmSale,
+    posPrintReceipt, salesTrackerQtyInput, fairKitSelectionChanged, fairKitModeChanged,
+    openFairKitModal, fairKitSelectAll, fkFocusFirstGap, salesTrackerAddCustom,
+    salesTrackerRemoveCustom, printSalesTracker, fkPresetSelected, fkSaveFairPreset,
+    fkDeleteFairPreset, printPaymentQRCodes, printFairKit, openPosBookModal,
+    closePosBookModal, generatePosBookStripeLink, copyPosBookLink, downloadPosBookQR,
+    savePosBook, removeCurrentPosBook, removePosBook,
+    openSalesTrackerModal, openQRPrintModal,
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,
     resetBookForm, openAddBookModal, openEditBookModal, closeAddBookModal, isValidPaymentLink,

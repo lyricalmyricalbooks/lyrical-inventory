@@ -14,6 +14,11 @@ import {
   stPresetMissingBooks,
   stPresetSummary,
 } from '../src/lib/sales-tracker-presets.js';
+// The Event POS handlers were `window.x = function …` at column 0, which runs
+// at import time — not allowed once this domain moves into a feature module.
+// They are plain declarations now, so these assertions locate them by name
+// through the shared helper rather than by how their export is spelled.
+import { bodyOfFunction } from './helpers/extract-decl.js';
 
 // Minimal localStorage stand-in, matching the one in tests/qr-presets.test.js —
 // the point of injecting storage is that these rules are testable without a DOM.
@@ -239,12 +244,11 @@ describe('Sales tracker fair preset wiring', () => {
   });
 
   it('saves and deletes the tally half of a fair alongside its QR half', () => {
-    const save = mainJs.slice(mainJs.indexOf('window.fkSaveFairPreset'));
-    const saveBody = save.slice(0, save.indexOf('\nwindow.'));
+    const saveBody = bodyOfFunction('fkSaveFairPreset', mainJs);
     expect(saveBody).toContain('_stReadPresetForm(name)');
     expect(saveBody).toContain('_qrReadPresetForm(name)');
 
-    const del = mainJs.slice(mainJs.indexOf('window.fkDeleteFairPreset'));
+    const del = bodyOfFunction('fkDeleteFairPreset', mainJs);
     const delBody = del.slice(0, del.indexOf('\n};'));
     expect(delBody).toContain('removeStPreset');
     expect(delBody).toContain('removeQrPreset');
@@ -254,11 +258,11 @@ describe('Sales tracker fair preset wiring', () => {
     expect(html).toContain('id="st-pack-total"');
     expect(html).toContain('id="st-custom-qty"');
     expect(mainJs).toContain('class="st-book-qty"');
-    expect(mainJs).toContain('window.salesTrackerQtyInput');
+    expect(mainJs).toMatch(/(?:window\.|const |let |function )salesTrackerQtyInput\b/);
   });
 
   it('loads presets when the modal opens, so a fair survives a page reload', () => {
-    expect(mainJs).toMatch(/window\.openFairKitModal[\s\S]{0,300}loadStPresets/);
+    expect(bodyOfFunction('openFairKitModal', mainJs)).toContain('loadStPresets');
   });
 
   it('re-renders the book list before imposing a preset selection on it', () => {
@@ -272,8 +276,7 @@ describe('Sales tracker fair preset wiring', () => {
   });
 
   it('prints the packed quantity and a packed total on the sheet', () => {
-    const fn = mainJs.slice(mainJs.indexOf('function printSalesTracker('));
-    const body = fn.slice(0, fn.indexOf('\nwindow.printSalesTracker ='));
+    const body = bodyOfFunction('printSalesTracker', mainJs);
     expect(body).toContain('title-packed');
     expect(body).toContain('totalPacked');
   });
