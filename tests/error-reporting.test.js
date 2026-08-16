@@ -20,7 +20,10 @@ function loadReporter({ logImpl, doc } = {}) {
   if (start === -1 || end === -1 || end <= start) {
     throw new Error('client error reporting block not found in src/main.js');
   }
-  const block = mainJs.slice(start, end);
+  // `export` is illegal inside new Function and is not part of what is under
+  // test — main.js exports some of these helpers now that feature modules
+  // import them. Stripped the same way tests/helpers/extract-decl.js does.
+  const block = mainJs.slice(start, end).replace(/^export\s+/gm, '');
 
   const calls = [];
   const win = {
