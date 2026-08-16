@@ -175,3 +175,86 @@ export function consignmentSyncPayload(book, e) {
     currency: getBookCurrencyCode(book)
   };
 }
+
+/**
+ * Gathers and deduplicates all consignment stores across all books in the catalogue.
+ * Preserves the richest available contact and location information while tracking
+ * catalogue-wide inventory numbers (sent, sold, outstanding) and associated book titles.
+ *
+ * @param {Record<string, {stores?: Array<object>}>} states - State map keyed by bookId
+ * @param {Array<{id: string, title: string}>} bookList - List of book definitions
+ * @returns {Array<object>} Sorted list of unique consignment stores
+ */
+export function collectUniqueConsignmentStores(states, bookList) {
+  if (!states || typeof states !== 'object') return [];
+  const books = Array.isArray(bookList) ? bookList : [];
+  const storeMap = new Map();
+
+  books.forEach(book => {
+    if (!book || !book.id) return;
+    const s = states[book.id];
+    if (!s || !Array.isArray(s.stores)) return;
+    const bookTitle = book.title || book.id;
+
+    s.stores.forEach(st => {
+      if (!st || !st.name || typeof st.name !== 'string') return;
+      const cleanName = st.name.trim();
+      if (!cleanName) return;
+      const key = cleanName.toLowerCase();
+
+      if (!storeMap.has(key)) {
+        storeMap.set(key, {
+          name: cleanName,
+          contact: (st.contact || '').trim(),
+          email: (st.email || '').trim(),
+          phone: (st.phone || '').trim(),
+          address: (st.address || '').trim(),
+          city: (st.city || '').trim(),
+          region: (st.region || '').trim(),
+          postal: (st.postal || '').trim(),
+          country: (st.country || '').trim(),
+          website: (st.website || '').trim(),
+          terms: (st.terms || '').trim(),
+          rate: st.rate != null ? Number(st.rate) : 40,
+          notes: (st.notes || '').trim(),
+          books: [bookTitle],
+          bookIds: [book.id],
+          totalSent: Number(st.sent || 0),
+          totalSold: Number(st.sold || 0),
+          totalReturned: Number(st.returned || 0),
+          totalOutstanding: Number(st.outstanding || 0),
+          totalAmountOwed: Number(st.amountOwed || 0),
+        });
+      } else {
+        const existing = storeMap.get(key);
+        if (!existing.contact && st.contact) existing.contact = st.contact.trim();
+        if (!existing.email && st.email) existing.email = st.email.trim();
+        if (!existing.phone && st.phone) existing.phone = st.phone.trim();
+        if (!existing.address && st.address) existing.address = st.address.trim();
+        if (!existing.city && st.city) existing.city = st.city.trim();
+        if (!existing.region && st.region) existing.region = st.region.trim();
+        if (!existing.postal && st.postal) existing.postal = st.postal.trim();
+        if (!existing.country && st.country) existing.country = st.country.trim();
+        if (!existing.website && st.website) existing.website = st.website.trim();
+        if (!existing.terms && st.terms) existing.terms = st.terms.trim();
+        if (existing.rate == null && st.rate != null) existing.rate = Number(st.rate);
+        if (!existing.notes && st.notes) existing.notes = st.notes.trim();
+
+        if (!existing.bookIds.includes(book.id)) {
+          existing.bookIds.push(book.id);
+          existing.books.push(bookTitle);
+        }
+
+        existing.totalSent += Number(st.sent || 0);
+        existing.totalSold += Number(st.sold || 0);
+        existing.totalReturned += Number(st.returned || 0);
+        existing.totalOutstanding += Number(st.outstanding || 0);
+        existing.totalAmountOwed += Number(st.amountOwed || 0);
+      }
+    });
+  });
+
+  return Array.from(storeMap.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  );
+}

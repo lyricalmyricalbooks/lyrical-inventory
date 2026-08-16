@@ -6,6 +6,7 @@ import {
   syncHistMirrorFromLedger,
   ledgerSaleIndexForHistMirror,
   consignmentSyncPayload,
+  collectUniqueConsignmentStores,
 } from '../src/lib/consignment.js';
 
 // A consignment Sale as it lands in the ledger (canonical) + its History mirror
@@ -313,5 +314,81 @@ describe('consignmentSyncPayload', () => {
   it('sends a blank invoice number for an unlinked row', () => {
     const p = consignmentSyncPayload(book, ledgerSale({ sheetsId: 'evt-aaa' }));
     expect(p.invoiceNum).toBe('');
+  });
+});
+
+describe('collectUniqueConsignmentStores', () => {
+  it('returns empty array when states or bookList are empty or invalid', () => {
+    expect(collectUniqueConsignmentStores(null, [])).toEqual([]);
+    expect(collectUniqueConsignmentStores({}, [])).toEqual([]);
+    expect(collectUniqueConsignmentStores({ b1: { stores: [] } }, [{ id: 'b1', title: 'Book 1' }])).toEqual([]);
+  });
+
+  it('aggregates and deduplicates stores across multiple books', () => {
+    const books = [
+      { id: 'b1', title: 'The Hound' },
+      { id: 'b2', title: 'The Bell' },
+    ];
+    const states = {
+      b1: {
+        stores: [
+          { name: 'Art Metropole', city: 'Toronto', contact: 'Sam', rate: 40, sent: 10, sold: 4, returned: 1, outstanding: 5, amountOwed: 60 },
+          { name: 'Glad Day Books', city: 'Toronto', rate: 40, sent: 5, sold: 5, returned: 0, outstanding: 0, amountOwed: 0 },
+        ],
+      },
+      b2: {
+        stores: [
+          { name: 'art metropole', city: 'Toronto', email: 'orders@artmetropole.com', address: '890 Dundas St W', rate: 40, sent: 6, sold: 2, returned: 0, outstanding: 4, amountOwed: 30 },
+          { name: 'Artphelien', city: 'Geneva', country: 'Switzerland', rate: 35, sent: 3, sold: 1, returned: 0, outstanding: 2, amountOwed: 15 },
+        ],
+      },
+    };
+
+    const result = collectUniqueConsignmentStores(states, books);
+    expect(result.length).toBe(3);
+
+    // Sorted alphabetically
+    expect(result[0].name).toBe('Art Metropole');
+    expect(result[1].name).toBe('Artphelien');
+    expect(result[2].name).toBe('Glad Day Books');
+
+    // Art Metropole merged details
+    const am = result[0];
+    expect(am.contact).toBe('Sam');
+    expect(am.email).toBe('orders@artmetropole.com');
+    expect(am.address).toBe('890 Dundas St W');
+    expect(am.city).toBe('Toronto');
+    expect(am.books).toEqual(['The Hound', 'The Bell']);
+    expect(am.bookIds).toEqual(['b1', 'b2']);
+    expect(am.totalSent).toBe(16);
+    expect(am.totalSold).toBe(6);
+    expect(am.totalReturned).toBe(1);
+    expect(am.totalOutstanding).toBe(9);
+    expect(am.totalAmountOwed).toBe(90);
+
+    // Artphelien details
+    const artp = result[1];
+    expect(artp.city).toBe('Geneva');
+    expect(artp.country).toBe('Switzerland');
+    expect(artp.rate).toBe(35);
+    expect(artp.books).toEqual(['The Bell']);
+  });
+
+  it('handles trimmed names and skips blank names', () => {
+    const books = [{ id: 'b1', title: 'Book 1' }];
+    const states = {
+      b1: {
+        stores: [
+          { name: '  Type Books  ', city: 'Toronto' },
+          { name: '   ' },
+          { name: null },
+        ],
+      },
+    };
+
+    const result = collectUniqueConsignmentStores(states, books);
+    expect(result.length).toBe(1);
+    expect(result[0].name).toBe('Type Books');
+    expect(result[0].city).toBe('Toronto');
   });
 });

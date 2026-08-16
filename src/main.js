@@ -534,8 +534,7 @@ import {
 import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
-import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload } from './lib/consignment.js';
+import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores } from './lib/consignment.js';
 import { isReceiptExemptExpense } from './lib/receipt-storage.js';
 
 // ─────────────────────────────────────────────
@@ -6589,6 +6588,143 @@ window.backfillGratuityExpenses = function () {
 
 function storeById(id) { return getState().stores.find(s => s.id === id); }
 
+export function getConsignmentStoresAcrossBooks() {
+  return collectUniqueConsignmentStores(states, BOOK_LIST);
+}
+
+export function populateAddStoreDirectory() {
+  const wrap = $('add-store-preset-wrap');
+  if (!wrap) return;
+  const allStores = getConsignmentStoresAcrossBooks();
+  if (!allStores || !allStores.length) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+
+  const pill = $('add-store-count-pill');
+  if (pill) {
+    pill.textContent = `${allStores.length} store${allStores.length === 1 ? '' : 's'} across catalogue`;
+  }
+
+  const currentStores = (getState().stores || []).map(s => (s.name || '').trim().toLowerCase());
+
+  const select = $('ns-existing-store-select');
+  if (select) {
+    select.innerHTML = `<option value="">— Select an existing store to auto-fill —</option>` +
+      allStores.map(st => {
+        const inThisBook = currentStores.includes(st.name.toLowerCase());
+        const loc = [st.city, st.country].filter(Boolean).join(', ');
+        const meta = [loc, `${st.rate}% cut`, `in ${st.books.length} book${st.books.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
+        const badge = inThisBook ? ' · [already in this book]' : '';
+        return `<option value="${escapeHtml(st.name)}">${escapeHtml(st.name)}${meta ? ` (${escapeHtml(meta)})` : ''}${badge}</option>`;
+      }).join('');
+    select.value = '';
+  }
+
+  const chipsList = $('add-store-quick-chips');
+  if (chipsList) {
+    chipsList.innerHTML = allStores.map(st => {
+      const inThisBook = currentStores.includes(st.name.toLowerCase());
+      const loc = st.city || st.country || '';
+      return `<button type="button" class="store-quick-chip" data-store-name="${escapeHtml(st.name)}" onclick="handleSelectExistingStore('${escapeHtml(st.name.replace(/'/g, "\\'"))}')" title="${escapeHtml(st.name)}${loc ? ` · ${escapeHtml(loc)}` : ''}">
+        <span class="chip-dot"></span>
+        <span class="chip-name">${escapeHtml(st.name)}</span>
+        ${loc ? `<span class="chip-meta">${escapeHtml(loc)}</span>` : ''}
+        ${inThisBook ? `<span class="chip-badge">In book</span>` : ''}
+      </button>`;
+    }).join('');
+  }
+
+  const banner = $('add-store-selected-banner');
+  if (banner) banner.style.display = 'none';
+  const warn = $('add-store-warning-banner');
+  if (warn) warn.style.display = 'none';
+}
+
+export function handleSelectExistingStore(storeName) {
+  if (!storeName || !storeName.trim()) {
+    clearAddStoreForm();
+    return;
+  }
+  const cleanName = storeName.trim();
+  const allStores = getConsignmentStoresAcrossBooks();
+  const st = allStores.find(s => s.name.toLowerCase() === cleanName.toLowerCase());
+  if (!st) return;
+
+  if ($('ns-name')) $('ns-name').value = st.name;
+  if ($('ns-contact')) $('ns-contact').value = st.contact || '';
+  if ($('ns-email')) $('ns-email').value = st.email || '';
+  if ($('ns-phone')) $('ns-phone').value = st.phone || '';
+  if ($('ns-address')) $('ns-address').value = st.address || '';
+  if ($('ns-city')) $('ns-city').value = st.city || '';
+  if ($('ns-region')) $('ns-region').value = st.region || '';
+  if ($('ns-postal')) $('ns-postal').value = st.postal || '';
+  if ($('ns-country')) $('ns-country').value = st.country || '';
+  if ($('ns-website')) $('ns-website').value = st.website || '';
+  if ($('ns-rate')) $('ns-rate').value = st.rate != null ? st.rate : '40';
+  if ($('ns-terms')) $('ns-terms').value = st.terms || '';
+  if ($('ns-notes')) $('ns-notes').value = st.notes || '';
+
+  const modal = $('m-add-store');
+  if (modal) clearFieldErrors(modal);
+
+  const select = $('ns-existing-store-select');
+  if (select && select.value !== st.name) {
+    select.value = st.name;
+  }
+
+  const chips = document.querySelectorAll('#add-store-quick-chips .store-quick-chip');
+  chips.forEach(chip => {
+    chip.classList.toggle('is-selected', chip.getAttribute('data-store-name') === st.name);
+  });
+
+  ['ns-name', 'ns-contact', 'ns-email', 'ns-phone', 'ns-address', 'ns-city', 'ns-region', 'ns-postal', 'ns-country', 'ns-website', 'ns-rate', 'ns-terms', 'ns-notes'].forEach(id => {
+    const el = $(id);
+    if (el) {
+      el.classList.remove('input-autofilled');
+      void el.offsetWidth;
+      el.classList.add('input-autofilled');
+    }
+  });
+
+  const banner = $('add-store-selected-banner');
+  const bannerText = $('add-store-banner-text');
+  if (banner && bannerText) {
+    const bookListStr = st.books && st.books.length ? st.books.map(b => escapeHtml(b)).join(', ') : 'other catalogue titles';
+    bannerText.innerHTML = `Auto-filled details from <strong>${escapeHtml(st.name)}</strong> · Stocked in <em>${bookListStr}</em>`;
+    banner.style.display = 'flex';
+  }
+
+  const warn = $('add-store-warning-banner');
+  if (warn) {
+    const currentStore = (getState().stores || []).find(s => (s.name || '').trim().toLowerCase() === st.name.toLowerCase());
+    if (currentStore) {
+      warn.innerHTML = `ℹ️ <strong>${escapeHtml(st.name)}</strong> is already in this book's accounts (${currentStore.outstanding} copies outstanding). Saving will add an additional store record.`;
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+}
+
+export function clearAddStoreForm() {
+  ['ns-name', 'ns-contact', 'ns-email', 'ns-phone', 'ns-address', 'ns-city', 'ns-region', 'ns-postal', 'ns-country', 'ns-website', 'ns-terms', 'ns-notes'].forEach(id => {
+    if ($(id)) $(id).value = '';
+  });
+  if ($('ns-rate')) $('ns-rate').value = '40';
+  const select = $('ns-existing-store-select');
+  if (select) select.value = '';
+  const chips = document.querySelectorAll('#add-store-quick-chips .store-quick-chip');
+  chips.forEach(chip => chip.classList.remove('is-selected'));
+  const banner = $('add-store-selected-banner');
+  if (banner) banner.style.display = 'none';
+  const warn = $('add-store-warning-banner');
+  if (warn) warn.style.display = 'none';
+  const modal = $('m-add-store');
+  if (modal) clearFieldErrors(modal);
+}
+
 function addStore() {
   if (!validateFields([
     { id: 'ns-name', test: v => v.trim().length > 0, msg: 'Store name is required' },
@@ -6596,7 +6732,9 @@ function addStore() {
   ])) return;
   const name = $('ns-name').value.trim();
   getState().stores.push({ id: Date.now(), name, contact: $('ns-contact').value.trim(), email: $('ns-email').value.trim(), phone: $('ns-phone').value.trim(), address: $('ns-address').value.trim(), city: $('ns-city').value.trim(), region: $('ns-region').value.trim(), postal: $('ns-postal').value.trim(), country: $('ns-country').value.trim(), website: $('ns-website').value.trim(), terms: $('ns-terms').value.trim(), rate: parseFloat($('ns-rate').value) || 40, notes: $('ns-notes').value.trim(), sent: 0, sold: 0, returned: 0, outstanding: 0, amountOwed: 0 });
-  closeM('add-store');['ns-name', 'ns-contact', 'ns-email', 'ns-phone', 'ns-address', 'ns-city', 'ns-region', 'ns-postal', 'ns-country', 'ns-website', 'ns-terms', 'ns-notes'].forEach(id => $(id).value = ''); $('ns-rate').value = '40'; renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store added');
+  closeM('add-store');
+  clearAddStoreForm();
+  renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store added');
 }
 function renderStores() {
   const s = getState(), el = $('stores-list'), book = getBook(), cur = book.currency;
@@ -9237,6 +9375,114 @@ async function confirmRestoreBookDataFromSheets() {
 }
 window.confirmRestoreBookDataFromSheets = confirmRestoreBookDataFromSheets;
 
+// ── MODAL HELPERS
+// Snapshot of a modal's field values, taken when it opens — used by the
+// backdrop/Esc close guard to detect unsaved edits.
+let _modalSnapshots = {};
+function _modalFieldSig(id) {
+  const el = $('m-' + id); if (!el) return '';
+  return Array.from(el.querySelectorAll('input,select,textarea'))
+    .map(f => (f.type === 'checkbox' || f.type === 'radio') ? (f.checked ? '1' : '0') : (f.value || ''))
+    .join(' ');
+}
+function _prefersReducedMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+let _modalReturnFocus = null;
+export function openM(id) {
+  const el = $('m-' + id); if (!el) return;
+  el.classList.remove('closing');
+  clearFieldErrors(el);
+  el.style.display = 'flex';
+  const d = id === 'send-books' ? 'send-date' : id === 'record-sale' ? 'sale-date' : 'ret-date';
+  if ($(d)) $(d).value = today();
+  if (id === 'add-store') {
+    populateAddStoreDirectory();
+  }
+  // Snapshot AFTER open* helpers and date defaults have populated fields, so a
+  // later mismatch means the *user* changed something.
+  _modalSnapshots[id] = _modalFieldSig(id);
+  // Move keyboard focus into the dialog and remember where to send it back, so
+  // keyboard/screen-reader users aren't stranded on the (now-inert) page behind.
+  _modalReturnFocus = document.activeElement;
+  const focusable = el.querySelector('input:not([type=hidden]),select,textarea,button,[tabindex]:not([tabindex="-1"])');
+  if (focusable) setTimeout(() => { try { focusable.focus(); } catch { } }, 0);
+}
+export function closeM(id) {
+  const el = $('m-' + id); if (!el) return;
+  el.dispatchEvent(new Event('modal-close'));
+  delete _modalSnapshots[id];
+  // Restore focus to whatever opened the modal (if it's still around).
+  if (_modalReturnFocus && el.contains(document.activeElement)) {
+    try { _modalReturnFocus.focus(); } catch { }
+  }
+  _modalReturnFocus = null;
+  if (el.classList.contains('fk-workspace') || el.closest('.pos-subpanel')) return;
+  if (el.classList.contains('closing')) return;
+  if (_prefersReducedMotion()) { el.style.display = 'none'; clearFieldErrors(el); return; }
+  el.classList.add('closing');
+  let t;
+  const done = () => {
+    el.style.display = 'none';
+    el.classList.remove('closing');
+    clearFieldErrors(el);
+    el.removeEventListener('animationend', done);
+    clearTimeout(t);
+  };
+  t = setTimeout(done, 240); // fallback if animationend doesn't fire
+  el.addEventListener('animationend', done);
+}
+// Close a modal, but if the user has unsaved edits, confirm first. Used by the
+// backdrop-click and Esc handlers so a stray tap can't silently lose data.
+async function attemptCloseModal(id) {
+  if (_modalSnapshots[id] !== undefined && _modalFieldSig(id) !== _modalSnapshots[id]) {
+    if (!(await confirmDialog('Discard your unsaved changes?',
+      { okLabel: 'Discard', cancelLabel: 'Keep editing', danger: true }))) return;
+  }
+  closeM(id);
+}
+
+// ── INLINE FORM VALIDATION ──────────────────────────────────────────────
+function fieldError(id, msg) {
+  const el = $(id); if (!el) return;
+  const fg = el.closest('.form-group') || el.parentElement;
+  if (fg) {
+    fg.classList.add('invalid');
+    let e = fg.querySelector('.field-error');
+    if (!e) { e = document.createElement('div'); e.className = 'field-error'; fg.appendChild(e); }
+    e.textContent = msg;
+  }
+  el.setAttribute('aria-invalid', 'true');
+}
+function clearFieldError(el) {
+  const fg = el && el.closest && el.closest('.form-group');
+  if (fg) {
+    fg.classList.remove('invalid');
+    const e = fg.querySelector('.field-error'); if (e) e.remove();
+  }
+  if (el && el.removeAttribute) el.removeAttribute('aria-invalid');
+}
+function clearFieldErrors(scope) {
+  const root = scope || document;
+  root.querySelectorAll('.form-group.invalid').forEach(fg => {
+    fg.classList.remove('invalid');
+    const e = fg.querySelector('.field-error'); if (e) e.remove();
+  });
+  root.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
+}
+// rules: [{ id, test:(value, el)=>bool, msg }]. Multiple rules may target the
+// same field; the first failing rule wins and later ones for it are skipped.
+// Returns true when every field passes.
+function validateFields(rules) {
+  let firstBad = null; const failed = new Set();
+  rules.forEach(r => {
+    const el = $(r.id); if (!el || failed.has(r.id)) return;
+    if (r.test(el.value, el)) { clearFieldError(el); }
+    else { fieldError(r.id, r.msg); failed.add(r.id); if (!firstBad) firstBad = el; }
+  });
+  if (firstBad && firstBad.focus) firstBad.focus();
+  return failed.size === 0;
+}
 // ── BUTTON LOADING STATE ────────────────────────────────────────────────
 // Disables the clicked button and shows a spinner while an async op runs, so
 // users can't double-submit. Pass the click event; safe to call with none.
@@ -19053,6 +19299,7 @@ function exposeLegacyInlineHandlers() {
     confirmImport, updateManualForm, phint, submitManual, recordOrderPendingTransfer,
     markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll,
     renderArtistTransfers, markExpenseReceived, renderPendingExpenses, submitGratuity, storeById,
+    getConsignmentStoresAcrossBooks, populateAddStoreDirectory, handleSelectExistingStore, clearAddStoreForm,
     addStore, renderStores, removeStore, openEditStore, confirmEditStore, openSend, confirmSend,
     openBulkSend, bulkRowEls, bulkApplyQty, bulkQtyChanged, bulkCheckChanged,
     updateBulkSendSummary, confirmBulkSend, openSale, confirmSale, openRet, confirmReturn,
