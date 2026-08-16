@@ -9001,6 +9001,13 @@ tr.hist-row:hover {
 .rec-per{font-size:var(--text-2xs);color:var(--content-muted);margin-left:2px;}
 .rec-next-date{font-family:'DM Mono',monospace;font-size:var(--text-sm);color:var(--content-primary);}
 .rec-next-rel{font-size:var(--text-xs);color:var(--content-muted);margin-top:2px;}
+/* What that charge will actually be. Quiet when it matches the amount column,
+   amber the moment the charge is the first one at a new price. */
+.rec-next-amt{
+  font-family:'DM Mono',monospace;font-size:var(--text-xs);
+  color:var(--content-secondary);margin-top:2px;
+}
+.rec-next-amt.is-new{color:var(--status-active);font-weight:700;cursor:help;}
 
 /* Paused/ended rows stay legible but visibly stand down, so the live
    commitments above them keep the eye. Deliberately scoped to the data cells:

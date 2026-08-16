@@ -137,6 +137,20 @@ describe('recurringDueCharges with a price change', () => {
     expect(recurringDueCharges(rent({ lastInjected: '2026-08' }), NOW)).toEqual([]);
   });
 
+  it('prices the next charge by its own date, not by today’s price', () => {
+    // The phone-bill case from the panel: the rise starts 1 Sep but the charge
+    // falls on the 16th, so the very next charge is already at the new price
+    // even though today's price is still the old one.
+    const phone = sub({
+      desc: 'Phone Bill', amount: 45.2, startDate: '2026-06-16', lastInjected: '2026-08',
+      rateChanges: [{ effectiveFrom: '2026-09-01', amount: 62 }],
+    });
+    const next = nextRecurringDate(phone, NOW);
+    expect(next).toBe('2026-09-16');
+    expect(currentAmount(phone, NOW)).toBe(45.2);
+    expect(amountOnDate(phone, next)).toBe(62);
+  });
+
   it('still bills when the starting amount is zero but a later price is set', () => {
     const due = recurringDueCharges(
       sub({ amount: 0, startDate: '2026-06-01', rateChanges: [{ effectiveFrom: '2026-07-01', amount: 20 }] }),
