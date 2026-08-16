@@ -3560,9 +3560,19 @@ function renderCustomersStat(allCustomers) {
   const host = $('customer-audience-summary');
   if (!host) return;
   const buyers = allCustomers || buildCustomerList();
-  const repeat = buyers.filter(r => r.orders >= 2).length;
-  const onList = mailingSubsArray().filter(s => !_isCustomerSuppressed(s.email)).length;
-  const unsubscribed = buyers.filter(r => _isCustomerSuppressed(r.email)).length;
+  let repeat = 0;
+  let unsubscribed = 0;
+  for (const r of buyers) {
+    if (r.orders >= 2) repeat++;
+    if (_isCustomerSuppressed(r.email)) unsubscribed++;
+  }
+
+  const subsArray = mailingSubsArray();
+  let onList = 0;
+  for (const s of subsArray) {
+    if (!_isCustomerSuppressed(s.email)) onList++;
+  }
+
   const mailable = Math.max(0, onList - unsubscribed);
   const conversion = buyers.length ? Math.round((onList / buyers.length) * 100) : 0;
   const stat = (label, val, hint, tone = '') => `<div class="audience-stat ${tone}"><span>${label}</span><strong>${val}</strong><em>${hint}</em></div>`;
@@ -22237,7 +22247,10 @@ function renderMailingList() {
   const cb = $('ml-autoadd');
   if (cb) cb.checked = !!MAILING_LIST.autoAdd;
   const subs = mailingSubsArray();
-  const unsub = subs.filter(s => _isCustomerSuppressed(s.email)).length;
+  let unsub = 0;
+  for (const s of subs) {
+    if (_isCustomerSuppressed(s.email)) unsub++;
+  }
   const countEl = $('ml-count');
   if (countEl) countEl.textContent = `${subs.length} subscriber${subs.length === 1 ? '' : 's'}` + (unsub ? ` · ${unsub} unsubscribed (excluded from sends)` : '');
   body.innerHTML = subs.length
@@ -22775,7 +22788,10 @@ function renderCustomersAudience() {
   renderCustomersStat(all);
   _mailingAutoSync(all);
   const list = _custApplyFilter(all);
-  const suppressedShown = list.filter(r => _isCustomerSuppressed(r.email)).length;
+  let suppressedShown = 0;
+  for (const r of list) {
+    if (_isCustomerSuppressed(r.email)) suppressedShown++;
+  }
 
   const summary = $('cust-summary');
   if (summary) {

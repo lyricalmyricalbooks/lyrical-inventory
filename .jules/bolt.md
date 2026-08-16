@@ -9,3 +9,7 @@
 ## 2025-02-23 - Replace reduce with for loops
 **Learning:** In hot loops, replacing array methods like reduce with imperative for loops avoids intermediate allocations and reduces Garbage Collection (GC) overhead.
 **Action:** Use direct imperative iteration for scalar accumulation in frequently updated computations to improve speed.
+
+## 2025-02-24 - Replace array filter with length with imperative loop
+**Learning:** Using chained array methods like `.filter(condition).length` allocates a full intermediate array simply to count matches. In UI-bound loops, this can add measurable Garbage Collection (GC) pressure.
+**Action:** Replace `.filter(condition).length` with imperative counting loops (e.g. `let count = 0; for (let x of arr) if (condition(x)) count++;`) to prevent unnecessary intermediate allocations.
