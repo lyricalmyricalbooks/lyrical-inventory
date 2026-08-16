@@ -7,61 +7,9 @@ import './style.css';
 import './styles/theme-dark.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
-import {
-  getSym,
-  normalizeCurrencyCode,
-  fmt,
-  fmtD,
-  getBookCurrencyCode,
-  paymentSummary,
-  buildPaymentMeta,
-  cadEquivalentForSale,
-  hexToRgba,
-  PAYMENT_TYPE_DIRECT_TO_ARTIST,
-  isDirectToArtistSale,
-  getContrastColor,
-  lightenColor,
-  getContrastSafeText,
-} from './lib/money.js';
-import {
-  bookCurrencyCode,
-  collectNativeAmounts,
-  detectCurrencyMismatch,
-  planCurrencyChange,
-  applyCurrencyChange,
-  stampNativeCurrency,
-  appendCurrencyLog,
-  describePlan,
-} from './lib/currency-migration.js';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
-import {
-  THEME_PREFERENCES,
-  THEME_LABELS,
-  normalizeThemePreference,
-  readThemePreference,
-  writeThemePreference,
-  applyThemeToDocument,
-  nextThemePreference,
-  oppositeThemePreference,
-} from './lib/theme.js';
 import { escapeHtml } from './lib/html.js';
 import {
-  _modalFieldSig,
-  _prefersReducedMotion,
-  attemptCloseModal,
-  clearFieldError,
-  clearFieldErrors,
-  configureModals,
-  confirmDialog,
-  fieldError,
-  modalFieldsChanged,
-  openM,
-  closeM,
-  promptDialog,
-  validateFields,
-} from './lib/modal.js';
-import {
-  EXPENSE_CATEGORIES,
   RECEIPT_SCAN_SCHEMA,
   _applyScanCategory,
   _applyScanCurrency,
@@ -98,6 +46,7 @@ import {
   batchScanAndRelinkReceipts,
   cacheAllReceiptsNow,
   cacheReceiptFile,
+  calcExpenseFx,
   cancelEmailReceiptExtraction,
   captureReceiptPhoto,
   checkReceiptFolderHealth,
@@ -133,6 +82,7 @@ import {
   localizeInboxReceiptFiles,
   makeReceiptPreview,
   normalizeReceiptDate,
+  onExpenseCurrencyChange,
   openBatchExpenseModal,
   openBlobInTab,
   openCloudReceiptsModal,
@@ -160,12 +110,14 @@ import {
   renderBatchExpenseRows,
   renderEmailPreviewContent,
   renderEmailReceiptDrafts,
+  renderExpenses,
   renderGmailChips,
   renderGmailEmailsList,
   renderOrganizerTable,
   renderReceiptCacheStatus,
   renderReceiptFolderAlert,
   renderReceiptProblemPanel,
+  requestBulkReimbursement,
   rescanBatchExpenseRow,
   resolveLocalReceiptFile,
   retakeReceiptPhoto,
@@ -183,6 +135,7 @@ import {
   setupReceiptFolder,
   startEmailInboxWatcher,
   submitBatchExpenses,
+  submitExpense,
   summarizeReceiptProblems,
   switchEmailImportTab,
   toggleAllBatchExpenses,
@@ -190,12 +143,66 @@ import {
   toggleAllGmailSelections,
   toggleEmailPreview,
   toggleEmailRowSelection,
+  toggleExpenseReimburseSelect,
   toggleOrganizerSkip,
   updateEmailInboxBadge,
+  updateExpenseForm,
   uploadReceiptToCloud,
   useReceiptPhoto,
   viewLocalReceipt,
+  voidExpense,
 } from './features/receipts.js';
+import {
+  appendCurrencyLog,
+  applyCurrencyChange,
+  bookCurrencyCode,
+  collectNativeAmounts,
+  describePlan,
+  detectCurrencyMismatch,
+  planCurrencyChange,
+  stampNativeCurrency,
+} from './lib/currency-migration.js';
+import {
+  _modalFieldSig,
+  _prefersReducedMotion,
+  attemptCloseModal,
+  clearFieldError,
+  clearFieldErrors,
+  closeM,
+  configureModals,
+  confirmDialog,
+  fieldError,
+  modalFieldsChanged,
+  openM,
+  promptDialog,
+  validateFields,
+} from './lib/modal.js';
+import {
+  PAYMENT_TYPE_DIRECT_TO_ARTIST,
+  buildPaymentMeta,
+  cadEquivalentForSale,
+  fmt,
+  fmtD,
+  getBookCurrencyCode,
+  getContrastColor,
+  getContrastSafeText,
+  getSym,
+  hexToRgba,
+  isDirectToArtistSale,
+  lightenColor,
+  normalizeCurrencyCode,
+  paymentSummary,
+} from './lib/money.js';
+import {
+  THEME_LABELS,
+  THEME_PREFERENCES,
+  applyThemeToDocument,
+  nextThemePreference,
+  normalizeThemePreference,
+  oppositeThemePreference,
+  readThemePreference,
+  writeThemePreference,
+} from './lib/theme.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
@@ -215,102 +222,97 @@ import {
   stPresetSummary,
 } from './lib/sales-tracker-presets.js';
 import {
-  saveTaxCenter,
-  processRecurringExpenses,
-  tcExpenseRowDragOver,
-  tcExpenseRowDragLeave,
-  tcExpenseRowDrop,
-  downloadTaxReport,
-  _tcSaveLedgerPrefs,
+  _tcApplyLedgerFilter,
+  _tcBlobToDataUrl,
+  _tcBuildCashFlowChart,
+  _tcCashFlowBucketRows,
+  _tcClearConfirmedPending,
+  _tcDeltaChip,
+  _tcFindTripRecord,
+  _tcGetTripsSummaryAll,
+  _tcIsPdfName,
+  _tcPdfToImages,
+  _tcPendingList,
+  _tcRenderCashFlowSummary,
+  _tcRenderReceiptGallery,
+  _tcRenderSelectedCashFlowBucket,
+  _tcResolveReceiptImages,
   _tcRestoreLedgerPrefs,
+  _tcSaveLedgerPrefs,
+  _tcSvgEsc,
+  _tcTripRecords,
+  _tcTripReportReceipts,
+  confirmPendingExpense,
+  deletePendingExpense,
+  deleteTripRecord,
+  dismissReceiptNotice,
+  downloadTaxLedgerCSV,
+  downloadTaxReport,
+  executeFullTaxSeasonExport,
+  exportTripPDF,
+  logExpenseForTrip,
+  openEditArtistPayout,
+  openEditTripDetails,
+  openNewTrip,
+  openPendingExpense,
+  openReceiptLightbox,
+  openRecurringEditor,
+  openTaxSeasonPreflightModal,
+  processRecurringExpenses,
+  removeRecurring,
+  renderTaxCenter,
+  resetDismissedReceiptNotices,
+  saveNewTrip,
+  savePendingExpense,
+  saveRecurringEditor,
+  saveTaxCenter,
+  saveTaxCenterSettings,
+  setTcGalleryPage,
   setTcLedgerPage,
+  snoozePendingExpense,
+  switchTaxCenterSubTab,
+  tcClearCashFlowBucket,
+  tcClearLedgerFilters,
+  tcClearSelectedTrip,
+  tcCloseTripDropdown,
+  tcExpFileChosen,
+  tcExpFileClear,
+  tcExpFileDragLeave,
+  tcExpFileDragOver,
+  tcExpFileDrop,
+  tcExpenseRowDragLeave,
+  tcExpenseRowDragOver,
+  tcExpenseRowDrop,
+  tcFilterLedgerByReceiptStorage,
+  tcFilterTripDropdown,
+  tcGalleryFilterChange,
+  tcGallerySearchInput,
+  tcJumpToFixPreflightIssues,
   tcLedgerSearchInput,
   tcLedgerTypeFilter,
-  tcYearChange,
   tcLedgerYearChange,
-  tcClearLedgerFilters,
-  _tcApplyLedgerFilter,
-  _tcRenderRecurringSubscriptions,
-  _tcRenderLedgerPagination,
-  _tcRenderLedgerFilterChip,
-  _tcRenderLedgerFoot,
-  _tcRenderLedgerTable,
-  _tcRenderCategoryPanel,
-  tcSetTripsView,
-  _tcGetTripsSummaryAll,
-  tcRenderQuickTripChips,
-  tcUpdateTripSelectedPreview,
-  tcClearSelectedTrip,
-  tcOpenTripDropdown,
-  tcCloseTripDropdown,
-  tcToggleTripDropdown,
-  tcFilterTripDropdown,
-  tcSelectTripOption,
-  _tcTripRecords,
-  _tcFindTripRecord,
-  openNewTrip,
-  openEditTripDetails,
-  tcNewTripValidate,
-  saveNewTrip,
-  deleteTripRecord,
-  logExpenseForTrip,
-  openPendingExpense,
-  tcPendingValidate,
-  tcPendingRemindIn,
-  savePendingExpense,
-  deletePendingExpense,
-  snoozePendingExpense,
-  confirmPendingExpense,
-  _tcClearConfirmedPending,
-  _tcPendingList,
-  _tcRenderPendingPanel,
-  exportTripPDF,
-  _tcTripReportReceipts,
-  _tcIsPdfName,
-  _tcBlobToDataUrl,
-  _tcPdfToImages,
-  _tcResolveReceiptImages,
-  _tcRenderTripsPanel,
-  _tcBuildLedger,
-  _tcRenderStatusHeaders,
-  renderTaxCenter,
-  _tcSvgEsc,
-  _tcDeltaChip,
-  _tcRenderCashFlowSummary,
-  _tcCashFlowBucketRows,
-  _tcRenderSelectedCashFlowBucket,
-  tcSelectCashFlowBucket,
-  tcSetCashFlowDetailType,
-  tcClearCashFlowBucket,
-  _tcBuildCashFlowChart,
-  openEditArtistPayout,
-  saveTaxCenterSettings,
-  openRecurringEditor,
-  saveRecurringEditor,
-  updateRecurringPreview,
-  toggleRecurringPause,
-  tcSetRecurringFilter,
-  tcShowRecurringCharges,
-  removeRecurring,
-  downloadTaxLedgerCSV,
-  dismissReceiptNotice,
-  resetDismissedReceiptNotices,
-  switchTaxCenterSubTab,
-  tcSubNavKeydown,
-  tcFilterLedgerByReceiptStorage,
-  openTaxSeasonPreflightModal,
-  tcJumpToFixPreflightIssues,
-  executeFullTaxSeasonExport,
-  tcSetVaultView,
-  tcGallerySearchInput,
-  tcGalleryFilterChange,
-  _tcRenderReceiptGallery,
-  setTcGalleryPage,
-  openReceiptLightbox,
-  tcLightboxZoom,
-  tcLightboxRotate,
-  tcLightboxReset,
   tcLightboxNav,
+  tcLightboxReset,
+  tcLightboxRotate,
+  tcLightboxZoom,
+  tcNewTripValidate,
+  tcOpenTripDropdown,
+  tcPendingRemindIn,
+  tcPendingValidate,
+  tcRenderQuickTripChips,
+  tcSelectCashFlowBucket,
+  tcSelectTripOption,
+  tcSetCashFlowDetailType,
+  tcSetRecurringFilter,
+  tcSetTripsView,
+  tcSetVaultView,
+  tcShowRecurringCharges,
+  tcSubNavKeydown,
+  tcToggleTripDropdown,
+  tcUpdateTripSelectedPreview,
+  tcYearChange,
+  toggleRecurringPause,
+  updateRecurringPreview,
 } from './features/taxcentre.js';
 import {
   reconcileApplyBigCartel,
@@ -327,7 +329,6 @@ import {
   triggerBigCartelShippingSync,
 } from './features/bigcartel.js';
 import {
-  _shippoDestMasterList,
   getShippingReconciliationOrders,
   renderOrderShippingSummary,
   backfillShipping,
@@ -370,6 +371,10 @@ import {
   roundShippingCharge,
   buildShippingChargePrediction,
   renderShippingChargePrediction,
+  renderShippoIncotermHint,
+  onShippoIncotermChange,
+  onShippoDestCountryChange,
+  updateShippoCustomsTotalHint,
   collectShippoMessages,
   renderShippoDiagnostics,
   buyShippoLabel,
@@ -410,10 +415,6 @@ import {
   downloadFilteredShippingLedgerCSV,
   updateShippoBaseSpecsFromInputs,
   onShippoQuantityChange,
-  renderShippoIncotermHint,
-  onShippoIncotermChange,
-  onShippoDestCountryChange,
-  updateShippoCustomsTotalHint,
   verifyDestinationAddress,
   applyVerifiedAddressCorrections,
   dismissAddressVerification,
@@ -535,7 +536,7 @@ import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload } from './lib/consignment.js';
-import { isRentExpense, isReceiptExemptExpense } from './lib/receipt-storage.js';
+import { isReceiptExemptExpense } from './lib/receipt-storage.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -2194,7 +2195,7 @@ function applyBookAccentTokens(bookId) {
 // permissions", while the Realtime Database puts PERMISSION_DENIED in the
 // message text. The submission handlers only checked the RTDB spelling, so a
 // Firestore book's rejection fell through to the generic failure message.
-function isPermissionDenied(err) {
+export function isPermissionDenied(err) {
   if (!err) return false;
   if (err.code === 'permission-denied' || err.code === 'PERMISSION_DENIED') return true;
   return typeof err.message === 'string' && err.message.includes('PERMISSION_DENIED');
@@ -5625,7 +5626,6 @@ export async function fetchHistoricalRate(from, to, date) {
 }
 
 let _manualFxRate = null;
-let _expenseFxRate = null;
 
 async function onManualCurrencyChange() {
   const resultSpan = $('m-fx-inline-result');
@@ -5711,59 +5711,6 @@ function calcManualFxRate() {
   phint();
 }
 
-async function onExpenseCurrencyChange() {
-  const resultSpan = $('exp-fx-inline-result');
-  const cur = $('exp-cur').value;
-  const book = getBook();
-  const native = getBookCurrencyCode(book);
-
-  if (cur === native) {
-    if (resultSpan) resultSpan.style.display = 'none';
-    _expenseFxRate = null;
-    return;
-  }
-
-  if (resultSpan) {
-    resultSpan.style.display = 'inline';
-    resultSpan.textContent = '(fetching rate...)';
-    resultSpan.style.color = 'var(--text3)';
-  }
-
-  const key = `${cur}_${native}`;
-  let rate = _fxRateCache[key];
-
-  if (!rate) {
-    try {
-      const res = await fetchLiveRate(cur, native);
-      if (res.rate) {
-        rate = res.rate;
-      }
-    } catch (e) { }
-  }
-
-  if (rate) {
-    _expenseFxRate = rate;
-    calcExpenseFx();
-  } else {
-    if (resultSpan) {
-      resultSpan.textContent = '(rate unavailable)';
-      resultSpan.style.color = 'var(--red)';
-    }
-    _expenseFxRate = null;
-  }
-}
-
-function calcExpenseFx() {
-  const resultSpan = $('exp-fx-inline-result');
-  if (!resultSpan || !_expenseFxRate) return;
-
-  const amt = parseFloat($('exp-amount').value) || 0;
-  const book = getBook();
-  const converted = amt * _expenseFxRate;
-
-  resultSpan.textContent = `≈ ${fmt(converted, book.currency)}`;
-  resultSpan.style.color = 'var(--gold)';
-}
 
 // ── ARTIST PAYMENT LINK
 function saveArtistPaymentLink() {
@@ -5824,393 +5771,7 @@ function renderArtistReimburseBanner() {
     </div>`).join('');
 }
 
-function updateExpenseForm() {
-  const book = getBook();
-  $('exp-date').value = today();
-  populateExpenseCategoryDropdown();
 
-  const native = getBookCurrencyCode(book);
-  const curField = $('exp-cur');
-  if (curField) curField.value = localStorage.getItem('lastExpenseCurrency') || native;
-  if ($('exp-fx-inline-result')) $('exp-fx-inline-result').style.display = 'none';
-  _expenseFxRate = null;
-
-  if (window.IS_PUBLISHER) {
-    if ($('exp-ai-btn')) $('exp-ai-btn').style.display = '';
-  } else {
-    if ($('exp-ai-btn')) $('exp-ai-btn').style.display = 'none';
-  }
-}
-
-// Fills #exp-cat from the canonical EXPENSE_CATEGORIES list (shared with
-// email-receipt import & tax center) instead of the old hardcoded 8-option
-// list, so manually-logged and AI-imported expenses land in the same
-// categories. Defaults to whichever category was last used.
-function populateExpenseCategoryDropdown() {
-  const sel = $('exp-cat');
-  if (!sel || sel.options.length) return;
-  sel.innerHTML = EXPENSE_CATEGORIES.map(c => `<option>${escapeHtml(c)}</option>`).join('');
-  const last = localStorage.getItem('lastExpenseCategory');
-  if (last && EXPENSE_CATEGORIES.includes(last)) sel.value = last;
-}
-
-async function submitExpense() {
-  if (!activeBook) { showToast('⚠ Error: No active book selected', 'err'); return; }
-  const desc = ($('exp-desc').value || '').trim();
-  const cat = $('exp-cat').value;
-  const date = $('exp-date').value || today();
-  const ref = ($('exp-ref').value || '').trim();
-  const book = getBook();
-
-  const curField = $('exp-cur');
-  const rawAmount = parseFloat($('exp-amount').value) || 0;
-  const cur = curField ? curField.value : book.currency;
-  const native = getBookCurrencyCode(book);
-
-  let amount = rawAmount;
-  let currency = native;
-  let fxNote = "";
-
-  if (cur !== native && _expenseFxRate) {
-    amount = rawAmount * _expenseFxRate;
-    fxNote = ` (Paid ${cur} ${rawAmount.toFixed(2)})`;
-  } else {
-    currency = cur; // If no FX used, use the selected currency (should match native anyway)
-  }
-
-  const finalDesc = desc + fxNote;
-
-  if (!desc) { showToast('⚠ Please enter a description', 'warn'); $('exp-desc').focus(); return; }
-  if (!rawAmount) { showToast('⚠ Please enter an amount', 'warn'); $('exp-amount').focus(); return; }
-
-  const existingExpenses = (getState().expenses || []);
-  const isDuplicate = existingExpenses.some(e =>
-    e.date === date &&
-    e.desc.trim().toLowerCase() === desc.toLowerCase() &&
-    Math.abs((e.origAmount ?? e.amount) - rawAmount) < 0.005
-  );
-  if (isDuplicate) {
-    const proceed = await confirmDialog(
-      `An expense dated ${fmtD(date)} for "${desc}" (${fmt(rawAmount, cur)}) already exists. Log it again anyway?`,
-      { title: 'Possible duplicate expense' }
-    );
-    if (!proceed) return;
-  }
-
-  const fileInput = $('exp-file');
-  let receiptUrl = '';
-  let receiptStorage = 'none';
-  if (fileInput && fileInput.files.length > 0) {
-    const file = fileInput.files[0];
-    const submitBtn = $('submit-exp-btn');
-    const oldText = submitBtn.textContent;
-
-    if (window.IS_PUBLISHER) {
-      // Folder first, cloud as the safety net — same deal as the Tax Centre.
-      // A publisher on a machine with no folder connected used to lose the
-      // receipt here without a word.
-      submitBtn.textContent = 'Saving receipt…'; submitBtn.disabled = true;
-      const saved = await saveReceiptBestEffort(file, book.title, {
-        date, desc: finalDesc, cat, amount: rawAmount, currency: cur, book: book.title,
-      });
-      receiptUrl = saved.ref;
-      receiptStorage = saved.storage;
-      if (receiptStorage === 'cloud') {
-        showToast('Receipt saved to the cloud — it moves to your folder when it\'s available', 'warn', 5000);
-      } else if (receiptStorage === 'none') {
-        showToast('⚠ Receipt could not be saved — logging the expense without it', 'err', 5000);
-      }
-    } else {
-      submitBtn.textContent = 'Uploading to cloud...'; submitBtn.disabled = true;
-      try {
-        receiptUrl = await uploadReceiptToCloud(file, activeBook);
-        receiptStorage = receiptUrl ? 'cloud' : 'none';
-      } catch (e) {
-        console.error(e);
-        showToast('⚠ Cloud upload failed — submitting without receipt', 'err');
-      }
-    }
-    submitBtn.textContent = oldText; submitBtn.disabled = false;
-  }
-
-  const s = getState();
-  if (!s.expenses) s.expenses = [];
-
-  // Store original payment info for ledger display
-  const origAmount = rawAmount;
-  const origCurrency = cur;
-
-  // Calculate CAD equivalence for publisher reporting (only once, at submission time)
-  const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
-  const baseAmount = cadRate ? (amount * cadRate) : amount;
-  const newExpense = { id: Date.now(), desc: finalDesc, cat, amount, currency, origAmount, origCurrency, date, ref, receipt: receiptUrl, fxRate: _expenseFxRate, baseAmount };
-  // Starts the clock the Tax Centre reads when it counts what's waiting.
-  if (receiptStorage === 'cloud') newExpense.receiptCloudAt = new Date().toISOString();
-
-  if (isAuthor()) {
-    try {
-      await window._fbSubmitActivity(activeBook, 'expenses', newExpense);
-      addLog('log-expenses', `${cat}: ${desc} — ${fmt(amount, currency)} (Submitted)`, 'ok');
-      showToast('✓ Expense submitted for approval');
-      notifyPublisherSubmission('Expense', newExpense, `${cat}: ${desc} — ${fmt(amount, currency)}`);
-    } catch (e) {
-      console.error("Submission error:", e);
-      reportClientError('submit-expense-failed', e && e.message, { stack: e && e.stack });
-      showToast(isPermissionDenied(e)
-        ? '⚠ Permission denied — this book is not linked to your account. Nothing was submitted.'
-        : '⚠ Could not submit the expense — nothing was recorded. Check your connection and try again.', 'err', 6000);
-    }
-  } else {
-    const s = getState();
-    if (!s.expenses) s.expenses = [];
-    s.expenses.unshift(newExpense);
-    saveState(activeBook);
-    addLog('log-expenses', `${cat}: ${desc} — ${fmt(amount, currency)}`, 'ok');
-    showToast('✓ Expense logged');
-  }
-
-  localStorage.setItem('lastExpenseCategory', cat);
-  localStorage.setItem('lastExpenseCurrency', cur);
-
-  renderExpenses();
-  updateDash();
-  $('exp-desc').value = ''; $('exp-amount').value = ''; $('exp-ref').value = ''; $('exp-date').value = today();
-  if (fileInput) fileInput.value = '';
-  if (typeof window.expFileChosen === 'function') window.expFileChosen();
-  $('exp-desc').focus();
-}
-
-function voidExpense(id) {
-  const s = getState();
-  s.expenses = (s.expenses || []).filter(e => e.id !== id);
-  renderExpenses();
-  updateDash();
-  saveState(activeBook);
-  showToast('Expense removed', 'warn');
-}
-
-// Same dropzone treatment for the Tax Center's Log Business Expense receipt
-// field (#tc-exp-file). Kept separate from expFileChosen/etc above since
-// that pair is wired to the plain ledger expense form's #exp-file ids.
-// These three sites used to read and write `window._pendingWebcamReceipt`,
-// which is a DIFFERENT property from the module-scoped `_pendingWebcamReceipt`
-// that useReceiptPhoto() sets and that submitExpense/saveExpenseEdit read.
-// Nothing ever wrote the window one, so the read was always falsy and the write
-// cleared nothing. They now go through the accessors, which is plainly what the
-// code was written to do: clearing the receipt field clears the pending capture.
-function tcExpFileChosen() {
-  const input = $('tc-exp-file'), chip = $('tc-exp-file-chip'), nameEl = $('tc-exp-file-name'), dz = $('tc-exp-dropzone');
-  const pending = getPendingWebcamReceipt();
-  const hasFile = (input && input.files && input.files.length > 0) || !!pending;
-  if (nameEl && hasFile) nameEl.textContent = input?.files?.[0]?.name || pending?.name || 'receipt';
-  if (chip) chip.style.display = hasFile ? 'flex' : 'none';
-  if (dz) dz.style.display = hasFile ? 'none' : 'flex';
-  const aiBtn = $('tc-ai-scan-btn');
-  if (aiBtn) {
-    aiBtn.disabled = !hasFile;
-    aiBtn.title = hasFile ? 'Scan receipt with Gemini AI' : 'Select or capture a receipt first to enable AI scanning';
-  }
-}
-function tcExpFileClear(ev) {
-  if (ev) ev.preventDefault();
-  const input = $('tc-exp-file');
-  if (input) input.value = '';
-  setPendingWebcamReceipt(null);
-  tcExpFileChosen();
-}
-function tcExpFileDragOver(ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.add('drag'); }
-function tcExpFileDragLeave(ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag'); }
-function tcExpFileDrop(ev) {
-  ev.preventDefault();
-  const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag');
-  const input = $('tc-exp-file');
-  if (input && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
-    try { input.files = ev.dataTransfer.files; } catch (e) { /* older browsers: ignore */ }
-    tcExpFileChosen();
-  }
-}
-// Rows the author can select for a bulk reimbursement request (unreceived,
-// approved, non-gratuity expenses). Persists selection across re-renders.
-// Plain module state rather than a window property: nothing outside this file
-// reads it, and a column-0 `window.x = …` runs at import time, which a feature
-// module may not do (see tests/features-boundary.test.js).
-const _expReimburseSelection = new Set();
-
-export function renderExpenses() {
-  const s = getState(), book = getBook(), cur = book.currency;
-  const expenses = s.expenses || [];
-  const body = $('exp-body');
-  if (!body) return;
-  const pbExp = window.authorSubmissions[activeBook]?.expenses || {};
-  const pendingAuthExpenses = Object.keys(pbExp).map(k => {
-    const raw = JSON.parse(pbExp[k].data);
-    return { ...raw, _subKey: k, pendingAuth: true };
-  });
-  const combined = [...pendingAuthExpenses, ...expenses];
-  const showSelectCol = isAuthor() && !window.IS_PUBLISHER;
-
-  // Selection can only ever contain currently-eligible ids; drop anything
-  // that got received/voided elsewhere since the last render.
-  const eligibleIds = new Set(combined.filter(e => !e.received && !e.pendingAuth && !isGratuityExpense(e)).map(e => e.id));
-  for (const id of _expReimburseSelection) if (!eligibleIds.has(id)) _expReimburseSelection.delete(id);
-
-  if (!combined.length) {
-    body.innerHTML = `<tr><td colspan="${window.IS_PUBLISHER ? 9 : (showSelectCol ? 9 : 8)}"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>`;
-    updateBulkReimburseButton();
-    return;
-  }
-
-  // ⚡ Bolt Optimization: Loop Fusion
-  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
-  const unreceived = [];
-  let total = 0;
-  for (const e of combined) {
-    if (!e.received && !e.pendingAuth && !isGratuityExpense(e)) {
-      unreceived.push(e);
-      total += (e.amount || 0);
-    }
-  }
-
-  $('exp-head-row').innerHTML = `<tr>${showSelectCol ? '<th></th>' : ''}<th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
-
-  body.innerHTML = combined.map(e => {
-    if (e.pendingAuth) {
-      const actionCell = window.IS_PUBLISHER
-        ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', '${e._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', '${e._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
-        : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
-      return `<tr style="opacity:0.8;background:var(--amber-bg);">
-        ${showSelectCol ? '<td></td>' : ''}
-        <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
-        <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
-        <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
-        <td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
-        <td>—</td>
-        <td class="r" style="font-weight:600;">${fmt(e.amount, e.currency)}</td>
-        ${window.IS_PUBLISHER ? '<td class="r">—</td>' : ''}
-        <td></td>
-        <td class="r">${actionCell}</td>
-      </tr>`;
-    }
-
-    const isGratuity = isGratuityExpense(e);
-    const statusCell = isGratuity
-      ? '<span class="pill gray" style="font-size:10px;" title="Gifted-copy cost — publisher absorbed, not reimbursed to author">Publisher expense</span>'
-      : e.received
-        ? '<span class="pill green" style="font-size:10px;">✓ Received</span>'
-        : '<span style="font-size:11px;color:var(--text3);">Pending</span>';
-    const actionCell = (!e.received && !isAuthor() && !isGratuity)
-      ? `<button class="edit-btn" onclick="voidExpense(${e.id})" title="Remove" aria-label="Remove" style="opacity:1;color:var(--red);">✕</button>` : '';
-    const baseReceiptLink = e.receipt ? (
-      e.receipt.startsWith('local://')
-        ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
-        : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
-    ) : isGratuity
-      ? `<span class="pill gray" style="font-size:10px;" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>`
-      : isRentExpense(e)
-        ? `<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — verified via lease agreement & bank record)">Lease record</span>`
-        : `<span style="font-size:11px;color:var(--text3); font-weight: 500;">Missing</span>`;
-    const trackLink = e.trackingUrl
-      ? ` <a href="${e.trackingUrl}" target="_blank" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
-      : '';
-    const receiptCell = baseReceiptLink + trackLink;
-
-    // Calculate multi-currency stuff
-    const eCur = e.currency || cur;
-    const isBase = !eCur || eCur === 'CAD' || eCur === 'CA$' || normalizeCurrencyCode(eCur) === 'CAD';
-    let baseAmountText = '';
-    let baseAmountTitle = '';
-
-    if (window.IS_PUBLISHER) {
-      if (isBase) {
-        baseAmountText = '-';
-      } else if (e.baseAmount) {
-        baseAmountText = fmt(e.baseAmount, 'CAD');
-      } else if (Number(e.fxRate) > 0) {
-        baseAmountText = fmt(e.amount * Number(e.fxRate), 'CAD');
-      } else if (_fxRateCache[`${eCur}_CAD`]) {
-        baseAmountText = fmt(e.amount * _fxRateCache[`${eCur}_CAD`], 'CAD');
-      } else {
-        baseAmountText = '<span style="color:var(--amber);" title="Missing exchange rate">⚠️</span>';
-      }
-      // Audit trail: show the exact rate used and on which date.
-      const usedRate = (Number(e.fxRate) > 0) ? Number(e.fxRate) : _fxRateCache[`${eCur}_CAD`];
-      if (!isBase && usedRate > 0) {
-        baseAmountTitle = `1 ${eCur} = ${usedRate.toFixed(4)} CAD${e.date ? ` on ${e.date}` : ''}`;
-      }
-    }
-
-    const selectCell = showSelectCol
-      ? (eligibleIds.has(e.id)
-        ? `<td><input type="checkbox" onchange="toggleExpenseReimburseSelect(${e.id}, this.checked)" ${_expReimburseSelection.has(e.id) ? 'checked' : ''}></td>`
-        : '<td></td>')
-      : '';
-
-    const isSettledReimbursable = e.received && !isGratuity;
-    return `<tr style="${isSettledReimbursable ? 'opacity:.5;' : ''}">
-      ${selectCell}
-      <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
-      <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
-      <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
-      <td style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
-      <td>${receiptCell}</td>
-      <td class="r" style="color:${isSettledReimbursable ? 'var(--text4)' : 'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount, eCur)}</td>
-      ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
-      <td>${statusCell}</td>
-      <td>${actionCell}</td>
-    </tr>`;
-  }).join('')
-    + `<tr style="background:var(--cream2);">
-      <td colspan="${showSelectCol ? 6 : 5}" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding</td>
-      <td class="r" style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${fmt(total, cur)}</td>
-      <td colspan="${window.IS_PUBLISHER ? 3 : 2}"></td>
-    </tr>`;
-
-  updateBulkReimburseButton();
-}
-
-function toggleExpenseReimburseSelect(id, checked) {
-  if (checked) _expReimburseSelection.add(id);
-  else _expReimburseSelection.delete(id);
-  updateBulkReimburseButton();
-}
-
-function updateBulkReimburseButton() {
-  const btn = $('exp-bulk-reimburse-btn');
-  const countEl = $('exp-bulk-reimburse-count');
-  if (!btn) return;
-  const n = _expReimburseSelection.size;
-  if (countEl) countEl.textContent = n;
-  btn.style.display = n > 0 ? '' : 'none';
-}
-
-// Sends one consolidated "please reimburse these" notification to the
-// publisher for every expense the author checked, instead of chasing each
-// one down individually.
-async function requestBulkReimbursement() {
-  const ids = Array.from(_expReimburseSelection);
-  if (!ids.length) return;
-  const s = getState(), book = getBook(), cur = book.currency;
-  const idSet = new Set(ids);
-  const items = (s.expenses || []).filter(e => idSet.has(e.id));
-  if (!items.length) { _expReimburseSelection.clear(); updateBulkReimburseButton(); return; }
-
-  const total = items.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const summary = `Reimbursement requested for ${items.length} expense${items.length !== 1 ? 's' : ''} — ${fmt(total, cur)}`;
-  const btn = $('exp-bulk-reimburse-btn');
-  const oldText = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
-  try {
-    await notifyPublisherSubmission('Reimbursement request', items, summary);
-    showToast(`✓ Requested reimbursement for ${items.length} expense${items.length !== 1 ? 's' : ''}`);
-    _expReimburseSelection.clear();
-    renderExpenses();
-  } catch (e) {
-    console.error(e);
-    showToast('⚠ Could not send reimbursement request', 'err');
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = oldText; }
-  }
-}
 
 // ── SPREADSHEET IMPORT
 let _importRows = [];

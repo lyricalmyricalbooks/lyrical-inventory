@@ -32,7 +32,6 @@ import {
   isAuthor,
   normalizeCountryCode,
   orders,
-  renderExpenses,
   renderHist,
   renderOrders,
   saveState,
@@ -41,7 +40,7 @@ import {
   states,
   today,
 } from '../main.js';
-import { saveReceiptToLocalFile } from './receipts.js';
+import { renderExpenses, saveReceiptToLocalFile } from './receipts.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {
   extractBigCartelAddress,

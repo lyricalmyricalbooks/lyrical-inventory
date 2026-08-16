@@ -25,22 +25,28 @@ import {
   TAX_CENTER,
   TC_CATEGORIES,
   _fxRateCache,
+  _tcOpenTripName,
   calculateFinancials,
   defaultState,
+  ensurePdfJs,
   isAuthor,
   isTestBook,
   isTestBookId,
-  ensurePdfJs,
   loadTaxCenter,
   openEditSale,
   saveState,
   showToast,
   states,
   today,
-  _tcEditTripId,
-  _tcOpenTripName,
 } from '../main.js';
-import { _localReceiptCell, loadReceiptFolderHandle, resolveLocalReceiptFile, saveReceiptBestEffort } from './receipts.js';
+import {
+  _localReceiptCell,
+  getPendingWebcamReceipt,
+  loadReceiptFolderHandle,
+  resolveLocalReceiptFile,
+  saveReceiptBestEffort,
+  setPendingWebcamReceipt,
+} from './receipts.js';
 import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import { renderShippingReconciliationWorklist } from './shipping.js';
 import { escapeHtml } from '../lib/html.js';
@@ -3628,103 +3634,154 @@ function downloadTaxLedgerCSV() {
   // is what keeps a `·` or an accented description from arriving as mojibake.
   downloadCsv(toCsv(rows, { bom: true, eol: '\r\n' }), `Tax_Ledger_${today()}.csv`);
 }
+
+// ── LOG BUSINESS EXPENSE: RECEIPT DROPZONE ──────────────────────────────
+// These target #tc-exp-file, this tab's own receipt field. They sat in main.js
+// next to the project-ledger dropzone they were copied from, and followed the
+// receipts out of it by proximity rather than by ownership.
+
+// Same dropzone treatment for the Tax Center's Log Business Expense receipt
+// field (#tc-exp-file). Kept separate from expFileChosen/etc above since
+// that pair is wired to the plain ledger expense form's #exp-file ids.
+// These three sites used to read and write `window._pendingWebcamReceipt`,
+// which is a DIFFERENT property from the module-scoped `_pendingWebcamReceipt`
+// that useReceiptPhoto() sets and that submitExpense/saveExpenseEdit read.
+// Nothing ever wrote the window one, so the read was always falsy and the write
+// cleared nothing. They now go through the accessors, which is plainly what the
+// code was written to do: clearing the receipt field clears the pending capture.
+function tcExpFileChosen() {
+  const input = $('tc-exp-file'), chip = $('tc-exp-file-chip'), nameEl = $('tc-exp-file-name'), dz = $('tc-exp-dropzone');
+  const pending = getPendingWebcamReceipt();
+  const hasFile = (input && input.files && input.files.length > 0) || !!pending;
+  if (nameEl && hasFile) nameEl.textContent = input?.files?.[0]?.name || pending?.name || 'receipt';
+  if (chip) chip.style.display = hasFile ? 'flex' : 'none';
+  if (dz) dz.style.display = hasFile ? 'none' : 'flex';
+  const aiBtn = $('tc-ai-scan-btn');
+  if (aiBtn) {
+    aiBtn.disabled = !hasFile;
+    aiBtn.title = hasFile ? 'Scan receipt with Gemini AI' : 'Select or capture a receipt first to enable AI scanning';
+  }
+}
+function tcExpFileClear(ev) {
+  if (ev) ev.preventDefault();
+  const input = $('tc-exp-file');
+  if (input) input.value = '';
+  setPendingWebcamReceipt(null);
+  tcExpFileChosen();
+}
+function tcExpFileDragOver(ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.add('drag'); }
+function tcExpFileDragLeave(ev) { ev.preventDefault(); const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag'); }
+function tcExpFileDrop(ev) {
+  ev.preventDefault();
+  const dz = $('tc-exp-dropzone'); if (dz) dz.classList.remove('drag');
+  const input = $('tc-exp-file');
+  if (input && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
+    try { input.files = ev.dataTransfer.files; } catch (e) { /* older browsers: ignore */ }
+    tcExpFileChosen();
+  }
+}
 export {
-  saveTaxCenter,
-  processRecurringExpenses,
-  tcExpenseRowDragOver,
-  tcExpenseRowDragLeave,
-  tcExpenseRowDrop,
-  downloadTaxReport,
-  _tcSaveLedgerPrefs,
-  _tcRestoreLedgerPrefs,
-  setTcLedgerPage,
-  tcLedgerSearchInput,
-  tcLedgerTypeFilter,
-  tcYearChange,
-  tcLedgerYearChange,
-  tcClearLedgerFilters,
+  _tcAllReceiptItems,
+  isReceiptNoticeDismissed,
   _tcApplyLedgerFilter,
-  _tcRenderRecurringSubscriptions,
-  _tcRenderLedgerPagination,
+  _tcBlobToDataUrl,
+  _tcBuildCashFlowChart,
+  _tcBuildLedger,
+  _tcCashFlowBucketRows,
+  _tcClearConfirmedPending,
+  _tcDeltaChip,
+  _tcFindTripRecord,
+  _tcGetTripsSummaryAll,
+  _tcIsPdfName,
+  _tcPdfToImages,
+  _tcPendingList,
+  _tcRenderCashFlowSummary,
+  _tcRenderCategoryPanel,
   _tcRenderLedgerFilterChip,
   _tcRenderLedgerFoot,
+  _tcRenderLedgerPagination,
   _tcRenderLedgerTable,
-  _tcRenderCategoryPanel,
-  tcSetTripsView,
-  _tcGetTripsSummaryAll,
-  tcRenderQuickTripChips,
-  tcUpdateTripSelectedPreview,
-  tcClearSelectedTrip,
-  tcOpenTripDropdown,
-  tcCloseTripDropdown,
-  tcToggleTripDropdown,
-  tcFilterTripDropdown,
-  tcSelectTripOption,
-  _tcTripRecords,
-  _tcFindTripRecord,
-  openNewTrip,
-  openEditTripDetails,
-  tcNewTripValidate,
-  saveNewTrip,
-  deleteTripRecord,
-  logExpenseForTrip,
-  openPendingExpense,
-  tcPendingValidate,
-  tcPendingRemindIn,
-  savePendingExpense,
-  deletePendingExpense,
-  snoozePendingExpense,
-  confirmPendingExpense,
-  _tcClearConfirmedPending,
-  _tcPendingList,
   _tcRenderPendingPanel,
-  exportTripPDF,
-  _tcTripReportReceipts,
-  _tcIsPdfName,
-  _tcBlobToDataUrl,
-  _tcPdfToImages,
-  _tcResolveReceiptImages,
-  _tcRenderTripsPanel,
-  _tcBuildLedger,
-  _tcRenderStatusHeaders,
-  renderTaxCenter,
-  _tcSvgEsc,
-  _tcDeltaChip,
-  _tcRenderCashFlowSummary,
-  _tcCashFlowBucketRows,
-  _tcRenderSelectedCashFlowBucket,
-  tcSelectCashFlowBucket,
-  tcSetCashFlowDetailType,
-  tcClearCashFlowBucket,
-  _tcBuildCashFlowChart,
-  openEditArtistPayout,
-  saveTaxCenterSettings,
-  openRecurringEditor,
-  saveRecurringEditor,
-  updateRecurringPreview,
-  toggleRecurringPause,
-  tcSetRecurringFilter,
-  tcShowRecurringCharges,
-  removeRecurring,
-  downloadTaxLedgerCSV,
-  dismissReceiptNotice,
-  resetDismissedReceiptNotices,
-  isReceiptNoticeDismissed,
-  switchTaxCenterSubTab,
-  tcSubNavKeydown,
-  tcFilterLedgerByReceiptStorage,
-  openTaxSeasonPreflightModal,
-  tcJumpToFixPreflightIssues,
-  executeFullTaxSeasonExport,
-  tcSetVaultView,
-  tcGallerySearchInput,
-  tcGalleryFilterChange,
   _tcRenderReceiptGallery,
-  setTcGalleryPage,
+  _tcRenderRecurringSubscriptions,
+  _tcRenderSelectedCashFlowBucket,
+  _tcRenderStatusHeaders,
+  _tcRenderTripsPanel,
+  _tcResolveReceiptImages,
+  _tcRestoreLedgerPrefs,
+  _tcSaveLedgerPrefs,
+  _tcSvgEsc,
+  _tcTripRecords,
+  _tcTripReportReceipts,
+  confirmPendingExpense,
+  deletePendingExpense,
+  deleteTripRecord,
+  dismissReceiptNotice,
+  downloadTaxLedgerCSV,
+  downloadTaxReport,
+  executeFullTaxSeasonExport,
+  exportTripPDF,
+  logExpenseForTrip,
+  openEditArtistPayout,
+  openEditTripDetails,
+  openNewTrip,
+  openPendingExpense,
   openReceiptLightbox,
-  tcLightboxZoom,
-  tcLightboxRotate,
-  tcLightboxReset,
+  openRecurringEditor,
+  openTaxSeasonPreflightModal,
+  processRecurringExpenses,
+  removeRecurring,
+  renderTaxCenter,
+  resetDismissedReceiptNotices,
+  saveNewTrip,
+  savePendingExpense,
+  saveRecurringEditor,
+  saveTaxCenter,
+  saveTaxCenterSettings,
+  setTcGalleryPage,
+  setTcLedgerPage,
+  snoozePendingExpense,
+  switchTaxCenterSubTab,
+  tcClearCashFlowBucket,
+  tcClearLedgerFilters,
+  tcClearSelectedTrip,
+  tcCloseTripDropdown,
+  tcExpFileChosen,
+  tcExpFileClear,
+  tcExpFileDragLeave,
+  tcExpFileDragOver,
+  tcExpFileDrop,
+  tcExpenseRowDragLeave,
+  tcExpenseRowDragOver,
+  tcExpenseRowDrop,
+  tcFilterLedgerByReceiptStorage,
+  tcFilterTripDropdown,
+  tcGalleryFilterChange,
+  tcGallerySearchInput,
+  tcJumpToFixPreflightIssues,
+  tcLedgerSearchInput,
+  tcLedgerTypeFilter,
+  tcLedgerYearChange,
   tcLightboxNav,
-  _tcAllReceiptItems,
+  tcLightboxReset,
+  tcLightboxRotate,
+  tcLightboxZoom,
+  tcNewTripValidate,
+  tcOpenTripDropdown,
+  tcPendingRemindIn,
+  tcPendingValidate,
+  tcRenderQuickTripChips,
+  tcSelectCashFlowBucket,
+  tcSelectTripOption,
+  tcSetCashFlowDetailType,
+  tcSetRecurringFilter,
+  tcSetTripsView,
+  tcSetVaultView,
+  tcShowRecurringCharges,
+  tcSubNavKeydown,
+  tcToggleTripDropdown,
+  tcUpdateTripSelectedPreview,
+  tcYearChange,
+  toggleRecurringPause,
+  updateRecurringPreview,
 };

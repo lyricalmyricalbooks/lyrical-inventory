@@ -17,17 +17,17 @@ const MAIN_IMPORT_BUDGET = {
   'bigcartel.js': 16,
   // +1 for ensurePdfJs: the printable trip report rasterises PDF receipts, and
   // that primitive stays in main.js. The receipt-file primitives it used to
-  // take from main.js now come from receipts.js instead, which is why this
-  // dropped by four.
-  'taxcentre.js': 20,
-  // Went 15 -> 24 when receipt capture joined, which is the opposite of what
-  // was predicted. The five AI-scanner names did stop crossing the seam as
-  // expected, but capture brought fourteen dependencies of its own with it
-  // (activeBook, addLog, fetchLiveRate, fetchSheetsCapabilities, getBook,
-  // getState, isAuthor, notifyPublisherSubmission, renderExpenses,
-  // reportClientError, sheetsUrl, today, updateDash, _fxRateCache) — it talks
-  // to the expense ledger, the FX rates and the Sheets bridge in a way the
-  // filing half never did. renderExpenses leaves when the ledger moves next.
+  // take from main.js now come from receipts.js instead. Dropped again when the
+  // Log Business Expense dropzone handlers moved in from main.js: they belong to
+  // this tab's own form, and bringing them here cost one name ($) while the
+  // expense ledger they used to reach through main.js left with the receipts.
+  'taxcentre.js': 19,
+  // Went 15 -> 24 when receipt capture joined: the AI-scanner names stopped
+  // crossing the seam as predicted, but capture brought fourteen dependencies
+  // of its own, because it talks to the expense ledger, the FX rates and the
+  // Sheets bridge in ways the filing half never did. Holding at 24 now that the
+  // ledger itself has moved in — renderExpenses stopped crossing, but the form
+  // it came with needs the book/state helpers in its place.
   'receipts.js': 24,
 };
 
