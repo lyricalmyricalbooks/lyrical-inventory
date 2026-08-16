@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
+import { appSource } from './helpers/extract-decl.js';
 import { resolve } from 'path';
 
 const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8');
 const styleCss = readFileSync(resolve(__dirname, '../src/style.css'), 'utf8');
 const themeDarkCss = readFileSync(resolve(__dirname, '../src/styles/theme-dark.css'), 'utf8');
-const mainJs = readFileSync(resolve(__dirname, '../src/main.js'), 'utf8');
+// Receipt capture and the AI scan moved to src/features/receipts.js; the tax
+// centre's own code lives in src/features/taxcentre.js. These assertions are
+// about the app's behaviour, not which file holds it.
+const mainJs = appSource;
 const taxcentreJs = readFileSync(resolve(__dirname, '../src/features/taxcentre.js'), 'utf8');
 
 describe('Tax Centre UX Enhancements Suite (#2, #3, #10, #15, #18, #19)', () => {

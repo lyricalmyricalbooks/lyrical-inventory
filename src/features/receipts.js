@@ -21,50 +21,79 @@
 import {
   $,
   BOOKS,
-  RECEIPT_SCAN_SCHEMA,
   TAX_CATEGORIES,
   TAX_CENTER,
   TC_CATEGORIES,
-  _buildReceiptScanPrompt,
-  _callGeminiForReceipts,
   _editingExpense,
-  _parseReceiptJson,
-  _prepareReceiptUpload,
+  _fxRateCache,
+  activeBook,
+  addLog,
+  fetchLiveRate,
+  fetchSheetsCapabilities,
+  getBook,
+  getState,
+  isAuthor,
   isGratuityExpense,
+  notifyPublisherSubmission,
+  renderExpenses,
+  reportClientError,
   saveState,
+  sheetsUrl,
   showToast,
   states,
+  today,
+  updateDash,
 } from '../main.js';
 import { escapeHtml } from '../lib/html.js';
-import { fmt } from '../lib/money.js';
-import { openM, closeM, confirmDialog } from '../lib/modal.js';
+import { fmt, getBookCurrencyCode } from '../lib/money.js';
+import { closeM, confirmDialog, openM } from '../lib/modal.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadBlob } from '../lib/download.js';
 import { createZip, textEntry } from '../lib/zip.js';
 import { planFile } from '../lib/receipt-match.js';
+import { renderTaxCenter, saveTaxCenter, tcExpenseRowDrop } from './taxcentre.js';
 import {
-  cloudReceiptRefs, externalLinkRefs, isCloudReceipt, isExternalLink,
-  isLocalReceipt, isOurCloudReceipt, isRentExpense, localRefPath,
-  receiptOwners, receiptRefsOf, toLocalRef, uniqueFileName, writeReceiptRefs,
+  cloudReceiptRefs,
+  externalLinkRefs,
+  isCloudReceipt,
+  isExternalLink,
+  isLocalReceipt,
+  isOurCloudReceipt,
+  isRentExpense,
+  localRefPath,
+  receiptOwners,
+  receiptRefsOf,
+  toLocalRef,
+  uniqueFileName,
+  writeReceiptRefs,
 } from '../lib/receipt-storage.js';
 import {
-  PREVIEW_MAX_EDGE, PREVIEW_QUALITY, cacheKeyFor, cachePlanFor, cacheStats,
-  formatCacheSize, planEviction, previewDimensions, uncachedRefs,
+  PREVIEW_MAX_EDGE,
+  PREVIEW_QUALITY,
+  cacheKeyFor,
+  cachePlanFor,
+  cacheStats,
+  formatCacheSize,
+  planEviction,
+  previewDimensions,
+  uncachedRefs,
 } from '../lib/receipt-cache.js';
 import {
-  describeDestination, receiptFileName, receiptFolderPath, vendorFrom,
+  describeDestination,
+  receiptFileName,
+  receiptFolderPath,
+  vendorFrom,
 } from '../lib/receipt-naming.js';
-import {
-  isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef,
-} from '../lib/shippo-invoices.js';
-import { renderTaxCenter, saveTaxCenter, tcExpenseRowDrop } from './taxcentre.js';
+import { isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef } from '../lib/shippo-invoices.js';
 
+// IndexedDB names for the folder handle and the on-device receipt cache.
+// They moved out of main.js with this domain; nothing else uses them.
 const RECEIPT_FOLDER_DB = 'lm-receipt-folder-db';
 const RECEIPT_FOLDER_STORE = 'handles';
 const RECEIPT_FOLDER_KEY = 'preferred-receipt-folder';
-// Standby copies of receipt files, so a moved folder can't blank the ledger.
 const RECEIPT_CACHE_DB = 'lm-receipt-cache-db';
 const RECEIPT_CACHE_STORE = 'blobs';
+
 // ── LOCAL RECEIPT FILING
 async function openReceiptHandleDb() {
   return new Promise((resolve, reject) => {
@@ -1918,20 +1947,2965 @@ function closeCloudReceiptsModal() {
   closeM('cloud-receipts');
 }
 
+
+// ── RECEIPT CAPTURE ─────────────────────────────────────────────────────
+// The dropzone, the email/Gmail receipt import, the AI scan and batch expense
+// entry. Moved here in the step after the filing half, which is why the AI
+// scanner no longer crosses the seam: the organiser calls it directly now.
+
+// ── Receipt dropzone (expense form) — styled file chip + drag-and-drop.
+// Reflects the chosen file into a chip and toggles the dropzone prompt. The
+// underlying #exp-file input stays the single source of truth that
+// submitExpense / scanProjectReceiptWithAI read from.
+function expFileChosen() {
+  const input = $('exp-file'), chip = $('exp-file-chip'), nameEl = $('exp-file-name'), dz = $('exp-dropzone');
+  const hasFile = input && input.files && input.files.length > 0;
+  if (nameEl && hasFile) nameEl.textContent = input.files[0].name;
+  if (chip) chip.style.display = hasFile ? 'flex' : 'none';
+  if (dz) dz.style.display = hasFile ? 'none' : 'flex';
+}
+function expFileClear(ev) {
+  if (ev) ev.preventDefault();
+  const input = $('exp-file');
+  if (input) input.value = '';
+  expFileChosen();
+}
+function expFileDragOver(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.add('drag'); }
+function expFileDragLeave(ev) { ev.preventDefault(); const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag'); }
+function expFileDrop(ev) {
+  ev.preventDefault();
+  const dz = $('exp-dropzone'); if (dz) dz.classList.remove('drag');
+  const input = $('exp-file');
+  if (input && ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
+    try { input.files = ev.dataTransfer.files; } catch (e) { /* older browsers: ignore */ }
+    expFileChosen();
+  }
+}
+
+// Project-ledger receipt scan. The shared runner also fills category and ref,
+// which this form has but the old 3-key prompt never asked for.
+async function scanProjectReceiptWithAI() {
+  return _runReceiptScan({
+    fileId: 'exp-file', btnId: 'exp-ai-btn',
+    descId: 'exp-desc', dateId: 'exp-date', amountId: 'exp-amount',
+    curId: 'exp-cur', catId: 'exp-cat', refId: 'exp-ref'
+  });
+}
+
+// ── EMAIL RECEIPT IMPORT
+// Module-level draft store so we don't smuggle JSON through onclick attributes.
+let _emailReceiptDrafts = [];
+let _activeEmailImportTab = 'gmail';
+let _gmailEmailsFetched = [];
+let _gmailSearchMeta = null;
+let _emailContentCache = {};
+// Selection lived only in `:checked` DOM nodes, so re-rendering the list (a
+// fresh search, a preset chip) silently wiped it. This is the source of truth;
+// the checkbox `checked` state is just its rendering.
+let _gmailSelectedIds = new Set();
+// Receipts pushed in by the Gmail add-on (Firestore `emailReceiptInbox`).
+let _emailInboxItems = [];
+let _emailInboxSeen = null; // Set of seen ids; null until the first snapshot.
+
+const EXPENSE_CATEGORIES = [
+  'Software & Subscriptions', 'Marketing & Advertising', 'Printing & Production',
+  'Editorial & Proofreading', 'Illustration & Photography', 'Rights & Permissions',
+  'ISBN, Barcodes & Cataloging', 'Shipping & Postage', 'Warehousing & Fulfillment',
+  'Packaging Materials', 'Office Supplies', 'Home Office', 'Travel & Meals', 'Professional Services',
+  'Sales Processing Fees',
+  'Books, Research & Reference', 'Events & Exhibitions', 'Other'
+];
+
+function inferReceiptCategory(vendor, description) {
+  const hay = `${vendor || ''} ${description || ''}`.toLowerCase();
+  if (typeof TAX_CATEGORIES === 'object' && TAX_CATEGORIES) {
+    for (const kw in TAX_CATEGORIES) {
+      if (hay.includes(kw)) return TAX_CATEGORIES[kw];
+    }
+  }
+  // Extra heuristics for common online vendors
+  const map = [
+    ['stripe', 'Software & Subscriptions'],
+    ['paypal', 'Professional Services'],
+    ['amazon', 'Office Supplies'],
+    ['etsy', 'Marketing & Advertising'],
+    ['canva', 'Software & Subscriptions'],
+    ['notion', 'Software & Subscriptions'],
+    ['github', 'Software & Subscriptions'],
+    ['openai', 'Software & Subscriptions'],
+    ['anthropic', 'Software & Subscriptions'],
+    ['gemini', 'Software & Subscriptions'],
+    ['canada post', 'Shipping & Postage'],
+    ['stallion', 'Shipping & Postage'],
+    ['chit chats', 'Shipping & Postage'],
+    ['ingram', 'Printing & Production'],
+    ['lulu', 'Printing & Production'],
+    ['blurb', 'Printing & Production'],
+    ['vistaprint', 'Printing & Production'],
+    ['costco', 'Office Supplies'],
+    ['staples', 'Office Supplies'],
+    ['uline', 'Packaging Materials'],
+    ['airbnb', 'Travel & Meals'],
+    ['rent', 'Home Office'],
+    ['landlord', 'Home Office'],
+    ['property management', 'Home Office'],
+    ['hydro', 'Home Office'],
+    ['electric', 'Home Office'],
+    ['enbridge', 'Home Office'],
+    ['utility', 'Home Office'],
+    ['utilities', 'Home Office'],
+    ['internet', 'Home Office'],
+    ['rogers', 'Home Office'],
+    ['bell canada', 'Home Office'],
+    ['telus', 'Home Office'],
+    ['comcast', 'Home Office'],
+    ['home insurance', 'Home Office'],
+    ['tenant insurance', 'Home Office'],
+    ['condo fee', 'Home Office'],
+    ['strata', 'Home Office'],
+    ['property tax', 'Home Office']
+  ];
+  for (const [kw, cat] of map) if (hay.includes(kw)) return cat;
+  return 'Other';
+}
+
+// Best-effort date normalization to YYYY-MM-DD
+function normalizeReceiptDate(s) {
+  if (!s) return '';
+  const t = String(s).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const d = new Date(t);
+  // Format in LOCAL time. toISOString() converts to UTC, so any evening
+  // timestamp ("2026-03-05 20:14") rolled forward a day west of Greenwich —
+  // which then broke _findDuplicateExpense's exact date-string match and let
+  // the same purchase import twice.
+  if (!isNaN(d.getTime())) {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+  return '';
+}
+
+// Decode quoted-printable + strip MIME headers + collapse HTML to text
+function parseEmlOrText(raw) {
+  if (!raw) return '';
+  let body = String(raw);
+  // If it looks like a raw .eml (RFC 5322), drop headers up to first blank line
+  if (/^[A-Za-z-]+:\s.+\r?\n/.test(body) && /\n\r?\n/.test(body)) {
+    const idx = body.search(/\r?\n\r?\n/);
+    if (idx > 0 && idx < body.length / 2) body = body.slice(idx).trim();
+  }
+  // Naive quoted-printable decode for =XX hex pairs and soft line breaks
+  if (/=[0-9A-F]{2}/.test(body)) {
+    try {
+      body = body.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (_, h) =>
+        String.fromCharCode(parseInt(h, 16))
+      );
+    } catch (_) { /* ignore */ }
+  }
+  // Collapse HTML to text if present
+  if (/<\w+[^>]*>/.test(body)) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = body;
+    body = tmp.textContent || tmp.innerText || body;
+  }
+  return body.replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').trim();
+}
+
+async function readReceiptFiles(files) {
+  const out = []; // [{kind:'text'|'inline', text?, mime?, base64?, name}]
+  for (const file of files) {
+    const name = file.name || 'attachment';
+    const isText = /^(text\/|message\/)/.test(file.type) ||
+      /\.(eml|txt|html?|md)$/i.test(name);
+    if (isText) {
+      const txt = await file.text();
+      out.push({ kind: 'text', text: parseEmlOrText(txt), name });
+    } else {
+      const buf = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const base64 = String(buf).split(',')[1] || '';
+      out.push({
+        kind: 'inline',
+        mime: file.type || 'application/octet-stream',
+        base64,
+        name
+      });
+    }
+  }
+  return out;
+}
+
+function openEmailReceiptImportModal() {
+  openM('email-receipt-import-modal');
+  if ($('email-receipt-results')) $('email-receipt-results').innerHTML = '';
+  _emailReceiptDrafts = [];
+  _activeEmailImportTab = 'gmail';
+  _gmailSelectedIds = new Set();
+  _activeGmailPresetIdx = -1;
+  _emailAttExcluded = {};
+  _emailExtractCache = {};
+
+  // Reset tab to Gmail
+  switchEmailImportTab('gmail');
+
+  // Render Preset chips
+  renderGmailChips();
+
+  // Set default search query
+  const queryInput = $('email-gmail-search-query');
+  if (queryInput) {
+    queryInput.value = 'newer_than:30d (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")';
+    // Enter-to-search: previously the only way to run a hand-edited query was
+    // to click the Search button — the field itself did nothing on Enter.
+    queryInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); searchGmailEmails(); } };
+  }
+
+  // Msg ids are immutable, so a previous search's results and downloaded
+  // content are never stale — re-render them instead of paying for the whole
+  // search + content fetch again every time the modal is reopened.
+  if (_gmailEmailsFetched.length) {
+    renderGmailEmailsList();
+  } else {
+    const listWrap = $('email-gmail-list-wrap');
+    if (listWrap) {
+      listWrap.innerHTML = `
+        <div class="empty-state" style="padding:30px 20px;font-size:12px;color:var(--text3);text-align:center;">
+          <span style="font-size:24px;display:block;margin-bottom:8px;">📬</span>
+          Click a quick preset or search above to pull recent emails.
+        </div>`;
+    }
+  }
+
+  const fileInput = $('email-receipt-files');
+  const list = $('email-receipt-files-list');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.onchange = () => {
+      if (list) {
+        const fs = Array.from(fileInput.files || []);
+        list.innerHTML = fs.length
+          ? fs.map(f => `• ${f.name} <span style="opacity:.6;">(${Math.round(f.size / 1024)} KB)</span>`).join('<br>')
+          : '';
+      }
+      _updateEmailExtractButtonLabel();
+    };
+  }
+  const sourceInput = $('email-receipt-source');
+  if (sourceInput) sourceInput.oninput = () => _updateEmailExtractButtonLabel();
+
+  _updateEmailExtractButtonLabel();
+
+  // Surface anything the Gmail add-on has pushed in as ready-to-edit drafts.
+  loadGmailInboxDrafts();
+}
+
+function closeEmailReceiptImportModal() {
+  // Closing the modal must actually stop an in-flight extraction — otherwise
+  // it keeps hitting Apps Script and Gemini against a hidden, orphaned UI.
+  if (_emailExtractAbort) _emailExtractAbort.abort();
+  closeM('email-receipt-import-modal');
+}
+
+// ── Gmail add-on inbox ───────────────────────────────────────────────
+// The add-on writes draft expenses to Firestore `emailReceiptInbox`; we watch
+// that collection live and feed items into the existing review/import flow.
+function startEmailInboxWatcher() {
+  if (isAuthor() || typeof window._fbWatchEmailInbox !== 'function') return;
+  window._fbWatchEmailInbox(items => {
+    _emailInboxItems = Array.isArray(items) ? items : [];
+    const ids = new Set(_emailInboxItems.map(i => i._inboxId));
+    // Only toast for items that landed after the first snapshot, so we don't
+    // shout on every page load about a backlog the user already knows about.
+    if (_emailInboxSeen) {
+      const fresh = _emailInboxItems.filter(i => !_emailInboxSeen.has(i._inboxId));
+      if (fresh.length) {
+        showToast(`📥 ${fresh.length} receipt${fresh.length > 1 ? 's' : ''} sent from Gmail — open Import from Email to review`, 'ok', 6000);
+      }
+    }
+    _emailInboxSeen = ids;
+    updateEmailInboxBadge();
+    // If the import modal is already open, refresh the loaded drafts live.
+    const modal = $('m-email-receipt-import-modal');
+    if (modal && modal.style.display !== 'none') loadGmailInboxDrafts();
+  });
+}
+
+function updateEmailInboxBadge() {
+  const badge = $('email-inbox-badge');
+  if (!badge) return;
+  const n = _emailInboxItems.length;
+  badge.textContent = n ? String(n) : '';
+  badge.style.display = n ? '' : 'none';
+}
+
+// Map an inbox doc to the editable-draft shape the import table expects.
+function _inboxItemToDraft(item) {
+  return {
+    vendor: item.vendor || '',
+    description: item.description || item.vendor || 'Email receipt',
+    date: normalizeReceiptDate(item.date) || today(),
+    amount: Number(item.amount || 0),
+    currency: String(item.currency || 'CAD').toUpperCase().slice(0, 3),
+    reference: item.reference || '',
+    category: EXPENSE_CATEGORIES.includes(item.category)
+      ? item.category
+      : inferReceiptCategory(item.vendor, item.description),
+    sourceSnippet: item.sourceSnippet || '',
+    confidence: typeof item.confidence === 'number' ? item.confidence : 1,
+    include: true,
+    // Receipt file(s) the add-on uploaded to Firebase Storage.
+    receipt: item.receipt || '',
+    receiptUrls: Array.isArray(item.receiptUrls) ? item.receiptUrls : (item.receipt ? [item.receipt] : []),
+    _inboxId: item._inboxId
+  };
+}
+
+// Load add-on receipts into the import modal's draft table (with a banner).
+// A live Firestore snapshot calls this on every change to the inbox queue —
+// including while the user is mid-review of a Gemini extraction. It used to
+// unconditionally overwrite _emailReceiptDrafts, silently discarding any
+// edits to a batch that didn't come from the inbox queue.
+function loadGmailInboxDrafts(force) {
+  if (!_emailInboxItems.length) return;
+
+  const hasUnsavedReview = !force && _emailReceiptDrafts.length > 0
+    && _emailReceiptDrafts.some(d => !d._inboxId);
+  if (hasUnsavedReview) {
+    const wrap = $('email-receipt-results');
+    if (wrap && !wrap.querySelector('[data-inbox-pending-banner]')) {
+      const n = _emailInboxItems.length;
+      const banner = document.createElement('div');
+      banner.setAttribute('data-inbox-pending-banner', '1');
+      banner.className = 'email-extract-summary';
+      banner.innerHTML = `📥 ${n} new receipt${n > 1 ? 's' : ''} arrived from the Gmail add-on — `
+        + `<button type="button" class="btn sm" onclick="loadGmailInboxDrafts(true)">Load them</button> (replaces the drafts below)`;
+      wrap.prepend(banner);
+    }
+    return;
+  }
+
+  _emailReceiptDrafts = _emailInboxItems.map(_inboxItemToDraft);
+  renderEmailReceiptDrafts(_emailReceiptDrafts);
+  const wrap = $('email-receipt-results');
+  if (wrap && !wrap.querySelector('[data-inbox-banner]')) {
+    const banner = document.createElement('div');
+    banner.setAttribute('data-inbox-banner', '1');
+    banner.style.cssText = 'background:rgba(40,140,90,.08);border:1px solid rgba(40,140,90,.25);border-radius:var(--r2);padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.5;';
+    const n = _emailInboxItems.length;
+    banner.innerHTML = `📥 <b>${n}</b> receipt${n > 1 ? 's' : ''} sent from the Gmail add-on. Review below and import — each imported row is cleared from the queue.`;
+    wrap.prepend(banner);
+  }
+}
+
+// Pull the receipt file(s) the Gmail add-on staged in Firebase Storage into the
+// local receipts folder — the same place manually-attached email receipts go —
+// and return the local:// path of the first one. Returns '' when no folder is
+// connected, so the caller keeps the cloud URL as the receipt instead.
+async function localizeInboxReceiptFiles(item) {
+  if (typeof saveReceiptToLocalFile !== 'function') return '';
+  const urls = (Array.isArray(item.receiptUrls) && item.receiptUrls.length)
+    ? item.receiptUrls
+    : (item.receipt && /^https?:/i.test(item.receipt) ? [item.receipt] : []);
+  if (!urls.length) return '';
+
+  const downloadedFiles = await Promise.all(urls.map(async (url) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      // Filename from the Storage object path: …/o/receipts%2Femail-imports%2F<id>%2F<name>?…
+      let name = decodeURIComponent((url.split('/o/')[1] || '').split('?')[0] || '').split('/').pop();
+      name = (name || 'receipt').replace(/[^a-zA-Z0-9.\-_]/g, '') || 'receipt';
+      return { url, blob, name };
+    } catch (_) {
+      return null;
+    }
+  }));
+
+  let firstLocal = '';
+  for (const dl of downloadedFiles) {
+    if (!dl) continue;
+    const { url, blob, name } = dl;
+    try {
+      const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
+      const local = await saveReceiptToLocalFile(file, 'email-imports');
+      if (local) {
+        if (!firstLocal) firstLocal = local;
+        // The cloud copy was only a staging area — remove it now it's local.
+        try { await window._fbDeleteReceipt(url); } catch (_) { }
+      }
+    } catch (_) { /* skip this file, keep going */ }
+  }
+  return firstLocal;
+}
+
+function switchEmailImportTab(tab) {
+  _activeEmailImportTab = tab;
+  const tabGmail = $('email-tab-gmail');
+  const tabManual = $('email-tab-manual');
+  const panelGmail = $('email-panel-gmail');
+  const panelManual = $('email-panel-manual');
+  if (tab === 'gmail') {
+    tabGmail?.classList.add('active');
+    tabManual?.classList.remove('active');
+    if (panelGmail) panelGmail.style.display = 'block';
+    if (panelManual) panelManual.style.display = 'none';
+  } else {
+    tabGmail?.classList.remove('active');
+    tabManual?.classList.add('active');
+    if (panelGmail) panelGmail.style.display = 'none';
+    if (panelManual) panelManual.style.display = 'block';
+  }
+  _updateEmailExtractButtonLabel();
+}
+
+// Single source of truth for the quick-preset chips — this used to be
+// copy-pasted into both renderGmailChips and applyGmailPresetQuery, so
+// editing one without the other made a chip's label lie about its query.
+const GMAIL_RECEIPT_PRESETS = [
+  { label: 'Past 7 Days', query: 'newer_than:7d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+  { label: 'Past 30 Days', query: 'newer_than:30d -from:me (subject:(receipt OR invoice OR bill OR order OR purchase OR payment) OR "receipt" OR "invoice" OR "payment")' },
+  { label: 'With Attachments', query: 'newer_than:30d has:attachment -from:me (receipt OR invoice OR bill)' },
+  { label: 'Invoices / Bills', query: '-from:me (subject:(receipt OR invoice OR bill OR payment OR order OR purchase OR confirmation) OR "receipt" OR "invoice" OR "payment")' },
+  { label: 'Shipping costs', query: '-from:me subject:(shipping OR postage OR label OR shippo OR ups OR fedex OR dhl OR tracking)' }
+];
+let _activeGmailPresetIdx = -1;
+
+function renderGmailChips() {
+  const chipsContainer = $('email-gmail-chips');
+  if (!chipsContainer) return;
+  chipsContainer.innerHTML = GMAIL_RECEIPT_PRESETS.map((p, idx) => {
+    return `<button type="button" class="filter-chip${idx === _activeGmailPresetIdx ? ' active' : ''}" onclick="applyGmailPresetQuery(${idx})">${escapeHtml(p.label)}</button>`;
+  }).join('');
+}
+
+function applyGmailPresetQuery(index) {
+  const p = GMAIL_RECEIPT_PRESETS[index];
+  if (!p) return;
+  _activeGmailPresetIdx = index;
+  const input = $('email-gmail-search-query');
+  if (input) input.value = p.query;
+  document.querySelectorAll('#email-gmail-chips .filter-chip').forEach((chip, idx) => {
+    chip.classList.toggle('active', idx === index);
+  });
+  searchGmailEmails();
+}
+
+async function searchGmailEmails() {
+  if (!sheetsUrl) {
+    showToast('Connect Google Sheets first to scan Gmail', 'warn');
+    return;
+  }
+  if (!navigator.onLine) {
+    showToast('Offline — reconnect to search Gmail. You can still use Paste & Upload.', 'warn');
+    return;
+  }
+  const queryInput = $('email-gmail-search-query');
+  const query = (queryInput?.value || '').trim();
+  if (!query) {
+    showToast('Please enter a search query', 'warn');
+    return;
+  }
+
+  const btn = $('email-gmail-search-btn');
+  const prevBtnText = btn ? btn.textContent : 'Search';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Searching…';
+  }
+
+  const listWrap = $('email-gmail-list-wrap');
+  if (listWrap) {
+    listWrap.innerHTML = `
+      <div style="padding:40px 20px;text-align:center;">
+        <div class="spinner" style="width:20px;height:20px;margin-bottom:12px;"></div>
+        <div style="font-size:12px;color:var(--text3);">Searching Gmail inbox (Apps Script)…</div>
+      </div>`;
+  }
+
+  // Apps Script reports its own errors as HTTP 200 + {error: ...} — that is a
+  // deterministic failure (bad query, stale deployment) and retrying it three
+  // times just burns ~3x the wait to show the exact same message. Only an
+  // actual transport failure (network drop, 5xx) is worth retrying.
+  const MAX_RETRIES = 2;
+  let attempt = 0;
+  let lastError = null;
+  let data = null;
+
+  while (attempt < MAX_RETRIES) {
+    attempt++;
+    try {
+      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=listReceiptEmails&limit=50&q=' + encodeURIComponent(query);
+      const res = await fetch(destUrl, { method: 'GET', mode: 'cors' });
+      if (!res.ok) {
+        const err = new Error(`HTTP ${res.status}`);
+        err.retryable = res.status >= 500;
+        throw err;
+      }
+      data = await res.json();
+      if (!data || !data.ok) {
+        const err = new Error(data?.error || 'Server returned failure');
+        err.retryable = false;
+        throw err;
+      }
+      break;
+    } catch (err) {
+      lastError = err;
+      data = null;
+      console.warn(`[searchGmailEmails] attempt ${attempt}/${MAX_RETRIES} failed:`, err);
+      const isNetworkDrop = /failed to fetch|networkerror|load failed/i.test(err.message || '');
+      if (attempt < MAX_RETRIES && (err.retryable || isNetworkDrop)) {
+        if (listWrap) {
+          listWrap.innerHTML = `
+            <div style="padding:40px 20px;text-align:center;">
+              <div class="spinner" style="width:20px;height:20px;margin-bottom:12px;"></div>
+              <div style="font-size:12px;color:var(--text3);">Retrying… (${attempt}/${MAX_RETRIES})</div>
+            </div>`;
+        }
+        await new Promise(r => setTimeout(r, 600));
+      } else {
+        break;
+      }
+    }
+  }
+
+  if (data && data.ok) {
+    _gmailEmailsFetched = data.emails || [];
+    // Capture which mailbox answered and how much it matched, so the UI can
+    // prove the search actually reached Gmail (and which account's Gmail).
+    _gmailSearchMeta = {
+      account: data.account || '',
+      query: data.query || query,
+      threadsFound: typeof data.threadsFound === 'number' ? data.threadsFound : null,
+      count: typeof data.count === 'number' ? data.count : _gmailEmailsFetched.length,
+      skipped: typeof data.skipped === 'number' ? data.skipped : 0,
+      skipError: data.skipError || ''
+    };
+    renderGmailEmailsList();
+  } else {
+    const msg = (lastError && lastError.message) ? lastError.message : String(lastError || 'Unknown error');
+    // A raw "Failed to fetch" means the browser couldn't read a CORS response —
+    // almost always an outdated or unauthorized Apps Script deployment rather
+    // than a bad query. Point the user at the real fix instead of a vague hint.
+    const isNetwork = /failed to fetch|networkerror|load failed|cors/i.test(msg);
+    const hint = isNetwork
+      ? 'The Apps Script didn\'t return a readable response. Re-deploy the latest <code>Code.gs</code> as a Web App (Execute as: <b>Me</b> · Who has access: <b>Anyone</b>) and authorize Gmail access when prompted, then try again.'
+      : 'Check that the Apps Script Web App URL is correct and the latest code is deployed.';
+    if (listWrap) {
+      listWrap.innerHTML = `
+        <div class="empty-state" style="padding:20px;color:var(--red);">
+          ❌ Search failed: ${escapeHtml(msg)}<br>
+          <span style="font-size:11px;color:var(--text3);margin-top:6px;display:block;">${hint}</span>
+        </div>`;
+    }
+    showToast(isNetwork ? 'Gmail search failed: Re-deploy Apps Script' : 'Gmail search failed', 'err');
+  }
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = prevBtnText;
+  }
+}
+
+function renderGmailEmailsList() {
+  const listWrap = $('email-gmail-list-wrap');
+  if (!listWrap) return;
+  if (!_gmailEmailsFetched.length) {
+    const meta = _gmailSearchMeta || {};
+    const acct = meta.account ? escapeHtml(meta.account) : '';
+    // Gmail matched threads but every one failed to read — an Apps Script
+    // problem (usually a stale deployment), not an empty mailbox. Say so,
+    // with the real error, instead of the misleading "no emails matched".
+    const allSkipped = typeof meta.threadsFound === 'number' && meta.threadsFound > 0;
+    const acctLine = allSkipped
+      ? `Gmail matched <b>${meta.threadsFound}</b> conversation${meta.threadsFound > 1 ? 's' : ''}${acct ? ` in <b>${acct}</b>` : ''}, but none could be read.`
+      : (acct
+        ? `Searched the Gmail account <b>${acct}</b> — no emails matched.`
+        : 'No matching emails found.');
+    const hint = allSkipped
+      ? `The deployed Apps Script hit an error on every email — copy the latest code from the <b>Connect your Google Sheet</b> tab and deploy a new version.${meta.skipError ? `<br>Error: <code>${escapeHtml(meta.skipError)}</code>` : ''}`
+      : `If your receipts are in a different Google account, re-deploy the Apps Script from that account.
+          Otherwise widen the window (try the <b>Past 30 Days</b> chip) or simplify the query.`;
+    const q = meta.query ? escapeHtml(meta.query) : '';
+    listWrap.innerHTML = `
+      <div class="empty-state" style="padding:26px 20px;font-size:12px;color:var(--text3);text-align:center;line-height:1.6;">
+        <span style="font-size:24px;display:block;margin-bottom:8px;">📭</span>
+        ${acctLine}
+        <span style="font-size:11px;display:block;margin-top:8px;">${hint}</span>
+        ${q ? `<code style="font-size:10px;display:block;margin-top:8px;word-break:break-all;">${q}</code>` : ''}
+      </div>`;
+    return;
+  }
+
+  const importedMsgIds = new Set(
+    (TAX_CENTER.businessExpenses || []).map(e => e.emailMsgId).filter(Boolean)
+  );
+
+  const esc = escapeHtml;
+  const rowsHtml = _gmailEmailsFetched.map((email) => {
+    const dateStr = new Date(email.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+    const attNames = Array.isArray(email.attachmentNames) ? email.attachmentNames : [];
+    const attachmentBadge = email.hasAttachments
+      ? `<span class="pill gray" style="font-size:10px;padding:1px 6px;" title="${esc(attNames.join(', '))}">📎 ${email.attachmentCount}</span>`
+      : '—';
+
+    const fromParts = (email.from || '').match(/^(.*?)\s*<.*>$/);
+    const cleanFrom = fromParts ? fromParts[1].replace(/['"]/g, '').trim() : (email.from || 'Unknown');
+    const isChecked = _gmailSelectedIds.has(email.id);
+    const isImported = importedMsgIds.has(email.id);
+
+    return `
+      <tr class="email-list-row${isChecked ? ' selected' : ''}" id="email-row-${email.id}">
+        <td class="email-list-cell" style="width:36px;text-align:center;">
+          <input type="checkbox" class="gmail-email-cb" data-msg-id="${email.id}" ${isChecked ? 'checked' : ''} onchange="toggleEmailRowSelection('${email.id}', this.checked)">
+        </td>
+        <td class="email-list-cell" style="white-space:nowrap;color:var(--text3);font-size:11px;">${dateStr}</td>
+        <td class="email-list-cell"><div class="email-sender" title="${esc(email.from || '')}">${esc(cleanFrom)}</div></td>
+        <td class="email-list-cell">
+          <div class="email-subject">${esc(email.subject || '(No subject)')}${isImported ? ' <span class="pill green" style="font-size:9px;padding:1px 5px;">imported</span>' : ''}</div>
+          <div class="email-snippet" title="${esc(email.snippet || '')}">${esc(email.snippet || '')}</div>
+        </td>
+        <td class="email-list-cell" style="text-align:center;">${attachmentBadge}</td>
+        <td class="email-list-cell" style="text-align:center;">
+          <button type="button" class="btn sm" id="email-preview-btn-${email.id}" onclick="toggleEmailPreview('${email.id}')">Preview</button>
+        </td>
+      </tr>
+      <tr id="email-preview-row-${email.id}" style="display:none;background:var(--cream3);">
+        <td colspan="6" class="email-list-cell" style="padding:0;">
+          <div class="email-preview-drawer" id="email-preview-drawer-${email.id}">
+            <!-- populated dynamically -->
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const meta = _gmailSearchMeta || {};
+  const shown = _gmailEmailsFetched.length;
+  const moreNote = (typeof meta.threadsFound === 'number' && meta.threadsFound > shown) ? ` of ${meta.threadsFound} matched` : '';
+  const skippedNote = meta.skipped ? ` · ${meta.skipped} unreadable` : '';
+  const metaHeader = `
+    <div class="email-list-meta-header">
+      <span>✓ Searched ${meta.account ? `<b>${escapeHtml(meta.account)}</b>` : 'Gmail'}</span>
+      <span style="white-space:nowrap;display:flex;align-items:center;gap:8px;">
+        ${shown} shown${moreNote}${skippedNote}
+        <button type="button" class="btn sm" onclick="searchGmailEmails()" title="Re-run this search to catch anything new">↻ Refresh</button>
+      </span>
+    </div>`;
+
+  // Preserve scroll position across the rebuild — otherwise every checkbox
+  // click that triggers a re-render (there are none today, but future ones)
+  // and every re-search jumps back to row 1.
+  const prevScroll = listWrap.scrollTop;
+
+  listWrap.innerHTML = `
+    ${metaHeader}
+    <table class="email-list-table">
+      <thead>
+        <tr>
+          <th style="width:36px;"><input type="checkbox" id="gmail-email-select-all" onchange="toggleAllGmailSelections(this.checked)"></th>
+          <th style="width:64px;">Date</th>
+          <th style="width:20%;">Sender</th>
+          <th>Subject</th>
+          <th style="width:56px;text-align:center;">Files</th>
+          <th style="width:74px;text-align:center;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  `;
+  listWrap.scrollTop = prevScroll;
+  _updateEmailExtractButtonLabel();
+}
+
+function toggleEmailRowSelection(msgId, isChecked) {
+  if (isChecked) _gmailSelectedIds.add(msgId);
+  else _gmailSelectedIds.delete(msgId);
+  const row = $('email-row-' + msgId);
+  if (row) row.classList.toggle('selected', isChecked);
+  _updateEmailExtractButtonLabel();
+}
+
+function toggleAllGmailSelections(isChecked) {
+  const checkboxes = document.querySelectorAll('.gmail-email-cb');
+  checkboxes.forEach(cb => {
+    cb.checked = isChecked;
+    const msgId = cb.getAttribute('data-msg-id');
+    toggleEmailRowSelection(msgId, isChecked);
+  });
+}
+
+// Keeps the shared footer button honest about which tab's data it will act
+// on and how many emails are selected, instead of a static "Extract drafts"
+// that silently no-ops if the user is looking at the wrong tab.
+function _updateEmailExtractButtonLabel() {
+  const btn = $('email-receipt-scan-btn');
+  if (!btn) return;
+  if (_activeEmailImportTab === 'gmail') {
+    const n = _gmailSelectedIds.size;
+    btn.textContent = n ? `✨ Extract from ${n} email${n > 1 ? 's' : ''}` : '✨ Select emails to extract';
+    btn.disabled = !n;
+  } else {
+    const pasted = ($('email-receipt-source')?.value || '').trim();
+    const files = ($('email-receipt-files')?.files || []).length;
+    btn.textContent = '✨ Extract from pasted text';
+    btn.disabled = !pasted && !files;
+  }
+}
+
+async function toggleEmailPreview(msgId) {
+  const row = $('email-preview-row-' + msgId);
+  const btn = $('email-preview-btn-' + msgId);
+  if (!row || !btn) return;
+
+  const isVisible = row.style.display !== 'none';
+  if (isVisible) {
+    row.style.display = 'none';
+    btn.textContent = 'Preview';
+  } else {
+    row.style.display = '';
+    btn.textContent = 'Close';
+
+    const drawer = $('email-preview-drawer-' + msgId);
+    if (drawer && !_emailContentCache[msgId]) {
+      drawer.innerHTML = `
+        <div style="padding:16px;text-align:center;">
+          <div class="spinner" style="width:14px;height:14px;margin-bottom:6px;"></div>
+          <div style="font-size:11px;color:var(--text3);">Fetching email contents &amp; attachments…</div>
+        </div>`;
+
+      try {
+        const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=getEmailContent&id=' + msgId;
+        const res = await fetch(destUrl, { method: 'GET', mode: 'cors' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data || !data.ok) throw new Error(data.error || 'Failed to fetch content');
+
+        _emailContentCache[msgId] = data.email;
+        renderEmailPreviewContent(msgId, drawer);
+      } catch (err) {
+        console.error('[toggleEmailPreview]', err);
+        drawer.innerHTML = `<div style="padding:12px;color:var(--red);font-size:11px;">Error loading content: ${escapeHtml(err.message || err)}</div>`;
+      }
+    } else if (drawer) {
+      renderEmailPreviewContent(msgId, drawer);
+    }
+  }
+}
+
+// Build a self-contained HTML receipt from an email that has no file
+// attachment (e.g. an emailed HTML receipt like Anthropic/Stripe). Saving
+// this means every imported expense gets a locally-viewable receipt in the
+// ledger instead of showing "Missing".
+function _emailBodyToReceiptFile(email, item) {
+  const subject = email.subject || item.description || item.vendor || 'Email receipt';
+  const meta = [
+    email.from ? `From: ${email.from}` : '',
+    email.date ? `Date: ${email.date}` : '',
+    item.reference ? `Reference: ${item.reference}` : ''
+  ].filter(Boolean).map(escapeHtml).join('<br>');
+  const bodyHtml = escapeHtml(email.body || '').replace(/\n/g, '<br>');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(subject)}</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:720px;margin:24px auto;padding:0 18px;color:#1a1a1a;line-height:1.5;}
+h1{font-size:18px;margin:0 0 4px;}.meta{color:#666;font-size:12px;margin-bottom:18px;border-bottom:1px solid #ddd;padding-bottom:12px;}
+.body{font-size:13px;white-space:normal;}</style></head>
+<body><h1>${escapeHtml(subject)}</h1><div class="meta">${meta}</div><div class="body">${bodyHtml}</div></body></html>`;
+  const nameBase = (item.vendor || subject || 'receipt')
+    .replace(/[^a-zA-Z0-9.\-_ ]/g, '').trim().slice(0, 60) || 'receipt';
+  return new File([html], `${nameBase}.html`, { type: 'text/html' });
+}
+
+// Per-message set of attachment indices the user has explicitly UNticked in
+// the preview drawer. The drawer's DOM is destroyed every time it's closed
+// and reopened, so without this store, unticking a fat irrelevant PDF and
+// reopening the drawer silently re-armed it for the Gemini upload.
+let _emailAttExcluded = {};
+
+// Which of an email's PDF/image attachments are selected for scanning/saving.
+// The preview drawer's checkboxes only exist once the drawer has been opened
+// — so no checkboxes in the DOM means "all attachments", not "none".
+// Otherwise the common select → extract flow (which never opens a preview)
+// would silently drop every file.
+function _selectedFileParts(msgId, email) {
+  const all = (email && email.fileParts) || [];
+  const boxes = Array.from(document.querySelectorAll(`.email-att-cb-${msgId}`));
+  if (boxes.length) {
+    return boxes
+      .filter(cb => cb.checked)
+      .map(cb => all[parseInt(cb.getAttribute('data-idx'))])
+      .filter(Boolean);
+  }
+  const excluded = _emailAttExcluded[msgId];
+  if (!excluded || !excluded.size) return all.slice();
+  return all.filter((_, idx) => !excluded.has(idx));
+}
+
+function renderEmailPreviewContent(msgId, container) {
+  const email = _emailContentCache[msgId];
+  if (!email || !container) return;
+
+  const esc = escapeHtml;
+  const truncatedBody = email.body.length > 2500 ? email.body.substring(0, 2500) + '\n\n[TRUNCATED FOR PREVIEW]' : email.body;
+  const excluded = _emailAttExcluded[msgId];
+
+  let attachmentsHtml = '';
+  if (email.fileParts && email.fileParts.length) {
+    const listItems = email.fileParts.map((f, idx) => {
+      const isDoc = f.mime === 'application/pdf';
+      const typeLabel = isDoc ? 'PDF Document' : 'Image';
+      const icon = isDoc ? '📄' : '🖼️';
+      const isChecked = !(excluded && excluded.has(idx));
+      return `
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0;padding:2px 0;">
+          <input type="checkbox" class="email-att-cb-${msgId}" data-idx="${idx}" ${isChecked ? 'checked' : ''} onchange="_setEmailAttExcluded('${msgId}', ${idx}, !this.checked)" style="width:14px;height:14px;">
+          <span style="font-family:'DM Mono',monospace;font-size:11px;">${icon} ${esc(f.name)} <span style="opacity:.6;font-size:10px;">(${typeLabel})</span></span>
+        </label>
+      `;
+    }).join('');
+
+    attachmentsHtml = `
+      <div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;">
+        <div style="font-weight:700;font-size:11px;margin-bottom:6px;color:var(--text2);">Include attachments in AI Scan (${email.fileParts.length}):</div>
+        <div style="background:var(--surface-card);padding:6px 12px;border:1px solid var(--border2);border-radius:var(--r);max-height:100px;overflow-y:auto;">
+          ${listItems}
+        </div>
+      </div>
+    `;
+  } else {
+    attachmentsHtml = `<div style="margin-top:6px;font-size:10px;color:var(--text3);font-style:italic;">No PDF or image attachments found.</div>`;
+  }
+
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <div style="font-weight:700;font-size:11px;color:var(--text2);margin-bottom:4px;">Email Body Preview:</div>
+      <div class="email-preview-body">${esc(truncatedBody)}</div>
+      ${attachmentsHtml}
+    </div>
+  `;
+}
+
+function _setEmailAttExcluded(msgId, idx, isExcluded) {
+  if (!_emailAttExcluded[msgId]) _emailAttExcluded[msgId] = new Set();
+  if (isExcluded) _emailAttExcluded[msgId].add(idx);
+  else _emailAttExcluded[msgId].delete(idx);
+}
+
+// Calls Gemini API to read a receipt/invoice and return its text response as a string.
+// Accepts Gemini-style `parts` (e.g. `{ text }` and `{ inline_data: { mime_type, data } }`).
+// Runs directly browser → Google API using the publisher's own key.
+// Gemini 2.0 Flash and 2.0 Flash-Lite were retired on 2026-06-01 — keeping them
+// in the fallback chain meant every escalation re-uploaded the whole payload to
+// a model that could only fail.
+const GEMINI_RECEIPT_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+
+// Above this serialized size, don't probe the fallback chain — re-uploading
+// megabytes to guess at a model costs far more than surfacing the error.
+const GEMINI_SINGLE_ATTEMPT_BYTES = 2_000_000;
+
+async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
+  const { signal, schema, maxOutputTokens = 8192 } = opts;
+
+  // Serialize ONCE. This used to sit inside the per-attempt closure, so each
+  // model and each retry re-stringified and re-uploaded the entire body.
+  const generationConfig = {
+    response_mime_type: 'application/json',
+    temperature: 0.1,
+    maxOutputTokens
+  };
+  if (schema) generationConfig.response_schema = schema;
+  const body = JSON.stringify({ contents: [{ parts }], generationConfig });
+
+  const models = body.length > GEMINI_SINGLE_ATTEMPT_BYTES
+    ? GEMINI_RECEIPT_MODELS.slice(0, 1)
+    : GEMINI_RECEIPT_MODELS;
+
+  let lastErr;
+  for (const model of models) {
+    try {
+      const send = () => fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal }
+      );
+      let res = await send();
+      // Retry transient overload / rate-limit / server errors with exponential
+      // backoff. A single flat 800ms retry lands right back inside the same
+      // congestion window that caused the 429, so the attempt was mostly
+      // wasted; jitter stops parallel email extractions from resonating.
+      for (let attempt = 0; attempt < 2 && !res.ok && (res.status === 429 || res.status >= 500); attempt++) {
+        const retryAfter = Number(res.headers?.get?.('retry-after'));
+        const wait = Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(retryAfter * 1000, 8000)
+          : (700 * Math.pow(2, attempt)) + Math.random() * 400;
+        await new Promise(r => setTimeout(r, wait));
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        res = await send();
+      }
+      if (!res.ok) {
+        let detail = `HTTP ${res.status} from ${model}`;
+        // Escalating to another model only helps when THIS model is the
+        // problem. A rejected key or a malformed payload fails identically on
+        // every model, so probing the chain just re-uploads the image twice
+        // more before showing the same error.
+        let shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
+        try {
+          const err = await res.json();
+          if (err?.error?.message) {
+            detail = err.error.message;
+            if (res.status === 429 || /prepayment|credits|billing|quota|API key/i.test(detail)) {
+              shouldStop = true;
+            }
+          }
+        } catch (_) { }
+        lastErr = new Error(detail);
+        // `throw` here lands in this iteration's own catch below, which used to
+        // record it as just another failed model and move on — so the
+        // stop-on-billing/quota check never actually stopped anything and a
+        // dead key still paid to upload the image three times. Mark it so the
+        // catch re-throws instead of swallowing.
+        if (shouldStop) { lastErr.__fatal = true; throw lastErr; }
+        continue;
+      }
+      const data = await res.json();
+      const cand = data.candidates?.[0];
+      // Newer flash models emit a thought part first. Reading only parts[0].text
+      // made a perfectly good answer look like a failure and escalated to the
+      // next model — another full upload.
+      const text = (cand?.content?.parts || [])
+        .filter(p => p && p.text && !p.thought)
+        .map(p => p.text)
+        .join('')
+        .trim();
+      const finish = cand?.finishReason;
+      if (finish && finish !== 'STOP' && finish !== 'MAX_TOKENS') {
+        lastErr = new Error(`Gemini stopped early (${finish})`);
+        continue;
+      }
+      if (text) return { text, truncated: finish === 'MAX_TOKENS', model };
+      lastErr = new Error(`Empty response from ${model}`);
+    } catch (e) {
+      // A cancel must never be mistaken for a model failure worth retrying.
+      if (e && e.name === 'AbortError') throw e;
+      // Nor an error every model in the chain would give identically.
+      if (e && e.__fatal) throw e;
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('All Gemini models failed');
+}
+
+// Structured output beats prompt rules: `enum` stops a near-miss category like
+// "Software" from being silently rerouted to Other, and NUMBER stops
+// Number("1,234.56") -> NaN from silently dropping the row.
+const RECEIPT_EXTRACTION_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    receipts: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          sourceSnippet: { type: 'STRING' },
+          vendor: { type: 'STRING' },
+          date: { type: 'STRING' },
+          amount: { type: 'NUMBER' },
+          currency: { type: 'STRING' },
+          description: { type: 'STRING' },
+          reference: { type: 'STRING' },
+          category: { type: 'STRING', enum: EXPENSE_CATEGORIES },
+          confidence: { type: 'NUMBER' }
+        },
+        required: ['vendor', 'date', 'amount', 'currency', 'category']
+      }
+    }
+  },
+  required: ['receipts']
+};
+
+// ── AI RECEIPT SCAN (single attached file → expense form)
+// The two "✨ AI Scan" buttons used to be near-duplicate functions that read a
+// phone photo straight to base64, asked for JSON in prose, then poked raw
+// strings into strict `number`/`date` inputs. Everything below exists to fix
+// one of those three steps.
+
+// A phone capture is 4–12 MB and base64 adds ~33% on top, so the upload was
+// the bulk of every scan's wall time — and anything over
+// GEMINI_SINGLE_ATTEMPT_BYTES silently forfeited the model fallback chain too.
+// 1600px on the long edge keeps receipt text comfortably legible for OCR while
+// typically taking a 6 MB capture under 400 KB.
+const RECEIPT_SCAN_MAX_EDGE = 1600;
+const RECEIPT_SCAN_JPEG_QUALITY = 0.82;
+// Under this, re-encoding costs more time than the smaller upload saves.
+const RECEIPT_SCAN_SKIP_DOWNSCALE_BYTES = 220_000;
+// A scan that never settles left the button reading "Scanning..." forever.
+const RECEIPT_SCAN_TIMEOUT_MS = 45_000;
+
+const RECEIPT_MIME_BY_EXT = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf'
+};
+
+// Some Android pickers and share targets hand over a File with an empty
+// `type`. That empty string went straight into `mime_type` and Gemini rejected
+// the request outright.
+function _receiptMimeFor(file) {
+  if (file && file.type) return file.type;
+  const ext = String(file?.name || '').split('.').pop().toLowerCase();
+  return RECEIPT_MIME_BY_EXT[ext] || 'application/octet-stream';
+}
+
+function _fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    // The old scan awaited `reader.onload` alone. A read failure (file removed
+    // from disk mid-scan, an iOS memory error, a revoked permission) never
+    // settled that promise, so the whole scan hung with no error and no way
+    // back except a reload.
+    r.onload = () => {
+      const s = String(r.result || '');
+      const comma = s.indexOf(',');
+      if (comma >= 0) resolve(s.slice(comma + 1));
+      else reject(new Error('Could not read that file'));
+    };
+    r.onerror = () => reject(r.error || new Error('Could not read that file'));
+    r.onabort = () => reject(new Error('File read cancelled'));
+    r.readAsDataURL(file);
+  });
+}
+
+// Returns { mime, base64, scaled, bytes }. Always resolves to *something*
+// uploadable: every downscale failure path (HEIC on a browser that can't
+// decode it, a canvas taint, an OOM on a huge scan) falls back to the
+// original bytes rather than failing the scan.
+async function _prepareReceiptUpload(file) {
+  const mime = _receiptMimeFor(file);
+  const raw = async () => ({ mime, base64: await _fileToBase64(file), scaled: false, bytes: file.size });
+  if (!/^image\//.test(mime) || file.size <= RECEIPT_SCAN_SKIP_DOWNSCALE_BYTES) return raw();
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return raw();
+
+  let bitmap = null;
+  try {
+    bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, RECEIPT_SCAN_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return raw();
+    // Flatten onto white first: a PNG scan with an alpha channel composites
+    // transparent pixels as BLACK on JPEG, which turns a white receipt into an
+    // unreadable dark rectangle.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', RECEIPT_SCAN_JPEG_QUALITY));
+    // Re-encoding an already-tight JPEG can come out bigger; never ship the
+    // worse of the two.
+    if (!blob || blob.size >= file.size) return raw();
+    return { mime: 'image/jpeg', base64: await _fileToBase64(blob), scaled: true, bytes: blob.size };
+  } catch (_) {
+    return raw();
+  } finally {
+    try { bitmap?.close?.(); } catch (_) { /* not all browsers implement close */ }
+  }
+}
+
+// Prompt-only "return strict JSON" was the root of most bad scans: the model
+// fenced the output, added a preamble, returned "$1,234.56" as a string, or
+// invented a category outside the ledger's list. A response schema makes the
+// shape non-negotiable, so the regex salvage below is only a backstop.
+const RECEIPT_SCAN_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    vendor: { type: 'STRING' },
+    date: { type: 'STRING' },
+    amount: { type: 'NUMBER' },
+    currency: { type: 'STRING' },
+    description: { type: 'STRING' },
+    reference: { type: 'STRING' },
+    category: { type: 'STRING', enum: EXPENSE_CATEGORIES },
+    confidence: { type: 'NUMBER' }
+  },
+  required: ['vendor', 'date', 'amount', 'currency']
+};
+
+// "Extract these exact 4 keys" never said WHICH number to extract, so a
+// receipt with a subtotal, tax line and total was a coin flip.
+function _buildReceiptScanPrompt() {
+  return `You are reading ONE receipt or invoice for a book publisher's bookkeeping. Return JSON matching the schema.
+
+amount — the final grand total actually charged, including tax, tip and shipping. Never the subtotal, never a single line item, never the pre-discount figure. If the document shows "Balance due", "Amount paid", or "Total charged", use that number.
+currency — ISO 4217, uppercase. Take an explicit code if printed. Otherwise infer from the symbol plus locale cues: "$" alongside GST/HST/QST or a Canadian address is CAD; "$" alongside a US state or "Sales Tax" is USD; "A$" is AUD; "£" is GBP; "€" is EUR. Only fall back to CAD when nothing at all indicates otherwise.
+date — the purchase/transaction date as YYYY-MM-DD. Not the due date, print date, delivery date, or statement period. For an ambiguous NN/NN/YYYY, use the convention of the vendor's country.
+vendor — the merchant being paid. Not the customer, and not the payment processor unless the processor is itself the merchant.
+description — a short plain label for what was bought, 60 characters or less.
+reference — the invoice, order, or receipt number if one is printed, otherwise "".
+category — the single best fit from the allowed list.
+confidence — 0 to 1, covering how certain you are of the amount and date together.
+
+If the image is blurry, cropped, or partly unreadable, still return your best reading and set confidence below 0.4.`;
+}
+
+// A <select> silently ignores an assignment to a value it has no <option> for.
+// `cur.value = 'AUD'` on the Tax Center form (CAD/USD/EUR/GBP only) therefore
+// left the PREVIOUS currency selected and logged an Australian receipt as
+// Canadian — a wrong number in the ledger with nothing on screen to hint at
+// it. Report the mismatch instead of quietly getting the money wrong.
+function _applyScanCurrency(el, code) {
+  if (!el || !code) return null;
+  const want = String(code).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  if (!want) return null;
+  if (el.tagName === 'SELECT') {
+    const match = Array.from(el.options).find(o => (o.value || o.textContent || '').trim().toUpperCase() === want);
+    if (!match) return { ok: false, code: want };
+    el.value = match.value || match.textContent.trim();
+    return { ok: true, code: want };
+  }
+  el.value = want;
+  return { ok: true, code: want };
+}
+
+function _applyScanCategory(el, category, vendor, description) {
+  if (!el) return false;
+  const cat = EXPENSE_CATEGORIES.includes(category)
+    ? category
+    : inferReceiptCategory(vendor, description);
+  if (!cat) return false;
+  const match = Array.from(el.options || []).find(o => (o.value || o.textContent || '').trim() === cat);
+  if (!match) return false;
+  el.value = match.value || match.textContent.trim();
+  return true;
+}
+
+// Read ONE receipt file and return the parsed fields. The single "✨ AI Scan"
+// buttons and the batch scanner all go through here, so a prompt or schema
+// change lands on every screen at once — the same reason the two hand-written
+// prompts were collapsed into one in the first place.
+async function _extractReceiptFromFile(apiKey, file, opts = {}) {
+  const { signal } = opts;
+  const upload = await _prepareReceiptUpload(file);
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+  const out = await _callGeminiForReceipts(apiKey, [
+    { text: _buildReceiptScanPrompt() },
+    { inline_data: { mime_type: upload.mime, data: upload.base64 } }
+  ], {
+    signal,
+    schema: RECEIPT_SCAN_SCHEMA,
+    // One receipt's JSON is a few hundred tokens; the old 8192 default let a
+    // confused model ramble, which cost latency on every scan. Kept at 2048
+    // rather than tighter because these flash models spend part of the
+    // budget on thought parts before the answer.
+    maxOutputTokens: 2048
+  });
+
+  return _parseReceiptJson(out?.text || '') || {};
+}
+
+// In-flight scan, so a second click cancels instead of hitting a dead button.
+let _receiptScanAbort = null;
+
+// Single implementation behind both "✨ AI Scan" buttons. `cfg` names the form
+// field ids; everything else is shared so the two forms can't drift apart the
+// way their two hand-written prompts did.
+async function _runReceiptScan(cfg) {
+  const fileInput = $(cfg.fileId);
+  const btn = $(cfg.btnId);
+
+  if (_receiptScanAbort) { _receiptScanAbort.abort(); return; }
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    showToast('⚠ Please attach a file first', 'warn');
+    return;
+  }
+
+  const apiKey = TAX_CENTER.settings?.geminiKey
+    || (cfg.keyId && $(cfg.keyId)?.value.trim())
+    || '';
+  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+
+  const file = fileInput.files[0];
+  const oldText = btn ? btn.textContent : '';
+  const ac = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ac.abort(); }, RECEIPT_SCAN_TIMEOUT_MS);
+  _receiptScanAbort = ac;
+  // Deliberately NOT disabled — a disabled button can't receive the cancel
+  // click, which is how the old one became unrecoverable when a request hung.
+  if (btn) btn.textContent = 'Scanning… (tap to cancel)';
+
+  const shimmerFields = [cfg.descId, cfg.amountId, cfg.dateId, cfg.catId, cfg.curId]
+    .map(id => id && $(id)).filter(Boolean);
+  shimmerFields.forEach(el => el.classList.add('tc-field-shimmer'));
+
+  try {
+    const parsed = await _extractReceiptFromFile(apiKey, file, { signal: ac.signal });
+    const applied = [];
+    const warnings = [];
+
+    const vendor = String(parsed.vendor || '').trim();
+    const description = String(parsed.description || '').trim();
+    const descEl = $(cfg.descId);
+    if (descEl && (vendor || description)) {
+      const both = vendor && description && !description.toLowerCase().includes(vendor.toLowerCase());
+      descEl.value = both ? `${vendor} — ${description}` : (vendor || description);
+      applied.push('vendor');
+    }
+
+    // Coerce before assigning: a number input rejects "1,234.56" outright and
+    // becomes an EMPTY string, so a comma-formatted total used to wipe the
+    // field and read as "the AI found nothing".
+    const amount = _parseReceiptAmount(parsed.amount);
+    const amtEl = $(cfg.amountId);
+    if (amtEl && amount > 0) { amtEl.value = amount.toFixed(2); applied.push('amount'); }
+    else warnings.push('amount');
+
+    // Same trap for `type="date"`: "Mar 4, 2025" or "03/04/2025" silently
+    // blanked the field.
+    const date = normalizeReceiptDate(parsed.date);
+    const dateEl = $(cfg.dateId);
+    if (dateEl && date) { dateEl.value = date; applied.push('date'); }
+    else warnings.push('date');
+
+    const cur = _applyScanCurrency($(cfg.curId), parsed.currency);
+    if (cur?.ok) applied.push('currency');
+    else if (cur) warnings.push(`${cur.code} not available here`);
+
+    // Only when there is something to categorise. inferReceiptCategory falls
+    // back to "Other", so running it on an empty extraction would set a field
+    // and make a scan that read nothing at all report partial success.
+    const haveSubject = vendor || description || EXPENSE_CATEGORIES.includes(parsed.category);
+    if (haveSubject && _applyScanCategory($(cfg.catId), parsed.category, vendor, description)) {
+      applied.push('category');
+    }
+
+    const refEl = cfg.refId && $(cfg.refId);
+    if (refEl && parsed.reference) { refEl.value = String(parsed.reference).trim(); applied.push('ref'); }
+
+    // Writing `.value` fires nothing, so both forms' FX preview kept showing
+    // the previous receipt's conversion until the user touched a field.
+    for (const id of [cfg.curId, cfg.amountId, cfg.descId, cfg.dateId, cfg.catId, cfg.refId]) {
+      const el = id && $(id);
+      if (!el) continue;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.classList.add('tc-field-extracted');
+      setTimeout(() => el.classList.remove('tc-field-extracted'), 2200);
+    }
+
+    if (!applied.length) {
+      showToast('⚠ Could not read that receipt — try a sharper, straighter photo', 'err');
+      return;
+    }
+    const conf = Number(parsed.confidence);
+    const lowConf = Number.isFinite(conf) && conf > 0 && conf < 0.5;
+    // The old blanket "✓ Receipt data extracted" fired even when three of four
+    // fields were empty, which is exactly when the user needed to look.
+    showToast(
+      `✓ Read ${applied.join(', ')}${warnings.length ? ` · check ${warnings.join(', ')}` : ''}${lowConf ? ' · low confidence' : ''}`,
+      (warnings.length || lowConf) ? 'warn' : 'ok',
+      (warnings.length || lowConf) ? 4200 : 2800
+    );
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      showToast(timedOut ? '⚠ Scan timed out — check your connection and retry' : 'Scan cancelled', 'warn');
+    } else {
+      console.error('AI Scan Error:', e);
+      showToast(`⚠ AI extraction failed: ${e.message || e}`, 'err', 4200);
+    }
+  } finally {
+    clearTimeout(timer);
+    _receiptScanAbort = null;
+    shimmerFields.forEach(el => el.classList.remove('tc-field-shimmer'));
+    if (btn) { btn.textContent = oldText; btn.disabled = false; }
+  }
+}
+
+// ── BATCH EXPENSE ENTRY
+// One-at-a-time is the right shape for a single subscription charge. It is the
+// wrong shape for coming home from a book fair with fourteen receipts in a
+// pocket: fourteen trips through the form, fourteen scans, fourteen chances to
+// lose one. Everything below is that same pile handled as one queue — drop them
+// all in, scan them together, fix the few the reader got wrong, post once.
+
+// Rows currently staged in the batch sheet. Addressed by `uid`, never by index:
+// a scan finishing while the owner deletes a row would otherwise write the
+// scanned values into whichever row slid up into that slot.
+let _batchExpenseRows = [];
+// 'business' = the Tax Centre operating ledger, 'project' = the active book's.
+let _batchExpenseDest = 'business';
+let _batchExpenseUid = 0;
+// In-flight batch scan, so the button can cancel the whole run.
+let _batchScanAbort = null;
+// True while scanning or logging — blocks a second run over the same rows.
+let _batchExpenseBusy = false;
+
+const BATCH_EXPENSE_CURRENCIES = ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'MXN', 'JPY', 'CHF'];
+
+// Receipts read in parallel. Three keeps a pile of a dozen moving without
+// tripping Gemini's rate limiter — and a 429 costs more time than it saves,
+// because the retry re-uploads the whole image.
+const BATCH_SCAN_CONCURRENCY = 3;
+
+/** Where a batch can currently be posted, in the order they're offered. */
+function batchExpenseDestinations() {
+  const out = [];
+  // The Tax Centre ledger is publisher-only: saveTaxCenter() no-ops for an
+  // author, so offering it would silently drop the whole batch.
+  if (!isAuthor()) out.push({ id: 'business', label: 'Business ledger', sub: 'Tax Centre operating costs' });
+  if (activeBook && getBook()) {
+    out.push({ id: 'project', label: getBook().title || 'This book', sub: "This project's expense ledger" });
+  }
+  return out;
+}
+
+/** The currency a fresh row starts in for the current destination. */
+function _batchExpenseDefaultCurrency() {
+  if (_batchExpenseDest === 'project') {
+    const book = getBook();
+    if (book) return getBookCurrencyCode(book);
+  }
+  return (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
+}
+
+/**
+ * The categories the batch offers for the current destination.
+ *
+ * The business side is deliberately the union of both lists. The Tax Centre's
+ * own picker and TC_CATEGORIES have never quite agreed — the picker offers
+ * "Sales Processing Fees", TC_CATEGORIES offers "Artist Royalties" — and the
+ * AI reads receipts against EXPENSE_CATEGORIES. Offering only one of the three
+ * means a correctly-read category silently lands in the row as blank.
+ */
+function _batchExpenseCategories() {
+  if (_batchExpenseDest === 'project') return EXPENSE_CATEGORIES;
+  return TC_CATEGORIES.concat(EXPENSE_CATEGORIES.filter(c => !TC_CATEGORIES.includes(c)));
+}
+
+/**
+ * The currencies a row can be held in.
+ *
+ * The destination's own currency is always included: a book priced in a
+ * currency outside the standard list would otherwise have no option to select,
+ * and a <select> silently ignores a value it has no option for — so the row
+ * would show, and log, whatever happened to be first in the list instead.
+ */
+function _batchExpenseCurrencies() {
+  const own = _batchExpenseDefaultCurrency();
+  return BATCH_EXPENSE_CURRENCIES.includes(own)
+    ? BATCH_EXPENSE_CURRENCIES
+    : [own, ...BATCH_EXPENSE_CURRENCIES];
+}
+
+function _batchExpenseNewRow(file) {
+  return {
+    uid: `bx${++_batchExpenseUid}`,
+    file: file || null,
+    fileName: file ? file.name : '',
+    include: true,
+    // ready → scanning → scanned | failed. 'manual' is a row typed by hand,
+    // which has nothing to scan and must never be reported as a scan failure.
+    status: file ? 'ready' : 'manual',
+    error: '',
+    confidence: null,
+    vendor: '',
+    description: '',
+    date: today(),
+    amount: '',
+    currency: _batchExpenseDefaultCurrency(),
+    // Only if it's still one of this ledger's categories — a remembered value
+    // the dropdown has no option for would show blank and log as itself.
+    category: _batchExpenseCategories().includes(localStorage.getItem('lastExpenseCategory'))
+      ? localStorage.getItem('lastExpenseCategory')
+      : '',
+    reference: ''
+  };
+}
+
+function _batchExpenseRow(uid) {
+  return _batchExpenseRows.find(r => r.uid === uid) || null;
+}
+
+/**
+ * The single description line a row will be logged under.
+ * When the description already names the vendor ("Lulu print run") that string
+ * is the more useful of the two, so it wins — repeating the vendor in front of
+ * it only pads the ledger, and dropping it loses what was actually bought.
+ */
+function _batchExpenseDescription(row) {
+  const vendor = String(row.vendor || '').trim();
+  const desc = String(row.description || '').trim();
+  if (vendor && desc && !desc.toLowerCase().includes(vendor.toLowerCase())) return `${vendor} — ${desc}`;
+  return desc || vendor;
+}
+
+/**
+ * Why a row looks like something already recorded, or ''.
+ * 'ledger' — matches an expense already in the destination ledger.
+ * 'batch'  — matches an earlier row in this same pile, which is what dropping
+ *            the same photo in twice looks like.
+ * Matched on date + amount + currency, the same test the email import uses.
+ */
+function _batchExpenseDuplicate(row) {
+  const amount = Number(row.amount) || 0;
+  if (!amount || !row.date) return '';
+  const cur = String(row.currency || '').toUpperCase();
+
+  const twin = _batchExpenseRows.find(r =>
+    r !== row && r.include !== false &&
+    r.date === row.date &&
+    Math.abs((Number(r.amount) || 0) - amount) < 0.005 &&
+    String(r.currency || '').toUpperCase() === cur
+  );
+  // Only the later of a matched pair is flagged, so a genuine pair of
+  // identical charges doesn't light up both rows and read as four.
+  if (twin && _batchExpenseRows.indexOf(twin) < _batchExpenseRows.indexOf(row)) return 'batch';
+
+  if (_batchExpenseDest === 'business') {
+    return _findDuplicateExpense({ date: row.date, amount, currency: cur }) ? 'ledger' : '';
+  }
+  const hit = (getState().expenses || []).some(e =>
+    e.date === row.date &&
+    Math.abs(((e.origAmount ?? e.amount) || 0) - amount) < 0.005 &&
+    String(e.origCurrency || e.currency || '').toUpperCase() === cur
+  );
+  return hit ? 'ledger' : '';
+}
+
+function openBatchExpenseModal(dest) {
+  // Reopening mid-run would clear the rows the running batch is still walking.
+  if (_batchExpenseBusy) { showToast('⚠ The batch is still working — give it a moment', 'warn'); return; }
+  const options = batchExpenseDestinations();
+  if (!options.length) { showToast('⚠ Pick a book first', 'warn'); return; }
+  _batchExpenseDest = options.some(o => o.id === dest) ? dest : options[0].id;
+  _batchExpenseRows = [];
+  const fileInput = $('bx-files');
+  if (fileInput) fileInput.value = '';
+  if ($('bx-trip')) $('bx-trip').value = '';
+  _batchExpenseProgress(0, 0, '');
+  renderBatchExpenseModal();
+  // Esc and a backdrop tap route through closeM, not through the Cancel
+  // button, so the abort has to hang off the close event or a cancelled modal
+  // would leave a scan burning API calls against rows nobody can see.
+  const overlay = $('m-batch-expense');
+  if (overlay) overlay.addEventListener('modal-close', _onBatchExpenseModalClose, { once: true });
+  openM('batch-expense');
+}
+
+function _onBatchExpenseModalClose() {
+  if (_batchScanAbort) { _batchScanAbort.abort(); _batchScanAbort = null; }
+}
+
+function closeBatchExpenseModal() {
+  if (_batchScanAbort) { _batchScanAbort.abort(); _batchScanAbort = null; }
+  closeM('batch-expense');
+}
+
+/** Destination picker, trip field and category dropdown for the chosen ledger. */
+function renderBatchExpenseModal() {
+  const options = batchExpenseDestinations();
+  const destWrap = $('bx-dest');
+  if (destWrap) {
+    // Built with DOM calls rather than an innerHTML template, because the one
+    // value here that isn't ours is the book's own title. Going through
+    // textContent means a title containing a quote or an angle bracket is
+    // never markup at any point, instead of relying on an escape being applied
+    // at every interpolation forever.
+    destWrap.textContent = '';
+    if (options.length < 2) {
+      const one = options[0] || { label: '', sub: '' };
+      const line = document.createElement('div');
+      line.className = 'bx-dest-single';
+      line.append('Logging to ');
+      const name = document.createElement('strong');
+      name.textContent = one.label;
+      line.append(name, ` · ${one.sub}`);
+      destWrap.append(line);
+    } else {
+      options.forEach(o => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bx-dest-btn' + (o.id === _batchExpenseDest ? ' active' : '');
+        const label = document.createElement('span');
+        label.className = 'bx-dest-label';
+        label.textContent = o.label;
+        const sub = document.createElement('span');
+        sub.className = 'bx-dest-sub';
+        sub.textContent = o.sub;
+        btn.append(label, sub);
+        btn.addEventListener('click', () => setBatchExpenseDest(o.id));
+        destWrap.append(btn);
+      });
+    }
+  }
+
+  // Trips group a whole batch far more often than a single receipt — a fair,
+  // a signing weekend — so it is asked once for the pile, not once per row.
+  const tripWrap = $('bx-trip-wrap');
+  if (tripWrap) tripWrap.style.display = _batchExpenseDest === 'business' ? '' : 'none';
+  const tripList = $('bx-trip-options');
+  if (tripList) {
+    const trips = Array.from(new Set((TAX_CENTER.businessExpenses || []).map(e => e.trip).filter(Boolean)));
+    tripList.innerHTML = trips.map(t => `<option value="${escapeHtml(t)}"></option>`).join('');
+  }
+
+  const bulkCat = $('bx-bulk-cat');
+  if (bulkCat) {
+    bulkCat.innerHTML = `<option value="">Set category…</option>`
+      + _batchExpenseCategories().map(c => `<option>${escapeHtml(c)}</option>`).join('');
+  }
+
+  // Scanning needs a key, and an author has no Tax Centre to keep one in.
+  const canScan = !!(TAX_CENTER.settings?.geminiKey) && !isAuthor();
+  const scanBtn = $('bx-scan-btn');
+  if (scanBtn) scanBtn.style.display = canScan ? '' : 'none';
+  const scanHint = $('bx-scan-hint');
+  if (scanHint) {
+    scanHint.textContent = canScan
+      ? 'Reads the vendor, date, total, currency and category off every receipt you added.'
+      : 'Add a Gemini API key in the Tax Centre config to read receipts automatically.';
+  }
+
+  renderBatchExpenseRows();
+}
+
+function setBatchExpenseDest(dest) {
+  if (_batchExpenseBusy) { showToast('⚠ Finish the batch first', 'warn'); return; }
+  if (dest === _batchExpenseDest) return;
+  _batchExpenseDest = dest;
+  // The two ledgers keep money in different currencies and use different
+  // category lists, so re-point anything still holding the old defaults.
+  const fallbackCur = _batchExpenseDefaultCurrency();
+  const cats = _batchExpenseCategories();
+  _batchExpenseRows.forEach(r => {
+    if (!r.currency) r.currency = fallbackCur;
+    if (r.category && !cats.includes(r.category)) r.category = '';
+  });
+  renderBatchExpenseModal();
+}
+
+function _batchExpenseAddFiles(files) {
+  const added = Array.from(files || []).filter(Boolean);
+  if (!added.length) return;
+  added.forEach(f => _batchExpenseRows.push(_batchExpenseNewRow(f)));
+  renderBatchExpenseRows();
+  showToast(`Added ${added.length} receipt${added.length > 1 ? 's' : ''}`);
+}
+
+function batchExpenseFilesChosen() {
+  const input = $('bx-files');
+  if (!input || !input.files) return;
+  _batchExpenseAddFiles(input.files);
+  // Cleared so re-picking the same file still fires `change` — the rows own
+  // the File objects now, the input is only a doorway.
+  input.value = '';
+}
+function batchExpenseDragOver(ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.add('drag'); }
+function batchExpenseDragLeave(ev) { ev.preventDefault(); const dz = $('bx-dropzone'); if (dz) dz.classList.remove('drag'); }
+function batchExpenseDrop(ev) {
+  ev.preventDefault();
+  const dz = $('bx-dropzone'); if (dz) dz.classList.remove('drag');
+  if (ev.dataTransfer && ev.dataTransfer.files) _batchExpenseAddFiles(ev.dataTransfer.files);
+}
+
+function batchExpenseAddBlankRow() {
+  _batchExpenseRows.push(_batchExpenseNewRow(null));
+  renderBatchExpenseRows();
+  const el = document.querySelector(`[data-bx-uid="${_batchExpenseRows[_batchExpenseRows.length - 1].uid}"][data-bx-field="vendor"]`);
+  if (el) el.focus();
+}
+
+function removeBatchExpenseRow(uid) {
+  const row = _batchExpenseRow(uid);
+  if (!row) return;
+  if (row.status === 'scanning') { showToast('⚠ That receipt is still being read', 'warn'); return; }
+  _batchExpenseRows = _batchExpenseRows.filter(r => r.uid !== uid);
+  renderBatchExpenseRows();
+}
+
+function toggleAllBatchExpenses(on) {
+  _batchExpenseRows.forEach(r => { r.include = !!on; });
+  renderBatchExpenseRows();
+}
+
+function deselectDuplicateBatchExpenses() {
+  let n = 0;
+  // Snapshot first: unticking as we go changes what _batchExpenseDuplicate
+  // sees for the rows after it, so a run of three copies would only lose one.
+  const flagged = _batchExpenseRows.filter(r => r.include !== false && _batchExpenseDuplicate(r));
+  flagged.forEach(r => { r.include = false; n++; });
+  renderBatchExpenseRows();
+  showToast(n ? `Deselected ${n} likely duplicate${n > 1 ? 's' : ''}` : 'No duplicates flagged', n ? 'ok' : 'warn');
+}
+
+/** Apply the toolbar's category (or date) to every selected row at once. */
+function applyBatchExpenseBulk(field) {
+  const src = field === 'date' ? $('bx-bulk-date') : $('bx-bulk-cat');
+  const value = src?.value || '';
+  if (!value) { showToast(`⚠ Choose a ${field === 'date' ? 'date' : 'category'} first`, 'warn'); return; }
+  let n = 0;
+  _batchExpenseRows.forEach(r => {
+    if (r.include === false) return;
+    if (field === 'date') r.date = value; else r.category = value;
+    n++;
+  });
+  renderBatchExpenseRows();
+  showToast(n ? `Applied to ${n} row${n > 1 ? 's' : ''}` : 'No rows selected', n ? 'ok' : 'warn');
+}
+
+const BATCH_STATUS_LABEL = {
+  ready: '⏳ Not read yet',
+  scanning: '✨ Reading…',
+  scanned: '✓ Read',
+  failed: '⚠ Could not read',
+  manual: 'Typed in'
+};
+
+function _batchExpenseStatusCell(row) {
+  const dup = _batchExpenseDuplicate(row);
+  const conf = Number(row.confidence);
+  const bits = [`<span class="bx-status bx-status-${row.status}">${BATCH_STATUS_LABEL[row.status] || ''}</span>`];
+  if (row.status === 'scanned' && Number.isFinite(conf) && conf > 0 && conf < 0.5) {
+    bits.push(`<span class="bx-flag">low confidence — check the total</span>`);
+  }
+  if (dup === 'ledger') bits.push(`<span class="bx-flag bx-flag-warn">already in the ledger</span>`);
+  if (dup === 'batch') bits.push(`<span class="bx-flag bx-flag-warn">same as a row above</span>`);
+  if (row.error) bits.push(`<span class="bx-flag bx-flag-bad">${escapeHtml(row.error)}</span>`);
+  return bits.join('');
+}
+
+function renderBatchExpenseRows() {
+  const wrap = $('bx-rows');
+  if (!wrap) return;
+  const rows = _batchExpenseRows;
+
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="empty-state bx-empty">Nothing staged yet. Drop your receipts above, or add a row to type one in by hand.</div>`;
+    _updateBatchExpenseSummary();
+    return;
+  }
+
+  const cats = _batchExpenseCategories();
+  const catOptions = (sel) => `<option value="">Category…</option>`
+    + cats.map(c => `<option${c === sel ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+  const currencies = _batchExpenseCurrencies();
+  const curOptions = (sel) => (currencies.includes(sel) ? currencies : [sel, ...currencies])
+    .filter(Boolean)
+    .map(c => `<option${c === sel ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('');
+
+  wrap.innerHTML = `
+    <div class="tbl-wrap bx-tbl-wrap">
+      <table class="tbl bx-tbl">
+        <thead><tr>
+          <th class="bx-col-check"></th>
+          <th>Receipt</th><th>Date</th><th>Vendor / what it was</th><th>Category</th><th>Ref</th>
+          <th class="r bx-col-amount">Amount</th><th class="bx-col-actions"></th>
+        </tr></thead>
+        <tbody>
+        ${rows.map(r => `
+          <tr data-bx-row="${r.uid}"${_batchExpenseDuplicate(r) ? ' class="bx-dup"' : ''}>
+            <td class="bx-col-check"><input type="checkbox" data-bx-include="${r.uid}" ${r.include !== false ? 'checked' : ''} aria-label="Include this expense"></td>
+            <td class="bx-cell-file">
+              <div class="bx-fname" title="${escapeHtml(r.fileName || 'No receipt attached')}">${r.file ? `🧾 ${escapeHtml(r.fileName)}` : '<span class="bx-nofile">no receipt</span>'}</div>
+              <div class="bx-status-wrap" data-bx-status="${r.uid}">${_batchExpenseStatusCell(r)}</div>
+            </td>
+            <td><input type="date" data-bx-uid="${r.uid}" data-bx-field="date" value="${escapeHtml(r.date || '')}" aria-label="Date"></td>
+            <td class="bx-cell-desc">
+              <input type="text" data-bx-uid="${r.uid}" data-bx-field="vendor" value="${escapeHtml(r.vendor || '')}" placeholder="Vendor" aria-label="Vendor">
+              <input type="text" data-bx-uid="${r.uid}" data-bx-field="description" value="${escapeHtml(r.description || '')}" placeholder="What it was" aria-label="Description">
+            </td>
+            <td><select data-bx-uid="${r.uid}" data-bx-field="category" aria-label="Category">${catOptions(r.category)}</select></td>
+            <td><input type="text" data-bx-uid="${r.uid}" data-bx-field="reference" value="${escapeHtml(r.reference || '')}" placeholder="—" aria-label="Reference"></td>
+            <td class="r bx-cell-amount">
+              <select data-bx-uid="${r.uid}" data-bx-field="currency" aria-label="Currency">${curOptions(r.currency)}</select>
+              <input type="number" step="0.01" min="0" data-bx-uid="${r.uid}" data-bx-field="amount" value="${r.amount === '' ? '' : escapeHtml(String(r.amount))}" placeholder="0.00" aria-label="Amount">
+            </td>
+            <td class="bx-col-actions">
+              ${r.file ? `<button class="btn sm" type="button" title="Read this receipt again" aria-label="Read this receipt again" onclick="rescanBatchExpenseRow('${r.uid}')">✨</button>` : ''}
+              <button class="btn sm" type="button" title="Remove this row" aria-label="Remove this row" onclick="removeBatchExpenseRow('${r.uid}')">🗑️</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  wrap.querySelectorAll('[data-bx-field]').forEach(el => {
+    el.addEventListener('change', () => {
+      const row = _batchExpenseRow(el.getAttribute('data-bx-uid'));
+      if (!row) return;
+      const field = el.getAttribute('data-bx-field');
+      let v = el.value;
+      if (field === 'currency') v = String(v).toUpperCase();
+      if (field === 'date') v = normalizeReceiptDate(v) || v;
+      row[field] = v;
+      // Editing a row is how a wrongly-flagged duplicate gets cleared, and how
+      // a mistyped amount creates a new one — so the flags follow every edit.
+      row.error = '';
+      _repaintBatchExpenseStatuses();
+      _updateBatchExpenseSummary();
+    });
+  });
+  wrap.querySelectorAll('[data-bx-include]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const row = _batchExpenseRow(cb.getAttribute('data-bx-include'));
+      if (row) row.include = !!cb.checked;
+      _repaintBatchExpenseStatuses();
+      _updateBatchExpenseSummary();
+    });
+  });
+
+  _updateBatchExpenseSummary();
+}
+
+/**
+ * Refresh only the status/flag cells and the duplicate tint.
+ * A full re-render here would throw away whatever the owner is mid-way through
+ * typing in another row, which is exactly when a scan tends to land.
+ */
+function _repaintBatchExpenseStatuses() {
+  _batchExpenseRows.forEach(row => {
+    const cell = document.querySelector(`[data-bx-status="${row.uid}"]`);
+    if (cell) cell.innerHTML = _batchExpenseStatusCell(row);
+    const tr = document.querySelector(`[data-bx-row="${row.uid}"]`);
+    if (tr) tr.classList.toggle('bx-dup', !!_batchExpenseDuplicate(row));
+  });
+}
+
+/** Push a scanned row's values back into its inputs without redrawing the table. */
+function _paintBatchExpenseRow(row) {
+  const set = (field, value) => {
+    const el = document.querySelector(`[data-bx-uid="${row.uid}"][data-bx-field="${field}"]`);
+    if (!el) return;
+    // A <select> silently ignores a value it has no <option> for, which is how
+    // an AUD receipt used to end up logged as Canadian. Leave the field alone
+    // and let the row's own warning say so instead.
+    if (el.tagName === 'SELECT' && !Array.from(el.options).some(o => (o.value || o.textContent).trim() === value)) return;
+    el.value = value;
+  };
+  set('date', row.date || '');
+  set('vendor', row.vendor || '');
+  set('description', row.description || '');
+  set('category', row.category || '');
+  set('reference', row.reference || '');
+  set('currency', row.currency || '');
+  set('amount', row.amount === '' ? '' : String(row.amount));
+  _repaintBatchExpenseStatuses();
+  _updateBatchExpenseSummary();
+}
+
+/** Selected-row count and per-currency totals, so the pile can be sanity-checked. */
+function _updateBatchExpenseSummary() {
+  const el = $('bx-summary');
+  const submit = $('bx-submit-btn');
+  const selected = _batchExpenseRows.filter(r => r.include !== false);
+  const totals = {};
+  selected.forEach(r => {
+    const amt = Number(r.amount) || 0;
+    if (!amt) return;
+    const cur = String(r.currency || '').toUpperCase() || _batchExpenseDefaultCurrency();
+    totals[cur] = (totals[cur] || 0) + amt;
+  });
+  // Currency code spelled out: two of these share a "$", and a batch summary
+  // that reads "$340.19 + $55.00" hides which pile is which.
+  const parts = Object.keys(totals).sort().map(c => `${fmt(totals[c], c)} ${c}`);
+  if (el) {
+    el.textContent = selected.length
+      ? `${selected.length} selected${parts.length ? ` · ${parts.join(' + ')}` : ''}`
+      : 'Nothing selected';
+  }
+  if (submit) {
+    submit.disabled = !selected.length || _batchExpenseBusy;
+    if (!_batchExpenseBusy) {
+      submit.textContent = selected.length
+        ? `Log ${selected.length} expense${selected.length > 1 ? 's' : ''}`
+        : 'Log expenses';
+    }
+  }
+  const unscanned = _batchExpenseRows.filter(r => r.file && r.status !== 'scanned').length;
+  const scanBtn = $('bx-scan-btn');
+  if (scanBtn && !_batchExpenseBusy) {
+    scanBtn.textContent = unscanned ? `✨ AI Scan ${unscanned} receipt${unscanned > 1 ? 's' : ''}` : '✨ AI Scan';
+    scanBtn.disabled = !unscanned;
+  }
+}
+
+function _batchExpenseProgress(done, total, label) {
+  const wrap = $('bx-progress');
+  const bar = $('bx-progress-bar');
+  const text = $('bx-progress-text');
+  if (!wrap) return;
+  if (total <= 0) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  if (bar) bar.style.width = `${Math.round((done / total) * 100)}%`;
+  if (text) text.textContent = `${label} ${done} of ${total}`;
+}
+
+/** Copy one Gemini reading onto a row, keeping whatever it couldn't determine. */
+function _applyBatchScanResult(row, parsed) {
+  const vendor = String(parsed.vendor || '').trim();
+  const description = String(parsed.description || '').trim();
+  const amount = _parseReceiptAmount(parsed.amount);
+  const date = normalizeReceiptDate(parsed.date);
+  const warn = [];
+
+  if (vendor) row.vendor = vendor;
+  if (description) row.description = description;
+  if (amount > 0) row.amount = amount.toFixed(2); else warn.push('amount');
+  if (date) row.date = date; else warn.push('date');
+
+  const want = String(parsed.currency || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  if (want && _batchExpenseCurrencies().includes(want)) row.currency = want;
+  else if (want) warn.push(`currency (${want})`);
+
+  const cats = _batchExpenseCategories();
+  const cat = cats.includes(parsed.category) ? parsed.category : inferReceiptCategory(vendor, description);
+  if (cat && cats.includes(cat)) row.category = cat;
+
+  if (parsed.reference) row.reference = String(parsed.reference).trim();
+
+  const conf = Number(parsed.confidence);
+  row.confidence = Number.isFinite(conf) ? conf : null;
+  // Nothing usable came back at all — say so on the row rather than leaving it
+  // looking scanned-and-empty, which reads as "the receipt had no total".
+  if (!vendor && !description && amount <= 0 && !date) {
+    row.status = 'failed';
+    row.error = 'Nothing readable — try a sharper photo, or type it in';
+    return;
+  }
+  row.status = 'scanned';
+  row.error = warn.length ? `check ${warn.join(', ')}` : '';
+}
+
+async function scanAllBatchExpenses(force) {
+  if (_batchScanAbort) { _batchScanAbort.abort(); return; }
+  const targets = _batchExpenseRows.filter(r => r.file && (force || r.status !== 'scanned'));
+  if (!targets.length) { showToast('⚠ No receipts left to read', 'warn'); return; }
+
+  const apiKey = TAX_CENTER.settings?.geminiKey || '';
+  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+
+  const btn = $('bx-scan-btn');
+  const ac = new AbortController();
+  _batchScanAbort = ac;
+  _batchExpenseBusy = true;
+  // A whole pile takes as long as it takes, so the only bound worth having is
+  // the owner's — the button stays live so it can cancel.
+  if (btn) { btn.textContent = 'Reading… (tap to cancel)'; btn.disabled = false; }
+
+  targets.forEach(r => { r.status = 'scanning'; r.error = ''; });
+  _repaintBatchExpenseStatuses();
+
+  let done = 0;
+  _batchExpenseProgress(0, targets.length, 'Read');
+
+  try {
+    const results = await _runExtractionPool(targets, BATCH_SCAN_CONCURRENCY, async (row) => {
+      const parsed = await _extractReceiptFromFile(apiKey, row.file, { signal: ac.signal });
+      _applyBatchScanResult(row, parsed);
+      _paintBatchExpenseRow(row);
+      _batchExpenseProgress(++done, targets.length, 'Read');
+      return true;
+    });
+
+    const failed = results.filter(r => r && !r.ok);
+    failed.forEach(r => {
+      r.item.status = 'failed';
+      r.item.error = (r.error?.message || 'Could not read this one').slice(0, 90);
+    });
+    _repaintBatchExpenseStatuses();
+
+    const ok = targets.length - failed.length;
+    showToast(
+      failed.length
+        ? `Read ${ok} of ${targets.length} — ${failed.length} need${failed.length > 1 ? '' : 's'} typing in by hand`
+        : `✓ Read all ${ok} receipt${ok > 1 ? 's' : ''} — check the totals before logging`,
+      failed.length ? 'warn' : 'ok',
+      failed.length ? 5200 : 3600
+    );
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      // Rows still queued behind the cancel never got a reading; put them back
+      // rather than leaving them stuck reading forever.
+      _batchExpenseRows.forEach(r => { if (r.status === 'scanning') r.status = 'ready'; });
+      _repaintBatchExpenseStatuses();
+      showToast('Scan cancelled', 'warn');
+    } else {
+      console.error('Batch scan error:', e);
+      showToast(`⚠ AI scan failed: ${e.message || e}`, 'err', 4200);
+    }
+  } finally {
+    _batchScanAbort = null;
+    _batchExpenseBusy = false;
+    _batchExpenseProgress(0, 0, '');
+    if (btn) btn.disabled = false;
+    _updateBatchExpenseSummary();
+  }
+}
+
+async function rescanBatchExpenseRow(uid) {
+  const row = _batchExpenseRow(uid);
+  if (!row || !row.file) return;
+  if (_batchScanAbort) { showToast('⚠ A scan is already running', 'warn'); return; }
+  const apiKey = TAX_CENTER.settings?.geminiKey || '';
+  if (!apiKey) { showToast('⚠ Gemini API Key required in Config', 'err'); return; }
+
+  const ac = new AbortController();
+  _batchScanAbort = ac;
+  row.status = 'scanning'; row.error = '';
+  _repaintBatchExpenseStatuses();
+  try {
+    _applyBatchScanResult(row, await _extractReceiptFromFile(apiKey, row.file, { signal: ac.signal }));
+    _paintBatchExpenseRow(row);
+  } catch (e) {
+    row.status = 'failed';
+    row.error = (e && e.name === 'AbortError') ? 'Cancelled' : String(e?.message || e).slice(0, 90);
+    _repaintBatchExpenseStatuses();
+  } finally {
+    _batchScanAbort = null;
+  }
+}
+
+/** Warm every rate the batch will need in one go, instead of one await per row. */
+async function _warmBatchExpenseRates(currencies, target) {
+  const to = String(target || 'CAD').toUpperCase();
+  const needed = Array.from(new Set(currencies.map(c => String(c || to).toUpperCase())))
+    .filter(c => c !== to && !_fxRateCache[`${c}_${to}`]);
+  if (!needed.length) return;
+  await Promise.all(needed.map(c => fetchLiveRate(c, to).catch(() => null)));
+}
+
+async function submitBatchExpenses() {
+  if (_batchExpenseBusy) { showToast('⚠ Still working — hang on', 'warn'); return; }
+  const rows = _batchExpenseRows.filter(r => r.include !== false);
+  if (!rows.length) { showToast('⚠ Nothing selected to log', 'warn'); return; }
+
+  // An expense with no amount or no name is one the owner can't find again.
+  // Refuse the batch and point at the rows rather than quietly dropping them.
+  const invalid = rows.filter(r => !(Number(r.amount) > 0) || !_batchExpenseDescription(r));
+  if (invalid.length) {
+    invalid.forEach(r => { r.error = 'Needs a description and an amount'; });
+    _repaintBatchExpenseStatuses();
+    showToast(`⚠ ${invalid.length} row${invalid.length > 1 ? 's need' : ' needs'} a description and an amount`, 'warn', 4600);
+    return;
+  }
+
+  const dupes = rows.filter(r => _batchExpenseDuplicate(r) === 'ledger');
+  if (dupes.length) {
+    const proceed = await confirmDialog(
+      `${dupes.length} of these already look like expenses in your ledger (same date, same amount). Log them again anyway?`,
+      { title: 'Possible duplicates', okLabel: 'Log them all', cancelLabel: 'Let me deselect them' }
+    );
+    if (!proceed) return;
+  }
+
+  _batchExpenseBusy = true;
+  const submit = $('bx-submit-btn');
+  if (submit) { submit.disabled = true; submit.textContent = 'Logging…'; }
+  let posted;
+  try {
+    posted = _batchExpenseDest === 'business'
+      ? await _postBatchToBusinessLedger(rows)
+      : await _postBatchToProjectLedger(rows);
+  } catch (e) {
+    // Anything the per-row handling didn't catch — a failed ledger write, a
+    // dead connection. The rows stay staged so the batch can be retried
+    // rather than retyped from the receipts all over again.
+    console.error('Batch expense logging failed:', e);
+    reportClientError('batch-expense-log-failed', e && e.message, { stack: e && e.stack });
+    _batchExpenseBusy = false;
+    _batchExpenseProgress(0, 0, '');
+    renderBatchExpenseRows();
+    showToast('⚠ Could not log this batch — nothing was lost, try again', 'err', 6000);
+    return;
+  }
+  _batchExpenseBusy = false;
+
+  const bits = [];
+  if (posted.logged) bits.push(`✓ Logged ${posted.logged} expense${posted.logged > 1 ? 's' : ''}${posted.pending ? ' for approval' : ''}`);
+  if (posted.failed) bits.push(`${posted.failed} could not be saved`);
+  showToast(bits.join(' · ') || 'Nothing logged', posted.failed ? 'err' : 'ok', posted.failed ? 6000 : 3200);
+
+  // Receipts are the part an accountant asks for, so never let a "✓ Logged"
+  // imply they all landed. The expenses are in either way — say which ones
+  // still need a file, and where to attach it.
+  if (posted.receiptsLost) {
+    showToast(
+      `⚠ ${posted.receiptsLost} receipt${posted.receiptsLost > 1 ? 's' : ''} could not be saved — the expense${posted.receiptsLost > 1 ? 's are' : ' is'} logged, attach the file from the ledger row`,
+      'err', 7000
+    );
+  }
+
+  if (posted.failed) {
+    // Keep only what didn't make it, so a retry can't double-post the rest.
+    _batchExpenseRows = _batchExpenseRows.filter(r => posted.failedUids.has(r.uid));
+    _batchExpenseProgress(0, 0, '');
+    renderBatchExpenseRows();
+    if (submit) submit.disabled = false;
+    return;
+  }
+  _batchExpenseProgress(0, 0, '');
+  closeBatchExpenseModal();
+}
+
+/** Post the batch into the Tax Centre's operating ledger. Publisher only. */
+async function _postBatchToBusinessLedger(rows) {
+  const base = (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
+  await _warmBatchExpenseRates(rows.map(r => r.currency), base);
+
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  const trip = ($('bx-trip')?.value || '').trim();
+  let logged = 0, receiptsLost = 0, done = 0;
+  const entries = [];
+  // One base per batch plus the row's own offset. A bare Date.now() per row
+  // collides whenever two saves land in the same millisecond, and every ledger
+  // action — edit, delete, attach a receipt — addresses a row by this id.
+  const idBase = Date.now() + Math.floor(Math.random() * 100000);
+
+  for (const row of rows) {
+    _batchExpenseProgress(done, rows.length, 'Logged');
+    const currency = String(row.currency || base).toUpperCase();
+    const amount = Number(row.amount) || 0;
+    const desc = _batchExpenseDescription(row);
+    const cat = row.category || 'Other';
+
+    let receipt = '';
+    if (row.file) {
+      const saved = await saveReceiptBestEffort(row.file, 'General', { date: row.date, desc, cat, amount, currency });
+      receipt = saved.ref;
+      if (saved.storage === 'none') receiptsLost++;
+      else if (saved.storage === 'cloud') row._cloud = true;
+    }
+
+    const fxRate = currency === base ? 1 : (_fxRateCache[`${currency}_${base}`] || 1);
+    const entry = {
+      id: idBase + logged,
+      desc, cat, currency, amount, fxRate,
+      baseAmount: amount * fxRate,
+      date: row.date || today(),
+      ref: row.reference || '',
+      receipt,
+      trip
+    };
+    // What the Tax Centre reads when it counts receipts still waiting to come
+    // down from the cloud into the folder.
+    if (row._cloud) entry.receiptCloudAt = new Date().toISOString();
+    entries.push(entry);
+    logged++;
+    done++;
+    _batchExpenseProgress(done, rows.length, 'Logged');
+  }
+
+  // Newest-first, matching how a single submit lands them.
+  entries.reverse().forEach(e => TAX_CENTER.businessExpenses.unshift(e));
+  await saveTaxCenter();
+  if (typeof renderTaxCenter === 'function') renderTaxCenter();
+  return { logged, failed: 0, failedUids: new Set(), receiptsLost, pending: false };
+}
+
+/** Post the batch into the active book's own expense ledger. */
+async function _postBatchToProjectLedger(rows) {
+  const book = getBook();
+  const native = getBookCurrencyCode(book);
+  await _warmBatchExpenseRates(rows.map(r => r.currency), native);
+  await _warmBatchExpenseRates([native, ...rows.map(r => r.currency)], 'CAD');
+
+  const author = isAuthor();
+  const s = getState();
+  if (!s.expenses) s.expenses = [];
+
+  let logged = 0, receiptsLost = 0, done = 0;
+  const failedUids = new Set();
+  const entries = [];
+  const idBase = Date.now() + Math.floor(Math.random() * 100000);
+
+  for (const row of rows) {
+    _batchExpenseProgress(done, rows.length, 'Logged');
+    const origCurrency = String(row.currency || native).toUpperCase();
+    const origAmount = Number(row.amount) || 0;
+    const cat = row.category || 'Other';
+
+    // Same conversion the single-expense form does: convert into the book's
+    // own currency when a rate is available, and keep the currency actually
+    // paid in the description so the ledger still shows what left the account.
+    let amount = origAmount;
+    let currency = native;
+    let fxNote = '';
+    let fxRate = null;
+    if (origCurrency !== native) {
+      const rate = _fxRateCache[`${origCurrency}_${native}`];
+      if (rate) { amount = origAmount * rate; fxRate = rate; fxNote = ` (Paid ${origCurrency} ${origAmount.toFixed(2)})`; }
+      else { currency = origCurrency; }
+    }
+    const desc = _batchExpenseDescription(row) + fxNote;
+
+    let receipt = '';
+    if (row.file) {
+      if (author) {
+        try {
+          receipt = await uploadReceiptToCloud(row.file, activeBook);
+        } catch (e) {
+          console.error('Batch receipt upload failed', e);
+        }
+      } else {
+        const saved = await saveReceiptBestEffort(row.file, book.title, {
+          date: row.date, desc, cat, amount: origAmount, currency: origCurrency, book: book.title
+        });
+        receipt = saved.ref;
+        if (saved.storage === 'cloud') row._cloud = true;
+      }
+      if (!receipt) receiptsLost++;
+    }
+
+    const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
+    const entry = {
+      id: idBase + logged,
+      desc, cat, amount, currency, origAmount, origCurrency,
+      date: row.date || today(),
+      ref: row.reference || '',
+      receipt,
+      fxRate,
+      baseAmount: cadRate ? amount * cadRate : amount
+    };
+    if (row._cloud || (author && receipt)) entry.receiptCloudAt = new Date().toISOString();
+
+    if (author) {
+      try {
+        await window._fbSubmitActivity(activeBook, 'expenses', entry);
+        addLog('log-expenses', `${cat}: ${desc} — ${fmt(amount, currency)} (Submitted)`, 'ok');
+        logged++;
+      } catch (e) {
+        console.error('Batch submission error:', e);
+        reportClientError('batch-expense-submit-failed', e && e.message, { stack: e && e.stack });
+        failedUids.add(row.uid);
+      }
+    } else {
+      entries.push(entry);
+      addLog('log-expenses', `${cat}: ${desc} — ${fmt(amount, currency)}`, 'ok');
+      logged++;
+    }
+    done++;
+    _batchExpenseProgress(done, rows.length, 'Logged');
+  }
+
+  if (entries.length) {
+    entries.reverse().forEach(e => s.expenses.unshift(e));
+    await saveState(activeBook);
+  }
+  if (author && logged) {
+    // One alert for the pile. Sending the publisher an email per receipt is
+    // how a batch of fourteen turns into fourteen ignored notifications.
+    const cats = Array.from(new Set(rows.map(r => r.category || 'Other')));
+    await notifyPublisherSubmission('Expense approval', {
+      batch: `${logged} expenses`,
+      categories: cats,
+      dates: `${rows.map(r => r.date).sort()[0]} → ${rows.map(r => r.date).sort().slice(-1)[0]}`
+    }, `${logged} expenses submitted for approval`);
+  }
+  renderExpenses();
+  updateDash();
+  return { logged, failed: failedUids.size, failedUids, receiptsLost, pending: author };
+}
+
+// In-flight extraction, so Cancel and closing the modal can actually stop it.
+let _emailExtractAbort = null;
+// Gemini output keyed by Gmail message id — adjusting the selection and
+// re-running no longer re-pays for emails already extracted this session.
+let _emailExtractCache = {};
+
+function _buildReceiptPrompt() {
+  const allowedCats = EXPENSE_CATEGORIES.join(' | ');
+  return `You extract purchase receipts/invoices from a single email for bookkeeping.
+Return JSON matching the provided schema: {"receipts":[…]}
+Rules:
+1. Include EVERY distinct purchase, payment, invoice, charge, or receipt — including subscriptions, ad spend, shipping labels, software, postage, services, and book printing. One row per receipt.
+2. Skip pure shipping-tracking updates, marketing emails, password resets, statements/balances with no charge, payment requests, refunds (note refunds as negative amount).
+3. Currency is the ISO 4217 code (e.g. USD, CAD, EUR, GBP, JPY). Default to CAD only if truly unknown.
+4. Amount is the TOTAL paid including tax/shipping (number, no symbol). Use a dot decimal.
+5. Date is when the charge was made (YYYY-MM-DD). If only month/day given, infer year from email context. If unsure, use today.
+6. category must be one of: ${allowedCats}. Use "Other" only if nothing fits.
+7. confidence is 0.0–1.0 reflecting how sure you are this is a real receipt.
+8. If an attachment is a PDF/image of a receipt, extract from it directly.
+9. Do not invent data. If amount/currency/date cannot be determined, omit the row entirely.
+10. sourceSnippet is <= 240 chars of the original line(s) that justify the row.
+If this email contains no purchase at all, return {"receipts":[]}.`;
+}
+
+// Run `worker` over `items` with at most `limit` in flight. Never rejects —
+// each slot's outcome is captured so one bad email can't discard the rest.
+async function _runExtractionPool(items, limit, worker) {
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= items.length) return;
+        try {
+          out[i] = { ok: true, value: await worker(items[i], i) };
+        } catch (e) {
+          if (e && e.name === 'AbortError') throw e;
+          out[i] = { ok: false, error: e, item: items[i] };
+        }
+      }
+    })
+  );
+  return out;
+}
+
+async function _fetchEmailContent(msgId, signal) {
+  if (_emailContentCache[msgId]) return _emailContentCache[msgId];
+  const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?')
+    + 'action=getEmailContent&id=' + encodeURIComponent(msgId);
+  const res = await fetch(destUrl, { method: 'GET', mode: 'cors', signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (!data || !data.ok) throw new Error(data.error || 'Failed to fetch content');
+  _emailContentCache[msgId] = data.email;
+  return data.email;
+}
+
+// Batch-fetch content for messages not already cached, chunked at 12 per
+// Apps Script call (server-enforced cap). Collapses what used to be one
+// Apps Script round-trip — with its own cold start — per selected email
+// into a small handful of calls. Only used when the deployed Apps Script
+// advertises `batchEmailContent`; older deployments fall through to
+// _fetchEmailContent's one-at-a-time path inside the extraction pool.
+async function _batchFetchEmailContents(msgIds, signal) {
+  const need = msgIds.filter(id => !_emailContentCache[id]);
+  if (!need.length) return;
+  const chunks = [];
+  for (let i = 0; i < need.length; i += 12) chunks.push(need.slice(i, i + 12));
+  await Promise.all(chunks.map(async (chunk) => {
+    try {
+      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?')
+        + 'action=getEmailContents&ids=' + encodeURIComponent(chunk.join(','));
+      const res = await fetch(destUrl, { method: 'GET', mode: 'cors', signal });
+      if (!res.ok) return; // fall back to per-message fetch for this chunk
+      const data = await res.json();
+      if (!data || !data.ok) return;
+      (data.emails || []).forEach(email => { _emailContentCache[email.id] = email; });
+    } catch (_) {
+      // A chunk failure just means those messages fetch one-at-a-time later.
+    }
+  }));
+}
+
+// The batch endpoint returns attachment metadata only (no base64) to keep the
+// response small. Fetch bytes for just the attachments actually selected,
+// in parallel, so a deselected multi-MB PDF never crosses the wire at all.
+async function _hydrateSelectedAttachmentBytes(msgId, files, signal) {
+  const missing = files.filter(f => f && !f.base64);
+  if (!missing.length) return;
+  await Promise.all(missing.map(async (f) => {
+    try {
+      const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?')
+        + 'action=getAttachment&messageId=' + encodeURIComponent(msgId)
+        + '&idx=' + encodeURIComponent(f.idx != null ? f.idx : '')
+        + '&name=' + encodeURIComponent(f.name || '');
+      const res = await fetch(destUrl, { method: 'GET', mode: 'cors', signal });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.ok && data.base64) f.base64 = data.base64;
+    } catch (_) {
+      // Leave f.base64 unset — the caller filters those out before uploading.
+    }
+  }));
+}
+
+// Gemini sometimes returns "1,234.56" or "$45.00" despite the NUMBER schema.
+// Coercing here beats the old silent `.filter()` drop.
+function _parseReceiptAmount(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  const n = Number(String(v == null ? '' : v).replace(/[^0-9.\-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function _parseReceiptJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    // Truncated or fenced output — salvage what we can rather than throwing
+    // away the whole email.
+    const m = String(text || '').match(/\{[\s\S]*\}/);
+    if (m) {
+      try { return JSON.parse(m[0]); } catch (_e) { /* fall through */ }
+    }
+    return { receipts: [] };
+  }
+}
+
+// Map raw Gemini rows onto editable drafts, reporting what was unusable
+// instead of silently discarding it.
+function _draftsFromReceiptRows(rows, msgId) {
+  const drafts = [];
+  let dropped = 0;
+  for (const r of (rows || [])) {
+    const amount = _parseReceiptAmount(r.amount);
+    const currency = String(r.currency || 'CAD').toUpperCase().slice(0, 3);
+    if (!amount || !currency) { dropped++; continue; }
+    const email = msgId ? _emailContentCache[msgId] : null;
+    drafts.push({
+      vendor: String(r.vendor || '').trim(),
+      description: String(r.description || r.vendor || 'Receipt').trim(),
+      date: normalizeReceiptDate(r.date) || today(),
+      amount,
+      currency,
+      reference: String(r.reference || '').trim(),
+      category: EXPENSE_CATEGORIES.includes(r.category)
+        ? r.category
+        : inferReceiptCategory(r.vendor, r.description),
+      sourceSnippet: String(r.sourceSnippet || '').slice(0, 240),
+      confidence: Number(r.confidence || 0.7),
+      include: true,
+      msgId: msgId || '',
+      selectedAtts: (msgId && email) ? _selectedFileParts(msgId, email) : []
+    });
+  }
+  return { drafts, dropped };
+}
+
+// Live progress panel pinned above the drafts table, with a Cancel that works.
+function _renderExtractProgress(state) {
+  const wrap = $('email-receipt-results');
+  if (!wrap) return;
+  let panel = wrap.querySelector('[data-extract-progress]');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.setAttribute('data-extract-progress', '1');
+    panel.className = 'email-extract-progress';
+    wrap.prepend(panel);
+  }
+  if (state.done) { panel.remove(); return; }
+  const pct = state.total ? Math.round((state.completed / state.total) * 100) : 0;
+  panel.innerHTML = `
+    <div class="email-extract-progress-head">
+      <span class="spinner" style="width:13px;height:13px;"></span>
+      <span>Reading email ${Math.min(state.completed + 1, state.total)} of ${state.total}${state.found ? ` · ${state.found} receipt${state.found === 1 ? '' : 's'} found` : ''}</span>
+      <button type="button" class="btn sm" onclick="cancelEmailReceiptExtraction()">Cancel</button>
+    </div>
+    <div class="email-extract-progress-bar"><span style="width:${pct}%;"></span></div>`;
+}
+
+function cancelEmailReceiptExtraction() {
+  if (_emailExtractAbort) {
+    _emailExtractAbort.abort();
+    showToast('Extraction cancelled', 'warn');
+  }
+}
+
+// One-line accounting of what happened, shown above the drafts table so a
+// partial batch failure or a silently-dropped row is never invisible.
+function _renderExtractSummary({ total, failures, alreadyImported, droppedRows, truncated }) {
+  const wrap = $('email-receipt-results');
+  if (!wrap) return;
+  const bits = [];
+  if (alreadyImported) bits.push(`${alreadyImported} already imported, skipped`);
+  if (failures && failures.length) bits.push(`${failures.length} of ${total} couldn't be read — <button type="button" class="btn sm" onclick="retryFailedEmailExtractions()">Retry</button>`);
+  if (droppedRows) bits.push(`${droppedRows} row${droppedRows > 1 ? 's' : ''} had no usable amount/currency and were skipped`);
+  if (truncated) bits.push(`a response was truncated — some receipts on a busy email may be missing`);
+  if (!bits.length) return;
+  const banner = document.createElement('div');
+  banner.className = 'email-extract-summary';
+  banner.innerHTML = bits.join(' · ');
+  wrap.prepend(banner);
+  if (failures && failures.length) _lastFailedEmailIds = failures.map(f => f.item);
+}
+
+let _lastFailedEmailIds = [];
+function retryFailedEmailExtractions() {
+  if (!_lastFailedEmailIds.length) return;
+  _gmailSelectedIds = new Set(_lastFailedEmailIds);
+  document.querySelectorAll('.gmail-email-cb').forEach(cb => {
+    const id = cb.getAttribute('data-msg-id');
+    cb.checked = _gmailSelectedIds.has(id);
+    toggleEmailRowSelection(id, cb.checked);
+  });
+  extractReceiptsFromEmailText();
+}
+
+async function extractReceiptsFromEmailText() {
+  const apiKey = TAX_CENTER.settings?.geminiKey;
+  if (!apiKey) { showToast('Gemini API Key required in Config', 'err'); return; }
+  if (!navigator.onLine) {
+    showToast('Offline — reconnect to extract receipts', 'warn');
+    return;
+  }
+
+  const btn = $('email-receipt-scan-btn');
+  const prev = btn.textContent;
+  const wrap = $('email-receipt-results');
+
+  let parts = [];
+  const prompt = _buildReceiptPrompt();
+
+  if (_activeEmailImportTab === 'gmail') {
+    const msgIds = _gmailSelectedIds.size
+      ? Array.from(_gmailSelectedIds)
+      : Array.from(document.querySelectorAll('.gmail-email-cb:checked'))
+        .map(cb => cb.getAttribute('data-msg-id'));
+    if (!msgIds.length) {
+      showToast('Select at least one email to extract drafts from', 'warn');
+      return;
+    }
+
+    // Emails already imported carry their message id on the expense, so this
+    // is an exact skip — no tokens spent re-extracting last month's receipts.
+    const importedMsgIds = new Set(
+      (TAX_CENTER.businessExpenses || []).map(e => e.emailMsgId).filter(Boolean)
+    );
+    const todo = msgIds.filter(id => !importedMsgIds.has(id));
+    const alreadyImported = msgIds.length - todo.length;
+    if (!todo.length) {
+      showToast(`All ${msgIds.length} selected email${msgIds.length === 1 ? ' is' : 's are'} already imported`, 'warn');
+      return;
+    }
+
+    _emailExtractAbort = new AbortController();
+    const signal = _emailExtractAbort.signal;
+    const timeoutId = setTimeout(() => _emailExtractAbort && _emailExtractAbort.abort(), 180000);
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Extracting…'; }
+    if (wrap) wrap.innerHTML = '';
+
+    const collected = [];
+    const failures = [];
+    let completed = 0;
+    let droppedRows = 0;
+    let truncatedAny = false;
+    _renderExtractProgress({ completed: 0, total: todo.length, found: 0 });
+
+    // On a deployed Apps Script new enough to advertise it, fetch every
+    // message's content in a handful of batched calls up front instead of
+    // one call per message inside the pool below. Falls through silently on
+    // an older deployment — _fetchEmailContent's per-message path still runs.
+    try {
+      const caps = await fetchSheetsCapabilities();
+      if (caps && caps.batchEmailContent) {
+        await _batchFetchEmailContents(todo, signal);
+      }
+    } catch (_) { /* fall back to per-message fetch below */ }
+
+    try {
+      await _runExtractionPool(todo, 3, async (msgId) => {
+        let rows;
+        if (_emailExtractCache[msgId]) {
+          rows = _emailExtractCache[msgId];
+        } else {
+          const email = await _fetchEmailContent(msgId, signal);
+          const selected = _selectedFileParts(msgId, email);
+          // The batch endpoint sends attachment metadata only — fetch bytes
+          // for just the files actually selected, not everything on the
+          // message.
+          await _hydrateSelectedAttachmentBytes(msgId, selected, signal);
+          const emailParts = [
+            { text: prompt },
+            {
+              text: `--- SUBJECT: "${email.subject}" FROM: ${email.from} DATE: ${email.date} ---\n`
+                + String(email.body || '').slice(0, 80000)
+            }
+          ];
+          for (const f of selected) {
+            if (f && f.base64) emailParts.push({ inline_data: { mime_type: f.mime, data: f.base64 } });
+          }
+          const out = await _callGeminiForReceipts(apiKey, emailParts, {
+            signal,
+            schema: RECEIPT_EXTRACTION_SCHEMA
+          });
+          if (out.truncated) truncatedAny = true;
+          rows = _parseReceiptJson(out.text || '{}').receipts || [];
+          _emailExtractCache[msgId] = rows;
+        }
+
+        const { drafts, dropped } = _draftsFromReceiptRows(rows, msgId);
+        droppedRows += dropped;
+        collected.push(...drafts);
+        completed++;
+        // Rows land as they arrive instead of after the whole batch.
+        _emailReceiptDrafts = collected.slice();
+        renderEmailReceiptDrafts(_emailReceiptDrafts);
+        _renderExtractProgress({ completed, total: todo.length, found: collected.length });
+        return drafts;
+      }).then(results => {
+        results.forEach(r => { if (r && !r.ok) failures.push(r); });
+      });
+    } catch (e) {
+      if (e && e.name === 'AbortError') {
+        _renderExtractProgress({ done: true });
+        if (btn) { btn.disabled = false; btn.textContent = prev; }
+        _emailExtractAbort = null;
+        clearTimeout(timeoutId);
+        _emailReceiptDrafts = collected.slice();
+        renderEmailReceiptDrafts(_emailReceiptDrafts);
+        return;
+      }
+      console.error('[email-receipt-import] extraction failed', e);
+    } finally {
+      clearTimeout(timeoutId);
+      _emailExtractAbort = null;
+    }
+
+    _renderExtractProgress({ done: true });
+    _emailReceiptDrafts = collected.slice();
+    renderEmailReceiptDrafts(_emailReceiptDrafts);
+    _renderExtractSummary({
+      total: todo.length,
+      found: collected.length,
+      failures,
+      alreadyImported,
+      droppedRows,
+      truncated: truncatedAny
+    });
+
+    if (btn) { btn.disabled = false; btn.textContent = prev; }
+    if (collected.length) {
+      showToast(`✓ Found ${collected.length} receipt${collected.length > 1 ? 's' : ''}`);
+    } else if (!failures.length) {
+      showToast('No receipts detected in the selected emails', 'warn');
+    }
+    return;
+  }
+
+  parts.push({ text: prompt });
+
+  {
+    const pasted = ($('email-receipt-source')?.value || '').trim();
+    const fileInput = $('email-receipt-files');
+    const files = Array.from(fileInput?.files || []);
+    if (!pasted && !files.length) { showToast('Paste emails or attach files first', 'warn'); return; }
+
+    if (btn) btn.disabled = true;
+    btn.textContent = 'Extracting…';
+    if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Reading attachments and querying Gemini…</div>`;
+
+    try {
+      const fileParts = await readReceiptFiles(files);
+      const cleanedText = parseEmlOrText(pasted);
+      if (cleanedText) parts.push({ text: '--- PASTED EMAIL TEXT ---\n' + cleanedText.slice(0, 120000) });
+      for (const fp of fileParts) {
+        if (fp.kind === 'text' && fp.text) {
+          parts.push({ text: `--- FILE: ${fp.name} ---\n` + fp.text.slice(0, 60000) });
+        } else if (fp.kind === 'inline' && fp.base64) {
+          parts.push({ inline_data: { mime_type: fp.mime, data: fp.base64 } });
+        }
+      }
+    } catch (e) {
+      console.error('[email-receipt-import] file read failed', e);
+      if (wrap) {
+        wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">File read failed: ${(e.message || e).toString().replace(/</g, '&lt;')}</div>`;
+      }
+      showToast('Could not read files', 'err');
+      if (btn) btn.disabled = false;
+      btn.textContent = prev;
+      return;
+    }
+  }
+
+  if (wrap) wrap.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sending content to Gemini AI…</div>`;
+  try {
+    const out = await _callGeminiForReceipts(apiKey, parts, { schema: RECEIPT_EXTRACTION_SCHEMA });
+    const parsed = _parseReceiptJson(out?.text || '{}');
+    const { drafts, dropped } = _draftsFromReceiptRows(parsed.receipts, '');
+
+    _emailReceiptDrafts = drafts;
+    renderEmailReceiptDrafts(drafts);
+    if (!drafts.length) {
+      showToast('No receipts detected — check your pasted text or files.', 'warn');
+    } else {
+      showToast(`✓ Found ${drafts.length} receipt${drafts.length > 1 ? 's' : ''}${dropped ? ` (${dropped} row${dropped > 1 ? 's' : ''} unreadable, skipped)` : ''}`);
+    }
+  } catch (e) {
+    console.error('[email-receipt-import] Gemini failed', e);
+    if (wrap) {
+      wrap.innerHTML = `<div style="background:rgba(220,60,60,.08);border:1px solid rgba(220,60,60,.25);border-radius:var(--r2);padding:10px 14px;font-size:12px;color:var(--red);">Extraction failed: ${(e.message || e).toString().replace(/</g, '&lt;')}<br><span style="color:var(--text3);">Verify your Gemini API key and parameters.</span></div>`;
+    }
+    showToast('Could not extract receipts', 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+// The existing expense a draft would duplicate (same date, amount, currency),
+// or null. Used both to flag duplicates and to attach receipt files to an
+// already-imported expense that has none yet.
+function _findDuplicateExpense(draft) {
+  const list = TAX_CENTER.businessExpenses || [];
+  const a = Number(draft.amount).toFixed(2);
+  const cur = String(draft.currency || 'CAD').toUpperCase();
+  return list.find(e =>
+    e.date === draft.date &&
+    Number(e.amount).toFixed(2) === a &&
+    (e.currency || 'CAD').toUpperCase() === cur
+  ) || null;
+}
+
+function _isLikelyDuplicateExpense(draft) {
+  return !!_findDuplicateExpense(draft);
+}
+
+// True when an expense already has at least one viewable receipt on file.
+function _expenseHasReceipt(e) {
+  return !!(e && ((Array.isArray(e.receiptFiles) && e.receiptFiles.length) || e.receipt));
+}
+
+function renderEmailReceiptDrafts(receipts) {
+  const wrap = $('email-receipt-results');
+  if (!wrap) return;
+  if (!Array.isArray(receipts) || !receipts.length) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:14px;font-size:12px;color:var(--text3);">No valid receipts found.</div>';
+    return;
+  }
+  const esc = escapeHtml;
+  const catOptions = (sel) => EXPENSE_CATEGORIES
+    .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const curOptions = (sel) => ['CAD', 'USD', 'EUR', 'GBP', 'AUD', 'JPY', 'MXN', 'CHF', 'SEK', 'NOK', 'DKK']
+    .map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('');
+
+  const dupCount = receipts.filter(r => _isLikelyDuplicateExpense(r)).length;
+
+  wrap.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:12px;color:var(--text3);">${receipts.length} draft${receipts.length > 1 ? 's' : ''} extracted${dupCount ? ` · <span style="color:var(--amber);">${dupCount} possible duplicate${dupCount > 1 ? 's' : ''}</span>` : ''}. Edit any field, deselect rows you don't want.</div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn sm" type="button" onclick="toggleAllEmailDrafts(true)">Select all</button>
+        <button class="btn sm" type="button" onclick="toggleAllEmailDrafts(false)">Select none</button>
+        ${dupCount ? `<button class="btn sm" type="button" onclick="deselectDuplicateEmailDrafts()">Deselect duplicates</button>` : ''}
+      </div>
+    </div>
+    <div class="tbl-wrap" style="max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:var(--r2);">
+      <table class="tbl" style="font-size:12px;">
+        <thead><tr>
+          <th></th><th>Date</th><th>Vendor / Description</th><th>Category</th><th>Ref</th>
+          <th class="r" style="min-width:130px;">Amount</th><th></th>
+        </tr></thead>
+        <tbody>
+        ${receipts.map((r, i) => {
+    const dup = _isLikelyDuplicateExpense(r);
+    const lowConf = (r.confidence ?? 1) < 0.5;
+    return `<tr data-erd-row="${i}" style="${dup ? 'background:rgba(220,170,40,.06);' : ''}">
+            <td><input type="checkbox" data-erd-include="${i}" ${r.include !== false ? 'checked' : ''}></td>
+            <td><input type="date" data-erd-field="date" data-erd-i="${i}" value="${esc(r.date)}" style="font-size:12px;width:130px;"></td>
+            <td>
+              <input type="text" data-erd-field="vendor" data-erd-i="${i}" value="${esc(r.vendor)}" placeholder="Vendor" style="font-size:12px;width:100%;margin-bottom:2px;">
+              <input type="text" data-erd-field="description" data-erd-i="${i}" value="${esc(r.description)}" placeholder="Description" style="font-size:11px;width:100%;color:var(--text2);">
+              ${dup ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;">⚠ matches an existing expense</div>` : ''}
+              ${lowConf ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">low confidence (${(r.confidence * 100 | 0)}%)</div>` : ''}
+              ${r.msgId
+        ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → receipts folder on import</div>`
+        : ''}
+            </td>
+            <td><select data-erd-field="category" data-erd-i="${i}" style="font-size:12px;">${catOptions(r.category)}</select></td>
+            <td><input type="text" data-erd-field="reference" data-erd-i="${i}" value="${esc(r.reference)}" placeholder="—" style="font-size:12px;width:120px;"></td>
+            <td class="r">
+              <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
+                <select data-erd-field="currency" data-erd-i="${i}" style="font-size:12px;width:64px;">${curOptions(r.currency)}</select>
+                <input type="number" step="0.01" data-erd-field="amount" data-erd-i="${i}" value="${Number(r.amount).toFixed(2)}" style="font-size:12px;width:90px;text-align:right;">
+              </div>
+            </td>
+            <td>${r.sourceSnippet ? `<button class="btn sm" type="button" title="View source snippet" aria-label="View source snippet" onclick="confirmDialog(${JSON.stringify(r.sourceSnippet)}, {title:'Source snippet', okLabel:'OK', cancelLabel:'Close'})">👁</button>` : ''}</td>
+          </tr>`;
+  }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:flex-end;">
+      <span style="font-size:11px;color:var(--text3);">FX rates auto-fetched at import</span>
+      <button class="btn gold" type="button" onclick="importEmailReceiptDrafts()">Import selected drafts</button>
+    </div>
+  `;
+
+  // Wire up edits → in-memory store
+  wrap.querySelectorAll('[data-erd-field]').forEach(el => {
+    el.addEventListener('change', () => {
+      const i = Number(el.getAttribute('data-erd-i'));
+      const f = el.getAttribute('data-erd-field');
+      if (!_emailReceiptDrafts[i]) return;
+      let v = el.value;
+      if (f === 'amount') v = Number(v) || 0;
+      if (f === 'currency') v = String(v).toUpperCase();
+      if (f === 'date') v = normalizeReceiptDate(v) || v;
+      _emailReceiptDrafts[i][f] = v;
+    });
+  });
+  wrap.querySelectorAll('[data-erd-include]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const i = Number(cb.getAttribute('data-erd-include'));
+      if (_emailReceiptDrafts[i]) _emailReceiptDrafts[i].include = !!cb.checked;
+    });
+  });
+}
+
+function toggleAllEmailDrafts(on) {
+  _emailReceiptDrafts.forEach(d => { d.include = !!on; });
+  document.querySelectorAll('[data-erd-include]').forEach(cb => { cb.checked = !!on; });
+}
+
+// The one bulk action a re-import overlap actually calls for: untick every
+// row that already matches an existing expense, in one click instead of
+// hunting each ⚠ row individually.
+function deselectDuplicateEmailDrafts() {
+  let n = 0;
+  _emailReceiptDrafts.forEach((d, i) => {
+    if (_isLikelyDuplicateExpense(d)) {
+      d.include = false;
+      n++;
+      const cb = document.querySelector(`[data-erd-include="${i}"]`);
+      if (cb) cb.checked = false;
+    }
+  });
+  if (n) showToast(`Deselected ${n} duplicate${n > 1 ? 's' : ''}`);
+}
+
+// Repurposes the (previously dead — every draft's category was already
+// guaranteed valid, so its "fallback" branch was unreachable) category
+// dropdown into a bulk-apply: fixing 10 miscategorised rows was previously
+// 10 separate dropdown interactions.
+function applyBulkCategoryToEmailDrafts() {
+  const cat = $('email-receipt-default-cat')?.value;
+  if (!cat) return;
+  let n = 0;
+  _emailReceiptDrafts.forEach((d, i) => {
+    if (d.include === false) return;
+    d.category = cat;
+    n++;
+    const sel = document.querySelector(`[data-erd-field="category"][data-erd-i="${i}"]`);
+    if (sel) sel.value = cat;
+  });
+  if (n) showToast(`Set category on ${n} selected draft${n > 1 ? 's' : ''}`);
+  else showToast('No drafts selected', 'warn');
+}
+
+// Save every receipt file for one draft into the local folder and return their
+// local:// paths. For a Gmail Search receipt that's the email body AND each
+// selected attachment, ordered PDF → email body → image (so the primary link
+// is the most receipt-like file). Saved once per source email via the shared
+// gmailSavedByMsg cache. Falls back to the add-on copy, a cloud URL, or a
+// manually-attached file when there are no Gmail files.
+async function _saveDraftReceiptFiles(item, ctx) {
+  const { gmailSavedByMsg, savedReceiptPaths, draftIdx } = ctx;
+
+  let addonLocal = '';
+  if (item._inboxId) addonLocal = await localizeInboxReceiptFiles(item);
+
+  let emailFiles = [];
+  if (item.msgId && typeof saveReceiptToLocalFile === 'function') {
+    if (gmailSavedByMsg[item.msgId] !== undefined) {
+      emailFiles = gmailSavedByMsg[item.msgId];
+    } else {
+      const email = _emailContentCache[item.msgId];
+      const atts = item.selectedAtts || [];
+      const isPdf = a => /pdf/i.test(a.mime || '') || /\.pdf$/i.test(a.name || '');
+      const ordered = [...atts.filter(isPdf), '__BODY__', ...atts.filter(a => !isPdf(a))];
+      const paths = [];
+      for (const entry of ordered) {
+        try {
+          if (entry === '__BODY__') {
+            if (email && (email.body || email.subject)) {
+              const bp = await saveReceiptToLocalFile(_emailBodyToReceiptFile(email, item), 'email-imports');
+              if (bp) paths.push(bp);
+            }
+          } else {
+            const byteChars = atob(entry.base64.replace(/\s/g, ''));
+            const byteArray = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+            const file = new File([byteArray], entry.name, { type: entry.mime });
+            const lp = await saveReceiptToLocalFile(file, 'email-imports');
+            if (lp) paths.push(lp);
+          }
+        } catch (err) {
+          console.error('Failed to save receipt file locally', err);
+        }
+      }
+      emailFiles = paths;
+      gmailSavedByMsg[item.msgId] = paths;
+    }
+  }
+
+  if (emailFiles.length) return emailFiles.slice();
+  const fallback = addonLocal || item.receipt || savedReceiptPaths[draftIdx] || savedReceiptPaths[0] || '';
+  return fallback ? [fallback] : [];
+}
+
+async function importEmailReceiptDrafts() {
+  const drafts = (_emailReceiptDrafts || []).filter(r => r.include !== false);
+  if (!drafts.length) { showToast('No drafts selected', 'warn'); return; }
+
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  const fallbackCat = $('email-receipt-default-cat')?.value || 'Other';
+  const baseCur = TAX_CENTER.settings?.baseCurrency || 'CAD';
+
+  const btn = document.querySelector('#email-receipt-results .btn.gold');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+
+  // Save attached files to local receipt storage
+  const fileInput = $('email-receipt-files');
+  const attachedFiles = Array.from(fileInput?.files || []);
+  const savedReceiptPaths = [];
+  if (attachedFiles.length) {
+    for (const file of attachedFiles) {
+      try {
+        const path = await saveReceiptToLocalFile(file, 'email-imports');
+        if (path) savedReceiptPaths.push(path);
+      } catch (_) { /* local folder may not be set up */ }
+    }
+  }
+
+  // Warm the FX cache for every distinct currency up front — previously the
+  // first draft of each currency blocked the whole import loop on its own
+  // await, one at a time, even though _fxRateCache already dedupes by pair.
+  const baseCurUp = (TAX_CENTER.settings?.baseCurrency || 'CAD').toUpperCase();
+  const neededCurrencies = Array.from(new Set(
+    drafts.map(d => (d.currency || baseCurUp).toUpperCase()).filter(c => c !== baseCurUp)
+  )).filter(c => !_fxRateCache[`${c}_${baseCurUp}`]);
+  if (neededCurrencies.length) {
+    await Promise.all(neededCurrencies.map(c => fetchLiveRate(c, baseCurUp).catch(() => null)));
+  }
+
+  let imported = 0, skippedDup = 0, relinked = 0;
+  let draftIdx = 0;
+  const gmailSavedByMsg = {}; // msgId → [saved local:// paths] for that email
+  for (const item of drafts) {
+    const currency = (item.currency || baseCur).toUpperCase();
+    const amount = Number(item.amount || 0);
+    if (!amount) continue;
+
+    // If this draft matches an existing expense that already has a receipt,
+    // there's nothing to do. If it matches one that has NO receipt yet, fall
+    // through and attach the files we're about to save instead of skipping —
+    // this is how a previously-imported expense gets its "View Local" link.
+    const dup = _findDuplicateExpense({ ...item, currency });
+    if (dup && _expenseHasReceipt(dup)) {
+      skippedDup++;
+      draftIdx++;
+      continue;
+    }
+
+    const receiptFiles = await _saveDraftReceiptFiles(item, { gmailSavedByMsg, savedReceiptPaths, draftIdx });
+    const receiptPath = receiptFiles[0] || '';
+    draftIdx++;
+
+    if (dup) {
+      // Existing receiptless expense — attach what we just saved.
+      if (receiptFiles.length) {
+        dup.receipt = receiptPath;
+        dup.receiptFiles = receiptFiles;
+        if (item.msgId && !dup.emailMsgId) dup.emailMsgId = item.msgId;
+        relinked++;
+      } else {
+        skippedDup++;
+      }
+      continue;
+    }
+
+    let fxRate = currency === baseCur ? 1 : (_fxRateCache[`${currency}_${baseCur}`] || 0);
+    if (!fxRate) {
+      try {
+        const r = await fetchLiveRate(currency, baseCur);
+        fxRate = r?.rate || 0;
+      } catch (_) { /* fall through */ }
+    }
+    if (!fxRate) fxRate = 1; // last resort
+
+    TAX_CENTER.businessExpenses.unshift({
+      id: Date.now() + Math.floor(Math.random() * 100000),
+      desc: item.description || item.vendor || 'Email receipt',
+      vendor: item.vendor || '',
+      cat: EXPENSE_CATEGORIES.includes(item.category) ? item.category : fallbackCat,
+      currency,
+      amount,
+      origCurrency: currency,
+      origAmount: amount,
+      fxRate,
+      baseAmount: amount * fxRate,
+      date: item.date || today(),
+      ref: item.reference || 'email-import',
+      receipt: receiptPath,
+      receiptFiles,
+      emailMsgId: item.msgId || '',
+      sourceSnippet: item.sourceSnippet || '',
+      importedFromEmail: true,
+      importedAt: new Date().toISOString()
+    });
+    imported++;
+  }
+
+  await saveTaxCenter();
+
+  // Drafts that came from the Gmail add-on carry an _inboxId — remove those
+  // Firestore docs now that they've been reviewed so the queue stays clean.
+  const inboxIds = drafts.map(d => d._inboxId).filter(Boolean);
+  if (inboxIds.length && typeof window._fbDeleteInboxItem === 'function') {
+    await Promise.all(inboxIds.map(id => window._fbDeleteInboxItem(id)));
+    // ⚡ Bolt Optimization: Replace O(N) Array.includes with O(1) Set.has inside filter loop
+    const inboxIdsSet = new Set(inboxIds);
+    _emailInboxItems = _emailInboxItems.filter(i => !inboxIdsSet.has(i._inboxId));
+    updateEmailInboxBadge();
+  }
+
+  if (typeof renderTaxCenter === 'function') renderTaxCenter();
+
+  const msgParts = [];
+  if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
+  if (relinked) msgParts.push(`📎 ${relinked} receipt${relinked > 1 ? 's' : ''} linked to existing`);
+  if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
+  showToast(msgParts.join(' · ') || 'Nothing imported', (imported || relinked) ? 'ok' : 'warn');
+
+  if (imported || relinked) closeEmailReceiptImportModal();
+  else if (btn) { btn.disabled = false; btn.textContent = 'Import selected drafts'; }
+}
 export {
+  EXPENSE_CATEGORIES,
+  RECEIPT_SCAN_SCHEMA,
+  _applyScanCategory,
+  _applyScanCurrency,
+  _buildReceiptScanPrompt,
+  _callGeminiForReceipts,
+  _emailBodyToReceiptFile,
+  _expenseHasReceipt,
+  _extractReceiptFromFile,
+  _fileToBase64,
+  _findDuplicateExpense,
+  _inboxItemToDraft,
+  _isLikelyDuplicateExpense,
   _localReceiptCell,
+  _prepareReceiptUpload,
+  _receiptMimeFor,
+  _runReceiptScan,
+  _saveDraftReceiptFiles,
+  _selectedFileParts,
+  _setEmailAttExcluded,
   _setReceiptCamStatus,
   _stopReceiptCamStream,
+  applyBatchExpenseBulk,
+  applyBulkCategoryToEmailDrafts,
+  applyGmailPresetQuery,
   attachReceiptToExpenseRow,
   authorizeReceiptFolder,
   backfillReceiptCache,
+  batchExpenseAddBlankRow,
+  batchExpenseDestinations,
+  batchExpenseDragLeave,
+  batchExpenseDragOver,
+  batchExpenseDrop,
+  batchExpenseFilesChosen,
   batchScanAndRelinkReceipts,
   cacheAllReceiptsNow,
   cacheReceiptFile,
+  cancelEmailReceiptExtraction,
   captureReceiptPhoto,
   checkReceiptFolderHealth,
   chooseOrganizerSource,
+  closeBatchExpenseModal,
   closeCloudReceiptsModal,
+  closeEmailReceiptImportModal,
   closeExportReceiptsModal,
   closeReceiptCameraModal,
   closeReceiptOrganizer,
@@ -1939,16 +4913,31 @@ export {
   cloudReceiptQueue,
   copyReceiptDiagnostic,
   deleteCachedReceipt,
+  deselectDuplicateBatchExpenses,
+  deselectDuplicateEmailDrafts,
   evictReceiptCacheToBudget,
+  expFileChosen,
+  expFileClear,
+  expFileDragLeave,
+  expFileDragOver,
+  expFileDrop,
   exportReceiptsZip,
+  extractReceiptsFromEmailText,
   formatReceiptDiagnostic,
   getPendingWebcamReceipt,
+  importEmailReceiptDrafts,
+  inferReceiptCategory,
   listCachedReceiptMeta,
   listFilesRecursive,
+  loadGmailInboxDrafts,
   loadReceiptFolderHandle,
+  localizeInboxReceiptFiles,
   makeReceiptPreview,
+  normalizeReceiptDate,
+  openBatchExpenseModal,
   openBlobInTab,
   openCloudReceiptsModal,
+  openEmailReceiptImportModal,
   openExportReceiptsModal,
   openReceiptCacheDb,
   openReceiptCameraModal,
@@ -1956,8 +4945,10 @@ export {
   openReceiptOrganizer,
   organizerCandidateExpenses,
   organizerReadUnclear,
+  parseEmlOrText,
   readCachedReceipt,
   readReceiptBytes,
+  readReceiptFiles,
   receiptExportYears,
   receiptFolderReachable,
   receiptWaitingDays,
@@ -1965,21 +4956,43 @@ export {
   reclaimCloudReceipts,
   reclaimCloudReceiptsNow,
   reclaimOneReceipt,
+  removeBatchExpenseRow,
+  renderBatchExpenseModal,
+  renderBatchExpenseRows,
+  renderEmailPreviewContent,
+  renderEmailReceiptDrafts,
+  renderGmailChips,
+  renderGmailEmailsList,
   renderOrganizerTable,
   renderReceiptCacheStatus,
   renderReceiptFolderAlert,
   renderReceiptProblemPanel,
+  rescanBatchExpenseRow,
   resolveLocalReceiptFile,
   retakeReceiptPhoto,
+  retryFailedEmailExtractions,
   runReceiptExport,
   runReceiptOrganizer,
   saveReceiptBestEffort,
   saveReceiptFolderHandle,
   saveReceiptToLocalFile,
+  scanAllBatchExpenses,
+  scanProjectReceiptWithAI,
+  searchGmailEmails,
+  setBatchExpenseDest,
   setPendingWebcamReceipt,
   setupReceiptFolder,
+  startEmailInboxWatcher,
+  submitBatchExpenses,
   summarizeReceiptProblems,
+  switchEmailImportTab,
+  toggleAllBatchExpenses,
+  toggleAllEmailDrafts,
+  toggleAllGmailSelections,
+  toggleEmailPreview,
+  toggleEmailRowSelection,
   toggleOrganizerSkip,
+  updateEmailInboxBadge,
   uploadReceiptToCloud,
   useReceiptPhoto,
   viewLocalReceipt,

@@ -20,11 +20,15 @@ const MAIN_IMPORT_BUDGET = {
   // take from main.js now come from receipts.js instead, which is why this
   // dropped by four.
   'taxcentre.js': 20,
-  // Five of these (RECEIPT_SCAN_SCHEMA, _buildReceiptScanPrompt,
-  // _callGeminiForReceipts, _parseReceiptJson, _prepareReceiptUpload) are the
-  // AI scanner the organiser calls. They only cross the seam because receipt
-  // CAPTURE has not moved yet, and stop counting once it joins this module.
-  'receipts.js': 15,
+  // Went 15 -> 24 when receipt capture joined, which is the opposite of what
+  // was predicted. The five AI-scanner names did stop crossing the seam as
+  // expected, but capture brought fourteen dependencies of its own with it
+  // (activeBook, addLog, fetchLiveRate, fetchSheetsCapabilities, getBook,
+  // getState, isAuthor, notifyPublisherSubmission, renderExpenses,
+  // reportClientError, sheetsUrl, today, updateDash, _fxRateCache) — it talks
+  // to the expense ledger, the FX rates and the Sheets bridge in a way the
+  // filing half never did. renderExpenses leaves when the ledger moves next.
+  'receipts.js': 24,
 };
 
 const featureFiles = fs.existsSync(featureDir)

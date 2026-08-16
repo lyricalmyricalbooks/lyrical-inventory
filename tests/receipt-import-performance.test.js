@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
+// Receipt import moved to src/features/receipts.js. These assertions are about
+// the behaviour, not which file holds it, so they read the whole app source.
+import { appSource } from './helpers/extract-decl.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -12,11 +15,10 @@ const __dirname = path.dirname(__filename);
 // never-rejects extraction pool that gives per-email failure isolation, and
 // the new batched Apps Script endpoints.
 describe('Receipt import performance & correctness fixes', () => {
-  const mainJsPath = path.resolve(__dirname, '../src/main.js');
   const gasPath = path.resolve(__dirname, '../apps-script/Code.gs');
   const gasCopyPath = path.resolve(__dirname, '../public/gas-code.txt');
 
-  const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+  const mainContent = appSource.replace(/^export\s+/gm, '');
   const gasContent = fs.readFileSync(gasPath, 'utf8');
 
   function extractFn(name, isAsync = false) {
