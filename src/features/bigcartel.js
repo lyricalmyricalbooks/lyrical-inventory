@@ -22,11 +22,9 @@ import {
   _reconSession,
   applyOne,
   classifyStripePayment,
-  closeM,
   escapeHTML,
   getReconMemory,
   normalizeCountryCode,
-  openM,
   renderReconcile,
   saveReconMemory,
   sheetsUrl,
@@ -35,6 +33,7 @@ import {
   switchTab,
   syncToSheets,
 } from '../main.js';
+import { openM, closeM } from '../lib/modal.js';
 import {
   _shippoDestMasterList,
   getFallbackShippingPhone,

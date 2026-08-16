@@ -19,7 +19,6 @@ import {
   $,
   BOOKS,
   _isCustomerSuppressed,
-  confirmDialog,
   deserializeHtmlToEditor,
   formatDateTime,
   isAuthor,
@@ -35,6 +34,7 @@ import {
   switchTab,
   today,
 } from '../main.js';
+import { confirmDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadBlob, downloadCsv } from '../lib/download.js';

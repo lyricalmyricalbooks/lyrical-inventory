@@ -19,8 +19,19 @@ export const FEATURE_PATHS = fs.existsSync(FEATURES_DIR)
       .map(f => path.join(FEATURES_DIR, f))
   : [];
 
-/** main.js and every feature module, concatenated. */
-export const appSource = [MAIN_JS_PATH, ...FEATURE_PATHS]
+// src/lib holds the leaf modules — the pieces that depend on nothing else in
+// the app. Extraction moves declarations down here too (the modal primitives
+// were the first), and for the same reason as above a suite that lifts one by
+// name should keep finding it. Listed AFTER main.js so that if a name exists in
+// both, main.js's copy still wins and no existing suite changes meaning.
+const LIB_DIR = path.resolve(__dirname, '../../src/lib');
+export const LIB_PATHS = fs.existsSync(LIB_DIR)
+  ? fs.readdirSync(LIB_DIR).filter(f => f.endsWith('.js'))
+      .map(f => path.join(LIB_DIR, f))
+  : [];
+
+/** main.js and every feature and lib module, concatenated. */
+export const appSource = [MAIN_JS_PATH, ...FEATURE_PATHS, ...LIB_PATHS]
   .map(p => fs.readFileSync(p, 'utf8'))
   .join('\n');
 

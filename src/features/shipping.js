@@ -24,8 +24,6 @@ import {
   _fxRateCache,
   activeBook,
   addLog,
-  closeM,
-  confirmDialog,
   fetchHistoricalRate,
   fetchLiveRate,
   getAllStores,
@@ -33,7 +31,6 @@ import {
   getState,
   isAuthor,
   normalizeCountryCode,
-  openM,
   orders,
   renderExpenses,
   renderHist,
@@ -45,6 +42,7 @@ import {
   states,
   today,
 } from '../main.js';
+import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {
   extractBigCartelAddress,
   getBigCartelIncluded,

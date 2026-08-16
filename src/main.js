@@ -46,6 +46,21 @@ import {
 } from './lib/theme.js';
 import { escapeHtml } from './lib/html.js';
 import {
+  _modalFieldSig,
+  _prefersReducedMotion,
+  attemptCloseModal,
+  clearFieldError,
+  clearFieldErrors,
+  configureModals,
+  confirmDialog,
+  fieldError,
+  modalFieldsChanged,
+  openM,
+  closeM,
+  promptDialog,
+  validateFields,
+} from './lib/modal.js';
+import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
   saveQrPresets,
@@ -863,7 +878,7 @@ function isValidPaymentLink(str) {
 function updateUnsavedIndicator() {
   const ind = $('add-book-unsaved-indicator');
   if (!ind) return;
-  const isChanged = _modalSnapshots['add-book'] !== undefined && _modalFieldSig('add-book') !== _modalSnapshots['add-book'];
+  const isChanged = modalFieldsChanged('add-book');
   if (isChanged) {
     ind.classList.add('show');
   } else {
@@ -2090,105 +2105,6 @@ function isPermissionDenied(err) {
   if (!err) return false;
   if (err.code === 'permission-denied' || err.code === 'PERMISSION_DENIED') return true;
   return typeof err.message === 'string' && err.message.includes('PERMISSION_DENIED');
-}
-
-// Styled replacement for window.confirm — returns a Promise<boolean>.
-// Falls back to native confirm() if the modal isn't present (e.g. very
-// early bootstrap or unit tests).
-export function confirmDialog(message, opts = {}) {
-  const overlay = $('m-confirm');
-  const body = $('m-confirm-body');
-  const titleEl = $('m-confirm-title');
-  const ok = $('m-confirm-ok');
-  const cancel = $('m-confirm-cancel');
-  if (!overlay || !body || !ok || !cancel) {
-    // Should never happen in production, but keep a working fallback.
-
-    return Promise.resolve(window.confirm(message));
-  }
-  body.textContent = String(message ?? '');
-  if (titleEl) titleEl.textContent = opts.title || 'Are you sure?';
-  ok.textContent = opts.okLabel || 'Confirm';
-  cancel.textContent = opts.cancelLabel || 'Cancel';
-  ok.classList.toggle('danger-btn', !!opts.danger);
-  ok.classList.toggle('gold', !opts.danger);
-
-  return new Promise(resolve => {
-    const cleanup = (result) => {
-      overlay.removeEventListener('modal-close', onCloseEvent);
-      closeM('confirm');
-      ok.removeEventListener('click', onOk);
-      cancel.removeEventListener('click', onCancel);
-      document.removeEventListener('keydown', onEnter);
-      resolve(result);
-    };
-    const onOk = () => cleanup(true);
-    const onCancel = () => cleanup(false);
-    const onCloseEvent = () => cleanup(false);
-    const onEnter = (e) => {
-      if (e.key === 'Enter') cleanup(true);
-    };
-
-    ok.addEventListener('click', onOk);
-    cancel.addEventListener('click', onCancel);
-    overlay.addEventListener('modal-close', onCloseEvent);
-    document.addEventListener('keydown', onEnter);
-
-    openM('confirm');
-    // Focus the safe (cancel) button by default for destructive prompts.
-    setTimeout(() => (opts.danger ? cancel : ok).focus(), 0);
-  });
-}
-
-// Styled single-line text prompt — the confirmDialog sibling for "type a value"
-// flows (replaces the browser's blocking prompt()). Resolves to the entered
-// string, or null if the user cancelled/dismissed, so callers can distinguish
-// "cancelled" from "deliberately cleared".
-function promptDialog(message, defaultValue = '', opts = {}) {
-  const overlay = $('m-prompt');
-  const body = $('m-prompt-body');
-  const titleEl = $('m-prompt-title');
-  const input = $('m-prompt-input');
-  const ok = $('m-prompt-ok');
-  const cancel = $('m-prompt-cancel');
-  if (!overlay || !body || !input || !ok || !cancel) {
-    // Should never happen in production, but keep a working fallback.
-    return Promise.resolve(window.prompt(message, defaultValue));
-  }
-  body.textContent = String(message ?? '');
-  if (titleEl) titleEl.textContent = opts.title || 'Enter a value';
-  ok.textContent = opts.okLabel || 'OK';
-  cancel.textContent = opts.cancelLabel || 'Cancel';
-  input.value = String(defaultValue ?? '');
-  input.placeholder = opts.placeholder || '';
-
-  return new Promise(resolve => {
-    const cleanup = (result) => {
-      overlay.removeEventListener('modal-close', onCloseEvent);
-      closeM('prompt');
-      ok.removeEventListener('click', onOk);
-      cancel.removeEventListener('click', onCancel);
-      input.removeEventListener('keydown', onKey);
-      resolve(result);
-    };
-    const onOk = () => cleanup(input.value);
-    const onCancel = () => cleanup(null);
-    const onCloseEvent = () => cleanup(null);
-    // Scoped to the input rather than the document so this dialog's Enter key
-    // can't also trigger a confirmDialog that happens to be listening.
-    const onKey = (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); cleanup(input.value); }
-      else if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
-    };
-
-    ok.addEventListener('click', onOk);
-    cancel.addEventListener('click', onCancel);
-    overlay.addEventListener('modal-close', onCloseEvent);
-    input.addEventListener('keydown', onKey);
-
-    openM('prompt');
-    setTimeout(() => { try { input.focus(); input.select(); } catch { } }, 0);
-  });
 }
 
 // Non-blocking alert replacement: shows a styled toast.
@@ -12639,112 +12555,6 @@ async function confirmRestoreBookDataFromSheets() {
 }
 window.confirmRestoreBookDataFromSheets = confirmRestoreBookDataFromSheets;
 
-// ── MODAL HELPERS
-// Snapshot of a modal's field values, taken when it opens — used by the
-// backdrop/Esc close guard to detect unsaved edits.
-let _modalSnapshots = {};
-function _modalFieldSig(id) {
-  const el = $('m-' + id); if (!el) return '';
-  return Array.from(el.querySelectorAll('input,select,textarea'))
-    .map(f => (f.type === 'checkbox' || f.type === 'radio') ? (f.checked ? '1' : '0') : (f.value || ''))
-    .join('');
-}
-function _prefersReducedMotion() {
-  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-}
-let _modalReturnFocus = null;
-export function openM(id) {
-  const el = $('m-' + id); if (!el) return;
-  el.classList.remove('closing');
-  clearFieldErrors(el);
-  el.style.display = 'flex';
-  const d = id === 'send-books' ? 'send-date' : id === 'record-sale' ? 'sale-date' : 'ret-date';
-  if ($(d)) $(d).value = today();
-  // Snapshot AFTER open* helpers and date defaults have populated fields, so a
-  // later mismatch means the *user* changed something.
-  _modalSnapshots[id] = _modalFieldSig(id);
-  // Move keyboard focus into the dialog and remember where to send it back, so
-  // keyboard/screen-reader users aren't stranded on the (now-inert) page behind.
-  _modalReturnFocus = document.activeElement;
-  const focusable = el.querySelector('input:not([type=hidden]),select,textarea,button,[tabindex]:not([tabindex="-1"])');
-  if (focusable) setTimeout(() => { try { focusable.focus(); } catch { } }, 0);
-}
-export function closeM(id) {
-  const el = $('m-' + id); if (!el) return;
-  el.dispatchEvent(new Event('modal-close'));
-  delete _modalSnapshots[id];
-  // Restore focus to whatever opened the modal (if it's still around).
-  if (_modalReturnFocus && el.contains(document.activeElement)) {
-    try { _modalReturnFocus.focus(); } catch { }
-  }
-  _modalReturnFocus = null;
-  if (el.classList.contains('fk-workspace') || el.closest('.pos-subpanel')) return;
-  if (el.classList.contains('closing')) return;
-  if (_prefersReducedMotion()) { el.style.display = 'none'; clearFieldErrors(el); return; }
-  el.classList.add('closing');
-  let t;
-  const done = () => {
-    el.style.display = 'none';
-    el.classList.remove('closing');
-    clearFieldErrors(el);
-    el.removeEventListener('animationend', done);
-    clearTimeout(t);
-  };
-  t = setTimeout(done, 240); // fallback if animationend doesn't fire
-  el.addEventListener('animationend', done);
-}
-// Close a modal, but if the user has unsaved edits, confirm first. Used by the
-// backdrop-click and Esc handlers so a stray tap can't silently lose data.
-async function attemptCloseModal(id) {
-  if (_modalSnapshots[id] !== undefined && _modalFieldSig(id) !== _modalSnapshots[id]) {
-    if (!(await confirmDialog('Discard your unsaved changes?',
-      { okLabel: 'Discard', cancelLabel: 'Keep editing', danger: true }))) return;
-  }
-  closeM(id);
-}
-
-// ── INLINE FORM VALIDATION ──────────────────────────────────────────────
-function fieldError(id, msg) {
-  const el = $(id); if (!el) return;
-  const fg = el.closest('.form-group') || el.parentElement;
-  if (fg) {
-    fg.classList.add('invalid');
-    let e = fg.querySelector('.field-error');
-    if (!e) { e = document.createElement('div'); e.className = 'field-error'; fg.appendChild(e); }
-    e.textContent = msg;
-  }
-  el.setAttribute('aria-invalid', 'true');
-}
-function clearFieldError(el) {
-  const fg = el && el.closest && el.closest('.form-group');
-  if (fg) {
-    fg.classList.remove('invalid');
-    const e = fg.querySelector('.field-error'); if (e) e.remove();
-  }
-  if (el && el.removeAttribute) el.removeAttribute('aria-invalid');
-}
-function clearFieldErrors(scope) {
-  const root = scope || document;
-  root.querySelectorAll('.form-group.invalid').forEach(fg => {
-    fg.classList.remove('invalid');
-    const e = fg.querySelector('.field-error'); if (e) e.remove();
-  });
-  root.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
-}
-// rules: [{ id, test:(value, el)=>bool, msg }]. Multiple rules may target the
-// same field; the first failing rule wins and later ones for it are skipped.
-// Returns true when every field passes.
-function validateFields(rules) {
-  let firstBad = null; const failed = new Set();
-  rules.forEach(r => {
-    const el = $(r.id); if (!el || failed.has(r.id)) return;
-    if (r.test(el.value, el)) { clearFieldError(el); }
-    else { fieldError(r.id, r.msg); failed.add(r.id); if (!firstBad) firstBad = el; }
-  });
-  if (firstBad && firstBad.focus) firstBad.focus();
-  return failed.size === 0;
-}
-
 // ── BUTTON LOADING STATE ────────────────────────────────────────────────
 // Disables the clicked button and shows a spinner while an async op runs, so
 // users can't double-submit. Pass the click event; safe to call with none.
@@ -18360,6 +18170,20 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── MODAL UX: backdrop-click + Esc to close, clear validation on input ──
+// The modal primitives live in src/lib/modal.js and know nothing about this
+// app's dialogs. Seeding the date field is the one behaviour that does, so it
+// is registered here rather than living in the leaf module.
+//
+// This runs for EVERY modal, not just the three named ones — any dialog that
+// happens to contain a #ret-date field gets today's date. That is the
+// long-standing behaviour, preserved deliberately.
+configureModals({
+  prepareOpen: (id) => {
+    const d = id === 'send-books' ? 'send-date' : id === 'record-sale' ? 'sale-date' : 'ret-date';
+    if ($(d)) $(d).value = today();
+  },
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   // Click the dimmed backdrop (not a child) to close the modal.
   document.addEventListener('click', (e) => {

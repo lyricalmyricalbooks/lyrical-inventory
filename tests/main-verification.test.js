@@ -15,13 +15,19 @@ describe('main.js window binding verification', () => {
   // is unchanged — every exposed name must be defined somewhere in the app —
   // so the search widens to the feature modules rather than the check being
   // weakened.
-  const featureDir = path.resolve(__dirname, '../src/features');
-  const appSource = [mainContent].concat(
-    fs.existsSync(featureDir)
-      ? fs.readdirSync(featureDir).filter(f => f.endsWith('.js'))
-          .map(f => fs.readFileSync(path.join(featureDir, f), 'utf8'))
-      : []
-  ).join('\n');
+  //
+  // src/lib is included for the same reason: the modal primitives (openM,
+  // closeM, confirmDialog, promptDialog and the field-validation helpers) are
+  // declared in src/lib/modal.js and imported here purely to be re-exposed on
+  // window for the inline on*= handlers in index.html.
+  const readDir = (dir) => (fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter(f => f.endsWith('.js'))
+        .map(f => fs.readFileSync(path.join(dir, f), 'utf8'))
+    : []);
+  const appSource = [mainContent]
+    .concat(readDir(path.resolve(__dirname, '../src/features')))
+    .concat(readDir(path.resolve(__dirname, '../src/lib')))
+    .join('\n');
 
   it('declares every variable/function bound to window in exposeLegacyInlineHandlers', () => {
     expect(fs.existsSync(mainJsPath)).toBe(true);

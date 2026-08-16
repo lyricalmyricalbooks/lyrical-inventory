@@ -18,7 +18,16 @@ const featureSources = fs.existsSync(featureDir)
   ? fs.readdirSync(featureDir).filter(f => f.endsWith('.js'))
       .map(f => fs.readFileSync(path.join(featureDir, f), 'utf8'))
   : [];
-const appSources = [mainJs, ...featureSources];
+// src/lib counts too, for the same reason: a handler may now be *defined* in a
+// leaf module (confirmDialog and promptDialog moved to lib/modal.js) and merely
+// re-exposed on window by main.js. Where it is declared doesn't change whether
+// the click resolves — being on window does.
+const libDir = path.join(root, 'src/lib');
+const libSources = fs.existsSync(libDir)
+  ? fs.readdirSync(libDir).filter(f => f.endsWith('.js'))
+      .map(f => fs.readFileSync(path.join(libDir, f), 'utf8'))
+  : [];
+const appSources = [mainJs, ...featureSources, ...libSources];
 const union = (fn) => appSources.reduce((acc, src) => {
   for (const name of fn(src)) acc.add(name);
   return acc;
