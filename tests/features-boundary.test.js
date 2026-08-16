@@ -44,19 +44,71 @@ describe('feature module boundary', () => {
       const src = fs.readFileSync(path.join(featureDir, file), 'utf8');
 
       it('runs nothing at module-evaluation time', () => {
-        // Strip block comments and string/template contents so prose and markup
-        // can't read as code, then look for a top-level statement that is not a
-        // declaration.
+        // Names this module pulls from src/lib. Those modules are leaves — they
+        // import nothing from main.js or from each other's cycle — so they are
+        // fully evaluated before this module's body runs. Deriving a value from
+        // one at import time is safe, and several modules legitimately do.
+        const libImported = new Set(
+          [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*'\.\.\/lib\/[^']+'/g)]
+            .flatMap(m => m[1].split(',').map(s => s.trim().split(/\s+as\s+/).pop()))
+            .filter(Boolean),
+        );
+
+        // Strip block comments and line comments so prose can't read as code.
         const stripped = src
           .replace(/\/\*[\s\S]*?\*\//g, '')
           .replace(/^\s*\/\/.*$/gm, '');
 
-        const offending = stripped.split('\n').filter(line => {
-          if (!/^\S/.test(line)) return false;            // indented: inside a block
-          if (/^(import|export|function|async|const|let|var|\}|\)|\]|`)/.test(line)) return false;
-          return /^[A-Za-z_$][\w$.]*\s*\(/.test(line)     // a bare call
-              || /^(if|for|while|switch|do|try|document|window)\b/.test(line);
-        });
+        // Template literals must be skipped too, and a regex can't do it: this
+        // codebase builds whole printable documents and email previews as
+        // template strings, and their embedded markup and script bodies sit at
+        // column 0. `renderQRs();` inside a print window's markup is not a
+        // module-evaluation-time call, but it is indistinguishable from one
+        // line-by-line. So track backtick parity and ignore any line that
+        // *began* inside a template.
+        const lines = stripped.split('\n');
+        const offending = [];
+        let inTemplate = false;
+
+        for (const line of lines) {
+          const startedInTemplate = inTemplate;
+          const ticks = (line.match(/(?<!\\)`/g) || []).length;
+          if (ticks % 2 === 1) inTemplate = !inTemplate;
+          if (startedInTemplate) continue;
+
+          if (!/^\S/.test(line)) continue;                // indented: inside a block
+          if (/^(\}|\)|\]|`)/.test(line)) continue;
+
+          // A bare call or control statement at column 0 runs on import. So
+          // does `window.x = …`, which is how inline handlers used to be
+          // registered — hence `window` in the list below.
+          const bareCall = /^[A-Za-z_$][\w$.]*\s*\(/.test(line)
+            || /^(if|for|while|switch|do|try|document|window)\b/.test(line);
+
+          // So does a declaration whose initialiser CALLS something —
+          // `let x = f();`. The previous version skipped every line starting
+          // with let/const/var and so missed exactly that shape, which is the
+          // dangerous one: an initialiser that reads back into main.js gets an
+          // uninitialised binding and throws during page load — in dev only,
+          // because the production build flattens the graph and hides it.
+          //
+          // Browser built-ins and values derived from a src/lib leaf are fine;
+          // neither can reach across the cycle. `new X()` and
+          // `const f = function …` are not calls at all.
+          const initialiser = line.match(
+            /^(?:export\s+)?(?:const|let|var)\s+[\w$]+\s*=\s*([A-Za-z_$][\w$]*)[\w$.]*\s*\(/);
+          const SAFE_GLOBALS = new Set([
+            'localStorage', 'sessionStorage', 'JSON', 'Object', 'Array', 'Date',
+            'Math', 'String', 'Number', 'Boolean', 'Symbol', 'navigator',
+            'window', 'document', 'parseInt', 'parseFloat', 'structuredClone',
+            'function', 'async', 'new',
+          ]);
+          const callingInitialiser = !!initialiser
+            && !SAFE_GLOBALS.has(initialiser[1])
+            && !libImported.has(initialiser[1]);
+
+          if (bareCall || callingInitialiser) offending.push(line.trim());
+        }
 
         expect(offending).toEqual([]);
       });
