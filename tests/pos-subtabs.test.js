@@ -22,8 +22,8 @@ describe('POS Subtabs & Fair Print Kit Workspace Integration', () => {
 
   it('declares switchPOSSubTab and fairKitSearchFilter in main.js', () => {
     expect(js).toContain('export function switchPOSSubTab');
-    expect(js).toContain('window.switchPOSSubTab = switchPOSSubTab');
-    expect(js).toContain('window.fairKitSearchFilter = function');
+    expect(js).toContain('export function fairKitSearchFilter');
+    expect(js).toContain('window.fairKitSearchFilter = fairKitSearchFilter');
     expect(js).toContain('switchPOSSubTab(activePOSSubTab)');
   });
 
