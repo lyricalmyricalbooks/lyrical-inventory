@@ -9,3 +9,6 @@
 ## 2025-02-23 - Replace reduce with for loops
 **Learning:** In hot loops, replacing array methods like reduce with imperative for loops avoids intermediate allocations and reduces Garbage Collection (GC) overhead.
 **Action:** Use direct imperative iteration for scalar accumulation in frequently updated computations to improve speed.
+## 2024-11-20 - [Memory Overhead of Filter Counting in UI Hot Loops]
+**Learning:** Using chained array methods like `.filter(condition).length` in frequent UI render cycles allocates full intermediate arrays simply to count elements. On large datasets, this generates unnecessary memory pressure and triggers frequent garbage collection (GC) pauses.
+**Action:** Always prefer imperative loops (e.g. `for...of` with a counter variable) when only computing the length/count of matching items in large lists or hot execution paths.
