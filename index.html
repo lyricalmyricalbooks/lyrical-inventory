@@ -1333,7 +1333,10 @@
   <div class="log-console" id="log-expenses"></div>
   <div class="sect" style="margin-top:1.5rem;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
     <span>Expense history</span>
-    <button class="btn gold outline sm" id="exp-bulk-reimburse-btn" style="display:none;font-size:11px;" onclick="requestBulkReimbursement()">💸 Request reimbursement for selected (<span id="exp-bulk-reimburse-count">0</span>)</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button type="button" class="ledger-toggle-btn is-alert" id="exp-missing-receipt-btn" style="display:none;" aria-pressed="false" onclick="toggleExpenseReceiptFilter()"><span class="con-group-toggle-icon" aria-hidden="true">⚠</span><span id="exp-missing-receipt-label">0 without a receipt</span></button>
+      <button class="btn gold outline sm" id="exp-bulk-reimburse-btn" style="display:none;font-size:11px;" onclick="requestBulkReimbursement()">💸 Request reimbursement for selected (<span id="exp-bulk-reimburse-count">0</span>)</button>
+    </div>
   </div>
   <div class="tbl-wrap"><table class="tbl">
     <thead id="exp-head-row"><tr><th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th><th>Reimbursement</th><th></th></tr></thead>

@@ -247,6 +247,28 @@ export function isReceiptExemptExpense(item) {
 }
 
 /**
+ * The one expense state an accountant will actually ask about: money went out
+ * and nothing at all backs it up.
+ *
+ * Kept here, next to the exemptions, so every screen answers the question the
+ * same way. The Tax Centre's audit preflight and the expense ledger were
+ * previously deriving this inline with subtly different rules — the ledger
+ * looked only at `receipt`, so an expense whose proof lived in `receiptFiles`
+ * or as a pasted supplier-invoice URL in `ref` was reported as missing on one
+ * screen and fine on the other.
+ *
+ * Exempt expenses (rent/lease payments, gratuity copies) are never missing:
+ * they are governed by a lease agreement or by inventory, not by a till slip.
+ */
+export function expenseMissingReceipt(item) {
+  if (!item || typeof item !== 'object') return false;
+  if (isReceiptExemptExpense(item)) return false;
+  if (receiptRefsOf(item).length) return false;
+  const ref = typeof item.ref === 'string' ? item.ref : '';
+  return !(ref.includes('local://') || /^https?:\/\//i.test(ref));
+}
+
+/**
  * Where the receipts actually are, as a neutral readout.
  *
  * Reports counts, not a verdict: receipts held in the cloud are safe, and

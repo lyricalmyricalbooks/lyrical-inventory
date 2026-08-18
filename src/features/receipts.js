@@ -54,6 +54,7 @@ import { planFile } from '../lib/receipt-match.js';
 import { renderTaxCenter, saveTaxCenter, tcExpenseRowDrop } from './taxcentre.js';
 import {
   cloudReceiptRefs,
+  expenseMissingReceipt,
   externalLinkRefs,
   isCloudReceipt,
   isExternalLink,
@@ -5040,6 +5041,11 @@ function voidExpense(id) {
 // module may not do (see tests/features-boundary.test.js).
 const _expReimburseSelection = new Set();
 
+// "Show me only the expenses with nothing backing them up." Off by default, and
+// reset automatically the moment the last gap is filled, so the filter can never
+// leave the ledger looking emptier than it is.
+let _expMissingReceiptOnly = false;
+
 function renderExpenses() {
   const s = getState(), book = getBook(), cur = book.currency;
   const expenses = s.expenses || [];
@@ -5058,11 +5064,20 @@ function renderExpenses() {
   const eligibleIds = new Set(combined.filter(e => !e.received && !e.pendingAuth && !isGratuityExpense(e)).map(e => e.id));
   for (const id of _expReimburseSelection) if (!eligibleIds.has(id)) _expReimburseSelection.delete(id);
 
+  // The gap an accountant asks about: money out, nothing filed against it.
+  // Author submissions awaiting approval are excluded — the publisher cannot
+  // attach a receipt to a row that is not in the ledger yet.
+  const missingReceipt = combined.filter(e => !e.pendingAuth && expenseMissingReceipt(e));
+  if (!missingReceipt.length) _expMissingReceiptOnly = false;
+  updateExpenseMissingReceiptButton(missingReceipt.length);
+
   if (!combined.length) {
     body.innerHTML = `<tr><td colspan="${window.IS_PUBLISHER ? 9 : (showSelectCol ? 9 : 8)}"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>`;
     updateBulkReimburseButton();
     return;
   }
+
+  const visible = _expMissingReceiptOnly ? missingReceipt : combined;
 
   // ⚡ Bolt Optimization: Loop Fusion
   // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
@@ -5077,14 +5092,14 @@ function renderExpenses() {
 
   $('exp-head-row').innerHTML = `<tr>${showSelectCol ? '<th></th>' : ''}<th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
 
-  body.innerHTML = combined.map(e => {
+  body.innerHTML = visible.map(e => {
     if (e.pendingAuth) {
       const actionCell = window.IS_PUBLISHER
         ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', '${e._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', '${e._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
         : `<span style="font-size:10px;color:var(--amber);">Awaiting Publisher</span>`;
       return `<tr style="opacity:0.8;background:var(--amber-bg);">
         ${showSelectCol ? '<td></td>' : ''}
-        <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
+        <td class="mono" style="color:var(--text3);">${fmtD(e.date) ?? '—'}</td>
         <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
         <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
         <td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
@@ -5112,7 +5127,12 @@ function renderExpenses() {
       ? `<span class="pill gray" style="font-size:10px;" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>`
       : isRentExpense(e)
         ? `<span class="pill gray" style="font-size:10px;" title="Rent / lease payment (receipt exempt — verified via lease agreement & bank record)">Lease record</span>`
-        : `<span style="font-size:11px;color:var(--text3); font-weight: 500;">Missing</span>`;
+        // A gap in the paper trail is the one thing on this row that costs money
+        // later, so it gets the same amber needs-attention pill the rest of the
+        // app uses — not the faintest text in the row, which is what it was.
+        : expenseMissingReceipt(e)
+          ? `<span class="pill amber" style="font-size:10px;" title="No receipt attached — this is the expense an accountant will ask you to produce at tax time">⚠ No receipt</span>`
+          : `<span class="pill gray" style="font-size:10px;" title="Backed by the reference in the Ref column">Ref on file</span>`;
     const trackLink = e.trackingUrl
       ? ` <a href="${e.trackingUrl}" target="_blank" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
       : '';
@@ -5152,10 +5172,10 @@ function renderExpenses() {
     const isSettledReimbursable = e.received && !isGratuity;
     return `<tr style="${isSettledReimbursable ? 'opacity:.5;' : ''}">
       ${selectCell}
-      <td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td>
+      <td class="mono" style="color:var(--text3);">${fmtD(e.date) ?? '—'}</td>
       <td style="font-weight:600;">${escapeHtml(e.desc)}</td>
       <td><span class="pill gray" style="font-size:10px;">${escapeHtml(e.cat)}</span></td>
-      <td style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
+      <td class="mono" style="font-size:11px;color:var(--text3);">${escapeHtml(e.ref) || '—'}</td>
       <td>${receiptCell}</td>
       <td class="r" style="color:${isSettledReimbursable ? 'var(--text4)' : 'var(--red)'};font-family:'DM Mono',monospace;">${fmt(e.amount, eCur)}</td>
       ${window.IS_PUBLISHER ? `<td class="r" style="font-family:'DM Mono',monospace;color:var(--text3);"${baseAmountTitle ? ` title="${baseAmountTitle}"` : ''}>${baseAmountText}</td>` : ''}
@@ -5164,7 +5184,7 @@ function renderExpenses() {
     </tr>`;
   }).join('')
     + `<tr style="background:var(--cream2);">
-      <td colspan="${showSelectCol ? 6 : 5}" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding</td>
+      <td colspan="${showSelectCol ? 6 : 5}" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding${_expMissingReceiptOnly ? ' (whole ledger)' : ''}</td>
       <td class="r" style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${fmt(total, cur)}</td>
       <td colspan="${window.IS_PUBLISHER ? 3 : 2}"></td>
     </tr>`;
@@ -5176,6 +5196,31 @@ function toggleExpenseReimburseSelect(id, checked) {
   if (checked) _expReimburseSelection.add(id);
   else _expReimburseSelection.delete(id);
   updateBulkReimburseButton();
+}
+
+// Narrows the ledger to the expenses with no proof filed against them, so the
+// list of things to chase is the list on screen. Purely a view toggle — nothing
+// is written, so it works the same offline.
+function toggleExpenseReceiptFilter() {
+  _expMissingReceiptOnly = !_expMissingReceiptOnly;
+  renderExpenses();
+}
+
+// Keeps the "no receipt" chip above the ledger honest: hidden when the paper
+// trail is complete, otherwise labelled with the live count and carrying its
+// own pressed state for screen readers.
+function updateExpenseMissingReceiptButton(count) {
+  const btn = $('exp-missing-receipt-btn');
+  if (!btn) return;
+  const labelEl = $('exp-missing-receipt-label');
+  const n = Number(count) || 0;
+  btn.style.display = n > 0 ? '' : 'none';
+  if (labelEl) labelEl.textContent = `${n} without a receipt`;
+  btn.classList.toggle('is-on', _expMissingReceiptOnly);
+  btn.setAttribute('aria-pressed', _expMissingReceiptOnly ? 'true' : 'false');
+  btn.title = _expMissingReceiptOnly
+    ? 'Showing only expenses with no receipt — click to show every expense again'
+    : `${n} expense${n === 1 ? ' has' : 's have'} no receipt attached. Click to show only those.`;
 }
 
 function updateBulkReimburseButton() {
@@ -5406,6 +5451,7 @@ export {
   toggleAllGmailSelections,
   toggleEmailPreview,
   toggleEmailRowSelection,
+  toggleExpenseReceiptFilter,
   toggleExpenseReimburseSelect,
   toggleOrganizerSkip,
   updateEmailInboxBadge,
