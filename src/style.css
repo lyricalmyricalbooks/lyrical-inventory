@@ -3421,10 +3421,35 @@ tr.hist-row:hover {
 .con-row-progress-link:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:100px;}
 
 .con-table-controls{display:flex;justify-content:flex-end;margin-bottom:10px;}
-.con-group-toggle-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;border:1px solid var(--border2);background:var(--surface-card);font-size:11px;font-weight:700;letter-spacing:.03em;color:var(--text2);cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease;}
-.con-group-toggle-btn:hover{border-color:var(--gold2);color:var(--text);}
-.con-group-toggle-btn.is-on{background:var(--gold-bg,rgba(212,168,74,.14));border-color:var(--gold2);color:var(--gold-text,var(--text));}
+/* Pill-shaped toggles that hold a binary view state over a ledger. `.ledger-toggle-btn`
+   is the neutral name for the same control outside the consignment table — the
+   consignment class stays as the original alias so nothing there has to move. */
+.con-group-toggle-btn,.ledger-toggle-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;border:1px solid var(--border2);background:var(--surface-card);font-size:11px;font-weight:700;letter-spacing:.03em;color:var(--text2);cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease;}
+.con-group-toggle-btn:hover,.ledger-toggle-btn:hover{border-color:var(--gold2);color:var(--text);}
+.con-group-toggle-btn.is-on,.ledger-toggle-btn.is-on{background:var(--gold-bg,rgba(212,168,74,.14));border-color:var(--gold2);color:var(--gold-text,var(--text));}
+.con-group-toggle-btn:focus-visible,.ledger-toggle-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+/* A toggle that exists because something needs attention reads as a warning even
+   before it is switched on — the same amber-text-on-amber-tint pairing the status
+   pills already use, so it themes itself and clears the contrast sweep in both
+   palettes. The pressed state deliberately keeps that pairing and signals itself
+   with a ring plus a dismiss glyph rather than a solid amber fill: amber is light
+   in the dark theme, so a filled chip would have to invert its text colour and
+   would land below AA on one of the two palettes. */
+.ledger-toggle-btn.is-alert{background:var(--status-active-bg);border-color:color-mix(in srgb, var(--status-active) 45%, transparent);color:var(--status-active);}
+.ledger-toggle-btn.is-alert:hover{border-color:var(--status-active);color:var(--status-active);}
+.ledger-toggle-btn.is-alert.is-on{background:var(--status-active-bg);border-color:var(--status-active);color:var(--status-active);box-shadow:inset 0 0 0 1px var(--status-active);}
+.ledger-toggle-btn.is-on::after{content:'✕';font-size:var(--text-2xs);opacity:.75;margin-left:2px;}
 .con-group-toggle-icon{font-size:12px;}
+
+/* Fitts's law: the pill is visually compact by design, so the hit area is grown
+   past the paint instead of the padding, keeping a full target without reflowing
+   the header row it sits in. */
+.ledger-toggle-btn{position:relative;}
+.ledger-toggle-btn::before{content:'';position:absolute;left:0;right:0;top:50%;height:var(--target-min);transform:translateY(-50%);}
+
+@media (prefers-reduced-motion: reduce){
+  .con-group-toggle-btn,.ledger-toggle-btn{transition:none;}
+}
 
 .all-consignment-table .tbl tbody tr.con-group-row{cursor:pointer;background:var(--cream2,rgba(14,12,10,.03));}
 .all-consignment-table .tbl tbody tr.con-group-row:hover{background:var(--gold-bg,rgba(212,168,74,.1));}
