@@ -12,7 +12,7 @@
 // legacy rows whose sheetsId was backfilled independently — can be unit-tested
 // without a browser. main.js imports these and owns the rendering / sync glue.
 
-import { getBookCurrencyCode } from './money.js';
+import { getBookCurrencyCode, normalizeCurrencyCode } from './money.js';
 
 // The s.hist mirror row for a ledger Sale. The mirror and its ledger entry are
 // minted sharing one sheetsId (see confirmSale), so that's the primary join.
@@ -257,4 +257,44 @@ export function collectUniqueConsignmentStores(states, bookList) {
   return Array.from(storeMap.values()).sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   );
+}
+
+
+// What the consignment ledger is actually for: how much the stores still owe.
+// The table has always shown a "Due to you" per row and never a total, so the
+// publisher had to add the column up by eye to answer the one question the
+// screen exists to answer.
+//
+// Grouped by the currency each row was RECORDED in, never summed across them.
+// Only Sale rows carry a non-zero amountDue and a `cur` stamp (Shipments and
+// Returns are minted with amountDue: 0), so a mixed-currency book produces one
+// bucket per currency instead of one meaningless number — the same rule the
+// History table follows.
+//
+// Voided rows are excluded: a void didn't move money, and counting it would
+// overstate what a store owes.
+export function consignmentLedgerTotals(ledger, bookCode) {
+  const fallback = normalizeCurrencyCode(bookCode, 'CAD');
+  const byCurrency = new Map();
+  for (const e of ledger || []) {
+    if (!e || e.voided) continue;
+    const amount = Number(e.amountDue) || 0;
+    if (amount <= 0) continue;
+    if (e.status !== 'paid' && e.status !== 'pending') continue;
+    const code = normalizeCurrencyCode(e.cur, fallback);
+    let bucket = byCurrency.get(code);
+    if (!bucket) {
+      bucket = { code, outstanding: 0, paid: 0, outstandingCount: 0, paidCount: 0 };
+      byCurrency.set(code, bucket);
+    }
+    if (e.status === 'paid') { bucket.paid += amount; bucket.paidCount += 1; }
+    else { bucket.outstanding += amount; bucket.outstandingCount += 1; }
+  }
+  // The book's own currency reads first; the rest alphabetically, so the order
+  // is stable across renders rather than following ledger insertion order.
+  return [...byCurrency.values()].sort((a, b) => {
+    if (a.code === fallback) return -1;
+    if (b.code === fallback) return 1;
+    return a.code < b.code ? -1 : a.code > b.code ? 1 : 0;
+  });
 }
