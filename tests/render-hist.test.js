@@ -35,7 +35,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       'CHANNEL_COLORS', '_CHAN_FALLBACK', 'HIST_PAGE',
       'channelColor', 'chanLabel',
       'renderConsignHistRow', 'renderOrderShippingSummary',
-      'renderHist',
+      'histEmptyStateHtml', 'renderHist',
     ],
     deps: {
       // Ambient state renderHist reads out of module scope.
@@ -149,7 +149,102 @@ describe('renderHist — order rows', () => {
     h.renderHist();
 
     expect(rows()).toHaveLength(0);
-    expect(document.getElementById('hist-body').textContent).toContain('No orders yet');
+    expect(document.getElementById('hist-body').textContent).toContain('No orders recorded for this book yet');
+  });
+});
+
+// Order History is a whole tab, so an empty one is a primary destination and
+// has to offer a way forward rather than a dead sentence — UX_PATTERNS.md
+// § Empty states. What matters is that the exit offered actually matches the
+// dead end the publisher hit.
+describe('renderHist — empty states', () => {
+  const emptyPanel = () => document.querySelector('#hist-body .empty-state.sys-empty');
+  const actions = () => [...document.querySelectorAll('#hist-body .sys-empty-actions .btn')]
+    .map(b => b.getAttribute('onclick'));
+
+  it('offers ways to record a first sale when the book has no orders at all', () => {
+    const h = makeHarness({ state: { stock: 100, hist: [], ledger: [], stores: [] } });
+    h.renderHist();
+
+    const panel = emptyPanel();
+    expect(panel).not.toBeNull();
+    expect(panel.querySelector('.e-icon')).not.toBeNull();
+    expect(actions()).toContain("switchTab('manual')");
+    expect(actions()).toContain("switchTab('pos')");
+  });
+
+  it('only offers the spreadsheet import to a publisher', () => {
+    const asAuthor = makeHarness({
+      state: { stock: 100, hist: [], ledger: [], stores: [] }, isPublisher: false,
+    });
+    asAuthor.renderHist();
+    // Authors cannot see #import-btn anywhere else, so pointing them at the
+    // hidden file input would dead-end them on a control they do not have.
+    expect(actions().some(a => a.includes('import-file-input'))).toBe(false);
+
+    mountDom();
+    const asPublisher = makeHarness({
+      state: { stock: 100, hist: [], ledger: [], stores: [] }, isPublisher: true,
+    });
+    asPublisher.renderHist();
+    expect(actions().some(a => a.includes('import-file-input'))).toBe(true);
+  });
+
+  it('offers to clear the filter — not to record a sale — when a filter matched nothing', () => {
+    const h = makeHarness({
+      state: {
+        stock: 100,
+        hist: [{ num: '1001', chan: 'Direct', qty: 1, price: 20, date: '2026-07-20' }],
+        ledger: [], stores: [],
+      },
+    });
+    h.setChanFilter({ bookId: 'book-1', chan: 'Website' });
+    h.renderHist();
+
+    expect(rows()).toHaveLength(0);
+    expect(actions()).toEqual(['clearHistChanFilter()']);
+    expect(emptyPanel().textContent).toContain('Website');
+  });
+
+  it('tells the publisher how many orders the filter is hiding', () => {
+    // "Nothing sold" and "nothing sold HERE" are different situations, and the
+    // count is what separates them.
+    const h = makeHarness({
+      state: {
+        stock: 100,
+        hist: [
+          { num: '1002', chan: 'Direct', qty: 1, price: 20, date: '2026-07-20' },
+          { num: '1001', chan: 'Direct', qty: 1, price: 20, date: '2026-07-19' },
+        ],
+        ledger: [], stores: [],
+      },
+    });
+    h.setChanFilter({ bookId: 'book-1', chan: 'Website' });
+    h.renderHist();
+
+    const text = emptyPanel().textContent;
+    expect(text).toContain('2 orders');
+    // Tabular figures on the count, per the financial-data invariant.
+    expect(emptyPanel().querySelector('.mono-num').textContent).toBe('2');
+  });
+
+  it('drops the count sentence when the filter is the only thing on record', () => {
+    const h = makeHarness({ state: { stock: 100, hist: [], ledger: [], stores: [] } });
+    h.setChanFilter({ bookId: 'book-1', chan: 'Website' });
+    h.renderHist();
+
+    expect(emptyPanel().textContent).toContain('Nothing has been recorded through Website');
+    expect(emptyPanel().querySelector('.mono-num')).toBeNull();
+  });
+
+  it('escapes a channel name instead of injecting markup into the empty state', () => {
+    const h = makeHarness({ state: { stock: 100, hist: [], ledger: [], stores: [] } });
+    h.setChanFilter({ bookId: 'book-1', chan: '<img src=x onerror=alert(1)>' });
+    h.renderHist();
+
+    const body = document.getElementById('hist-body');
+    expect(body.querySelector('img')).toBeNull();
+    expect(body.textContent).toContain('<img src=x onerror=alert(1)>');
   });
 });
 

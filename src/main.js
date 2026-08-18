@@ -4916,6 +4916,50 @@ function renderConsignHistRow(e, after) {
   return `<tr class="hist-row ${voided}"><td class="mono mono-num" style="color:var(--text3);">${label}</td><td>${badge}</td><td class="r mono-num">${e.voided ? '' : qtyCell}</td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num"><span style="color:var(--text4);font-size:11px;/* faint-ok: em-dash placeholder */">—</span></td><td class="r mono-num">${after}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td style="font-size:12px;color:var(--text3);"><span class="chip-status gray">Consignment</span></td><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)} ${voidPill}</td><td>${manageBtn}</td></tr>`;
 }
 
+// Order History is a whole tab, not a nested list, so an empty one gets the
+// rich treatment from UX_PATTERNS.md § Empty states — icon, conversational
+// context and a real way forward — instead of the dead one-liner it used to
+// show. Two genuinely different dead ends land here and they need different
+// exits: a book with nothing recorded wants a way to record something, while a
+// channel filter that matched nothing wants the filter cleared, because the
+// orders it is looking for already exist one click away.
+function histEmptyStateHtml(chanFilter, totalCount) {
+  if (chanFilter !== null && chanFilter !== undefined) {
+    const label = escapeHtml(chanLabel(chanFilter));
+    const others = Number.isFinite(totalCount) ? totalCount : 0;
+    // Naming the number is the whole point: it tells the publisher the book is
+    // not empty, only this slice of it is, which is the difference between
+    // "nothing sold" and "nothing sold HERE".
+    const copy = others > 0
+      ? `This book has <strong class="mono-num">${others}</strong> order${others === 1 ? '' : 's'} on record — none of them came through ${label}.`
+      : `Nothing has been recorded through ${label} for this book yet.`;
+    return `<div class="empty-state sys-empty">
+      <div class="e-icon" aria-hidden="true">🔍</div>
+      <strong>No ${label} orders for this book</strong>
+      <span>${copy}</span>
+      <div class="sys-empty-actions">
+        <button class="btn gold lg" onclick="clearHistChanFilter()">✕ Show all orders</button>
+      </div>
+    </div>`;
+  }
+  // Import is publisher-only everywhere else in the app (#import-btn is hidden
+  // for authors), so offering it here would dead-end an author on a control
+  // they cannot see.
+  const importBtn = window.IS_PUBLISHER
+    ? `<button class="btn lg" onclick="document.getElementById('import-file-input').click()">⬆ Import from spreadsheet</button>`
+    : '';
+  return `<div class="empty-state sys-empty">
+    <div class="e-icon" aria-hidden="true">📖</div>
+    <strong>No orders recorded for this book yet</strong>
+    <span>Every copy that moves lands here — sold in person, ordered from the website, or shipped out to a consignment store — each with the stock count it left behind, so any book can be traced back to the order that moved it.</span>
+    <div class="sys-empty-actions">
+      <button class="btn gold lg" onclick="switchTab('manual')">✎ Record a sale</button>
+      <button class="btn lg" onclick="switchTab('pos')">💳 Open checkout</button>
+      ${importBtn}
+    </div>
+  </div>`;
+}
+
 // No currency parameter on purpose: customer-paid shipping is natively CAD
 // and must never be FX-converted, so this formats as CAD unconditionally.
 
@@ -5078,7 +5122,7 @@ export function renderHist() {
       const stockAfterVal = row._after ?? row.after ?? '—';
       return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num" style="font-weight:600;">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
     }).join('') + moreRow
-    : `<tr><td colspan="10"><div class="empty-state" style="padding:1.5rem;">${chanFilter !== null ? `No ${escapeHtml(chanLabel(chanFilter))} orders for this book.` : 'No orders yet.'}</div></td></tr>`;
+    : `<tr class="hist-empty-row"><td colspan="10">${histEmptyStateHtml(chanFilter, timeline.length + pendingSales.length)}</td></tr>`;
 }
 
 // ── WEBSITE ORDERS — persistent scan memory
