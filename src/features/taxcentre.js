@@ -59,6 +59,7 @@ import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import {
   RECURRING_FREQUENCIES,
+  amountOnDate,
   currentAmount,
   frequencyLabel,
   frequencyMonths,
@@ -66,6 +67,7 @@ import {
   lastPostedChargeDate,
   localYmd,
   monthlyEquivalent,
+  monthlyEquivalentOn,
   newRecurringId,
   nextRateChange,
   nextRecurringDate,
@@ -75,6 +77,7 @@ import {
   recurringStatus,
   relativeDayLabel,
   summarizeRecurring,
+  upcomingCharges,
 } from '../lib/recurring.js';
 
 async function saveTaxCenter({ rethrow = false } = {}) {
@@ -490,16 +493,34 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
     : '';
 
   // Per-month column: converted where a rate is known, flagged with ≈ where it
-  // isn't, rather than silently reporting a USD figure as if it were CAD.
+  // isn't, rather than silently reporting a USD figure as if it were CAD. A
+  // scheduled change carries the monthly figure with it — the number under this
+  // heading is what the month costs, so it has to move when the price does.
+  const perMonthAfter = change ? monthlyEquivalentOn(s, change.effectiveFrom) : 0;
+  const perMonthNote = change
+    ? `<div class="rec-rate-after${change.delta < 0 ? ' is-down' : ''}"
+         title="From ${escapeHtml(change.effectiveFrom)} this subscription costs ${escapeHtml(rate ? fmt(perMonthAfter * rate, baseCurrency) : fmt(perMonthAfter, cur))} a month.">${change.delta < 0 ? '↓' : '↑'} ${escapeHtml(rate ? fmt(perMonthAfter * rate, baseCurrency) : `≈ ${fmt(perMonthAfter, cur)}`)}<br>from ${escapeHtml(change.effectiveFrom)}</div>`
+    : '';
   const perMonthCell = inactive
     ? '<span class="rec-dim">—</span>'
-    : rate
+    : (rate
       ? `${fmt(perMonth * rate, baseCurrency)}`
-      : `<span class="rec-approx" title="No ${cur}→${baseCurrency} rate cached yet — shown unconverted.">≈ ${fmt(perMonth, cur)}</span>`;
+      : `<span class="rec-approx" title="No ${cur}→${baseCurrency} rate cached yet — shown unconverted.">≈ ${fmt(perMonth, cur)}</span>`) + perMonthNote;
 
+  // The next charge is priced by its own date, which is the whole point of a
+  // scheduled change: if the rise lands on or before that date, the money that
+  // actually leaves the account is the new figure, not the one in the amount
+  // column. Saying "2026-09-01" without the amount was the half of it that
+  // mattered least.
   const next = nextRecurringDate(s, now);
+  const nextAmount = next ? amountOnDate(s, next) : 0;
+  const nextIsNewPrice = next && Math.abs(nextAmount - liveAmount) >= 0.005;
   const nextCell = next
-    ? `<div class="rec-next-date">${escapeHtml(next)}</div><div class="rec-next-rel">${escapeHtml(relativeDayLabel(next, now))}</div>`
+    ? `<div class="rec-next-date">${escapeHtml(next)}</div>
+       <div class="rec-next-rel">${escapeHtml(relativeDayLabel(next, now))}</div>
+       <div class="rec-next-amt${nextIsNewPrice ? ' is-new' : ''}"${nextIsNewPrice
+        ? ` title="First charge at the new price — everything up to ${escapeHtml(next)} bills at ${escapeHtml(fmt(liveAmount, cur))}"`
+        : ''}>${nextIsNewPrice ? `${nextAmount > liveAmount ? '↑' : '↓'} ` : ''}${escapeHtml(fmt(nextAmount, cur))}</div>`
     : status === 'paused'
       ? '<span class="rec-dim">Held</span>'
       : status === 'ended'
@@ -549,9 +570,16 @@ function _tcRenderRecurringSummary(subs, summary, baseCurrency) {
   const approx = summary.unconverted.length
     ? `<div class="rec-stat-note" title="No cached rate for ${summary.unconverted.join(', ')} — those lines are counted at 1:1 until a rate is fetched.">≈ excludes ${escapeHtml(summary.unconverted.join(', '))} conversion</div>`
     : '';
-  const nextUp = summary.nextUp
-    ? `<div class="rec-stat-val">${escapeHtml(relativeDayLabel(summary.nextUp.date))}</div>
-       <div class="rec-stat-lbl">Next charge · ${escapeHtml(summary.nextUp.sub.desc || '')}</div>`
+  // The soonest charge names its amount, and flags it when that amount is a
+  // price change taking effect — the tile is read as "what's about to be paid".
+  const upNext = summary.nextUp;
+  const upNextCur = upNext ? (upNext.sub.currency || baseCurrency) : baseCurrency;
+  const upNextDelta = upNext ? upNext.amount - currentAmount(upNext.sub) : 0;
+  const upNextIsNew = Math.abs(upNextDelta) >= 0.005;
+  const nextUp = upNext
+    ? `<div class="rec-stat-val">${escapeHtml(relativeDayLabel(upNext.date))}</div>
+       <div class="rec-stat-lbl">Next charge · ${escapeHtml(fmt(upNext.amount, upNextCur))} · ${escapeHtml(upNext.sub.desc || '')}</div>
+       ${upNextIsNew ? `<div class="rec-stat-note rec-stat-change" title="This is the first charge at the new price.">${upNextDelta < 0 ? '↓' : '↑'} new price starts with this charge</div>` : ''}`
     : `<div class="rec-stat-val">—</div><div class="rec-stat-lbl">Next charge</div>`;
 
   // A scheduled rise changes the number this card exists to report, so say so
@@ -571,6 +599,7 @@ function _tcRenderRecurringSummary(subs, summary, baseCurrency) {
     <div class="rec-stat">
       <div class="rec-stat-val">${fmt(summary.annualBase, baseCurrency)}</div>
       <div class="rec-stat-lbl">Annualised run rate</div>
+      ${change ? `<div class="rec-stat-note rec-stat-change" title="Twelve months at the committed total once ${escapeHtml(change.sub.desc || 'that change')} takes effect on ${escapeHtml(change.date)}.">${change.delta < 0 ? '↓' : '↑'} ${escapeHtml(fmt(summary.monthlyBaseAfterChange * 12, baseCurrency))} from ${escapeHtml(change.date)}</div>` : ''}
     </div>
     <div class="rec-stat">${nextUp}</div>
     <div class="rec-stat">
@@ -3450,6 +3479,10 @@ function _tcRateRowHtml(row = {}) {
         <input type="text" class="rec-rate-note" value="${escapeHtml(row.note || '')}"
           placeholder="e.g. 2026 rent increase" oninput="updateRecurringPreview()">
       </div>
+      <label class="rec-rate-moves-lbl" title="Tick this when the payment date moves too — from this date the charge lands on this day of the month instead of the old one.">
+        <input type="checkbox" class="rec-rate-moves"${row.movesCharge ? ' checked' : ''} onchange="updateRecurringPreview()">
+        <span>Charge moves to this day too</span>
+      </label>
       <button type="button" class="btn sm danger-btn rec-rate-del" aria-label="Delete this price change"
         title="Delete this price change" onclick="removeRecurringRateChange(this)">✕</button>
     </div>`;
@@ -3471,6 +3504,7 @@ function _tcReadRateRows() {
     effectiveFrom: row.querySelector('.rec-rate-date')?.value || '',
     amount: row.querySelector('.rec-rate-amount')?.value || '',
     note: (row.querySelector('.rec-rate-note')?.value || '').trim(),
+    movesCharge: !!row.querySelector('.rec-rate-moves')?.checked,
   }));
 }
 
@@ -3480,7 +3514,7 @@ function _tcReadRateRows() {
  */
 function addRecurringRateChange(prefillDate = '') {
   const rows = _tcReadRateRows();
-  rows.push({ effectiveFrom: prefillDate || '', amount: '', note: '' });
+  rows.push({ effectiveFrom: prefillDate || '', amount: '', note: '', movesCharge: false });
   _tcRenderRateRows(rows);
   const dates = document.querySelectorAll('#rec-edit-rates .rec-rate-date');
   const last = dates[dates.length - 1];
@@ -3607,7 +3641,9 @@ function updateRecurringPreview() {
     ? 'Paused — nothing will post until you resume.'
     : status === 'ended'
       ? `Ended ${escapeHtml(draft.endDate)} — no further charges.`
-      : next ? `Next charge ${escapeHtml(next)} (${escapeHtml(relativeDayLabel(next))}).` : 'No upcoming charge.';
+      : next
+        ? `Next charge ${escapeHtml(fmt(amountOnDate(draft, next), draft.currency))} on ${escapeHtml(next)} (${escapeHtml(relativeDayLabel(next))}).`
+        : 'No upcoming charge.';
 
   // Backfill warning: a start date in the past means the ledger gets every
   // missed period at once on save. Better said here than discovered after.
@@ -3626,8 +3662,22 @@ function updateRecurringPreview() {
     ? `<div class="rec-preview-change">${change.delta < 0 ? '↓' : '↑'} ${escapeHtml(fmt(change.from, draft.currency))} → <strong>${escapeHtml(fmt(change.to, draft.currency))}</strong>${escapeHtml(frequencySuffix(draft.frequency))} from ${escapeHtml(change.effectiveFrom)} (${escapeHtml(relativeDayLabel(change.effectiveFrom))})${draft.frequency === 'monthly' ? '' : ` · ${escapeHtml(fmt(perMonthAfter, draft.currency))}/mo`}<br><span class="rec-dim">Charges dated before then keep ${escapeHtml(fmt(change.from, draft.currency))}.</span></div>`
     : '';
 
+  // Moving the charge day rearranges the calendar, and the rule that stops one
+  // period being billed twice can push the first charge on the new day a whole
+  // cadence out. That is the kind of thing you want to see as dates, before
+  // saving — so the next three charges are spelled out whenever a move is set.
+  const moves = draft.rateChanges.some(r => r.movesCharge);
+  const soon = moves && !draft.paused
+    ? upcomingCharges({ ...draft, lastInjected: _tcEditingRecurring ? (_tcFindRecurring(_tcEditingRecurring)?.lastInjected || '') : '' }, 3)
+    : [];
+  const scheduleLine = soon.length
+    ? `<div class="rec-preview-sched"><span class="rec-dim">Charges from here:</span> ${soon.map(c => `${escapeHtml(c.date)} · ${escapeHtml(fmt(c.amount, draft.currency))}`).join(' &nbsp;·&nbsp; ')}</div>`
+    : moves
+      ? `<div class="rec-preview-sched"><span class="rec-dim">No further charges on this schedule.</span></div>`
+      : '';
+
   el.innerHTML = `<div class="rec-preview-money">${money}</div>
-    <div class="rec-preview-when">${escapeHtml(frequencyLabel(draft.frequency))} · ${when}</div>${changeLine}${backfill}`;
+    <div class="rec-preview-when">${escapeHtml(frequencyLabel(draft.frequency))} · ${when}</div>${changeLine}${scheduleLine}${backfill}`;
 }
 
 /** Read the editor fields into a subscription-shaped draft. */
@@ -3683,9 +3733,7 @@ async function saveRecurringEditor() {
   // that charge — posted expenses are real records. Say so plainly instead of
   // leaving the owner to find the old figure still sitting in the ledger.
   const existingRecord = _tcEditingRecurring ? _tcFindRecurring(_tcEditingRecurring) : null;
-  const lastPosted = existingRecord
-    ? lastPostedChargeDate({ ...normalizeRecurring(existingRecord), ...draft, lastInjected: existingRecord.lastInjected || '' })
-    : '';
+  const lastPosted = existingRecord ? lastPostedChargeDate(existingRecord) : '';
   const retro = lastPosted ? draft.rateChanges.filter(r => r.effectiveFrom <= lastPosted) : [];
   if (retro.length && !(await confirmDialog(
     `${retro.length === 1 ? 'A price change starts' : `${retro.length} price changes start`} on or before ${lastPosted}, which has already been posted to the ledger.\n\n` +

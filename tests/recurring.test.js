@@ -13,6 +13,7 @@ import {
   monthlyEquivalentOn,
   nextRateChange,
   nextRecurringDate,
+  upcomingCharges,
   normalizeRateChanges,
   normalizeRecurring,
   parseYmd,
@@ -137,12 +138,86 @@ describe('recurringDueCharges with a price change', () => {
     expect(recurringDueCharges(rent({ lastInjected: '2026-08' }), NOW)).toEqual([]);
   });
 
+  it('prices the next charge by its own date, not by today’s price', () => {
+    // The phone-bill case from the panel: the rise starts 1 Sep but the charge
+    // falls on the 16th, so the very next charge is already at the new price
+    // even though today's price is still the old one.
+    const phone = sub({
+      desc: 'Phone Bill', amount: 45.2, startDate: '2026-06-16', lastInjected: '2026-08',
+      rateChanges: [{ effectiveFrom: '2026-09-01', amount: 62 }],
+    });
+    const next = nextRecurringDate(phone, NOW);
+    expect(next).toBe('2026-09-16');
+    expect(currentAmount(phone, NOW)).toBe(45.2);
+    expect(amountOnDate(phone, next)).toBe(62);
+  });
+
   it('still bills when the starting amount is zero but a later price is set', () => {
     const due = recurringDueCharges(
       sub({ amount: 0, startDate: '2026-06-01', rateChanges: [{ effectiveFrom: '2026-07-01', amount: 20 }] }),
       NOW,
     );
     expect(due.map(d => [d.date, d.amount])).toEqual([['2026-07-01', 20], ['2026-08-01', 20]]);
+  });
+});
+
+describe('a price change that also moves the charge day', () => {
+  // Rent goes up AND moves from the 1st to the 5th in the same letter.
+  const moved = rent({
+    rateChanges: [{ effectiveFrom: '2026-09-05', amount: 450, movesCharge: true }],
+  });
+
+  it('leaves earlier charges on the old day and re-anchors from the change', () => {
+    const due = recurringDueCharges(moved, new Date(2026, 11, 20)); // 20 Dec 2026
+    const dates = due.map(d => d.date);
+    expect(dates).toContain('2026-08-01');
+    expect(dates).toContain('2026-09-01'); // still due on the 1st — the move is dated the 5th
+    expect(dates).toContain('2026-10-05');
+    expect(dates).toContain('2026-11-05');
+    expect(dates).toContain('2026-12-05');
+    expect(dates).not.toContain('2026-10-01');
+  });
+
+  it('prices each charge by its own date across the move', () => {
+    const due = recurringDueCharges(moved, new Date(2026, 11, 20));
+    const by = Object.fromEntries(due.map(d => [d.date, d.amount]));
+    expect(by['2026-09-01']).toBe(300); // before the 5th, still the old rent
+    expect(by['2026-10-05']).toBe(450);
+  });
+
+  it('never bills one period twice when the day moves earlier', () => {
+    // Phone bill on the 16th moving to the 1st: 1 Sep is a fortnight after the
+    // 16 Aug charge, so the new day starts a full cadence later instead.
+    const phone = sub({
+      desc: 'Phone Bill', amount: 45.2, startDate: '2026-06-16',
+      rateChanges: [{ effectiveFrom: '2026-09-01', amount: 62, movesCharge: true }],
+    });
+    const dates = recurringDueCharges(phone, new Date(2026, 11, 20)).map(d => d.date);
+    expect(dates).toEqual(['2026-06-16', '2026-07-16', '2026-08-16', '2026-10-01', '2026-11-01', '2026-12-01']);
+  });
+
+  it('does not move the day unless asked', () => {
+    const dates = recurringDueCharges(rent(), new Date(2026, 11, 20)).map(d => d.date);
+    expect(dates).toContain('2026-10-01');
+    expect(dates).not.toContain('2026-10-05');
+  });
+
+  it('reports the rearranged calendar to the editor', () => {
+    const next = upcomingCharges(rent({ lastInjected: '2026-08', ...{} }), 3, NOW);
+    expect(next.map(c => [c.date, c.amount]))
+      .toEqual([['2026-09-01', 350], ['2026-10-01', 350], ['2026-11-01', 350]]);
+    expect(upcomingCharges(sub({ paused: true }), 3, NOW)).toEqual([]);
+  });
+
+  it('keeps the moved day clamped to short months', () => {
+    const s = sub({
+      startDate: '2026-01-10', amount: 10,
+      rateChanges: [{ effectiveFrom: '2026-03-31', amount: 12, movesCharge: true }],
+    });
+    const dates = recurringDueCharges(s, new Date(2026, 5, 30)).map(d => d.date);
+    // March was already billed on the 10th, so the day-31 anchor starts in
+    // April — and April has 30 days, so it clamps rather than spilling over.
+    expect(dates).toEqual(['2026-01-10', '2026-02-10', '2026-03-10', '2026-04-30', '2026-05-31', '2026-06-30']);
   });
 });
 
@@ -402,7 +477,7 @@ describe('recurring subscriptions panel markup', () => {
       expect(html, `${id} missing from index.html`).toContain(`id="${id}"`);
       expect(taxcentre, `${id} never referenced`).toContain(id);
     });
-    ['rec-rate-date', 'rec-rate-amount', 'rec-rate-note', 'rec-rate-row'].forEach(cls => {
+    ['rec-rate-date', 'rec-rate-amount', 'rec-rate-note', 'rec-rate-row', 'rec-rate-moves'].forEach(cls => {
       expect(taxcentre, `.${cls} written but never read`)
         .toContain(`.${cls}`);
     });

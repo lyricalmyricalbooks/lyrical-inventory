@@ -9245,6 +9245,13 @@ tr.hist-row:hover {
 .rec-per{font-size:var(--text-2xs);color:var(--content-muted);margin-left:2px;}
 .rec-next-date{font-family:'DM Mono',monospace;font-size:var(--text-sm);color:var(--content-primary);}
 .rec-next-rel{font-size:var(--text-xs);color:var(--content-muted);margin-top:2px;}
+/* What that charge will actually be. Quiet when it matches the amount column,
+   amber the moment the charge is the first one at a new price. */
+.rec-next-amt{
+  font-family:'DM Mono',monospace;font-size:var(--text-xs);
+  color:var(--content-secondary);margin-top:2px;
+}
+.rec-next-amt.is-new{color:var(--status-active);font-weight:700;cursor:help;}
 
 /* Paused/ended rows stay legible but visibly stand down, so the live
    commitments above them keep the eye. Deliberately scoped to the data cells:
@@ -9275,6 +9282,14 @@ tr.hist-row:hover {
   transition:background-color var(--dur-fast) var(--ease-standard);
 }
 .rec-rate-chip:hover{background:var(--status-active-bg);}
+/* The per-month column's version of the same news: no border, because the
+   bordered chip one column over already carries the price and the date. */
+.rec-rate-after{
+  font-family:'DM Mono',monospace;font-size:var(--text-2xs);
+  color:var(--status-active);margin-top:var(--space-1);
+  line-height:var(--leading-snug);cursor:help;
+}
+.rec-rate-after.is-down{color:var(--status-positive);}
 .rec-rate-chip.is-down{border-color:var(--status-positive);color:var(--status-positive);}
 .rec-rate-chip.is-down:hover{background:var(--status-positive-bg);}
 .rec-actions{display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
@@ -9341,6 +9356,16 @@ tr.hist-row:hover {
   color:var(--content-muted);flex:none;
 }
 .rec-rate-del{align-self:end;}
+/* "Charge moves to this day too" spans the row under the fields — it changes
+   the whole schedule, so it reads as a statement about the row, not a fourth
+   field crammed in beside the note. */
+.rec-rate-moves-lbl{
+  grid-column:1 / -1;display:flex;align-items:center;gap:var(--space-2);
+  cursor:pointer;padding:6px 2px 2px;
+  font-size:var(--text-xs);color:var(--content-secondary);
+}
+.rec-rate-moves-lbl:hover{color:var(--content-primary);}
+.rec-rate-moves-lbl input{width:16px;height:16px;accent-color:var(--gold);flex:none;}
 @container (max-width:460px){
   .rec-rate-row{grid-template-columns:1fr 1fr;}
   .rec-rate-field-note{grid-column:1 / -1;}
@@ -9370,6 +9395,11 @@ tr.hist-row:hover {
   color:var(--content-primary);line-height:var(--leading-snug);
 }
 .rec-stat-change{color:var(--status-active);font-family:'DM Mono',monospace;}
+.rec-preview-sched{
+  margin-top:var(--space-2);font-family:'DM Mono',monospace;
+  font-size:var(--text-2xs);color:var(--content-primary);
+  line-height:var(--leading-snug);
+}
 
 @media (max-width:768px){
   .rec-head .btn{width:100%;justify-content:center;}
