@@ -3234,6 +3234,50 @@ tr.hist-row:hover {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+/* An endlessly sweeping shimmer is exactly the motion someone with vestibular
+   sensitivity asks to be spared. The bars still render — they just hold still,
+   so the "content is coming" cue survives. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line { animation: none; }
+}
+
+/* ─── CATALOGUE LOADING SKELETON ──────────────────────────────────────────
+   The all-books overview is visible from first paint but only populated once
+   every book has come back from Firestore, so a cold open used to show three
+   bare headings over nothing. These placeholders stand in for the book strips
+   and are built on .book-strip itself, so the padding, gap and rail width are
+   the real ones and the layout does not jump when the data lands. */
+.book-strip.is-skeleton {
+  /* No accent colour is known yet, and no hover/lift: there is nothing here to
+     click. color-mix on an undefined accent would fall back oddly, so the plain
+     card surface is used instead. */
+  background: var(--surface-card);
+  pointer-events: none;
+}
+.book-strip.is-skeleton::before {
+  background: var(--border-strong);
+}
+.book-strip.is-skeleton .book-cover-3d {
+  background: var(--track-bg);
+  border-radius: var(--r);
+}
+/* These margins are not arbitrary: they are tuned so a placeholder strip is
+   the same height as the real one to the pixel, which is the whole point of
+   matching the content's dimensions rather than approximating them. Measured
+   against a rendered strip — re-measure before changing any of them. */
+.sk-title { height: 18px; width: 55%; margin-bottom: 10px; }
+.sk-meta { height: 11px; width: 78%; margin-bottom: 8px; }
+.sk-bar-label { height: 9px; width: 34%; margin-bottom: 7px; }
+.sk-bar { height: 5px; width: 100%; margin-bottom: 10px; border-radius: 100px; }
+.book-strip.is-skeleton .bsk {
+  /* Same tile box as a real KPI, so the rail keeps its height and the four
+     columns line up with the row that replaces them. */
+  gap: 8px;
+}
+.sk-kpi-val { height: 17px; width: 62%; margin-bottom: 0; }
+.sk-kpi-label { height: 9px; width: 44%; margin-bottom: 0; }
+.sk-action { height: 29px; width: 108px; border-radius: var(--r2); margin-bottom: 0; }
+
 
 /* ===== TAX CENTER — Cash Flow Summary card ===== */
 .cf-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:1rem;}
