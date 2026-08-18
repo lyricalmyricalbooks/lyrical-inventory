@@ -2892,6 +2892,29 @@ tr.hist-row:hover {
 .hist-filter-chip button{border:none;background:var(--ink);color:var(--on-inverse);font-size:11px;font-weight:600;border-radius:100px;padding:4px 10px;margin-left:4px;cursor:pointer;font-family:'DM Mono',monospace;transition:opacity .12s;}
 .hist-filter-chip button:hover{opacity:.85;}
 
+/* The row that carries Order History's rich empty state is a panel, not a
+   record: it must not take the zebra hover, the cell padding, or the row
+   divider that make a real order row read as clickable data. */
+.tbl tbody tr.hist-empty-row td,
+.tbl tbody tr.hist-empty-row:hover td {
+  padding: 1.25rem 1rem;
+  border-bottom: none;
+  background: transparent;
+}
+.tbl tbody tr.hist-empty-row {
+  background: transparent;
+}
+/* Ten nowrap header cells are what force this table wider than a phone screen,
+   which pushes the centred empty state off the right edge where it cannot be
+   read or tapped. With no rows there are no columns worth labelling, so the
+   header stands down and the panel sizes to the screen — which is also how
+   every other rich empty state in the app reads: a standalone panel, not a
+   headed table. Degrades to the previous behaviour wherever :has() is not
+   supported. */
+.tbl:has(> tbody > tr.hist-empty-row) thead {
+  display: none;
+}
+
 /* Card entrance micro-animation on view state changes */
 .card, .kpi, .metric-banner, .stock-block, .store-card, .stock-alert {
   animation: cardEntrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;

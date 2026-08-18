@@ -253,6 +253,103 @@ tbody.sys-long-list > tr {
   box-shadow: inset 3px 0 0 var(--status-active);
 }
 
+/* ── Rich empty states ─────────────────────────────────────────────────────
+   The second tier described in UX_PATTERNS.md § Empty states: the treatment a
+   whole tab or panel gets when it has nothing to show, as opposed to the plain
+   one-liner that suits a small nested table body.
+
+   A modifier on .empty-state rather than a parallel class, so the base padding,
+   centring and `text-wrap: pretty` still apply and only the framing is added.
+   Every value here is a token, which is what makes this themeable for free —
+   the earlier .web-empty variant baked light-mode gradients and needed a
+   hand-written dark override to follow.
+
+   Unlayered on purpose: .empty-state in style.css is unlayered, and a rule
+   inside @layer system would lose to it no matter how specific. */
+.empty-state.sys-empty {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .55rem;
+  padding: 2.75rem 1.25rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r3);
+  background: var(--surface-sunken);
+}
+.empty-state.sys-empty .e-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 0 .35rem;
+  border-radius: var(--r3);
+  background: var(--gold-bg);
+  box-shadow: inset 0 0 0 1px var(--gold-line);
+  font-size: var(--text-2xl);
+  /* The base .e-icon fades to .35 — legible as a bare glyph, muddy once it
+     sits on a tinted plate. */
+  opacity: 1;
+}
+.empty-state.sys-empty > strong {
+  font-family: 'Playfair Display', serif;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  color: var(--content-primary);
+}
+.empty-state.sys-empty > span {
+  max-width: 52ch;
+  font-size: var(--text-base);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+}
+.sys-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: .7rem;
+}
+/* Panel-width, not viewport-width: this block renders inside a full tab and
+   inside a narrow card, and only its own width decides whether the buttons
+   still fit side by side. */
+@container (max-width: 460px) {
+  .sys-empty-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: min(100%, 280px);
+  }
+  .sys-empty-actions .btn {
+    justify-content: center;
+  }
+}
+.sys-empty-actions .btn {
+  transition:
+    transform var(--dur-base) var(--ease-entrance),
+    box-shadow var(--dur-base) var(--ease-entrance),
+    background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+.sys-empty-actions .btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--elev-hover);
+}
+.sys-empty-actions .btn:active {
+  transform: scale(.975);
+}
+/* The motion tokens already collapse to 1ms here; the transforms themselves
+   still need standing down. */
+@media (prefers-reduced-motion: reduce) {
+  .sys-empty-actions .btn:hover,
+  .sys-empty-actions .btn:active {
+    transform: none;
+  }
+}
+
 /* ── View Transitions ──────────────────────────────────────────────────────
    Applies to re-renders wrapped in withViewTransition() (src/lib/motion.js).
    Kept short and non-bouncy: this is a dense financial tool, so transitions
