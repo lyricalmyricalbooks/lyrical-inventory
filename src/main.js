@@ -3429,13 +3429,69 @@ function bookProgressBarHtml({ pct, tone = '', label = '', valueText = '' }) {
           </div>`;
 }
 
+// The all-books overview is the app's landing screen and it is visible from
+// first paint, but updateAllOverview() only runs once loadAllBooks() has pulled
+// every book back from Firestore. Until then the publisher looked at three
+// section headings over nothing — indistinguishable, on a slow connection or a
+// cold PWA start, from an app that had lost their catalogue.
+//
+// Placeholder strips instead, built on the real .book-strip so the padding, the
+// rail width and the row height are the genuine ones and nothing jumps when the
+// data arrives. Per AGENTS.md this is a shimmer skeleton matching the real
+// content's dimensions, never a spinner.
+function catalogueSkeletonHtml(rows = 3) {
+  const kpi = `<div class="bsk"><div class="skeleton-line sk-kpi-val"></div><div class="skeleton-line sk-kpi-label"></div></div>`;
+  const bar = `<div class="skeleton-line sk-bar-label"></div><div class="skeleton-line sk-bar"></div>`;
+  const strip = `<div class="book-strip is-skeleton" aria-hidden="true">
+      <div class="book-cover-3d"></div>
+      <div class="book-strip-info">
+        <div class="skeleton-line sk-title"></div>
+        <div class="skeleton-line sk-meta"></div>
+        ${bar}${bar}
+      </div>
+      <div class="book-strip-kpis">${kpi.repeat(4)}</div>
+      <div class="book-strip-actions"><div class="skeleton-line sk-action"></div></div>
+    </div>`;
+  const count = Number.isFinite(Number(rows)) ? Math.min(6, Math.max(1, Math.trunc(Number(rows)))) : 3;
+  // aria-hidden on the strips and one live region carrying the actual status —
+  // a screen reader should hear "loading", not four columns of empty boxes.
+  return `<div class="sr-only" role="status" aria-live="polite">Loading your books\u2026</div>${strip.repeat(count)}`;
+}
+
+// Loaded, and there genuinely are no books. Distinct from the skeleton above:
+// one says "wait", this one says "there is nothing here and here is what to do".
+function catalogueEmptyHtml() {
+  return `<div class="empty-state sys-empty">
+      <div class="e-icon" aria-hidden="true">\ud83d\udcda</div>
+      <strong>No books in your catalogue yet</strong>
+      <span>Every title you add gets its own stock count, sales history and consignment ledger, and they all roll up onto this screen.</span>
+      <div class="sys-empty-actions">
+        <button class="btn gold lg" onclick="switchTab('sheets')">\u2699 Open settings to add a book</button>
+      </div>
+    </div>`;
+}
+
+// Painted immediately at boot so the landing screen is never blank. Safe to call
+// before Firestore has answered, and a no-op once real strips are in place.
+function showCatalogueSkeleton() {
+  const list = $('all-books-list');
+  if (!list || list.dataset.loaded === '1') return;
+  list.innerHTML = catalogueSkeletonHtml();
+}
+
 // ── ALL BOOKS OVERVIEW
 function updateAllOverview() {
   const allBooksVisible = BOOK_LIST.filter(b => !isTestBook(b));
 
   // Book strips
   const list = $('all-books-list');
-  list.innerHTML = allBooksVisible.map(book => {
+  // Stamped so showCatalogueSkeleton() can never paint over real content if a
+  // later boot step calls it again.
+  list.dataset.loaded = '1';
+  if (!allBooksVisible.length) {
+    list.innerHTML = catalogueEmptyHtml();
+  } else {
+    list.innerHTML = allBooksVisible.map(book => {
     const s = states[book.id] || defaultState(book);
     // ⚡ Bolt Optimization: Calculate consigned and owed in a single loop
     let _consigned = 0, owed = 0;
@@ -3526,7 +3582,8 @@ function updateAllOverview() {
         </button>
       </div>
     </div>`;
-  }).join('');
+    }).join('');
+  }
 
   // Combined channel analytics — collect structured data grouped by currency so
   // the view can render visually (stacked bars + per-currency toggle) instead of
@@ -12456,6 +12513,10 @@ async function boot(forcedBook) {
     } else {
       // Publisher
       activeBook = 'all';
+      // Painted before the await so the landing screen shows the catalogue
+      // arriving rather than nothing at all. Replaced by updateAllOverview()
+      // the moment loadAllBooks() resolves.
+      showCatalogueSkeleton();
       loadAllBooks().then(() => {
         maybeRunDailyBackup(true); startDailyBackupWatcher();
         window.posConfigureRates({ silent: true });
