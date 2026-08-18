@@ -3407,6 +3407,27 @@ function updateHeader() {
   }
 }
 
+// One progress bar on a book strip — the stock bar and the break-even bar are
+// the same component with a different tone and label.
+//
+// Two things it fixes over the markup it replaces. The trough was an inline
+// dark wash, which on a dark card meant no visible trough at all: the fill just
+// stopped, with nothing showing how far it still had to go. And the bar carried
+// no semantics beyond a `title` on its wrapper, so the headline figure on the
+// app's first screen was invisible to a screen reader.
+//
+// Callers pass the already-computed percentage — no aggregation happens here.
+function bookProgressBarHtml({ pct, tone = '', label = '', valueText = '' }) {
+  const raw = Number(pct);
+  // A book with maxPrint 0, or stock recorded above the print run, would
+  // otherwise push the fill past the trough or render `width:NaN%`.
+  const safe = Number.isFinite(raw) ? Math.min(100, Math.max(0, raw)) : 0;
+  const toneClass = tone ? ` ${tone}` : '';
+  return `<div class="bar-track" role="progressbar" aria-valuenow="${safe.toFixed(0)}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(label)}" aria-valuetext="${escapeHtml(valueText)}">
+            <div class="bar-fill${toneClass}" style="width:${safe}%;"></div>
+          </div>`;
+}
+
 // ── ALL BOOKS OVERVIEW
 function updateAllOverview() {
   const allBooksVisible = BOOK_LIST.filter(b => !isTestBook(b));
@@ -3436,9 +3457,14 @@ function updateAllOverview() {
             ${broken ? '✓ Broken even' : bePct.toFixed(0) + '%'}
           </span>
         </div>
-        <div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;">
-          <div class="bar-fill" style="width:${bePct}%;${broken ? 'background:var(--green);' : ''}"></div>
-        </div>
+        ${bookProgressBarHtml({
+      pct: bePct,
+      tone: broken ? 'done' : '',
+      label: `Break-even for ${book.title}`,
+      valueText: broken
+        ? 'Broken even — production costs fully recovered'
+        : `${bePct.toFixed(0)}% of production costs recovered`,
+    })}
       </div>` : '';
 
     const expTotal = (s.expenses || []).reduce((a, e) => a + (e.amount || 0), 0);
@@ -3462,9 +3488,15 @@ function updateAllOverview() {
             <span>Stock on hand</span>
             <span class="progress-pct">${s.stock} / ${book.maxPrint} (${pct.toFixed(0)}%)</span>
           </div>
-          <div class="bar-track" style="background:rgba(0,0,0,.08);margin-bottom:0;">
-            <div class="bar-fill" style="width:${pct}%;"></div>
-          </div>
+          ${bookProgressBarHtml({
+      pct,
+      // Same tone the on-hand figure already uses, so a book running low reads
+      // as low from the bar too. 'gold' is the healthy default and needs no
+      // override on the fill.
+      tone: stockClass === 'gold' ? '' : stockClass,
+      label: `Stock on hand for ${book.title}`,
+      valueText: `${s.stock} of ${book.maxPrint} copies on hand`,
+    })}
         </div>
         ${beBar}
       </div>

@@ -72,6 +72,9 @@
   --gold-text: #f2cd85;
   --gold-bg: rgba(221, 165, 72, .14);
   --gold-line: rgba(221, 165, 72, .32);
+  /* A dark wash on a dark card is no trough at all — this is the one that
+     makes the catalogue's stock and break-even bars readable at night. */
+  --track-bg: rgba(255, 255, 255, .13);
 
   /* STATUS — the light theme's deep, low-luminance status colours are text on
      a pale tint. That inverts here: the tint stays low-alpha (so it composites
@@ -168,6 +171,9 @@
     --gold-text: #f2cd85;
     --gold-bg: rgba(221, 165, 72, .14);
     --gold-line: rgba(221, 165, 72, .32);
+    /* A dark wash on a dark card is no trough at all — this is the one that
+       makes the catalogue's stock and break-even bars readable at night. */
+    --track-bg: rgba(255, 255, 255, .13);
 
     --green: #5fcf90;
     --green-light: #86e5ad;
