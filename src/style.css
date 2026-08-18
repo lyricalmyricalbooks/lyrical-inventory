@@ -2915,6 +2915,70 @@ tr.hist-row:hover {
   display: none;
 }
 
+/* ─── CONSIGNMENT LEDGER — TOTALS & EMPTY STATE ───────────────────────────
+   The ledger's whole purpose is "how much do the stores still owe me", and the
+   table showed a per-row amount with nothing summing it. This is that total,
+   sitting under the column it totals so it reads as part of the ledger rather
+   than a separate widget. */
+.ledger-total-row td {
+  border-top: 2px solid var(--border-default);
+  border-bottom: none;
+  background: var(--surface-sunken);
+  padding-top: 12px;
+  padding-bottom: 12px;
+  vertical-align: middle;
+}
+/* The total is not a record — it must not take the row hover that tells the
+   publisher a line is interactive. */
+.tbl tfoot tr.ledger-total-row:hover td {
+  background: var(--surface-sunken);
+}
+.ledger-total-label {
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--content-secondary);
+}
+.ledger-total-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--content-muted);
+}
+.ledger-total-val {
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+.ledger-total-val.is-owed {
+  color: var(--status-active);
+}
+.ledger-total-val.is-clear {
+  color: var(--status-positive);
+}
+
+/* Same reasoning as the Order History empty row: the panel is not a record, so
+   it takes neither the hover, the cell padding, nor the row divider. */
+.tbl tbody tr.ledger-empty-row td,
+.tbl tbody tr.ledger-empty-row:hover td {
+  padding: 1.25rem 1rem;
+  border-bottom: none;
+  background: transparent;
+}
+.tbl tbody tr.ledger-empty-row {
+  background: transparent;
+}
+/* Eight nowrap headers force this table wider than a phone, which pushes the
+   centred panel off the right edge. With no rows there are no columns worth
+   labelling. Degrades to the previous behaviour without :has(). */
+.tbl:has(> tbody > tr.ledger-empty-row) thead {
+  display: none;
+}
+
 /* Card entrance micro-animation on view state changes */
 .card, .kpi, .metric-banner, .stock-block, .store-card, .stock-alert {
   animation: cardEntrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;

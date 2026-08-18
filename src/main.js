@@ -537,7 +537,7 @@ import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
-import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores } from './lib/consignment.js';
+import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals } from './lib/consignment.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -7070,13 +7070,65 @@ async function markHistoryConsignmentPaid(num) {
   if (!(await confirmDialog(`Mark consignment sale "${num}" (${fmt(e.amountDue, book.currency)}) as paid?`, { title: 'Mark Consignment Paid', okLabel: 'Mark paid' }))) return;
   markPaid(e.id);
 }
+// The ledger sits directly under the Stores and Invoices panels, both of which
+// already offer an icon, a sentence and a way forward when empty — this one
+// said "No entries." and stopped, which read as unfinished next to them. The
+// two routes into the ledger are shipping stock out and recording what sold,
+// so those are the exits offered.
+function consignmentLedgerEmptyHtml() {
+  return `<div class="empty-state sys-empty">
+      <div class="e-icon" aria-hidden="true">📒</div>
+      <strong>Nothing in the consignment ledger yet</strong>
+      <span>Every shipment you send a store, every copy they sell and every book that comes back is recorded here, with what each sale still owes you.</span>
+      <div class="sys-empty-actions">
+        <button class="btn gold lg" onclick="openM('add-store')">+ Add a store</button>
+        <button class="btn lg" onclick="openBulkSend()">📦 Send books out</button>
+      </div>
+    </div>`;
+}
+
+// The total the table never had. One row per currency the ledger was recorded
+// in — deliberately not one combined figure, because adding CA$ to € would
+// produce a number that is wrong in both.
+function consignmentLedgerFootHtml(totals) {
+  if (!totals || !totals.length) return '';
+  return totals.map((t) => {
+    const owed = t.outstanding ?? 0;
+    const settled = t.paid ?? 0;
+    const sym = getSym(t.code);
+    const unpaid = t.outstandingCount ?? 0;
+    const settledNote = settled > 0
+      ? `${sym}${settled.toFixed(2)} settled`
+      : 'nothing settled yet';
+    // All-clear is worth stating outright: it is the answer to "is anyone
+    // behind on paying me?", and a bare 0.00 does not read as reassurance.
+    const label = owed > 0
+      ? `Still owed to you<span class="ledger-total-sub">${unpaid} unpaid sale${unpaid === 1 ? '' : 's'} · ${escapeHtml(settledNote)}</span>`
+      : `All settled<span class="ledger-total-sub">no unpaid sales · ${escapeHtml(settledNote)}</span>`;
+    const valueClass = owed > 0 ? 'ledger-total-val is-owed' : 'ledger-total-val is-clear';
+    const codeTag = totals.length > 1
+      ? ` <span class="chip-status gray">${escapeHtml(t.code)}</span>`
+      : '';
+    return `<tr class="ledger-total-row">
+        <td colspan="5" class="ledger-total-label">${label}</td>
+        <td class="r mono-num ${valueClass}">${sym}${owed.toFixed(2)}</td>
+        <td colspan="2">${owed > 0 ? '<span class="pill amber">● Outstanding</span>' : '<span class="pill green">✓ Clear</span>'}${codeTag}</td>
+      </tr>`;
+  }).join('');
+}
+
 function renderLedger() {
   const s = getState(), book = getBook(), cur = book.currency, b = $('ledger-body');
   const ledgerBookCode = bookCurrencyCode(book);
   // Same rule as the History table: an amount renders in the currency its row
   // was recorded in, so a pre-change entry can't masquerade as the new one.
   const ledgerCur = e => (e.cur && normalizeCurrencyCode(e.cur, ledgerBookCode) !== ledgerBookCode) ? getSym(e.cur) : cur;
-  if (!s.ledger.length) { b.innerHTML = '<tr><td colspan="8"><div class="empty-state" style="padding:1rem;">No entries.</div></td></tr>'; return; }
+  const foot = $('ledger-foot');
+  if (!s.ledger.length) {
+    b.innerHTML = `<tr class="ledger-empty-row"><td colspan="8">${consignmentLedgerEmptyHtml()}</td></tr>`;
+    if (foot) foot.innerHTML = '';
+    return;
+  }
   const pill = e => {
     if (e.voided) return '<span class="void-badge">Void</span>';
     if (e.type === 'Shipment') return '<span class="pill blue">Sent</span>';
@@ -7094,9 +7146,10 @@ function renderLedger() {
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     // Cross-link Sale rows back to the invoice that bills them (absent id → '').
     const invBadge = e.type === 'Sale' ? invoiceBadgeHTML(e.invoiceId, e.invoiceNum) : '';
-    html += `<tr class="${voided}"><td style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
+    html += `<tr class="${voided}"><td class="mono-num" style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
   }
   b.innerHTML = html;
+  if (foot) foot.innerHTML = consignmentLedgerFootHtml(consignmentLedgerTotals(s.ledger, ledgerBookCode));
 }
 
 // Export the current book's consignment ledger (shipments, sales, returns) as a
