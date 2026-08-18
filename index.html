@@ -120,7 +120,7 @@
   .invoice-paper .inv-foot{text-align:center;font-size:11px;color:#a8a094;margin-top:24px;font-style:italic;}
 
   /* Invoice list cards */
-  .invoice-card{background:#fff;border-radius:var(--r2);border:1px solid var(--border);padding:14px 18px;margin-bottom:10px;display:grid;grid-template-columns:auto 1.6fr 1fr 1fr 1fr auto;gap:16px;align-items:center;transition:border-color .14s;}
+  .invoice-card{background:var(--surface-card);border-radius:var(--r2);border:1px solid var(--border);padding:14px 18px;margin-bottom:10px;display:grid;grid-template-columns:auto 1.6fr 1fr 1fr 1fr auto;gap:16px;align-items:center;transition:border-color .14s;}
   .invoice-card:hover{border-color:var(--gold-line);}
   .invoice-card .inv-c-num{font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);font-weight:600;}
   .invoice-card .inv-c-store{font-weight:700;color:var(--text);font-size:13px;}
@@ -129,6 +129,14 @@
   .invoice-card .inv-c-cell strong{display:block;font-family:'DM Mono',monospace;color:var(--text);font-weight:600;font-size:13px;margin-top:2px;}
   .invoice-card .inv-c-cell.amt strong{color:var(--gold);}
   .invoice-card .inv-c-actions{display:flex;gap:6px;}
+  /* Status pill — a themed sibling of .invoice-paper's print-only version above,
+     so the printed invoice stays fixed-light while this list row follows dark mode. */
+  .invoice-card .inv-status{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:4px 10px;border-radius:99px;text-align:center;}
+  .invoice-card .inv-status.draft{background:var(--status-neutral-bg);color:var(--status-neutral);}
+  .invoice-card .inv-status.sent{background:var(--status-info-bg);color:var(--status-info);}
+  .invoice-card .inv-status.paid{background:var(--status-positive-bg);color:var(--status-positive);}
+  .invoice-card .inv-status.overdue{background:var(--status-critical-bg);color:var(--status-critical);}
+  .invoice-card .inv-status.cancelled{background:var(--status-neutral-bg);color:var(--status-neutral);text-decoration:line-through;}
   @media (max-width:780px){
     .invoice-card{grid-template-columns:1fr;gap:8px;}
     .invoice-card .inv-c-actions{justify-content:flex-end;}

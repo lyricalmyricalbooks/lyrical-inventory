@@ -7480,9 +7480,7 @@ function renderInvoices() {
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
       <div class="inv-c-cell amt">Total<strong>${fmt(inv.total || 0, cur)}</strong></div>
       <div class="inv-c-actions" style="flex-direction:column;align-items:stretch;gap:6px;">
-        <span class="inv-status ${statusCls}" style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:4px 10px;border-radius:99px;text-align:center;
-          background:${statusCls === 'paid' ? '#e0f5ea' : statusCls === 'sent' ? '#ebf2ff' : statusCls === 'overdue' ? '#fde6e0' : statusCls === 'cancelled' ? '#eee' : '#e9e6e0'};
-          color:${statusCls === 'paid' ? '#1d7a4a' : statusCls === 'sent' ? '#1d4cb3' : statusCls === 'overdue' ? '#a13a1b' : statusCls === 'cancelled' ? '#5a544c' : '#6b665e'};">${statusLabel}</span>
+        <span class="inv-status ${statusCls}">${statusLabel}</span>
         <div style="display:flex;gap:4px;justify-content:flex-end;">
           <button class="btn sm" onclick="viewInvoice('${inv.id}')">View</button>
           <button class="btn sm ink" onclick="openCreateInvoice(null,'${inv.id}')">Edit</button>
