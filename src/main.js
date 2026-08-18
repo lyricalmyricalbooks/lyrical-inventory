@@ -13316,6 +13316,67 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
+// ── POS cart presentation ─────────────────────────────────────────────
+// Both checkout actions already refuse an empty cart (posCheckout and
+// posGenerateSaleQR toast and bail), but at a fair the wasted tap costs a beat
+// with a customer standing there. Showing the refusal in the control itself is
+// cheaper than explaining it afterwards; the guards stay as the real safety
+// net. The existing :disabled styling carries the look — never a custom one.
+function posSyncCheckoutAvailability(hasItems) {
+  for (const id of ['pos-checkout-btn', 'pos-sale-qr-btn']) {
+    const btn = $(id);
+    if (!btn) continue;
+    btn.disabled = !hasItems;
+    if (hasItems) btn.removeAttribute('title');
+    else btn.setAttribute('title', 'Add a book to the cart first');
+  }
+}
+
+// Split out of renderPOS so the checkout column is coverable on its own: it is
+// the screen under the most time pressure in the app (a customer waiting at a
+// fair table), and a mis-tap here removes a line or charges the wrong amount.
+// buildPOSCartRows still does all the money work — these only format it.
+
+// The three per-line controls used to be identical 11px pills roughly 20px
+// tall, one of which deleted the line. That is a mis-tap waiting to happen on a
+// phone. They are now real targets, and the destructive one is a separated
+// icon so it cannot be confused with Adjust at a glance.
+function posCartRowHtml(row, txnCurrency) {
+  const idAttr = escapeHtml(String(row?.book?.id ?? ''));
+  const title = escapeHtml(row?.book?.title ?? 'Untitled');
+  const qty = row?.qty ?? 0;
+  const unitLabel = row.overridden
+    ? `<span class="pos-line-was">${posFormat(row.listUnit, row.sourceCode)}</span> <span class="pos-line-now">${posFormat(row.sourceUnit, row.sourceCode)}</span> <span class="pos-line-adj">Adj</span>`
+    : posFormat(row.sourceUnit, row.sourceCode);
+  const lineTotal = row.convertedLine === null
+    ? posFormat(row.sourceLine, row.sourceCode)
+    : posFormat(row.convertedLine, txnCurrency);
+  return `
+      <div class="pos-line">
+        <div class="pos-line-id">
+          <div class="pos-line-title">${title}</div>
+          <div class="pos-line-meta"><span class="mono-num">${qty}</span> × ${unitLabel}</div>
+        </div>
+        <div class="pos-line-total mono-num">${lineTotal}</div>
+        <div class="pos-line-actions">
+          <button type="button" class="pos-line-btn" onclick="openPosPriceModal('${idAttr}')" title="Adjust the price of this line">Adjust</button>
+          <button type="button" class="pos-line-btn" onclick="posGenerateLineQR('${idAttr}')" title="Payment QR for this line">QR</button>
+          <button type="button" class="pos-line-btn danger" onclick="posRemoveItem('${idAttr}')" title="Remove ${title} from the cart" aria-label="Remove ${title} from the cart">✕</button>
+        </div>
+      </div>
+    `;
+}
+
+// An empty till is the normal state between customers, not an error — so this
+// says what to do next rather than just reporting that nothing is there.
+function posCartEmptyHtml() {
+  return `<div class="empty-state pos-cart-empty">
+      <div class="e-icon" aria-hidden="true">🛒</div>
+      Nothing in the cart yet.
+      <span>Tap <strong>+</strong> on a book to start a sale, or press <kbd>/</kbd> to search.</span>
+    </div>`;
+}
+
 function renderPOS() {
   const grid = $('pos-grid');
   if (!grid) return;
@@ -13404,28 +13465,12 @@ function renderPOS() {
   } // end search-filter else
 
   if (cartItemsEl) {
-    cartItemsEl.innerHTML = cartRows.length ? cartRows.map((row) => {
-      const unitLabel = row.overridden
-        ? `<span style="text-decoration:line-through;color:var(--text3);">${posFormat(row.listUnit, row.sourceCode)}</span> <span style="color:var(--gold-text,#8a5815);font-weight:700;">${posFormat(row.sourceUnit, row.sourceCode)}</span> <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-text,#8a5815);">Adj</span>`
-        : posFormat(row.sourceUnit, row.sourceCode);
-      return `
-      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid rgba(14,12,10,.08);">
-        <div>
-          <div style="font-size:13px;color:var(--text);font-weight:700;">${escapeHtml(row.book.title)}</div>
-          <div style="font-size:11px;color:var(--text2);font-weight:500;">${row.qty} × ${unitLabel}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:13px;color:var(--text);font-weight:700;">${row.convertedLine === null ? posFormat(row.sourceLine, row.sourceCode) : posFormat(row.convertedLine, posTransactionCurrency)}</div>
-          <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:3px;">
-            <button class="btn sm" style="padding:2px 7px;font-size:11px;" onclick="openPosPriceModal('${row.book.id}')">Adjust</button>
-            <button class="btn sm" style="padding:2px 7px;font-size:11px;" onclick="posGenerateLineQR('${row.book.id}')" title="Payment QR for this line">QR</button>
-            <button class="btn sm" style="padding:2px 7px;font-size:11px;color:var(--red);" onclick="posRemoveItem('${row.book.id}')">Remove</button>
-          </div>
-        </div>
-      </div>
-    `;
-    }).join('') : '<div style="font-size:12px;color:var(--text3);padding:10px 0;text-align:center;">Cart is empty.</div>';
+    cartItemsEl.innerHTML = cartRows.length
+      ? cartRows.map((row) => posCartRowHtml(row, posTransactionCurrency)).join('')
+      : posCartEmptyHtml();
   }
+
+  posSyncCheckoutAvailability(cartRows.length > 0);
 
   if (subtotalEl) {
     const subtotalRows = Object.entries(mixedTotals).map(([code, amount]) => `<div>${code}: ${posFormat(amount, code)}</div>`).join('');

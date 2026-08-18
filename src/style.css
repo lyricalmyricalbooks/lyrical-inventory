@@ -8514,8 +8514,8 @@ tr.hist-row:hover {
   align-items: center !important;
   justify-content: space-between !important;
   margin-top: 1rem !important;
-  background: var(--cream2, #efe9dc) !important;
-  border: 1px solid rgba(14, 12, 10, 0.08) !important;
+  background: var(--surface-sunken) !important;
+  border: 1px solid var(--border-subtle) !important;
   border-radius: 10px !important;
   padding: 4px 6px !important;
 }
@@ -8532,8 +8532,8 @@ tr.hist-row:hover {
   border-radius: 8px !important;
   background: var(--surface-card) !important;
   color: var(--text) !important;
-  border: 1px solid rgba(14, 12, 10, 0.1) !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid var(--border-default) !important;
+  box-shadow: var(--elev-1) !important;
   cursor: pointer !important;
   transition: all 0.18s ease !important;
 }
@@ -8560,6 +8560,163 @@ tr.hist-row:hover {
   border-radius: 14px !important;
   padding: 1.25rem !important;
   box-shadow: 0 8px 30px rgba(14, 12, 10, 0.08) !important;
+}
+
+/* ─── POS CHECKOUT LINES ──────────────────────────────────────────────────
+   The cart column, which is read and tapped with a customer waiting. Every
+   value here is a token: the old inline styles baked near-black dividers
+   (rgba(14,12,10,.08)) that vanish against a dark surface, so in night mode
+   the lines ran together with nothing separating them. */
+.pos-line {
+  display: grid;
+  /* Title and total share the top row; the controls take a row of their own so
+     a long title keeps the full width instead of being squeezed into a column
+     and wrapping mid-word. */
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.pos-line:last-child {
+  border-bottom: none;
+}
+.pos-line-title {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--content-primary);
+  line-height: var(--leading-snug);
+}
+.pos-line-meta {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--content-secondary);
+}
+.pos-line-was {
+  text-decoration: line-through;
+  color: var(--content-muted);
+}
+.pos-line-now {
+  font-weight: 700;
+  color: var(--gold-text);
+}
+.pos-line-adj {
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--gold-text);
+}
+.pos-line-total {
+  grid-column: 2;
+  justify-self: end;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--content-primary);
+}
+
+/* Three identical ~20px pills sat here, one of which deleted the line. On a
+   phone at a fair that is a mis-tap that costs a sale. These are real targets
+   now, and the destructive one is a separated icon rather than a third
+   look-alike word. */
+.pos-line-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 6px;
+}
+.pos-line-btn {
+  min-height: var(--target-min);
+  padding: 7px 12px;
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--content-secondary);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform var(--dur-fast) var(--ease-entrance),
+    background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+.pos-line-btn:hover {
+  background: var(--surface-inset);
+  color: var(--content-primary);
+}
+.pos-line-btn:active {
+  transform: scale(.975);
+}
+/* Separated from the two safe actions, square, and wearing the danger role —
+   so "remove this line" never reads as another word-shaped button. */
+.pos-line-btn.danger {
+  min-width: var(--target-min);
+  padding: 7px 9px;
+  margin-left: 6px;
+  color: var(--status-critical);
+  background: var(--status-critical-bg);
+  border-color: var(--status-critical-bg);
+  font-size: var(--text-sm);
+}
+.pos-line-btn.danger:hover {
+  color: var(--status-critical);
+  background: var(--rose-pale);
+  border-color: var(--status-critical);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pos-line-btn:active {
+    transform: none;
+  }
+}
+
+/* The scroll window around the lines. Was a fixed 220px with a near-black
+   tint and border baked in — invisible framing in dark mode, and once the rows
+   grew to real tap targets it showed barely two of them. Scales with the
+   viewport instead, so a four-book sale is visible without scrolling. */
+.pos-cart-scroll {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 4px 10px;
+  background: var(--surface-sunken);
+  max-height: min(46vh, 380px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* An empty till is the normal state between customers, so this reads as
+   guidance rather than as a report that something is missing. */
+.pos-cart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+  padding: 1.4rem 1rem;
+  font-size: var(--text-sm);
+  color: var(--content-muted);
+}
+.pos-cart-empty .e-icon {
+  margin-bottom: .15rem;
+  font-size: var(--text-2xl);
+}
+.pos-cart-empty span {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+.pos-cart-empty kbd {
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-2xs);
+  padding: 1px 5px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r);
+  background: var(--surface-sunken);
+  color: var(--content-secondary);
 }
 
 /* Web Analytics Umami API KPI Grid */
