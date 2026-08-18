@@ -2969,7 +2969,7 @@
         <div id="pos-total" style="font-family:'Syne',sans-serif;font-size:34px;font-weight:800;color:var(--green);line-height:1.1;">€0.00</div>
         <div id="pos-total-note" style="font-size:11px;font-weight:500;color:var(--text2);margin-top:4px;margin-bottom:12px;">Transaction currency: EUR</div>
 
-        <div style="border:1px solid rgba(14,12,10,.08);border-radius:10px;padding:4px 10px;background:rgba(14,12,10,.02);margin-bottom:12px;max-height:220px;overflow-y:auto;">
+        <div class="pos-cart-scroll" style="margin-bottom:12px;">
           <div id="pos-cart-items"></div>
         </div>
 
@@ -2985,7 +2985,7 @@
             <option value="Comp/Gift">Comp/Gift</option>
           </select>
         </div>
-        <button class="btn gold" style="width:100%;font-size:14px;font-weight:700;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;box-shadow:0 4px 12px rgba(200,145,58,0.25);" onclick="posCheckout()">
+        <button class="btn gold" id="pos-checkout-btn" style="width:100%;font-size:14px;font-weight:700;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;box-shadow:0 4px 12px rgba(200,145,58,0.25);" onclick="posCheckout()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           Complete Sale
         </button>
