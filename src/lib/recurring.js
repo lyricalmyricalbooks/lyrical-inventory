@@ -35,6 +35,11 @@
  * at plus a dated list of adjustments, and every charge is priced by the date it
  * falls on, so history stays exactly as it was billed and a rise can be entered
  * before it takes effect.
+ *
+ * A change can carry `movesCharge`, which re-anchors the billing day to its own
+ * date from that point on — the rent that goes up *and* moves from the 1st to
+ * the 5th in the same letter. The walker never bills one period twice when a
+ * day moves earlier; see walkCharges.
  */
 
 /** Supported billing cadences, in the order the editor lists them. */
@@ -144,6 +149,10 @@ export function normalizeRateChanges(list) {
       effectiveFrom: String(r?.effectiveFrom || '').trim(),
       amount: Number(r?.amount) || 0,
       note: String(r?.note || '').trim(),
+      // Opt-in: the charge also moves to this date's day of the month from
+      // here on. Off by default, so a change dated mid-month for a
+      // subscription that bills on the 1st leaves the cycle alone.
+      movesCharge: !!r?.movesCharge,
     }))
     .filter(r => parseYmd(r.effectiveFrom) && r.amount > 0)
     .forEach(r => byDate.set(r.effectiveFrom, r));
@@ -207,17 +216,55 @@ export function rateSchedule(sub) {
  * each. Stops when `visit` returns false, at the end date, or after a hard cap
  * so a malformed record can never spin the render loop.
  */
+function addMonths(year, month, step) {
+  let y = year, m = month + step;
+  while (m > 12) { m -= 12; y += 1; }
+  return { y, m };
+}
+
 function walkCharges(sub, visit) {
   const start = parseYmd(sub.startDate);
   if (!start) return;
   const step = frequencyMonths(sub.frequency);
-  let y = start.y, m = start.m;
+
+  // A price change can also move the charge to its own day — the landlord who
+  // raises the rent and shifts the due date in the same letter. Each of those
+  // re-anchors the schedule from its effective date onward.
+  const moves = (sub.rateChanges || []).filter(r => r.movesCharge && parseYmd(r.effectiveFrom));
+  let mi = 0;
+
+  let y = start.y, m = start.m, day = start.d;
+  let last = null;
   for (let i = 0; i < 1200; i++) {
-    const dateStr = ymd(y, m, Math.min(start.d, daysInMonth(y, m)));
+    let dateStr = ymd(y, m, Math.min(day, daysInMonth(y, m)));
+
+    // The move lands on the first charge that reaches its date, not on the one
+    // before it: a rise dated the 5th leaves a charge already due on the 1st
+    // exactly where it was.
+    if (mi < moves.length && dateStr >= moves[mi].effectiveFrom) {
+      const mv = parseYmd(moves[mi].effectiveFrom);
+      mi++;
+      y = mv.y; m = mv.m; day = mv.d;
+      // Never bill one period twice. Moving from the 16th to the 1st would
+      // otherwise post twice inside a fortnight; the new day starts a full
+      // cadence after the last charge instead. Under-billing a period the
+      // ledger can be told about beats inventing an expense that never left
+      // the account, and the editor previews the resulting dates.
+      for (let guard = 0; guard < 1200 && last; guard++) {
+        const lastP = parseYmd(last);
+        const due = addMonths(lastP.y, lastP.m, step);
+        const earliest = ymd(due.y, due.m, Math.min(lastP.d, daysInMonth(due.y, due.m)));
+        const candidate = ymd(y, m, Math.min(day, daysInMonth(y, m)));
+        if (candidate >= earliest) break;
+        ({ y, m } = addMonths(y, m, step));
+      }
+      dateStr = ymd(y, m, Math.min(day, daysInMonth(y, m)));
+    }
+
     if (sub.endDate && dateStr > sub.endDate) return;
     if (visit(dateStr, monthKey(y, m)) === false) return;
-    m += step;
-    while (m > 12) { m -= 12; y += 1; }
+    last = dateStr;
+    ({ y, m } = addMonths(y, m, step));
   }
 }
 
@@ -283,6 +330,25 @@ export function nextRecurringDate(sub, now = new Date()) {
     return false;
   });
   return next;
+}
+
+/**
+ * The next `count` charges this subscription will bill, each with the price in
+ * force on its own date. The editor previews these because a change that moves
+ * the charge day rearranges the calendar, and the owner should see the actual
+ * dates before saving rather than after.
+ */
+export function upcomingCharges(sub, count = 3, now = new Date()) {
+  const s = normalizeRecurring(sub);
+  const out = [];
+  if (s.paused || count < 1) return out;
+  const todayStr = localYmd(now);
+  walkCharges(s, (dateStr, key) => {
+    if (dateStr < todayStr || key <= s.lastInjected) return true;
+    out.push({ date: dateStr, monthKey: key, amount: amountAt(s, dateStr) });
+    return out.length < count;
+  });
+  return out;
 }
 
 /**
