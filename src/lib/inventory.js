@@ -182,3 +182,54 @@ export function recalculateBookStatsFromHistory(s) {
   });
 }
 
+
+// Presentational preview of what the order currently sitting in the Manual
+// entry form would do to stock, worked out BEFORE anything is saved.
+//
+// This exists because recordOrder() writes `Math.max(0, stock - qty)`: logging
+// five copies when three are on hand silently lands on zero and the two extra
+// units disappear from the count with no warning anywhere. The publisher only
+// discovers it later, via the on-hand drift banner. Surfacing the shortfall
+// while the form is still open is the cheapest place to catch it.
+//
+// Pure numbers in, description out — it reads nothing and writes nothing, so
+// the ledger keeps sole ownership of stock.
+export function orderStockPreview(onHand, qty, threshold) {
+  const before = Number.isFinite(onHand) && onHand > 0 ? Math.floor(onHand) : 0;
+  const units = Number.isFinite(qty) && qty > 0 ? Math.floor(qty) : 0;
+  const limit = Number.isFinite(threshold) && threshold > 0 ? Math.floor(threshold) : 0;
+  const after = before - units;
+
+  // `after` keeps the true (possibly negative) arithmetic so the shortfall is
+  // reportable; `displayAfter` is what a stock count is allowed to read as.
+  const base = { before, qty: units, after, displayAfter: Math.max(0, after), shortBy: Math.max(0, -after) };
+
+  if (units === 0) return { ...base, level: 'idle', label: '—' };
+  if (after < 0) return { ...base, level: 'short', label: 'Not enough stock' };
+  if (after === 0) return { ...base, level: 'out', label: 'Last copies' };
+  if (after <= limit) return { ...base, level: 'low', label: 'Low stock' };
+  return { ...base, level: 'ok', label: 'In stock' };
+}
+
+// Maps a preview level onto the app's pill vocabulary (UX_PATTERNS.md: amber =
+// needs attention, green = good, red = error, gray = inert) plus the sentence
+// shown underneath it.
+export function orderStockPreviewCopy(preview, threshold) {
+  const limit = Number.isFinite(threshold) && threshold > 0 ? Math.floor(threshold) : 0;
+  switch (preview && preview.level) {
+    case 'short':
+      return {
+        pill: 'red',
+        glyph: '✕',
+        note: `${preview.shortBy} more ${preview.shortBy === 1 ? 'copy' : 'copies'} than you have on hand — on-hand will stop at 0 and won't match your records.`,
+      };
+    case 'out':
+      return { pill: 'amber', glyph: '●', note: 'This clears the shelf — nothing left on hand after it.' };
+    case 'low':
+      return { pill: 'amber', glyph: '●', note: `Leaves you at or below your ${limit}-unit alert level.` };
+    case 'ok':
+      return { pill: 'green', glyph: '✓', note: '' };
+    default:
+      return { pill: 'gray', glyph: '', note: '' };
+  }
+}

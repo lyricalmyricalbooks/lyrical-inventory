@@ -1842,6 +1842,50 @@ tr.hist-row:hover {
 .field-note{font-size:11px;color:var(--text3);margin-top:6px;line-height:1.55;}
 /* Subtle red ring on a required control until it's filled (clears once a valid option is chosen) */
 .form-group.needs-attention select:invalid{border-color:rgba(149,32,32,.35);box-shadow:0 0 0 3px rgba(149,32,32,.07);background-color:var(--surface-card);}
+/* MANUAL ENTRY — live order preview
+   ─────────────────────────────────────────────────────────────────────────
+   Answers "what does this order cost, and what does it leave on the shelf?"
+   while the form is still open. recordOrder() clamps stock at zero, so an
+   oversell would otherwise be invisible until the on-hand drift banner turns
+   up days later — this is the cheapest place to catch it.
+   The wrapper is the query container; the strip inside is what re-flows. */
+.order-preview-wrap{container-type:inline-size;container-name:orderpreview;margin-top:var(--space-4);}
+.order-preview{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:var(--space-3) var(--space-5);
+  padding:var(--space-3) var(--space-4);
+  background:var(--surface-sunken);
+  border:1px solid var(--border-default);
+  border-radius:var(--r2);
+  transition:background var(--dur-base) var(--ease-standard),border-color var(--dur-base) var(--ease-standard);
+}
+.order-preview-figures{display:flex;flex-wrap:wrap;gap:var(--space-3) var(--space-5);min-width:0;}
+.order-preview-cell{display:flex;flex-direction:column;gap:var(--space-1);min-width:0;}
+.order-preview-label{
+  font-family:'Syne',sans-serif;font-size:var(--text-3xs);font-weight:700;
+  letter-spacing:var(--tracking-label);text-transform:uppercase;
+  color:var(--content-muted);
+}
+/* Money and unit counts are always mono here — the figures change on every
+   keystroke, and proportional digits make them jitter as they do. */
+.order-preview-value{
+  font-family:'DM Mono',monospace;font-feature-settings:"tnum" 1,"zero" 1;
+  font-size:var(--text-md);font-weight:500;color:var(--content-primary);white-space:nowrap;
+}
+.order-preview-arrow{margin:0 var(--space-2);color:var(--content-muted);}
+.order-preview-status{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:var(--space-3);min-width:0;}
+/* Left-aligned even though the block sits right — a wrapped warning with a
+   ragged left edge is measurably slower to read, and this one is a warning. */
+.order-preview-status .hint-text{margin-top:0;max-width:40ch;}
+/* Derived tint read off the status pill rather than a second JS class — that
+   pill is the only one inside the strip, so :has() is unambiguous here. */
+.order-preview:has(.pill.amber){background:var(--status-active-bg);border-color:var(--status-active);}
+.order-preview:has(.pill.red){background:var(--status-critical-bg);border-color:var(--status-critical);}
+.order-preview:has(.pill.red) .order-preview-after{color:var(--status-critical);font-weight:700;}
+@container orderpreview (max-width:560px){
+  .order-preview{flex-direction:column;align-items:stretch;}
+  .order-preview-status{justify-content:flex-start;}
+}
 /* Footer action bar — keeps the primary button below every field */
 .card-actions{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-top:1.3rem;padding-top:1.1rem;border-top:1px solid var(--border);}
 .card-actions .field-note{margin-top:0;max-width:62%;}

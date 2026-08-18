@@ -1153,7 +1153,26 @@
       </div>
     </div>
     <div class="form-group" style="margin-top:14px;"><label for="m-notes">Notes</label><input type="text" id="m-notes" placeholder="e.g. promo, event"></div>
-    <div class="hint-text" id="m-hint"></div>
+    <!-- Live order preview — what this order costs and what it leaves on the
+         shelf, shown before "Add order" is pressed. Populated by phint(). -->
+    <div class="order-preview-wrap">
+      <div class="order-preview" id="m-preview">
+        <div class="order-preview-figures">
+          <div class="order-preview-cell">
+            <span class="order-preview-label">Order total</span>
+            <span class="order-preview-value" id="m-prev-total">—</span>
+          </div>
+          <div class="order-preview-cell">
+            <span class="order-preview-label">Stock after this order</span>
+            <span class="order-preview-value"><span id="m-prev-before">—</span><span class="order-preview-arrow" aria-hidden="true">→</span><span class="order-preview-after" id="m-prev-after">—</span></span>
+          </div>
+        </div>
+        <div class="order-preview-status">
+          <span class="pill gray" id="m-prev-pill" role="status" aria-live="polite">—</span>
+          <div class="hint-text" id="m-hint"></div>
+        </div>
+      </div>
+    </div>
     <div class="card-actions">
       <div class="field-note">Stock is reduced and revenue recorded when you add the order.</div>
       <button class="btn gold lg" onclick="submitManual(event)">＋ Add order</button>
