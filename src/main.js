@@ -3526,7 +3526,16 @@ function updateAllOverview() {
 
     const expTotal = (s.expenses || []).reduce((a, e) => a + (e.amount || 0), 0);
 
-    return `<div class="book-strip" style="--accent-color: ${book.accent}; --accent-color-bg: ${book.accentBg}; --accent-color-light: ${lightenColor(book.accent, 0.25)}; --accent-text: ${getContrastSafeText(book.accent)}; --accent-contrast: ${getContrastColor(book.accent)};">
+    // Every one of these reaches innerHTML. book.id, book.currency and
+    // book.accent are stored verbatim from the Add-book form's inputs
+    // ($('nb-id'), $('nb-cur'), $('nb-accent')), so they are DOM text on a
+    // round trip through Firestore — CodeQL flags the path as
+    // js/xss-through-dom, and it is right to. The numeric fields go through
+    // parseInt/parseFloat upstream and cannot carry markup, but escaping them
+    // costs nothing and stops this template needing a per-field audit again.
+    const accent = escapeHtml(book.accent);
+    const idAttr = escapeHtml(book.id);
+    return `<div class="book-strip" style="--accent-color: ${accent}; --accent-color-bg: ${escapeHtml(book.accentBg)}; --accent-color-light: ${escapeHtml(lightenColor(book.accent, 0.25))}; --accent-text: ${escapeHtml(getContrastSafeText(book.accent))}; --accent-contrast: ${escapeHtml(getContrastColor(book.accent))};">
       <div class="book-cover-3d" aria-hidden="true">
         <div class="book-cover-spine"></div>
         <div class="book-cover-front">
@@ -3537,13 +3546,13 @@ function updateAllOverview() {
         <div class="book-strip-title">${escapeHtml(book.title)}</div>
         <div class="book-strip-meta">
           <span>✍ ${escapeHtml(book.author) || '—'}</span>
-          <span>&nbsp;·&nbsp; 🏷 ${book.currency}${book.listPrice}</span>
-          <span>&nbsp;·&nbsp; 🖨 ${book.maxPrint} printed</span>
+          <span>&nbsp;·&nbsp; 🏷 ${escapeHtml(book.currency)}${escapeHtml(book.listPrice)}</span>
+          <span>&nbsp;·&nbsp; 🖨 ${escapeHtml(book.maxPrint)} printed</span>
         </div>
-        <div class="book-progress-wrapper" title="${s.stock} units on hand of ${book.maxPrint} total printed (${pct.toFixed(0)}%)">
+        <div class="book-progress-wrapper" title="${escapeHtml(s.stock)} units on hand of ${escapeHtml(book.maxPrint)} total printed (${pct.toFixed(0)}%)">
           <div class="book-progress-header">
             <span>Stock on hand</span>
-            <span class="progress-pct">${s.stock} / ${book.maxPrint} (${pct.toFixed(0)}%)</span>
+            <span class="progress-pct">${escapeHtml(s.stock)} / ${escapeHtml(book.maxPrint)} (${pct.toFixed(0)}%)</span>
           </div>
           ${bookProgressBarHtml({
       pct,
@@ -3559,11 +3568,11 @@ function updateAllOverview() {
       </div>
       <div class="book-strip-kpis">
         <div class="bsk">
-          <div class="bsk-val ${stockClass}">${s.stock}</div>
+          <div class="bsk-val ${stockClass}">${escapeHtml(s.stock)}</div>
           <div class="bsk-label">On hand</div>
         </div>
         <div class="bsk">
-          <div class="bsk-val">${s.sold}</div>
+          <div class="bsk-val">${escapeHtml(s.sold)}</div>
           <div class="bsk-label">Sold</div>
         </div>
         <div class="bsk">
@@ -3576,7 +3585,7 @@ function updateAllOverview() {
         </div>
       </div>
       <div class="book-strip-actions">
-        <button class="btn sm gold manage-btn" onclick="switchBook('${book.id}')">
+        <button class="btn sm gold manage-btn" onclick="switchBook('${idAttr}')">
           <span>Manage</span>
           <svg class="manage-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
