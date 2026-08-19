@@ -74,6 +74,25 @@ Row states to reuse rather than re-derive:
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.
 
+**Sticky column labels on a long ledger:** add `.sys-sticky-head` to the `.tbl-wrap`
+(`system.css`, alongside `.sys-long-list`). The header cells pin just under the app header
+instead of scrolling away, so row 200 of a money table is still readable as Qty / Unit price /
+Total. Already on Order History, the consignment ledger and the tax ledger.
+
+Two conditions before you add it:
+- The table must scroll with the **page**. A wrap that is already its own scroll container
+  (an inline `max-height` + `overflow:auto`, or one inside a scrolling modal body) resolves
+  `top` against the wrong box and pushes its header down *inside* the panel.
+- The header must use the flat `.tbl thead` fill. `.all-consignment-table` paints a gradient
+  across the whole `thead`; moving that onto each `th` restarts the gradient per cell, so that
+  table stays unsticky until someone reworks the fill.
+
+The offset comes from `--sticky-top`, published by `src/lib/sticky-header.js` — it measures the
+real `.app-header` height (which wraps to two rows on a phone and grows with the safe-area
+inset) and republishes on resize. It falls back to `0px` everywhere it can't measure, and the
+wrap falls back to `overflow:hidden` on engines without `overflow: clip`, so both degrade to
+today's plain header rather than to a broken one.
+
 ---
 
 ## Empty states — `.empty-state`
@@ -333,3 +352,5 @@ the user asked for it and it now ships — the row above records what replaced t
    outside-click, and Esc handling? (§2)
 10. New mutation path — did I decide how its pending / failed / conflict states render, and is
     it optimistic rather than network-blocking? (§7)
+11. New table that can run past a screenful and scrolls with the page — did I add
+    `.sys-sticky-head` to its wrap so the column labels survive the scroll?
