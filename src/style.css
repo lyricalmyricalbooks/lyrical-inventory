@@ -3085,6 +3085,100 @@ tr.hist-row:hover {
 .ledger-total-val.is-clear {
   color: var(--status-positive);
 }
+/* A grand total that is a fact rather than a status — revenue is neither
+   "outstanding" nor "clear", so it must not borrow the amber/green reading. */
+.ledger-total-val.is-neutral {
+  color: var(--content-primary);
+}
+
+/* ─── DASHBOARD — SALES BY CHANNEL ────────────────────────────────────────
+   Same four numbers as before plus the proportion between them. The bar is
+   scaled to the leading channel (not to the total) so a minor channel still
+   looks minor, and the percentage sits beside it in mono so the column stacks
+   in a straight line. Reuses .ledger-total-row for the footer rather than
+   inventing a second totals treatment. */
+/* A flex row rather than an inline dot: an inline-block is a line-break
+   opportunity, so a plain dot would strand "Consignment" on its own line as
+   soon as the column tightened. */
+.ch-mix-chan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ch-mix-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 100px;
+  /* The fill is a channel colour, so it needs its own edge to stay visible
+     against both the cream and the dark surface. */
+  box-shadow: 0 0 0 1px var(--border-subtle);
+}
+.ch-mix-share-col {
+  width: 34%;
+  min-width: 140px;
+}
+.ch-mix-share-cell {
+  vertical-align: middle;
+}
+.ch-mix-share {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ch-mix-track {
+  flex: 1 1 auto;
+  min-width: 48px;
+  height: 8px;
+  border-radius: 100px;
+  background: var(--surface-inset);
+  overflow: hidden;
+}
+.ch-mix-fill {
+  height: 100%;
+  border-radius: 100px;
+  /* The bar is decoration over a number that is already on screen — it may
+     animate, but it collapses to an instant redraw under reduced motion
+     because --dur-base does (see system.css). */
+  transition: width var(--dur-base) var(--ease-entrance);
+}
+.ch-mix-pct {
+  flex: 0 0 auto;
+  min-width: 34px;
+  text-align: right;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--content-secondary);
+}
+/* The footer label is a single cell here (the consignment ledger's spans five),
+   so without a floor it compresses into a three-words-per-line tower on a
+   phone. */
+.ch-mix-tbl .ledger-total-label {
+  min-width: 168px;
+}
+/* Below a phone-to-small-tablet panel the bar has nowhere useful to live — the
+   percentage carries the same information in a fraction of the space. Measured
+   rather than guessed: at this threshold the fifth column costs no width at
+   all, so the table still fits the screen instead of starting to scroll
+   sideways as it does not today. Container-scoped so it follows the panel's
+   width rather than the viewport's. */
+.ch-mix-wrap {
+  container-type: inline-size;
+}
+@container (max-width: 620px) {
+  .ch-mix-track { display: none; }
+  .ch-mix-share { justify-content: flex-end; }
+  /* Both the width floor and the long header label go: either one on its own
+     would widen the table past the screen and start it scrolling sideways,
+     which it does not do today. */
+  .ch-mix-share-col { width: auto; min-width: 0; }
+  .ch-mix-col-qualifier { display: none; }
+  .ch-mix-tbl .ledger-total-label { min-width: 0; }
+  /* The footer's note only restates which channel is on top, which the first
+     row already shows. On a phone the column is too narrow to hold it without
+     stacking three words per line. */
+  .ch-mix-tbl .ledger-total-sub { display: none; }
+}
 
 /* Same reasoning as the Order History empty row: the panel is not a record, so
    it takes neither the hover, the cell padding, nor the row divider. */
