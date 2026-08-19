@@ -3364,6 +3364,10 @@ export function switchTab(name) {
 
   if (name === 'dashboard') { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); }
   if (name === 'history') renderHist();
+  // Website orders was the one panel that rendered nothing on arrival, so the
+  // queue and its counts showed whatever the last visit left behind — orders
+  // applied since then still sat there as "new".
+  if (name === 'website') renderOrders();
   if (name === 'manual') updateManualForm();
   if (name === 'consignment') { renderStores(); renderLedger(); renderInvoices(); }
   // renderArtistReimburseBanner writes into this panel too, and used to arrive
@@ -4835,6 +4839,10 @@ window.deleteArtistPayout = deleteArtistPayout;
 // screen gains nothing from being rebuilt.
 const TAB_RENDERERS = {
   dashboard: () => { updateDash(); renderArtistReimburseBanner(); renderPendingExpenses(); },
+  // The scan strip counts are per-book and go stale the moment an order is
+  // applied, so the queue has to repaint on a state change like every other
+  // visible tab. Cheap: this only fires while Website orders is on screen.
+  website: () => { renderOrders(); },
   consignment: () => { renderStores(); renderLedger(); renderInvoices(); },
   history: () => { renderHist(); },
   expenses: () => { renderExpenses(); renderArtistReimburseBanner(); },
@@ -5249,6 +5257,121 @@ function saveScanMemory(mem) {
   localStorage.setItem(SCAN_MEMORY_KEY, JSON.stringify(mem));
 }
 
+/* ── WEBSITE ORDERS — the scan status strip ────────────────────────────────
+   The three tiles above the queue used to read "Source: Gmail / Channel: Big
+   Cartel / Action: Inventory update" — true on every render for every book,
+   and therefore worth nothing after the first read. They now carry the only
+   three facts this screen is ever asked for: how many orders are waiting to be
+   applied, how many are already accounted for, and how stale the last Gmail
+   read is. All three are read off the same values renderOrders() already
+   computes — nothing new is derived, and no aggregation is touched. */
+
+/**
+ * "Never" / "Just now" / "12 min ago" / "3 hours ago" / "6 Aug" for the
+ * last-scan tile. `now` is a parameter so the boundaries stay testable.
+ */
+function webScanRelativeTime(iso, now = Date.now()) {
+  if (!iso) return 'Never';
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return 'Never';
+  const mins = Math.floor((now - then) / 60000);
+  // A clock that has drifted backwards should read as fresh, not as a negative
+  // age — the scan genuinely did just happen.
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return new Date(then).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+/** One tile. `tone` drives the accent: 'ready' = gold, '' = neutral. */
+function webScanStatTile(label, value, sub, tone = '') {
+  return `<div class="web-stat web-stat-live${tone ? ` is-${tone}` : ''}">
+    <span class="web-stat-label">${escapeHtml(label)}</span>
+    <strong class="web-stat-value">${escapeHtml(String(value ?? '—'))}</strong>
+    <span class="web-stat-sub">${escapeHtml(sub ?? '')}</span>
+  </div>`;
+}
+
+/**
+ * The strip's markup for a given state. Built on `.web-stat` itself so the
+ * placeholder tiles occupy the same box as the real ones and the page does not
+ * jump when a scan lands.
+ */
+function webScanStatusHtml({ newCount = 0, appliedCount = 0, lastScan = null, scanning = false, now = Date.now() } = {}) {
+  if (scanning) {
+    const tile = `<div class="web-stat web-stat-live is-scanning" aria-hidden="true">
+      <div class="skeleton-line sk-web-label"></div>
+      <div class="skeleton-line sk-web-value"></div>
+      <div class="skeleton-line sk-web-sub"></div>
+    </div>`;
+    // The tiles are decorative while they shimmer; the status is what a screen
+    // reader should hear. .sr-only is absolutely positioned, so it claims no
+    // grid track of its own.
+    return `${tile}${tile}${tile}<span class="sr-only" role="status">Scanning Gmail for new orders…</span>`;
+  }
+
+  const n = Number(newCount) || 0;
+  const applied = Number(appliedCount) || 0;
+  const readyTile = webScanStatTile(
+    'Ready to apply',
+    n,
+    n === 0 ? 'Nothing waiting on you' : `New order${n === 1 ? '' : 's'} not yet in stock`,
+    n > 0 ? 'ready' : '',
+  );
+  const appliedTile = webScanStatTile(
+    'Already applied',
+    applied,
+    applied === 0 ? 'None recorded from this scan' : 'Counted in stock, hidden below',
+  );
+  const scanTile = webScanStatTile(
+    'Last Gmail scan',
+    webScanRelativeTime(lastScan, now),
+    lastScan ? new Date(lastScan).toLocaleString() : 'Press Scan Gmail to check',
+  );
+  return `${readyTile}${appliedTile}${scanTile}`;
+}
+
+/** Placeholder order cards, built on `.order-card` so the queue keeps its height. */
+function webOrdersSkeletonHtml(rows = 3) {
+  const card = `<div class="order-card is-skeleton" aria-hidden="true">
+    <div class="order-row order-card-top">
+      <div class="order-identity">
+        <div class="skeleton-line sk-ord-num"></div>
+        <div class="skeleton-line sk-ord-meta"></div>
+      </div>
+      <div class="skeleton-line sk-ord-pill"></div>
+    </div>
+    <div class="order-row order-card-bottom">
+      <div class="skeleton-line sk-ord-summary"></div>
+      <div class="skeleton-line sk-ord-actions"></div>
+    </div>
+  </div>`;
+  return `<div class="sr-only" role="status">Scanning Gmail for new orders…</div>`
+    + card.repeat(Math.max(1, rows));
+}
+
+// True only while fetchOrders() is in flight. renderOrders() bails out on it so
+// an unrelated re-render (the show-applied checkbox, a Firestore echo) cannot
+// replace the skeletons with a stale queue mid-scan.
+let _webScanning = false;
+
+/**
+ * Swap the whole Website-orders screen into its scanning state. Clearing the
+ * flag only unlocks the screen — the caller then renders the real result, so
+ * the skeletons are never on-screen a frame longer than the fetch.
+ */
+function setWebScanning(on) {
+  _webScanning = !!on;
+  if (!on) return;
+  const strip = $('web-orders-status');
+  if (strip) strip.innerHTML = webScanStatusHtml({ scanning: true });
+  const list = $('orders-list');
+  if (list) list.innerHTML = webOrdersSkeletonHtml(3);
+}
+
 // Build a cross-book set of all order IDs already applied across any session.
 // Cached until explicitly invalidated — rebuilt at most once per render cycle.
 let _appliedIdsCache = null;
@@ -5264,6 +5387,9 @@ function getAllAppliedIds() {
 }
 
 export function renderOrders() {
+  // A scan is mid-flight and the skeletons are on screen. Repainting the real
+  // queue now would show the pre-scan state as though it were the result.
+  if (_webScanning) return;
   const book = getBook(), cur = book.currency;
   const list = $('orders-list');
   // Filter to current book; show all if bookId not set
@@ -5287,6 +5413,24 @@ export function renderOrders() {
     return !isApplied(o) && !isCancelled(o);
   });
   const hiddenCount = rel.length - visible.length;
+
+  // Counts for the status strip. Read off `rel` rather than `visible` so the
+  // "Show applied/hidden" checkbox changes what the queue lists without
+  // changing what the tiles report — the strip is about this book's scan, not
+  // about the current filter.
+  let readyCount = 0, appliedCount = 0;
+  for (const o of rel) {
+    if (isApplied(o)) appliedCount++;
+    else if (!isCancelled(o)) readyCount++;
+  }
+  const strip = $('web-orders-status');
+  if (strip) {
+    strip.innerHTML = webScanStatusHtml({
+      newCount: readyCount,
+      appliedCount,
+      lastScan: mem.lastScan || null,
+    });
+  }
 
   if (!visible.length) {
     const msg = hiddenCount > 0
@@ -5568,6 +5712,9 @@ async function fetchOrders() {
     showToast('Connect Google Sheets first to scan Gmail', 'warn');
     return;
   }
+  // The empty state carries its own "Scan Gmail" button, so a second scan can
+  // be started from the queue while the first is still retrying. One at a time.
+  if (_webScanning) return;
 
   const setStatus = (msg) => { btn.innerHTML = `<span class="spinner"></span>${msg}`; btn.disabled = true; };
 
@@ -5609,6 +5756,10 @@ async function fetchOrders() {
     return null;
   };
 
+  // A Gmail scan is three retries deep at worst, so it can run for the better
+  // part of a minute. Until now the queue kept showing its pre-scan content for
+  // all of it, which reads as "nothing happened".
+  setWebScanning(true);
   setStatus('Connecting to Google Apps Script…');
   let attempt = 0;
   let parsed = null;
@@ -5640,6 +5791,8 @@ async function fetchOrders() {
   if (!parsed) {
     addLog(log, `❌ Apps Script Scan failed: ${lastError?.message || 'Unknown error'}. Check URL or re-authorize Apps Script.`, 'err');
     orders = [];
+    setWebScanning(false);
+    renderOrders();
     btn.textContent = 'Scan Gmail'; btn.disabled = false;
     return;
   }
@@ -5715,6 +5868,7 @@ async function fetchOrders() {
   }
   if (lastScanDate) addLog(log, `🕐 Previous scan: ${lastScanDate.toLocaleString()}`, 'ok');
 
+  setWebScanning(false);
   renderOrders();
   btn.textContent = 'Scan Gmail'; btn.disabled = false;
 }

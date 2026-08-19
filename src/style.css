@@ -3478,6 +3478,75 @@ tr.hist-row:hover {
 .web-stat{background:rgba(255,255,255,.72);border:1px solid var(--border);border-radius:16px;padding:.85rem 1rem;box-shadow:0 8px 22px rgba(14,12,10,.04);}
 .web-stat-label{display:block;margin-bottom:.3rem;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);}
 .web-stat strong{font-size:13px;color:var(--text);}
+
+/* ─── WEBSITE ORDERS — live scan status tiles ─────────────────────────────
+   The strip carries three real numbers now (waiting / already applied / how
+   stale the last Gmail read is), so the tiles need a headline value rather
+   than a caption. Built as a modifier on .web-stat so the surface, border and
+   dark-theme override above keep applying unchanged. */
+.web-stat-live{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  /* A tile's height must not change when "3 hours ago" becomes "Never" or a
+     sub-line wraps, or the strip jiggles on every scan. */
+  min-height:82px;
+  justify-content:center;
+}
+.web-stat-live .web-stat-label{margin-bottom:0;}
+/* Counts and elapsed times are figures: mono and tabular, so 8 and 11 line up
+   across the three tiles and across renders. */
+.web-stat-value{
+  font-family:'DM Mono',monospace;
+  font-feature-settings:"tnum" 1,"zero" 1;
+  font-size:var(--text-lg);
+  font-weight:500;
+  line-height:var(--leading-tight);
+  letter-spacing:var(--tracking-tight);
+  color:var(--content-primary);
+}
+.web-stat-sub{
+  font-size:var(--text-xs);
+  line-height:var(--leading-snug);
+  color:var(--content-muted);
+}
+/* Gold only when there is genuinely something to act on — a permanently
+   highlighted tile is the same as no highlight at all. --gold-text is the
+   pairing that clears AA on --gold-bg in BOTH themes; --gold itself does not,
+   so it stays off text here. */
+.web-stat-live.is-ready{border-color:var(--gold-line);background:var(--gold-bg);}
+.web-stat-live.is-ready .web-stat-label,
+.web-stat-live.is-ready .web-stat-value{color:var(--gold-text);}
+.web-stat-live.is-ready .web-stat-sub{color:var(--content-secondary);}
+/* When the strip itself is narrow the viewport rule below has already stacked
+   the tiles, and three 82px boxes then eat a phone screen before the queue
+   starts. Keyed off the strip's own width (it carries .sys-container), not the
+   viewport, so it also holds inside the narrower author shell. */
+@container (max-width: 430px){
+  .web-stat-live{min-height:0;}
+}
+.web-stat-live.is-scanning{justify-content:center;gap:6px;}
+.sk-web-label{height:9px;width:52%;margin-bottom:0;}
+.sk-web-value{height:18px;width:38%;margin-bottom:0;}
+.sk-web-sub{height:11px;width:74%;margin-bottom:0;}
+
+/* Placeholder order cards. Built on .order-card itself so the padding, radius
+   and row height are the real ones and the queue does not jump when the scan
+   lands. Nothing here is clickable and nothing lifts — there is no order yet. */
+.order-card.is-skeleton{
+  pointer-events:none;
+  border-left-color:var(--border-strong);
+  box-shadow:var(--elev-1);
+}
+.order-card.is-skeleton:hover{transform:none;box-shadow:var(--elev-1);border-color:var(--border);}
+/* Measured against a rendered order card so a placeholder is the same height
+   to the pixel — re-measure before changing any of these. */
+.sk-ord-num{height:14px;width:118px;margin-bottom:6px;}
+.sk-ord-meta{height:11px;width:64%;margin-bottom:0;}
+.sk-ord-pill{height:19px;width:64px;border-radius:100px;margin-bottom:0;flex:0 0 auto;}
+.sk-ord-summary{height:20px;width:44%;border-radius:100px;margin-bottom:0;}
+.sk-ord-actions{height:27px;width:150px;border-radius:var(--r2);margin-bottom:0;flex:0 0 auto;}
+
 .orders-list{min-height:230px;}
 .web-empty{display:flex;min-height:230px;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;border:1px dashed rgba(200,145,58,.32);border-radius:22px;background:linear-gradient(180deg,rgba(255,255,255,.46),rgba(255,255,255,.18));}
 .web-empty .e-icon{width:54px;height:54px;display:flex;align-items:center;justify-content:center;margin:0;border-radius:18px;background:rgba(200,145,58,.12);opacity:1;font-size:27px;box-shadow:inset 0 0 0 1px rgba(200,145,58,.12);}

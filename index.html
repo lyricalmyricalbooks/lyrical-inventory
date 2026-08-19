@@ -779,10 +779,14 @@
         <button class="btn ink" id="scan-btn" onclick="fetchOrders()">Scan Gmail</button>
       </div>
     </div>
-    <div class="web-orders-status" aria-label="Order scan status">
-      <div class="web-stat"><span class="web-stat-label">Source</span><strong>Gmail</strong></div>
-      <div class="web-stat"><span class="web-stat-label">Channel</span><strong>Big Cartel</strong></div>
-      <div class="web-stat"><span class="web-stat-label">Action</span><strong>Inventory update</strong></div>
+    <!-- Live scan status. renderOrders() rewrites this strip on every render and
+         setWebScanning() swaps it for shimmer placeholders while Gmail is being
+         read; the markup below is the pre-first-render state, written out so a
+         cold open shows the real box rather than an empty band. -->
+    <div class="web-orders-status sys-container" id="web-orders-status" aria-label="Order scan status">
+      <div class="web-stat web-stat-live"><span class="web-stat-label">Ready to apply</span><strong class="web-stat-value">0</strong><span class="web-stat-sub">Nothing waiting on you</span></div>
+      <div class="web-stat web-stat-live"><span class="web-stat-label">Already applied</span><strong class="web-stat-value">0</strong><span class="web-stat-sub">None recorded from this scan</span></div>
+      <div class="web-stat web-stat-live"><span class="web-stat-label">Last Gmail scan</span><strong class="web-stat-value">Never</strong><span class="web-stat-sub">Press Scan Gmail to check</span></div>
     </div>
     <div id="orders-list" class="orders-list"><div class="empty-state web-empty"><div class="e-icon">📬</div><strong>Ready to scan for new orders</strong><span>Press “Scan Gmail” to pull in recent Big Cartel receipts for this book.</span><button class="btn ink sm" onclick="fetchOrders()">Scan Gmail</button></div></div>
     <button class="btn gold apply-all-cta" id="apply-all-btn" onclick="applyAll()" disabled>Apply all new orders</button>
