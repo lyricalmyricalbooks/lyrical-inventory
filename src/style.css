@@ -9278,6 +9278,23 @@ tr.hist-row:hover {
   color: var(--text2) !important;
 }
 
+/* Stock line on a POS card. The register is the one screen worked with a
+   customer standing there, and it never said how many copies were left — so a
+   title could be tapped up to six when two were in the box. The pill counts
+   down as the cart fills. POS-only guest titles carry no catalog stock at all
+   and render no pill rather than a misleading zero. */
+.pos-card-stock {
+  margin-top: 6px;
+}
+
+/* A card whose stock pill has gone critical — out of stock, or the cart already
+   holds more than the records do — takes its border from the pill via :has(),
+   so purely visual state needs no extra JS class bookkeeping. More specific
+   than .pos-card.is-active on purpose: a shortfall outranks "in the cart". */
+.pos-card:has(.pos-stock-pill.red) {
+  border-color: var(--red) !important;
+}
+
 .pos-qty-wrapper {
   display: flex !important;
   align-items: center !important;
@@ -9850,6 +9867,22 @@ tr.hist-row:hover {
   border-radius:var(--r2);
   font-size:var(--text-xs);line-height:1.55;color:var(--amber);
 }
+/* "This sells more copies than you have on hand." Shown above Complete Sale and
+   again in the confirm dialog. Deliberately loud and deliberately NON-blocking:
+   the seller may have brought copies the records don't know about, and refusing
+   a sale at a fair table is worse than an off-by-two stock count. */
+.pos-oversell-note{
+  display:flex;gap:8px;align-items:flex-start;
+  margin-bottom:10px;padding:9px 11px;
+  background:var(--status-critical-bg);
+  border:1px solid color-mix(in srgb, var(--status-critical) 40%, transparent);
+  border-radius:var(--r2);
+  font-size:var(--text-xs);line-height:1.5;color:var(--status-critical);
+}
+.pos-oversell-note[hidden]{display:none;}
+.pos-oversell-note strong{font-weight:700;}
+.pos-oversell-ico{flex:none;font-size:var(--text-sm);line-height:1.35;}
+
 .hist-currency-warn span{flex:1 1 260px;}
 .hist-currency-warn strong{font-weight:700;}
 .hist-currency-warn .btn{flex:none;white-space:nowrap;}

@@ -542,6 +542,7 @@ import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy } from './lib/inventory.js';
+import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 
@@ -14231,6 +14232,45 @@ function posCartEmptyHtml() {
     </div>`;
 }
 
+// On-hand for one POS card, read from the same per-book state every other
+// screen reads (`s.stock`). The register REPORTS stock, it never recomputes it —
+// keeping the ledger the single owner of the number. A POS-only guest title has
+// no catalog state at all and returns null, which posStockView() reads as "not
+// stock-tracked" and renders as nothing rather than a misleading zero.
+function posOnHandFor(bookId) {
+  if (isPosOnlyBook(bookId)) return null;
+  const s = states[bookId];
+  return s && Number.isFinite(s.stock) ? s.stock : null;
+}
+
+// The cart in the shape posOversellSummary() wants. Built straight off posCart
+// rather than buildPOSCartRows() so the stock warning stays entirely clear of
+// the money/FX pipeline.
+function posStockLines() {
+  return Object.entries(posCart)
+    .filter(([, qty]) => qty > 0)
+    .map(([bookId, qty]) => {
+      const book = posResolveBook(bookId);
+      return { title: (book && book.title) || 'Untitled', onHand: posOnHandFor(bookId), inCart: qty };
+    });
+}
+
+// Paint (or hide) the "this sells more copies than you have" banner. Used in two
+// places on purpose: above Complete Sale, where the seller is looking while they
+// build the cart, and again in the confirm dialog, which is the last moment
+// before the stock actually moves.
+function posRenderOversellNote(hostId, summary) {
+  const host = $(hostId);
+  if (!host) return;
+  if (!summary) {
+    host.hidden = true;
+    host.innerHTML = '';
+    return;
+  }
+  host.hidden = false;
+  host.innerHTML = `<span class="pos-oversell-ico" aria-hidden="true">⚠</span><span><strong>More copies than you have on hand.</strong> ${escapeHtml(summary.message)} ${escapeHtml(summary.note)}</span>`;
+}
+
 function renderPOS() {
   const grid = $('pos-grid');
   if (!grid) return;
@@ -14284,6 +14324,12 @@ function renderPOS() {
       const soldNote = (posOnly && book.sold)
         ? `<div style="font-size:11px;color:var(--green);margin-top:3px;">${book.sold} sold${book.revenue ? ' · ' + posFormat(book.revenue, sourceCode) : ''}</div>`
         : '';
+      // How many are still in the box, counting down as the cart fills. The
+      // pill is the only place on this screen that has ever said so.
+      const stockView = posStockView({ onHand: posOnHandFor(book.id), inCart: qty });
+      const stockPill = stockView.tracked
+        ? `<div class="pos-card-stock"><span class="pill ${stockView.pill} pos-stock-pill" title="${escapeHtml(stockView.srText)}">${stockView.glyph ? escapeHtml(stockView.glyph) + ' ' : ''}${escapeHtml(stockView.label)}</span></div>`
+        : '';
       const editControls = posOnly
         ? `<div style="display:flex;gap:6px;margin-top:8px;">
            <button class="btn sm" style="flex:1;font-size:11px;" onclick="openPosBookModal('${idAttr}')" aria-label="Edit or view QR">✎ Edit / QR</button>
@@ -14297,6 +14343,7 @@ function renderPOS() {
           ${badge}
           <div class="pos-card-title">${escapeHtml(book.title)}</div>
           <div class="pos-card-sub">${posFormat(book.listPrice || 0, sourceCode)} &bull; ${convertedLabel}</div>
+          ${stockPill}
           ${soldNote}
         </div>
         <div>
@@ -14325,6 +14372,7 @@ function renderPOS() {
   }
 
   posSyncCheckoutAvailability(cartRows.length > 0);
+  posRenderOversellNote('pos-oversell-note', posOversellSummary(posStockLines()));
 
   if (subtotalEl) {
     const subtotalRows = Object.entries(mixedTotals).map(([code, amount]) => `<div>${code}: ${posFormat(amount, code)}</div>`).join('');
@@ -14668,6 +14716,9 @@ window.posCheckout = function () {
       : '';
     return `<tr><td>${escapeHtml(row.book.title)}${adj}</td><td class="r">${row.qty}</td><td class="r">${lineDisplay}</td></tr>`;
   }).join('');
+  // Last gate before the stock actually moves — repeat the shortfall here so a
+  // seller who built the cart while talking to a customer still sees it.
+  posRenderOversellNote('pos-confirm-oversell', posOversellSummary(posStockLines()));
   $('pos-confirm-payment').textContent = method;
   $('pos-confirm-timestamp').textContent = localeTs;
   $('pos-confirm-total').textContent = totalCharged;
