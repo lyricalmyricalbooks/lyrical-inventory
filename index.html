@@ -3035,6 +3035,10 @@
             <option value="Comp/Gift">Comp/Gift</option>
           </select>
         </div>
+        <!-- Painted by posRenderOversellNote() when a cart line sells more copies
+             than the records hold. Sits directly above Complete Sale because that
+             is where the seller's eye already is. -->
+        <div class="pos-oversell-note" id="pos-oversell-note" role="status" aria-live="polite" hidden></div>
         <button class="btn gold" id="pos-checkout-btn" style="width:100%;font-size:14px;font-weight:700;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;box-shadow:0 4px 12px rgba(200,145,58,0.25);" onclick="posCheckout()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           Complete Sale
@@ -4406,6 +4410,7 @@
       <tbody id="pos-confirm-items"></tbody>
     </table>
   </div>
+  <div class="pos-oversell-note" id="pos-confirm-oversell" role="status" aria-live="polite" hidden></div>
   <div class="g2">
     <div style="font-size:12px;color:var(--text3);">Payment method<br><strong id="pos-confirm-payment" style="color:var(--text);font-size:13px;"></strong></div>
     <div style="font-size:12px;color:var(--text3);">Timestamp<br><strong id="pos-confirm-timestamp" style="color:var(--text);font-size:13px;"></strong></div>

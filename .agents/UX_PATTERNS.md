@@ -50,6 +50,30 @@ settled, `✕` void) — it's how users scan a whole column of pills without rea
 Chip variant for inline counts/filters (not status): `.pile-chip` (`style.css:1632`) —
 bordered, neutral background, optional colored `.dot`.
 
+### Reporting stock on a surface that spends it
+
+Any screen that moves inventory (POS register, manual entry, a future shipment form) should say
+what it is about to do to on-hand *before* it does it. Two pure helpers already encode this —
+`orderStockPreview()`/`orderStockPreviewCopy()` in [src/lib/inventory.js](../src/lib/inventory.js)
+for the manual-entry form, and `posStockView()`/`posOversellSummary()` in
+[src/lib/pos-stock.js](../src/lib/pos-stock.js) for the register. Four rules they share:
+
+- **Report, never recompute.** These helpers read a stock figure and describe it. The ledger keeps
+  sole ownership of the number — no rounding, re-tallying, or writing back.
+- **A book's `threshold` is a REORDER alarm, not a screen-level one.** It is sized against a whole
+  print run (15, 30…), so on a register card it would paint nearly every title amber and mean
+  nothing. Pick a cutoff that matches the surface's question; `POS_LOW_STOCK_AT` is the fair-table
+  one.
+- **Warn, don't block.** A seller may genuinely have brought copies the records don't know about,
+  and a refused sale at a fair table is worse than an off-by-two stock count. Say what will happen
+  ("on-hand stops at 0 and your count stops matching") and let them decide.
+- **Never print a negative count.** Keep the true arithmetic in the returned object so the shortfall
+  is reportable, and show `Math.max(0, …)` — a stock count below zero is the bug being reported, not
+  a number to render.
+
+Untracked things say nothing at all. A POS-only guest title has no catalog stock, so its card gets
+no pill — a `0` there would read as "out of stock" and stop a perfectly good sale.
+
 ---
 
 ## Tables / lists — `.tbl`

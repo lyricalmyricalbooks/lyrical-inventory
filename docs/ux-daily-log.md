@@ -37,6 +37,7 @@ the same voice as the commit subject.
 | 2026-08-19 | Shipping rates | Pointed at the box that is actually empty | #574 |
 | 2026-08-19 | Dialogs | Stopped Cancel quietly throwing away what you typed | #576 |
 | 2026-08-19 | Consignment ledger | Showed one store's rows, and what that store owes | #577 |
+| 2026-08-19 | Event POS | Showed how many copies are left before you sell them | #579 |
 
 ---
 
