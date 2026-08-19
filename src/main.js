@@ -7,7 +7,7 @@ import './style.css';
 import './styles/theme-dark.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
-import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
+import { calcArtistEarnings, tierEffectiveCap, describePayout } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
 import { describeCustomerFilters, joinFilterLabels } from './lib/customer-segment.js';
 import {
@@ -4793,7 +4793,7 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
           <div style="font-weight:600; color:var(--text2); font-size:13px;">The artist requested a payout of ${fmt(pending.amount, cur)}</div>
           <div style="font-size:11px; color:var(--text3); margin-top:2px;">Requested ${escapeHtml(pending.requestedAt ? pending.requestedAt.slice(0, 10) : '—')} · ${fmt(owed, cur)} currently owed</div>
         </div>
-        <button class="btn gold" style="padding:6px 12px; font-size:11px;" onclick="toggleArtistPayoutForm('${bookId}')">Record payout</button>
+        <button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">Record payout</button>
       </div>`;
   }
 
@@ -4819,20 +4819,37 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
 }
 
 function getPayoutHistoryHtml(stats, bookId, cur) {
-  return (stats.payouts || []).length > 0
-    // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
-    ? stats.payouts.slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : 0); }).map(p => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; font-size:12px;
-          border-bottom:1px solid rgba(0,0,0,.05);">
-          <span style="display:flex; flex-direction:column;">
-            <span style="font-family:'DM Mono',monospace; color:var(--green); font-weight:600;">${fmt(parseFloat(p.amount) || 0, cur)}</span>
-            <!-- ⚡ Bolt Optimization: Use shared escapeHtml to prevent GC pressure from inline object creation during replace operations -->
-            <span style="font-size:10px; color:var(--text3);">${p.date || '—'}${p.method ? ' · ' + escapeHtml(p.method) : ''}${p.notes ? ' · ' + escapeHtml(p.notes) : ''}</span>
+  const payouts = stats.payouts || [];
+  if (!payouts.length) {
+    return `<div class="ps-payout-empty">
+      <span class="ps-payout-empty-icon" aria-hidden="true">💸</span>
+      <strong>No payouts recorded yet</strong>
+      <span>Every payment you send the artist belongs here — it is what the balance above is measured against.</span>
+    </div>`;
+  }
+
+  // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
+  const rows = payouts.slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : 0); }).map(p => {
+    // ⚡ Bolt Optimization: Use shared escapeHtml to prevent GC pressure from inline object creation during replace operations
+    const meta = [p.method ? escapeHtml(p.method) : '', p.notes ? escapeHtml(p.notes) : ''].filter(Boolean).join(' · ');
+    return `
+        <div class="ps-payout-row">
+          <span class="ps-payout-row-main">
+            <span class="ps-payout-row-amt">${fmt(parseFloat(p.amount) || 0, cur)}</span>
+            <span class="ps-payout-row-meta">${fmtD(p.date) ?? '—'}${meta ? ' · ' + meta : ''}</span>
           </span>
-          <button class="btn" style="padding:4px 8px; font-size:10px; background:transparent; color:var(--text3); border:1px solid rgba(0,0,0,.1);"
+          <button class="btn tx sm sys-target ps-payout-del"
             onclick="deleteArtistPayout('${bookId}', ${p.id})" title="Delete this payout" aria-label="Delete payout">✕</button>
-        </div>`).join('')
-    : '<div style="padding:12px; font-size:11px; color:var(--text3); text-align:center;">No payouts recorded yet.</div>';
+        </div>`;
+  }).join('');
+
+  // The running total is the same figure as the "Paid to artist" card above, so
+  // the list can be reconciled against it without adding the rows up by hand.
+  return `${rows}
+        <div class="ps-payout-total">
+          <span>${payouts.length} payout${payouts.length === 1 ? '' : 's'}</span>
+          <span class="ps-payout-total-val">${fmt(stats.totalPaidToArtist ?? 0, cur)}</span>
+        </div>`;
 }
 function renderProfitSharingBreakdown(bookId) {
   const block = $('d-profit-sharing-block');
@@ -4891,35 +4908,41 @@ function renderProfitSharingBreakdown(bookId) {
        ${tierHtml}
     </div>
     ${progressHtml}
-    <div style="margin-top:1.5rem; padding-top:1rem; border-top:1px solid rgba(0,0,0,.08);">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+    <div class="ps-payout-section">
+      <div class="ps-payout-head">
         <span class="sect" style="font-size:8px; margin:0;">Artist Payouts</span>
-        <button class="btn gold" style="padding:6px 12px; font-size:11px;" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>
+        <button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>
       </div>
-      <div id="artist-payout-form-${bookId}" style="display:none; padding:12px; background:var(--cream2); border-radius:var(--r2); margin-bottom:12px;">
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:8px;">
-          <label style="font-size:11px; color:var(--text3);">Amount (${cur})
-            <input type="number" id="ap-amount-${bookId}" step="0.01" min="0" placeholder="${owed > 0.01 ? owed.toFixed(2) : '0.00'}" style="width:100%; padding:6px; margin-top:2px;">
-          </label>
-          <label style="font-size:11px; color:var(--text3);">Date
-            <input type="date" id="ap-date-${bookId}" value="${today()}" style="width:100%; padding:6px; margin-top:2px;">
-          </label>
+      <div id="artist-payout-form-${bookId}" class="ps-payout-form sys-container" hidden>
+        <div class="ps-payout-fields">
+          <div class="form-group">
+            <label for="ap-amount-${bookId}">Amount (${cur})</label>
+            <input type="number" id="ap-amount-${bookId}" class="ps-payout-num" step="0.01" min="0" inputmode="decimal"
+              placeholder="${owed > 0.01 ? owed.toFixed(2) : '0.00'}" oninput="previewArtistPayout('${bookId}')">
+          </div>
+          <div class="form-group">
+            <label for="ap-date-${bookId}">Date</label>
+            <input type="date" id="ap-date-${bookId}" class="ps-payout-num" value="${today()}">
+          </div>
+          <div class="form-group">
+            <label for="ap-method-${bookId}">Method (optional)</label>
+            <input type="text" id="ap-method-${bookId}" placeholder="e-Transfer, PayPal…">
+          </div>
+          <div class="form-group">
+            <label for="ap-notes-${bookId}">Notes (optional)</label>
+            <input type="text" id="ap-notes-${bookId}" placeholder="Anything worth remembering">
+          </div>
         </div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:8px;">
-          <label style="font-size:11px; color:var(--text3);">Method (optional)
-            <input type="text" id="ap-method-${bookId}" placeholder="e-Transfer, PayPal..." style="width:100%; padding:6px; margin-top:2px;">
-          </label>
-          <label style="font-size:11px; color:var(--text3);">Notes (optional)
-            <input type="text" id="ap-notes-${bookId}" placeholder="..." style="width:100%; padding:6px; margin-top:2px;">
-          </label>
-        </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <button class="btn gold" style="padding:6px 14px; font-size:11px;" onclick="recordArtistPayout('${bookId}')">Save payout</button>
-          ${owed > 0.01 ? `<button class="btn" style="padding:6px 12px; font-size:11px;" onclick="document.getElementById('ap-amount-${bookId}').value='${owed.toFixed(2)}'">Pay full balance (${fmt(owed, cur)})</button>` : ''}
-          <button class="btn" style="padding:6px 12px; font-size:11px; background:transparent;" onclick="toggleArtistPayoutForm('${bookId}')">Cancel</button>
+        <!-- Live verdict on what the typed amount does to the balance. Announced
+             politely so a screen reader hears the overpayment warning too. -->
+        <div class="ps-payout-preview" id="ap-preview-${bookId}" role="status" aria-live="polite"></div>
+        <div class="ps-payout-actions">
+          <button class="btn gold" onclick="recordArtistPayout('${bookId}')">Save payout</button>
+          ${owed > 0.01 ? `<button class="btn" onclick="fillArtistPayoutFull('${bookId}')">Pay full balance (${fmt(owed, cur)})</button>` : ''}
+          <button class="btn tx" onclick="toggleArtistPayoutForm('${bookId}')">Cancel</button>
         </div>
       </div>
-      <div style="background:var(--cream2); border-radius:var(--r2); overflow:hidden;">
+      <div class="ps-payout-list sys-container">
         ${payoutHistoryHtml}
       </div>
     </div>
@@ -4928,7 +4951,66 @@ function renderProfitSharingBreakdown(bookId) {
 
 function toggleArtistPayoutForm(bookId) {
   const form = document.getElementById(`artist-payout-form-${bookId}`);
-  if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
+  if (!form) return;
+  form.hidden = !form.hidden;
+  if (form.hidden) return;
+  // Opening it: state the balance straight away, so the reference figure is on
+  // screen before the first keystroke rather than only after one.
+  previewArtistPayout(bookId);
+  const amount = document.getElementById(`ap-amount-${bookId}`);
+  if (amount) amount.focus();
+}
+
+// Quick-fill the amount with the whole outstanding balance. Goes through here
+// rather than an inline assignment so the preview refreshes with it — `value`
+// set from script fires no `input` event.
+function fillArtistPayoutFull(bookId) {
+  const stats = calculateArtistEarnings(bookId);
+  const amount = document.getElementById(`ap-amount-${bookId}`);
+  if (!stats || !amount) return;
+  const owed = stats.owedToArtist;
+  if (!(owed > 0.01)) return;
+  amount.value = owed.toFixed(2);
+  previewArtistPayout(bookId);
+  amount.focus();
+}
+
+// Say what the typed amount will do to the balance before it is saved. The
+// figures come from the live earnings pipeline every time, so a payout recorded
+// in another tab (or synced in from another device) can't leave a stale verdict
+// on screen.
+function previewArtistPayout(bookId) {
+  const host = document.getElementById(`ap-preview-${bookId}`);
+  const input = document.getElementById(`ap-amount-${bookId}`);
+  if (!host || !input) return;
+
+  const book = BOOKS[bookId];
+  const stats = calculateArtistEarnings(bookId);
+  if (!book || !stats) { host.textContent = ''; host.className = 'ps-payout-preview'; return; }
+
+  const cur = book.currency;
+  const owed = stats.owedToArtist ?? 0;
+  const v = describePayout(input.value, owed);
+
+  let tone = 'neutral', msg;
+  if (v.tone === 'empty' || v.tone === 'invalid') {
+    tone = 'neutral';
+    msg = owed > 0.01
+      ? `${fmt(owed, cur)} is currently owed to the artist.`
+      : 'Nothing is currently owed — anything you record here counts as an advance.';
+  } else if (v.tone === 'partial') {
+    tone = 'neutral';
+    msg = `Records ${fmt(v.amount, cur)} — leaves ${fmt(v.remaining, cur)} still owed.`;
+  } else if (v.tone === 'clears') {
+    tone = 'good';
+    msg = `Records ${fmt(v.amount, cur)} — settles the balance in full.`;
+  } else {
+    tone = 'warn';
+    msg = `${fmt(v.over, cur)} more than the ${fmt(Math.max(0, owed), cur)} owed — this will show as overpaid, held against future earnings.`;
+  }
+
+  host.className = `ps-payout-preview is-${tone}`;
+  host.textContent = msg;
 }
 
 async function recordArtistPayout(bookId) {
@@ -5009,6 +5091,8 @@ async function deleteArtistPayout(bookId, payoutId) {
 }
 
 window.toggleArtistPayoutForm = toggleArtistPayoutForm;
+window.fillArtistPayoutFull = fillArtistPayoutFull;
+window.previewArtistPayout = previewArtistPayout;
 window.recordArtistPayout = recordArtistPayout;
 window.requestArtistPayout = requestArtistPayout;
 window.deleteArtistPayout = deleteArtistPayout;

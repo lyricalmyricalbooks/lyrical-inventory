@@ -99,3 +99,39 @@ export function calcArtistEarnings(book, state) {
     payouts
   };
 }
+
+// What a payout of `amountRaw` would do to the outstanding balance, worked out
+// BEFORE it is written to the ledger. Pure and currency-format-free: the caller
+// formats `amount` / `remaining` / `over` with its own money helper, so this
+// stays testable without a DOM or a locale.
+//
+// The case that matters is `over`. Recording more than is owed is legal (an
+// advance against future royalties) but it silently flips the panel's balance
+// card into "⚠ Overpaid to artist" only AFTER saving — so the publisher had no
+// way to notice the typo while it was still a keystroke away.
+//
+// tone:
+//   'empty'   — nothing typed yet; no verdict to give
+//   'invalid' — not a number, or zero/negative
+//   'partial' — valid, and a balance survives it
+//   'clears'  — valid, and it settles the balance to the cent
+//   'over'    — valid, but larger than what is owed
+export function describePayout(amountRaw, owed) {
+  const owedNet = roundCents(Number(owed) || 0);
+  const blank = { amount: 0, remaining: Math.max(0, owedNet), over: 0 };
+
+  if (amountRaw === '' || amountRaw === null || amountRaw === undefined) {
+    return { tone: 'empty', ...blank };
+  }
+  const amount = Number(amountRaw);
+  if (!Number.isFinite(amount) || amount <= 0) return { tone: 'invalid', ...blank };
+
+  const paid = roundCents(amount);
+  const left = roundCents(owedNet - paid);
+
+  // Half-cent deadband on both sides: a balance of 0.004 is settled, not a
+  // lingering debt, and paying 0.004 over is not an overpayment.
+  if (left > 0.005) return { tone: 'partial', amount: paid, remaining: left, over: 0 };
+  if (left < -0.005) return { tone: 'over', amount: paid, remaining: 0, over: roundCents(-left) };
+  return { tone: 'clears', amount: paid, remaining: 0, over: 0 };
+}
