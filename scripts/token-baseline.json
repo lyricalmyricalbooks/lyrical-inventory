@@ -10,10 +10,10 @@
     "mark a reviewed exception on the line with a /* token-ok */ comment."
   ],
   "limits": {
-    "raw-hex": 148,
-    "raw-zindex": 42,
-    "raw-font-size": 419,
+    "raw-hex": 147,
+    "raw-zindex": 41,
+    "raw-font-size": 409,
     "raw-easing": 97,
-    "raw-shadow": 86
+    "raw-shadow": 84
   }
 }

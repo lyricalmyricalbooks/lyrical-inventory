@@ -3950,63 +3950,84 @@ function renderChannelAnalytics() {
     }).join('') + `</div>`;
   }
 
-  // Channel performance — comparative horizontal bar chart
+  // Channel performance. The bar width IS the share of combined revenue, so the
+  // bar and the percentage beside it are the same number. The previous version
+  // scaled every bar against the LEADER while labelling it with share of TOTAL,
+  // which put two different scales in one row: the top channel's bar always ran
+  // full width whatever its actual share.
   const chans = Object.entries(cd.channelTotals).map(([chan, t]) => ({ chan, ...t })).sort((a, b) => b.revenue - a.revenue);
   // ⚡ Bolt Optimization: Combine multiple channel aggregate passes into a single loop instead of 4 separate reduces
-  let grandRev = 0, grandTxn = 0, grandU = 0, maxRev = 0;
+  let grandRev = 0, grandTxn = 0, grandU = 0;
   for (let i = 0; i < chans.length; i++) {
     const x = chans[i];
     grandRev += x.revenue || 0;
     grandTxn += x.txns || 0;
     grandU += x.units || 0;
-    if (x.revenue > maxRev) maxRev = x.revenue;
   }
-  if (maxRev === 0) maxRev = 1;
   const top = chans[0];
   const activeChans = chans.filter(x => (x.revenue || 0) > 0).length;
   const avgOrder = grandTxn ? grandRev / grandTxn : 0;
   const avgUnit = grandU ? grandRev / grandU : 0;
   const topShare = top && grandRev > 0 ? top.revenue / grandRev * 100 : 0;
-  const heroColor = top ? channelColor(top.chan) : 'var(--gold2)';
-  const chartRows = chans.map((x, idx) => {
+  const curCode = escapeHtml(cur);
+
+  const chartRows = chans.map((x) => {
     const share = grandRev > 0 ? x.revenue / grandRev * 100 : 0;
     const col = channelColor(x.chan);
-    const avgTxn = x.txns ? x.revenue / x.txns : 0;
-    const revUnit = x.units ? x.revenue / x.units : 0;
-    return `<div class="ch-bar-row" style="--ch:${col}">
-      <div class="ch-rank">${idx + 1}</div>
-      <div class="ch-bar-main">
-        <div class="ch-bar-head"><span class="ch-dot" style="background:${col}"></span><span class="ch-bar-name">${escapeHtml(chanLabel(x.chan))}</span><span class="ch-bar-val">${fmt(x.revenue, cur)} <em>${share.toFixed(0)}%</em></span></div>
-        <div class="ch-bar-track" role="img" aria-label="${escapeHtml(chanLabel(x.chan))} generated ${share.toFixed(0)}% of ${escapeHtml(cur)} revenue"><div class="ch-bar-fill" style="width:${x.revenue / maxRev * 100}%;background:linear-gradient(90deg, ${lightenColor(col, 0.25)}, ${col});"></div></div>
-        <div class="ch-bar-meta"><span>${x.txns} txn</span><span>${x.units} units</span>${x.txns ? `<span>${fmt(avgTxn, cur)}/txn</span>` : ''}${x.units ? `<span>${fmt(revUnit, cur)}/unit</span>` : ''}</div>
-      </div>
+    const name = escapeHtml(chanLabel(x.chan));
+    const volume = `${x.txns} txn · ${x.units} u`;
+    return `<div class="ch-row">
+      <div class="ch-row-name"><span class="ch-dot" style="background:${escapeHtml(col)}"></span><span>${name}</span></div>
+      <div class="ch-row-track" role="img" aria-label="${name} generated ${share.toFixed(0)}% of ${curCode} revenue"><div class="ch-row-fill" style="width:${share.toFixed(2)}%;background:${escapeHtml(col)};"></div></div>
+      <div class="ch-row-pct mono-num">${share.toFixed(0)}%</div>
+      <div class="ch-row-rev mono-num">${fmt(x.revenue, cur)}</div>
+      <div class="ch-row-vol mono-num">${escapeHtml(volume)}</div>
     </div>`;
   }).join('');
+
   const chart = `<div class="ch-panel">
-    <div class="ch-hero" style="--ch:${heroColor}">
+    <div class="ch-summary">
       <div>
-        <div class="ch-eyebrow">Channel performance</div>
-        <div class="ch-hero-title">${top ? `${escapeHtml(chanLabel(top.chan))} leads at ${topShare.toFixed(0)}%` : 'No leading channel yet'}</div>
-        <div class="ch-hero-sub">${fmt(grandRev, cur)} total · ${grandTxn} transactions · ${grandU} units</div>
+        <div class="ch-summary-label">Combined revenue</div>
+        <div class="ch-summary-total mono-num">${fmt(grandRev, cur)}</div>
       </div>
-      <div class="ch-hero-badge">${top ? `Top channel<br><strong>${fmt(top.revenue, cur)}</strong>` : 'No sales'}</div>
+      <div class="ch-summary-stats">
+        <div class="ch-stat"><span>Transactions</span><strong class="mono-num">${grandTxn}</strong></div>
+        <div class="ch-stat"><span>Units</span><strong class="mono-num">${grandU}</strong></div>
+        <div class="ch-stat"><span>Per transaction</span><strong class="mono-num">${fmt(avgOrder, cur)}</strong></div>
+        <div class="ch-stat"><span>Per unit</span><strong class="mono-num">${fmt(avgUnit, cur)}</strong></div>
+      </div>
     </div>
-    <div class="ch-metrics">
-      <div class="ch-metric"><span>Total revenue</span><strong>${fmt(grandRev, cur)}</strong></div>
-      <div class="ch-metric"><span>Avg / txn</span><strong>${fmt(avgOrder, cur)}</strong></div>
-      <div class="ch-metric"><span>Avg / unit</span><strong>${fmt(avgUnit, cur)}</strong></div>
-      <div class="ch-metric"><span>Active channels</span><strong>${activeChans}/${chans.length}</strong></div>
+    <div class="ch-insight">
+      <span class="ch-insight-lead">${top ? `${escapeHtml(chanLabel(top.chan))} leads at ${topShare.toFixed(0)}%` : 'No leading channel yet'}</span>
+      <span class="ch-insight-sub">of combined revenue, across ${activeChans} active ${activeChans === 1 ? 'channel' : 'channels'}</span>
     </div>
-    <div class="ch-bars">${chartRows}</div>
+    <div class="ch-table">
+      <div class="ch-row ch-row-head">
+        <div>Channel</div>
+        <div>Share of revenue</div>
+        <div class="ch-row-pct">%</div>
+        <div class="ch-row-rev">Revenue</div>
+        <div class="ch-row-vol">Volume</div>
+      </div>
+      ${chartRows}
+      <div class="ch-row ch-row-total">
+        <div class="ch-row-name">All channels</div>
+        <div></div>
+        <div class="ch-row-pct mono-num">100%</div>
+        <div class="ch-row-rev mono-num">${fmt(grandRev, cur)}</div>
+        <div class="ch-row-vol mono-num">${grandTxn} txn · ${grandU} u</div>
+      </div>
+    </div>
   </div>`;
 
   // Per-book cards — one stacked channel-mix bar per book + colour-keyed legend
   const cards = cd.books.map(b => {
     const segs = b.channels.filter(c => c.rev > 0).map(c =>
-      `<div class="ch-seg" style="width:${b.total > 0 ? c.rev / b.total * 100 : 0}%;background:${channelColor(c.chan)}" title="${escapeHtml(chanLabel(c.chan))}: ${fmt(c.rev, b.cur)}"></div>`
+      `<div class="ch-seg" style="width:${b.total > 0 ? c.rev / b.total * 100 : 0}%;background:${escapeHtml(channelColor(c.chan))}" title="${escapeHtml(chanLabel(c.chan))}: ${fmt(c.rev, b.cur)}"></div>`
     ).join('') || `<div class="ch-seg" style="width:100%;background:var(--cream3)"></div>`;
     const legend = b.channels.map(c => {
-      const top = c.chan === b.bestChan;
+      const isTop = c.chan === b.bestChan;
       // Rows with real transactions drill into that book + channel's order history.
       const clickable = c.txns > 0;
       const jsChan = (c.chan || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -4014,14 +4035,15 @@ function renderChannelAnalytics() {
         ? ` class="ch-leg-row ch-leg-tap" title="View ${escapeHtml(chanLabel(c.chan))} orders" onclick="${escapeHtml(`drillToChannel('${b.id}','${jsChan}')`)}"`
         : ` class="ch-leg-row"`;
       return `<div${tap}>
-        <span class="ch-dot" style="background:${channelColor(c.chan)}"></span>
-        <span class="ch-leg-name">${escapeHtml(chanLabel(c.chan))}${top ? ' <span class="pill gold ch-top">TOP</span>' : ''}</span>
-        <span class="ch-leg-val">${fmt(c.rev, b.cur)} <em>${c.share.toFixed(0)}%</em></span>
-        <span class="ch-leg-meta">${c.txns} txn · ${c.units} u${clickable ? ' <span class="ch-leg-go">›</span>' : ''}</span>
+        <span class="ch-dot" style="background:${escapeHtml(channelColor(c.chan))}"></span>
+        <span class="ch-leg-name">${escapeHtml(chanLabel(c.chan))}${isTop ? ' <span class="pill gold ch-top">TOP</span>' : ''}</span>
+        <span class="ch-leg-pct mono-num">${c.share.toFixed(0)}%</span>
+        <span class="ch-leg-val mono-num">${fmt(c.rev, b.cur)}</span>
+        <span class="ch-leg-meta mono-num">${c.txns} txn · ${c.units} u${clickable ? ' <span class="ch-leg-go">›</span>' : ''}</span>
       </div>`;
     }).join('');
     return `<div class="ch-book-card">
-      <div class="ch-book-head"><span class="ch-book-title">${escapeHtml(b.title)}</span><span class="ch-book-total">${fmt(b.total, b.cur)}</span></div>
+      <div class="ch-book-head"><span class="ch-book-title">${escapeHtml(b.title)}</span><span class="ch-book-total mono-num">${fmt(b.total, b.cur)}</span></div>
       <div class="ch-stack">${segs}</div>
       <div class="ch-legend">${legend}</div>
     </div>`;
