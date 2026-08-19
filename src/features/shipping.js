@@ -41,7 +41,7 @@ import {
   today,
 } from '../main.js';
 import { renderExpenses, saveReceiptToLocalFile } from './receipts.js';
-import { openM, closeM, confirmDialog } from '../lib/modal.js';
+import { openM, closeM, confirmDialog, validateFields, clearFieldErrors, _prefersReducedMotion } from '../lib/modal.js';
 import {
   extractBigCartelAddress,
   getBigCartelIncluded,
@@ -1226,6 +1226,8 @@ function initShippingTab() {
   renderCustomShippoDestPicker();
   bindDestinationVerificationWatchers();
   renderDestinationVerification();
+  bindRateReadinessWatchers();
+  renderShippoRateReadiness();
   loadShippoIncotermPreference($('st-country')?.value || '');
   updateShippoCustomsTotalHint();
   renderShippingAnalysisHub();
@@ -1576,6 +1578,9 @@ function onShippoPreFillDestChange() {
     onShippoDestCountryChange();
     // A verdict belongs to one address; loading a different one retires it.
     dismissAddressVerification();
+    // Fields written in code fire no input event, so the readiness line has to
+    // be told the destination just filled itself in.
+    renderShippoRateReadiness();
     showToast('✓ Destination populated');
 
     // Older cached orders were fetched without the contact resources, so the phone
@@ -1887,6 +1892,7 @@ function applyVerifiedAddressCorrections() {
   };
   onShippoDestCountryChange();
   renderDestinationVerification();
+  renderShippoRateReadiness();
   showToast(`✓ Applied Shippo's standardized ${applied.length === 1 ? 'field' : 'fields'}: ${applied.join(', ')}`);
 }
 
@@ -1928,6 +1934,7 @@ function onShippoBookPresetChange() {
   };
 
   updateShippoCustomsTotalHint();
+  renderShippoRateReadiness();
 
   if (source === 'generic') {
     showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor.`, 'warn', 6000);
@@ -2357,6 +2364,107 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
   }
 }
 
+// ── RATE FORM READINESS ──────────────────────────────────────────────────
+// A quote needs a specific set of boxes filled in, spread over three cards and
+// roughly twenty inputs. The old feedback was a toast naming a whole card
+// ("Origin address (Sender Name, Street, City, Zip) is required") and then
+// leaving the publisher to hunt the form for the one that is actually blank —
+// on a phone the empty box is usually off-screen when the toast appears.
+//
+// This is the single list both the live readiness line and the Calculate button
+// read, in the order the fields appear on screen, so the two can never disagree
+// about what is still missing and "the first one" is always the topmost one.
+//
+// `test` signatures match validateFields() in lib/modal.js — the same helper the
+// modals already use for inline errors — so the marking, the aria-invalid and
+// the clear-as-you-type behaviour are the app's existing ones, not new ones.
+function shippoRateRules(opts) {
+  const o = opts || {};
+  const international = !!o.international;
+  // Injectable so the rules can be exercised without main.js's country table.
+  const supported = o.isSupportedCountry || ((v) => !!normalizeCountryCode(v));
+  const filled = (v) => String(v ?? '').trim().length > 0;
+  const positive = (v) => parseFloat(v) > 0;
+
+  const rules = [
+    { id: 'sf-name', label: 'Sender name', msg: 'Who is the parcel coming from?', test: filled },
+  ];
+  // Only asked for when it is genuinely required, so a domestic quote is never
+  // blocked on a phone number no carrier will look at.
+  if (international) {
+    rules.push({ id: 'sf-phone', label: 'Sender phone', msg: 'International carriers need a sender phone for customs.', test: filled });
+  }
+  rules.push(
+    { id: 'sf-street1', label: 'Sender street address', msg: 'Add the street the parcel ships from.', test: filled },
+    { id: 'sf-city', label: 'Sender city', msg: 'Add the sending city.', test: filled },
+    { id: 'sf-zip', label: 'Sender postal code', msg: 'Add the sending postal or zip code.', test: filled },
+    { id: 'sf-country', label: 'Sender country', msg: 'Choose a country Shippo can rate from.', test: supported },
+    { id: 'st-name', label: 'Recipient name', msg: 'Who is receiving the parcel?', test: filled },
+  );
+  if (international) {
+    rules.push({ id: 'st-phone', label: 'Recipient phone', msg: 'International carriers need a recipient phone for customs.', test: filled });
+  }
+  rules.push(
+    { id: 'st-street1', label: 'Recipient street address', msg: 'Add the street the parcel is going to.', test: filled },
+    { id: 'st-city', label: 'Recipient city', msg: 'Add the destination city.', test: filled },
+    { id: 'st-zip', label: 'Recipient postal code', msg: 'Add the destination postal or zip code.', test: filled },
+    { id: 'st-country', label: 'Recipient country', msg: 'Choose a country Shippo can rate to.', test: supported },
+    { id: 'sp-length', label: 'Parcel length', msg: 'Length has to be more than zero.', test: positive },
+    { id: 'sp-width', label: 'Parcel width', msg: 'Width has to be more than zero.', test: positive },
+    { id: 'sp-height', label: 'Parcel height', msg: 'Height has to be more than zero.', test: positive },
+    { id: 'sp-weight', label: 'Parcel weight', msg: 'Weight has to be more than zero.', test: positive },
+  );
+  return rules;
+}
+
+/** The live state of the rate form: every rule, plus the ones failing now. */
+function shippoRateFormState() {
+  const originCode = normalizeCountryCode($('sf-country')?.value || '');
+  const destCode = normalizeCountryCode($('st-country')?.value || '');
+  const international = !!(originCode && destCode) && isInternationalShipment(originCode, destCode);
+  const rules = shippoRateRules({ international });
+  // A rule whose input is absent from the DOM is not a missing detail — it is a
+  // form that has not rendered — so it never counts against the publisher.
+  const missing = rules.filter(r => {
+    const el = $(r.id);
+    return !!el && !r.test(el.value, el);
+  });
+  return { rules, missing, international };
+}
+
+/**
+ * The line above the Calculate button: what the form still needs, updated as it
+ * is typed, so nothing is discovered only after pressing the button.
+ */
+function renderShippoRateReadiness() {
+  const host = $('ship-rate-readiness');
+  if (!host) return;
+  const { missing } = shippoRateFormState();
+  if (!missing.length) {
+    host.innerHTML = '<span class="pill green">✓ Ready to quote</span>'
+      + '<span class="ship-readiness-note">Sender, recipient and parcel are all filled in.</span>';
+    return;
+  }
+  const names = missing.map(r => r.label ?? 'A required detail');
+  const shown = names.slice(0, 3).join(' · ');
+  const rest = names.length > 3 ? ` · +${names.length - 3} more` : '';
+  host.innerHTML = `<span class="pill amber">● ${missing.length} still needed</span>`
+    + `<span class="ship-readiness-note">${escapeHtml(shown + rest)}</span>`;
+}
+
+/**
+ * Keeps the readiness line honest as the form is edited. Delegated from the tab
+ * itself and bound once, the same shape as bindDestinationVerificationWatchers —
+ * initShippingTab runs on every visit to the tab.
+ */
+function bindRateReadinessWatchers() {
+  const scope = $('tab-shipping');
+  if (!scope || scope.dataset.rateReadyWatch === 'true') return;
+  scope.dataset.rateReadyWatch = 'true';
+  scope.addEventListener('input', renderShippoRateReadiness);
+  scope.addEventListener('change', renderShippoRateReadiness);
+}
+
 async function calculateShippoRates() {
   const shippoKey = TAX_CENTER.settings?.shippoKey || '';
   if (!shippoKey) {
@@ -2394,29 +2502,32 @@ async function calculateShippoRates() {
   const spWeight = parseFloat($('sp-weight').value) || 0;
   const spWeightUnit = $('sp-weight-unit').value;
 
-  // Validation
-  if (!sfName || !sfStreet1 || !sfCity || !sfZip) {
-    showToast('⚠️ Origin address (Sender Name, Street, City, Zip) is required', 'warn');
+  // Validation — mark the exact boxes that are empty rather than naming a whole
+  // card and leaving the publisher to find them. Errors are cleared across the
+  // whole tab first so a rule that no longer applies (the phone fields, once a
+  // shipment stops being international) cannot leave a stale red box behind.
+  clearFieldErrors($('tab-shipping') || document);
+  const { rules, missing } = shippoRateFormState();
+  if (missing.length) {
+    validateFields(rules);
+    // validateFields focuses the first failure; centre it too, because on a
+    // phone the focused box can land under the sticky header.
+    const firstEl = $(missing[0].id);
+    const target = (firstEl && firstEl.closest && firstEl.closest('.form-group')) || firstEl;
+    if (target && target.scrollIntoView) {
+      try {
+        target.scrollIntoView({ behavior: _prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' });
+      } catch { /* older engines take no options object */ }
+    }
+    renderShippoRateReadiness();
+    showToast(missing.length === 1
+      ? `⚠️ ${missing[0].label} is still empty — it is highlighted below.`
+      : `⚠️ ${missing.length} details are still missing — starting with ${missing[0].label}.`, 'warn', 5000);
     return;
   }
-  if (!stName || !stStreet1 || !stCity || !stZip) {
-    showToast('⚠️ Destination address (Recipient Name, Street, City, Zip) is required', 'warn');
-    return;
-  }
-  if (spLength <= 0 || spWidth <= 0 || spHeight <= 0 || spWeight <= 0) {
-    showToast('⚠️ Parcel dimensions and weight must be positive numbers', 'warn');
-    return;
-  }
-  if (!sfCountryCode || !stCountryCode) {
-    showToast('⚠️ Choose a supported origin and destination country before rating', 'warn');
-    return;
-  }
+  renderShippoRateReadiness();
 
   const isInternational = isInternationalShipment(sfCountryCode, stCountryCode);
-  if (isInternational && (!sfPhone || !stPhone)) {
-    showToast('⚠️ International Shippo rates need sender and recipient phone numbers for customs/carrier rating', 'warn');
-    return;
-  }
 
   // Save Origin default if checked
   if ($('ship-save-origin').checked) {
