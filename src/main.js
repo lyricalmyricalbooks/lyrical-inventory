@@ -543,6 +543,7 @@ import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy } from './lib/inventory.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
+import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -7350,7 +7351,12 @@ function renderStores() {
     const ledger = s.ledger || [];
     // ⚡ Bolt Optimization: Calculate double-entry ledger balances in a single pass to eliminate intermediate arrays and multiple loop overhead
     let ledgerSent = 0, ledgerSold = 0, ledgerReturned = 0;
+    // Counted alongside, and deliberately including voided rows: the "Ledger"
+    // button below exists to show this store's paper trail, and a void is part
+    // of that trail even though it moved nothing.
+    let ledgerRows = 0;
     for (const e of ledger) {
+      if (e.storeId === st.id) ledgerRows += 1;
       if (e.storeId === st.id && !e.voided) {
         if (e.type === 'Shipment') ledgerSent += e.qty || 0;
         else if (e.type === 'Sale') ledgerSold += e.qty || 0;
@@ -7395,7 +7401,7 @@ function renderStores() {
     const sentCell = `<div class="sk-v${rowOff('sent')}">${st.sent ?? 0}</div>`;
     const soldCell = `<div class="sk-v${rowOff('sold')}">${st.sold ?? 0}</div>`;
 
-    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city, st.contact, st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
+    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city, st.contact, st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="showStoreLedger(${escapeHtml(JSON.stringify(st.id))})" ${ledgerRows ? '' : 'disabled'} title="${ledgerRows ? `Show this store's ${ledgerRows} ledger entr${ledgerRows === 1 ? 'y' : 'ies'} below` : 'Nothing in the ledger for this store yet'}">📒 Ledger</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
   }).join('');
 }
 async function removeStore(id) {
@@ -7675,8 +7681,13 @@ function consignmentLedgerEmptyHtml() {
 // The total the table never had. One row per currency the ledger was recorded
 // in — deliberately not one combined figure, because adding CA$ to € would
 // produce a number that is wrong in both.
-function consignmentLedgerFootHtml(totals) {
+function consignmentLedgerFootHtml(totals, scope = '') {
   if (!totals || !totals.length) return '';
+  // When the table has been narrowed to one store, the totals underneath are
+  // that store's — saying so inline is the difference between "the shops owe me
+  // €84" and "this shop owes me €84", which are very different sentences to act
+  // on.
+  const scopeTag = scope ? ` <span class="ledger-total-scope">${escapeHtml(scope)}</span>` : '';
   return totals.map((t) => {
     const owed = t.outstanding ?? 0;
     const settled = t.paid ?? 0;
@@ -7688,8 +7699,8 @@ function consignmentLedgerFootHtml(totals) {
     // All-clear is worth stating outright: it is the answer to "is anyone
     // behind on paying me?", and a bare 0.00 does not read as reassurance.
     const label = owed > 0
-      ? `Still owed to you<span class="ledger-total-sub">${unpaid} unpaid sale${unpaid === 1 ? '' : 's'} · ${escapeHtml(settledNote)}</span>`
-      : `All settled<span class="ledger-total-sub">no unpaid sales · ${escapeHtml(settledNote)}</span>`;
+      ? `Still owed to you${scopeTag}<span class="ledger-total-sub">${unpaid} unpaid sale${unpaid === 1 ? '' : 's'} · ${escapeHtml(settledNote)}</span>`
+      : `All settled${scopeTag}<span class="ledger-total-sub">no unpaid sales · ${escapeHtml(settledNote)}</span>`;
     const valueClass = owed > 0 ? 'ledger-total-val is-owed' : 'ledger-total-val is-clear';
     const codeTag = totals.length > 1
       ? ` <span class="chip-status gray">${escapeHtml(t.code)}</span>`
@@ -7702,6 +7713,142 @@ function consignmentLedgerFootHtml(totals) {
   }).join('');
 }
 
+// ── CONSIGNMENT LEDGER FILTER ───────────────────────────────────────────
+// Which slice of the ledger is on screen. Carries the book it was set on for
+// the same reason `histChanFilter` does: switching books must not leave a
+// filter pointing at a store that belongs to a different title, which would
+// render an empty table with no obvious cause.
+let conLedgerFilter = { ...emptyLedgerFilter(), bookId: null };
+
+function activeConLedgerFilter() {
+  if (conLedgerFilter.bookId !== activeBook) conLedgerFilter = { ...emptyLedgerFilter(), bookId: activeBook };
+  return conLedgerFilter;
+}
+
+function setConLedgerFilter(patch) {
+  conLedgerFilter = { ...activeConLedgerFilter(), ...patch, bookId: activeBook };
+  renderLedger();
+}
+
+function setConLedgerStore(storeId) {
+  setConLedgerFilter({ storeId: storeId ? String(storeId) : null });
+}
+
+// Type chips and the unpaid chip are toggles, not a radio set: pressing the one
+// that is already on clears it, which is what the ✕ the pressed state grows is
+// promising.
+function toggleConLedgerType(type) {
+  const cur = activeConLedgerFilter();
+  setConLedgerFilter({ type: cur.type === type ? null : type });
+}
+
+function toggleConLedgerUnpaid() {
+  setConLedgerFilter({ unpaidOnly: !activeConLedgerFilter().unpaidOnly });
+}
+
+function clearConLedgerFilter() {
+  conLedgerFilter = { ...emptyLedgerFilter(), bookId: activeBook };
+  renderLedger();
+}
+
+// Jump from a store card straight to that store's rows. This is the whole point
+// of the filter: the card says a shop owes you money, and this is the one click
+// that shows which sales that is.
+function showStoreLedger(storeId) {
+  setConLedgerFilter({ storeId: storeId ? String(storeId) : null, type: null, unpaidOnly: false });
+  const wrap = $('con-ledger-filter');
+  if (wrap && typeof wrap.scrollIntoView === 'function') {
+    wrap.scrollIntoView({ behavior: _prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  }
+  const sel = $('con-ledger-store');
+  if (sel && typeof sel.focus === 'function') sel.focus({ preventScroll: true });
+}
+
+/**
+ * The controls above the ledger. Rebuilt on every ledger render so the store
+ * picker and the chip counts can never describe a ledger that has since changed
+ * underneath them.
+ */
+function renderLedgerFilterBar(entries, filter, stores, described) {
+  const bar = $('con-ledger-filter');
+  const controls = $('con-ledger-controls');
+  const status = $('con-ledger-status');
+  if (!bar || !controls || !status) return;
+  // Nothing to narrow: one store and a handful of rows is faster to read than
+  // to filter, and an inert control bar over an empty table reads as broken.
+  // A filter that is already on always keeps the bar — hiding the only way to
+  // clear it would strand the owner on a table they can't widen again.
+  if (!described.active && (!entries.length || (stores.length < 2 && entries.length < 8))) {
+    controls.innerHTML = '';
+    status.innerHTML = '';
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+
+  const counts = ledgerTypeCounts(entries, { ...filter, type: null });
+  const storeOpts = stores.map((st) => {
+    const selected = filter.storeId && String(st.id) === String(filter.storeId) ? ' selected' : '';
+    return `<option value="${escapeHtml(String(st.id))}"${selected}>${escapeHtml(st.name)} (${st.count})</option>`;
+  }).join('');
+
+  const typeChips = LEDGER_TYPE_FILTERS.map((t) => {
+    const on = filter.type === t.key;
+    const n = counts[t.key] ?? 0;
+    // A type with no rows left under the current store is disabled rather than
+    // hidden, so the row of chips keeps the same shape as you move between
+    // stores instead of shuffling under the cursor.
+    const dead = n === 0 && !on;
+    return `<button type="button" class="ledger-toggle-btn${on ? ' is-on' : ''}" aria-pressed="${on ? 'true' : 'false'}"${dead ? ' disabled' : ''} onclick="toggleConLedgerType('${escapeHtml(t.key)}')" title="${on ? 'Showing only these — click to show every kind of entry again' : `Show only what was ${escapeHtml(t.label.toLowerCase())}`}"><span class="con-group-toggle-icon" aria-hidden="true">${t.glyph}</span>${escapeHtml(t.label)} <span class="ledger-chip-count mono-num">${n}</span></button>`;
+  }).join('');
+
+  const unpaidOn = !!filter.unpaidOnly;
+  const unpaidCount = counts.unpaid ?? 0;
+  const unpaidChip = (unpaidCount > 0 || unpaidOn)
+    ? `<button type="button" class="ledger-toggle-btn is-alert${unpaidOn ? ' is-on' : ''}" aria-pressed="${unpaidOn ? 'true' : 'false'}" onclick="toggleConLedgerUnpaid()" title="${unpaidOn ? 'Showing only sales that have not been paid for — click to show every entry again' : 'Show only the sales a store still owes you for'}"><span class="con-group-toggle-icon" aria-hidden="true">⚠</span>Still unpaid <span class="ledger-chip-count mono-num">${unpaidCount}</span></button>`
+    : '';
+
+  const clearBtn = described.active
+    ? `<button type="button" class="btn sm" onclick="clearConLedgerFilter()">✕ Show everything</button>`
+    : '';
+
+  const chipParts = described.parts.length
+    ? ` <span class="ledger-filter-scope">${described.parts.map((p) => escapeHtml(p)).join(' · ')}</span>`
+    : '';
+
+  controls.innerHTML = `<label class="ledger-filter-field">
+        <span class="ledger-filter-label">Store</span>
+        <select id="con-ledger-store" class="ledger-filter-select" onchange="setConLedgerStore(this.value)">
+          <option value=""${filter.storeId ? '' : ' selected'}>All stores (${entries.length})</option>
+          ${storeOpts}
+        </select>
+      </label>
+      <div class="ledger-filter-chips">${typeChips}${unpaidChip}${clearBtn}</div>`;
+  status.innerHTML = `<strong class="mono-num">${escapeHtml(described.headline)}</strong>${chipParts} <span class="ledger-filter-detail">${escapeHtml(described.detail)}</span>`;
+}
+
+// The ledger has rows, but not for what was asked. Says which filter is doing
+// the hiding and offers the way back, rather than reading like a book with no
+// consignment history at all.
+function consignmentLedgerNoMatchHtml(described) {
+  return `<div class="empty-state sys-empty">
+      <div class="e-icon" aria-hidden="true">🔍</div>
+      <strong>No entries match this filter</strong>
+      <span>${escapeHtml(described.detail)}</span>
+      <div class="sys-empty-actions">
+        <button class="btn gold lg" onclick="clearConLedgerFilter()">✕ Show everything</button>
+      </div>
+    </div>`;
+}
+
+Object.assign(window, {
+  setConLedgerStore,
+  toggleConLedgerType,
+  toggleConLedgerUnpaid,
+  clearConLedgerFilter,
+  showStoreLedger,
+});
+
 function renderLedger() {
   const s = getState(), book = getBook(), cur = book.currency, b = $('ledger-body');
   const ledgerBookCode = bookCurrencyCode(book);
@@ -7710,10 +7857,33 @@ function renderLedger() {
   const ledgerCur = e => (e.cur && normalizeCurrencyCode(e.cur, ledgerBookCode) !== ledgerBookCode) ? getSym(e.cur) : cur;
   const foot = $('ledger-foot');
   if (!s.ledger.length) {
+    const bar = $('con-ledger-filter');
+    if (bar) { bar.innerHTML = ''; bar.hidden = true; }
     b.innerHTML = `<tr class="ledger-empty-row"><td colspan="8">${consignmentLedgerEmptyHtml()}</td></tr>`;
     if (foot) foot.innerHTML = '';
     return;
   }
+
+  // The filter narrows which rows are painted and which rows the totals are
+  // taken over. It never re-orders, re-tallies or mutates the ledger — the loop
+  // below still walks `s.ledger` itself, so every row keeps the index
+  // `openEditLedger()` needs.
+  const filter = activeConLedgerFilter();
+  const stores = ledgerStoreOptions(s.ledger);
+  const matched = filterLedgerEntries(s.ledger, filter);
+  const visible = ledgerFilterIsActive(filter) ? new Set(matched) : null;
+  const storeName = filter.storeId
+    ? (stores.find((st) => String(st.id) === String(filter.storeId))?.name ?? '')
+    : '';
+  const described = describeLedgerFilter(filter, { shown: matched.length, total: s.ledger.length, storeName });
+  renderLedgerFilterBar(s.ledger, filter, stores, described);
+
+  if (!matched.length) {
+    b.innerHTML = `<tr class="ledger-empty-row"><td colspan="8">${consignmentLedgerNoMatchHtml(described)}</td></tr>`;
+    if (foot) foot.innerHTML = '';
+    return;
+  }
+
   const pill = e => {
     if (e.voided) return '<span class="void-badge">Void</span>';
     if (e.type === 'Shipment') return '<span class="pill blue">Sent</span>';
@@ -7727,6 +7897,7 @@ function renderLedger() {
   let html = '';
   for (let i = s.ledger.length - 1; i >= 0; i--) {
     const e = s.ledger[i];
+    if (visible && !visible.has(e)) continue;
     const voided = e.voided ? ' voided' : '';
     const editBtn = `<button class="edit-btn" onclick="openEditLedger(${i})" title="Edit entry" aria-label="Edit entry">✎</button>`;
     // Cross-link Sale rows back to the invoice that bills them (absent id → '').
@@ -7734,7 +7905,7 @@ function renderLedger() {
     html += `<tr class="${voided}"><td class="mono-num" style="font-size:12px;color:var(--text3);">${fmtD(e.date)}</td><td style="font-weight:600;">${escapeHtml(e.storeName)}${editBtn}</td><td>${escapeHtml(e.type)}</td><td class="r">${e.qty}</td><td class="r">${e.type === 'Sale' ? e.rate + '%' : '—'}</td><td class="r" style="font-weight:600;">${e.amountDue > 0 ? fmt(e.amountDue, ledgerCur(e)) : '—'}</td><td style="font-size:12px;color:var(--text3);">${escapeHtml(e.notes) || '—'}</td><td>${pill(e)}${e.status === 'pending' && !e.voided ? ` <button class="btn sm" style="margin-left:6px;" onclick="markPaid(${e.id})">Mark paid</button>` : ''}${invBadge}</td></tr>`;
   }
   b.innerHTML = html;
-  if (foot) foot.innerHTML = consignmentLedgerFootHtml(consignmentLedgerTotals(s.ledger, ledgerBookCode));
+  if (foot) foot.innerHTML = consignmentLedgerFootHtml(consignmentLedgerTotals(matched, ledgerBookCode), ledgerTotalsScope(filter, storeName));
 }
 
 // Export the current book's consignment ledger (shipments, sales, returns) as a
