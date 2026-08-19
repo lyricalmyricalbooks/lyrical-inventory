@@ -541,6 +541,7 @@ import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy } from './lib/inventory.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals } from './lib/consignment.js';
+import { summariseOrderRows, summaryExclusionNotes } from './lib/order-summary.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -5166,6 +5167,50 @@ export function renderHist() {
     } else {
       recon.style.display = 'none';
       recon.innerHTML = '';
+    }
+  }
+
+  // What the rows on screen are actually worth. Rendered whether or not a
+  // channel filter is on — the copies band above hides itself the moment you
+  // filter, and "Website orders, 41 found" without a figure is the one question
+  // the screen exists to answer left unanswered.
+  const money = $('hist-money');
+  if (money) {
+    if (combined.length) {
+      const sum = summariseOrderRows(combined, { bookCode, normalize: normalizeCurrencyCode });
+      const notes = summaryExclusionNotes(sum, (n) => fmt(n, cur));
+      const scope = chanFilter !== null ? `${chanLabel(chanFilter)} only` : 'all channels';
+      const grossSub = sum.foreignOrders
+        ? `${sum.counted} of ${sum.orders} orders, in ${bookCode}`
+        : `across ${sum.counted} order${sum.counted === 1 ? '' : 's'}`;
+
+      money.style.display = '';
+      money.innerHTML = `
+        <div class="hist-money" role="group" aria-label="Totals for the orders shown">
+          <div class="hist-money-figs">
+            <div class="hist-money-fig is-lead">
+              <span class="hist-money-label">Gross revenue</span>
+              <span class="hist-money-val mono-num">${fmt(sum.gross, cur)}</span>
+              <span class="hist-money-sub">${escapeHtml(grossSub)}</span>
+            </div>
+            <div class="hist-money-fig">
+              <span class="hist-money-label">Copies sold</span>
+              <span class="hist-money-val mono-num">${sum.copies}</span>
+              <span class="hist-money-sub">${escapeHtml(scope)}</span>
+            </div>
+            <div class="hist-money-fig">
+              <span class="hist-money-label">Average order</span>
+              <span class="hist-money-val mono-num">${sum.average === null ? '—' : fmt(sum.average, cur)}</span>
+              <span class="hist-money-sub">per counted order</span>
+            </div>
+          </div>
+          ${notes.length
+    ? `<p class="hist-money-note">Not in this total: ${notes.map(n => escapeHtml(n)).join(' · ')}</p>`
+    : ''}
+        </div>`;
+    } else {
+      money.style.display = 'none';
+      money.innerHTML = '';
     }
   }
 

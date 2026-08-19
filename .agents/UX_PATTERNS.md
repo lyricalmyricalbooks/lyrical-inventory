@@ -71,6 +71,19 @@ Row states to reuse rather than re-derive:
   and a `title` describing the destination — see `.con-row-progress-link` (`style.css:2660`)
   and `conAccountRowHtml()` in `main.js` for the reference implementation.
 
+**Totalling a money table:** a table of money needs a total, and the total has to say what
+it left out. `.hist-money` (`style.css`, rendered by `renderHist()` from
+`summariseOrderRows()` in `src/lib/order-summary.js`) is the reference: a compact strip of
+three mono figures above the table, plus a single footnote naming every excluded row
+(voided, gifted, awaiting approval, recorded in another currency, consignment movement).
+Two rules it exists to encode — reuse them for any new total:
+- **Never sum across currencies.** Rows stamped with another code are counted as orders and
+  copies but held out of the money figure, and the footnote says how many.
+- **Accumulate in cents**, then divide once (`roundCents` in `src/lib/money.js`). A running
+  float over a few hundred rows drifts visibly.
+The strip stays visible while a filter is on — a total that disappears exactly when someone
+narrows the list is a total that is never there when it is wanted.
+
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.
 

@@ -135,6 +135,79 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   margin-top: 2px;
 }
 
+/* ─── ORDER HISTORY — what the rows on screen are worth ─────────────
+   The band below this one counts copies (printed / on hand / distributed) and
+   hides itself the moment a channel filter is applied — which is exactly when
+   "so what did that bring in?" gets asked. This strip answers that instead, and
+   stays put whether the list is filtered or whole.
+
+   Deliberately a summary line, not a second dashboard: it sits above a KPI band
+   and a long paginated table, so it stays one shallow row of figures with the
+   caveats folded into a single footnote underneath. */
+.hist-money {
+  container-type: inline-size;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-left: 3.5px solid var(--gold);
+  border-radius: var(--r2);
+  box-shadow: var(--elev-1);
+}
+.hist-money-figs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+}
+.hist-money-fig {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hist-money-label {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--content-muted);
+}
+/* Mono + tabular, like every other quantity in the app, so the three figures
+   line up with the Total column they are summing. */
+.hist-money-val {
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  color: var(--content-primary);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+}
+.hist-money-fig.is-lead .hist-money-val { font-size: var(--text-xl); }
+.hist-money-sub {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+/* Every row the total stepped around, named. A total that silently drops voided
+   orders, gifts and foreign-currency sales is worse than no total: it looks
+   authoritative and is quietly short. */
+.hist-money-note {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+  text-wrap: pretty;
+}
+/* Panel width, not viewport width — this strip would render just as happily
+   inside a narrower card than the History tab. */
+@container (max-width: 460px) {
+  .hist-money-figs { gap: var(--space-3); }
+  .hist-money-fig { flex: 1 1 100%; }
+}
+
 .hist-progress-bar-wrap {
   width: 100%;
   height: 6px;
