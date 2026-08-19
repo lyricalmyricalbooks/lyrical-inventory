@@ -7,6 +7,7 @@ import { bookCurrencyCode, detectCurrencyMismatch } from '../src/lib/currency-mi
 import { buildOrderTimeline, inventoryBreakdown } from '../src/lib/inventory.js';
 import { reconcileConsignmentMirrors } from '../src/lib/consignment.js';
 import { linkedShippingSummary } from '../src/lib/shipping-reconciliation.js';
+import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from '../src/lib/order-history-search.js';
 
 // Order History is where a mis-rendered row reads as a sale that didn't happen
 // or stock the publisher doesn't have, so this covers what it actually puts on
@@ -24,6 +25,11 @@ const BOOK = { id: 'book-1', title: 'Test Book', currency: 'CA$', maxPrint: 100,
 function mountDom() {
   document.body.innerHTML = `
     <div id="hist-filter-bar"></div>
+    <div id="hist-search-bar" hidden>
+      <input type="search" id="hist-search">
+      <button type="button" id="hist-search-clear" hidden></button>
+      <p id="hist-search-status" aria-live="polite"></p>
+    </div>
     <div id="hist-recon"></div>
     <table><tbody id="hist-body"></tbody></table>
   `;
@@ -32,9 +38,10 @@ function mountDom() {
 function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} } = {}) {
   return buildHarness({
     names: [
-      'CHANNEL_COLORS', '_CHAN_FALLBACK', 'HIST_PAGE',
+      'CHANNEL_COLORS', '_CHAN_FALLBACK', 'HIST_PAGE', 'HIST_SEARCH_MIN',
       'channelColor', 'chanLabel',
       'renderConsignHistRow', 'renderOrderShippingSummary',
+      'renderHistSearchBar', 'histNoSearchMatchHtml',
       'histEmptyStateHtml', 'renderHist',
     ],
     deps: {
@@ -50,17 +57,26 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {} 
       bookCurrencyCode, detectCurrencyMismatch,
       buildOrderTimeline, inventoryBreakdown,
       reconcileConsignmentMirrors, linkedShippingSummary,
+      filterHistoryRows, historySearchIsActive, describeHistorySearch,
     },
     moduleState: `
       let histChanFilter = null;
       let _histLimit = HIST_PAGE;
       let _histPageSig = null;
+      let _histSearch = '';
+      let _histSearchBook = null;
     `,
     returns: `{
       renderHist,
       setChanFilter: (v) => { histChanFilter = v; },
       setLimit: (v) => { _histLimit = v; },
+      // Mirrors what histSearchInput() does: the query is stamped with the book
+      // it was typed on, so renderHist can drop it on a book switch.
+      setSearch: (v) => { _histSearch = v; _histSearchBook = activeBook; },
+      setSearchFromOtherBook: (v) => { _histSearch = v; _histSearchBook = 'some-other-book'; },
+      readSearch: () => _histSearch,
       HIST_PAGE,
+      HIST_SEARCH_MIN,
     }`,
   });
 }
@@ -624,5 +640,135 @@ describe('renderHist — currency drift', () => {
     });
     h.renderHist();
     expect(document.querySelector('#hist-recon .hist-currency-warn')).toBeNull();
+  });
+});
+
+describe('renderHist — search', () => {
+  // Twelve orders, above HIST_SEARCH_MIN, so the box is offered.
+  const manyOrders = () => ({
+    stock: 88,
+    hist: Array.from({ length: 12 }, (_, k) => ({
+      num: `10${String(k).padStart(2, '0')}`,
+      chan: k % 2 ? 'Website' : 'POS',
+      qty: 1, price: 40, date: `2026-07-${String(k + 1).padStart(2, '0')}`,
+      notes: k === 3 ? 'Vancouver zine fair' : '',
+    })),
+    ledger: [], stores: [],
+  });
+
+  it('offers the box only once the table is long enough to need it', () => {
+    const few = makeHarness({
+      state: { stock: 99, hist: [{ num: '1001', chan: 'Direct', qty: 1, price: 20, date: '2026-07-01', notes: '' }], ledger: [], stores: [] },
+    });
+    few.renderHist();
+    expect(document.getElementById('hist-search-bar').hidden).toBe(true);
+
+    mountDom();
+    const many = makeHarness({ state: manyOrders() });
+    many.renderHist();
+    expect(document.getElementById('hist-search-bar').hidden).toBe(false);
+  });
+
+  it('narrows the table to the rows that match, and says so', () => {
+    const h = makeHarness({ state: manyOrders() });
+    h.setSearch('zine');
+    h.renderHist();
+
+    expect(rows()).toHaveLength(1);
+    expect(cells(rows()[0])[6]).toContain('Vancouver zine fair');
+    expect(document.getElementById('hist-search-status').textContent)
+      .toContain('Showing 1 of 12 orders');
+  });
+
+  it('keeps the Edit button pointed at the right order after narrowing', () => {
+    // The regression that would cost real money: filtering re-indexes the rows
+    // on screen but openEditHist() is keyed on the position in the record.
+    const h = makeHarness({ state: manyOrders() });
+    h.setSearch('zine');
+    h.renderHist();
+    expect(rows()[0].querySelector('.edit-btn').getAttribute('onclick')).toBe('openEditHist(3)');
+  });
+
+  it('says the other orders are hidden rather than showing the never-sold panel', () => {
+    const h = makeHarness({ state: manyOrders() });
+    h.setSearch('nothing-like-this');
+    h.renderHist();
+
+    const body = document.getElementById('hist-body').textContent;
+    expect(body).toContain('No orders match your search');
+    expect(body).toContain('hidden by this search');
+    expect(body).not.toContain('No orders recorded for this book yet');
+    expect(document.querySelector('#hist-body button').getAttribute('onclick')).toBe('clearHistSearch()');
+  });
+
+  it('leaves the reconciliation strip alone when a search matches nothing', () => {
+    // Print run and on-hand are facts about the book, not about the search.
+    const h = makeHarness({ state: manyOrders() });
+    h.setSearch('nothing-like-this');
+    h.renderHist();
+    expect(document.getElementById('hist-recon').style.display).not.toBe('none');
+    expect(document.getElementById('hist-recon').textContent).toContain('Stock On Hand');
+  });
+
+  it('composes with the channel filter and names it in the count', () => {
+    const h = makeHarness({ state: manyOrders() });
+    h.setChanFilter({ bookId: BOOK.id, chan: 'Website' });
+    h.setSearch('10');
+    h.renderHist();
+
+    expect(rows().every(tr => tr.textContent.includes('Website'))).toBe(true);
+    expect(document.getElementById('hist-search-status').textContent)
+      .toContain('of 6 Website orders');
+  });
+
+  it('drops a query typed on another book instead of carrying it across', () => {
+    const h = makeHarness({ state: manyOrders() });
+    h.setSearchFromOtherBook('zine');
+    h.renderHist();
+
+    expect(h.readSearch()).toBe('');
+    expect(rows()).toHaveLength(12);
+    expect(document.getElementById('hist-search').value).toBe('');
+  });
+
+  it('shows the clear button only while a search is running', () => {
+    const h = makeHarness({ state: manyOrders() });
+    h.renderHist();
+    expect(document.getElementById('hist-search-clear').hidden).toBe(true);
+
+    h.setSearch('zine');
+    h.renderHist();
+    expect(document.getElementById('hist-search-clear').hidden).toBe(false);
+  });
+
+  it('keeps the box on screen when a search hides every row', () => {
+    // Hiding the only way to clear the search would strand the publisher on a
+    // table they cannot widen again.
+    const h = makeHarness({ state: manyOrders() });
+    h.setSearch('nothing-like-this');
+    h.renderHist();
+    expect(document.getElementById('hist-search-bar').hidden).toBe(false);
+  });
+
+  it('does not fight the publisher for the field they are typing in', () => {
+    const h = makeHarness({ state: manyOrders() });
+    h.setSearch('zine');
+    h.renderHist();
+    const input = document.getElementById('hist-search');
+    expect(input.value).toBe('zine');
+    // A render while the field already agrees must not rewrite it — that is
+    // what moves the caret to the end mid-word.
+    input.setAttribute('data-untouched', 'yes');
+    h.renderHist();
+    expect(input.value).toBe('zine');
+  });
+
+  it('escapes a query before putting it back on the page', () => {
+    const h = makeHarness({ state: manyOrders() });
+    h.setSearch('<img src=x onerror=alert(1)>');
+    h.renderHist();
+    const status = document.getElementById('hist-search-status');
+    expect(status.querySelector('img')).toBeNull();
+    expect(status.textContent).toContain('<img src=x onerror=alert(1)>');
   });
 });

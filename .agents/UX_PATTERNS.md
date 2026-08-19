@@ -109,6 +109,25 @@ reference. Four rules it encodes, worth keeping on any other filtered money tabl
 - **A live region has to be a permanent node.** `#con-ledger-status` sits outside the part of
   the bar that is rebuilt, because a region replaced wholesale announces nothing.
 
+**Searching a long ledger:** Order History's box (`.ledger-filter-bar` + `.ledger-filter-input`,
+`renderHistSearchBar()` in `main.js`, pure helpers in
+[src/lib/order-history-search.js](../src/lib/order-history-search.js)) is the reference for free-text
+search. It shares the filter bar's furniture — reuse `.ledger-filter-input` rather than styling a new
+`<input type="search">`. Five rules on top of the filter-bar ones above:
+- **The field is permanent markup, never part of the render.** A field rebuilt by `innerHTML` on
+  every keystroke drops the caret mid-word. Only write `input.value` when it *disagrees* with state,
+  so a render triggered while someone is typing can't reset them.
+- **Debounce at 200ms**, matching `tcLedgerSearchInput()`. Repainting a fifty-row table between two
+  keystrokes is wasted work.
+- **Search what is on screen, not what is stored.** Rows hold `POS` but the table paints
+  "In Person"; a search that only matches the stored value looks broken to anyone who has not seen
+  the raw records. `channelSearchWords()` carries the alias list — keep it in step with
+  `formatChannelBadge()`.
+- **Text only — no dates, no amounts.** Someone typing `12` wants order 12, and folding dates in
+  buries it under every order placed on the 12th of any month.
+- **Scope the query to the book it was typed on.** A query carried across a book switch opens the
+  next book on a table that looks empty for no visible reason.
+
 **Totalling a money table:** `.ledger-total-row` + `.ledger-total-label` / `.ledger-total-sub` /
 `.ledger-total-val` (`.is-owed` amber, `.is-clear` green, `.is-neutral`) / `.ledger-total-scope`
 is the shared footer furniture. `.is-end` on the label right-aligns it when it spans several

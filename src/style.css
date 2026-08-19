@@ -3285,6 +3285,38 @@ tr.hist-row:hover {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
 }
+/* Text sibling of .ledger-filter-select — same target height, same focus ring,
+   so Order History's search box and the ledger's store picker read as one
+   control family rather than two. Used by #hist-search. */
+.ledger-filter-input {
+  min-height: var(--target-min);
+  width: 100%;
+  min-width: 200px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+  background: var(--surface-raised);
+  color: var(--content-primary);
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-sm);
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.ledger-filter-input::placeholder {
+  color: var(--content-muted);
+}
+.ledger-filter-input:hover {
+  border-color: var(--gold2);
+}
+.ledger-filter-input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+/* The search field is the only control on this bar, so it takes the width the
+   store picker's chips would otherwise share. */
+.hist-search-field {
+  flex: 1 1 260px;
+}
 .ledger-filter-chips {
   display: flex;
   align-items: center;
@@ -3332,7 +3364,8 @@ tr.hist-row:hover {
     align-items: stretch;
     flex-direction: column;
   }
-  .ledger-filter-select {
+  .ledger-filter-select,
+  .ledger-filter-input {
     min-width: 0;
     width: 100%;
   }

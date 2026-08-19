@@ -545,6 +545,7 @@ import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirect
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
+import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -5280,6 +5281,82 @@ let _histPageSig = null;
 function showMoreHist() { _histLimit += HIST_PAGE; renderHist(); }
 function showAllHist() { _histLimit = Infinity; renderHist(); }
 
+// ── Order History search ───────────────────────────────────────────────────
+// A book at its third print run has hundreds of rows here, paged fifty at a
+// time, and no way to reach one of them except "Show all" and the browser's
+// find bar. The search narrows which rows are painted; the timeline itself,
+// and the running Stock After it stamps on each row, are untouched.
+// The pure matching and copy live in src/lib/order-history-search.js.
+/** Rows below this and the search costs more attention than it saves. */
+const HIST_SEARCH_MIN = 8;
+let _histSearch = '';
+/** Which book `_histSearch` belongs to, so it can't leak across a book switch. */
+let _histSearchBook = null;
+let _histSearchTimer = null;
+
+/**
+ * Debounced at the same 200ms as the tax ledger's search: History repaints a
+ * fifty-row table plus its reconciliation strip, which is more work than is
+ * worth doing between two keystrokes.
+ */
+function histSearchInput(v) {
+  _histSearch = v || '';
+  _histSearchBook = activeBook;
+  clearTimeout(_histSearchTimer);
+  _histSearchTimer = setTimeout(() => { renderHist(); }, 200);
+}
+
+/** Clear and hand focus back, so the next search starts where the last ended. */
+function clearHistSearch() {
+  clearTimeout(_histSearchTimer);
+  _histSearchTimer = null;
+  _histSearch = '';
+  const input = $('hist-search');
+  if (input) input.value = '';
+  renderHist();
+  if (input && typeof input.focus === 'function') input.focus({ preventScroll: true });
+}
+
+/**
+ * Paint the search bar's variable parts. The input and the status node are
+ * permanent markup — only their contents move — so typing never loses the
+ * caret and the live region survives each render.
+ */
+function renderHistSearchBar({ visible, described, query }) {
+  const bar = $('hist-search-bar');
+  if (!bar) return;
+  bar.hidden = !visible;
+  if (!visible) return;
+
+  const input = $('hist-search');
+  // Only write the field when it disagrees, so a render triggered while the
+  // publisher is mid-word can't reset what they have typed.
+  if (input && input.value !== query) input.value = query;
+
+  const clear = $('hist-search-clear');
+  if (clear) clear.hidden = !described.active;
+
+  const status = $('hist-search-status');
+  if (status) {
+    status.innerHTML = `<strong class="mono-num">${escapeHtml(described.headline)}</strong> <span class="ledger-filter-detail">${escapeHtml(described.detail)}</span>`;
+  }
+}
+
+// The table has rows, but not for what was typed. Says what is doing the hiding
+// and offers the way back, rather than reading like a book with no history.
+function histNoSearchMatchHtml(described) {
+  return `<div class="empty-state sys-empty">
+      <div class="e-icon" aria-hidden="true">🔍</div>
+      <strong>No orders match your search</strong>
+      <span>${escapeHtml(described.detail)}</span>
+      <div class="sys-empty-actions">
+        <button class="btn gold lg" onclick="clearHistSearch()">✕ Clear search</button>
+      </div>
+    </div>`;
+}
+
+Object.assign(window, { histSearchInput, clearHistSearch });
+
 // Read-only Order-History row for a consignment movement (shipment out / return
 // back). These live in the ledger, but showing them inline — with the same
 // running Stock After as every sale — makes it visible that consigned copies
@@ -5376,7 +5453,33 @@ export function renderHist() {
   let pend = pendingSales.map(h => ({ type: 'pending', h }));
   if (chanFilter !== null) pend = pend.filter(r => (r.h.chan || '') === chanFilter);
   const matchCount = rows.length + pend.length;
-  const combined = [...pend, ...rows];
+  const inScope = [...pend, ...rows];
+
+  // A search belongs to the book it was typed on. Carrying it across a book
+  // switch would open the next book on a table that looks empty for no visible
+  // reason.
+  if (_histSearchBook !== activeBook) { _histSearch = ''; _histSearchBook = activeBook; }
+  const searchQuery = _histSearch;
+  const searchOn = historySearchIsActive(searchQuery);
+  // The search runs over rows the channel filter has already narrowed, so the
+  // two compose and the status line's count is honest about which slice it is
+  // counting. Row descriptors are passed through untouched, so every row keeps
+  // the index openEditHist() is keyed on.
+  const combined = searchOn ? filterHistoryRows(inScope, searchQuery) : inScope;
+
+  const describedSearch = describeHistorySearch(searchQuery, {
+    shown: combined.length,
+    total: inScope.length,
+    scope: chanFilter !== null ? chanLabel(chanFilter) : '',
+  });
+  // Below the threshold the table is faster to read than to filter — but a
+  // search that is already on always keeps its box, or clearing it would be
+  // impossible.
+  renderHistSearchBar({
+    visible: searchOn || inScope.length >= HIST_SEARCH_MIN,
+    described: describedSearch,
+    query: searchQuery,
+  });
 
   const filterBar = $('hist-filter-bar');
   if (filterBar) {
@@ -5391,7 +5494,10 @@ export function renderHist() {
 
   const recon = $('hist-recon');
   if (recon) {
-    if (chanFilter === null && combined.length) {
+    // Read off `inScope`, not the searched set: the three figures describe the
+    // whole print run, so a search that matches nothing must not make the
+    // book's reconciliation strip vanish as though the stock went with it.
+    if (chanFilter === null && inScope.length) {
       const bd = inventoryBreakdown(s, book);
       const printedCount = bd.printed || 0;
       const onHandCount = bd.onHand || 0;
@@ -5455,7 +5561,9 @@ export function renderHist() {
     return `<span class="ch-badge">${escapeHtml(c)}</span>`;
   };
 
-  const pageSig = `${activeBook}|${chanFilter ?? ''}`;
+  // The query is part of the signature so a new search opens at the first page
+  // rather than inheriting "showing 200 of 200" from the last one.
+  const pageSig = `${activeBook}|${chanFilter ?? ''}|${searchQuery}`;
   if (_histPageSig !== pageSig) { _histLimit = HIST_PAGE; _histPageSig = pageSig; }
   const shownRows = combined.slice(0, _histLimit);
   const moreCount = combined.length - shownRows.length;
@@ -5513,7 +5621,9 @@ export function renderHist() {
       const stockAfterVal = row._after ?? row.after ?? '—';
       return `<tr class="hist-row ${voided}"${rowStyle}><td class="mono mono-num">${escapeHtml(h.num)}${editBtn}</td><td>${chanCell}</td><td class="r mono-num">${h.voided ? '' : '-'}${h.qty}</td><td class="r mono-num">${priceCell}</td><td class="r mono-num" style="font-weight:600;">${totalCell}</td><td class="r mono-num">${stockAfterVal}</td><td style="font-size:12px;color:var(--text3);">${notesCell || '—'}</td><td style="font-size:12px;color:var(--text3);">${enteredByPill}</td><td style="font-size:12px;color:var(--text3);">${fmtD(h.date)} ${voidPill}</td><td>${labelBtn}</td></tr>`;
     }).join('') + moreRow
-    : `<tr class="hist-empty-row"><td colspan="10">${histEmptyStateHtml(chanFilter, timeline.length + pendingSales.length)}</td></tr>`;
+    : searchOn
+      ? `<tr class="hist-empty-row"><td colspan="10">${histNoSearchMatchHtml(describedSearch)}</td></tr>`
+      : `<tr class="hist-empty-row"><td colspan="10">${histEmptyStateHtml(chanFilter, timeline.length + pendingSales.length)}</td></tr>`;
 }
 
 // ── WEBSITE ORDERS — persistent scan memory
