@@ -537,7 +537,7 @@ import {
 import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy } from './lib/inventory.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals } from './lib/consignment.js';
 
 // ─────────────────────────────────────────────
@@ -6068,23 +6068,46 @@ function updateManualForm() {
   if (typeof window.updateGratuitySourceHint === 'function') window.updateGratuitySourceHint();
 }
 
+// Keeps the live order-preview strip under the Manual entry form in step with
+// what's typed: the order's total, what it leaves on hand, and a status pill
+// when that lands low or short. The total no longer needs restating in the
+// hint line — it has its own labelled figure — so the hint carries only the
+// things worth reading: a discount, and the stock consequence.
 function phint() {
-  const book = getBook(), p = parseFloat($('m-price').value) || 0, q = parseInt($('m-qty').value) || 1, h = $('m-hint');
+  const book = getBook(), h = $('m-hint');
+  if (!book || !h) return;
+  const p = parseFloat($('m-price').value) || 0, q = parseInt($('m-qty').value) || 1;
   let t = p * q;
+  const notes = [];
 
   if (_manualFxRate) {
     calcFx(); // Update the inline converted value
-    const convertedP = p * _manualFxRate;
-    t = convertedP * q;
-    h.className = 'hint-text';
-    h.textContent = t > 0 ? `Total revenue: ${fmt(t, book.currency)}` : '';
-  } else if (p < book.listPrice) {
-    h.className = 'hint-text amber';
-    h.textContent = `Discounted from ${book.currency}${book.listPrice} — total ${fmt(t, book.currency)}`;
-  } else {
-    h.className = 'hint-text';
-    h.textContent = q > 1 ? `Total ${fmt(t, book.currency)}` : '';
+    t = (p * _manualFxRate) * q;
+  } else if (p > 0 && p < book.listPrice) {
+    notes.push(`Discounted from ${book.currency}${book.listPrice}`);
   }
+
+  const totalEl = $('m-prev-total');
+  if (totalEl) totalEl.textContent = t > 0 ? fmt(t, book.currency) : '—';
+
+  // Stock impact. Read-only: the ledger still owns stock, this only reports
+  // what the order in the form would do to it.
+  const s = getState();
+  const preview = orderStockPreview(s ? s.stock : 0, q, book.threshold);
+  const copy = orderStockPreviewCopy(preview, book.threshold);
+  const beforeEl = $('m-prev-before'), afterEl = $('m-prev-after'), pillEl = $('m-prev-pill');
+  if (beforeEl) beforeEl.textContent = preview.before;
+  if (afterEl) afterEl.textContent = preview.displayAfter;
+  if (pillEl) {
+    pillEl.className = `pill ${copy.pill}`;
+    pillEl.textContent = preview.level === 'idle' ? '—' : `${copy.glyph} ${preview.label}`.trim();
+  }
+  if (copy.note) notes.push(copy.note);
+
+  // Amber only for the discount case — the strip itself tints for the stock
+  // states, so doubling that up on the hint just adds noise.
+  h.className = 'hint-text' + (notes.length && !copy.note ? ' amber' : '');
+  h.textContent = notes.join(' · ');
 }
 async function submitManual(ev) {
   return withButtonLoading(ev, 'Saving…', async () => {
