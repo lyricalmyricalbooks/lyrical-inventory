@@ -291,6 +291,19 @@ Never show a queued write as fully-committed, and never make the user wait on th
 see their own action land. When adding any new mutation path, decide which of these three states
 it can enter and render all of them.
 
+**App-level counterpart — `#sync-chip`.** The three classes above say "this row is queued"; the
+chip says "the connection is why". It is fixed bottom-left (`.sync-chip` in `system.css`;
+`.toast` owns bottom-right) and painted by `renderSyncChip()` in `main.js` from the pure
+`describeSyncStatus()` in [src/lib/sync-status.js](../src/lib/sync-status.js). Two rules it
+encodes, worth keeping if you touch it:
+- **It only appears when there is something the publisher could not otherwise know** — online
+  with an empty queue paints nothing at all. A permanent "all good" badge is noise.
+- **Offline is reported the instant it happens**, off the `offline` window event, not at the next
+  save attempt. Before this the app read "Live" until something was sold.
+
+Copy for it goes through `describeSyncStatus()`, never inline — a test asserts the visible
+strings stay free of "Firestore", "queue" and friends.
+
 ## 8. Deliberately *not* adopting yet
 - **CSS anchor positioning** (`anchor-name`/`position-anchor`) — genuinely the right model for
   dropdown/tooltip placement, but support is still Chromium-led. Revisit; today the popover +
