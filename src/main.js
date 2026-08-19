@@ -540,7 +540,7 @@ import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy } from './lib/inventory.js';
-import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals } from './lib/consignment.js';
+import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -6943,12 +6943,39 @@ function renderStores() {
       st.sold !== ledgerSold ||
       st.outstanding !== calculatedOutstanding
     );
+    // The mismatch used to be a red chip whose only explanation lived in a
+    // `title` tooltip — unreachable on the tablet this screen is actually used
+    // on. It is now a real button opening a native popover (top layer, Esc and
+    // click-away for free) that names WHICH figure disagrees and by how much.
+    const balancePopId = `store-balance-pop-${storeBalanceSlug(st.id)}`;
+    const balanceRows = storeBalanceComparison(st, {
+      sent: ledgerSent, sold: ledgerSold, returned: ledgerReturned, outstanding: calculatedOutstanding,
+    });
+    const rowOff = key => (isUnbalanced && balanceRows.find(r => r.key === key)?.off ? ' is-off' : '');
     const unbalancedBadge = isUnbalanced
-      ? `<span title="Ledger mismatch: cached outstanding=${st.outstanding}, calculated=${calculatedOutstanding}" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#c0392b;border-radius:6px;padding:3px 8px;margin-left:8px;cursor:help;">⚠ Unbalanced</span>`
+      ? `<button type="button" class="pill red store-balance-flag" popovertarget="${balancePopId}" title="These figures disagree with the ledger — open for the details" aria-label="These figures disagree with the ledger — open for the details">⚠ Doesn't match</button>`
       : '';
-    const outstandingCell = `<div class="sk-v ${st.outstanding > 0 ? 'warn' : ''}" style="display:flex;align-items:center;gap:4px;">${st.outstanding}${unbalancedBadge}</div>`;
+    const unbalancedPopover = isUnbalanced
+      ? `<div id="${balancePopId}" class="store-balance-pop" popover aria-labelledby="${balancePopId}-title">
+        <div class="store-balance-pop-head">
+          <span class="store-balance-pop-eyebrow">${escapeHtml(st.name)}</span>
+          <button type="button" class="store-balance-pop-close" popovertarget="${balancePopId}" popovertargetaction="hide" aria-label="Close">✕</button>
+        </div>
+        <div class="store-balance-pop-title" id="${balancePopId}-title">These figures don't match the ledger</div>
+        <p class="store-balance-pop-copy">The card shows the running totals saved against this store. The ledger column re-counts every shipment, sale and return you have actually recorded for them. Where the two differ, the ledger is the one to trust.</p>
+        <table class="tbl store-balance-tbl"><thead><tr><th>Figure</th><th class="r">On the card</th><th class="r">In the ledger</th></tr></thead><tbody>${
+  balanceRows.map(r => `<tr class="store-balance-row${r.off ? ' is-off' : ''}"><td>${r.label}</td><td class="r">${r.card ?? '—'}</td><td class="r">${r.ledger ?? '—'}</td></tr>`).join('')
+}</tbody></table>
+        <p class="store-balance-pop-foot">A gap almost always means a shipment, sale or return happened but never got written down. Add the missing entry in the consignment ledger below and the two columns line up again.</p>
+      </div>`
+      : '';
+    // Marking the individual figure that disagrees means the card answers
+    // "which number is wrong?" at a glance, before the popover is opened.
+    const outstandingCell = `<div class="sk-v ${st.outstanding > 0 ? 'warn' : ''}${rowOff('outstanding')}">${st.outstanding ?? 0}</div>`;
+    const sentCell = `<div class="sk-v${rowOff('sent')}">${st.sent ?? 0}</div>`;
+    const soldCell = `<div class="sk-v${rowOff('sold')}">${st.sold ?? 0}</div>`;
 
-    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city, st.contact, st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div>${sp}</div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div><div class="sk-v">${st.sent}</div></div><div class="sk"><div class="sk-l">Sold</div><div class="sk-v">${st.sold}</div></div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div></div>`;
+    return `<div class="store-card"><div class="store-head"><div><div class="store-name">${escapeHtml(st.name)}</div><div class="store-meta">${[st.city, st.contact, st.email].filter(Boolean).map(escapeHtml).join(' · ')} · ${st.rate}% commission</div></div><div class="store-head-flags">${sp}${unbalancedBadge}</div></div><div class="store-kpis"><div class="sk"><div class="sk-l">Sent</div>${sentCell}</div><div class="sk"><div class="sk-l">Sold</div>${soldCell}</div><div class="sk"><div class="sk-l">Outstanding</div>${outstandingCell}</div><div class="sk"><div class="sk-l">Owed</div><div class="sk-v ${st.amountOwed > 0 ? 'warn' : ''}">${st.amountOwed > 0 ? fmt(st.amountOwed, cur) : '—'}</div></div></div><div class="store-actions"><button class="btn sm gold" onclick="openSend(${escapeHtml(JSON.stringify(st.id))})">Send books</button><button class="btn sm ink" onclick="openSale(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Record sale</button><button class="btn sm" onclick="openRet(${escapeHtml(JSON.stringify(st.id))})" ${!st.outstanding ? 'disabled' : ''}>Return</button><button class="btn sm" onclick="openEditStore(${escapeHtml(JSON.stringify(st.id))})">Edit</button><button class="btn sm danger-btn" onclick="removeStore(${escapeHtml(JSON.stringify(st.id))})">Remove</button></div>${unbalancedPopover}</div>`;
   }).join('');
 }
 async function removeStore(id) {

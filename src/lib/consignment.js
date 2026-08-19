@@ -298,3 +298,47 @@ export function consignmentLedgerTotals(ledger, bookCode) {
     return a.code < b.code ? -1 : a.code > b.code ? 1 : 0;
   });
 }
+
+// ── STORE BALANCE EXPLAINER ─────────────────────────────────────────────────
+// A store card carries its own running totals (st.sent / st.sold / st.returned
+// / st.outstanding), maintained incrementally as books are shipped, sold and
+// returned. The consignment ledger holds the individual events those totals are
+// supposed to summarise. They can drift apart — a row voided after the fact, an
+// import that wrote one side only, an edit that never made it to both places.
+//
+// renderStores() already detected the drift and showed a red chip. What it
+// could not say was WHICH figure disagreed, so these helpers turn the two sets
+// of numbers into the side-by-side the card now explains itself with. Pure and
+// DOM-free: they compare numbers that were tallied elsewhere and never re-tally
+// the ledger themselves.
+
+/**
+ * Makes a store id safe to use inside a DOM id (the balance popover's).
+ * Ids are normally `Date.now()` numbers, but an imported book can carry string
+ * ids with spaces or punctuation. Every character outside [A-Za-z0-9] is
+ * escaped to `_<charCode>_`, which is injective — so two different store ids
+ * can never collapse onto one popover id and leave both cards' buttons opening
+ * the same panel.
+ */
+export function storeBalanceSlug(id) {
+  return String(id ?? '').replace(/[^A-Za-z0-9]/g, c => `_${c.charCodeAt(0)}_`) || 'unknown';
+}
+
+/**
+ * The card-versus-ledger comparison shown in the balance popover.
+ * `store` is the store record; `tallies` is what walking the ledger produced
+ * ({ sent, sold, returned, outstanding }). Returns one row per figure, each
+ * flagged `off` when the two sides disagree, so the UI can mark exactly the
+ * lines that need attention rather than colouring the whole panel red.
+ */
+export function storeBalanceComparison(store, tallies) {
+  const st = store || {};
+  const t = tallies || {};
+  const num = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  return [
+    { key: 'sent', label: 'Sent to the store', card: num(st.sent), ledger: num(t.sent) },
+    { key: 'sold', label: 'Sold by the store', card: num(st.sold), ledger: num(t.sold) },
+    { key: 'returned', label: 'Returned to you', card: num(st.returned), ledger: num(t.returned) },
+    { key: 'outstanding', label: 'Still on their shelf', card: num(st.outstanding), ledger: num(t.outstanding) },
+  ].map(r => ({ ...r, off: r.card !== r.ledger }));
+}

@@ -421,6 +421,14 @@
 .theme-dark .bsk-val.warn,
 .theme-dark .sk-v.warn { color: var(--orange); }
 
+/* A store KPI that disagrees with the ledger outranks its own "warn" tint —
+   the .warn override above is more specific than the base .sk-v.is-off rule in
+   style.css, so the disputed-figure colour has to be restated at this weight. */
+.theme-dark .sk-v.is-off {
+  color: var(--status-critical);
+  text-decoration-color: var(--status-critical);
+}
+
 .theme-dark #ship-analysis-hub {
   --shipping-pnl-success: var(--green);
   --shipping-pnl-warning: var(--amber);
