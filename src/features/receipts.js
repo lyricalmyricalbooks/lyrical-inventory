@@ -46,6 +46,7 @@ import {
 } from '../main.js';
 import { escapeHtml } from '../lib/html.js';
 import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
+import { expenseLedgerTotals, expenseTotalsCopy } from '../lib/expense-totals.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadBlob } from '../lib/download.js';
@@ -5046,6 +5047,46 @@ const _expReimburseSelection = new Set();
 // leave the ledger looking emptier than it is.
 let _expMissingReceiptOnly = false;
 
+/**
+ * The expense ledger's footer: one row per currency the ledger holds.
+ *
+ * Reuses the consignment ledger's `.ledger-total-row` furniture rather than the
+ * one-off inline styling this footer used to carry, so the two money tables in
+ * the app total themselves the same way — including the currency chip that
+ * appears only once there is more than one bucket to tell apart.
+ *
+ * Renders nothing when there is nothing to total (a ledger of gratuity copies
+ * only): a "CA$0.00 outstanding" line under rows that all say "Publisher
+ * expense" states a total nobody asked for.
+ */
+function expenseTotalsFootHtml(totals, showSelectCol) {
+  if (!totals || !totals.length) return '';
+  // The missing-receipt filter hides rows but must never shrink the total — the
+  // money is still owed whether or not its receipt has been filed. Saying which
+  // set the figure covers is the difference between "I owe CA$40" and "I owe
+  // CA$40 on the ones I haven't filed yet".
+  const scopeTag = _expMissingReceiptOnly
+    ? ' <span class="ledger-total-scope">whole ledger</span>'
+    : '';
+  const labelSpan = showSelectCol ? 6 : 5;
+  const tailSpan = window.IS_PUBLISHER ? 3 : 2;
+  return totals.map((t) => {
+    const copy = expenseTotalsCopy(t);
+    const valueClass = copy.status === 'outstanding' ? 'is-owed' : 'is-clear';
+    const statusPill = copy.status === 'outstanding'
+      ? '<span class="pill amber">● Outstanding</span>'
+      : '<span class="pill green">✓ Clear</span>';
+    const codeTag = totals.length > 1
+      ? ` <span class="chip-status gray">${escapeHtml(copy.code)}</span>`
+      : '';
+    return `<tr class="ledger-total-row">
+      <td colspan="${labelSpan}" class="ledger-total-label is-end">${escapeHtml(copy.label)}${scopeTag}<span class="ledger-total-sub">${escapeHtml(copy.sub)}</span></td>
+      <td class="r mono-num ledger-total-val ${valueClass}">${fmt(copy.amount, copy.code)}</td>
+      <td colspan="${tailSpan}">${statusPill}${codeTag}</td>
+    </tr>`;
+  }).join('');
+}
+
 function renderExpenses() {
   const s = getState(), book = getBook(), cur = book.currency;
   const expenses = s.expenses || [];
@@ -5079,16 +5120,11 @@ function renderExpenses() {
 
   const visible = _expMissingReceiptOnly ? missingReceipt : combined;
 
-  // ⚡ Bolt Optimization: Loop Fusion
-  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
-  const unreceived = [];
-  let total = 0;
-  for (const e of combined) {
-    if (!e.received && !e.pendingAuth && !isGratuityExpense(e)) {
-      unreceived.push(e);
-      total += (e.amount || 0);
-    }
-  }
+  // One running total per currency the ledger actually holds, rather than one
+  // raw sum printed in the book's currency. The form offers six currencies and
+  // defaults to CAD whatever the book is priced in, so the old single figure
+  // could carry a euro sign over dollars, or add the two together.
+  const expTotals = expenseLedgerTotals(combined, getBookCurrencyCode(book));
 
   $('exp-head-row').innerHTML = `<tr>${showSelectCol ? '<th></th>' : ''}<th>Date</th><th>Description</th><th>Category</th><th>Ref</th><th>Receipt</th><th class="r">Amount</th>${window.IS_PUBLISHER ? '<th class="r">Amount (CAD)</th>' : ''}<th>Reimbursement</th><th></th></tr>`;
 
@@ -5183,11 +5219,7 @@ function renderExpenses() {
       <td>${actionCell}</td>
     </tr>`;
   }).join('')
-    + `<tr style="background:var(--cream2);">
-      <td colspan="${showSelectCol ? 6 : 5}" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);text-align:right;padding-right:16px;">Outstanding${_expMissingReceiptOnly ? ' (whole ledger)' : ''}</td>
-      <td class="r" style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace;">${fmt(total, cur)}</td>
-      <td colspan="${window.IS_PUBLISHER ? 3 : 2}"></td>
-    </tr>`;
+    + expenseTotalsFootHtml(expTotals, showSelectCol);
 
   updateBulkReimburseButton();
 }

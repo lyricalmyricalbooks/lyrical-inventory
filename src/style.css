@@ -3165,8 +3165,10 @@ tr.hist-row:hover {
   vertical-align: middle;
 }
 /* The total is not a record — it must not take the row hover that tells the
-   publisher a line is interactive. */
-.tbl tfoot tr.ledger-total-row:hover td {
+   publisher a line is interactive. The tbody selector is for the expense
+   ledger, whose totals sit at the foot of the body rather than in a <tfoot>. */
+.tbl tfoot tr.ledger-total-row:hover td,
+.tbl tbody tr.ledger-total-row:hover td {
   background: var(--surface-sunken);
 }
 .ledger-total-label {
@@ -3176,6 +3178,13 @@ tr.hist-row:hover {
   letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   color: var(--content-secondary);
+}
+/* Label that spans five or six columns before its figure (the expense ledger).
+   Left-aligned it strands the words a whole table away from the number they
+   describe; pushing them to the inline end keeps the pair readable as one line. */
+.ledger-total-label.is-end {
+  text-align: right;
+  padding-right: 16px;
 }
 .ledger-total-sub {
   display: block;
