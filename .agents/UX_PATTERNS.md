@@ -109,6 +109,21 @@ reference. Four rules it encodes, worth keeping on any other filtered money tabl
 - **A live region has to be a permanent node.** `#con-ledger-status` sits outside the part of
   the bar that is rebuilt, because a region replaced wholesale announces nothing.
 
+**Totalling a money table:** `.ledger-total-row` + `.ledger-total-label` / `.ledger-total-sub` /
+`.ledger-total-val` (`.is-owed` amber, `.is-clear` green, `.is-neutral`) / `.ledger-total-scope`
+is the shared footer furniture. `.is-end` on the label right-aligns it when it spans several
+columns before its figure. Three rules every footer here follows:
+- **One row per currency, never one sum across them.** Bucket by the code each row was recorded
+  in (`consignmentLedgerTotals()` in [src/lib/consignment.js](../src/lib/consignment.js),
+  `expenseLedgerTotals()` in [src/lib/expense-totals.js](../src/lib/expense-totals.js) — same
+  shape, book's own code first then alphabetical, so the order is stable across re-renders). Add
+  a `<span class="chip-status gray">CODE</span>` only once there is more than one bucket.
+- **Never convert at render time.** An exchange rate belongs to the day the money moved; a rate
+  invented in the footer disagrees with the per-row converted column beside it.
+- **Say all-clear outright.** A bare `0.00` does not read as "nobody is waiting to be paid" —
+  swap the label ("All settled", "All reimbursed") and the pill, and keep a sub-line naming what
+  *has* been settled.
+
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.
 

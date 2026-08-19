@@ -79,8 +79,12 @@ describe('expense ledger — missing receipt affordances', () => {
 
   it('labels the outstanding total as the whole ledger while filtered', () => {
     // The footer sums every expense, not the filtered subset. Saying so is the
-    // difference between a total and a wrong number.
-    expect(receipts).toContain("Outstanding${_expMissingReceiptOnly ? ' (whole ledger)' : ''}");
+    // difference between a total and a wrong number. The words now ride the
+    // shared `.ledger-total-scope` tag the consignment ledger uses to name
+    // whose balance a footer figure is.
+    expect(receipts).toMatch(/_expMissingReceiptOnly\s*\n?\s*\?\s*' <span class="ledger-total-scope">whole ledger<\/span>'/);
+    // …and the footer is still handed the unfiltered set, not the visible one.
+    expect(receipts).toContain('expenseLedgerTotals(combined,');
   });
 
   it('gives dates and refs tabular figures so the column reads as a column', () => {
