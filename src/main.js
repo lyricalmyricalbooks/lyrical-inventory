@@ -4201,7 +4201,7 @@ function renderChannelAnalytics() {
   const top = chans[0];
   const activeChans = chans.filter(x => (x.revenue || 0) > 0).length;
   const totalChans = chans.length || 1;
-  const channelUtilizationPct = Math.round((activeChans / totalChans) * 100);
+  const _channelUtilizationPct = Math.round((activeChans / totalChans) * 100);
   const avgOrder = grandTxn ? grandRev / grandTxn : 0;
   const avgUnit = grandU ? grandRev / grandU : 0;
   const topShare = top && grandRev > 0 ? top.revenue / grandRev * 100 : 0;
