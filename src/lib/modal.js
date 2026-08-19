@@ -58,6 +58,7 @@ export function openM(id) {
   const el = $('m-' + id); if (!el) return;
   el.classList.remove('closing');
   clearFieldErrors(el);
+  _clearUnsavedMarker(el);
   el.style.display = 'flex';
   if (_prepareOpen) { try { _prepareOpen(id, el); } catch { /* a bad default must not block the dialog */ } }
   // Snapshot AFTER open* helpers and date defaults have populated fields, so a
@@ -73,6 +74,7 @@ export function closeM(id) {
   const el = $('m-' + id); if (!el) return;
   el.dispatchEvent(new Event('modal-close'));
   delete _modalSnapshots[id];
+  _clearUnsavedMarker(el);
   // Restore focus to whatever opened the modal (if it's still around).
   if (_modalReturnFocus && el.contains(document.activeElement)) {
     try { _modalReturnFocus.focus(); } catch { }
@@ -97,14 +99,71 @@ export function closeM(id) {
   t = setTimeout(done, 240); // fallback if animationend doesn't fire
   el.addEventListener('animationend', done);
 }
+// ── UNSAVED-CHANGES MARKER ──────────────────────────────────────────────
+// The Add Book form has always shown an "unsaved changes" flag in its footer;
+// every other dialog in the app showed nothing, so a half-filled shipment or
+// sale form looked identical to an untouched one. The marker is *injected*
+// into the footer here rather than authored into thirty-odd footers by hand,
+// so a dialog added tomorrow gets it for free.
+//
+// A dialog that already ships its own `.save-indicator` (Add Book) keeps that
+// element — this only toggles it, so there is never a second flag.
+const UNSAVED_LABEL = '● Unsaved changes';
+
+/**
+ * Show/hide the unsaved-changes flag on every currently-open, tracked modal.
+ * Cheap enough to call on every keystroke: at most one dialog is open, and the
+ * work is a field-signature string compare plus a classList toggle.
+ */
+export function refreshUnsavedMarkers() {
+  for (const ov of document.querySelectorAll('.overlay[id^="m-"]')) {
+    if (ov.style.display === 'none' || ov.classList.contains('closing')) continue;
+    const id = ov.id.slice(2);
+    // Untracked means the dialog was never opened through openM (or is already
+    // closing) — there is no snapshot to compare against, so stay quiet.
+    if (_modalSnapshots[id] === undefined) continue;
+    const footer = ov.querySelector('.modal-footer');
+    if (!footer) continue;
+    const changed = modalFieldsChanged(id);
+    let mark = footer.querySelector('.save-indicator');
+    if (!mark) {
+      // Created lazily so an untouched dialog's footer keeps exactly the
+      // layout it has today — no reserved gap, no mobile button reflow.
+      if (!changed) continue;
+      mark = document.createElement('span');
+      mark.className = 'save-indicator';
+      mark.dataset.autoUnsaved = '1';
+      mark.setAttribute('role', 'status');
+      mark.textContent = UNSAVED_LABEL;
+      footer.prepend(mark);
+    }
+    mark.classList.toggle('show', changed);
+    mark.setAttribute('aria-hidden', changed ? 'false' : 'true');
+  }
+}
+
+// Reset the flag when a dialog closes: injected markers are removed outright,
+// and a footer's own hand-authored indicator is just switched off, so the next
+// open starts from "nothing typed yet" either way.
+function _clearUnsavedMarker(el) {
+  for (const mark of el.querySelectorAll('.save-indicator')) {
+    if (mark.dataset.autoUnsaved) mark.remove();
+    else { mark.classList.remove('show'); mark.setAttribute('aria-hidden', 'true'); }
+  }
+}
+
 // Close a modal, but if the user has unsaved edits, confirm first. Used by the
-// backdrop-click and Esc handlers so a stray tap can't silently lose data.
+// backdrop-click and Esc handlers, and by every Cancel/Close button in the app,
+// so neither a stray tap nor a mis-aimed Cancel can silently lose data.
+// Resolves true when the dialog actually closed, so callers that need to run
+// teardown (resetting a form) can tell "closed" from "kept editing".
 export async function attemptCloseModal(id) {
   if (modalFieldsChanged(id)) {
     if (!(await confirmDialog('Discard your unsaved changes?',
-      { okLabel: 'Discard', cancelLabel: 'Keep editing', danger: true }))) return;
+      { okLabel: 'Discard', cancelLabel: 'Keep editing', danger: true }))) return false;
   }
   closeM(id);
+  return true;
 }
 
 // Styled replacement for window.confirm — returns a Promise<boolean>.
