@@ -1265,6 +1265,14 @@
     <div class="sect" style="margin-bottom:0;flex:1;">Consignment ledger</div>
     <button class="btn" onclick="exportConsignmentLedgerCSV()" title="Download this book's consignment ledger as a CSV">⤓ Export CSV</button>
   </div>
+  <!-- Both children are filled by renderLedgerFilterBar(). The status line is a
+       permanent node rather than part of that render so its aria-live region
+       survives each rebuild — a live region replaced wholesale announces
+       nothing. -->
+  <div class="ledger-filter-bar" id="con-ledger-filter" role="group" aria-label="Narrow the consignment ledger" hidden>
+    <div class="ledger-filter-row" id="con-ledger-controls"></div>
+    <p class="ledger-filter-status" id="con-ledger-status" aria-live="polite"></p>
+  </div>
   <div class="tbl-wrap sys-sticky-head"><table class="tbl"><thead><tr><th>Date</th><th>Store</th><th>Type</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Due to you</th><th>Notes</th><th>Status</th></tr></thead><tbody id="ledger-body" class="sys-long-list"></tbody><tfoot id="ledger-foot"></tfoot></table></div>
 </div>
 

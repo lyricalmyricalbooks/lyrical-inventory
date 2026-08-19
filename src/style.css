@@ -3181,6 +3181,133 @@ tr.hist-row:hover {
 .ledger-total-val.is-neutral {
   color: var(--content-primary);
 }
+/* Whose balance this is. Sits inline with the "Still owed to you" label so the
+   figure beside it can't be read as the whole book's when it is one shop's. */
+.ledger-total-scope {
+  margin-left: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--content-muted);
+}
+
+/* ─── CONSIGNMENT LEDGER — FILTER BAR ─────────────────────────────────────
+   The ledger holds every shipment, sale and return a book has ever had. The
+   question actually asked of it is "what has THIS store done and what do they
+   still owe me", so this narrows the table — and the totals underneath it — to
+   one store, one kind of movement, or the sales still unpaid.
+
+   Laid out with a container query rather than a viewport breakpoint: the bar
+   sits in the Consignment panel, whose width is set by the app shell and the
+   sidebar, not by the window. */
+.ledger-filter-bar {
+  container-type: inline-size;
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r2);
+}
+.ledger-filter-bar[hidden] {
+  display: none;
+}
+.ledger-filter-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.ledger-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.ledger-filter-label {
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--content-muted);
+}
+/* Fitts's law: the picker is the one control here that carries a long list, so
+   it gets the full target height rather than the compact chip height. */
+.ledger-filter-select {
+  min-height: var(--target-min);
+  min-width: 200px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+  background: var(--surface-raised);
+  color: var(--content-primary);
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.ledger-filter-select:hover {
+  border-color: var(--gold2);
+}
+.ledger-filter-select:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+.ledger-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  /* The chips are 32px of paint with a 44px hit area grown past it
+     (.ledger-toggle-btn::before), so the row needs the headroom or neighbouring
+     targets overlap. */
+  padding: 6px 0;
+}
+/* The count rides inside the chip, so "Sold 41" is one target rather than a
+   label and a separate badge. */
+.ledger-chip-count {
+  margin-left: 2px;
+  opacity: .7;
+  font-size: var(--text-2xs);
+}
+.ledger-toggle-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.ledger-toggle-btn:disabled:hover {
+  border-color: var(--border-subtle);
+  color: var(--content-secondary);
+}
+.ledger-filter-status {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+}
+.ledger-filter-status strong {
+  color: var(--content-primary);
+  font-size: var(--text-sm);
+}
+.ledger-filter-scope {
+  color: var(--content-secondary);
+  font-weight: 600;
+}
+.ledger-filter-detail {
+  display: block;
+}
+@container (max-width: 560px) {
+  .ledger-filter-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .ledger-filter-select {
+    min-width: 0;
+    width: 100%;
+  }
+}
 
 /* ─── DASHBOARD — SALES BY CHANNEL ────────────────────────────────────────
    Same four numbers as before plus the proportion between them. The bar is

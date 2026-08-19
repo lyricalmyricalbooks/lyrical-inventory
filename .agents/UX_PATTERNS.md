@@ -71,6 +71,20 @@ Row states to reuse rather than re-derive:
   and a `title` describing the destination — see `.con-row-progress-link` (`style.css:2660`)
   and `conAccountRowHtml()` in `main.js` for the reference implementation.
 
+**Narrowing a long ledger:** the consignment ledger's filter bar (`.ledger-filter-bar`,
+`renderLedgerFilterBar()` in `main.js`, pure helpers in
+[src/lib/consignment-ledger-filter.js](../src/lib/consignment-ledger-filter.js)) is the
+reference. Four rules it encodes, worth keeping on any other filtered money table:
+- **Filter the rows the totals are taken over, never re-tally them.** The footer still calls
+  `consignmentLedgerTotals()`; the filter only decides which entries it is handed, so a
+  per-store total is the same arithmetic over a smaller set and adds back up to the whole.
+- **Skip rows inside the original index walk** rather than mapping a filtered copy — row
+  actions like `openEditLedger(i)` are keyed on the real array index.
+- **Say what is hidden, not just what is shown.** An empty filtered table must state that the
+  other rows exist and the filter is hiding them, or it reads as "this book has no history".
+- **A live region has to be a permanent node.** `#con-ledger-status` sits outside the part of
+  the bar that is rebuilt, because a region replaced wholesale announces nothing.
+
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.
 
