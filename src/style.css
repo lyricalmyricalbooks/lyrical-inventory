@@ -1625,13 +1625,29 @@ tr.hist-row:hover {
 
 
 
-/* TABS */
-.tab-bar{background:var(--ink2);display:flex;padding:0 2rem;overflow-x:auto;border-bottom:1px solid rgba(255,255,255,.04);}
+/* TABS
+   This is the app's primary navigation and it is on screen everywhere, so the
+   resting label state is the single most-read piece of text in the product.
+   It used to be rgba(255,255,255,.28), which composites to 2.6:1 against
+   --ink2 — under AA even for large text, and this is 11px uppercase. The bar
+   sits on a permanently dark surface in BOTH themes, so the labels take the
+   --on-inverse tier (identical light/dark) rather than a raw white alpha:
+   --on-inverse-2 measures 8.6:1 on light-theme --ink2 and higher on dark.
+   Hierarchy against the active tab is carried by hue + underline + tint, not
+   by making the other nine destinations unreadable. */
+.tab-bar{background:var(--ink2);display:flex;padding:0 2rem;overflow-x:auto;border-bottom:1px solid rgba(255,255,255,.04);scrollbar-width:none;}
 .tab-bar::-webkit-scrollbar{display:none;}
-.tab-btn{padding:.7rem 1.1rem;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.28);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;transition:color .18s,border-color .18s;white-space:nowrap;font-family:'Syne',sans-serif;}
-.tab-btn:hover{color:rgba(255,255,255,.6);}
-.tab-btn.active{color:var(--gold3);border-bottom-color:var(--gold2);}
-.tab-updated{margin-left:auto;align-self:center;white-space:nowrap;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;color:rgba(255,255,255,.28);padding-left:1rem;flex-shrink:0;}
+.tab-btn{padding:.7rem 1.1rem;min-height:44px;display:inline-flex;align-items:center;flex-shrink:0;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--on-inverse-2);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;white-space:nowrap;font-family:'Syne',sans-serif;touch-action:manipulation;transition:color var(--dur-fast) var(--ease-standard),border-color var(--dur-fast) var(--ease-standard),background-color var(--dur-fast) var(--ease-standard),transform var(--dur-base) var(--ease-entrance);}
+.tab-btn:hover{color:var(--on-inverse);background:rgba(255,255,255,.06);transform:translateY(-1px);}
+.tab-btn:active{transform:scale(.975);}
+/* Inset ring: the bar is a horizontal scroller, so an offset outline gets
+   clipped on the first and last tab. Overrides system.css's global ring. */
+.tab-btn:focus-visible{color:var(--on-inverse);outline:2px solid var(--gold2);outline-offset:-3px;border-radius:var(--r2);}
+.tab-btn.active{color:var(--gold3);border-bottom-color:var(--gold2);background:rgba(255,255,255,.06);}
+@media (prefers-reduced-motion: reduce){
+  .tab-btn:hover,.tab-btn:active{transform:none;}
+}
+.tab-updated{margin-left:auto;align-self:center;white-space:nowrap;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--on-inverse-3);padding-left:1rem;flex-shrink:0;}
 .tab-author{display:none;align-self:center;white-space:nowrap;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--gold2);flex-shrink:0;}
 .tab-author.on{display:inline-flex;margin-left:auto;}
 .tab-author.on + .tab-updated{margin-left:0;padding-left:.85rem;}
@@ -2746,10 +2762,13 @@ tr.hist-row:hover {
     border-radius:100px;
     padding:9px 14px;
     font-size:11px;
-    min-height:42px;
+    min-height:44px;
     display:inline-flex;align-items:center;justify-content:center;
     flex-shrink:0;
   }
+  /* The pill already carries a lift; a hover translate on touch leaves it
+     stuck raised after a tap, so the bottom nav opts out of it. */
+  .tab-btn:hover{transform:none;background:rgba(255,255,255,.09);}
   .tab-btn.active{background:var(--gold);color:var(--ink);border-color:var(--gold);}
 
   /* Buttons */
