@@ -942,6 +942,11 @@
       </div>
     </div>
 
+    <!-- Which filters are narrowing the segment, and how many buyers Copy /
+         Export / Email will actually reach. Populated by _renderCustFilterBar()
+         and hidden entirely when no filter is on. -->
+    <div id="cust-active-filters" class="seg-filter-bar" role="status" aria-live="polite" hidden></div>
+
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button class="btn" onclick="copyCustomerEmails()">📋 Copy segment</button>

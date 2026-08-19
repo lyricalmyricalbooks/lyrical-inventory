@@ -9,6 +9,7 @@ import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
 import { escapeHtml } from './lib/html.js';
+import { describeCustomerFilters, joinFilterLabels } from './lib/customer-segment.js';
 import {
   RECEIPT_SCAN_SCHEMA,
   _applyScanCategory,
@@ -17686,6 +17687,91 @@ function setCustomerChannelFilter(v) { _customerChannelFilter = v || ''; renderC
 function setCustomerSpendFilter(v) { _customerSpendFilter = v || ''; renderCustomers(); }
 function setCustomerOrdersFilter(v) { _customerOrdersFilter = v || ''; renderCustomers(); }
 
+// The five filters as one object, so the chip row, the empty state and the
+// "any filter on?" check all read the same shape instead of each repeating the
+// same five-way OR. Read-only snapshot — the module-level lets stay the truth.
+function _custFilterState() {
+  return {
+    search: _customerFilter,
+    bookId: _customerBookFilter,
+    channel: _customerChannelFilter,
+    spend: _customerSpendFilter,
+    orders: _customerOrdersFilter,
+  };
+}
+
+// Active filters, already phrased for a human. BOOK_LIST is the catalogue the
+// book <select> was populated from, so the chip shows the title the owner
+// picked rather than the id stored behind it.
+function _custActiveFilters() {
+  return describeCustomerFilters(_custFilterState(), {
+    bookTitle: (id) => (BOOK_LIST.find(b => b.id === id) || {}).title || '',
+  });
+}
+
+// Drop one filter by the id describeCustomerFilters() stamped on its chip.
+function clearCustomerFilter(id) {
+  if (id === 'search') {
+    _customerFilter = '';
+    const box = $('cust-search');
+    if (box) box.value = '';
+  } else if (id === 'book') { _customerBookFilter = ''; }
+  else if (id === 'channel') { _customerChannelFilter = ''; }
+  else if (id === 'spend') { _customerSpendFilter = ''; }
+  else if (id === 'orders') { _customerOrdersFilter = ''; }
+  else { return; }
+  renderCustomers();
+}
+
+// Back to everyone. The selects are re-synced from state by the renderer, but
+// the search box is an uncontrolled input, so it has to be cleared by hand.
+function clearCustomerFilters() {
+  _customerFilter = '';
+  _customerBookFilter = '';
+  _customerChannelFilter = '';
+  _customerSpendFilter = '';
+  _customerOrdersFilter = '';
+  const box = $('cust-search');
+  if (box) box.value = '';
+  renderCustomers();
+}
+
+/**
+ * The strip between the filter panel and the segment actions. It exists to
+ * answer one question before the owner presses Copy / Export / Email: who is
+ * actually in this segment right now? Hidden entirely when nothing is
+ * filtered — an always-on bar saying "no filters" is noise that trains people
+ * to stop reading it.
+ */
+function _renderCustFilterBar(shown, total, activeFilters) {
+  const bar = $('cust-active-filters');
+  if (!bar) return;
+  const active = Array.isArray(activeFilters) ? activeFilters : _custActiveFilters();
+  if (!active.length) {
+    bar.hidden = true;
+    bar.innerHTML = '';
+    return;
+  }
+  const chips = active.map(f => {
+    const safe = escapeHtml(f.label);
+    return `<span class="pile-chip is-filter">${safe}<button type="button" class="pile-chip-x" `
+      + `aria-label="Remove filter ${safe}" title="Remove this filter" `
+      + `onclick="clearCustomerFilter('${escapeHtml(f.id)}')">✕</button></span>`;
+  }).join('');
+  const n = Number(shown) || 0;
+  const all = Number(total) || 0;
+  bar.hidden = false;
+  bar.innerHTML = `
+    <span class="seg-filter-lead">
+      <span class="seg-filter-icon" aria-hidden="true">⌕</span>
+      Copy, export and email will reach
+      <strong class="mono-num">${n}</strong> of <strong class="mono-num">${all}</strong>
+      buyer${all === 1 ? '' : 's'}
+    </span>
+    <span class="seg-filter-chips">${chips}</span>
+    <button type="button" class="btn sm" onclick="clearCustomerFilters()">✕ Clear all filters</button>`;
+}
+
 // ── Email Typo Correction
 let _lastMailingCorrection = '';
 
@@ -17943,12 +18029,15 @@ function renderCustomersAudience() {
     if (_isCustomerSuppressed(r.email)) suppressedShown++;
   }
 
+  const activeFilters = _custActiveFilters();
+  _renderCustFilterBar(list.length, all.length, activeFilters);
+
   const summary = $('cust-summary');
   if (summary) {
     const srcSet = new Set();
     all.forEach(r => r.sources.forEach(s => srcSet.add(s)));
     const srcStr = Array.from(srcSet).sort().join(', ') || '—';
-    const filtered = _customerFilter.trim() || _customerBookFilter || _customerChannelFilter || _customerSpendFilter || _customerOrdersFilter;
+    const filtered = activeFilters.length;
     summary.textContent = `${all.length} customer${all.length === 1 ? '' : 's'} with email`
       + (filtered ? ` · ${list.length} shown` : '')
       + (suppressedShown ? ` · ${suppressedShown} unsubscribed (excluded from export)` : '')
@@ -17981,7 +18070,43 @@ function renderCustomersAudience() {
         <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${listBtn}${supBtn}</div></td>
       </tr>`;
     }).join('')
-    : `<tr><td colspan="9"><div class="empty-state" style="padding:1.5rem;">${(_customerFilter.trim() || _customerBookFilter || _customerChannelFilter || _customerSpendFilter || _customerOrdersFilter) ? 'No customers match this filter.' : 'No customers found yet. Apply some website orders, log in-person sales with an email, or pull buyers from Stripe.'}</div></td></tr>`;
+    : `<tr class="sys-empty-row"><td colspan="9">${_custEmptyHtml(all.length, activeFilters)}</td></tr>`;
+}
+
+/**
+ * What the buyer table shows when it has no rows. Two genuinely different
+ * situations, and telling them apart is the whole point:
+ *
+ *   • Filters are on → the buyers exist, they are just hidden. Naming the
+ *     filters and offering one button back is the difference between a dead end
+ *     and a two-second recovery — and it warns that Copy/Export/Email would
+ *     reach nobody at all right now.
+ *   • Nothing on record → an onboarding moment, so it points at the two ways
+ *     buyers actually arrive rather than restating that the table is empty.
+ */
+function _custEmptyHtml(total, activeFilters) {
+  const active = Array.isArray(activeFilters) ? activeFilters : [];
+  if (active.length) {
+    const clause = escapeHtml(joinFilterLabels(active));
+    const n = Number(total) || 0;
+    return `<div class="empty-state sys-empty">
+      <div class="e-icon" aria-hidden="true">🔍</div>
+      <strong>No buyers match these filters</strong>
+      <span>You have <strong class="mono-num">${n}</strong> buyer${n === 1 ? '' : 's'} on record, but none of them match ${clause}. Copy, export and email would reach nobody until you widen this.</span>
+      <div class="sys-empty-actions">
+        <button class="btn gold lg" onclick="clearCustomerFilters()">✕ Show all buyers</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="empty-state sys-empty">
+    <div class="e-icon" aria-hidden="true">👥</div>
+    <strong>No buyers with an email yet</strong>
+    <span>Everyone who buys from you lands here the moment an email address is attached — apply a website order, take a checkout with an email on it, or pull your past buyers across from Stripe.</span>
+    <div class="sys-empty-actions">
+      <button class="btn gold lg" onclick="customerPullStripe()">↻ Pull buyers from Stripe</button>
+      <button class="btn lg" onclick="switchTab('pos')">💳 Open checkout</button>
+    </div>
+  </div>`;
 }
 
 export function openCampaignWizard(presets = null) {
@@ -18673,6 +18798,7 @@ Object.assign(window, {
   confirmDialog, promptDialog, notify,
   renderCustomers, filterCustomers, customerPullStripe, copyCustomerEmails, exportCustomersCSV,
   toggleCustomerSuppress, setCustomerBookFilter, customerPullDeeper,
+  clearCustomerFilter, clearCustomerFilters,
   addManualSubscriber, addBuyerToMailingList, removeFromMailingList, addAllBuyersToMailingList,
   toggleMailingAutoAdd, emailCustomerSegment, emailMailingList, copyMailingListEmails, exportMailingListCSV,
   setCustomerChannelFilter, setCustomerSpendFilter, setCustomerOrdersFilter, checkMailingEmailTypo, applyMailingEmailCorrection,
@@ -19598,6 +19724,8 @@ function exposeLegacyInlineHandlers() {
     copyMailingListEmails, exportMailingListCSV, _loadCustomerStripeCache,
     _saveCustomerStripeCache, _custEmailKey, _custUpsert, _custAddSpend, _custTouchDate,
     buildCustomerList, _custSpendStr, _custApplyFilter, _custMailable, _custSyncBookFilterOptions,
+    _custFilterState, _custActiveFilters, _custEmptyHtml, _renderCustFilterBar,
+    clearCustomerFilter, clearCustomerFilters,
     setCustomerChannelFilter, setCustomerSpendFilter, setCustomerOrdersFilter,
     checkMailingEmailTypo, suggestEmailTypo, applyMailingEmailCorrection, checkOcEmailTypo,
     applyOcEmailCorrection, loadCampaigns, _persistCampaigns, loadOpenCalls, _persistOpenCalls,
