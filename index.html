@@ -2911,7 +2911,10 @@
           </div>
         </div>
 
-        <button class="btn gold" style="width:100%; margin-top:1.5rem; height:46px; font-size:14px;" onclick="calculateShippoRates()">
+        <!-- Live "what's still missing" line, filled in by renderShippoRateReadiness(). -->
+        <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
+
+        <button class="btn gold" style="width:100%; margin-top:0.75rem; height:46px; font-size:14px;" onclick="calculateShippoRates()">
           ⚡ Calculate Rates & Predict Customer Charge
         </button>
       </div>

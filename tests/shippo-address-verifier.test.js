@@ -127,6 +127,9 @@ function buildVerifier({ fetchImpl, taxCenter = { settings: { shippoKey: 'shippo
       // holds codes, so identity is the honest stand-in.
       normalizeCountryCode: (code) => String(code || '').trim().toUpperCase(),
       onShippoDestCountryChange: () => {},
+      // Applying a correction rewrites destination fields in code, so it also
+      // refreshes the rate form's readiness line — no-op here.
+      renderShippoRateReadiness: () => {},
       escapeHtml,
       console: { error: () => {}, warn: () => {} },
       ADDRESS_FIELD_LABELS,
