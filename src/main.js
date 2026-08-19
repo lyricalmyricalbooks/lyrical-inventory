@@ -544,6 +544,7 @@ import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy } from './lib/inventory.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
+import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles } from './lib/invoices.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 
@@ -8194,15 +8195,40 @@ function invoicesVisibleHere() {
   return !!window.IS_PUBLISHER && !isAuthor() && activeBook && activeBook !== 'all';
 }
 
+// ── Invoices span books ──────────────────────────────────────────────────
+// One invoice can bill several titles, but it is stored in a single book's
+// state. These two resolve an invoice by id wherever it actually lives, so
+// viewing, editing, paying or deleting it works identically from any title it
+// covers — and so the save lands on the book that holds it, not on whichever
+// book happens to be open. See ./lib/invoices.js for the matching rules.
+function locateInvoice(id) {
+  return findInvoiceAcrossBooks(states, id, activeBook);
+}
+
+// The state object holding `id`, plus the book id to persist. Falls back to the
+// active book so callers can stay a single code path when the id is unknown.
+function invoiceHome(id) {
+  const hit = locateInvoice(id);
+  if (!hit) return { inv: null, bookId: activeBook, s: getState() };
+  return { inv: hit.inv, bookId: hit.ownerBookId, s: states[hit.ownerBookId] || getState() };
+}
+
 function renderInvoices() {
   const section = $('invoices-section');
   if (!section) return;
   if (!invoicesVisibleHere()) { section.style.display = 'none'; return; }
   section.style.display = '';
 
-  const s = getState(), book = getBook(), cur = book.currency, list = $('invoices-list'), summary = $('inv-summary');
+  const book = getBook(), cur = book.currency, list = $('invoices-list'), summary = $('inv-summary');
+  // An invoice bills a store, and one invoice can list several titles. Gather
+  // every invoice that charges for THIS book — the ones it holds itself plus
+  // the ones another title holds but that bill this one too — so a multi-title
+  // invoice is reachable from each title on it, not just the one it was
+  // written from.
+  const rows = invoicesForBook(states, BOOK_LIST, activeBook, isTestBookId);
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
-  const invs = (s.invoices || []).slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : ((b.createdAt || 0) - (a.createdAt || 0))); });
+  rows.sort((a, b) => { const dA = a.inv.date || ''; const dB = b.inv.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : ((b.inv.createdAt || 0) - (a.inv.createdAt || 0))); });
+  const invs = rows.map(r => r.inv);
 
   // Mark overdue automatically (visual only, not persisted)
   const todayStr = today();
@@ -8212,32 +8238,43 @@ function renderInvoices() {
 
   // Summary line
   // ⚡ Bolt Optimization: Calculate outstanding, paid, and drafts in a single pass instead of iterating over the `invs` array three times.
-  let outstanding = 0, paid = 0, drafts = 0;
-  for (const i of invs) {
+  let outstanding = 0, paid = 0, drafts = 0, shared = 0;
+  for (const r of rows) {
+    const i = r.inv;
+    if (r.shared) shared++;
     if (i.status === 'sent') outstanding += (i.total || 0);
     else if (i.status === 'paid') paid += (i.total || 0);
     else if (i.status === 'draft') drafts++;
   }
-  summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}`;
+  summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}${shared ? ` · ${shared} shared with another title` : ''}`;
 
   if (!invs.length) {
     list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';
     return;
   }
 
-  list.innerHTML = invs.map(inv => {
+  list.innerHTML = rows.map(({ inv, ownerBookId }) => {
     const statusLabel = inv._overdue ? 'OVERDUE' : (inv.status || 'draft').toUpperCase();
     const statusCls = inv._overdue ? 'overdue' : (inv.status || 'draft');
     const due = inv.dueDate ? fmtD(inv.dueDate) : '—';
     const stripeChip = isDynamicStripeLink(inv)
       ? `<span title="Dynamic Stripe Checkout · exact amount" style="display:inline-block;margin-left:6px;background:#0e0c0a;color:#f0c060;font-size:8px;font-weight:700;letter-spacing:.16em;padding:2px 6px;border-radius:99px;">💳 STRIPE</span>`
       : '';
+    // Name the other titles on the invoice so a shared one reads as one bill
+    // covering several books, not as a stray record filed under the wrong title.
+    const others = otherBookTitles(inv, ownerBookId, activeBook, BOOK_LIST);
+    const sharedChip = others.length
+      ? `<span class="chip-status gray" title="This invoice also bills: ${escapeHtml(others.join(', '))}" style="margin-left:6px;font-size:9px;">＋ ${escapeHtml(others.join(' · '))}</span>`
+      : '';
+    // An invoice carries its own currency, and a shared one may well be priced
+    // in a different one than the book being viewed — show what it actually bills.
+    const invCur = inv.currency || cur;
     return `<div class="invoice-card">
-      <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}</div>
+      <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${sharedChip}</div>
       <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div></div>
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
-      <div class="inv-c-cell amt">Total<strong>${fmt(inv.total || 0, cur)}</strong></div>
+      <div class="inv-c-cell amt">Total<strong>${fmt(inv.total || 0, invCur)}</strong></div>
       <div class="inv-c-actions" style="flex-direction:column;align-items:stretch;gap:6px;">
         <span class="inv-status ${statusCls}">${statusLabel}</span>
         <div style="display:flex;gap:4px;justify-content:flex-end;">
@@ -8253,7 +8290,13 @@ function renderInvoices() {
 let invoiceCtx = null; // { editingId, items: [{description,qty,unitPrice}] }
 
 function openCreateInvoice(storeId, editingId) {
-  const s = getState(), book = getBook();
+  // Edit the invoice where it lives. Opening a shared invoice from a title that
+  // doesn't own it must still edit the one stored copy — including its store
+  // list and currency, which belong to the owning book, not the one on screen.
+  const hit = editingId ? locateInvoice(editingId) : null;
+  if (editingId && !hit) { showToast('Invoice not found', 'err'); return; }
+  const ownerBookId = hit ? hit.ownerBookId : activeBook;
+  const s = states[ownerBookId] || getState(), book = BOOKS[ownerBookId] || getBook();
   // Populate store dropdown
   const sel = $('inv-store');
   sel.innerHTML = '<option value="">— Select store —</option>' + (s.stores || []).map(st => `<option value="${st.id}">${escapeHtml(st.name)}${st.city ? ' · ' + escapeHtml(st.city) : ''}</option>`).join('');
@@ -8264,9 +8307,8 @@ function openCreateInvoice(storeId, editingId) {
   $('inv-discount-sym').textContent = getSym(bookCurCode);
 
   if (editingId) {
-    const inv = (s.invoices || []).find(i => i.id === editingId);
-    if (!inv) { showToast('Invoice not found', 'err'); return; }
-    invoiceCtx = { editingId, items: JSON.parse(JSON.stringify(inv.items || [])) };
+    const inv = hit.inv;
+    invoiceCtx = { editingId, ownerBookId, items: JSON.parse(JSON.stringify(inv.items || [])) };
     $('inv-edit-title').textContent = `Edit ${inv.num}`;
     sel.value = inv.storeId || '';
     $('inv-num').value = inv.num || '';
@@ -8297,7 +8339,7 @@ function openCreateInvoice(storeId, editingId) {
     if ($('inv-currency')) $('inv-currency').value = invCurCode;
     $('inv-discount-sym').textContent = getSym(invCurCode);
   } else {
-    invoiceCtx = { editingId: null, items: [] };
+    invoiceCtx = { editingId: null, ownerBookId, items: [] };
     $('inv-edit-title').textContent = 'New invoice';
     sel.value = storeId ? String(storeId) : '';
     $('inv-num').value = nextInvoiceNumber();
@@ -8413,6 +8455,9 @@ function updateInvoiceItem(idx, field, value) {
   // Re-render only the amount cell for performance
   const amtEl = document.querySelector(`#inv-items-body tr[data-i="${idx}"] .inv-item-amt`);
   if (amtEl) amtEl.textContent = fmt((it.qty || 0) * (it.unitPrice || 0), getSym(getInvoiceCurrency()));
+  // Which titles the invoice covers is read off the descriptions, so keep the
+  // "filed under" line honest while they're being typed.
+  if (field === 'description') renderInvoiceBooksHint();
   recalcInvoiceTotals();
 }
 
@@ -8429,6 +8474,25 @@ function renderInvoiceItems() {
     <td class="r"><span class="inv-item-amt">${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</span></td>
     <td><button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove line" aria-label="Remove line">×</button></td>
   </tr>`).join('');
+  renderInvoiceBooksHint();
+}
+
+// Say out loud which titles this invoice will be filed under. A line item is
+// matched to a title either because it was imported from that book's sales or
+// because its description names the book — so if a hand-typed line spells a
+// title differently, the publisher sees the omission here rather than
+// discovering later that the invoice is missing from one of its books.
+function renderInvoiceBooksHint() {
+  const el = $('inv-books-hint');
+  if (!el || !invoiceCtx) return;
+  const ownerBookId = invoiceCtx.ownerBookId || activeBook;
+  const ids = deriveInvoiceBookIds({ items: invoiceCtx.items }, ownerBookId, BOOK_LIST);
+  const titles = ids.map(id => (BOOKS[id] || {}).title).filter(Boolean);
+  if (titles.length <= 1) {
+    el.innerHTML = `Filed under <strong>${escapeHtml(titles[0] || (getBook().title || 'this title'))}</strong>. Name another title in a line's description to bill it here too.`;
+    return;
+  }
+  el.innerHTML = `Filed under <strong>${titles.map(escapeHtml).join('</strong>, <strong>')}</strong> — this invoice appears in each of those titles' Invoices lists.`;
 }
 
 export function escapeHTML(s) { return escapeHtml(s); }
@@ -8491,7 +8555,10 @@ function recalcInvoiceTotals() {
 }
 
 function prefillFromPendingSales(forceStoreId) {
-  const s = getState(), book = getBook();
+  // Pull from the book that owns the invoice being edited — for a shared invoice
+  // opened from another title, its store and ledger both live in the owner.
+  const ownerBookId = (invoiceCtx && invoiceCtx.ownerBookId) || activeBook;
+  const s = states[ownerBookId] || getState(), book = BOOKS[ownerBookId] || getBook();
   const storeId = forceStoreId ? Number(forceStoreId) : Number($('inv-store').value);
   if (!storeId) { showToast('Pick a store first', 'warn'); return; }
   $('inv-store').value = String(storeId);
@@ -8510,6 +8577,9 @@ function prefillFromPendingSales(forceStoreId) {
     qty: e.qty,
     unitPrice: e.qty ? (e.amountDue / e.qty) : 0,
     _ledgerId: e.id,
+    // Stamp the title outright so the invoice's reach never depends on the
+    // description text still spelling the title the same way.
+    bookId: ownerBookId,
   }));
   renderInvoiceItems();
   recalcInvoiceTotals();
@@ -8517,7 +8587,12 @@ function prefillFromPendingSales(forceStoreId) {
 }
 
 function saveInvoice(status) {
-  const s = getState(), book = getBook();
+  // Write to the book that HOLDS this invoice, not whichever title is open. A
+  // multi-title invoice is reachable from every book it bills, so editing one
+  // from a book that doesn't own it must still update the single stored copy
+  // instead of pushing a duplicate into the book being viewed.
+  const ownerBookId = (invoiceCtx && invoiceCtx.ownerBookId) || activeBook;
+  const s = states[ownerBookId] || getState(), book = BOOKS[ownerBookId] || getBook();
   const storeId = Number($('inv-store').value);
   if (!storeId) { showToast('Choose a store to bill', 'err'); return; }
   if (!invoiceCtx.items.length) { showToast('Add at least one line item', 'err'); return; }
@@ -8538,7 +8613,7 @@ function saveInvoice(status) {
     id: invoiceCtx.editingId || ('inv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7)),
     num, storeId, storeName: store.name, storeEmail: store.email || '', storeCity: store.city || '', storeContact: store.contact || '', storePhone: store.phone || '', storeAddress: store.address || '', storeRegion: store.region || '', storePostal: store.postal || '', storeCountry: store.country || '',
     date, dueDate,
-    items: invoiceCtx.items.map(it => ({ description: it.description || '', qty: parseFloat(it.qty) || 0, unitPrice: parseFloat(it.unitPrice) || 0, _ledgerId: it._ledgerId || null })),
+    items: invoiceCtx.items.map(it => ({ description: it.description || '', qty: parseFloat(it.qty) || 0, unitPrice: parseFloat(it.unitPrice) || 0, _ledgerId: it._ledgerId || null, bookId: it.bookId || null })),
     subtotal: totals.subtotal,
     discount: totals.discount,
     discountType: totals.discountType || 'flat',
@@ -8552,9 +8627,14 @@ function saveInvoice(status) {
     notes: $('inv-notes').value.trim(),
     terms: $('inv-terms').value.trim(),
     status,
-    createdAt: invoiceCtx.editingId ? (s.invoices.find(i => i.id === invoiceCtx.editingId)?.createdAt || Date.now()) : Date.now(),
+    createdAt: invoiceCtx.editingId ? ((s.invoices || []).find(i => i.id === invoiceCtx.editingId)?.createdAt || Date.now()) : Date.now(),
     updatedAt: Date.now(),
   };
+  // Record every title this invoice bills, so it appears under each of them —
+  // the owning book plus any title a line item is stamped with or names in its
+  // description. Stamped here rather than only derived on read so a later title
+  // rename can't quietly drop a book off an invoice already sent.
+  payload.bookIds = deriveInvoiceBookIds(payload, ownerBookId, BOOK_LIST);
 
   let oldStripeLinkId = null;
   // Capture the ledger ids this invoice billed BEFORE we overwrite it, so we can
@@ -8620,7 +8700,7 @@ function saveInvoice(status) {
     }
   }
 
-  saveState(activeBook);
+  saveState(ownerBookId);
   closeM('invoice-edit');
   renderInvoices();
   renderLedger();
@@ -8635,12 +8715,14 @@ function saveInvoice(status) {
   if (shouldAutoStripe) {
     showToast('Creating Stripe Payment Link…', 'ok', 1800);
     createStripePaymentLinkForInvoice(payload).then(stripe => {
-      const s2 = getState();
-      const inv = (s2.invoices || []).find(i => i.id === payload.id);
-      if (!inv) return;
+      // Re-resolve by id: the publisher may have switched titles while the link
+      // was being created, and the invoice lives in its owning book either way.
+      const hit = locateInvoice(payload.id);
+      if (!hit) return;
+      const inv = hit.inv;
       inv.stripe = stripe;
       inv.paymentLink = stripe.url; // also set as the primary payment link so QR/etc. use it
-      saveState(activeBook);
+      saveState(hit.ownerBookId);
       renderInvoices();
       setTimeout(() => viewInvoice(payload.id), 60);
       showToast(`✓ Stripe link ready — ${fmt(payload.total, payload.currency)} owed`);
@@ -8656,8 +8738,7 @@ function saveInvoice(status) {
 
 async function regenerateStripeLinkFromView() {
   if (!currentViewInvoiceId) return;
-  const s = getState();
-  const inv = (s.invoices || []).find(i => i.id === currentViewInvoiceId);
+  const { inv, bookId } = invoiceHome(currentViewInvoiceId);
   if (!inv) return;
   const settings = getInvoiceSettings();
   if (!settings.stripeKey) {
@@ -8675,7 +8756,7 @@ async function regenerateStripeLinkFromView() {
     if (oldId) deactivateStripePaymentLink(oldId);
     inv.stripe = stripe;
     inv.paymentLink = stripe.url;
-    saveState(activeBook);
+    saveState(bookId);
     renderInvoices();
     viewInvoice(currentViewInvoiceId);
     showToast(`✓ Stripe link ready — ${fmt(inv.total, inv.currency)} owed`);
@@ -8689,8 +8770,9 @@ async function regenerateStripeLinkFromView() {
 
 async function deleteInvoice() {
   if (!invoiceCtx || !invoiceCtx.editingId) return;
-  const s = getState();
-  const inv = (s.invoices || []).find(i => i.id === invoiceCtx.editingId);
+  // Delete from the book that holds it — filtering the active book's list would
+  // leave a shared invoice in place while appearing to remove it.
+  const { inv, bookId, s } = invoiceHome(invoiceCtx.editingId);
   if (!inv) return;
   if (!(await confirmDialog(`Delete invoice ${inv.num}? This cannot be undone.`, { okLabel: 'Delete invoice', danger: true }))) return;
   // Clear the back-links on every ledger sale this invoice billed, so the ledger
@@ -8698,8 +8780,8 @@ async function deleteInvoice() {
   for (const it of (inv.items || [])) {
     if (it._ledgerId) stampLedgerInvoiceLink(s, it._ledgerId, null);
   }
-  s.invoices = s.invoices.filter(i => i.id !== invoiceCtx.editingId);
-  saveState(activeBook);
+  s.invoices = (s.invoices || []).filter(i => i.id !== invoiceCtx.editingId);
+  saveState(bookId);
   closeM('invoice-edit');
   renderInvoices();
   renderLedger();
@@ -8711,8 +8793,9 @@ async function deleteInvoice() {
 let currentViewInvoiceId = null;
 
 function viewInvoice(id) {
-  const s = getState();
-  const inv = (s.invoices || []).find(i => i.id === id);
+  // Resolve across books: a multi-title invoice is opened from whichever title
+  // the publisher is looking at, but only one book actually stores it.
+  const inv = invoiceHome(id).inv;
   if (!inv) { showToast('Invoice not found', 'err'); return; }
   currentViewInvoiceId = id;
   $('invoice-print-area').innerHTML = renderInvoicePaperHTML(inv);
@@ -8751,8 +8834,16 @@ function viewInvoice(id) {
   }, 30);
 }
 
+// The book an invoice belongs to, which is not always the one on screen: a
+// multi-title invoice is viewable from every title it bills, but its payment
+// links and branding come from the book that issued it.
+function invoiceOwnerBook(inv) {
+  const hit = inv && inv.id ? locateInvoice(inv.id) : null;
+  return (hit && BOOKS[hit.ownerBookId]) || BOOKS[activeBook] || getBook();
+}
+
 function effectivePaymentLink(inv) {
-  const book = BOOKS[activeBook] || getBook();
+  const book = invoiceOwnerBook(inv);
   const acceptedMethods = getAcceptedPaymentMethodsForBook(book.id);
 
   if (inv.stripe && inv.stripe.url && acceptedMethods.includes('stripe')) return inv.stripe.url;
@@ -8796,7 +8887,9 @@ function isDynamicStripeLink(inv) { return !!(inv && inv.stripe && inv.stripe.ur
 
 function renderInvoicePaperHTML(inv) {
   const settings = getInvoiceSettings();
-  const book = BOOKS[activeBook] || getBook();
+  // The issuing book, so a shared invoice prints the same document whichever
+  // title it was opened from rather than picking up the viewer's accent.
+  const book = invoiceOwnerBook(inv);
   const cur = inv.currency || book.currency;
   const payUrl = effectivePaymentLink(inv);
   const todayStr = today();
@@ -8919,8 +9012,11 @@ function editInvoiceFromView() {
 
 async function markInvoicePaidFromView() {
   if (!currentViewInvoiceId) return;
-  const s = getState(), book = getBook();
-  const inv = (s.invoices || []).find(i => i.id === currentViewInvoiceId);
+  // Settle against the book that holds the invoice: its linked consignment
+  // sales live in that book's ledger, so paying from another title has to reach
+  // the same rows it would have from the title the invoice was written on.
+  const { inv, bookId, s } = invoiceHome(currentViewInvoiceId);
+  const book = BOOKS[bookId] || getBook();
   if (!inv) return;
   if (!(await confirmDialog(`Mark ${inv.num} as PAID? This will also mark any linked pending consignment sales as paid.`, { okLabel: 'Mark paid' }))) return;
   inv.status = 'paid';
@@ -8935,11 +9031,11 @@ async function markInvoicePaidFromView() {
   // ledger row, store owed, and hist mirror paidState all flip together.
   for (const it of (inv.items || [])) {
     if (it._ledgerId) {
-      const e = s.ledger.find(x => x.id === it._ledgerId);
+      const e = (s.ledger || []).find(x => x.id === it._ledgerId);
       if (e) settleLedgerSalePaid(s, e);
     }
   }
-  saveState(activeBook);
+  saveState(bookId);
   renderInvoices();
   renderStores();
   renderLedger();
@@ -8951,7 +9047,7 @@ async function markInvoicePaidFromView() {
 
 function printInvoice() {
   if (!currentViewInvoiceId) return;
-  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  const inv = invoiceHome(currentViewInvoiceId).inv;
   if (!inv) return;
   // Print the self-contained invoice document (its own clean stylesheet — no app
   // chrome, scripts, or print-isolation CSS) via a hidden, off-screen iframe.
@@ -9007,7 +9103,7 @@ function printInvoiceViaPopup(html) {
 
 function copyInvoicePayLink() {
   if (!currentViewInvoiceId) return;
-  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  const inv = invoiceHome(currentViewInvoiceId).inv;
   if (!inv) return;
   const url = effectivePaymentLink(inv);
   if (!url) { showToast('No payment link set for this book or invoice', 'warn'); return; }
@@ -9124,7 +9220,7 @@ async function copyInvoiceEmailToClipboard(inv) {
 
 async function emailInvoice() {
   if (!currentViewInvoiceId) return;
-  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  const inv = invoiceHome(currentViewInvoiceId).inv;
   if (!inv) return;
   const settings = getInvoiceSettings();
   const subject = `Invoice ${inv.num} — ${settings.name || 'Lyricalmyrical Books'}`;
@@ -9252,7 +9348,7 @@ function buildStandaloneInvoiceHTML(inv) {
 
 function downloadInvoiceHTML(opts) {
   if (!currentViewInvoiceId) return;
-  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  const inv = invoiceHome(currentViewInvoiceId).inv;
   if (!inv) return;
   const html = buildStandaloneInvoiceHTML(inv);
   downloadText(html, `${inv.num}.html`, 'text/html');
@@ -9315,7 +9411,7 @@ export async function ensurePdfJs() {
 // back to the print/Save-as-PDF flow if the libraries can't be loaded.
 async function downloadInvoicePDF() {
   if (!currentViewInvoiceId) return;
-  const inv = getState().invoices.find(i => i.id === currentViewInvoiceId);
+  const inv = invoiceHome(currentViewInvoiceId).inv;
   if (!inv) return;
   const btn = $('inv-pdf-btn');
   const prevLabel = btn ? btn.textContent : '';
