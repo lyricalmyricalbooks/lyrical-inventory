@@ -2294,6 +2294,97 @@ tr.hist-row:hover {
 .sk-v.warn{color:#ad5500;}
 .store-actions{display:flex;gap:8px;flex-wrap:wrap;}
 
+/* ── STORE BALANCE FLAG + EXPLAINER POPOVER ──────────────────────────────────
+   When a store's saved totals disagree with what the ledger actually adds up
+   to, the card used to show a hardcoded red chip whose only explanation was a
+   `title` tooltip — invisible on the tablet this screen is used on at a fair,
+   and unreachable by keyboard. It is now a `.pill.red` BUTTON (so the status
+   vocabulary themes with everything else) opening a native popover: top layer,
+   light-dismiss and Esc for free, no z-index stack to lose the panel behind. */
+.store-head-flags{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;flex:none;}
+.store-balance-flag{
+  position:relative;border:0;cursor:pointer;
+  font-family:'Syne',sans-serif;font-weight:700;letter-spacing:.06em;
+  transition:transform var(--dur-fast) var(--ease-standard),
+             box-shadow var(--dur-fast) var(--ease-standard);
+}
+/* Fitts's Law: the pill itself measures ~19px tall, so an invisible hit area is
+   pushed out around it — 19 + 2×13 = 45px — rather than inflating the badge and
+   unbalancing the status pill it sits beside. */
+.store-balance-flag::after{content:'';position:absolute;inset:-13px -6px;}
+.store-balance-flag:hover{transform:translateY(-1px);box-shadow:var(--elev-2);}
+.store-balance-flag:active{transform:scale(.975);}
+.store-balance-flag:focus-visible{outline:2px solid var(--status-critical);outline-offset:2px;}
+
+/* The KPI whose number is the one in dispute gets a dotted underline, so the
+   card answers "which figure is wrong?" before the popover is even opened. */
+.sk-v.is-off{
+  color:var(--status-critical);
+  text-decoration:underline dotted var(--status-critical);
+  text-underline-offset:3px;
+}
+
+.store-balance-pop{
+  display:none;flex-direction:column;gap:var(--space-3);
+  /* The global `*{margin:0}` reset wipes the UA's `margin:auto` on [popover],
+     which is what centres a popover in the viewport — restore it here. */
+  margin:auto;
+  width:min(420px,calc(100vw - 32px));padding:var(--space-4);
+  border:1px solid var(--status-critical);border-radius:var(--r3);
+  background:var(--surface-card);color:var(--text);
+  box-shadow:var(--elev-4);
+}
+.store-balance-pop:popover-open{display:flex;}
+.store-balance-pop::backdrop{background:rgba(14,12,10,.34);backdrop-filter:blur(3px) saturate(120%);}
+.store-balance-pop-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);}
+.store-balance-pop-eyebrow{
+  font-family:'Syne',sans-serif;font-size:var(--text-3xs);font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--text3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.store-balance-pop-close{
+  min-width:36px;min-height:36px;padding:0;flex:none;
+  border:0;border-radius:var(--r);background:none;cursor:pointer;
+  color:var(--text3);font-size:var(--text-md);line-height:1;
+  transition:background var(--dur-fast) var(--ease-standard),color var(--dur-fast) var(--ease-standard);
+}
+.store-balance-pop-close:hover{background:var(--surface-inset);color:var(--text);}
+.store-balance-pop-title{
+  font-family:'Playfair Display',serif;font-size:var(--text-lg);color:var(--text);
+  text-wrap:balance;
+}
+.store-balance-pop-copy,.store-balance-pop-foot{
+  margin:0;font-size:var(--text-sm);line-height:1.6;color:var(--text2);text-wrap:pretty;
+}
+.store-balance-pop-foot{color:var(--text3);}
+/* Standalone `.tbl` — no `.tbl-wrap` here, so it carries its own frame — with
+   tighter padding to fit three columns inside a phone-width popover. */
+.store-balance-tbl{
+  width:100%;border:1px solid var(--border-default);border-radius:var(--r2);
+  overflow:hidden;border-collapse:separate;border-spacing:0;
+}
+.store-balance-tbl th,.store-balance-tbl td{padding:7px 10px;}
+.store-balance-tbl td{font-size:var(--text-sm);}
+/* The disputed line is called out on the row itself — an accent bar plus the
+   critical colour on the ledger figure, which is the number to believe. */
+.store-balance-tbl tbody tr.is-off td:first-child{box-shadow:inset 3px 0 0 var(--status-critical);}
+.store-balance-tbl tbody tr.is-off td:last-child{color:var(--status-critical);font-weight:700;}
+
+/* Motion: enters on the spring curve, and the duration tokens collapse to 1ms
+   under prefers-reduced-motion, so this needs no separate reduced-motion rule. */
+@media (prefers-reduced-motion: no-preference){
+  .store-balance-pop{
+    opacity:1;transform:translateY(0) scale(1);
+    transition:opacity var(--dur-base) var(--ease-standard),
+               transform var(--dur-base) var(--ease-spring),
+               overlay var(--dur-base) allow-discrete,
+               display var(--dur-base) allow-discrete;
+  }
+  @starting-style{
+    .store-balance-pop:popover-open{opacity:0;transform:translateY(-6px) scale(.97);}
+  }
+}
+
 /* CONSIGNMENT PRESET STORE DIRECTORY (Add Store Modal) */
 .add-store-preset-box {
   background: var(--cream2);
