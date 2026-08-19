@@ -3797,59 +3797,252 @@ function updateAllOverview() {
   const statsHost = $('all-con-stats');
   if (statsHost) {
     statsHost.innerHTML = `
-      <div class="consignment-stat-card focus"><div class="consignment-stat-icon">📦</div><span>Outstanding</span><strong>${conTotals.outstanding}</strong><em>copies still on shelves</em></div>
-      <div class="consignment-stat-card"><div class="consignment-stat-icon">🏬</div><span>Active accounts</span><strong>${conTotals.active}</strong><em>${conTotals.settled} settled</em></div>
-      <div class="consignment-stat-card"><div class="consignment-stat-icon">📈</div><span>Sell-through</span><strong>${sellThrough}%</strong><em>${conTotals.sold} of ${conTotals.sent} sold</em></div>
+      <div class="consignment-stat-card focus" tabindex="0" role="region" aria-label="Outstanding stock">
+        <div class="con-stat-glow" aria-hidden="true"></div>
+        <div class="consignment-stat-icon-wrap">
+          <span class="consignment-stat-icon" aria-hidden="true">📦</span>
+        </div>
+        <div class="con-stat-content">
+          <span class="con-stat-label">Outstanding stock</span>
+          <strong class="con-stat-val tnum">${conTotals.outstanding}</strong>
+          <em class="con-stat-sub"><span class="con-stat-bullet ${conTotals.outstanding ? 'amber' : 'gray'}" aria-hidden="true">●</span> copies still on shelves</em>
+        </div>
+      </div>
+      <div class="consignment-stat-card" tabindex="0" role="region" aria-label="Active retail accounts">
+        <div class="con-stat-glow" aria-hidden="true"></div>
+        <div class="consignment-stat-icon-wrap">
+          <span class="consignment-stat-icon" aria-hidden="true">🏬</span>
+        </div>
+        <div class="con-stat-content">
+          <span class="con-stat-label">Active accounts</span>
+          <strong class="con-stat-val tnum">${conTotals.active}</strong>
+          <em class="con-stat-sub">${conTotals.settled} settled · ${conTotals.accounts} partners</em>
+        </div>
+      </div>
+      <div class="consignment-stat-card" tabindex="0" role="region" aria-label="Sell-through rate">
+        <div class="con-stat-glow" aria-hidden="true"></div>
+        <div class="consignment-stat-icon-wrap">
+          <span class="consignment-stat-icon" aria-hidden="true">📈</span>
+        </div>
+        <div class="con-stat-content">
+          <span class="con-stat-label">Sell-through</span>
+          <strong class="con-stat-val tnum">${sellThrough}%</strong>
+          <div class="con-stat-bar-track" aria-hidden="true" title="${conTotals.sold} of ${conTotals.sent} sold">
+            <div class="con-stat-bar-fill" style="width:${Math.min(100, Math.max(0, sellThrough))}%;"></div>
+          </div>
+          <em class="con-stat-sub">${conTotals.sold} of ${conTotals.sent} sold</em>
+        </div>
+      </div>
     `;
   }
   const statusChip = $('all-con-status-chip');
   if (statusChip) {
-    statusChip.className = `pill ${conTotals.active ? 'amber' : 'green'}`;
-    statusChip.textContent = conTotals.accounts ? `${conTotals.accounts} account${conTotals.accounts === 1 ? '' : 's'}` : 'No accounts';
+    statusChip.className = `pill ${conTotals.active ? 'amber' : (conTotals.accounts ? 'green' : 'gray')}`;
+    statusChip.textContent = conTotals.accounts
+      ? (conTotals.active ? `● ${conTotals.accounts} account${conTotals.accounts === 1 ? '' : 's'}` : `✓ ${conTotals.accounts} settled`)
+      : 'No accounts';
   }
+
+  const countAll = $('con-filter-count-all');
+  if (countAll) countAll.textContent = conTotals.accounts;
+  const countActive = $('con-filter-count-active');
+  if (countActive) countActive.textContent = conTotals.active;
+  const countSettled = $('con-filter-count-settled');
+  if (countSettled) countSettled.textContent = conTotals.settled;
+
   const groupToggle = $('all-con-group-toggle');
   if (groupToggle) {
     groupToggle.classList.toggle('is-on', !!window._allConGrouped);
     groupToggle.setAttribute('aria-pressed', window._allConGrouped ? 'true' : 'false');
+  }
+  const expandToggle = $('all-con-expand-toggle');
+  if (expandToggle) {
+    expandToggle.style.display = window._allConGrouped ? 'inline-flex' : 'none';
   }
   renderConsignmentTable();
 
   renderGlobalPendingAlert();
 }
 
-// Renders #all-con-body from window._allConBooks, honoring the flat/grouped
-// toggle (window._allConGrouped) and per-book collapse state
-// (window._allConCollapsed) without recomputing the underlying totals.
-function conAccountRowHtml(bookId, bookTitle, r, nested) {
-  const jump = `switchBook('${bookId}'); setTimeout(()=>switchTab('consignment'), 50);`;
-  const titleCell = nested ? `<td class="con-nested-spacer"></td>` : `<td style="font-weight:700;">${escapeHtml(bookTitle)}</td>`;
-  return `<tr class="${r.isActive ? 'is-active' : 'is-settled'}${nested ? ' con-nested-row' : ''}">${titleCell}<td><span class="store-name-cell">${escapeHtml(r.store)}</span></td><td class="r col-sent">${r.sent}</td><td class="r">${r.sold}</td><td class="r outstanding-cell">${r.outstanding}</td><td class="col-sellthrough"><div class="con-row-progress con-row-progress-link" role="button" tabindex="0" title="${r.pct}% sold-through — view ${escapeHtml(bookTitle)} consignment" onclick="${jump}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${jump}}"><div class="con-row-progress-bar" style="width:${r.pct}%;"></div></div></td><td>${r.isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td></tr>`;
+// Filter & Search state for Combined Consignment Summary
+function setConStatusFilter(status) {
+  window._allConStatusFilter = status;
+  ['all', 'active', 'settled'].forEach(key => {
+    const btn = $('con-filter-' + key);
+    if (btn) {
+      const isAct = (status === key);
+      btn.classList.toggle('active', isAct);
+      btn.setAttribute('aria-selected', isAct ? 'true' : 'false');
+    }
+  });
+  renderConsignmentTable();
 }
+
+function onConSearchInput(query) {
+  window._allConSearchQuery = (query || '').trim().toLowerCase();
+  const clearBtn = $('all-con-search-clear');
+  if (clearBtn) clearBtn.style.display = window._allConSearchQuery ? 'inline-flex' : 'none';
+  renderConsignmentTable();
+}
+
+function clearConSearch() {
+  window._allConSearchQuery = '';
+  const input = $('all-con-search-input');
+  if (input) { input.value = ''; input.focus(); }
+  const clearBtn = $('all-con-search-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderConsignmentTable();
+}
+
+function clearConSearchAndFilter() {
+  clearConSearch();
+  setConStatusFilter('all');
+}
+
+function toggleAllConGroups() {
+  const conBooks = window._allConBooks || [];
+  if (!conBooks.length) return;
+  const collapsed = window._allConCollapsed || (window._allConCollapsed = new Set());
+  if (collapsed.size >= conBooks.length) {
+    collapsed.clear();
+  } else {
+    conBooks.forEach(b => collapsed.add(b.id));
+  }
+  renderConsignmentTable();
+}
+
+// Renders #all-con-body from window._allConBooks, honoring the flat/grouped
+// toggle (window._allConGrouped), active filters, and per-book collapse state
+// (window._allConCollapsed) without recomputing the underlying totals.
+function conAccountRowHtml(bookId, bookTitle, r, nested, bookAccent) {
+  const jump = `switchBook('${bookId}'); setTimeout(()=>switchTab('consignment'), 50);`;
+  const titleCell = nested
+    ? `<td class="con-nested-spacer" aria-hidden="true"></td>`
+    : `<td><span class="con-row-book-title" role="button" tabindex="0" title="View ${escapeHtml(bookTitle)} consignment" onclick="${jump}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${jump}}"><span class="con-group-dot" style="background:${bookAccent || 'var(--gold2)'};" aria-hidden="true"></span><strong class="con-book-title-text">${escapeHtml(bookTitle)}</strong></span></td>`;
+
+  const storeCell = nested
+    ? `<td class="con-nested-store-cell"><div class="con-tree-guide" aria-hidden="true"></div><span class="store-name-cell store-jump-link" role="button" tabindex="0" title="Manage ${escapeHtml(r.store)} in ${escapeHtml(bookTitle)}" onclick="${jump}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${jump}}">${escapeHtml(r.store)}</span></td>`
+    : `<td><span class="store-name-cell store-jump-link" role="button" tabindex="0" title="Manage ${escapeHtml(r.store)} in ${escapeHtml(bookTitle)}" onclick="${jump}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${jump}}">${escapeHtml(r.store)}</span></td>`;
+
+  const outstandingDisplay = r.outstanding > 0
+    ? `<span class="con-outstanding-badge tnum">${r.outstanding}</span>`
+    : `<span class="con-zero-muted tnum">0</span>`;
+
+  return `<tr class="${r.isActive ? 'is-active' : 'is-settled'}${nested ? ' con-nested-row' : ''}">`
+    + titleCell
+    + storeCell
+    + `<td class="r col-sent tnum">${r.sent}</td>`
+    + `<td class="r tnum">${r.sold}</td>`
+    + `<td class="r outstanding-cell tnum">${outstandingDisplay}</td>`
+    + `<td class="col-sellthrough"><div class="con-sellthrough-wrap"><div class="con-row-progress con-row-progress-link" role="button" tabindex="0" title="${r.pct}% sold-through (${r.sold} of ${r.sent}) — view ${escapeHtml(bookTitle)} consignment" onclick="${jump}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${jump}}"><div class="con-row-progress-bar" style="width:${r.pct}%;"></div></div><span class="con-row-pct tnum">${r.pct}%</span></div></td>`
+    + `<td>${r.isActive ? '<span class="pill amber">● Active</span>' : '<span class="pill gray">✓ Settled</span>'}</td>`
+    + `</tr>`;
+}
+
 function renderConsignmentTable() {
   const body = $('all-con-body');
   if (!body) return;
   const conBooks = window._allConBooks || [];
   if (!conBooks.length) {
-    body.innerHTML = '<tr><td colspan="7"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="7"><div class="empty-state con-empty-state"><div class="e-icon">🏪</div><p class="con-empty-msg">No consignment accounts found across the catalogue.</p></div></td></tr>';
     return;
   }
+
+  const query = window._allConSearchQuery || '';
+  const filter = window._allConStatusFilter || 'all';
+
+  const rowMatches = (r, bTitle) => {
+    if (filter === 'active' && !r.isActive) return false;
+    if (filter === 'settled' && r.isActive) return false;
+    if (query) {
+      const matchStore = r.store.toLowerCase().includes(query);
+      const matchBook = bTitle.toLowerCase().includes(query);
+      if (!matchStore && !matchBook) return false;
+    }
+    return true;
+  };
+
+  const expandToggle = $('all-con-expand-toggle');
+  if (expandToggle) {
+    expandToggle.style.display = window._allConGrouped ? 'inline-flex' : 'none';
+  }
+
   if (!window._allConGrouped) {
     const flat = [];
-    conBooks.forEach(b => b.rows.forEach(r => flat.push({ r, bookId: b.id, bookTitle: b.title })));
+    conBooks.forEach(b => {
+      b.rows.forEach(r => {
+        if (rowMatches(r, b.title)) {
+          flat.push({ r, bookId: b.id, bookTitle: b.title, bookAccent: b.accent });
+        }
+      });
+    });
+    if (!flat.length) {
+      body.innerHTML = '<tr><td colspan="7"><div class="empty-state con-empty-state"><div class="e-icon">🔍</div><p class="con-empty-msg">No consignment accounts matching filters.</p><button type="button" class="btn sm ink" onclick="clearConSearchAndFilter()">Reset filters</button></div></td></tr>';
+      return;
+    }
     flat.sort((a, b) => (b.r.isActive - a.r.isActive));
-    body.innerHTML = flat.map(({ r, bookId, bookTitle }) => conAccountRowHtml(bookId, bookTitle, r)).join('');
+    body.innerHTML = flat.map(({ r, bookId, bookTitle, bookAccent }) => conAccountRowHtml(bookId, bookTitle, r, false, bookAccent)).join('');
     return;
   }
+
   const collapsed = window._allConCollapsed || (window._allConCollapsed = new Set());
-  const sortedBooks = [...conBooks].sort((a, b) => (b.totals.active > 0) - (a.totals.active > 0));
+  const matchingBooks = [];
+  conBooks.forEach(b => {
+    const filteredRows = b.rows.filter(r => rowMatches(r, b.title));
+    if (filteredRows.length > 0) {
+      const totals = { sent: 0, sold: 0, outstanding: 0, active: 0 };
+      for (const r of filteredRows) {
+        totals.sent += r.sent;
+        totals.sold += r.sold;
+        totals.outstanding += r.outstanding;
+        if (r.isActive) totals.active += 1;
+      }
+      matchingBooks.push({ ...b, rows: filteredRows, totals });
+    }
+  });
+
+  if (!matchingBooks.length) {
+    body.innerHTML = '<tr><td colspan="7"><div class="empty-state con-empty-state"><div class="e-icon">🔍</div><p class="con-empty-msg">No consignment accounts matching filters.</p><button type="button" class="btn sm ink" onclick="clearConSearchAndFilter()">Reset filters</button></div></td></tr>';
+    return;
+  }
+
+  if (expandToggle) {
+    const allCollapsed = matchingBooks.every(b => collapsed.has(b.id));
+    const iconSpan = $('all-con-expand-icon');
+    const textSpan = $('all-con-expand-text');
+    if (iconSpan) iconSpan.textContent = allCollapsed ? '⊞' : '⊟';
+    if (textSpan) textSpan.textContent = allCollapsed ? 'Expand all' : 'Collapse all';
+    expandToggle.setAttribute('title', allCollapsed ? 'Expand all book groups' : 'Collapse all book groups');
+  }
+
+  const sortedBooks = [...matchingBooks].sort((a, b) => (b.totals.active > 0) - (a.totals.active > 0));
   body.innerHTML = sortedBooks.map(b => {
     const isCollapsed = collapsed.has(b.id);
     const pct = b.totals.sent ? Math.round((b.totals.sold / b.totals.sent) * 100) : 0;
     const statusLabel = b.totals.active ? `${b.totals.active} active` : 'All settled';
-    const headerRow = `<tr class="con-group-row ${b.totals.active ? 'is-active' : 'is-settled'}" onclick="toggleConGroup('${b.id}')"><td colspan="2" style="font-weight:800;"><span class="con-group-chevron${isCollapsed ? '' : ' open'}">▸</span><span class="con-group-dot" style="background:${b.accent};"></span>${escapeHtml(b.title)}</td><td class="r col-sent">${b.totals.sent}</td><td class="r">${b.totals.sold}</td><td class="r outstanding-cell">${b.totals.outstanding}</td><td class="col-sellthrough"><div class="con-row-progress" title="${pct}% sold-through"><div class="con-row-progress-bar" style="width:${pct}%;"></div></div></td><td><span class="pill ${b.totals.active ? 'amber' : 'gray'}">${b.totals.active ? '● ' : '✓ '}${statusLabel}</span></td></tr>`;
+    const outstandingDisplay = b.totals.outstanding > 0
+      ? `<span class="con-outstanding-badge tnum">${b.totals.outstanding}</span>`
+      : `<span class="con-zero-muted tnum">0</span>`;
+
+    const headerRow = `<tr class="con-group-row ${b.totals.active ? 'is-active' : 'is-settled'}" onclick="toggleConGroup('${b.id}')" role="button" tabindex="0" aria-expanded="${!isCollapsed}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleConGroup('${b.id}');}">`
+      + `<td colspan="2" class="con-group-lead-cell">`
+      + `<div class="con-group-lead-wrap">`
+      + `<span class="con-group-chevron${isCollapsed ? '' : ' open'}" aria-hidden="true">▸</span>`
+      + `<span class="con-group-dot" style="background:${b.accent};" aria-hidden="true"></span>`
+      + `<strong class="con-group-title">${escapeHtml(b.title)}</strong>`
+      + `<button type="button" class="con-group-jump-btn" title="Open ${escapeHtml(b.title)} consignment ledger" onclick="event.stopPropagation();switchBook('${b.id}');setTimeout(()=>switchTab('consignment'),50);" aria-label="Open ${escapeHtml(b.title)} consignment">Manage →</button>`
+      + `</div>`
+      + `</td>`
+      + `<td class="r col-sent tnum">${b.totals.sent}</td>`
+      + `<td class="r tnum">${b.totals.sold}</td>`
+      + `<td class="r outstanding-cell tnum">${outstandingDisplay}</td>`
+      + `<td class="col-sellthrough"><div class="con-sellthrough-wrap"><div class="con-row-progress" title="${pct}% sold-through (${b.totals.sold} of ${b.totals.sent})"><div class="con-row-progress-bar" style="width:${pct}%;"></div></div><span class="con-row-pct tnum">${pct}%</span></div></td>`
+      + `<td><span class="pill ${b.totals.active ? 'amber' : 'gray'}">${b.totals.active ? '● ' : '✓ '}${statusLabel}</span></td>`
+      + `</tr>`;
+
     if (isCollapsed) return headerRow;
     const sortedRows = [...b.rows].sort((a, c) => (c.isActive - a.isActive));
-    return headerRow + sortedRows.map(r => conAccountRowHtml(b.id, b.title, r, true)).join('');
+    return headerRow + sortedRows.map(r => conAccountRowHtml(b.id, b.title, r, true, b.accent)).join('');
   }).join('');
 }
 // NOTE: these re-renders are deliberately NOT wrapped in withViewTransition()
@@ -3869,10 +4062,20 @@ function toggleConGrouping() {
     btn.classList.toggle('is-on', window._allConGrouped);
     btn.setAttribute('aria-pressed', window._allConGrouped ? 'true' : 'false');
   }
+  const expandBtn = $('all-con-expand-toggle');
+  if (expandBtn) {
+    expandBtn.style.display = window._allConGrouped ? 'inline-flex' : 'none';
+  }
   renderConsignmentTable();
 }
 window.toggleConGroup = toggleConGroup;
 window.toggleConGrouping = toggleConGrouping;
+window.toggleAllConGroups = toggleAllConGroups;
+window.setConStatusFilter = setConStatusFilter;
+window.onConSearchInput = onConSearchInput;
+window.clearConSearch = clearConSearch;
+window.clearConSearchAndFilter = clearConSearchAndFilter;
+window.renderConsignmentTable = renderConsignmentTable;
 
 // Polished audience snapshot for the Customers tab.
 function renderCustomersStat(allCustomers) {
@@ -3929,6 +4132,32 @@ function channelColor(chan) {
 }
 const chanLabel = (chan) => (chan && chan.trim()) ? chan : 'Direct';
 
+function selectAllChCurrency(c) {
+  window._allChCur = c;
+  renderChannelAnalytics();
+}
+
+function setChChannelFilter(chan) {
+  const k = (chan || '').toLowerCase().trim();
+  window._allChFilter = (window._allChFilter === k) ? null : k;
+  renderChannelAnalytics();
+}
+
+function clearChChannelFilter() {
+  window._allChFilter = null;
+  renderChannelAnalytics();
+}
+
+function setChBookSort(sortKey) {
+  window._allChSort = sortKey;
+  renderChannelAnalytics();
+}
+
+function setChBookSearch(query) {
+  window._allChSearch = query || '';
+  renderChannelAnalytics();
+}
+
 function renderChannelAnalytics() {
   const host = $('all-ch-analytics');
   if (!host) return;
@@ -3945,9 +4174,13 @@ function renderChannelAnalytics() {
   // Currency toggle — only when more than one currency is in play
   let toggle = '';
   if (curKeys.length > 1) {
-    toggle = `<div class="ch-cur-toggle">` + curKeys.map(c => {
-      const tot = (byCur[c].books || []).reduce((a, b) => a + b.total, 0);
-      return `<button class="ch-cur-btn${c === cur ? ' active' : ''}" onclick="selectAllChCurrency('${c.replace(/'/g, "\\'")}')">${escapeHtml(c)} <span>${fmt(tot, c)}</span></button>`;
+    toggle = `<div class="ch-cur-toggle" role="tablist" aria-label="Currency selection">` + curKeys.map(c => {
+      const tot = (byCur[c].books || []).reduce((a, b) => a + (b.total || 0), 0);
+      const isAct = c === cur;
+      return `<button type="button" role="tab" aria-selected="${isAct}" class="ch-cur-btn${isAct ? ' active' : ''}" onclick="selectAllChCurrency('${c.replace(/'/g, "\\'")}')">
+        <span class="ch-cur-code">${escapeHtml(c)}</span>
+        <span class="ch-cur-amt">${fmt(tot, c)}</span>
+      </button>`;
     }).join('') + `</div>`;
   }
 
@@ -3967,6 +4200,8 @@ function renderChannelAnalytics() {
   }
   const top = chans[0];
   const activeChans = chans.filter(x => (x.revenue || 0) > 0).length;
+  const totalChans = chans.length || 1;
+  const channelUtilizationPct = Math.round((activeChans / totalChans) * 100);
   const avgOrder = grandTxn ? grandRev / grandTxn : 0;
   const avgUnit = grandU ? grandRev / grandU : 0;
   const topShare = top && grandRev > 0 ? top.revenue / grandRev * 100 : 0;
@@ -4052,7 +4287,6 @@ function renderChannelAnalytics() {
 
   host.innerHTML = toggle + chart + `<div class="ch-book-grid">${cards}</div>`;
 }
-window.selectAllChCurrency = function (c) { window._allChCur = c; renderChannelAnalytics(); };
 
 // ── BOOK CONTEXT BANNERS
 function renderGlobalPendingAlert() {
@@ -20456,7 +20690,8 @@ function exposeLegacyInlineHandlers() {
     updateRoleToggleButton, updateSubheader, placeKpiStrip, bindKpiResize, syncRoleUI,
     toggleCurrentBookView, updateProfileTabs, selectProfileTab, seedMockTestData, switchBook,
     switchTab, updateHeader, updateAllOverview, renderCustomersStat, channelColor,
-    renderChannelAnalytics, renderGlobalPendingAlert, updateContextBanners,
+    renderChannelAnalytics, selectAllChCurrency, setChChannelFilter, clearChChannelFilter, setChBookSort, setChBookSearch, renderGlobalPendingAlert, updateContextBanners,
+    toggleConGroup, toggleConGrouping, toggleAllConGroups, setConStatusFilter, onConSearchInput, clearConSearch, clearConSearchAndFilter, renderConsignmentTable,
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
     dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
     getArtistHeldHtml, getPayoutHistoryHtml, renderProfitSharingBreakdown, toggleArtistPayoutForm,

@@ -554,19 +554,45 @@
   <div class="sect">Combined sales by channel</div>
   <div id="all-ch-analytics" class="ch-analytics"></div>
 
-  <div class="consignment-summary-panel sys-container">
+  <div class="consignment-summary-panel sys-container" id="all-consignment-summary-panel">
     <div class="consignment-summary-head">
-      <div>
-        <div class="sect">Combined consignment summary</div>
+      <div class="consignment-summary-titles">
+        <div class="consignment-kicker"><span class="con-kicker-dot"></span>Retail &amp; Consignment Network</div>
+        <div class="sect consignment-summary-title">Combined consignment summary</div>
         <p class="section-subcopy">Track every consignment account across the full catalogue, with active stock and settled partners surfaced at a glance.</p>
       </div>
-      <div id="all-con-status-chip" class="pill gold">—</div>
+      <div class="consignment-summary-badges">
+        <div id="all-con-status-chip" class="pill gold">—</div>
+      </div>
     </div>
     <div id="all-con-stats" class="consignment-stat-grid"></div>
-    <div class="con-table-controls">
-      <button type="button" id="all-con-group-toggle" class="con-group-toggle-btn" onclick="toggleConGrouping()" aria-pressed="false" title="Collapse accounts into one row per book">
-        <span class="con-group-toggle-icon">▤</span> Group by book
-      </button>
+    <div class="con-table-toolbar">
+      <div class="con-toolbar-search">
+        <div class="con-search-box">
+          <span class="con-search-icon" aria-hidden="true">🔍</span>
+          <input type="search" id="all-con-search-input" class="con-search-input" placeholder="Filter by store or book…" oninput="onConSearchInput(this.value)" aria-label="Filter consignment accounts" autocomplete="off" spellcheck="false">
+          <button type="button" id="all-con-search-clear" class="con-search-clear-btn" onclick="clearConSearch()" title="Clear search" style="display:none;" aria-label="Clear filter">✕</button>
+        </div>
+      </div>
+      <div class="con-toolbar-filters" id="all-con-filter-tabs" role="tablist" aria-label="Filter accounts by status">
+        <button type="button" role="tab" id="con-filter-all" class="con-filter-btn active" aria-selected="true" onclick="setConStatusFilter('all')">
+          <span>All</span> <span class="con-filter-badge" id="con-filter-count-all">0</span>
+        </button>
+        <button type="button" role="tab" id="con-filter-active" class="con-filter-btn" aria-selected="false" onclick="setConStatusFilter('active')">
+          <span class="con-dot active" aria-hidden="true">●</span> <span>Active</span> <span class="con-filter-badge" id="con-filter-count-active">0</span>
+        </button>
+        <button type="button" role="tab" id="con-filter-settled" class="con-filter-btn" aria-selected="false" onclick="setConStatusFilter('settled')">
+          <span class="con-dot settled" aria-hidden="true">✓</span> <span>Settled</span> <span class="con-filter-badge" id="con-filter-count-settled">0</span>
+        </button>
+      </div>
+      <div class="con-toolbar-actions">
+        <button type="button" id="all-con-expand-toggle" class="con-action-btn con-expand-toggle-btn" onclick="toggleAllConGroups()" title="Expand or collapse all book groups" style="display:none;">
+          <span id="all-con-expand-icon">⊞</span> <span id="all-con-expand-text">Expand all</span>
+        </button>
+        <button type="button" id="all-con-group-toggle" class="con-group-toggle-btn" onclick="toggleConGrouping()" aria-pressed="false" title="Collapse accounts into one row per book">
+          <span class="con-group-toggle-icon">▤</span> <span>Group by book</span>
+        </button>
+      </div>
     </div>
     <div class="tbl-wrap all-consignment-table">
       <table class="tbl"><thead><tr><th>Book</th><th>Store</th><th class="r col-sent">Sent</th><th class="r">Sold</th><th class="r">Outstanding</th><th class="col-sellthrough">Sell-through</th><th>Status</th></tr></thead>
