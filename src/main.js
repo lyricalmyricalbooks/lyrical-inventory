@@ -536,6 +536,7 @@ import {
   ocSaveTemplates,
   exportOpenCallCSV,
 } from './features/opencall.js';
+import { channelMixRows } from './lib/channel-mix.js';
 import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
@@ -4163,6 +4164,68 @@ function dismissStockDrift() {
   if (b) { _dismissedDriftSig = b.dataset.sig || null; b.style.display = 'none'; }
 }
 
+/* ─── DASHBOARD — SALES BY CHANNEL ────────────────────────────────────────
+   The table answers "where is the money coming from?". Until now it listed
+   channels in whichever order they were first used, with no total under the
+   columns and no sense of proportion, so the answer had to be worked out by
+   hand on every visit. These three helpers add the missing half: order, a
+   share bar scaled to the leading channel, and a footer that sums the columns
+   it sits under. The `chStats` rollup itself is untouched. */
+
+/** One channel row: name, its numbers, and a bar scaled against the leader. */
+function channelMixRowHtml(row, cur) {
+  const label = chanLabel(row.chan ?? '');
+  const col = channelColor(row.chan ?? '');
+  const share = Number.isFinite(row.share) ? row.share : 0;
+  const barPct = Number.isFinite(row.barPct) ? row.barPct : 0;
+  // A channel that moved copies without earning (gratuities, comps) reads as a
+  // dash rather than "0%", which would look like an underperforming sale.
+  const shareText = (row.revenue ?? 0) > 0 ? `${share.toFixed(0)}%` : '—';
+  return `<tr>
+    <td style="font-weight:600;"><span class="ch-mix-chan"><span class="ch-mix-dot" style="background:${col};"></span>${escapeHtml(label)}</span></td>
+    <td class="r">${row.txns ?? 0}</td>
+    <td class="r">${row.units ?? 0}</td>
+    <td class="r">${fmt(row.revenue ?? 0, cur)}</td>
+    <td class="ch-mix-share-cell">
+      <div class="ch-mix-share" title="${escapeHtml(label)} is ${shareText} of this book's revenue">
+        <div class="ch-mix-track" role="img" aria-label="${escapeHtml(label)}: ${shareText} of revenue"><div class="ch-mix-fill" style="width:${barPct.toFixed(1)}%;background:${col};"></div></div>
+        <span class="ch-mix-pct mono-num">${shareText}</span>
+      </div>
+    </td>
+  </tr>`;
+}
+
+/** The footer that totals the columns it sits under, and names the leader. */
+function channelMixFootHtml(totals, cur) {
+  if (!totals || !totals.channels) return '';
+  const leaderNote = totals.leader
+    ? `${escapeHtml(chanLabel(totals.leader))} leads with ${totals.leaderShare.toFixed(0)}% of revenue`
+    : 'no channel has earned yet';
+  const chanCount = totals.earningChannels === totals.channels
+    ? `${totals.channels} channel${totals.channels === 1 ? '' : 's'}`
+    : `${totals.earningChannels} of ${totals.channels} channels earning`;
+  return `<tr class="ledger-total-row">
+    <td class="ledger-total-label">All channels<span class="ledger-total-sub">${chanCount} · ${leaderNote}</span></td>
+    <td class="r mono-num">${totals.txns ?? 0}</td>
+    <td class="r mono-num">${totals.units ?? 0}</td>
+    <td class="r mono-num ledger-total-val is-neutral">${fmt(totals.revenue ?? 0, cur)}</td>
+    <td class="ch-mix-share-cell"></td>
+  </tr>`;
+}
+
+/** No sales on record yet — an onboarding moment, not a dead table. */
+function channelMixEmptyHtml() {
+  return `<div class="empty-state sys-empty">
+    <div class="e-icon" aria-hidden="true">📊</div>
+    <strong>No sales on this book yet</strong>
+    <span>Once orders start landing, this is where you will see which channel is actually carrying the book — the shop, the fairs, or the stores that stock it.</span>
+    <div class="sys-empty-actions">
+      <button class="btn gold lg" onclick="switchTab('manual')">+ Record a sale</button>
+      <button class="btn lg" onclick="switchTab('consignment')">Send stock to a store</button>
+    </div>
+  </div>`;
+}
+
 export function updateDash() {
   if (!activeBook || activeBook === 'all') return;
   const s = getState(), book = getBook();
@@ -4272,8 +4335,12 @@ export function updateDash() {
   if (s.stock <= book.threshold) { al.className = 'stock-alert danger'; al.textContent = '⚠ Below threshold (' + book.threshold + ') — reorder now.'; }
   else if (s.stock <= book.threshold * 2) { al.className = 'stock-alert warn'; al.textContent = 'Getting low — ' + s.stock + ' units remaining.'; }
   else { al.className = 'stock-alert ok'; al.textContent = 'Stock is healthy.'; }
-  const ckeys = Object.keys(s.chStats || {});
-  $('ch-body').innerHTML = ckeys.length ? ckeys.map(k => { const cs = s.chStats[k]; return `<tr><td style="font-weight:600;">${escapeHtml(chanLabel(k))}</td><td class="r">${cs.txns}</td><td class="r">${cs.units}</td><td class="r">${fmt(cs.revenue, cur)}</td></tr>`; }).join('') : '<tr><td colspan="4"><div class="empty-state" style="padding:1rem;">No sales yet.</div></td></tr>';
+  const chMix = channelMixRows(s.chStats);
+  const chFoot = $('ch-foot');
+  $('ch-body').innerHTML = chMix.rows.length
+    ? chMix.rows.map(r => channelMixRowHtml(r, cur)).join('')
+    : `<tr class="sys-empty-row"><td colspan="5">${channelMixEmptyHtml()}</td></tr>`;
+  if (chFoot) chFoot.innerHTML = chMix.rows.length ? channelMixFootHtml(chMix.totals, cur) : '';
   $('dash-con-body').innerHTML = s.stores.length ? s.stores.map(st => `<tr><td style="font-weight:600;">${escapeHtml(st.name)}</td><td class="r">${st.sent}</td><td class="r">${st.sold}</td><td class="r">${st.returned}</td><td class="r">${st.outstanding}</td><td>${st.outstanding > 0 ? '<span class="pill amber">Active</span>' : '<span class="pill gray">Settled</span>'}</td></tr>`).join('') : '<tr><td colspan="6"><div class="empty-state" style="padding:1rem;">No consignment accounts.</div></td></tr>';
   // Show danger zone only for publisher — explicitly hide for authors so it
   // doesn't linger when switching from publisher into an author view.
@@ -4315,7 +4382,7 @@ export function updateDash() {
             <td style="padding:6px 8px;color:rgba(255,255,255,.7);font-weight:500;">${escapeHtml(e.desc)}</td>
             <td style="padding:6px 8px;"><span style="font-size:10px;background:rgba(255,255,255,.08);color:var(--on-inverse-3);padding:2px 8px;border-radius:100px;">${escapeHtml(e.cat)}</span></td>
             <td style="padding:6px 8px;color:var(--on-inverse-3);">${escapeHtml(e.ref) || '—'}</td>
-            <td style="padding:6px 0;text-align:right;color:#f87171;font-weight:500;">${fmt(e.amount, cur)}</td>
+            <td style="padding:6px 0;text-align:right;color:var(--rose-soft);font-weight:500;">${fmt(e.amount, cur)}</td>
           </tr>`).join('');
         // Payment button
         const artistLink = (s.artistPaymentLink || '').trim();
