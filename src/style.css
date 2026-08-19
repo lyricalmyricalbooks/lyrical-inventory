@@ -1854,6 +1854,27 @@ tr.hist-row:hover {
 .pile-chip .dot{width:7px;height:7px;border-radius:50%;}
 .pile-chip .dot.pub{background:var(--gold);}
 .pile-chip .dot.auth{background:var(--ink3);}
+/* Dismissible filter chip — a .pile-chip that names an active filter and carries
+   its own remove control. Amber because the house convention reads amber as
+   "active / needs attention", which is exactly what a filter still switched on is. */
+.pile-chip.is-filter{background:var(--status-active-bg);border-color:var(--gold-line);color:var(--content-primary);gap:8px;padding-right:5px;}
+.pile-chip-x{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:20px;padding:0;border:0;border-radius:50%;
+  background:transparent;color:var(--content-muted);
+  font-size:var(--text-xs);line-height:1;cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease-standard),
+             color var(--dur-fast) var(--ease-standard),
+             transform var(--dur-fast) var(--ease-entrance);
+}
+/* Fitts's Law without inflating the chip: the glyph stays 20px, the hit box is
+   44px. Chips sit 8px apart and every chip is far wider than 44px, so no two
+   expanded hit boxes can reach each other. */
+.pile-chip-x::after{content:'';position:absolute;inset:-12px;}
+.pile-chip-x:hover{background:var(--status-critical-bg);color:var(--status-critical);}
+.pile-chip-x:active{transform:scale(.9);}
+.pile-chip-x:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){.pile-chip-x:active{transform:none;}}
 /* "Expense this gratuity" toggle */
 .toggle-row{display:flex;align-items:flex-start;gap:12px;margin-top:1.1rem;padding:12px 14px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r2);cursor:pointer;}
 .toggle-title{font-size:13px;font-weight:600;color:var(--text);}
@@ -2925,16 +2946,23 @@ tr.hist-row:hover {
 .hist-filter-chip button{border:none;background:var(--ink);color:var(--on-inverse);font-size:11px;font-weight:600;border-radius:100px;padding:4px 10px;margin-left:4px;cursor:pointer;font-family:'DM Mono',monospace;transition:opacity .12s;}
 .hist-filter-chip button:hover{opacity:.85;}
 
-/* The row that carries Order History's rich empty state is a panel, not a
-   record: it must not take the zebra hover, the cell padding, or the row
-   divider that make a real order row read as clickable data. */
+/* The row that carries a table's rich empty state is a panel, not a record: it
+   must not take the zebra hover, the cell padding, or the row divider that make
+   a real data row read as clickable.
+
+   `.sys-empty-row` is the name to use on any new table; `.hist-empty-row` is
+   Order History's original and is kept as an alias so its markup and tests stay
+   put. Same treatment either way. */
 .tbl tbody tr.hist-empty-row td,
-.tbl tbody tr.hist-empty-row:hover td {
+.tbl tbody tr.hist-empty-row:hover td,
+.tbl tbody tr.sys-empty-row td,
+.tbl tbody tr.sys-empty-row:hover td {
   padding: 1.25rem 1rem;
   border-bottom: none;
   background: transparent;
 }
-.tbl tbody tr.hist-empty-row {
+.tbl tbody tr.hist-empty-row,
+.tbl tbody tr.sys-empty-row {
   background: transparent;
 }
 /* Ten nowrap header cells are what force this table wider than a phone screen,
@@ -2943,8 +2971,9 @@ tr.hist-row:hover {
    header stands down and the panel sizes to the screen — which is also how
    every other rich empty state in the app reads: a standalone panel, not a
    headed table. Degrades to the previous behaviour wherever :has() is not
-   supported. */
-.tbl:has(> tbody > tr.hist-empty-row) thead {
+   supported. (The buyer table is nine such cells, and has the same problem.) */
+.tbl:has(> tbody > tr.hist-empty-row) thead,
+.tbl:has(> tbody > tr.sys-empty-row) thead {
   display: none;
 }
 
@@ -4330,6 +4359,58 @@ tr.hist-row:hover {
   padding: var(--space-3);
   border-radius: var(--r2);
   border: 1px solid var(--border);
+}
+
+/* ── Active-segment bar ─────────────────────────────────────────────────────
+   Sits between the buyer filters and the Copy / Export / Email buttons, and
+   exists to answer one question at the moment it matters: who am I about to
+   reach? Those three buttons act on the FILTERED list, so a book filter left on
+   from last week silently turns a mailout to the whole list into a mailout to a
+   handful of people — and an email cannot be un-sent. The bar names each active
+   filter, counts the buyers that survive them, and hands back a one-press exit.
+
+   Rendered only when at least one filter is on: a permanent "no filters" strip
+   is noise, and noise is what teaches people to stop reading the warning. */
+.seg-filter-bar {
+  container-type: inline-size;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--status-active-bg);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--r2);
+}
+/* `display:flex` would otherwise beat the hidden attribute. */
+.seg-filter-bar[hidden] { display: none; }
+.seg-filter-lead {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+/* The two counts are the whole point of the sentence — mono so they line up
+   with every other quantity in the app, and full-strength so they read first. */
+.seg-filter-lead .mono-num { color: var(--content-primary); }
+.seg-filter-icon { font-size: var(--text-base); color: var(--status-active); }
+.seg-filter-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.seg-filter-bar > .btn { margin-left: auto; }
+/* Panel width, not viewport width: this bar renders inside the Customers tab
+   today and would render just as happily inside a narrower card. */
+@container (max-width: 560px) {
+  .seg-filter-bar { flex-direction: column; align-items: stretch; }
+  .seg-filter-bar > .btn { margin-left: 0; justify-content: center; }
 }
 
 .email-suggest-correction {
