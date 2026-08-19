@@ -206,6 +206,7 @@ import {
   writeThemePreference,
 } from './lib/theme.js';
 import { initStickyOffset } from './lib/sticky-header.js';
+import { describeSyncStatus } from './lib/sync-status.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
@@ -1894,6 +1895,86 @@ let _syncRetryTimer = null;
 let _syncRetryAttempt = 0;
 let _syncFlushing = false;
 
+// ── Persistent sync chip ───────────────────────────────────────────────────
+// The queue below has always been reliable; what it lacked was a face. The
+// account-menu dot and the one-shot toast are both easy to miss, so a phone
+// that drops signal at a market has read "Live" until the next save was
+// attempted. These three pieces of state feed the always-visible chip
+// (#sync-chip) via describeSyncStatus() — see src/lib/sync-status.js.
+const LAST_CLOUD_SYNC_KEY = 'lm-last-cloud-sync';
+/** True once a queue drain has thrown and is backing off; cleared on success. */
+let _syncRetrying = false;
+/** Epoch ms of the last confirmed cloud write, persisted so a reload while
+ *  offline still knows how stale the cloud copy is. */
+let _lastCloudSyncAt = (() => {
+  try {
+    const raw = Number(localStorage.getItem(LAST_CLOUD_SYNC_KEY));
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  } catch (_) { return null; }   // private mode / blocked storage
+})();
+let _syncChipTimer = null;
+
+/** Stamp a confirmed cloud write. Storage failures are never worth throwing on. */
+function markCloudSynced(at = Date.now()) {
+  _lastCloudSyncAt = at;
+  try { localStorage.setItem(LAST_CLOUD_SYNC_KEY, String(at)); } catch (_) { /* non-fatal */ }
+}
+
+/**
+ * Paint the persistent offline / not-yet-uploaded chip. Idempotent and cheap —
+ * safe to call from every sync transition. The wording and the decision to show
+ * anything at all live in the pure describeSyncStatus(); this only writes DOM.
+ */
+function renderSyncChip() {
+  const host = document.getElementById('sync-chip');
+  if (!host) return;
+  const view = describeSyncStatus({
+    online: typeof navigator === 'undefined' || navigator.onLine !== false,
+    pending: syncQueue.length,
+    retrying: _syncRetrying,
+    lastSyncedAt: _lastCloudSyncAt,
+  });
+
+  host.hidden = !view.visible;
+  host.classList.toggle('is-offline', view.tone === 'offline');
+  host.classList.toggle('is-pending', view.tone === 'pending');
+  host.classList.toggle('is-failed', view.tone === 'failed');
+
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  set('sync-chip-ico', view.icon ?? '');
+  set('sync-chip-title', view.title ?? '');
+  set('sync-chip-detail', view.detail ?? '');
+  set('sync-chip-meta', view.meta ?? '');
+  host.setAttribute('aria-label', view.srText ?? '');
+
+  const action = document.getElementById('sync-chip-action');
+  if (action) {
+    action.hidden = !view.action;
+    if (view.action) {
+      action.textContent = view.action.label;
+      action.title = view.action.title;
+    }
+  }
+
+  // "Last upload 14 min ago" goes stale on its own, so keep a slow tick running
+  // only while the chip is actually on screen.
+  clearInterval(_syncChipTimer);
+  _syncChipTimer = null;
+  if (view.visible && view.meta) _syncChipTimer = setInterval(renderSyncChip, 60_000);
+}
+
+/**
+ * Drop the backoff and drain the queue immediately. Wired to the chip's
+ * "Try again now" button — the moment a publisher knows the connection is back
+ * is usually well before the next scheduled retry.
+ */
+function retrySyncNow() {
+  clearTimeout(_syncRetryTimer);
+  _syncRetryTimer = null;
+  _syncRetryAttempt = 0;
+  processSyncQueue();
+}
+
 // Persist a not-yet-saved book state so an optimistic UI change is never
 // lost. Only the LATEST snapshot per book is kept — a newer edit supersedes
 // an older queued one, so rapid edits don't grow the queue unbounded.
@@ -1913,6 +1994,7 @@ function updatePendingIndicator() {
   if (n > 0) {
     setSyncState('syncing', `<b>Firestore</b> · ${n} change${n === 1 ? '' : 's'} pending…`);
   }
+  renderSyncChip();
 }
 
 async function processSyncQueue() {
@@ -1944,13 +2026,16 @@ async function processSyncQueue() {
     syncQueue.shift();
     localStorage.setItem('lm-sync-queue', JSON.stringify(syncQueue));
     _syncRetryAttempt = 0;
+    _syncRetrying = false;
     _syncFlushing = false;
+    markCloudSynced();
     if (syncQueue.length) {
       updatePendingIndicator();
       processSyncQueue();
     } else {
       setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
       showToast('✅ All changes synced');
+      renderSyncChip();
     }
   } catch (e) {
     console.error('Queue sync failed', e);
@@ -1958,17 +2043,37 @@ async function processSyncQueue() {
     // Schedule an automatic retry with exponential backoff (capped at 30s)
     // so a transient failure reconciles itself without user action.
     _syncRetryAttempt++;
+    _syncRetrying = true;
     const delay = Math.min(30000, 2000 * Math.pow(2, _syncRetryAttempt - 1));
     setSyncState('error', `<b>Firestore</b> · ${syncQueue.length} pending · retrying…`);
     if (_syncRetryAttempt === 1) {
       showToast('⚠ Save failed — your change is saved locally and will retry', 'err', 4000);
     }
+    renderSyncChip();
     clearTimeout(_syncRetryTimer);
     _syncRetryTimer = setTimeout(processSyncQueue, delay);
   }
 }
 
-window.addEventListener('online', processSyncQueue);
+// Connection changes are reflected the INSTANT they happen, not at the next
+// save attempt. Before this, walking out of Wi-Fi range at a market changed
+// nothing on screen — the status still read "Live" until something was sold.
+window.addEventListener('online', () => {
+  // A restored connection means the backoff clock is stale: drain now.
+  _syncRetryAttempt = 0;
+  clearTimeout(_syncRetryTimer);
+  _syncRetryTimer = null;
+  if (!syncQueue.length) setSyncState('ok', '<b>Firestore</b> · connected · live sync on');
+  renderSyncChip();
+  processSyncQueue();
+});
+window.addEventListener('offline', () => {
+  // setSyncState detects "offline" in the message and shows the amber dot; the
+  // chip carries the part that explains what happens to the work in the queue.
+  setSyncState('ok', '<b>Firestore</b> · offline · changes save on this device');
+  renderSyncChip();
+});
+
 export let sheetsUrl = localStorage.getItem('lm-sheets-url') || '';
 let sheetsSpreadsheetUrl = localStorage.getItem('lm-sheets-spreadsheet-url') || '';
 // Apps Script Web App endpoint used ONLY to fire the "needs approval"
@@ -2155,6 +2260,11 @@ initTheme();
 // initTheme() above for running here rather than on DOMContentLoaded.
 initStickyOffset();
 
+// Paint the sync chip on boot. This is the case a reload used to lose entirely:
+// open the app already offline, or with writes still queued from last session,
+// and nothing on screen said so until the next save was attempted.
+renderSyncChip();
+
 /**
  * Writes the --book-accent-* custom properties for a book (or the all-books
  * gold default).
@@ -2240,6 +2350,10 @@ function setSyncState(status, msg) {
   const sideDot = $('side-sync-dot'), sideText = $('side-sync-text');
   if (sideDot) sideDot.className = dotCls;
   if (sideText) sideText.textContent = word;
+  // The chip reads the same three facts this function is reacting to, so keep
+  // the two in lockstep rather than letting a caller update one and not the
+  // other. It is a no-op whenever there is nothing outstanding to say.
+  renderSyncChip();
 }
 
 // ── FIREBASE (per-book)
@@ -2292,6 +2406,9 @@ export async function saveState(bookId) {
       lastSavedHashes[bookId] = json;
     }
     lastSaveTimes[bookId] = Date.now();
+    // A confirmed cloud write — this is what "Last upload …" on the sync chip
+    // measures from, so the next offline stretch can say how stale the cloud is.
+    markCloudSynced();
     setSyncState('ok', '<b>Firestore</b> · saved · live sync on');
     const ind = $('save-ind'); if (ind) { ind.classList.add('show'); setTimeout(() => ind.classList.remove('show'), 2000); }
   } catch (e) {
@@ -19773,6 +19890,7 @@ function exposeLegacyInlineHandlers() {
     copyPaymentLink, downloadPaymentQR, renderAllQRCodes, renderAuthorQRPage,
     loadAuthorViewOverrides, saveAuthorViewOverrides, isPublisherSession, isAuthor,
     animateCountValue, triggerCardAnimations, queueSync, updatePendingIndicator, processSyncQueue,
+    renderSyncChip, retrySyncNow,
     defaultState, getState, getBook, showToast, confirmDialog, promptDialog, notify, setSyncState, saveState,
     loadBook, toggleFirestoreMode, loadTaxCenter, saveTaxCenter, processRecurringExpenses,
     refreshDailyRates, loadAllBooks, forceSync, buildBookSwitcher, toggleBookDropdown,

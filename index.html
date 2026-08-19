@@ -4453,6 +4453,22 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Persistent sync chip. Fixed to the bottom-left (the toast owns the right)
+     so it survives scrolling and never shifts the layout or the --sticky-top
+     offset the ledger headers pin against. Rendered by renderSyncChip() in
+     src/main.js from lib/sync-status.js; hidden entirely whenever the app is
+     online with an empty queue, so it only ever appears with something to say. -->
+<div class="sync-chip" id="sync-chip" hidden role="status" aria-live="polite">
+  <span class="sync-chip-ico" id="sync-chip-ico" aria-hidden="true">⚡</span>
+  <span class="sync-chip-text">
+    <span class="sync-chip-title" id="sync-chip-title"></span>
+    <span class="sync-chip-detail" id="sync-chip-detail"></span>
+    <span class="sync-chip-meta" id="sync-chip-meta"></span>
+  </span>
+  <button type="button" class="sync-chip-action" id="sync-chip-action" hidden
+          onclick="retrySyncNow()">Try again now</button>
+</div>
+
 <!-- Styled confirm dialog (replaces browser confirm/alert) -->
 <div class="overlay" id="m-confirm" style="display:none;z-index:1200;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:440px;">
