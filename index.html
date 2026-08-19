@@ -1291,6 +1291,21 @@
     </div>
   </div>
   <div id="hist-filter-bar" style="display:none;"></div>
+  <!-- The input is permanent markup rather than part of renderHist()'s output:
+       a field rebuilt by innerHTML on every keystroke loses its caret. The
+       status line is permanent for the same reason renderLedgerFilterBar()'s
+       is — a live region replaced wholesale announces nothing. -->
+  <div class="ledger-filter-bar" id="hist-search-bar" role="search" aria-label="Search this book's order history" hidden>
+    <div class="ledger-filter-row">
+      <label class="ledger-filter-field hist-search-field">
+        <span class="ledger-filter-label">Find an order</span>
+        <input type="search" id="hist-search" class="ledger-filter-input" autocomplete="off"
+          placeholder="Order number, channel, note, store, name…" oninput="histSearchInput(this.value)">
+      </label>
+      <button type="button" class="btn sm" id="hist-search-clear" onclick="clearHistSearch()" hidden>✕ Clear search</button>
+    </div>
+    <p class="ledger-filter-status" id="hist-search-status" aria-live="polite"></p>
+  </div>
   <div id="hist-recon" style="display:none;"></div>
   <div class="tbl-wrap sys-sticky-head"><table class="tbl"><thead><tr><th>Order #</th><th>Channel</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Total</th><th class="r">Stock after</th><th>Notes</th><th>Entered by</th><th>Date</th><th></th></tr></thead><tbody id="hist-body"></tbody></table></div>
 </div>

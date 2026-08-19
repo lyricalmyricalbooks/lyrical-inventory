@@ -39,6 +39,7 @@ the same voice as the commit subject.
 | 2026-08-19 | Consignment ledger | Showed one store's rows, and what that store owes | #577 |
 | 2026-08-19 | Event POS | Showed how many copies are left before you sell them | #579 |
 | 2026-08-19 | Expenses | Stopped the expense total mixing currencies into one wrong number | #580 |
+| 2026-08-19 | Order History | Made it possible to find one order without scrolling | #581 |
 
 ---
 
