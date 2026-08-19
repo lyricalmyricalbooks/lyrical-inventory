@@ -174,9 +174,9 @@ import {
   configureModals,
   confirmDialog,
   fieldError,
-  modalFieldsChanged,
   openM,
   promptDialog,
+  refreshUnsavedMarkers,
   validateFields,
 } from './lib/modal.js';
 import {
@@ -963,9 +963,12 @@ function openEditBookModal(id) {
   openM('add-book');
 }
 
-function closeAddBookModal() {
-  closeM('add-book');
-  resetBookForm();
+// Cancel used to drop a half-written book on the floor — the footer flagged the
+// unsaved changes and then discarded them anyway. Route it through the same
+// guard Esc and the backdrop already use, and only reset the form once the
+// dialog has actually closed.
+async function closeAddBookModal() {
+  if (await attemptCloseModal('add-book')) resetBookForm();
 }
 
 function isValidPaymentLink(str) {
@@ -983,15 +986,10 @@ function isValidPaymentLink(str) {
   return emailRegex.test(str) || isUrl;
 }
 
+// Kept as the Add Book form's named entry point, but the logic now lives in
+// lib/modal.js so every dialog raises the same flag from the same code.
 function updateUnsavedIndicator() {
-  const ind = $('add-book-unsaved-indicator');
-  if (!ind) return;
-  const isChanged = modalFieldsChanged('add-book');
-  if (isChanged) {
-    ind.classList.add('show');
-  } else {
-    ind.classList.remove('show');
-  }
+  refreshUnsavedMarkers();
 }
 window.updateUnsavedIndicator = updateUnsavedIndicator;
 
@@ -13820,18 +13818,17 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('input', (e) => {
     const t = e.target;
     if (t && t.closest && t.closest('.form-group.invalid')) clearFieldError(t);
-    // If the input is inside #m-add-book overlay, update the unsaved changes indicator.
-    if (t && t.closest && t.closest('#m-add-book')) {
-      updateUnsavedIndicator();
-    }
+    // Any dialog, not just Add Book: typing in an open form raises that form's
+    // "unsaved changes" flag. refreshUnsavedMarkers drives the Add Book
+    // indicator too, so there is no bespoke path left to keep in step.
+    if (t && t.closest && t.closest('.overlay[id^="m-"]')) refreshUnsavedMarkers();
   });
 
-  // Listen for changes (like select dropdowns or color input) inside #m-add-book
+  // Same for changes that don't fire `input` — select dropdowns, colour swatches,
+  // checkboxes — in any open dialog.
   document.addEventListener('change', (e) => {
     const t = e.target;
-    if (t && t.closest && t.closest('#m-add-book')) {
-      updateUnsavedIndicator();
-    }
+    if (t && t.closest && t.closest('.overlay[id^="m-"]')) refreshUnsavedMarkers();
   });
 });
 

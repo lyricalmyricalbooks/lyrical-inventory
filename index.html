@@ -1401,7 +1401,7 @@
       <button class="btn gold outline" onclick="exportTripCSV(_tcOpenTripName)">⬇ Export CSV</button>
       <button class="btn tag" onclick="setTripBudgetPrompt(_tcOpenTripName)">🎯 Set budget</button>
     </div>
-    <button class="btn" onclick="closeM('tc-trip-detail')">Close</button>
+    <button class="btn" onclick="attemptCloseModal('tc-trip-detail')">Close</button>
   </div>
 </div></div>
 
@@ -1476,7 +1476,7 @@
   <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:16px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
     <button class="btn danger-btn" id="tc-pending-delete" onclick="deletePendingExpense()" style="display:none;">🗑 Delete note</button>
     <div style="display:flex;gap:8px;margin-left:auto;">
-      <button class="btn" onclick="closeM('tc-pending')">Cancel</button>
+      <button class="btn" onclick="attemptCloseModal('tc-pending')">Cancel</button>
       <button class="btn gold" id="tc-pending-save" onclick="savePendingExpense()">Save note</button>
     </div>
   </div>
@@ -1542,7 +1542,7 @@
   <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:16px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
     <button class="btn danger-btn" id="tc-new-trip-delete" onclick="deleteTripRecord()" style="display:none;">🗑 Delete trip</button>
     <div style="display:flex;gap:8px;margin-left:auto;">
-      <button class="btn" onclick="closeM('tc-new-trip')">Cancel</button>
+      <button class="btn" onclick="attemptCloseModal('tc-new-trip')">Cancel</button>
       <button class="btn gold" id="tc-new-trip-save" onclick="saveNewTrip()">Create trip</button>
     </div>
   </div>
@@ -1563,7 +1563,7 @@
     </div>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
-    <button class="btn" onclick="closeM('tc-edit-trip')">Cancel</button>
+    <button class="btn" onclick="attemptCloseModal('tc-edit-trip')">Cancel</button>
     <button class="btn gold" onclick="saveTripAssignment()">Save</button>
   </div>
 </div></div>
@@ -1646,7 +1646,7 @@
   <div class="rec-preview" id="rec-edit-preview" aria-live="polite"></div>
 
   <div class="modal-footer" style="margin-top:14px;">
-    <button class="btn" onclick="closeM('rec-edit')">Cancel</button>
+    <button class="btn" onclick="attemptCloseModal('rec-edit')">Cancel</button>
     <button class="btn gold" id="rec-edit-save" onclick="saveRecurringEditor()">Add subscription</button>
   </div>
 </div></div>
@@ -1662,7 +1662,7 @@
     </table>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
-    <button class="btn" onclick="closeM('tc-cat-detail')">Close</button>
+    <button class="btn" onclick="attemptCloseModal('tc-cat-detail')">Close</button>
   </div>
 </div></div>
 
@@ -1727,7 +1727,7 @@
     <!-- Populated by openTaxSeasonPreflightModal() -->
   </div>
   <div class="modal-footer" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-    <button class="btn" type="button" onclick="closeM('tc-preflight')">Cancel</button>
+    <button class="btn" type="button" onclick="attemptCloseModal('tc-preflight')">Cancel</button>
     <div style="display:flex;gap:8px;">
       <button class="btn tag" type="button" id="tc-preflight-fix-btn" onclick="tcJumpToFixPreflightIssues()" style="display:none;">🔍 Review &amp; Fix Missing Receipts</button>
       <button class="btn gold" type="button" id="tc-preflight-export-btn" onclick="executeFullTaxSeasonExport()">⬇ Download Tax Season Export</button>
@@ -1748,7 +1748,7 @@
       <button class="btn sm" type="button" onclick="tcLightboxRotate()" title="Rotate 90°" aria-label="Rotate 90 degrees">↻ Rotate</button>
       <button class="btn sm" type="button" onclick="tcLightboxReset()" title="Reset Zoom &amp; Rotation">↺ Reset</button>
       <a class="btn sm" id="tc-lightbox-open-external" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;" title="Open in new window">↗ Open</a>
-      <button class="btn sm" type="button" onclick="closeM('tc-receipt-lightbox')" aria-label="Close lightbox">✕</button>
+      <button class="btn sm" type="button" onclick="attemptCloseModal('tc-receipt-lightbox')" aria-label="Close lightbox">✕</button>
     </div>
   </div>
   <div class="tc-lightbox-body" id="tc-lightbox-body" style="flex:1;min-height:360px;max-height:60vh;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--surface-sunken);border-radius:var(--r2);padding:16px;position:relative;">
@@ -1767,7 +1767,7 @@
       <span id="tc-lightbox-counter" style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;min-width:60px;text-align:center;"></span>
       <button class="btn sm" type="button" id="tc-lightbox-next-btn" onclick="tcLightboxNav(1)">Next ›</button>
     </div>
-    <button class="btn" type="button" onclick="closeM('tc-receipt-lightbox')">Close</button>
+    <button class="btn" type="button" onclick="attemptCloseModal('tc-receipt-lightbox')">Close</button>
   </div>
 </div></div>
 
@@ -1932,7 +1932,7 @@
 <div class="overlay" id="m-inventory-valuation-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:960px; width:95vw;">
   <div class="modal-title" style="display:flex; justify-content:space-between; align-items:center;">
     <span>📦 Inventory Valuation Asset Report</span>
-    <button class="btn tx" onclick="closeM('inventory-valuation-modal')" style="font-size:16px; padding:2px 8px;">✕</button>
+    <button class="btn tx" onclick="attemptCloseModal('inventory-valuation-modal')" style="font-size:16px; padding:2px 8px;">✕</button>
   </div>
   <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:16px;">
     Balance Sheet asset audit across warehouse on-hand stock and partner store consignment inventory.
@@ -1987,7 +1987,7 @@
       <div style="font-size:11px; color:var(--text3);">* FX conversion rates applied automatically to non-CAD currencies.</div>
     </div>
     <div style="display:flex; gap:8px;">
-      <button type="button" class="btn" onclick="closeM('inventory-valuation-modal')">Close</button>
+      <button type="button" class="btn" onclick="attemptCloseModal('inventory-valuation-modal')">Close</button>
       <button type="button" class="btn gold outline" onclick="printInventoryValuationReport()">🖨️ Print Report</button>
       <button type="button" class="btn gold" onclick="downloadInventoryValuationCSV()">📥 Download CSV / Excel</button>
     </div>
@@ -1998,7 +1998,7 @@
 <div class="overlay" id="m-inventory-writeoff-modal" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:520px; width:92vw;">
   <div class="modal-title" style="display:flex; justify-content:space-between; align-items:center;">
     <span>📉 Inventory Write-Off &amp; Depreciation</span>
-    <button class="btn tx" onclick="closeM('inventory-writeoff-modal')" style="font-size:16px; padding:2px 8px;">✕</button>
+    <button class="btn tx" onclick="attemptCloseModal('inventory-writeoff-modal')" style="font-size:16px; padding:2px 8px;">✕</button>
   </div>
   <div style="font-size:12px; color:var(--text3); margin-top:-6px; margin-bottom:16px;">
     Deduct damaged, lost, or promotional copies from ending inventory assets to record a deductible tax write-off.
@@ -2047,7 +2047,7 @@
     </div>
 
     <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
-      <button type="button" class="btn" onclick="closeM('inventory-writeoff-modal')">Cancel</button>
+      <button type="button" class="btn" onclick="attemptCloseModal('inventory-writeoff-modal')">Cancel</button>
       <button type="submit" class="btn gold" style="background:var(--red); border-color:var(--red); color:var(--on-status);">📉 Record Tax Write-Off</button>
     </div>
   </form>
@@ -3678,7 +3678,7 @@
     </div>
 
     <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;">
-      <button class="btn" onclick="closeM('bc-address-preview')">Close</button>
+      <button class="btn" onclick="attemptCloseModal('bc-address-preview')">Close</button>
       <div style="display:flex; gap:8px;">
         <button class="btn gold" id="bc-addr-copy-btn">📋 Copy Address</button>
         <button class="btn gold" id="bc-addr-ship-btn">📦 Open in Shipping</button>
@@ -3724,7 +3724,7 @@
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ns-website">Website</label><input id="ns-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="ns-rate">Commission rate (%)<span class="tip tip-mark" data-tip="The store's cut of each sale. At 40%, you keep 60% of the list price on every book they sell.">?</span></label><input id="ns-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="ns-terms">Payment terms<span class="tip tip-mark" data-tip="When the store pays you for sold books — e.g. Net 30 (within 30 days) or paid on each sale. For your reference only.">?</span></label><input id="ns-terms" placeholder="e.g. Net 30, paid on sale"></div>
   <div class="form-group"><label for="ns-notes">Notes</label><textarea id="ns-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
-  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('add-store')">Cancel</button><button class="btn gold" onclick="addStore()">Add store</button></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('add-store')">Cancel</button><button class="btn gold" onclick="addStore()">Add store</button></div>
 </div></div>
 
 <div class="overlay" id="m-edit-store" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
@@ -3737,7 +3737,7 @@
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="es-website">Website</label><input id="es-website" placeholder="e.g. store.com"></div><div class="form-group"><label for="es-rate">Commission rate (%)</label><input id="es-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="es-terms">Payment terms</label><input id="es-terms" placeholder="e.g. Net 30, paid on sale"></div>
   <div class="form-group"><label for="es-notes">Notes</label><textarea id="es-notes" placeholder="Delivery info, special arrangements…"></textarea></div>
-  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('edit-store')">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('edit-store')">Cancel</button><button class="btn gold" onclick="confirmEditStore()">Save changes</button></div>
 </div></div>
 
 <div class="overlay" id="m-send-books" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
@@ -3745,7 +3745,7 @@
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="send-qty">Qty to send</label><input id="send-qty" type="number" inputmode="numeric" value="10" min="1"></div><div class="form-group"><label for="send-date">Date sent</label><input id="send-date" type="date"></div></div>
   <div class="form-group" style="margin-bottom:12px;"><label for="send-rate">Commission rate (%)</label><input id="send-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div>
   <div class="form-group"><label for="send-notes">Notes</label><input id="send-notes" placeholder="e.g. delivery ref, batch #"></div>
-  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
 </div></div>
 
 <div class="overlay" id="m-bulk-send" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
@@ -3760,7 +3760,7 @@
     <div class="form-group"><label for="bulk-notes">Notes (all)</label><input id="bulk-notes" placeholder="e.g. spring launch batch"></div>
   </div>
   <div id="bulk-send-list" style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:2px 12px;margin-bottom:6px;"></div>
-  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('bulk-send')">Cancel</button><button class="btn gold" onclick="confirmBulkSend()">Send books</button></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('bulk-send')">Cancel</button><button class="btn gold" onclick="confirmBulkSend()">Send books</button></div>
 </div></div>
 
 <div class="overlay" id="m-record-sale" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
@@ -3774,7 +3774,7 @@
       <span>Draft an invoice for this store after saving</span>
     </label>
   </div>
-  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('record-sale')">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('record-sale')">Cancel</button><button class="btn gold" onclick="confirmSale()">Record sale</button></div>
 </div></div>
 
 <div class="overlay" id="m-return" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
@@ -3782,7 +3782,7 @@
   <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="ret-qty">Qty returned</label><input id="ret-qty" type="number" inputmode="numeric" value="1" min="1"></div><div class="form-group"><label for="ret-date">Date</label><input id="ret-date" type="date"></div></div>
   <div class="form-group"><label for="ret-cond">Condition</label><select id="ret-cond"><option>Good — return to stock</option><option>Damaged — write off</option></select></div>
   <div class="form-group" style="margin-top:12px;"><label for="ret-notes">Notes</label><input id="ret-notes" placeholder="e.g. reason for return"></div>
-  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="closeM('return')">Cancel</button><button class="btn gold" onclick="confirmReturn()">Record return</button></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('return')">Cancel</button><button class="btn gold" onclick="confirmReturn()">Record return</button></div>
 </div></div>
 
 
@@ -3839,7 +3839,7 @@
   </div>
 
   <div class="modal-footer" role="dialog" aria-modal="true">
-    <button class="btn" onclick="closeM('edit-entry')">Cancel</button>
+    <button class="btn" onclick="attemptCloseModal('edit-entry')">Cancel</button>
     <button class="btn gold" onclick="saveEntryEdit()">Save changes</button>
   </div>
 </div></div>
@@ -3894,7 +3894,7 @@
   </div>
 
   <div class="modal-footer" role="dialog" aria-modal="true">
-    <button class="btn" onclick="closeM('edit-expense')">Cancel</button>
+    <button class="btn" onclick="attemptCloseModal('edit-expense')">Cancel</button>
     <button class="btn gold" onclick="saveExpenseEdit()">Save changes</button>
   </div>
 </div></div>
@@ -3995,7 +3995,7 @@
   <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;">
     <button class="btn danger-btn" id="inv-delete-btn" style="display:none;" onclick="deleteInvoice()">Delete invoice</button>
     <div style="display:flex;gap:8px;">
-      <button class="btn" onclick="closeM('invoice-edit')">Cancel</button>
+      <button class="btn" onclick="attemptCloseModal('invoice-edit')">Cancel</button>
       <button class="btn gold" onclick="saveInvoice('sent')">Save &amp; finalize</button>
     </div>
   </div>
@@ -4017,7 +4017,7 @@
       <button class="btn ink" onclick="downloadInvoiceHTML()" title="Download the invoice as an HTML file">⬇ HTML</button>
       <button class="btn ink" onclick="printInvoice()">🖨 Print</button>
       <button class="btn gold" id="inv-mark-paid-btn" onclick="markInvoicePaidFromView()">✓ Mark paid</button>
-      <button class="btn" onclick="closeM('invoice-view')">Close</button>
+      <button class="btn" onclick="attemptCloseModal('invoice-view')">Close</button>
     </div>
   </div>
 
@@ -4080,7 +4080,7 @@
   </div>
 
   <div class="modal-footer" role="dialog" aria-modal="true">
-    <button class="btn" onclick="closeM('invoice-settings')">Cancel</button>
+    <button class="btn" onclick="attemptCloseModal('invoice-settings')">Cancel</button>
     <button class="btn gold" onclick="saveInvoiceSettings()">Save settings</button>
   </div>
 </div></div>
@@ -4110,7 +4110,7 @@
     <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:6px;background:var(--green-bg);color:var(--green);border:1px solid var(--green-bg);"></div>
 
     <div class="modal-footer" role="dialog" aria-modal="true">
-      <button class="btn" onclick="closeM('shipping-label')">Cancel</button>
+      <button class="btn" onclick="attemptCloseModal('shipping-label')">Cancel</button>
       <button class="btn" id="sl-toggle-shipped-btn" onclick="toggleShipped()" style="display:none;">Mark as shipped</button>
       <button class="btn gold" onclick="printShippingLabel()">🖨 Print &amp; mark shipped</button>
     </div>
@@ -4134,7 +4134,7 @@
       ⚠ This will <strong>add</strong> these rows to the current book's history. It will not overwrite existing data. Stock and revenue will be recalculated.
     </div>
     <div class="modal-footer" role="dialog" aria-modal="true">
-      <button class="btn" onclick="closeM('import')">Cancel</button>
+      <button class="btn" onclick="attemptCloseModal('import')">Cancel</button>
       <button class="btn gold" id="import-confirm-btn" onclick="confirmImport()">Import <span id="import-count">0</span> orders</button>
     </div>
   </div>
@@ -4234,7 +4234,7 @@
     </div>
   </div>
 
-  <div class="modal-footer" role="dialog" aria-modal="true"><span id="add-book-unsaved-indicator" class="save-indicator" style="color:var(--gold);margin-right:auto;align-self:center;">* Unsaved changes</span><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
+  <div class="modal-footer" role="dialog" aria-modal="true"><span id="add-book-unsaved-indicator" class="save-indicator" role="status" aria-hidden="true">● Unsaved changes</span><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
 </div></div>
 
 <!-- PAYMENT QR MODAL -->
@@ -4279,7 +4279,7 @@
     </div>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true">
-    <button class="btn" onclick="closeM('payment-qr')">Close</button>
+    <button class="btn" onclick="attemptCloseModal('payment-qr')">Close</button>
     <button class="btn gold" onclick="downloadPaymentQR()">Download Image</button>
   </div>
 </div></div>
@@ -4363,7 +4363,7 @@
 
   <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" id="pp-reset-btn" onclick="posResetPrice()">Reset to list</button>
-    <button class="btn" onclick="closeM('pos-price')">Cancel</button>
+    <button class="btn" onclick="attemptCloseModal('pos-price')">Cancel</button>
     <button class="btn gold" onclick="savePosPrice()">Apply price</button>
   </div>
 </div></div>
@@ -4384,7 +4384,7 @@
     </div>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true">
-    <button class="btn" onclick="closeM('pos-qr')">Close</button>
+    <button class="btn" onclick="attemptCloseModal('pos-qr')">Close</button>
     <button class="btn gold" onclick="downloadPosQR()">Download Image</button>
   </div>
 </div></div>
@@ -4407,7 +4407,7 @@
     <strong id="pos-confirm-total" style="font-size:18px;color:var(--green);"></strong>
   </div>
   <div class="modal-footer" role="dialog" aria-modal="true">
-    <button class="btn" onclick="closeM('pos-sale-confirm')">Cancel</button>
+    <button class="btn" onclick="attemptCloseModal('pos-sale-confirm')">Cancel</button>
     <button class="btn" onclick="posPrintReceipt()">Print receipt</button>
     <button class="btn gold" onclick="posConfirmSale()">Confirm sale</button>
   </div>
@@ -4422,7 +4422,7 @@
       <!-- Populated dynamically -->
     </div>
     <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px;">
-      <button type="button" class="btn gold" onclick="closeM('whats-new')">Dismiss</button>
+      <button type="button" class="btn gold" onclick="attemptCloseModal('whats-new')">Dismiss</button>
     </div>
   </div>
 </div>
@@ -4554,7 +4554,7 @@
     <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:12px;">Pick the book to restore. Only that book's catalog entry, inventory, history and consignment ledger are overwritten from this snapshot — every other book and all your settings stay exactly as they are now.</div>
     <div id="restore-book-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;"></div>
     <div class="modal-footer" role="dialog" aria-modal="true">
-      <button type="button" class="btn" onclick="closeM('restore-book')">Cancel</button>
+      <button type="button" class="btn" onclick="attemptCloseModal('restore-book')">Cancel</button>
     </div>
   </div>
 </div>

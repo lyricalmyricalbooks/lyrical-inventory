@@ -2660,8 +2660,25 @@ tr.hist-row:hover {
 .section-hed{font-family:'Playfair Display',serif;font-size:20px;color:var(--text);}
 .hint-text{font-size:11px;color:var(--text3);margin-top:6px;}
 .hint-text.amber{color:var(--orange-ink);}
-.save-indicator{font-size:11px;color:var(--gold);opacity:0;transition:opacity .3s;font-family:'DM Mono',monospace;}
-.save-indicator.show{opacity:1;}
+/* Unsaved-changes flag in a dialog footer. Amber, because the house convention
+   is amber = active / needs attention (see .agents/UX_PATTERNS.md) — a gold
+   flag read as decoration next to the gold Save button. Injected into any open
+   dialog's footer by refreshUnsavedMarkers() in src/lib/modal.js; the Add Book
+   form authors its own span and this styles that one too.
+   Not present in the DOM until something is actually typed, so an untouched
+   footer keeps exactly the layout it had before. */
+.save-indicator{
+  display:inline-flex;align-items:center;gap:5px;
+  margin-right:auto;align-self:center;
+  padding:3px 9px;border-radius:100px;
+  background:var(--status-active-bg);color:var(--status-active);
+  border:1px solid color-mix(in srgb, var(--status-active) 30%, transparent);
+  font-family:'DM Mono',monospace;font-size:var(--text-xs);font-weight:600;
+  letter-spacing:.04em;white-space:nowrap;
+  opacity:0;transform:translateY(2px);
+  transition:opacity var(--dur-base) var(--ease-entrance),transform var(--dur-base) var(--ease-entrance);
+}
+.save-indicator.show{opacity:1;transform:none;}
 .mono{font-family:'DM Mono',monospace;font-size:12px;}
 .empty-state{text-align:center;padding:3rem 1rem;color:var(--text3);font-size:14px;}
 .empty-state .e-icon{font-size:36px;margin-bottom:.75rem;opacity:.35;}
@@ -2969,6 +2986,9 @@ tr.hist-row:hover {
   .modal-title{font-size:20px;margin-bottom:1rem;}
   .modal-footer{position:sticky;bottom:0;background:var(--cream);padding-top:.75rem;flex-wrap:wrap;}
   .modal-footer .btn{flex:1;}
+  /* On a phone the buttons already fill the row, so the unsaved flag takes its
+     own line above them rather than squeezing Cancel and Save narrower. */
+  .modal-footer .save-indicator{flex-basis:100%;justify-content:center;margin-right:0;}
 
   /* Toasts above bottom nav */
   .toast{
