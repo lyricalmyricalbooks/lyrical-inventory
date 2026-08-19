@@ -10263,3 +10263,198 @@ tr.hist-row:hover {
   .fk-preview{grid-template-columns:minmax(0,1fr);}
   .fk-sheets{display:none;}
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ARTIST PAYOUTS — the money half of the Profit Sharing panel
+   ──────────────────────────────────────────────────────────────────────────
+   Recording a payout used to be four 6px-tall inputs with no feedback: you
+   typed a figure, saved, and only then found out whether it had overshot the
+   balance (the card silently flipped to "Overpaid to artist"). This block
+   gives the form real fields, a live verdict line, and a history list that
+   totals itself.
+
+   Every value here is a token, so the whole block themes itself — the old
+   inline `rgba(0,0,0,.05)` hairlines it replaces simply vanished in dark mode.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ps-payout-section{
+  margin-top:var(--space-5);
+  padding-top:var(--space-4);
+  border-top:1px solid var(--border-default);
+}
+.ps-payout-head{
+  display:flex;justify-content:space-between;align-items:center;
+  gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-3);
+}
+
+/* ── The form ─────────────────────────────────────────────────────────────
+   `hidden` rather than an inline display flip, so the open/closed state is in
+   the DOM where assistive tech can read it instead of in a style attribute. */
+.ps-payout-form{
+  padding:var(--space-4);
+  margin-bottom:var(--space-3);
+  background:var(--surface-sunken);
+  border:1px solid var(--border-default);
+  border-radius:var(--r2);
+}
+.ps-payout-form[hidden]{display:none;}
+.ps-payout-fields{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--space-3);
+}
+/* Panel width, not viewport width: this form renders inside a full-width
+   dashboard card and inside a narrow single-book column, and only its own
+   width decides whether two fields still fit side by side. */
+@container (max-width:420px){
+  .ps-payout-fields{grid-template-columns:minmax(0,1fr);}
+}
+.ps-payout-form .form-group{margin-bottom:0;}
+/* Fitts's Law: a money field is not a place to miss. The inputs sit at the
+   full 44px target even though .btn deliberately stays denser. */
+.ps-payout-form .form-group input{
+  min-height:var(--target-min);
+  background:var(--surface-card);
+}
+/* Amounts and dates in tabular figures so a column of them lines up on the
+   decimal, per AGENTS.md §5. */
+.ps-payout-num{
+  font-family:'DM Mono',monospace !important;
+  font-feature-settings:"tnum" 1,"zero" 1;
+}
+
+/* ── The live verdict ─────────────────────────────────────────────────────
+   Neutral while the figure still leaves a balance, emerald once it settles
+   one, amber when it would overshoot — the app's amber = needs-attention,
+   green = settled convention, not a fourth colour language. */
+.ps-payout-preview{
+  margin-top:var(--space-3);
+  padding:10px 12px;
+  border-radius:var(--r2);
+  font-size:var(--text-sm);
+  line-height:var(--leading-snug);
+  color:var(--content-secondary);
+  background:var(--status-neutral-bg);
+  border-left:3px solid var(--border-strong);
+  transition:background-color var(--dur-fast) var(--ease-standard),
+             border-color var(--dur-fast) var(--ease-standard),
+             color var(--dur-fast) var(--ease-standard);
+}
+.ps-payout-preview:empty{display:none;}
+.ps-payout-preview.is-good{
+  color:var(--status-positive);
+  background:var(--status-positive-bg);
+  border-left-color:var(--status-positive);
+}
+.ps-payout-preview.is-warn{
+  color:var(--status-active);
+  background:var(--status-active-bg);
+  border-left-color:var(--status-active);
+}
+.ps-payout-actions{
+  display:flex;align-items:center;flex-wrap:wrap;
+  gap:var(--space-2);margin-top:var(--space-3);
+}
+/* UX_PATTERNS.md's standing ruling keeps the GLOBAL .btn at ~33px, and points
+   at per-control opt-in for the ones that genuinely need a full target. These
+   qualify: Save writes a financial record and Cancel discards a half-typed
+   one, both often on a phone. Scoped here, so nothing else reflows. */
+.ps-payout-actions .btn{
+  min-height:var(--target-min);
+  transition:transform var(--dur-base) var(--ease-entrance),
+             box-shadow var(--dur-base) var(--ease-entrance),
+             background-color var(--dur-fast) var(--ease-standard),
+             border-color var(--dur-fast) var(--ease-standard);
+}
+.ps-payout-actions .btn:hover{transform:translateY(-2px);box-shadow:var(--elev-hover);}
+.ps-payout-actions .btn:active{transform:scale(.975);}
+
+/* ── The history list ─────────────────────────────────────────────────────── */
+.ps-payout-list{
+  background:var(--surface-sunken);
+  border-radius:var(--r2);
+  overflow:hidden;
+}
+.ps-payout-row{
+  display:flex;justify-content:space-between;align-items:center;
+  gap:var(--space-3);
+  padding:var(--space-2) 10px;
+  font-size:var(--text-sm);
+  border-bottom:1px solid var(--border-subtle);
+  transition:background-color var(--dur-fast) var(--ease-standard);
+}
+.ps-payout-row:hover{background:var(--surface-inset);}
+.ps-payout-row-main{display:flex;flex-direction:column;min-width:0;}
+.ps-payout-row-amt{
+  font-family:'DM Mono',monospace;
+  font-feature-settings:"tnum" 1,"zero" 1;
+  font-weight:600;
+  color:var(--status-positive);
+}
+.ps-payout-row-meta{
+  font-size:var(--text-2xs);
+  color:var(--content-muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* Deleting a payout record moves a real balance, so the target is a full 44px
+   (.sys-target) rather than the 20px hit box it used to be. */
+.ps-payout-del{
+  flex-shrink:0;
+  color:var(--content-muted);
+}
+.ps-payout-del:hover{
+  color:var(--status-critical);
+  background:var(--status-critical-bg);
+  border-color:var(--status-critical-bg);
+}
+/* Reconciles against the "Paid to artist" card above without adding the rows
+   up by hand. */
+.ps-payout-total{
+  display:flex;justify-content:space-between;align-items:center;
+  gap:var(--space-3);
+  padding:10px;
+  font-size:var(--text-2xs);
+  font-weight:700;
+  letter-spacing:var(--tracking-caps);
+  text-transform:uppercase;
+  color:var(--content-muted);
+  background:var(--surface-inset);
+}
+.ps-payout-total-val{
+  font-family:'DM Mono',monospace;
+  font-feature-settings:"tnum" 1,"zero" 1;
+  font-size:var(--text-base);
+  letter-spacing:normal;
+  text-transform:none;
+  color:var(--content-primary);
+}
+.ps-payout-empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;
+  padding:var(--space-5) var(--space-4);
+  text-align:center;
+}
+.ps-payout-empty-icon{
+  display:flex;align-items:center;justify-content:center;
+  width:44px;height:44px;
+  border-radius:var(--r3);
+  background:var(--gold-bg);
+  box-shadow:inset 0 0 0 1px var(--gold-line);
+  font-size:var(--text-lg);
+}
+.ps-payout-empty strong{
+  font-size:var(--text-base);
+  color:var(--content-primary);
+}
+.ps-payout-empty span:not(.ps-payout-empty-icon){
+  max-width:46ch;
+  font-size:var(--text-xs);
+  line-height:var(--leading-snug);
+  color:var(--content-muted);
+}
+
+/* The motion tokens already collapse to 1ms; the transforms still need
+   standing down for anyone who asked for reduced motion. */
+@media (prefers-reduced-motion:reduce){
+  .ps-payout-actions .btn:hover,
+  .ps-payout-actions .btn:active{transform:none;}
+}
