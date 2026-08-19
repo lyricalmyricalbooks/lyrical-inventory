@@ -543,6 +543,7 @@ import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy } from './lib/inventory.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
+import { shipmentStockView } from './lib/shipment-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
@@ -7531,7 +7532,43 @@ function confirmEditStore() {
   st.name = name; st.contact = $('es-contact').value.trim(); st.email = $('es-email').value.trim(); st.phone = $('es-phone').value.trim(); st.address = $('es-address').value.trim(); st.city = $('es-city').value.trim(); st.region = $('es-region').value.trim(); st.postal = $('es-postal').value.trim(); st.country = $('es-country').value.trim(); st.website = $('es-website').value.trim(); st.terms = $('es-terms').value.trim(); st.rate = parseFloat($('es-rate').value) || st.rate; st.notes = $('es-notes').value.trim();
   closeM('edit-store'); renderStores(); updateDash(); saveState(activeBook); showToast('✓ Store updated');
 }
-function openSend(id) { activeId = id; const st = storeById(id); $('send-sname').textContent = st.name; $('send-rate').value = st.rate; openM('send-books'); }
+function openSend(id) { activeId = id; const st = storeById(id); $('send-sname').textContent = st.name; $('send-rate').value = st.rate; openM('send-books'); sendStockHint(); }
+
+// Live preview for the shipment dialog. Read-only: the ledger still owns stock,
+// this only reports what the box currently described in the form would do to it
+// — and to the store's shelf, so a restock doesn't read as a pure loss.
+//
+// Guarded end to end because it fires from an inline oninput and from openSend,
+// and a store can be removed between the two.
+function sendStockHint() {
+  const beforeEl = $('send-prev-before');
+  if (!beforeEl) return;
+  const book = getBook(), s = getState();
+  const st = (s && s.stores || []).find(x => x.id === activeId) || null;
+  const view = shipmentStockView({
+    onHand: s ? s.stock : 0,
+    qty: parseInt($('send-qty') ? $('send-qty').value : '', 10) || 0,
+    threshold: book ? book.threshold : 0,
+    storeOutstanding: st ? st.outstanding : 0,
+  });
+
+  beforeEl.textContent = view.onHand;
+  const afterEl = $('send-prev-after');
+  if (afterEl) afterEl.textContent = view.displayAfter;
+  const storeBeforeEl = $('send-prev-store-before');
+  if (storeBeforeEl) storeBeforeEl.textContent = view.storeBefore;
+  const storeAfterEl = $('send-prev-store-after');
+  if (storeAfterEl) storeAfterEl.textContent = view.storeAfter;
+
+  const pillEl = $('send-prev-pill');
+  if (pillEl) {
+    pillEl.className = `pill ${view.pill}`;
+    pillEl.textContent = `${view.glyph} ${view.label}`.trim();
+    pillEl.title = view.srText ?? '';
+  }
+  const noteEl = $('send-prev-note');
+  if (noteEl) noteEl.textContent = view.note ?? '';
+}
 function confirmSend() {
   const s = getState(), book = getBook(), st = storeById(activeId);
   if (!validateFields([
@@ -19608,7 +19645,7 @@ Object.assign(window, {
   fetchOrders, applyOne, applyAll, cancelOrder, restoreOrder, unapplyOne, onManualCurrencyChange, calcFx, calcManualFxRate, submitManual,
   onExpenseCurrencyChange, calcExpenseFx,
 
-  submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, confirmSend, openSale, confirmSale,
+  submitGratuity, openM, closeM, addStore, openEditStore, confirmEditStore, openSend, sendStockHint, confirmSend, openSale, confirmSale,
   exportConsignmentLedgerCSV, openBulkSend, bulkApplyQty, bulkQtyChanged, bulkCheckChanged, updateBulkSendSummary, confirmBulkSend,
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
   restoreBookDataFromSheets, resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
@@ -20391,7 +20428,7 @@ function exposeLegacyInlineHandlers() {
     markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll,
     renderArtistTransfers, markExpenseReceived, renderPendingExpenses, submitGratuity, storeById,
     getConsignmentStoresAcrossBooks, populateAddStoreDirectory, handleSelectExistingStore, clearAddStoreForm,
-    addStore, renderStores, removeStore, openEditStore, confirmEditStore, openSend, confirmSend,
+    addStore, renderStores, removeStore, openEditStore, confirmEditStore, openSend, sendStockHint, confirmSend,
     openBulkSend, bulkRowEls, bulkApplyQty, bulkQtyChanged, bulkCheckChanged,
     updateBulkSendSummary, confirmBulkSend, openSale, confirmSale, openRet, confirmReturn,
     settleLedgerSalePaid, maybeAutoPayInvoiceForLedger, invoiceBadgeHTML, markPaid,

@@ -52,11 +52,13 @@ bordered, neutral background, optional colored `.dot`.
 
 ### Reporting stock on a surface that spends it
 
-Any screen that moves inventory (POS register, manual entry, a future shipment form) should say
-what it is about to do to on-hand *before* it does it. Two pure helpers already encode this —
-`orderStockPreview()`/`orderStockPreviewCopy()` in [src/lib/inventory.js](../src/lib/inventory.js)
-for the manual-entry form, and `posStockView()`/`posOversellSummary()` in
-[src/lib/pos-stock.js](../src/lib/pos-stock.js) for the register. Four rules they share:
+Any screen that moves inventory (POS register, manual entry, the consignment shipment dialog)
+should say what it is about to do to on-hand *before* it does it. Three pure helpers already encode
+this — `orderStockPreview()`/`orderStockPreviewCopy()` in
+[src/lib/inventory.js](../src/lib/inventory.js) for the manual-entry form, `posStockView()`/
+`posOversellSummary()` in [src/lib/pos-stock.js](../src/lib/pos-stock.js) for the register, and
+`shipmentStockView()` in [src/lib/shipment-stock.js](../src/lib/shipment-stock.js) for "Send books
+to <store>". Four rules they share:
 
 - **Report, never recompute.** These helpers read a stock figure and describe it. The ledger keeps
   sole ownership of the number — no rounding, re-tallying, or writing back.
@@ -73,6 +75,20 @@ for the manual-entry form, and `posStockView()`/`posOversellSummary()` in
 
 Untracked things say nothing at all. A POS-only guest title has no catalog stock, so its card gets
 no pill — a `0` there would read as "out of stock" and stop a perfectly good sale.
+
+Two more, learned on the shipment dialog:
+- **A move is not a loss — report both shelves.** Sending copies to a store doesn't destroy them, so
+  the preview shows your stock falling *and* the store's holding rising side by side. A lone falling
+  number makes an ordinary restock read like a write-off.
+- **Pick the cutoff from the surface's own timescale.** The register deliberately ignores a book's
+  `threshold` (see above), but the shipment dialog uses it: shipping a box is a print-run-scale
+  decision, which is exactly the question the reorder alarm was sized for.
+
+**Reusing the preview strip.** `.order-preview-wrap` / `.order-preview` (`style.css:1868`) is the
+shared furniture: figure cells in tabular mono, a status `.pill`, a `.hint-text` note, a
+`@container orderpreview` reflow, and `:has(.pill.amber|red)` deriving the strip's own tint off that
+pill. It is not manual-entry-specific — drop it into any form that previews a mutation rather than
+styling a second one. It expects **exactly one** pill inside, or the `:has()` tint becomes ambiguous.
 
 ---
 

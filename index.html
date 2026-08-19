@@ -3769,7 +3769,28 @@
 
 <div class="overlay" id="m-send-books" style="display:none;"><div class="modal" role="dialog" aria-modal="true">
   <div class="modal-title" role="dialog" aria-modal="true">Send books to <span id="send-sname"></span></div>
-  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="send-qty">Qty to send</label><input id="send-qty" type="number" inputmode="numeric" value="10" min="1"></div><div class="form-group"><label for="send-date">Date sent</label><input id="send-date" type="date"></div></div>
+  <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="send-qty">Qty to send</label><input id="send-qty" type="number" inputmode="numeric" value="10" min="1" oninput="sendStockHint()"></div><div class="form-group"><label for="send-date">Date sent</label><input id="send-date" type="date"></div></div>
+  <!-- Live shipment preview — what this box does to your shelf and to the
+       store's, shown before "Send books" is pressed. Populated by
+       sendStockHint(); reuses the manual-entry order-preview furniture. -->
+  <div class="order-preview-wrap" style="margin-top:0;margin-bottom:12px;">
+    <div class="order-preview" id="send-preview">
+      <div class="order-preview-figures">
+        <div class="order-preview-cell">
+          <span class="order-preview-label">Your stock after sending</span>
+          <span class="order-preview-value"><span id="send-prev-before">—</span><span class="order-preview-arrow" aria-hidden="true">→</span><span class="order-preview-after" id="send-prev-after">—</span></span>
+        </div>
+        <div class="order-preview-cell">
+          <span class="order-preview-label">Store will hold</span>
+          <span class="order-preview-value"><span id="send-prev-store-before">—</span><span class="order-preview-arrow" aria-hidden="true">→</span><span id="send-prev-store-after">—</span></span>
+        </div>
+      </div>
+      <div class="order-preview-status">
+        <span class="pill gray" id="send-prev-pill" role="status" aria-live="polite">—</span>
+        <div class="hint-text" id="send-prev-note"></div>
+      </div>
+    </div>
+  </div>
   <div class="form-group" style="margin-bottom:12px;"><label for="send-rate">Commission rate (%)</label><input id="send-rate" type="number" inputmode="numeric" value="40" min="0" max="100"></div>
   <div class="form-group"><label for="send-notes">Notes</label><input id="send-notes" placeholder="e.g. delivery ref, batch #"></div>
   <div class="modal-footer" role="dialog" aria-modal="true"><button class="btn" onclick="attemptCloseModal('send-books')">Cancel</button><button class="btn gold" onclick="confirmSend()">Send books</button></div>
