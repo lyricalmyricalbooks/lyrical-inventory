@@ -2582,8 +2582,14 @@ function openTaxSeasonPreflightModal() {
   const { totalGrossSales, totalOperatingExpenses, allLedger } = _tcBuildLedger(year);
 
   // Check 1: Missing receipts (excluding rent / lease payments and gratuity copies which are exempt)
-  const expenseEntries = allLedger.filter(r => !r.isIncome);
-  const missingReceipts = expenseEntries.filter(r => !isReceiptExemptExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref)))).length;
+  // ⚡ Bolt Optimization: Replace chained .filter().length with an imperative counting loop
+  // to prevent allocating large intermediate arrays in this frequent UI render path.
+  let missingReceipts = 0;
+  for (const r of allLedger) {
+    if (!r.isIncome && !isReceiptExemptExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref)))) {
+      missingReceipts++;
+    }
+  }
 
   // Check 2: Foreign currency rate fallback warnings
   const rateWarnings = [];
