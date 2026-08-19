@@ -253,6 +253,51 @@ tbody.sys-long-list > tr {
   box-shadow: inset 3px 0 0 var(--status-active);
 }
 
+/* ── Sticky ledger headers ─────────────────────────────────────────────────
+   Opt-in on a `.tbl-wrap` whose table can outrun a screenful: the column
+   labels stay pinned under the app header instead of scrolling away, so the
+   twentieth row of figures is still readable as Qty / Unit price / Total /
+   Stock after rather than four anonymous mono columns.
+
+   Deliberately opt-in, not applied to `.tbl` globally, because several
+   `.tbl-wrap`s are already their own scroll container (an inline max-height
+   with overflow:auto) or live inside a scrolling modal body — there `top` would
+   resolve against the wrong box and push the header down inside the panel.
+   Apply it only to a table that scrolls with the PAGE.
+
+   `--sticky-top` is published by src/lib/sticky-header.js and tracks the real
+   height of the sticky app header. Absent that (no JS yet, no observer, no
+   sticky chrome) it falls back to 0px, which is still correct — the header just
+   pins to the top of the viewport. */
+.tbl-wrap.sys-sticky-head {
+  /* `clip` trims the rounded corners exactly like the base rule's `hidden`,
+     but — unlike `hidden` — does NOT make this a scroll container. That is the
+     whole trick: the header cells below can then resolve their sticky position
+     against the page instead of against a box that never scrolls. Engines
+     without `overflow: clip` drop this line, keep `hidden`, and simply render
+     today's non-sticky header. */
+  overflow: clip;
+}
+/* Below the table breakpoint the wrapper goes back to scrolling sideways —
+   reaching the last column matters more on a phone than pinning the labels —
+   so restore that here rather than let this higher-specificity rule win. */
+@media (max-width: 768px) {
+  .tbl-wrap.sys-sticky-head {
+    overflow-x: auto;
+    overflow-y: clip;
+  }
+}
+.tbl-wrap.sys-sticky-head .tbl thead th {
+  position: sticky;
+  top: var(--sticky-top, 0px);
+  /* Above rows, below the app header (--z-sticky) it tucks under. */
+  z-index: var(--z-raised);
+  /* The base fill lives on `thead`, which a sticky `th` scrolls out from
+     under — without its own background the rows would show straight through. */
+  background: var(--surface-inverse);
+  box-shadow: var(--elev-2);
+}
+
 /* ── Rich empty states ─────────────────────────────────────────────────────
    The second tier described in UX_PATTERNS.md § Empty states: the treatment a
    whole tab or panel gets when it has nothing to show, as opposed to the plain

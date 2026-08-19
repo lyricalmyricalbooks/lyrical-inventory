@@ -204,6 +204,7 @@ import {
   readThemePreference,
   writeThemePreference,
 } from './lib/theme.js';
+import { initStickyOffset } from './lib/sticky-header.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
@@ -2146,6 +2147,11 @@ function initTheme() {
 // main.js is a deferred module, so the document is fully parsed by the time
 // this runs — the controls' host markup exists and needs no DOMContentLoaded.
 initTheme();
+
+// Publish the app header's height as --sticky-top so the ledger tables marked
+// .sys-sticky-head can pin their column labels just below it. Same reasoning as
+// initTheme() above for running here rather than on DOMContentLoaded.
+initStickyOffset();
 
 /**
  * Writes the --book-accent-* custom properties for a book (or the all-books
