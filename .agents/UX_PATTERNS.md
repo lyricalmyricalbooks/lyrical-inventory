@@ -134,7 +134,8 @@ is the shared footer furniture. `.is-end` on the label right-aligns it when it s
 columns before its figure. Three rules every footer here follows:
 - **One row per currency, never one sum across them.** Bucket by the code each row was recorded
   in (`consignmentLedgerTotals()` in [src/lib/consignment.js](../src/lib/consignment.js),
-  `expenseLedgerTotals()` in [src/lib/expense-totals.js](../src/lib/expense-totals.js) — same
+  `expenseLedgerTotals()` in [src/lib/expense-totals.js](../src/lib/expense-totals.js),
+  `invoiceLedgerTotals()` in [src/lib/invoice-totals.js](../src/lib/invoice-totals.js) — same
   shape, book's own code first then alphabetical, so the order is stable across re-renders). Add
   a `<span class="chip-status gray">CODE</span>` only once there is more than one bucket.
 - **Never convert at render time.** An exchange rate belongs to the day the money moved; a rate
@@ -142,6 +143,22 @@ columns before its figure. Three rules every footer here follows:
 - **Say all-clear outright.** A bare `0.00` does not read as "nobody is waiting to be paid" —
   swap the label ("All settled", "All reimbursed") and the pill, and keep a sub-line naming what
   *has* been settled.
+
+**Totalling something that isn't a table.** The Invoices panel's `.inv-summary` strip
+(`invoiceSummaryHtml()` in `main.js`, pure helpers in
+[src/lib/invoice-totals.js](../src/lib/invoice-totals.js)) is the reference for a money roll-up
+that sits above a list of cards rather than in a `<tfoot>`. The three footer rules above still
+hold — bucket per currency, never convert, say all-clear outright — and three more:
+- **A row carries its own currency; the book's is only the fallback.** Anything the publisher can
+  bill, spend or sell in a chosen currency stamps that choice on the record. Reading
+  `book.currency` at render time prints a euro sign over dollars on the one screen that was
+  supposed to summarise them.
+- **Currency-blind counts go first, currency-split money second.** "2 past due" is the line that
+  decides whether the panel gets opened at all; splitting that count per currency buries it.
+- **Derived flags are assigned, not set.** `inv._overdue` used to be written only in its true
+  branch, so recording a payment left the card still reading OVERDUE. Any transient flag stamped
+  during a render must be assigned on every branch, or moved into a pure predicate the template
+  calls directly.
 
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.

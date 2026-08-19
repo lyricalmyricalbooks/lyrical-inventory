@@ -1252,11 +1252,16 @@
     <div class="row-between">
       <div class="section-hed">Invoices</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div id="inv-summary" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;"></div>
         <button class="btn ink" onclick="openInvoiceTemplateSettings()" title="Edit publisher details & default terms">⚙ Settings</button>
         <button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button>
       </div>
     </div>
+    <!-- Roll-up strip, filled by invoiceSummaryHtml() in main.js. It used to be
+         a single line squeezed in beside the buttons above; it now carries one
+         group per currency the book has billed in, so it needs a row of its
+         own rather than one that has to stay short enough not to push
+         "+ New invoice" off the end of a phone screen. -->
+    <div id="inv-summary" class="inv-summary" hidden></div>
     <div id="invoices-list"><div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div></div>
     <div class="divider"></div>
   </div>

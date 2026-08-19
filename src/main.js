@@ -546,6 +546,7 @@ import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
+import { invoiceIsOverdue, invoiceLedgerTotals, invoiceTotalsCopy, invoiceSummaryCounts } from './lib/invoice-totals.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -8194,6 +8195,42 @@ function invoicesVisibleHere() {
   return !!window.IS_PUBLISHER && !isAuthor() && activeBook && activeBook !== 'all';
 }
 
+// The Invoices panel's roll-up strip. Reuses .pill for the counts and
+// .chip-status for the currency tag rather than inventing a parallel badge —
+// see .agents/UX_PATTERNS.md, and the expense ledger's footer for the same
+// one-group-per-currency shape.
+//
+// Counts first, because "2 past due" is the line that decides whether the
+// publisher opens this panel at all; the per-currency money follows.
+function invoiceSummaryHtml(counts, totals) {
+  const total = Number(counts?.total) || 0;
+  const drafts = Number(counts?.drafts) || 0;
+  const overdue = Number(counts?.overdue) || 0;
+  if (!total) return '';
+
+  const chips = [
+    `<span class="pill gold">${total} invoice${total === 1 ? '' : 's'}</span>`,
+  ];
+  if (drafts) chips.push(`<span class="pill gray">✎ ${drafts} draft${drafts === 1 ? '' : 's'}</span>`);
+  // Amber, not red: a late invoice is the house's "active / needs attention"
+  // state, not an error — nothing has gone wrong, a store simply has not paid.
+  if (overdue) chips.push(`<span class="pill amber" title="Sent, past the due date, not yet marked paid">● ${overdue} past due</span>`);
+
+  const money = (totals || []).map(t => {
+    const copy = invoiceTotalsCopy(t);
+    const codeTag = (totals || []).length > 1
+      ? `<span class="chip-status gray">${escapeHtml(copy.code)}</span>`
+      : '';
+    return `<div class="inv-summary-group is-${escapeHtml(copy.status)}">
+      ${codeTag}
+      <span class="inv-summary-val">${fmt(copy.amount, copy.code)}</span>
+      <span class="inv-summary-label">${escapeHtml(copy.label)}<span class="inv-summary-sub">${escapeHtml(copy.sub)}</span></span>
+    </div>`;
+  }).join('');
+
+  return `<div class="inv-summary-counts">${chips.join('')}</div>${money}`;
+}
+
 function renderInvoices() {
   const section = $('invoices-section');
   if (!section) return;
@@ -8204,21 +8241,22 @@ function renderInvoices() {
   // ⚡ Bolt Optimization: Use string comparison instead of localeCompare for sorting ISO "YYYY-MM-DD" dates
   const invs = (s.invoices || []).slice().sort((a, b) => { const dA = a.date || ''; const dB = b.date || ''; return dA > dB ? -1 : (dA < dB ? 1 : ((b.createdAt || 0) - (a.createdAt || 0))); });
 
-  // Mark overdue automatically (visual only, not persisted)
+  // Mark overdue automatically (visual only, not persisted). Assigned on both
+  // branches, not only set: the old one-way flag left a card reading OVERDUE
+  // after the payment had been recorded, because nothing ever cleared it.
   const todayStr = today();
   for (const inv of invs) {
-    if (inv.status === 'sent' && inv.dueDate && inv.dueDate < todayStr) inv._overdue = true;
+    inv._overdue = invoiceIsOverdue(inv, todayStr);
   }
 
-  // Summary line
-  // ⚡ Bolt Optimization: Calculate outstanding, paid, and drafts in a single pass instead of iterating over the `invs` array three times.
-  let outstanding = 0, paid = 0, drafts = 0;
-  for (const i of invs) {
-    if (i.status === 'sent') outstanding += (i.total || 0);
-    else if (i.status === 'paid') paid += (i.total || 0);
-    else if (i.status === 'draft') drafts++;
-  }
-  summary.textContent = `${invs.length} total · ${fmt(outstanding, cur)} outstanding · ${fmt(paid, cur)} collected${drafts ? ` · ${drafts} draft${drafts > 1 ? 's' : ''}` : ''}`;
+  // Summary strip. One group per currency the book has actually billed in,
+  // rather than one raw sum printed in the book's currency — the editor lets a
+  // store be invoiced in any of the supported currencies, so a book holding a
+  // US$ and a € invoice used to show their addition under a single euro sign.
+  const counts = invoiceSummaryCounts(invs, todayStr);
+  const invTotals = invoiceLedgerTotals(invs, getBookCurrencyCode(book), todayStr);
+  summary.innerHTML = invoiceSummaryHtml(counts, invTotals);
+  summary.hidden = !invs.length;
 
   if (!invs.length) {
     list.innerHTML = '<div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div>';
@@ -8237,7 +8275,7 @@ function renderInvoices() {
       <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div></div>
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
-      <div class="inv-c-cell amt">Total<strong>${fmt(inv.total || 0, cur)}</strong></div>
+      <div class="inv-c-cell amt">Total<strong>${fmt(inv.total || 0, inv.currency ?? cur)}</strong></div>
       <div class="inv-c-actions" style="flex-direction:column;align-items:stretch;gap:6px;">
         <span class="inv-status ${statusCls}">${statusLabel}</span>
         <div style="display:flex;gap:4px;justify-content:flex-end;">
