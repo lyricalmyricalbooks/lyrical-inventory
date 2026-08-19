@@ -66,3 +66,16 @@ You maintain extremely high standards of code hygiene, test coverage, and user f
 - **Comment Preservation:** Never delete or alter existing comments, docstrings, or explanatory notes in the codebase unless they are directly contradicted by your changes. Preserving this context is critical for long-term maintenance.
 - **Graceful Error Handling:** Wrap all external API calls, storage mutations, and network requests in try-catch blocks. Log the technical error to `console.error` and show a user-friendly message via `showToast`.
 
+---
+
+## 7. Multi-Agent Engineering Team & Personas
+
+The workspace defines 6 collaborative agent personas located in `.agents/agents/`:
+- **`lead-developer`**: Lead Orchestrator & Chief Architect
+- **`ux-designer`**: Design Engineer & Frontend Architect
+- **`backend-architect`**: Cloud, Firestore, and Integrations Architect
+- **`ledger-auditor`**: Financial Ledger & Reconciliation Auditor
+- **`qa-tester`**: QA Automation & Test Harness Engineer
+- **`release-manager`**: Release & Deployment Specialist
+
+

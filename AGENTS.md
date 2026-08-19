@@ -143,3 +143,17 @@ graph TD
 - **Frontend:** Vanilla HTML5 ([index.html](index.html)), CSS3 ([style.css](src/style.css)), and Vanilla JS ES Modules ([main.js](src/main.js)).
 - **Backend:** Google Firebase (Firestore and Auth).
 - **Integrations:** Google Sheets Webhook via Apps Script, Shippo API, and Stripe API.
+
+## Multi-Agent Engineering Team & Personas
+
+The workspace is configured with an elite multi-agent development team available in the Antigravity IDE agent selector and orchestratable via the Lead Developer:
+
+| Persona | Identifier | Core Scope & Mission |
+| :--- | :--- | :--- |
+| **Lead Developer** | `lead-developer` | Chief Architect & Orchestrator. Decomposes tasks, coordinates domain subagents, synthesizes clean Vanilla JS code, and enforces comprehensive quality gates. |
+| **UX Designer** | `ux-designer` | Design Engineer. Enforces OKLCH perceptual colors, Container Queries, Subgrid, View Transitions, spring motion physics, touch targets $\ge 44\text{px}$, and zero blank states. |
+| **Backend Architect** | `backend-architect` | Cloud & Sync Engineer. Oversees Firestore security rules, offline IndexedDB sync queues, Apps Script triple-version parity (`Code.gs`), and Stripe/Shippo APIs. |
+| **Ledger Auditor** | `ledger-auditor` | Financial Integrity Specialist. Enforces zero float drift (`roundCents`), double-entry balance equations, customer shipping CAD invariants, and tax ledgers. |
+| **QA Tester** | `qa-tester` | Test Automation Engineer. Authors and maintains Vitest unit test suites (`tests/*.test.js`), edge-case coverage, mocks, and regression prevention. |
+| **Release Manager** | `release-manager` | Release & Deployment Specialist. Manages Git branch hygiene, automated PR creation via GitHub MCP, version bumping, and GitHub Pages release builds. |
+
