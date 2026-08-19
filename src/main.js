@@ -206,6 +206,7 @@ import {
   writeThemePreference,
 } from './lib/theme.js';
 import { initStickyOffset } from './lib/sticky-header.js';
+import { initTableScrollEdges } from './lib/table-scroll.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
@@ -2153,6 +2154,11 @@ initTheme();
 // .sys-sticky-head can pin their column labels just below it. Same reasoning as
 // initTheme() above for running here rather than on DOMContentLoaded.
 initStickyOffset();
+
+// The sideways companion to the above: publish how far each ledger is scrolled
+// across, so the tables marked .sys-sticky-col can freeze the column that
+// identifies the row and fade their right edge while columns remain off-screen.
+initTableScrollEdges();
 
 /**
  * Writes the --book-accent-* custom properties for a book (or the all-books

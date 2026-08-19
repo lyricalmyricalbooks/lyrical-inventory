@@ -140,6 +140,7 @@
   --elev-3: 0 4px 8px rgba(0, 0, 0, .46), 0 12px 28px rgba(0, 0, 0, .48);
   --elev-4: 0 8px 16px rgba(0, 0, 0, .48), 0 24px 60px rgba(0, 0, 0, .60);
   --elev-hover: 0 6px 14px rgba(0, 0, 0, .46), 0 16px 36px rgba(0, 0, 0, .52);
+  --elev-edge: 6px 0 10px -6px rgba(0, 0, 0, .72);
   --focus-ring-halo: 0 0 0 4px rgba(221, 165, 72, .28);
 }
 }
@@ -221,6 +222,7 @@
     --elev-3: 0 4px 8px rgba(0, 0, 0, .46), 0 12px 28px rgba(0, 0, 0, .48);
     --elev-4: 0 8px 16px rgba(0, 0, 0, .48), 0 24px 60px rgba(0, 0, 0, .60);
     --elev-hover: 0 6px 14px rgba(0, 0, 0, .46), 0 16px 36px rgba(0, 0, 0, .52);
+    --elev-edge: 6px 0 10px -6px rgba(0, 0, 0, .72);
     --focus-ring-halo: 0 0 0 4px rgba(221, 165, 72, .28);
   }
 }

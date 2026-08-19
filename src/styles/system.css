@@ -51,6 +51,10 @@
   --elev-4: 0 8px 16px rgba(14, 12, 10, .06), 0 24px 60px rgba(14, 12, 10, .16);
   /* Lift applied on hover — pair with --elev-2/3, never with a raw shadow */
   --elev-hover: 0 6px 14px rgba(14, 12, 10, .07), 0 16px 36px rgba(14, 12, 10, .11);
+  /* Seam cast SIDEWAYS by a frozen column over the content sliding under it.
+     Directional rather than ambient, so it reads as "this layer is on top of
+     that one" instead of "this box floats". */
+  --elev-edge: 6px 0 10px -6px rgba(14, 12, 10, .30);
 
   /* ── MOTION ──────────────────────────────────────────────────────────────
      Replaces 8 bespoke curves. Any transition written with these tokens
@@ -296,6 +300,69 @@ tbody.sys-long-list > tr {
      under — without its own background the rows would show straight through. */
   background: var(--surface-inverse);
   box-shadow: var(--elev-2);
+}
+
+/* ── Pinned row-identity column ────────────────────────────────────────────
+   The companion to the rule above, for the axis it deliberately gives up: on a
+   phone a `.tbl-wrap` bleeds full width and scrolls SIDEWAYS, because reaching
+   the last column matters more there than pinning the labels. But nine columns
+   of Order # / Channel / Qty / Unit price / Total / Stock after do not fit a
+   375px screen, so by the time "Total" is on screen the order number that
+   identifies the row is long gone — the figure is readable and anonymous, which
+   on a money table is worse than not seeing it. Freezing the first column keeps
+   every amount attached to the order it belongs to.
+
+   Gated on `data-scroll`, not on a width query, because the real condition is
+   "this table is wider than the space it has" — which depends on the column
+   content, and which neither a media nor a container query can express. The
+   attribute is published by src/lib/table-scroll.js; with no JS it is simply
+   absent and every table renders exactly as it does today.
+
+   `:not([colspan])` skips the full-width cells — empty states, the "Show more"
+   row, ledger totals. Those already span the table, so pinning them would
+   freeze the whole row and gain nothing. */
+.tbl-wrap.sys-sticky-col[data-scroll]:not([data-scroll="none"]) .tbl thead th:first-child,
+.tbl-wrap.sys-sticky-col[data-scroll]:not([data-scroll="none"]) .tbl tbody td:first-child:not([colspan]) {
+  position: sticky;
+  left: 0;
+}
+.tbl-wrap.sys-sticky-col[data-scroll]:not([data-scroll="none"]) .tbl thead th:first-child {
+  /* Same layer the sticky header uses, so the corner cell wins over the pinned
+     body cells below it and still tucks under the app header. */
+  z-index: var(--z-raised);
+  background: var(--surface-inverse);
+}
+.tbl-wrap.sys-sticky-col[data-scroll]:not([data-scroll="none"]) .tbl tbody td:first-child:not([colspan]) {
+  z-index: var(--z-base);
+}
+/* Zero-specificity on purpose. A pinned cell must be opaque or the columns
+   sliding beneath show straight through it, but it must ALSO keep whatever
+   background its row earned — hover, zebra, the amber tint on a pending row.
+   `:where()` supplies the fallback (the row's own fill, inherited) while
+   letting every existing `td` rule keep winning on the first cell too. */
+:where(.tbl-wrap.sys-sticky-col .tbl tbody td:first-child) {
+  background-color: inherit;
+}
+/* Only once the table has actually been pushed sideways: unscrolled, the first
+   column is just the first column and a seam over nothing is noise.
+   The inset line redraws the row separator, which a collapsed-border table
+   paints at the table level and therefore scrolls out from under the pinned
+   cell. */
+.tbl-wrap.sys-sticky-col[data-scroll="middle"] .tbl tbody td:first-child:not([colspan]),
+.tbl-wrap.sys-sticky-col[data-scroll="end"] .tbl tbody td:first-child:not([colspan]),
+.tbl-wrap.sys-sticky-col[data-scroll="middle"] .tbl thead th:first-child,
+.tbl-wrap.sys-sticky-col[data-scroll="end"] .tbl thead th:first-child {
+  box-shadow: inset 0 -1px 0 var(--border-subtle), var(--elev-edge);
+}
+/* "There is more to the right." A mask on the scroll container is painted in
+   the container's own box, so it stays parked on the visible right edge rather
+   than scrolling away with the content — and it clears itself the moment the
+   last column arrives, so it never promises a column that isn't there. */
+@supports (mask-image: linear-gradient(to right, oklch(0 0 0), transparent)) {
+  .tbl-wrap.sys-sticky-col[data-scroll="start"],
+  .tbl-wrap.sys-sticky-col[data-scroll="middle"] {
+    mask-image: linear-gradient(to right, oklch(0 0 0) calc(100% - 26px), transparent 100%);
+  }
 }
 
 /* ── Rich empty states ─────────────────────────────────────────────────────
