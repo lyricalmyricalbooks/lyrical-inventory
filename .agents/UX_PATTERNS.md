@@ -255,6 +255,21 @@ label/figure cells rather than a `<table>`): it loses the alignment `.tbl` gets 
 - **`--gold-text`, never `--gold`, for a figure you want to sing.** Raw `--gold` is a fill/accent
   colour and does not clear AA as text on a card surface in either theme.
 
+**Repeated rows inside one card** (a legend, a mini ledger, any run of label + % + amount)
+align with **column subgrid on the card, not `auto` tracks on each row** — `.ch-legend` /
+`.ch-leg-row` is the reference. Each row being its own grid looks identical in a mock-up with
+one row in it and falls apart with four: `auto` tracks size to each row's own content, so a
+card reading 62% / 8% / 30% steps its percentage and money columns in and out down the card.
+The card declares the tracks; every row takes `grid-column: 1 / -1` plus
+`grid-template-columns: subgrid`. Two rules come with it:
+- **Keep the plain tracks in the base rule and put `subgrid` behind
+  `@supports (grid-template-columns: subgrid)`.** An unsupported `subgrid` value is dropped,
+  which would leave the row a one-column grid — a worse fallback than today's ragged one.
+- **Padding and margin go on *every* row, not just the interactive ones.** Padding on a
+  subgrid item insets that item's own tracks, so a hover pill given to the clickable rows
+  only pushes exactly those rows out of the shared edges. Give all rows the geometry and let
+  the interactive modifier carry nothing but paint.
+
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.
 
