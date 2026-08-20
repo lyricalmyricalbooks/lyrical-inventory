@@ -5088,6 +5088,33 @@ tr.hist-row:hover {
   }
 }
 
+/* ── Stripe connection panel — the setup step above the worklist ─────────
+   Was four loose lines carrying four different ad-hoc margins (6/14, 10, 8,
+   14) and a completely unstyled native <input> for the secret key — on the
+   one screen that also shows .recon-search, a fully themed field, so the key
+   box read as unfinished next to it. Now one sunken panel on the shared
+   space scale, with the key wearing the app's own .form-group furniture. */
+.recon-setup{
+  display:flex;flex-direction:column;gap:var(--space-3);
+  padding:var(--space-4);margin-bottom:var(--space-4);
+  background:var(--surface-sunken);
+  border:1px solid var(--border-default);
+  border-radius:var(--r3);
+}
+.recon-keyrow{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:flex-end;}
+/* The field owns the row's width; the Change button sits on its baseline. */
+.recon-key-field{flex:1 1 320px;min-width:0;}
+/* A secret key is a fixed-width token being checked character by character —
+   mono keeps it scannable and stops the masked dots dancing. */
+.recon-key-field input{font-family:'DM Mono',monospace;letter-spacing:.02em;}
+.recon-key-field .field-note{margin-top:var(--space-1);}
+.recon-key-saved{display:inline-flex;align-items:center;gap:var(--space-2);min-height:33px;}
+.recon-key-mask{font-family:'DM Mono',monospace;font-size:var(--text-sm);color:var(--content-muted);}
+/* Permanent node: reconcileSync() writes into it before and after the fetch,
+   so it holds its line rather than shunting the panel as messages arrive. */
+.recon-status{font-size:var(--text-sm);color:var(--content-muted);line-height:var(--leading-snug);min-height:1.45em;}
+.recon-summary{font-size:var(--text-base);color:var(--content-secondary);margin-bottom:var(--space-3);}
+
 /* ── Stripe reconcile worklist toolbar ───────────────────────────────────── */
 .recon-toolbar{position:sticky;top:0;z-index:6;display:flex;flex-wrap:wrap;gap:8px;
   align-items:center;padding:10px 12px;margin-bottom:12px;background:var(--cream);
