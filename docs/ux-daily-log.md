@@ -49,7 +49,9 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-20 | visual | POS checkout | Gave the checkout column a readable total and an even rhythm | #589 |
 | 2026-08-20 | visual | Order History | Made the stock figures at the top of the page line up and lead | #590 |
 | 2026-08-20 | visual | Consignment store cards | Let the shop's name lead its card instead of its numbers | #591 |
+| 2026-08-20 | visual | Invoices | Let the amount lead each invoice, and lined the totals up | #593 |
 | 2026-08-20 | visual | Payments | Made the Stripe key box look like the rest of the app | #595 |
+| 2026-08-20 | visual | Dialogs | Kept a dialog's heading in view and stopped its buttons cutting the form off | #597 |
 
 ---
 
