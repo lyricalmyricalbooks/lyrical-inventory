@@ -3419,7 +3419,7 @@ tr.hist-row:hover {
 }
 .ch-row-total .ch-row-rev{font-weight:700;}
 @media (prefers-reduced-motion: reduce){
-  .ch-row-fill{transition:none;}
+  .ch-row-fill,.ch-seg{transition:none;}
 }
 /* Panel width, not viewport width: this card renders at very different widths
    depending on the column it lands in. */
@@ -3436,21 +3436,58 @@ tr.hist-row:hover {
   .ch-row-total > div:nth-child(2){display:none;}
 }
 
-.ch-book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
-.ch-book-card{background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow);}
-.ch-book-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px;}
-.ch-book-title{font-family:'Playfair Display',serif;font-size:15px;color:var(--text);}
-.ch-book-total{font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;}
-.ch-stack{display:flex;height:12px;border-radius:100px;overflow:hidden;background:var(--cream2);margin-bottom:12px;}
+/* ─── PER-BOOK CHANNEL MIX CARDS ──────────────────────────────────────────
+   One card per title, in a grid directly under .ch-panel. When that panel was
+   rebuilt onto the app's ordinary card (--r3, --elev-2, 20/22 padding, the
+   --text-* scale) this grid was left on the frame it shipped with — --r2,
+   14/16 padding and raw 15/14/12/11/10px type — so the two halves of one
+   section read as components from two different screens. Same frame, same
+   spacing scale, same type scale now. */
+.ch-book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--space-3);}
+.ch-book-card{background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r3);padding:var(--space-4) 18px;box-shadow:var(--elev-2);}
+.ch-book-head{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3);margin-bottom:var(--space-3);}
+.ch-book-title{font-family:'Playfair Display',serif;font-size:var(--text-md);color:var(--text);}
+/* 500, not 600: DM Mono is loaded at 400/500 only (see the font link in
+   index.html), so 600 was synthesised and this total sat in faux-bold beside
+   the real-weight figures in the panel above it. */
+.ch-book-total{font-family:'DM Mono',monospace;font-size:var(--text-base);font-weight:500;color:var(--text);white-space:nowrap;}
+/* --track-bg, not --cream2: on the dark theme --cream2 lands ~2% off
+   --surface-card, so the unfilled remainder of a book's mix bar vanished and
+   the segments floated with nothing to read their length against. This is the
+   same trough .ch-row-track uses in the panel above. */
+.ch-stack{display:flex;height:12px;border-radius:100px;overflow:hidden;background:var(--track-bg);margin-bottom:var(--space-3);}
 .ch-seg{height:100%;transition:width .7s cubic-bezier(.16,1,.3,1);}
 .ch-seg + .ch-seg{box-shadow:-1px 0 0 rgba(255,255,255,.55);}
-.ch-legend{display:flex;flex-direction:column;gap:7px;}
-.ch-leg-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:"dot name pct val" "dot meta meta meta";column-gap:8px;row-gap:1px;align-items:center;}
-.ch-leg-row .ch-dot{grid-area:dot;}
-.ch-leg-name{grid-area:name;font-size:12px;font-weight:600;color:var(--text2);display:flex;align-items:center;gap:5px;min-width:0;}
-.ch-leg-pct{grid-area:pct;font-size:11px;color:var(--text3);white-space:nowrap;}
-.ch-leg-val{grid-area:val;font-size:12px;color:var(--text);font-weight:600;white-space:nowrap;}
-.ch-leg-meta{grid-area:meta;font-size:10px;color:var(--text3);}
+
+/* Legend — ONE grid per card, each row a column subgrid, so every row's share,
+   amount and volume land on the same edges. Each row used to be its own grid
+   with `auto` tracks, so a card reading 62% / 8% / 30% stepped its percentage
+   and money columns in and out down the card and the figures could not be
+   compared without re-reading each line. */
+.ch-legend{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;row-gap:var(--space-1);}
+.ch-leg-row{
+  display:grid;
+  /* fallback for engines without subgrid — today's per-row tracks */
+  grid-template-columns:auto minmax(0,1fr) auto auto;
+  grid-column:1 / -1;
+  column-gap:var(--space-2);
+  row-gap:1px;
+  align-items:center;
+  /* Every row carries the tap row's geometry, clickable or not. Padding on a
+     subgrid item insets its own tracks, so giving the hover pill to some rows
+     only would push those rows out of the shared column edges above. */
+  border-radius:var(--r);
+  margin:0 -6px;
+  padding:3px 6px;
+}
+@supports (grid-template-columns: subgrid){
+  .ch-leg-row{grid-template-columns:subgrid;}
+}
+.ch-leg-row .ch-dot{grid-column:1;grid-row:1 / span 2;}
+.ch-leg-name{grid-column:2;grid-row:1;font-size:var(--text-sm);font-weight:600;color:var(--text2);display:flex;align-items:center;gap:5px;min-width:0;}
+.ch-leg-pct{grid-column:3;grid-row:1;font-size:var(--text-xs);color:var(--text3);white-space:nowrap;text-align:right;}
+.ch-leg-val{grid-column:4;grid-row:1;font-size:var(--text-sm);color:var(--text);font-weight:600;white-space:nowrap;text-align:right;}
+.ch-leg-meta{grid-column:2 / -1;grid-row:2;font-size:var(--text-2xs);color:var(--text3);}
 .pill.ch-top{font-size:8px;padding:0 5px;line-height:1.5;}
 
 @media(max-width:640px){
@@ -3460,10 +3497,16 @@ tr.hist-row:hover {
   .ch-summary-stats{gap:18px;}
 }
 
-/* Tappable legend rows — drill into a book + channel's order history */
-.ch-leg-tap{cursor:pointer;border-radius:var(--r);margin:0 -6px;padding:3px 6px;transition:background .12s;}
-.ch-leg-tap:hover,.ch-leg-tap:focus-visible{background:var(--cream2);outline:none;}
-.ch-leg-tap:active{background:var(--cream3);}
+/* Tappable legend rows — drill into a book + channel's order history.
+   Radius, margin and padding now live on .ch-leg-row so tapped and untapped
+   rows share one geometry; only the paint is here. */
+.ch-leg-tap{cursor:pointer;transition:background var(--dur-fast) var(--ease-standard);}
+/* --cream3/--cream4, not --cream2/--cream3: --cream2 sits ~2% off
+   --surface-card on the dark theme, so hovering a row at night showed nothing
+   and only the press registered. */
+.ch-leg-tap:hover{background:var(--cream3);}
+.ch-leg-tap:focus-visible{background:var(--cream3);outline:2px solid var(--gold2);outline-offset:1px;}
+.ch-leg-tap:active{background:var(--cream4);}
 .ch-leg-go{color:var(--text4) /* faint-ok: decorative, paired with visible text */;font-weight:700;margin-left:2px;}
 .ch-leg-tap:hover .ch-leg-go{color:var(--gold2);}
 

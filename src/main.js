@@ -4267,8 +4267,12 @@ function renderChannelAnalytics() {
       // Rows with real transactions drill into that book + channel's order history.
       const clickable = c.txns > 0;
       const jsChan = (c.chan || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      // A clickable row that is not a <button> needs role/tabindex/keydown, or
+      // the :focus-visible ring styled for it can never be reached — see the
+      // pre-flight list in .agents/UX_PATTERNS.md and .con-row-progress-link.
+      const jump = escapeHtml(`drillToChannel('${b.id}','${jsChan}')`);
       const tap = clickable
-        ? ` class="ch-leg-row ch-leg-tap" title="View ${escapeHtml(chanLabel(c.chan))} orders" onclick="${escapeHtml(`drillToChannel('${b.id}','${jsChan}')`)}"`
+        ? ` class="ch-leg-row ch-leg-tap" role="button" tabindex="0" title="View ${escapeHtml(chanLabel(c.chan))} orders" onclick="${jump}" onkeydown="if(event.key===&#39;Enter&#39;||event.key===&#39; &#39;){event.preventDefault();${jump}}"`
         : ` class="ch-leg-row"`;
       return `<div${tap}>
         <span class="ch-dot" style="background:${escapeHtml(channelColor(c.chan))}"></span>
