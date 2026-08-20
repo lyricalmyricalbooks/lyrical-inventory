@@ -134,11 +134,17 @@ describe('sticky ledger header wiring', () => {
   const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
   const css = readFileSync(join(ROOT, 'src/styles/system.css'), 'utf8');
 
-  it('marks the three page-scrolling ledgers, and only those', () => {
+  it('marks the page-scrolling ledgers and buyer lists, and only those', () => {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const wraps = [...doc.querySelectorAll('.tbl-wrap.sys-sticky-head')];
     const bodies = wraps.map((w) => w.querySelector('tbody')?.id);
-    expect(bodies.sort()).toEqual(['hist-body', 'ledger-body', 'tc-ledger-body']);
+    // An allowlist, not a count: every entry here has been checked against the
+    // two conditions in UX_PATTERNS (scrolls with the PAGE, flat `.tbl thead`
+    // fill). `cust-body` is nine columns long and as long as the shop's whole
+    // history; `ml-body` sits in a plain `.card`, which is not a scroll box.
+    expect(bodies.sort()).toEqual([
+      'cust-body', 'hist-body', 'ledger-body', 'ml-body', 'tc-ledger-body',
+    ]);
   });
 
   it('never marks a wrapper that is already its own scroll container', () => {

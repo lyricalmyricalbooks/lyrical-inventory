@@ -143,6 +143,29 @@ columns before its figure. Three rules every footer here follows:
   swap the label ("All settled", "All reimbursed") and the pill, and keep a sub-line naming what
   *has* been settled.
 
+**Column roles on a wide table.** `td.r` is the whole vocabulary a five-column table
+needs. Past about seven columns the numbers stop being the only thing in the row and
+quietly lose the argument — a money column left in proportional body type at the same
+size and colour as the free text beside it cannot be compared down the page. Four
+classes on `.tbl td` say which cell leads, which anchors, and which recede:
+
+- `.lead-cell` — the row's subject (a buyer's name, a store name). Syne 600, primary
+  text. **One per row**; a second one leaves the row with no entry point again.
+- `.money-cell` — pairs with `.r`; the row's headline figure. Primary text at
+  `font-weight:500`, not 600 — DM Mono is loaded at 400/500 only (see the font link in
+  `index.html`), so a heavier request is synthesised and faux-bold smears the digits it
+  is meant to strengthen. Every DM Mono rule in `style.css` uses 500; match it.
+- `.date-cell` — reads left-aligned like text but in DM Mono, so a column of dates lines
+  up. This is the treatment the consignment and history ledgers already re-type inline
+  (`class="mono-num" style="font-size:12px;color:var(--text3)"`) — prefer the class.
+- `.text-cell` — free text sitting between the figures. Recedes to `--content-muted` at
+  `--text-sm`, and its **inner `<span>`** carries `max-width:26ch` so one long value
+  can't squeeze the money column. The cap must live on the span: `max-width` on a `td`
+  is unreliable under auto table layout. It wraps rather than truncating — a list of
+  what someone bought is data, not a label, so no `text-overflow` here.
+
+Reference: the Discovered Buyers and Curated Mailing List tables on the Customers tab.
+
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.
 

@@ -1727,6 +1727,44 @@ tr.hist-row:hover {
 .tbl tbody tr{background:var(--surface-raised);transition:background-color var(--dur-fast) var(--ease-standard);}
 .tbl tbody tr:hover td{background:var(--surface-sunken);}
 
+/* ── Wide-table column roles ────────────────────────────────────────────────
+   `.tbl td.r` already covers a right-aligned figure, and that is the whole
+   vocabulary a five-column table needs. A wide list table (nine columns on the
+   buyer list) needs two more, because on those the numbers stopped being the
+   only thing in the row and quietly lost the argument: a money column left in
+   proportional body type at the same size and colour as the free text beside
+   it cannot be compared down the page — the decimal points wander and the eye
+   has nothing to track — and a date column has the same problem one step
+   quieter.
+
+   The three roles below say which of a wide row's cells leads, which anchors,
+   and which recede:
+     .lead-cell  — the row's subject (a buyer's name). One per row.
+     .money-cell — pairs with `.r`; the row's headline figure, so it keeps full
+                   text weight instead of the muted meta treatment.
+     .date-cell  — reads left-aligned like text but with tabular digits, so a
+                   column of dates lines up. Matches the inline treatment the
+                   consignment and history ledgers already hand their date
+                   columns; prefer this class over re-typing it.
+     .text-cell  — free text sitting between the figures. Recedes, and is width
+                   capped so one buyer with nine titles cannot squeeze the
+                   spend column. It wraps rather than truncating: this is a
+                   list of what someone bought, not a label. */
+.tbl td.lead-cell{font-weight:600;color:var(--content-primary);}
+/* 500, not 600: DM Mono is only loaded at 400/500 (see the font link in
+   index.html), so a heavier request is synthesised, and faux-bold on a
+   monospace figure smears the digits it is meant to strengthen. 500 is the
+   real weight, and it is what every DM Mono rule in this stylesheet uses. */
+.tbl td.money-cell{color:var(--content-primary);font-weight:500;white-space:nowrap;}
+.tbl td.date-cell{
+  font-family:'DM Mono',monospace;
+  font-size:var(--text-sm);
+  color:var(--content-muted);
+  white-space:nowrap;
+}
+.tbl td.text-cell{font-size:var(--text-sm);color:var(--content-muted);}
+.tbl td.text-cell > span{display:block;max-width:26ch;}
+
 /* STOCK BLOCK */
 .stock-block{background:var(--ink);border-radius:var(--r3);padding:1.5rem;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.04);margin-bottom:1.5rem;}
 .stock-block::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at top right,rgba(200,145,58,.07),transparent 55%);pointer-events:none;}
