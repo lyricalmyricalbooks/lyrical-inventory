@@ -76,6 +76,56 @@ no pill — a `0` there would read as "out of stock" and stop a perfectly good s
 
 ---
 
+## Stat cards / HUD strips — one anatomy, two surfaces
+
+A row of headline figures at the head of a screen (the consignment summary HUD, Order History's
+reconciliation strip) uses **one** card anatomy. Before adding a third, extend one of these rather
+than starting a parallel set — the two above were parallel systems for a while and the drift was
+visible on screen.
+
+The anatomy: **icon plate → content column → 3px bottom accent.**
+
+```html
+<div class="hist-kpi-card highlight-gold is-lead">
+  <div class="hist-kpi-icon" aria-hidden="true">📚</div>
+  <div class="hist-kpi-content">
+    <div class="hist-kpi-label">Stock On Hand</div>
+    <div class="hist-kpi-val">88</div>
+    <div class="hist-kpi-sub">35% available</div>
+  </div>
+</div>
+```
+
+Reference implementations: `.consignment-stat-card` (`style.css:4041`) and `.hist-kpi-card`
+(`style.css:~110`). Five rules they share:
+
+- **Label `--text-2xs` / 800 / `--tracking-label`, figure `'DM Mono'` at `--text-xl`, sub-line
+  `--text-sm`.** Anything else and the strip reads as a different app's component. Spacing comes
+  off `--space-*`; gaps written as raw 12/14/4/2px are how the drift started.
+- **The accent is a 3px `::after` along the bottom, never a left border.** Everything is
+  `border-box`, so a left border shrinks the content box of the accented cards only — their labels
+  then sit a few px right of the unaccented card's and the row reads ragged for a reason nobody can
+  name. Colour the `::after`, not the frame.
+- **Exactly one card leads, by size *and* colour.** `.is-lead` steps the figure to `--text-2xl` and
+  recolours it `--gold-text`. One size step on its own reads as an accident. Pick the figure the
+  screen exists to act on — not the biggest number, and never more than one.
+- **Sub-lines bottom-align with `margin-top:auto`.** The lead's taller figure otherwise pushes its
+  own sub-line below the others'. Card is `align-items:stretch`, content is a flex column, icon
+  plate takes `align-self:flex-start`.
+- **The grid is an explicit `repeat(3, minmax(0,1fr))` with a `@container` step to `1fr` at 680px** —
+  matching the consignment HUD, so a phone gets the same layout in both places. `auto-fit` looks
+  equivalent and isn't: at mid widths it wraps 3 cards into 2 columns and leaves the third an orphan
+  half the row wide. The `container-type` has to sit on a **wrapper** (`.hist-recon-strip`), because
+  an element cannot query its own container.
+
+**Progress bar under a strip:** trough is `var(--track-bg)` — never `--cream2`, which lands ~3% off
+the page colour on dark and leaves the unfilled remainder invisible. The fill stays inside **one**
+colour family and matches the card it plots; a `--gold` → `--emerald` ramp blends two semantic roles
+across a single measurement, so the colour change reads as a state change that isn't there. Width
+transitions use `var(--dur-base) var(--ease-entrance)` so they collapse under reduced motion.
+
+---
+
 ## Tables / lists — `.tbl`
 Base: `.tbl` (`style.css:1540`) — dark header (`.tbl thead{background:var(--ink)}`), uppercase
 9px th labels at `.14em` tracking, 13px body, right-aligned numeric columns via `th.r`/`td.r`
