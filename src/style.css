@@ -2388,11 +2388,26 @@ tr.hist-row:hover {
 .organizer-warn{color:var(--amber);font-weight:600;}
 .organizer-skip{white-space:nowrap;color:var(--text3);cursor:pointer;}
 
-/* LOG */
-.log-console{background:var(--ink);border-radius:var(--r2);padding:10px 14px;font-size:11px;font-family:'DM Mono',monospace;max-height:90px;overflow-y:auto;line-height:2;display:none;margin-top:1rem;border:1px solid rgba(255,255,255,.05);}
-.log-line{display:block;}
+/* LOG
+   The console sits on --ink, which stays dark in BOTH themes (theme-dark.css
+   pushes the inverse surfaces deeper rather than flipping them), so every
+   colour below comes from the theme-stable --on-inverse tier and the
+   `-soft`/`-bright` accent inks documented as readable on ink — the same pair
+   .kpi-value.danger / .metric-banner-value.green already use.
+
+   Before this the console set no colour at all. A line with no type, and every
+   addLog(…, 'err') line — which had no rule either — inherited --text, and in
+   light mode --text is byte-identical to --ink, so the two message kinds that
+   matter most rendered invisible against their own background. */
+.log-console{background:var(--ink);border-radius:var(--r2);padding:10px 14px;font-size:11px;font-family:'DM Mono',monospace;max-height:90px;overflow-y:auto;line-height:2;display:none;margin-top:1rem;border:1px solid rgba(255,255,255,.05);color:var(--on-inverse-2);scrollbar-width:thin;scrollbar-color:var(--ink4) transparent;}
+.log-line{display:block;color:var(--on-inverse-2);}
 .log-line.ok{color:var(--emerald-soft);}
 .log-line.warn{color:var(--orange);}
+.log-line.err{color:var(--rose-soft);}
+/* Fixed gutter so every message starts at the same left edge however long its
+   timestamp renders ("9:05:03 AM" vs "10:05:03 AM"). min-width never truncates,
+   so a longer locale format pushes its own row out rather than clipping. */
+.log-time{display:inline-block;min-width:14ch;color:var(--on-inverse-3);font-variant-numeric:tabular-nums;}
 
 /* STORE CARDS
    Hierarchy: the store's NAME leads the card. It used to be set a point

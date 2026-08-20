@@ -10711,7 +10711,22 @@ async function withButtonLoading(ev, busyLabel, fn) {
   finally { if (btn) { btn.disabled = false; btn.innerHTML = original; } }
 }
 window.withButtonLoading = withButtonLoading;
-export function addLog(lid, msg, type = '') { const el = $(lid); el.style.display = 'block'; const s = document.createElement('span'); s.className = 'log-line ' + type; s.textContent = new Date().toLocaleTimeString() + ' · ' + msg; el.appendChild(s); el.scrollTop = el.scrollHeight; }
+// The timestamp is its own element so it can recede (.log-time, dimmer and in a
+// fixed gutter) and let the message lead. Both halves stay textContent — nothing
+// here is ever parsed as markup.
+export function addLog(lid, msg, type = '') {
+  const el = $(lid);
+  el.style.display = 'block';
+  const s = document.createElement('span');
+  s.className = 'log-line ' + type;
+  const t = document.createElement('span');
+  t.className = 'log-time';
+  t.textContent = new Date().toLocaleTimeString() + ' · ';
+  s.appendChild(t);
+  s.appendChild(document.createTextNode(msg));
+  el.appendChild(s);
+  el.scrollTop = el.scrollHeight;
+}
 
 // ── GOOGLE SHEETS
 function updateSheetsBadge() {
