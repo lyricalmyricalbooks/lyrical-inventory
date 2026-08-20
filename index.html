@@ -135,7 +135,10 @@
   /* The figure resets the caption's caps/tracking — a date or an amount must
      not inherit the label's letter-spacing. */
   .invoice-card .inv-c-cell strong{display:block;font-family:'DM Mono',monospace;color:var(--text);font-weight:600;font-size:var(--text-base);letter-spacing:0;text-transform:none;margin-top:var(--space-1);}
-  .invoice-card .inv-c-cell.amt{text-align:right;}
+  /* One step more gutter than the grid's own gap: at --text-lg the figure is
+     the heaviest thing on the row, and butted straight against the status pill
+     it reads as one cluster with the controls rather than as the row's answer. */
+  .invoice-card .inv-c-cell.amt{text-align:right;padding-right:var(--space-2);}
   /* --gold-text, not --gold: raw gold is a fill/accent colour and does not
      clear AA as text on the card surface in either theme. */
   .invoice-card .inv-c-cell.amt strong{font-size:var(--text-lg);color:var(--gold-text);letter-spacing:var(--tracking-tight);white-space:nowrap;}
@@ -153,7 +156,7 @@
     /* Stacked, every cell is full width — a right-aligned total would float
        away from the column of left-aligned labels above it. */
     .invoice-card{grid-template-columns:1fr;gap:var(--space-2);}
-    .invoice-card .inv-c-cell.amt{text-align:left;}
+    .invoice-card .inv-c-cell.amt{text-align:left;padding-right:0;}
     .invoice-card .inv-c-actions{flex-direction:row;align-items:center;justify-content:space-between;}
   }
   .inv-item-row td{padding:6px 4px;}

@@ -35,7 +35,12 @@ test('the invoice total leads its row instead of tying with the dates beside it'
 });
 
 test('invoice totals share one right edge so a column of them can be compared', () => {
-  expect(rule('.invoice-card .inv-c-cell.amt')).toMatch(/text-align:\s*right/);
+  const amtCell = rule('.invoice-card .inv-c-cell.amt');
+  expect(amtCell).toMatch(/text-align:\s*right/);
+
+  // A step more gutter than the grid gap, or the enlarged figure butts against
+  // the status pill and reads as part of the action cluster.
+  expect(amtCell).toMatch(/padding-right:\s*var\(--space-2\)/);
 
   // The amount column needs a floor, or a long total reflows the grid and the
   // shared edge moves from card to card.
@@ -47,7 +52,7 @@ test('invoice totals share one right edge so a column of them can be compared', 
   // deliberately dropped rather than left to float the total off on its own.
   const narrow = html.match(/@media \(max-width:780px\)\{([\s\S]*?)\n  \}/);
   expect(narrow).not.toBeNull();
-  expect(narrow[1]).toMatch(/\.invoice-card \.inv-c-cell\.amt\{text-align:left;\}/);
+  expect(narrow[1]).toMatch(/\.invoice-card \.inv-c-cell\.amt\{text-align:left;padding-right:0;\}/);
 });
 
 test('invoice captions sit on the Syne micro-label scale, a step below their figures', () => {
