@@ -55,6 +55,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-20 | visual | Dialogs | Kept a dialog's heading in view and stopped its buttons cutting the form off | #597 |
 | 2026-08-20 | visual | Opening screen | Gave the home screen real headings instead of the faintest type in the app | #598 |
 | 2026-08-20 | visual | Sales by book | Made the per-book sales cards match the chart above them and line their figures up | #601 |
+| 2026-08-20 | visual | QR codes page | Redesigned the payment QR cards so the book title and price lead | pending |
 
 ---
 
