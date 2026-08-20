@@ -5781,19 +5781,28 @@ export function renderHist() {
       recon.innerHTML = `
         <div class="hist-kpi-container">
           <div class="hist-kpi-card">
-            <div class="hist-kpi-label">Total Printed</div>
-            <div class="hist-kpi-val">${printedCount}</div>
-            <div class="hist-kpi-sub">Print Run Edition</div>
+            <div class="hist-kpi-icon" aria-hidden="true">🖨️</div>
+            <div class="hist-kpi-content">
+              <div class="hist-kpi-label">Total Printed</div>
+              <div class="hist-kpi-val">${printedCount}</div>
+              <div class="hist-kpi-sub">Print Run Edition</div>
+            </div>
           </div>
-          <div class="hist-kpi-card highlight-gold">
-            <div class="hist-kpi-label">Stock On Hand</div>
-            <div class="hist-kpi-val">${onHandCount}</div>
-            <div class="hist-kpi-sub">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}% available</div>
+          <div class="hist-kpi-card highlight-gold is-lead">
+            <div class="hist-kpi-icon" aria-hidden="true">📚</div>
+            <div class="hist-kpi-content">
+              <div class="hist-kpi-label">Stock On Hand</div>
+              <div class="hist-kpi-val">${onHandCount}</div>
+              <div class="hist-kpi-sub">${printedCount > 0 ? ((onHandCount / printedCount) * 100).toFixed(0) : 0}% available</div>
+            </div>
           </div>
           <div class="hist-kpi-card highlight-green">
-            <div class="hist-kpi-label">Distributed & Sold</div>
-            <div class="hist-kpi-val">${distributedCount}</div>
-            <div class="hist-kpi-sub">${sellThroughPct}% sell-through rate</div>
+            <div class="hist-kpi-icon" aria-hidden="true">🚚</div>
+            <div class="hist-kpi-content">
+              <div class="hist-kpi-label">Distributed & Sold</div>
+              <div class="hist-kpi-val">${distributedCount}</div>
+              <div class="hist-kpi-sub">${sellThroughPct}% sell-through rate</div>
+            </div>
           </div>
         </div>
         <div class="hist-progress-bar-wrap" title="${onHandCount} on hand of ${printedCount} printed (${sellThroughPct}% distributed)">
