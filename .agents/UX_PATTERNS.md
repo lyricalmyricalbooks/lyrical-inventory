@@ -118,8 +118,8 @@ The anatomy: **icon plate → content column → 3px bottom accent.**
 </div>
 ```
 
-Reference implementations: `.consignment-stat-card` (`style.css:4041`) and `.hist-kpi-card`
-(`style.css:~110`). Five rules they share:
+Reference implementations: `.consignment-stat-card` (`style.css:4041`), `.hist-kpi-card`
+(`style.css:~110`) and `.cf-stat` (the Tax Centre's cash-flow strip). Five rules they share:
 
 - **Label `--text-2xs` / 800 / `--tracking-label`, figure `'DM Mono'` at `--text-xl`, sub-line
   `--text-sm`.** Anything else and the strip reads as a different app's component. Spacing comes
@@ -133,7 +133,17 @@ Reference implementations: `.consignment-stat-card` (`style.css:4041`) and `.his
   screen exists to act on — not the biggest number, and never more than one.
 - **Sub-lines bottom-align with `margin-top:auto`.** The lead's taller figure otherwise pushes its
   own sub-line below the others'. Card is `align-items:stretch`, content is a flex column, icon
-  plate takes `align-self:flex-start`.
+  plate takes `align-self:flex-start`. **When the labels can wrap unevenly** — "Operating Expenses
+  (Money Out)" goes to two lines at widths where "Net Cash Flow" stays on one — put the
+  `margin-top:auto` on the *figure* instead, so the figure and its sub-line both hang off the
+  bottom of the stretched card. Do **not** reserve a blank second line on the label to fake it
+  (`min-height:2lh`): it buys the same alignment and costs every card an empty row at the widths
+  where nothing wraps, which is most of them.
+- **A card in a group of three carries at most one colour role.** Where the figures are an
+  input/input/outcome set (money in, money out, what's left), colour only the outcome and let the
+  two inputs keep a tinted icon plate as their cue. `.cf-stat` painted all three — green in, red
+  out, and a net card the renderer also paints green or red — so the number the screen exists to
+  answer had no more weight than the two it is derived from.
 - **The grid is an explicit `repeat(3, minmax(0,1fr))` with a `@container` step to `1fr` at 680px** —
   matching the consignment HUD, so a phone gets the same layout in both places. `auto-fit` looks
   equivalent and isn't: at mid widths it wraps 3 cards into 2 columns and leaves the third an orphan

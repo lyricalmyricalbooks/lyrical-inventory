@@ -4051,39 +4051,122 @@ tr.hist-row:hover {
 .cf-head select#tc-year:focus{outline:none;border-color:var(--gold);background-image:var(--select-arrow-gold);box-shadow:0 0 0 3px rgba(200,145,58,.12);}
 .cf-cad-badge{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-text);background:var(--gold-bg);border:1px solid var(--gold-line);padding:3px 10px;border-radius:99px;}
 
-/* Headline stat cards */
-.cf-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px;}
-.cf-stat{position:relative;padding:14px 16px;border-radius:var(--r2);background:var(--cream2);border:1px solid var(--border);border-left:3px solid var(--text4);}
-.cf-stat.cf-income{border-left-color:var(--green);}
-.cf-stat.cf-expense{border-left-color:var(--red);}
-.cf-stat-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:22px;margin-bottom:8px;}
-.cf-ic{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--cream);color:var(--text3);border:1px solid var(--border);}
+/* ─── CASH FLOW HEADLINE STRIP ────────────────────────────────────────────
+   This was a third parallel stat-card system: 9px labels at .12em, a 24px
+   figure, a 10.5px sub-line and 12/14/8/4/3px gaps, none of them off the
+   scale, plus a 3px LEFT slab on the two accented cards. Under the global
+   border-box that slab shrank only those cards' content boxes, so the three
+   labels never shared a left edge.
+
+   Worse, every card on the strip was coloured — green in, red out, and a net
+   card renderTaxCenter also paints green or red — so the one figure the
+   screen exists to answer carried no more weight than the two figures it is
+   derived from. Emphasis is now inverted: Gross Sales and Operating Expenses
+   step back to a neutral figure and keep only a tinted icon plate as the
+   in/out cue, and Net Cash Flow is the only large, coloured figure and the
+   only coloured accent on the strip.
+
+   Anatomy and tokens are .hist-kpi-card's (icon plate → content column → 3px
+   bottom accent), so the app's three headline strips are one system. */
+.cf-strip{
+  display:flex;flex-direction:column;
+  /* Stage-wrapper spacing: two gaps rather than a margin per block. */
+  gap:var(--space-3);margin-bottom:var(--space-4);
+  container-type:inline-size;container-name:cf-strip;
+}
+.cf-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);margin-bottom:0;}
+.cf-stat{
+  position:relative;overflow:hidden;
+  /* stretch, not center: the content column has to fill the card height for
+     the sub-lines to bottom-align across all three. */
+  display:flex;align-items:stretch;gap:14px;
+  padding:var(--space-4) 18px;border-radius:var(--r2);
+  background:var(--surface-card);border:1px solid var(--border2);
+  box-shadow:var(--elev-1);
+  transition:transform var(--dur-fast) var(--ease-entrance),
+             box-shadow var(--dur-fast) var(--ease-entrance),
+             border-color var(--dur-fast) var(--ease-standard);
+}
+.cf-stat:hover{transform:translateY(-2px);box-shadow:var(--elev-hover);border-color:var(--gold-line);}
+/* The accent is a bottom rule, never a left border — colour the ::after, not
+   the frame, and every card keeps one shared left edge. */
+.cf-stat::after{content:'';position:absolute;inset:auto 0 0;height:3px;background:var(--cream3);}
+.cf-ic{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:42px;height:42px;border-radius:12px;
+  align-self:flex-start;flex-shrink:0;
+  background:var(--cream2);border:1px solid var(--border2);color:var(--text3);
+}
 .cf-stat.cf-income .cf-ic{color:var(--green);background:var(--green-bg);border-color:transparent;}
 .cf-stat.cf-expense .cf-ic{color:var(--red);background:var(--red-bg);border-color:transparent;}
-.cf-stat-label{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:3px;}
-.cf-stat-val{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;color:var(--text);line-height:1.1;}
-.cf-stat.cf-income .cf-stat-val{color:var(--green);}
-.cf-stat.cf-expense .cf-stat-val{color:var(--red);}
-.cf-stat-sub{font-size:10.5px;color:var(--text3);margin-top:4px;}
+.cf-stat-content{min-width:0;flex:1;display:flex;flex-direction:column;}
+.cf-stat-label{
+  font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;line-height:var(--leading-snug);
+  color:var(--text3);margin-bottom:var(--space-1);
+}
+.cf-stat-figure{
+  display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--space-2);min-width:0;
+  /* The figures hang off the BOTTOM of the column, not off the label above
+     them. "Operating Expenses (Money Out)" wraps to two lines at widths where
+     "Net Cash Flow" stays on one, and a figure that starts under its own label
+     therefore starts at a different height on every card. Anchored to the
+     bottom of a stretched card they share one edge whatever the labels do —
+     and no card has to reserve a blank second line to get there. */
+  margin-top:auto;
+}
+.cf-stat-val{
+  font-family:'DM Mono',monospace;font-size:var(--text-xl);font-weight:700;
+  line-height:var(--leading-tight);letter-spacing:var(--tracking-tight);
+  color:var(--text);
+  font-feature-settings:"tnum" 1,"zero" 1;font-variant-numeric:tabular-nums;
+}
+.cf-stat-sub{
+  font-size:var(--text-sm);line-height:var(--leading-snug);color:var(--text2);
+  padding-top:6px;
+}
+/* Exactly one card leads, by size AND colour — a size step on its own reads as
+   an accident. Net Cash Flow keeps the green/red the sign genuinely carries;
+   the two input cards deliberately do not. */
+.cf-stat.is-lead{border-color:var(--border);box-shadow:var(--elev-2);}
+.cf-stat.is-lead .cf-stat-val{font-size:var(--text-2xl);}
+.cf-stat.is-lead.cf-income .cf-stat-val{color:var(--green);}
+.cf-stat.is-lead.cf-expense .cf-stat-val{color:var(--red);}
+.cf-stat.is-lead.cf-income::after{background:linear-gradient(90deg,var(--emerald),var(--emerald-soft));}
+.cf-stat.is-lead.cf-expense::after{background:linear-gradient(90deg,var(--rose),var(--rose-soft));}
 
 /* Delta chips on headline cards */
-.cf-stat-delta{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;white-space:nowrap;}
+.cf-stat-delta{font-family:'Syne',sans-serif;font-size:var(--text-xs);font-weight:700;white-space:nowrap;}
 .cf-stat-delta:empty{display:none;}
-.cf-chip-up,.cf-chip-down,.cf-chip-flat,.cf-chip-new{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;letter-spacing:.01em;}
+.cf-chip-up,.cf-chip-down,.cf-chip-flat,.cf-chip-new{display:inline-flex;align-items:center;gap:3px;padding:2px var(--space-2);border-radius:99px;letter-spacing:.01em;}
 .cf-chip-up{color:var(--green);background:var(--green-bg);}
 .cf-chip-down{color:var(--red);background:var(--red-bg);}
 .cf-chip-flat{color:var(--text3);background:var(--cream3);}
 .cf-chip-new{color:var(--gold);background:var(--gold-bg);}
 .cf-chip-vs{font-weight:600;opacity:.8;}
 
-/* Secondary KPI chips */
-.cf-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:16px;}
-.cf-kpi{padding:10px 12px;border-radius:var(--r2);background:var(--cream);border:1px solid var(--border);text-align:center;}
-.cf-kpi-val{font-family:'DM Mono',monospace;font-size:16px;font-weight:500;color:var(--text);line-height:1.15;}
+/* Secondary KPI chips — deliberately a step BELOW the headline figures
+   (--text-md against --text-xl), so the strip reads top-down rather than as
+   two rows of equally loud numbers. */
+.cf-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-2);margin-bottom:0;}
+.cf-kpi{padding:var(--space-3);border-radius:var(--r2);background:var(--cream);border:1px solid var(--border);text-align:center;}
+.cf-kpi-val{
+  font-family:'DM Mono',monospace;font-size:var(--text-md);font-weight:500;
+  line-height:var(--leading-tight);color:var(--text);
+  font-feature-settings:"tnum" 1,"zero" 1;font-variant-numeric:tabular-nums;
+}
 .cf-kpi-val.cf-kpi-good{color:var(--green);}
 .cf-kpi-val.cf-kpi-bad{color:var(--red);}
 .cf-kpi-val.cf-kpi-muted{color:var(--text2);}
-.cf-kpi-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-top:4px;}
+.cf-kpi-label{font-size:var(--text-3xs);font-weight:800;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text3);margin-top:var(--space-1);}
+
+/* Component-level, not viewport-level: this strip sits inside a card whose
+   width depends on the sidebar, so viewport width is the wrong signal. 680px
+   matches the consignment HUD and Order History's 3→1 step. */
+@container cf-strip (max-width:680px){
+  .cf-stats{grid-template-columns:1fr;}
+  .cf-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
 
 /* FX rate-staleness banner */
 .cf-fx-warn{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.45;color:var(--amber);background:var(--amber-bg);border:1px solid rgba(122,85,0,.25);border-radius:var(--r2);padding:9px 12px;margin-bottom:14px;}
@@ -4126,8 +4209,8 @@ tr.hist-row:hover {
 .cf-detail-expense{color:var(--red)!important;font-weight:700;}
 
 @media (max-width:760px){
-  .cf-stats{grid-template-columns:1fr;}
-  .cf-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
+  /* .cf-stats / .cf-kpis moved to the @container step above — they respond to
+     the card they sit in, not to the viewport. */
   .cf-detail-totals{grid-template-columns:1fr;}
   .cf-chip-vs{display:none;}
 }

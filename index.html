@@ -2157,39 +2157,52 @@
     <!-- FX rate-staleness banner (populated by renderTaxCenter) -->
     <div id="tc-fx-warning"></div>
 
-    <!-- Headline stat cards (built by renderTaxCenter) -->
-    <div class="cf-stats" id="tc-cf-stats">
-      <div class="cf-stat cf-income">
-        <div class="cf-stat-top">
-          <span class="cf-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></span>
-          <span class="cf-stat-delta" id="tc-sales-delta"></span>
+    <!-- Headline strip. .cf-strip is the query container for the two grids
+         below it — an element cannot query its own container, so the
+         container-type has to sit on this wrapper rather than on .cf-stats. -->
+    <div class="cf-strip">
+      <!-- Headline stat cards (built by renderTaxCenter) -->
+      <div class="cf-stats" id="tc-cf-stats">
+        <div class="cf-stat cf-income">
+          <span class="cf-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></span>
+          <div class="cf-stat-content">
+            <div class="cf-stat-label">Gross Sales (Money In)</div>
+            <div class="cf-stat-figure">
+              <span class="cf-stat-val" id="tc-sales">—</span>
+              <span class="cf-stat-delta" id="tc-sales-delta"></span>
+            </div>
+            <div class="cf-stat-sub">Before expenses &amp; tax</div>
+          </div>
         </div>
-        <div class="cf-stat-label">Gross Sales (Money In)</div>
-        <div class="cf-stat-val" id="tc-sales">—</div>
-        <div class="cf-stat-sub">Before expenses &amp; tax</div>
-      </div>
-      <div class="cf-stat cf-expense">
-        <div class="cf-stat-top">
-          <span class="cf-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></span>
-          <span class="cf-stat-delta" id="tc-expenses-delta"></span>
+        <div class="cf-stat cf-expense">
+          <span class="cf-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></span>
+          <div class="cf-stat-content">
+            <div class="cf-stat-label">Operating Expenses (Money Out)</div>
+            <div class="cf-stat-figure">
+              <span class="cf-stat-val" id="tc-expenses">—</span>
+              <span class="cf-stat-delta" id="tc-expenses-delta"></span>
+            </div>
+            <div class="cf-stat-sub">Excludes artist payouts</div>
+          </div>
         </div>
-        <div class="cf-stat-label">Operating Expenses (Money Out)</div>
-        <div class="cf-stat-val" id="tc-expenses">—</div>
-        <div class="cf-stat-sub">Excludes artist payouts</div>
-      </div>
-      <div class="cf-stat" id="tc-net-card">
-        <div class="cf-stat-top">
-          <span class="cf-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><polyline points="7 14 11 10 15 13 21 6"></polyline></svg></span>
-          <span class="cf-stat-delta" id="tc-net-delta"></span>
+        <!-- is-lead: the one figure this strip exists to answer. renderTaxCenter
+             adds cf-income/cf-expense here for the sign, so both classes stay. -->
+        <div class="cf-stat cf-net is-lead" id="tc-net-card">
+          <span class="cf-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><polyline points="7 14 11 10 15 13 21 6"></polyline></svg></span>
+          <div class="cf-stat-content">
+            <div class="cf-stat-label">Net Cash Flow</div>
+            <div class="cf-stat-figure">
+              <span class="cf-stat-val" id="tc-net">—</span>
+              <span class="cf-stat-delta" id="tc-net-delta"></span>
+            </div>
+            <div class="cf-stat-sub">Before taxes</div>
+          </div>
         </div>
-        <div class="cf-stat-label">Net Cash Flow</div>
-        <div class="cf-stat-val" id="tc-net">—</div>
-        <div class="cf-stat-sub">Before taxes</div>
       </div>
-    </div>
 
-    <!-- Secondary KPI chips (built by renderTaxCenter) -->
-    <div class="cf-kpis" id="tc-cf-kpis"></div>
+      <!-- Secondary KPI chips (built by renderTaxCenter) -->
+      <div class="cf-kpis" id="tc-cf-kpis"></div>
+    </div>
 
     <!-- Monthly / yearly cash-flow mini chart (built by renderTaxCenter) -->
     <div class="cf-chart-wrap" id="tc-cf-chart"></div>
