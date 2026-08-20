@@ -279,6 +279,51 @@ carry a single emoji that matches the section's theme (💳 payments, 📄 invoi
 
 ---
 
+## Section heads — `.sec-head`
+
+A screen's sections are headed one of two ways, and mixing the two on one screen is
+what `.sec-head` exists to stop. The app has a micro-label tier (`.sect` — 9px uppercase
+grey with a trailing hairline) and a heading tier (`.section-hed` — 20px Playfair serif).
+Before this landed, the "All books" landing screen ran two `.sect` labels above a section
+that had a gold kicker, a heading and a line of subcopy — so the first screen the publisher
+sees carried the faintest headings in the app, and the only part that looked designed was
+the supporting section at the bottom.
+
+Use `.sect` for a label *inside* a panel (a sub-divider). Use `.sec-head` for a section that
+is one of a screen's top-level parts:
+
+```html
+<div class="overview-section">
+  <div class="sec-head is-muted">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Sales Performance</div>
+      <div class="section-hed sec-head-title">Combined sales by channel</div>
+      <p class="section-subcopy">Where the whole catalogue actually sells.</p>
+    </div>
+    <div class="sec-head-badges"><span class="pill gold">4 channels</span></div>
+  </div>
+  …section content…
+</div>
+```
+
+Four rules it encodes:
+- **The heading tier is `.section-hed`, not a new class.** `.sec-head-title` only owns the
+  spacing inside the head. A section that invents its own heading size is how a screen ends
+  up with three heading tiers.
+- **`--sec-accent` tints one head's kicker, and gold is spent once per screen.** Default is
+  gold; `.is-muted` re-points it at `var(--slate)`. Reach for the custom property rather
+  than a hardcoded colour so it themes itself in both directions. A screen where every
+  kicker is gold has no entry point left.
+- **`.consignment-summary-head` and friends alias onto these rules** rather than keeping a
+  second copy. Extend the selector list; don't fork the declarations.
+- **Space between sections has to beat space within one.** `.overview-section` is
+  `var(--space-6)`, and it zeroes the trailing margin of the last card inside itself — the
+  cards already carry 14–16px of their own, and left alone that sums with the section gap
+  and the rhythm drifts down the screen. It is also its own `@container` (`overview-sec`),
+  so the head stacks on a narrow panel without a viewport breakpoint.
+
+---
+
 ## Dialogs — `.modal`
 Every dialog is a three-part shell: a pinned `.modal-title` header, a scrolling body, a pinned
 `.modal-footer` action row. Both pinned edges carry a `--border-default` hairline and a
