@@ -9608,6 +9608,159 @@ tr.hist-row:hover {
   box-shadow: 0 8px 30px rgba(14, 12, 10, 0.08) !important;
 }
 
+/* ─── POS CHECKOUT PANEL — STACK RHYTHM & HIERARCHY ───────────────────────
+   The column worked with a customer standing at the table.
+
+   It was eleven inline-styled blocks whose vertical gaps ran
+   6 / 10 / 8 / 4 / 12 / 12 / 4 / 14 / 12 / 8 / 8 px, so the space BETWEEN the
+   four stages of a sale (rates → total → lines → pay) was the same as the
+   space INSIDE them and nothing grouped: the panel read as one undifferentiated
+   run of small text. Two rhythms replace all eleven — --space-5 between
+   stages, --space-2 within one — which is the whole reason the markup now
+   wraps each stage in a .pos-checkout-stage.
+
+   The sale total led on size but not on type: 34px Syne 800 is the app's
+   heading face, proportional, so the figure re-widthed on every quantity tap
+   and it was the one money value in the app not set in tabular DM Mono. It is
+   neutral rather than green here too — green is the settled/paid role in this
+   app, and it was competing for the same panel with both the live-rates line
+   above it and the gold primary action below. Size and mono weight carry the
+   lead now; the only saturated fill left is Complete Sale. */
+.pos-cart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.pos-checkout-stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* A long mixed-currency total must wrap inside the column rather than
+     stretch a flex item past the panel. */
+  min-width: 0;
+}
+
+.pos-checkout-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+/* One size step above the field labels below it and the only gold text on the
+   panel, so the section heading actually outranks "Txn currency" instead of
+   sitting level with it. */
+.pos-checkout-eyebrow {
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--gold-text);
+}
+/* renderPOSFxStatus() swaps this to --green once live rates land; the amber
+   here is the "saved rates" resting state it starts from. */
+.pos-checkout-fx {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: var(--leading-snug);
+  color: var(--status-active);
+}
+
+/* Deliberately the same spec as `.form-group label` — the app's field-label
+   type — so an inline label inside a plate and a stacked one above a table
+   read as one set rather than two near-misses at 11px/600. */
+.pos-checkout-label {
+  display: block;
+  font-family: 'Syne', sans-serif;
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--content-muted);
+}
+
+/* One plate treatment, not two: the currency row and the itemised subtotal
+   were both cream washes, at 8px and 6px radius with different paddings and no
+   border at all, so two blocks doing the same job looked unrelated. */
+.pos-checkout-plate {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r2);
+  background: var(--surface-sunken);
+}
+.pos-checkout-ccy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pos-checkout-ccy .pos-checkout-label {
+  flex: none;
+}
+.pos-checkout-ccy select {
+  flex: 0 1 auto;
+  max-width: 130px;
+  padding: 4px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--content-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r);
+  cursor: pointer;
+}
+
+.pos-checkout-total {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-3xl);
+  font-weight: 500;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--content-primary);
+  /* A cart the FX rates can't reconcile prints "€12.00 + $34.00" here — wrap
+     it rather than push the sticky column wider than its track. */
+  overflow-wrap: anywhere;
+}
+.pos-checkout-total-note {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+.pos-checkout-subtotal {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  color: var(--content-primary);
+}
+
+/* The warning carries its own bottom margin for the contexts it was written
+   in; inside a gapped stage that would stack on top of the gap. */
+.pos-checkout-stage .pos-oversell-note {
+  margin-bottom: 0;
+}
+/* `.btn.lg` is the house 44px hero CTA — reused rather than re-sized inline,
+   so Complete Sale is a full Fitts's-Law target on a phone at a fair table. */
+.btn.pos-checkout-cta {
+  width: 100%;
+  justify-content: center;
+  box-shadow: var(--elev-2);
+}
+.btn.pos-checkout-cta-alt {
+  box-shadow: var(--elev-1);
+}
+.pos-checkout-foot {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-normal);
+  text-align: center;
+  color: var(--content-muted);
+}
+
 /* ─── POS CHECKOUT LINES ──────────────────────────────────────────────────
    The cart column, which is read and tapped with a customer waiting. Every
    value here is a token: the old inline styles baked near-black dividers
