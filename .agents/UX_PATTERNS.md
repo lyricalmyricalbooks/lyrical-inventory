@@ -190,6 +190,38 @@ carry a single emoji that matches the section's theme (💳 payments, 📄 invoi
 
 ---
 
+## Dialogs — `.modal`
+Every dialog is a three-part shell: a pinned `.modal-title` header, a scrolling body, a pinned
+`.modal-footer` action row. Both pinned edges carry a `--border-default` hairline and a
+`--space-3` gradient scrim. Four rules hold it together — break any one and the shell leaks.
+
+- **The block padding lives on the header and footer, not on `.modal`.** `.modal` sets
+  `padding: 0 var(--space-6)` only. A sticky child can pin no higher than the scrollport edge,
+  so padding left on `.modal` would sit *above* the pinned header and show a strip of scrolling
+  content through the gap. `.modal:not(:has(.modal-title))` and its footer twin give that
+  padding back to the two dialogs here that render without one of those parts (the receipt
+  lightbox and the invoice paper). Repeat the split in any breakpoint that re-declares
+  `.modal`'s padding — the ≤768px block does.
+- **A hairline alone is not enough; it needs a scrim.** An opaque pinned bar guillotines
+  whatever glyph lands on the seam, and a field label sliced through its x-height reads as a
+  rendering fault rather than as "there is more above". The scrim fades the body into the
+  pinned surface over one spacing step instead. It is absolutely positioned, which also keeps
+  it out of the footer's flex row — a static pseudo-element there lays out as a third button.
+- **Offset the scrim past the hairline: `calc(100% + 1px)`.** A percentage offset on an
+  absolutely positioned box resolves against the containing block's *padding* box, so a plain
+  `100%` starts the scrim inside the border and paints its opaque end straight over the seam
+  it is meant to sit below.
+- **`.modal-title` must be the dialog's first element.** It is what the header *is*, and what
+  the padding guard keys off. A dialog opening with something else pins that something else
+  against the top edge. `tests/modal-shell-seams.test.js` holds the two known exceptions in an
+  exact allowlist.
+
+Spacing comes from the shared rule — never an inline `margin-top` on a footer. Twelve of them
+used to hand-pick 14/16/18px, so no two dialogs put their buttons the same distance below the
+last field.
+
+---
+
 ## Dropdowns & menus
 The book switcher (`index.html:311`, `#book-dropdown-menu`) is the canonical custom dropdown:
 absolute-positioned panel, `var(--ink2)` background, `0 8px 32px rgba(0,0,0,.4)` shadow,

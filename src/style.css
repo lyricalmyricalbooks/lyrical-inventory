@@ -2571,7 +2571,16 @@ tr.hist-row:hover {
    a modal whose content stacks tall on desktop (long forms, a rendered
    drafts table) had no scroll container at all — content below the fold was
    simply unreachable, with the primary action button as the first casualty. */
-.modal{background:var(--cream);border-radius:var(--r3);border:1px solid var(--border);padding:var(--space-6);width:100%;max-width:500px;max-height:88vh;overflow:auto;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);}
+/* The dialog is a three-part shell: a pinned header, a scrolling body, a pinned
+   footer. The block padding therefore lives on the header and the footer rather
+   than on .modal itself — a sticky child can only pin flush against the
+   scrollport edge, so any padding left here would sit ABOVE the pinned header
+   and show a strip of scrolling content through the gap. Only the inline
+   padding stays. The two :has() guards below give the padding back to the
+   handful of dialogs that render without one of those two parts. */
+.modal{background:var(--surface-page);border-radius:var(--r3);border:1px solid var(--border);padding:0 var(--space-6);width:100%;max-width:500px;max-height:88vh;overflow:auto;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);}
+.modal:not(:has(.modal-title)){padding-top:var(--space-6);}
+.modal:not(:has(.modal-footer)){padding-bottom:var(--space-6);}
 @keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes overlayIn{from{opacity:0}to{opacity:1}}
 @keyframes modalOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.95) translateY(12px)}}
@@ -2585,8 +2594,59 @@ tr.hist-row:hover {
 @media (prefers-reduced-motion: reduce){
   .overlay,.modal,.overlay.closing,.overlay.closing .modal{animation:none !important;}
 }
-.modal-title{font-family:'Playfair Display',serif;font-size:22px;color:var(--text);margin-bottom:1.4rem;}
-.modal-footer{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-5);position:sticky;bottom:0;background:var(--cream);padding-top:var(--space-3);z-index:1;}
+/* Pinned header. Carries .modal's former padding-top so the inset survives
+   pinning, and an opaque fill + hairline so body content reads as passing
+   BEHIND a header rather than being clipped by nothing. */
+.modal-title{
+  position:sticky;top:0;z-index:var(--z-raised);
+  background:var(--surface-page);
+  font-family:'Playfair Display',serif;
+  font-size:var(--text-xl);
+  line-height:var(--leading-tight);
+  color:var(--content-primary);
+  padding:var(--space-6) 0 var(--space-4);
+  margin-bottom:var(--space-5);
+  border-bottom:1px solid var(--border-default);
+}
+/* Pinned footer, the header's mirror: same hairline, and it owns .modal's
+   former padding-bottom so the action row keeps its inset whether the dialog
+   is short enough to sit in flow or long enough to pin. */
+.modal-footer{
+  display:flex;justify-content:flex-end;gap:var(--space-2);
+  margin-top:var(--space-5);
+  position:sticky;bottom:0;z-index:var(--z-raised);
+  background:var(--surface-page);
+  padding:var(--space-3) 0 var(--space-6);
+  border-top:1px solid var(--border-default);
+}
+/* Scrims either side of the scrolling body. A hairline alone marks WHERE the
+   body ends but still guillotines whatever glyph happens to sit on the seam —
+   a field label sliced through its x-height reads as a rendering fault, not as
+   "there is more above". These fade the content out into the pinned surface
+   over one spacing step instead.
+   They are absolutely positioned, which also keeps them out of the footer's
+   flex row: a static pseudo-element there would lay out as a third button.
+   At rest they land inside the header's/footer's own margin gap, so a dialog
+   too short to scroll looks exactly as it did. */
+.modal-title::after,
+.modal-footer::before{
+  content:'';
+  position:absolute;left:0;right:0;
+  height:var(--space-3);
+  pointer-events:none;
+}
+/* The +1px clears the hairline. A percentage offset on an absolutely
+   positioned box resolves against the containing block's PADDING box, so a
+   plain 100% would start the scrim inside the border and paint its opaque end
+   straight over the seam it is meant to sit below. */
+.modal-title::after{
+  top:calc(100% + 1px);
+  background:linear-gradient(to bottom,var(--surface-page),transparent);
+}
+.modal-footer::before{
+  bottom:calc(100% + 1px);
+  background:linear-gradient(to top,var(--surface-page),transparent);
+}
 
 /* INLINE FORM VALIDATION (#3) */
 .form-group.invalid input,.form-group.invalid select,.form-group.invalid textarea{
@@ -2975,16 +3035,20 @@ tr.hist-row:hover {
   }
 
   /* Modals */
+  /* Same three-part shell as desktop, one step tighter: the block padding
+     stays on the pinned header and footer, only the amount changes. */
   .modal{
     width:calc(100% - 16px);
     margin:0 8px;
-    padding:1.25rem;
+    padding:0 var(--space-4);
     border-radius:14px;
     max-height:88vh;
     overflow:auto;
   }
-  .modal-title{font-size:20px;margin-bottom:1rem;}
-  .modal-footer{position:sticky;bottom:0;background:var(--cream);padding-top:.75rem;flex-wrap:wrap;}
+  .modal:not(:has(.modal-title)){padding-top:var(--space-4);}
+  .modal:not(:has(.modal-footer)){padding-bottom:var(--space-4);}
+  .modal-title{font-size:20px;padding:var(--space-4) 0 var(--space-3);margin-bottom:var(--space-4);}
+  .modal-footer{position:sticky;bottom:0;background:var(--surface-page);padding:var(--space-3) 0 var(--space-4);flex-wrap:wrap;}
   .modal-footer .btn{flex:1;}
   /* On a phone the buttons already fill the row, so the unsaved flag takes its
      own line above them rather than squeezing Cancel and Save narrower. */
