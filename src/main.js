@@ -17893,10 +17893,20 @@ function reconRenderKeyRow(forceEdit) {
   if (!row) return;
   const saved = (TAX_CENTER?.settings?.stripeKey || getInvoiceSettings().stripeKey || '').trim();
   if (saved && !forceEdit && !row.dataset.editing) {
-    row.innerHTML = `<span style="font-size:12px;color:var(--text2);">🔒 Stripe key saved <span style="font-family:'DM Mono',monospace;color:var(--text3);">••••${escapeHtml(saved.slice(-4))}</span></span>
+    // Settled state, so the house green pill rather than a bare line of text —
+    // it has to read as "done" at a glance beside the amber/red worklist below.
+    row.innerHTML = `<span class="recon-key-saved"><span class="pill green">🔒 Stripe key saved</span><span class="recon-key-mask">••••${escapeHtml(saved.slice(-4))}</span></span>
       <button class="btn tag sm" onclick="reconEditKey()">Change</button>`;
   } else {
-    row.innerHTML = `<input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off" value="${escapeHtml(saved)}">`;
+    // Mirrors the markup in index.html — the field wears .form-group so it
+    // matches every other input in the app, and the "reused from…" note lives
+    // under the box instead of as a placeholder sentence that vanishes on
+    // the first keystroke.
+    row.innerHTML = `<div class="form-group recon-key-field">
+        <label for="recon-key">Stripe secret key</label>
+        <input type="password" id="recon-key" placeholder="rk_live_… or sk_live_…" autocomplete="off" value="${escapeHtml(saved)}">
+        <div class="field-note">Reused from Tax Centre / Invoices if already saved.</div>
+      </div>`;
   }
 }
 function reconEditKey() {

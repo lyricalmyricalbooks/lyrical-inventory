@@ -46,6 +46,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-19 | behavioural | Event POS | Showed how many copies are left before you sell them | #579 |
 | 2026-08-19 | behavioural | Expenses | Stopped the expense total mixing currencies into one wrong number | #580 |
 | 2026-08-19 | behavioural | Order History | Made it possible to find one order without scrolling | #581 |
+| 2026-08-20 | visual | Payments | Made the Stripe key box look like the rest of the app | #595 |
 
 ---
 

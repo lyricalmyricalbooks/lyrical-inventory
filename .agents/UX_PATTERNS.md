@@ -165,6 +165,30 @@ inset) and republishes on resize. It falls back to `0px` everywhere it can't mea
 wrap falls back to `overflow:hidden` on engines without `overflow: clip`, so both degrade to
 today's plain header rather than to a broken one.
 
+### There is no base `input` style — an unclassed field is raw browser chrome
+
+`src/style.css` styles inputs **only** through `.form-group input` and a handful of named
+component classes (`.recon-search`, `.ledger-filter-input`, `.pill-search-input`, `.bx-tbl input`).
+There is no bare `input {…}` element rule anywhere, so a field dropped into a panel without one of
+those wrappers renders with the operating system's own border, radius and font — a square hairline
+box in the middle of a rounded, cream, Syne-set app. It looks like an unfinished screen rather than
+a styling bug, which is why it survives review.
+
+The Payments screen's Stripe key box was the specimen (`.recon-setup`, `style.css` ~4846). Three
+rules from fixing it:
+- **Wrap the field in `.form-group`** rather than writing a new one-off input rule. That single
+  class carries the padding, radius, cream fill, Syne face, gold focus ring and the 9px uppercase
+  label — the whole set, already themed for both palettes.
+- **A placeholder is not help text.** The key box carried a 90-character sentence as its
+  placeholder, so the explanation vanished the moment anyone typed. Long-form guidance goes in a
+  `.field-note` under the box; the placeholder keeps only the shape of the expected value.
+- **Group the setup step into one panel.** Loose siblings each picking their own `margin-bottom`
+  have no rhythm at all. `.recon-setup` is the shape to copy: a `--surface-sunken` panel,
+  `--border-default` hairline, `--r3` corners, one `gap` token between children.
+
+A key, token, or ID being typed in gets `font-family:'DM Mono',monospace` for the same reason money
+does — it is checked character by character, and the masked dots stop jittering.
+
 ---
 
 ## Empty states — `.empty-state`
