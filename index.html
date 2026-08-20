@@ -1332,7 +1332,10 @@
     </div>
     <p class="ledger-filter-status" id="hist-search-status" aria-live="polite"></p>
   </div>
-  <div id="hist-recon" style="display:none;"></div>
+  <!-- .hist-recon-strip is the query container for the three reconciliation
+       cards inside it — an element can't query its own container, so the
+       container-type lives on this wrapper rather than on .hist-kpi-container. -->
+  <div id="hist-recon" class="hist-recon-strip" style="display:none;"></div>
   <div class="tbl-wrap sys-sticky-head"><table class="tbl"><thead><tr><th>Order #</th><th>Channel</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Total</th><th class="r">Stock after</th><th>Notes</th><th>Entered by</th><th>Date</th><th></th></tr></thead><tbody id="hist-body"></tbody></table></div>
 </div>
 
