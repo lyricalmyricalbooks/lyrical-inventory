@@ -18595,9 +18595,9 @@ function renderMailingList() {
         ? `<span style="text-decoration:line-through;color:var(--text3);">${escapeHtml(s.email)}</span> <span class="pill gray" style="font-size:10px;">unsubscribed</span>`
         : `<a href="mailto:${escapeHtml(s.email)}" style="color:var(--gold2);">${escapeHtml(s.email)}</a>`;
       return `<tr${sup ? ' style="opacity:.55;"' : ''}>
-          <td>${escapeHtml(s.name) || '<span style="color:var(--text4);/* faint-ok: em-dash placeholder */">—</span>'}</td>
+          <td class="lead-cell">${escapeHtml(s.name) || '<span style="color:var(--text4);/* faint-ok: em-dash placeholder */">—</span>'}</td>
           <td>${emailCell}</td>
-          <td style="font-size:12px;color:var(--text3);">${s.added ? fmtD(s.added) : '—'}</td>
+          <td class="date-cell">${s.added ? fmtD(s.added) : '—'}</td>
           <td><span class="pill gray" style="font-size:10px;">${escapeHtml(s.source || 'Manual')}</span></td>
           <td><button class="btn sm" onclick="removeFromMailingList('${encodeURIComponent(s.email)}')" title="Remove from mailing list">Remove</button></td>
         </tr>`;
@@ -19204,13 +19204,13 @@ function renderCustomersAudience() {
           : `<button class="btn sm gold" onclick="addBuyerToMailingList('${encodeURIComponent(r.email)}')" title="Add to your mailing list">＋ List</button>`);
       const supBtn = `<button class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
       return `<tr${sup ? ' style="opacity:.55;"' : ''}>
-        <td>${escapeHtml(r.name) || '<span style="color:var(--text4);/* faint-ok: em-dash placeholder */">—</span>'}</td>
+        <td class="lead-cell">${escapeHtml(r.name) || '<span style="color:var(--text4);/* faint-ok: em-dash placeholder */">—</span>'}</td>
         <td>${emailCell}</td>
         <td class="r">${r.orders}</td>
         <td class="r">${r.units || '—'}</td>
-        <td style="font-size:12px;color:var(--text3);">${escapeHtml(Array.from(r.books).join(', ')) || '—'}</td>
-        <td style="font-size:12px;color:var(--text3);">${_custSpendStr(r.spend) || '—'}</td>
-        <td style="font-size:12px;color:var(--text3);">${r.last ? fmtD(r.last) : '—'}</td>
+        <td class="text-cell"><span>${escapeHtml(Array.from(r.books).join(', ')) || '—'}</span></td>
+        <td class="r money-cell">${_custSpendStr(r.spend) || '—'}</td>
+        <td class="date-cell">${r.last ? fmtD(r.last) : '—'}</td>
         <td>${Array.from(r.sources).map(s => `<span class="pill gray" style="font-size:10px;">${escapeHtml(s)}</span>`).join(' ')}</td>
         <td><div style="display:flex;gap:6px;flex-wrap:wrap;">${listBtn}${supBtn}</div></td>
       </tr>`;

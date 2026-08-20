@@ -51,6 +51,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-20 | visual | Consignment store cards | Let the shop's name lead its card instead of its numbers | #591 |
 | 2026-08-20 | visual | Book dashboard | Gave the row of numbers at the top one figure that leads | #592 |
 | 2026-08-20 | visual | Invoices | Let the amount lead each invoice, and lined the totals up | #593 |
+| 2026-08-20 | visual | Customers | Lined up what each buyer spent so the column can be read down | #594 |
 | 2026-08-20 | visual | Dialogs | Kept a dialog's heading in view and stopped its buttons cutting the form off | #597 |
 | 2026-08-20 | visual | Opening screen | Gave the home screen real headings instead of the faintest type in the app | #598 |
 
