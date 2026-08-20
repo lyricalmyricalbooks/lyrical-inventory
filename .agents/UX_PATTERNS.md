@@ -50,6 +50,28 @@ settled, `✕` void) — it's how users scan a whole column of pills without rea
 Chip variant for inline counts/filters (not status): `.pile-chip` (`style.css:1632`) —
 bordered, neutral background, optional colored `.dot`.
 
+### Flagging one tile inside a group of tiles
+
+When one figure in a row of KPI tiles is the one to act on (Owed on a store card, a
+disputed balance, a failed sync), mark it with an **inset accent bar plus a tinted
+border** — `box-shadow: inset 3px 0 0 var(--status-active)` — not with a
+`--status-*-bg` fill. Two reasons, both learned on `.sk` (the store card's tiles):
+
+- **A status wash is *lighter* than the plate it sits on.** The `--status-*-bg` tokens
+  are low-alpha tints designed for white cards; over `--surface-inset` in light mode
+  they land paler than the neutral tiles beside them, so the flagged tile becomes the
+  *least* prominent one on the card. Exactly backwards.
+- **It costs the figure its contrast.** Amber `--status-active` on an amber-washed
+  plate measured 4.25:1 — under AA for an 18px figure. The accent bar changes no
+  background, so the figure keeps the full contrast it was checked at.
+
+The bar is already the house device for this: `.sys-failed`/`.sys-conflict`
+(`system.css`), the active consignment row, and `.store-balance-tbl tr.is-off` all use
+it. Derive the state with `:has()` where the figure already carries a class
+(`.sk:has(.sk-v.warn)`) rather than stamping a second class from JS — §3. Order the
+rules so critical comes *after* active, or a tile that is both owed-money and
+off-ledger paints amber.
+
 ### Reporting stock on a surface that spends it
 
 Any screen that moves inventory (POS register, manual entry, a future shipment form) should say
