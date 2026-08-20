@@ -1794,7 +1794,24 @@ tr.hist-row:hover {
 .kpi-value.warn{color:var(--orange);}
 .kpi-value.danger{color:var(--rose-soft);}
 .kpi-sub{font-size:11px;color:rgba(255,255,255,.6);margin-top:7px;}
-.kpi-grid-primary{grid-template-columns:repeat(4,minmax(0,1fr));}
+/* PRIMARY KPI BAND — one lead, one even row.
+   Two things were wrong with a fixed four-column band. A book with profit
+   sharing configured shows a fifth tile ("Publisher keeps"), which stranded a
+   quarter-width tile alone on a second line; auto-fit tracks let whatever
+   number of tiles a book's setup shows fill one row evenly instead.
+   And three of the five figures carried the book accent, so nothing led the
+   band — `.is-lead` marks the single tile the screen is built around (stock on
+   hand, which the inventory bar, the threshold alert and the drift banner
+   below it all elaborate) and every other figure steps down to neutral. */
+.kpi-grid-primary{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+.kpi.is-lead{border-color:color-mix(in srgb,var(--book-accent,var(--gold)) 34%,transparent);box-shadow:var(--elev-3);}
+/* The lead's label leads too — a hero figure under the same 50%-white label as
+   its neighbours reads as an accident of size rather than a deliberate step. */
+.kpi.is-lead .kpi-label{color:rgba(255,255,255,.72);}
+/* --text-3xl is clamp(28px … 40px), so the step over the 28px body figure
+   opens up on a desktop and never inverts on a phone (where .kpi-value drops
+   to 22px at the ≤480px breakpoint). */
+.kpi.is-lead .kpi-value{font-size:var(--text-3xl);}
 .kpi-more{margin-bottom:1.5rem;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r2);padding:.35rem .85rem;box-shadow:var(--shadow);}
 .kpi-more summary{cursor:pointer;list-style:none;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);padding:.55rem 0;}
 .kpi-more summary::-webkit-details-marker{display:none;}
@@ -7401,9 +7418,17 @@ tr.hist-row:hover {
   color: var(--book-accent, var(--gold3)) !important;
 }
 
-/* KPI top border gradient glow */
-.tab-panel .kpi::before {
+/* KPI top border gradient glow — reserved for the band's lead tile.
+   Painting the book's accent across the top of every tile spent the accent on
+   the whole row, which is the same as spending it on nothing. The supporting
+   tiles keep the hairline as a plain neutral rule so the band still reads as a
+   set of tiles, but only one of them is coloured. */
+.tab-panel .kpi.is-lead::before {
   background: linear-gradient(90deg, transparent, var(--book-accent, var(--gold)), transparent) !important;
+}
+.tab-panel .kpi:not(.is-lead)::before {
+  background: rgba(255, 255, 255, .09) !important;
+  opacity: 1;
 }
 
 /* Section horizontal lines */

@@ -256,6 +256,30 @@ today's plain header rather than to a broken one.
 
 ---
 
+## Metric bands — `.kpi-grid` / `.kpi` / `.kpi.is-lead`
+
+The dashboard's numbers band is the reference for any row of headline figures.
+Three rules it now encodes, worth keeping on any other metric row:
+
+- **One tile leads, and it is marked in the markup.** `.kpi.is-lead` gets the figure at
+  `var(--text-3xl)` (a clamp, so the step over the 28px body figure survives the ≤480px drop to
+  22px), a brighter label, an accent-tinted border and `--elev-3`. Everything else stays neutral.
+  Pick the lead by what the *screen* is about, not by which number is biggest — the dashboard leads
+  on stock on hand because the inventory bar, the threshold alert and the drift banner below it all
+  elaborate that one figure.
+- **The book accent marks exactly one tile.** `.tab-panel .kpi::before` used to paint the accent
+  hairline across every tile in the band, which is the same as painting it on none; it is now split
+  into `.kpi.is-lead::before` (accent gradient) and `.kpi:not(.is-lead)::before` (a plain neutral
+  rule). Same for the figure colour: only the lead keeps `.kpi-value.gold`, which
+  `.tab-panel .kpi-value.gold` resolves to the live book accent.
+- **Tracks are `auto-fit`, never a fixed count, when the tile count varies.** The primary band shows
+  four tiles, or five once a book has profit sharing configured. At `repeat(4, …)` that fifth tile
+  stranded alone at quarter width on a second line; `repeat(auto-fit, minmax(180px, 1fr))` lets
+  whatever a book's setup shows fill one row evenly. Only reach for this where the count really is
+  variable — a fixed 3-column grid holding six tiles still beats auto-fit's 5-plus-orphan.
+
+---
+
 ## Empty states — `.empty-state`
 Two tiers exist; use the richer one whenever the empty state is a primary destination
 (a whole tab/panel), and the plain one only for small nested table bodies.
