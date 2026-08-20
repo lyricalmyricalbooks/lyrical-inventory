@@ -119,16 +119,31 @@
   .invoice-paper .inv-notes .inv-notes-block{margin-bottom:14px;white-space:pre-wrap;}
   .invoice-paper .inv-foot{text-align:center;font-size:11px;color:#a8a094;margin-top:24px;font-style:italic;}
 
-  /* Invoice list cards */
-  .invoice-card{background:var(--surface-card);border-radius:var(--r2);border:1px solid var(--border);padding:14px 18px;margin-bottom:10px;display:grid;grid-template-columns:auto 1.6fr 1fr 1fr 1fr auto;gap:16px;align-items:center;transition:border-color .14s;}
-  .invoice-card:hover{border-color:var(--gold-line);}
-  .invoice-card .inv-c-num{font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);font-weight:600;}
-  .invoice-card .inv-c-store{font-weight:700;color:var(--text);font-size:13px;}
-  .invoice-card .inv-c-store .inv-c-store-meta{font-weight:400;font-size:11px;color:var(--text3);margin-top:2px;}
-  .invoice-card .inv-c-cell{font-size:11px;color:var(--text3);}
-  .invoice-card .inv-c-cell strong{display:block;font-family:'DM Mono',monospace;color:var(--text);font-weight:600;font-size:13px;margin-top:2px;}
-  .invoice-card .inv-c-cell.amt strong{color:var(--gold);}
-  .invoice-card .inv-c-actions{display:flex;gap:6px;}
+  /* Invoice list cards.
+     The money is the point of an invoice, so the total carries the row: two
+     type steps above the dates beside it and right-aligned, so every card's
+     figure lands on one shared edge and a stack of totals can be compared by
+     eye instead of read one by one. The three captions sit on the house Syne
+     micro-label scale, which puts a real step between a label and its own
+     figure — at the old body size the two read as a single run of text. */
+  .invoice-card{background:var(--surface-card);border-radius:var(--r2);border:1px solid var(--border);padding:var(--space-4) var(--space-5);margin-bottom:var(--space-3);display:grid;grid-template-columns:auto minmax(0,1.6fr) 1fr 1fr minmax(124px,1fr) auto;gap:var(--space-4);align-items:center;box-shadow:var(--elev-1);transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),transform var(--dur-fast) var(--ease-standard);}
+  .invoice-card:hover{border-color:var(--gold-line);box-shadow:var(--elev-hover);transform:translateY(-1px);}
+  .invoice-card .inv-c-num{font-family:'DM Mono',monospace;font-size:var(--text-xs);color:var(--text2);font-weight:600;}
+  .invoice-card .inv-c-store{font-weight:700;color:var(--text);font-size:var(--text-base);min-width:0;}
+  .invoice-card .inv-c-store .inv-c-store-meta{font-weight:400;font-size:var(--text-xs);color:var(--text3);margin-top:2px;}
+  .invoice-card .inv-c-cell{font-family:'Syne',sans-serif;font-size:var(--text-3xs);font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text3);min-width:0;}
+  /* The figure resets the caption's caps/tracking — a date or an amount must
+     not inherit the label's letter-spacing. */
+  .invoice-card .inv-c-cell strong{display:block;font-family:'DM Mono',monospace;color:var(--text);font-weight:600;font-size:var(--text-base);letter-spacing:0;text-transform:none;margin-top:var(--space-1);}
+  /* One step more gutter than the grid's own gap: at --text-lg the figure is
+     the heaviest thing on the row, and butted straight against the status pill
+     it reads as one cluster with the controls rather than as the row's answer. */
+  .invoice-card .inv-c-cell.amt{text-align:right;padding-right:var(--space-2);}
+  /* --gold-text, not --gold: raw gold is a fill/accent colour and does not
+     clear AA as text on the card surface in either theme. */
+  .invoice-card .inv-c-cell.amt strong{font-size:var(--text-lg);color:var(--gold-text);letter-spacing:var(--tracking-tight);white-space:nowrap;}
+  .invoice-card .inv-c-actions{display:flex;flex-direction:column;align-items:stretch;gap:var(--space-1);}
+  .invoice-card .inv-c-btns{display:flex;gap:var(--space-1);justify-content:flex-end;}
   /* Status pill — a themed sibling of .invoice-paper's print-only version above,
      so the printed invoice stays fixed-light while this list row follows dark mode. */
   .invoice-card .inv-status{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:4px 10px;border-radius:99px;text-align:center;}
@@ -138,8 +153,11 @@
   .invoice-card .inv-status.overdue{background:var(--status-critical-bg);color:var(--status-critical);}
   .invoice-card .inv-status.cancelled{background:var(--status-neutral-bg);color:var(--status-neutral);text-decoration:line-through;}
   @media (max-width:780px){
-    .invoice-card{grid-template-columns:1fr;gap:8px;}
-    .invoice-card .inv-c-actions{justify-content:flex-end;}
+    /* Stacked, every cell is full width — a right-aligned total would float
+       away from the column of left-aligned labels above it. */
+    .invoice-card{grid-template-columns:1fr;gap:var(--space-2);}
+    .invoice-card .inv-c-cell.amt{text-align:left;padding-right:0;}
+    .invoice-card .inv-c-actions{flex-direction:row;align-items:center;justify-content:space-between;}
   }
   .inv-item-row td{padding:6px 4px;}
   .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
@@ -1443,7 +1461,7 @@
       <tbody id="tc-trip-detail-body"></tbody>
     </table>
   </div>
-  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+  <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;flex-wrap:wrap;">
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn gold" onclick="logExpenseForTrip()">➕ Log expense to this trip</button>
       <button class="btn" onclick="openPendingExpense(null, _tcOpenTripName)">🕑 Note a pending expense</button>
@@ -1525,7 +1543,7 @@
 
   <div class="tc-trip-form-err" id="tc-pending-err" style="display:none;"></div>
 
-  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:16px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+  <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;flex-wrap:wrap;">
     <button class="btn danger-btn" id="tc-pending-delete" onclick="deletePendingExpense()" style="display:none;">🗑 Delete note</button>
     <div style="display:flex;gap:8px;margin-left:auto;">
       <button class="btn" onclick="attemptCloseModal('tc-pending')">Cancel</button>
@@ -1591,7 +1609,7 @@
 
   <div class="tc-trip-form-err" id="tc-new-trip-err" style="display:none;"></div>
 
-  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:16px;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+  <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;flex-wrap:wrap;">
     <button class="btn danger-btn" id="tc-new-trip-delete" onclick="deleteTripRecord()" style="display:none;">🗑 Delete trip</button>
     <div style="display:flex;gap:8px;margin-left:auto;">
       <button class="btn" onclick="attemptCloseModal('tc-new-trip')">Cancel</button>
@@ -1614,7 +1632,7 @@
       </div>
     </div>
   </div>
-  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="attemptCloseModal('tc-edit-trip')">Cancel</button>
     <button class="btn gold" onclick="saveTripAssignment()">Save</button>
   </div>
@@ -1697,7 +1715,7 @@
 
   <div class="rec-preview" id="rec-edit-preview" aria-live="polite"></div>
 
-  <div class="modal-footer" style="margin-top:14px;">
+  <div class="modal-footer">
     <button class="btn" onclick="attemptCloseModal('rec-edit')">Cancel</button>
     <button class="btn gold" id="rec-edit-save" onclick="saveRecurringEditor()">Add subscription</button>
   </div>
@@ -1713,7 +1731,7 @@
       <tbody id="tc-cat-detail-body"></tbody>
     </table>
   </div>
-  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button class="btn" onclick="attemptCloseModal('tc-cat-detail')">Close</button>
   </div>
 </div></div>
@@ -1778,7 +1796,7 @@
   <div id="tc-preflight-content" style="margin-top:12px;">
     <!-- Populated by openTaxSeasonPreflightModal() -->
   </div>
-  <div class="modal-footer" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+  <div class="modal-footer" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
     <button class="btn" type="button" onclick="attemptCloseModal('tc-preflight')">Cancel</button>
     <div style="display:flex;gap:8px;">
       <button class="btn tag" type="button" id="tc-preflight-fix-btn" onclick="tcJumpToFixPreflightIssues()" style="display:none;">🔍 Review &amp; Fix Missing Receipts</button>
@@ -1899,7 +1917,7 @@
   </div>
 
   <div id="email-receipt-results" style="margin-top:14px;"></div>
-  <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;">
+  <div class="modal-footer" role="dialog" aria-modal="true">
     <button type="button" class="btn" onclick="closeEmailReceiptImportModal()">Cancel</button>
     <button type="button" class="btn gold" onclick="extractReceiptsFromEmailText()" id="email-receipt-scan-btn">✨ Extract drafts</button>
   </div>
@@ -2098,7 +2116,7 @@
       <input type="text" id="wo-notes" placeholder="e.g. 3 copies water damaged during spring warehouse transit" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--cream2); color:var(--text1); font-size:13px;">
     </div>
 
-    <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+    <div class="modal-footer" style="justify-content:flex-end;">
       <button type="button" class="btn" onclick="attemptCloseModal('inventory-writeoff-modal')">Cancel</button>
       <button type="submit" class="btn gold" style="background:var(--red); border-color:var(--red); color:var(--on-status);">📉 Record Tax Write-Off</button>
     </div>
@@ -4490,7 +4508,7 @@
     <div id="whats-new-list" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;padding-right:4px;">
       <!-- Populated dynamically -->
     </div>
-    <div class="modal-footer" role="dialog" aria-modal="true" style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px;">
+    <div class="modal-footer" role="dialog" aria-modal="true">
       <button type="button" class="btn gold" onclick="attemptCloseModal('whats-new')">Dismiss</button>
     </div>
   </div>
