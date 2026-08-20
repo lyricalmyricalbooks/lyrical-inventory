@@ -655,7 +655,8 @@ function _tcRenderRecurringSubscriptions() {
     .sort((a, b) => {
       const rank = (r) => (r.status === 'paused' ? 1 : r.status === 'ended' ? 2 : 0);
       if (rank(a) !== rank(b)) return rank(a) - rank(b);
-      return (a.next || '9999').localeCompare(b.next || '9999');
+      // ⚡ Bolt: Replace localeCompare with operators for much faster date sorting
+      const aNext = a.next || '9999'; const bNext = b.next || '9999'; return aNext < bNext ? -1 : (aNext > bNext ? 1 : 0);
     });
 
   const wrap = $('tc-recurring-tbl-wrap');
@@ -2777,7 +2778,8 @@ function _tcAllReceiptItems() {
   });
 
   // Sort latest date first
-  items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  // ⚡ Bolt: Optimize date string sorting by bypassing slow localeCompare
+  items.sort((a, b) => { const aDate = a.date || ''; const bDate = b.date || ''; return bDate < aDate ? -1 : (bDate > aDate ? 1 : 0); });
   return items;
 }
 
