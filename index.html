@@ -119,16 +119,31 @@
   .invoice-paper .inv-notes .inv-notes-block{margin-bottom:14px;white-space:pre-wrap;}
   .invoice-paper .inv-foot{text-align:center;font-size:11px;color:#a8a094;margin-top:24px;font-style:italic;}
 
-  /* Invoice list cards */
-  .invoice-card{background:var(--surface-card);border-radius:var(--r2);border:1px solid var(--border);padding:14px 18px;margin-bottom:10px;display:grid;grid-template-columns:auto 1.6fr 1fr 1fr 1fr auto;gap:16px;align-items:center;transition:border-color .14s;}
-  .invoice-card:hover{border-color:var(--gold-line);}
-  .invoice-card .inv-c-num{font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);font-weight:600;}
-  .invoice-card .inv-c-store{font-weight:700;color:var(--text);font-size:13px;}
-  .invoice-card .inv-c-store .inv-c-store-meta{font-weight:400;font-size:11px;color:var(--text3);margin-top:2px;}
-  .invoice-card .inv-c-cell{font-size:11px;color:var(--text3);}
-  .invoice-card .inv-c-cell strong{display:block;font-family:'DM Mono',monospace;color:var(--text);font-weight:600;font-size:13px;margin-top:2px;}
-  .invoice-card .inv-c-cell.amt strong{color:var(--gold);}
-  .invoice-card .inv-c-actions{display:flex;gap:6px;}
+  /* Invoice list cards.
+     The money is the point of an invoice, so the total carries the row: two
+     type steps above the dates beside it and right-aligned, so every card's
+     figure lands on one shared edge and a stack of totals can be compared by
+     eye instead of read one by one. The three captions sit on the house Syne
+     micro-label scale, which puts a real step between a label and its own
+     figure — at the old body size the two read as a single run of text. */
+  .invoice-card{background:var(--surface-card);border-radius:var(--r2);border:1px solid var(--border);padding:var(--space-4) var(--space-5);margin-bottom:var(--space-3);display:grid;grid-template-columns:auto minmax(0,1.6fr) 1fr 1fr minmax(124px,1fr) auto;gap:var(--space-4);align-items:center;box-shadow:var(--elev-1);transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),transform var(--dur-fast) var(--ease-standard);}
+  .invoice-card:hover{border-color:var(--gold-line);box-shadow:var(--elev-hover);transform:translateY(-1px);}
+  .invoice-card .inv-c-num{font-family:'DM Mono',monospace;font-size:var(--text-xs);color:var(--text2);font-weight:600;}
+  .invoice-card .inv-c-store{font-weight:700;color:var(--text);font-size:var(--text-base);min-width:0;}
+  .invoice-card .inv-c-store .inv-c-store-meta{font-weight:400;font-size:var(--text-xs);color:var(--text3);margin-top:2px;}
+  .invoice-card .inv-c-cell{font-family:'Syne',sans-serif;font-size:var(--text-3xs);font-weight:700;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text3);min-width:0;}
+  /* The figure resets the caption's caps/tracking — a date or an amount must
+     not inherit the label's letter-spacing. */
+  .invoice-card .inv-c-cell strong{display:block;font-family:'DM Mono',monospace;color:var(--text);font-weight:600;font-size:var(--text-base);letter-spacing:0;text-transform:none;margin-top:var(--space-1);}
+  /* One step more gutter than the grid's own gap: at --text-lg the figure is
+     the heaviest thing on the row, and butted straight against the status pill
+     it reads as one cluster with the controls rather than as the row's answer. */
+  .invoice-card .inv-c-cell.amt{text-align:right;padding-right:var(--space-2);}
+  /* --gold-text, not --gold: raw gold is a fill/accent colour and does not
+     clear AA as text on the card surface in either theme. */
+  .invoice-card .inv-c-cell.amt strong{font-size:var(--text-lg);color:var(--gold-text);letter-spacing:var(--tracking-tight);white-space:nowrap;}
+  .invoice-card .inv-c-actions{display:flex;flex-direction:column;align-items:stretch;gap:var(--space-1);}
+  .invoice-card .inv-c-btns{display:flex;gap:var(--space-1);justify-content:flex-end;}
   /* Status pill — a themed sibling of .invoice-paper's print-only version above,
      so the printed invoice stays fixed-light while this list row follows dark mode. */
   .invoice-card .inv-status{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:4px 10px;border-radius:99px;text-align:center;}
@@ -138,8 +153,11 @@
   .invoice-card .inv-status.overdue{background:var(--status-critical-bg);color:var(--status-critical);}
   .invoice-card .inv-status.cancelled{background:var(--status-neutral-bg);color:var(--status-neutral);text-decoration:line-through;}
   @media (max-width:780px){
-    .invoice-card{grid-template-columns:1fr;gap:8px;}
-    .invoice-card .inv-c-actions{justify-content:flex-end;}
+    /* Stacked, every cell is full width — a right-aligned total would float
+       away from the column of left-aligned labels above it. */
+    .invoice-card{grid-template-columns:1fr;gap:var(--space-2);}
+    .invoice-card .inv-c-cell.amt{text-align:left;padding-right:0;}
+    .invoice-card .inv-c-actions{flex-direction:row;align-items:center;justify-content:space-between;}
   }
   .inv-item-row td{padding:6px 4px;}
   .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
@@ -1332,7 +1350,10 @@
     </div>
     <p class="ledger-filter-status" id="hist-search-status" aria-live="polite"></p>
   </div>
-  <div id="hist-recon" style="display:none;"></div>
+  <!-- .hist-recon-strip is the query container for the three reconciliation
+       cards inside it — an element can't query its own container, so the
+       container-type lives on this wrapper rather than on .hist-kpi-container. -->
+  <div id="hist-recon" class="hist-recon-strip" style="display:none;"></div>
   <div class="tbl-wrap sys-sticky-head"><table class="tbl"><thead><tr><th>Order #</th><th>Channel</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Total</th><th class="r">Stock after</th><th>Notes</th><th>Entered by</th><th>Date</th><th></th></tr></thead><tbody id="hist-body"></tbody></table></div>
 </div>
 
@@ -3044,51 +3065,62 @@
         </div>
       </div>
 
-      <div class="card pos-cart-panel" style="position:sticky;top:88px;padding:1.25rem;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--gold-text,#8a5815);">Checkout Review</div>
-          <button class="btn sm" onclick="posConfigureRates()" style="font-size:11px;padding:4px 8px;">↻ FX Rates</button>
-        </div>
-        <div id="pos-fx-status" style="font-size:11px;font-weight:500;color:var(--amber,#b45309);margin-bottom:10px;">Using saved rates — click ↻ FX Rates to refresh</div>
-
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;background:var(--cream2,#efe9dc);padding:6px 10px;border-radius:8px;">
-          <label style="font-size:11px;font-weight:600;color:var(--text2);">Txn Currency:</label>
-          <select id="pos-currency" onchange="posSetCurrency(this.value)" style="max-width:120px;font-weight:700;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--border);">
-            <option value="EUR">EUR</option>
-          </select>
-        </div>
-        <div id="pos-total" style="font-family:'Syne',sans-serif;font-size:34px;font-weight:800;color:var(--green);line-height:1.1;">€0.00</div>
-        <div id="pos-total-note" style="font-size:11px;font-weight:500;color:var(--text2);margin-top:4px;margin-bottom:12px;">Transaction currency: EUR</div>
-
-        <div class="pos-cart-scroll" style="margin-bottom:12px;">
-          <div id="pos-cart-items"></div>
+      <!-- Four stages of a sale, each its own .pos-checkout-stage: rates →
+           total → lines → pay. The stack rhythm and every type/colour decision
+           live in the .pos-checkout-* block in style.css; nothing here carries
+           its own inline styling any more. -->
+      <div class="card pos-cart-panel" style="position:sticky;top:88px;">
+        <div class="pos-checkout-stage">
+          <div class="pos-checkout-head">
+            <div class="pos-checkout-eyebrow">Checkout Review</div>
+            <button class="btn sm" onclick="posConfigureRates()">↻ FX Rates</button>
+          </div>
+          <div id="pos-fx-status" class="pos-checkout-fx">Using saved rates — click ↻ FX Rates to refresh</div>
         </div>
 
-        <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px;">Itemized Subtotal</div>
-        <div id="pos-subtotal-lines" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--text);margin-bottom:14px;background:var(--cream2,#efe9dc);padding:6px 10px;border-radius:6px;">—</div>
-
-        <div class="form-group" style="margin-bottom:12px;">
-          <label for="pos-payment-method" style="font-size:11px;font-weight:600;color:var(--text2);">Payment Method</label>
-          <select id="pos-payment-method" style="font-size:12px;padding:7px 10px;border-radius:8px;">
-            <option value="Cash">Cash</option>
-            <option value="Card">Card</option>
-            <option value="Bank Transfer">Bank Transfer</option>
-            <option value="Comp/Gift">Comp/Gift</option>
-          </select>
+        <div class="pos-checkout-stage">
+          <div class="pos-checkout-plate pos-checkout-ccy">
+            <label class="pos-checkout-label" for="pos-currency">Txn currency</label>
+            <select id="pos-currency" onchange="posSetCurrency(this.value)">
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+          <div id="pos-total" class="pos-checkout-total">€0.00</div>
+          <div id="pos-total-note" class="pos-checkout-total-note">Transaction currency: EUR</div>
         </div>
-        <!-- Painted by posRenderOversellNote() when a cart line sells more copies
-             than the records hold. Sits directly above Complete Sale because that
-             is where the seller's eye already is. -->
-        <div class="pos-oversell-note" id="pos-oversell-note" role="status" aria-live="polite" hidden></div>
-        <button class="btn gold" id="pos-checkout-btn" style="width:100%;font-size:14px;font-weight:700;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;box-shadow:0 4px 12px rgba(200,145,58,0.25);" onclick="posCheckout()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          Complete Sale
-        </button>
-        <button class="btn ink" id="pos-sale-qr-btn" style="width:100%;font-size:13px;font-weight:600;padding:10px;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;" onclick="posGenerateSaleQR()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h3v1h-3zM20 17h1v4h-4v-1"></path></svg>
-          Pay by QR (this total)
-        </button>
-        <div style="font-size:10px;color:var(--text3);margin-top:8px;text-align:center;line-height:1.5;">Charges the exact total above, discounts included. Needs internet + your saved Stripe key.</div>
+
+        <div class="pos-checkout-stage">
+          <div class="pos-cart-scroll">
+            <div id="pos-cart-items"></div>
+          </div>
+          <div class="pos-checkout-label">Itemized subtotal</div>
+          <div id="pos-subtotal-lines" class="pos-checkout-plate pos-checkout-subtotal">—</div>
+        </div>
+
+        <div class="pos-checkout-stage">
+          <div class="form-group">
+            <label for="pos-payment-method">Payment method</label>
+            <select id="pos-payment-method">
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Comp/Gift">Comp/Gift</option>
+            </select>
+          </div>
+          <!-- Painted by posRenderOversellNote() when a cart line sells more copies
+               than the records hold. Sits directly above Complete Sale because that
+               is where the seller's eye already is. -->
+          <div class="pos-oversell-note" id="pos-oversell-note" role="status" aria-live="polite" hidden></div>
+          <button class="btn gold lg pos-checkout-cta" id="pos-checkout-btn" onclick="posCheckout()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Complete Sale
+          </button>
+          <button class="btn ink pos-checkout-cta pos-checkout-cta-alt" id="pos-sale-qr-btn" onclick="posGenerateSaleQR()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h3v1h-3zM20 17h1v4h-4v-1"></path></svg>
+            Pay by QR (this total)
+          </button>
+          <div class="pos-checkout-foot">Charges the exact total above, discounts included. Needs internet + your saved Stripe key.</div>
+        </div>
       </div>
     </div>
   </div>
