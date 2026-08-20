@@ -468,7 +468,9 @@
 
 /* History rows tint gold on hover; the light-mode 4% wash is invisible here. */
 .theme-dark tr.hist-row:hover { background: rgba(221, 165, 72, .07) !important; }
-.theme-dark .hist-kpi-card:hover { box-shadow: var(--elev-hover); }
+/* .hist-kpi-card:hover no longer needs a dark correction — it took a raw
+   rgba(0,0,0,.08) shadow that vanished on charcoal, and now uses --elev-hover
+   in the base rule, which theme-dark.css already re-points for both themes. */
 
 /* Tax Centre Receipts & Preflight dark elevations */
 .theme-dark .tc-receipt-tile:hover {
