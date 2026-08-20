@@ -2411,18 +2411,87 @@ tr.hist-row:hover {
 .log-line.ok{color:var(--emerald-soft);}
 .log-line.warn{color:var(--orange);}
 
-/* STORE CARDS */
-.store-card{background:var(--surface-card);border-radius:var(--r3);border:1px solid var(--border);padding:1.4rem;margin-bottom:14px;box-shadow:var(--shadow);transition:box-shadow .18s,border-color .18s;}
-.store-card:hover{border-color:var(--gold-line);box-shadow:0 6px 24px rgba(200,145,58,.1);}
-.store-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;}
-.store-name{font-family:'Playfair Display',serif;font-size:17px;color:var(--text);}
-.store-meta{font-size:11px;color:var(--text3);margin-top:3px;line-height:1.5;}
-.store-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem;}
-.sk{background:var(--cream);border-radius:var(--r2);padding:9px 11px;border:1px solid var(--border2);}
-.sk-l{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;}
-.sk-v{font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--text);}
-.sk-v.warn{color:#ad5500;}
-.store-actions{display:flex;gap:8px;flex-wrap:wrap;}
+/* STORE CARDS
+   Hierarchy: the store's NAME leads the card. It used to be set a point
+   smaller than the four mono figures beneath it, so a column of store cards
+   read as a wall of numbers with the identities as captions — the opposite of
+   how the screen is used ("which store is this, and what does it owe me?").
+   The name now sits two steps above the figures on the type scale.
+   Everything else here is the shared spacing and type scale replacing the
+   ad-hoc rem/px values this block had accumulated. */
+.store-card{
+  background:var(--surface-card);border-radius:var(--r3);
+  border:1px solid var(--border-default);
+  padding:var(--space-5);margin-bottom:var(--space-3);
+  box-shadow:var(--shadow);
+  transition:box-shadow var(--dur-base) var(--ease-entrance),
+             border-color var(--dur-base) var(--ease-entrance);
+}
+.store-card:hover{border-color:var(--gold-line);box-shadow:var(--elev-hover);}
+.store-head{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  gap:var(--space-3);margin-bottom:var(--space-4);
+}
+.store-name{
+  font-family:'Playfair Display',serif;font-size:var(--text-xl);
+  line-height:var(--leading-tight);letter-spacing:var(--tracking-tight);
+  color:var(--content-primary);
+}
+.store-meta{
+  font-size:var(--text-xs);line-height:var(--leading-snug);
+  margin-top:var(--space-1);color:var(--content-muted);
+}
+.store-kpis{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:var(--space-2);margin-bottom:var(--space-4);
+}
+/* A flex column with its own gap, so the label/figure spacing inside a tile
+   comes off the same scale as the gap between tiles — and is visibly smaller
+   than it, which is what makes four tiles read as four groups. */
+.sk{
+  display:flex;flex-direction:column;gap:var(--space-1);min-width:0;
+  background:var(--surface-inset);border:1px solid var(--border-subtle);
+  border-radius:var(--r2);padding:var(--space-2) var(--space-3);
+  transition:box-shadow var(--dur-fast) var(--ease-standard),
+             border-color var(--dur-fast) var(--ease-standard);
+}
+.sk-l{
+  font-size:var(--text-3xs);font-weight:700;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;color:var(--content-muted);
+}
+/* Tabular figures: a store's counts change on every shipment and sale, and
+   without tnum the four tiles jitter sideways as the digits change width. */
+.sk-v{
+  font-family:'DM Mono',monospace;
+  font-feature-settings:"tnum" 1,"zero" 1;font-variant-numeric:tabular-nums;
+  font-size:var(--text-lg);font-weight:500;line-height:var(--leading-tight);
+  color:var(--content-primary);
+  /* minmax(0,1fr) above lets a track shrink below its content; a long money
+     figure ("CA$1,234.00") therefore wraps inside its tile instead of pushing
+     the whole card into horizontal overflow. */
+  overflow-wrap:anywhere;
+}
+.sk-v.warn{color:var(--status-active);}
+/* Colour with intent: a tile earns a tinted plate only when its figure is the
+   one to act on. Derived from the figure's own state via :has() rather than a
+   second JS class (UX_PATTERNS §3) — "Owed $120" is then findable down a
+   column of stores without reading every tile. Critical outranks active, so
+   the disputed-figure rule comes second.
+
+   The emphasis is an inset accent bar plus a tinted border, NOT a tinted
+   fill: --status-*-bg is a pale wash, so washing it over the plate would both
+   make the flagged tile the palest one on the card and drop its own amber
+   figure under 4.5:1. The accent bar is the same device the ledger rows and
+   .sys-failed already use, and it costs the text no contrast at all. */
+.sk:has(.sk-v.warn){
+  border-color:color-mix(in srgb, var(--status-active) 35%, transparent);
+  box-shadow:inset 3px 0 0 var(--status-active);
+}
+.sk:has(.sk-v.is-off){
+  border-color:color-mix(in srgb, var(--status-critical) 35%, transparent);
+  box-shadow:inset 3px 0 0 var(--status-critical);
+}
+.store-actions{display:flex;gap:var(--space-2);flex-wrap:wrap;}
 
 /* ── STORE BALANCE FLAG + EXPLAINER POPOVER ──────────────────────────────────
    When a store's saved totals disagree with what the ledger actually adds up
@@ -2701,7 +2770,16 @@ tr.hist-row:hover {
    a modal whose content stacks tall on desktop (long forms, a rendered
    drafts table) had no scroll container at all — content below the fold was
    simply unreachable, with the primary action button as the first casualty. */
-.modal{background:var(--cream);border-radius:var(--r3);border:1px solid var(--border);padding:var(--space-6);width:100%;max-width:500px;max-height:88vh;overflow:auto;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);}
+/* The dialog is a three-part shell: a pinned header, a scrolling body, a pinned
+   footer. The block padding therefore lives on the header and the footer rather
+   than on .modal itself — a sticky child can only pin flush against the
+   scrollport edge, so any padding left here would sit ABOVE the pinned header
+   and show a strip of scrolling content through the gap. Only the inline
+   padding stays. The two :has() guards below give the padding back to the
+   handful of dialogs that render without one of those two parts. */
+.modal{background:var(--surface-page);border-radius:var(--r3);border:1px solid var(--border);padding:0 var(--space-6);width:100%;max-width:500px;max-height:88vh;overflow:auto;box-shadow:0 32px 80px rgba(0,0,0,.25);animation:modalIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);}
+.modal:not(:has(.modal-title)){padding-top:var(--space-6);}
+.modal:not(:has(.modal-footer)){padding-bottom:var(--space-6);}
 @keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes overlayIn{from{opacity:0}to{opacity:1}}
 @keyframes modalOut{from{opacity:1;transform:scale(1) translateY(0)}to{opacity:0;transform:scale(.95) translateY(12px)}}
@@ -2715,8 +2793,59 @@ tr.hist-row:hover {
 @media (prefers-reduced-motion: reduce){
   .overlay,.modal,.overlay.closing,.overlay.closing .modal{animation:none !important;}
 }
-.modal-title{font-family:'Playfair Display',serif;font-size:22px;color:var(--text);margin-bottom:1.4rem;}
-.modal-footer{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-5);position:sticky;bottom:0;background:var(--cream);padding-top:var(--space-3);z-index:1;}
+/* Pinned header. Carries .modal's former padding-top so the inset survives
+   pinning, and an opaque fill + hairline so body content reads as passing
+   BEHIND a header rather than being clipped by nothing. */
+.modal-title{
+  position:sticky;top:0;z-index:var(--z-raised);
+  background:var(--surface-page);
+  font-family:'Playfair Display',serif;
+  font-size:var(--text-xl);
+  line-height:var(--leading-tight);
+  color:var(--content-primary);
+  padding:var(--space-6) 0 var(--space-4);
+  margin-bottom:var(--space-5);
+  border-bottom:1px solid var(--border-default);
+}
+/* Pinned footer, the header's mirror: same hairline, and it owns .modal's
+   former padding-bottom so the action row keeps its inset whether the dialog
+   is short enough to sit in flow or long enough to pin. */
+.modal-footer{
+  display:flex;justify-content:flex-end;gap:var(--space-2);
+  margin-top:var(--space-5);
+  position:sticky;bottom:0;z-index:var(--z-raised);
+  background:var(--surface-page);
+  padding:var(--space-3) 0 var(--space-6);
+  border-top:1px solid var(--border-default);
+}
+/* Scrims either side of the scrolling body. A hairline alone marks WHERE the
+   body ends but still guillotines whatever glyph happens to sit on the seam —
+   a field label sliced through its x-height reads as a rendering fault, not as
+   "there is more above". These fade the content out into the pinned surface
+   over one spacing step instead.
+   They are absolutely positioned, which also keeps them out of the footer's
+   flex row: a static pseudo-element there would lay out as a third button.
+   At rest they land inside the header's/footer's own margin gap, so a dialog
+   too short to scroll looks exactly as it did. */
+.modal-title::after,
+.modal-footer::before{
+  content:'';
+  position:absolute;left:0;right:0;
+  height:var(--space-3);
+  pointer-events:none;
+}
+/* The +1px clears the hairline. A percentage offset on an absolutely
+   positioned box resolves against the containing block's PADDING box, so a
+   plain 100% would start the scrim inside the border and paint its opaque end
+   straight over the seam it is meant to sit below. */
+.modal-title::after{
+  top:calc(100% + 1px);
+  background:linear-gradient(to bottom,var(--surface-page),transparent);
+}
+.modal-footer::before{
+  bottom:calc(100% + 1px);
+  background:linear-gradient(to top,var(--surface-page),transparent);
+}
 
 /* INLINE FORM VALIDATION (#3) */
 .form-group.invalid input,.form-group.invalid select,.form-group.invalid textarea{
@@ -3105,16 +3234,20 @@ tr.hist-row:hover {
   }
 
   /* Modals */
+  /* Same three-part shell as desktop, one step tighter: the block padding
+     stays on the pinned header and footer, only the amount changes. */
   .modal{
     width:calc(100% - 16px);
     margin:0 8px;
-    padding:1.25rem;
+    padding:0 var(--space-4);
     border-radius:14px;
     max-height:88vh;
     overflow:auto;
   }
-  .modal-title{font-size:20px;margin-bottom:1rem;}
-  .modal-footer{position:sticky;bottom:0;background:var(--cream);padding-top:.75rem;flex-wrap:wrap;}
+  .modal:not(:has(.modal-title)){padding-top:var(--space-4);}
+  .modal:not(:has(.modal-footer)){padding-bottom:var(--space-4);}
+  .modal-title{font-size:20px;padding:var(--space-4) 0 var(--space-3);margin-bottom:var(--space-4);}
+  .modal-footer{position:sticky;bottom:0;background:var(--surface-page);padding:var(--space-3) 0 var(--space-4);flex-wrap:wrap;}
   .modal-footer .btn{flex:1;}
   /* On a phone the buttons already fill the row, so the unsaved flag takes its
      own line above them rather than squeezing Cancel and Save narrower. */

@@ -50,6 +50,28 @@ settled, `✕` void) — it's how users scan a whole column of pills without rea
 Chip variant for inline counts/filters (not status): `.pile-chip` (`style.css:1632`) —
 bordered, neutral background, optional colored `.dot`.
 
+### Flagging one tile inside a group of tiles
+
+When one figure in a row of KPI tiles is the one to act on (Owed on a store card, a
+disputed balance, a failed sync), mark it with an **inset accent bar plus a tinted
+border** — `box-shadow: inset 3px 0 0 var(--status-active)` — not with a
+`--status-*-bg` fill. Two reasons, both learned on `.sk` (the store card's tiles):
+
+- **A status wash is *lighter* than the plate it sits on.** The `--status-*-bg` tokens
+  are low-alpha tints designed for white cards; over `--surface-inset` in light mode
+  they land paler than the neutral tiles beside them, so the flagged tile becomes the
+  *least* prominent one on the card. Exactly backwards.
+- **It costs the figure its contrast.** Amber `--status-active` on an amber-washed
+  plate measured 4.25:1 — under AA for an 18px figure. The accent bar changes no
+  background, so the figure keeps the full contrast it was checked at.
+
+The bar is already the house device for this: `.sys-failed`/`.sys-conflict`
+(`system.css`), the active consignment row, and `.store-balance-tbl tr.is-off` all use
+it. Derive the state with `:has()` where the figure already carries a class
+(`.sk:has(.sk-v.warn)`) rather than stamping a second class from JS — §3. Order the
+rules so critical comes *after* active, or a tile that is both owed-money and
+off-ledger paints amber.
+
 ### Reporting stock on a surface that spends it
 
 Any screen that moves inventory (POS register, manual entry, a future shipment form) should say
@@ -193,6 +215,23 @@ columns before its figure. Three rules every footer here follows:
   swap the label ("All settled", "All reimbursed") and the pill, and keep a sub-line naming what
   *has* been settled.
 
+**A row of cards that behaves like a table** (`.invoice-card` is the reference — a CSS grid of
+label/figure cells rather than a `<table>`): it loses the alignment `.tbl` gets for free from
+`th.r`/`td.r`, so put it back explicitly. Four rules:
+- **Right-align the money cell and give its track a floor.** `text-align:right` plus
+  `minmax(<floor>, 1fr)` on that grid column is what makes every card's figure land on one
+  shared edge; without the floor a long total reflows the grid and the edge moves card to card.
+  Drop the right-align in the narrow stacked layout, where each cell is full width and a
+  right-aligned figure just floats away from the labels above it.
+- **One figure leads.** The row exists to answer one question — for an invoice, *how much* — so
+  that figure goes two steps up the scale (`--text-lg` against the `--text-base` dates beside it).
+  A total at the same size as a due date is the bug, whatever colour it is.
+- **Captions go on the Syne micro-label scale** (`--text-3xs`, uppercase, `--tracking-caps`),
+  and the figure inside must reset `letter-spacing` and `text-transform` or it inherits the
+  caption's tracking. At body size a caption and its own figure read as one run of text.
+- **`--gold-text`, never `--gold`, for a figure you want to sing.** Raw `--gold` is a fill/accent
+  colour and does not clear AA as text on a card surface in either theme.
+
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.
 
@@ -261,6 +300,38 @@ Two tiers exist; use the richer one whenever the empty state is a primary destin
 Real examples: `main.js:8389` (stores), `main.js:8899` (invoices), `main.js:18579` (Stripe
 reconciliation). Grep `e-icon` before adding a new empty-state icon convention — most already
 carry a single emoji that matches the section's theme (💳 payments, 📄 invoices, 🔍 filtered-empty).
+
+---
+
+## Dialogs — `.modal`
+Every dialog is a three-part shell: a pinned `.modal-title` header, a scrolling body, a pinned
+`.modal-footer` action row. Both pinned edges carry a `--border-default` hairline and a
+`--space-3` gradient scrim. Four rules hold it together — break any one and the shell leaks.
+
+- **The block padding lives on the header and footer, not on `.modal`.** `.modal` sets
+  `padding: 0 var(--space-6)` only. A sticky child can pin no higher than the scrollport edge,
+  so padding left on `.modal` would sit *above* the pinned header and show a strip of scrolling
+  content through the gap. `.modal:not(:has(.modal-title))` and its footer twin give that
+  padding back to the two dialogs here that render without one of those parts (the receipt
+  lightbox and the invoice paper). Repeat the split in any breakpoint that re-declares
+  `.modal`'s padding — the ≤768px block does.
+- **A hairline alone is not enough; it needs a scrim.** An opaque pinned bar guillotines
+  whatever glyph lands on the seam, and a field label sliced through its x-height reads as a
+  rendering fault rather than as "there is more above". The scrim fades the body into the
+  pinned surface over one spacing step instead. It is absolutely positioned, which also keeps
+  it out of the footer's flex row — a static pseudo-element there lays out as a third button.
+- **Offset the scrim past the hairline: `calc(100% + 1px)`.** A percentage offset on an
+  absolutely positioned box resolves against the containing block's *padding* box, so a plain
+  `100%` starts the scrim inside the border and paints its opaque end straight over the seam
+  it is meant to sit below.
+- **`.modal-title` must be the dialog's first element.** It is what the header *is*, and what
+  the padding guard keys off. A dialog opening with something else pins that something else
+  against the top edge. `tests/modal-shell-seams.test.js` holds the two known exceptions in an
+  exact allowlist.
+
+Spacing comes from the shared rule — never an inline `margin-top` on a footer. Twelve of them
+used to hand-pick 14/16/18px, so no two dialogs put their buttons the same distance below the
+last field.
 
 ---
 
