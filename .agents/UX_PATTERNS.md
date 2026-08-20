@@ -143,6 +143,23 @@ columns before its figure. Three rules every footer here follows:
   swap the label ("All settled", "All reimbursed") and the pill, and keep a sub-line naming what
   *has* been settled.
 
+**A row of cards that behaves like a table** (`.invoice-card` is the reference — a CSS grid of
+label/figure cells rather than a `<table>`): it loses the alignment `.tbl` gets for free from
+`th.r`/`td.r`, so put it back explicitly. Four rules:
+- **Right-align the money cell and give its track a floor.** `text-align:right` plus
+  `minmax(<floor>, 1fr)` on that grid column is what makes every card's figure land on one
+  shared edge; without the floor a long total reflows the grid and the edge moves card to card.
+  Drop the right-align in the narrow stacked layout, where each cell is full width and a
+  right-aligned figure just floats away from the labels above it.
+- **One figure leads.** The row exists to answer one question — for an invoice, *how much* — so
+  that figure goes two steps up the scale (`--text-lg` against the `--text-base` dates beside it).
+  A total at the same size as a due date is the bug, whatever colour it is.
+- **Captions go on the Syne micro-label scale** (`--text-3xs`, uppercase, `--tracking-caps`),
+  and the figure inside must reset `letter-spacing` and `text-transform` or it inherits the
+  caption's tracking. At body size a caption and its own figure read as one run of text.
+- **`--gold-text`, never `--gold`, for a figure you want to sing.** Raw `--gold` is a fill/accent
+  colour and does not clear AA as text on a card surface in either theme.
+
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.
 

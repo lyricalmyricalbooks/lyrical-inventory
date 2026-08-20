@@ -8531,9 +8531,9 @@ function renderInvoices() {
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
       <div class="inv-c-cell amt">Total<strong>${fmt(inv.total || 0, invCur)}</strong></div>
-      <div class="inv-c-actions" style="flex-direction:column;align-items:stretch;gap:6px;">
+      <div class="inv-c-actions">
         <span class="inv-status ${statusCls}">${statusLabel}</span>
-        <div style="display:flex;gap:4px;justify-content:flex-end;">
+        <div class="inv-c-btns">
           <button class="btn sm" onclick="viewInvoice('${inv.id}')">View</button>
           <button class="btn sm ink" onclick="openCreateInvoice(null,'${inv.id}')">Edit</button>
         </div>
