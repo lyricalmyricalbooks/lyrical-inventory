@@ -47,6 +47,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-19 | behavioural | Expenses | Stopped the expense total mixing currencies into one wrong number | #580 |
 | 2026-08-19 | behavioural | Order History | Made it possible to find one order without scrolling | #581 |
 | 2026-08-20 | visual | POS checkout | Gave the checkout column a readable total and an even rhythm | #589 |
+| 2026-08-20 | visual | Order History | Made the stock figures at the top of the page line up and lead | #590 |
 
 ---
 
