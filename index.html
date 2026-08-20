@@ -3047,51 +3047,62 @@
         </div>
       </div>
 
-      <div class="card pos-cart-panel" style="position:sticky;top:88px;padding:1.25rem;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--gold-text,#8a5815);">Checkout Review</div>
-          <button class="btn sm" onclick="posConfigureRates()" style="font-size:11px;padding:4px 8px;">↻ FX Rates</button>
-        </div>
-        <div id="pos-fx-status" style="font-size:11px;font-weight:500;color:var(--amber,#b45309);margin-bottom:10px;">Using saved rates — click ↻ FX Rates to refresh</div>
-
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;background:var(--cream2,#efe9dc);padding:6px 10px;border-radius:8px;">
-          <label style="font-size:11px;font-weight:600;color:var(--text2);">Txn Currency:</label>
-          <select id="pos-currency" onchange="posSetCurrency(this.value)" style="max-width:120px;font-weight:700;font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--border);">
-            <option value="EUR">EUR</option>
-          </select>
-        </div>
-        <div id="pos-total" style="font-family:'Syne',sans-serif;font-size:34px;font-weight:800;color:var(--green);line-height:1.1;">€0.00</div>
-        <div id="pos-total-note" style="font-size:11px;font-weight:500;color:var(--text2);margin-top:4px;margin-bottom:12px;">Transaction currency: EUR</div>
-
-        <div class="pos-cart-scroll" style="margin-bottom:12px;">
-          <div id="pos-cart-items"></div>
+      <!-- Four stages of a sale, each its own .pos-checkout-stage: rates →
+           total → lines → pay. The stack rhythm and every type/colour decision
+           live in the .pos-checkout-* block in style.css; nothing here carries
+           its own inline styling any more. -->
+      <div class="card pos-cart-panel" style="position:sticky;top:88px;">
+        <div class="pos-checkout-stage">
+          <div class="pos-checkout-head">
+            <div class="pos-checkout-eyebrow">Checkout Review</div>
+            <button class="btn sm" onclick="posConfigureRates()">↻ FX Rates</button>
+          </div>
+          <div id="pos-fx-status" class="pos-checkout-fx">Using saved rates — click ↻ FX Rates to refresh</div>
         </div>
 
-        <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px;">Itemized Subtotal</div>
-        <div id="pos-subtotal-lines" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--text);margin-bottom:14px;background:var(--cream2,#efe9dc);padding:6px 10px;border-radius:6px;">—</div>
-
-        <div class="form-group" style="margin-bottom:12px;">
-          <label for="pos-payment-method" style="font-size:11px;font-weight:600;color:var(--text2);">Payment Method</label>
-          <select id="pos-payment-method" style="font-size:12px;padding:7px 10px;border-radius:8px;">
-            <option value="Cash">Cash</option>
-            <option value="Card">Card</option>
-            <option value="Bank Transfer">Bank Transfer</option>
-            <option value="Comp/Gift">Comp/Gift</option>
-          </select>
+        <div class="pos-checkout-stage">
+          <div class="pos-checkout-plate pos-checkout-ccy">
+            <label class="pos-checkout-label" for="pos-currency">Txn currency</label>
+            <select id="pos-currency" onchange="posSetCurrency(this.value)">
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+          <div id="pos-total" class="pos-checkout-total">€0.00</div>
+          <div id="pos-total-note" class="pos-checkout-total-note">Transaction currency: EUR</div>
         </div>
-        <!-- Painted by posRenderOversellNote() when a cart line sells more copies
-             than the records hold. Sits directly above Complete Sale because that
-             is where the seller's eye already is. -->
-        <div class="pos-oversell-note" id="pos-oversell-note" role="status" aria-live="polite" hidden></div>
-        <button class="btn gold" id="pos-checkout-btn" style="width:100%;font-size:14px;font-weight:700;padding:12px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;box-shadow:0 4px 12px rgba(200,145,58,0.25);" onclick="posCheckout()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          Complete Sale
-        </button>
-        <button class="btn ink" id="pos-sale-qr-btn" style="width:100%;font-size:13px;font-weight:600;padding:10px;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;" onclick="posGenerateSaleQR()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h3v1h-3zM20 17h1v4h-4v-1"></path></svg>
-          Pay by QR (this total)
-        </button>
-        <div style="font-size:10px;color:var(--text3);margin-top:8px;text-align:center;line-height:1.5;">Charges the exact total above, discounts included. Needs internet + your saved Stripe key.</div>
+
+        <div class="pos-checkout-stage">
+          <div class="pos-cart-scroll">
+            <div id="pos-cart-items"></div>
+          </div>
+          <div class="pos-checkout-label">Itemized subtotal</div>
+          <div id="pos-subtotal-lines" class="pos-checkout-plate pos-checkout-subtotal">—</div>
+        </div>
+
+        <div class="pos-checkout-stage">
+          <div class="form-group">
+            <label for="pos-payment-method">Payment method</label>
+            <select id="pos-payment-method">
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Comp/Gift">Comp/Gift</option>
+            </select>
+          </div>
+          <!-- Painted by posRenderOversellNote() when a cart line sells more copies
+               than the records hold. Sits directly above Complete Sale because that
+               is where the seller's eye already is. -->
+          <div class="pos-oversell-note" id="pos-oversell-note" role="status" aria-live="polite" hidden></div>
+          <button class="btn gold lg pos-checkout-cta" id="pos-checkout-btn" onclick="posCheckout()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Complete Sale
+          </button>
+          <button class="btn ink pos-checkout-cta pos-checkout-cta-alt" id="pos-sale-qr-btn" onclick="posGenerateSaleQR()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h3v1h-3zM20 17h1v4h-4v-1"></path></svg>
+            Pay by QR (this total)
+          </button>
+          <div class="pos-checkout-foot">Charges the exact total above, discounts included. Needs internet + your saved Stripe key.</div>
+        </div>
       </div>
     </div>
   </div>
