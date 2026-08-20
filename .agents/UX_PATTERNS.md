@@ -214,6 +214,48 @@ carry a single emoji that matches the section's theme (💳 payments, 📄 invoi
 
 ---
 
+## Stacked panels — group with a stage wrapper, not with margins
+
+A tall panel built as a flat run of blocks, each carrying its own
+`margin-bottom`, always drifts: the POS checkout column reached eleven blocks
+whose gaps ran 6 / 10 / 8 / 4 / 12 / 12 / 4 / 14 / 12 / 8 / 8 px. However
+carefully each one was chosen, the space *between* the stages of the task ended
+up the same as the space *inside* them, so nothing grouped and the panel read as
+one undifferentiated run of small text.
+
+The fix is two numbers, not eleven. Wrap each stage of the task in a stage div
+and let two `gap`s do all the spacing — see `.pos-cart-panel` /
+`.pos-checkout-stage` (`style.css`, "POS CHECKOUT PANEL") for the reference:
+
+```css
+.some-panel       { display:flex; flex-direction:column; gap:var(--space-5); }  /* BETWEEN stages */
+.some-panel-stage { display:flex; flex-direction:column; gap:var(--space-2); }  /* WITHIN one    */
+```
+
+Three rules that come with it:
+- **Between must exceed within, visibly.** One step apart (12 vs 8) is not a
+  grouping, it's a rounding error. `--space-5` against `--space-2` is.
+- **Zero out child margins that predate the gap.** A component written for a
+  flow context brings its own `margin-bottom` and it stacks *on top of* the gap
+  — `.pos-checkout-stage .pos-oversell-note{margin-bottom:0}` is that fix. A
+  `display:none` child (`[hidden]`) contributes no gap, so conditional rows need
+  no special handling.
+- **`min-width: 0` on the stage.** Without it a long unbreakable figure — a
+  mixed-currency total, a full ISBN — stretches the flex item and widens the
+  whole column.
+
+**Money figures lead on type, not just size.** The sale total on that panel was
+34px Syne 800 — the heading face, proportional — so the digits re-widthed on
+every quantity tap and it was the one monetary value in the app not in DM Mono.
+Any figure that leads a panel gets `'DM Mono'` + `font-variant-numeric:
+tabular-nums` + `font-feature-settings:"tnum" 1,"zero" 1` and takes its
+prominence from the size step and `--text-3xl`, not from an accent colour.
+Reserve the status colours for status: a pending cart total wearing `--green`
+claimed the settled/paid role and left the panel with three accents competing
+(gold heading, green total, gold primary button) and no emphasis left.
+
+---
+
 ## Dropdowns & menus
 The book switcher (`index.html:311`, `#book-dropdown-menu`) is the canonical custom dropdown:
 absolute-positioned panel, `var(--ink2)` background, `0 8px 32px rgba(0,0,0,.4)` shadow,
