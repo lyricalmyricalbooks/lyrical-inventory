@@ -51,6 +51,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-20 | visual | Consignment store cards | Let the shop's name lead its card instead of its numbers | #591 |
 | 2026-08-20 | visual | Invoices | Let the amount lead each invoice, and lined the totals up | #593 |
 | 2026-08-20 | visual | Dialogs | Kept a dialog's heading in view and stopped its buttons cutting the form off | #597 |
+| 2026-08-20 | visual | Tax Centre | Made "what's left" the number that leads the cash flow summary | #599 |
 
 ---
 
