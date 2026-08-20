@@ -156,7 +156,8 @@ export function normalizeRateChanges(list) {
     }))
     .filter(r => parseYmd(r.effectiveFrom) && r.amount > 0)
     .forEach(r => byDate.set(r.effectiveFrom, r));
-  return [...byDate.values()].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  // ⚡ Bolt: Fast string comparison for YYYY-MM-DD dates to reduce sorting overhead
+  return [...byDate.values()].sort((a, b) => a.effectiveFrom < b.effectiveFrom ? -1 : (a.effectiveFrom > b.effectiveFrom ? 1 : 0));
 }
 
 /** Price in force on `dateStr`, from an already-normalized record. */
@@ -208,7 +209,8 @@ export function rateSchedule(sub) {
   return [
     { effectiveFrom: s.startDate || '', amount: s.amount, note: '', opening: true },
     ...s.rateChanges.map(r => ({ ...r, opening: false })),
-  ].sort((a, b) => String(a.effectiveFrom).localeCompare(String(b.effectiveFrom)));
+  // ⚡ Bolt: Fast string comparison for dates avoiding locale overhead
+  ].sort((a, b) => { const aStr = String(a.effectiveFrom); const bStr = String(b.effectiveFrom); return aStr < bStr ? -1 : (aStr > bStr ? 1 : 0); });
 }
 
 /**
