@@ -4999,6 +4999,152 @@ tr.hist-row:hover {
   justify-content: center;
 }
 
+/* ── ALL-BOOKS QR CODES PAGE ─────────────────────────────────────────────
+   One card per book at an event line-up: the title (Playfair) leads, the
+   price (mono, gold) is the second focal point, and the QR plate is the
+   card's centre of gravity. Every wrapper below carries a --qr-* class so
+   renderAllQRCodes() writes no inline styles — the token lint stays clean
+   and the theme flip carries the whole card through --on-inverse tiers.
+   The QR frame stays a bright white square in both themes because a phone
+   camera needs the light background whatever the app paints around it. */
+.qr-page .sec-head { margin-bottom: var(--space-5); }
+.qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-5);
+}
+.qr-card {
+  --qr-accent: var(--gold);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--surface-inverse-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r3);
+  box-shadow: var(--elev-2);
+  transition:
+    transform var(--dur-base) var(--ease-entrance),
+    box-shadow var(--dur-base) var(--ease-entrance),
+    border-color var(--dur-base) var(--ease-entrance);
+}
+.qr-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold-line);
+  box-shadow: var(--elev-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .qr-card:hover { transform: none; }
+}
+/* Head: accent dot + title stack. Author is muted; price wears mono/gold so
+   it survives glance-reading from across a fair table. */
+.qr-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.qr-card-accent {
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--qr-accent);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--qr-accent) 22%, transparent);
+}
+.qr-card-heading { min-width: 0; flex: 1; }
+.qr-card-title {
+  font-family: 'Playfair Display', serif;
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
+  color: var(--on-inverse);
+  overflow-wrap: anywhere;
+}
+/* Author on the left, price on the right — the two secondary pieces of info
+   share a row but stay separated so the price can lead its half. */
+.qr-card-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  min-width: 0;
+}
+.qr-card-author {
+  font-size: var(--text-2xs);
+  color: var(--on-inverse-3);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* Price uses tabular figures so a column of cards lines its digits up rather
+   than jittering when a title's currency prefix changes width. */
+.qr-card-price {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--gold-text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* The QR plate — deliberately bright white in both themes; the camera reads a
+   high-contrast square, not a themed one. Padding is on the frame, not on the
+   library-generated child, so the plate stays a fixed size regardless of QR
+   version. */
+.qr-frame {
+  align-self: center;
+  width: 196px;
+  height: 196px;
+  padding: 14px;
+  background: #ffffff; /* token-ok — a QR is scanned by phones and must stay white in both themes */
+  border-radius: var(--r2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06);
+}
+.qr-frame-target { display: flex; align-items: center; justify-content: center; }
+.qr-frame-message {
+  color: var(--text3);
+  font-size: var(--text-xs);
+  text-align: center;
+  padding: var(--space-4);
+  line-height: var(--leading-snug);
+}
+.qr-card.is-empty .qr-frame { box-shadow: inset 0 0 0 1px var(--border-default); }
+.qr-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: auto;
+}
+/* The full Stripe URL — mono, muted, single line with the full value in the
+   title attribute so an artist confirming which book they're being paid for
+   never sees a wall of blue text. */
+.qr-card-link {
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-2xs);
+  color: var(--on-inverse-3);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qr-card-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.qr-card-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
 /* Premium Apps Script Setup Card & Code Display Block */
 .gas-code-container {
   position: relative;

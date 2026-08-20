@@ -1651,6 +1651,13 @@ window.copyPaymentLink = copyPaymentLink;
 window.downloadPaymentQR = downloadPaymentQR;
 
 // ── ALL-BOOKS QR PAGE (publisher only)
+//
+// One card per book: title leads (Playfair on --ink2), price is the second
+// focal point (mono, gold), author recedes, the QR sits in a white plate that
+// is the card's obvious centre, and Download leads Copy in the action row.
+// Every wrapper here maps to a `.qr-*` class in style.css — no inline styles,
+// so the token lint has nothing to complain about and the theme flip carries
+// the whole card through --on-inverse tiers.
 function renderAllQRCodes() {
   const grid = $('qr-all-grid');
   if (!grid) return;
@@ -1658,42 +1665,55 @@ function renderAllQRCodes() {
 
   BOOK_LIST.forEach(book => {
     const url = getEffectiveBookPaymentLink(book);
-    const card = document.createElement('div');
-    card.style.cssText = `background:var(--ink2);border:1px solid rgba(255,255,255,.08);border-radius:var(--r3);padding:1.5rem;display:flex;flex-direction:column;align-items:center;gap:1rem;`;
+    const card = document.createElement('article');
+    card.className = 'qr-card' + (url ? '' : ' is-empty');
+    card.style.setProperty('--qr-accent', book.accent);
 
-    // Book title header
-    const header = document.createElement('div');
-    header.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;';
+    // Header — accent dot + title stack. Author and price are separated so the
+    // price can wear a heavier mono treatment while the author stays muted.
+    const priceLabel = `${book.currency ?? ''}${book.listPrice ?? '—'}`;
+    const author = escapeHtml(book.author) || '—';
+    const header = document.createElement('header');
+    header.className = 'qr-card-head';
     header.innerHTML = `
-      <div style="width:10px;height:10px;border-radius:50%;background:${book.accent};flex-shrink:0;"></div>
-      <div style="flex:1;">
-        <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--on-inverse);">${escapeHtml(book.title)}</div>
-        <div style="font-size:10px;color:var(--on-inverse-3);margin-top:2px;">${escapeHtml(book.author) || '—'} · ${book.currency}${book.listPrice}</div>
+      <span class="qr-card-accent" aria-hidden="true"></span>
+      <div class="qr-card-heading">
+        <div class="qr-card-title">${escapeHtml(book.title)}</div>
+        <div class="qr-card-meta">
+          <span class="qr-card-author">${author}</span>
+          <span class="qr-card-price" aria-label="List price">${escapeHtml(priceLabel)}</span>
+        </div>
       </div>`;
     card.appendChild(header);
 
-    // QR code container
+    // QR plate — kept as a bright white square regardless of theme; a QR
+    // scanned by a phone camera needs the light background whatever the app
+    // paints around it.
     const qrWrap = document.createElement('div');
-    qrWrap.style.cssText = 'background:white;padding:14px;border-radius:var(--r2);width:196px;height:196px;display:flex;align-items:center;justify-content:center;';
+    qrWrap.className = 'qr-frame' + (url ? '' : ' qr-frame-empty');
     const qrEl = document.createElement('div');
     qrEl.id = `qr-all-${book.id}`;
+    qrEl.className = 'qr-frame-target';
     qrWrap.appendChild(qrEl);
     card.appendChild(qrWrap);
 
     if (url && typeof QRCode !== 'undefined') {
       new QRCode(qrEl, { text: url, width: 168, height: 168, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H });
     } else {
-      qrEl.innerHTML = `<div style="color:var(--text3);font-size:11px;text-align:center;padding:1rem;">${url ? 'QR library not ready' : 'No Stripe link set.<br>Edit this book to add one.'}</div>`;
+      qrEl.innerHTML = `<div class="qr-frame-message">${url ? 'QR library not ready' : 'No Stripe link set.<br>Edit this book to add one.'}</div>`;
     }
 
-    // Link display + actions
+    // Actions column — url line above, buttons below. Download leads (gold),
+    // Copy is the secondary (ink), so the primary action reads first in an
+    // event line-up. Disabled state is inherited from `.btn:disabled`.
     const linkRow = document.createElement('div');
-    linkRow.style.cssText = 'width:100%;display:flex;flex-direction:column;gap:8px;';
+    linkRow.className = 'qr-card-footer';
+    const safeUrl = (url || '').replace(/'/g, "\\'");
     linkRow.innerHTML = `
-      <div style="font-size:10px;color:var(--on-inverse-3);font-family:'DM Mono',monospace;word-break:break-all;text-align:center;min-height:14px;">${url || 'No link configured'}</div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn ink" style="flex:1;font-size:11px;" onclick="window.copyBookQR('${book.id}','${url.replace(/'/g, "\\'")}')">Copy link</button>
-        <button class="btn gold" style="flex:1;font-size:11px;" ${url ? '' : 'disabled'} onclick="window.downloadBookQR('${book.id}')">Download</button>
+      <div class="qr-card-link" title="${escapeHtml(url || 'No link configured')}">${escapeHtml(url || 'No link configured')}</div>
+      <div class="qr-card-actions">
+        <button class="btn ink sm" ${url ? '' : 'disabled'} onclick="window.copyBookQR('${book.id}','${safeUrl}')">Copy link</button>
+        <button class="btn gold sm" ${url ? '' : 'disabled'} onclick="window.downloadBookQR('${book.id}')">Download</button>
       </div>`;
     card.appendChild(linkRow);
     grid.appendChild(card);
