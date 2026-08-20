@@ -4010,6 +4010,55 @@ tr.hist-row:hover {
 .orders-hidden-note{text-align:center;font-size:11px;color:var(--text3);padding:12px 0;}
 @media(max-width:760px){.web-orders-hero{align-items:stretch;flex-direction:column;padding:1.2rem;}.web-orders-actions{justify-content:stretch;}.web-orders-actions .btn{flex:1;justify-content:center;}.web-orders-status{grid-template-columns:1fr;}.order-row{align-items:flex-start;flex-direction:column;}.order-actions{width:100%;}.order-actions .btn{flex:1;justify-content:center;}.shipping-reconciliation-row{grid-template-columns:1fr;}.shipping-reconciliation-row .btn{min-height:44px;justify-content:center;}}
 
+/* ── Section heads on the "All books" landing screen ──────────────────────
+   The home screen used to run: a 9px uppercase micro-label + a list of book
+   cards, another micro-label + the channel chart, and then a fully-dressed
+   consignment panel with a gold kicker, a real heading and a line of subcopy.
+   So the first screen the publisher sees carried the faintest headings in the
+   whole app — every other tab heads its sections with the 20px serif
+   `.section-hed` — and the one section that looked designed was the supporting
+   one at the bottom.
+
+   `.sec-head` generalises the furniture the consignment panel already proved,
+   so all three sections share one head instead of one being designed and two
+   being labels. The consignment classes below alias onto it rather than
+   keeping a second copy of the same declarations.
+
+   `--sec-accent` lets a head tint its own kicker: gold is the lead (the
+   catalogue, which is what the screen is named after), everything else takes
+   the neutral slate so the screen keeps one gold entry point instead of
+   spending the accent three times. */
+.sec-head,
+.consignment-summary-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4);}
+.sec-head-titles,
+.consignment-summary-titles{min-width:0;flex:1;}
+.sec-head-badges,
+.consignment-summary-badges{flex-shrink:0;display:flex;align-items:center;gap:8px;}
+.sec-kicker,
+.consignment-kicker{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--sec-accent,var(--gold));margin-bottom:6px;}
+.sec-kicker-dot,
+.con-kicker-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--sec-accent,var(--gold));box-shadow:0 0 8px var(--sec-accent,var(--gold)); /* token-ok */}
+/* Worn alongside `.section-hed`, so the heading tier itself is the app's
+   existing serif one and this only owns the spacing inside the head. */
+.sec-head-title{margin:0 0 .45rem;text-wrap:balance;}
+/* A head whose section is a supporting read, not the screen's entry point. */
+.sec-head.is-muted{--sec-accent:var(--slate);}
+/* The heads sit above content that carries its own cards (`.book-strip`,
+   `.ch-panel`), so the rhythm has to come from the gap between one section and
+   the next — group spacing has to beat the 16px the cards already use between
+   themselves or the three sections read as one long stack. */
+.overview-section{container-type:inline-size;container-name:overview-sec;margin-bottom:var(--space-6);}
+.overview-section:last-child{margin-bottom:0;}
+/* The cards inside each section carry their own bottom margin (16px on a book
+   strip, 14px on a channel panel). Left alone that stacks onto the section gap
+   and the rhythm drifts section by section; zeroed, the gap between sections is
+   exactly one step and always beats the gap between cards within one. */
+.overview-section > :last-child,
+.overview-section > :last-child > :last-child{margin-bottom:0;}
+@container overview-sec (max-width: 680px){
+  .sec-head{flex-direction:column;align-items:stretch;}
+}
+
 /* Combined consignment summary */
 .consignment-summary-panel{
   position:relative;
@@ -4028,13 +4077,8 @@ tr.hist-row:hover {
   margin-bottom:2rem;
   transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard);
 }
-.consignment-summary-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4);}
-.consignment-summary-titles{min-width:0;flex:1;}
-.consignment-kicker{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--gold);margin-bottom:6px;}
-.con-kicker-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold); /* token-ok */}
-.consignment-summary-title{margin-bottom:.45rem;color:var(--text);}
+.consignment-summary-title{margin:0 0 .45rem;color:var(--text);text-wrap:balance;}
 .section-subcopy{max-width:720px;font-size:var(--text-base);line-height:var(--leading-normal);color:var(--text3);}
-.consignment-summary-badges{flex-shrink:0;display:flex;align-items:center;gap:8px;}
 
 /* HUD KPI Stat Grid */
 .consignment-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);margin-bottom:var(--space-4);}
