@@ -50,6 +50,28 @@ settled, `✕` void) — it's how users scan a whole column of pills without rea
 Chip variant for inline counts/filters (not status): `.pile-chip` (`style.css:1632`) —
 bordered, neutral background, optional colored `.dot`.
 
+### Flagging one tile inside a group of tiles
+
+When one figure in a row of KPI tiles is the one to act on (Owed on a store card, a
+disputed balance, a failed sync), mark it with an **inset accent bar plus a tinted
+border** — `box-shadow: inset 3px 0 0 var(--status-active)` — not with a
+`--status-*-bg` fill. Two reasons, both learned on `.sk` (the store card's tiles):
+
+- **A status wash is *lighter* than the plate it sits on.** The `--status-*-bg` tokens
+  are low-alpha tints designed for white cards; over `--surface-inset` in light mode
+  they land paler than the neutral tiles beside them, so the flagged tile becomes the
+  *least* prominent one on the card. Exactly backwards.
+- **It costs the figure its contrast.** Amber `--status-active` on an amber-washed
+  plate measured 4.25:1 — under AA for an 18px figure. The accent bar changes no
+  background, so the figure keeps the full contrast it was checked at.
+
+The bar is already the house device for this: `.sys-failed`/`.sys-conflict`
+(`system.css`), the active consignment row, and `.store-balance-tbl tr.is-off` all use
+it. Derive the state with `:has()` where the figure already carries a class
+(`.sk:has(.sk-v.warn)`) rather than stamping a second class from JS — §3. Order the
+rules so critical comes *after* active, or a tile that is both owed-money and
+off-ledger paints amber.
+
 ### Reporting stock on a surface that spends it
 
 Any screen that moves inventory (POS register, manual entry, a future shipment form) should say
@@ -73,6 +95,56 @@ for the manual-entry form, and `posStockView()`/`posOversellSummary()` in
 
 Untracked things say nothing at all. A POS-only guest title has no catalog stock, so its card gets
 no pill — a `0` there would read as "out of stock" and stop a perfectly good sale.
+
+---
+
+## Stat cards / HUD strips — one anatomy, two surfaces
+
+A row of headline figures at the head of a screen (the consignment summary HUD, Order History's
+reconciliation strip) uses **one** card anatomy. Before adding a third, extend one of these rather
+than starting a parallel set — the two above were parallel systems for a while and the drift was
+visible on screen.
+
+The anatomy: **icon plate → content column → 3px bottom accent.**
+
+```html
+<div class="hist-kpi-card highlight-gold is-lead">
+  <div class="hist-kpi-icon" aria-hidden="true">📚</div>
+  <div class="hist-kpi-content">
+    <div class="hist-kpi-label">Stock On Hand</div>
+    <div class="hist-kpi-val">88</div>
+    <div class="hist-kpi-sub">35% available</div>
+  </div>
+</div>
+```
+
+Reference implementations: `.consignment-stat-card` (`style.css:4041`) and `.hist-kpi-card`
+(`style.css:~110`). Five rules they share:
+
+- **Label `--text-2xs` / 800 / `--tracking-label`, figure `'DM Mono'` at `--text-xl`, sub-line
+  `--text-sm`.** Anything else and the strip reads as a different app's component. Spacing comes
+  off `--space-*`; gaps written as raw 12/14/4/2px are how the drift started.
+- **The accent is a 3px `::after` along the bottom, never a left border.** Everything is
+  `border-box`, so a left border shrinks the content box of the accented cards only — their labels
+  then sit a few px right of the unaccented card's and the row reads ragged for a reason nobody can
+  name. Colour the `::after`, not the frame.
+- **Exactly one card leads, by size *and* colour.** `.is-lead` steps the figure to `--text-2xl` and
+  recolours it `--gold-text`. One size step on its own reads as an accident. Pick the figure the
+  screen exists to act on — not the biggest number, and never more than one.
+- **Sub-lines bottom-align with `margin-top:auto`.** The lead's taller figure otherwise pushes its
+  own sub-line below the others'. Card is `align-items:stretch`, content is a flex column, icon
+  plate takes `align-self:flex-start`.
+- **The grid is an explicit `repeat(3, minmax(0,1fr))` with a `@container` step to `1fr` at 680px** —
+  matching the consignment HUD, so a phone gets the same layout in both places. `auto-fit` looks
+  equivalent and isn't: at mid widths it wraps 3 cards into 2 columns and leaves the third an orphan
+  half the row wide. The `container-type` has to sit on a **wrapper** (`.hist-recon-strip`), because
+  an element cannot query its own container.
+
+**Progress bar under a strip:** trough is `var(--track-bg)` — never `--cream2`, which lands ~3% off
+the page colour on dark and leaves the unfilled remainder invisible. The fill stays inside **one**
+colour family and matches the card it plots; a `--gold` → `--emerald` ramp blends two semantic roles
+across a single measurement, so the colour change reads as a state change that isn't there. Width
+transitions use `var(--dur-base) var(--ease-entrance)` so they collapse under reduced motion.
 
 ---
 
@@ -204,6 +276,48 @@ Two tiers exist; use the richer one whenever the empty state is a primary destin
 Real examples: `main.js:8389` (stores), `main.js:8899` (invoices), `main.js:18579` (Stripe
 reconciliation). Grep `e-icon` before adding a new empty-state icon convention — most already
 carry a single emoji that matches the section's theme (💳 payments, 📄 invoices, 🔍 filtered-empty).
+
+---
+
+## Stacked panels — group with a stage wrapper, not with margins
+
+A tall panel built as a flat run of blocks, each carrying its own
+`margin-bottom`, always drifts: the POS checkout column reached eleven blocks
+whose gaps ran 6 / 10 / 8 / 4 / 12 / 12 / 4 / 14 / 12 / 8 / 8 px. However
+carefully each one was chosen, the space *between* the stages of the task ended
+up the same as the space *inside* them, so nothing grouped and the panel read as
+one undifferentiated run of small text.
+
+The fix is two numbers, not eleven. Wrap each stage of the task in a stage div
+and let two `gap`s do all the spacing — see `.pos-cart-panel` /
+`.pos-checkout-stage` (`style.css`, "POS CHECKOUT PANEL") for the reference:
+
+```css
+.some-panel       { display:flex; flex-direction:column; gap:var(--space-5); }  /* BETWEEN stages */
+.some-panel-stage { display:flex; flex-direction:column; gap:var(--space-2); }  /* WITHIN one    */
+```
+
+Three rules that come with it:
+- **Between must exceed within, visibly.** One step apart (12 vs 8) is not a
+  grouping, it's a rounding error. `--space-5` against `--space-2` is.
+- **Zero out child margins that predate the gap.** A component written for a
+  flow context brings its own `margin-bottom` and it stacks *on top of* the gap
+  — `.pos-checkout-stage .pos-oversell-note{margin-bottom:0}` is that fix. A
+  `display:none` child (`[hidden]`) contributes no gap, so conditional rows need
+  no special handling.
+- **`min-width: 0` on the stage.** Without it a long unbreakable figure — a
+  mixed-currency total, a full ISBN — stretches the flex item and widens the
+  whole column.
+
+**Money figures lead on type, not just size.** The sale total on that panel was
+34px Syne 800 — the heading face, proportional — so the digits re-widthed on
+every quantity tap and it was the one monetary value in the app not in DM Mono.
+Any figure that leads a panel gets `'DM Mono'` + `font-variant-numeric:
+tabular-nums` + `font-feature-settings:"tnum" 1,"zero" 1` and takes its
+prominence from the size step and `--text-3xl`, not from an accent colour.
+Reserve the status colours for status: a pending cart total wearing `--green`
+claimed the settled/paid role and left the panel with three accents competing
+(gold heading, green total, gold primary button) and no emphasis left.
 
 ---
 
