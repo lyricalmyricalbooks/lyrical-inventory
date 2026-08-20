@@ -215,7 +215,7 @@ export function contrastRatio(c1, c2) {
 // Keep in sync with src/style.css if these selectors change.
 // ---------------------------------------------------------------------------
 
-const DARK_BG_CLASSES = new Set(['app-header', 'kpi', 'gas-code-container', 'metric-banner']);
+const DARK_BG_CLASSES = new Set(['app-header', 'kpi', 'gas-code-container', 'metric-banner', 'log-console']);
 // Every entry is a TOKEN, never a literal — a literal would resolve to the same
 // colour in both palettes and quietly make the dark sweep check a fiction.
 const CLASS_BG = {
@@ -236,6 +236,17 @@ const CLASS_TEXT_TOKENS = {
   'metric-banner-value': {
     base: 'var(--on-inverse)',
     modifiers: { gold: 'var(--gold3)', green: 'var(--emerald-soft)', danger: 'var(--rose-soft)' },
+  },
+  // The scan/expense/order console lines. Same story as the two above: the
+  // .log-console well is --ink in BOTH themes, so these read off the
+  // theme-stable inverse tier rather than --text.
+  'log-line': {
+    base: 'var(--on-inverse-2)',
+    modifiers: { ok: 'var(--emerald-soft)', warn: 'var(--orange)', err: 'var(--rose-soft)' },
+  },
+  'log-time': {
+    base: 'var(--on-inverse-3)',
+    modifiers: {},
   },
 };
 

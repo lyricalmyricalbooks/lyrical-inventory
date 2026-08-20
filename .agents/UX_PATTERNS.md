@@ -222,6 +222,31 @@ sync, Stripe pulls, Gemini OCR) instead of a spinner GIF or a bare "Loading…" 
 
 ---
 
+## Run logs — `.log-console`
+The dark well under the manual-entry, expense, Gmail-scan and shipping-backfill forms.
+`addLog(id, msg, type)` appends one `.log-line` per message; `type` is `''`, `'ok'`,
+`'warn'` or `'err'`. Two rules, both learned the hard way:
+
+- **Every type needs a colour, and it comes from the inverse tier.** The well is `--ink`,
+  which stays dark in *both* themes (`theme-dark.css` pushes the inverse surfaces deeper
+  rather than flipping them), while `--text` is byte-identical to `--ink` in light mode.
+  So a line with no `color` of its own is invisible on the light theme — which is exactly
+  what happened to plain and `'err'` lines. Use `--on-inverse-2` for the body and the
+  ink-readable accent inks (`--emerald-soft` / `--orange` / `--rose-soft`) for the states,
+  the same set `.kpi-value.*` and `.metric-banner-value.*` already use. **Adding a new
+  `type` to `addLog()` means adding its `.log-line.<type>` rule in the same commit.**
+- **The timestamp recedes, the message leads.** `addLog()` emits the clock as its own
+  `.log-time` span so it can sit dimmer and in a fixed `14ch` gutter — that gutter is what
+  gives a stack of messages one shared left edge, since `9:05:03 AM` and `10:05:03 AM`
+  are different widths. Both halves are set with `textContent`; nothing in a scan-failure
+  message is ever parsed as markup.
+
+`.log-console`, `.log-line` and `.log-time` are registered in `scripts/check-contrast.mjs`
+(`DARK_BG_CLASSES` / `CLASS_TEXT_TOKENS`), so the sweep now sees this component in both
+themes. Keep that table in step if the selectors change.
+
+---
+
 # Modern platform capabilities — the current state of the art
 
 > [!IMPORTANT]
