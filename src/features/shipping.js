@@ -89,6 +89,10 @@ import {
   storedVerificationIsCurrent,
   verificationVerdict,
 } from '../lib/address-verification.js';
+import {
+  calculateZonosLandedCost,
+  estimateOfflineLandedCost,
+} from '../lib/zonos.js';
 
 function getShippingReconciliationOrders() {
   const byNumber = new Map();
@@ -2077,6 +2081,14 @@ function saveShippoIncotermPreference(destCountryCode) {
 
 function onShippoDestCountryChange() {
   loadShippoIncotermPreference($('st-country')?.value || '');
+  const sfCountryCode = $('sf-country')?.value || 'CA';
+  const stCountryCode = $('st-country')?.value || 'US';
+  if (isInternationalShipment(sfCountryCode, stCountryCode)) {
+    calculateZonosDutiesHandler().catch(() => {});
+  } else {
+    const card = $('zonos-duty-card');
+    if (card) card.style.display = 'none';
+  }
 }
 
 function onShippoIncotermChange() {
@@ -2114,6 +2126,200 @@ function renderShippoIncotermHint() {
   } else {
     hint.textContent = `${incoterm}: the recipient pays any duties and taxes on delivery.`;
   }
+}
+
+let _lastZonosLandedCost = null;
+
+async function calculateZonosDutiesHandler({ shippingAmount, carrierName } = {}) {
+  const sfCountryCode = $('sf-country')?.value || 'CA';
+  const stCountryCode = $('st-country')?.value || 'US';
+  const stState = $('st-state')?.value || '';
+  const stZip = $('st-zip')?.value || '';
+  const sfState = $('sf-state')?.value || 'QC';
+  const sfZip = $('sf-zip')?.value || 'H2X 1Y4';
+
+  const isInternational = isInternationalShipment(sfCountryCode, stCountryCode);
+  const card = $('zonos-duty-card');
+  if (!card) return;
+
+  if (!isInternational) {
+    card.style.display = 'none';
+    card.innerHTML = '';
+    return;
+  }
+
+  const qty = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
+  const unitValue = Math.max(0.01, parseFloat($('sp-customs-value')?.value) || 25);
+  const hsCode = ($('sp-customs-hs')?.value || '490199').trim();
+  const description = $('sp-customs-description')?.value || 'Printed books';
+  const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 10);
+  const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 8);
+  const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 1);
+  const dimUnit = $('sp-dim-unit')?.value || 'in';
+  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 1.2);
+  const weightUnit = $('sp-weight-unit')?.value || 'lb';
+  const incoterm = resolveShippoIncoterm(stCountryCode);
+
+  const zonosApiKey = TAX_CENTER.settings?.zonosApiKey || 'credential_live_11988839-5711-4e1c-9036-303dc94fb15b';
+  const isEnabled = TAX_CENTER.settings?.zonosEnabled !== false;
+
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="zonos-duty-header">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="zonos-duty-icon">🌐</span>
+        <strong>Zonos Cross-Border Duties &amp; Taxes</strong>
+      </div>
+      <span class="pill gold" style="animation:pulse-glow 1.5s infinite ease-in-out;">Calculating...</span>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-top:8px;">Fetching real-time landed cost quote from Zonos GraphQL API for destination (${escapeHtml(stCountryCode)})...</div>
+  `;
+
+  const finalShippingAmount = typeof shippingAmount === 'number' ? shippingAmount : 15.00;
+
+  try {
+    let result;
+    if (zonosApiKey && isEnabled && navigator.onLine) {
+      result = await calculateZonosLandedCost({
+        apiKey: zonosApiKey,
+        origin: { countryCode: sfCountryCode, stateCode: sfState, postalCode: sfZip },
+        destination: { countryCode: stCountryCode, stateCode: stState, postalCode: stZip },
+        items: [{
+          amount: unitValue,
+          currencyCode: 'CAD',
+          description,
+          hsCode,
+          quantity: qty
+        }],
+        parcel: { length, width, height, dimUnit, weight, weightUnit },
+        shippingRate: { amount: finalShippingAmount, displayName: carrierName || 'Estimated Postage' },
+        incoterm: incoterm === 'auto' ? (stCountryCode === 'US' ? 'DDP' : 'DAP') : incoterm,
+        currency: 'CAD'
+      });
+      _lastZonosLandedCost = result;
+    } else {
+      result = estimateOfflineLandedCost({
+        destCountryCode: stCountryCode,
+        declaredValueCad: unitValue * qty,
+        shippingCostCad: finalShippingAmount,
+        hsCode
+      });
+      _lastZonosLandedCost = result;
+    }
+
+    renderZonosDutyCard(result, { stCountryCode, qty, unitValue, hsCode });
+  } catch (err) {
+    console.warn('Zonos API calculation fallback:', err);
+    const offlineResult = estimateOfflineLandedCost({
+      destCountryCode: stCountryCode,
+      declaredValueCad: unitValue * qty,
+      shippingCostCad: finalShippingAmount,
+      hsCode
+    });
+    _lastZonosLandedCost = offlineResult;
+    renderZonosDutyCard(offlineResult, { stCountryCode, qty, unitValue, hsCode, errorNote: err.message });
+  }
+}
+
+function renderZonosDutyCard(calc, { stCountryCode, qty, unitValue, hsCode, errorNote } = {}) {
+  const card = $('zonos-duty-card');
+  if (!card) return;
+  card.style.display = 'block';
+
+  const isOffline = !!calc.isOfflineEstimate;
+  const cur = calc.currencyCode || calc.currency || 'CAD';
+  const duty = (calc.dutiesAmount || 0).toFixed(2);
+  const tax = (calc.taxesAmount || 0).toFixed(2);
+  const fee = (calc.feesAmount || 0).toFixed(2);
+  const total = (calc.totalLandedCost || 0).toFixed(2);
+
+  const deMinimisNotes = [];
+  if (Array.isArray(calc.deMinimis) && calc.deMinimis.length > 0) {
+    calc.deMinimis.forEach(dm => {
+      if (dm.note) deMinimisNotes.push(`${dm.type || 'Rule'}: ${dm.note} (${dm.threshold || ''})`);
+    });
+  } else if (calc.deMinimisNote) {
+    deMinimisNotes.push(calc.deMinimisNote);
+  }
+
+  const isFree = parseFloat(total) === 0;
+  const statusBadge = isOffline
+    ? '<span class="pill gray">Offline Estimate</span>'
+    : (isFree ? '<span class="pill green">Duty &amp; Tax Free</span>' : '<span class="pill gold">Landed Cost Quoted</span>');
+
+  const dutyItemRows = (calc.dutiesBreakdown || []).filter(d => d.amount > 0).map(d => `
+    <div class="zonos-detail-row">
+      <span>${escapeHtml(d.description || 'Duty')} ${d.note ? `<small style="color:var(--text3);">(${escapeHtml(d.note)})</small>` : ''}</span>
+      <strong class="tnum">${d.amount.toFixed(2)} ${cur}</strong>
+    </div>
+  `).join('');
+
+  const feeItemRows = (calc.feesBreakdown || []).filter(f => f.amount > 0).map(f => `
+    <div class="zonos-detail-row">
+      <span>${escapeHtml(f.description || 'Clearance Fee')}</span>
+      <strong class="tnum">${f.amount.toFixed(2)} ${cur}</strong>
+    </div>
+  `).join('');
+
+  const taxItemRows = (calc.taxesBreakdown || []).filter(t => t.amount > 0).map(t => `
+    <div class="zonos-detail-row">
+      <span>${escapeHtml(t.description || 'Import Tax')}</span>
+      <strong class="tnum">${t.amount.toFixed(2)} ${cur}</strong>
+    </div>
+  `).join('');
+
+  card.innerHTML = `
+    <div class="zonos-duty-header">
+      <div>
+        <div class="zonos-duty-title">
+          <span class="zonos-duty-icon">🌐</span>
+          <strong>Zonos Landed Cost &amp; Duties</strong>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+          ${escapeHtml(stCountryCode || 'International')} · HS Code <span class="tnum">${escapeHtml(hsCode || '490199')}</span> · Declared <span class="tnum">${(qty * unitValue).toFixed(2)} ${cur}</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        ${statusBadge}
+        <button class="btn sm tag" type="button" onclick="calculateZonosDutiesHandler()" style="font-size:10px;padding:3px 8px;" title="Refresh calculation">↻ Refresh</button>
+      </div>
+    </div>
+
+    <div class="zonos-duty-metrics">
+      <div class="zonos-metric-box">
+        <label>Customs Duty</label>
+        <span class="zonos-metric-val tnum">${duty} ${cur}</span>
+      </div>
+      <div class="zonos-metric-box">
+        <label>Import VAT / Tax</label>
+        <span class="zonos-metric-val tnum">${tax} ${cur}</span>
+      </div>
+      <div class="zonos-metric-box">
+        <label>Clearance / Brokerage</label>
+        <span class="zonos-metric-val tnum">${fee} ${cur}</span>
+      </div>
+      <div class="zonos-metric-box highlighted">
+        <label>Total Landed Cost</label>
+        <span class="zonos-metric-val grand tnum">${total} ${cur}</span>
+      </div>
+    </div>
+
+    ${(dutyItemRows || taxItemRows || feeItemRows) ? `
+      <div class="zonos-breakdown-details">
+        ${dutyItemRows}
+        ${taxItemRows}
+        ${feeItemRows}
+      </div>
+    ` : ''}
+
+    ${deMinimisNotes.length > 0 ? `
+      <div class="zonos-duty-note">
+        ${deMinimisNotes.map(n => `<div>${escapeHtml(n)}</div>`).join('')}
+      </div>
+    ` : ''}
+
+    ${errorNote ? `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Note: Using verified offline table (${escapeHtml(errorNote)})</div>` : ''}
+  `;
 }
 
 function buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit }) {
@@ -2639,6 +2845,11 @@ async function calculateShippoRates() {
     }
 
     renderShippingChargePrediction(rates);
+
+    if (isInternational) {
+      const cheapestRate = rates.length > 0 ? [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))[0] : null;
+      calculateZonosDutiesHandler({ shippingAmount: cheapestRate ? parseFloat(cheapestRate.amount) : 15.00, carrierName: cheapestRate?.provider || '' }).catch(() => {});
+    }
 
     // Sort rates by amount ascending to find the cheapest
     const sortedByPrice = [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
@@ -5233,6 +5444,8 @@ export {
   renderShippoDiagnostics,
   buyShippoLabel,
   calculateShippoRates,
+  calculateZonosDutiesHandler,
+  renderZonosDutyCard,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,

@@ -2561,6 +2561,38 @@
             </div>
           </div>
 
+          <!-- Zonos API Section -->
+          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-zonos" onclick="toggleIntegrationSection('zonos')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('zonos');}">
+              <div>
+                <strong style="font-size:13px;color:var(--text1);">🌐 Zonos Cross-Border Duties &amp; Taxes</strong>
+                <div style="font-size:11px;color:var(--text3);">Calculate real-time customs duties, import VAT/GST, carrier clearance fees, and landed costs for international orders.</div>
+              </div>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-zonos">▾</span>
+            </div>
+            <div class="oc-collapse-body" id="tc-integration-body-zonos" style="display:flex;flex-direction:column;gap:0.75rem;">
+              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Zonos Live API Key (credentialToken)</label>
+                  <input type="password" id="tc-zonos-key" placeholder="credential_live_..." value="credential_live_11988839-5711-4e1c-9036-303dc94fb15b" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+                </div>
+                <div class="form-group" style="flex:1.5;min-width:180px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Zonos Account Key</label>
+                  <input type="text" id="tc-zonos-account-key" placeholder="credential_live_..." value="credential_live_7649ea9f-46b2-493c-951d-d05e6208b7a9" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+                </div>
+                <div class="form-group" style="display:flex;align-items:center;gap:6px;min-height:35px;margin-bottom:0;">
+                  <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
+                    <input type="checkbox" id="tc-zonos-enabled" checked style="accent-color:var(--gold);">
+                    <span>Enable Duties API</span>
+                  </label>
+                </div>
+                <button id="tc-zonos-test-btn" class="btn gold outline" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="testZonosConnectionHandler()">Test Connection</button>
+                <button id="tc-save-zonos-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
+              </div>
+              <div id="tc-zonos-status" style="font-size:11px;color:var(--text3);min-height:16px;"></div>
+            </div>
+          </div>
+
           <!-- Stripe API Section -->
           <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
             <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
@@ -3009,15 +3041,21 @@
         <!-- Live "what's still missing" line, filled in by renderShippoRateReadiness(). -->
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
 
-        <button class="btn gold" style="width:100%; margin-top:0.75rem; height:46px; font-size:14px;" onclick="calculateShippoRates()">
-          ⚡ Calculate Rates & Predict Customer Charge
-        </button>
+        <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:8px;margin-top:0.75rem;">
+          <button class="btn gold" style="height:46px;font-size:13px;white-space:nowrap;" onclick="calculateShippoRates()">
+            ⚡ Calculate Rates &amp; Prediction
+          </button>
+          <button class="btn tag" style="height:46px;font-size:13px;white-space:nowrap;" onclick="calculateZonosDutiesHandler()" title="Calculate destination customs duties and import taxes with Zonos">
+            🌐 Duties (Zonos)
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- Results Side -->
     <div class="shipping-results-container">
       <div class="card" style="min-height:300px; height:100%; display:flex; flex-direction:column;">
+        <div id="zonos-duty-card" class="zonos-duty-card" style="display:none; margin-bottom:12px;"></div>
         <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Customer Charge Prediction</div>
         <div id="ship-prediction-card" class="shipping-prediction-card" style="display:none;"></div>
         <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Carrier Rates Comparison</div>

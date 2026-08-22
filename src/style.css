@@ -8080,6 +8080,115 @@ tr.hist-row:hover {
   color: var(--red);
 }
 
+/* ── Zonos Cross-Border Duties & Taxes Card ────────────────────────────── */
+.zonos-duty-card {
+  background: linear-gradient(135deg, rgba(200,145,58,.08), rgba(99,102,241,.06));
+  border: 1px solid var(--gold-line);
+  border-radius: var(--r2);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  transition: border-color var(--dur-base) var(--ease-standard), box-shadow var(--dur-base) var(--ease-standard);
+  container-type: inline-size;
+}
+.zonos-duty-card:hover {
+  border-color: var(--gold);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.12);
+}
+.zonos-duty-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.zonos-duty-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 700;
+}
+.zonos-duty-icon {
+  font-size: 16px;
+}
+.zonos-duty-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
+@container (max-width: 480px) {
+  .zonos-duty-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.zonos-metric-box {
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.zonos-metric-box.highlighted {
+  background: linear-gradient(135deg, rgba(200,145,58,.12), rgba(30,86,49,.1));
+  border-color: var(--gold-line);
+}
+.zonos-metric-box label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 2px;
+}
+.zonos-metric-val {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.zonos-metric-val.grand {
+  font-size: 15px;
+  color: var(--gold);
+}
+.zonos-breakdown-details {
+  background: rgba(0,0,0,0.12);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.zonos-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text2);
+}
+.zonos-detail-row strong {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  color: var(--text);
+}
+.zonos-duty-note {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text3);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* ─── Rate-form readiness line ────────────────────────────────────────────
    Sits directly above the Calculate button and answers "can I press this yet?"
    without scrolling back through twenty inputs. A container query, not a
