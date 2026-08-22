@@ -360,6 +360,9 @@ import {
   openShippoLabel,
   getBookPresetSpecs,
   initShippingTab,
+  openSaveBookPresetModal,
+  confirmSaveBookPreset,
+  renderSaveBookPresetPreview,
   getFallbackShippingPhone,
   renderCustomShippoDestPicker,
   setShippoDestMenuOpenState,
@@ -816,7 +819,7 @@ function ownersFromBooks() {
   return owners;
 }
 
-function saveCatalogWithDeletions() {
+export function saveCatalogWithDeletions() {
   // Keep the rules-readable ownership map in step with the catalog so the
   // tightened security rules can verify author→book ownership. Publisher-only —
   // authors can't write settings (rules reject), so skip to avoid noisy errors.
@@ -20943,6 +20946,7 @@ function exposeLegacyInlineHandlers() {
     getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
     toggleIntegrationSection,
     testZonosConnectionHandler, calculateZonosDutiesHandler, renderZonosDutyCard,
+    openSaveBookPresetModal, confirmSaveBookPreset, renderSaveBookPresetPreview,
     setThemePreference, cycleThemePreference, toggleTheme
   });
 }
@@ -20980,6 +20984,9 @@ window.filterShippoDestMenu = filterShippoDestMenu;
 window.selectShippoDestCustomItem = selectShippoDestCustomItem;
 window.clearShippoDestSelection = clearShippoDestSelection;
 window.onShippoBookPresetChange = onShippoBookPresetChange;
+window.openSaveBookPresetModal = openSaveBookPresetModal;
+window.confirmSaveBookPreset = confirmSaveBookPreset;
+window.renderSaveBookPresetPreview = renderSaveBookPresetPreview;
 window.calculateShippoRates = calculateShippoRates;
 window.updateShippoBaseSpecsFromInputs = updateShippoBaseSpecsFromInputs;
 window.onShippoQuantityChange = onShippoQuantityChange;
