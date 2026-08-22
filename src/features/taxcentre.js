@@ -58,6 +58,7 @@ import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
+import { testCanadaPostConnection } from '../lib/canadapost.js';
 import {
   RECURRING_FREQUENCIES,
   amountOnDate,
@@ -2315,6 +2316,20 @@ function _tcRenderStatusHeaders() {
     }
   }
 
+  if ($('tc-cp-key') && TAX_CENTER.settings?.cpApiKey) $('tc-cp-key').value = TAX_CENTER.settings.cpApiKey;
+  if ($('tc-cp-secret') && TAX_CENTER.settings?.cpApiSecret) $('tc-cp-secret').value = TAX_CENTER.settings.cpApiSecret;
+  if ($('tc-cp-customer-number') && TAX_CENTER.settings?.cpCustomerNumber) $('tc-cp-customer-number').value = TAX_CENTER.settings.cpCustomerNumber;
+  if ($('tc-cp-contract-id') && TAX_CENTER.settings?.cpContractId) $('tc-cp-contract-id').value = TAX_CENTER.settings.cpContractId;
+  if ($('tc-cp-test-mode') && TAX_CENTER.settings?.cpTestMode !== undefined) $('tc-cp-test-mode').checked = !!TAX_CENTER.settings.cpTestMode;
+  if ($('tc-cp-enabled') && TAX_CENTER.settings?.cpEnabled !== undefined) $('tc-cp-enabled').checked = TAX_CENTER.settings.cpEnabled !== false;
+  const _cpStatusEl = $('tc-cp-status');
+  if (_cpStatusEl && TAX_CENTER.settings?.cpLastTestAt) {
+    const last = new Date(TAX_CENTER.settings.cpLastTestAt);
+    if (!isNaN(last)) {
+      _cpStatusEl.innerHTML = `<span style="color:var(--green);font-weight:600;">✓ API connection active</span> <span style="color:var(--text3);font-size:10px;">(tested ${last.toLocaleDateString()} ${last.toLocaleTimeString()})</span>`;
+    }
+  }
+
   // Update the receipt storage status shown inline next to the Receipt
   // input on Log Business Expense.
   loadReceiptFolderHandle().then(async handle => {
@@ -3438,7 +3453,7 @@ async function openEditArtistPayout(bid, itemId) {
 }
 
 async function saveTaxCenterSettings() {
-  const btn = $('tc-save-config-btn') || $('tc-save-zonos-btn');
+  const btn = $('tc-save-config-btn') || $('tc-save-zonos-btn') || $('tc-save-cp-btn');
   const oldText = btn ? btn.textContent : 'Save Config';
   if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
 
@@ -3447,6 +3462,13 @@ async function saveTaxCenterSettings() {
   const zonosAccountKey = $('tc-zonos-account-key')?.value.trim() || '';
   const zonosEnabled = $('tc-zonos-enabled') ? $('tc-zonos-enabled').checked : true;
 
+  const cpApiKey = $('tc-cp-key')?.value.trim() || '';
+  const cpApiSecret = $('tc-cp-secret')?.value.trim() || '';
+  const cpCustomerNumber = $('tc-cp-customer-number')?.value.trim() || '';
+  const cpContractId = $('tc-cp-contract-id')?.value.trim() || '';
+  const cpTestMode = $('tc-cp-test-mode') ? $('tc-cp-test-mode').checked : false;
+  const cpEnabled = $('tc-cp-enabled') ? $('tc-cp-enabled').checked : true;
+
   try {
     await loadTaxCenter();
     if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
@@ -3454,6 +3476,14 @@ async function saveTaxCenterSettings() {
     if (zonosApiKey) TAX_CENTER.settings.zonosApiKey = zonosApiKey;
     if (zonosAccountKey) TAX_CENTER.settings.zonosAccountKey = zonosAccountKey;
     TAX_CENTER.settings.zonosEnabled = zonosEnabled;
+
+    if (cpApiKey) TAX_CENTER.settings.cpApiKey = cpApiKey;
+    if (cpApiSecret) TAX_CENTER.settings.cpApiSecret = cpApiSecret;
+    if (cpCustomerNumber) TAX_CENTER.settings.cpCustomerNumber = cpCustomerNumber;
+    if (cpContractId) TAX_CENTER.settings.cpContractId = cpContractId;
+    TAX_CENTER.settings.cpTestMode = cpTestMode;
+    TAX_CENTER.settings.cpEnabled = cpEnabled;
+
     await saveTaxCenter();
     showToast('✓ Settings saved to Firebase');
   } catch (e) {
@@ -3503,6 +3533,62 @@ async function testZonosConnectionHandler() {
       statusEl.innerHTML = `<span style="color:var(--red);font-weight:600;">⚠ Error: ${escapeHtml(err.message)}</span>`;
     }
     showToast(`⚠ Zonos error: ${err.message}`, 'err');
+  } finally {
+    if (testBtn) { testBtn.disabled = false; testBtn.textContent = 'Test Connection'; }
+  }
+}
+
+async function testCanadaPostConnectionHandler() {
+  const keyInput = $('tc-cp-key');
+  const secretInput = $('tc-cp-secret');
+  const customerInput = $('tc-cp-customer-number');
+  const testModeInput = $('tc-cp-test-mode');
+  const statusEl = $('tc-cp-status');
+  const testBtn = $('tc-cp-test-btn');
+
+  const apiKey = keyInput?.value.trim() || TAX_CENTER.settings?.cpApiKey || '';
+  const apiSecret = secretInput?.value.trim() || TAX_CENTER.settings?.cpApiSecret || '';
+  const customerNumber = customerInput?.value.trim() || TAX_CENTER.settings?.cpCustomerNumber || '';
+  const isTest = testModeInput ? testModeInput.checked : !!TAX_CENTER.settings?.cpTestMode;
+
+  if (!apiKey || !apiSecret) {
+    showToast('⚠ Please enter both your Canada Post API Key and Secret / Password first', 'warn');
+    if (!apiKey && keyInput) keyInput.focus();
+    else if (!apiSecret && secretInput) secretInput.focus();
+    return;
+  }
+
+  if (testBtn) { testBtn.disabled = true; testBtn.textContent = 'Testing...'; }
+  if (statusEl) {
+    statusEl.innerHTML = '<span style="color:var(--text2);">Connecting to Canada Post Web Services...</span>';
+  }
+
+  try {
+    const result = await testCanadaPostConnection({
+      apiKey,
+      apiSecret,
+      customerNumber,
+      isTest
+    });
+
+    if (result.ok) {
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color:var(--green);font-weight:600;">✓ Connected to Canada Post! (${result.servicesCount} services quoted)</span> <span style="color:var(--text3);font-size:10px;">(${new Date().toLocaleTimeString()})</span>`;
+      }
+      showToast('✓ Connected to Canada Post API successfully');
+      if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+      TAX_CENTER.settings.cpApiKey = apiKey;
+      TAX_CENTER.settings.cpApiSecret = apiSecret;
+      if (customerNumber) TAX_CENTER.settings.cpCustomerNumber = customerNumber;
+      TAX_CENTER.settings.cpTestMode = isTest;
+      TAX_CENTER.settings.cpLastTestAt = new Date().toISOString();
+      await saveTaxCenter().catch(() => {});
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.innerHTML = `<span style="color:var(--red);font-weight:600;">⚠ Error: ${escapeHtml(err.message)}</span>`;
+    }
+    showToast(`⚠ Canada Post error: ${err.message}`, 'err');
   } finally {
     if (testBtn) { testBtn.disabled = false; testBtn.textContent = 'Test Connection'; }
   }
@@ -4046,6 +4132,7 @@ export {
   saveTaxCenter,
   saveTaxCenterSettings,
   testZonosConnectionHandler,
+  testCanadaPostConnectionHandler,
   setTcGalleryPage,
   setTcLedgerPage,
   snoozePendingExpense,

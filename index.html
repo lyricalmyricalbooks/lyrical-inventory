@@ -2593,6 +2593,52 @@
             </div>
           </div>
 
+          <!-- Canada Post Direct API Section -->
+          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-canadapost" onclick="toggleIntegrationSection('canadapost')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('canadapost');}">
+              <div>
+                <strong style="font-size:13px;color:var(--text1);">🇨🇦 Canada Post Direct API</strong>
+                <div style="font-size:11px;color:var(--text3);">Official Canada Post Web Services for direct live rate quotes, Small Business / Contract pricing, and tracking.</div>
+              </div>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-canadapost">▾</span>
+            </div>
+            <div class="oc-collapse-body" id="tc-integration-body-canadapost" style="display:flex;flex-direction:column;gap:0.75rem;">
+              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">API Key / Username / Client ID</label>
+                  <input type="text" id="tc-cp-key" placeholder="5832e33..." value="5832e3366d6aeb872e41adfab8192271" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+                </div>
+                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">API Secret / Password</label>
+                  <input type="password" id="tc-cp-secret" placeholder="75fdce5..." value="75fdce5f4799ac746b93cc34944ff146" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+                </div>
+                <div class="form-group" style="flex:1.2;min-width:140px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Customer # (Optional)</label>
+                  <input type="text" id="tc-cp-customer-number" placeholder="0007123456" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+                </div>
+                <div class="form-group" style="flex:1.2;min-width:140px;margin-bottom:0;">
+                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Contract ID (Optional)</label>
+                  <input type="text" id="tc-cp-contract-id" placeholder="e.g. 4299100" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
+                </div>
+              </div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:4px;">
+                <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
+                  <input type="checkbox" id="tc-cp-enabled" checked style="accent-color:var(--gold);">
+                  <span>Enable Direct Canada Post API</span>
+                </label>
+                <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
+                  <input type="checkbox" id="tc-cp-test-mode" style="accent-color:var(--gold);">
+                  <span>Sandbox Environment (ct.soa-gw)</span>
+                </label>
+                <div style="margin-left:auto;display:flex;gap:8px;">
+                  <button id="tc-cp-test-btn" class="btn gold outline" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="testCanadaPostConnectionHandler()">Test Connection</button>
+                  <button id="tc-save-cp-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
+                </div>
+              </div>
+              <div id="tc-cp-status" style="font-size:11px;color:var(--text3);min-height:16px;"></div>
+            </div>
+          </div>
+
           <!-- Stripe API Section -->
           <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
             <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
@@ -3047,9 +3093,12 @@
         <!-- Live "what's still missing" line, filled in by renderShippoRateReadiness(). -->
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
 
-        <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:8px;margin-top:0.75rem;">
+        <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:8px;margin-top:0.75rem;">
           <button class="btn gold" style="height:46px;font-size:13px;white-space:nowrap;" onclick="calculateShippoRates()">
             ⚡ Calculate Rates &amp; Prediction
+          </button>
+          <button class="btn outline" style="height:46px;font-size:13px;white-space:nowrap;" onclick="calculateCanadaPostRatesHandler()" title="Calculate rates directly via official Canada Post API">
+            🇨🇦 Canada Post
           </button>
           <button class="btn tag" style="height:46px;font-size:13px;white-space:nowrap;" onclick="calculateZonosDutiesHandler()" title="Calculate destination customs duties and import taxes with Zonos">
             🌐 Duties (Zonos)
@@ -3061,6 +3110,7 @@
     <!-- Results Side -->
     <div class="shipping-results-container">
       <div class="card" style="min-height:300px; height:100%; display:flex; flex-direction:column;">
+        <div id="canadapost-rates-card" class="canadapost-rates-card card" style="display:none; margin-bottom:12px; background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r2); padding:12px 14px;"></div>
         <div id="zonos-duty-card" class="zonos-duty-card" style="display:none; margin-bottom:12px;"></div>
         <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Customer Charge Prediction</div>
         <div id="ship-prediction-card" class="shipping-prediction-card" style="display:none;"></div>
