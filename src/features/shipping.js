@@ -34,6 +34,7 @@ import {
   orders,
   renderHist,
   renderOrders,
+  saveCatalogWithDeletions,
   saveState,
   sheetsUrl,
   showToast,
@@ -1921,11 +1922,22 @@ function onShippoBookPresetChange() {
   $('sp-weight').value = specs.weight;
   $('sp-weight-unit').value = specs.weight_unit;
   const customsValue = $('sp-customs-value');
-  if (customsValue) customsValue.value = Math.max(1, parseFloat(book.listPrice || book.price || customsValue.value || 25)).toFixed(2);
+  if (customsValue) {
+    customsValue.value = (book.shipCustomsVal != null)
+      ? parseFloat(book.shipCustomsVal).toFixed(2)
+      : Math.max(1, parseFloat(book.listPrice || book.price || customsValue.value || 25)).toFixed(2);
+  }
   const customsDescription = $('sp-customs-description');
-  if (customsDescription) customsDescription.value = `${book.title || 'Printed books'} - printed books`.slice(0, 80);
+  if (customsDescription) {
+    customsDescription.value = book.shipCustomsDesc || `${book.title || 'Printed books'} - printed books`.slice(0, 80);
+  }
   const customsHs = $('sp-customs-hs');
-  if (customsHs) customsHs.value = book.shipHsCode || '490199';
+  if (customsHs) {
+    customsHs.value = book.shipHsCode || '490199';
+  }
+  if (book.shipIncoterm && $('sp-incoterm')) {
+    $('sp-incoterm').value = book.shipIncoterm;
+  }
 
   // Update base specifications cache
   shippoBaseSpecs = {
@@ -1941,10 +1953,154 @@ function onShippoBookPresetChange() {
   renderShippoRateReadiness();
 
   if (source === 'generic') {
-    showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor.`, 'warn', 6000);
+    showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor or click "Save to Book Preset".`, 'warn', 6000);
   } else {
     showToast(`✓ Package preset loaded: ${book.title}`);
   }
+}
+
+/**
+ * Open modal to save the current parcel and customs specifications to a book preset in the catalog.
+ */
+function openSaveBookPresetModal() {
+  const select = $('sbp-target-book');
+  if (!select) return;
+
+  const currentPresetVal = $('ship-preset-book')?.value || activeBook || (BOOK_LIST[0]?.id || '');
+  select.innerHTML = '<option value="">— Select a catalogue book to update —</option>' +
+    BOOK_LIST.map(b => `<option value="${escapeHtml(b.id)}" ${b.id === currentPresetVal ? 'selected' : ''}>${escapeHtml(b.title)} (${escapeHtml(b.id)})</option>`).join('');
+
+  renderSaveBookPresetPreview();
+  openM('save-book-preset');
+}
+
+/**
+ * Render the live preview of dimensions, weight, and customs values to be saved to the book preset.
+ */
+function renderSaveBookPresetPreview() {
+  const preview = $('sbp-specs-preview');
+  if (!preview) return;
+
+  const qty = Math.max(1, parseInt($('sp-qty')?.value || '1', 10));
+  const length = parseFloat($('sp-length')?.value || '0');
+  const width = parseFloat($('sp-width')?.value || '0');
+  const totalHeight = parseFloat($('sp-height')?.value || '0');
+  const dimUnit = $('sp-dim-unit')?.value || 'in';
+  const totalWeight = parseFloat($('sp-weight')?.value || '0');
+  const weightUnit = $('sp-weight-unit')?.value || 'lb';
+  const customsVal = parseFloat($('sp-customs-value')?.value || '0');
+  const customsDesc = $('sp-customs-description')?.value?.trim() || '';
+  const hsCode = $('sp-customs-hs')?.value?.trim() || '';
+  const incoterm = $('sp-incoterm')?.value || 'auto';
+
+  const singleHeight = totalHeight > 0 ? (totalHeight / qty) : 0;
+  const singleWeight = totalWeight > 0 ? (totalWeight / qty) : 0;
+
+  const formattedHeight = singleHeight ? (Math.round(singleHeight * 100) / 100) : '—';
+  const formattedWeight = singleWeight ? (singleWeight >= 10 ? (Math.round(singleWeight * 100) / 100) : (Math.round(singleWeight * 10000) / 10000)) : '—';
+
+  const scalingNote = qty > 1
+    ? `<div class="sbp-scale-note" style="margin-top:10px;padding:8px 10px;background:var(--gold-bg);border-radius:var(--r);font-size:11px;color:var(--gold-text);line-height:1.45;">ℹ Automatically normalized per copy from total quantity of <strong>${qty}</strong>: single-copy height is <strong>${formattedHeight} ${dimUnit}</strong> and weight is <strong>${formattedWeight} ${weightUnit}</strong>.</div>`
+    : '';
+
+  preview.innerHTML = `
+    <div class="sbp-spec-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px;">
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Dimensions (Per Copy)</label>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--text);">${length} × ${width} × ${formattedHeight} ${dimUnit}</span>
+      </div>
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Weight (Per Copy)</label>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--text);">${formattedWeight} ${weightUnit}</span>
+      </div>
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Value (CAD)</label>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--gold);">${customsVal ? customsVal.toFixed(2) + ' CAD' : '—'}</span>
+      </div>
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">HS Tariff Code</label>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--text);">${escapeHtml(hsCode || '—')}</span>
+      </div>
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Default Incoterm</label>
+        <span style="font-size:12px;font-weight:600;color:var(--text);">${escapeHtml(incoterm || 'Auto')}</span>
+      </div>
+      <div class="sbp-spec-item" style="grid-column:1 / -1;display:flex;flex-direction:column;gap:2px;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px;margin-top:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Description</label>
+        <span style="font-size:12px;color:var(--text2);font-weight:500;">${escapeHtml(customsDesc || 'Printed books')}</span>
+      </div>
+    </div>
+    ${scalingNote}
+  `;
+}
+
+/**
+ * Confirm and save the current specifications to the selected book record in the catalog.
+ */
+async function confirmSaveBookPreset() {
+  const targetId = $('sbp-target-book')?.value;
+  if (!targetId || !BOOKS[targetId]) {
+    showToast('Please select a book to save these specifications to', 'warn');
+    return;
+  }
+
+  const book = BOOKS[targetId];
+  const qty = Math.max(1, parseInt($('sp-qty')?.value || '1', 10));
+  const length = parseFloat($('sp-length')?.value || '0');
+  const width = parseFloat($('sp-width')?.value || '0');
+  const totalHeight = parseFloat($('sp-height')?.value || '0');
+  const dimUnit = $('sp-dim-unit')?.value || 'in';
+  const totalWeight = parseFloat($('sp-weight')?.value || '0');
+  const weightUnit = $('sp-weight-unit')?.value || 'lb';
+  const customsVal = parseFloat($('sp-customs-value')?.value || '0');
+  const customsDesc = $('sp-customs-description')?.value?.trim() || '';
+  const hsCode = $('sp-customs-hs')?.value?.trim() || '';
+  const incoterm = $('sp-incoterm')?.value || 'auto';
+
+  if (!length || !width || !totalHeight || !totalWeight) {
+    showToast('Please specify valid length, width, height, and weight values', 'warn');
+    return;
+  }
+
+  const singleHeight = Math.round((totalHeight / qty) * 100) / 100;
+  const singleWeight = Math.round((totalWeight / qty) * 10000) / 10000;
+
+  // Persist to book object
+  book.shipLength = length;
+  book.shipWidth = width;
+  book.shipHeight = singleHeight;
+  book.shipDimUnit = dimUnit;
+  book.shipWeight = singleWeight;
+  book.shipWeightUnit = weightUnit;
+  if (hsCode) book.shipHsCode = hsCode;
+  if (customsDesc) book.shipCustomsDesc = customsDesc;
+  if (customsVal) book.shipCustomsVal = customsVal;
+  if (incoterm) book.shipIncoterm = incoterm;
+
+  // Update base specifications cache
+  shippoBaseSpecs = {
+    length,
+    width,
+    height: singleHeight,
+    dim_unit: dimUnit,
+    weight: singleWeight,
+    weight_unit: weightUnit
+  };
+
+  // Sync with Firestore & localStorage
+  try {
+    await saveCatalogWithDeletions();
+    localStorage.setItem('lm-catalog-backup', JSON.stringify(BOOKS));
+  } catch (err) {
+    console.error('Error saving book preset:', err);
+  }
+
+  // Update book preset dropdown selection
+  const presetSelect = $('ship-preset-book');
+  if (presetSelect) presetSelect.value = targetId;
+
+  closeM('save-book-preset');
+  showToast(`✓ Saved shipping preset to ${book.title}`, 'ok');
 }
 
 function isCanadaPostRate(rate) {
@@ -5424,6 +5580,9 @@ export {
   editShippoApiKey,
   onShippoPreFillDestChange,
   onShippoBookPresetChange,
+  openSaveBookPresetModal,
+  confirmSaveBookPreset,
+  renderSaveBookPresetPreview,
   isCanadaPostRate,
   moneyAmount,
   roundShippingCharge,

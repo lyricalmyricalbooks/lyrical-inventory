@@ -2809,7 +2809,10 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Load Package From</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="margin-bottom:0;">Load Package From</label>
+              <button type="button" class="btn sm tag" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" style="font-size:10px; padding:2px 8px; height:24px; min-height:24px;" title="Save current specifications to a book preset">💾 Save to Preset</button>
+            </div>
             <select id="ship-preset-book" onchange="onShippoBookPresetChange()">
               <option value="">— Select book preset —</option>
             </select>
@@ -2948,8 +2951,11 @@
 
       <!-- Parcel Specs Card -->
       <div class="card" style="margin-top:1.25rem;">
-        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
-          <span>Parcel Specifications</span>
+        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span>Parcel Specifications</span>
+            <button type="button" class="btn sm outline" onclick="openSaveBookPresetModal()" style="font-size:11px; padding:3px 10px; height:28px; min-height:28px; display:inline-flex; align-items:center; gap:4px;" title="Save these dimensions, weight, and customs info into a book preset">💾 Save to Book Preset</button>
+          </div>
           <span style="font-size:10px; font-weight:400; text-transform:none; color:var(--text3);">Auto-scales height &amp; weight with quantity</span>
         </div>
         <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
@@ -4281,6 +4287,31 @@
     <div class="modal-footer" role="dialog" aria-modal="true">
       <button class="btn" onclick="attemptCloseModal('import')">Cancel</button>
       <button class="btn gold" id="import-confirm-btn" onclick="confirmImport()">Import <span id="import-count">0</span> orders</button>
+    </div>
+  </div>
+</div>
+
+<!-- SAVE BOOK PRESET MODAL -->
+<div class="overlay" id="m-save-book-preset" style="display:none;">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:520px;">
+    <div class="modal-title" role="dialog" aria-modal="true">📦 Save Parcel Specs to Book Preset</div>
+    <div style="font-size:12px; color:var(--text3); margin-bottom:1rem;">
+      Save current dimensions, weight, and customs declarations directly onto a catalogue book record. Future shipments for this book will load these specifications automatically.
+    </div>
+
+    <div class="form-group" style="margin-bottom:1rem;">
+      <label for="sbp-target-book" style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text2); margin-bottom:6px;">Target Catalogue Book</label>
+      <select id="sbp-target-book" style="width:100%; height:40px; font-size:13px;" onchange="renderSaveBookPresetPreview()">
+        <option value="">— Select a catalogue book to update —</option>
+      </select>
+    </div>
+
+    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">Specifications Summary</div>
+    <div id="sbp-specs-preview" style="margin-bottom:1.25rem;"></div>
+
+    <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;">
+      <button class="btn" type="button" onclick="attemptCloseModal('save-book-preset')">Cancel</button>
+      <button class="btn gold" id="sbp-confirm-btn" type="button" onclick="confirmSaveBookPreset()">💾 Save Preset to Book</button>
     </div>
   </div>
 </div>
