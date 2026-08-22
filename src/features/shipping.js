@@ -94,6 +94,10 @@ import {
   calculateZonosLandedCost,
   estimateOfflineLandedCost,
 } from '../lib/zonos.js';
+import {
+  getCanadaPostRates,
+  estimateOfflineCanadaPostRates,
+} from '../lib/canadapost.js';
 
 function getShippingReconciliationOrders() {
   const byNumber = new Map();
@@ -2475,6 +2479,132 @@ function renderZonosDutyCard(calc, { stCountryCode, qty, unitValue, hsCode, erro
     ` : ''}
 
     ${errorNote ? `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Note: Using verified offline table (${escapeHtml(errorNote)})</div>` : ''}
+  `;
+}
+
+/**
+ * Calculate Direct Canada Post Rates for the current shipment form
+ */
+async function calculateCanadaPostRatesHandler() {
+  const card = $('canadapost-rates-card');
+  if (!card) return;
+
+  const sfZip = $('sf-zip')?.value || 'M4B 1B3';
+  const stCountryCode = normalizeCountryCode($('st-country')?.value) || 'CA';
+  const stZip = $('st-zip')?.value || '';
+
+  const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 20);
+  const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 15);
+  const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 2);
+  const dimUnit = $('sp-dim-unit')?.value || 'cm';
+  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 0.5);
+  const weightUnit = $('sp-weight-unit')?.value || 'kg';
+
+  // Normalize dimensions to cm and weight to kg
+  const lengthCm = dimUnit === 'in' ? length * 2.54 : length;
+  const widthCm = dimUnit === 'in' ? width * 2.54 : width;
+  const heightCm = dimUnit === 'in' ? height * 2.54 : height;
+  let weightKg = weight;
+  if (weightUnit === 'lb') weightKg = weight * 0.45359237;
+  else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
+  else if (weightUnit === 'g') weightKg = weight / 1000;
+
+  const apiKey = TAX_CENTER.settings?.cpApiKey || '';
+  const apiSecret = TAX_CENTER.settings?.cpApiSecret || '';
+  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || '';
+  const contractId = TAX_CENTER.settings?.cpContractId || '';
+  const isTest = !!TAX_CENTER.settings?.cpTestMode;
+  const isEnabled = TAX_CENTER.settings?.cpEnabled !== false;
+
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="cp-rate-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:18px;">🇨🇦</span>
+        <strong>Canada Post Direct Rates</strong>
+      </div>
+      <span class="pill gold" style="animation:pulse-glow 1.5s infinite ease-in-out;">Quoting...</span>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-top:8px;">Fetching official live rates from Canada Post Web Services...</div>
+  `;
+
+  try {
+    let quotes;
+    if (apiKey && apiSecret && isEnabled && navigator.onLine) {
+      quotes = await getCanadaPostRates({
+        originPostalCode: sfZip,
+        destCountry: stCountryCode,
+        destPostalOrZip: stZip,
+        weightKg,
+        lengthCm,
+        widthCm,
+        heightCm,
+        apiKey,
+        apiSecret,
+        customerNumber,
+        contractId,
+        isTest
+      });
+    } else {
+      quotes = estimateOfflineCanadaPostRates({
+        destCountry: stCountryCode,
+        weightKg,
+        isCommercial: !!customerNumber
+      });
+    }
+
+    renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline: !apiKey || !apiSecret || !navigator.onLine });
+  } catch (err) {
+    console.warn('Canada Post direct rates fallback:', err);
+    const offlineQuotes = estimateOfflineCanadaPostRates({
+      destCountry: stCountryCode,
+      weightKg,
+      isCommercial: !!customerNumber
+    });
+    renderCanadaPostRatesCard(offlineQuotes, { stCountryCode, isOffline: true, errorNote: err.message });
+  }
+}
+
+function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote } = {}) {
+  const card = $('canadapost-rates-card');
+  if (!card) return;
+  card.style.display = 'block';
+
+  const statusBadge = isOffline
+    ? '<span class="pill gray">Offline Estimate</span>'
+    : '<span class="pill green">Live Direct Rates</span>';
+
+  const rateRows = (quotes || []).map(q => `
+    <div class="cp-rate-row" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);margin-top:6px;">
+      <div>
+        <div style="font-weight:600;font-size:13px;color:var(--text);">${escapeHtml(q.serviceName)}</div>
+        <div style="font-size:11px;color:var(--text3);">${escapeHtml(q.estimatedSpeed || '')} ${q.deliveryDate ? `· Est. ${q.deliveryDate}` : ''}</div>
+      </div>
+      <div style="text-align:right;">
+        <strong class="tnum" style="font-size:14px;color:var(--text);">${q.totalPrice.toFixed(2)} CAD</strong>
+        ${q.taxes > 0 ? `<div style="font-size:10px;color:var(--text3);">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  card.innerHTML = `
+    <div class="cp-rate-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:18px;">🇨🇦</span>
+        <div>
+          <strong style="font-size:13px;">Canada Post Direct Rates</strong>
+          <div style="font-size:10px;color:var(--text3);">Destination: ${escapeHtml(stCountryCode || 'CA')}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        ${statusBadge}
+        <button class="btn sm tag" type="button" onclick="calculateCanadaPostRatesHandler()" style="font-size:10px;padding:3px 8px;" title="Refresh rates">↻ Refresh</button>
+      </div>
+    </div>
+    <div class="cp-rates-list" style="margin-top:8px;">
+      ${rateRows || '<div style="font-size:12px;color:var(--text3);padding:8px 0;">No services available for this route.</div>'}
+    </div>
+    ${errorNote ? `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Note: ${escapeHtml(errorNote)}</div>` : ''}
   `;
 }
 
@@ -5605,6 +5735,8 @@ export {
   calculateShippoRates,
   calculateZonosDutiesHandler,
   renderZonosDutyCard,
+  calculateCanadaPostRatesHandler,
+  renderCanadaPostRatesCard,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,

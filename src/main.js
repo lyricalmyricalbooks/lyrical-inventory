@@ -274,6 +274,7 @@ import {
   saveTaxCenter,
   saveTaxCenterSettings,
   testZonosConnectionHandler,
+  testCanadaPostConnectionHandler,
   setTcGalleryPage,
   setTcLedgerPage,
   snoozePendingExpense,
@@ -391,6 +392,8 @@ import {
   calculateShippoRates,
   calculateZonosDutiesHandler,
   renderZonosDutyCard,
+  calculateCanadaPostRatesHandler,
+  renderCanadaPostRatesCard,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,
@@ -14409,7 +14412,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Integrations & API Configuration: collapsible sections, state remembered per browser ──
-const INTEGRATION_SECTION_KEYS = ['gemini', 'shippo', 'stripe', 'zonos'];
+const INTEGRATION_SECTION_KEYS = ['gemini', 'shippo', 'stripe', 'zonos', 'canadapost'];
 
 function applyIntegrationSectionState(key, collapsed) {
   const body = document.getElementById(`tc-integration-body-${key}`);
@@ -20946,6 +20949,7 @@ function exposeLegacyInlineHandlers() {
     getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
     toggleIntegrationSection,
     testZonosConnectionHandler, calculateZonosDutiesHandler, renderZonosDutyCard,
+    testCanadaPostConnectionHandler, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard,
     openSaveBookPresetModal, confirmSaveBookPreset, renderSaveBookPresetPreview,
     setThemePreference, cycleThemePreference, toggleTheme
   });
@@ -20996,6 +21000,9 @@ window.onShippoDestCountryChange = onShippoDestCountryChange;
 window.updateShippoCustomsTotalHint = updateShippoCustomsTotalHint;
 window.calculateZonosDutiesHandler = calculateZonosDutiesHandler;
 window.testZonosConnectionHandler = testZonosConnectionHandler;
+window.calculateCanadaPostRatesHandler = calculateCanadaPostRatesHandler;
+window.testCanadaPostConnectionHandler = testCanadaPostConnectionHandler;
+window.renderCanadaPostRatesCard = renderCanadaPostRatesCard;
 window.buyShippoLabel = buyShippoLabel;
 window.verifyDestinationAddress = verifyDestinationAddress;
 window.applyVerifiedAddressCorrections = applyVerifiedAddressCorrections;
