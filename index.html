@@ -3093,16 +3093,24 @@
         <!-- Live "what's still missing" line, filled in by renderShippoRateReadiness(). -->
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
 
-        <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:8px;margin-top:0.75rem;">
-          <button class="btn gold" style="height:46px;font-size:13px;white-space:nowrap;" onclick="calculateShippoRates()">
-            ⚡ Calculate Rates &amp; Prediction
+        <div class="ship-actions-container" style="margin-top:1rem;display:flex;flex-direction:column;gap:10px;">
+          <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(200,145,58,0.25);" onclick="calculateShippoRates()">
+            <span>⚡</span>
+            <span>Calculate Shipping Rates &amp; Prediction</span>
           </button>
-          <button class="btn outline" style="height:46px;font-size:13px;white-space:nowrap;" onclick="calculateCanadaPostRatesHandler()" title="Calculate rates directly via official Canada Post API">
-            🇨🇦 Canada Post
-          </button>
-          <button class="btn tag" style="height:46px;font-size:13px;white-space:nowrap;" onclick="calculateZonosDutiesHandler()" title="Calculate destination customs duties and import taxes with Zonos">
-            🌐 Duties (Zonos)
-          </button>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <button class="btn outline" type="button" onclick="calculateCanadaPostRatesHandler()" style="height:42px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(216,42,42,0.06);border-color:rgba(216,42,42,0.3);color:var(--text);" title="Calculate rates and buy official postage labels directly via Canada Post API">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
+                <path d="M12 2L14 8L19 7L16 12L21 15L15 17L16 22L12 18L8 22L9 17L3 15L8 12L5 7L10 8L12 2Z" fill="#D82A2A"/>
+              </svg>
+              <span>Canada Post Direct</span>
+            </button>
+            <button class="btn tag" type="button" onclick="calculateZonosDutiesHandler()" style="height:42px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Calculate destination customs duties and import taxes with Zonos">
+              <span>🌐</span>
+              <span>Landed Cost (Zonos)</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

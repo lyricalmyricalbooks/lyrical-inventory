@@ -346,3 +346,208 @@ export function estimateOfflineCanadaPostRates({
     }
   ];
 }
+
+function escapeXml(unsafe) {
+  return String(unsafe || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Build XML payload for creating a Non-Contract Shipment with Canada Post
+ */
+export function buildNonContractShipmentXml({
+  serviceCode = 'DOM.EP',
+  sender = {},
+  destination = {},
+  parcel = {},
+  orderNum = '',
+  customs = null
+}) {
+  const weightKg = Math.max(0.01, parseFloat(parcel.weightKg || 0.5)).toFixed(3);
+  const lengthCm = Math.max(0.1, parseFloat(parcel.lengthCm || 20)).toFixed(1);
+  const widthCm = Math.max(0.1, parseFloat(parcel.widthCm || 15)).toFixed(1);
+  const heightCm = Math.max(0.1, parseFloat(parcel.heightCm || 2)).toFixed(1);
+
+  const cleanOriginZip = cleanPostalCode(sender.postalCode) || 'M4B1B3';
+  const destCountry = String(destination.countryCode || 'CA').toUpperCase().trim();
+  const cleanDestZip = destCountry === 'CA' ? cleanPostalCode(destination.postalCode) : (destination.postalCode || destination.zip || '90210');
+
+  let customsXml = '';
+  if (destCountry !== 'CA' && customs) {
+    const qty = Math.max(1, parseInt(customs.quantity, 10) || 1);
+    const declaredVal = Math.max(1, parseFloat(customs.declaredValue || 25)).toFixed(2);
+    const customsDesc = String(customs.description || 'Printed books').slice(0, 44);
+    const hsCode = String(customs.hsCode || '490199').replace(/[^0-9]/g, '').slice(0, 6) || '490199';
+    customsXml = `
+    <customs>
+      <currency>CAD</currency>
+      <conversion-from-cad>1.0</conversion-from-cad>
+      <reason-for-export>SOG</reason-for-export>
+      <sku-list>
+        <item>
+          <customs-number-of-units>${qty}</customs-number-of-units>
+          <customs-description>${escapeXml(customsDesc)}</customs-description>
+          <unit-weight>${(parseFloat(weightKg) / qty).toFixed(3)}</unit-weight>
+          <customs-value-per-unit>${(parseFloat(declaredVal) / qty).toFixed(2)}</customs-value-per-unit>
+          <hs-tariff-code>${hsCode}</hs-tariff-code>
+          <country-of-origin>CA</country-of-origin>
+        </item>
+      </sku-list>
+    </customs>`;
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<non-contract-shipment xmlns="http://www.canadapost.ca/ws/ncshipment-v4">
+  <delivery-spec>
+    <service-code>${serviceCode}</service-code>
+    <sender>
+      <name>${escapeXml(sender.name || 'Lyricalmyrical Books')}</name>
+      <company>${escapeXml(sender.company || 'Lyricalmyrical Books')}</company>
+      <contact-phone>${escapeXml(sender.phone || '4165550199')}</contact-phone>
+      <address-details>
+        <address-line-1>${escapeXml(sender.address1 || '123 Main St')}</address-line-1>
+        <city>${escapeXml(sender.city || 'Toronto')}</city>
+        <prov-state>${escapeXml(sender.province || 'ON')}</prov-state>
+        <postal-zip-code>${cleanOriginZip}</postal-zip-code>
+      </address-details>
+    </sender>
+    <destination>
+      <name>${escapeXml(destination.name || 'Customer')}</name>
+      <company>${escapeXml(destination.company || '')}</company>
+      <client-voice-number>${escapeXml(destination.phone || '5555555555')}</client-voice-number>
+      <address-details>
+        <address-line-1>${escapeXml(destination.address1 || '')}</address-line-1>
+        <city>${escapeXml(destination.city || '')}</city>
+        <prov-state>${escapeXml(destination.province || destination.state || '')}</prov-state>
+        <country-code>${destCountry}</country-code>
+        <postal-zip-code>${cleanDestZip}</postal-zip-code>
+      </address-details>
+    </destination>
+    <parcel-characteristics>
+      <weight>${weightKg}</weight>
+      <dimensions>
+        <length>${lengthCm}</length>
+        <width>${widthCm}</width>
+        <height>${heightCm}</height>
+      </dimensions>
+    </parcel-characteristics>
+    <preferences>
+      <show-packing-instructions>true</show-packing-instructions>
+      <show-postage-rate>true</show-postage-rate>
+    </preferences>
+    <references>
+      <customer-ref-1>${escapeXml(orderNum || 'BOOK-ORDER')}</customer-ref-1>
+    </references>
+    ${customsXml}
+  </delivery-spec>
+</non-contract-shipment>`.trim();
+}
+
+/**
+ * Parse Canada Post Non-Contract Shipment creation XML response
+ */
+export function parseCanadaPostShipmentResponse(xmlText) {
+  if (!xmlText || typeof xmlText !== 'string') {
+    throw new Error('Empty response from Canada Post Shipment API');
+  }
+
+  // Error check
+  if (xmlText.includes('<message>') || xmlText.includes('<code>E')) {
+    const code = xmlText.match(/<code>([^<]+)<\/code>/)?.[1] || 'ERROR';
+    const desc = xmlText.match(/<description>([^<]+)<\/description>/)?.[1] || 'Shipment creation failed';
+    throw new Error(`Canada Post [${code}]: ${desc}`);
+  }
+
+  const shipmentId = xmlText.match(/<shipment-id>([^<]+)<\/shipment-id>/)?.[1] || '';
+  const trackingPin = xmlText.match(/<tracking-pin>([^<]+)<\/tracking-pin>/)?.[1] || '';
+  
+  // Extract links for label artifact
+  const labelLink = xmlText.match(/<link\s+[^>]*rel="label"[^>]*href="([^"]+)"/)?.[1]
+    || xmlText.match(/<link\s+[^>]*href="([^"]+)"[^>]*rel="label"/)?.[1] || '';
+
+  const receiptLink = xmlText.match(/<link\s+[^>]*rel="receipt"[^>]*href="([^"]+)"/)?.[1]
+    || xmlText.match(/<link\s+[^>]*href="([^"]+)"[^>]*rel="receipt"/)?.[1] || '';
+
+  return {
+    ok: true,
+    shipmentId,
+    trackingPin,
+    labelUrl: labelLink,
+    receiptUrl: receiptLink
+  };
+}
+
+/**
+ * Buy a Canada Post shipping label and create the shipment
+ */
+export async function buyCanadaPostLabel({
+  serviceCode = 'DOM.EP',
+  sender = {},
+  destination = {},
+  parcel = {},
+  orderNum = '',
+  customs = null,
+  apiKey = '',
+  apiSecret = '',
+  customerNumber = '',
+  isTest = false,
+  proxyUrl = '/api/canadapost/shipment'
+}) {
+  const xmlPayload = buildNonContractShipmentXml({
+    serviceCode,
+    sender,
+    destination,
+    parcel,
+    orderNum,
+    customs
+  });
+
+  const customerId = customerNumber ? customerNumber.trim() : '0007123456';
+  const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
+  const targetEndpoint = `${baseUrl}/rs/${encodeURIComponent(customerId)}/ncshipment`;
+  const authHeader = 'Basic ' + btoa(`${(apiKey || '').trim()}:${(apiSecret || '').trim()}`);
+
+  // Try proxy first
+  try {
+    const proxyResp = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        xmlPayload,
+        isTest,
+        apiKey,
+        apiSecret,
+        targetEndpoint,
+        customerNumber: customerId
+      })
+    });
+
+    if (proxyResp.ok) {
+      const data = await proxyResp.json();
+      if (data.trackingPin && data.labelUrl) return data;
+      if (data.xml) return parseCanadaPostShipmentResponse(data.xml);
+    }
+  } catch (_) {
+    // Fall back to direct fetch
+  }
+
+  // Direct fetch to Canada Post Gateway
+  const resp = await fetch(targetEndpoint, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/vnd.cpc.ncshipment-v4+xml',
+      'Content-Type': 'application/vnd.cpc.ncshipment-v4+xml',
+      'Authorization': authHeader,
+      'Accept-language': 'en-CA'
+    },
+    body: xmlPayload
+  });
+
+  const text = await resp.text();
+  return parseCanadaPostShipmentResponse(text);
+}
+

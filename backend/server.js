@@ -113,6 +113,74 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    if (url.pathname === '/api/canadapost/shipment' && req.method === 'POST') {
+      const body = await readJson(req, res);
+      if (!body) return;
+      const { xmlPayload, apiKey, apiSecret, isTest, targetEndpoint, customerNumber } = body;
+      const key = apiKey || process.env.CANADAPOST_API_KEY;
+      const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
+      const custNum = customerNumber || process.env.CANADAPOST_CUSTOMER_NUMBER || '0007123456';
+      const baseUrl = isTest ? 'https://ct.soa-gw.canadapost.ca' : 'https://soa-gw.canadapost.ca';
+      const endpoint = targetEndpoint || `${baseUrl}/rs/${encodeURIComponent(custNum)}/ncshipment`;
+
+      if (!key || !secret) {
+        return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
+      }
+
+      try {
+        const authHeader = 'Basic ' + Buffer.from(`${key.trim()}:${secret.trim()}`).toString('base64');
+        const cpRes = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/vnd.cpc.ncshipment-v4+xml',
+            'Content-Type': 'application/vnd.cpc.ncshipment-v4+xml',
+            'Authorization': authHeader,
+            'Accept-language': 'en-CA'
+          },
+          body: xmlPayload
+        });
+
+        const xmlText = await cpRes.text();
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, xml: xmlText });
+      } catch (err) {
+        console.error('Canada Post shipment proxy failed:', err);
+        return sendJson(res, 502, { error: `Canada Post shipment error: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/canadapost/artifact' && req.method === 'GET') {
+      const artifactUrl = url.searchParams.get('url');
+      const apiKey = req.headers['x-cp-api-key'] || process.env.CANADAPOST_API_KEY;
+      const apiSecret = req.headers['x-cp-api-secret'] || process.env.CANADAPOST_API_SECRET;
+
+      if (!artifactUrl) return sendJson(res, 400, { error: 'Missing artifact url parameter' });
+      if (!apiKey || !apiSecret) return sendJson(res, 400, { error: 'Missing Canada Post credentials' });
+
+      try {
+        const authHeader = 'Basic ' + Buffer.from(`${apiKey.trim()}:${apiSecret.trim()}`).toString('base64');
+        const cpRes = await fetch(artifactUrl, {
+          headers: {
+            'Accept': 'application/pdf',
+            'Authorization': authHeader
+          }
+        });
+
+        if (!cpRes.ok) {
+          return sendJson(res, cpRes.status, { error: `Artifact fetch failed: ${cpRes.statusText}` });
+        }
+
+        const buffer = await cpRes.arrayBuffer();
+        res.writeHead(200, {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'inline; filename="canadapost-shipping-label.pdf"'
+        });
+        res.end(Buffer.from(buffer));
+        return;
+      } catch (err) {
+        return sendJson(res, 502, { error: `Failed to fetch artifact: ${err.message}` });
+      }
+    }
+
     if (url.pathname === '/api/campaign/send' && req.method === 'POST') {
       const body = await readJson(req, res);
       if (!body) return;

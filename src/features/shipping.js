@@ -97,6 +97,7 @@ import {
 import {
   getCanadaPostRates,
   estimateOfflineCanadaPostRates,
+  buyCanadaPostLabel,
 } from '../lib/canadapost.js';
 
 function getShippingReconciliationOrders() {
@@ -2575,24 +2576,30 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
     : '<span class="pill green">Live Direct Rates</span>';
 
   const rateRows = (quotes || []).map(q => `
-    <div class="cp-rate-row" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);margin-top:6px;">
-      <div>
-        <div style="font-weight:600;font-size:13px;color:var(--text);">${escapeHtml(q.serviceName)}</div>
-        <div style="font-size:11px;color:var(--text3);">${escapeHtml(q.estimatedSpeed || '')} ${q.deliveryDate ? `· Est. ${q.deliveryDate}` : ''}</div>
+    <div class="cp-rate-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);margin-top:8px;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:180px;">
+        <div style="font-weight:700;font-size:13px;color:var(--text);">${escapeHtml(q.serviceName)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">${escapeHtml(q.estimatedSpeed || '')} ${q.deliveryDate ? `· Est. ${q.deliveryDate}` : ''}</div>
       </div>
-      <div style="text-align:right;">
-        <strong class="tnum" style="font-size:14px;color:var(--text);">${q.totalPrice.toFixed(2)} CAD</strong>
-        ${q.taxes > 0 ? `<div style="font-size:10px;color:var(--text3);">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="text-align:right;">
+          <strong class="tnum" style="font-size:15px;color:var(--text);font-weight:700;">${q.totalPrice.toFixed(2)} CAD</strong>
+          ${q.taxes > 0 ? `<div style="font-size:10px;color:var(--text3);">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
+        </div>
+        <button class="btn sm gold cp-buy-btn" type="button" onclick="buyCanadaPostLabelHandler('${escapeHtml(q.serviceCode)}', '${escapeHtml(q.serviceName)}', ${q.totalPrice})" style="font-size:11px;padding:6px 12px;height:32px;min-height:32px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font-weight:600;" title="Buy ${escapeHtml(q.serviceName)} label with Canada Post API">
+          <span>🏷️</span>
+          <span>Buy Label</span>
+        </button>
       </div>
     </div>
   `).join('');
 
   card.innerHTML = `
-    <div class="cp-rate-header" style="display:flex;justify-content:space-between;align-items:center;">
+    <div class="cp-rate-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-size:18px;">🇨🇦</span>
         <div>
-          <strong style="font-size:13px;">Canada Post Direct Rates</strong>
+          <strong style="font-size:13px;">Canada Post Direct Rates &amp; Labels</strong>
           <div style="font-size:10px;color:var(--text3);">Destination: ${escapeHtml(stCountryCode || 'CA')}</div>
         </div>
       </div>
@@ -2605,7 +2612,173 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
       ${rateRows || '<div style="font-size:12px;color:var(--text3);padding:8px 0;">No services available for this route.</div>'}
     </div>
     ${errorNote ? `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Note: ${escapeHtml(errorNote)}</div>` : ''}
+    <div id="cp-purchased-label-panel" style="display:none;margin-top:12px;"></div>
   `;
+}
+
+/**
+ * Buy a Canada Post shipping label for the chosen service
+ */
+async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) {
+  const sfName = $('sf-name')?.value?.trim() || 'Lyricalmyrical Books';
+  const sfPhone = $('sf-phone')?.value?.trim() || '4165550199';
+  const sfAddr = $('sf-street')?.value?.trim() || '';
+  const sfCity = $('sf-city')?.value?.trim() || '';
+  const sfProv = $('sf-state')?.value?.trim() || 'ON';
+  const sfZip = $('sf-zip')?.value?.trim() || '';
+
+  const stName = $('st-name')?.value?.trim() || '';
+  const stPhone = $('st-phone')?.value?.trim() || '5555555555';
+  const stAddr = $('st-street')?.value?.trim() || '';
+  const stCity = $('st-city')?.value?.trim() || '';
+  const stState = $('st-state')?.value?.trim() || '';
+  const stZip = $('st-zip')?.value?.trim() || '';
+  const stCountryCode = normalizeCountryCode($('st-country')?.value) || 'CA';
+
+  if (!stAddr || !stCity || !stZip) {
+    showToast('⚠ Please fill in recipient street address, city, and postal/zip code before buying a label', 'warn');
+    return;
+  }
+
+  const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 20);
+  const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 15);
+  const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 2);
+  const dimUnit = $('sp-dim-unit')?.value || 'cm';
+  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 0.5);
+  const weightUnit = $('sp-weight-unit')?.value || 'kg';
+
+  // Normalize dimensions to cm and weight to kg
+  const lengthCm = dimUnit === 'in' ? length * 2.54 : length;
+  const widthCm = dimUnit === 'in' ? width * 2.54 : width;
+  const heightCm = dimUnit === 'in' ? height * 2.54 : height;
+  let weightKg = weight;
+  if (weightUnit === 'lb') weightKg = weight * 0.45359237;
+  else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
+  else if (weightUnit === 'g') weightKg = weight / 1000;
+
+  const apiKey = TAX_CENTER.settings?.cpApiKey || '';
+  const apiSecret = TAX_CENTER.settings?.cpApiSecret || '';
+  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || '';
+  const isTest = !!TAX_CENTER.settings?.cpTestMode;
+
+  if (!apiKey || !apiSecret) {
+    showToast('⚠ Please enter and save your Canada Post API Key & Secret in Tax Centre settings first', 'warn');
+    return;
+  }
+
+  const confirmed = await confirmDialog({
+    title: '🏷️ Confirm Canada Post Label Purchase',
+    message: `Purchase official <strong>${escapeHtml(serviceName)}</strong> shipping label for <strong>$${quotedPrice.toFixed(2)} CAD</strong> to <strong>${escapeHtml(stName || 'Customer')}</strong> in ${escapeHtml(stCity)}, ${escapeHtml(stCountryCode)}?`,
+    confirmText: `Buy Label ($${quotedPrice.toFixed(2)} CAD)`,
+    cancelText: 'Cancel'
+  });
+
+  if (!confirmed) return;
+
+  showToast('⏳ Creating shipment and generating Canada Post label...', 'ok');
+
+  const customs = stCountryCode !== 'CA' ? {
+    quantity: Math.max(1, parseInt($('sp-qty')?.value, 10) || 1),
+    declaredValue: parseFloat($('sp-customs-value')?.value || '25'),
+    description: $('sp-customs-description')?.value || 'Printed books',
+    hsCode: $('sp-customs-hs')?.value || '490199'
+  } : null;
+
+  try {
+    const result = await buyCanadaPostLabel({
+      serviceCode,
+      sender: {
+        name: sfName,
+        company: 'Lyricalmyrical Books',
+        phone: sfPhone,
+        address1: sfAddr,
+        city: sfCity,
+        province: sfProv,
+        postalCode: sfZip
+      },
+      destination: {
+        name: stName || 'Customer',
+        phone: stPhone,
+        address1: stAddr,
+        city: stCity,
+        province: stState,
+        state: stState,
+        countryCode: stCountryCode,
+        postalCode: stZip
+      },
+      parcel: {
+        lengthCm,
+        widthCm,
+        heightCm,
+        weightKg
+      },
+      orderNum: $('sp-order-num')?.value || `ORDER-${Date.now().toString().slice(-6)}`,
+      customs,
+      apiKey,
+      apiSecret,
+      customerNumber,
+      isTest
+    });
+
+    if (result.trackingPin || result.labelUrl) {
+      showToast(`✓ Canada Post label purchased! Tracking PIN: ${result.trackingPin}`, 'ok');
+
+      // Record business expense into TAX_CENTER ledger
+      try {
+        if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+        TAX_CENTER.businessExpenses.push({
+          id: `exp_cp_${Date.now()}`,
+          date: today(),
+          amount: quotedPrice,
+          category: 'Shipping & Postage',
+          vendor: 'Canada Post',
+          desc: `Postage: ${serviceName} (PIN: ${result.trackingPin || result.shipmentId})`,
+          ref: `canadapost:pin:${result.trackingPin || result.shipmentId}`,
+          currency: 'CAD'
+        });
+        await saveTaxCenter().catch(() => {});
+      } catch (e) {
+        console.error('Failed to auto-log Canada Post expense:', e);
+      }
+
+      // Display purchased label panel
+      const labelPanel = $('cp-purchased-label-panel');
+      if (labelPanel) {
+        labelPanel.style.display = 'block';
+        const labelDownloadUrl = result.labelUrl
+          ? `/api/canadapost/artifact?url=${encodeURIComponent(result.labelUrl)}`
+          : null;
+
+        labelPanel.innerHTML = `
+          <div style="background:rgba(46,125,50,0.08);border:1px solid var(--green);border-radius:var(--r2);padding:14px;margin-top:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:20px;">✓</span>
+                <div>
+                  <strong style="color:var(--green);font-size:13px;">Label Created Successfully</strong>
+                  <div style="font-size:11px;color:var(--text3);">Tracking PIN: <strong class="tnum" style="color:var(--text);">${escapeHtml(result.trackingPin || 'Generated')}</strong></div>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                ${labelDownloadUrl ? `
+                  <a href="${labelDownloadUrl}" target="_blank" rel="noopener" class="btn gold sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 14px;">
+                    <span>🖨️</span>
+                    <span>Print Label (PDF)</span>
+                  </a>
+                ` : ''}
+                <button class="btn sm tag" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(result.trackingPin)}');showToast('Copied PIN to clipboard');" style="font-size:11px;">
+                  📋 Copy PIN
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+  } catch (err) {
+    console.error('Canada Post label purchase error:', err);
+    showToast(`⚠ Label purchase failed: ${err.message}`, 'err');
+  }
 }
 
 function buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit }) {
@@ -5737,6 +5910,7 @@ export {
   renderZonosDutyCard,
   calculateCanadaPostRatesHandler,
   renderCanadaPostRatesCard,
+  buyCanadaPostLabelHandler,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,

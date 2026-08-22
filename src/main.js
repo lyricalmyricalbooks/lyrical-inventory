@@ -394,6 +394,7 @@ import {
   renderZonosDutyCard,
   calculateCanadaPostRatesHandler,
   renderCanadaPostRatesCard,
+  buyCanadaPostLabelHandler,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,
@@ -20949,7 +20950,7 @@ function exposeLegacyInlineHandlers() {
     getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
     toggleIntegrationSection,
     testZonosConnectionHandler, calculateZonosDutiesHandler, renderZonosDutyCard,
-    testCanadaPostConnectionHandler, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard,
+    testCanadaPostConnectionHandler, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard, buyCanadaPostLabelHandler,
     openSaveBookPresetModal, confirmSaveBookPreset, renderSaveBookPresetPreview,
     setThemePreference, cycleThemePreference, toggleTheme
   });
@@ -21003,6 +21004,7 @@ window.testZonosConnectionHandler = testZonosConnectionHandler;
 window.calculateCanadaPostRatesHandler = calculateCanadaPostRatesHandler;
 window.testCanadaPostConnectionHandler = testCanadaPostConnectionHandler;
 window.renderCanadaPostRatesCard = renderCanadaPostRatesCard;
+window.buyCanadaPostLabelHandler = buyCanadaPostLabelHandler;
 window.buyShippoLabel = buyShippoLabel;
 window.verifyDestinationAddress = verifyDestinationAddress;
 window.applyVerifiedAddressCorrections = applyVerifiedAddressCorrections;

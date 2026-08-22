@@ -134,3 +134,74 @@ describe('Offline Canada Post Rate Estimator', () => {
     expect(intl.find(r => r.serviceCode === 'INT.TP')).toBeDefined();
   });
 });
+
+describe('Canada Post Label & Shipment Creation', () => {
+  it('builds valid Non-Contract Shipment XML with sender, recipient, and customs', async () => {
+    const { buildNonContractShipmentXml } = await import('../src/lib/canadapost.js');
+    const xml = buildNonContractShipmentXml({
+      serviceCode: 'USA.TP',
+      sender: {
+        name: 'Lyrical Books',
+        company: 'Lyricalmyrical Books',
+        phone: '4165550199',
+        address1: '123 Main St',
+        city: 'Toronto',
+        province: 'ON',
+        postalCode: 'M4B 1B3'
+      },
+      destination: {
+        name: 'Jane Doe',
+        company: 'Art Studio',
+        phone: '2125551234',
+        address1: '456 Broadway',
+        city: 'New York',
+        state: 'NY',
+        countryCode: 'US',
+        postalCode: '10001'
+      },
+      parcel: {
+        lengthCm: 23,
+        widthCm: 19.5,
+        heightCm: 2,
+        weightKg: 0.45
+      },
+      orderNum: 'ORD-2026-99',
+      customs: {
+        quantity: 1,
+        description: 'Hardcover poetry books',
+        declaredValue: 40.00,
+        hsCode: '4901.99.00'
+      }
+    });
+
+    expect(xml).toContain('<service-code>USA.TP</service-code>');
+    expect(xml).toContain('<postal-zip-code>M4B1B3</postal-zip-code>');
+    expect(xml).toContain('<country-code>US</country-code>');
+    expect(xml).toContain('<postal-zip-code>10001</postal-zip-code>');
+    expect(xml).toContain('<customs-description>Hardcover poetry books</customs-description>');
+    expect(xml).toContain('<hs-tariff-code>490199</hs-tariff-code>');
+    expect(xml).toContain('<customer-ref-1>ORD-2026-99</customer-ref-1>');
+  });
+
+  it('parses successful shipment response with tracking PIN and label artifact link', async () => {
+    const { parseCanadaPostShipmentResponse } = await import('../src/lib/canadapost.js');
+    const sampleShipmentXml = `<?xml version="1.0" encoding="UTF-8"?>
+<non-contract-shipment-info xmlns="http://www.canadapost.ca/ws/ncshipment-v4">
+  <shipment-id>123456789012345678</shipment-id>
+  <tracking-pin>1234567890123456</tracking-pin>
+  <links>
+    <link rel="self" href="https://soa-gw.canadapost.ca/rs/0007123456/ncshipment/123456789012345678" media-type="application/vnd.cpc.ncshipment-v4+xml"/>
+    <link rel="label" href="https://soa-gw.canadapost.ca/rs/artifact/6e933e69452/10000/0" media-type="application/pdf"/>
+    <link rel="receipt" href="https://soa-gw.canadapost.ca/rs/0007123456/ncshipment/123456789012345678/receipt" media-type="application/vnd.cpc.ncshipment-v4+xml"/>
+  </links>
+</non-contract-shipment-info>`;
+
+    const parsed = parseCanadaPostShipmentResponse(sampleShipmentXml);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.shipmentId).toBe('123456789012345678');
+    expect(parsed.trackingPin).toBe('1234567890123456');
+    expect(parsed.labelUrl).toBe('https://soa-gw.canadapost.ca/rs/artifact/6e933e69452/10000/0');
+    expect(parsed.receiptUrl).toBe('https://soa-gw.canadapost.ca/rs/0007123456/ncshipment/123456789012345678/receipt');
+  });
+});
+

@@ -8189,6 +8189,36 @@ tr.hist-row:hover {
   gap: 4px;
 }
 
+/* ── Canada Post Direct Rates & Label Card ────────────────────────────── */
+.canadapost-rates-card {
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+  border-radius: var(--r2);
+  padding: 14px 16px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.canadapost-rates-card:hover {
+  border-color: rgba(216,42,42,0.4);
+}
+.cp-rate-row {
+  transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+.cp-rate-row:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+.cp-buy-btn {
+  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.cp-buy-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(200,145,58,0.25);
+}
+.cp-buy-btn:active {
+  transform: scale(0.975);
+}
+
 /* ─── Rate-form readiness line ────────────────────────────────────────────
    Sits directly above the Calculate button and answers "can I press this yet?"
    without scrolling back through twenty inputs. A container query, not a
