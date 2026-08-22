@@ -9,3 +9,7 @@
 ## 2025-02-23 - Replace reduce with for loops
 **Learning:** In hot loops, replacing array methods like reduce with imperative for loops avoids intermediate allocations and reduces Garbage Collection (GC) overhead.
 **Action:** Use direct imperative iteration for scalar accumulation in frequently updated computations to improve speed.
+
+## 2025-02-24 - Replace chained array combinations in rendering filters
+**Learning:** In functions that filter collections on UI state changes (like `_tcApplyLedgerFilter`), chained methods like `.filter().some()` create multiple intermediate arrays and add significant GC overhead (O(N) allocations) on every re-render.
+**Action:** Collapse complex chained filtering logic into a single imperative loop using early `continue` statements to prevent intermediate array allocations and improve UI responsiveness.

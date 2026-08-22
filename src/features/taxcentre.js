@@ -385,31 +385,65 @@ function tcFilterLedgerByReceiptStorage(storageType) {
 }
 
 function _tcApplyLedgerFilter(rows) {
-  let out = rows;
-  if (_tcLedgerType === 'sales') out = out.filter(r => r.isIncome);
-  else if (_tcLedgerType === 'expenses') out = out.filter(r => !r.isIncome);
-
-  if (_tcLedgerSpecialFilter) {
-    if (_tcLedgerSpecialFilter === 'missing') {
-      out = out.filter(r => !r.isIncome && !isReceiptExemptExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref))));
-    } else if (_tcLedgerSpecialFilter === 'cloud') {
-      out = out.filter(r => !r.isIncome && (r.receiptCloudAt || (typeof r.receipt === 'string' && r.receipt.startsWith('cloud://')) || (Array.isArray(r.receiptFiles) && r.receiptFiles.some(f => f && f.startsWith('cloud://')))));
-    } else if (_tcLedgerSpecialFilter === 'local') {
-      out = out.filter(r => !r.isIncome && ((typeof r.receipt === 'string' && r.receipt.startsWith('local://')) || (typeof r.ref === 'string' && r.ref.includes('local://')) || (Array.isArray(r.receiptFiles) && r.receiptFiles.some(f => f && f.startsWith('local://')))));
-    } else if (_tcLedgerSpecialFilter === 'linked') {
-      out = out.filter(r => !r.isIncome && ((typeof r.receipt === 'string' && /^https?:\/\//i.test(r.receipt) && !r.receipt.includes('shippo')) || (Array.isArray(r.receiptFiles) && r.receiptFiles.some(f => /^https?:\/\//i.test(f) && !f.includes('shippo')))));
-    } else if (_tcLedgerSpecialFilter === 'label') {
-      out = out.filter(r => !r.isIncome && ((typeof r.receipt === 'string' && r.receipt.includes('shippo')) || (typeof r.ref === 'string' && r.ref.includes('shippo'))));
-    }
-  }
-
+  // ⚡ Bolt Optimization: Replace chained .filter().some() passes with a single imperative loop
+  // This avoids allocating multiple intermediate arrays and O(N) internal GC allocations on every ledger re-render
+  const out = [];
   const q = _tcLedgerSearch.trim().toLowerCase();
-  if (q) {
-    out = out.filter(r => {
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+
+    // Type filter
+    if (_tcLedgerType === 'sales' && !r.isIncome) continue;
+    if (_tcLedgerType === 'expenses' && r.isIncome) continue;
+
+    // Special filter (all special filters apply to expenses only)
+    if (_tcLedgerSpecialFilter) {
+      if (r.isIncome) continue;
+
+      let matchedSpecial = false;
+      if (_tcLedgerSpecialFilter === 'missing') {
+        matchedSpecial = !isReceiptExemptExpense(r) && !r.receipt && (!r.receiptFiles || !r.receiptFiles.length) && !(typeof r.ref === 'string' && (r.ref.includes('local://') || /^https?:\/\//i.test(r.ref)));
+      } else if (_tcLedgerSpecialFilter === 'cloud') {
+        if (r.receiptCloudAt) matchedSpecial = true;
+        else if (typeof r.receipt === 'string' && r.receipt.startsWith('cloud://')) matchedSpecial = true;
+        else if (Array.isArray(r.receiptFiles)) {
+          for (let k = 0; k < r.receiptFiles.length; k++) {
+            if (r.receiptFiles[k] && r.receiptFiles[k].startsWith('cloud://')) { matchedSpecial = true; break; }
+          }
+        }
+      } else if (_tcLedgerSpecialFilter === 'local') {
+        if (typeof r.receipt === 'string' && r.receipt.startsWith('local://')) matchedSpecial = true;
+        else if (typeof r.ref === 'string' && r.ref.includes('local://')) matchedSpecial = true;
+        else if (Array.isArray(r.receiptFiles)) {
+          for (let k = 0; k < r.receiptFiles.length; k++) {
+            if (r.receiptFiles[k] && r.receiptFiles[k].startsWith('local://')) { matchedSpecial = true; break; }
+          }
+        }
+      } else if (_tcLedgerSpecialFilter === 'linked') {
+        if (typeof r.receipt === 'string' && /^https?:\/\//i.test(r.receipt) && !r.receipt.includes('shippo')) matchedSpecial = true;
+        else if (Array.isArray(r.receiptFiles)) {
+          for (let k = 0; k < r.receiptFiles.length; k++) {
+            if (r.receiptFiles[k] && /^https?:\/\//i.test(r.receiptFiles[k]) && !r.receiptFiles[k].includes('shippo')) { matchedSpecial = true; break; }
+          }
+        }
+      } else if (_tcLedgerSpecialFilter === 'label') {
+        if (typeof r.receipt === 'string' && r.receipt.includes('shippo')) matchedSpecial = true;
+        else if (typeof r.ref === 'string' && r.ref.includes('shippo')) matchedSpecial = true;
+      }
+
+      if (!matchedSpecial) continue;
+    }
+
+    // Search text filter
+    if (q) {
       const hay = `${r.date || ''} ${r.type || ''} ${r.desc || ''} ${r.cat || ''} ${r.ref || ''} ${r.origCurrency || ''}`.toLowerCase();
-      return hay.includes(q);
-    });
+      if (!hay.includes(q)) continue;
+    }
+
+    out.push(r);
   }
+
   return out;
 }
 
