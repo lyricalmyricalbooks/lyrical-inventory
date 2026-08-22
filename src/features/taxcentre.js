@@ -57,6 +57,7 @@ import { reconcileConsignmentMirrors } from '../lib/consignment.js';
 import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../lib/cashflow.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
+import { testZonosConnection } from '../lib/zonos.js';
 import {
   RECURRING_FREQUENCIES,
   amountOnDate,
@@ -2303,6 +2304,16 @@ function _tcRenderStatusHeaders() {
       _shippoStatusEl.textContent = `Last synced ${ago} (${last.toISOString().slice(0, 10)}). Imports non-refunded transaction rates as Shipping & Postage expenses.`;
     }
   }
+  if ($('tc-zonos-key') && TAX_CENTER.settings?.zonosApiKey) $('tc-zonos-key').value = TAX_CENTER.settings.zonosApiKey;
+  if ($('tc-zonos-account-key') && TAX_CENTER.settings?.zonosAccountKey) $('tc-zonos-account-key').value = TAX_CENTER.settings.zonosAccountKey;
+  if ($('tc-zonos-enabled') && TAX_CENTER.settings?.zonosEnabled !== undefined) $('tc-zonos-enabled').checked = TAX_CENTER.settings.zonosEnabled !== false;
+  const _zonosStatusEl = $('tc-zonos-status');
+  if (_zonosStatusEl && TAX_CENTER.settings?.zonosLastTestAt) {
+    const last = new Date(TAX_CENTER.settings.zonosLastTestAt);
+    if (!isNaN(last)) {
+      _zonosStatusEl.innerHTML = `<span style="color:var(--green);font-weight:600;">✓ API connection active</span> <span style="color:var(--text3);font-size:10px;">(tested ${last.toLocaleDateString()} ${last.toLocaleTimeString()})</span>`;
+    }
+  }
 
   // Update the receipt storage status shown inline next to the Receipt
   // input on Log Business Expense.
@@ -3427,16 +3438,22 @@ async function openEditArtistPayout(bid, itemId) {
 }
 
 async function saveTaxCenterSettings() {
-  const btn = $('tc-save-config-btn');
-  const oldText = btn.textContent;
-  btn.textContent = 'Saving...'; btn.disabled = true;
+  const btn = $('tc-save-config-btn') || $('tc-save-zonos-btn');
+  const oldText = btn ? btn.textContent : 'Save Config';
+  if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
 
-  const geminiKey = document.getElementById('tc-api-key').value.trim();
+  const geminiKey = $('tc-api-key')?.value.trim() || '';
+  const zonosApiKey = $('tc-zonos-key')?.value.trim() || '';
+  const zonosAccountKey = $('tc-zonos-account-key')?.value.trim() || '';
+  const zonosEnabled = $('tc-zonos-enabled') ? $('tc-zonos-enabled').checked : true;
 
   try {
     await loadTaxCenter();
     if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
     TAX_CENTER.settings.geminiKey = geminiKey;
+    if (zonosApiKey) TAX_CENTER.settings.zonosApiKey = zonosApiKey;
+    if (zonosAccountKey) TAX_CENTER.settings.zonosAccountKey = zonosAccountKey;
+    TAX_CENTER.settings.zonosEnabled = zonosEnabled;
     await saveTaxCenter();
     showToast('✓ Settings saved to Firebase');
   } catch (e) {
@@ -3444,7 +3461,51 @@ async function saveTaxCenterSettings() {
     showToast('⚠ Failed to save settings', 'err');
   }
 
-  btn.textContent = oldText; btn.disabled = false;
+  if (btn) { btn.textContent = oldText; btn.disabled = false; }
+}
+
+async function testZonosConnectionHandler() {
+  const keyInput = $('tc-zonos-key');
+  const statusEl = $('tc-zonos-status');
+  const testBtn = $('tc-zonos-test-btn');
+  const apiKey = keyInput?.value.trim() || TAX_CENTER.settings?.zonosApiKey || '';
+
+  if (!apiKey) {
+    showToast('⚠ Please enter your Zonos Live API Key first', 'warn');
+    if (keyInput) keyInput.focus();
+    return;
+  }
+
+  if (testBtn) { testBtn.disabled = true; testBtn.textContent = 'Testing...'; }
+  if (statusEl) {
+    statusEl.innerHTML = '<span style="color:var(--text2);">Testing connection to Zonos GraphQL API...</span>';
+  }
+
+  try {
+    const result = await testZonosConnection(apiKey);
+    if (result.ok) {
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color:var(--green);font-weight:600;">✓ Connected to Zonos API successfully!</span> <span style="color:var(--text3);font-size:10px;">(${new Date().toLocaleTimeString()})</span>`;
+      }
+      showToast('✓ Connected to Zonos API successfully');
+      if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
+      TAX_CENTER.settings.zonosApiKey = apiKey;
+      TAX_CENTER.settings.zonosLastTestAt = new Date().toISOString();
+      await saveTaxCenter().catch(() => {});
+    } else {
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color:var(--red);font-weight:600;">⚠ Connection failed: ${escapeHtml(result.error || 'Check API key')}</span>`;
+      }
+      showToast(`⚠ Zonos connection failed: ${result.error || 'Check key'}`, 'err');
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.innerHTML = `<span style="color:var(--red);font-weight:600;">⚠ Error: ${escapeHtml(err.message)}</span>`;
+    }
+    showToast(`⚠ Zonos error: ${err.message}`, 'err');
+  } finally {
+    if (testBtn) { testBtn.disabled = false; testBtn.textContent = 'Test Connection'; }
+  }
 }
 
 // ── Recurring subscription editor ───────────────────────────────────────────
@@ -3984,6 +4045,7 @@ export {
   saveRecurringEditor,
   saveTaxCenter,
   saveTaxCenterSettings,
+  testZonosConnectionHandler,
   setTcGalleryPage,
   setTcLedgerPage,
   snoozePendingExpense,

@@ -273,6 +273,7 @@ import {
   saveRecurringEditor,
   saveTaxCenter,
   saveTaxCenterSettings,
+  testZonosConnectionHandler,
   setTcGalleryPage,
   setTcLedgerPage,
   snoozePendingExpense,
@@ -385,6 +386,8 @@ import {
   renderShippoDiagnostics,
   buyShippoLabel,
   calculateShippoRates,
+  calculateZonosDutiesHandler,
+  renderZonosDutyCard,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,
@@ -14403,7 +14406,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Integrations & API Configuration: collapsible sections, state remembered per browser ──
-const INTEGRATION_SECTION_KEYS = ['gemini', 'shippo', 'stripe'];
+const INTEGRATION_SECTION_KEYS = ['gemini', 'shippo', 'stripe', 'zonos'];
 
 function applyIntegrationSectionState(key, collapsed) {
   const body = document.getElementById(`tc-integration-body-${key}`);
@@ -20939,6 +20942,7 @@ function exposeLegacyInlineHandlers() {
     updateManualShippingRates, applySmartShippingRates, onShipRecoWeightSelectChange, onShipRecoCustomWeightChange, onShipRecoModeChange, onShipInsightsToggle,
     getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
     toggleIntegrationSection,
+    testZonosConnectionHandler, calculateZonosDutiesHandler, renderZonosDutyCard,
     setThemePreference, cycleThemePreference, toggleTheme
   });
 }
@@ -20983,6 +20987,8 @@ window.renderShippoIncotermHint = renderShippoIncotermHint;
 window.onShippoIncotermChange = onShippoIncotermChange;
 window.onShippoDestCountryChange = onShippoDestCountryChange;
 window.updateShippoCustomsTotalHint = updateShippoCustomsTotalHint;
+window.calculateZonosDutiesHandler = calculateZonosDutiesHandler;
+window.testZonosConnectionHandler = testZonosConnectionHandler;
 window.buyShippoLabel = buyShippoLabel;
 window.verifyDestinationAddress = verifyDestinationAddress;
 window.applyVerifiedAddressCorrections = applyVerifiedAddressCorrections;
