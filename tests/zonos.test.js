@@ -285,4 +285,68 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       })).rejects.toThrow('Zonos calculation error: Service rating requires valid destination');
     });
   });
+
+  describe('Zonos Declaration & Prepay Utilities', () => {
+    it('formats 13-character Declaration ID correctly', async () => {
+      const { formatDeclarationId } = await import('../src/lib/zonos.js');
+      expect(formatDeclarationId('zonos-1234-5678')).toBe('ZONOS12345678');
+      expect(formatDeclarationId('13chardeclid1extra')).toBe('13CHARDECLID1');
+      expect(formatDeclarationId('')).toBe('');
+      expect(formatDeclarationId(null)).toBe('');
+    });
+
+    it('builds pre-filled Zonos Prepay deep link for US destination', async () => {
+      const { buildZonosPrepayDeepLink } = await import('../src/lib/zonos.js');
+      const url = buildZonosPrepayDeepLink({
+        destCountry: 'US',
+        destPostalOrZip: '90210',
+        destState: 'CA',
+        declaredValueCad: 35.00,
+        hsCode: '490199',
+        itemDescription: 'Paperback novel'
+      });
+
+      expect(url).toContain('https://prepay.zonos.com/?');
+      expect(url).toContain('destinationCountry=US');
+      expect(url).toContain('destinationPostalCode=90210');
+      expect(url).toContain('destinationState=CA');
+      expect(url).toContain('declaredValue=35.00');
+      expect(url).toContain('hsCode=490199');
+    });
+
+    it('creates Zonos declaration from landed cost calculation', async () => {
+      const { createZonosDeclaration } = await import('../src/lib/zonos.js');
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            landedCostCalculateWorkflow: [{
+              id: 'ldct_1234567890123',
+              currencyCode: 'CAD',
+              method: 'DDP',
+              landedCostGuaranteeCode: 'ZONOS99887766',
+              deMinimis: { type: 'BELOW', threshold: '800', note: 'Below US Section 321' },
+              amountSubtotals: { duties: 0, taxes: 0, fees: 0, landedCostTotal: 0 },
+              duties: [],
+              taxes: [],
+              fees: []
+            }]
+          }
+        })
+      });
+
+      const decl = await createZonosDeclaration({
+        apiKey: 'test_key',
+        destination: { countryCode: 'US', postalCode: '90210' },
+        items: [{ amount: 25.00, description: 'Book', hsCode: '490199', quantity: 1 }]
+      });
+
+      expect(decl.ok).toBe(true);
+      expect(decl.declarationId).toBe('ZONOS99887766');
+      expect(decl.isDutyFree).toBe(true);
+      expect(decl.qrCodeData).toContain('ZONOS:ZONOS99887766:CAD:0');
+    });
+  });
 });
+

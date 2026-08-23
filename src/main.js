@@ -392,6 +392,10 @@ import {
   calculateShippoRates,
   calculateZonosDutiesHandler,
   renderZonosDutyCard,
+  onZonosDeclarationIdInput,
+  pasteZonosDeclarationId,
+  autoGenerateZonosDeclarationHandler,
+  openZonosPrepayAppHandler,
   calculateCanadaPostRatesHandler,
   renderCanadaPostRatesCard,
   buyCanadaPostLabelHandler,
@@ -21001,6 +21005,10 @@ window.onShippoDestCountryChange = onShippoDestCountryChange;
 window.updateShippoCustomsTotalHint = updateShippoCustomsTotalHint;
 window.calculateZonosDutiesHandler = calculateZonosDutiesHandler;
 window.testZonosConnectionHandler = testZonosConnectionHandler;
+window.onZonosDeclarationIdInput = onZonosDeclarationIdInput;
+window.pasteZonosDeclarationId = pasteZonosDeclarationId;
+window.autoGenerateZonosDeclarationHandler = autoGenerateZonosDeclarationHandler;
+window.openZonosPrepayAppHandler = openZonosPrepayAppHandler;
 window.calculateCanadaPostRatesHandler = calculateCanadaPostRatesHandler;
 window.testCanadaPostConnectionHandler = testCanadaPostConnectionHandler;
 window.renderCanadaPostRatesCard = renderCanadaPostRatesCard;

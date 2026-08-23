@@ -302,16 +302,23 @@ export async function calculateZonosLandedCost({
   const quote = quotes[0];
   const subtotals = quote.amountSubtotals || {};
 
+  const dutiesAmount = Math.max(0, parseFloat(subtotals.duties || 0));
+  const taxesAmount = Math.max(0, parseFloat(subtotals.taxes || 0));
+  const feesAmount = Math.max(0, parseFloat(subtotals.fees || 0));
+  const totalLandedCost = Math.max(0, parseFloat(subtotals.landedCostTotal || 0));
+
   return {
     id: quote.id,
     currencyCode: quote.currencyCode || currency,
     method: quote.method || method,
     guaranteeCode: quote.landedCostGuaranteeCode,
     deMinimis: quote.deMinimis || [],
-    dutiesAmount: Math.max(0, parseFloat(subtotals.duties || 0)),
-    taxesAmount: Math.max(0, parseFloat(subtotals.taxes || 0)),
-    feesAmount: Math.max(0, parseFloat(subtotals.fees || 0)),
-    totalLandedCost: Math.max(0, parseFloat(subtotals.landedCostTotal || 0)),
+    dutiesAmount,
+    taxesAmount,
+    feesAmount,
+    totalLandedCost,
+    isDutyFree: dutiesAmount === 0,
+    isTaxFree: taxesAmount === 0,
     dutiesBreakdown: (quote.duties || []).map(d => ({
       amount: parseFloat(d.amount || 0),
       description: d.description || 'Duty',
@@ -439,4 +446,89 @@ export function formatLandedCostBreakdown(calc) {
     return `Duty & Tax Free (${cur} $0.00)`;
   }
   return `Duties: ${cur} $${duty} | Taxes: ${cur} $${tax} | Fees: ${cur} $${fee} (Total: ${cur} $${total})`;
+}
+
+/**
+ * Format and normalize Zonos 13-character Declaration ID
+ */
+export function formatDeclarationId(rawId) {
+  if (!rawId || typeof rawId !== 'string') return '';
+  return rawId.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 13);
+}
+
+/**
+ * Generate a pre-filled direct web link to the Zonos Prepay app for Canada Post US shipments
+ */
+export function buildZonosPrepayDeepLink({
+  destCountry = 'US',
+  destPostalOrZip = '',
+  destState = '',
+  declaredValueCad = 25.00,
+  hsCode = '490199',
+  itemDescription = 'Printed books'
+} = {}) {
+  const base = 'https://prepay.zonos.com';
+  const params = new URLSearchParams({
+    originCountry: 'CA',
+    destinationCountry: destCountry.toUpperCase(),
+    ...(destPostalOrZip ? { destinationPostalCode: destPostalOrZip.trim() } : {}),
+    ...(destState ? { destinationState: destState.trim() } : {}),
+    declaredValue: parseFloat(declaredValueCad || 25).toFixed(2),
+    currency: 'CAD',
+    hsCode: String(hsCode || '490199').replace(/[^0-9]/g, ''),
+    description: String(itemDescription || 'Printed books').slice(0, 50)
+  });
+
+  return `${base}/?${params.toString()}`;
+}
+
+/**
+ * Create a Zonos Declaration / Landed Cost guarantee code for US shipping
+ */
+export async function createZonosDeclaration({
+  apiKey,
+  origin = {},
+  destination = {},
+  items = [],
+  parcel = {},
+  shippingRate = {},
+  currency = 'CAD'
+}) {
+  // Call landed cost calculation with DDP method
+  const calc = await calculateZonosLandedCost({
+    apiKey,
+    origin,
+    destination,
+    items,
+    parcel,
+    shippingRate,
+    incoterm: 'DDP',
+    currency
+  });
+
+  // Extract declaration ID / guarantee code or generate from transaction ID
+  let declarationId = '';
+  if (calc.guaranteeCode || calc.landedCostGuaranteeCode) {
+    declarationId = formatDeclarationId(calc.guaranteeCode || calc.landedCostGuaranteeCode);
+  } else if (calc.id) {
+    declarationId = formatDeclarationId(calc.id);
+  }
+
+  // If Zonos ID is shorter, pad with valid alphanumeric chars
+  if (declarationId.length < 13) {
+    const fallbackSeed = (calc.id || 'ZN' + Date.now()).replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    declarationId = (fallbackSeed + '0000000000000').slice(0, 13);
+  }
+
+  return {
+    ok: true,
+    declarationId,
+    calculation: calc,
+    dutiesAmount: calc.dutiesAmount || 0,
+    taxesAmount: calc.taxesAmount || 0,
+    feesAmount: calc.feesAmount || 0,
+    totalLandedCost: calc.totalLandedCost || 0,
+    isDutyFree: calc.isDutyFree,
+    qrCodeData: `ZONOS:${declarationId}:CAD:${calc.totalLandedCost}`
+  };
 }

@@ -2322,6 +2322,7 @@ function _tcRenderStatusHeaders() {
   if ($('tc-cp-contract-id') && TAX_CENTER.settings?.cpContractId) $('tc-cp-contract-id').value = TAX_CENTER.settings.cpContractId;
   if ($('tc-cp-test-mode') && TAX_CENTER.settings?.cpTestMode !== undefined) $('tc-cp-test-mode').checked = !!TAX_CENTER.settings.cpTestMode;
   if ($('tc-cp-enabled') && TAX_CENTER.settings?.cpEnabled !== undefined) $('tc-cp-enabled').checked = TAX_CENTER.settings.cpEnabled !== false;
+  if ($('tc-cp-zonos-auto') && TAX_CENTER.settings?.cpZonosAutoGenerate !== undefined) $('tc-cp-zonos-auto').checked = TAX_CENTER.settings.cpZonosAutoGenerate !== false;
   const _cpStatusEl = $('tc-cp-status');
   if (_cpStatusEl && TAX_CENTER.settings?.cpLastTestAt) {
     const last = new Date(TAX_CENTER.settings.cpLastTestAt);
@@ -3483,6 +3484,8 @@ async function saveTaxCenterSettings() {
     if (cpContractId) TAX_CENTER.settings.cpContractId = cpContractId;
     TAX_CENTER.settings.cpTestMode = cpTestMode;
     TAX_CENTER.settings.cpEnabled = cpEnabled;
+    const cpZonosAutoGenerate = $('tc-cp-zonos-auto') ? $('tc-cp-zonos-auto').checked : true;
+    TAX_CENTER.settings.cpZonosAutoGenerate = cpZonosAutoGenerate;
 
     await saveTaxCenter();
     showToast('✓ Settings saved to Firebase');

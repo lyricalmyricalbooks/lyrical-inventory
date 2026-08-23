@@ -7,9 +7,8 @@ import { expect, test } from 'vitest';
 // jsdom test environment the global URL is jsdom's, and node:fs / fileURLToPath
 // reject a foreign URL object with "must be of scheme file". Passing a string
 // keeps node's own parser in play, and matches how the rest of tests/ does it.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const markup = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8').replace(/\r\n/g, '\n');
+const markup = readFileSync(path.join(__dirname, '../index.html'), 'utf8').replace(/\r\n/g, '\n');
 
 test('the primary KPI band fills its row however many tiles a book shows', () => {
   // A fixed four-column band stranded the fifth tile (a profit-sharing book's

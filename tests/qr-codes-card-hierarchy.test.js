@@ -6,10 +6,9 @@ import { expect, test } from 'vitest';
 // Resolved via __dirname rather than `new URL(..., import.meta.url)` — jsdom's
 // global URL is not a node file URL and node:fs rejects it. Matches the rest
 // of tests/.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
-const indexHtml = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8').replace(/\r\n/g, '\n');
+const mainJs = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8').replace(/\r\n/g, '\n');
+const indexHtml = readFileSync(path.join(__dirname, '../index.html'), 'utf8').replace(/\r\n/g, '\n');
 
 // The all-books QR page used to be one long inline-style string per card:
 // title, author and price all read at the same weight, two equal-weight

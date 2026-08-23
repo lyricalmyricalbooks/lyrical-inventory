@@ -357,6 +357,15 @@ function escapeXml(unsafe) {
 }
 
 /**
+ * Validate 13-character Zonos Declaration ID format (alphanumeric, e.g. 13 characters)
+ */
+export function validateDeclarationId(declarationId) {
+  if (!declarationId || typeof declarationId !== 'string') return false;
+  const clean = declarationId.trim().toUpperCase();
+  return /^[A-Z0-9]{13}$/.test(clean);
+}
+
+/**
  * Build XML payload for creating a Non-Contract Shipment with Canada Post
  */
 export function buildNonContractShipmentXml({
@@ -365,7 +374,8 @@ export function buildNonContractShipmentXml({
   destination = {},
   parcel = {},
   orderNum = '',
-  customs = null
+  customs = null,
+  declarationId = ''
 }) {
   const weightKg = Math.max(0.01, parseFloat(parcel.weightKg || 0.5)).toFixed(3);
   const lengthCm = Math.max(0.1, parseFloat(parcel.lengthCm || 20)).toFixed(1);
@@ -376,17 +386,23 @@ export function buildNonContractShipmentXml({
   const destCountry = String(destination.countryCode || 'CA').toUpperCase().trim();
   const cleanDestZip = destCountry === 'CA' ? cleanPostalCode(destination.postalCode) : (destination.postalCode || destination.zip || '90210');
 
+  const cleanDeclId = (declarationId || customs?.declarationId || '').trim().toUpperCase();
+  let declXml = '';
+  if (cleanDeclId) {
+    declXml = `\n      <declaration-id>${escapeXml(cleanDeclId)}</declaration-id>`;
+  }
+
   let customsXml = '';
-  if (destCountry !== 'CA' && customs) {
-    const qty = Math.max(1, parseInt(customs.quantity, 10) || 1);
-    const declaredVal = Math.max(1, parseFloat(customs.declaredValue || 25)).toFixed(2);
-    const customsDesc = String(customs.description || 'Printed books').slice(0, 44);
-    const hsCode = String(customs.hsCode || '490199').replace(/[^0-9]/g, '').slice(0, 6) || '490199';
+  if (destCountry !== 'CA' && (customs || cleanDeclId)) {
+    const qty = Math.max(1, parseInt(customs?.quantity, 10) || 1);
+    const declaredVal = Math.max(1, parseFloat(customs?.declaredValue || 25)).toFixed(2);
+    const customsDesc = String(customs?.description || 'Printed books').slice(0, 44);
+    const hsCode = String(customs?.hsCode || '490199').replace(/[^0-9]/g, '').slice(0, 6) || '490199';
     customsXml = `
     <customs>
       <currency>CAD</currency>
       <conversion-from-cad>1.0</conversion-from-cad>
-      <reason-for-export>SOG</reason-for-export>
+      <reason-for-export>SOG</reason-for-export>${declXml}
       <sku-list>
         <item>
           <customs-number-of-units>${qty}</customs-number-of-units>
@@ -491,9 +507,11 @@ export async function buyCanadaPostLabel({
   parcel = {},
   orderNum = '',
   customs = null,
+  declarationId = '',
   apiKey = '',
   apiSecret = '',
   customerNumber = '',
+  zonosAccountKey = '',
   isTest = false,
   proxyUrl = '/api/canadapost/shipment'
 }) {
@@ -503,13 +521,24 @@ export async function buyCanadaPostLabel({
     destination,
     parcel,
     orderNum,
-    customs
+    customs,
+    declarationId
   });
 
   const customerId = customerNumber ? customerNumber.trim() : '0007123456';
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
   const targetEndpoint = `${baseUrl}/rs/${encodeURIComponent(customerId)}/ncshipment`;
   const authHeader = 'Basic ' + btoa(`${(apiKey || '').trim()}:${(apiSecret || '').trim()}`);
+
+  const headers = {
+    'Accept': 'application/vnd.cpc.ncshipment-v4+xml',
+    'Content-Type': 'application/vnd.cpc.ncshipment-v4+xml',
+    'Authorization': authHeader,
+    'Accept-language': 'en-CA'
+  };
+  if (zonosAccountKey && zonosAccountKey.trim()) {
+    headers['X-CPC-Zonos-Key'] = zonosAccountKey.trim();
+  }
 
   // Try proxy first
   try {
@@ -522,7 +551,8 @@ export async function buyCanadaPostLabel({
         apiKey,
         apiSecret,
         targetEndpoint,
-        customerNumber: customerId
+        customerNumber: customerId,
+        zonosAccountKey
       })
     });
 
@@ -538,12 +568,7 @@ export async function buyCanadaPostLabel({
   // Direct fetch to Canada Post Gateway
   const resp = await fetch(targetEndpoint, {
     method: 'POST',
-    headers: {
-      'Accept': 'application/vnd.cpc.ncshipment-v4+xml',
-      'Content-Type': 'application/vnd.cpc.ncshipment-v4+xml',
-      'Authorization': authHeader,
-      'Accept-language': 'en-CA'
-    },
+    headers,
     body: xmlPayload
   });
 
