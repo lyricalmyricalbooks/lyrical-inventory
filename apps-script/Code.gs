@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v20)
+/* Lyricalmyrical Inventory — Unified Backend (v24)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -89,6 +89,10 @@
  *      existing "Reimbursement request") land as [ACTION REQUIRED] with the
  *      action banner instead of being filed as informational. Bump flags
  *      v22-and-older as outdated so the publisher redeploys.
+ *  22. v24: Canada Post Web Services and Zonos GraphQL API proxies in doPost
+ *      ('proxycanadapost' and 'proxyzonos') to eliminate client-side CORS issues
+ *      for live direct rates, duty-free calculations, label creation, and PDF
+ *      label downloads. Bump flags v23-and-older as outdated.
  */
 
 const HEADERS = [
@@ -137,9 +141,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v23',
-    scriptVersion: 'v23',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true },
+    service: 'lyrical-sheets-webhook-v24',
+    scriptVersion: 'v24',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -578,12 +582,105 @@ function doPost(e) {
       return jsonOut_({ ok: true });
     }
 
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const action = (
-      payload.action ||
-      (payload.payload && payload.payload.action) ||
-      'add'
-    ).toString().toLowerCase();
+    // ── Proxy Canada Post Web Services API request (bypasses browser CORS) ──
+    if (action === 'proxycanadapost') {
+      const d = payload.payload || {};
+      const endpoint = d.endpoint || d.targetEndpoint;
+      const xmlPayload = d.xmlPayload || d.body || '';
+      const method = (d.method || (xmlPayload ? 'POST' : 'GET')).toUpperCase();
+      const apiKey = d.apiKey || '';
+      const apiSecret = d.apiSecret || '';
+      const zonosAccountKey = d.zonosAccountKey || '';
+      const isArtifact = d.isArtifact === true;
+
+      if (!endpoint) return jsonOut_({ error: 'Endpoint required' });
+      if (!apiKey || !apiSecret) return jsonOut_({ error: 'Canada Post API Key & Secret required' });
+
+      try {
+        const authHeader = 'Basic ' + Utilities.base64Encode(apiKey.trim() + ':' + apiSecret.trim());
+        const headers = {
+          'Authorization': authHeader,
+          'Accept-language': 'en-CA'
+        };
+        if (isArtifact) {
+          headers['Accept'] = 'application/pdf';
+        } else if (method === 'POST') {
+          headers['Accept'] = endpoint.indexOf('ncshipment') !== -1 
+            ? 'application/vnd.cpc.ncshipment-v4+xml' 
+            : 'application/vnd.cpc.ship.rate-v4+xml';
+          headers['Content-Type'] = headers['Accept'];
+        }
+        if (zonosAccountKey && zonosAccountKey.trim()) {
+          headers['X-CPC-Zonos-Key'] = zonosAccountKey.trim();
+        }
+
+        const options = {
+          method: method,
+          headers: headers,
+          muteHttpExceptions: true
+        };
+        if (xmlPayload && method === 'POST') {
+          options.payload = xmlPayload;
+        }
+
+        const resp = UrlFetchApp.fetch(endpoint, options);
+        const code = resp.getResponseCode();
+
+        if (isArtifact) {
+          const blob = resp.getBlob();
+          return jsonOut_({
+            ok: code >= 200 && code < 300,
+            status: code,
+            base64: Utilities.base64Encode(blob.getBytes()),
+            mime: blob.getContentType() || 'application/pdf'
+          });
+        }
+
+        const xmlText = resp.getContentText();
+        return jsonOut_({
+          ok: code >= 200 && code < 300,
+          status: code,
+          xml: xmlText
+        });
+      } catch (err) {
+        return jsonOut_({ error: 'Canada Post proxy failed: ' + String(err) });
+      }
+    }
+
+    // ── Proxy Zonos GraphQL API request (bypasses browser CORS) ──
+    if (action === 'proxyzonos') {
+      const d = payload.payload || {};
+      const query = d.query || '';
+      const variables = d.variables || {};
+      const token = d.apiKey || d.token || '';
+
+      if (!token) return jsonOut_({ error: 'Zonos API token required' });
+      if (!query) return jsonOut_({ error: 'GraphQL query required' });
+
+      try {
+        const options = {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'credentialToken': token.trim()
+          },
+          payload: JSON.stringify({ query: query, variables: variables }),
+          muteHttpExceptions: true
+        };
+
+        const resp = UrlFetchApp.fetch('https://api.zonos.com/graphql', options);
+        const json = JSON.parse(resp.getContentText());
+        return jsonOut_({
+          ok: resp.getResponseCode() >= 200 && resp.getResponseCode() < 300,
+          status: resp.getResponseCode(),
+          data: json.data || null,
+          errors: json.errors || null,
+          raw: json
+        });
+      } catch (err) {
+        return jsonOut_({ error: 'Zonos proxy failed: ' + String(err) });
+      }
+    }
 
     // ── Publisher notification email ──
     if (action === 'notifypublisher') {

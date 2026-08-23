@@ -399,6 +399,7 @@ import {
   calculateCanadaPostRatesHandler,
   renderCanadaPostRatesCard,
   buyCanadaPostLabelHandler,
+  openCanadaPostPurchasedLabel,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,
@@ -2122,7 +2123,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v23';
+const EXPECTED_SCRIPT_VERSION = 'v24';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -11294,7 +11295,7 @@ async function backfillAndResync() {
 window.backfillAndResync = backfillAndResync;
 function retryDelayMs(attempt) { return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0, attempt - 1))); }
 
-async function postToSheets(body, urlOverride) {
+export async function postToSheets(body, urlOverride) {
   const isTest = isTestBookId(activeBook);
   if (isTest) {
     return simulatePostToSheets(body);
@@ -21013,6 +21014,7 @@ window.calculateCanadaPostRatesHandler = calculateCanadaPostRatesHandler;
 window.testCanadaPostConnectionHandler = testCanadaPostConnectionHandler;
 window.renderCanadaPostRatesCard = renderCanadaPostRatesCard;
 window.buyCanadaPostLabelHandler = buyCanadaPostLabelHandler;
+window.openCanadaPostPurchasedLabel = openCanadaPostPurchasedLabel;
 window.buyShippoLabel = buyShippoLabel;
 window.verifyDestinationAddress = verifyDestinationAddress;
 window.applyVerifiedAddressCorrections = applyVerifiedAddressCorrections;
