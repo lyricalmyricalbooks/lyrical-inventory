@@ -269,6 +269,53 @@ describe('Canada Post Label & Shipment Creation', () => {
     expect(xml).toContain('<prov-state>AZ</prov-state>');
     expect(xml).toContain('<postal-zip-code>85603</postal-zip-code>');
   });
+
+  it('generates authentic Code 128 barcode SVG rect elements', async () => {
+    const { generateCode128SvgBars } = await import('../src/lib/canadapost.js');
+    const svgBars = generateCode128SvgBars('7012345678901234');
+    expect(svgBars).toContain('<rect');
+    expect(svgBars).toContain('fill="#000000"');
+  });
+
+  it('generates full 4x6 vector Canada Post shipping label SVG with customs and Zonos DDP', async () => {
+    const { generateCanadaPostLabelSvg } = await import('../src/lib/canadapost.js');
+    const svg = generateCanadaPostLabelSvg({
+      serviceCode: 'USA.TP',
+      serviceName: 'Tracked Packet - USA',
+      trackingPin: '7012345678901234',
+      sender: { name: 'Lyricalmyrical Books', address1: '123 Main St', city: 'Toronto', province: 'ON', postalCode: 'M4B 1B3' },
+      destination: { name: 'Daniela Dawson', address1: 'PO Box 897', city: 'Bisbee', state: 'AZ', postalCode: '85603', countryCode: 'US' },
+      parcel: { weightKg: 0.357, lengthCm: 19.5, widthCm: 15, heightCm: 2 },
+      customs: { description: 'Printed books', quantity: 1, declaredValue: 25.00, hsCode: '490199' },
+      declarationId: 'ZONOS12345678'
+    });
+
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('CANADA POST');
+    expect(svg).toContain('POSTES CANADA');
+    expect(svg).toContain('DANIELA DAWSON');
+    expect(svg).toContain('85603');
+    expect(svg).toContain('CUSTOMS DECLARATION');
+    expect(svg).toContain('ZONOS DECLARATION ID:');
+    expect(svg).toContain('ZONOS12345678');
+  });
+
+  it('generates vector printable Blob from shipment context with zero network errors', async () => {
+    const { generateClientCanadaPostLabelBlob, fetchCanadaPostLabelBlob, setLastPurchasedShipmentContext } = await import('../src/lib/canadapost.js');
+    const context = {
+      serviceCode: 'DOM.EP',
+      trackingPin: '7012999988881111',
+      sender: { name: 'Lyrical Books' },
+      destination: { name: 'Jane Doe', postalCode: 'V6B 2W9', countryCode: 'CA' }
+    };
+
+    setLastPurchasedShipmentContext(context);
+    const blob1 = generateClientCanadaPostLabelBlob(context);
+    expect(blob1).toBeInstanceOf(Blob);
+
+    const blob2 = await fetchCanadaPostLabelBlob({ labelUrl: 'local://canadapost/label/7012999988881111' });
+    expect(blob2).toBeInstanceOf(Blob);
+  });
 });
 
 
