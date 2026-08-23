@@ -2789,15 +2789,19 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
  */
 async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) {
   const sfName = $('sf-name')?.value?.trim() || 'Lyricalmyrical Books';
+  const sfCompany = $('sf-company')?.value?.trim() || 'Lyricalmyrical Books';
   const sfPhone = $('sf-phone')?.value?.trim() || '4165550199';
-  const sfAddr = $('sf-street')?.value?.trim() || '';
+  const sfAddr = ($('sf-street1')?.value || $('sf-street')?.value || '').trim();
+  const sfAddr2 = ($('sf-street2')?.value || '').trim();
   const sfCity = $('sf-city')?.value?.trim() || '';
   const sfProv = $('sf-state')?.value?.trim() || 'ON';
   const sfZip = $('sf-zip')?.value?.trim() || '';
 
   const stName = $('st-name')?.value?.trim() || '';
+  const stCompany = $('st-company')?.value?.trim() || '';
   const stPhone = $('st-phone')?.value?.trim() || '5555555555';
-  const stAddr = $('st-street')?.value?.trim() || '';
+  const stAddr = ($('st-street1')?.value || $('st-street')?.value || '').trim();
+  const stAddr2 = ($('st-street2')?.value || '').trim();
   const stCity = $('st-city')?.value?.trim() || '';
   const stState = $('st-state')?.value?.trim() || '';
   const stZip = $('st-zip')?.value?.trim() || '';
@@ -2885,17 +2889,20 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
       serviceCode,
       sender: {
         name: sfName,
-        company: 'Lyricalmyrical Books',
+        company: sfCompany,
         phone: sfPhone,
         address1: sfAddr,
+        address2: sfAddr2,
         city: sfCity,
         province: sfProv,
         postalCode: sfZip
       },
       destination: {
         name: stName || 'Customer',
+        company: stCompany,
         phone: stPhone,
         address1: stAddr,
+        address2: stAddr2,
         city: stCity,
         province: stState,
         state: stState,
