@@ -156,8 +156,8 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === '/api/canadapost/artifact' && req.method === 'GET') {
       const artifactUrl = url.searchParams.get('url');
-      const apiKey = req.headers['x-cp-api-key'] || process.env.CANADAPOST_API_KEY;
-      const apiSecret = req.headers['x-cp-api-secret'] || process.env.CANADAPOST_API_SECRET;
+      const apiKey = req.headers['x-cp-api-key'] || url.searchParams.get('key') || process.env.CANADAPOST_API_KEY;
+      const apiSecret = req.headers['x-cp-api-secret'] || url.searchParams.get('secret') || process.env.CANADAPOST_API_SECRET;
 
       if (!artifactUrl) return sendJson(res, 400, { error: 'Missing artifact url parameter' });
       if (!apiKey || !apiSecret) return sendJson(res, 400, { error: 'Missing Canada Post credentials' });

@@ -287,12 +287,19 @@ describe('Zonos Landed Cost & Duty Engine', () => {
   });
 
   describe('Zonos Declaration & Prepay Utilities', () => {
-    it('formats 13-character Declaration ID correctly', async () => {
-      const { formatDeclarationId } = await import('../src/lib/zonos.js');
-      expect(formatDeclarationId('zonos-1234-5678')).toBe('ZONOS12345678');
-      expect(formatDeclarationId('13chardeclid1extra')).toBe('13CHARDECLID1');
+    it('formats and validates 13-character Declaration ID correctly', async () => {
+      const { formatDeclarationId, validateDeclarationId } = await import('../src/lib/zonos.js');
+      expect(formatDeclarationId('0rcvxj2tkbnwr')).toBe('0rcvxj2tkbnwr');
+      expect(formatDeclarationId('0RCVXJ2TKBNWR')).toBe('0rcvxj2tkbnwr');
+      expect(formatDeclarationId('0rcr-8py0-fc9yh')).toBe('0rcr8py0fc9yh');
+      expect(formatDeclarationId('13chardeclid1extra')).toBe('13chardeclid1');
       expect(formatDeclarationId('')).toBe('');
       expect(formatDeclarationId(null)).toBe('');
+
+      expect(validateDeclarationId('0rcvxj2tkbnwr')).toBe(true);
+      expect(validateDeclarationId('0RCR8PY0FC9YH')).toBe(true);
+      expect(validateDeclarationId('short')).toBe(false);
+      expect(validateDeclarationId('')).toBe(false);
     });
 
     it('builds pre-filled Zonos Prepay deep link for US destination', async () => {
@@ -314,27 +321,47 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       expect(url).toContain('hsCode=490199');
     });
 
-    it('creates Zonos declaration from landed cost calculation', async () => {
+    it('creates authentic Zonos declaration via two-step workflow (landed cost + declaration)', async () => {
       const { createZonosDeclaration } = await import('../src/lib/zonos.js');
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: {
-            landedCostCalculateWorkflow: [{
-              id: 'ldct_1234567890123',
-              currencyCode: 'CAD',
-              method: 'DDP',
-              landedCostGuaranteeCode: 'ZONOS99887766',
-              deMinimis: { type: 'BELOW', threshold: '800', note: 'Below US Section 321' },
-              amountSubtotals: { duties: 0, taxes: 0, fees: 0, landedCostTotal: 0 },
-              duties: [],
-              taxes: [],
-              fees: []
-            }]
-          }
+      global.fetch = vi.fn()
+        // 1. landed cost calculation mock
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: {
+              landedCostCalculateWorkflow: [{
+                id: 'landed_cost_398d774d-d960-4cf9-832a-ae21edd46b6d',
+                currencyCode: 'CAD',
+                method: 'DDP',
+                landedCostGuaranteeCode: 'NOT_APPLICABLE',
+                deMinimis: [{ type: 'BELOW', threshold: '800', note: 'Below US Section 321' }],
+                amountSubtotals: { duties: 0, taxes: 0, fees: 0, landedCostTotal: 0 },
+                duties: [],
+                taxes: [],
+                fees: []
+              }]
+            }
+          })
         })
-      });
+        // 2. declarationCreateWorkflow mock
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: {
+              declarationCreateWorkflow: [{
+                declaration: {
+                  id: '0rd4dpkrvc1y9',
+                  status: 'OPEN',
+                  paymentStatus: 'OPEN',
+                  source: 'POST',
+                  createdAt: '2026-08-23T21:53:58.729Z'
+                },
+                errors: []
+              }]
+            }
+          })
+        });
 
       const decl = await createZonosDeclaration({
         apiKey: 'test_key',
@@ -343,9 +370,9 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       });
 
       expect(decl.ok).toBe(true);
-      expect(decl.declarationId).toBe('ZONOS99887766');
+      expect(decl.declarationId).toBe('0rd4dpkrvc1y9');
       expect(decl.isDutyFree).toBe(true);
-      expect(decl.qrCodeData).toContain('ZONOS:ZONOS99887766:CAD:0');
+      expect(decl.qrCodeData).toContain('ZONOS:0rd4dpkrvc1y9:CAD:0');
     });
   });
 });
