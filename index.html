@@ -2630,6 +2630,10 @@
                   <input type="checkbox" id="tc-cp-test-mode" style="accent-color:var(--gold);">
                   <span>Sandbox Environment (ct.soa-gw)</span>
                 </label>
+                <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;" title="Automatically generate 13-character Zonos Declaration IDs for US-bound packages">
+                  <input type="checkbox" id="tc-cp-zonos-auto" checked style="accent-color:var(--gold);">
+                  <span>Auto-Prepay US Duties (Zonos)</span>
+                </label>
                 <div style="margin-left:auto;display:flex;gap:8px;">
                   <button id="tc-cp-test-btn" class="btn gold outline" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="testCanadaPostConnectionHandler()">Test Connection</button>
                   <button id="tc-save-cp-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
@@ -3063,6 +3067,50 @@
         <div id="sp-incoterm-hint" style="font-size:11px;color:var(--text3);line-height:1.55;margin:0 0 12px;"></div>
         <div style="font-size:11px;color:var(--text3);line-height:1.55;margin:-4px 0 12px;">
           International Shippo rates include this customs declaration automatically. The declared value is <strong>per copy</strong> and is multiplied by the quantity above. If Canada Post still does not appear, connect or enable your Canada Post carrier account in Shippo.
+        </div>
+
+        <!-- 🇺🇸 US Duty Prepayment (Zonos & Canada Post Mandate) -->
+        <div id="us-zonos-duty-card" class="us-zonos-duty-card" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:18px;">🇺🇸</span>
+              <div>
+                <strong style="font-size:13px;color:var(--text);">US Duty Prepayment (Zonos Mandate)</strong>
+                <div style="font-size:10px;color:var(--text3);">Required by Canada Post for all U.S.-bound parcels</div>
+              </div>
+            </div>
+            <span id="us-zonos-status-pill" class="pill amber" style="font-size:10px;">Declaration Required</span>
+          </div>
+
+          <div style="font-size:11px;color:var(--text2);line-height:1.5;margin-top:8px;">
+            Canada Post requires proof of prepaid U.S. customs duties before accepting packages. Printed books (<span class="tnum">HS 4901.99</span>) enter duty-free ($0.00 duty), but obtaining a <strong>13-character Zonos Declaration ID</strong> is strictly mandatory for acceptance.
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
+                <span>Zonos Declaration ID (13 characters)</span>
+                <span id="zonos-decl-validation-hint" style="font-size:10px;color:var(--text3);">Auto-generated via Zonos API or Prepay App</span>
+              </label>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input type="text" id="sp-zonos-declaration-id" maxlength="13" placeholder="e.g. ZONOS12345678" style="font-family:'DM Mono',monospace;font-size:13px;letter-spacing:1px;text-transform:uppercase;" oninput="onZonosDeclarationIdInput(this.value)">
+                <button class="btn sm tag" type="button" onclick="pasteZonosDeclarationId()" style="height:36px;padding:0 10px;font-size:11px;white-space:nowrap;" title="Paste Declaration ID from clipboard">📋 Paste</button>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
+              <button class="btn sm gold" id="sp-auto-gen-zonos-btn" type="button" onclick="autoGenerateZonosDeclarationHandler()" style="flex:1;min-width:170px;height:34px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Calculate landed cost and generate Zonos Declaration ID via API">
+                <span>⚡</span>
+                <span>Auto-Generate via Zonos API</span>
+              </button>
+              <button class="btn sm outline" id="sp-open-zonos-prepay-btn" type="button" onclick="openZonosPrepayAppHandler()" style="flex:1;min-width:170px;height:34px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Open Zonos Prepay Web App with pre-filled book details">
+                <span>📱</span>
+                <span>Open Zonos Prepay App</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="zonos-auto-result-hint" style="display:none;font-size:11px;margin-top:8px;padding:8px 10px;border-radius:var(--r);background:rgba(46,125,50,0.08);border:1px solid var(--green);color:var(--text);"></div>
         </div>
 
         <div class="shipping-predictor-settings">

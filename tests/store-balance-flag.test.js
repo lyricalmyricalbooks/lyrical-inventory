@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { storeBalanceSlug, storeBalanceComparison } from '../src/lib/consignment.js';
 
-const read = rel => fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
+const read = rel => fs.readFileSync(path.join(process.cwd(), rel), 'utf8').replace(/\r\n/g, '\n');
 
 // A consignment store card keeps its own running totals, and the ledger below
 // keeps the events those totals summarise. When the two drift apart the card

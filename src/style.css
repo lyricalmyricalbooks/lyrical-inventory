@@ -11952,3 +11952,31 @@ tr.hist-row:hover {
   .ps-payout-actions .btn:hover,
   .ps-payout-actions .btn:active{transform:none;}
 }
+
+/* ═══════════════════════════════════════════════
+   US ZONOS DUTY PREPAYMENT & CANADA POST MANDATE
+   ═══════════════════════════════════════════════ */
+.us-zonos-duty-card {
+  border: 1px solid oklch(0.65 0.18 25 / 0.35);
+  background: var(--surface-sunken, oklch(0.18 0.02 260));
+  border-radius: var(--r2, 8px);
+  padding: 14px 16px;
+  margin: 12px 0;
+  transition: border-color var(--ease-spring, 0.2s ease), box-shadow var(--ease-spring, 0.2s ease);
+}
+.us-zonos-duty-card:focus-within {
+  border-color: var(--gold, oklch(0.75 0.15 75));
+  box-shadow: 0 0 0 1px oklch(0.75 0.15 75 / 0.2);
+}
+.zonos-decl-code {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+@media (prefers-reduced-motion: reduce) {
+  .us-zonos-duty-card {
+    transition: none;
+  }
+}
+

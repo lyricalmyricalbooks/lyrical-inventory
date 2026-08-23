@@ -6,8 +6,8 @@ import { expect, test } from 'vitest';
 // Resolved via __dirname rather than `new URL(..., import.meta.url)` — see the
 // note in tests/book-strip-kpi-alignment.test.js for why.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8').replace(/\r\n/g, '\n');
+const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8').replace(/\r\n/g, '\n');
 
 // The lookbehind keeps a single-selector lookup from matching the tail of a
 // grouped one — `.modal-footer::before` must not resolve to the shared

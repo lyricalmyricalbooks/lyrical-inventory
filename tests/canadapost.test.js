@@ -203,5 +203,25 @@ describe('Canada Post Label & Shipment Creation', () => {
     expect(parsed.labelUrl).toBe('https://soa-gw.canadapost.ca/rs/artifact/6e933e69452/10000/0');
     expect(parsed.receiptUrl).toBe('https://soa-gw.canadapost.ca/rs/0007123456/ncshipment/123456789012345678/receipt');
   });
+
+  it('validates 13-character Zonos Declaration ID format and embeds it in customs XML', async () => {
+    const { validateDeclarationId, buildNonContractShipmentXml } = await import('../src/lib/canadapost.js');
+    
+    expect(validateDeclarationId('ZONOS12345678')).toBe(true);
+    expect(validateDeclarationId('13CHARDECLID1')).toBe(true);
+    expect(validateDeclarationId('short')).toBe(false);
+    expect(validateDeclarationId('toolongdeclarationid123')).toBe(false);
+    expect(validateDeclarationId('')).toBe(false);
+
+    const xml = buildNonContractShipmentXml({
+      serviceCode: 'USA.TP',
+      destination: { countryCode: 'US', postalCode: '90210' },
+      parcel: { weightKg: 0.5 },
+      declarationId: 'ZONOS12345678'
+    });
+
+    expect(xml).toContain('<declaration-id>ZONOS12345678</declaration-id>');
+  });
 });
+
 

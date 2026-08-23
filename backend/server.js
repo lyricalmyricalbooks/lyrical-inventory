@@ -116,7 +116,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/canadapost/shipment' && req.method === 'POST') {
       const body = await readJson(req, res);
       if (!body) return;
-      const { xmlPayload, apiKey, apiSecret, isTest, targetEndpoint, customerNumber } = body;
+      const { xmlPayload, apiKey, apiSecret, isTest, targetEndpoint, customerNumber, zonosAccountKey } = body;
       const key = apiKey || process.env.CANADAPOST_API_KEY;
       const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
       const custNum = customerNumber || process.env.CANADAPOST_CUSTOMER_NUMBER || '0007123456';
@@ -129,14 +129,20 @@ const server = http.createServer(async (req, res) => {
 
       try {
         const authHeader = 'Basic ' + Buffer.from(`${key.trim()}:${secret.trim()}`).toString('base64');
+        const headers = {
+          'Accept': 'application/vnd.cpc.ncshipment-v4+xml',
+          'Content-Type': 'application/vnd.cpc.ncshipment-v4+xml',
+          'Authorization': authHeader,
+          'Accept-language': 'en-CA'
+        };
+        const zKey = zonosAccountKey || process.env.CANADAPOST_ZONOS_KEY;
+        if (zKey && zKey.trim()) {
+          headers['X-CPC-Zonos-Key'] = zKey.trim();
+        }
+
         const cpRes = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Accept': 'application/vnd.cpc.ncshipment-v4+xml',
-            'Content-Type': 'application/vnd.cpc.ncshipment-v4+xml',
-            'Authorization': authHeader,
-            'Accept-language': 'en-CA'
-          },
+          headers,
           body: xmlPayload
         });
 
@@ -178,6 +184,34 @@ const server = http.createServer(async (req, res) => {
         return;
       } catch (err) {
         return sendJson(res, 502, { error: `Failed to fetch artifact: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/zonos/graphql' && req.method === 'POST') {
+      const body = await readJson(req, res);
+      if (!body) return;
+      const { query, variables, apiKey } = body;
+      const token = apiKey || req.headers['credentialtoken'] || process.env.ZONOS_API_KEY;
+
+      if (!token) {
+        return sendJson(res, 400, { error: 'Missing Zonos API credential token' });
+      }
+
+      try {
+        const zonosRes = await fetch('https://api.zonos.com/graphql', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'credentialToken': token.trim()
+          },
+          body: JSON.stringify({ query, variables })
+        });
+
+        const json = await zonosRes.json();
+        return sendJson(res, zonosRes.status, json);
+      } catch (err) {
+        console.error('Zonos GraphQL proxy failed:', err);
+        return sendJson(res, 502, { error: `Zonos proxy error: ${err.message}` });
       }
     }
 
