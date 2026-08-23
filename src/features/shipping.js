@@ -96,12 +96,17 @@ import {
   createZonosDeclaration,
   buildZonosPrepayDeepLink,
   formatDeclarationId,
+  DEFAULT_ZONOS_API_KEY,
 } from '../lib/zonos.js';
 import {
   getCanadaPostRates,
   estimateOfflineCanadaPostRates,
   buyCanadaPostLabel,
   validateDeclarationId,
+  DEFAULT_CP_API_KEY,
+  DEFAULT_CP_API_SECRET,
+  DEFAULT_CP_CUSTOMER_NUMBER,
+  fetchCanadaPostLabelBlob,
 } from '../lib/canadapost.js';
 
 function getShippingReconciliationOrders() {
@@ -2678,9 +2683,9 @@ async function calculateCanadaPostRatesHandler() {
   else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
   else if (weightUnit === 'g') weightKg = weight / 1000;
 
-  const apiKey = TAX_CENTER.settings?.cpApiKey || '';
-  const apiSecret = TAX_CENTER.settings?.cpApiSecret || '';
-  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || '';
+  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
   const contractId = TAX_CENTER.settings?.cpContractId || '';
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
   const isEnabled = TAX_CENTER.settings?.cpEnabled !== false;
@@ -2701,7 +2706,7 @@ async function calculateCanadaPostRatesHandler() {
     let quotes;
     if (apiKey && apiSecret && isEnabled && navigator.onLine) {
       quotes = await getCanadaPostRates({
-        originPostalCode: sfZip,
+        originPostalCode: sfZip || 'M4B1B3',
         destCountry: stCountryCode,
         destPostalOrZip: stZip,
         weightKg,
@@ -2785,6 +2790,27 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
 }
 
 /**
+ * Open or print Canada Post purchased shipping label PDF
+ */
+async function openCanadaPostPurchasedLabel(labelUrl) {
+  if (!labelUrl) {
+    showToast('⚠ No label URL available for printing', 'warn');
+    return;
+  }
+  showToast('⏳ Downloading Canada Post PDF label...', 'ok');
+  try {
+    const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+    const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+    const blob = await fetchCanadaPostLabelBlob({ labelUrl, apiKey, apiSecret });
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank', 'noopener');
+  } catch (err) {
+    console.error('Failed to open Canada Post label PDF:', err);
+    showToast(`⚠ Failed to open label PDF: ${err.message}`, 'err');
+  }
+}
+
+/**
  * Buy a Canada Post shipping label for the chosen service
  */
 async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) {
@@ -2828,15 +2854,10 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
   else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
   else if (weightUnit === 'g') weightKg = weight / 1000;
 
-  const apiKey = TAX_CENTER.settings?.cpApiKey || '';
-  const apiSecret = TAX_CENTER.settings?.cpApiSecret || '';
-  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || '';
+  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
-
-  if (!apiKey || !apiSecret) {
-    showToast('⚠ Please enter and save your Canada Post API Key & Secret in Tax Centre settings first', 'warn');
-    return;
-  }
 
   // Handle US Duty Prepayment (Zonos Mandate)
   let declarationId = '';
@@ -2844,7 +2865,8 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
     declarationId = ($('sp-zonos-declaration-id')?.value || '').trim();
     if (!declarationId) {
       // Try auto-generating if Zonos key exists
-      if (TAX_CENTER.settings?.zonosApiKey) {
+      const zonosKey = TAX_CENTER.settings?.zonosApiKey || DEFAULT_ZONOS_API_KEY;
+      if (zonosKey) {
         await autoGenerateZonosDeclarationHandler({ silent: true });
         declarationId = ($('sp-zonos-declaration-id')?.value || '').trim();
       }
@@ -2950,9 +2972,6 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
       const labelPanel = $('cp-purchased-label-panel');
       if (labelPanel) {
         labelPanel.style.display = 'block';
-        const labelDownloadUrl = result.labelUrl
-          ? `/api/canadapost/artifact?url=${encodeURIComponent(result.labelUrl)}`
-          : null;
 
         labelPanel.innerHTML = `
           <div style="background:rgba(46,125,50,0.08);border:1px solid var(--green);border-radius:var(--r2);padding:14px;margin-top:10px;">
@@ -2965,11 +2984,11 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
                 </div>
               </div>
               <div style="display:flex;gap:8px;">
-                ${labelDownloadUrl ? `
-                  <a href="${labelDownloadUrl}" target="_blank" rel="noopener" class="btn gold sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 14px;">
+                ${result.labelUrl ? `
+                  <button class="btn gold sm" type="button" onclick="openCanadaPostPurchasedLabel('${escapeHtml(result.labelUrl)}')" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 14px;">
                     <span>🖨️</span>
                     <span>Print Label (PDF)</span>
-                  </a>
+                  </button>
                 ` : ''}
                 <button class="btn sm tag" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(result.trackingPin)}');showToast('Copied PIN to clipboard');" style="font-size:11px;">
                   📋 Copy PIN
@@ -6134,6 +6153,7 @@ export {
   calculateCanadaPostRatesHandler,
   renderCanadaPostRatesCard,
   buyCanadaPostLabelHandler,
+  openCanadaPostPurchasedLabel,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,

@@ -190,8 +190,116 @@ export function parseCanadaPostPriceQuotes(xmlText) {
   return quotes;
 }
 
+export const DEFAULT_CP_API_KEY = '5832e3366d6aeb872e41adfab8192271';
+export const DEFAULT_CP_API_SECRET = '75fdce5f4799ac746b93cc34944ff146';
+export const DEFAULT_CP_CUSTOMER_NUMBER = '0007123456';
+
+function getSavedSheetsUrl() {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
+      return localStorage.getItem('lm-sheets-url') || '';
+    }
+  } catch (_) {}
+  try {
+    if (typeof window !== 'undefined' && window.sheetsUrl) {
+      return window.sheetsUrl;
+    }
+  } catch (_) {}
+  return '';
+}
+
 /**
- * Fetch live rates directly from Canada Post or via local backend proxy
+ * Execute Canada Post API request with proxy chain (Local dev -> Google Apps Script -> Direct)
+ */
+export async function executeCanadaPostProxy({
+  targetEndpoint,
+  xmlPayload,
+  apiKey = DEFAULT_CP_API_KEY,
+  apiSecret = DEFAULT_CP_API_SECRET,
+  customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
+  zonosAccountKey = '',
+  isTest = false
+}) {
+  const key = (apiKey || DEFAULT_CP_API_KEY).trim();
+  const secret = (apiSecret || DEFAULT_CP_API_SECRET).trim();
+  const isShipment = targetEndpoint.indexOf('ncshipment') !== -1;
+  const localProxyUrl = isShipment ? '/api/canadapost/shipment' : '/api/canadapost/rates';
+
+  // 1. Try local dev proxy first if running in browser
+  if (typeof window !== 'undefined') {
+    try {
+      const proxyResp = await fetch(localProxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          xmlPayload,
+          isTest,
+          apiKey: key,
+          apiSecret: secret,
+          targetEndpoint,
+          customerNumber,
+          zonosAccountKey
+        })
+      });
+      if (proxyResp.ok) {
+        const data = await proxyResp.json();
+        if (data.rates && Array.isArray(data.rates)) return { ok: true, rates: data.rates };
+        if (data.trackingPin && data.labelUrl) return { ok: true, ...data };
+        if (data.xml) return { ok: true, xml: data.xml };
+      }
+    } catch (_) {}
+  }
+
+  // 2. Try Google Apps Script proxy (bypasses browser CORS on GitHub Pages)
+  const sheetsUrl = getSavedSheetsUrl();
+  if (sheetsUrl && !sheetsUrl.includes('mock-test')) {
+    try {
+      const gasResp = await fetch(sheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          version: 2,
+          action: 'proxycanadapost',
+          payload: {
+            endpoint: targetEndpoint,
+            xmlPayload,
+            apiKey: key,
+            apiSecret: secret,
+            zonosAccountKey
+          }
+        })
+      });
+      if (gasResp.ok) {
+        const json = await gasResp.json();
+        if (json && json.xml) return { ok: true, xml: json.xml };
+      }
+    } catch (_) {}
+  }
+
+  // 3. Direct fetch to Canada Post Gateway
+  const authHeader = 'Basic ' + btoa(`${key}:${secret}`);
+  const headers = {
+    'Accept': isShipment ? 'application/vnd.cpc.ncshipment-v4+xml' : 'application/vnd.cpc.ship.rate-v4+xml',
+    'Content-Type': isShipment ? 'application/vnd.cpc.ncshipment-v4+xml' : 'application/vnd.cpc.ship.rate-v4+xml',
+    'Authorization': authHeader,
+    'Accept-language': 'en-CA'
+  };
+  if (zonosAccountKey && zonosAccountKey.trim()) {
+    headers['X-CPC-Zonos-Key'] = zonosAccountKey.trim();
+  }
+
+  const resp = await fetch(targetEndpoint, {
+    method: 'POST',
+    headers,
+    body: xmlPayload
+  });
+
+  const text = await resp.text();
+  return { ok: resp.ok, xml: text };
+}
+
+/**
+ * Fetch live rates directly from Canada Post or via proxy
  */
 export async function getCanadaPostRates({
   originPostalCode = 'M4B1B3',
@@ -201,12 +309,11 @@ export async function getCanadaPostRates({
   lengthCm = 20,
   widthCm = 15,
   heightCm = 2,
-  apiKey = '',
-  apiSecret = '',
-  customerNumber = '',
+  apiKey = DEFAULT_CP_API_KEY,
+  apiSecret = DEFAULT_CP_API_SECRET,
+  customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
   contractId = '',
-  isTest = false,
-  proxyUrl = '/api/canadapost/rates'
+  isTest = false
 }) {
   const xmlPayload = buildRateScenarioXml({
     originPostalCode,
@@ -222,65 +329,28 @@ export async function getCanadaPostRates({
 
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
   const targetEndpoint = `${baseUrl}/rs/ship/price`;
-  const authHeader = 'Basic ' + btoa(`${(apiKey || '').trim()}:${(apiSecret || '').trim()}`);
 
-  // Try proxy first if running locally or configured
-  try {
-    const proxyResp = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        xmlPayload,
-        isTest,
-        apiKey,
-        apiSecret,
-        targetEndpoint
-      })
-    });
-
-    if (proxyResp.ok) {
-      const data = await proxyResp.json();
-      if (data.rates && Array.isArray(data.rates)) return data.rates;
-      if (data.xml) return parseCanadaPostPriceQuotes(data.xml);
-    }
-  } catch (_) {
-    // Fall back to direct fetch if proxy not running
-  }
-
-  // Direct fetch to Canada Post REST Gateway
-  const resp = await fetch(targetEndpoint, {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/vnd.cpc.ship.rate-v4+xml',
-      'Content-Type': 'application/vnd.cpc.ship.rate-v4+xml',
-      'Authorization': authHeader,
-      'Accept-language': 'en-CA'
-    },
-    body: xmlPayload
+  const result = await executeCanadaPostProxy({
+    targetEndpoint,
+    xmlPayload,
+    apiKey,
+    apiSecret,
+    customerNumber,
+    isTest
   });
 
-  const text = await resp.text();
-  if (!resp.ok && !text.includes('<price-quote>')) {
-    let errMsg = `HTTP ${resp.status} ${resp.statusText}`;
-    if (text.includes('<description>')) {
-      const desc = text.match(/<description>([^<]+)<\/description>/)?.[1];
-      if (desc) errMsg = desc;
-    }
-    throw new Error(`Canada Post API error: ${errMsg}`);
-  }
-
-  return parseCanadaPostPriceQuotes(text);
+  if (result.rates && Array.isArray(result.rates)) return result.rates;
+  if (result.xml) return parseCanadaPostPriceQuotes(result.xml);
+  throw new Error('Empty response from Canada Post Rating API');
 }
 
 /**
  * Lightweight ping test function to verify Canada Post credentials
  */
 export async function testCanadaPostConnection({
-  apiKey = '',
-  apiSecret = '',
-  customerNumber = '',
+  apiKey = DEFAULT_CP_API_KEY,
+  apiSecret = DEFAULT_CP_API_SECRET,
+  customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
   isTest = false
 }) {
   if (!apiKey || !apiSecret) {
@@ -552,12 +622,11 @@ export async function buyCanadaPostLabel({
   orderNum = '',
   customs = null,
   declarationId = '',
-  apiKey = '',
-  apiSecret = '',
-  customerNumber = '',
+  apiKey = DEFAULT_CP_API_KEY,
+  apiSecret = DEFAULT_CP_API_SECRET,
+  customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
   zonosAccountKey = '',
-  isTest = false,
-  proxyUrl = '/api/canadapost/shipment'
+  isTest = false
 }) {
   const xmlPayload = buildNonContractShipmentXml({
     serviceCode,
@@ -569,54 +638,92 @@ export async function buyCanadaPostLabel({
     declarationId
   });
 
-  const customerId = customerNumber ? customerNumber.trim() : '0007123456';
+  const customerId = customerNumber ? customerNumber.trim() : DEFAULT_CP_CUSTOMER_NUMBER;
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
   const targetEndpoint = `${baseUrl}/rs/${encodeURIComponent(customerId)}/ncshipment`;
-  const authHeader = 'Basic ' + btoa(`${(apiKey || '').trim()}:${(apiSecret || '').trim()}`);
 
-  const headers = {
-    'Accept': 'application/vnd.cpc.ncshipment-v4+xml',
-    'Content-Type': 'application/vnd.cpc.ncshipment-v4+xml',
-    'Authorization': authHeader,
-    'Accept-language': 'en-CA'
-  };
-  if (zonosAccountKey && zonosAccountKey.trim()) {
-    headers['X-CPC-Zonos-Key'] = zonosAccountKey.trim();
-  }
-
-  // Try proxy first
-  try {
-    const proxyResp = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        xmlPayload,
-        isTest,
-        apiKey,
-        apiSecret,
-        targetEndpoint,
-        customerNumber: customerId,
-        zonosAccountKey
-      })
-    });
-
-    if (proxyResp.ok) {
-      const data = await proxyResp.json();
-      if (data.trackingPin && data.labelUrl) return data;
-      if (data.xml) return parseCanadaPostShipmentResponse(data.xml);
-    }
-  } catch (_) {
-    // Fall back to direct fetch
-  }
-
-  // Direct fetch to Canada Post Gateway
-  const resp = await fetch(targetEndpoint, {
-    method: 'POST',
-    headers,
-    body: xmlPayload
+  const result = await executeCanadaPostProxy({
+    targetEndpoint,
+    xmlPayload,
+    apiKey,
+    apiSecret,
+    customerNumber: customerId,
+    zonosAccountKey,
+    isTest
   });
 
-  const text = await resp.text();
-  return parseCanadaPostShipmentResponse(text);
+  if (result.trackingPin && result.labelUrl) return result;
+  if (result.xml) return parseCanadaPostShipmentResponse(result.xml);
+  throw new Error('Empty response from Canada Post Shipment API');
+}
+
+/**
+ * Fetch shipping label PDF as a Blob for viewing or printing (bypassing CORS via proxy)
+ */
+export async function fetchCanadaPostLabelBlob({
+  labelUrl,
+  apiKey = DEFAULT_CP_API_KEY,
+  apiSecret = DEFAULT_CP_API_SECRET
+}) {
+  if (!labelUrl) throw new Error('Label URL is required');
+
+  const key = (apiKey || DEFAULT_CP_API_KEY).trim();
+  const secret = (apiSecret || DEFAULT_CP_API_SECRET).trim();
+
+  // 1. Try local dev proxy if running
+  try {
+    const proxyResp = await fetch(`/api/canadapost/artifact?url=${encodeURIComponent(labelUrl)}`, {
+      headers: {
+        'x-cp-api-key': key,
+        'x-cp-api-secret': secret
+      }
+    });
+    if (proxyResp.ok) {
+      return await proxyResp.blob();
+    }
+  } catch (_) {}
+
+  // 2. Try Google Apps Script proxy (bypasses browser CORS on GitHub Pages)
+  const sheetsUrl = getSavedSheetsUrl();
+  if (sheetsUrl && !sheetsUrl.includes('mock-test')) {
+    try {
+      const gasResp = await fetch(sheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          version: 2,
+          action: 'proxycanadapost',
+          payload: {
+            endpoint: labelUrl,
+            apiKey: key,
+            apiSecret: secret,
+            isArtifact: true
+          }
+        })
+      });
+      if (gasResp.ok) {
+        const json = await gasResp.json();
+        if (json && json.base64) {
+          const byteChars = atob(json.base64);
+          const byteNums = new Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) {
+            byteNums[i] = byteChars.charCodeAt(i);
+          }
+          return new Blob([new Uint8Array(byteNums)], { type: 'application/pdf' });
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Direct fetch
+  const authHeader = 'Basic ' + btoa(`${key}:${secret}`);
+  const resp = await fetch(labelUrl, {
+    headers: {
+      'Accept': 'application/pdf',
+      'Authorization': authHeader
+    }
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching label PDF`);
+  return await resp.blob();
 }
 

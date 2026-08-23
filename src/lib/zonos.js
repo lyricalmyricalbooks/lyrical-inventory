@@ -68,11 +68,105 @@ export function normalizeWeightUnit(unit) {
   return ZONOS_WEIGHT_UNITS[clean] || 'POUND';
 }
 
+export const DEFAULT_ZONOS_API_KEY = 'credential_live_11988839-5711-4e1c-9036-303dc94fb15b';
+
+function getSavedSheetsUrl() {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
+      return localStorage.getItem('lm-sheets-url') || '';
+    }
+  } catch (_) {}
+  try {
+    if (typeof window !== 'undefined' && window.sheetsUrl) {
+      return window.sheetsUrl;
+    }
+  } catch (_) {}
+  return '';
+}
+
+/**
+ * Execute Zonos GraphQL query via direct fetch with proxy fallback
+ */
+export async function executeZonosGraphQL({ query, variables = {}, apiKey = DEFAULT_ZONOS_API_KEY }) {
+  const token = (apiKey || DEFAULT_ZONOS_API_KEY).trim();
+
+  // 1. Attempt direct fetch to Zonos API
+  try {
+    const resp = await fetch(ZONOS_GRAPHQL_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'credentialToken': token
+      },
+      body: JSON.stringify({ query, variables })
+    });
+
+    if (resp.ok) {
+      const json = await resp.json();
+      if (json.errors && json.errors.length > 0) {
+        throw new Error(`Zonos calculation error: ${json.errors.map(e => e.message).join('; ')}`);
+      }
+      return json;
+    }
+
+    // If HTTP error received directly from Zonos
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Zonos API HTTP ${resp.status}: ${text || resp.statusText}`);
+  } catch (err) {
+    // If direct fetch fails (e.g. browser CORS block), fallback to proxies
+
+    // A. Local dev proxy
+    if (typeof window !== 'undefined') {
+      try {
+        const proxyResp = await fetch('/api/zonos/graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, variables, apiKey: token })
+        });
+        if (proxyResp.ok) {
+          const json = await proxyResp.json();
+          if (json.data) return json;
+          if (json.raw && json.raw.data) return json.raw;
+          if (json.errors) throw new Error(`Zonos calculation error: ${json.errors.map(e => e.message).join('; ')}`);
+        }
+      } catch (_) {}
+    }
+
+    // B. Google Apps Script proxy (for GitHub Pages static deploy)
+    const sheetsUrl = getSavedSheetsUrl();
+    if (sheetsUrl && !sheetsUrl.includes('mock-test')) {
+      try {
+        const gasResp = await fetch(sheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            version: 2,
+            action: 'proxyzonos',
+            payload: { query, variables, apiKey: token }
+          })
+        });
+        if (gasResp.ok) {
+          const json = await gasResp.json();
+          if (json && json.data) return json;
+          if (json && json.raw && json.raw.data) return json.raw;
+          if (json && json.errors) throw new Error(`Zonos calculation error: ${json.errors.map(e => e.message).join('; ')}`);
+        }
+      } catch (_) {}
+    }
+
+    throw err;
+  }
+}
+
 /**
  * Test Zonos API key connection with a lightweight introspection query
  */
 export async function testZonosConnection(apiKey) {
-  if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
+  if (apiKey !== undefined && (!apiKey || typeof apiKey !== 'string' || !apiKey.trim())) {
+    return { ok: false, error: 'Zonos API key is required' };
+  }
+  const token = (apiKey || DEFAULT_ZONOS_API_KEY).trim();
+  if (!token) {
     return { ok: false, error: 'Zonos API key is required' };
   }
 
@@ -81,7 +175,7 @@ export async function testZonosConnection(apiKey) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'credentialToken': apiKey.trim()
+        'credentialToken': token
       },
       body: JSON.stringify({
         query: 'query ZonosPing { __schema { queryType { name } } }'
@@ -107,6 +201,28 @@ export async function testZonosConnection(apiKey) {
 
     return { ok: true, timestamp: new Date().toISOString() };
   } catch (err) {
+    // If browser CORS failed, try Apps Script proxy fallback
+    const sheetsUrl = getSavedSheetsUrl();
+    if (sheetsUrl && !sheetsUrl.includes('mock-test')) {
+      try {
+        const gasResp = await fetch(sheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            version: 2,
+            action: 'proxyzonos',
+            payload: { query: 'query ZonosPing { __schema { queryType { name } } }', apiKey: token }
+          })
+        });
+        if (gasResp.ok) {
+          const json = await gasResp.json();
+          if (json && json.data) return { ok: true, timestamp: new Date().toISOString() };
+          if (json && json.raw && json.raw.data) return { ok: true, timestamp: new Date().toISOString() };
+          if (json && json.errors) return { ok: false, error: json.errors.map(e => e.message).join(', ') };
+        }
+      } catch (_) {}
+    }
+
     return { ok: false, error: err.message || 'Network error connecting to Zonos' };
   }
 }
@@ -124,7 +240,11 @@ export async function calculateZonosLandedCost({
   incoterm = 'DDP',
   currency = 'CAD'
 }) {
-  if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
+  if (apiKey !== undefined && (!apiKey || typeof apiKey !== 'string' || !apiKey.trim())) {
+    throw new Error('Zonos API key is required for landed cost calculation');
+  }
+  const token = (apiKey || DEFAULT_ZONOS_API_KEY).trim();
+  if (!token) {
     throw new Error('Zonos API key is required for landed cost calculation');
   }
 
@@ -265,34 +385,17 @@ export async function calculateZonosLandedCost({
     }
   `;
 
-  const resp = await fetch(ZONOS_GRAPHQL_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'credentialToken': apiKey.trim()
+  const json = await executeZonosGraphQL({
+    query: mutation,
+    variables: {
+      parties,
+      items: validItems,
+      cartons,
+      shipmentRating,
+      landedCost
     },
-    body: JSON.stringify({
-      query: mutation,
-      variables: {
-        parties,
-        items: validItems,
-        cartons,
-        shipmentRating,
-        landedCost
-      }
-    })
+    apiKey: (apiKey || DEFAULT_ZONOS_API_KEY).trim()
   });
-
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-    throw new Error(`Zonos API HTTP ${resp.status}: ${text || resp.statusText}`);
-  }
-
-  const json = await resp.json();
-  if (json.errors && json.errors.length > 0) {
-    const msg = json.errors.map(e => e.message).join('; ');
-    throw new Error(`Zonos calculation error: ${msg}`);
-  }
 
   const quotes = json.data?.landedCostCalculateWorkflow || [];
   if (!quotes || quotes.length === 0) {
