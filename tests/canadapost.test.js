@@ -222,6 +222,54 @@ describe('Canada Post Label & Shipment Creation', () => {
 
     expect(xml).toContain('<declaration-id>ZONOS12345678</declaration-id>');
   });
+
+  it('normalizes full state and province names to 2-letter postal codes', async () => {
+    const { normalizeStateOrProvince } = await import('../src/lib/canadapost.js');
+    expect(normalizeStateOrProvince('Arizona', 'US')).toBe('AZ');
+    expect(normalizeStateOrProvince('arizona')).toBe('AZ');
+    expect(normalizeStateOrProvince('California', 'US')).toBe('CA');
+    expect(normalizeStateOrProvince('New York', 'US')).toBe('NY');
+    expect(normalizeStateOrProvince('Ontario', 'CA')).toBe('ON');
+    expect(normalizeStateOrProvince('British Columbia', 'CA')).toBe('BC');
+    expect(normalizeStateOrProvince('QC')).toBe('QC');
+    expect(normalizeStateOrProvince('WA')).toBe('WA');
+  });
+
+  it('correctly formats multi-line addresses and normalized states in shipment XML', async () => {
+    const { buildNonContractShipmentXml } = await import('../src/lib/canadapost.js');
+    const xml = buildNonContractShipmentXml({
+      serviceCode: 'USA.TP',
+      sender: {
+        name: 'Lyricalmyrical Books',
+        address1: '123 Bookish Way',
+        address2: 'Suite 400',
+        city: 'Toronto',
+        province: 'Ontario',
+        postalCode: 'M4B 1B3'
+      },
+      destination: {
+        name: 'Daniela Dawson',
+        address1: 'PO Box 897',
+        address2: '29e laundry hill road',
+        city: 'Bisbee',
+        state: 'Arizona',
+        countryCode: 'US',
+        postalCode: '85603'
+      },
+      parcel: { weightKg: 0.357, lengthCm: 19.5, widthCm: 15, heightCm: 2 }
+    });
+
+    expect(xml).toContain('<address-line-1>123 Bookish Way</address-line-1>');
+    expect(xml).toContain('<address-line-2>Suite 400</address-line-2>');
+    expect(xml).toContain('<prov-state>ON</prov-state>');
+    expect(xml).toContain('<name>Daniela Dawson</name>');
+    expect(xml).toContain('<address-line-1>PO Box 897</address-line-1>');
+    expect(xml).toContain('<address-line-2>29e laundry hill road</address-line-2>');
+    expect(xml).toContain('<city>Bisbee</city>');
+    expect(xml).toContain('<prov-state>AZ</prov-state>');
+    expect(xml).toContain('<postal-zip-code>85603</postal-zip-code>');
+  });
 });
+
 
 

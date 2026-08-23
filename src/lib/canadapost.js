@@ -29,6 +29,47 @@ export const CANADAPOST_SERVICES = {
   'INT.IP.SURF': { name: 'International Parcel - Surface', category: 'international', speed: '4-12 weeks' }
 };
 
+export const US_STATES = {
+  'ALABAMA': 'AL', 'ALASKA': 'AK', 'ARIZONA': 'AZ', 'ARKANSAS': 'AR', 'CALIFORNIA': 'CA',
+  'COLORADO': 'CO', 'CONNECTICUT': 'CT', 'DELAWARE': 'DE', 'FLORIDA': 'FL', 'GEORGIA': 'GA',
+  'HAWAII': 'HI', 'IDAHO': 'ID', 'ILLINOIS': 'IL', 'INDIANA': 'IN', 'IOWA': 'IA',
+  'KANSAS': 'KS', 'KENTUCKY': 'KY', 'LOUISIANA': 'LA', 'MAINE': 'ME', 'MARYLAND': 'MD',
+  'MASSACHUSETTS': 'MA', 'MICHIGAN': 'MI', 'MINNESOTA': 'MN', 'MISSISSIPPI': 'MS', 'MISSOURI': 'MO',
+  'MONTANA': 'MT', 'NEBRASKA': 'NE', 'NEVADA': 'NV', 'NEW HAMPSHIRE': 'NH', 'NEW JERSEY': 'NJ',
+  'NEW MEXICO': 'NM', 'NEW YORK': 'NY', 'NORTH CAROLINA': 'NC', 'NORTH DAKOTA': 'ND', 'OHIO': 'OH',
+  'OKLAHOMA': 'OK', 'OREGON': 'OR', 'PENNSYLVANIA': 'PA', 'RHODE ISLAND': 'RI', 'SOUTH CAROLINA': 'SC',
+  'SOUTH DAKOTA': 'SD', 'TENNESSEE': 'TN', 'TEXAS': 'TX', 'UTAH': 'UT', 'VERMONT': 'VT',
+  'VIRGINIA': 'VA', 'WASHINGTON': 'WA', 'WEST VIRGINIA': 'WV', 'WISCONSIN': 'WI', 'WYOMING': 'WY',
+  'DISTRICT OF COLUMBIA': 'DC', 'PUERTO RICO': 'PR', 'GUAM': 'GU', 'VIRGIN ISLANDS': 'VI'
+};
+
+export const CA_PROVINCES = {
+  'ALBERTA': 'AB', 'BRITISH COLUMBIA': 'BC', 'MANITOBA': 'MB', 'NEW BRUNSWICK': 'NB',
+  'NEWFOUNDLAND': 'NL', 'NEWFOUNDLAND AND LABRADOR': 'NL', 'NOVA SCOTIA': 'NS',
+  'NORTHWEST TERRITORIES': 'NT', 'NUNAVUT': 'NU', 'ONTARIO': 'ON', 'PRINCE EDWARD ISLAND': 'PE',
+  'QUEBEC': 'QC', 'SASKATCHEWAN': 'SK', 'YUKON': 'YT', 'YUKON TERRITORY': 'YT'
+};
+
+/**
+ * Normalize state or province string to 2-letter uppercase postal code (e.g. Arizona -> AZ, Ontario -> ON)
+ */
+export function normalizeStateOrProvince(val, countryCode = '') {
+  if (!val || typeof val !== 'string') return '';
+  const trimmed = val.trim();
+  if (!trimmed) return '';
+  const upper = trimmed.toUpperCase();
+  const c = String(countryCode || '').toUpperCase().trim();
+
+  if (c === 'US' || !c) {
+    if (US_STATES[upper]) return US_STATES[upper];
+  }
+  if (c === 'CA' || !c) {
+    if (CA_PROVINCES[upper]) return CA_PROVINCES[upper];
+  }
+  if (upper.length === 2) return upper;
+  return upper;
+}
+
 /**
  * Clean and format Canadian postal code to standard format without spaces (e.g. M4B1B3)
  */
@@ -416,6 +457,9 @@ export function buildNonContractShipmentXml({
     </customs>`;
   }
 
+  const cleanSenderState = normalizeStateOrProvince(sender.province || sender.state || 'ON', 'CA') || 'ON';
+  const cleanDestState = normalizeStateOrProvince(destination.province || destination.state || '', destCountry);
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <non-contract-shipment xmlns="http://www.canadapost.ca/ws/ncshipment-v4">
   <delivery-spec>
@@ -425,9 +469,9 @@ export function buildNonContractShipmentXml({
       <company>${escapeXml(sender.company || 'Lyricalmyrical Books')}</company>
       <contact-phone>${escapeXml(sender.phone || '4165550199')}</contact-phone>
       <address-details>
-        <address-line-1>${escapeXml(sender.address1 || '123 Main St')}</address-line-1>
+        <address-line-1>${escapeXml(sender.address1 || '123 Main St')}</address-line-1>${sender.address2 ? `\n        <address-line-2>${escapeXml(sender.address2)}</address-line-2>` : ''}
         <city>${escapeXml(sender.city || 'Toronto')}</city>
-        <prov-state>${escapeXml(sender.province || 'ON')}</prov-state>
+        <prov-state>${escapeXml(cleanSenderState)}</prov-state>
         <postal-zip-code>${cleanOriginZip}</postal-zip-code>
       </address-details>
     </sender>
@@ -436,9 +480,9 @@ export function buildNonContractShipmentXml({
       <company>${escapeXml(destination.company || '')}</company>
       <client-voice-number>${escapeXml(destination.phone || '5555555555')}</client-voice-number>
       <address-details>
-        <address-line-1>${escapeXml(destination.address1 || '')}</address-line-1>
+        <address-line-1>${escapeXml(destination.address1 || '')}</address-line-1>${destination.address2 ? `\n        <address-line-2>${escapeXml(destination.address2)}</address-line-2>` : ''}
         <city>${escapeXml(destination.city || '')}</city>
-        <prov-state>${escapeXml(destination.province || destination.state || '')}</prov-state>
+        <prov-state>${escapeXml(cleanDestState)}</prov-state>
         <country-code>${destCountry}</country-code>
         <postal-zip-code>${cleanDestZip}</postal-zip-code>
       </address-details>
