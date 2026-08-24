@@ -564,14 +564,27 @@ describe('Purchased labels stay reprintable offline', () => {
     });
   };
 
+  let mockStore = {};
+  const mockStorage = {
+    getItem: (k) => mockStore[k] ?? null,
+    setItem: (k, v) => { mockStore[k] = String(v); },
+    removeItem: (k) => { delete mockStore[k]; },
+    clear: () => { mockStore = {}; },
+  };
+
   beforeEach(() => {
-    localStorage.clear();
+    mockStore = {};
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: mockStorage,
+      writable: true,
+      configurable: true,
+    });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     delete global.fetch;
-    localStorage.clear();
+    mockStore = {};
   });
 
   it('keeps an earlier label reachable after a later one is bought', async () => {

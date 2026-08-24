@@ -2507,200 +2507,216 @@
   <!-- 3. INTEGRATIONS & APIS SECTION -->
   <div id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations" style="display:none;">
     <!-- INTEGRATIONS & API SERVICES -->
-    <div class="card tc-integrations-card" style="margin-bottom:1.5rem;">
+    <div class="card tc-integrations-card">
       <div class="rec-head tc-integrations-head">
-          <div>
-            <div class="rec-card-title tc-integrations-title">
-              <span class="tc-integrations-icon">🔌</span>
-              <span>Integrations &amp; API Services</span>
-            </div>
-            <div class="rec-card-sub tc-integrations-sub">
-              Connect external services to automate expense scanning, shipping logs, and processing fee reconciliation.
-            </div>
+        <div class="tc-integrations-icon-badge" aria-hidden="true">⚡</div>
+        <div>
+          <div class="rec-card-title tc-integrations-title">
+            <span>Integrations &amp; API Services</span>
           </div>
-        </div>
-        
-        <div style="display:flex;flex-direction:column;gap:1.25rem;">
-          
-          <!-- Gemini API Section -->
-          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
-            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-gemini" onclick="toggleIntegrationSection('gemini')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('gemini');}">
-              <div>
-                <strong style="font-size:13px;color:var(--text1);">♊ Gemini AI Assistant</strong>
-                <div style="font-size:11px;color:var(--text3);">Used to analyze and automatically categorize receipt photos during upload.</div>
-              </div>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-gemini">▾</span>
-            </div>
-            <div class="oc-collapse-body" id="tc-integration-body-gemini" style="display:flex;flex-direction:column;gap:0.75rem;">
-              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Gemini API Key</label>
-                  <input type="password" id="tc-api-key" placeholder="AI Studio key (AI_KEY)..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <div class="form-group" style="flex:1;min-width:120px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Base Currency</label>
-                  <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled style="width:100%;font-size:12px;height:35px;background:rgba(255,255,255,0.03);">
-                    <option value="CAD">CAD (Default)</option>
-                  </select>
-                </div>
-                <button id="tc-save-config-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
-              </div>
-            </div>
+          <div class="rec-card-sub tc-integrations-sub">
+            Connect external cloud services to automate receipt AI extraction, carrier postage syncing, international duties calculation, and Stripe processing fees.
           </div>
-
-          <!-- Shippo API Section -->
-          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
-            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-shippo" onclick="toggleIntegrationSection('shippo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('shippo');}">
-              <div>
-                <strong style="font-size:13px;color:var(--text1);">📦 Shippo Live Import</strong>
-                <div style="font-size:11px;color:var(--text3);">Syncs non-refunded transaction rates straight into your Shipping &amp; Postage ledger.</div>
-              </div>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-shippo">▾</span>
-            </div>
-            <div class="oc-collapse-body" id="tc-integration-body-shippo" style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
-              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-                <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Shippo Live API Key</label>
-                  <input type="password" id="tc-shippo-key" placeholder="shippo_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <button class="btn gold outline" id="tc-shippo-btn" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="importShippoShippingFromApi()">Import Shippo Shipping</button>
-              </div>
-              <div id="tc-shippo-status" style="font-size:11px;color:var(--text3);">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
-              <section class="shipping-reconciliation" aria-labelledby="shipping-reconciliation-title">
-                <div class="shipping-reconciliation-head">
-                  <div>
-                    <strong id="shipping-reconciliation-title">Shipping reconciliation</strong>
-                    <p>Link paid postage to its website order. Suggested matches always need your confirmation.</p>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-                    <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
-                    <button class="btn sm" id="shipping-reconciliation-clear" type="button" onclick="clearShippingReconciliationList()">Clear list</button>
-                    <button class="btn sm" id="shipping-reconciliation-close" type="button" onclick="closeShippingReconciliation()" aria-label="Close shipping reconciliation">Close</button>
-                  </div>
-                </div>
-                <div id="shipping-reconciliation-list" aria-live="polite"></div>
-              </section>
-              <button class="btn sm" id="shipping-reconciliation-open" type="button" onclick="openShippingReconciliation()" style="display:none;justify-self:start;">Open reconciliation</button>
-            </div>
-          </div>
-
-          <!-- Zonos API Section -->
-          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
-            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-zonos" onclick="toggleIntegrationSection('zonos')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('zonos');}">
-              <div>
-                <strong style="font-size:13px;color:var(--text1);">🌐 Zonos Cross-Border Duties &amp; Taxes</strong>
-                <div style="font-size:11px;color:var(--text3);">Calculate real-time customs duties, import VAT/GST, carrier clearance fees, and landed costs for international orders.</div>
-              </div>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-zonos">▾</span>
-            </div>
-            <div class="oc-collapse-body" id="tc-integration-body-zonos" style="display:flex;flex-direction:column;gap:0.75rem;">
-              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Zonos Live API Key (credentialToken)</label>
-                  <input type="password" id="tc-zonos-key" placeholder="credential_live_…" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <div class="form-group" style="flex:1.5;min-width:180px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Zonos Account Key</label>
-                  <input type="text" id="tc-zonos-account-key" placeholder="credential_live_…" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <div class="form-group" style="display:flex;align-items:center;gap:6px;min-height:35px;margin-bottom:0;">
-                  <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
-                    <input type="checkbox" id="tc-zonos-enabled" checked style="accent-color:var(--gold);">
-                    <span>Enable Duties API</span>
-                  </label>
-                </div>
-                <button id="tc-zonos-test-btn" class="btn gold outline" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="testZonosConnectionHandler()">Test Connection</button>
-                <button id="tc-save-zonos-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
-              </div>
-              <div id="tc-zonos-status" style="font-size:11px;color:var(--text3);min-height:16px;"></div>
-            </div>
-          </div>
-
-          <!-- Canada Post Direct API Section -->
-          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
-            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-canadapost" onclick="toggleIntegrationSection('canadapost')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('canadapost');}">
-              <div>
-                <strong style="font-size:13px;color:var(--text1);">🇨🇦 Canada Post Direct API</strong>
-                <div style="font-size:11px;color:var(--text3);">Official Canada Post Web Services for direct live rate quotes, Small Business / Contract pricing, and tracking.</div>
-              </div>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-canadapost">▾</span>
-            </div>
-            <div class="oc-collapse-body" id="tc-integration-body-canadapost" style="display:flex;flex-direction:column;gap:0.75rem;">
-              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">API Key / Username / Client ID</label>
-                  <input type="text" id="tc-cp-key" placeholder="Your Canada Post API key" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">API Secret / Password</label>
-                  <input type="password" id="tc-cp-secret" placeholder="Your Canada Post API secret" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <div class="form-group" style="flex:1.2;min-width:140px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Customer # (Optional)</label>
-                  <input type="text" id="tc-cp-customer-number" placeholder="7–10 digits" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <div class="form-group" style="flex:1.2;min-width:140px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Contract ID (Optional)</label>
-                  <input type="text" id="tc-cp-contract-id" placeholder="e.g. 4299100" style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-              </div>
-              <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:4px;">
-                <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
-                  <input type="checkbox" id="tc-cp-enabled" checked style="accent-color:var(--gold);">
-                  <span>Enable Direct Canada Post API</span>
-                </label>
-                <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;">
-                  <input type="checkbox" id="tc-cp-test-mode" style="accent-color:var(--gold);">
-                  <span>Sandbox Environment (ct.soa-gw)</span>
-                </label>
-                <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;" title="Automatically generate 13-character Zonos Declaration IDs for US-bound packages">
-                  <input type="checkbox" id="tc-cp-zonos-auto" checked style="accent-color:var(--gold);">
-                  <span>Auto-Prepay US Duties (Zonos)</span>
-                </label>
-                <div style="margin-left:auto;display:flex;gap:8px;">
-                  <button id="tc-cp-test-btn" class="btn gold outline" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="testCanadaPostConnectionHandler()">Test Connection</button>
-                  <button id="tc-save-cp-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
-                </div>
-              </div>
-              <div id="tc-cp-status" style="font-size:11px;color:var(--text3);min-height:16px;"></div>
-            </div>
-          </div>
-
-          <!-- Stripe API Section -->
-          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
-            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
-              <div>
-                <strong style="font-size:13px;color:var(--text1);">💳 Stripe Processing Fees</strong>
-                <div style="font-size:11px;color:var(--text3);">
-                  Fetch annual balance transactions processing fees.
-                   <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-text);">Create restricted key in Stripe →</a>
-                </div>
-              </div>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-stripe">▾</span>
-            </div>
-            <div class="oc-collapse-body" id="tc-integration-body-stripe" style="display:flex;flex-direction:column;gap:0.75rem;">
-              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-                <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Restricted Stripe API Key</label>
-                  <input type="password" id="stripe-fees-key" placeholder="rk_live_... or sk_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn" style="height:35px;padding:0 16px;font-size:12px;">Fetch Stripe Fees</button>
-              </div>
-              <div id="stripe-fees-status" style="font-size:11px;color:var(--text3);min-height:16px;"></div>
-              <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
-              <div id="stripe-fees-results-wrap" style="display:none;"></div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
-                <select id="stripe-fees-year" style="display:none;height:34px;font-size:12px;background:rgba(255,255,255,0.03);"><option value="all">All years</option></select>
-                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;font-size:11px;height:34px;padding:0 12px;">➕ Insert fees into ledger</button>
-                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⚖ Reconcile against sales</button>
-                <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⬇ Download audit CSV</button>
-                <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;font-size:11px;height:34px;padding:0 12px;">Forget key</button>
-              </div>
-            </div>
-          </div>
-
         </div>
       </div>
+      
+      <div class="tc-integrations-list">
+        
+        <!-- Gemini API Section -->
+        <div class="tc-integration-section">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-gemini" onclick="toggleIntegrationSection('gemini')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('gemini');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-gemini" aria-hidden="true">♊</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Gemini AI Assistant</strong>
+                <div class="tc-service-desc">Used to analyze and automatically categorize receipt photos during upload.</div>
+              </div>
+            </div>
+            <span class="oc-collapse-chevron" id="tc-integration-chevron-gemini">▾</span>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-gemini">
+            <div class="tc-form-grid grid-gemini">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-api-key">Gemini API Key</label>
+                <input type="password" id="tc-api-key" class="tc-form-input" placeholder="AI Studio key (AI_KEY)..." autocomplete="off">
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-base-cur">Base Currency</label>
+                <select id="tc-base-cur" class="tc-form-select" onchange="saveTaxCenterSettings()" disabled>
+                  <option value="CAD">CAD (Default)</option>
+                </select>
+              </div>
+              <button id="tc-save-config-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shippo API Section -->
+        <div class="tc-integration-section">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-shippo" onclick="toggleIntegrationSection('shippo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('shippo');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-shippo" aria-hidden="true">📦</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Shippo Live Import</strong>
+                <div class="tc-service-desc">Syncs non-refunded transaction rates straight into your Shipping &amp; Postage ledger.</div>
+              </div>
+            </div>
+            <span class="oc-collapse-chevron" id="tc-integration-chevron-shippo">▾</span>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-shippo">
+            <div class="tc-form-grid grid-shippo">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-shippo-key">Shippo Live API Key</label>
+                <input type="password" id="tc-shippo-key" class="tc-form-input" placeholder="shippo_live_..." autocomplete="off">
+              </div>
+              <button class="btn gold outline" id="tc-shippo-btn" onclick="importShippoShippingFromApi()">Import Shippo Shipping</button>
+            </div>
+            <div id="tc-shippo-status" class="tc-status-msg">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
+            
+            <section class="shipping-reconciliation" aria-labelledby="shipping-reconciliation-title">
+              <div class="shipping-reconciliation-head">
+                <div>
+                  <strong id="shipping-reconciliation-title">Shipping reconciliation</strong>
+                  <p>Link paid postage to its website order. Suggested matches always need your confirmation.</p>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                  <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
+                  <button class="btn sm" id="shipping-reconciliation-clear" type="button" onclick="clearShippingReconciliationList()">Clear list</button>
+                  <button class="btn sm" id="shipping-reconciliation-close" type="button" onclick="closeShippingReconciliation()" aria-label="Close shipping reconciliation">Close</button>
+                </div>
+              </div>
+              <div id="shipping-reconciliation-list" aria-live="polite"></div>
+            </section>
+            <button class="btn sm" id="shipping-reconciliation-open" type="button" onclick="openShippingReconciliation()" style="display:none;justify-self:start;margin-top:var(--space-2);">Open reconciliation</button>
+          </div>
+        </div>
+
+        <!-- Zonos API Section -->
+        <div class="tc-integration-section">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-zonos" onclick="toggleIntegrationSection('zonos')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('zonos');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-zonos" aria-hidden="true">🌐</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Zonos Cross-Border Duties &amp; Taxes</strong>
+                <div class="tc-service-desc">Calculate real-time customs duties, import VAT/GST, carrier clearance fees, and landed costs for international orders.</div>
+              </div>
+            </div>
+            <span class="oc-collapse-chevron" id="tc-integration-chevron-zonos">▾</span>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-zonos">
+            <div class="tc-form-grid grid-zonos">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-zonos-key">Zonos Live API Key (credentialToken)</label>
+                <input type="password" id="tc-zonos-key" class="tc-form-input" placeholder="credential_live_…" autocomplete="off">
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-zonos-account-key">Zonos Account Key</label>
+                <input type="text" id="tc-zonos-account-key" class="tc-form-input" placeholder="credential_live_…" autocomplete="off">
+              </div>
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="tc-zonos-enabled" checked>
+                <span>Enable Duties API</span>
+              </label>
+              <div style="display:flex;gap:8px;">
+                <button id="tc-zonos-test-btn" class="btn gold outline" onclick="testZonosConnectionHandler()">Test Connection</button>
+                <button id="tc-save-zonos-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
+              </div>
+            </div>
+            <div id="tc-zonos-status" class="tc-status-msg"></div>
+          </div>
+        </div>
+
+        <!-- Canada Post Direct API Section -->
+        <div class="tc-integration-section">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-canadapost" onclick="toggleIntegrationSection('canadapost')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('canadapost');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-canadapost" aria-hidden="true">🇨🇦</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Canada Post Direct API</strong>
+                <div class="tc-service-desc">Official Canada Post Web Services for direct live rate quotes, Small Business / Contract pricing, and tracking.</div>
+              </div>
+            </div>
+            <span class="oc-collapse-chevron" id="tc-integration-chevron-canadapost">▾</span>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-canadapost">
+            <div class="tc-form-grid grid-canadapost">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cp-key">API Key / Username / Client ID</label>
+                <input type="text" id="tc-cp-key" class="tc-form-input" placeholder="Your Canada Post API key" autocomplete="off">
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cp-secret">API Secret / Password</label>
+                <input type="password" id="tc-cp-secret" class="tc-form-input" placeholder="Your Canada Post API secret" autocomplete="off">
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cp-customer-number">Customer # (Optional)</label>
+                <input type="text" id="tc-cp-customer-number" class="tc-form-input" placeholder="7–10 digits" autocomplete="off">
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cp-contract-id">Contract ID (Optional)</label>
+                <input type="text" id="tc-cp-contract-id" class="tc-form-input" placeholder="e.g. 4299100" autocomplete="off">
+              </div>
+            </div>
+            <div class="tc-form-actions-row">
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="tc-cp-enabled" checked>
+                <span>Enable Direct Canada Post API</span>
+              </label>
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="tc-cp-test-mode">
+                <span>Sandbox Environment (ct.soa-gw)</span>
+              </label>
+              <label class="tc-toggle-wrap" title="Automatically generate 13-character Zonos Declaration IDs for US-bound packages">
+                <input type="checkbox" id="tc-cp-zonos-auto" checked>
+                <span>Auto-Prepay US Duties (Zonos)</span>
+              </label>
+              <div style="margin-left:auto;display:flex;gap:8px;">
+                <button id="tc-cp-test-btn" class="btn gold outline" onclick="testCanadaPostConnectionHandler()">Test Connection</button>
+                <button id="tc-save-cp-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
+              </div>
+            </div>
+            <div id="tc-cp-status" class="tc-status-msg"></div>
+          </div>
+        </div>
+
+        <!-- Stripe API Section -->
+        <div class="tc-integration-section">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-stripe" aria-hidden="true">💳</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Stripe Processing Fees</strong>
+                <div class="tc-service-desc">
+                  Fetch annual balance transactions processing fees.
+                  <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-text);font-weight:600;">Create restricted key in Stripe →</a>
+                </div>
+              </div>
+            </div>
+            <span class="oc-collapse-chevron" id="tc-integration-chevron-stripe">▾</span>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-stripe">
+            <div class="tc-form-grid grid-stripe">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="stripe-fees-key">Restricted Stripe API Key</label>
+                <input type="password" id="stripe-fees-key" class="tc-form-input" placeholder="rk_live_... or sk_live_..." autocomplete="off">
+              </div>
+              <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn">Fetch Stripe Fees</button>
+            </div>
+            <div id="stripe-fees-status" class="tc-status-msg"></div>
+            <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
+            <div id="stripe-fees-results-wrap" style="display:none;"></div>
+            <div class="tc-form-actions-row">
+              <select id="stripe-fees-year" class="tc-form-select" style="display:none;width:auto;"><option value="all">All years</option></select>
+              <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;font-size:11px;">➕ Insert fees into ledger</button>
+              <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;font-size:11px;">⚖ Reconcile against sales</button>
+              <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;font-size:11px;">⬇ Download audit CSV</button>
+              <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;font-size:11px;">Forget key</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
   </div> <!-- /#tc-sec-integrations -->
 </div>
 
