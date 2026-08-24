@@ -492,6 +492,26 @@
   border: 1px solid var(--border);
 }
 
+/* Integrations & API Services dark theme */
+.theme-dark .tc-integration-section {
+  background: var(--surface-sunken);
+  border-color: var(--border2);
+}
+.theme-dark .tc-integration-section:hover {
+  border-color: var(--border);
+}
+.theme-dark .shipping-reconciliation {
+  background: var(--surface-card);
+  border-color: var(--border);
+}
+.theme-dark .shipping-reconciliation-row {
+  background: var(--surface-sunken);
+  border-color: var(--border2);
+}
+.theme-dark .shipping-reconciliation-row:hover {
+  border-color: var(--gold-line);
+}
+
 } /* end @media screen — component corrections */
 
 /* Belt and braces: the pre-paint bootstrap in index.html paints <html> inline
