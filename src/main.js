@@ -395,6 +395,7 @@ import {
   onZonosDeclarationIdInput,
   pasteZonosDeclarationId,
   autoGenerateZonosDeclarationHandler,
+  checkCanadaPostAccountAndPinHandler,
   openZonosPrepayAppHandler,
   calculateCanadaPostRatesHandler,
   renderCanadaPostRatesCard,
@@ -2127,7 +2128,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v24';
+const EXPECTED_SCRIPT_VERSION = 'v25';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -21014,6 +21015,7 @@ window.testZonosConnectionHandler = testZonosConnectionHandler;
 window.onZonosDeclarationIdInput = onZonosDeclarationIdInput;
 window.pasteZonosDeclarationId = pasteZonosDeclarationId;
 window.autoGenerateZonosDeclarationHandler = autoGenerateZonosDeclarationHandler;
+window.checkCanadaPostAccountAndPinHandler = checkCanadaPostAccountAndPinHandler;
 window.openZonosPrepayAppHandler = openZonosPrepayAppHandler;
 window.calculateCanadaPostRatesHandler = calculateCanadaPostRatesHandler;
 window.testCanadaPostConnectionHandler = testCanadaPostConnectionHandler;

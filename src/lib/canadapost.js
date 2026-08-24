@@ -194,6 +194,103 @@ export const DEFAULT_CP_API_KEY = '5832e3366d6aeb872e41adfab8192271';
 export const DEFAULT_CP_API_SECRET = '75fdce5f4799ac746b93cc34944ff146';
 export const DEFAULT_CP_CUSTOMER_NUMBER = '0007123456';
 
+/**
+ * Resolve which Canada Post environment a set of settings will actually hit.
+ * Sandbox shipments are never charged and never enter the Online Business Centre;
+ * live shipments bill the merchant's real account, so the two must be told apart.
+ */
+export function resolveCanadaPostEnvironment({ isTest = false } = {}) {
+  const sandbox = !!isTest;
+  return {
+    isTest: sandbox,
+    mode: sandbox ? 'sandbox' : 'live',
+    baseUrl: sandbox ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL,
+    hostname: sandbox ? 'ct.soa-gw.canadapost.ca' : 'soa-gw.canadapost.ca',
+    label: sandbox ? 'Sandbox Test Mode' : 'Live Production Mode',
+    description: sandbox
+      ? 'Shipments are simulated against the Canada Post development gateway. Nothing is charged and no label is valid for mailing.'
+      : 'Shipments are created against your live Canada Post account, charged to your card on file, and appear in the Online Business Centre.'
+  };
+}
+
+/**
+ * Canada Post customer numbers are 7 to 10 digits (commonly zero-padded to 10).
+ */
+export function isValidCustomerNumber(customerNumber) {
+  const digits = String(customerNumber || '').replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 10;
+}
+
+export function normalizeCustomerNumber(customerNumber) {
+  return String(customerNumber || '').replace(/\D/g, '').slice(0, 10);
+}
+
+/**
+ * True when the supplied credentials are the bundled demo values rather than the
+ * merchant's own Canada Post account.
+ */
+export function isUsingDemoCredentials({ apiKey = '', apiSecret = '', customerNumber = '' } = {}) {
+  return (
+    String(apiKey || '').trim() === DEFAULT_CP_API_KEY ||
+    String(apiSecret || '').trim() === DEFAULT_CP_API_SECRET ||
+    normalizeCustomerNumber(customerNumber) === normalizeCustomerNumber(DEFAULT_CP_CUSTOMER_NUMBER)
+  );
+}
+
+function isSimulationAllowed({ apiKey, apiSecret, customerNumber, isTest }) {
+  return !!isTest || isUsingDemoCredentials({ apiKey, apiSecret, customerNumber });
+}
+
+/**
+ * Audit a Canada Post configuration before any money is spent.
+ * Returns the resolved environment plus blocking errors and non-blocking warnings,
+ * so the publisher can see exactly which account a label will be billed to.
+ */
+export function validateCanadaPostAccount({
+  apiKey = '',
+  apiSecret = '',
+  customerNumber = '',
+  contractId = '',
+  isTest = false
+} = {}) {
+  const env = resolveCanadaPostEnvironment({ isTest });
+  const errors = [];
+  const warnings = [];
+
+  const key = String(apiKey || '').trim();
+  const secret = String(apiSecret || '').trim();
+  const custDigits = normalizeCustomerNumber(customerNumber);
+  const usingDemo = isUsingDemoCredentials({ apiKey: key, apiSecret: secret, customerNumber: custDigits });
+
+  if (!key) errors.push('Canada Post API key is missing.');
+  if (!secret) errors.push('Canada Post API secret / password is missing.');
+  if (!custDigits) {
+    errors.push('Canada Post customer number is missing — labels cannot be attached to your account without it.');
+  } else if (!isValidCustomerNumber(custDigits)) {
+    errors.push(`Canada Post customer number "${custDigits}" is ${custDigits.length} digits; it must be 7 to 10 digits.`);
+  }
+
+  if (!env.isTest && usingDemo) {
+    errors.push('Live Production Mode is selected but the bundled demo credentials are still in use. Enter your own Canada Post API key, secret, and customer number before buying a label.');
+  }
+  if (env.isTest) {
+    warnings.push('Sandbox Test Mode is on. Labels created here are not real, are not charged, and cannot be mailed.');
+  }
+  if (contractId && !env.isTest && !custDigits) {
+    warnings.push('A contract ID is set without a customer number; contract rates will not be applied.');
+  }
+
+  return {
+    ok: errors.length === 0,
+    environment: env,
+    mode: env.mode,
+    usingDemoCredentials: usingDemo,
+    customerNumber: custDigits,
+    errors,
+    warnings
+  };
+}
+
 function getSavedSheetsUrl() {
   try {
     if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
@@ -464,7 +561,8 @@ export async function executeCanadaPostProxy({
   apiSecret = DEFAULT_CP_API_SECRET,
   customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
   zonosAccountKey = '',
-  isTest = false
+  isTest = false,
+  allowSimulation = null
 }) {
   const key = (apiKey || DEFAULT_CP_API_KEY).trim();
   const secret = (apiSecret || DEFAULT_CP_API_SECRET).trim();
@@ -545,9 +643,11 @@ export async function executeCanadaPostProxy({
     const text = await resp.text();
     return { ok: resp.ok, xml: text };
   } catch (directErr) {
-    // Browser CORS rejection or offline network disconnect
-    if (isShipment) {
-      // Provide simulated offline/sandbox shipment creation when in test mode or default keys
+    // Browser CORS rejection or offline network disconnect.
+    // A simulated shipment produces a tracking PIN that does not exist at Canada Post.
+    // Handing that to a customer, billing it to the ledger, or marking an order shipped
+    // would all be wrong, so simulation is confined to sandbox/demo-credential runs.
+    if (isShipment && (allowSimulation === null ? isSimulationAllowed({ apiKey, apiSecret, customerNumber, isTest }) : !!allowSimulation)) {
       const mockShipmentId = `CP-SHIP-${Date.now().toString().slice(-8)}`;
       const mockTrackingPin = `7012${Date.now().toString().slice(-12)}`;
       const mockLabelUrl = `local://canadapost/label/${mockTrackingPin}`;
@@ -557,8 +657,15 @@ export async function executeCanadaPostProxy({
         trackingPin: mockTrackingPin,
         labelUrl: mockLabelUrl,
         receiptUrl: mockLabelUrl,
-        isSimulated: true
+        isSimulated: true,
+        simulationReason: directErr.message || 'Canada Post gateway unreachable'
       };
+    }
+    if (isShipment) {
+      throw new Error(
+        `Canada Post could not be reached, so no label was purchased and no shipment was created (${directErr.message}). ` +
+        'Check your connection, or run the local backend / Google Apps Script proxy, then try again.'
+      );
     }
     throw new Error(`Canada Post connection: ${directErr.message}`);
   }
@@ -643,6 +750,108 @@ export async function testCanadaPostConnection({
     servicesCount: quotes.length,
     quotes
   };
+}
+
+/**
+ * Parse a Canada Post tracking summary XML document.
+ */
+export function parseCanadaPostTrackingSummary(xmlText) {
+  if (!xmlText || typeof xmlText !== 'string') {
+    throw new Error('Empty response from Canada Post Tracking API');
+  }
+
+  if (/<messages?[\s>]/.test(xmlText) && xmlText.includes('<description>')) {
+    const code = xmlText.match(/<code>([^<]+)<\/code>/)?.[1] || 'ERROR';
+    const desc = xmlText.match(/<description>([^<]+)<\/description>/)?.[1] || 'Tracking lookup failed';
+    throw new Error(`Canada Post [${code}]: ${desc}`);
+  }
+
+  const pin = xmlText.match(/<pin>([^<]+)<\/pin>/)?.[1] || '';
+  if (!pin) {
+    throw new Error('Canada Post returned no tracking record for that PIN.');
+  }
+
+  return {
+    ok: true,
+    found: true,
+    pin,
+    originPostalId: xmlText.match(/<origin-postal-id>([^<]+)<\/origin-postal-id>/)?.[1] || '',
+    destinationPostalId: xmlText.match(/<destination-postal-id>([^<]+)<\/destination-postal-id>/)?.[1] || '',
+    destinationProvince: xmlText.match(/<destination-province>([^<]+)<\/destination-province>/)?.[1] || '',
+    serviceName: xmlText.match(/<service-name>([^<]+)<\/service-name>/)?.[1] || '',
+    status: xmlText.match(/<event-description>([^<]+)<\/event-description>/)?.[1] || '',
+    eventDateTime: xmlText.match(/<event-date-time>([^<]+)<\/event-date-time>/)?.[1] || '',
+    eventLocation: xmlText.match(/<event-location>([^<]+)<\/event-location>/)?.[1] || '',
+    expectedDeliveryDate: xmlText.match(/<expected-delivery-date>([^<]+)<\/expected-delivery-date>/)?.[1] || '',
+    actualDeliveryDate: xmlText.match(/<actual-delivery-date>([^<]+)<\/actual-delivery-date>/)?.[1] || '',
+    attemptedDate: xmlText.match(/<attempted-date>([^<]+)<\/attempted-date>/)?.[1] || ''
+  };
+}
+
+/**
+ * Verify a tracking PIN exists at Canada Post, confirming a purchased label is real
+ * and reached the merchant's account. Routes through the same proxy chain as the
+ * other calls so it works from GitHub Pages as well as local dev.
+ */
+export async function verifyCanadaPostTrackingPin({
+  pin,
+  apiKey = DEFAULT_CP_API_KEY,
+  apiSecret = DEFAULT_CP_API_SECRET,
+  isTest = false
+}) {
+  const cleanPin = String(pin || '').replace(/[^0-9A-Za-z]/g, '');
+  if (!cleanPin) throw new Error('A tracking PIN is required.');
+
+  const key = (apiKey || DEFAULT_CP_API_KEY).trim();
+  const secret = (apiSecret || DEFAULT_CP_API_SECRET).trim();
+  const env = resolveCanadaPostEnvironment({ isTest });
+  const targetEndpoint = `${env.baseUrl}/vis/tracking/pin/${encodeURIComponent(cleanPin)}/summary`;
+
+  // 1. Local dev / backend proxy
+  if (typeof window !== 'undefined') {
+    try {
+      const proxyResp = await fetch(
+        `/api/canadapost/track?pin=${encodeURIComponent(cleanPin)}&test=${env.isTest ? 'true' : 'false'}`,
+        { headers: { 'x-cp-api-key': key, 'x-cp-api-secret': secret } }
+      );
+      if (proxyResp.ok) {
+        const data = await proxyResp.json();
+        if (data.xml) return { ...parseCanadaPostTrackingSummary(data.xml), environment: env };
+      }
+    } catch (_) {}
+  }
+
+  // 2. Google Apps Script proxy (bypasses browser CORS on GitHub Pages)
+  const sheetsUrl = getSavedSheetsUrl();
+  if (sheetsUrl && !sheetsUrl.includes('mock-test')) {
+    try {
+      const gasResp = await fetch(sheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          version: 2,
+          action: 'proxycanadapost',
+          payload: { endpoint: targetEndpoint, apiKey: key, apiSecret: secret, isTracking: true }
+        })
+      });
+      if (gasResp.ok) {
+        const json = await gasResp.json();
+        if (json && json.xml) return { ...parseCanadaPostTrackingSummary(json.xml), environment: env };
+      }
+    } catch (_) {}
+  }
+
+  // 3. Direct fetch
+  const authHeader = 'Basic ' + btoa(`${key}:${secret}`);
+  const resp = await fetch(targetEndpoint, {
+    headers: {
+      'Accept': 'application/vnd.cpc.track+xml',
+      'Authorization': authHeader,
+      'Accept-language': 'en-CA'
+    }
+  });
+  const text = await resp.text();
+  return { ...parseCanadaPostTrackingSummary(text), environment: env };
 }
 
 /**
@@ -734,12 +943,22 @@ function escapeXml(unsafe) {
 }
 
 /**
- * Validate 13-character Zonos Declaration ID format (alphanumeric, e.g. 13 characters)
+ * Normalize a Zonos Declaration ID to its canonical form: 13 lowercase base36 characters.
+ * Zonos issues these lowercase (e.g. 0rd4dpkrvc1y9); Canada Post forwards the value
+ * verbatim, so the case must be preserved exactly as Zonos issued it.
+ */
+export function formatDeclarationId(declarationId) {
+  if (!declarationId || typeof declarationId !== 'string') return '';
+  return declarationId.toLowerCase().trim().replace(/[^a-z0-9]/g, '').slice(0, 13);
+}
+
+/**
+ * Validate a 13-character Zonos Declaration ID. Accepts either case on input;
+ * the canonical stored and transmitted form is lowercase base36.
  */
 export function validateDeclarationId(declarationId) {
   if (!declarationId || typeof declarationId !== 'string') return false;
-  const clean = declarationId.trim().toUpperCase();
-  return /^[A-Z0-9]{13}$/.test(clean);
+  return /^[a-z0-9]{13}$/.test(declarationId.trim().toLowerCase());
 }
 
 /**
@@ -763,7 +982,7 @@ export function buildNonContractShipmentXml({
   const destCountry = String(destination.countryCode || 'CA').toUpperCase().trim();
   const cleanDestZip = destCountry === 'CA' ? cleanPostalCode(destination.postalCode) : (destination.postalCode || destination.zip || '90210');
 
-  const cleanDeclId = (declarationId || customs?.declarationId || '').trim().toUpperCase();
+  const cleanDeclId = formatDeclarationId(declarationId || customs?.declarationId || '');
   let declXml = '';
   if (cleanDeclId) {
     declXml = `\n      <declaration-id>${escapeXml(cleanDeclId)}</declaration-id>`;
@@ -904,9 +1123,14 @@ export async function buyCanadaPostLabel({
     declarationId
   });
 
-  const customerId = customerNumber ? customerNumber.trim() : DEFAULT_CP_CUSTOMER_NUMBER;
-  const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
-  const targetEndpoint = `${baseUrl}/rs/${encodeURIComponent(customerId)}/ncshipment`;
+  // Confirm the shipment will be billed to a real, correctly-formatted account before spending money.
+  const audit = validateCanadaPostAccount({ apiKey, apiSecret, customerNumber, isTest });
+  if (!audit.ok) {
+    throw new Error(audit.errors.join(' '));
+  }
+
+  const customerId = audit.customerNumber || normalizeCustomerNumber(DEFAULT_CP_CUSTOMER_NUMBER);
+  const targetEndpoint = `${audit.environment.baseUrl}/rs/${encodeURIComponent(customerId)}/ncshipment`;
 
   const result = await executeCanadaPostProxy({
     targetEndpoint,
@@ -927,6 +1151,8 @@ export async function buyCanadaPostLabel({
     throw new Error('Empty response from Canada Post Shipment API');
   }
 
+  const isSimulated = !!(result.isSimulated || responseData.isSimulated);
+
   // Cache shipment context for instant high-res label reproduction
   setLastPurchasedShipmentContext({
     serviceCode,
@@ -938,12 +1164,22 @@ export async function buyCanadaPostLabel({
     destination,
     parcel,
     customs,
-    declarationId,
+    declarationId: formatDeclarationId(declarationId || customs?.declarationId || ''),
     customerNumber: customerId,
+    isSimulated,
+    mode: audit.environment.mode,
     purchasedAt: new Date().toISOString()
   });
 
-  return responseData;
+  return {
+    ...responseData,
+    isSimulated,
+    simulationReason: result.simulationReason || '',
+    mode: audit.environment.mode,
+    environment: audit.environment,
+    customerNumber: customerId,
+    warnings: audit.warnings
+  };
 }
 
 /**

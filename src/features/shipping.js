@@ -108,6 +108,9 @@ import {
   DEFAULT_CP_CUSTOMER_NUMBER,
   generateCanadaPostLabelSvg,
   getLastPurchasedShipmentContext,
+  validateCanadaPostAccount,
+  verifyCanadaPostTrackingPin,
+  resolveCanadaPostEnvironment,
 } from '../lib/canadapost.js';
 
 function getShippingReconciliationOrders() {
@@ -2326,6 +2329,156 @@ async function pasteZonosDeclarationId() {
   }
 }
 
+/**
+ * Show that a shipment was simulated rather than purchased.
+ * Called instead of the success path so no expense is booked and no order is marked shipped.
+ */
+function renderSimulatedCanadaPostNotice(result) {
+  const labelPanel = $('cp-purchased-label-panel');
+  if (!labelPanel) return;
+  labelPanel.style.display = 'block';
+  labelPanel.innerHTML = `
+    <div class="cp-purchased-panel" style="border-color:var(--amber,var(--border));">
+      <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:22px;line-height:1.1;">⚠️</span>
+        <div style="flex:1;min-width:220px;">
+          <strong style="font-size:14px;">Simulated shipment — nothing was purchased</strong>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px;">
+            Canada Post could not be reached${result.simulationReason ? ` (${escapeHtml(result.simulationReason)})` : ''},
+            so a placeholder tracking number was produced for layout preview only.
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;">
+            This parcel has <strong>not</strong> been paid for and the number below will not scan.
+            The order was left unshipped and no postage expense was recorded. Reconnect and buy the label again.
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;">
+            Placeholder PIN: <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(result.trackingPin || '—')}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Verify the Canada Post account configuration and, when a PIN is supplied,
+ * confirm the shipment actually exists on Canada Post's tracking system.
+ */
+async function checkCanadaPostAccountAndPinHandler() {
+  const btn = $('cp-check-account-btn');
+  const out = $('cp-account-check-result');
+  const oldText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span><span>Checking…</span>';
+  }
+
+  try {
+    const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+    const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+    const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
+    const contractId = TAX_CENTER.settings?.cpContractId || '';
+    const isTest = !!TAX_CENTER.settings?.cpTestMode;
+
+    const audit = validateCanadaPostAccount({ apiKey, apiSecret, customerNumber, contractId, isTest });
+
+    const pin = ($('cp-check-pin')?.value || getLastPurchasedShipmentContext()?.trackingPin || '').trim();
+    let tracking = null;
+    let trackingError = '';
+    if (pin) {
+      try {
+        tracking = await verifyCanadaPostTrackingPin({ pin, apiKey, apiSecret, isTest });
+      } catch (err) {
+        trackingError = err?.message || 'Tracking lookup failed.';
+      }
+    }
+
+    if (out) {
+      const modePill = audit.environment.mode === 'live'
+        ? '<span class="pill green sm">Live Production Mode</span>'
+        : '<span class="pill amber sm">Sandbox Test Mode</span>';
+
+      const rows = [];
+      rows.push(`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${modePill}<span class="tnum" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${escapeHtml(audit.environment.hostname)}</span></div>`);
+      rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:6px;">${escapeHtml(audit.environment.description)}</div>`);
+      rows.push(`<div style="font-size:11px;margin-top:8px;">Customer number: <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(audit.customerNumber || '—')}</span>${audit.usingDemoCredentials ? ' <span class="pill gray sm">demo credentials</span>' : ''}</div>`);
+
+      audit.errors.forEach(e => {
+        rows.push(`<div style="font-size:11px;color:var(--red,var(--text));margin-top:6px;">✕ ${escapeHtml(e)}</div>`);
+      });
+      audit.warnings.forEach(w => {
+        rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:6px;">⚠ ${escapeHtml(w)}</div>`);
+      });
+      if (audit.ok && !audit.errors.length) {
+        rows.push('<div style="font-size:11px;color:var(--green);margin-top:6px;">✓ Account settings look complete — labels will be attached to this customer number.</div>');
+      }
+
+      if (pin) {
+        if (tracking && tracking.found) {
+          rows.push(`<div style="font-size:11px;color:var(--green);margin-top:10px;">✓ Tracking PIN <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(tracking.pin)}</span> found at Canada Post${tracking.status ? ` — ${escapeHtml(tracking.status)}` : ''}.</div>`);
+          if (tracking.expectedDeliveryDate) {
+            rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:3px;">Expected delivery: <span class="tnum">${escapeHtml(tracking.expectedDeliveryDate)}</span></div>`);
+          }
+        } else {
+          rows.push(`<div style="font-size:11px;color:var(--red,var(--text));margin-top:10px;">✕ Tracking PIN <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(pin)}</span> could not be confirmed. ${escapeHtml(trackingError)}</div>`);
+        }
+      }
+
+      out.style.display = 'block';
+      out.innerHTML = rows.join('');
+    }
+
+    if (!audit.ok) {
+      showToast('⚠ Canada Post account settings need attention', 'warn');
+    } else if (pin && tracking?.found) {
+      showToast('✓ Account and tracking PIN verified', 'ok');
+    } else if (pin) {
+      showToast('⚠ Tracking PIN could not be confirmed', 'warn');
+    } else {
+      showToast('✓ Canada Post account settings verified', 'ok');
+    }
+  } catch (err) {
+    console.warn('Canada Post account check failed:', err);
+    showToast(`⚠ Account check failed: ${err?.message || 'unknown error'}`, 'warn');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = oldText;
+    }
+  }
+}
+
+/**
+ * Render an explicit failure state when Zonos does not issue a Declaration ID.
+ * A Declaration ID is the customs identifier Canada Post forwards to U.S. CBP, so an
+ * unissued one is left blank rather than filled with a locally invented code.
+ */
+function renderZonosDeclarationFailure(hint, reason, silent) {
+  const input = $('sp-zonos-declaration-id');
+  if (input) {
+    input.value = '';
+    onZonosDeclarationIdInput('');
+  }
+  if (hint) {
+    hint.style.display = 'block';
+    hint.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:15px;line-height:1.2;">⚠️</span>
+        <div style="flex:1;min-width:200px;">
+          <strong style="color:var(--amber,var(--text));">No Declaration ID was issued</strong>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px;">${escapeHtml(reason)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:5px;">
+            You can still ship: open the Zonos Prepay app to buy the declaration directly, or send the parcel
+            without prepaid duties and let the recipient pay on delivery. Canada Post will not accept an
+            invented Declaration ID, so this field stays empty until Zonos issues a real one.
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  if (!silent) showToast('⚠ Zonos did not issue a Declaration ID — see the note under the button', 'warn');
+}
+
 async function autoGenerateZonosDeclarationHandler({ silent = false } = {}) {
   const btn = $('sp-auto-gen-zonos-btn');
   const hint = $('zonos-auto-result-hint');
@@ -2369,52 +2522,39 @@ async function autoGenerateZonosDeclarationHandler({ silent = false } = {}) {
       source: 'POST'
     });
 
-    if (decl.declarationId) {
+    if (decl.ok && decl.declarationId) {
       const input = $('sp-zonos-declaration-id');
       if (input) {
         input.value = decl.declarationId;
         onZonosDeclarationIdInput(decl.declarationId);
       }
 
+      const dutyLabel = decl.isDutyFree
+        ? 'Duty &amp; tax free at this value'
+        : `Duties &amp; taxes CAD $${Number(decl.totalLandedCost || 0).toFixed(2)}`;
+
       if (hint) {
         hint.style.display = 'block';
         hint.innerHTML = `
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <strong style="color:var(--green);">✓ Legit Zonos Declaration ID:</strong>
+            <strong style="color:var(--green);">✓ Zonos Declaration ID issued:</strong>
             <span class="tnum" style="font-weight:700;letter-spacing:0.5px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;">${escapeHtml(decl.declarationId)}</span>
             <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(decl.declarationId)}');showToast('✓ Copied Zonos Declaration ID');" style="min-height:30px;padding:4px 8px;font-size:11px;" title="Copy Declaration ID">
               📋 Copy
             </button>
-            <span class="pill green sm" style="font-size:9px;">Duties Verified (0.00 CAD on books)</span>
+            <span class="pill green sm" style="font-size:9px;">${dutyLabel}</span>
           </div>
-          <div style="font-size:10px;color:var(--text3);margin-top:4px;">Duties prepaid &amp; verified with Zonos Duty Prepay. Ready for Canada Post label generation and outlet drop-off scan.</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px;">Issued by Zonos and ready for the Canada Post label and outlet drop-off scan.</div>
         `;
       }
 
-      if (!silent) showToast(`✓ Zonos Declaration Generated: ${decl.declarationId}`, 'ok');
+      if (!silent) showToast(`✓ Zonos Declaration issued: ${decl.declarationId}`, 'ok');
+    } else {
+      renderZonosDeclarationFailure(hint, decl.error || 'Zonos did not return a Declaration ID.', silent);
     }
   } catch (err) {
-    console.warn('Auto-generate Zonos Declaration fallback:', err);
-    // Offline fallback generator producing authentic 13-character base36 format
-    const base36Time = Math.floor(Date.now() / 1000).toString(36);
-    const randomBase36 = Math.random().toString(36).slice(2, 8);
-    const fallbackId = `0rc${base36Time}${randomBase36}`.slice(0, 13);
-    const input = $('sp-zonos-declaration-id');
-    if (input) {
-      input.value = fallbackId;
-      onZonosDeclarationIdInput(fallbackId);
-    }
-    if (hint) {
-      hint.style.display = 'block';
-      hint.innerHTML = `
-        <div style="display:flex;align-items:center;gap:6px;">
-          <strong>Declaration ID:</strong>
-          <span class="tnum" style="font-weight:700;font-family:'DM Mono',monospace;">${fallbackId}</span>
-          <span class="pill gray sm" style="font-size:9px;">Offline Prepared</span>
-        </div>
-      `;
-    }
-    if (!silent) showToast(`Generated declaration code: ${fallbackId}`, 'ok');
+    console.warn('Zonos declaration workflow failed:', err);
+    renderZonosDeclarationFailure(hint, err?.message || 'Could not reach Zonos.', silent);
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -2773,9 +2913,45 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
   if (!card) return;
   card.style.display = 'block';
 
+  const cpApiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+  const cpApiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const cpCustomerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
+  const cpContractId = TAX_CENTER.settings?.cpContractId || '';
+  const env = resolveCanadaPostEnvironment({ isTest });
+  const audit = validateCanadaPostAccount({
+    apiKey: cpApiKey,
+    apiSecret: cpApiSecret,
+    customerNumber: cpCustomerNumber,
+    contractId: cpContractId,
+    isTest
+  });
+
   let statusBadge = '<span class="pill green">Live Direct Rates</span>';
   if (isTest) statusBadge = '<span class="pill gold">Sandbox Test Mode</span>';
   if (isOffline) statusBadge = '<span class="pill gray">Offline Estimate</span>';
+
+  // Which Canada Post account a purchase actually bills is not obvious from the rates alone,
+  // so the environment and customer number are stated before any Buy Label button.
+  const accountBanner = `
+    <div class="cp-account-banner ${env.mode === 'live' ? 'is-live' : 'is-sandbox'}">
+      <div class="cp-account-banner-head">
+        <span class="pill ${env.mode === 'live' ? 'green' : 'gold'} sm">${escapeHtml(env.label)}</span>
+        <span class="tnum cp-account-host">${escapeHtml(env.hostname)}</span>
+        <span class="cp-account-cust">Account <span class="tnum">${escapeHtml(audit.customerNumber || '—')}</span></span>
+      </div>
+      <div class="cp-account-banner-note">${escapeHtml(env.description)}</div>
+      ${audit.errors.map(e => `<div class="cp-account-banner-error">✕ ${escapeHtml(e)}</div>`).join('')}
+      ${audit.warnings.map(w => `<div class="cp-account-banner-warn">⚠ ${escapeHtml(w)}</div>`).join('')}
+      <div class="cp-account-banner-actions">
+        <input type="text" id="cp-check-pin" class="cp-account-pin-input tnum" placeholder="Tracking PIN (optional)" inputmode="numeric" autocomplete="off" aria-label="Canada Post tracking PIN to verify">
+        <button class="btn sm tag cp-label-action-btn" id="cp-check-account-btn" type="button" onclick="checkCanadaPostAccountAndPinHandler()" title="Verify your Canada Post account settings and confirm a tracking PIN exists">
+          <span>🔍</span>
+          <span>Check Account &amp; Tracking PIN</span>
+        </button>
+      </div>
+      <div id="cp-account-check-result" class="cp-account-check-result" style="display:none;"></div>
+    </div>
+  `;
 
   const rateRows = (quotes || []).map(q => `
     <div class="cp-rate-row">
@@ -2816,6 +2992,7 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
         </button>
       </div>
     </div>
+    ${accountBanner}
     <div class="cp-rates-list">
       ${rateRows || '<div style="font-size:12px;color:var(--text3);padding:12px 0;text-align:center;">No direct Canada Post services found for this package and route.</div>'}
     </div>
@@ -3067,6 +3244,14 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
       isTest
     });
 
+    if (result.isSimulated) {
+      // The gateway was unreachable and a sandbox/demo run produced a placeholder PIN.
+      // Nothing was bought, so the order stays unshipped and the ledger stays untouched.
+      renderSimulatedCanadaPostNotice(result);
+      showToast('⚠ Simulated shipment only — no label was purchased and nothing was charged', 'warn');
+      return;
+    }
+
     if (result.trackingPin || result.labelUrl) {
       showToast(`✓ Canada Post label purchased! Tracking PIN: ${result.trackingPin}`, 'ok');
 
@@ -3093,16 +3278,29 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
       // Record business expense into TAX_CENTER ledger
       try {
         if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
-        TAX_CENTER.businessExpenses.unshift({
-          id: `exp_cp_${Date.now()}`,
-          date: today(),
-          amount: quotedPrice,
-          category: 'Shipping & Postage',
-          vendor: 'Canada Post',
-          desc: `Canada Post ${serviceName} (PIN: ${result.trackingPin || result.shipmentId})${declarationId ? ` · Zonos: ${declarationId}` : ''}`,
-          ref: `canadapost:pin:${result.trackingPin || result.shipmentId}`,
-          currency: 'CAD'
-        });
+        const cpRef = `canadapost:${result.trackingPin || result.shipmentId}`;
+        const alreadyLogged = TAX_CENTER.businessExpenses.some(e => e && e.ref === cpRef);
+        if (!alreadyLogged) {
+          TAX_CENTER.businessExpenses.unshift({
+            id: `exp_cp_${Date.now()}`,
+            date: today(),
+            // Canada Post postage is billed natively in CAD; stored verbatim with no FX conversion.
+            amount: quotedPrice,
+            category: 'Shipping & Postage',
+            vendor: 'Canada Post',
+            desc: `Canada Post ${serviceName} (PIN: ${result.trackingPin || result.shipmentId})${declarationId ? ` · Zonos: ${declarationId}` : ''}`,
+            ref: cpRef,
+            currency: 'CAD',
+            trackingPin: result.trackingPin || '',
+            declarationId: declarationId || '',
+            // This label was generated in-app, so its amount is already exact.
+            // These flags keep the receipt organizer from spending an AI scan re-reading it.
+            source: 'canadapost-label',
+            autoLogged: true,
+            receiptRequired: false,
+            ocrSkip: true
+          });
+        }
         await saveTaxCenter().catch(() => {});
         renderTaxCenter();
         renderShippingAnalysisHub();
@@ -6293,6 +6491,7 @@ export {
   onZonosDeclarationIdInput,
   pasteZonosDeclarationId,
   autoGenerateZonosDeclarationHandler,
+  checkCanadaPostAccountAndPinHandler,
   openZonosPrepayAppHandler,
   calculateCanadaPostRatesHandler,
   renderCanadaPostRatesCard,

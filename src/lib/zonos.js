@@ -561,12 +561,20 @@ export function formatDeclarationId(rawId) {
 }
 
 /**
- * Validate 13-character Zonos Declaration ID
+ * Validate a 13-character Zonos Declaration ID.
+ * Accepts either case on input; the canonical stored/emitted form is lowercase.
  */
 export function validateDeclarationId(rawId) {
   if (!rawId || typeof rawId !== 'string') return false;
   const clean = rawId.trim();
   return /^[a-zA-Z0-9]{13}$/.test(clean);
+}
+
+/**
+ * Strict check that an ID is already in Zonos canonical form: 13 lowercase base36 characters.
+ */
+export function isCanonicalDeclarationId(rawId) {
+  return typeof rawId === 'string' && /^[a-z0-9]{13}$/.test(rawId);
 }
 
 /**
@@ -627,6 +635,7 @@ export async function createZonosDeclaration({
   const landedCostId = calc.id || calc.raw?.id;
   let declarationId = '';
   let declarationDetails = null;
+  let declarationError = '';
 
   // Step 2: Execute declarationCreateWorkflow to obtain the authentic 13-character Zonos Declaration ID
   if (landedCostId) {
@@ -664,25 +673,37 @@ export async function createZonosDeclaration({
       if (declResult?.declaration?.id) {
         declarationId = formatDeclarationId(declResult.declaration.id);
         declarationDetails = declResult.declaration;
+      } else if (declResult?.errors?.length) {
+        declarationError = declResult.errors.map(e => e.message || e.code).filter(Boolean).join('; ');
+      } else {
+        declarationError = 'Zonos returned no declaration for this landed cost calculation.';
       }
     } catch (err) {
-      console.warn('Zonos declaration workflow creation note:', err);
+      declarationError = err?.message || String(err);
+      console.warn('Zonos declarationCreateWorkflow failed:', err);
     }
+  } else {
+    declarationError = 'Zonos landed cost calculation returned no id, so no declaration could be created.';
   }
 
-  // Fallback if declarationId was not returned directly:
+  // A Declaration ID is a customs identifier that Canada Post forwards to U.S. CBP.
+  // It must come back from Zonos' declarationCreateWorkflow — never be synthesized
+  // locally — so an unresolved workflow is reported as a failure, not papered over.
   if (!declarationId) {
-    if (calc.guaranteeCode && calc.guaranteeCode !== 'NOT_APPLICABLE') {
-      declarationId = formatDeclarationId(calc.guaranteeCode);
-    } else if (landedCostId && /^0r[a-z0-9]{11}$/i.test(landedCostId.replace(/^landed_cost_/i, ''))) {
-      declarationId = formatDeclarationId(landedCostId.replace(/^landed_cost_/i, ''));
-    } else {
-      // Generate a legitimate-format 13-character base36 Zonos declaration ID starting with '0rc'
-      const base36Time = Math.floor(Date.now() / 1000).toString(36);
-      const randomBase36 = Math.random().toString(36).slice(2, 8);
-      const raw = `0rc${base36Time}${randomBase36}`.slice(0, 13);
-      declarationId = formatDeclarationId(raw);
-    }
+    return {
+      ok: false,
+      declarationId: '',
+      declarationDetails: null,
+      landedCostId: landedCostId || '',
+      error: declarationError || 'Zonos did not return a Declaration ID.',
+      calculation: calc,
+      dutiesAmount: calc.dutiesAmount || 0,
+      taxesAmount: calc.taxesAmount || 0,
+      feesAmount: calc.feesAmount || 0,
+      totalLandedCost: calc.totalLandedCost || 0,
+      isDutyFree: calc.isDutyFree,
+      qrCodeData: ''
+    };
   }
 
   return {

@@ -209,12 +209,59 @@ export function categoryFromName(name, keywordMap) {
 }
 
 /**
+ * Match a file to an expense by a carrier reference carried in both.
+ *
+ * A shipping label this app produced writes its tracking PIN into the filename,
+ * and the expense the app logged for it stores the same PIN. That is an identity,
+ * not a resemblance — so it beats every score, and reading the file with the AI
+ * would only re-derive an amount and date the ledger already holds exactly.
+ *
+ * Returns the matching expense, or null when the filename carries no known reference.
+ */
+export function exactReferenceMatch(fileInfo, expenses) {
+  const hay = String(fileInfo?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!hay) return null;
+
+  return (expenses || []).find(exp => {
+    const pin = String(exp?.trackingPin || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (pin && pin.length >= 8 && hay.includes(pin)) return true;
+    const ref = String(exp?.ref || '').toLowerCase().split(':').pop().replace(/[^a-z0-9]/g, '');
+    return !!(ref && ref.length >= 8 && hay.includes(ref));
+  }) || null;
+}
+
+/**
  * Plan what happens to one file: where it goes, and whether a human should look.
  *
  * `needsReview` is the contract with the caller — anything true here must be
  * shown before it is acted on. Nothing is ever filed silently on a guess.
  */
 export function planFile(fileInfo, expenses, keywordMap, threshold = CONFIDENCE_THRESHOLD) {
+  // An app-generated label already knows exactly which expense it belongs to,
+  // so it is filed on that identity and never sent to OCR.
+  const exact = exactReferenceMatch(fileInfo, expenses);
+  if (exact) {
+    return {
+      file: fileInfo.name,
+      match: exact,
+      matched: true,
+      score: 1,
+      reasons: ['tracking reference in filename'],
+      ambiguous: false,
+      meta: {
+        date: exact.date || '',
+        desc: exact.desc || '',
+        vendor: exact.vendor || fileInfo.vendor || '',
+        cat: exact.cat || exact.category || '',
+        amount: exact.origAmount ?? exact.amount,
+        currency: exact.origCurrency || exact.currency || '',
+      },
+      needsReview: !(exact.cat || exact.category) || !exact.date,
+      needsOcr: false,
+      exactRef: true,
+    };
+  }
+
   const result = bestMatch(fileInfo, expenses, threshold);
   const fileDate = fileInfo.date || dateFromName(fileInfo.name);
   const money = fileInfo.amount != null
