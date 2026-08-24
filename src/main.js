@@ -544,7 +544,7 @@ import { OC_STAGES } from './lib/opencall.js';
 import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy } from './lib/inventory.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
-import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles } from './lib/invoices.js';
+import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber } from './lib/invoices.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 
@@ -8269,9 +8269,16 @@ function renderInvoices() {
     // An invoice carries its own currency, and a shared one may well be priced
     // in a different one than the book being viewed — show what it actually bills.
     const invCur = inv.currency || cur;
+    // On a bill covering several titles, the headline total is what the shop
+    // pays for all of them — so say what this title's share of it is, rather
+    // than leaving the whole amount to read as this book's earnings.
+    const share = others.length ? invoiceShareForBook(inv, ownerBookId, activeBook, BOOK_LIST) : null;
+    const shareLine = share
+      ? `<div class="inv-c-store-meta" style="margin-top:2px;">${escapeHtml(book.title)}'s share: <strong>${fmt(share.total, invCur)}</strong></div>`
+      : '';
     return `<div class="invoice-card">
       <div class="inv-c-num">${escapeHtml(inv.num)}${stripeChip}${sharedChip}</div>
-      <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div></div>
+      <div class="inv-c-store">${escapeHtml(inv.storeName) || '—'}<div class="inv-c-store-meta">${[inv.storeEmail, inv.storeCity].filter(Boolean).map(escapeHtml).join(' · ') || '—'}</div>${shareLine}</div>
       <div class="inv-c-cell">Issued<strong>${fmtD(inv.date)}</strong></div>
       <div class="inv-c-cell">Due<strong>${due}</strong></div>
       <div class="inv-c-cell amt">Total<strong>${fmt(inv.total || 0, invCur)}</strong></div>
@@ -8308,7 +8315,12 @@ function openCreateInvoice(storeId, editingId) {
 
   if (editingId) {
     const inv = hit.inv;
-    invoiceCtx = { editingId, ownerBookId, items: JSON.parse(JSON.stringify(inv.items || [])) };
+    const items = JSON.parse(JSON.stringify(inv.items || []));
+    // Settle each line's title before the pickers render, so an invoice written
+    // before the picker existed opens showing the title it is actually billed
+    // against rather than defaulting every line to the issuing book.
+    for (const it of items) it.bookId = lineItemBookId(it, ownerBookId, invoiceBookOptions());
+    invoiceCtx = { editingId, ownerBookId, items };
     $('inv-edit-title').textContent = `Edit ${inv.num}`;
     sel.value = inv.storeId || '';
     $('inv-num').value = inv.num || '';
@@ -8342,7 +8354,10 @@ function openCreateInvoice(storeId, editingId) {
     invoiceCtx = { editingId: null, ownerBookId, items: [] };
     $('inv-edit-title').textContent = 'New invoice';
     sel.value = storeId ? String(storeId) : '';
-    $('inv-num').value = nextInvoiceNumber();
+    // Starts on this book's own numbering; refreshAutoInvoiceNumber moves it to
+    // the neutral prefix if a second title is added before the invoice is saved.
+    invoiceCtx.autoNum = nextInvoiceNumber([ownerBookId]);
+    $('inv-num').value = invoiceCtx.autoNum;
     $('inv-date').value = today();
     // default due date = 30 days from today
     const d = new Date(); d.setDate(d.getDate() + 30);
@@ -8367,23 +8382,56 @@ function openCreateInvoice(storeId, editingId) {
   openM('invoice-edit');
 }
 
-function nextInvoiceNumber() {
-  const s = getState(), book = getBook();
-  const year = new Date().getFullYear();
-  const prefix = (book.id || 'BOOK').slice(0, 6).toUpperCase();
-  // ⚡ Bolt Optimization: Loop Fusion
-  // Combined .filter() and .reduce() into a single pass to eliminate intermediate array allocations
-  let maxSeq = s.invoiceSeq || 0;
-  for (const i of (s.invoices || [])) {
-    const numStr = i.num || '';
-    if (numStr.includes(`-${year}-`)) {
-      const mt = /-(\d+)$/.exec(numStr);
-      if (mt) {
-        maxSeq = Math.max(maxSeq, parseInt(mt[1], 10));
-      }
-    }
+// Every invoice on record, across all books. A neutral-prefixed number is
+// shared between titles, so its sequence has to be counted over the whole set
+// rather than one book's list.
+function allInvoicesEverywhere() {
+  const out = [];
+  for (const bid of Object.keys(states || {})) {
+    if (isTestBookId(bid)) continue;
+    for (const inv of ((states[bid] || {}).invoices || [])) out.push(inv);
   }
-  return `INV-${prefix}-${year}-${String(maxSeq + 1).padStart(3, '0')}`;
+  return out;
+}
+
+// The number prefix for an invoice covering `bookIds`. One title keeps that
+// title's own code; more than one gets the business's initials instead, because
+// a bill charging for two books should not be numbered after just one of them.
+function invoicePrefixForBooks(bookIds) {
+  if (Array.isArray(bookIds) && bookIds.length > 1) {
+    return neutralInvoicePrefix(getInvoiceSettings().name || 'Lyricalmyrical Books');
+  }
+  const bid = (bookIds && bookIds[0]) || activeBook;
+  const book = BOOKS[bid] || getBook();
+  return (book.id || 'BOOK').slice(0, 6).toUpperCase();
+}
+
+function nextInvoiceNumber(bookIds) {
+  const s = getState();
+  const year = new Date().getFullYear();
+  const prefix = invoicePrefixForBooks(bookIds);
+  // The per-book counter is a floor for that book's own prefix only; a shared
+  // prefix is counted purely from the numbers already issued under it.
+  const seqFloor = prefix === ((getBook().id || 'BOOK').slice(0, 6).toUpperCase()) ? (s.invoiceSeq || 0) : 0;
+  const seq = Math.max(seqFloor + 1, nextInvoiceSeq(allInvoicesEverywhere(), prefix, year));
+  return buildInvoiceNumber(prefix, year, seq);
+}
+
+// Keep an unsaved invoice's number in step with the titles it covers: adding a
+// second title to a draft should move it off the first title's numbering. Only
+// ever touches a number this function itself put there — the moment the
+// publisher types their own, it is left alone, and a saved invoice never gets
+// renumbered behind a shop that already has the old number.
+function refreshAutoInvoiceNumber() {
+  if (!invoiceCtx || invoiceCtx.editingId) return;
+  const el = $('inv-num');
+  if (!el || (invoiceCtx.autoNum && el.value.trim() !== invoiceCtx.autoNum)) return;
+  const ownerBookId = invoiceCtx.ownerBookId || activeBook;
+  const ids = deriveInvoiceBookIds({ items: invoiceCtx.items }, ownerBookId, BOOK_LIST);
+  const next = nextInvoiceNumber(ids);
+  if (next === el.value.trim()) return;
+  el.value = next;
+  invoiceCtx.autoNum = next;
 }
 
 function onInvoiceStoreChange() {
@@ -8437,7 +8485,9 @@ function onInvoiceCurrencyChange() {
 }
 
 function addInvoiceItem(description = '', qty = 1, unitPrice = 0) {
-  invoiceCtx.items.push({ description, qty, unitPrice });
+  // A new line bills the book issuing the invoice until the publisher says
+  // otherwise, which is the common case and keeps the picker from starting blank.
+  invoiceCtx.items.push({ description, qty, unitPrice, bookId: invoiceCtx.ownerBookId || activeBook });
   renderInvoiceItems();
   recalcInvoiceTotals();
 }
@@ -8451,29 +8501,53 @@ function removeInvoiceItem(idx) {
 function updateInvoiceItem(idx, field, value) {
   const it = invoiceCtx.items[idx]; if (!it) return;
   if (field === 'description') it.description = value;
+  else if (field === 'bookId') it.bookId = value || null;
   else it[field] = parseFloat(value) || 0;
   // Re-render only the amount cell for performance
   const amtEl = document.querySelector(`#inv-items-body tr[data-i="${idx}"] .inv-item-amt`);
   if (amtEl) amtEl.textContent = fmt((it.qty || 0) * (it.unitPrice || 0), getSym(getInvoiceCurrency()));
-  // Which titles the invoice covers is read off the descriptions, so keep the
-  // "filed under" line honest while they're being typed.
-  if (field === 'description') renderInvoiceBooksHint();
+  // Which titles the invoice covers follows the picker and the descriptions, so
+  // keep the "filed under" line — and the invoice number — honest as they change.
+  if (field === 'description' || field === 'bookId') {
+    renderInvoiceBooksHint();
+    refreshAutoInvoiceNumber();
+  }
   recalcInvoiceTotals();
+}
+
+// The titles a line item can be billed against. Test books never appear — an
+// invoice is a real document going to a real shop.
+function invoiceBookOptions() {
+  return BOOK_LIST.filter(b => b && b.id && !isTestBook(b) && !isTestBookId(b.id));
 }
 
 function renderInvoiceItems() {
   const body = $('inv-items-body'), cur = getSym(getInvoiceCurrency());
   if (!invoiceCtx.items.length) {
-    body.innerHTML = `<tr><td colspan="5" style="font-size:12px;color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" style="font-size:12px;color:var(--text3);padding:14px;text-align:center;">No line items. Click <strong>+ Add line</strong>.</td></tr>`;
+    renderInvoiceBooksHint();
     return;
   }
-  body.innerHTML = invoiceCtx.items.map((it, i) => `<tr class="inv-item-row" data-i="${i}">
+  const ownerBookId = invoiceCtx.ownerBookId || activeBook;
+  const books = invoiceBookOptions();
+  body.innerHTML = invoiceCtx.items.map((it, i) => {
+    // Show what the line is actually billed against, whether that was picked
+    // outright or read from the description, so the row and the invoice's
+    // filing always agree. A line pointing at a title that is no longer on the
+    // shelf falls back to the issuing book — and is rewritten to match, so the
+    // dropdown can never display one title while the invoice files under another.
+    let selected = lineItemBookId(it, ownerBookId, books);
+    if (!books.some(b => b.id === selected)) { selected = ownerBookId; it.bookId = ownerBookId; }
+    const opts = books.map(b => `<option value="${escapeHTML(b.id)}"${b.id === selected ? ' selected' : ''}>${escapeHTML(b.title)}</option>`).join('');
+    return `<tr class="inv-item-row" data-i="${i}">
     <td><input type="text" value="${escapeHTML(it.description || '')}" placeholder="e.g. ${getBook().title} — consignment sale, Sept 2026" oninput="updateInvoiceItem(${i},'description',this.value)"></td>
+    <td><select class="inv-item-book" title="Which title this line bills for" aria-label="Title for this line" onchange="updateInvoiceItem(${i},'bookId',this.value)">${opts}</select></td>
     <td><input type="number" min="0" step="1" value="${it.qty || 0}" oninput="updateInvoiceItem(${i},'qty',this.value)"></td>
     <td><input type="number" min="0" step="0.01" value="${(it.unitPrice || 0).toFixed(2)}" oninput="updateInvoiceItem(${i},'unitPrice',this.value)"></td>
     <td class="r"><span class="inv-item-amt">${fmt((it.qty || 0) * (it.unitPrice || 0), cur)}</span></td>
     <td><button type="button" class="inv-item-remove" onclick="removeInvoiceItem(${i})" title="Remove line" aria-label="Remove line">×</button></td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
   renderInvoiceBooksHint();
 }
 
@@ -8489,10 +8563,10 @@ function renderInvoiceBooksHint() {
   const ids = deriveInvoiceBookIds({ items: invoiceCtx.items }, ownerBookId, BOOK_LIST);
   const titles = ids.map(id => (BOOKS[id] || {}).title).filter(Boolean);
   if (titles.length <= 1) {
-    el.innerHTML = `Filed under <strong>${escapeHtml(titles[0] || (getBook().title || 'this title'))}</strong>. Name another title in a line's description to bill it here too.`;
+    el.innerHTML = `Filed under <strong>${escapeHtml(titles[0] || (getBook().title || 'this title'))}</strong>. Set a line's <em>Title</em> to bill another book on this same invoice.`;
     return;
   }
-  el.innerHTML = `Filed under <strong>${titles.map(escapeHtml).join('</strong>, <strong>')}</strong> — this invoice appears in each of those titles' Invoices lists.`;
+  el.innerHTML = `Filed under <strong>${titles.map(escapeHtml).join('</strong>, <strong>')}</strong> — this invoice appears in each of those titles' Invoices lists, and is numbered for the business rather than one title.`;
 }
 
 export function escapeHTML(s) { return escapeHtml(s); }
@@ -8602,7 +8676,10 @@ function saveInvoice(status) {
   const totals = recalcInvoiceTotals();
   if (totals.total <= 0) { showToast('Invoice total must be greater than zero', 'err'); return; }
 
-  const num = ($('inv-num').value || '').trim() || nextInvoiceNumber();
+  // The titles this invoice bills, needed before the number so a multi-title
+  // invoice is numbered after the business rather than after one of its books.
+  const coveredBookIds = deriveInvoiceBookIds({ items: invoiceCtx.items }, ownerBookId, BOOK_LIST);
+  const num = ($('inv-num').value || '').trim() || nextInvoiceNumber(coveredBookIds);
   const date = $('inv-date').value || today();
   const dueDate = $('inv-due').value || '';
   // Use the currency selected in the editor (ISO code → symbol for storage, consistent with book.currency pattern)
@@ -8664,9 +8741,13 @@ function saveInvoice(status) {
   } else {
     s.invoices = s.invoices || [];
     s.invoices.push(payload);
-    // bump seq counter for safety
+    // Bump the book's own counter only for a number issued under that book's
+    // prefix. A neutral, multi-title number belongs to the shared sequence, and
+    // folding it in here would burn numbers out of this book's run.
     const mt = /-(\d+)$/.exec(num);
-    if (mt) s.invoiceSeq = Math.max(s.invoiceSeq || 0, parseInt(mt[1], 10));
+    if (mt && invoiceNumberPrefix(num) === ((book.id || 'BOOK').slice(0, 6).toUpperCase())) {
+      s.invoiceSeq = Math.max(s.invoiceSeq || 0, parseInt(mt[1], 10));
+    }
   }
 
   // ── Stamp ledger ↔ invoice back-links (covers create AND edit re-pointing).
@@ -8792,12 +8873,42 @@ async function deleteInvoice() {
 // ── invoice view (printable) ────────────────────────────────────────────
 let currentViewInvoiceId = null;
 
+// What each title on this invoice is worth — the publisher's own breakdown of a
+// bill the shop pays as one amount. Shown above the invoice preview and left off
+// the printed document, which is the shop's copy and has no use for it.
+// Single-title invoices show nothing: the total already is that title's total.
+function renderInvoiceSplitPanel(inv, ownerBookId) {
+  const el = $('inv-split-panel');
+  if (!el) return;
+  const split = invoiceBookSplit(inv, ownerBookId, BOOK_LIST);
+  if (split.length < 2) { el.style.display = 'none'; el.innerHTML = ''; return; }
+
+  const cur = inv.currency || (BOOKS[ownerBookId] || getBook()).currency;
+  const rows = split.map(r => `<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);">
+      <span style="color:var(--text2);">${escapeHtml(r.title)}<span style="color:var(--text3);font-size:11px;margin-left:6px;">${Math.round(r.share * 100)}%</span></span>
+      <span class="mono-num" style="font-weight:600;white-space:nowrap;">${fmt(r.total, cur)}</span>
+    </div>`).join('');
+
+  el.style.display = '';
+  el.innerHTML = `<div style="background:var(--cream);border:1px solid var(--line);border-radius:var(--r3);padding:14px 18px;margin-bottom:18px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">What each title earned on this invoice</div>
+      ${rows}
+      <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0 0;">
+        <span style="color:var(--text3);font-size:12px;">Invoice total</span>
+        <span class="mono-num" style="font-weight:700;white-space:nowrap;">${fmt(inv.total || 0, cur)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-top:8px;">Any discount and tax are shared out in proportion to each title's lines, so these add up to the invoice total. Not shown on the copy the shop receives.</div>
+    </div>`;
+}
+
 function viewInvoice(id) {
   // Resolve across books: a multi-title invoice is opened from whichever title
   // the publisher is looking at, but only one book actually stores it.
-  const inv = invoiceHome(id).inv;
+  const home = invoiceHome(id);
+  const inv = home.inv;
   if (!inv) { showToast('Invoice not found', 'err'); return; }
   currentViewInvoiceId = id;
+  renderInvoiceSplitPanel(inv, home.bookId);
   $('invoice-print-area').innerHTML = renderInvoicePaperHTML(inv);
   // Paid invoices show a non-clickable "✓ Paid" badge; unpaid ones keep the
   // clickable gold "✓ Mark paid" action. (Same element is reused across

@@ -41,6 +41,16 @@ export function booksNamedInText(text, books) {
   return found;
 }
 
+// The title a single line bills for. `bookId` is what the publisher picked in
+// the editor (or what an imported line was stamped with) and always wins; a
+// hand-typed line falls back to the title its description names, and a line
+// naming none belongs to the book issuing the invoice.
+export function lineItemBookId(item, ownerBookId, books) {
+  if (item && item.bookId) return item.bookId;
+  const named = booksNamedInText(item && item.description, books);
+  return named[0] || ownerBookId;
+}
+
 // Every book an invoice belongs to: the book that owns it, whatever its line
 // items were explicitly stamped with, and any title named in a description.
 // Owner always included — an invoice never disappears from the book holding it,
@@ -125,3 +135,123 @@ export function otherBookTitles(inv, ownerBookId, bookId, books) {
     .map(id => (byId.get(id) || {}).title)
     .filter(Boolean);
 }
+
+// ── How much of an invoice belongs to each title ─────────────────────────
+// A shop pays ONE bill covering several books, but the publisher still has to
+// know what each title earned — that is what each author's share is worked out
+// from. Splitting by hand off the line items is the step this removes.
+
+const cents = n => Math.round((Number(n) || 0) * 100);
+
+// Split `amount` across `weights` so the parts are whole cents that add back up
+// to `amount` exactly. Plain per-share rounding leaves the parts a cent or two
+// off the invoice total, which is precisely the kind of drift that makes a
+// payout look wrong. Largest-remainder: floor every share, then hand the
+// leftover cents to the shares that lost the most in the rounding.
+function allocate(amount, weights) {
+  const totalCents = cents(amount);
+  const weightSum = weights.reduce((a, w) => a + w, 0);
+  if (!weights.length) return [];
+  if (weightSum <= 0) {
+    // Nothing to weight by (a zero-value invoice, or every line free): give it
+    // all to the first title rather than inventing a split.
+    return weights.map((_, i) => (i === 0 ? totalCents / 100 : 0));
+  }
+  const exact = weights.map(w => (totalCents * w) / weightSum);
+  const floors = exact.map(Math.floor);
+  let remainder = totalCents - floors.reduce((a, c) => a + c, 0);
+  const order = exact
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (let k = 0; k < order.length && remainder > 0; k++, remainder--) {
+    floors[order[k].i]++;
+  }
+  return floors.map(c => c / 100);
+}
+
+// Per-title breakdown of one invoice: what each book contributed before the
+// invoice-level discount and tax, and what it comes to after both are shared
+// out in proportion. The `total` column sums to the invoice total exactly.
+// Returns [] when the invoice has no line items.
+export function invoiceBookSplit(inv, ownerBookId, books) {
+  const items = (inv && inv.items) || [];
+  if (!items.length) return [];
+
+  const byId = new Map((books || []).filter(b => b && b.id).map(b => [b.id, b]));
+  const order = [];
+  const subtotals = new Map();
+  for (const it of items) {
+    const bid = lineItemBookId(it, ownerBookId, books);
+    if (!subtotals.has(bid)) { subtotals.set(bid, 0); order.push(bid); }
+    subtotals.set(bid, subtotals.get(bid) + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0));
+  }
+
+  const weights = order.map(bid => Math.max(0, cents(subtotals.get(bid))));
+  // Prefer the invoice's stored total; fall back to the line sum so a partly
+  // filled draft still splits sensibly.
+  const subtotalSum = order.reduce((a, bid) => a + subtotals.get(bid), 0);
+  const grand = (inv && inv.total != null) ? Number(inv.total) || 0 : subtotalSum;
+  const totals = allocate(grand, weights);
+  const weightSum = weights.reduce((a, w) => a + w, 0);
+
+  return order.map((bid, i) => ({
+    bookId: bid,
+    title: (byId.get(bid) || {}).title || bid,
+    subtotal: Math.round(subtotals.get(bid) * 100) / 100,
+    share: weightSum > 0 ? weights[i] / weightSum : (i === 0 ? 1 : 0),
+    total: totals[i],
+  }));
+}
+
+// One title's slice of an invoice, or null when that title isn't on it.
+export function invoiceShareForBook(inv, ownerBookId, bookId, books) {
+  return invoiceBookSplit(inv, ownerBookId, books).find(r => r.bookId === bookId) || null;
+}
+
+// ── Numbering ────────────────────────────────────────────────────────────
+// Numbers are per-book ("INV-ALTROV-2026-004"), which reads as an error to a
+// shop holding a bill that also charges for another title. An invoice covering
+// more than one book gets a neutral prefix built from the business name
+// instead, so the number names the publisher rather than one of its titles.
+
+export const NEUTRAL_PREFIX_FALLBACK = 'LMB';
+
+// Initials of the business name — "Lyricalmyrical Books" → "LB". A single-word
+// name keeps its first letters instead ("Nightjar" → "NIGHT") so the prefix is
+// still recognisable rather than one bare letter. Derived from the name printed
+// on the invoice, so the number reads as the publisher's rather than a title's.
+export function neutralInvoicePrefix(businessName) {
+  const words = String(businessName || '')
+    .replace(/[^A-Za-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!words.length) return NEUTRAL_PREFIX_FALLBACK;
+  if (words.length === 1) return words[0].slice(0, 5).toUpperCase();
+  return words.map(w => w[0]).join('').slice(0, 6).toUpperCase();
+}
+
+// The prefix an invoice number carries: "INV-ALTROV-2026-004" → "ALTROV".
+// Returns '' for anything not in that shape.
+export function invoiceNumberPrefix(num) {
+  const m = /^INV-(.+)-(\d{4})-(\d+)$/.exec(String(num || '').trim());
+  return m ? m[1] : '';
+}
+
+// The next free sequence number for one prefix and year, across every book's
+// invoices — a neutral-prefixed number is shared between books, so counting
+// only the issuing book's list would hand out the same number twice.
+export function nextInvoiceSeq(allInvoices, prefix, year) {
+  let max = 0;
+  for (const inv of (allInvoices || [])) {
+    const m = /^INV-(.+)-(\d{4})-(\d+)$/.exec(String((inv && inv.num) || '').trim());
+    if (!m) continue;
+    if (m[1] !== prefix || m[2] !== String(year)) continue;
+    max = Math.max(max, parseInt(m[3], 10) || 0);
+  }
+  return max + 1;
+}
+
+export function buildInvoiceNumber(prefix, year, seq) {
+  return `INV-${prefix}-${year}-${String(seq).padStart(3, '0')}`;
+}
+
