@@ -4376,8 +4376,16 @@ tr.hist-row:hover {
 .consignment-summary-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4);}
 .sec-head-titles,
 .consignment-summary-titles{min-width:0;flex:1;}
+/* `flex-wrap` because a head's badge slot is not always one pill: the per-book
+   consignment sections hang two or three buttons (and a summary line) off it,
+   and `flex-shrink:0` on an unwrapped row would push the titles narrower and
+   narrower until the head overflowed, well before the 680px stack kicks in. */
 .sec-head-badges,
-.consignment-summary-badges{flex-shrink:0;display:flex;align-items:center;gap:8px;}
+.consignment-summary-badges{flex-shrink:0;display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
+/* A figure or status line riding alongside the buttons in a head. Mono, because
+   every number in this app is mono, and one step down from the buttons so the
+   actions still lead the slot. */
+.sec-head-note{font-family:'DM Mono',monospace;font-size:var(--text-xs);font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1,"zero" 1;color:var(--content-muted);}
 .sec-kicker,
 .consignment-kicker{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--sec-accent,var(--gold));margin-bottom:6px;}
 .sec-kicker-dot,
