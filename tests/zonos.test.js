@@ -374,6 +374,102 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       expect(decl.isDutyFree).toBe(true);
       expect(decl.qrCodeData).toContain('ZONOS:0rd4dpkrvc1y9:CAD:0');
     });
+
+    it('recognises the canonical lowercase base36 Declaration ID form', async () => {
+      const { isCanonicalDeclarationId } = await import('../src/lib/zonos.js');
+      expect(isCanonicalDeclarationId('0rd4dpkrvc1y9')).toBe(true);
+      expect(isCanonicalDeclarationId('0RD4DPKRVC1Y9')).toBe(false);
+      expect(isCanonicalDeclarationId('0rd4dpkrvc1y')).toBe(false);
+      expect(isCanonicalDeclarationId('0rd4-dpkrvc1y9')).toBe(false);
+      expect(isCanonicalDeclarationId(null)).toBe(false);
+    });
+  });
+
+  describe('Declaration ID authenticity guardrail', () => {
+    const landedCostOnly = () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          landedCostCalculateWorkflow: [{
+            id: 'landed_cost_398d774d-d960-4cf9-832a-ae21edd46b6d',
+            currencyCode: 'CAD',
+            method: 'DDP',
+            landedCostGuaranteeCode: 'NOT_APPLICABLE',
+            deMinimis: [{ type: 'BELOW', threshold: '800' }],
+            amountSubtotals: { duties: 0, taxes: 0, fees: 0, landedCostTotal: 0 },
+            duties: [], taxes: [], fees: []
+          }]
+        }
+      })
+    });
+
+    const declParams = {
+      apiKey: 'test_key',
+      destination: { countryCode: 'US', postalCode: '90210' },
+      items: [{ amount: 25.00, description: 'Book', hsCode: '490199', quantity: 1 }]
+    };
+
+    it('reports failure instead of inventing an ID when the declaration workflow errors', async () => {
+      const { createZonosDeclaration } = await import('../src/lib/zonos.js');
+
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(landedCostOnly())
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            data: {
+              declarationCreateWorkflow: [{
+                declaration: null,
+                errors: [{ message: 'Declaration payment method is not configured', code: 'PAYMENT_REQUIRED' }]
+              }]
+            }
+          })
+        });
+
+      const decl = await createZonosDeclaration(declParams);
+
+      // A Declaration ID reaches U.S. customs via Canada Post, so an unissued one
+      // must stay empty rather than be replaced with a plausible-looking code.
+      expect(decl.ok).toBe(false);
+      expect(decl.declarationId).toBe('');
+      expect(decl.qrCodeData).toBe('');
+      expect(decl.error).toMatch(/payment method is not configured/i);
+      // The landed cost figures that did come back are still usable.
+      expect(decl.landedCostId).toContain('landed_cost_');
+      expect(decl.isDutyFree).toBe(true);
+    });
+
+    it('reports failure when the declaration request itself fails outright', async () => {
+      const { createZonosDeclaration } = await import('../src/lib/zonos.js');
+
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(landedCostOnly())
+        .mockRejectedValue(new Error('Failed to fetch'));
+
+      const decl = await createZonosDeclaration(declParams);
+      expect(decl.ok).toBe(false);
+      expect(decl.declarationId).toBe('');
+      expect(decl.error).toBeTruthy();
+    });
+
+    it('produces no ID at all across repeated failures, rather than a fresh random one each time', async () => {
+      const { createZonosDeclaration } = await import('../src/lib/zonos.js');
+      const results = [];
+
+      for (let i = 0; i < 3; i++) {
+        global.fetch = vi.fn()
+          .mockResolvedValueOnce(landedCostOnly())
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ data: { declarationCreateWorkflow: [{ declaration: null, errors: [] }] } })
+          });
+        results.push(await createZonosDeclaration(declParams));
+      }
+
+      expect(results.every(r => r.ok === false)).toBe(true);
+      expect(results.every(r => r.declarationId === '')).toBe(true);
+      expect(new Set(results.map(r => r.declarationId)).size).toBe(1);
+    });
   });
 });
 

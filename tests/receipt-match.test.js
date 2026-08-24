@@ -5,6 +5,7 @@ import {
   bestMatch,
   categoryFromName,
   dateFromName,
+  exactReferenceMatch,
   planFile,
   scoreMatch,
   textSimilarity,
@@ -216,5 +217,59 @@ describe('planning what happens to each real file', () => {
       const p = planFile({ name }, expenses, KEYWORDS);
       if (!p.needsReview) expect(p.meta.cat).toBeTruthy();
     });
+  });
+});
+
+describe('app-generated shipping labels are filed without an AI read', () => {
+  const labelExpense = {
+    id: 'exp_cp_1',
+    date: '2026-08-24',
+    amount: 14.72,
+    currency: 'CAD',
+    cat: 'Shipping & Postage',
+    vendor: 'Canada Post',
+    desc: 'Canada Post Tracked Packet - USA (PIN: 70123456789012345)',
+    ref: 'canadapost:70123456789012345',
+    trackingPin: '70123456789012345',
+    source: 'canadapost-label',
+    ocrSkip: true,
+  };
+  const otherExpense = {
+    id: 'exp_2', date: '2026-07-30', amount: 13.93, currency: 'CAD',
+    cat: 'Travel', vendor: 'Uber', desc: 'Uber ride',
+  };
+  const expenses = [otherExpense, labelExpense];
+
+  it('matches a label file to its expense on the tracking PIN alone', () => {
+    expect(exactReferenceMatch({ name: 'canadapost-70123456789012345.pdf' }, expenses)).toBe(labelExpense);
+    expect(exactReferenceMatch({ name: 'label_7012 3456 7890 12345.png' }, expenses)).toBe(labelExpense);
+    expect(exactReferenceMatch({ name: 'random-receipt.pdf' }, expenses)).toBe(null);
+    expect(exactReferenceMatch({ name: '' }, expenses)).toBe(null);
+  });
+
+  it('files the label with the ledger figures and skips OCR entirely', () => {
+    const plan = planFile({ name: 'canadapost-70123456789012345.pdf' }, expenses, {});
+
+    expect(plan.matched).toBe(true);
+    expect(plan.exactRef).toBe(true);
+    // The amount and date are already exact in the ledger, so paying for an AI
+    // read of a label this app produced would buy nothing.
+    expect(plan.needsOcr).toBe(false);
+    expect(plan.needsReview).toBe(false);
+    expect(plan.meta.amount).toBe(14.72);
+    expect(plan.meta.currency).toBe('CAD');
+    expect(plan.meta.cat).toBe('Shipping & Postage');
+    expect(plan.meta.date).toBe('2026-08-24');
+  });
+
+  it('leaves an unrelated opaque filename on the normal scoring path', () => {
+    const plan = planFile({ name: 'receipt_c917c7a6-2807-4b95-b96b.pdf' }, expenses, {});
+    expect(plan.exactRef).toBeUndefined();
+    expect(plan.needsOcr).toBe(true);
+  });
+
+  it('does not treat a short reference as an identity match', () => {
+    const shortRef = [{ id: 'x', ref: 'canadapost:1234', trackingPin: '1234', date: '2026-01-01', amount: 5 }];
+    expect(exactReferenceMatch({ name: 'invoice-1234.pdf' }, shortRef)).toBe(null);
   });
 });

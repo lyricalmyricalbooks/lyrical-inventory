@@ -119,12 +119,15 @@ const server = http.createServer(async (req, res) => {
       const { xmlPayload, apiKey, apiSecret, isTest, targetEndpoint, customerNumber, zonosAccountKey } = body;
       const key = apiKey || process.env.CANADAPOST_API_KEY;
       const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
-      const custNum = customerNumber || process.env.CANADAPOST_CUSTOMER_NUMBER || '0007123456';
+      const custNum = customerNumber || process.env.CANADAPOST_CUSTOMER_NUMBER || '';
       const baseUrl = isTest ? 'https://ct.soa-gw.canadapost.ca' : 'https://soa-gw.canadapost.ca';
       const endpoint = targetEndpoint || `${baseUrl}/rs/${encodeURIComponent(custNum)}/ncshipment`;
 
       if (!key || !secret) {
         return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
+      }
+      if (!custNum && !targetEndpoint) {
+        return sendJson(res, 400, { error: 'Missing Canada Post customer number — a shipment cannot be attached to an account without it' });
       }
 
       try {

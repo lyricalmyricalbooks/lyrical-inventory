@@ -58,7 +58,7 @@ import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
-import { testCanadaPostConnection } from '../lib/canadapost.js';
+import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber } from '../lib/canadapost.js';
 import {
   RECURRING_FREQUENCIES,
   amountOnDate,
@@ -3561,6 +3561,14 @@ async function testCanadaPostConnectionHandler() {
     return;
   }
 
+  // Live and sandbox look identical once connected, so state the target account up front.
+  const audit = validateCanadaPostAccount({ apiKey, apiSecret, customerNumber, isTest });
+  if (customerNumber && !isValidCustomerNumber(customerNumber)) {
+    showToast(`⚠ Canada Post customer number must be 7 to 10 digits (got ${customerNumber.replace(/\D/g, '').length})`, 'warn');
+    customerInput?.focus();
+    return;
+  }
+
   if (testBtn) { testBtn.disabled = true; testBtn.textContent = 'Testing...'; }
   if (statusEl) {
     statusEl.innerHTML = '<span style="color:var(--text2);">Connecting to Canada Post Web Services...</span>';
@@ -3576,9 +3584,24 @@ async function testCanadaPostConnectionHandler() {
 
     if (result.ok) {
       if (statusEl) {
-        statusEl.innerHTML = `<span style="color:var(--green);font-weight:600;">✓ Connected to Canada Post! (${result.servicesCount} services quoted)</span> <span style="color:var(--text3);font-size:10px;">(${new Date().toLocaleTimeString()})</span>`;
+        const modePill = audit.environment.mode === 'live'
+          ? '<span class="pill green sm">Live Production Mode</span>'
+          : '<span class="pill gold sm">Sandbox Test Mode</span>';
+        const notes = [...audit.errors, ...audit.warnings]
+          .map(n => `<div style="color:var(--text3);font-size:10px;margin-top:3px;">${escapeHtml(n)}</div>`)
+          .join('');
+        statusEl.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="color:var(--green);font-weight:600;">✓ Connected to Canada Post! (${result.servicesCount} services quoted)</span>
+            ${modePill}
+            <span class="tnum" style="color:var(--text3);font-size:10px;font-family:'DM Mono',monospace;">${escapeHtml(audit.environment.hostname)}</span>
+            <span style="color:var(--text3);font-size:10px;">(${new Date().toLocaleTimeString()})</span>
+          </div>
+          <div style="color:var(--text3);font-size:10px;margin-top:3px;">Labels will be billed to customer number <span class="tnum">${escapeHtml(audit.customerNumber || '—')}</span>.</div>
+          ${notes}
+        `;
       }
-      showToast('✓ Connected to Canada Post API successfully');
+      showToast(`✓ Connected to Canada Post — ${audit.environment.label}`);
       if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
       TAX_CENTER.settings.cpApiKey = apiKey;
       TAX_CENTER.settings.cpApiSecret = apiSecret;

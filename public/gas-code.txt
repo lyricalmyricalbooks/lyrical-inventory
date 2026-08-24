@@ -93,6 +93,11 @@
  *      ('proxycanadapost' and 'proxyzonos') to eliminate client-side CORS issues
  *      for live direct rates, duty-free calculations, label creation, and PDF
  *      label downloads. Bump flags v23-and-older as outdated.
+ *  23. v25: 'proxycanadapost' accepts an isTracking flag and sends the
+ *      'application/vnd.cpc.track+xml' Accept header, so the client's
+ *      "Check Account & Tracking PIN" action can verify a purchased label
+ *      really exists on Canada Post's tracking system from a static deploy.
+ *      Bump flags v24-and-older as outdated.
  */
 
 const HEADERS = [
@@ -141,9 +146,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v24',
-    scriptVersion: 'v24',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true },
+    service: 'lyrical-sheets-webhook-v25',
+    scriptVersion: 'v25',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -592,6 +597,7 @@ function doPost(e) {
       const apiSecret = d.apiSecret || '';
       const zonosAccountKey = d.zonosAccountKey || '';
       const isArtifact = d.isArtifact === true;
+      const isTracking = d.isTracking === true;
 
       if (!endpoint) return jsonOut_({ error: 'Endpoint required' });
       if (!apiKey || !apiSecret) return jsonOut_({ error: 'Canada Post API Key & Secret required' });
@@ -604,6 +610,8 @@ function doPost(e) {
         };
         if (isArtifact) {
           headers['Accept'] = 'application/pdf';
+        } else if (isTracking) {
+          headers['Accept'] = 'application/vnd.cpc.track+xml';
         } else if (method === 'POST') {
           headers['Accept'] = endpoint.indexOf('ncshipment') !== -1 
             ? 'application/vnd.cpc.ncshipment-v4+xml' 
