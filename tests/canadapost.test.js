@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   cleanPostalCode,
   buildRateScenarioXml,
@@ -369,18 +369,28 @@ describe('Canada Post Account & Environment Validation', () => {
     expect(normalizeCustomerNumber('000 712-3456')).toBe('0007123456');
   });
 
-  it('blocks a live purchase that still uses the bundled demo credentials', async () => {
-    const { validateCanadaPostAccount } = await import('../src/lib/canadapost.js');
+  it('ships no built-in credentials, so an unconfigured account cannot buy a label', async () => {
+    const {
+      DEFAULT_CP_API_KEY,
+      DEFAULT_CP_API_SECRET,
+      DEFAULT_CP_CUSTOMER_NUMBER,
+      hasCanadaPostCredentials,
+      validateCanadaPostAccount
+    } = await import('../src/lib/canadapost.js');
 
-    const demoLive = validateCanadaPostAccount({
-      apiKey: '5832e3366d6aeb872e41adfab8192271',
-      apiSecret: '75fdce5f4799ac746b93cc34944ff146',
-      customerNumber: '0007123456',
-      isTest: false
-    });
-    expect(demoLive.ok).toBe(false);
-    expect(demoLive.usingDemoCredentials).toBe(true);
-    expect(demoLive.errors.join(' ')).toMatch(/demo credentials/i);
+    // This bundle is served publicly; a credential here would be a published one.
+    expect(DEFAULT_CP_API_KEY).toBe('');
+    expect(DEFAULT_CP_API_SECRET).toBe('');
+    expect(DEFAULT_CP_CUSTOMER_NUMBER).toBe('');
+    expect(hasCanadaPostCredentials({ apiKey: '', apiSecret: '' })).toBe(false);
+    expect(hasCanadaPostCredentials({ apiKey: 'k', apiSecret: '' })).toBe(false);
+    expect(hasCanadaPostCredentials({ apiKey: 'k', apiSecret: 's' })).toBe(true);
+
+    const unconfigured = validateCanadaPostAccount({ isTest: false });
+    expect(unconfigured.ok).toBe(false);
+    expect(unconfigured.configured).toBe(false);
+    expect(unconfigured.errors.join(' ')).toMatch(/API key is missing/i);
+    expect(unconfigured.errors.join(' ')).toMatch(/Tax Centre/i);
 
     const realLive = validateCanadaPostAccount({
       apiKey: 'merchant_key_abc',
@@ -389,7 +399,7 @@ describe('Canada Post Account & Environment Validation', () => {
       isTest: false
     });
     expect(realLive.ok).toBe(true);
-    expect(realLive.usingDemoCredentials).toBe(false);
+    expect(realLive.configured).toBe(true);
     expect(realLive.customerNumber).toBe('0042998877');
     expect(realLive.errors).toHaveLength(0);
   });
@@ -457,7 +467,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
     expect(result.simulationReason).toMatch(/Failed to fetch/);
   });
 
-  it('refuses to buy a live label with demo credentials before any network call', async () => {
+  it('refuses to buy a label with no credentials configured, before any network call', async () => {
     const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
     global.fetch = vi.fn().mockRejectedValue(new Error('should never be called'));
 
@@ -466,9 +476,20 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
       destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
       parcel: { weightKg: 0.5 },
       isTest: false
-    })).rejects.toThrow(/demo credentials/i);
+    })).rejects.toThrow(/API key is missing/i);
 
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not simulate a shipment outside sandbox mode even with no credentials', async () => {
+    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+
+    await expect(executeCanadaPostProxy({
+      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/0042998877/ncshipment',
+      xmlPayload: '<non-contract-shipment/>',
+      isTest: false
+    })).rejects.toThrow(/no label was purchased/i);
   });
 
   it('routes a purchase through the merchant customer number endpoint', async () => {
@@ -507,6 +528,90 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
     const proxyBody = JSON.parse(proxyCall[1].body);
     expect(proxyBody.targetEndpoint).toBe('https://soa-gw.canadapost.ca/rs/0042998877/ncshipment');
     expect(proxyBody.xmlPayload).toContain('<declaration-id>0rd4dpkrvc1y9</declaration-id>');
+  });
+});
+
+describe('Purchased labels stay reprintable offline', () => {
+  const realCreds = {
+    apiKey: 'merchant_key_abc',
+    apiSecret: 'merchant_secret_xyz',
+    customerNumber: '0042998877'
+  };
+
+  const shipmentXml = pin => `<?xml version="1.0" encoding="UTF-8"?>
+    <non-contract-shipment-info>
+      <shipment-id>4069513219837873${pin.slice(-2)}</shipment-id>
+      <tracking-pin>${pin}</tracking-pin>
+      <links><link rel="label" href="https://soa-gw.canadapost.ca/rs/artifact/abc/10000/0"/></links>
+    </non-contract-shipment-info>`;
+
+  const buy = async (pin, orderNum) => {
+    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const xml = shipmentXml(pin);
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, xml }),
+      text: async () => xml,
+      headers: { get: () => 'application/xml' }
+    });
+    return buyCanadaPostLabel({
+      serviceCode: 'DOM.EP',
+      orderNum,
+      destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
+      parcel: { weightKg: 0.5 },
+      ...realCreds,
+      isTest: false
+    });
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete global.fetch;
+    localStorage.clear();
+  });
+
+  it('keeps an earlier label reachable after a later one is bought', async () => {
+    const { getArchivedShipmentContext, listArchivedShipments } = await import('../src/lib/canadapost.js');
+
+    await buy('70123456789000001', 'ORD-1');
+    await buy('70123456789000002', 'ORD-2');
+
+    // The older parcel is the one that used to become unreachable.
+    const older = getArchivedShipmentContext('70123456789000001');
+    expect(older).toBeTruthy();
+    expect(older.orderNum).toBe('ORD-1');
+
+    const newer = getArchivedShipmentContext('7012 3456 7890 00002');
+    expect(newer.orderNum).toBe('ORD-2');
+
+    expect(listArchivedShipments().map(l => l.orderNum)).toEqual(['ORD-2', 'ORD-1']);
+  });
+
+  it('returns null for a parcel that was never bought here', async () => {
+    const { getArchivedShipmentContext } = await import('../src/lib/canadapost.js');
+    await buy('70123456789000001', 'ORD-1');
+    expect(getArchivedShipmentContext('70123456789009999')).toBe(null);
+  });
+
+  it('does not offer a simulated shipment for reprint', async () => {
+    const { executeCanadaPostProxy, setLastPurchasedShipmentContext, listArchivedShipments } =
+      await import('../src/lib/canadapost.js');
+
+    global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+    const sim = await executeCanadaPostProxy({
+      targetEndpoint: 'https://ct.soa-gw.canadapost.ca/rs/0042998877/ncshipment',
+      xmlPayload: '<non-contract-shipment/>',
+      ...realCreds,
+      isTest: true
+    });
+    setLastPurchasedShipmentContext({ ...sim, orderNum: 'SIM-1' });
+
+    // Nothing was purchased, so there is no label worth reprinting.
+    expect(listArchivedShipments()).toEqual([]);
   });
 });
 

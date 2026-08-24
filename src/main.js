@@ -396,6 +396,9 @@ import {
   pasteZonosDeclarationId,
   autoGenerateZonosDeclarationHandler,
   checkCanadaPostAccountAndPinHandler,
+  verifyShippedTrackingPinsHandler,
+  showArchivedCanadaPostLabels,
+  reprintArchivedCanadaPostLabel,
   openZonosPrepayAppHandler,
   calculateCanadaPostRatesHandler,
   renderCanadaPostRatesCard,
@@ -21016,6 +21019,9 @@ window.onZonosDeclarationIdInput = onZonosDeclarationIdInput;
 window.pasteZonosDeclarationId = pasteZonosDeclarationId;
 window.autoGenerateZonosDeclarationHandler = autoGenerateZonosDeclarationHandler;
 window.checkCanadaPostAccountAndPinHandler = checkCanadaPostAccountAndPinHandler;
+window.verifyShippedTrackingPinsHandler = verifyShippedTrackingPinsHandler;
+window.showArchivedCanadaPostLabels = showArchivedCanadaPostLabels;
+window.reprintArchivedCanadaPostLabel = reprintArchivedCanadaPostLabel;
 window.openZonosPrepayAppHandler = openZonosPrepayAppHandler;
 window.calculateCanadaPostRatesHandler = calculateCanadaPostRatesHandler;
 window.testCanadaPostConnectionHandler = testCanadaPostConnectionHandler;

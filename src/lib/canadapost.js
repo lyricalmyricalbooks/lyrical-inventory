@@ -8,6 +8,14 @@
  * - Offline-first fallback estimation for Canadian domestic and cross-border shipments
  */
 
+import {
+  addLabelToArchive,
+  findArchivedLabel,
+  pruneLabelArchive,
+  listArchivedLabels,
+  archiveKeyForPin,
+} from './label-archive.js';
+
 export const CANADAPOST_PRODUCTION_URL = 'https://soa-gw.canadapost.ca';
 export const CANADAPOST_SANDBOX_URL = 'https://ct.soa-gw.canadapost.ca';
 
@@ -190,9 +198,17 @@ export function parseCanadaPostPriceQuotes(xmlText) {
   return quotes;
 }
 
-export const DEFAULT_CP_API_KEY = '5832e3366d6aeb872e41adfab8192271';
-export const DEFAULT_CP_API_SECRET = '75fdce5f4799ac746b93cc34944ff146';
-export const DEFAULT_CP_CUSTOMER_NUMBER = '0007123456';
+// NOTE ON CREDENTIALS
+// These are deliberately empty. This app is served as a static bundle from
+// GitHub Pages, so anything written here is readable by anyone who opens the
+// page source — a shipping credential in this file is a published credential.
+// The publisher's own key, secret and customer number are entered once in the
+// Tax Centre and read from saved settings; nothing falls back to a built-in
+// account. Code that needs credentials asks for them and fails loudly when
+// they are absent, rather than quietly shipping on somebody else's account.
+export const DEFAULT_CP_API_KEY = '';
+export const DEFAULT_CP_API_SECRET = '';
+export const DEFAULT_CP_CUSTOMER_NUMBER = '';
 
 /**
  * Resolve which Canada Post environment a set of settings will actually hit.
@@ -226,19 +242,17 @@ export function normalizeCustomerNumber(customerNumber) {
 }
 
 /**
- * True when the supplied credentials are the bundled demo values rather than the
- * merchant's own Canada Post account.
+ * True when a usable Canada Post key and secret have been configured.
  */
-export function isUsingDemoCredentials({ apiKey = '', apiSecret = '', customerNumber = '' } = {}) {
-  return (
-    String(apiKey || '').trim() === DEFAULT_CP_API_KEY ||
-    String(apiSecret || '').trim() === DEFAULT_CP_API_SECRET ||
-    normalizeCustomerNumber(customerNumber) === normalizeCustomerNumber(DEFAULT_CP_CUSTOMER_NUMBER)
-  );
+export function hasCanadaPostCredentials({ apiKey = '', apiSecret = '' } = {}) {
+  return !!String(apiKey || '').trim() && !!String(apiSecret || '').trim();
 }
 
-function isSimulationAllowed({ apiKey, apiSecret, customerNumber, isTest }) {
-  return !!isTest || isUsingDemoCredentials({ apiKey, apiSecret, customerNumber });
+// Simulation exists to let the shipping screen be laid out and rehearsed without
+// a live account. Sandbox mode is the only place it is allowed: outside it, an
+// unreachable gateway is reported as the failure it is.
+function isSimulationAllowed({ isTest }) {
+  return !!isTest;
 }
 
 /**
@@ -260,19 +274,16 @@ export function validateCanadaPostAccount({
   const key = String(apiKey || '').trim();
   const secret = String(apiSecret || '').trim();
   const custDigits = normalizeCustomerNumber(customerNumber);
-  const usingDemo = isUsingDemoCredentials({ apiKey: key, apiSecret: secret, customerNumber: custDigits });
+  const configured = hasCanadaPostCredentials({ apiKey: key, apiSecret: secret });
 
-  if (!key) errors.push('Canada Post API key is missing.');
-  if (!secret) errors.push('Canada Post API secret / password is missing.');
+  if (!key) errors.push('Canada Post API key is missing. Add it in Tax Centre → Canada Post Direct API.');
+  if (!secret) errors.push('Canada Post API secret / password is missing. Add it in Tax Centre → Canada Post Direct API.');
   if (!custDigits) {
     errors.push('Canada Post customer number is missing — labels cannot be attached to your account without it.');
   } else if (!isValidCustomerNumber(custDigits)) {
     errors.push(`Canada Post customer number "${custDigits}" is ${custDigits.length} digits; it must be 7 to 10 digits.`);
   }
 
-  if (!env.isTest && usingDemo) {
-    errors.push('Live Production Mode is selected but the bundled demo credentials are still in use. Enter your own Canada Post API key, secret, and customer number before buying a label.');
-  }
   if (env.isTest) {
     warnings.push('Sandbox Test Mode is on. Labels created here are not real, are not charged, and cannot be mailed.');
   }
@@ -284,7 +295,7 @@ export function validateCanadaPostAccount({
     ok: errors.length === 0,
     environment: env,
     mode: env.mode,
-    usingDemoCredentials: usingDemo,
+    configured,
     customerNumber: custDigits,
     errors,
     warnings
@@ -365,8 +376,45 @@ export function setLastPurchasedShipmentContext(ctx) {
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('lm_last_cp_shipment', JSON.stringify(ctx));
+      // Also keep it alongside every earlier purchase, so a label bought last
+      // week can still be reprinted when Canada Post is unreachable.
+      if (!ctx?.isSimulated) {
+        const archive = addLabelToArchive(readLabelArchive(), ctx);
+        localStorage.setItem(LABEL_ARCHIVE_KEY, JSON.stringify(archive));
+      }
     }
   } catch (_) {}
+}
+
+const LABEL_ARCHIVE_KEY = 'lm_cp_label_archive';
+
+/** Every purchase still held on this device, newest first. */
+export function readLabelArchive() {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(LABEL_ARCHIVE_KEY);
+    return raw ? pruneLabelArchive(JSON.parse(raw)) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * The shipment behind a tracking PIN, for redrawing its label with no network.
+ * Falls back to the most recent purchase when the PIN matches it.
+ */
+export function getArchivedShipmentContext(pin) {
+  const found = findArchivedLabel(readLabelArchive(), pin);
+  if (found) return found;
+
+  const last = getLastPurchasedShipmentContext();
+  if (last && archiveKeyForPin(last.trackingPin) === archiveKeyForPin(pin)) return last;
+  return null;
+}
+
+/** Past purchases as a list, for a "reprint an earlier label" picker. */
+export function listArchivedShipments() {
+  return listArchivedLabels(readLabelArchive());
 }
 
 export function getLastPurchasedShipmentContext() {
@@ -394,7 +442,7 @@ export function generateCanadaPostLabelSvg({
   parcel = {},
   customs = null,
   declarationId = '',
-  customerNumber = DEFAULT_CP_CUSTOMER_NUMBER
+  customerNumber = ''
 }) {
   const sfName = sender.name || 'Lyricalmyrical Books';
   const sfAddr1 = sender.address1 || '123 Main St';
@@ -444,7 +492,7 @@ export function generateCanadaPostLabelSvg({
     <!-- POSTAGE PAID INDICIA BOX -->
     <rect x="550" y="25" width="220" height="75" fill="#ffffff" stroke="#000000" stroke-width="2"/>
     <text x="660" y="45" font-size="11" font-weight="800" text-anchor="middle" fill="#000000">POSTAGE PAID / PORT PAYÉ</text>
-    <text x="660" y="62" font-size="10" font-weight="600" text-anchor="middle" fill="#333333">Cust #: ${escapeXml(customerNumber)}</text>
+    <text x="660" y="62" font-size="10" font-weight="600" text-anchor="middle" fill="#333333">Cust #: ${escapeXml(customerNumber || '—')}</text>
     <text x="660" y="78" font-size="9" font-weight="600" text-anchor="middle" fill="#333333">${todayDate} · ${escapeXml(sfZip)}</text>
 
     <!-- SERVICE NAME STRIP -->
@@ -647,7 +695,7 @@ export async function executeCanadaPostProxy({
     // A simulated shipment produces a tracking PIN that does not exist at Canada Post.
     // Handing that to a customer, billing it to the ledger, or marking an order shipped
     // would all be wrong, so simulation is confined to sandbox/demo-credential runs.
-    if (isShipment && (allowSimulation === null ? isSimulationAllowed({ apiKey, apiSecret, customerNumber, isTest }) : !!allowSimulation)) {
+    if (isShipment && (allowSimulation === null ? isSimulationAllowed({ isTest }) : !!allowSimulation)) {
       const mockShipmentId = `CP-SHIP-${Date.now().toString().slice(-8)}`;
       const mockTrackingPin = `7012${Date.now().toString().slice(-12)}`;
       const mockLabelUrl = `local://canadapost/label/${mockTrackingPin}`;
@@ -804,6 +852,9 @@ export async function verifyCanadaPostTrackingPin({
 
   const key = (apiKey || DEFAULT_CP_API_KEY).trim();
   const secret = (apiSecret || DEFAULT_CP_API_SECRET).trim();
+  if (!hasCanadaPostCredentials({ apiKey: key, apiSecret: secret })) {
+    throw new Error('Add your Canada Post API key and secret in Tax Centre → Canada Post Direct API before checking a tracking PIN.');
+  }
   const env = resolveCanadaPostEnvironment({ isTest });
   const targetEndpoint = `${env.baseUrl}/vis/tracking/pin/${encodeURIComponent(cleanPin)}/summary`;
 

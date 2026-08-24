@@ -68,7 +68,17 @@ export function normalizeWeightUnit(unit) {
   return ZONOS_WEIGHT_UNITS[clean] || 'POUND';
 }
 
-export const DEFAULT_ZONOS_API_KEY = 'credential_live_11988839-5711-4e1c-9036-303dc94fb15b';
+// NOTE ON CREDENTIALS
+// Deliberately empty — see the same note in canadapost.js. This bundle is served
+// publicly, so a credentialToken written here would be a published secret. The
+// publisher's Zonos key is entered once in the Tax Centre and read from saved
+// settings; there is no built-in account to fall back to.
+export const DEFAULT_ZONOS_API_KEY = '';
+
+/** True when a usable Zonos credentialToken has been configured. */
+export function hasZonosCredentials(apiKey) {
+  return !!String(apiKey || '').trim();
+}
 
 function getSavedSheetsUrl() {
   try {
@@ -89,6 +99,9 @@ function getSavedSheetsUrl() {
  */
 export async function executeZonosGraphQL({ query, variables = {}, apiKey = DEFAULT_ZONOS_API_KEY }) {
   const token = (apiKey || DEFAULT_ZONOS_API_KEY).trim();
+  if (!token) {
+    throw new Error('Add your Zonos API key in Tax Centre → Zonos Duties before calculating duties or creating a declaration.');
+  }
 
   // 1. Attempt direct fetch to Zonos API
   try {
@@ -619,6 +632,9 @@ export async function createZonosDeclaration({
   source = 'POST'
 }) {
   const token = (apiKey || DEFAULT_ZONOS_API_KEY).trim();
+  if (!token) {
+    throw new Error('Add your Zonos API key in Tax Centre → Zonos Duties before creating a declaration.');
+  }
 
   // Step 1: Calculate Landed Cost Workflow
   const calc = await calculateZonosLandedCost({

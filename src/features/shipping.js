@@ -111,7 +111,15 @@ import {
   validateCanadaPostAccount,
   verifyCanadaPostTrackingPin,
   resolveCanadaPostEnvironment,
+  getArchivedShipmentContext,
+  listArchivedShipments,
 } from '../lib/canadapost.js';
+import {
+  collectVerifiableShipments,
+  classifyTrackingResult,
+  summarizeTrackingAudit,
+  describeTrackingAudit,
+} from '../lib/tracking-audit.js';
 
 function getShippingReconciliationOrders() {
   const byNumber = new Map();
@@ -2364,6 +2372,119 @@ function renderSimulatedCanadaPostNotice(result) {
  * Verify the Canada Post account configuration and, when a PIN is supplied,
  * confirm the shipment actually exists on Canada Post's tracking system.
  */
+/**
+ * Check every shipped order's Canada Post tracking number against Canada Post.
+ *
+ * Orders shipped before the app stopped inventing tracking numbers may still be
+ * carrying one, and it is indistinguishable from a real PIN by eye. This asks
+ * Canada Post about each one and lists the parcels it has never heard of.
+ */
+async function verifyShippedTrackingPinsHandler() {
+  const btn = $('cp-verify-shipped-btn');
+  const out = $('cp-account-check-result');
+  const oldText = btn ? btn.innerHTML : '';
+
+  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const isTest = !!TAX_CENTER.settings?.cpTestMode;
+
+  if (!apiKey || !apiSecret) {
+    showToast('⚠ Add your Canada Post API key and secret in Tax Centre settings first', 'warn');
+    return;
+  }
+
+  const shipments = collectVerifiableShipments(getShippingReconciliationOrders());
+  if (!shipments.length) {
+    if (out) {
+      out.style.display = 'block';
+      out.innerHTML = '<div style="font-size:11px;color:var(--text3);">No shipped orders with a Canada Post tracking number to check yet.</div>';
+    }
+    showToast('Nothing to check — no shipped orders carry a Canada Post tracking number', 'ok');
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+
+  const verdicts = [];
+  try {
+    for (let i = 0; i < shipments.length; i++) {
+      const shipment = shipments[i];
+      if (btn) btn.innerHTML = `<span>⏳</span><span>Checking ${i + 1} of ${shipments.length}…</span>`;
+      if (out) {
+        out.style.display = 'block';
+        out.innerHTML = `<div style="font-size:11px;color:var(--text3);">Asking Canada Post about parcel ${i + 1} of ${shipments.length}…</div>`;
+      }
+
+      let verdict;
+      try {
+        const result = await verifyCanadaPostTrackingPin({ pin: shipment.pin, apiKey, apiSecret, isTest });
+        verdict = classifyTrackingResult({ result });
+      } catch (err) {
+        verdict = classifyTrackingResult({ error: err });
+      }
+      verdicts.push({ ...shipment, ...verdict });
+    }
+
+    const summary = summarizeTrackingAudit(verdicts);
+    renderTrackingAuditResult(out, verdicts, summary);
+
+    if (summary.missing) {
+      showToast(`⚠ ${summary.missing} tracking number${summary.missing === 1 ? '' : 's'} Canada Post has no record of`, 'warn');
+    } else if (summary.unchecked === summary.total) {
+      showToast('⚠ Could not reach Canada Post to check any parcels', 'warn');
+    } else {
+      showToast(`✓ ${summary.verified} tracking number${summary.verified === 1 ? '' : 's'} confirmed with Canada Post`, 'ok');
+    }
+  } catch (err) {
+    console.warn('Tracking sweep failed:', err);
+    showToast(`⚠ Tracking check failed: ${err?.message || 'unknown error'}`, 'warn');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = oldText;
+    }
+  }
+}
+
+/** Render the sweep's findings, problems first. */
+function renderTrackingAuditResult(out, verdicts, summary) {
+  if (!out) return;
+
+  const order = { missing: 0, unchecked: 1, verified: 2 };
+  const sorted = [...verdicts].sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
+
+  const rowFor = v => {
+    const tone = v.status === 'missing'
+      ? 'color:var(--red,var(--text));'
+      : v.status === 'verified'
+        ? 'color:var(--green);'
+        : 'color:var(--text3);';
+    const mark = v.status === 'missing' ? '✕' : v.status === 'verified' ? '✓' : '—';
+    return `
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--border-subtle,var(--border));">
+        <span style="${tone}font-weight:700;">${mark}</span>
+        <span class="tnum" style="font-family:'DM Mono',monospace;font-size:11px;">${escapeHtml(v.pin)}</span>
+        ${v.orderNum ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(v.orderNum)}</span>` : ''}
+        <span style="font-size:11px;${tone}flex:1;min-width:140px;">${escapeHtml(v.detail || '')}</span>
+      </div>
+    `;
+  };
+
+  const advice = summary.missing
+    ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.5;">
+         A parcel Canada Post has no record of was never actually bought — most likely the connection dropped
+         during an older purchase. Buy the label again for those orders before telling the customer it is on its way.
+       </div>`
+    : '';
+
+  out.style.display = 'block';
+  out.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:6px;">${escapeHtml(describeTrackingAudit(summary))}</div>
+    ${sorted.map(rowFor).join('')}
+    ${advice}
+  `;
+}
+
 async function checkCanadaPostAccountAndPinHandler() {
   const btn = $('cp-check-account-btn');
   const out = $('cp-account-check-result');
@@ -2401,7 +2522,7 @@ async function checkCanadaPostAccountAndPinHandler() {
       const rows = [];
       rows.push(`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${modePill}<span class="tnum" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${escapeHtml(audit.environment.hostname)}</span></div>`);
       rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:6px;">${escapeHtml(audit.environment.description)}</div>`);
-      rows.push(`<div style="font-size:11px;margin-top:8px;">Customer number: <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(audit.customerNumber || '—')}</span>${audit.usingDemoCredentials ? ' <span class="pill gray sm">demo credentials</span>' : ''}</div>`);
+      rows.push(`<div style="font-size:11px;margin-top:8px;">Customer number: <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(audit.customerNumber || '—')}</span>${audit.configured ? '' : ' <span class="pill gray sm">not configured</span>'}</div>`);
 
       audit.errors.forEach(e => {
         rows.push(`<div style="font-size:11px;color:var(--red,var(--text));margin-top:6px;">✕ ${escapeHtml(e)}</div>`);
@@ -2654,7 +2775,7 @@ async function calculateZonosDutiesHandler({ shippingAmount, carrierName } = {})
   const weightUnit = $('sp-weight-unit')?.value || 'lb';
   const incoterm = resolveShippoIncoterm(stCountryCode);
 
-  const zonosApiKey = TAX_CENTER.settings?.zonosApiKey || 'credential_live_11988839-5711-4e1c-9036-303dc94fb15b';
+  const zonosApiKey = TAX_CENTER.settings?.zonosApiKey || DEFAULT_ZONOS_API_KEY;
   const isEnabled = TAX_CENTER.settings?.zonosEnabled !== false;
 
   card.style.display = 'block';
@@ -2948,6 +3069,14 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
           <span>🔍</span>
           <span>Check Account &amp; Tracking PIN</span>
         </button>
+        <button class="btn sm tag cp-label-action-btn" id="cp-verify-shipped-btn" type="button" onclick="verifyShippedTrackingPinsHandler()" title="Ask Canada Post about every shipped order's tracking number">
+          <span>📦</span>
+          <span>Verify All Shipped Orders</span>
+        </button>
+        <button class="btn sm tag cp-label-action-btn" id="cp-past-labels-btn" type="button" onclick="showArchivedCanadaPostLabels()" title="Reprint a label you already bought — works offline">
+          <span>🗂️</span>
+          <span>Reprint a Past Label</span>
+        </button>
       </div>
       <div id="cp-account-check-result" class="cp-account-check-result" style="display:none;"></div>
     </div>
@@ -3007,6 +3136,58 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
 async function openCanadaPostPurchasedLabel(labelUrl) {
   const context = getLastPurchasedShipmentContext();
   showCanadaPostLabelModal(context || { labelUrl });
+}
+
+/**
+ * Reopen a label bought earlier, redrawn from the stored shipment details.
+ * Needs no network and no Canada Post credentials — the postage is already paid.
+ */
+function reprintArchivedCanadaPostLabel(pin) {
+  const context = getArchivedShipmentContext(pin);
+  if (!context) {
+    showToast('⚠ That label is no longer stored on this device', 'warn');
+    return;
+  }
+  showCanadaPostLabelModal(context);
+}
+
+/**
+ * List the labels still held on this device so any of them can be reprinted.
+ */
+function showArchivedCanadaPostLabels() {
+  const out = $('cp-account-check-result');
+  if (!out) return;
+
+  const labels = listArchivedShipments();
+  out.style.display = 'block';
+
+  if (!labels.length) {
+    out.innerHTML = `
+      <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+        No labels stored on this device yet. Every label you buy from here is kept automatically,
+        so you can reprint it later even with no internet.
+      </div>`;
+    return;
+  }
+
+  const rows = labels.map(l => `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border-subtle,var(--border));">
+      <span class="tnum" style="font-family:'DM Mono',monospace;font-size:11px;">${escapeHtml(l.trackingPin || l.pin)}</span>
+      ${l.orderNum ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(l.orderNum)}</span>` : ''}
+      ${l.destinationName ? `<span style="font-size:11px;color:var(--text3);">→ ${escapeHtml(l.destinationName)}${l.destinationCountry ? ` (${escapeHtml(l.destinationCountry)})` : ''}</span>` : ''}
+      <button class="btn sm tag cp-label-action-btn" type="button" style="margin-left:auto;min-height:36px;padding:6px 12px;" onclick="reprintArchivedCanadaPostLabel('${escapeHtml(l.pin)}')" title="Reopen and reprint this label">
+        🖨️ Reprint
+      </button>
+    </div>
+  `).join('');
+
+  out.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px;">
+      ${labels.length} label${labels.length === 1 ? '' : 's'} stored on this device
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">These reprint without internet — the postage is already paid.</div>
+    ${rows}
+  `;
 }
 
 /**
@@ -3088,7 +3269,7 @@ function printCanadaPostLabelModal() {
 }
 
 function downloadCanadaPostLabelModal(pin) {
-  const context = getLastPurchasedShipmentContext();
+  const context = getArchivedShipmentContext(pin) || getLastPurchasedShipmentContext();
   const svgText = generateCanadaPostLabelSvg(context || { trackingPin: pin });
   const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -3265,6 +3446,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
             histItem.shipped = true;
             histItem.shippedDate = today();
             histItem.trackingNumber = result.trackingPin || '';
+            histItem.carrier = 'canadapost';
             histItem.declarationId = declarationId || '';
             histItem.postagePaid = quotedPrice;
             saveState(activeBook);
@@ -6492,6 +6674,9 @@ export {
   pasteZonosDeclarationId,
   autoGenerateZonosDeclarationHandler,
   checkCanadaPostAccountAndPinHandler,
+  verifyShippedTrackingPinsHandler,
+  showArchivedCanadaPostLabels,
+  reprintArchivedCanadaPostLabel,
   openZonosPrepayAppHandler,
   calculateCanadaPostRatesHandler,
   renderCanadaPostRatesCard,
