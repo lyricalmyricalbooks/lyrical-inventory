@@ -384,6 +384,23 @@ Four rules it encodes:
   and the rhythm drifts down the screen. It is also its own `@container` (`overview-sec`),
   so the head stacks on a narrow panel without a viewport breakpoint.
 
+The pair generalises past the landing screen — the per-book Consignment tab (accounts /
+invoices / ledger) is the second screen on it. Two things that surfaced there:
+
+- **`.overview-section` and `.sys-sticky-head` coexist.** `container-type: inline-size`
+  applies layout and inline-size containment, not paint containment, so it does **not**
+  become a scroll container and a sticky `th` inside it still resolves `top` against the
+  page. Verified against the real sheet at `--sticky-top: 60px`.
+- **`.sec-head-badges` wraps.** A head's badge slot is not always one pill — these sections
+  hang two or three `.btn`s (and a `.sec-head-note` summary line) off it. Without
+  `flex-wrap`, `flex-shrink:0` squeezes the title column narrower and narrower until the
+  head overflows, well before the 680px container stack takes over. Use `.sec-head-note`
+  for a figure or status line riding alongside those buttons — mono and tabular, one step
+  below the buttons, so the actions still lead the slot.
+- **Replacing `.divider` is the point, not a side effect.** A screen that separates its
+  sections with hairlines is one where the spacing is doing no grouping work. Delete the
+  rules and let the section gap carry it.
+
 ---
 
 ## Dialogs — `.modal`

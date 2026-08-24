@@ -1303,43 +1303,65 @@
     <div class="book-context-dot"></div>
     <div><div class="book-context-title" id="bc-title-con">—</div><div class="book-context-meta">Consignment accounts & ledger</div></div>
   </div>
-  <div class="row-between">
-    <div class="section-hed">Consignment accounts</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn" onclick="openBulkSend()" title="Send books to several stores at once">📦 Bulk send</button>
-      <button class="btn gold" onclick="openM('add-store')">+ Add store</button>
+  <!-- Three sections, one head system. This screen used to run two serif
+       `.section-hed` heads and then drop the ledger — the longest and most
+       consequential thing on it — onto the 9px `.sect` micro-label tier, with
+       hairline `.divider`s standing in for a spacing rhythm. `.sec-head` +
+       `.overview-section` is the furniture the landing screen already proved;
+       gold is spent once, on the accounts the screen exists to manage. -->
+  <div class="overview-section">
+    <div class="sec-head">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Retail Partners</div>
+        <div class="section-hed sec-head-title">Consignment accounts</div>
+        <p class="section-subcopy">Every store holding copies of this title — what they still have on their shelves and what they owe you for.</p>
+      </div>
+      <div class="sec-head-badges">
+        <button class="btn" onclick="openBulkSend()" title="Send books to several stores at once">📦 Bulk send</button>
+        <button class="btn gold" onclick="openM('add-store')">+ Add store</button>
+      </div>
     </div>
+    <div id="stores-list"><div class="empty-state"><div class="e-icon">🏪</div>No stores yet.<div style="margin-top:12px;"><button class="btn gold" onclick="openM('add-store')">+ Add store</button></div></div></div>
   </div>
-  <div id="stores-list"><div class="empty-state"><div class="e-icon">🏪</div>No stores yet.<div style="margin-top:12px;"><button class="btn gold" onclick="openM('add-store')">+ Add store</button></div></div></div>
-  <div class="divider"></div>
 
   <!-- INVOICES (publisher only) -->
-  <div id="invoices-section" style="display:none;">
-    <div class="row-between">
-      <div class="section-hed">Invoices</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div id="inv-summary" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;"></div>
+  <div class="overview-section" id="invoices-section" style="display:none;">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Billing</div>
+        <div class="section-hed sec-head-title">Invoices</div>
+        <p class="section-subcopy">Bills raised against these stores, and how much of that is still waiting to be paid.</p>
+      </div>
+      <div class="sec-head-badges">
+        <div id="inv-summary" class="sec-head-note"></div>
         <button class="btn ink" onclick="openInvoiceTemplateSettings()" title="Edit publisher details & default terms">⚙ Settings</button>
         <button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button>
       </div>
     </div>
     <div id="invoices-list"><div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div></div>
-    <div class="divider"></div>
   </div>
 
-  <div class="row-between" style="margin-bottom:1rem;">
-    <div class="sect" style="margin-bottom:0;flex:1;">Consignment ledger</div>
-    <button class="btn" onclick="exportConsignmentLedgerCSV()" title="Download this book's consignment ledger as a CSV">⤓ Export CSV</button>
+  <div class="overview-section">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Audit Trail</div>
+        <div class="section-hed sec-head-title">Consignment ledger</div>
+        <p class="section-subcopy">Every shipment, return, sale and payment recorded against this title, newest first.</p>
+      </div>
+      <div class="sec-head-badges">
+        <button class="btn" onclick="exportConsignmentLedgerCSV()" title="Download this book's consignment ledger as a CSV">⤓ Export CSV</button>
+      </div>
+    </div>
+    <!-- Both children are filled by renderLedgerFilterBar(). The status line is a
+         permanent node rather than part of that render so its aria-live region
+         survives each rebuild — a live region replaced wholesale announces
+         nothing. -->
+    <div class="ledger-filter-bar" id="con-ledger-filter" role="group" aria-label="Narrow the consignment ledger" hidden>
+      <div class="ledger-filter-row" id="con-ledger-controls"></div>
+      <p class="ledger-filter-status" id="con-ledger-status" aria-live="polite"></p>
+    </div>
+    <div class="tbl-wrap sys-sticky-head"><table class="tbl"><thead><tr><th>Date</th><th>Store</th><th>Type</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Due to you</th><th>Notes</th><th>Status</th></tr></thead><tbody id="ledger-body" class="sys-long-list"></tbody><tfoot id="ledger-foot"></tfoot></table></div>
   </div>
-  <!-- Both children are filled by renderLedgerFilterBar(). The status line is a
-       permanent node rather than part of that render so its aria-live region
-       survives each rebuild — a live region replaced wholesale announces
-       nothing. -->
-  <div class="ledger-filter-bar" id="con-ledger-filter" role="group" aria-label="Narrow the consignment ledger" hidden>
-    <div class="ledger-filter-row" id="con-ledger-controls"></div>
-    <p class="ledger-filter-status" id="con-ledger-status" aria-live="polite"></p>
-  </div>
-  <div class="tbl-wrap sys-sticky-head"><table class="tbl"><thead><tr><th>Date</th><th>Store</th><th>Type</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Due to you</th><th>Notes</th><th>Status</th></tr></thead><tbody id="ledger-body" class="sys-long-list"></tbody><tfoot id="ledger-foot"></tfoot></table></div>
 </div>
 
 <!-- HISTORY -->
