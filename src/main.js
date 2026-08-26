@@ -564,7 +564,7 @@ import { channelMixRows } from './lib/channel-mix.js';
 import { csvCell, toCsv } from './lib/csv.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy } from './lib/inventory.js';
+import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, deductSaleFromStockBreakdown } from './lib/inventory.js';
 import { posStockView, posOversellSummary } from './lib/pos-stock.js';
 import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber } from './lib/invoices.js';
@@ -938,6 +938,7 @@ function resetBookForm() {
   $('nb-prod').value = '0';
   if ($('nb-pub-grat')) $('nb-pub-grat').value = '0';
   if ($('nb-author-grat')) $('nb-author-grat').value = '0';
+  if ($('nb-author-stock')) $('nb-author-stock').value = '0';
   $('nb-paylink').value = '';
   if ($('nb-payment-link')) $('nb-payment-link').value = 'https://paypal.me/lyricalmyricalbooks';
   $('nb-ship-length').value = '';
@@ -976,6 +977,7 @@ function openEditBookModal(id) {
   $('nb-prod').value = book.productionCost ?? 0;
   if ($('nb-pub-grat')) $('nb-pub-grat').value = book.pubGratuity ?? 0;
   if ($('nb-author-grat')) $('nb-author-grat').value = book.authorGratuity ?? 0;
+  if ($('nb-author-stock')) $('nb-author-stock').value = (states[id] && Number.isFinite(states[id].authorStock)) ? states[id].authorStock : 0;
   $('nb-paylink').value = book.stripeLink || '';
   if ($('nb-payment-link')) $('nb-payment-link').value = book.paymentLink || 'https://paypal.me/lyricalmyricalbooks';
   $('nb-ship-length').value = book.shipLength ?? '';
@@ -1400,6 +1402,12 @@ async function saveBookFromModal() {
   BOOKS[id] = book;
   BOOK_LIST = Object.values(BOOKS);
   if (!states[id]) states[id] = defaultState(book);
+
+  const inputAuthorStock = parseInt($('nb-author-stock')?.value, 10);
+  if (Number.isFinite(inputAuthorStock) && inputAuthorStock >= 0) {
+    states[id].authorStock = inputAuthorStock;
+    await saveState(id);
+  }
 
   if (currencyResult) {
     applyCurrencyResult(currencyResult, book, states[id]);
@@ -2141,7 +2149,7 @@ if (sheetsUrl) {
 }
 
 export function defaultState(book) {
-  return { stock: book.maxPrint, sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], payoutRequests: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0, openCall: [] };
+  return { stock: book.maxPrint, authorStock: 0, stockTransfers: [], sold: 0, revenue: 0, chStats: {}, hist: [], stores: [], ledger: [], doneIds: [], artistTransfers: [], artistPayouts: [], payoutRequests: [], expenses: [], artistPaymentLink: '', invoices: [], invoiceSeq: 0, openCall: [] };
 }
 
 export function getState() {
@@ -3722,6 +3730,7 @@ function updateAllOverview() {
           <span>✍ ${escapeHtml(book.author) || '—'}</span>
           <span>&nbsp;·&nbsp; 🏷 ${escapeHtml(book.currency)}${escapeHtml(book.listPrice)}</span>
           <span>&nbsp;·&nbsp; 🖨 ${escapeHtml(book.maxPrint)} printed</span>
+          ${!isAuthor() && s.authorStock > 0 ? `<span>&nbsp;·&nbsp; 👤 ${escapeHtml(s.authorStock)} with author</span>` : ''}
         </div>
         <div class="book-progress-wrapper" title="${escapeHtml(s.stock)} units on hand of ${escapeHtml(book.maxPrint)} total printed (${pct.toFixed(0)}%)">
           <div class="book-progress-header">
@@ -4684,9 +4693,13 @@ export function updateDash() {
   $('d-book-isbn').textContent = book.isbn || '—';
   const cost = book.productionCost || 0;
   const printed = book.maxPrint || 0;
+  const breakdown = deriveStockBreakdown(s, book);
   let stockSubText = 'of ' + printed + ' printed';
   if (!isAuthor() && cost > 0 && printed > 0) {
     stockSubText += ' · ' + fmt(cost / printed, cur) + '/book';
+  }
+  if (!isAuthor() && breakdown.authorHeld > 0) {
+    stockSubText += ` · ${breakdown.publisherOnHand} with you · ${breakdown.authorHeld} with author`;
   }
   $('d-stock-sub').textContent = stockSubText;
   $('d-thresh-sub').textContent = 'threshold: ' + book.threshold + ' units';
@@ -4753,10 +4766,45 @@ export function updateDash() {
   renderArtistTransfers();
   $('d-low').textContent = s.stock <= book.threshold ? '⚠ Low' : 'OK';
   $('d-low').className = 'kpi-value' + (s.stock <= book.threshold ? ' danger' : '');
-  const pct = Math.max(0, s.stock / book.maxPrint * 100);
-  $('d-bar').style.width = pct + '%';
-  $('d-bar').style.background = s.stock <= book.threshold ? '#f87171' : book.accent;
-  $('d-bar-label').textContent = s.stock + ' / ' + book.maxPrint + ' units on hand';
+  
+  const pct = Math.max(0, (s.stock / (book.maxPrint || 1)) * 100);
+  const barAuthor = $('d-bar-author');
+  const pillsEl = $('d-stock-breakdown-pills');
+  const transferBtn = $('d-transfer-stock-btn');
+
+  if (!isAuthor()) {
+    if (transferBtn) transferBtn.style.display = '';
+    if (breakdown.authorHeld > 0) {
+      const pubPct = Math.max(0, (breakdown.publisherOnHand / (book.maxPrint || 1)) * 100);
+      const authPct = Math.max(0, (breakdown.authorHeld / (book.maxPrint || 1)) * 100);
+      $('d-bar').style.width = pubPct + '%';
+      $('d-bar').style.background = s.stock <= book.threshold ? '#f87171' : (book.accent || 'var(--gold2)');
+      if (barAuthor) {
+        barAuthor.style.display = '';
+        barAuthor.style.width = authPct + '%';
+      }
+      $('d-bar-label').textContent = `${s.stock} / ${book.maxPrint} on hand (${breakdown.publisherOnHand} pub · ${breakdown.authorHeld} author)`;
+      if (pillsEl) {
+        pillsEl.style.display = 'flex';
+        pillsEl.innerHTML = `<span class="stock-loc-pill publisher" title="Stock at publisher warehouse">🏢 Publisher: ${breakdown.publisherOnHand}</span><span class="stock-loc-pill author" title="Stock held by author">👤 Author: ${breakdown.authorHeld}</span>`;
+      }
+    } else {
+      $('d-bar').style.width = pct + '%';
+      $('d-bar').style.background = s.stock <= book.threshold ? '#f87171' : (book.accent || 'var(--gold2)');
+      if (barAuthor) { barAuthor.style.display = 'none'; barAuthor.style.width = '0%'; }
+      $('d-bar-label').textContent = s.stock + ' / ' + book.maxPrint + ' units on hand';
+      if (pillsEl) { pillsEl.style.display = 'none'; pillsEl.innerHTML = ''; }
+    }
+  } else {
+    // Author mode: strictly unclassified total
+    if (transferBtn) transferBtn.style.display = 'none';
+    if (barAuthor) { barAuthor.style.display = 'none'; barAuthor.style.width = '0%'; }
+    if (pillsEl) { pillsEl.style.display = 'none'; pillsEl.innerHTML = ''; }
+    $('d-bar').style.width = pct + '%';
+    $('d-bar').style.background = s.stock <= book.threshold ? '#f87171' : (book.accent || 'var(--gold2)');
+    $('d-bar-label').textContent = s.stock + ' / ' + book.maxPrint + ' units on hand';
+  }
+
   const al = $('d-alert');
   if (s.stock <= book.threshold) { al.className = 'stock-alert danger'; al.textContent = '⚠ Below threshold (' + book.threshold + ') — reorder now.'; }
   else if (s.stock <= book.threshold * 2) { al.className = 'stock-alert warn'; al.textContent = 'Getting low — ' + s.stock + ' units remaining.'; }
@@ -5542,6 +5590,9 @@ function scheduleRender() {
 function recordOrder(num, chan, qty, price, notes, payment = null) {
   const s = getState(), book = getBook();
   const enteredBy = isAuthor() ? 'Artist' : 'Publisher';
+  if (isAuthor() || enteredBy === 'Artist') {
+    deductSaleFromStockBreakdown(s, qty, true);
+  }
   s.stock = Math.max(0, s.stock - qty);
   s.sold += qty; s.revenue += qty * price;
   if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
@@ -7125,6 +7176,7 @@ window.rejectSubmission = async function (type, subKey) {
 
 function recordOrderPendingTransfer(num, chan, qty, price, notes, payment = null) {
   const s = getState(), book = getBook();
+  deductSaleFromStockBreakdown(s, qty, true);
   // Reduce stock and count as sold, but do NOT add to revenue yet
   s.stock = Math.max(0, s.stock - qty);
   s.sold += qty;
@@ -10335,6 +10387,125 @@ async function recalcOnHand() {
   recomputeAfters(s, book);
   renderAll(); updateDash(); saveState(activeBook);
   showToast(`✓ On-hand recalculated: ${current} → ${derived}`);
+}
+
+// ── STOCK TRANSFER (Publisher to/from Author) ───────────────────────────────
+let _stDirection = 'to_author';
+
+function setStockTransferDirection(dir) {
+  _stDirection = dir === 'from_author' ? 'from_author' : 'to_author';
+  const toBtn = $('st-dir-to-author');
+  const fromBtn = $('st-dir-from-author');
+  if (toBtn) toBtn.classList.toggle('is-on', _stDirection === 'to_author');
+  if (fromBtn) fromBtn.classList.toggle('is-on', _stDirection === 'from_author');
+  updateStockTransferPreview();
+}
+
+function openStockTransferModal() {
+  if (!activeBook || activeBook === 'all' || isAuthor()) return;
+  const book = BOOKS[activeBook];
+  const s = states[activeBook];
+  if (!book || !s) return;
+
+  const breakdown = deriveStockBreakdown(s, book);
+  if ($('st-modal-title')) $('st-modal-title').textContent = `Transfer stock · ${book.title}`;
+  if ($('st-cur-publisher')) $('st-cur-publisher').textContent = breakdown.publisherOnHand;
+  if ($('st-cur-author')) $('st-cur-author').textContent = breakdown.authorHeld;
+
+  _stDirection = 'to_author';
+  const toBtn = $('st-dir-to-author');
+  const fromBtn = $('st-dir-from-author');
+  if (toBtn) toBtn.classList.add('is-on');
+  if (fromBtn) fromBtn.classList.remove('is-on');
+
+  if ($('st-qty')) $('st-qty').value = 1;
+  if ($('st-note')) $('st-note').value = '';
+  updateStockTransferPreview();
+  openM('stock-transfer');
+}
+
+function stepStockTransfer(delta) {
+  const input = $('st-qty');
+  if (!input) return;
+  const cur = parseInt(input.value, 10) || 0;
+  const next = Math.max(1, cur + delta);
+  input.value = next;
+  updateStockTransferPreview();
+}
+
+function onStockTransferQtyChange() {
+  updateStockTransferPreview();
+}
+
+function updateStockTransferPreview() {
+  if (!activeBook || activeBook === 'all') return;
+  const book = BOOKS[activeBook];
+  const s = states[activeBook];
+  if (!book || !s) return;
+
+  const breakdown = deriveStockBreakdown(s, book);
+  const qtyInput = $('st-qty');
+  const previewEl = $('st-preview');
+  const limitLabel = $('st-qty-limit-label');
+  const submitBtn = $('st-submit-btn');
+
+  const maxAllowed = _stDirection === 'to_author' ? breakdown.publisherOnHand : breakdown.authorHeld;
+  const qty = parseInt(qtyInput?.value, 10) || 0;
+
+  if (limitLabel) {
+    limitLabel.textContent = `(max ${maxAllowed} available)`;
+  }
+
+  if (qty <= 0) {
+    if (previewEl) previewEl.textContent = 'Please enter a quantity of at least 1 unit.';
+    if (submitBtn) submitBtn.disabled = true;
+    return;
+  }
+
+  if (qty > maxAllowed) {
+    if (previewEl) {
+      previewEl.innerHTML = `<span style="color:var(--red, #ef4444);">Cannot transfer ${qty} copies — only ${maxAllowed} copies currently ${_stDirection === 'to_author' ? 'at publisher warehouse' : 'held by author'}.</span>`;
+    }
+    if (submitBtn) submitBtn.disabled = true;
+    return;
+  }
+
+  if (submitBtn) submitBtn.disabled = false;
+
+  const afterPub = _stDirection === 'to_author' ? breakdown.publisherOnHand - qty : breakdown.publisherOnHand + qty;
+  const afterAuth = _stDirection === 'to_author' ? breakdown.authorHeld + qty : breakdown.authorHeld - qty;
+
+  if (previewEl) {
+    previewEl.innerHTML = `<strong>Result:</strong> Publisher will have <strong>${afterPub}</strong> copies · Author will have <strong>${afterAuth}</strong> copies (${_stDirection === 'to_author' ? 'Handing off ' : 'Returning '}${qty} copies).`;
+  }
+}
+
+async function submitStockTransfer() {
+  if (!activeBook || activeBook === 'all' || isAuthor()) return;
+  const book = BOOKS[activeBook];
+  const s = states[activeBook];
+  if (!book || !s) return;
+
+  const qtyInput = $('st-qty');
+  const qty = parseInt(qtyInput?.value, 10) || 0;
+  const note = ($('st-note')?.value || '').trim();
+
+  const breakdown = deriveStockBreakdown(s, book);
+  const maxAllowed = _stDirection === 'to_author' ? breakdown.publisherOnHand : breakdown.authorHeld;
+
+  if (qty <= 0 || qty > maxAllowed) {
+    showToast(`Invalid transfer quantity (max ${maxAllowed})`, 'warn');
+    return;
+  }
+
+  const delta = _stDirection === 'to_author' ? qty : -qty;
+  transferAuthorStock(s, book, delta, note);
+
+  await saveState(activeBook);
+  closeM('stock-transfer');
+  updateDash();
+  updateAllOverview();
+  showToast(`✓ Transferred ${qty} ${qty === 1 ? 'copy' : 'copies'} ${_stDirection === 'to_author' ? 'to author' : 'back to publisher'}`);
 }
 
 function syncHistoryVoidDeletion(h, isVoided) {
@@ -20929,7 +21100,7 @@ function exposeLegacyInlineHandlers() {
     invoicePaperBodyWithQR, buildStandaloneInvoiceHTML, downloadInvoiceHTML, loadExternalScript,
     ensurePdfLibs, downloadInvoicePDF, findKeptAllPayout, convertKeptAllToReceived, openEditHist,
     openEditLedger, saveEntryEdit, syncLedgerVoid, reconcileConsignmentChannel, reconcileStores,
-    recomputeAfters, recalcOnHand, syncHistoryVoidDeletion, voidEntry, resetBookData,
+    recomputeAfters, recalcOnHand, setStockTransferDirection, openStockTransferModal, stepStockTransfer, onStockTransferQtyChange, updateStockTransferPreview, submitStockTransfer, syncHistoryVoidDeletion, voidEntry, resetBookData,
     parseAndValidateDate, restoreBookDataFromSheets, confirmRestoreBookDataFromSheets,
     _modalFieldSig, _prefersReducedMotion, openM, closeM, attemptCloseModal, fieldError,
     clearFieldError, clearFieldErrors, validateFields, withButtonLoading, addLog,

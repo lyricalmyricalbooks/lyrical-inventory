@@ -778,11 +778,18 @@
       <div><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
       <span class="pill gold" id="d-book-isbn">—</span>
     </div>
-    <div class="bar-track"><div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);"></div></div>
+    <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:9999px;">
+      <div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);transition:width var(--dur-base) var(--ease-entrance);"></div>
+      <div class="bar-fill bar-fill-author" id="d-bar-author" style="width:0%;display:none;background:var(--violet, #8b5cf6);transition:width var(--dur-base) var(--ease-entrance);"></div>
+    </div>
     <div class="bar-meta"><span id="d-bar-label">— / — on hand</span><span id="d-thresh-label">Alert at — units</span></div>
+    <div id="d-stock-breakdown-pills" class="stock-breakdown-pills" style="display:none;margin-top:0.6rem;"></div>
     <div class="stock-alert ok" id="d-alert">Loading…</div>
-    <div id="d-recalc-onhand-wrap" style="margin-top:0.75rem;text-align:right;">
-      <button class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
+    <div id="d-recalc-onhand-wrap" style="margin-top:0.75rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <button type="button" class="btn sm ink" id="d-transfer-stock-btn" onclick="openStockTransferModal()" title="Transfer stock between publisher and author" style="display:none;">⇄ Transfer stock</button>
+      <div style="margin-left:auto;">
+        <button type="button" class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
+      </div>
     </div>
   </div>
   <div id="d-breakeven-block" style="display:none;">
@@ -4554,6 +4561,13 @@
       <div class="form-group"><label for="nb-pub-grat">Publisher gratuity copies</label><input id="nb-pub-grat" type="number" inputmode="numeric" min="0" value="0"></div>
       <div class="form-group"><label for="nb-author-grat">Author gratuity copies</label><input id="nb-author-grat" type="number" inputmode="numeric" min="0" value="0"></div>
     </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label for="nb-author-stock">Author-Held Stock (Copies with Author)</label>
+      <input id="nb-author-stock" type="number" inputmode="numeric" min="0" value="0" placeholder="0">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">
+        Physical copies held directly by the author. Deducted from available publisher warehouse stock.
+      </div>
+    </div>
   </div>
 
   <div class="modal-footer" role="dialog" aria-modal="true"><span id="add-book-unsaved-indicator" class="save-indicator" role="status" aria-hidden="true">● Unsaved changes</span><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
@@ -4893,6 +4907,56 @@
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Please keep Lyrical Inventory open until sending finishes.</div>
     <button class="btn sm" id="c-send-cancel-btn" onclick="cancelCampaignSending()">✕ Abort Send</button>
     <div class="send-log-console" id="c-send-log-console"></div>
+  </div>
+</div>
+
+<!-- STOCK TRANSFER MODAL (Publisher to/from Author) -->
+<div class="overlay" id="m-stock-transfer" style="display:none;z-index:1200;">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
+    <div class="modal-title" role="dialog" aria-modal="true" id="st-modal-title">Transfer stock</div>
+    <p class="lead-note" id="st-modal-sub" style="margin-bottom:14px;">Move physical inventory between publisher warehouse and author.</p>
+    
+    <div class="st-balance-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div class="card" style="padding:10px 14px;background:var(--cream2);">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);font-weight:700;">Publisher On-Hand</div>
+        <div id="st-cur-publisher" class="mono-num" style="font-size:22px;font-weight:600;color:var(--gold2);margin-top:2px;">—</div>
+      </div>
+      <div class="card" style="padding:10px 14px;background:var(--cream2);">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);font-weight:700;">Author Held</div>
+        <div id="st-cur-author" class="mono-num" style="font-size:22px;font-weight:600;color:var(--violet, #8b5cf6);margin-top:2px;">—</div>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Transfer Direction</label>
+      <div class="st-dir-toggle" style="display:flex;gap:8px;margin-top:4px;">
+        <button type="button" class="btn sm is-on st-dir-btn" id="st-dir-to-author" onclick="setStockTransferDirection('to_author')" style="flex:1;">🏢 → 👤 Hand off to Author</button>
+        <button type="button" class="btn sm st-dir-btn" id="st-dir-from-author" onclick="setStockTransferDirection('from_author')" style="flex:1;">👤 → 🏢 Return to Publisher</button>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px;">
+      <label for="st-qty">Quantity <span id="st-qty-limit-label" class="muted-note" style="font-size:11px;color:var(--text3);"></span></label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button type="button" class="btn sm" onclick="stepStockTransfer(-1)">−1</button>
+        <input type="number" id="st-qty" min="1" step="1" inputmode="numeric" value="1" style="flex:1;text-align:center;font-family:'DM Mono',monospace;font-size:16px;font-weight:600;" oninput="onStockTransferQtyChange()">
+        <button type="button" class="btn sm" onclick="stepStockTransfer(1)">+1</button>
+        <button type="button" class="btn sm" onclick="stepStockTransfer(5)">+5</button>
+        <button type="button" class="btn sm" onclick="stepStockTransfer(10)">+10</button>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px;">
+      <label for="st-note">Transfer Note / Reason <span class="muted-note" style="font-weight:400;font-size:10px;color:var(--text3);">(optional)</span></label>
+      <input type="text" id="st-note" placeholder="e.g. Fair copies, Book launch stock">
+    </div>
+
+    <div id="st-preview" class="field-note" style="margin-bottom:14px;padding:8px 12px;background:rgba(200,145,58,0.08);border-radius:var(--r2);font-size:12px;color:var(--text2);line-height:1.5;"></div>
+
+    <div class="modal-footer" role="dialog" aria-modal="true">
+      <button type="button" class="btn" onclick="attemptCloseModal('stock-transfer')">Cancel</button>
+      <button type="button" class="btn gold" id="st-submit-btn" onclick="submitStockTransfer()">Confirm Transfer</button>
+    </div>
   </div>
 </div>
 
