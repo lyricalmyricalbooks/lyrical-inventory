@@ -97,9 +97,10 @@
  *      'application/vnd.cpc.track+xml' Accept header, so the client's
  *      "Check Account & Tracking PIN" action can verify a purchased label
  *      really exists on Canada Post's tracking system from a static deploy.
- *      Bump flags v24-and-older as outdated.
  *  24. v26: Declare action in doPost for proxycanadapost and proxyzonos routing.
  *      Bump flags v25-and-older as outdated.
+ *  25. v27: Add OAuth 2.0 token resolution for Canada Post Developer Portal Client ID/Secret.
+ *      Bump flags v26-and-older as outdated.
  */
 
 const HEADERS = [
@@ -148,9 +149,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v26',
-    scriptVersion: 'v26',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true },
+    service: 'lyrical-sheets-webhook-v27',
+    scriptVersion: 'v27',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -607,7 +608,30 @@ function doPost(e) {
       if (!apiKey || !apiSecret) return jsonOut_({ error: 'Canada Post API Key & Secret required' });
 
       try {
-        const authHeader = 'Basic ' + Utilities.base64Encode(apiKey.trim() + ':' + apiSecret.trim());
+        let authHeader = '';
+        const keyTrim = apiKey.trim();
+        const secretTrim = apiSecret.trim();
+
+        // If apiKey is a 32-character hex string (Canada Post Developer Portal Client ID), attempt OAuth 2.0 token exchange
+        if (d.authType === 'oauth' || (/^[a-f0-9]{32}$/i.test(keyTrim) && !d.authType)) {
+          try {
+            const tokenUrl = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token';
+            const tokenResp = UrlFetchApp.fetch(tokenUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              payload: 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim),
+              muteHttpExceptions: true
+            });
+            const tokenJson = JSON.parse(tokenResp.getContentText() || '{}');
+            if (tokenJson && tokenJson.access_token) {
+              authHeader = 'Bearer ' + tokenJson.access_token;
+            }
+          } catch (_) {}
+        }
+        if (!authHeader) {
+          authHeader = 'Basic ' + Utilities.base64Encode(keyTrim + ':' + secretTrim);
+        }
+
         const headers = {
           'Authorization': authHeader,
           'Accept-language': 'en-CA'
