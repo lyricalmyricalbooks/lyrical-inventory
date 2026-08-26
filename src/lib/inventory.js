@@ -233,3 +233,99 @@ export function orderStockPreviewCopy(preview, threshold) {
       return { pill: 'gray', glyph: '', note: '' };
   }
 }
+
+// ── CLASSIFIED INVENTORY (Publisher vs. Author Held Stock) ──────────────────
+
+/**
+ * Derive the full breakdown of on-hand stock into Publisher-held and Author-held copies.
+ * Invariant: totalOnHand === publisherOnHand + authorHeld.
+ * Author-held stock is bounded within [0, totalOnHand].
+ *
+ * @param {object} s - Book state
+ * @param {object} book - Book catalog definition
+ * @returns {{ totalOnHand: number, publisherOnHand: number, authorHeld: number, pctPublisher: number, pctAuthor: number }}
+ */
+export function deriveStockBreakdown(s, book) {
+  const totalOnHand = deriveOnHand(s, book);
+  const rawAuthorStock = Number.isFinite(s && s.authorStock) ? Math.floor(s.authorStock) : 0;
+  const authorHeld = Math.max(0, Math.min(totalOnHand, rawAuthorStock));
+  const publisherOnHand = Math.max(0, totalOnHand - authorHeld);
+
+  const pctPublisher = totalOnHand > 0 ? (publisherOnHand / totalOnHand) * 100 : 0;
+  const pctAuthor = totalOnHand > 0 ? (authorHeld / totalOnHand) * 100 : 0;
+
+  return {
+    totalOnHand,
+    publisherOnHand,
+    authorHeld,
+    pctPublisher,
+    pctAuthor,
+  };
+}
+
+/**
+ * Transfer physical copies between the Publisher and Author.
+ *
+ * @param {object} s - Book state
+ * @param {object} book - Book catalog definition
+ * @param {number} delta - Positive = hand off to author; Negative = return from author
+ * @param {string} [note] - Optional reason/memo for the transfer
+ * @param {string} [isoDate] - Optional ISO date string (defaults to today)
+ * @returns {{ breakdown: object, transfer: object }}
+ */
+export function transferAuthorStock(s, book, delta, note = '', isoDate = '') {
+  if (!s) return { breakdown: deriveStockBreakdown(s, book), transfer: null };
+  const d = Number.isFinite(delta) ? Math.floor(delta) : 0;
+  if (d === 0) return { breakdown: deriveStockBreakdown(s, book), transfer: null };
+
+  const currentBreakdown = deriveStockBreakdown(s, book);
+  let newAuthorStock = currentBreakdown.authorHeld;
+
+  if (d > 0) {
+    // Hand off to author: limited by what the publisher currently holds
+    const actualDelta = Math.min(d, currentBreakdown.publisherOnHand);
+    newAuthorStock += actualDelta;
+  } else {
+    // Return from author: limited by what the author currently holds
+    const actualDelta = Math.min(Math.abs(d), currentBreakdown.authorHeld);
+    newAuthorStock -= actualDelta;
+  }
+
+  s.authorStock = Math.max(0, Math.min(currentBreakdown.totalOnHand, newAuthorStock));
+  const newBreakdown = deriveStockBreakdown(s, book);
+
+  const transfer = {
+    id: 'st_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    date: (isoDate && isoDate.slice(0, 10)) || new Date().toISOString().slice(0, 10),
+    delta: d,
+    direction: d > 0 ? 'to_author' : 'from_author',
+    qty: Math.abs(d),
+    note: (note || '').trim(),
+    publisherOnHand: newBreakdown.publisherOnHand,
+    authorHeld: newBreakdown.authorHeld,
+  };
+
+  if (!Array.isArray(s.stockTransfers)) {
+    s.stockTransfers = [];
+  }
+  s.stockTransfers.push(transfer);
+
+  return { breakdown: newBreakdown, transfer };
+}
+
+/**
+ * Automatically adjust author-held inventory when a sale is fulfilled directly by the author.
+ *
+ * @param {object} s - Book state
+ * @param {number} qty - Units sold
+ * @param {boolean} isAuthorSale - True if this transaction was submitted/fulfilled by the author
+ */
+export function deductSaleFromStockBreakdown(s, qty, isAuthorSale) {
+  if (!s || !isAuthorSale) return;
+  const units = Number.isFinite(qty) && qty > 0 ? Math.floor(qty) : 0;
+  if (units <= 0) return;
+
+  const currentAuthorStock = Number.isFinite(s.authorStock) ? s.authorStock : 0;
+  s.authorStock = Math.max(0, currentAuthorStock - units);
+}
+
