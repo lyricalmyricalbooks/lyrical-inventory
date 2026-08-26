@@ -3612,7 +3612,18 @@ async function testCanadaPostConnectionHandler() {
     }
   } catch (err) {
     if (statusEl) {
-      statusEl.innerHTML = `<span style="color:var(--red);font-weight:600;">⚠ Error: ${escapeHtml(err.message)}</span>`;
+      const isAuthFail = /E002|Authentication Failure|unauthorized/i.test(err.message);
+      let extraHint = '';
+      if (isAuthFail) {
+        extraHint = `
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:3px solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+            <strong>How to fix:</strong><br>
+            • If using <strong>Development / Test</strong> keys, turn <strong>ON</strong> the <em>Sandbox Environment</em> toggle switch above.<br>
+            • If using <strong>Production / Live</strong> keys, ensure you are pasting the <strong>API Password / Secret</strong> generated in the Canada Post Developer Program (not your regular canadapost.ca account login password).
+          </div>
+        `;
+      }
+      statusEl.innerHTML = `<span style="color:var(--red);font-weight:600;">⚠ Error: ${escapeHtml(err.message)}</span>${extraHint}`;
     }
     showToast(`⚠ Canada Post error: ${err.message}`, 'err');
   } finally {
