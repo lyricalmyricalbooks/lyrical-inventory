@@ -184,6 +184,7 @@ import {
   buildPaymentMeta,
   cadEquivalentForSale,
   fmt,
+  fmtWhole,
   fmtD,
   getBookCurrencyCode,
   getContrastColor,
@@ -3580,7 +3581,7 @@ function updateHeader() {
     const s = getState(), book = getBook();
     const cur = book.currency;
     animateCountValue('h-stock', s.stock);
-    animateCountValue('h-revenue', fmt(recognizedRevenueOf(s), cur));
+    animateCountValue('h-revenue', fmtWhole(recognizedRevenueOf(s), cur));
     // ⚡ Bolt Optimization: Use for-loop instead of reduce to avoid function allocation
     let storesCon = 0;
     for (let i = 0; i < s.stores.length; i++) {
@@ -3759,11 +3760,11 @@ function updateAllOverview() {
           <div class="bsk-label">Sold</div>
         </div>
         <div class="bsk">
-          <div class="bsk-val">${owed > 0 ? fmt(owed, book.currency) : '—'}</div>
+          <div class="bsk-val">${owed > 0 ? fmtWhole(owed, book.currency) : '—'}</div>
           <div class="bsk-label">Owed</div>
         </div>
         <div class="bsk">
-          <div class="bsk-val ${expTotal > 0 ? 'warn' : ''}">${expTotal > 0 ? fmt(expTotal, book.currency) : '—'}</div>
+          <div class="bsk-val ${expTotal > 0 ? 'warn' : ''}">${expTotal > 0 ? fmtWhole(expTotal, book.currency) : '—'}</div>
           <div class="bsk-label">Expenses</div>
         </div>
       </div>
@@ -4730,10 +4731,10 @@ export function updateDash() {
   animateCountValue('d-sold', s.sold);
   const heldGross = heldGrossOf(s);
   const recognizedRev = recognizedRevenueOf(s);
-  animateCountValue('d-revenue', fmt(recognizedRev, cur)); animateCountValue('h-revenue', fmt(recognizedRev, cur));
+  animateCountValue('d-revenue', fmtWhole(recognizedRev, cur)); animateCountValue('h-revenue', fmtWhole(recognizedRev, cur));
   const revSub = $('d-revenue-sub');
   if (revSub) revSub.textContent = heldGross > 0.01
-    ? `${fmt(s.revenue, cur)} collected · ${fmt(heldGross, cur)} held by artist`
+    ? `${fmtWhole(s.revenue, cur)} collected · ${fmtWhole(heldGross, cur)} held by artist`
     : 'total collected';
   $('d-avg-sub').textContent = 'avg ' + (s.sold > 0 ? fmt(recognizedRev / s.sold, cur) : '—');
   // ⚡ Bolt Optimization: Calculate consigned and owed in a single loop
@@ -4744,7 +4745,7 @@ export function updateDash() {
   }
   animateCountValue('d-consigned', consigned); animateCountValue('h-consigned', consigned);
   $('d-stores').textContent = s.stores.length;
-  animateCountValue('d-owed', fmt(owed, cur)); $('d-owed').className = 'kpi-value' + (owed > 0 ? ' warn' : '');
+  animateCountValue('d-owed', fmtWhole(owed, cur)); $('d-owed').className = 'kpi-value' + (owed > 0 ? ' warn' : '');
   const pendingTransfers = [...(s.artistTransfers || [])];
 
   // Merge pending sales where they collected payment
@@ -4760,7 +4761,7 @@ export function updateDash() {
   });
 
   const pendingTotal = pendingTransfers.reduce((a, t) => a + t.total, 0);
-  animateCountValue('d-artist-pending', pendingTransfers.length > 0 ? fmt(pendingTotal, cur) : '—');
+  animateCountValue('d-artist-pending', pendingTransfers.length > 0 ? fmtWhole(pendingTotal, cur) : '—');
   $('d-artist-pending').className = 'kpi-value' + (pendingTransfers.length > 0 ? ' warn' : '');
   $('d-artist-pending-sub').textContent = pendingTransfers.length > 0 ? `${pendingTransfers.length} order${pendingTransfers.length > 1 ? 's' : ''} (incl. pending) awaiting forwarding` : 'no pending transfers';
   renderArtistTransfers();
@@ -4843,12 +4844,12 @@ export function updateDash() {
     if (unreceivedExp.length) {
       // KPI tile
       if (expKpi) { expKpi.style.display = ''; }
-      animateCountValue('d-expenses-owed', fmt(expTotal, cur));
+      animateCountValue('d-expenses-owed', fmtWhole(expTotal, cur));
       $('d-expenses-owed-sub').textContent = `${unreceivedExp.length} expense${unreceivedExp.length !== 1 ? 's' : ''} outstanding`;
       // Detail table — dark banner style
       if (expSect) {
         expSect.style.display = '';
-        animateCountValue('d-exp-total', fmt(expTotal, cur));
+        animateCountValue('d-exp-total', fmtWhole(expTotal, cur));
         $('d-exp-count').textContent = `${expenses.length} expense${expenses.length !== 1 ? 's' : ''} logged`;
         $('d-exp-body').innerHTML = unreceivedExp.map(e => `
           <tr>
@@ -4886,9 +4887,9 @@ export function updateDash() {
     const pctBe = Math.min(100, recognizedRev / cost * 100);
     const remaining = Math.max(0, cost - recognizedRev);
     const broken = recognizedRev >= cost;
-    $('d-breakeven-val').textContent = broken ? '✓ Done' : fmt(remaining, cur) + ' to go';
+    $('d-breakeven-val').textContent = broken ? '✓ Done' : fmtWhole(remaining, cur) + ' to go';
     $('d-breakeven-val').className = 'kpi-value' + (broken ? ' gold' : '');
-    $('d-breakeven-sub').textContent = `of ${fmt(cost, cur)} production cost`;
+    $('d-breakeven-sub').textContent = `of ${fmtWhole(cost, cur)} production cost`;
     $('d-be-title').textContent = broken ? 'Project has broken even' : 'Not yet broken even';
     $('d-be-sub').textContent = `Production cost: ${fmt(cost, cur)} · Revenue to date: ${fmt(recognizedRev, cur)}`;
     $('d-be-bar').style.width = pctBe + '%';
@@ -4950,7 +4951,7 @@ export function updateDash() {
     const earningsStats = calculateArtistEarnings(activeBook);
     if (earningsStats && $('d-net-publisher-kpi')) {
       $('d-net-publisher-kpi').style.display = '';
-      animateCountValue('d-net-publisher', fmt(earningsStats.netPublisher, cur));
+      animateCountValue('d-net-publisher', fmtWhole(earningsStats.netPublisher, cur));
     }
   } else if ($('d-net-publisher-kpi')) {
     $('d-net-publisher-kpi').style.display = 'none';

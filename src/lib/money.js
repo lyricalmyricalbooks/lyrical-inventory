@@ -47,6 +47,13 @@ export function normalizeCurrencyCode(cur, fallback = 'CAD') {
 export const fmt = (n, cur = '€') =>
   getSym(cur) + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
+export const fmtWhole = (n, cur = '€') => {
+  const num = Math.round(Number(n) || 0);
+  const formatted = Math.abs(num).toLocaleString('en-US');
+  const sym = getSym(cur);
+  return num < 0 ? `-${sym}${formatted}` : `${sym}${formatted}`;
+};
+
 export const fmtNum = (n) => Number(n).toFixed(2);
 
 // Round a currency amount to whole cents, killing binary floating-point drift

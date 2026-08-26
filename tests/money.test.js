@@ -5,6 +5,7 @@ import {
   getSym,
   normalizeCurrencyCode,
   fmt,
+  fmtWhole,
   fmtNum,
   fmtD,
   getBookCurrencyCode,
@@ -81,6 +82,21 @@ describe('fmt', () => {
   });
   it('defaults to euro symbol', () => {
     expect(fmt(10)).toBe('€10.00');
+  });
+});
+
+describe('fmtWhole', () => {
+  it('formats currency without cents and rounds to nearest whole number', () => {
+    expect(fmtWhole(13435.52, 'CAD')).toBe('CA$13,436');
+    expect(fmtWhole(13435.49, 'CAD')).toBe('CA$13,435');
+    expect(fmtWhole(1000000, 'USD')).toBe('US$1,000,000');
+  });
+  it('handles zero and negative amounts', () => {
+    expect(fmtWhole(0, 'CAD')).toBe('CA$0');
+    expect(fmtWhole(-500.8, 'USD')).toBe('-US$501');
+  });
+  it('defaults to euro symbol', () => {
+    expect(fmtWhole(42.3)).toBe('€42');
   });
 });
 
