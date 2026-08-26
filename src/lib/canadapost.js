@@ -715,6 +715,13 @@ export async function executeCanadaPostProxy({
         'Check your connection, or run the local backend / Google Apps Script proxy, then try again.'
       );
     }
+    const isCors = /Failed to fetch|NetworkError|CORS|cross-origin/i.test(directErr.message || '');
+    if (isCors) {
+      throw new Error(
+        'Canada Post connection: Browser CORS restriction. Canada Post Web Services does not allow direct browser requests. ' +
+        'Please ensure your Google Sheet is connected in the Settings tab (or run the local backend proxy) so requests can be securely routed.'
+      );
+    }
     throw new Error(`Canada Post connection: ${directErr.message}`);
   }
 }
