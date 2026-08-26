@@ -98,6 +98,8 @@
  *      "Check Account & Tracking PIN" action can verify a purchased label
  *      really exists on Canada Post's tracking system from a static deploy.
  *      Bump flags v24-and-older as outdated.
+ *  24. v26: Declare action in doPost for proxycanadapost and proxyzonos routing.
+ *      Bump flags v25-and-older as outdated.
  */
 
 const HEADERS = [
@@ -146,8 +148,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v25',
-    scriptVersion: 'v25',
+    service: 'lyrical-sheets-webhook-v26',
+    scriptVersion: 'v26',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -586,6 +588,8 @@ function doPost(e) {
     if (eventId && eventId.toString().startsWith('probe-')) {
       return jsonOut_({ ok: true });
     }
+
+    const action = String(payload.action || (payload.payload && payload.payload.action) || '').toLowerCase();
 
     // ── Proxy Canada Post Web Services API request (bypasses browser CORS) ──
     if (action === 'proxycanadapost') {
