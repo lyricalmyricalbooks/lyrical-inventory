@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v29)
+/* Lyricalmyrical Inventory — Unified Backend (v30)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -105,6 +105,8 @@
  *      human-readable timestamps, gold luxury masthead, and action badges. Bump flags v27-and-older as outdated.
  *  27. v29: Luxury graphical HTML email template for author payment requests (emailauthor action).
  *      Bump flags v28-and-older as outdated.
+ *  28. v30: Detailed OAuth 2.0 error reporting and HTTP Basic header fallback for Canada Post API subscriptions.
+ *      Bump flags v29-and-older as outdated.
  */
 
 const HEADERS = [
@@ -153,8 +155,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v29',
-    scriptVersion: 'v29',
+    service: 'lyrical-sheets-webhook-v30',
+    scriptVersion: 'v30',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -613,6 +615,7 @@ function doPost(e) {
 
       try {
         let authHeader = '';
+        let oauthError = '';
         const keyTrim = apiKey.trim();
         const secretTrim = apiSecret.trim();
 
@@ -620,19 +623,32 @@ function doPost(e) {
         if (d.authType === 'oauth' || (/^[a-f0-9]{32}$/i.test(keyTrim) && !d.authType)) {
           try {
             const tokenUrl = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token';
+            const basicAuth = Utilities.base64Encode(keyTrim + ':' + secretTrim);
             const tokenResp = UrlFetchApp.fetch(tokenUrl, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              headers: { 
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': 'Basic ' + basicAuth
+              },
               payload: 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim),
               muteHttpExceptions: true
             });
             const tokenJson = JSON.parse(tokenResp.getContentText() || '{}');
             if (tokenJson && tokenJson.access_token) {
               authHeader = 'Bearer ' + tokenJson.access_token;
+            } else if (tokenJson && tokenJson.error_description) {
+              oauthError = tokenJson.error_description;
+            } else if (tokenJson && tokenJson.error) {
+              oauthError = tokenJson.error;
             }
-          } catch (_) {}
+          } catch (e) {
+            oauthError = String(e);
+          }
         }
         if (!authHeader) {
+          if (oauthError && (/^[a-f0-9]{32}$/i.test(keyTrim) || d.authType === 'oauth')) {
+            return jsonOut_({ error: 'Canada Post OAuth Error: ' + oauthError + '. (Please verify that your App is subscribed to the Rating API product in the Canada Post Developer Portal)' });
+          }
           authHeader = 'Basic ' + Utilities.base64Encode(keyTrim + ':' + secretTrim);
         }
 
