@@ -971,8 +971,16 @@ async function importShippoShippingFromApi() {
       for (const e of pendingExpenses) byCur[e.currency] = (byCur[e.currency] || 0) + (e.amount || 0);
       const curLines = Object.keys(byCur).sort()
         .map(c => `  • ${byCur[c].toFixed(2)} ${c}`).join('\n');
-      const dates = pendingExpenses.map(e => e.date).filter(Boolean).sort();
-      const range = dates.length ? `${dates[0]} → ${dates[dates.length - 1]}` : '—';
+
+      // ⚡ Bolt Optimization: Use imperative loop to track min/max dates instead of chained map and sort, reducing O(N log N) complexity and array allocations to O(N).
+      let minDate = null, maxDate = null;
+      for (let i = 0; i < pendingExpenses.length; i++) {
+        const d = pendingExpenses[i].date;
+        if (!d) continue;
+        if (!minDate || d < minDate) minDate = d;
+        if (!maxDate || d > maxDate) maxDate = d;
+      }
+      const range = minDate ? `${minDate} → ${maxDate}` : '—';
 
       const accept = await confirmDialog(
         `Add ${imported} new Shippo shipping cost${imported === 1 ? '' : 's'} to your master ledger?\n\n` +
