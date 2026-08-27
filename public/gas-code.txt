@@ -624,13 +624,14 @@ function doPost(e) {
           try {
             const tokenUrl = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token';
             const basicAuth = Utilities.base64Encode(keyTrim + ':' + secretTrim);
+            const scope = encodeURIComponent((d.scope || 'merchant').trim());
             const tokenResp = UrlFetchApp.fetch(tokenUrl, {
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': 'Basic ' + basicAuth
               },
-              payload: 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim),
+              payload: 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim) + '&scope=' + scope,
               muteHttpExceptions: true
             });
             const tokenJson = JSON.parse(tokenResp.getContentText() || '{}');
