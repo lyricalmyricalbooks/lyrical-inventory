@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v24)
+/* Lyricalmyrical Inventory — Unified Backend (v29)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:

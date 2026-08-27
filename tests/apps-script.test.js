@@ -25,6 +25,28 @@ describe('Apps Script Integration', () => {
     expect(gasCodeTxt).toBe(codeContent);
   });
 
+  it('Code.gs line 1 header version matches doGet scriptVersion and main.js EXPECTED_SCRIPT_VERSION', () => {
+    const codeContent = fs.readFileSync(codeGsPath, 'utf8');
+    const mainJsPath = path.resolve(__dirname, '../src/main.js');
+    const mainContent = fs.readFileSync(mainJsPath, 'utf8');
+
+    const firstLine = codeContent.split('\n')[0];
+    const headerMatch = firstLine.match(/Unified Backend \((v\d+)\)/);
+    expect(headerMatch, 'Code.gs line 1 must declare Unified Backend (vXX)').not.toBeNull();
+    const headerVer = headerMatch[1];
+
+    const doGetMatch = codeContent.match(/scriptVersion:\s*'(v\d+)'/);
+    expect(doGetMatch, 'Code.gs doGet must declare scriptVersion: "vXX"').not.toBeNull();
+    const doGetVer = doGetMatch[1];
+
+    const mainMatch = mainContent.match(/const EXPECTED_SCRIPT_VERSION\s*=\s*'(v\d+)';/);
+    expect(mainMatch, 'main.js must declare const EXPECTED_SCRIPT_VERSION = "vXX"').not.toBeNull();
+    const mainVer = mainMatch[1];
+
+    expect(headerVer).toBe(doGetVer);
+    expect(mainVer).toBe(doGetVer);
+  });
+
   it('index.html no longer embeds the full Apps Script source inline', () => {
     const indexContent = fs.readFileSync(indexHtmlPath, 'utf8');
     const preRegex = /<pre id="gas-code"[^>]*>([\s\S]*?)<\/pre>/;

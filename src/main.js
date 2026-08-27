@@ -12080,6 +12080,10 @@ function renderSheetsLog() {
 // source needs no HTML-escaping. _gasCodeLoaded guards against re-fetching.
 let _gasCodeLoaded = false;
 async function loadGasCode() {
+  const scriptVerEl = $('gas-script-ver');
+  if (scriptVerEl) scriptVerEl.textContent = EXPECTED_SCRIPT_VERSION;
+  const expectedEl = $('sheets-expected-version');
+  if (expectedEl) expectedEl.textContent = EXPECTED_SCRIPT_VERSION;
   if (_gasCodeLoaded) return;
   const el = $('gas-code'); if (!el) return;
   try {
