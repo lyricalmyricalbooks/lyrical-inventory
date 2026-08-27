@@ -119,3 +119,30 @@ test('no dialog footer hand-picks its own spacing any more', () => {
     expect(style, style).not.toMatch(/(?:^|;)\s*(?:margin-top|padding-top|border-top)\s*:/);
   }
 });
+
+// Modal Modifier Classes must NEVER override the vertical padding of .modal,
+// because .modal-title and .modal-footer own top and bottom block padding.
+test('modal modifier classes never override vertical block padding', () => {
+  const modalModifiers = [
+    ...styles.matchAll(/(?:\n|^)(\.[a-z0-9_-]*modal[a-z0-9_-]*)\s*\{([^}]*)\}/gi)
+  ];
+  for (const [, selector, block] of modalModifiers) {
+    if (selector === '.modal' || selector.includes(':not(')) continue;
+    // Disallow padding: <val> where vertical padding is non-zero, or padding-top/bottom
+    expect(block, selector).not.toMatch(/padding\s*:\s*(?!0\s+)[^;]+!important/);
+    expect(block, selector).not.toMatch(/padding-(?:top|bottom)\s*:\s*[^;]+!important/);
+  }
+});
+
+// Semantic Surface Tokens: styles must never use generic undefined tokens
+// like var(--surface), var(--surface2), var(--surface3), var(--surface4), or var(--card)
+test('styles never reference undefined generic surface tokens', () => {
+  const invalidSurfaceTokens = [
+    ...styles.matchAll(/var\(\s*--(surface[0-9]|surface|card)(?![-\w])\s*[^)]*\)/g)
+  ];
+  expect(
+    invalidSurfaceTokens.map((m) => m[0]),
+    'Found undefined surface tokens in src/style.css; use canonical --surface-page, --surface-raised, --surface-sunken, --surface-inset, or --surface-card instead'
+  ).toEqual([]);
+});
+

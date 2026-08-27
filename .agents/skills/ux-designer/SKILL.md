@@ -62,6 +62,26 @@ Combine hardware-accelerated backdrop filters with diffuse ambient glows:
 }
 ```
 
+### C. Semantic Surfaces & Modal Shell Architecture Invariants (MANDATORY)
+1. **Canonical Semantic Surfaces Only:**
+   - NEVER invent or use generic undefined tokens such as `var(--surface)`, `var(--surface2)`, `var(--surface3)`, `var(--surface4)`, or `var(--card)`.
+   - Use ONLY canonical defined tokens from `src/styles/system.css`:
+     - `var(--surface-page)` — Modal containers and page backgrounds.
+     - `var(--surface-raised)` — Elevated cards, active stepper tabs, white well inputs.
+     - `var(--surface-sunken)` — Recessed segmented control strips, calculator wells, preset bars.
+     - `var(--surface-inset)` — Inner badges, step number circles, chip pills.
+     - `var(--surface-inverse)` / `var(--surface-inverse-raised)` — Fixed dark chrome.
+
+2. **Modal Shell Scroll Architecture:**
+   - NEVER add vertical padding (`padding: 24px ... !important` or `padding-top/bottom`) to `.modal` sub-classes.
+   - `.modal` MUST keep `padding: 0 var(--space-6)` with `overflow: auto`.
+   - Pinned headers (`.modal-title`) and footers (`.modal-footer`) own top/bottom block padding and hairline scrims (`.modal-title::after`, `.modal-footer::before`). Ad-hoc vertical padding on `.modal` floats sticky children inside the box and destroys the scroll seam.
+
+3. **Steppers & Form Contrast:**
+   - Inactive tabs must use `var(--content-secondary)` on `var(--surface-sunken)` with `var(--surface-inset)` step circles.
+   - Active tabs must use `var(--surface-raised)` with `var(--content-primary)` and `box-shadow: var(--elev-1)`.
+   - Never use `--text3` for interactive control labels or metadata sub-headers.
+
 ---
 
 ## 2. Modern Layout Engine: Container Queries, Subgrid & Popover API

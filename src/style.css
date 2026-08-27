@@ -8788,7 +8788,7 @@ tr.hist-row:hover {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: var(--surface-raised, var(--surface));
+  background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--r);
   gap: 14px;
@@ -8832,7 +8832,7 @@ tr.hist-row:hover {
   padding: 12px 14px;
   border-radius: var(--r2);
   border: 1px solid var(--border);
-  background: var(--surface-raised, var(--surface));
+  background: var(--surface-raised);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -8887,7 +8887,7 @@ tr.hist-row:hover {
   padding: 10px 14px;
   border-radius: var(--r);
   border: 1px solid var(--border);
-  background: var(--surface-card, var(--surface));
+  background: var(--surface-card);
   color: var(--text);
   font-size: var(--text-xs);
   font-family: 'DM Mono', ui-monospace, monospace;
@@ -8905,7 +8905,7 @@ tr.hist-row:hover {
   padding: 10px 12px;
   border-radius: var(--r);
   border: 1px solid var(--border-subtle, var(--border));
-  background: var(--surface-card, var(--surface));
+  background: var(--surface-card);
 }
 @container (max-width: 420px) {
   .cp-account-banner-actions {
@@ -8992,7 +8992,7 @@ tr.hist-row:hover {
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-page);
 }
 .cp-label-modal-body {
   flex: 1;
@@ -9019,7 +9019,7 @@ tr.hist-row:hover {
 .cp-label-modal-footer {
   padding: 16px 20px;
   border-top: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-page);
   display: flex;
   justify-content: space-between;
   align-items: center;
