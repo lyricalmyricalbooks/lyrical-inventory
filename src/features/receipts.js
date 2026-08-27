@@ -1173,7 +1173,7 @@ function summarizeReceiptProblems(problems) {
 function formatReceiptDiagnostic(problems, context = {}) {
   const groups = summarizeReceiptProblems(problems);
   const lines = [
-    'Lyrical Inventory — receipt move diagnostic',
+    'Lyricalmyrical Inventory — receipt move diagnostic',
     `When: ${new Date().toISOString()}`,
     `Attempted: ${problems.length} receipt${problems.length === 1 ? '' : 's'}`,
   ];

@@ -1,5 +1,5 @@
 /**
- * Gmail add-on — "Send to Lyrical Inventory"
+ * Gmail add-on — "Send to Lyricalmyrical Inventory"
  * ────────────────────────────────────────────────────────────────────────────
  * Adds a sidebar card inside Gmail. Open a receipt/invoice email, confirm the
  * vendor / amount / category, and press the button: a draft expense is written
@@ -39,9 +39,9 @@ function onGmailHomepage(e) {
   var section = CardService.newCardSection()
     .addWidget(CardService.newTextParagraph().setText(
       'Open a <b>receipt</b> or <b>invoice</b> email, then use this panel to send ' +
-      'it straight into Lyrical Inventory as a draft expense.'));
+      'it straight into Lyricalmyrical Inventory as a draft expense.'));
   return CardService.newCardBuilder()
-    .setHeader(CardService.newCardHeader().setTitle('Lyrical Inventory'))
+    .setHeader(CardService.newCardHeader().setTitle('Lyricalmyrical Inventory'))
     .addSection(section)
     .build();
 }
@@ -84,12 +84,12 @@ function onGmailMessageOpen(e) {
     .setFunctionName('importReceiptToApp')
     .setParameters({ messageId: e.gmail.messageId });
   section.addWidget(CardService.newTextButton()
-    .setText('Send to Lyrical Inventory')
+    .setText('Send to Lyricalmyrical Inventory')
     .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
     .setOnClickAction(action));
 
   return CardService.newCardBuilder()
-    .setHeader(CardService.newCardHeader().setTitle('Send to Lyrical Inventory'))
+    .setHeader(CardService.newCardHeader().setTitle('Send to Lyricalmyrical Inventory'))
     .addSection(section)
     .build();
 }
@@ -134,7 +134,7 @@ function importReceiptToApp(e) {
     } catch (_) { /* metadata-only access; skip enrichment/upload */ }
 
     writeInboxDoc_(draft);
-    return notify_('✓ Sent to Lyrical Inventory — review it in the app.');
+    return notify_('✓ Sent to Lyricalmyrical Inventory — review it in the app.');
   } catch (err) {
     return notify_('Could not send: ' + err);
   }

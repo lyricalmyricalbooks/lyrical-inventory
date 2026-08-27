@@ -101,6 +101,8 @@
  *      Bump flags v25-and-older as outdated.
  *  25. v27: Add OAuth 2.0 token resolution for Canada Post Developer Portal Client ID/Secret.
  *      Bump flags v26-and-older as outdated.
+ *  26. v28: Rebranded to Lyricalmyrical Inventory with state-of-the-art graphical HTML email templates,
+ *      human-readable timestamps, gold luxury masthead, and action badges. Bump flags v27-and-older as outdated.
  */
 
 const HEADERS = [
@@ -149,9 +151,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v27',
-    scriptVersion: 'v27',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true },
+    service: 'lyrical-sheets-webhook-v28',
+    scriptVersion: 'v28',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -728,7 +730,7 @@ function doPost(e) {
         const clean_ = (s) => String(s == null ? '' : s).replace(/[\x00-\x1F\x7F]+/g, ' ').trim();
         const kind = clean_(d.kind || 'Submission');
         const needsAction = /approval|payment|payout|transfer|reimburse/i.test(kind);
-        const prefix = needsAction ? '[ACTION REQUIRED]' : '[Lyrical Inventory]';
+        const prefix = needsAction ? '[ACTION REQUIRED]' : '[Lyricalmyrical Inventory]';
         const subject = `${prefix} ${kind} awaiting approval — ${clean_(d.bookTitle)}`;
         const intro = needsAction
           ? `An author submission requires your action: ${kind}.`
@@ -2199,73 +2201,188 @@ function formatNotifyValue_(key, val) {
   return String(val);
 }
 
+function formatNotifyDate_(isoStr) {
+  if (!isoStr || isoStr === '—') return '—';
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return String(isoStr);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getUTCMonth()];
+    const day = d.getUTCDate();
+    const year = d.getUTCFullYear();
+    let hours = d.getUTCHours();
+    const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${month} ${day}, ${year} · ${hours}:${minutes} ${ampm} UTC`;
+  } catch (_) {
+    return String(isoStr);
+  }
+}
+
 // Renders an object as a set of labeled rows; nested objects (e.g. a
 // "payment" sub-object) render as an indented mini-table instead of raw JSON.
 function notifyDetailsRowsHtml_(obj, depth) {
   const keys = Object.keys(obj || {});
   if (!keys.length) {
-    return '<tr><td colspan="2" style="padding:10px 0;color:#8a8078;font-style:italic;">No additional details</td></tr>';
+    return '<tr><td colspan="2" style="padding:14px 16px;color:#8a8078;font-style:italic;font-size:13px;">No additional details</td></tr>';
   }
   const indent = 16 * (depth || 0);
-  return keys.map((key) => {
+  return keys.map((key, idx) => {
     const val = obj[key];
+    const isLast = idx === keys.length - 1;
+    const borderBottom = isLast ? '' : 'border-bottom:1px solid #f2ece1;';
+
     if (val && typeof val === 'object' && !Array.isArray(val)) {
       const nested = notifyDetailsRowsHtml_(val, (depth || 0) + 1);
       return (
-        `<tr><td colspan="2" style="padding:12px 0 4px ${indent}px;font-family:'Syne',Georgia,serif;font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:#8c5b00;border-top:1px solid rgba(14,12,10,.09);">${escapeHtml_(prettyLabel_(key))}</td></tr>` +
+        `<tr><td colspan="2" style="padding:10px 16px 4px ${16 + indent}px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8c5b00;background-color:#fdfbf7;border-top:1px solid #ece4d7;border-bottom:1px solid #ece4d7;">${escapeHtml_(prettyLabel_(key))}</td></tr>` +
         nested
       );
     }
     const display = Array.isArray(val) ? val.map((v) => formatNotifyValue_(key, v)).join(', ') : formatNotifyValue_(key, val);
+    const isMoney = /price|amount|total|rate|due|cost|payout|paid/i.test(key);
+    const valColor = isMoney ? '#8c5b00' : '#110f0d';
     return (
       `<tr>` +
-      `<td style="padding:6px 12px 6px ${indent}px;color:#8a8078;font-size:13px;white-space:nowrap;vertical-align:top;">${escapeHtml_(prettyLabel_(key))}</td>` +
-      `<td style="padding:6px 0;color:#0e0c0a;font-size:13px;font-weight:600;font-family:'DM Mono',Consolas,monospace;">${escapeHtml_(display)}</td>` +
+      `<td style="padding:9px 16px 9px ${16 + indent}px;color:#786f65;font-size:12px;font-weight:600;white-space:nowrap;vertical-align:middle;${borderBottom}">${escapeHtml_(prettyLabel_(key))}</td>` +
+      `<td style="padding:9px 16px;color:${valColor};font-size:13px;font-weight:600;font-family:'DM Mono',Consolas,monospace;text-align:right;vertical-align:middle;${borderBottom}">${escapeHtml_(display)}</td>` +
       `</tr>`
     );
   }).join('');
 }
 
 function buildNotifyEmailHtml_(opts) {
-  const bannerBg = opts.needsAction ? '#8c5b00' : '#0e0c0a';
-  const bannerLabel = opts.needsAction ? 'ACTION REQUIRED' : 'FYI — NO ACTION NEEDED';
+  const isAction = opts.needsAction;
+  const bannerBg = isAction ? '#2a1d08' : '#1a1815';
+  const bannerBorder = isAction ? '#8c5b00' : '#332e29';
+  const bannerColor = isAction ? '#f5d58a' : '#d1c9be';
+  const bannerIcon = isAction ? '⚡' : 'ℹ️';
+  const bannerLabel = isAction ? 'ACTION REQUIRED' : 'FYI · NO ACTION NEEDED';
   const detailsRows = notifyDetailsRowsHtml_(opts.data, 0);
   const summaryHtml = opts.summary
-    ? `<div style="background:#f7f2e9;border-left:4px solid #c8913a;border-radius:6px;padding:14px 16px;margin:0 0 20px;color:#0e0c0a;font-size:14px;line-height:1.5;">${escapeHtml_(opts.summary)}</div>`
+    ? `<div style="background:#fdfbf7;border:1px solid #e7ded0;border-left:4px solid #c8913a;border-radius:8px;padding:14px 18px;margin:0 0 22px;color:#1c1916;font-size:14px;line-height:1.55;">${escapeHtml_(opts.summary)}</div>`
     : '';
 
   return `<!doctype html>
 <html>
-  <body style="margin:0;padding:0;background:#efe9dc;font-family:Helvetica,Arial,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
-      <div style="background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid rgba(14,12,10,.09);">
-        <div style="background:#0e0c0a;padding:18px 24px;">
-          <div style="font-family:Georgia,serif;font-weight:700;font-size:16px;letter-spacing:.02em;color:#f0c060;">Lyrical Inventory</div>
-        </div>
-        <div style="background:${bannerBg};padding:10px 24px;">
-          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:12px;letter-spacing:.08em;color:#ffffff;">${escapeHtml_(bannerLabel)} · ${escapeHtml_(opts.kind)}</div>
-        </div>
-        <div style="padding:24px;">
-          <p style="margin:0 0 18px;color:#0e0c0a;font-size:14px;line-height:1.5;">${escapeHtml_(opts.intro)}</p>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  </head>
+  <body style="margin:0;padding:0;background-color:#f5f0e6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f5f0e6;padding:32px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:580px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5dccf;box-shadow:0 12px 36px rgba(17,15,13,0.06);">
+            <!-- Top Gold Accent Bar -->
+            <tr>
+              <td style="height:4px;background-color:#c8913a;font-size:0;line-height:0;">&nbsp;</td>
+            </tr>
 
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
-            <tr><td style="padding:4px 0;color:#8a8078;font-size:12px;width:90px;vertical-align:top;">Book</td><td style="padding:4px 0;color:#0e0c0a;font-size:13px;font-weight:600;">${escapeHtml_(opts.bookTitle) || '—'} <span style="color:#8a8078;font-weight:400;">(${escapeHtml_(opts.bookId) || '—'})</span></td></tr>
-            <tr><td style="padding:4px 0;color:#8a8078;font-size:12px;vertical-align:top;">Author</td><td style="padding:4px 0;color:#0e0c0a;font-size:13px;font-weight:600;">${escapeHtml_(opts.authorEmail) || 'unknown'}</td></tr>
-            <tr><td style="padding:4px 0;color:#8a8078;font-size:12px;vertical-align:top;">Submitted</td><td style="padding:4px 0;color:#0e0c0a;font-size:13px;font-weight:600;">${escapeHtml_(opts.submittedAt) || '—'}</td></tr>
+            <!-- Header Masthead -->
+            <tr>
+              <td style="background-color:#110f0d;padding:22px 28px;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td valign="middle">
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="width:32px;height:32px;background-color:#c8913a;border-radius:8px;text-align:center;vertical-align:middle;font-family:Georgia,serif;font-weight:900;font-size:15px;color:#0e0c0a;line-height:32px;">
+                            LM
+                          </td>
+                          <td style="padding-left:12px;" valign="middle">
+                            <div style="font-family:Georgia,'Playfair Display',serif;font-weight:700;font-size:18px;letter-spacing:0.01em;color:#fdfbf7;line-height:1.2;">Lyricalmyrical Inventory</div>
+                            <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.14em;color:#c8913a;text-transform:uppercase;margin-top:3px;">Publisher Operations</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Status Banner Strip -->
+            <tr>
+              <td style="background-color:${bannerBg};border-bottom:1px solid ${bannerBorder};padding:10px 28px;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.1em;color:${bannerColor};text-transform:uppercase;">
+                      ${bannerIcon} ${escapeHtml_(bannerLabel)} · ${escapeHtml_(opts.kind)}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Main Content Area -->
+            <tr>
+              <td style="padding:28px 28px 24px;">
+                <p style="margin:0 0 20px;color:#1c1916;font-size:15px;line-height:1.55;font-weight:500;">${escapeHtml_(opts.intro)}</p>
+
+                <!-- Core Metadata Box -->
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#fbf9f5;border:1px solid #ece4d7;border-radius:10px;margin-bottom:22px;overflow:hidden;">
+                  <tr>
+                    <td style="padding:14px 18px;">
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                          <td style="padding:4px 0;color:#786f65;font-size:12px;font-weight:600;width:95px;vertical-align:top;text-transform:uppercase;letter-spacing:0.04em;">Book</td>
+                          <td style="padding:4px 0;color:#110f0d;font-size:14px;font-weight:700;">
+                            ${escapeHtml_(opts.bookTitle) || '—'}
+                            ${opts.bookId ? `<span style="display:inline-block;margin-left:6px;background:rgba(140,91,0,0.09);color:#8c5b00;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;font-family:'DM Mono',Consolas,monospace;">${escapeHtml_(opts.bookId)}</span>` : ''}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:6px 0 4px;color:#786f65;font-size:12px;font-weight:600;vertical-align:top;text-transform:uppercase;letter-spacing:0.04em;">Author</td>
+                          <td style="padding:6px 0 4px;color:#110f0d;font-size:13px;font-weight:600;">${escapeHtml_(opts.authorEmail) || 'unknown'}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding:4px 0;color:#786f65;font-size:12px;font-weight:600;vertical-align:top;text-transform:uppercase;letter-spacing:0.04em;">Submitted</td>
+                          <td style="padding:4px 0;color:#453f38;font-size:13px;font-weight:600;font-family:'DM Mono',Consolas,monospace;">${escapeHtml_(formatNotifyDate_(opts.submittedAt))}</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+
+                ${summaryHtml}
+
+                <!-- Transaction Details -->
+                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-weight:800;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#786f65;margin:0 0 10px;">Transaction Details</div>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#ffffff;border:1px solid #ece4d7;border-radius:10px;overflow:hidden;border-collapse:separate;border-spacing:0;">
+                  ${detailsRows}
+                </table>
+
+                <!-- Action CTA -->
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;">
+                  <tr>
+                    <td align="center">
+                      <a href="https://lyricalmyricalbooks.github.io/lyrical-inventory/" target="_blank" style="display:inline-block;background-color:#c8913a;color:#0e0c0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.03em;text-decoration:none;padding:12px 28px;border-radius:8px;box-shadow:0 4px 14px rgba(200,145,58,0.25);">
+                        Open Lyricalmyrical Inventory →
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="background-color:#fbf8f2;border-top:1px solid #ece4d7;padding:18px 28px;text-align:center;">
+                <div style="color:#786f65;font-size:12px;font-weight:500;margin-bottom:4px;">
+                  Sent automatically by <strong>Lyricalmyrical Inventory</strong>
+                </div>
+                <div style="color:#a89f94;font-size:11px;">
+                  Confidential operations notice for Lyricalmyrical Books management.
+                </div>
+              </td>
+            </tr>
           </table>
-
-          ${summaryHtml}
-
-          <div style="font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8a8078;margin:0 0 6px;">Details</div>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            ${detailsRows}
-          </table>
-        </div>
-        <div style="background:#f7f2e9;padding:14px 24px;border-top:1px solid rgba(14,12,10,.09);">
-          <div style="color:#8a8078;font-size:11px;">Sent automatically by Lyrical Inventory — review and approve in the app.</div>
-        </div>
-      </div>
-    </div>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>`;
 }
@@ -2297,7 +2414,7 @@ function sendMail_(opts) {
   const provider = String(props.getProperty('MAIL_PROVIDER') || '').trim().toLowerCase();
   const apiKey = String(props.getProperty('MAIL_API_KEY') || '').trim();
   const fromEmail = String(props.getProperty('MAIL_FROM') || '').trim();
-  const fromName = String(props.getProperty('MAIL_FROM_NAME') || 'Lyrical Inventory').trim();
+  const fromName = String(props.getProperty('MAIL_FROM_NAME') || 'Lyricalmyrical Inventory').trim();
   const replyTo = String(opts.replyTo || props.getProperty('MAIL_REPLY_TO') || '').trim();
   const to = String(opts.to || '').trim();
   const subject = String(opts.subject || '');
@@ -2411,7 +2528,7 @@ function configureMail_() {
     MAIL_PROVIDER: '',   // resend | brevo | sendgrid | mailgun | postmark
     MAIL_API_KEY: '',    // provider API key / server token
     MAIL_FROM: '',       // verified sender, e.g. noreply@lyricalmyrical.app
-    MAIL_FROM_NAME: 'Lyrical Inventory',
+    MAIL_FROM_NAME: 'Lyricalmyrical Inventory',
     MAIL_REPLY_TO: '',   // optional
     MAIL_DOMAIN: '',     // Mailgun only
     MAIL_REGION: ''      // Mailgun only: "eu" or blank for US
@@ -2613,7 +2730,7 @@ function ocSendDigest_(freshRows, nameByEmail) {
       to: me,
       subject: 'Open Call: ' + freshRows.length + ' update' + (freshRows.length === 1 ? '' : 's') + ' to review',
       body: 'The scheduled Gmail scan found:\n\n' + lines.join('\n') +
-        '\n\nNothing has been applied automatically. Open Lyrical Inventory → Open Call → "Review scan results" to approve or dismiss each one.'
+        '\n\nNothing has been applied automatically. Open Lyricalmyrical Inventory → Open Call → "Review scan results" to approve or dismiss each one.'
     });
   } catch (_) {}
 }
