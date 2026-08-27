@@ -904,29 +904,171 @@ async function syncCatalog() {
   }
 }
 
-function switchBookModalTab(tabName) {
-  const tabs = ['general', 'sales', 'costs'];
-  tabs.forEach(t => {
-    const btn = $('book-modal-tab-' + t);
-    const panel = $('book-panel-' + t);
-    if (btn && panel) {
-      if (t === tabName) {
-        btn.classList.add('active');
-        panel.style.display = '';
-      } else {
-        btn.classList.remove('active');
-        panel.style.display = 'none';
-      }
+const BOOK_MODAL_SUBTITLES = {
+  general: 'Step 1 of 3: Core Identity & Contributor Access',
+  sales: 'Step 2 of 3: Retail Pricing, Currency & Shipping Specs',
+  costs: 'Step 3 of 3: Production Cost, Breakeven & Gratuity'
+};
+
+const BOOK_PARCEL_PRESETS = {
+  trade: { length: 22, width: 15, height: 2, dimUnit: 'cm', weight: 0.45, weightUnit: 'kg' },
+  monograph: { length: 30, width: 24, height: 3, dimUnit: 'cm', weight: 1.10, weightUnit: 'kg' },
+  zine: { length: 21, width: 14, height: 0.5, dimUnit: 'cm', weight: 0.12, weightUnit: 'kg' },
+  boxset: { length: 32, width: 26, height: 8, dimUnit: 'cm', weight: 2.50, weightUnit: 'kg' }
+};
+
+function rgbToHex(rgb) {
+  if (!rgb || typeof rgb !== 'string' || !rgb.startsWith('rgb')) return rgb || '';
+  const rgbValues = rgb.match(/\d+/g);
+  if (!rgbValues || rgbValues.length < 3) return rgb;
+  const r = parseInt(rgbValues[0]).toString(16).padStart(2, '0');
+  const g = parseInt(rgbValues[1]).toString(16).padStart(2, '0');
+  const b = parseInt(rgbValues[2]).toString(16).padStart(2, '0');
+  return `#${r}${g}${b}`;
+}
+
+function selectBookAccentPreset(color) {
+  const accentInput = $('nb-accent');
+  if (accentInput) {
+    accentInput.value = color;
+    onCustomAccentInput(color);
+  }
+}
+
+function onCustomAccentInput(color) {
+  const hexDisplay = $('nb-accent-hex');
+  if (hexDisplay) hexDisplay.textContent = color;
+
+  const swatches = document.querySelectorAll('#nb-accent-swatches .accent-swatch-btn');
+  swatches.forEach(btn => {
+    const bg = btn.style.backgroundColor;
+    if (bg && (bg.toLowerCase() === color.toLowerCase() || rgbToHex(bg).toLowerCase() === color.toLowerCase())) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
     }
   });
+
+  const accentInput = $('nb-accent');
+  if (accentInput) updateModalAccentPreview(accentInput);
+}
+
+function onBookTitleInput(val) {
+  if (!editingBookId) {
+    const idInput = $('nb-id');
+    if (idInput && (!idInput.dataset.manual || !idInput.value.trim())) {
+      const slug = (val || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      idInput.value = slug;
+    }
+  }
+}
+
+function applyBookParcelPreset(presetKey) {
+  const p = BOOK_PARCEL_PRESETS[presetKey];
+  if (!p) return;
+  if ($('nb-ship-length')) $('nb-ship-length').value = p.length;
+  if ($('nb-ship-width')) $('nb-ship-width').value = p.width;
+  if ($('nb-ship-height')) $('nb-ship-height').value = p.height;
+  if ($('nb-ship-dim-unit')) $('nb-ship-dim-unit').value = p.dimUnit;
+  if ($('nb-ship-weight')) $('nb-ship-weight').value = p.weight;
+  if ($('nb-ship-weight-unit')) $('nb-ship-weight-unit').value = p.weightUnit;
+  showToast(`✓ Applied parcel preset: ${presetKey.toUpperCase()}`);
+}
+
+function updateBookModalFinancials() {
+  const listPrice = parseFloat($('nb-price')?.value) || 0;
+  const printRun = parseInt($('nb-max')?.value) || 0;
+  const prodCost = parseFloat($('nb-prod')?.value) || 0;
+  const curSymbol = $('nb-cur')?.value || '€';
+
+  const grossPotential = listPrice * printRun;
+  const unitCost = printRun > 0 ? (prodCost / printRun) : 0;
+  const unitMargin = listPrice - unitCost;
+  const marginPercent = listPrice > 0 ? Math.round((unitMargin / listPrice) * 100) : 0;
+  const breakevenCopies = listPrice > 0 ? Math.ceil(prodCost / listPrice) : 0;
+
+  const grossEl = $('bm-metric-gross');
+  const unitCostEl = $('bm-metric-unitcost');
+  const marginEl = $('bm-metric-margin');
+  const breakevenEl = $('bm-metric-breakeven');
+
+  if (grossEl) grossEl.textContent = `${curSymbol}${grossPotential.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (unitCostEl) unitCostEl.textContent = `${curSymbol}${unitCost.toFixed(2)}`;
+  if (marginEl) marginEl.textContent = `${curSymbol}${unitMargin.toFixed(2)} (${marginPercent}%)`;
+  if (breakevenEl) breakevenEl.textContent = `${breakevenCopies} ${breakevenCopies === 1 ? 'copy' : 'copies'}`;
+}
+
+function switchBookModalTab(tabName) {
+  const tabs = ['general', 'sales', 'costs'];
+  const updateDom = () => {
+    tabs.forEach(t => {
+      const btn = $('book-modal-tab-' + t);
+      const panel = $('book-panel-' + t);
+      if (btn && panel) {
+        if (t === tabName) {
+          btn.classList.add('active');
+          btn.setAttribute('aria-selected', 'true');
+          panel.style.display = '';
+        } else {
+          btn.classList.remove('active');
+          btn.setAttribute('aria-selected', 'false');
+          panel.style.display = 'none';
+        }
+      }
+    });
+
+    if ($('book-modal-subtitle')) {
+      $('book-modal-subtitle').textContent = BOOK_MODAL_SUBTITLES[tabName] || 'Book Settings';
+    }
+
+    const prevBtn = $('book-modal-prev-btn');
+    const nextBtn = $('book-modal-next-btn');
+
+    if (tabName === 'general') {
+      if (prevBtn) prevBtn.style.display = 'none';
+      if (nextBtn) {
+        nextBtn.style.display = '';
+        nextBtn.textContent = 'Next: Sales & Shipping →';
+      }
+    } else if (tabName === 'sales') {
+      if (prevBtn) prevBtn.style.display = '';
+      if (nextBtn) {
+        nextBtn.style.display = '';
+        nextBtn.textContent = 'Next: Costs & Payouts →';
+      }
+    } else if (tabName === 'costs') {
+      if (prevBtn) prevBtn.style.display = '';
+      if (nextBtn) nextBtn.style.display = 'none';
+    }
+
+    updateBookModalFinancials();
+  };
+
+  if (typeof document !== 'undefined' && document.startViewTransition) {
+    document.startViewTransition(updateDom);
+  } else {
+    updateDom();
+  }
+}
+
+function stepBookModal(delta) {
+  const tabs = ['general', 'sales', 'costs'];
+  let currentIdx = 0;
+  tabs.forEach((t, i) => {
+    if ($('book-modal-tab-' + t)?.classList.contains('active')) currentIdx = i;
+  });
+  const targetIdx = Math.max(0, Math.min(tabs.length - 1, currentIdx + delta));
+  switchBookModalTab(tabs[targetIdx]);
 }
 
 function resetBookForm() {
   editingBookId = null;
+  if ($('book-modal-badge')) $('book-modal-badge').textContent = '✨ New Release';
   $('add-book-modal-title').textContent = 'Add new book';
   $('add-book-save-btn').textContent = 'Save Book';
   $('nb-id').disabled = false;
   $('nb-id').value = '';
+  if ($('nb-id')) $('nb-id').dataset.manual = '';
   $('nb-title').value = '';
   $('nb-author').value = '';
   $('nb-isbn').value = '';
@@ -935,6 +1077,7 @@ function resetBookForm() {
   $('nb-cur').value = '€';
   $('nb-thresh').value = '10';
   $('nb-accent').value = '#c8913a';
+  onCustomAccentInput('#c8913a');
   $('nb-pw').value = '';
   $('nb-prod').value = '0';
   if ($('nb-pub-grat')) $('nb-pub-grat').value = '0';
@@ -945,11 +1088,12 @@ function resetBookForm() {
   $('nb-ship-length').value = '';
   $('nb-ship-width').value = '';
   $('nb-ship-height').value = '';
-  $('nb-ship-dim-unit').value = 'in';
+  $('nb-ship-dim-unit').value = 'cm';
   $('nb-ship-weight').value = '';
-  $('nb-ship-weight-unit').value = 'lb';
+  $('nb-ship-weight-unit').value = 'kg';
   $('nb-ship-hs').value = '490199';
   switchBookModalTab('general');
+  updateBookModalFinancials();
 }
 
 function openAddBookModal() {
@@ -962,10 +1106,12 @@ function openEditBookModal(id) {
   const book = BOOKS[id];
   if (!book) return;
   editingBookId = id;
+  if ($('book-modal-badge')) $('book-modal-badge').textContent = '📖 Project Settings';
   $('add-book-modal-title').textContent = `Edit book · ${book.title}`;
   $('add-book-save-btn').textContent = 'Save Changes';
   $('nb-id').disabled = true;
   $('nb-id').value = book.id || '';
+  if ($('nb-id')) $('nb-id').dataset.manual = 'true';
   $('nb-title').value = book.title || '';
   $('nb-author').value = book.author || '';
   $('nb-isbn').value = book.isbn || '—';
@@ -974,6 +1120,7 @@ function openEditBookModal(id) {
   $('nb-cur').value = book.currency || '€';
   $('nb-thresh').value = book.threshold ?? 10;
   $('nb-accent').value = book.accent || '#c8913a';
+  onCustomAccentInput(book.accent || '#c8913a');
   $('nb-pw').value = book.authorEmail || '';
   $('nb-prod').value = book.productionCost ?? 0;
   if ($('nb-pub-grat')) $('nb-pub-grat').value = book.pubGratuity ?? 0;
@@ -984,12 +1131,13 @@ function openEditBookModal(id) {
   $('nb-ship-length').value = book.shipLength ?? '';
   $('nb-ship-width').value = book.shipWidth ?? '';
   $('nb-ship-height').value = book.shipHeight ?? '';
-  $('nb-ship-dim-unit').value = book.shipDimUnit || 'in';
+  $('nb-ship-dim-unit').value = book.shipDimUnit || 'cm';
   $('nb-ship-weight').value = book.shipWeight ?? '';
-  $('nb-ship-weight-unit').value = book.shipWeightUnit || 'lb';
+  $('nb-ship-weight-unit').value = book.shipWeightUnit || 'kg';
   $('nb-ship-hs').value = book.shipHsCode || '490199';
   switchBookModalTab('general');
   updateModalAccentPreview($('nb-accent'));
+  updateBookModalFinancials();
   openM('add-book');
 }
 
@@ -21023,6 +21171,7 @@ function exposeLegacyInlineHandlers() {
   Object.assign(window, {
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,
+    stepBookModal, updateBookModalFinancials, onBookTitleInput, selectBookAccentPreset, onCustomAccentInput, applyBookParcelPreset,
     resetBookForm, openAddBookModal, openEditBookModal, closeAddBookModal, isValidPaymentLink,
     updateUnsavedIndicator, saveBookFromModal, renderCatalogList, deleteBook, openPaymentQRModal,
     updateSingleBookPaymentQR, generateSingleBookStripeQR,
