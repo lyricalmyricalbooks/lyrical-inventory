@@ -1149,6 +1149,313 @@ async function closeAddBookModal() {
   if (await attemptCloseModal('add-book')) resetBookForm();
 }
 
+// ── PRODUCTION COST CALCULATOR (TAX CENTRE AGGREGATOR) ──────────────────────
+let _tccSelectedExpenseIds = new Set();
+let _tccActiveFilter = 'production';
+let _tccTargetBookId = null;
+let _tccTargetCurrency = 'CAD';
+
+function getNormalizedCurCode(cur) {
+  if (!cur) return 'CAD';
+  if (cur === '€' || cur === 'EUR') return 'EUR';
+  if (cur === '$' || cur === 'CAD') return 'CAD';
+  if (cur === 'USD' || cur === 'US$') return 'USD';
+  if (cur === 'GBP' || cur === '£') return 'GBP';
+  if (cur === 'MXN') return 'MXN';
+  return cur;
+}
+
+function getCurSymbolForCode(code) {
+  if (code === 'EUR') return '€';
+  if (code === 'USD') return '$';
+  if (code === 'CAD') return '$';
+  if (code === 'GBP') return '£';
+  if (code === 'MXN') return '$';
+  return code ? code + ' ' : '$';
+}
+
+function getAllTaxCentreExpensesForCalc() {
+  const list = [];
+  // 1. Business expenses from TAX_CENTER
+  (TAX_CENTER?.businessExpenses || []).forEach(e => {
+    const rawCur = e.currency || 'CAD';
+    const curCode = getNormalizedCurCode(rawCur);
+    list.push({
+      id: String(e.id || e.ref || Math.random()),
+      rawId: e.id,
+      date: e.date || '',
+      desc: e.desc || e.description || e.vendor || 'Expense',
+      vendor: e.vendor || '',
+      category: e.category || 'General',
+      amount: Number(e.amount) || 0,
+      currency: curCode,
+      bookId: e.bookId || e.book || '',
+      source: 'businessExpense'
+    });
+  });
+
+  // 2. Book-specific expenses from states
+  Object.entries(states || {}).forEach(([bId, s]) => {
+    if (s && Array.isArray(s.expenses)) {
+      const bCur = BOOKS[bId]?.currency || 'CAD';
+      const curCode = getNormalizedCurCode(bCur);
+      s.expenses.forEach(e => {
+        const expCur = getNormalizedCurCode(e.currency || curCode);
+        list.push({
+          id: `book_${bId}_${e.id}`,
+          rawId: e.id,
+          date: e.date || '',
+          desc: e.desc || e.description || 'Production Expense',
+          vendor: e.vendor || '',
+          category: e.category || 'Production',
+          amount: Number(e.amount) || 0,
+          currency: expCur,
+          bookId: bId,
+          source: 'bookExpense'
+        });
+      });
+    }
+  });
+
+  return list;
+}
+
+function convertExpenseToTargetCurrency(amt, fromCur, toCur) {
+  if (!amt || isNaN(amt)) return 0;
+  fromCur = getNormalizedCurCode(fromCur);
+  toCur = getNormalizedCurCode(toCur);
+  if (fromCur === toCur) return amt;
+
+  // Direct pair: fromCur_toCur
+  const pairKey = `${fromCur}_${toCur}`;
+  if (_fxRateCache && _fxRateCache[pairKey]) {
+    return amt * _fxRateCache[pairKey];
+  }
+
+  // Inverse pair: toCur_fromCur
+  const invPairKey = `${toCur}_${fromCur}`;
+  if (_fxRateCache && _fxRateCache[invPairKey] && _fxRateCache[invPairKey] > 0) {
+    return amt / _fxRateCache[invPairKey];
+  }
+
+  // Cross rate via CAD
+  const fromToCad = fromCur === 'CAD' ? 1 : (_fxRateCache?.[`${fromCur}_CAD`] || 1);
+  const toToCad = toCur === 'CAD' ? 1 : (_fxRateCache?.[`${toCur}_CAD`] || 1);
+
+  if (toToCad > 0) {
+    return (amt * fromToCad) / toToCad;
+  }
+
+  return amt;
+}
+
+function isProductionCategory(cat) {
+  if (!cat) return false;
+  const lower = cat.toLowerCase();
+  return lower.includes('print') || lower.includes('manufactur') || lower.includes('product') ||
+         lower.includes('suppl') || lower.includes('proof') || lower.includes('bind') ||
+         lower.includes('paper') || lower.includes('press') || lower.includes('cost of goods');
+}
+
+function openProductionCostCalculator() {
+  _tccTargetBookId = editingBookId || $('nb-id')?.value || null;
+  const rawCur = $('nb-cur')?.value || (editingBookId && BOOKS[editingBookId]?.currency) || '€';
+  _tccTargetCurrency = getNormalizedCurCode(rawCur);
+
+  const bookTitle = (_tccTargetBookId && BOOKS[_tccTargetBookId]?.title) || $('nb-title')?.value || 'Book';
+  if ($('tcc-modal-title')) {
+    $('tcc-modal-title').textContent = `Sum Production Costs · ${bookTitle}`;
+  }
+
+  _tccSelectedExpenseIds = new Set();
+  _tccActiveFilter = 'production';
+
+  const allExpenses = getAllTaxCentreExpensesForCalc();
+  const lowerTitle = bookTitle.toLowerCase();
+  const lowerId = (_tccTargetBookId || '').toLowerCase();
+
+  allExpenses.forEach(exp => {
+    const isDirectBook = lowerId && exp.bookId && exp.bookId.toLowerCase() === lowerId;
+    const isTitleMatch = lowerTitle.length > 2 && (exp.desc.toLowerCase().includes(lowerTitle) || (exp.vendor && exp.vendor.toLowerCase().includes(lowerTitle)));
+    const isProdCat = isProductionCategory(exp.category);
+
+    if (isDirectBook || (isProdCat && isTitleMatch)) {
+      _tccSelectedExpenseIds.add(exp.id);
+    }
+  });
+
+  if ($('tcc-search')) $('tcc-search').value = '';
+  setProdCostCalcFilter('production', false);
+  renderProdCostCalcList();
+  openM('tc-prod-cost-calc');
+}
+
+function closeProductionCostCalculator() {
+  closeM('tc-prod-cost-calc');
+}
+
+function setProdCostCalcFilter(mode, shouldRender = true) {
+  _tccActiveFilter = mode;
+  ['production', 'this-book', 'all'].forEach(f => {
+    const btn = $('tcc-filter-' + (f === 'this-book' ? 'book' : (f === 'production' ? 'prod' : 'all')));
+    if (btn) {
+      if (f === mode) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+  if (shouldRender) renderProdCostCalcList();
+}
+
+function toggleProdCostCalcExpense(id) {
+  if (_tccSelectedExpenseIds.has(id)) {
+    _tccSelectedExpenseIds.delete(id);
+  } else {
+    _tccSelectedExpenseIds.add(id);
+  }
+  renderProdCostCalcList();
+}
+
+function toggleAllFilteredProdCost(select) {
+  const visible = getFilteredProdCostExpenses();
+  visible.forEach(exp => {
+    if (select) _tccSelectedExpenseIds.add(exp.id);
+    else _tccSelectedExpenseIds.delete(exp.id);
+  });
+  renderProdCostCalcList();
+}
+
+function getFilteredProdCostExpenses() {
+  const all = getAllTaxCentreExpensesForCalc();
+  const search = ($('tcc-search')?.value || '').trim().toLowerCase();
+  const targetId = (_tccTargetBookId || '').toLowerCase();
+
+  return all.filter(exp => {
+    if (_tccActiveFilter === 'production') {
+      const isProd = isProductionCategory(exp.category) ||
+                     exp.desc.toLowerCase().includes('print') ||
+                     exp.desc.toLowerCase().includes('proof') ||
+                     exp.desc.toLowerCase().includes('press');
+      if (!isProd && (!targetId || exp.bookId.toLowerCase() !== targetId)) return false;
+    } else if (_tccActiveFilter === 'this-book') {
+      if (!targetId || exp.bookId.toLowerCase() !== targetId) return false;
+    }
+
+    if (search) {
+      const matchesDesc = exp.desc.toLowerCase().includes(search);
+      const matchesVendor = (exp.vendor || '').toLowerCase().includes(search);
+      const matchesCat = (exp.category || '').toLowerCase().includes(search);
+      const matchesDate = (exp.date || '').toLowerCase().includes(search);
+      const matchesBook = (exp.bookId || '').toLowerCase().includes(search);
+      if (!matchesDesc && !matchesVendor && !matchesCat && !matchesDate && !matchesBook) return false;
+    }
+
+    return true;
+  });
+}
+
+function renderProdCostCalcList() {
+  const listEl = $('tcc-expense-list');
+  if (!listEl) return;
+
+  const all = getAllTaxCentreExpensesForCalc();
+  const visible = getFilteredProdCostExpenses();
+
+  let totalConvertedSum = 0;
+  let selectedCount = 0;
+
+  all.forEach(exp => {
+    if (_tccSelectedExpenseIds.has(exp.id)) {
+      selectedCount++;
+      const converted = convertExpenseToTargetCurrency(exp.amount, exp.currency, _tccTargetCurrency);
+      totalConvertedSum += converted;
+    }
+  });
+
+  const curSymbol = getCurSymbolForCode(_tccTargetCurrency);
+  const formattedTotal = `${curSymbol}${totalConvertedSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${_tccTargetCurrency}`;
+
+  if ($('tcc-selected-count')) {
+    $('tcc-selected-count').textContent = `${selectedCount} ${selectedCount === 1 ? 'expense' : 'expenses'} selected`;
+  }
+  if ($('tcc-selected-total')) {
+    $('tcc-selected-total').textContent = formattedTotal;
+  }
+  if ($('tcc-apply-btn')) {
+    $('tcc-apply-btn').textContent = `✓ Apply ${curSymbol}${totalConvertedSum.toFixed(2)} to Production Cost`;
+    $('tcc-apply-btn').disabled = (selectedCount === 0);
+  }
+
+  if (!visible.length) {
+    listEl.innerHTML = `
+      <div class="tcc-empty-state">
+        <div style="font-size:var(--text-2xl);">🔍</div>
+        <div style="font-weight:600;color:var(--text);">No matching expenses found</div>
+        <div style="font-size:var(--text-xs);color:var(--text3);">Try adjusting your search terms or switching to "All Expenses"</div>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = visible.map(exp => {
+    const isSelected = _tccSelectedExpenseIds.has(exp.id);
+    const converted = convertExpenseToTargetCurrency(exp.amount, exp.currency, _tccTargetCurrency);
+    const isDifferentCur = exp.currency !== _tccTargetCurrency;
+    const origSymbol = getCurSymbolForCode(exp.currency);
+
+    const origDisplay = isDifferentCur
+      ? `<span class="tcc-amount-orig">Orig: ${origSymbol}${exp.amount.toFixed(2)} ${exp.currency}</span>`
+      : '';
+
+    const bookBadge = exp.bookId
+      ? `<span class="tcc-badge-book">📖 ${escapeHtml(BOOKS[exp.bookId]?.title || exp.bookId)}</span>`
+      : '';
+
+    return `
+      <div class="tcc-expense-row ${isSelected ? 'selected' : ''}" onclick="toggleProdCostCalcExpense('${escapeHtml(exp.id)}')">
+        <input type="checkbox" class="tcc-row-checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleProdCostCalcExpense('${escapeHtml(exp.id)}')" aria-label="Select ${escapeHtml(exp.desc)}">
+        <div class="tcc-row-meta">
+          <div class="tcc-row-badges">
+            <span class="tcc-badge-cat">${escapeHtml(exp.category || 'General')}</span>
+            ${bookBadge}
+            <span style="font-size:var(--text-3xs);color:var(--text3);font-family:'DM Mono',monospace;">${escapeHtml(exp.date || '—')}</span>
+          </div>
+          <div class="tcc-row-desc">${escapeHtml(exp.desc)}</div>
+          ${exp.vendor ? `<div class="tcc-row-sub">Vendor: ${escapeHtml(exp.vendor)}</div>` : ''}
+        </div>
+        <div class="tcc-row-amount">
+          <div class="tcc-amount-main">${curSymbol}${converted.toFixed(2)}</div>
+          ${origDisplay}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function applyCalculatedProdCost() {
+  const all = getAllTaxCentreExpensesForCalc();
+  let totalConvertedSum = 0;
+  let count = 0;
+
+  all.forEach(exp => {
+    if (_tccSelectedExpenseIds.has(exp.id)) {
+      count++;
+      const converted = convertExpenseToTargetCurrency(exp.amount, exp.currency, _tccTargetCurrency);
+      totalConvertedSum += converted;
+    }
+  });
+
+  const rounded = Math.round(totalConvertedSum * 100) / 100;
+  const prodInput = $('nb-prod');
+  if (prodInput) {
+    prodInput.value = rounded.toFixed(2);
+    updateBookModalFinancials();
+  }
+
+  const curSymbol = getCurSymbolForCode(_tccTargetCurrency);
+  showToast(`✓ Applied ${curSymbol}${rounded.toFixed(2)} (${count} ${count === 1 ? 'expense' : 'expenses'}) as Initial Production Cost`, 'ok');
+  closeProductionCostCalculator();
+}
+
 function isValidPaymentLink(str) {
   if (!str) return true; // Optional/cleared is fine
   // Email regex
@@ -1695,6 +2002,13 @@ window.openEditBookModal = openEditBookModal;
 window.closeAddBookModal = closeAddBookModal;
 window.deleteBook = deleteBook;
 window.switchBookModalTab = switchBookModalTab;
+window.openProductionCostCalculator = openProductionCostCalculator;
+window.closeProductionCostCalculator = closeProductionCostCalculator;
+window.renderProdCostCalcList = renderProdCostCalcList;
+window.toggleProdCostCalcExpense = toggleProdCostCalcExpense;
+window.setProdCostCalcFilter = setProdCostCalcFilter;
+window.toggleAllFilteredProdCost = toggleAllFilteredProdCost;
+window.applyCalculatedProdCost = applyCalculatedProdCost;
 
 // ── PAYMENT QR GENERATOR (publisher only)
 let _currentQR = null;
@@ -21173,6 +21487,7 @@ function exposeLegacyInlineHandlers() {
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,
     stepBookModal, updateBookModalFinancials, onBookTitleInput, selectBookAccentPreset, onCustomAccentInput, applyBookParcelPreset,
     resetBookForm, openAddBookModal, openEditBookModal, closeAddBookModal, isValidPaymentLink,
+    openProductionCostCalculator, closeProductionCostCalculator, renderProdCostCalcList, toggleProdCostCalcExpense, setProdCostCalcFilter, toggleAllFilteredProdCost, applyCalculatedProdCost,
     updateUnsavedIndicator, saveBookFromModal, renderCatalogList, deleteBook, openPaymentQRModal,
     updateSingleBookPaymentQR, generateSingleBookStripeQR,
     copyPaymentLink, downloadPaymentQR, renderAllQRCodes, renderAuthorQRPage,

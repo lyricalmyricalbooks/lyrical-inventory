@@ -8060,6 +8060,225 @@ tr.hist-row:hover {
   gap: 8px;
 }
 
+/* ==========================================================================
+   PRODUCTION COST CALCULATOR (TAX CENTRE LINK)
+   ========================================================================== */
+
+.prod-cost-calc-modal {
+  max-width: 720px !important;
+  border-radius: var(--r3, 16px) !important;
+  padding: 24px 28px !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--elev-4) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 88vh !important;
+}
+
+.tcc-controls-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tcc-search-wrap input[type="search"] {
+  border-radius: var(--r);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  color: var(--text);
+}
+
+.tcc-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tcc-filter-pill {
+  font-size: var(--text-xs);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text3);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all var(--dur-fast) var(--ease-standard);
+}
+
+.tcc-filter-pill:hover {
+  color: var(--text);
+  background: var(--surface3);
+}
+
+.tcc-filter-pill.active {
+  background: var(--surface-page, var(--surface));
+  color: var(--text);
+  border-color: var(--local-accent, var(--gold));
+  box-shadow: var(--elev-1);
+}
+
+.tcc-quick-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.tcc-list-container {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 200px;
+  max-height: 380px;
+  border: 1px solid var(--border);
+  border-radius: var(--r2, 10px);
+  background: var(--surface2);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tcc-expense-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+
+.tcc-expense-row:hover {
+  background: var(--surface3);
+  border-color: var(--border-subtle);
+}
+
+.tcc-expense-row.selected {
+  border-color: var(--local-accent, var(--gold));
+  background: linear-gradient(135deg, rgba(200, 145, 58, 0.08), rgba(200, 145, 58, 0.02));
+}
+
+.tcc-row-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--local-accent, var(--gold));
+}
+
+.tcc-row-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tcc-row-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tcc-badge-cat {
+  font-size: var(--text-3xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps, 0.08em);
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface3);
+  color: var(--text2);
+}
+
+.tcc-badge-book {
+  font-size: var(--text-3xs);
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(200, 145, 58, 0.15);
+  color: var(--local-accent, var(--gold));
+}
+
+.tcc-row-desc {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tcc-row-sub {
+  font-size: var(--text-xs);
+  color: var(--text3);
+}
+
+.tcc-row-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tcc-amount-main {
+  font-size: var(--text-base);
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  color: var(--text);
+  font-feature-settings: 'tnum' 1;
+}
+
+.tcc-amount-orig {
+  font-size: var(--text-2xs);
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+}
+
+.tcc-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  color: var(--text3);
+  text-align: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+}
+
+.tcc-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+
+.tcc-footer-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tcc-total-val {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  color: var(--local-accent, var(--gold));
+  font-feature-settings: 'tnum' 1;
+}
+
 /* ==========================================
    SANDBOX SPREADSHEET SIMULATOR (TEST PROFILE)
    ========================================== */
