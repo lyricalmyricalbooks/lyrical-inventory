@@ -2140,7 +2140,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v28';
+const EXPECTED_SCRIPT_VERSION = 'v29';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -11705,9 +11705,13 @@ async function emailArtistForPayment() {
   if (!to) { showToast('No artist email on file for this book', 'warn'); return; }
   if (!confirm(`Send a payment-request email to ${to}?`)) return;
   const title = book.title || activeBook;
+  const authorName = book.author || '';
+  const currency = book.currency || 'CAD';
+  const owedEl = $('d-owed');
+  const amountDue = (owedEl && owedEl.textContent && owedEl.textContent !== '—') ? owedEl.textContent.trim() : '';
   const subject = `Payment request — ${title}`;
   const body = [
-    'Hi,',
+    `Hi${authorName ? ' ' + authorName : ''},`,
     '',
     `This is a friendly reminder regarding outstanding payments for "${title}".`,
     'When you have a moment, please log in to the inventory app and submit or forward any payments due so the ledger stays up to date.',
@@ -11723,7 +11727,7 @@ async function emailArtistForPayment() {
       version: 2,
       action: 'emailAuthor',
       eventId: 'emailauthor-' + Date.now(),
-      payload: { action: 'emailAuthor', to, bookId: activeBook, bookTitle: title, subject, body }
+      payload: { action: 'emailAuthor', to, authorName, bookId: activeBook, bookTitle: title, subject, body, amountDue, currency }
     });
     showToast('✓ Payment request sent to ' + to);
   } catch (e) {

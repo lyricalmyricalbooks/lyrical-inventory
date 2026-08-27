@@ -103,6 +103,8 @@
  *      Bump flags v26-and-older as outdated.
  *  26. v28: Rebranded to Lyricalmyrical Inventory with state-of-the-art graphical HTML email templates,
  *      human-readable timestamps, gold luxury masthead, and action badges. Bump flags v27-and-older as outdated.
+ *  27. v29: Luxury graphical HTML email template for author payment requests (emailauthor action).
+ *      Bump flags v28-and-older as outdated.
  */
 
 const HEADERS = [
@@ -151,9 +153,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v28',
-    scriptVersion: 'v28',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true },
+    service: 'lyrical-sheets-webhook-v29',
+    scriptVersion: 'v29',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -831,12 +833,21 @@ function doPost(e) {
           ('Hi,\n\nThis is a friendly reminder regarding outstanding payments' +
            (bookTitle ? ' for "' + bookTitle + '"' : '') +
            '. When you have a moment, please submit or forward any payments due so the ledger stays up to date.\n\nThank you,\nLyricalmyrical Books');
+        const htmlBody = cleanBody_(d.htmlBody) || buildAuthorPaymentEmailHtml_({
+          to: to,
+          authorName: clean_(d.authorName),
+          bookTitle: bookTitle,
+          bookId: clean_(d.bookId),
+          message: cleanBody_(d.message || d.body),
+          amountDue: clean_(d.amountDue),
+          currency: clean_(d.currency)
+        });
         // Route through sendMail_ so, when a transactional provider is
         // configured in Script Properties, the message goes out from a neutral
         // "the app" address instead of the script owner's Gmail. Reply-to is
         // intentionally left to the provider config (MAIL_REPLY_TO) rather than
         // hard-coding the publisher's Gmail, which would re-expose it.
-        const sent = sendMail_({ to: to, subject: subject, body: body });
+        const sent = sendMail_({ to: to, subject: subject, body: body, htmlBody: htmlBody });
         return jsonOut_({ ok: true, emailed: true, via: sent.provider });
       } catch (err) {
         return jsonOut_({ error: 'mail failed: ' + String(err) });
@@ -2376,6 +2387,142 @@ function buildNotifyEmailHtml_(opts) {
                 </div>
                 <div style="color:#a89f94;font-size:11px;">
                   Confidential operations notice for Lyricalmyrical Books management.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function buildAuthorPaymentEmailHtml_(opts) {
+  const authorDisplay = opts.authorName ? escapeHtml_(opts.authorName) : 'Author / Contributor';
+  const bookTitle = opts.bookTitle ? escapeHtml_(opts.bookTitle) : 'Book Project';
+  const bookIdHtml = opts.bookId 
+    ? `<span style="display:inline-block;margin-left:6px;background:rgba(140,91,0,0.09);color:#8c5b00;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;font-family:'DM Mono',Consolas,monospace;">${escapeHtml_(opts.bookId)}</span>`
+    : '';
+  const messageText = opts.message
+    ? escapeHtml_(opts.message).replace(/\n/g, '<br>')
+    : 'This is a friendly reminder regarding outstanding payments and ledger balance updates for your book. When you have a moment, please log in to review and reconcile transactions.';
+
+  const amountBlock = opts.amountDue ? `
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#fcf9f2;border:1px solid #e8dfcf;border-radius:10px;margin-bottom:20px;padding:14px 18px;">
+      <tr>
+        <td style="color:#786f65;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Outstanding Balance / Amount Due</td>
+        <td align="right" style="color:#8c5b00;font-size:18px;font-weight:700;font-family:'DM Mono',Consolas,monospace;">${escapeHtml_(opts.amountDue)} ${opts.currency ? `<span style="font-size:12px;color:#786f65;font-weight:600;">${escapeHtml_(opts.currency)}</span>` : ''}</td>
+      </tr>
+    </table>` : '';
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  </head>
+  <body style="margin:0;padding:0;background-color:#f5f0e6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f5f0e6;padding:32px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:580px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5dccf;box-shadow:0 12px 36px rgba(17,15,13,0.06);">
+            <!-- Top Gold Accent Bar -->
+            <tr>
+              <td style="height:4px;background-color:#c8913a;font-size:0;line-height:0;">&nbsp;</td>
+            </tr>
+
+            <!-- Header Masthead -->
+            <tr>
+              <td style="background-color:#110f0d;padding:22px 28px;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td valign="middle">
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="width:32px;height:32px;background-color:#c8913a;border-radius:8px;text-align:center;vertical-align:middle;font-family:Georgia,serif;font-weight:900;font-size:15px;color:#0e0c0a;line-height:32px;">
+                            LM
+                          </td>
+                          <td style="padding-left:12px;" valign="middle">
+                            <div style="font-family:Georgia,'Playfair Display',serif;font-weight:700;font-size:18px;letter-spacing:0.01em;color:#fdfbf7;line-height:1.2;">Lyricalmyrical Books</div>
+                            <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:10px;font-weight:700;letter-spacing:0.14em;color:#c8913a;text-transform:uppercase;margin-top:3px;">Author &amp; Contributor Operations</div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Banner Strip -->
+            <tr>
+              <td style="background-color:#2a1d08;border-bottom:1px solid #8c5b00;padding:10px 28px;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                  <tr>
+                    <td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:11px;font-weight:800;letter-spacing:0.1em;color:#f5d58a;text-transform:uppercase;">
+                      💳 PAYMENT REQUEST · ${bookTitle}
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Main Content Area -->
+            <tr>
+              <td style="padding:28px 28px 24px;">
+                <p style="margin:0 0 16px;color:#1c1916;font-size:16px;line-height:1.5;font-weight:600;">Hi ${authorDisplay},</p>
+                <p style="margin:0 0 20px;color:#332e29;font-size:14px;line-height:1.6;">${messageText}</p>
+
+                ${amountBlock}
+
+                <!-- Book & Metadata Card -->
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#fbf9f5;border:1px solid #ece4d7;border-radius:10px;margin-bottom:22px;overflow:hidden;">
+                  <tr>
+                    <td style="padding:14px 18px;">
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                          <td style="padding:4px 0;color:#786f65;font-size:12px;font-weight:600;width:95px;vertical-align:top;text-transform:uppercase;letter-spacing:0.04em;">Title</td>
+                          <td style="padding:4px 0;color:#110f0d;font-size:14px;font-weight:700;">
+                            ${bookTitle}
+                            ${bookIdHtml}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:6px 0 4px;color:#786f65;font-size:12px;font-weight:600;vertical-align:top;text-transform:uppercase;letter-spacing:0.04em;">Publisher</td>
+                          <td style="padding:6px 0 4px;color:#110f0d;font-size:13px;font-weight:600;">Lyricalmyrical Books</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Callout Box -->
+                <div style="background-color:#fdfbf7;border:1px solid #e7ded0;border-left:4px solid #c8913a;border-radius:8px;padding:14px 18px;margin:0 0 22px;color:#1c1916;font-size:13px;line-height:1.55;">
+                  Please visit your author portal in Lyricalmyrical Inventory to forward any collected reader payments, record off-app sales, or verify your direct payout link.
+                </div>
+
+                <!-- Action CTA -->
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;">
+                  <tr>
+                    <td align="center">
+                      <a href="https://lyricalmyricalbooks.github.io/lyrical-inventory/" target="_blank" style="display:inline-block;background-color:#c8913a;color:#0e0c0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;font-weight:700;letter-spacing:0.03em;text-decoration:none;padding:12px 28px;border-radius:8px;box-shadow:0 4px 14px rgba(200,145,58,0.25);">
+                        Open Author Portal →
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="background-color:#fbf8f2;border-top:1px solid #ece4d7;padding:18px 28px;text-align:center;">
+                <div style="color:#786f65;font-size:12px;font-weight:500;margin-bottom:4px;">
+                  Sent via <strong>Lyricalmyrical Inventory</strong> on behalf of <strong>Lyricalmyrical Books</strong>
+                </div>
+                <div style="color:#a89f94;font-size:11px;">
+                  Thank you for being part of the Lyricalmyrical Books creator community.
                 </div>
               </td>
             </tr>
