@@ -302,15 +302,17 @@ export function validateCanadaPostAccount({
   };
 }
 
-function getSavedSheetsUrl() {
+export function getSavedSheetsUrl() {
   try {
     if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
-      return localStorage.getItem('lm-sheets-url') || '';
+      const url = localStorage.getItem('lm-sheets-url') || localStorage.getItem('lm-notify-url') || localStorage.getItem('lm-last-sheets-url') || '';
+      if (url) return url;
     }
   } catch (_) {}
   try {
-    if (typeof window !== 'undefined' && window.sheetsUrl) {
-      return window.sheetsUrl;
+    if (typeof window !== 'undefined') {
+      if (window.sheetsUrl) return window.sheetsUrl;
+      if (window.notifyUrl) return window.notifyUrl;
     }
   } catch (_) {}
   return '';
@@ -664,9 +666,13 @@ export async function executeCanadaPostProxy({
       if (gasResp.ok) {
         const json = await gasResp.json();
         if (json && json.xml) return { ok: true, xml: json.xml };
-        if (json && json.error) console.warn('Google Apps Script Canada Post proxy note:', json.error);
+        if (json && json.error) throw new Error(json.error);
       }
-    } catch (_) {}
+    } catch (gasErr) {
+      if (gasErr.message && !/Failed to fetch|NetworkError/i.test(gasErr.message)) {
+        throw gasErr;
+      }
+    }
   }
 
   // 3. Direct fetch to Canada Post Gateway (handles serverless or browser CORS fallback)
@@ -895,8 +901,13 @@ export async function verifyCanadaPostTrackingPin({
       if (gasResp.ok) {
         const json = await gasResp.json();
         if (json && json.xml) return { ...parseCanadaPostTrackingSummary(json.xml), environment: env };
+        if (json && json.error) throw new Error(json.error);
       }
-    } catch (_) {}
+    } catch (gasErr) {
+      if (gasErr.message && !/Failed to fetch|NetworkError/i.test(gasErr.message)) {
+        throw gasErr;
+      }
+    }
   }
 
   // 3. Direct fetch

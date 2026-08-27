@@ -58,7 +58,7 @@ import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
-import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber } from '../lib/canadapost.js';
+import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl } from '../lib/canadapost.js';
 import {
   RECURRING_FREQUENCIES,
   amountOnDate,
@@ -3569,6 +3569,24 @@ async function testCanadaPostConnectionHandler() {
     return;
   }
 
+  const sheetsUrl = getSavedSheetsUrl();
+  const isOnlineWeb = typeof window !== 'undefined' && window.location && window.location.protocol && window.location.protocol.startsWith('http') && !window.location.hostname.includes('localhost');
+  if (!sheetsUrl && isOnlineWeb) {
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="padding:10px 12px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.5;">
+          <strong>Setup Required: Google Sheets Web App Connection</strong><br>
+          Canada Post Web Services does not permit direct cross-origin requests from web browsers. Requests must be securely routed through your Google Sheet backend.<br>
+          <div style="margin-top:6px;">
+            Please open the <strong>Settings</strong> tab ➔ <strong>Connect your Google Sheet</strong>, paste your Web App URL, and ensure it is deployed with the latest code.
+          </div>
+        </div>
+      `;
+    }
+    showToast('⚠ Connect your Google Sheet in Settings first to proxy Canada Post requests', 'warn');
+    return;
+  }
+
   if (testBtn) { testBtn.disabled = true; testBtn.textContent = 'Testing...'; }
   if (statusEl) {
     statusEl.innerHTML = '<span style="color:var(--text2);">Connecting to Canada Post Web Services...</span>';
@@ -3612,14 +3630,30 @@ async function testCanadaPostConnectionHandler() {
     }
   } catch (err) {
     if (statusEl) {
-      const isAuthFail = /E002|Authentication Failure|unauthorized/i.test(err.message);
+      const isAuthFail = /E002|Authentication Failure|unauthorized|invalid_client/i.test(err.message);
+      const isScopeFail = /invalid_scope|Missing scope/i.test(err.message);
+      const isCors = /CORS|Google Sheet is not connected|Browser CORS restriction/i.test(err.message);
       let extraHint = '';
       if (isAuthFail) {
         extraHint = `
           <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:3px solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
-            <strong>How to fix:</strong><br>
+            <strong>How to fix authentication:</strong><br>
+            • If using Canada Post Developer Portal OAuth keys (32-char hex), ensure your App is subscribed to the <strong>Rating</strong> API product in the Developer Portal.<br>
             • If using <strong>Development / Test</strong> keys, turn <strong>ON</strong> the <em>Sandbox Environment</em> toggle switch above.<br>
-            • If using <strong>Production / Live</strong> keys, ensure you are pasting the <strong>API Password / Secret</strong> generated in the Canada Post Developer Program (not your regular canadapost.ca account login password).
+            • If using Legacy Production keys, ensure you paste the <strong>API Password</strong> generated in the Canada Post Developer Program (not your personal canadapost.ca password).
+          </div>
+        `;
+      } else if (isScopeFail) {
+        extraHint = `
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+            <strong>Missing OAuth Scope:</strong> Please ensure your Google Apps Script is updated to the latest version (v30) which includes the <code>scope=merchant</code> parameter.
+          </div>
+        `;
+      } else if (isCors) {
+        extraHint = `
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+            <strong>Google Sheet Webhook Required:</strong><br>
+            Canada Post API blocks direct browser calls due to browser CORS policies. Please go to <strong>Settings ➔ Connect your Google Sheet</strong> and paste your Apps Script URL so requests can be proxied.
           </div>
         `;
       }
