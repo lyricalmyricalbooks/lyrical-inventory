@@ -4657,7 +4657,12 @@
   <!-- Panel 3: Costs & Payouts -->
   <div id="book-panel-costs" style="display:none;" role="tabpanel" aria-labelledby="book-modal-tab-costs">
     <div class="form-group" style="margin-bottom:12px;">
-      <label for="nb-prod">Total Production / Printing Expense <span style="font-weight:400;font-size:10px;color:var(--text3);">(Break-even target)</span></label>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
+        <label for="nb-prod" style="margin:0;">Total Production / Printing Expense <span style="font-weight:400;font-size:10px;color:var(--text3);">(Break-even target)</span></label>
+        <button type="button" class="btn sm secondary" onclick="openProductionCostCalculator()" style="font-size:var(--text-xs);padding:3px 8px;display:inline-flex;align-items:center;gap:4px;" title="Search and sum production expenses from Tax Centre">
+          <span>🔍</span><span>Sum from Tax Centre</span>
+        </button>
+      </div>
       <input id="nb-prod" type="number" step="0.01" inputmode="decimal" value="0" min="0" oninput="updateBookModalFinancials()" style="font-family:'DM Mono',monospace;">
       <div class="book-modal-callout" style="margin-top:6px;">
         💡 <strong>Publisher Recovery:</strong> This manufacturing cost sets the first 100% publisher recovery tier before artist profit splits begin.
@@ -4701,6 +4706,55 @@
       <button class="btn" type="button" id="book-modal-prev-btn" onclick="stepBookModal(-1)" style="display:none;">← Back</button>
       <button class="btn" type="button" id="book-modal-next-btn" onclick="stepBookModal(1)">Next: Sales &amp; Shipping →</button>
       <button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- TAX CENTRE PRODUCTION COST CALCULATOR MODAL -->
+<div class="overlay" id="m-tc-prod-cost-calc" style="display:none;"><div class="modal prod-cost-calc-modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true" id="tcc-modal-title">Sum Production Costs from Tax Centre</div>
+  
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:-6px;margin-bottom:12px;gap:8px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="modal-badge-pill" id="tcc-modal-badge">📊 Tax Centre Link</span>
+      <span class="modal-subtitle" id="tcc-modal-subtitle">Select expenses to calculate break-even production cost</span>
+    </div>
+    <button class="modal-close-btn" type="button" onclick="closeProductionCostCalculator()" aria-label="Close dialog">×</button>
+  </div>
+
+  <!-- Search & Quick Filters Bar -->
+  <div class="tcc-controls-bar">
+    <div class="tcc-search-wrap">
+      <input id="tcc-search" type="search" placeholder="Search by vendor, description, or keyword..." oninput="renderProdCostCalcList()" style="width:100%;font-size:var(--text-sm);">
+    </div>
+    <div class="tcc-filter-pills">
+      <button type="button" class="tcc-filter-pill active" id="tcc-filter-prod" onclick="setProdCostCalcFilter('production')">🏭 Production &amp; Printing</button>
+      <button type="button" class="tcc-filter-pill" id="tcc-filter-book" onclick="setProdCostCalcFilter('this-book')">📖 Tagged to This Book</button>
+      <button type="button" class="tcc-filter-pill" id="tcc-filter-all" onclick="setProdCostCalcFilter('all')">📋 All Expenses</button>
+    </div>
+    <div class="tcc-quick-actions">
+      <button type="button" class="btn sm" onclick="toggleAllFilteredProdCost(true)">Select All Filtered</button>
+      <button type="button" class="btn sm" onclick="toggleAllFilteredProdCost(false)">Deselect All</button>
+    </div>
+  </div>
+
+  <!-- Expense Items List -->
+  <div class="tcc-list-container" id="tcc-expense-list" role="region" aria-label="Tax Centre Expenses">
+    <!-- Rendered dynamically -->
+  </div>
+
+  <!-- Sticky Tally & Action Footer -->
+  <div class="modal-footer tcc-modal-footer" role="dialog" aria-modal="true">
+    <div class="tcc-footer-summary">
+      <div style="font-size:var(--text-xs);color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:var(--tracking-caps, 0.08em);" id="tcc-selected-count">0 expenses selected</div>
+      <div style="display:flex;align-items:baseline;gap:6px;">
+        <span style="font-size:var(--text-xs);color:var(--text2);">Total:</span>
+        <span class="tcc-total-val" id="tcc-selected-total">$0.00 CAD</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button class="btn" type="button" onclick="closeProductionCostCalculator()">Cancel</button>
+      <button class="btn gold" id="tcc-apply-btn" type="button" onclick="applyCalculatedProdCost()">✓ Apply $0.00 to Production Cost</button>
     </div>
   </div>
 </div></div>
