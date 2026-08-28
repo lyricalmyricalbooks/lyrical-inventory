@@ -93,7 +93,7 @@ import {
 import {
   calculateZonosLandedCost,
   estimateOfflineLandedCost,
-  createZonosDeclaration,
+  resolveDutyPrepaymentRoute,
   buildZonosPrepayDeepLink,
   formatDeclarationId,
   DEFAULT_ZONOS_API_KEY,
@@ -2584,14 +2584,15 @@ function renderZonosDeclarationFailure(hint, reason, silent) {
     hint.style.display = 'block';
     hint.innerHTML = `
       <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-        <span style="font-size:15px;line-height:1.2;">⚠️</span>
+        <span style="font-size:15px;line-height:1.2;">📋</span>
         <div style="flex:1;min-width:200px;">
-          <strong style="color:var(--amber,var(--text));">No Declaration ID was issued</strong>
+          <strong>A Declaration ID has to be paid for</strong>
           <div style="font-size:10px;color:var(--text3);margin-top:3px;">${escapeHtml(reason)}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:5px;">
-            You can still ship: open the Zonos Prepay app to buy the declaration directly, or send the parcel
-            without prepaid duties and let the recipient pay on delivery. Canada Post will not accept an
-            invented Declaration ID, so this field stays empty until Zonos issues a real one.
+          <div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5;">
+            <strong>To do it by hand:</strong> open the Zonos Prepay app, pay the duty for this parcel, and paste the
+            13-character ID it gives you into the box above.<br>
+            <strong>To have it happen automatically:</strong> set up a Zonos Verified Account, then save its Account Key
+            in Tax Centre → Zonos. After that Canada Post issues the ID itself every time you buy a label.
           </div>
         </div>
       </div>
@@ -2600,110 +2601,114 @@ function renderZonosDeclarationFailure(hint, reason, silent) {
   if (!silent) showToast('⚠ Zonos did not issue a Declaration ID — see the note under the button', 'warn');
 }
 
+/**
+ * Explain — and where possible arrange — how this parcel's U.S. duty gets prepaid.
+ *
+ * This replaces a button that promised to "auto-generate" a Declaration ID by
+ * calling Zonos' declarationCreateWorkflow. That mutation belongs to the Landed
+ * Cost / Checkout product and has no authority to issue a Canada Post
+ * prepayment declaration, so the call never produced one. A Declaration ID is
+ * proof that duty has been paid, so it cannot be conjured before payment: either
+ * a Verified Account pays it automatically at label time, or it is bought by
+ * hand in the Prepay app.
+ */
 async function autoGenerateZonosDeclarationHandler({ silent = false } = {}) {
-  const btn = $('sp-auto-gen-zonos-btn');
   const hint = $('zonos-auto-result-hint');
-  const oldText = btn ? btn.innerHTML : '';
+  const route = currentDutyPrepaymentRoute();
 
-  const apiKey = TAX_CENTER.settings?.zonosApiKey || DEFAULT_ZONOS_API_KEY;
-  if (!apiKey) {
-    if (!silent) showToast('⚠ Please configure your Zonos API Key in Tax Centre settings first', 'warn');
-    return;
+  if (route.route === 'not-required') {
+    if (!silent) showToast('U.S. duty prepayment only applies to parcels going to the United States', 'ok');
+    return route;
   }
 
-  if (btn && !silent) {
-    btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span><span>Generating Declaration...</span>';
-  }
-
-  try {
-    const sfCountryCode = $('sf-country')?.value || 'CA';
-    const sfState = $('sf-state')?.value || 'ON';
-    const sfZip = $('sf-zip')?.value || 'M4B 1B3';
-
-    const stCountryCode = normalizeCountryCode($('st-country')?.value) || 'US';
-    const stState = $('st-state')?.value || 'AZ';
-    const stZip = $('st-zip')?.value || '85603';
-    const qty = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
-    const unitValue = Math.max(0.01, parseFloat($('sp-customs-value')?.value) || 25);
-    const hsCode = ($('sp-customs-hs')?.value || '490199').trim();
-    const description = $('sp-customs-description')?.value || 'Printed books';
-
-    const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 20);
-    const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 15);
-    const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 2);
-    const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 0.5);
-
-    const decl = await createZonosDeclaration({
-      apiKey,
-      origin: { countryCode: sfCountryCode, stateCode: sfState, postalCode: sfZip },
-      destination: { countryCode: stCountryCode, stateCode: stState, postalCode: stZip },
-      items: [{ amount: unitValue, description, hsCode, quantity: qty }],
-      parcel: { length, width, height, weight, dimUnit: 'cm', weightUnit: 'kg' },
-      source: 'POST'
-    });
-
-    if (decl.ok && decl.declarationId) {
-      const input = $('sp-zonos-declaration-id');
-      if (input) {
-        input.value = decl.declarationId;
-        onZonosDeclarationIdInput(decl.declarationId);
-      }
-
-      const dutyLabel = decl.isDutyFree
-        ? 'Duty &amp; tax free at this value'
-        : `Duties &amp; taxes CAD $${Number(decl.totalLandedCost || 0).toFixed(2)}`;
-
-      if (hint) {
-        hint.style.display = 'block';
-        hint.innerHTML = `
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <strong style="color:var(--green);">✓ Zonos Declaration ID issued:</strong>
-            <span class="tnum" style="font-weight:700;letter-spacing:0.5px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;">${escapeHtml(decl.declarationId)}</span>
-            <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(decl.declarationId)}');showToast('✓ Copied Zonos Declaration ID');" style="min-height:30px;padding:4px 8px;font-size:11px;" title="Copy Declaration ID">
-              📋 Copy
-            </button>
-            <span class="pill green sm" style="font-size:9px;">${dutyLabel}</span>
-          </div>
-          <div style="font-size:10px;color:var(--text3);margin-top:4px;">Issued by Zonos and ready for the Canada Post label and outlet drop-off scan.</div>
-        `;
-      }
-
-      if (!silent) showToast(`✓ Zonos Declaration issued: ${decl.declarationId}`, 'ok');
-    } else {
-      renderZonosDeclarationFailure(hint, decl.error || 'Zonos did not return a Declaration ID.', silent);
+  if (route.route === 'manual') {
+    if (hint) {
+      hint.style.display = 'block';
+      hint.innerHTML = `
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <strong style="color:var(--green);">✓ Declaration ID ready:</strong>
+          <span class="tnum" style="font-weight:700;letter-spacing:0.5px;font-family:'DM Mono',monospace;font-size:13px;">${escapeHtml(route.declarationId)}</span>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;">It will be sent with the label and printed in the customs header.</div>
+      `;
     }
-  } catch (err) {
-    console.warn('Zonos declaration workflow failed:', err);
-    renderZonosDeclarationFailure(hint, err?.message || 'Could not reach Zonos.', silent);
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = oldText;
-    }
+    if (!silent) showToast('✓ Declaration ID already entered', 'ok');
+    return route;
   }
+
+  if (route.route === 'verified') {
+    if (hint) {
+      hint.style.display = 'block';
+      hint.innerHTML = `
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:14px;">⚡</span>
+          <strong style="color:var(--green);">Zonos Verified Account connected</strong>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">
+          Leave this field empty. Canada Post issues the Declaration ID when you buy the label and bills the duty
+          to your Zonos account — it will appear on the label and against the order automatically.
+        </div>
+      `;
+    }
+    if (!silent) showToast('✓ Verified Account will supply the Declaration ID at purchase', 'ok');
+    return route;
+  }
+
+  renderZonosDeclarationFailure(hint, route.summary, silent);
+  return route;
+}
+
+/**
+ * The Zonos Verified Account key, as saved by the Tax Centre.
+ *
+ * This is what makes the whole flow automatic: sent as X-CPC-Zonos-Key on the
+ * shipment call, it lets Canada Post issue the Declaration ID and bill the duty.
+ * It was previously read here under a name nothing ever wrote
+ * (`cpZonosAccountKey`, while the Tax Centre saves `zonosAccountKey`), so the
+ * key was always blank and the automated route never once fired. The old name is
+ * still read as a fallback in case anything stored one under it.
+ */
+function getZonosAccountKey() {
+  return String(
+    TAX_CENTER.settings?.zonosAccountKey
+    || TAX_CENTER.settings?.cpZonosAccountKey
+    || ''
+  ).trim();
+}
+
+/** Which duty-prepayment route the shipment in the form will take. */
+function currentDutyPrepaymentRoute() {
+  return resolveDutyPrepaymentRoute({
+    destCountry: normalizeCountryCode($('st-country')?.value) || '',
+    accountKey: getZonosAccountKey(),
+    declarationId: ($('sp-zonos-declaration-id')?.value || '').trim()
+  });
 }
 
 function openZonosPrepayAppHandler() {
-  const stCountryCode = normalizeCountryCode($('st-country')?.value) || 'US';
-  const stZip = $('st-zip')?.value || '';
-  const stState = $('st-state')?.value || '';
+  // Prepay has no documented deep-link format, so the form cannot be pre-filled.
+  // The parcel's details are copied to the clipboard instead, to be pasted in.
   const qty = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
   const unitVal = Math.max(0.01, parseFloat($('sp-customs-value')?.value) || 25);
   const hsCode = ($('sp-customs-hs')?.value || '490199').trim();
   const desc = $('sp-customs-description')?.value || 'Printed books';
+  const stZip = $('st-zip')?.value || '';
+  const stState = $('st-state')?.value || '';
 
-  const url = buildZonosPrepayDeepLink({
-    destCountry: stCountryCode,
-    destPostalOrZip: stZip,
-    destState: stState,
-    declaredValueCad: unitVal * qty,
-    hsCode,
-    itemDescription: desc
-  });
+  const details = [
+    `Description: ${desc}`,
+    `HS code: ${hsCode}`,
+    `Quantity: ${qty}`,
+    `Value: CAD $${(unitVal * qty).toFixed(2)}`,
+    `Destination: ${[stState, stZip].filter(Boolean).join(' ')} US`
+  ].join('\n');
 
-  window.open(url, '_blank', 'noopener');
-  showToast('Opened Zonos Prepay App in new tab');
+  try {
+    navigator.clipboard?.writeText(details);
+  } catch (_) {}
+
+  window.open(buildZonosPrepayDeepLink(), '_blank', 'noopener');
+  showToast('Opened Zonos Prepay — parcel details copied, ready to paste');
 }
 
 function onShippoIncotermChange() {
@@ -3335,32 +3340,23 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
   const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
 
-  // Handle US Duty Prepayment (Zonos Mandate)
-  let declarationId = '';
-  if (stCountryCode === 'US') {
-    declarationId = ($('sp-zonos-declaration-id')?.value || '').trim();
-    if (!declarationId) {
-      // Try auto-generating if Zonos key exists
-      const zonosKey = TAX_CENTER.settings?.zonosApiKey || DEFAULT_ZONOS_API_KEY;
-      if (zonosKey) {
-        await autoGenerateZonosDeclarationHandler({ silent: true });
-        declarationId = ($('sp-zonos-declaration-id')?.value || '').trim();
-      }
-    }
+  // U.S. duty prepayment. Either a Verified Account key rides along on the request
+  // and Canada Post issues the Declaration ID itself, or one bought in the Prepay
+  // app is supplied here. Nothing can invent one, so there is no third option.
+  const dutyRoute = currentDutyPrepaymentRoute();
+  let declarationId = dutyRoute.route === 'manual' ? dutyRoute.declarationId : '';
 
-    if (!declarationId) {
-      const proceedWithout = await confirmDialog({
-        title: '⚠️ Zonos Declaration ID Missing',
-        message: `Canada Post requires a 13-character <strong>Zonos Declaration ID</strong> for all U.S. shipments.<br><br>Do you want to generate one automatically with Zonos before creating this label?`,
-        confirmText: 'Generate with Zonos',
-        cancelText: 'Continue Without (Outlet Pay)'
-      });
-
-      if (proceedWithout) {
-        await autoGenerateZonosDeclarationHandler();
-        declarationId = ($('sp-zonos-declaration-id')?.value || '').trim();
-      }
-    }
+  if (dutyRoute.needsDeclaration && !declarationId && dutyRoute.route !== 'verified') {
+    const proceed = await confirmDialog({
+      title: 'No prepaid U.S. duty for this parcel',
+      message: `Canada Post needs a 13-character <strong>Declaration ID</strong> proving the U.S. duty is prepaid, and one has to be paid for before it exists.<br><br>`
+        + `<strong>Buy it now:</strong> open the Zonos Prepay app, pay the duty, and paste the ID in before buying the label.<br><br>`
+        + `<strong>Or set it up once:</strong> save a Zonos Verified Account Key in Tax Centre → Zonos and Canada Post will issue the ID automatically from then on.<br><br>`
+        + `You can also carry on without one — the parcel ships with duty unpaid and the recipient settles it on delivery.`,
+      confirmText: 'Carry on without prepaid duty',
+      cancelText: 'Go back'
+    });
+    if (!proceed) return;
   }
 
   const confirmed = await confirmDialog({
@@ -3421,7 +3417,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
       apiKey,
       apiSecret,
       customerNumber,
-      zonosAccountKey: TAX_CENTER.settings?.cpZonosAccountKey || '',
+      zonosAccountKey: getZonosAccountKey(),
       isTest
     });
 
@@ -3437,6 +3433,17 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
       showToast(`✓ Canada Post label purchased! Tracking PIN: ${result.trackingPin}`, 'ok');
 
       // Auto-mark prefilled order as Shipped in Order History
+      // A Verified Account purchase returns the Declaration ID Canada Post issued;
+      // prefer it over anything typed in, and show it on the form.
+      if (result.declarationId && result.declarationId !== declarationId) {
+        declarationId = result.declarationId;
+        const declInput = $('sp-zonos-declaration-id');
+        if (declInput) {
+          declInput.value = declarationId;
+          onZonosDeclarationIdInput(declarationId);
+        }
+      }
+
       const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber || orderNum);
       if (selectedOrderNumber) {
         try {

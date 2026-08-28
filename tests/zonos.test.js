@@ -36,7 +36,11 @@ describe('Zonos Landed Cost & Duty Engine', () => {
   });
 
   describe('estimateOfflineLandedCost', () => {
-    it('evaluates US Section 321 de minimis threshold ($800 USD / ~$1080 CAD)', () => {
+    it('treats the U.S. threshold as a prepayment ceiling, not a duty-free allowance', () => {
+      // Since 24 July 2026 the Section 321 $800 de minimis no longer exempts
+      // postal shipments. The threshold (now $2,500 USD) marks the ceiling under
+      // which duty must be PREPAID; books are duty-free on their tariff line
+      // either way, so the amount owed does not turn on it.
       const under = estimateOfflineLandedCost({
         destCountryCode: 'US',
         declaredValueCad: 50.00,
@@ -45,18 +49,30 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       expect(under.isOfflineEstimate).toBe(true);
       expect(under.destCountryCode).toBe('US');
       expect(under.isDutyFree).toBe(true);
-      expect(under.isTaxFree).toBe(true);
       expect(under.totalLandedCost).toBe(0.00);
       expect(under.recommendedIncoterm).toBe('DDP');
-      expect(under.deMinimisNote).toContain('US Section 321');
+      expect(under.prepaymentRequired).toBe(true);
+      expect(under.deMinimisNote).toMatch(/prepayment is still required/i);
+      expect(under.deMinimisNote).not.toMatch(/section 321/i);
 
+      // A parcel worth more than the ceiling needs a formal entry instead, and
+      // is still duty-free on the books themselves.
       const over = estimateOfflineLandedCost({
+        destCountryCode: 'US',
+        declaredValueCad: 4000.00,
+        shippingCostCad: 50.00
+      });
+      expect(over.prepaymentRequired).toBe(false);
+      expect(over.isDutyFree).toBe(true);
+      expect(over.deMinimisNote).toMatch(/\$2,500/);
+
+      // The old $800/$1080 boundary must no longer change the answer.
+      const justOverOldLimit = estimateOfflineLandedCost({
         destCountryCode: 'US',
         declaredValueCad: 1200.00,
         shippingCostCad: 50.00
       });
-      expect(over.isTaxFree).toBe(false);
-      expect(over.deMinimisNote).toContain('exceeds US $800');
+      expect(justOverOldLimit.prepaymentRequired).toBe(true);
     });
 
     it('evaluates UK zero-rated status for printed books', () => {
@@ -302,23 +318,45 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       expect(validateDeclarationId('')).toBe(false);
     });
 
-    it('builds pre-filled Zonos Prepay deep link for US destination', async () => {
-      const { buildZonosPrepayDeepLink } = await import('../src/lib/zonos.js');
-      const url = buildZonosPrepayDeepLink({
-        destCountry: 'US',
-        destPostalOrZip: '90210',
-        destState: 'CA',
-        declaredValueCad: 35.00,
-        hsCode: '490199',
-        itemDescription: 'Paperback novel'
-      });
+    it('links to the Zonos Prepay form that actually exists', async () => {
+      const { buildZonosPrepayDeepLink, ZONOS_PREPAY_SHIP_URL } = await import('../src/lib/zonos.js');
 
-      expect(url).toContain('https://prepay.zonos.com/?');
-      expect(url).toContain('destinationCountry=US');
-      expect(url).toContain('destinationPostalCode=90210');
-      expect(url).toContain('destinationState=CA');
-      expect(url).toContain('declaredValue=35.00');
-      expect(url).toContain('hsCode=490199');
+      // The old link pointed at prepay.zonos.com with invented query parameters:
+      // a host that does not serve the app, so the button opened nothing. Prepay
+      // publishes no deep-link format, so no pre-filled URL is fabricated.
+      expect(ZONOS_PREPAY_SHIP_URL).toBe('https://dashboard.zonosprepay.com/en/ship');
+      expect(buildZonosPrepayDeepLink()).toBe(ZONOS_PREPAY_SHIP_URL);
+      expect(buildZonosPrepayDeepLink()).not.toContain('prepay.zonos.com');
+      expect(buildZonosPrepayDeepLink()).not.toContain('?');
+    });
+
+    it('routes U.S. duty prepayment by what the account can actually do', async () => {
+      const { resolveDutyPrepaymentRoute } = await import('../src/lib/zonos.js');
+
+      // Verified Account: Canada Post issues the ID at label time. Nothing to paste.
+      const verified = resolveDutyPrepaymentRoute({ destCountry: 'US', accountKey: 'credential_live_abc' });
+      expect(verified.route).toBe('verified');
+      expect(verified.canAutomate).toBe(true);
+      expect(verified.needsDeclaration).toBe(true);
+
+      // No key: the declaration has to be bought by hand in the Prepay app.
+      const prepay = resolveDutyPrepaymentRoute({ destCountry: 'US' });
+      expect(prepay.route).toBe('prepay');
+      expect(prepay.canAutomate).toBe(false);
+      expect(prepay.summary).toMatch(/Prepay app/i);
+
+      // An ID already in hand wins over either.
+      const manual = resolveDutyPrepaymentRoute({ destCountry: 'US', declarationId: '0RD4DPKRVC1Y9' });
+      expect(manual.route).toBe('manual');
+      expect(manual.declarationId).toBe('0rd4dpkrvc1y9');
+
+      // A malformed ID is not treated as one.
+      expect(resolveDutyPrepaymentRoute({ destCountry: 'US', declarationId: 'nope' }).route).toBe('prepay');
+
+      // Domestic and non-U.S. parcels need no declaration at all.
+      expect(resolveDutyPrepaymentRoute({ destCountry: 'CA', accountKey: 'k' }).route).toBe('not-required');
+      expect(resolveDutyPrepaymentRoute({ destCountry: 'GB' }).needsDeclaration).toBe(false);
+      expect(resolveDutyPrepaymentRoute({}).route).toBe('not-required');
     });
 
     it('creates authentic Zonos declaration via two-step workflow (landed cost + declaration)', async () => {
