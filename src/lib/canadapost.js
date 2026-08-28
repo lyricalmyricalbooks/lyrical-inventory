@@ -680,19 +680,74 @@ function isProxyEnvelope(json) {
 }
 
 /**
- * Read a proxy response as JSON without letting a 401/404/HTML answer be
- * silently discarded. Returns null when the body is not one of our envelopes
- * (e.g. a static host's 404 page), which means "no proxy here, keep walking
- * the chain" rather than "the request failed".
+ * Read a proxy response and say what kind of answer it was.
+ *
+ * The distinction matters per hop. A static host answers /api/... with a 404
+ * HTML page, which simply means "no local proxy here, keep walking". The same
+ * reply from the Google Apps Script webhook means something is wrong with the
+ * deployment, and reporting it as "no proxy here" sends the publisher off to
+ * reconnect a sheet that is already connected.
  */
-async function readProxyEnvelope(resp) {
+async function readProxyResponse(resp) {
+  let text = '';
+  try {
+    text = await resp.text();
+  } catch (_) {
+    return { kind: 'unreadable', status: resp.status };
+  }
+
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return { kind: 'empty', status: resp.status, body: '' };
+
   let json = null;
   try {
-    json = await resp.json();
+    json = JSON.parse(trimmed);
   } catch (_) {
-    return null;
+    return { kind: 'not-json', status: resp.status, body: trimmed };
   }
-  return isProxyEnvelope(json) ? json : null;
+
+  if (!isProxyEnvelope(json)) {
+    return { kind: 'not-envelope', status: resp.status, json, body: trimmed };
+  }
+  return { kind: 'envelope', status: resp.status, json };
+}
+
+/**
+ * Explain a Google Apps Script webhook that answered with something other than
+ * one of our envelopes. Apps Script serves a sign-in page, an error page or a
+ * redirect as HTML, so the body itself says which of the usual deployment
+ * mistakes it is.
+ */
+export function describeAppsScriptProxyFailure(result = {}) {
+  const body = String(result.body || '');
+  const looksHtml = /^\s*<(?:!doctype|html|head|body)/i.test(body) || /<\/html>/i.test(body);
+
+  if (/sign in|accounts\.google\.com|AccountChooser|ServiceLogin/i.test(body)) {
+    return 'Your Google Sheet connection answered with a Google sign-in page instead of data. ' +
+      'The Apps Script deployment is set to require sign-in. Redeploy it with "Who has access" set to ' +
+      '"Anyone", then try again.';
+  }
+  if (/authoriz|permission|access denied/i.test(body) && looksHtml) {
+    return 'Your Google Sheet connection answered with an authorization page instead of data. ' +
+      'Open the Apps Script project, run any function once to grant permissions, then redeploy it ' +
+      'with "Who has access" set to "Anyone".';
+  }
+  if (/script function not found|TypeError|ReferenceError|Exception/i.test(body)) {
+    return 'Your Google Sheet script hit an error while handling the request. ' +
+      'It is probably running an older version — open Settings, copy the latest script, and redeploy it.';
+  }
+  if (looksHtml || result.kind === 'not-json') {
+    return 'Your Google Sheet connection answered with a web page instead of data. ' +
+      'That usually means the deployment is out of date, was removed, or the saved address points at a ' +
+      '/dev URL rather than the /exec one. Open Settings, copy the latest script, redeploy it, and paste ' +
+      'the new web app URL.';
+  }
+  if (result.kind === 'empty') {
+    return 'Your Google Sheet connection answered with an empty response. ' +
+      'Open Settings, copy the latest script, and redeploy it.';
+  }
+  return 'Your Google Sheet connection answered with an unexpected response. ' +
+    'Open Settings, copy the latest script, and redeploy it.';
 }
 
 /**
@@ -774,13 +829,16 @@ export async function executeCanadaPostProxy({
         }),
         signal: probe.signal
       });
-      const data = await readProxyEnvelope(proxyResp);
-      if (data) {
+      const local = await readProxyResponse(proxyResp);
+      if (local.kind === 'envelope') {
+        const data = local.json;
         unwrapProxyEnvelope(data, { endpoint: targetEndpoint, isTest });
         if (data.rates && Array.isArray(data.rates)) return { ok: true, rates: data.rates };
         if (data.trackingPin && data.labelUrl) return { ok: true, ...data };
         if (data.xml) return { ok: true, xml: data.xml };
       }
+      // Anything else here means there is no local backend (a static host
+      // answers this path with its own 404 page), so keep walking the chain.
     } catch (localErr) {
       // A real answer from the proxy (bad credentials, Canada Post outage) is
       // the end of the road — retrying the same request through another hop
@@ -812,11 +870,17 @@ export async function executeCanadaPostProxy({
           }
         })
       });
-      const json = await readProxyEnvelope(gasResp);
-      if (json) {
+      const relay = await readProxyResponse(gasResp);
+      if (relay.kind === 'envelope') {
+        const json = relay.json;
         unwrapProxyEnvelope(json, { endpoint: targetEndpoint, isTest });
         if (json.xml) return { ok: true, xml: json.xml };
       }
+      // The sheet answered, but not with a proxy envelope. Falling through to
+      // a direct browser fetch here can only produce a CORS error, which reads
+      // as "connect your Google Sheet" — advice that is wrong when a sheet is
+      // connected and is the thing actually failing. Report it instead.
+      throw new Error(describeAppsScriptProxyFailure(relay));
     } catch (gasErr) {
       if (isDefinitiveProxyError(gasErr)) throw gasErr;
     }
@@ -882,9 +946,16 @@ export async function executeCanadaPostProxy({
     }
     const isCors = /Failed to fetch|NetworkError|CORS|cross-origin/i.test(directErr.message || '');
     if (isCors) {
+      // Only advise connecting a sheet when there genuinely is not one. With a
+      // sheet configured, reaching this point means the relay itself failed,
+      // and telling the publisher to connect what is already connected is what
+      // makes this error so hard to act on.
       throw new Error(
-        'Canada Post connection: Browser CORS restriction. Canada Post Web Services does not allow direct browser requests. ' +
-        'Please ensure your Google Sheet is connected in the Settings tab (or run the local backend proxy) so requests can be securely routed.'
+        sheetsUrl
+          ? 'Canada Post connection: the request could not be routed through your Google Sheet, and Canada Post does not accept direct browser requests. ' +
+            'Open Settings, copy the latest script, and redeploy your Google Sheet web app with "Who has access" set to "Anyone".'
+          : 'Canada Post connection: Browser CORS restriction. Canada Post Web Services does not allow direct browser requests. ' +
+            'Please ensure your Google Sheet is connected in the Settings tab (or run the local backend proxy) so requests can be securely routed.'
       );
     }
     throw new Error(`Canada Post connection: ${directErr.message}`);
@@ -1322,10 +1393,10 @@ export async function verifyCanadaPostTrackingPin({
         `/api/canadapost/track?pin=${encodeURIComponent(cleanPin)}&test=${env.isTest ? 'true' : 'false'}`,
         { headers: { 'x-cp-api-key': key, 'x-cp-api-secret': secret }, signal: probe.signal }
       );
-      const data = await readProxyEnvelope(proxyResp);
-      if (data) {
-        unwrapProxyEnvelope(data, { endpoint: targetEndpoint, isTest: env.isTest });
-        if (data.xml) return { ...parseCanadaPostTrackingSummary(data.xml), environment: env };
+      const local = await readProxyResponse(proxyResp);
+      if (local.kind === 'envelope') {
+        unwrapProxyEnvelope(local.json, { endpoint: targetEndpoint, isTest: env.isTest });
+        if (local.json.xml) return { ...parseCanadaPostTrackingSummary(local.json.xml), environment: env };
       }
     } catch (localErr) {
       if (isDefinitiveProxyError(localErr)) throw localErr;
@@ -1353,11 +1424,12 @@ export async function verifyCanadaPostTrackingPin({
           }
         })
       });
-      const json = await readProxyEnvelope(gasResp);
-      if (json) {
-        unwrapProxyEnvelope(json, { endpoint: targetEndpoint, isTest: env.isTest });
-        if (json.xml) return { ...parseCanadaPostTrackingSummary(json.xml), environment: env };
+      const relay = await readProxyResponse(gasResp);
+      if (relay.kind === 'envelope') {
+        unwrapProxyEnvelope(relay.json, { endpoint: targetEndpoint, isTest: env.isTest });
+        if (relay.json.xml) return { ...parseCanadaPostTrackingSummary(relay.json.xml), environment: env };
       }
+      throw new Error(describeAppsScriptProxyFailure(relay));
     } catch (gasErr) {
       if (isDefinitiveProxyError(gasErr)) throw gasErr;
     }
