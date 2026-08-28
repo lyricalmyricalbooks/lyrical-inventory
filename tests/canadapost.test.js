@@ -930,12 +930,16 @@ describe('Canada Post credential inspection', () => {
 
   it('passes a well-formed key and password with nothing to report', async () => {
     const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    // A Developer Program username — the half before the colon of the key
+    // Canada Post issues. A bare 32-hex string is a Developer Portal client
+    // ID instead, and is reported as such rather than passed as clean.
     const result = inspectCanadaPostCredentials({
-      apiKey: '1ed63baea3162824ee820aa20130a893',
+      apiKey: '6e93d53968881714',
       apiSecret: 'b2c4d6e8f0a1b3c5d7e9f1',
       customerNumber: '0001298882'
     });
     expect(result.ok).toBe(true);
+    expect(result.keyKind).toBe('legacy');
     expect(result.customerNumber).toBe('0001298882');
   });
 });
@@ -1025,6 +1029,77 @@ describe('Canada Post connection diagnosis', () => {
     const insp = inspectCanadaPostCredentials({ apiKey: ' key​with­junk ', apiSecret: ' secret﻿value ' });
     expect(insp.apiKey.value).toBe('keywithjunk');
     expect(insp.apiSecret.value).toBe('secretvalue');
+    expect(seen).toHaveLength(1);
+  });
+});
+
+describe('Canada Post key system detection', () => {
+  it('recognises a Developer Portal client ID, which this app cannot use', async () => {
+    const { classifyCanadaPostKeyKind } = await import('../src/lib/canadapost.js');
+    expect(classifyCanadaPostKeyKind('1ed63baea3162824ee820aa20130a893')).toBe('portal-client-id');
+    expect(classifyCanadaPostKeyKind('cc42b40f9036917c8e2fd928c65df5de')).toBe('portal-client-id');
+  });
+
+  it('recognises a Developer Program key still joined to its password', async () => {
+    const { classifyCanadaPostKeyKind } = await import('../src/lib/canadapost.js');
+    expect(classifyCanadaPostKeyKind('6e93d53968881714:0bfa9fcb9853d1f51ee57a')).toBe('legacy-combined');
+  });
+
+  it('splits a whole key:password paste into its two halves', async () => {
+    const { splitCanadaPostApiKey } = await import('../src/lib/canadapost.js');
+    const pair = splitCanadaPostApiKey('6e93d53968881714:0bfa9fcb9853d1f51ee57a', '');
+    expect(pair).toEqual({
+      apiKey: '6e93d53968881714',
+      apiSecret: '0bfa9fcb9853d1f51ee57a',
+      split: true
+    });
+  });
+
+  it('leaves an already-separated key and password alone', async () => {
+    const { splitCanadaPostApiKey } = await import('../src/lib/canadapost.js');
+    const pair = splitCanadaPostApiKey('6e93d53968881714', '0bfa9fcb9853d1f51ee57a');
+    expect(pair.split).toBe(false);
+    expect(pair.apiKey).toBe('6e93d53968881714');
+    expect(pair.apiSecret).toBe('0bfa9fcb9853d1f51ee57a');
+  });
+
+  it('tells the owner they have the wrong kind of key rather than to re-check the password', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const result = await diagnoseCanadaPostConnection({
+      apiKey: '1ed63baea3162824ee820aa20130a893',
+      apiSecret: 'aSecretFromTheDeveloperPortal',
+      customerNumber: '0001298882',
+      isTest: false,
+      probe: async () => { throw new Error('Canada Post [E002]: AAA Authentication Failure'); }
+    });
+    expect(result.verdict).toBe('wrong-key-system');
+    expect(result.steps.join(' ')).toMatch(/Developer Program/);
+    expect(result.steps.join(' ')).toMatch(/username:password|"username:password"/);
+  });
+
+  it('still reports a plain bad password as a bad password', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const result = await diagnoseCanadaPostConnection({
+      apiKey: '6e93d53968881714',
+      apiSecret: 'wrongpassword',
+      isTest: false,
+      probe: async () => { throw new Error('Canada Post [E002]: AAA Authentication Failure'); }
+    });
+    expect(result.verdict).toBe('bad-credentials');
+    expect(result.steps.join(' ')).toMatch(/1-866-511-0546/);
+  });
+
+  it('diagnoses a whole key:password paste by testing its split halves', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const seen = [];
+    const result = await diagnoseCanadaPostConnection({
+      apiKey: '6e93d53968881714:0bfa9fcb9853d1f51ee57a',
+      apiSecret: '',
+      isTest: false,
+      probe: async () => { seen.push(1); return [{ serviceCode: 'DOM.EP' }]; }
+    });
+    expect(result.keySplit).toBe(true);
+    expect(result.ok).toBe(true);
     expect(seen).toHaveLength(1);
   });
 });

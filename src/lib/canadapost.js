@@ -969,6 +969,50 @@ export function sanitizeCanadaPostCredential(value) {
 }
 
 /**
+ * Canada Post runs two credential systems, and only one of them works here.
+ *
+ *  - Developer Program ("Web Services", what this app speaks): the key is
+ *    issued as a single string of the form USERNAME:PASSWORD. The half before
+ *    the colon is the username, the half after it is the password, and they
+ *    are sent as HTTP Basic to soa-gw.canadapost.ca (or ct.soa-gw for the
+ *    development key).
+ *  - Developer Portal (newer): issues an OAuth 2.0 client ID and client
+ *    secret — a single 32-character hex string with no colon — which are
+ *    exchanged for a Bearer token and used against
+ *    api.canadapost-postescanada.ca. They are NOT accepted by soa-gw under
+ *    any authentication scheme.
+ *
+ * A portal client ID pasted into this card therefore fails with E002 forever,
+ * and no toggle on the card can change that. Telling the two apart by shape is
+ * the difference between "check your password again" (useless) and "you have
+ * the wrong kind of key, here is how to get the right one".
+ */
+export function classifyCanadaPostKeyKind(apiKey = '') {
+  const key = sanitizeCanadaPostCredential(apiKey).value;
+  if (!key) return 'unknown';
+  if (key.includes(':')) return 'legacy-combined';
+  if (/^[0-9a-f]{32}$/i.test(key)) return 'portal-client-id';
+  return 'legacy';
+}
+
+/**
+ * Canada Post shows the Developer Program key as one "USERNAME:PASSWORD"
+ * string, so pasting the whole thing into the key box is the natural mistake.
+ * Split it rather than failing on it.
+ */
+export function splitCanadaPostApiKey(apiKey = '', apiSecret = '') {
+  const key = sanitizeCanadaPostCredential(apiKey).value;
+  const secret = sanitizeCanadaPostCredential(apiSecret).value;
+  const idx = key.indexOf(':');
+  if (idx <= 0) return { apiKey: key, apiSecret: secret, split: false };
+  return {
+    apiKey: key.slice(0, idx),
+    apiSecret: key.slice(idx + 1) || secret,
+    split: true
+  };
+}
+
+/**
  * Look at a key and password before spending a network round trip on them.
  * Everything here is a shape problem the publisher can see and fix; none of
  * it can tell whether the account itself is valid.
@@ -992,8 +1036,12 @@ export function inspectCanadaPostCredentials({ apiKey = '', apiSecret = '', cust
   describe('API key', key);
   describe('API password', secret);
 
-  if (key.value.includes(':')) {
-    findings.push('Your API key contains a colon. Canada Post shows the pair as "key:password" — paste only the part before the colon here, and the part after it in the password box.');
+  const kind = classifyCanadaPostKeyKind(key.value);
+  if (kind === 'legacy-combined') {
+    findings.push('Your API key still has the password joined onto it. Canada Post shows the pair as "key:password" — the part before the colon goes in the key box, the part after it in the password box. (The Diagnose button splits it for you automatically.)');
+  }
+  if (kind === 'portal-client-id') {
+    findings.push('This looks like a Client ID from the newer Canada Post Developer Portal, not a Developer Program API key. Canada Post runs two separate systems and this app uses the older one, which issues its key as two parts joined by a colon. A Developer Portal Client ID cannot sign in to it, which is why the password is refused no matter what else you change.');
   }
   if (key.value && secret.value && key.value === secret.value) {
     findings.push('The API key and the API password are identical. They are two different values from the Canada Post Developer Program.');
@@ -1004,7 +1052,7 @@ export function inspectCanadaPostCredentials({ apiKey = '', apiSecret = '', cust
     findings.push(`The customer number should be 7 to 10 digits; this one is ${custDigits.length}.`);
   }
 
-  return { apiKey: key, apiSecret: secret, customerNumber: custDigits, findings, ok: findings.length === 0 };
+  return { apiKey: key, apiSecret: secret, customerNumber: custDigits, keyKind: kind, findings, ok: findings.length === 0 };
 }
 
 /** Canada Post's own wording for "these credentials were refused". */
@@ -1032,8 +1080,11 @@ export async function diagnoseCanadaPostConnection({
   probe = null
 } = {}) {
   const inspection = inspectCanadaPostCredentials({ apiKey, apiSecret, customerNumber });
-  const key = inspection.apiKey.value;
-  const secret = inspection.apiSecret.value;
+  // A key pasted whole as "username:password" is a paste mistake, not a bad
+  // credential — split it and test what the publisher actually meant.
+  const pair = splitCanadaPostApiKey(apiKey, apiSecret);
+  const key = pair.apiKey;
+  const secret = pair.apiSecret;
   const cust = inspection.customerNumber;
 
   if (!key || !secret) {
@@ -1086,7 +1137,7 @@ export async function diagnoseCanadaPostConnection({
     }
   }
 
-  return { ...classifyCanadaPostDiagnosis({ attempts, success, isTest, inspection }), attempts, inspection };
+  return { ...classifyCanadaPostDiagnosis({ attempts, success, isTest, inspection }), attempts, inspection, keySplit: pair.split };
 }
 
 /** Turn the probe results into a verdict and a short list of next steps. */
@@ -1122,6 +1173,22 @@ export function classifyCanadaPostDiagnosis({ attempts = [], success = null, isT
 
   const allAuth = attempts.length > 0 && attempts.every(a => isCanadaPostAuthFailure(a.error));
   if (allAuth) {
+    // A Developer Portal client ID can never authenticate here, so say that
+    // instead of sending the publisher round the credential-checking loop
+    // again with a key that was never going to work.
+    if (inspection?.keyKind === 'portal-client-id') {
+      return {
+        ok: false,
+        verdict: 'wrong-key-system',
+        headline: 'This key is for a different Canada Post system, so it will never be accepted here.',
+        steps: [
+          'Canada Post runs two separate developer systems. The newer Developer Portal issues a Client ID and Client Secret; the older Developer Program issues an API key written as two parts joined by a colon. This app uses the older one.',
+          'What you have pasted is a Developer Portal Client ID, which the older service cannot accept under any setting.',
+          'Sign in at canadapost-postescanada.ca, go to the Developer Program section, and get your API keys there. You will be given two — one for development and one for production — each shown as "username:password".',
+          'Paste the part before the colon into the key box and the part after it into the password box, then test again.'
+        ]
+      };
+    }
     return {
       ok: false,
       verdict: 'bad-credentials',
@@ -1130,7 +1197,8 @@ export function classifyCanadaPostDiagnosis({ attempts = [], success = null, isT
         'The key and password themselves are the problem, so no combination of settings in this app will fix it.',
         'Sign in to the Canada Post Developer Program and open your API keys page, then copy the key and the password again from there.',
         'Make sure you are copying the generated API password, not the password you sign in to canadapost.ca with.',
-        'A brand new production key can take up to a business day to activate, while the development key works immediately — if the account is new, try the development key with Sandbox Environment turned on.'
+        'A brand new production key can take up to a business day to activate, while the development key works immediately — if the account is new, try the development key with Sandbox Environment turned on.',
+        'If the key is definitely correct and still refused, the account may not be switched on for rate lookups. Canada Post support can enable it: 1-866-511-0546.'
       ]
     };
   }
