@@ -797,8 +797,14 @@ export function describeCanadaPostFailure({ status = 0, body = '', endpoint = ''
       'development keys only work with sandbox on, production keys only with it off.';
   }
   if (status === 403) {
-    return `Canada Post accepted the credentials but refused this request (HTTP 403) at ${where}. ` +
-      'The account is usually missing the Rating / Shipping entitlement, or the customer number does not belong to it.';
+    // Canada Post documents 403 as "you used a development API key against
+    // production or vice versa" (AA002), alongside the deactivated-account and
+    // customer-number cases. The environment mismatch is the common one and is
+    // fixed by the toggle, so lead with it.
+    return `Canada Post refused this request at ${where} (HTTP 403). ` +
+      'Most often this means the key is for the other environment: a development key only works with the Sandbox ' +
+      'Environment toggle ON, a production key only with it OFF. It can also mean the account is deactivated, or ' +
+      'that the key does not match the customer number entered.';
   }
   if (status === 404) {
     return `Canada Post has no endpoint at ${endpoint || where} (HTTP 404).`;
@@ -1230,6 +1236,45 @@ export function sanitizeCanadaPostCredential(value) {
  * the difference between "check your password again" (useless) and "you have
  * the wrong kind of key, here is how to get the right one".
  */
+/**
+ * Canada Post's REST fundamentals pin the Authorization header exactly:
+ *
+ *   "The API key follows the space as a single Base64-encoded string
+ *    (52 characters). The encoded string is generated from the API key
+ *    (a concatenation of the userid, a colon and the password)."
+ *
+ * Their own published sandbox key, 6e93d53968881714:0bfa9fcb9853d1f51ee57a,
+ * is 39 bytes and encodes to exactly 52 characters. So a genuine Web Services
+ * credential is 37 to 39 bytes of "userid:password" and nothing else can be
+ * one — this is arithmetic against a documented format, not a guess about
+ * what keys tend to look like.
+ */
+export const CANADAPOST_BASIC_AUTH_LENGTH = 52;
+
+/** Length of the Base64 encoding of n bytes, without encoding anything. */
+function base64Length(byteLength) {
+  return 4 * Math.ceil(byteLength / 3);
+}
+
+/**
+ * Does this key and password pair encode to an Authorization value of the
+ * documented length? Returns the encoded length alongside, so a mismatch can
+ * be reported concretely rather than as a bare "wrong".
+ */
+export function checkWebServicesKeyLength(apiKey = '', apiSecret = '') {
+  const key = sanitizeCanadaPostCredential(apiKey).value;
+  const secret = sanitizeCanadaPostCredential(apiSecret).value;
+  if (!key || !secret) return { ok: false, encodedLength: 0, expected: CANADAPOST_BASIC_AUTH_LENGTH };
+
+  // The pair is ASCII, so byte length equals character length.
+  const encodedLength = base64Length(`${key}:${secret}`.length);
+  return {
+    ok: encodedLength === CANADAPOST_BASIC_AUTH_LENGTH,
+    encodedLength,
+    expected: CANADAPOST_BASIC_AUTH_LENGTH
+  };
+}
+
 export function classifyCanadaPostKeyKind(apiKey = '') {
   const key = sanitizeCanadaPostCredential(apiKey).value;
   if (!key) return 'unknown';
@@ -1280,6 +1325,20 @@ export function inspectCanadaPostCredentials({ apiKey = '', apiSecret = '', cust
   describe('API password', secret);
 
   const kind = classifyCanadaPostKeyKind(key.value);
+
+  // The length rule is documented and exact, so it decides where the shape
+  // heuristic can only suggest. A pair that cannot produce a 52-character
+  // Authorization value is definitely not a Web Services credential.
+  const lengthCheck = checkWebServicesKeyLength(key.value, secret.value);
+  if (key.value && secret.value && !lengthCheck.ok && kind !== 'legacy-combined') {
+    findings.push(
+      `This key and password cannot be a Canada Post Web Services credential. Canada Post's specification says ` +
+      `the pair must encode to exactly ${lengthCheck.expected} characters; this one encodes to ${lengthCheck.encodedLength}. ` +
+      `A Web Services key is issued as a single "username:password" string — the username about 16 characters, ` +
+      `the password about 22.`
+    );
+  }
+
   if (kind === 'legacy-combined') {
     findings.push('Your API key still has the password joined onto it. Canada Post shows the pair as "key:password" — the part before the colon goes in the key box, the part after it in the password box. (The Diagnose button splits it for you automatically.)');
   }
@@ -1295,7 +1354,7 @@ export function inspectCanadaPostCredentials({ apiKey = '', apiSecret = '', cust
     findings.push(`The customer number should be 7 to 10 digits; this one is ${custDigits.length}.`);
   }
 
-  return { apiKey: key, apiSecret: secret, customerNumber: custDigits, keyKind: kind, findings, ok: findings.length === 0 };
+  return { apiKey: key, apiSecret: secret, customerNumber: custDigits, keyKind: kind, keyLength: lengthCheck, findings, ok: findings.length === 0 };
 }
 
 /** Canada Post's own wording for "these credentials were refused". */
@@ -1555,6 +1614,16 @@ export async function verifyCanadaPostTrackingPin({
     throw new Error('Add your Canada Post API key and secret in Tax Centre → Canada Post Direct API before checking a tracking PIN.');
   }
   const env = resolveCanadaPostEnvironment({ isTest });
+  // Canada Post's sandbox returns "No Pin History" for EVERY tracking request,
+  // whatever PIN is sent. Checking a PIN there can only ever look like a
+  // missing parcel, so say that rather than let it read as a real result.
+  if (env.isTest) {
+    throw new Error(
+      'Tracking cannot be checked in Sandbox Test Mode. Canada Post\'s sandbox answers every tracking request with ' +
+      '"No Pin History" regardless of the number sent, so a real result is impossible there. Turn the Sandbox ' +
+      'Environment toggle OFF to check a live tracking number.'
+    );
+  }
   const targetEndpoint = `${env.baseUrl}/vis/tracking/pin/${encodeURIComponent(cleanPin)}/summary`;
 
   // 1. Local dev / backend proxy
@@ -2047,18 +2116,31 @@ export async function fetchCanadaPostLabelBlob({
     } catch (_) {}
   }
 
-  // 3. Direct fetch (if server/CORS permits)
+  // 3. Direct fetch (if server/CORS permits).
+  // Canada Post renders labels asynchronously: its documentation says a delay
+  // of about a second is needed after creating a shipment before the artifact
+  // can be retrieved, and that a 404 on a freshly created resource means "not
+  // ready yet, try again" rather than "gone". A single immediate attempt
+  // therefore misses a label that exists moments later.
   if (labelUrl && !labelUrl.startsWith('local://')) {
-    try {
-      const authHeader = 'Basic ' + btoa(`${key}:${secret}`);
-      const resp = await fetch(labelUrl, {
-        headers: {
-          'Accept': 'application/pdf',
-          'Authorization': authHeader
-        }
-      });
-      if (resp.ok) return await resp.blob();
-    } catch (_) {}
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await delay(1000 * attempt);
+      try {
+        const authHeader = 'Basic ' + btoa(`${key}:${secret}`);
+        const resp = await fetch(labelUrl, {
+          headers: {
+            'Accept': 'application/pdf',
+            'Authorization': authHeader
+          }
+        });
+        if (resp.ok) return await resp.blob();
+        // 202 and 404 are both "still rendering" here; anything else will not
+        // improve by asking again.
+        if (resp.status !== 202 && resp.status !== 404) break;
+      } catch (_) {
+        break;
+      }
+    }
   }
 
   // 4. Guaranteed Client-Side Vector Label Generation fallback

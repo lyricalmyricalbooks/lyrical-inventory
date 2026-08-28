@@ -1361,3 +1361,106 @@ describe('Canada Post "try again shortly" responses', () => {
     expect(call).toBe(1);
   });
 });
+
+describe('The documented 52-character Authorization rule', () => {
+  it('accepts Canada Post’s own published sandbox key', async () => {
+    const { checkWebServicesKeyLength } = await import('../src/lib/canadapost.js');
+    // From Canada Post's fundamentals page: 6e93d53968881714:0bfa9fcb9853d1f51ee57a
+    const result = checkWebServicesKeyLength('6e93d53968881714', '0bfa9fcb9853d1f51ee57a');
+    expect(result.encodedLength).toBe(52);
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects a Developer Portal Key and Secret pair by arithmetic', async () => {
+    const { checkWebServicesKeyLength } = await import('../src/lib/canadapost.js');
+    const result = checkWebServicesKeyLength(
+      'd1d36298650efe474806c94f75cfb04a',
+      '3648447ed034f611b57de8b745423f79'
+    );
+    expect(result.ok).toBe(false);
+    expect(result.encodedLength).toBe(88);
+  });
+
+  it('says concretely why the pair cannot be a Web Services key', async () => {
+    const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    const { findings, keyLength } = inspectCanadaPostCredentials({
+      apiKey: 'd1d36298650efe474806c94f75cfb04a',
+      apiSecret: '3648447ed034f611b57de8b745423f79'
+    });
+    expect(keyLength.ok).toBe(false);
+    expect(findings.join(' ')).toMatch(/exactly 52 characters/);
+    expect(findings.join(' ')).toMatch(/encodes to 88/);
+  });
+
+  it('does not flag a genuine Web Services pair', async () => {
+    const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    const { findings, ok } = inspectCanadaPostCredentials({
+      apiKey: '6e93d53968881714',
+      apiSecret: '0bfa9fcb9853d1f51ee57a'
+    });
+    expect(ok).toBe(true);
+    expect(findings).toEqual([]);
+  });
+});
+
+describe('Labels render asynchronously', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete global.fetch;
+    localStorage.removeItem('lm-sheets-url');
+  });
+
+  it('waits for a label that is still rendering instead of falling back', async () => {
+    const { fetchCanadaPostLabelBlob } = await import('../src/lib/canadapost.js');
+    // Canada Post documents ~1s before a freshly created label can be fetched,
+    // and answers 404 in the meantime.
+    let call = 0;
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      call += 1;
+      if (call < 3) return { ok: false, status: 404 };
+      return { ok: true, status: 200, blob: async () => new Blob(['%PDF-1.4'], { type: 'application/pdf' }) };
+    });
+
+    const blob = await fetchCanadaPostLabelBlob({
+      labelUrl: 'https://soa-gw.canadapost.ca/rs/artifact/abc/10000/0',
+      apiKey: '6e93d53968881714',
+      apiSecret: '0bfa9fcb9853d1f51ee57a'
+    });
+    expect(blob.type).toBe('application/pdf');
+    expect(call).toBe(3);
+  });
+
+  it('gives up quickly on an error that will not resolve by waiting', async () => {
+    const { fetchCanadaPostLabelBlob } = await import('../src/lib/canadapost.js');
+    let call = 0;
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      call += 1;
+      return { ok: false, status: 403 };
+    });
+
+    // Falls through to the drawn label rather than retrying a refusal.
+    await fetchCanadaPostLabelBlob({
+      labelUrl: 'https://soa-gw.canadapost.ca/rs/artifact/abc/10000/0',
+      apiKey: '6e93d53968881714',
+      apiSecret: '0bfa9fcb9853d1f51ee57a',
+      shipmentContext: { trackingPin: '70123456789012345', sender: { name: 'X' }, destination: { name: 'Y' } }
+    });
+    expect(call).toBe(1);
+  });
+});
+
+describe('Sandbox tracking cannot return a real result', () => {
+  it('refuses to check a tracking PIN in sandbox mode', async () => {
+    const { verifyCanadaPostTrackingPin } = await import('../src/lib/canadapost.js');
+    // Canada Post's sandbox answers every tracking request with "No Pin
+    // History", so a lookup there can only look like a lost parcel.
+    await expect(verifyCanadaPostTrackingPin({
+      pin: '123456789012',
+      apiKey: '6e93d53968881714',
+      apiSecret: '0bfa9fcb9853d1f51ee57a',
+      isTest: true
+    })).rejects.toThrow(/Sandbox Test Mode|No Pin History/i);
+  });
+});
