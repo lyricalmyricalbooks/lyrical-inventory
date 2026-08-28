@@ -1116,6 +1116,16 @@ describe('Canada Post key system detection', () => {
 });
 
 describe('A Google Sheet relay that answers with a web page is reported, not hidden', () => {
+  // Match the relay by exact hostname, never by substring: a URL merely
+  // containing the host (in a query string, say) is not the relay.
+  const isSheetsUrl = (url) => {
+    try {
+      return new URL(String(url), 'http://localhost').hostname === 'script.google.com';
+    } catch (_) {
+      return false;
+    }
+  };
+
   afterEach(() => {
     vi.restoreAllMocks();
     delete global.fetch;
@@ -1131,7 +1141,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
 
     global.fetch = vi.fn(async (url) => {
       if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
-      if (String(url).includes('script.google.com')) {
+      if (isSheetsUrl(url)) {
         return { ok: true, status: 200, text: async () => signInPage };
       }
       throw new Error('Failed to fetch');
@@ -1151,7 +1161,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
     localStorage.setItem('lm-sheets-url', 'https://script.google.com/macros/s/real/exec');
 
     global.fetch = vi.fn(async (url) => {
-      if (String(url).includes('script.google.com')) {
+      if (isSheetsUrl(url)) {
         return { ok: true, status: 200, text: async () => signInPage };
       }
       throw new Error('Failed to fetch');
