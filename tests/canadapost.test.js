@@ -831,7 +831,13 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
 
     global.fetch = vi.fn(async (url) => {
       if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
-      return { ok: true, status: 200, json: async () => ({ ok: false, status: 401, xml: '' }) };
+      const envelope = { ok: false, status: 401, xml: '' };
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(envelope),
+        json: async () => envelope
+      };
     });
 
     await expect(executeCanadaPostProxy({
@@ -869,7 +875,12 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
     global.fetch = vi.fn(async (url) => {
       // GitHub Pages answers an unknown path with an HTML 404 page.
       if (String(url).startsWith('/api/')) {
-        return { ok: false, status: 404, json: async () => { throw new Error('not json'); } };
+        return {
+          ok: false,
+          status: 404,
+          text: async () => '<!doctype html><html>404</html>',
+          json: async () => { throw new Error('not json'); }
+        };
       }
       return { ok: true, status: 200, text: async () => priceXml };
     });
@@ -1101,5 +1112,140 @@ describe('Canada Post key system detection', () => {
     expect(result.keySplit).toBe(true);
     expect(result.ok).toBe(true);
     expect(seen).toHaveLength(1);
+  });
+});
+
+describe('A Google Sheet relay that answers with a web page is reported, not hidden', () => {
+  // Match the relay by exact hostname, never by substring: a URL merely
+  // containing the host (in a query string, say) is not the relay.
+  const isSheetsUrl = (url) => {
+    try {
+      return new URL(String(url), 'http://localhost').hostname === 'script.google.com';
+    } catch (_) {
+      return false;
+    }
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete global.fetch;
+    localStorage.removeItem('lm-sheets-url');
+  });
+
+  const signInPage = '<!doctype html><html><head><title>Sign in - Google Accounts</title></head>' +
+    '<body><form action="https://accounts.google.com/ServiceLogin">Sign in</form></body></html>';
+
+  it('names the deployment problem instead of blaming browser CORS', async () => {
+    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    localStorage.setItem('lm-sheets-url', 'https://script.google.com/macros/s/real/exec');
+
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      if (isSheetsUrl(url)) {
+        return { ok: true, status: 200, text: async () => signInPage };
+      }
+      throw new Error('Failed to fetch');
+    });
+
+    await expect(executeCanadaPostProxy({
+      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
+      xmlPayload: '<mailing-scenario/>',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      isTest: false
+    })).rejects.toThrow(/sign-in page|Who has access/i);
+  });
+
+  it('does not tell the owner to connect a sheet that is already connected', async () => {
+    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    localStorage.setItem('lm-sheets-url', 'https://script.google.com/macros/s/real/exec');
+
+    global.fetch = vi.fn(async (url) => {
+      if (isSheetsUrl(url)) {
+        return { ok: true, status: 200, text: async () => signInPage };
+      }
+      throw new Error('Failed to fetch');
+    });
+
+    const err = await executeCanadaPostProxy({
+      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
+      xmlPayload: '<mailing-scenario/>',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      isTest: false
+    }).catch(e => e);
+
+    expect(err.message).not.toMatch(/ensure your Google Sheet is connected/i);
+  });
+
+  it('still keeps walking past a static host that has no local backend', async () => {
+    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const priceXml = '<price-quotes><price-quote><service-code>DOM.EP</service-code></price-quote></price-quotes>';
+
+    global.fetch = vi.fn(async (url) => {
+      // GitHub Pages answers an unknown path with an HTML 404 — expected here,
+      // and must not be reported as a relay failure.
+      if (String(url).startsWith('/api/')) {
+        return { ok: false, status: 404, text: async () => '<!doctype html><html>404</html>' };
+      }
+      return { ok: true, status: 200, text: async () => priceXml };
+    });
+
+    const result = await executeCanadaPostProxy({
+      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
+      xmlPayload: '<mailing-scenario/>',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      isTest: false
+    });
+    expect(result.ok).toBe(true);
+    expect(result.xml).toContain('DOM.EP');
+  });
+
+  it('keeps the original advice when no sheet is configured at all', async () => {
+    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+
+    await expect(executeCanadaPostProxy({
+      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
+      xmlPayload: '<mailing-scenario/>',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      isTest: false
+    })).rejects.toThrow(/ensure your Google Sheet is connected/i);
+  });
+
+  it('relays a real Canada Post answer through the sheet unchanged', async () => {
+    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    localStorage.setItem('lm-sheets-url', 'https://script.google.com/macros/s/real/exec');
+    const priceXml = '<price-quotes><price-quote><service-code>DOM.EP</service-code></price-quote></price-quotes>';
+
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, status: 200, authMode: 'basic', xml: priceXml })
+      };
+    });
+
+    const result = await executeCanadaPostProxy({
+      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
+      xmlPayload: '<mailing-scenario/>',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      isTest: false
+    });
+    expect(result.xml).toContain('DOM.EP');
+  });
+
+  it('describes each way an Apps Script deployment goes wrong', async () => {
+    const { describeAppsScriptProxyFailure } = await import('../src/lib/canadapost.js');
+    expect(describeAppsScriptProxyFailure({ kind: 'not-json', body: signInPage })).toMatch(/Who has access/i);
+    expect(describeAppsScriptProxyFailure({ kind: 'not-json', body: '<html>TypeError: x is not a function</html>' }))
+      .toMatch(/older version|redeploy/i);
+    expect(describeAppsScriptProxyFailure({ kind: 'empty', body: '' })).toMatch(/empty response/i);
+    expect(describeAppsScriptProxyFailure({ kind: 'not-json', body: '<!doctype html><html>Moved</html>' }))
+      .toMatch(/\/exec|out of date/i);
   });
 });
