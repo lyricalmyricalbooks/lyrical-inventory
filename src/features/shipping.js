@@ -3550,11 +3550,31 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
   }
 }
 
+// Shippo weighs a customs line as quantity x net_weight and rejects the whole
+// shipment with "Combined weight of all Customs Items on the Customs
+// Declaration cannot be larger than the Parcel Weight" when that product is
+// over the parcel's own weight. net_weight is therefore PER COPY, not the line
+// total, so it is the parcel weight split across the copies in the box.
+//
+// The split is rounded DOWN to the two decimals Shippo stores. Rounding to
+// nearest would let the rounded-up copies push the total back over the parcel
+// weight (1.00 lb over 8 copies rounds 0.125 up to 0.13, and 8 x 0.13 = 1.04),
+// which is the same 400 error by another route.
+function shippoCustomsNetWeight(parcelWeight, quantity) {
+  const weight = Math.max(0.01, parseFloat(parcelWeight) || 0.01);
+  const qty = Math.max(1, parseInt(quantity, 10) || 1);
+  const perUnit = Math.floor((weight / qty) * 100) / 100;
+  // 0.01 is Shippo's smallest accepted net weight. Hitting this floor means the
+  // parcel weight is too low to cover the copies inside it; the rate form warns
+  // about that before we get here, so the declaration stays valid-shaped.
+  return Math.max(0.01, perUnit).toFixed(2);
+}
+
 function buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit }) {
   const quantity = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
   const description = readShippoCustomsValue('sp-customs-description', 'Printed books');
   // sp-customs-value is the value of a single copy; Shippo's items[].value_amount
-  // and net_weight are both totals for the line (quantity x per-unit).
+  // is the line total (quantity x per-unit), while net_weight is per copy.
   const unitValue = Math.max(0.01, parseFloat(readShippoCustomsValue('sp-customs-value', '25')) || 25);
   const hsCode = readShippoCustomsValue('sp-customs-hs', '490199');
   const originCountry = normalizeCountryCode(sfCountryCode) || 'CA';
@@ -3570,7 +3590,7 @@ function buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, s
     items: [{
       description,
       quantity,
-      net_weight: Math.max(0.01, spWeight).toFixed(2),
+      net_weight: shippoCustomsNetWeight(spWeight, quantity),
       mass_unit: spWeightUnit,
       value_amount: (unitValue * quantity).toFixed(2),
       value_currency: 'CAD',
@@ -3848,6 +3868,19 @@ function shippoRateRules(opts) {
     { id: 'sp-height', label: 'Parcel height', msg: 'Height has to be more than zero.', test: positive },
     { id: 'sp-weight', label: 'Parcel weight', msg: 'Weight has to be more than zero.', test: positive },
   );
+  // Customs splits the parcel weight across the copies inside it, and Shippo
+  // will not accept a copy lighter than 0.01. A box declared at less than that
+  // per copy is a weight that was mistyped, so it is caught on the form rather
+  // than as a 400 from the carrier after the publisher hits Calculate.
+  if (international) {
+    const qty = Math.max(1, parseInt(o.quantity, 10) || 1);
+    rules.push({
+      id: 'sp-weight',
+      label: 'Parcel weight',
+      msg: `Too light for ${qty} copies — customs needs at least ${(qty * 0.01).toFixed(2)} here.`,
+      test: (v) => (parseFloat(v) || 0) >= qty * 0.01
+    });
+  }
   return rules;
 }
 
@@ -3856,7 +3889,7 @@ function shippoRateFormState() {
   const originCode = normalizeCountryCode($('sf-country')?.value || '');
   const destCode = normalizeCountryCode($('st-country')?.value || '');
   const international = !!(originCode && destCode) && isInternationalShipment(originCode, destCode);
-  const rules = shippoRateRules({ international });
+  const rules = shippoRateRules({ international, quantity: $('sp-qty')?.value });
   // A rule whose input is absent from the DOM is not a missing detail — it is a
   // form that has not rendered — so it never counts against the publisher.
   const missing = rules.filter(r => {
@@ -6671,6 +6704,7 @@ export {
   updateShippoCustomsTotalHint,
   readShippoCustomsValue,
   buildShippoCustomsDeclaration,
+  shippoCustomsNetWeight,
   collectShippoMessages,
   renderShippoDiagnostics,
   buyShippoLabel,

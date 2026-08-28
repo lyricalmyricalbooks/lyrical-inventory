@@ -14,6 +14,7 @@ describe('Shippo Customs & Country Helpers', () => {
   let buildShippoCustomsDeclaration;
   let readShippoCustomsValue;
   let resolveShippoIncoterm;
+  let shippoCustomsNetWeight;
 
   // We extract the functions statically so we don't have to load main.js's DOM dependencies
   beforeEach(() => {
@@ -28,12 +29,14 @@ describe('Shippo Customs & Country Helpers', () => {
     const interMatch = mainContent.match(/function isInternationalShipment\(fromCountry, toCountry\) \{([\s\S]+?)\n\}/);
     const readMatch = mainContent.match(/function readShippoCustomsValue\(id, fallback\) \{([\s\S]+?)\n\}/);
     const declMatch = mainContent.match(/function buildShippoCustomsDeclaration\(\{ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit \}\) \{([\s\S]+?)\n\}/);
+    const netWeightMatch = mainContent.match(/function shippoCustomsNetWeight\(parcelWeight, quantity\) \{([\s\S]+?)\n\}/);
     const incotermMatch = mainContent.match(/function resolveShippoIncoterm\(destCountryCode\) \{([\s\S]+?)\n\}/);
 
     expect(normMatch).not.toBeNull();
     expect(interMatch).not.toBeNull();
     expect(readMatch).not.toBeNull();
     expect(declMatch).not.toBeNull();
+    expect(netWeightMatch).not.toBeNull();
     expect(incotermMatch).not.toBeNull();
 
     // Reconstruct them with new Function
@@ -49,6 +52,10 @@ describe('Shippo Customs & Country Helpers', () => {
       readMatch[0] + '\nreturn readShippoCustomsValue(id, fallback);'
     );
 
+    shippoCustomsNetWeight = new Function('parcelWeight', 'quantity',
+      netWeightMatch[0] + '\nreturn shippoCustomsNetWeight(parcelWeight, quantity);'
+    );
+
     resolveShippoIncoterm = new Function('$', 'normalizeCountryCode', 'destCountryCode',
       incotermMatch[0] + '\nreturn resolveShippoIncoterm(destCountryCode);'
     );
@@ -56,6 +63,7 @@ describe('Shippo Customs & Country Helpers', () => {
     buildShippoCustomsDeclaration = new Function('$', 'normalizeCountryCode', 'readShippoCustomsValue', 'params',
       `const { sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit } = params;\n` +
       incotermMatch[0] + '\n' +
+      netWeightMatch[0] + '\n' +
       declMatch[0] + '\n' +
       `return buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit });`
     );
@@ -131,6 +139,30 @@ describe('Shippo Customs & Country Helpers', () => {
     });
   });
 
+  describe('shippoCustomsNetWeight', () => {
+    it('splits the parcel weight across the copies rather than repeating it', () => {
+      // The bug: net_weight was the whole parcel weight, so Shippo's
+      // quantity x net_weight came to 3 x 3.60 = 10.8 lb in a 3.6 lb parcel and
+      // every multi-copy US order was rejected with a 400.
+      expect(shippoCustomsNetWeight(3.6, 3)).toBe('1.20');
+      expect(shippoCustomsNetWeight(1.2, 1)).toBe('1.20');
+      expect(shippoCustomsNetWeight(2, 4)).toBe('0.50');
+    });
+
+    it('never rounds the combined weight above the parcel weight', () => {
+      for (const [weight, qty] of [[1, 8], [1, 3], [2.5, 7], [0.9, 11], [4.75, 6]]) {
+        const combined = parseFloat(shippoCustomsNetWeight(weight, qty)) * qty;
+        expect(combined).toBeLessThanOrEqual(weight + 1e-9);
+      }
+    });
+
+    it('holds Shippo\'s 0.01 floor when the parcel weight is implausibly low', () => {
+      expect(shippoCustomsNetWeight(0.02, 50)).toBe('0.01');
+      expect(shippoCustomsNetWeight(0, 1)).toBe('0.01');
+      expect(shippoCustomsNetWeight('nonsense', 2)).toBe('0.01');
+    });
+  });
+
   describe('buildShippoCustomsDeclaration', () => {
     it('declares DDP on the customs declaration for US destinations', () => {
       const mockElements = {
@@ -155,6 +187,8 @@ describe('Shippo Customs & Country Helpers', () => {
       // value_amount is a line total: 3 copies at 25.00 each.
       expect(decl.items[0].value_amount).toBe('75.00');
       expect(decl.items[0].quantity).toBe(3);
+      // net_weight is per copy: 3 x 1.20 is exactly the 3.6 lb parcel.
+      expect(decl.items[0].net_weight).toBe('1.20');
     });
 
     it('builds a valid customs declaration structure', () => {
@@ -191,7 +225,7 @@ describe('Shippo Customs & Country Helpers', () => {
         items: [{
           description: 'Novels',
           quantity: 2,
-          net_weight: '1.50',
+          net_weight: '0.75',
           mass_unit: 'lb',
           value_amount: '60.00',
           value_currency: 'CAD',
