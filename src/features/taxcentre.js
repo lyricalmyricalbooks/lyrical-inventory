@@ -3730,12 +3730,29 @@ async function testCanadaPostConnectionHandler() {
     }
   } catch (err) {
     if (statusEl) {
+      // The key's own system is checked first: when it belongs to the newer
+      // Developer Portal, "re-check your password" and "flip the sandbox
+      // toggle" are both dead ends, and showing them sends the publisher round
+      // a loop that cannot terminate. Test Connection used to skip this check
+      // entirely — only Diagnose knew — so the one message that mattered was
+      // the one this button could never show.
+      const keyKind = inspectCanadaPostCredentials({ apiKey, apiSecret, customerNumber }).keyKind;
+      const isWrongKeySystem = keyKind === 'portal-client-id';
       const isAuthFail = /E002|Authentication Failure|unauthorized|HTTP 401|rejected these credentials|invalid_client/i.test(err.message);
       const isEntitlement = /HTTP 403|refused this request|entitlement/i.test(err.message);
       const isStaleScript = /invalid client ID or secret|not subscribed to this API|invalid_scope|Missing scope/i.test(err.message);
       const isCors = /CORS|Google Sheet is not connected|Browser CORS restriction/i.test(err.message);
       let extraHint = '';
-      if (isStaleScript) {
+      if (isWrongKeySystem && (isAuthFail || isStaleScript)) {
+        extraHint = `
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:3px solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+            <strong>This key is for a different Canada Post system.</strong><br>
+            Canada Post runs two developer systems. The newer <strong>Developer Portal</strong> issues a Key and a Secret that are each one long string of letters and numbers — which is what is pasted here. The older <strong>Developer Program</strong> issues a single key written as two halves joined by a colon, and that is the one this app uses.<br>
+            A Developer Portal key cannot sign in to the older service, so it is refused whatever the Sandbox toggle is set to and whatever the password is. Neither of those is the problem.<br>
+            Ask Canada Post for Developer Program (Web Services) API keys — <span class="tnum">developer.program@canadapost.postescanada.ca</span> — or ask for this app to be updated to use the newer system.
+          </div>
+        `;
+      } else if (isStaleScript) {
         // The "invalid client ID or secret" wording can now only come from a
         // Google Apps Script deployment older than v31, which guessed the
         // authentication method from the shape of the key and gave up before
