@@ -628,6 +628,83 @@ describe('Purchased labels stay reprintable offline', () => {
   });
 });
 
+describe('Zonos Verified Account key reaches Canada Post', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete global.fetch;
+    localStorage.clear();
+  });
+
+  it('sends the account key on the shipment request so Canada Post can issue the Declaration ID', async () => {
+    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const xml = `<non-contract-shipment-info>
+      <shipment-id>1</shipment-id>
+      <tracking-pin>70123456789012345</tracking-pin>
+      <declaration-id>0rd4dpkrvc1y9</declaration-id>
+    </non-contract-shipment-info>`;
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, xml }),
+      text: async () => xml,
+      headers: { get: () => 'application/xml' }
+    });
+
+    const result = await buyCanadaPostLabel({
+      serviceCode: 'USA.TP',
+      destination: { countryCode: 'US', postalCode: '90210', address1: '1 Palm Dr', city: 'Beverly Hills', state: 'CA' },
+      parcel: { weightKg: 0.5 },
+      apiKey: 'merchant_key_abc',
+      apiSecret: 'merchant_secret_xyz',
+      customerNumber: '0042998877',
+      zonosAccountKey: 'credential_live_account_key',
+      isTest: false
+    });
+
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.zonosAccountKey).toBe('credential_live_account_key');
+
+    // Canada Post issued the ID; it must come back on the result rather than
+    // being expected from the caller.
+    expect(result.declarationId).toBe('0rd4dpkrvc1y9');
+    expect(result.declarationIssuedByCarrier).toBe(true);
+  });
+
+  it('keeps a Declaration ID bought by hand when the carrier issues none', async () => {
+    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const xml = '<non-contract-shipment-info><shipment-id>1</shipment-id><tracking-pin>70123456789012345</tracking-pin></non-contract-shipment-info>';
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, xml }),
+      text: async () => xml,
+      headers: { get: () => 'application/xml' }
+    });
+
+    const result = await buyCanadaPostLabel({
+      serviceCode: 'USA.TP',
+      destination: { countryCode: 'US', postalCode: '90210', address1: '1 Palm Dr', city: 'Beverly Hills', state: 'CA' },
+      parcel: { weightKg: 0.5 },
+      declarationId: '0rcvxj2tkbnwr',
+      apiKey: 'merchant_key_abc',
+      apiSecret: 'merchant_secret_xyz',
+      customerNumber: '0042998877',
+      isTest: false
+    });
+
+    expect(result.declarationId).toBe('0rcvxj2tkbnwr');
+    expect(result.declarationIssuedByCarrier).toBe(false);
+  });
+
+  it('ignores a malformed declaration id in the response', async () => {
+    const { parseCanadaPostShipmentResponse } = await import('../src/lib/canadapost.js');
+    const parsed = parseCanadaPostShipmentResponse(
+      '<a><shipment-id>1</shipment-id><tracking-pin>7012345678901</tracking-pin><declaration-id>NOT-AN-ID</declaration-id></a>'
+    );
+    expect(parsed.declarationId).toBe('');
+  });
+});
+
 describe('Canada Post Tracking PIN Verification', () => {
   afterEach(() => {
     vi.restoreAllMocks();

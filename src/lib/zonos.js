@@ -44,7 +44,14 @@ export const ZONOS_WEIGHT_UNITS = {
  * Used as offline-first fallback calculation when network or API key is not configured.
  */
 export const DESTINATION_DE_MINIMIS = {
-  US: { dutyFreeThresholdCad: 1080.00, taxFreeThresholdCad: 1080.00, currency: 'USD', thresholdNative: 800, note: 'US Section 321 $800 USD threshold — duty & tax free for typical orders' },
+  // NOTE ON THE U.S. RULE CHANGE (24 July 2026)
+  // The Section 321 $800 de minimis no longer exempts postal shipments: they are
+  // subject to ordinary duty (MFN, Section 301, Section 232). What the threshold
+  // now marks is the ceiling — raised $800 → $2,500 USD — under which duty must be
+  // *prepaid* before Canada Post will accept the parcel. So this is a prepayment
+  // threshold, not a duty-free allowance. Printed books still carry no duty, but
+  // that is their tariff classification (HS 4901, MFN free), not an exemption.
+  US: { prepayThresholdCad: 3400.00, currency: 'USD', thresholdNative: 2500, prepaymentRequired: true, note: 'U.S. duty must be prepaid on postal shipments up to $2,500 USD; printed books (HS 4901) are MFN duty-free' },
   GB: { dutyFreeThresholdCad: 235.00, taxFreeThresholdCad: 0.00, currency: 'GBP', thresholdNative: 135, note: 'UK zero-rates printed books (0% VAT & 0% Duty)' },
   AU: { dutyFreeThresholdCad: 900.00, taxFreeThresholdCad: 900.00, currency: 'AUD', thresholdNative: 1000, note: 'Australia AUD $1,000 threshold' },
   NZ: { dutyFreeThresholdCad: 800.00, taxFreeThresholdCad: 800.00, currency: 'NZD', thresholdNative: 1000, note: 'New Zealand NZD $1,000 threshold' },
@@ -473,8 +480,10 @@ export function estimateOfflineLandedCost({
   const rule = DESTINATION_DE_MINIMIS[dest] || (dest.match(/^(AT|BE|BG|HR|CY|CZ|DK|EE|FI|FR|DE|GR|HU|IE|IT|LV|LT|LU|MT|NL|PL|PT|RO|SK|SI|ES|SE)$/) ? DESTINATION_DE_MINIMIS.EU : null);
 
   if (dest === 'US') {
-    // US Section 321 de minimis is $800 USD (~$1080 CAD)
-    const isBelow = value <= 1080;
+    // Books are duty-free by tariff classification rather than by any exemption,
+    // so the figure below is 0 whichever side of the threshold the parcel falls.
+    // The threshold decides whether prepayment is *required*, not what is owed.
+    const withinPrepayRange = value <= 3400;
     return {
       isOfflineEstimate: true,
       destCountryCode: 'US',
@@ -484,10 +493,11 @@ export function estimateOfflineLandedCost({
       feesAmount: 0.00,
       totalLandedCost: 0.00,
       isDutyFree: true,
-      isTaxFree: isBelow,
-      deMinimisNote: isBelow 
-        ? '✓ Under US Section 321 $800 USD threshold — Duty & Tax Free' 
-        : 'Shipment value exceeds US $800 de minimis threshold; standard tariffs apply.',
+      isTaxFree: true,
+      prepaymentRequired: withinPrepayRange,
+      deMinimisNote: withinPrepayRange
+        ? 'Printed books (HS 4901) are duty-free, but U.S. duty prepayment is still required — a Declaration ID must accompany the parcel.'
+        : 'Above the $2,500 USD postal prepayment ceiling — this parcel needs formal customs entry rather than postal prepayment.',
       recommendedIncoterm: 'DDP'
     };
   }
@@ -590,30 +600,77 @@ export function isCanonicalDeclarationId(rawId) {
   return typeof rawId === 'string' && /^[a-z0-9]{13}$/.test(rawId);
 }
 
-/**
- * Generate a pre-filled direct web link to the Zonos Prepay app for Canada Post US shipments
- */
-export function buildZonosPrepayDeepLink({
-  destCountry = 'US',
-  destPostalOrZip = '',
-  destState = '',
-  declaredValueCad = 25.00,
-  hsCode = '490199',
-  itemDescription = 'Printed books'
-} = {}) {
-  const base = 'https://prepay.zonos.com';
-  const params = new URLSearchParams({
-    originCountry: 'CA',
-    destinationCountry: destCountry.toUpperCase(),
-    ...(destPostalOrZip ? { destinationPostalCode: destPostalOrZip.trim() } : {}),
-    ...(destState ? { destinationState: destState.trim() } : {}),
-    declaredValue: parseFloat(declaredValueCad || 25).toFixed(2),
-    currency: 'CAD',
-    hsCode: String(hsCode || '490199').replace(/[^0-9]/g, ''),
-    description: String(itemDescription || 'Printed books').slice(0, 50)
-  });
+/** The Zonos Prepay web app's shipment form. */
+export const ZONOS_PREPAY_SHIP_URL = 'https://dashboard.zonosprepay.com/en/ship';
 
-  return `${base}/?${params.toString()}`;
+/**
+ * Link to the Zonos Prepay app, where a declaration is bought by hand.
+ *
+ * This used to point at prepay.zonos.com with a query string of invented
+ * parameters — a host that does not serve the app, carrying fields Zonos never
+ * documented, so the button opened nothing. Prepay has no documented deep-link
+ * format: the shipment is filled in on their form. So this returns the form's
+ * address and nothing more, rather than a URL that looks pre-filled and is not.
+ */
+export function buildZonosPrepayDeepLink() {
+  return ZONOS_PREPAY_SHIP_URL;
+}
+
+/**
+ * Which of the two Canada Post duty-prepayment routes applies.
+ *
+ * HOW A DECLARATION ID IS ACTUALLY OBTAINED
+ * There is no API that mints one on request, which is why the old
+ * "auto-generate" button could never work: it called declarationCreateWorkflow,
+ * a mutation belonging to Zonos' Landed Cost / Checkout product, not to Canada
+ * Post prepayment. A Declaration ID is proof that duty has been *paid*, so it
+ * only exists once somebody has paid. There are exactly two ways:
+ *
+ *   verified — A Zonos Verified Account with an approved billing method issues
+ *     an Account Key. Sent as the X-CPC-Zonos-Key header on the shipment call,
+ *     it lets Canada Post generate and link the Declaration ID itself and bill
+ *     the duty to the account. Nothing to paste; this is the automated route.
+ *
+ *   prepay — No Account Key. The declaration is bought one parcel at a time in
+ *     the Zonos Prepay app, which returns an ID and QR code to paste in here.
+ *
+ * `manual` is the prepay route with the ID already in hand.
+ */
+export function resolveDutyPrepaymentRoute({
+  destCountry = '',
+  accountKey = '',
+  declarationId = ''
+} = {}) {
+  const dest = String(destCountry || '').toUpperCase().trim();
+  if (dest !== 'US') {
+    return { route: 'not-required', needsDeclaration: false, canAutomate: false };
+  }
+
+  if (validateDeclarationId(declarationId)) {
+    return {
+      route: 'manual',
+      needsDeclaration: true,
+      canAutomate: false,
+      declarationId: formatDeclarationId(declarationId),
+      summary: 'Declaration ID entered — it will be sent with the label.'
+    };
+  }
+
+  if (String(accountKey || '').trim()) {
+    return {
+      route: 'verified',
+      needsDeclaration: true,
+      canAutomate: true,
+      summary: 'Zonos Verified Account connected — Canada Post issues the Declaration ID when the label is bought, and bills the duty to your Zonos account.'
+    };
+  }
+
+  return {
+    route: 'prepay',
+    needsDeclaration: true,
+    canAutomate: false,
+    summary: 'No Zonos Account Key saved. Buy the declaration in the Zonos Prepay app and paste the ID here, or connect a Verified Account to have this happen automatically.'
+  };
 }
 
 /**

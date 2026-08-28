@@ -1549,12 +1549,24 @@ export function parseCanadaPostShipmentResponse(xmlText) {
   const receiptLink = xmlText.match(/<link\s+[^>]*rel="receipt"[^>]*href="([^"]+)"/)?.[1]
     || xmlText.match(/<link\s+[^>]*href="([^"]+)"[^>]*rel="receipt"/)?.[1] || '';
 
+  // When a Zonos Verified Account key is sent on the request, Canada Post issues
+  // the Declaration ID itself and returns it here rather than expecting one in.
+  // The element name is not published in the schema we have, so several spellings
+  // are accepted and the value is only trusted if it is a well-formed ID.
+  const declarationMatch =
+    xmlText.match(/<(?:[a-z-]*:)?declaration-id>([^<]+)<\/(?:[a-z-]*:)?declaration-id>/i)
+    || xmlText.match(/<(?:[a-z-]*:)?zonos-declaration-id>([^<]+)<\/(?:[a-z-]*:)?zonos-declaration-id>/i)
+    || xmlText.match(/<(?:[a-z-]*:)?duty-declaration-id>([^<]+)<\/(?:[a-z-]*:)?duty-declaration-id>/i);
+  const rawDeclaration = declarationMatch?.[1] || '';
+  const declarationId = validateDeclarationId(rawDeclaration) ? formatDeclarationId(rawDeclaration) : '';
+
   return {
     ok: true,
     shipmentId,
     trackingPin,
     labelUrl: labelLink,
-    receiptUrl: receiptLink
+    receiptUrl: receiptLink,
+    declarationId
   };
 }
 
@@ -1615,6 +1627,12 @@ export async function buyCanadaPostLabel({
 
   const isSimulated = !!(result.isSimulated || responseData.isSimulated);
 
+  // A Verified Account shipment comes back with the Declaration ID Canada Post
+  // issued; otherwise the one we supplied (bought in the Prepay app) stands.
+  const sentDeclarationId = formatDeclarationId(declarationId || customs?.declarationId || '');
+  const issuedDeclarationId = formatDeclarationId(responseData.declarationId || '');
+  const finalDeclarationId = issuedDeclarationId || sentDeclarationId;
+
   // Cache shipment context for instant high-res label reproduction
   setLastPurchasedShipmentContext({
     serviceCode,
@@ -1626,7 +1644,7 @@ export async function buyCanadaPostLabel({
     destination,
     parcel,
     customs,
-    declarationId: formatDeclarationId(declarationId || customs?.declarationId || ''),
+    declarationId: finalDeclarationId,
     customerNumber: customerId,
     isSimulated,
     mode: audit.environment.mode,
@@ -1635,6 +1653,8 @@ export async function buyCanadaPostLabel({
 
   return {
     ...responseData,
+    declarationId: finalDeclarationId,
+    declarationIssuedByCarrier: !!issuedDeclarationId,
     isSimulated,
     simulationReason: result.simulationReason || '',
     mode: audit.environment.mode,
