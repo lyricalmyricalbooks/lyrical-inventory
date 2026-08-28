@@ -3630,23 +3630,37 @@ async function testCanadaPostConnectionHandler() {
     }
   } catch (err) {
     if (statusEl) {
-      const isAuthFail = /E002|Authentication Failure|unauthorized|invalid_client/i.test(err.message);
-      const isScopeFail = /invalid_scope|Missing scope/i.test(err.message);
+      const isAuthFail = /E002|Authentication Failure|unauthorized|HTTP 401|rejected these credentials|invalid_client/i.test(err.message);
+      const isEntitlement = /HTTP 403|refused this request|entitlement/i.test(err.message);
+      const isStaleScript = /invalid client ID or secret|not subscribed to this API|invalid_scope|Missing scope/i.test(err.message);
       const isCors = /CORS|Google Sheet is not connected|Browser CORS restriction/i.test(err.message);
       let extraHint = '';
-      if (isAuthFail) {
-        extraHint = `
-          <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:3px solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
-            <strong>How to fix authentication:</strong><br>
-            • If using Canada Post Developer Portal OAuth keys (32-char hex), ensure your App is subscribed to the <strong>Rating</strong> API product in the Developer Portal.<br>
-            • If using <strong>Development / Test</strong> keys, turn <strong>ON</strong> the <em>Sandbox Environment</em> toggle switch above.<br>
-            • If using Legacy Production keys, ensure you paste the <strong>API Password</strong> generated in the Canada Post Developer Program (not your personal canadapost.ca password).
-          </div>
-        `;
-      } else if (isScopeFail) {
+      if (isStaleScript) {
+        // The "invalid client ID or secret" wording can now only come from a
+        // Google Apps Script deployment older than v31, which guessed the
+        // authentication method from the shape of the key and gave up before
+        // it ever reached Canada Post.
         extraHint = `
           <div style="margin-top:6px;padding:8px 10px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
-            <strong>Missing OAuth Scope:</strong> Please ensure your Google Apps Script is updated to the latest version (v30) which includes the <code>scope=merchant</code> parameter.
+            <strong>Your Google Sheet script is out of date.</strong><br>
+            This error comes from the connection script itself, not from Canada Post — an older version misread your API key and stopped before contacting them.
+            Open <strong>Settings ➔ Connect your Google Sheet</strong>, copy the latest script and redeploy it, then test again — the card there shows which version you are running.
+          </div>
+        `;
+      } else if (isAuthFail) {
+        extraHint = `
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:3px solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+            <strong>Canada Post refused this key and password.</strong><br>
+            • Development / test keys only work with the <strong>Sandbox Environment</strong> toggle <strong>ON</strong>; production keys only work with it <strong>OFF</strong>. Try flipping it.<br>
+            • The password must be the <strong>API password</strong> from the Canada Post Developer Program — not the password you sign in to canadapost.ca with.<br>
+            • Copy both values again with no leading or trailing spaces.
+          </div>
+        `;
+      } else if (isEntitlement) {
+        extraHint = `
+          <div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,0.08);border-left:3px solid var(--rose);border-radius:var(--r);font-size:11px;color:var(--text2);line-height:1.45;">
+            <strong>The key is valid but this account cannot quote rates.</strong><br>
+            Sign in to the Canada Post Developer Program and confirm the account has the Rating and Shipping services enabled, and that customer number <span class="tnum">${escapeHtml(customerNumber || '—')}</span> belongs to it.
           </div>
         `;
       } else if (isCors) {

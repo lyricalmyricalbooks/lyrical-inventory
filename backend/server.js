@@ -80,7 +80,7 @@ const server = http.createServer(async (req, res) => {
         });
 
         const xmlText = await cpRes.text();
-        return sendJson(res, cpRes.status, { ok: cpRes.ok, xml: xmlText });
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, xml: xmlText });
       } catch (err) {
         console.error('Canada Post proxy failed:', err);
         return sendJson(res, 502, { error: `Canada Post proxy error: ${err.message}` });
@@ -107,7 +107,7 @@ const server = http.createServer(async (req, res) => {
           }
         });
         const xmlText = await cpRes.text();
-        return sendJson(res, cpRes.status, { ok: cpRes.ok, xml: xmlText });
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, xml: xmlText });
       } catch (err) {
         return sendJson(res, 502, { error: `Canada Post tracking proxy error: ${err.message}` });
       }
@@ -150,7 +150,7 @@ const server = http.createServer(async (req, res) => {
         });
 
         const xmlText = await cpRes.text();
-        return sendJson(res, cpRes.status, { ok: cpRes.ok, xml: xmlText });
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, xml: xmlText });
       } catch (err) {
         console.error('Canada Post shipment proxy failed:', err);
         return sendJson(res, 502, { error: `Canada Post shipment error: ${err.message}` });
@@ -159,8 +159,10 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === '/api/canadapost/artifact' && req.method === 'GET') {
       const artifactUrl = url.searchParams.get('url');
-      const apiKey = req.headers['x-cp-api-key'] || url.searchParams.get('key') || process.env.CANADAPOST_API_KEY;
-      const apiSecret = req.headers['x-cp-api-secret'] || url.searchParams.get('secret') || process.env.CANADAPOST_API_SECRET;
+      // Headers only: a key or secret in the query string is written verbatim
+      // into every access log the request touches.
+      const apiKey = req.headers['x-cp-api-key'] || process.env.CANADAPOST_API_KEY;
+      const apiSecret = req.headers['x-cp-api-secret'] || process.env.CANADAPOST_API_SECRET;
 
       if (!artifactUrl) return sendJson(res, 400, { error: 'Missing artifact url parameter' });
       if (!apiKey || !apiSecret) return sendJson(res, 400, { error: 'Missing Canada Post credentials' });

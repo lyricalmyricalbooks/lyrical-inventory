@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v30)
+/* Lyricalmyrical Inventory — Unified Backend (v31)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -107,6 +107,20 @@
  *      Bump flags v28-and-older as outdated.
  *  28. v30: Detailed OAuth 2.0 error reporting and HTTP Basic header fallback for Canada Post API subscriptions.
  *      Bump flags v29-and-older as outdated.
+ *  29. v31: Fixes 'proxycanadapost' authentication, which had been failing for
+ *      every Canada Post Web Services request. v27-v30 guessed the auth scheme
+ *      from the shape of the API key: a 32-character hex key was assumed to be
+ *      a Developer Portal OAuth client ID and sent to the OAuth token endpoint.
+ *      Developer Program API usernames are hex too, so valid Web Services
+ *      credentials were routed into a token exchange that cannot succeed, and
+ *      the proxy then aborted with an "invalid client ID or secret" error
+ *      WITHOUT EVER CALLING CANADA POST. The scheme is now chosen from the
+ *      endpoint host — soa-gw.canadapost.ca and ct.soa-gw.canadapost.ca use
+ *      HTTP Basic, api.canadapost-postescanada.ca uses OAuth — and a failed
+ *      token exchange falls back to Basic instead of aborting, so Canada Post's
+ *      own status code always reaches the client. Responses now also carry
+ *      authMode and oauthNote for diagnostics. Bump flags v30-and-older as
+ *      outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -155,8 +169,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v30',
-    scriptVersion: 'v30',
+    service: 'lyrical-sheets-webhook-v31',
+    scriptVersion: 'v31',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -619,15 +633,36 @@ function doPost(e) {
         const keyTrim = apiKey.trim();
         const secretTrim = apiSecret.trim();
 
-        // If apiKey is a 32-character hex string (Canada Post Developer Portal Client ID), attempt OAuth 2.0 token exchange
-        if (d.authType === 'oauth' || (/^[a-f0-9]{32}$/i.test(keyTrim) && !d.authType)) {
+        // Canada Post runs two unrelated auth systems and they are NOT
+        // interchangeable:
+        //   soa-gw.canadapost.ca / ct.soa-gw.canadapost.ca (Web Services:
+        //     rating, shipping, tracking, artifacts) -> HTTP Basic with the
+        //     Developer Program API username + password. Bearer tokens are
+        //     rejected outright.
+        //   api.canadapost-postescanada.ca (newer Developer Portal APIs)
+        //     -> OAuth 2.0 client-credentials Bearer token.
+        //
+        // Earlier versions guessed the scheme from the *shape* of the key
+        // (a 32-char hex string was assumed to be an OAuth client ID). A
+        // Developer Program API username is also hex, so ordinary, correct
+        // Web Services credentials were pushed into an OAuth exchange that
+        // can never succeed — and the request was then aborted with an
+        // "invalid client" error without ever calling Canada Post at all.
+        // Decide from the endpoint instead; that is unambiguous.
+        const endpointHost = String(endpoint).replace(/^https?:\/\//i, '').split('/')[0].toLowerCase();
+        const isOAuthHost = endpointHost === 'api.canadapost-postescanada.ca' ||
+          endpointHost.indexOf('.api.canadapost-postescanada.ca') !== -1;
+        const authType = String(d.authType || '').toLowerCase();
+        const useOAuth = authType === 'oauth' || (isOAuthHost && authType !== 'basic');
+
+        if (useOAuth) {
           try {
             const tokenUrl = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token';
             const basicAuth = Utilities.base64Encode(keyTrim + ':' + secretTrim);
             const scope = encodeURIComponent((d.scope || 'merchant').trim());
             const tokenResp = UrlFetchApp.fetch(tokenUrl, {
               method: 'POST',
-              headers: { 
+              headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': 'Basic ' + basicAuth
               },
@@ -646,10 +681,12 @@ function doPost(e) {
             oauthError = String(e);
           }
         }
+
+        // A failed token exchange is never the end of the road: fall back to
+        // Basic and let Canada Post's own gateway answer. Its status code is
+        // returned to the client, which turns it into an accurate message,
+        // rather than a guessed one invented here.
         if (!authHeader) {
-          if (oauthError && (/^[a-f0-9]{32}$/i.test(keyTrim) || d.authType === 'oauth')) {
-            return jsonOut_({ error: 'Canada Post OAuth Error: ' + oauthError + '. (Please verify that your App is subscribed to the Rating API product in the Canada Post Developer Portal)' });
-          }
           authHeader = 'Basic ' + Utilities.base64Encode(keyTrim + ':' + secretTrim);
         }
 
@@ -688,6 +725,7 @@ function doPost(e) {
           return jsonOut_({
             ok: code >= 200 && code < 300,
             status: code,
+            authMode: authHeader.indexOf('Bearer ') === 0 ? 'oauth' : 'basic',
             base64: Utilities.base64Encode(blob.getBytes()),
             mime: blob.getContentType() || 'application/pdf'
           });
@@ -697,6 +735,8 @@ function doPost(e) {
         return jsonOut_({
           ok: code >= 200 && code < 300,
           status: code,
+          authMode: authHeader.indexOf('Bearer ') === 0 ? 'oauth' : 'basic',
+          oauthNote: oauthError || '',
           xml: xmlText
         });
       } catch (err) {

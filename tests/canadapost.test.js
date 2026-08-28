@@ -701,3 +701,126 @@ describe('Canada Post Tracking PIN Verification', () => {
     await expect(verifyCanadaPostTrackingPin({ pin: '' })).rejects.toThrow(/required/i);
   });
 });
+
+describe('Canada Post authentication routing', () => {
+  it('uses HTTP Basic for the Web Services gateways regardless of key shape', async () => {
+    const { resolveCanadaPostAuthStrategy } = await import('../src/lib/canadapost.js');
+    // A 32-char hex string is a perfectly ordinary Developer Program API
+    // username; it must not be mistaken for an OAuth client ID.
+    expect(resolveCanadaPostAuthStrategy('https://soa-gw.canadapost.ca/rs/ship/price')).toBe('basic');
+    expect(resolveCanadaPostAuthStrategy('https://ct.soa-gw.canadapost.ca/rs/ship/price')).toBe('basic');
+    expect(resolveCanadaPostAuthStrategy('https://soa-gw.canadapost.ca/vis/tracking/pin/123/summary')).toBe('basic');
+  });
+
+  it('uses OAuth only for the Developer Portal host, or when asked explicitly', async () => {
+    const { resolveCanadaPostAuthStrategy } = await import('../src/lib/canadapost.js');
+    expect(resolveCanadaPostAuthStrategy('https://api.canadapost-postescanada.ca/rating/v1/quote')).toBe('oauth');
+    expect(resolveCanadaPostAuthStrategy('https://soa-gw.canadapost.ca/rs/ship/price', { authType: 'oauth' })).toBe('oauth');
+    expect(resolveCanadaPostAuthStrategy('https://api.canadapost-postescanada.ca/x', { authType: 'basic' })).toBe('basic');
+  });
+});
+
+describe('Canada Post failure reporting', () => {
+  it('explains a rejected credential instead of reporting an empty response', async () => {
+    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    const msg = describeCanadaPostFailure({ status: 401, body: '', isTest: false });
+    expect(msg).toMatch(/401/);
+    expect(msg).toMatch(/Sandbox Environment toggle/i);
+    expect(msg).not.toMatch(/empty response/i);
+  });
+
+  it('separates a missing entitlement from a bad password', async () => {
+    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    expect(describeCanadaPostFailure({ status: 403 })).toMatch(/entitlement|refused this request/i);
+    expect(describeCanadaPostFailure({ status: 503 })).toMatch(/outage on their side/i);
+  });
+
+  it('prefers Canada Post’s own error document when one is present', async () => {
+    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    const xml = '<messages><message><code>E002</code><description>Authentication Failure</description></message></messages>';
+    expect(describeCanadaPostFailure({ status: 400, body: xml })).toBe('Canada Post [E002]: Authentication Failure');
+  });
+});
+
+describe('Proxy failures reach the publisher instead of being swallowed', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete global.fetch;
+  });
+
+  it('reports a 401 relayed by the Apps Script proxy rather than a parse error', async () => {
+    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    localStorage.setItem('lm-sheets-url', 'https://script.google.com/macros/s/real/exec');
+
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      return { ok: true, status: 200, json: async () => ({ ok: false, status: 401, xml: '' }) };
+    });
+
+    await expect(executeCanadaPostProxy({
+      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
+      xmlPayload: '<mailing-scenario/>',
+      apiKey: 'cc42b40f9036917c8e2fd928c65df5de',
+      apiSecret: 'secret',
+      isTest: false
+    })).rejects.toThrow(/401/);
+
+    localStorage.removeItem('lm-sheets-url');
+  });
+
+  it('does not simulate a sandbox shipment that Canada Post actually refused', async () => {
+    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      return { ok: false, status: 403, text: async () => '', json: async () => { throw new Error('not json'); } };
+    });
+
+    await expect(executeCanadaPostProxy({
+      targetEndpoint: 'https://ct.soa-gw.canadapost.ca/rs/0042998877/ncshipment',
+      xmlPayload: '<non-contract-shipment/>',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      isTest: true
+    })).rejects.toThrow(/403/);
+  });
+
+  it('walks past a static host that has no local proxy', async () => {
+    const { executeCanadaPostProxy } = await import('../src/lib/canadapost.js');
+    const priceXml = '<price-quotes><price-quote><service-code>DOM.EP</service-code>' +
+      '<price-details><base>12.00</base><due>13.56</due></price-details></price-quote></price-quotes>';
+
+    global.fetch = vi.fn(async (url) => {
+      // GitHub Pages answers an unknown path with an HTML 404 page.
+      if (String(url).startsWith('/api/')) {
+        return { ok: false, status: 404, json: async () => { throw new Error('not json'); } };
+      }
+      return { ok: true, status: 200, text: async () => priceXml };
+    });
+
+    const result = await executeCanadaPostProxy({
+      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
+      xmlPayload: '<mailing-scenario/>',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      isTest: false
+    });
+    expect(result.ok).toBe(true);
+    expect(result.xml).toContain('DOM.EP');
+  });
+
+  it('never puts the API secret in the label-download URL', async () => {
+    const { fetchCanadaPostLabelBlob } = await import('../src/lib/canadapost.js');
+    global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+
+    await fetchCanadaPostLabelBlob({
+      labelUrl: 'https://soa-gw.canadapost.ca/rs/artifact/abc/10000/0',
+      apiKey: 'key',
+      apiSecret: 'super-secret-password',
+      shipmentContext: { trackingPin: '70123456789012345', sender: { name: 'X' }, destination: { name: 'Y' } }
+    });
+
+    for (const call of global.fetch.mock.calls) {
+      expect(String(call[0])).not.toContain('super-secret-password');
+    }
+  });
+});
