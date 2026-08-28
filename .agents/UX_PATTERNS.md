@@ -465,6 +465,27 @@ Three rules that come with it:
   mixed-currency total, a full ISBN — stretches the flex item and widens the
   whole column.
 
+Second surface on this pattern: the book dashboard's Inventory and Break-even
+panels (`.stock-block` / `.stock-stage`, "STOCK BLOCK" in `style.css`). Same
+before-state — five hand-picked margins running 20 / 10 / 17.6 / 9.6 / 12px — and
+the same two-gap fix. Two things it adds:
+
+- **The reading goes ABOVE the bar it explains.** A progress bar is an
+  illustration of a figure, so the figure has to exist first; with the number
+  underneath, the bar is the panel's largest element and the reading is a
+  footnote to it. Order is figure → bar → breakdown pills, all inside one stage.
+- **Scope a bar's height to the panel, not to `.bar-track`.** 5px of trough
+  carries no weight under a 22px figure, but the same class draws the catalogue's
+  own bars, which are sized against a whole shelf of cards. `.stock-block
+  .bar-track{height:8px}` + `.stock-block .bar-fill{height:100%}` leaves those
+  alone.
+
+**Layout that JS resets belongs in a class, not inline.** `#d-recalc-onhand-wrap`
+held `display:flex` in its `style` attribute while `updateDashboard()` reset the
+row with `style.display = ''` on leaving author mode — which clears the inline
+property outright and left the row stacked. Anything a `style.display = ''`
+touches must get its display from CSS (`.stock-actions`).
+
 **Money figures lead on type, not just size.** The sale total on that panel was
 34px Syne 800 — the heading face, proportional — so the digits re-widthed on
 every quantity tap and it was the one monetary value in the app not in DM Mono.
