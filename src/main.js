@@ -276,6 +276,7 @@ import {
   saveTaxCenterSettings,
   testZonosConnectionHandler,
   testCanadaPostConnectionHandler,
+  diagnoseCanadaPostHandler,
   setTcGalleryPage,
   setTcLedgerPage,
   snoozePendingExpense,
@@ -21718,7 +21719,7 @@ function exposeLegacyInlineHandlers() {
     getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
     toggleIntegrationSection,
     testZonosConnectionHandler, calculateZonosDutiesHandler, renderZonosDutyCard,
-    testCanadaPostConnectionHandler, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard, buyCanadaPostLabelHandler,
+    testCanadaPostConnectionHandler, diagnoseCanadaPostHandler, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard, buyCanadaPostLabelHandler,
     showCanadaPostLabelModal, closeCanadaPostLabelModal, printCanadaPostLabelModal, downloadCanadaPostLabelModal,
     openSaveBookPresetModal, confirmSaveBookPreset, renderSaveBookPresetPreview,
     setThemePreference, cycleThemePreference, toggleTheme
@@ -21780,6 +21781,7 @@ window.reprintArchivedCanadaPostLabel = reprintArchivedCanadaPostLabel;
 window.openZonosPrepayAppHandler = openZonosPrepayAppHandler;
 window.calculateCanadaPostRatesHandler = calculateCanadaPostRatesHandler;
 window.testCanadaPostConnectionHandler = testCanadaPostConnectionHandler;
+window.diagnoseCanadaPostHandler = diagnoseCanadaPostHandler;
 window.renderCanadaPostRatesCard = renderCanadaPostRatesCard;
 window.buyCanadaPostLabelHandler = buyCanadaPostLabelHandler;
 window.openCanadaPostPurchasedLabel = openCanadaPostPurchasedLabel;

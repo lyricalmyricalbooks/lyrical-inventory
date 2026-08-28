@@ -824,3 +824,130 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
     }
   });
 });
+
+describe('Canada Post credential inspection', () => {
+  it('strips hidden characters that survive trim and break authentication', async () => {
+    const { sanitizeCanadaPostCredential } = await import('../src/lib/canadapost.js');
+    // A zero-width space pasted into the middle of a key is invisible on
+    // screen but makes Canada Post answer E002.
+    const dirty = '1ed63baea​3162824ee820aa20130a893 ';
+    const result = sanitizeCanadaPostCredential(dirty);
+    expect(result.value).toBe('1ed63baea3162824ee820aa20130a893');
+    expect(result.issues).toContain('invisible');
+    expect(result.issues).toContain('padded');
+  });
+
+  it('leaves a clean credential completely untouched', async () => {
+    const { sanitizeCanadaPostCredential } = await import('../src/lib/canadapost.js');
+    const result = sanitizeCanadaPostCredential('1ed63baea3162824ee820aa20130a893');
+    expect(result.value).toBe('1ed63baea3162824ee820aa20130a893');
+    expect(result.issues).toEqual([]);
+    expect(result.changed).toBe(false);
+  });
+
+  it('catches a key and password pasted together as one value', async () => {
+    const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    const { findings } = inspectCanadaPostCredentials({ apiKey: '6e93d5:0bfa9f', apiSecret: 'x' });
+    expect(findings.join(' ')).toMatch(/colon/i);
+  });
+
+  it('passes a well-formed key and password with nothing to report', async () => {
+    const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    const result = inspectCanadaPostCredentials({
+      apiKey: '1ed63baea3162824ee820aa20130a893',
+      apiSecret: 'b2c4d6e8f0a1b3c5d7e9f1',
+      customerNumber: '0001298882'
+    });
+    expect(result.ok).toBe(true);
+    expect(result.customerNumber).toBe('0001298882');
+  });
+});
+
+describe('Canada Post connection diagnosis', () => {
+  const creds = { apiKey: 'devkey1234567890', apiSecret: 'devsecret0987654321' };
+  const authError = () => { throw new Error('Canada Post [E002]: AAA Authentication Failure'); };
+
+  it('identifies a development key being used against the live gateway', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const result = await diagnoseCanadaPostConnection({
+      ...creds,
+      customerNumber: '0001298882',
+      isTest: false,
+      probe: async ({ sandbox }) => {
+        if (!sandbox) authError();
+        return [{ serviceCode: 'DOM.EP' }, { serviceCode: 'DOM.RP' }];
+      }
+    });
+    expect(result.verdict).toBe('wrong-settings');
+    expect(result.steps.join(' ')).toMatch(/Sandbox Environment toggle ON/);
+  });
+
+  it('identifies a customer number the key is not entitled to', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const result = await diagnoseCanadaPostConnection({
+      ...creds,
+      customerNumber: '0001298882',
+      isTest: false,
+      probe: async ({ withCustomer }) => {
+        if (withCustomer) authError();
+        return [{ serviceCode: 'DOM.EP' }];
+      }
+    });
+    expect(result.verdict).toBe('wrong-settings');
+    expect(result.steps.join(' ')).toMatch(/Clear the customer number \(0001298882\)/);
+  });
+
+  it('says plainly when the key itself is refused everywhere', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const result = await diagnoseCanadaPostConnection({
+      ...creds,
+      customerNumber: '0001298882',
+      isTest: false,
+      probe: async () => authError()
+    });
+    expect(result.verdict).toBe('bad-credentials');
+    expect(result.attempts).toHaveLength(4);
+    expect(result.steps.join(' ')).toMatch(/Developer Program/);
+  });
+
+  it('reports success without asking the owner to change anything', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const result = await diagnoseCanadaPostConnection({
+      ...creds,
+      customerNumber: '0001298882',
+      isTest: false,
+      probe: async () => [{ serviceCode: 'DOM.EP' }, { serviceCode: 'DOM.XP' }]
+    });
+    expect(result.ok).toBe(true);
+    expect(result.verdict).toBe('working');
+    expect(result.steps).toEqual([]);
+    expect(result.attempts).toHaveLength(1);
+  });
+
+  it('does not blame the credentials for a non-authentication failure', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const result = await diagnoseCanadaPostConnection({
+      ...creds,
+      isTest: false,
+      probe: async () => { throw new Error('Canada Post [9999]: Postal code is invalid'); }
+    });
+    expect(result.verdict).toBe('other-failure');
+    expect(result.steps.join(' ')).toMatch(/Postal code is invalid/);
+  });
+
+  it('sanitizes the credentials before probing with them', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const seen = [];
+    await diagnoseCanadaPostConnection({
+      apiKey: ' key​with­junk ',
+      apiSecret: ' secret﻿value ',
+      isTest: false,
+      probe: async () => { seen.push('called'); return [{ serviceCode: 'DOM.EP' }]; }
+    });
+    const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    const insp = inspectCanadaPostCredentials({ apiKey: ' key​with­junk ', apiSecret: ' secret﻿value ' });
+    expect(insp.apiKey.value).toBe('keywithjunk');
+    expect(insp.apiSecret.value).toBe('secretvalue');
+    expect(seen).toHaveLength(1);
+  });
+});

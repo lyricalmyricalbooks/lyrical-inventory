@@ -747,8 +747,8 @@ export async function executeCanadaPostProxy({
   isTest = false,
   allowSimulation = null
 }) {
-  const key = (apiKey || DEFAULT_CP_API_KEY).trim();
-  const secret = (apiSecret || DEFAULT_CP_API_SECRET).trim();
+  const key = sanitizeCanadaPostCredential(apiKey || DEFAULT_CP_API_KEY).value;
+  const secret = sanitizeCanadaPostCredential(apiSecret || DEFAULT_CP_API_SECRET).value;
   const isShipment = targetEndpoint.indexOf('ncshipment') !== -1;
   const localProxyUrl = isShipment ? '/api/canadapost/shipment' : '/api/canadapost/rates';
 
@@ -938,6 +938,222 @@ export async function getCanadaPostRates({
 }
 
 /**
+ * Characters that survive .trim() but corrupt a credential.
+ *
+ * Canada Post keys and passwords are plain ASCII. Copying one out of a PDF,
+ * an email or the Developer Program portal can carry along a zero-width
+ * space, a soft hyphen or a directional mark — invisible on screen, and
+ * sitting inside the string rather than at its edges, so trimming does not
+ * touch them. The gateway then sees a password that is not the one shown on
+ * screen and answers E002, which reads exactly like a wrong password.
+ */
+const CP_INVISIBLE_CHARS = /[\u00AD\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g;
+const CP_CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
+
+/**
+ * Clean one credential and report what had to be removed, so a paste that
+ * looked fine but was not can be named instead of guessed at.
+ */
+export function sanitizeCanadaPostCredential(value) {
+  const raw = String(value == null ? '' : value);
+  const stripped = raw.replace(CP_INVISIBLE_CHARS, '').replace(CP_CONTROL_CHARS, '');
+  const clean = stripped.trim();
+
+  const issues = [];
+  if (stripped !== raw) issues.push('invisible');
+  if (raw !== raw.trim()) issues.push('padded');
+  if (/\s/.test(clean)) issues.push('internal-space');
+  if (/[^\x20-\x7E]/.test(clean)) issues.push('non-ascii');
+
+  return { value: clean, raw, issues, changed: clean !== raw };
+}
+
+/**
+ * Look at a key and password before spending a network round trip on them.
+ * Everything here is a shape problem the publisher can see and fix; none of
+ * it can tell whether the account itself is valid.
+ */
+export function inspectCanadaPostCredentials({ apiKey = '', apiSecret = '', customerNumber = '' } = {}) {
+  const key = sanitizeCanadaPostCredential(apiKey);
+  const secret = sanitizeCanadaPostCredential(apiSecret);
+  const findings = [];
+
+  const describe = (label, result) => {
+    if (result.issues.includes('invisible')) {
+      findings.push(`Your ${label} contains hidden characters that do not show on screen — usually picked up when copying from a PDF or a web page. Retype it by hand, or copy it through a plain text editor.`);
+    }
+    if (result.issues.includes('internal-space')) {
+      findings.push(`Your ${label} has a space inside it. Canada Post keys never contain spaces.`);
+    }
+    if (result.issues.includes('non-ascii')) {
+      findings.push(`Your ${label} contains an unusual character, such as a curly quote or an accented letter. Canada Post keys are plain letters and numbers only.`);
+    }
+  };
+  describe('API key', key);
+  describe('API password', secret);
+
+  if (key.value.includes(':')) {
+    findings.push('Your API key contains a colon. Canada Post shows the pair as "key:password" — paste only the part before the colon here, and the part after it in the password box.');
+  }
+  if (key.value && secret.value && key.value === secret.value) {
+    findings.push('The API key and the API password are identical. They are two different values from the Canada Post Developer Program.');
+  }
+
+  const custDigits = normalizeCustomerNumber(customerNumber);
+  if (customerNumber && !isValidCustomerNumber(custDigits)) {
+    findings.push(`The customer number should be 7 to 10 digits; this one is ${custDigits.length}.`);
+  }
+
+  return { apiKey: key, apiSecret: secret, customerNumber: custDigits, findings, ok: findings.length === 0 };
+}
+
+/** Canada Post's own wording for "these credentials were refused". */
+export function isCanadaPostAuthFailure(message) {
+  return /E002|AAA Authentication|Authentication Failure|HTTP 401|rejected these credentials/i.test(String(message || ''));
+}
+
+/**
+ * Work out WHY Canada Post is refusing, rather than restating that it is.
+ *
+ * E002 covers a handful of distinct causes that look identical on the card,
+ * and they are separable by experiment: a development key refused by the live
+ * gateway is accepted by the sandbox one, and a customer number the key is not
+ * entitled to fails only when that number is sent. So try the combinations,
+ * cheapest first, and stop at the first that works.
+ *
+ * `probe` is injected so this is testable without a network.
+ */
+export async function diagnoseCanadaPostConnection({
+  apiKey = '',
+  apiSecret = '',
+  customerNumber = '',
+  contractId = '',
+  isTest = false,
+  probe = null
+} = {}) {
+  const inspection = inspectCanadaPostCredentials({ apiKey, apiSecret, customerNumber });
+  const key = inspection.apiKey.value;
+  const secret = inspection.apiSecret.value;
+  const cust = inspection.customerNumber;
+
+  if (!key || !secret) {
+    return {
+      ok: false,
+      verdict: 'missing-credentials',
+      headline: 'Add both an API key and an API password before testing.',
+      steps: [],
+      attempts: [],
+      inspection
+    };
+  }
+
+  const run = probe || (async ({ sandbox, withCustomer }) => getCanadaPostRates({
+    originPostalCode: 'M4B1B3',
+    destCountry: 'CA',
+    destPostalOrZip: 'V6B2W9',
+    weightKg: 0.5,
+    apiKey: key,
+    apiSecret: secret,
+    customerNumber: withCustomer ? cust : '',
+    contractId: withCustomer ? contractId : '',
+    isTest: sandbox
+  }));
+
+  // Cheapest first: the configured environment, then the other one. The
+  // customer number is only dropped after a plain attempt has already failed,
+  // so a working configuration is never reported as a broken one.
+  const plan = [
+    { sandbox: !!isTest, withCustomer: !!cust },
+    { sandbox: !isTest, withCustomer: !!cust }
+  ];
+  if (cust) {
+    plan.push({ sandbox: !!isTest, withCustomer: false });
+    plan.push({ sandbox: !isTest, withCustomer: false });
+  }
+
+  const attempts = [];
+  let success = null;
+  for (const step of plan) {
+    if (attempts.some(a => a.sandbox === step.sandbox && a.withCustomer === step.withCustomer)) continue;
+    try {
+      const quotes = await run(step);
+      const attempt = { ...step, ok: true, error: '', quoteCount: Array.isArray(quotes) ? quotes.length : 0 };
+      attempts.push(attempt);
+      success = attempt;
+      break;
+    } catch (err) {
+      attempts.push({ ...step, ok: false, error: String((err && err.message) || err), quoteCount: 0 });
+    }
+  }
+
+  return { ...classifyCanadaPostDiagnosis({ attempts, success, isTest, inspection }), attempts, inspection };
+}
+
+/** Turn the probe results into a verdict and a short list of next steps. */
+export function classifyCanadaPostDiagnosis({ attempts = [], success = null, isTest = false, inspection = null } = {}) {
+  const envName = (sandbox) => (sandbox ? 'the sandbox gateway' : 'the live gateway');
+
+  if (success) {
+    const matchesConfig = success.sandbox === !!isTest && (success.withCustomer || !inspection?.customerNumber);
+    if (matchesConfig) {
+      return {
+        ok: true,
+        verdict: 'working',
+        headline: `Connected. Canada Post returned ${success.quoteCount} service${success.quoteCount === 1 ? '' : 's'}.`,
+        steps: []
+      };
+    }
+    const steps = [];
+    if (success.sandbox !== !!isTest) {
+      steps.push(success.sandbox
+        ? 'Turn the Sandbox Environment toggle ON. This is a development key, and development keys only work against the sandbox gateway.'
+        : 'Turn the Sandbox Environment toggle OFF. This is a production key, and production keys only work against the live gateway.');
+    }
+    if (!success.withCustomer && inspection?.customerNumber) {
+      steps.push(`Clear the customer number (${inspection.customerNumber}). Canada Post accepts this key, but not with that customer number attached — it belongs to a different account, or this key has no contract pricing on it. Rates still work without it.`);
+    }
+    return {
+      ok: false,
+      verdict: 'wrong-settings',
+      headline: `Your key and password are good. They work against ${envName(success.sandbox)}${success.withCustomer ? '' : ', without the customer number'} — not with the settings saved right now.`,
+      steps
+    };
+  }
+
+  const allAuth = attempts.length > 0 && attempts.every(a => isCanadaPostAuthFailure(a.error));
+  if (allAuth) {
+    return {
+      ok: false,
+      verdict: 'bad-credentials',
+      headline: 'Canada Post refused this key and password on both gateways, with and without the customer number.',
+      steps: [
+        'The key and password themselves are the problem, so no combination of settings in this app will fix it.',
+        'Sign in to the Canada Post Developer Program and open your API keys page, then copy the key and the password again from there.',
+        'Make sure you are copying the generated API password, not the password you sign in to canadapost.ca with.',
+        'A brand new production key can take up to a business day to activate, while the development key works immediately — if the account is new, try the development key with Sandbox Environment turned on.'
+      ]
+    };
+  }
+
+  const nonAuth = attempts.find(a => !isCanadaPostAuthFailure(a.error));
+  if (nonAuth) {
+    return {
+      ok: false,
+      verdict: 'other-failure',
+      headline: 'The key and password were not the problem — the request failed for another reason.',
+      steps: [nonAuth.error || 'Canada Post returned an unexpected response.']
+    };
+  }
+
+  return {
+    ok: false,
+    verdict: 'unknown',
+    headline: 'Canada Post could not be reached, so the key could not be checked.',
+    steps: ['Check your internet connection, and that your Google Sheet is connected in Settings so requests can be routed.']
+  };
+}
+
+/**
  * Lightweight ping test function to verify Canada Post credentials
  */
 export async function testCanadaPostConnection({
@@ -1022,8 +1238,8 @@ export async function verifyCanadaPostTrackingPin({
   const cleanPin = String(pin || '').replace(/[^0-9A-Za-z]/g, '');
   if (!cleanPin) throw new Error('A tracking PIN is required.');
 
-  const key = (apiKey || DEFAULT_CP_API_KEY).trim();
-  const secret = (apiSecret || DEFAULT_CP_API_SECRET).trim();
+  const key = sanitizeCanadaPostCredential(apiKey || DEFAULT_CP_API_KEY).value;
+  const secret = sanitizeCanadaPostCredential(apiSecret || DEFAULT_CP_API_SECRET).value;
   if (!hasCanadaPostCredentials({ apiKey: key, apiSecret: secret })) {
     throw new Error('Add your Canada Post API key and secret in Tax Centre → Canada Post Direct API before checking a tracking PIN.');
   }
@@ -1437,8 +1653,8 @@ export async function fetchCanadaPostLabelBlob({
   apiSecret = DEFAULT_CP_API_SECRET,
   shipmentContext = null
 }) {
-  const key = (apiKey || DEFAULT_CP_API_KEY).trim();
-  const secret = (apiSecret || DEFAULT_CP_API_SECRET).trim();
+  const key = sanitizeCanadaPostCredential(apiKey || DEFAULT_CP_API_KEY).value;
+  const secret = sanitizeCanadaPostCredential(apiSecret || DEFAULT_CP_API_SECRET).value;
   const context = shipmentContext || getLastPurchasedShipmentContext();
 
   // If local URI or mock URL, generate high-res vector label blob directly
