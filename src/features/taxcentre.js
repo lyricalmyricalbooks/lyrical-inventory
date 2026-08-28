@@ -59,6 +59,7 @@ import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
 import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl, diagnoseCanadaPostConnection, inspectCanadaPostCredentials } from '../lib/canadapost.js';
+import { testCanadaPostPortalCredentials } from '../lib/canadapost-portal.js';
 import {
   RECURRING_FREQUENCIES,
   amountOnDate,
@@ -3587,6 +3588,39 @@ async function diagnoseCanadaPostHandler() {
 
   if (btn) { btn.disabled = true; btn.textContent = 'Diagnosing...'; }
   try {
+    // A Developer Portal key cannot authenticate against the legacy gateway,
+    // so probing it there four times only reprints E002. Ask the system the
+    // key actually belongs to whether the credentials are valid — that answer
+    // is the one worth having, and it separates "wrong system" from
+    // "wrong system AND bad key".
+    if (inspection.keyKind === 'portal-client-id') {
+      const portal = await testCanadaPostPortalCredentials({
+        clientId: apiKey,
+        clientSecret: apiSecret
+      }).catch(err => ({ ok: false, headline: 'Could not check these credentials.', steps: [String(err.message || err)], attempts: [] }));
+
+      if (statusEl) {
+        const tone = portal.ok
+          ? { bg: 'rgba(245,158,11,0.08)', border: 'var(--amber)', label: 'var(--amber)' }
+          : { bg: 'rgba(239,68,68,0.08)', border: 'var(--rose)', label: 'var(--red)' };
+        const body = portal.ok
+          ? `<div style="margin-top:6px;">Your Key and Secret are good — Canada Post signed you in. They belong to their newer
+             <strong>Developer Portal</strong>, though, and this app currently talks to their older
+             <strong>Web Services</strong> system, so shipping cannot use them yet.</div>
+             <div style="margin-top:6px;">Nothing is wrong with your credentials or your settings. The app needs to be
+             updated to use the newer system, or Canada Post needs to issue you Web Services keys.</div>`
+          : `<ul style="margin:6px 0 0;padding-left:18px;line-height:1.55;">${(portal.steps || []).map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>`;
+        statusEl.innerHTML = `
+          <div style="padding:10px 12px;background:${tone.bg};border-left:3px solid ${tone.border};border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.55;">
+            <strong style="color:${tone.label};">${escapeHtml(portal.headline)}</strong>
+            ${body}
+          </div>
+        `;
+      }
+      showToast(portal.ok ? '✓ Portal credentials valid — app needs the newer API' : `⚠ ${portal.headline}`, portal.ok ? 'ok' : 'warn');
+      return;
+    }
+
     const result = await diagnoseCanadaPostConnection({
       apiKey,
       apiSecret,

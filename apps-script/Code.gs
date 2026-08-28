@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v31)
+/* Lyricalmyrical Inventory — Unified Backend (v32)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -121,6 +121,16 @@
  *      own status code always reaches the client. Responses now also carry
  *      authMode and oauthNote for diagnostics. Bump flags v30-and-older as
  *      outdated so the publisher redeploys.
+ *  30. v32: 'cptoken' action exchanges Canada Post Developer Portal app
+ *      credentials (a Key and Secret, each a 32-character hex string) for an
+ *      OAuth 2.0 Bearer token via grant_type=client_credentials. Canada Post's
+ *      self-serve flow now issues these instead of the older Developer Program
+ *      "username:password" API keys, and the browser cannot perform the
+ *      exchange itself — the endpoint is cross-origin with no CORS headers,
+ *      and the secret must not travel in a URL. The token response is returned
+ *      verbatim, a rejection included, so the client can explain which of the
+ *      causes applies rather than guess. Bump flags v31-and-older as outdated
+ *      so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -169,8 +179,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v31',
-    scriptVersion: 'v31',
+    service: 'lyrical-sheets-webhook-v32',
+    scriptVersion: 'v32',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -741,6 +751,73 @@ function doPost(e) {
         });
       } catch (err) {
         return jsonOut_({ error: 'Canada Post proxy failed: ' + String(err) });
+      }
+    }
+
+    // ── Canada Post Developer Portal OAuth token exchange ──
+    // The browser cannot call the token endpoint itself: it is cross-origin,
+    // Canada Post sends no CORS headers, and the client secret must never
+    // travel in a URL. This returns the token response verbatim (including a
+    // rejection) so the client can explain it rather than guess.
+    if (action === 'cptoken') {
+      const d = payload.payload || {};
+      const clientId = String(d.clientId || d.apiKey || '').trim();
+      const clientSecret = String(d.clientSecret || d.apiSecret || '').trim();
+      const scope = String(d.scope == null ? 'merchant' : d.scope).trim();
+
+      if (!clientId || !clientSecret) {
+        return jsonOut_({ error: 'Canada Post Developer Portal Key and Secret are both required' });
+      }
+
+      try {
+        const tokenUrl = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token';
+        let body = 'grant_type=client_credentials' +
+          '&client_id=' + encodeURIComponent(clientId) +
+          '&client_secret=' + encodeURIComponent(clientSecret);
+        if (scope) body += '&scope=' + encodeURIComponent(scope);
+
+        const resp = UrlFetchApp.fetch(tokenUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+            'Authorization': 'Basic ' + Utilities.base64Encode(clientId + ':' + clientSecret)
+          },
+          payload: body,
+          muteHttpExceptions: true
+        });
+
+        const code = resp.getResponseCode();
+        const text = resp.getContentText() || '';
+        let parsed = null;
+        try {
+          parsed = JSON.parse(text);
+        } catch (e) {
+          parsed = null;
+        }
+
+        if (parsed && parsed.access_token) {
+          return jsonOut_({
+            ok: true,
+            status: code,
+            access_token: parsed.access_token,
+            token_type: parsed.token_type || 'Bearer',
+            expires_in: parsed.expires_in || 0,
+            scope: parsed.scope || scope
+          });
+        }
+
+        return jsonOut_({
+          ok: false,
+          status: code,
+          error_code: (parsed && (parsed.error || parsed.errorCode)) || '',
+          error_description: (parsed && (parsed.error_description || parsed.errorDescription)) || '',
+          // Only a short excerpt: the body can be a full HTML error page, and
+          // the whole thing is neither useful nor safe to echo.
+          raw: parsed ? '' : String(text).slice(0, 300)
+        });
+      } catch (err) {
+        return jsonOut_({ error: 'Canada Post token request failed: ' + String(err) });
       }
     }
 
