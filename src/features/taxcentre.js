@@ -58,7 +58,7 @@ import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
-import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl } from '../lib/canadapost.js';
+import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl, diagnoseCanadaPostConnection, inspectCanadaPostCredentials } from '../lib/canadapost.js';
 import {
   RECURRING_FREQUENCIES,
   amountOnDate,
@@ -3541,6 +3541,106 @@ async function testZonosConnectionHandler() {
   }
 }
 
+/**
+ * Canada Post answers every credential problem with the same E002 code, so a
+ * failed test cannot say which of its several causes applies. This tries the
+ * key against both gateways, with and without the customer number, and reports
+ * which combination Canada Post actually accepts — turning "authentication
+ * failure" into a specific instruction.
+ */
+async function diagnoseCanadaPostHandler() {
+  const keyInput = $('tc-cp-key');
+  const secretInput = $('tc-cp-secret');
+  const customerInput = $('tc-cp-customer-number');
+  const contractInput = $('tc-cp-contract-id');
+  const testModeInput = $('tc-cp-test-mode');
+  const statusEl = $('tc-cp-status');
+  const btn = $('tc-cp-diagnose-btn');
+
+  const apiKey = keyInput?.value || TAX_CENTER.settings?.cpApiKey || '';
+  const apiSecret = secretInput?.value || TAX_CENTER.settings?.cpApiSecret || '';
+  const customerNumber = customerInput?.value || TAX_CENTER.settings?.cpCustomerNumber || '';
+  const contractId = contractInput?.value || TAX_CENTER.settings?.cpContractId || '';
+  const isTest = testModeInput ? testModeInput.checked : !!TAX_CENTER.settings?.cpTestMode;
+
+  if (!apiKey.trim() || !apiSecret.trim()) {
+    showToast('⚠ Enter your Canada Post API key and password first', 'warn');
+    return;
+  }
+
+  // Shape problems are free to detect and are the likeliest cause of an E002
+  // on a key that looks correct, so surface them before any network call.
+  const inspection = inspectCanadaPostCredentials({ apiKey, apiSecret, customerNumber });
+  if (inspection.findings.length && statusEl) {
+    statusEl.innerHTML = `
+      <div style="padding:10px 12px;background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.55;">
+        <strong>Found a problem with what is typed in:</strong>
+        <ul style="margin:6px 0 0;padding-left:18px;">
+          ${inspection.findings.map(f => `<li>${escapeHtml(f)}</li>`).join('')}
+        </ul>
+        <div style="margin-top:6px;color:var(--text3);">Checking with Canada Post anyway…</div>
+      </div>
+    `;
+  } else if (statusEl) {
+    statusEl.innerHTML = '<span style="color:var(--text2);">Trying your key against both Canada Post gateways… this takes a few seconds.</span>';
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Diagnosing...'; }
+  try {
+    const result = await diagnoseCanadaPostConnection({
+      apiKey,
+      apiSecret,
+      customerNumber,
+      contractId,
+      isTest
+    });
+
+    const tone = result.ok
+      ? { bg: 'rgba(16,185,129,0.08)', border: 'var(--green)', label: 'var(--green)' }
+      : { bg: 'rgba(239,68,68,0.08)', border: 'var(--rose)', label: 'var(--red)' };
+
+    const rows = (result.attempts || []).map(a => `
+      <tr>
+        <td style="padding:3px 10px 3px 0;color:var(--text3);">${a.sandbox ? 'Sandbox' : 'Live'}</td>
+        <td style="padding:3px 10px 3px 0;color:var(--text3);">${a.withCustomer ? 'with customer #' : 'no customer #'}</td>
+        <td style="padding:3px 0;color:${a.ok ? 'var(--green)' : 'var(--text3)'};">
+          ${a.ok ? `accepted — ${a.quoteCount} service${a.quoteCount === 1 ? '' : 's'}` : escapeHtml(a.error.slice(0, 90))}
+        </td>
+      </tr>
+    `).join('');
+
+    const steps = (result.steps || []).length
+      ? `<ol style="margin:8px 0 0;padding-left:18px;line-height:1.55;">${result.steps.map(t => `<li style="margin-bottom:4px;">${escapeHtml(t)}</li>`).join('')}</ol>`
+      : '';
+
+    const findings = inspection.findings.length
+      ? `<ul style="margin:8px 0 0;padding-left:18px;line-height:1.55;">${inspection.findings.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>`
+      : '';
+
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="padding:10px 12px;background:${tone.bg};border-left:3px solid ${tone.border};border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.55;">
+          <strong style="color:${tone.label};">${escapeHtml(result.headline)}</strong>
+          ${findings}
+          ${steps}
+          <details style="margin-top:8px;">
+            <summary style="cursor:pointer;color:var(--text3);font-size:10.5px;">What was tried</summary>
+            <table class="tnum" style="margin-top:5px;font-size:10.5px;border-collapse:collapse;">${rows}</table>
+          </details>
+        </div>
+      `;
+    }
+    showToast(result.ok ? '✓ Canada Post connection works' : '⚠ ' + result.headline, result.ok ? 'ok' : 'warn');
+  } catch (err) {
+    if (statusEl) {
+      statusEl.innerHTML = `<span style="color:var(--red);font-weight:600;">⚠ Diagnosis failed: ${escapeHtml(err.message)}</span>`;
+    }
+    showToast(`⚠ Diagnosis failed: ${err.message}`, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Diagnose'; }
+  }
+}
+
 async function testCanadaPostConnectionHandler() {
   const keyInput = $('tc-cp-key');
   const secretInput = $('tc-cp-secret');
@@ -4218,6 +4318,7 @@ export {
   saveTaxCenterSettings,
   testZonosConnectionHandler,
   testCanadaPostConnectionHandler,
+  diagnoseCanadaPostHandler,
   setTcGalleryPage,
   setTcLedgerPage,
   snoozePendingExpense,
