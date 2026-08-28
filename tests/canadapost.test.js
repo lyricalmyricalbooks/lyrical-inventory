@@ -117,7 +117,35 @@ describe('Canada Post Price Quotes Parser', () => {
   </message>
 </messages>`;
 
-    expect(() => parseCanadaPostPriceQuotes(errorXml)).toThrow('Canada Post [E002]: AAA Authentication Failure');
+    // The code is kept, but "AAA Authentication Failure" is Canada Post's
+    // internal wording and means nothing to a shop owner. Their published code
+    // table defines E002 as an invalid API key, so that is what gets said.
+    expect(() => parseCanadaPostPriceQuotes(errorXml)).toThrow(/E002/);
+    expect(() => parseCanadaPostPriceQuotes(errorXml)).toThrow(/does not recognise this API key/i);
+
+    let thrown;
+    try { parseCanadaPostPriceQuotes(errorXml); } catch (e) { thrown = e; }
+    expect(thrown.canadaPostCode).toBe('E002');
+    expect(thrown.canadaPostCause).toBe('key-invalid');
+  });
+
+  it('distinguishes a wrong-environment key from an invalid one', () => {
+    // AA002, not E002, is what Canada Post returns when a development key is
+    // used against production — the case the Sandbox toggle actually fixes.
+    const aa002 = `<messages xmlns="http://www.canadapost.ca/ws/messages"><message>
+      <code>AA002</code><description>AAA Authentication Failure</description></message></messages>`;
+    expect(() => parseCanadaPostPriceQuotes(aa002)).toThrow(/Sandbox Environment toggle/i);
+
+    const aa003 = `<messages xmlns="http://www.canadapost.ca/ws/messages"><message>
+      <code>AA003</code><description>AAA Authentication Failure</description></message></messages>`;
+    expect(() => parseCanadaPostPriceQuotes(aa003)).toThrow(/customer number/i);
+  });
+
+  it('explains that Canada Post has paused U.S. label creation', () => {
+    const blocked = `<messages xmlns="http://www.canadapost.ca/ws/messages"><message>
+      <code>8721</code><description>Due to U.S. customs changes...</description></message></messages>`;
+    expect(() => parseCanadaPostPriceQuotes(blocked)).toThrow(/not currently issuing shipping labels for United States/i);
+    expect(() => parseCanadaPostPriceQuotes(blocked)).toThrow(/every seller/i);
   });
 });
 
@@ -1247,5 +1275,89 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
     expect(describeAppsScriptProxyFailure({ kind: 'empty', body: '' })).toMatch(/empty response/i);
     expect(describeAppsScriptProxyFailure({ kind: 'not-json', body: '<!doctype html><html>Moved</html>' }))
       .toMatch(/\/exec|out of date/i);
+  });
+});
+
+describe('Canada Post rate quotes follow the documented request rules', () => {
+  it('asks for counter rates when there is no customer number', async () => {
+    const { buildRateScenarioXml } = await import('../src/lib/canadapost.js');
+    // Rule 9113/9114: omitting quote-type defaults to commercial, which
+    // REQUIRES a customer number. A quote without one must say "counter".
+    const xml = buildRateScenarioXml({ destCountry: 'CA', destPostalOrZip: 'V6B2W9' });
+    expect(xml).toContain('<quote-type>counter</quote-type>');
+    expect(xml).not.toContain('<customer-number>');
+    expect(xml).not.toContain('<contract-id>');
+  });
+
+  it('asks for commercial rates when a customer number is given', async () => {
+    const { buildRateScenarioXml } = await import('../src/lib/canadapost.js');
+    const xml = buildRateScenarioXml({ customerNumber: '0001298882', contractId: '4299100' });
+    expect(xml).toContain('<quote-type>commercial</quote-type>');
+    expect(xml).toContain('<customer-number>0001298882</customer-number>');
+    expect(xml).toContain('<contract-id>4299100</contract-id>');
+  });
+
+  it('never sends a contract number without the customer number it belongs to', async () => {
+    const { buildRateScenarioXml } = await import('../src/lib/canadapost.js');
+    // Rule 2561: the pair must be valid together, so a lone contract id is
+    // dropped rather than sent to be rejected.
+    const xml = buildRateScenarioXml({ customerNumber: '', contractId: '4299100' });
+    expect(xml).not.toContain('<contract-id>');
+    expect(xml).toContain('<quote-type>counter</quote-type>');
+  });
+});
+
+describe('Canada Post "try again shortly" responses', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete global.fetch;
+  });
+
+  const retryXml = `<messages xmlns="http://www.canadapost.ca/ws/messages"><message>
+    <code>7010</code><description>We are unable to provide you with a price at this time.</description>
+  </message></messages>`;
+  const priceXml = `<price-quotes><price-quote><service-code>DOM.EP</service-code>
+    <price-details><base>12.00</base><due>13.56</due></price-details></price-quote></price-quotes>`;
+
+  it('retries a 7010 instead of reporting it as a failure', async () => {
+    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    let call = 0;
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      call += 1;
+      return { ok: true, status: 200, text: async () => (call === 1 ? retryXml : priceXml) };
+    });
+
+    const quotes = await getCanadaPostRates({ apiKey: 'k', apiSecret: 's', isTest: false });
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0].serviceCode).toBe('DOM.EP');
+    expect(call).toBeGreaterThan(1);
+  });
+
+  it('gives up with the real reason after repeated retries', async () => {
+    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      return { ok: true, status: 200, text: async () => retryXml };
+    });
+
+    await expect(getCanadaPostRates({ apiKey: 'k', apiSecret: 's', isTest: false }))
+      .rejects.toThrow(/could not price this parcel/i);
+  });
+
+  it('does not retry an error that will never succeed', async () => {
+    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    const authXml = `<messages xmlns="http://www.canadapost.ca/ws/messages"><message>
+      <code>E002</code><description>AAA Authentication Failure</description></message></messages>`;
+    let call = 0;
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      call += 1;
+      return { ok: true, status: 200, text: async () => authXml };
+    });
+
+    await expect(getCanadaPostRates({ apiKey: 'k', apiSecret: 's', isTest: false }))
+      .rejects.toThrow(/does not recognise this API key/i);
+    expect(call).toBe(1);
   });
 });

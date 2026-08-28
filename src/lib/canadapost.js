@@ -117,13 +117,19 @@ export function buildRateScenarioXml({
     destXml = `<international><country-code>${dest}</country-code></international>`;
   }
 
+  // Canada Post rejects a mismatch between quote-type and the customer number
+  // (codes 9113 and 9114): a commercial quote REQUIRES a customer number, and
+  // a counter quote requires that there be none. Omitting quote-type defaults
+  // to commercial, so a request with no customer number used to be refused.
   const customerXml = customerNumber ? `<customer-number>${customerNumber.trim()}</customer-number>` : '';
-  const contractXml = contractId ? `<contract-id>${contractId.trim()}</contract-id>` : '';
+  const contractXml = customerNumber && contractId ? `<contract-id>${contractId.trim()}</contract-id>` : '';
+  const quoteTypeXml = `<quote-type>${customerNumber ? 'commercial' : 'counter'}</quote-type>`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <mailing-scenario xmlns="http://www.canadapost.ca/ws/ship/rate-v4">
   ${customerXml}
   ${contractXml}
+  ${quoteTypeXml}
   <parcel-characteristics>
     <weight>${weight}</weight>
     <dimensions>
@@ -140,6 +146,134 @@ export function buildRateScenarioXml({
 }
 
 /**
+ * Canada Post's own message codes, from its published code table.
+ *
+ * These matter because the codes are far more specific than the app was
+ * treating them. In particular E002 and AA002 are NOT interchangeable:
+ *
+ *   E002  the API key itself is invalid
+ *   AA002 the key is valid but is being used against the wrong environment
+ *         (a development key against production, or the reverse)
+ *   AA003 the key is valid but does not match the customer number sent
+ *
+ * So the three causes the connection card used to guess between by trial are
+ * each announced directly. Reading the code is both faster and correct, where
+ * probing four combinations was neither.
+ */
+export const CANADAPOST_MESSAGE_CODES = {
+  E002: {
+    cause: 'key-invalid',
+    message: 'Canada Post does not recognise this API key. Check the key and password are copied exactly, ' +
+      'with no characters missing from either end.'
+  },
+  AA001: {
+    cause: 'account-inactive',
+    message: 'This Canada Post developer account has been deactivated. Sign in to the Developer Program and rejoin it.'
+  },
+  AA002: {
+    cause: 'wrong-environment',
+    message: 'This key is for the other environment. A development key only works with the Sandbox Environment ' +
+      'toggle ON, and a production key only with it OFF — flip the toggle and try again.'
+  },
+  AA003: {
+    cause: 'customer-mismatch',
+    message: 'This API key does not belong to the customer number entered. Either clear the customer number, ' +
+      'or replace it with the one that belongs to this key.'
+  },
+  AA004: {
+    cause: 'customer-mismatch',
+    message: 'This key is not permitted to ship on behalf of that customer number. Check the customer number.'
+  },
+  1182: {
+    cause: 'billing',
+    message: 'Canada Post could not authorize the payment. The credit card on your Canada Post business profile ' +
+      'has expired or been declined — sign in to canadapost.ca and update it.'
+  },
+  1653: {
+    cause: 'entitlement',
+    message: 'This account cannot create commercial or return labels. It needs a parcel agreement with Canada Post in good standing.'
+  },
+  2550: { cause: 'contract', message: 'That contract number is not valid. Check it, or clear the contract field.' },
+  2561: {
+    cause: 'contract',
+    message: 'This customer number and contract number do not go together. Check both, or clear the contract field.'
+  },
+  7010: {
+    cause: 'retry',
+    message: 'Canada Post could not price this parcel just now. This is temporary — trying again usually works.'
+  },
+  7266: { cause: 'address', message: 'That postal code is not in a valid format. Use either the first three characters or all six.' },
+  8721: {
+    cause: 'us-blocked',
+    message: 'Canada Post is not currently issuing shipping labels for United States addresses, because of changes to ' +
+      'U.S. customs rules. This is a pause on their side and affects every seller, not just this account. Use Shippo ' +
+      'for U.S. orders, or Canada Post’s own Snap Ship, until they restore it.'
+  },
+  8722: {
+    cause: 'zonos',
+    message: 'A United States shipment needs a Zonos Declaration ID or Zonos Account Key. Add your Zonos key in Tax Centre.'
+  },
+  8724: { cause: 'zonos', message: 'That Zonos Declaration ID is not valid. Generate a fresh one and try again.' },
+  9111: {
+    cause: 'no-service',
+    message: 'No Canada Post service fits this parcel — usually the weight or the dimensions fall outside every option. ' +
+      'Check the size and weight entered.'
+  },
+  9113: {
+    cause: 'quote-type',
+    message: 'A commercial rate quote needs your customer number. Add it, or ask for counter rates instead.'
+  },
+  9114: {
+    cause: 'quote-type',
+    message: 'Counter rates cannot be combined with a customer or contract number. Clear them, or ask for a commercial quote.'
+  },
+  9152: { cause: 'customer-number', message: 'The customer number must be digits only.' },
+  9173: {
+    cause: 'entitlement',
+    message: 'This is a commercial account with a parcel agreement, so it must use contract shipping rather than ' +
+      'the non-contract service this app is calling.'
+  },
+  9174: {
+    cause: 'billing',
+    message: 'Paying by credit card needs a default card saved on your Canada Post profile. Sign in to canadapost.ca and add one.'
+  }
+};
+
+/** True when Canada Post is asking for the same request again shortly. */
+export function isCanadaPostRetryableCode(code) {
+  const entry = CANADAPOST_MESSAGE_CODES[String(code || '').trim()];
+  return !!entry && entry.cause === 'retry';
+}
+
+/**
+ * Look up what Canada Post means by a code, falling back to the description
+ * it sent when the code is one we have not catalogued.
+ */
+export function explainCanadaPostCode(code, description = '') {
+  const key = String(code || '').trim();
+  const entry = CANADAPOST_MESSAGE_CODES[key];
+  const desc = String(description || '').trim();
+  if (entry) {
+    return { code: key, cause: entry.cause, message: entry.message, raw: desc };
+  }
+  return {
+    code: key,
+    cause: 'unknown',
+    message: desc ? `Canada Post [${key || 'ERROR'}]: ${desc}` : `Canada Post returned error ${key || 'ERROR'}.`,
+    raw: desc
+  };
+}
+
+/** Pull the first <code>/<description> pair out of a Canada Post document. */
+export function extractCanadaPostMessage(xmlText) {
+  const text = String(xmlText || '');
+  const code = (text.match(/<code>([^<]+)<\/code>/) || [])[1] || '';
+  const description = (text.match(/<description>([^<]+)<\/description>/) || [])[1] || '';
+  if (!code && !description) return null;
+  return explainCanadaPostCode(code, description);
+}
+
+/**
  * Parse Canada Post XML price quotes response
  */
 export function parseCanadaPostPriceQuotes(xmlText) {
@@ -147,13 +281,21 @@ export function parseCanadaPostPriceQuotes(xmlText) {
     throw new Error('Empty response from Canada Post Rating API');
   }
 
-  // Check for error messages
+  // Check for error messages. Canada Post's own code table says what each one
+  // means, so say that rather than echoing a code the publisher cannot read.
   if (xmlText.includes('<message>') || xmlText.includes('<code>E')) {
-    const codeMatch = xmlText.match(/<code>([^<]+)<\/code>/);
-    const descMatch = xmlText.match(/<description>([^<]+)<\/description>/);
-    const code = codeMatch ? codeMatch[1] : 'ERROR';
-    const desc = descMatch ? descMatch[1] : 'Unknown Canada Post error';
-    throw new Error(`Canada Post [${code}]: ${desc}`);
+    const explained = extractCanadaPostMessage(xmlText);
+    if (explained) {
+      const err = new Error(
+        explained.cause === 'unknown'
+          ? explained.message
+          : `Canada Post [${explained.code}]: ${explained.message}`
+      );
+      err.canadaPostCode = explained.code;
+      err.canadaPostCause = explained.cause;
+      throw err;
+    }
+    throw new Error('Canada Post [ERROR]: Unknown Canada Post error');
   }
 
   const quotes = [];
@@ -758,7 +900,9 @@ function unwrapProxyEnvelope(json, { endpoint = '', isTest = false } = {}) {
   if (json.error) throw new Error(String(json.error));
 
   const status = Number(json.status || 0);
-  const failed = json.ok === false || (status >= 400);
+  // 202 is Canada Post asking for the request again shortly, not a failure and
+  // not a completed answer; it is handled by the caller's retry loop.
+  const failed = (json.ok === false && status !== 202) || (status >= 400);
   if (failed) {
     throw new Error(describeCanadaPostFailure({ status, body: json.xml || '', endpoint, isTest }));
   }
@@ -874,7 +1018,7 @@ export async function executeCanadaPostProxy({
       if (relay.kind === 'envelope') {
         const json = relay.json;
         unwrapProxyEnvelope(json, { endpoint: targetEndpoint, isTest });
-        if (json.xml) return { ok: true, xml: json.xml };
+        if (json.xml) return { ok: true, xml: json.xml, status: Number(json.status || 0) };
       }
       // The sheet answered, but not with a proxy envelope. Falling through to
       // a direct browser fetch here can only produce a CORS error, which reads
@@ -914,7 +1058,7 @@ export async function executeCanadaPostProxy({
         isTest
       }));
     }
-    return { ok: true, xml: text };
+    return { ok: true, xml: text, status: resp.status };
   } catch (directErr) {
     // A status Canada Post actually returned is a real answer, not an
     // unreachable gateway: report it instead of simulating over it.
@@ -994,18 +1138,46 @@ export async function getCanadaPostRates({
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
   const targetEndpoint = `${baseUrl}/rs/ship/price`;
 
-  const result = await executeCanadaPostProxy({
-    targetEndpoint,
-    xmlPayload,
-    apiKey,
-    apiSecret,
-    customerNumber,
-    isTest
-  });
+  // Canada Post answers "unable to price this right now" with HTTP 202 and
+  // message 7010, and its documentation says to sleep about a second and send
+  // the same request again. 202 is a 2xx, so this used to be taken as success
+  // and then fail to parse — the publisher saw an empty-response error for
+  // something that would have worked on a second attempt.
+  const maxAttempts = 3;
+  let lastRetryable = null;
 
-  if (result.rates && Array.isArray(result.rates)) return result.rates;
-  if (result.xml) return parseCanadaPostPriceQuotes(result.xml);
-  throw new Error('Empty response from Canada Post Rating API');
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) await delay(1000 * attempt);
+
+    const result = await executeCanadaPostProxy({
+      targetEndpoint,
+      xmlPayload,
+      apiKey,
+      apiSecret,
+      customerNumber,
+      isTest
+    });
+
+    if (result.rates && Array.isArray(result.rates)) return result.rates;
+    if (!result.xml) throw new Error('Empty response from Canada Post Rating API');
+
+    try {
+      return parseCanadaPostPriceQuotes(result.xml);
+    } catch (err) {
+      if (isCanadaPostRetryableCode(err.canadaPostCode) || Number(result.status) === 202) {
+        lastRetryable = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastRetryable || new Error('Canada Post could not price this parcel after several attempts.');
+}
+
+/** Wait, without pulling in a timer library. */
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
