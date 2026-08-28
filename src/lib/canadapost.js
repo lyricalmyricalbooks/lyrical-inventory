@@ -602,6 +602,139 @@ export function generateClientCanadaPostLabelBlob(shipmentDetails) {
 }
 
 /**
+ * Canada Post runs two entirely separate authentication systems, and mixing them
+ * up is the single most common reason a correct key is reported as invalid:
+ *
+ *  - soa-gw.canadapost.ca / ct.soa-gw.canadapost.ca (Web Services: rating,
+ *    shipping, tracking, artifacts) authenticate with HTTP Basic using the
+ *    API username + password issued by the Canada Post Developer Program.
+ *    They do not accept, and never have accepted, a Bearer token.
+ *  - api.canadapost-postescanada.ca (the newer Developer Portal APIs)
+ *    authenticate with an OAuth 2.0 client-credentials Bearer token.
+ *
+ * A Developer Program API username is a hex string, so guessing the auth
+ * scheme from the *shape* of the key routes perfectly good Web Services
+ * credentials into an OAuth exchange that can never succeed. Decide from the
+ * endpoint being called instead — that is unambiguous.
+ */
+export const CANADAPOST_OAUTH_HOSTS = ['api.canadapost-postescanada.ca'];
+
+export function resolveCanadaPostAuthStrategy(endpoint, { authType = '' } = {}) {
+  const explicit = String(authType || '').toLowerCase().trim();
+  if (explicit === 'oauth' || explicit === 'basic') return explicit;
+
+  let host = '';
+  try {
+    host = new URL(String(endpoint || '')).hostname.toLowerCase();
+  } catch (_) {
+    host = '';
+  }
+  return CANADAPOST_OAUTH_HOSTS.some(h => host === h || host.endsWith('.' + h)) ? 'oauth' : 'basic';
+}
+
+/**
+ * Turn a Canada Post HTTP status (plus whatever body came back with it) into a
+ * sentence the publisher can act on. Canada Post answers a rejected credential
+ * with a bare 401 and an empty or HTML body, so without this the old code
+ * reported "Empty response from Canada Post Rating API" for what is really
+ * "your key was refused" — sending the owner off to debug the wrong thing.
+ */
+export function describeCanadaPostFailure({ status = 0, body = '', endpoint = '', isTest = false } = {}) {
+  const text = String(body || '');
+  const codeMatch = text.match(/<code>([^<]+)<\/code>/);
+  const descMatch = text.match(/<description>([^<]+)<\/description>/);
+  if (codeMatch || descMatch) {
+    return `Canada Post [${codeMatch ? codeMatch[1] : status || 'ERROR'}]: ${descMatch ? descMatch[1] : 'request rejected'}`;
+  }
+
+  const where = isTest ? 'the sandbox gateway (ct.soa-gw.canadapost.ca)' : 'the live gateway (soa-gw.canadapost.ca)';
+  if (status === 401) {
+    return `Canada Post rejected these credentials (HTTP 401) at ${where}. ` +
+      'Check that the API key and password are the pair issued by the Canada Post Developer Program, ' +
+      'and that the Sandbox Environment toggle matches the kind of key you pasted — ' +
+      'development keys only work with sandbox on, production keys only with it off.';
+  }
+  if (status === 403) {
+    return `Canada Post accepted the credentials but refused this request (HTTP 403) at ${where}. ` +
+      'The account is usually missing the Rating / Shipping entitlement, or the customer number does not belong to it.';
+  }
+  if (status === 404) {
+    return `Canada Post has no endpoint at ${endpoint || where} (HTTP 404).`;
+  }
+  if (status === 429) {
+    return 'Canada Post is rate-limiting this account (HTTP 429). Wait a moment and try again.';
+  }
+  if (status >= 500) {
+    return `Canada Post's own gateway returned HTTP ${status}. This is an outage on their side, not a problem with your key.`;
+  }
+  if (status) {
+    return `Canada Post returned HTTP ${status}${text ? `: ${text.slice(0, 300)}` : ''}`;
+  }
+  return 'Canada Post returned an empty response.';
+}
+
+/** True when a proxy response body actually came from one of our proxies. */
+function isProxyEnvelope(json) {
+  return !!json && typeof json === 'object' &&
+    ('xml' in json || 'error' in json || 'rates' in json || 'base64' in json || 'status' in json);
+}
+
+/**
+ * Read a proxy response as JSON without letting a 401/404/HTML answer be
+ * silently discarded. Returns null when the body is not one of our envelopes
+ * (e.g. a static host's 404 page), which means "no proxy here, keep walking
+ * the chain" rather than "the request failed".
+ */
+async function readProxyEnvelope(resp) {
+  let json = null;
+  try {
+    json = await resp.json();
+  } catch (_) {
+    return null;
+  }
+  return isProxyEnvelope(json) ? json : null;
+}
+
+/**
+ * A proxy answered. Decide whether it carries a usable payload or a failure
+ * worth reporting; throw for the latter so the real cause reaches the screen.
+ */
+function unwrapProxyEnvelope(json, { endpoint = '', isTest = false } = {}) {
+  if (json.error) throw new Error(String(json.error));
+
+  const status = Number(json.status || 0);
+  const failed = json.ok === false || (status >= 400);
+  if (failed) {
+    throw new Error(describeCanadaPostFailure({ status, body: json.xml || '', endpoint, isTest }));
+  }
+  return json;
+}
+
+/**
+ * Distinguish "this hop isn't available" (offline, CORS, aborted probe) from
+ * "Canada Post gave a real answer and it was a failure". Only the first is
+ * worth falling through to the next hop for.
+ */
+function isDefinitiveProxyError(err) {
+  const msg = String((err && err.message) || err || '');
+  if (!msg) return false;
+  if (err && err.name === 'AbortError') return false;
+  return !/Failed to fetch|NetworkError|network error|load failed|aborted|ECONNREFUSED|fetch failed/i.test(msg);
+}
+
+/** Abort a proxy probe that never answers, so a hung host can't freeze the UI. */
+function withTimeout(ms) {
+  try {
+    if (typeof AbortController === 'undefined') return { signal: undefined, done: () => {} };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    return { signal: controller.signal, done: () => clearTimeout(timer) };
+  } catch (_) {
+    return { signal: undefined, done: () => {} };
+  }
+}
+
+/**
  * Execute Canada Post API request with proxy chain (Local dev -> Google Apps Script -> Direct)
  */
 export async function executeCanadaPostProxy({
@@ -619,8 +752,13 @@ export async function executeCanadaPostProxy({
   const isShipment = targetEndpoint.indexOf('ncshipment') !== -1;
   const localProxyUrl = isShipment ? '/api/canadapost/shipment' : '/api/canadapost/rates';
 
-  // 1. Try local dev / backend proxy first if running in browser
+  // 1. Try local dev / backend proxy first if running in browser.
+  // The body is read whatever the status code is: the backend mirrors Canada
+  // Post's own status, so treating a 401 as "no proxy here" (the old
+  // `if (proxyResp.ok)` guard) threw away the one answer that explains the
+  // failure and left the publisher staring at a generic parse error.
   if (typeof window !== 'undefined') {
+    const probe = withTimeout(8000);
     try {
       const proxyResp = await fetch(localProxyUrl, {
         method: 'POST',
@@ -633,15 +771,24 @@ export async function executeCanadaPostProxy({
           targetEndpoint,
           customerNumber,
           zonosAccountKey
-        })
+        }),
+        signal: probe.signal
       });
-      if (proxyResp.ok) {
-        const data = await proxyResp.json();
+      const data = await readProxyEnvelope(proxyResp);
+      if (data) {
+        unwrapProxyEnvelope(data, { endpoint: targetEndpoint, isTest });
         if (data.rates && Array.isArray(data.rates)) return { ok: true, rates: data.rates };
         if (data.trackingPin && data.labelUrl) return { ok: true, ...data };
         if (data.xml) return { ok: true, xml: data.xml };
       }
-    } catch (_) {}
+    } catch (localErr) {
+      // A real answer from the proxy (bad credentials, Canada Post outage) is
+      // the end of the road — retrying the same request through another hop
+      // only produces the same rejection with a worse error message.
+      if (isDefinitiveProxyError(localErr)) throw localErr;
+    } finally {
+      probe.done();
+    }
   }
 
   // 2. Try Google Apps Script proxy (bypasses browser CORS on GitHub Pages)
@@ -659,19 +806,19 @@ export async function executeCanadaPostProxy({
             xmlPayload,
             apiKey: key,
             apiSecret: secret,
-            zonosAccountKey
+            customerNumber,
+            zonosAccountKey,
+            isTest
           }
         })
       });
-      if (gasResp.ok) {
-        const json = await gasResp.json();
-        if (json && json.xml) return { ok: true, xml: json.xml };
-        if (json && json.error) throw new Error(json.error);
+      const json = await readProxyEnvelope(gasResp);
+      if (json) {
+        unwrapProxyEnvelope(json, { endpoint: targetEndpoint, isTest });
+        if (json.xml) return { ok: true, xml: json.xml };
       }
     } catch (gasErr) {
-      if (gasErr.message && !/Failed to fetch|NetworkError/i.test(gasErr.message)) {
-        throw gasErr;
-      }
+      if (isDefinitiveProxyError(gasErr)) throw gasErr;
     }
   }
 
@@ -695,8 +842,20 @@ export async function executeCanadaPostProxy({
     });
 
     const text = await resp.text();
-    return { ok: resp.ok, xml: text };
+    if (!resp.ok) {
+      throw new Error(describeCanadaPostFailure({
+        status: resp.status,
+        body: text,
+        endpoint: targetEndpoint,
+        isTest
+      }));
+    }
+    return { ok: true, xml: text };
   } catch (directErr) {
+    // A status Canada Post actually returned is a real answer, not an
+    // unreachable gateway: report it instead of simulating over it.
+    if (isDefinitiveProxyError(directErr)) throw directErr;
+
     // Browser CORS rejection or offline network disconnect.
     // A simulated shipment produces a tracking PIN that does not exist at Canada Post.
     // Handing that to a customer, billing it to the ledger, or marking an order shipped
@@ -873,16 +1032,22 @@ export async function verifyCanadaPostTrackingPin({
 
   // 1. Local dev / backend proxy
   if (typeof window !== 'undefined') {
+    const probe = withTimeout(8000);
     try {
       const proxyResp = await fetch(
         `/api/canadapost/track?pin=${encodeURIComponent(cleanPin)}&test=${env.isTest ? 'true' : 'false'}`,
-        { headers: { 'x-cp-api-key': key, 'x-cp-api-secret': secret } }
+        { headers: { 'x-cp-api-key': key, 'x-cp-api-secret': secret }, signal: probe.signal }
       );
-      if (proxyResp.ok) {
-        const data = await proxyResp.json();
+      const data = await readProxyEnvelope(proxyResp);
+      if (data) {
+        unwrapProxyEnvelope(data, { endpoint: targetEndpoint, isTest: env.isTest });
         if (data.xml) return { ...parseCanadaPostTrackingSummary(data.xml), environment: env };
       }
-    } catch (_) {}
+    } catch (localErr) {
+      if (isDefinitiveProxyError(localErr)) throw localErr;
+    } finally {
+      probe.done();
+    }
   }
 
   // 2. Google Apps Script proxy (bypasses browser CORS on GitHub Pages)
@@ -895,18 +1060,22 @@ export async function verifyCanadaPostTrackingPin({
         body: JSON.stringify({
           version: 2,
           action: 'proxycanadapost',
-          payload: { endpoint: targetEndpoint, apiKey: key, apiSecret: secret, isTracking: true }
+          payload: {
+            endpoint: targetEndpoint,
+            apiKey: key,
+            apiSecret: secret,
+            isTracking: true,
+            isTest: env.isTest
+          }
         })
       });
-      if (gasResp.ok) {
-        const json = await gasResp.json();
-        if (json && json.xml) return { ...parseCanadaPostTrackingSummary(json.xml), environment: env };
-        if (json && json.error) throw new Error(json.error);
+      const json = await readProxyEnvelope(gasResp);
+      if (json) {
+        unwrapProxyEnvelope(json, { endpoint: targetEndpoint, isTest: env.isTest });
+        if (json.xml) return { ...parseCanadaPostTrackingSummary(json.xml), environment: env };
       }
     } catch (gasErr) {
-      if (gasErr.message && !/Failed to fetch|NetworkError/i.test(gasErr.message)) {
-        throw gasErr;
-      }
+      if (isDefinitiveProxyError(gasErr)) throw gasErr;
     }
   }
 
@@ -920,6 +1089,14 @@ export async function verifyCanadaPostTrackingPin({
     }
   });
   const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(describeCanadaPostFailure({
+      status: resp.status,
+      body: text,
+      endpoint: targetEndpoint,
+      isTest: env.isTest
+    }));
+  }
   return { ...parseCanadaPostTrackingSummary(text), environment: env };
 }
 
@@ -1272,7 +1449,10 @@ export async function fetchCanadaPostLabelBlob({
   // 1. Try local dev proxy if running in browser
   if (typeof window !== 'undefined' && labelUrl && !labelUrl.startsWith('local://')) {
     try {
-      const proxyResp = await fetch(`/api/canadapost/artifact?url=${encodeURIComponent(labelUrl)}&key=${encodeURIComponent(key)}&secret=${encodeURIComponent(secret)}`, {
+      // Credentials travel in headers only. They used to be repeated in the
+      // query string, which writes a live shipping secret into every access
+      // log, proxy log and browser history entry the request passes through.
+      const proxyResp = await fetch(`/api/canadapost/artifact?url=${encodeURIComponent(labelUrl)}`, {
         headers: {
           'x-cp-api-key': key,
           'x-cp-api-secret': secret
