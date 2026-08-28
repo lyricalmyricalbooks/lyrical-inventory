@@ -774,18 +774,20 @@
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Store</th><th class="r">Sent</th><th class="r">Sold</th><th class="r">Returned</th><th class="r">Outstanding</th><th>Status</th></tr></thead><tbody id="dash-con-body"></tbody></table></div>
   <div class="sect">Inventory</div>
   <div class="stock-block">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;">
-      <div><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
+    <div class="stock-head">
+      <div class="stock-head-titles"><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
       <span class="pill gold" id="d-book-isbn">—</span>
     </div>
-    <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:9999px;">
-      <div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);transition:width var(--dur-base) var(--ease-entrance);"></div>
-      <div class="bar-fill bar-fill-author" id="d-bar-author" style="width:0%;display:none;background:var(--violet, #8b5cf6);transition:width var(--dur-base) var(--ease-entrance);"></div>
+    <div class="stock-stage">
+      <div class="bar-meta"><span class="bar-meta-lead" id="d-bar-label">— / — on hand</span><span class="bar-meta-note" id="d-thresh-label">Alert at — units</span></div>
+      <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:9999px;">
+        <div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);transition:width var(--dur-base) var(--ease-entrance);"></div>
+        <div class="bar-fill bar-fill-author" id="d-bar-author" style="width:0%;display:none;background:var(--violet, #8b5cf6);transition:width var(--dur-base) var(--ease-entrance);"></div>
+      </div>
+      <div id="d-stock-breakdown-pills" class="stock-breakdown-pills" style="display:none;"></div>
     </div>
-    <div class="bar-meta"><span id="d-bar-label">— / — on hand</span><span id="d-thresh-label">Alert at — units</span></div>
-    <div id="d-stock-breakdown-pills" class="stock-breakdown-pills" style="display:none;margin-top:0.6rem;"></div>
     <div class="stock-alert ok" id="d-alert">Loading…</div>
-    <div id="d-recalc-onhand-wrap" style="margin-top:0.75rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div class="stock-actions" id="d-recalc-onhand-wrap">
       <button type="button" class="btn sm ink" id="d-transfer-stock-btn" onclick="openStockTransferModal()" title="Transfer stock between publisher and author" style="display:none;">⇄ Transfer stock</button>
       <div style="margin-left:auto;">
         <button type="button" class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
@@ -795,16 +797,18 @@
   <div id="d-breakeven-block" style="display:none;">
     <div class="sect">Break-even tracker</div>
     <div class="stock-block">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;">
-        <div>
+      <div class="stock-head">
+        <div class="stock-head-titles">
           <div class="stock-title" id="d-be-title">—</div>
           <div class="stock-author" id="d-be-sub">—</div>
         </div>
         <span class="pill" id="d-be-pill" style="background:rgba(200,145,58,.15);color:var(--gold2);">—</span>
       </div>
-      <div class="bar-track" id="d-be-bar-track"><div class="bar-fill" id="d-be-bar" style="width:0%;background:var(--gold2);"></div></div>
-      <div class="bar-meta"><span id="d-be-bar-label">—</span><span id="d-be-bar-right">—</span></div>
-      <div class="stock-alert" id="d-be-alert" style="margin-top:1.1rem;">—</div>
+      <div class="stock-stage">
+        <div class="bar-meta"><span class="bar-meta-lead" id="d-be-bar-label">—</span><span class="bar-meta-note" id="d-be-bar-right">—</span></div>
+        <div class="bar-track" id="d-be-bar-track"><div class="bar-fill" id="d-be-bar" style="width:0%;background:var(--gold2);"></div></div>
+      </div>
+      <div class="stock-alert" id="d-be-alert">—</div>
     </div>
   </div>
   <!-- REIMBURSEMENT REQUESTS (publisher only) -->
