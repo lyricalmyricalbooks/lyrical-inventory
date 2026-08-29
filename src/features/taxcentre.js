@@ -592,7 +592,7 @@ function _tcRenderRecurringSummary(subs, summary, baseCurrency) {
     : '';
 
   el.innerHTML = `
-    <div class="rec-stat">
+    <div class="rec-stat is-lead">
       <div class="rec-stat-val">${fmt(summary.monthlyBase, baseCurrency)}</div>
       <div class="rec-stat-lbl">Committed per month</div>
       ${approx}

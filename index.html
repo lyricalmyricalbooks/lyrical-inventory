@@ -873,17 +873,20 @@
 
 <!-- PAYMENTS / STRIPE RECONCILIATION -->
 <div class="tab-panel" id="tab-reconcile" style="display:none;">
-  <div class="row-between">
-    <div class="section-hed">Stripe payments to reconcile</div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <span id="recon-last-sync" style="font-size:11px;color:var(--text3);">Not synced yet</span>
+  <div class="sec-head">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Payments</div>
+      <div class="section-hed sec-head-title">Stripe payments to reconcile</div>
+      <p class="section-subcopy">
+        Pulls your recent Stripe payments and checks each one against your inventory. Invoices (INV-…), Big Cartel
+        orders, and SKU-tagged links match automatically — the rest land in a short worklist where you pick the book and log the sale.
+      </p>
+    </div>
+    <div class="sec-head-badges">
       <button class="btn ink" id="recon-sync-btn" onclick="reconcileSync()">↻ Sync from Stripe</button>
+      <span class="sec-head-note" id="recon-last-sync">Not synced yet</span>
     </div>
   </div>
-  <p style="font-size:12px;color:var(--text3);margin:6px 0 14px;line-height:1.6;">
-    Pulls your recent Stripe payments and checks each one against your inventory. Invoices (INV-…), Big Cartel
-    orders, and SKU-tagged links match automatically — the rest land in a short worklist where you pick the book and log the sale.
-  </p>
   <div id="recon-keyrow" style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
     <input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off">
   </div>
@@ -3638,25 +3641,29 @@
   <div id="settings-sec-catalog" class="settings-section">
     <!-- BOOK CATALOG SETTINGS -->
     <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
-        <div>
-          <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Book Catalog</div>
-          <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage the books available in your library. Changes here update the switcher and dashboards.</div>
+      <div class="sec-head cat-settings-head">
+        <div class="sec-head-titles">
+          <div class="sec-kicker"><span class="sec-kicker-dot"></span>Library Settings</div>
+          <div class="section-hed sec-head-title">Book Catalog</div>
+          <p class="section-subcopy">Manage the books available in your library. Changes here update the switcher and dashboards.</p>
         </div>
-        <button class="btn gold" onclick="openAddBookModal()">+ Add new book</button>
+        <div class="sec-head-badges">
+          <button class="btn gold" onclick="openAddBookModal()">+ Add new book</button>
+        </div>
       </div>
       <div id="catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
     </div>
 
     <!-- TEST BOOK CATALOG SETTINGS -->
     <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
-        <div>
-          <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span>Test Book Catalog</span>
-            <span style="font-size:10px;font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:12px;font-weight:600;letter-spacing:0.5px;border:1px solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
-          </div>
-          <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage test books in an isolated sandbox environment. Test book activity is strictly blocked from syncing to Google Sheets and excluded from financial ledgers.</div>
+      <div class="sec-head cat-settings-head is-muted">
+        <div class="sec-head-titles">
+          <div class="sec-kicker"><span class="sec-kicker-dot"></span>Sandbox</div>
+          <div class="section-hed sec-head-title">Test Book Catalog</div>
+          <p class="section-subcopy">Manage test books in an isolated sandbox environment. Test book activity is strictly blocked from syncing to Google Sheets and excluded from financial ledgers.</p>
+        </div>
+        <div class="sec-head-badges">
+          <span style="font-size:10px;font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:12px;font-weight:600;letter-spacing:0.5px;border:1px solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
         </div>
       </div>
       <div id="test-catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>

@@ -62,6 +62,13 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-29 | visual | Tax Centre | Gave the Business Trips header the same card-level heading its neighbours already have | #644 |
 | 2026-08-29 | visual | Web Analytics | Fixed the "Connected" badge so it matches the app's colours in night mode | #646 |
 | 2026-08-29 | visual | Book dashboard | Gave the profit-sharing money row its own proper cards instead of a stretched header style | #650 |
+| 2026-08-29 | visual | Catalog & Stock | Made hovering a book card actually lift it in dark mode | #658 |
+| 2026-08-29 | visual | Settings — Book Catalog | Gave the Book Catalog and Test Book Catalog cards a real heading instead of a plain caption | #651 |
+| 2026-08-29 | visual | Dashboard | Gave the "awaiting transfer" and "awaiting payment" cards the same flagged-tile accent bar and even spacing as the rest of the app | #661 |
+| 2026-08-29 | visual | Payments (Stripe reconciliation) | Gave the reconciliation screen a real heading instead of a bare caption | #652 |
+| 2026-08-29 | visual | Customers | Gave the buyer filter panel back its background, in both themes | #653 |
+| 2026-08-29 | visual | Event POS | Made hovering a book card at the register actually lift it in dark mode | #666 |
+| 2026-08-29 | visual | Tax Centre | Gave the subscriptions summary strip one leading figure instead of four equal ones | #654 |
 
 ---
 
