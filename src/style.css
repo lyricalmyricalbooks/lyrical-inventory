@@ -11039,9 +11039,13 @@ tr.hist-row:hover {
   padding: 4px 6px !important;
 }
 
+/* 38px undersold Fitts's Law on the one control tapped over and over with a
+   customer standing at the table — the cart column beside this grid already
+   holds its own line actions to the full 44px target (`.pos-line-btn`), this
+   stepper was the one control in the redesign that got missed. */
 .pos-qty-btn {
-  width: 38px !important;
-  height: 38px !important;
+  width: var(--target-min) !important;
+  height: var(--target-min) !important;
   padding: 0 !important;
   display: flex !important;
   align-items: center !important;
@@ -11054,7 +11058,10 @@ tr.hist-row:hover {
   border: 1px solid var(--border-default) !important;
   box-shadow: var(--elev-1) !important;
   cursor: pointer !important;
-  transition: all 0.18s ease !important;
+  transition: transform var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-fast) var(--ease-standard) !important;
 }
 
 .pos-qty-btn:hover {
@@ -11062,6 +11069,22 @@ tr.hist-row:hover {
   color: var(--on-accent) !important;
   border-color: var(--gold) !important;
   transform: scale(1.06);
+}
+
+.pos-qty-btn:active {
+  transform: scale(.94);
+}
+
+.pos-qty-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-qty-btn:hover,
+  .pos-qty-btn:active {
+    transform: none;
+  }
 }
 
 .pos-qty-val {
