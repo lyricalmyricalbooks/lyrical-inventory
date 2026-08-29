@@ -21265,8 +21265,6 @@ function renderWebAnalytics() {
     if (statusBadge) {
       statusBadge.textContent = 'Connected';
       statusBadge.className = 'sheets-badge';
-      statusBadge.style.background = '#e0f5ea';
-      statusBadge.style.color = '#1d7a4a';
     }
     if (setupView) setupView.style.display = 'none';
     if (connectedView) connectedView.style.display = 'block';
@@ -21292,8 +21290,6 @@ function renderWebAnalytics() {
     if (statusBadge) {
       statusBadge.textContent = 'Not Connected';
       statusBadge.className = 'sheets-badge off';
-      statusBadge.style.background = '';
-      statusBadge.style.color = '';
     }
     if (connectedView) connectedView.style.display = 'none';
     if (setupView) setupView.style.display = 'block';
