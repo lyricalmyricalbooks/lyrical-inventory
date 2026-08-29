@@ -179,6 +179,7 @@ import {
   refreshUnsavedMarkers,
   validateFields,
 } from './lib/modal.js';
+import { followableUrl } from './lib/receipt-links.js';
 import {
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   buildPaymentMeta,
@@ -7955,17 +7956,17 @@ function renderArtistTransfers() {
     : `<span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">No payment link set</span>`;
 
   list.innerHTML = transfers.map(t => `
-    <div style="background:var(--surface-card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;opacity: ${t.status === 'pending' ? '.6' : '1'};">
+    <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">
       <div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div class="pending-card-head">
           <span class="pill amber">⏳ Awaiting transfer</span>
-          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${escapeHtml(t.num)}</span>
+          <span class="pending-card-num">${escapeHtml(t.num)}</span>
           ${t.status === 'pending' ? `<span class="pill gray" style="font-size:10px;">Pending Approval</span>` : ''}
         </div>
-        <div style="font-size:12px;color:var(--text3);">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong style="color:var(--amber);">${fmt(t.total, cur)} held</strong></div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px;">${escapeHtml(t.notes) || '—'}</div>
+        <div class="pending-card-meta">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong class="pending-card-highlight">${fmt(t.total, cur)} held</strong></div>
+        <div class="pending-card-note">${escapeHtml(t.notes) || '—'}</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div class="pending-card-actions">
         ${payHtml}
         ${t.status === 'pending'
       ? `<button class="btn sm outline" disabled>Approve sale first</button>`
@@ -8005,16 +8006,16 @@ function renderPendingExpenses() {
     ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : `<span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">No payment link set</span>`;
   list.innerHTML = pending.map(e => `
-    <div style="background:var(--surface-card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div class="pending-card">
       <div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div class="pending-card-head">
           <span class="pill amber">⏳ Awaiting payment</span>
-          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${fmt(e.amount, cur)}</span>
+          <span class="pending-card-num">${fmt(e.amount, cur)}</span>
         </div>
-        <div style="font-size:12px;color:var(--text3);">${fmtD(e.date)} · <span style="background:var(--cream3);padding:1px 7px;border-radius:100px;font-size:10px;">${escapeHtml(e.cat)}</span> · <strong style="color:var(--text2);">${escapeHtml(e.desc)}</strong></div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px;">${escapeHtml(e.ref) || ''}</div>
+        <div class="pending-card-meta">${fmtD(e.date)} · <span class="pile-chip">${escapeHtml(e.cat)}</span> · <strong class="pending-card-desc">${escapeHtml(e.desc)}</strong></div>
+        <div class="pending-card-note">${escapeHtml(e.ref) || ''}</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div class="pending-card-actions">
         ${payHtml}
         <button class="btn gold" onclick="markExpenseReceived(${e.id})">✓ Mark received</button>
       </div>
@@ -9926,8 +9927,17 @@ function renderInvoicePaperHTML(inv) {
     ? `Click below to pay <strong>${fmt(inv.total || 0, cur)}</strong> via Stripe Checkout.`
     : `Click below to pay <strong>${fmt(inv.total || 0, cur)}</strong> securely, or scan the QR with your phone.`;
 
-  const payFallback = payUrl ? `
-    <p class="inv-pay-fallback">Pay online: <a href="${payUrl}" target="_blank" rel="noopener">${escapeHTML(payUrl)}</a></p>` : '';
+  // An Interac e-Transfer address is an email, not a page. Putting it in an
+  // href made it a RELATIVE link, so the Pay button on a customer's invoice
+  // navigated to a path that does not exist. Show the address to send to
+  // instead, and only ever link something with a real scheme.
+  const payHref = followableUrl(payUrl);
+
+  const payFallback = payUrl ? (payHref
+    ? `
+    <p class="inv-pay-fallback">Pay online: <a href="${escapeHTML(payHref)}" target="_blank" rel="noopener">${escapeHTML(payUrl)}</a></p>`
+    : `
+    <p class="inv-pay-fallback">Send an Interac e-Transfer to: <strong>${escapeHTML(payUrl)}</strong></p>`) : '';
 
   const payBlock = payUrl ? `
     <section class="inv-pay" style="--book-accent:${accent};">
@@ -9935,7 +9945,9 @@ function renderInvoicePaperHTML(inv) {
         ${dynBadge}
         <h3>Pay this invoice</h3>
         <p>${payCopy}</p>
-        <a class="pay-btn" href="${payUrl}" target="_blank" rel="noopener">Pay ${fmt(inv.total || 0, cur)} →</a>
+        ${payHref
+    ? `<a class="pay-btn" href="${escapeHTML(payHref)}" target="_blank" rel="noopener">Pay ${fmt(inv.total || 0, cur)} →</a>`
+    : `<p class="inv-pay-address">Send <strong>${fmt(inv.total || 0, cur)}</strong> by Interac e-Transfer to<br><strong>${escapeHTML(payUrl)}</strong></p>`}
         <div class="pay-methods">${payMethodsLabel}</div>
       </div>
       <div class="inv-qr"></div>
@@ -10193,7 +10205,11 @@ function buildInvoiceEmailHTML(inv) {
           <tr><td style="padding:14px 12px;background:#0e0c0a;color:#f7f2e9;border-radius:6px 0 0 6px;font-weight:800;">Total due</td><td align="right" style="padding:14px 12px;background:#0e0c0a;color:#f0c060;border-radius:0 6px 6px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:800;">${fmt(inv.total || 0, cur)}</td></tr>
         </table>
         <div style="clear:both;"></div>
-        ${payUrl ? `<div style="background:#faf6ec;border:1px solid #eadfca;border-radius:10px;padding:18px 20px;margin:16px 0 20px;"><div style="font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Pay this invoice</div><div style="font-size:13px;line-height:1.5;color:#675f55;margin-bottom:14px;">Pay <strong>${fmt(inv.total || 0, cur)}</strong> securely online${isDynamicStripeLink(inv) ? ' via Stripe Checkout' : ''}.</div><a href="${payUrl}" style="display:inline-block;background:#0e0c0a;color:#f0c060;text-decoration:none;border-radius:999px;padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;">Pay ${fmt(inv.total || 0, cur)} →</a><div style="font-size:11px;line-height:1.4;color:#6b6459;margin-top:10px;word-break:break-all;">${escapeHTML(payUrl)}</div></div>` : ''}
+        ${payUrl ? `<div style="background:#faf6ec;border:1px solid #eadfca;border-radius:10px;padding:18px 20px;margin:16px 0 20px;"><div style="font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;margin-bottom:6px;">Pay this invoice</div><div style="font-size:13px;line-height:1.5;color:#675f55;margin-bottom:14px;">${followableUrl(payUrl)
+    ? `Pay <strong>${fmt(inv.total || 0, cur)}</strong> securely online${isDynamicStripeLink(inv) ? ' via Stripe Checkout' : ''}.`
+    : `Pay <strong>${fmt(inv.total || 0, cur)}</strong> by Interac e-Transfer.`}</div>${followableUrl(payUrl)
+    ? `<a href="${escapeHTML(followableUrl(payUrl))}" style="display:inline-block;background:#0e0c0a;color:#f0c060;text-decoration:none;border-radius:999px;padding:11px 22px;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;">Pay ${fmt(inv.total || 0, cur)} →</a>`
+    : `<div style="font-size:14px;line-height:1.5;color:#0e0c0a;">Send by Interac e-Transfer to <strong>${escapeHTML(payUrl)}</strong></div>`}<div style="font-size:11px;line-height:1.4;color:#6b6459;margin-top:10px;word-break:break-all;">${escapeHTML(payUrl)}</div></div>` : ''}
         ${notes}
         <div style="text-align:center;font-size:12px;color:#6b6459;margin-top:24px;font-style:italic;">${escapeHTML(settings.footer || 'Thank you for stocking our books.')}</div>
       </div>
@@ -14396,7 +14412,7 @@ function renderFinancials() {
     const sortedCats = Object.entries(fin.expCats).sort((a, b) => b[1].total - a[1].total);
     expBody.innerHTML = sortedCats.map(([cat, val]) => `
       <tr>
-        <td style="font-weight:600; display:flex; align-items:center;">${cat} ${val.missingReceipts ? `<span class="pill" style="margin-left:8px; font-size:9px; background:var(--red); color:var(--dark); font-weight:600;">${val.missingReceipts} missing</span>` : ''}</td>
+        <td style="font-weight:600; display:flex; align-items:center;">${cat} ${val.missingReceipts ? `<span class="pill red" style="margin-left:8px;">${val.missingReceipts} missing</span>` : ''}</td>
         <td class="r">${val.count} txn</td>
         <td class="r" style="font-weight:700; color:var(--red);">${fmt(val.total, cur)}</td>
       </tr>
@@ -14653,6 +14669,30 @@ async function setTripBudgetPrompt(tripName) {
 // from the ledger. Months for a single year, years for "All Time". Returns ''
 // when there is nothing to plot so the chart hides gracefully.
 
+/**
+ * Delete exactly one row, even when its key is not unique.
+ *
+ * History entries are never given an `id` — nothing in the app sets one — so
+ * these deletes key on `num`, and `num` is not unique. A consignment sale's
+ * number ends in the last four digits of the clock (see recordSale), which
+ * recycle every ten seconds, and a manual sale's number is free text the owner
+ * types. `filter` removed EVERY match: two sales to the same store ten seconds
+ * apart, and deleting one silently deleted both — two stock reversals and two
+ * revenue reversals for one intended deletion, with nothing on screen to say
+ * so.
+ *
+ * Splicing the first match keeps the delete to the one row the owner asked
+ * about. It does not make the key unique — a duplicate number still means the
+ * wrong one of the two may go — but it can no longer destroy a record the
+ * owner never selected.
+ */
+function removeOneByKey(list, id) {
+  const wanted = String(id);
+  const idx = list.findIndex(entry => String(entry?.id ?? entry?.num) === wanted);
+  if (idx !== -1) list.splice(idx, 1);
+  return idx !== -1;
+}
+
 export async function removeLedgerEntry(type, bid, id) {
   if (!(await confirmDialog('Are you sure you want to permanently delete this entry from the ledger?', { okLabel: 'Delete entry', danger: true }))) return;
 
@@ -14668,13 +14708,13 @@ export async function removeLedgerEntry(type, bid, id) {
   } else if (type === 'artistPayout') {
     const s = states[bid];
     if (s && s.artistTransfers) {
-      s.artistTransfers = s.artistTransfers.filter(t => String(t.id || t.num) !== String(id));
+      removeOneByKey(s.artistTransfers, id);
       saveState(bid);
     }
   } else if (type === 'sale') {
     const s = states[bid];
     if (s && s.hist) {
-      s.hist = s.hist.filter(h => String(h.id || h.num) !== String(id));
+      removeOneByKey(s.hist, id);
       saveState(bid);
     }
   }
@@ -14729,7 +14769,13 @@ function renderEditExpenseReceipts() {
       viewLink = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${fn.replace(/'/g, "\\'")}')" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(base)}</a>`;
     } else {
       name = String(r).split('/').pop() || 'Remote Receipt';
-      viewLink = `<a href="${r}" target="_blank" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(name)}</a>`;
+      const href = followableUrl(r);
+      // Unfollowable and unescaped before: a stored value with a quote in it
+      // broke out of the attribute, and one with no usable scheme rendered a
+      // link that did nothing.
+      viewLink = href
+        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(name)}</a>`
+        : `<span title="This receipt reference cannot be opened" style="color:var(--text3);">${escapeHtml(name)}</span>`;
     }
     return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid rgba(255,255,255,0.1);margin-bottom:4px;">
       <span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;" title="${escapeHtml(name)}">📄 ${viewLink}</span>
@@ -14743,18 +14789,30 @@ function renderEditExpenseReceipts() {
 
 async function relinkEditExpenseReceipt(idx) {
   if (!_editingExpense) return;
-  const currentPath = _editingExpense.files[idx] || '';
-  const currentFilename = typeof currentPath === 'string' ? currentPath.replace('local://', '') : '';
+  const currentPath = String(_editingExpense.files[idx] || '');
+  // A receipt is either a path in the connected folder or a real URL, and the
+  // two must not be confused. Stripping `local://` unconditionally and
+  // re-adding it turned a cloud receipt into `local://https://…` — a reference
+  // that resolves to nothing, so relinking a perfectly good cloud receipt
+  // destroyed it.
+  const isLocal = currentPath.startsWith('local://');
+  const currentValue = isLocal ? currentPath.slice('local://'.length) : currentPath;
 
   const newPath = await promptDialog(
-    `Enter the correct relative filename or path in your connected receipts folder:\n(e.g., "Business/2026-06-03_receipt.jpg" or "receipt_123.pdf")`,
-    currentFilename,
+    isLocal
+      ? `Enter the correct relative filename or path in your connected receipts folder:\n(e.g., "Business/2026-06-03_receipt.jpg" or "receipt_123.pdf")`
+      : 'Enter the correct web address for this receipt, or a filename in your connected receipts folder.',
+    currentValue,
     { title: 'Relink Receipt File', okLabel: 'Update Link', cancelLabel: 'Cancel' }
   );
 
   if (newPath !== null && newPath.trim()) {
-    const cleanPath = newPath.trim().replace(/^local:\/\//, '');
-    _editingExpense.files[idx] = `local://${cleanPath}`;
+    const entered = newPath.trim();
+    // Keep whatever kind the owner actually typed: a web address stays a web
+    // address, anything else is a path in the folder.
+    _editingExpense.files[idx] = /^(https?:|data:|blob:)/i.test(entered)
+      ? entered
+      : `local://${entered.replace(/^local:\/\//, '')}`;
     renderEditExpenseReceipts();
     showToast('✓ Receipt link updated — click Save changes to apply', 'ok');
   }
