@@ -5745,10 +5745,10 @@ tr.hist-row:hover {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-3);
   margin: var(--space-4) 0 var(--space-3);
-  background: var(--cream-bg);
+  background: var(--surface-sunken);
   padding: var(--space-3);
   border-radius: var(--r2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
 }
 
 /* ── Active-segment bar ─────────────────────────────────────────────────────
@@ -11100,16 +11100,18 @@ tr.hist-row:hover {
   display: flex !important;
   flex-direction: column !important;
   justify-content: space-between !important;
-  box-shadow: 0 2px 10px rgba(14, 12, 10, 0.05) !important;
+  box-shadow: var(--elev-2) !important;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
   position: relative;
   overflow: hidden;
 }
 
+/* Themed elevation, not a raw shadow — a hardcoded warm rgba here reads as
+   no lift at all once the page goes dark, same bug .catalog-card had. */
 .pos-card:hover {
   transform: translateY(-2px);
   border-color: var(--gold-line, rgba(200, 145, 58, 0.4)) !important;
-  box-shadow: 0 8px 24px rgba(14, 12, 10, 0.1) !important;
+  box-shadow: var(--elev-hover) !important;
 }
 
 .pos-card.is-active {
@@ -12852,6 +12854,36 @@ tr.hist-row:hover {
 .ps-stat-card.tone-green .ps-stat-sub{color:var(--status-positive);}
 
 /* ══════════════════════════════════════════════════════════════════════════
+   PENDING TRANSFER / EXPENSE CARDS — Dashboard "awaiting" lists
+   ──────────────────────────────────────────────────────────────────────────
+   renderArtistTransfers() and renderPendingExpenses() used to hand-roll the
+   same inline-style card twice: a literal border-left instead of the inset
+   accent bar the rest of the app uses for "this one needs attention" (a
+   border-box left border shrinks only the flagged card's own content box,
+   so its label sits a few px right of its neighbours'), margin-bottom
+   stacking instead of a list gap, and an ad-hoc pill reinventing .pile-chip.
+   One shared class now backs both live lists.
+   ══════════════════════════════════════════════════════════════════════════ */
+#artist-transfers-list,
+#d-pending-expenses-list{display:flex;flex-direction:column;gap:var(--space-2);}
+.pending-card{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-2);
+  background:var(--surface-card);
+  border:1px solid var(--border-default);
+  border-radius:var(--r2);
+  padding:var(--space-4) var(--space-5);
+  box-shadow:var(--elev-1),inset 3px 0 0 var(--status-active);
+}
+.pending-card.is-pending{opacity:.6;}
+.pending-card-head{display:flex;align-items:center;gap:var(--space-2);margin-bottom:4px;flex-wrap:wrap;}
+.pending-card-num{font-family:'DM Mono',monospace;font-size:var(--text-sm);font-weight:600;color:var(--content-primary);}
+.pending-card-meta{font-size:var(--text-xs);color:var(--content-muted);}
+.pending-card-highlight{color:var(--status-active);font-weight:500;}
+.pending-card-desc{color:var(--content-secondary);font-weight:500;}
+.pending-card-note{font-size:var(--text-2xs);color:var(--content-muted);margin-top:var(--space-1);}
+.pending-card-actions{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;}
+
+/* ══════════════════════════════════════════════════════════════════════════
    ARTIST PAYOUTS — the money half of the Profit Sharing panel
    ──────────────────────────────────────────────────────────────────────────
    Recording a payout used to be four 6px-tall inputs with no feedback: you
@@ -13799,6 +13831,45 @@ tr.hist-row:hover {
   font-size: var(--text-xs);
   color: var(--content-muted);
   max-width: 52ch;
+}
+
+/* A receipt in the connected folder can only be opened by the app, so its
+   control is a <button>. It must still read as the link it replaces. */
+.shipping-pnl-tracking-link.as-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--gold-text);
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: left;
+}
+
+/* The row being read right now during a batch scan. A shimmer on the two
+   fields it is about to fill, so a long run shows where it has got to. */
+.postage-match-row.is-scanning {
+  border-color: var(--gold-line);
+}
+
+.postage-match-row.is-scanning .postage-match-field input {
+  background-image: linear-gradient(90deg, transparent 0%, var(--gold-bg) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: postage-scan-shimmer 1.1s var(--ease-standard) infinite;
+}
+
+@keyframes postage-scan-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .postage-match-row.is-scanning .postage-match-field input {
+    animation: none;
+    background-image: none;
+    background-color: var(--gold-bg);
+  }
 }
 
 .manual-link-hint {
