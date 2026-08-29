@@ -34,6 +34,27 @@ export function receiptLinkTarget(receipt) {
   return { kind: 'none', path: ref, href: '' };
 }
 
+/**
+ * A value safe to put in an href, or '' when it is not one.
+ *
+ * The same allow-list `receiptLinkTarget` applies, exposed on its own for the
+ * other stored fields that reach an anchor — a tracking URL, an invoice
+ * payment link. Two failure modes it closes, both seen in this codebase:
+ *
+ *  - A value with no scheme at all. An Interac e-Transfer address is an email,
+ *    not a URL, and `href="pay@example.com"` is a RELATIVE link: clicking it
+ *    navigates the page to a path that does not exist. On a customer's invoice
+ *    that is the Pay button going nowhere.
+ *  - A `javascript:` value. Any stored field that becomes an href is a place
+ *    someone's typed text gets executed, so the check is an allow-list rather
+ *    than a "not local, therefore fine" test.
+ */
+export function followableUrl(value) {
+  const ref = String(value ?? '').trim();
+  if (!ref) return '';
+  return /^(https?:|mailto:|data:|blob:)/i.test(ref) ? ref : '';
+}
+
 /** True when this receipt can actually be opened by some route. */
 export function receiptIsOpenable(receipt) {
   return receiptLinkTarget(receipt).kind !== 'none';
