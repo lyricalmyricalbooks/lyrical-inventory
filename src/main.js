@@ -7952,17 +7952,17 @@ function renderArtistTransfers() {
     : `<span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">No payment link set</span>`;
 
   list.innerHTML = transfers.map(t => `
-    <div style="background:var(--surface-card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;opacity: ${t.status === 'pending' ? '.6' : '1'};">
+    <div class="pending-card${t.status === 'pending' ? ' is-pending' : ''}">
       <div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div class="pending-card-head">
           <span class="pill amber">⏳ Awaiting transfer</span>
-          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${escapeHtml(t.num)}</span>
+          <span class="pending-card-num">${escapeHtml(t.num)}</span>
           ${t.status === 'pending' ? `<span class="pill gray" style="font-size:10px;">Pending Approval</span>` : ''}
         </div>
-        <div style="font-size:12px;color:var(--text3);">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong style="color:var(--amber);">${fmt(t.total, cur)} held</strong></div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px;">${escapeHtml(t.notes) || '—'}</div>
+        <div class="pending-card-meta">${fmtD(t.date)} · ${t.chan} · ${t.qty}× · <strong class="pending-card-highlight">${fmt(t.total, cur)} held</strong></div>
+        <div class="pending-card-note">${escapeHtml(t.notes) || '—'}</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div class="pending-card-actions">
         ${payHtml}
         ${t.status === 'pending'
       ? `<button class="btn sm outline" disabled>Approve sale first</button>`
@@ -8002,16 +8002,16 @@ function renderPendingExpenses() {
     ? `<a href="${fullLink}" target="_blank" class="btn sm" style="text-decoration:none;background:var(--green-bg);color:var(--green);border-color:rgba(42,99,72,.2);">↗ Payment link</a>`
     : `<span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;">No payment link set</span>`;
   list.innerHTML = pending.map(e => `
-    <div style="background:var(--surface-card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);padding:1rem 1.25rem;margin-bottom:10px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div class="pending-card">
       <div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <div class="pending-card-head">
           <span class="pill amber">⏳ Awaiting payment</span>
-          <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:600;">${fmt(e.amount, cur)}</span>
+          <span class="pending-card-num">${fmt(e.amount, cur)}</span>
         </div>
-        <div style="font-size:12px;color:var(--text3);">${fmtD(e.date)} · <span style="background:var(--cream3);padding:1px 7px;border-radius:100px;font-size:10px;">${escapeHtml(e.cat)}</span> · <strong style="color:var(--text2);">${escapeHtml(e.desc)}</strong></div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px;">${escapeHtml(e.ref) || ''}</div>
+        <div class="pending-card-meta">${fmtD(e.date)} · <span class="pile-chip">${escapeHtml(e.cat)}</span> · <strong class="pending-card-desc">${escapeHtml(e.desc)}</strong></div>
+        <div class="pending-card-note">${escapeHtml(e.ref) || ''}</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div class="pending-card-actions">
         ${payHtml}
         <button class="btn gold" onclick="markExpenseReceived(${e.id})">✓ Mark received</button>
       </div>

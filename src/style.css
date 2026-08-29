@@ -12839,6 +12839,36 @@ tr.hist-row:hover {
 .ps-stat-card.tone-green .ps-stat-sub{color:var(--status-positive);}
 
 /* ══════════════════════════════════════════════════════════════════════════
+   PENDING TRANSFER / EXPENSE CARDS — Dashboard "awaiting" lists
+   ──────────────────────────────────────────────────────────────────────────
+   renderArtistTransfers() and renderPendingExpenses() used to hand-roll the
+   same inline-style card twice: a literal border-left instead of the inset
+   accent bar the rest of the app uses for "this one needs attention" (a
+   border-box left border shrinks only the flagged card's own content box,
+   so its label sits a few px right of its neighbours'), margin-bottom
+   stacking instead of a list gap, and an ad-hoc pill reinventing .pile-chip.
+   One shared class now backs both live lists.
+   ══════════════════════════════════════════════════════════════════════════ */
+#artist-transfers-list,
+#d-pending-expenses-list{display:flex;flex-direction:column;gap:var(--space-2);}
+.pending-card{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-2);
+  background:var(--surface-card);
+  border:1px solid var(--border-default);
+  border-radius:var(--r2);
+  padding:var(--space-4) var(--space-5);
+  box-shadow:var(--elev-1),inset 3px 0 0 var(--status-active);
+}
+.pending-card.is-pending{opacity:.6;}
+.pending-card-head{display:flex;align-items:center;gap:var(--space-2);margin-bottom:4px;flex-wrap:wrap;}
+.pending-card-num{font-family:'DM Mono',monospace;font-size:var(--text-sm);font-weight:600;color:var(--content-primary);}
+.pending-card-meta{font-size:var(--text-xs);color:var(--content-muted);}
+.pending-card-highlight{color:var(--status-active);font-weight:500;}
+.pending-card-desc{color:var(--content-secondary);font-weight:500;}
+.pending-card-note{font-size:var(--text-2xs);color:var(--content-muted);margin-top:var(--space-1);}
+.pending-card-actions{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;}
+
+/* ══════════════════════════════════════════════════════════════════════════
    ARTIST PAYOUTS — the money half of the Profit Sharing panel
    ──────────────────────────────────────────────────────────────────────────
    Recording a payout used to be four 6px-tall inputs with no feedback: you
