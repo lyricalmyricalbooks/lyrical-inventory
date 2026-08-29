@@ -4180,10 +4180,17 @@ async function _postBatchToProjectLedger(rows) {
     // One alert for the pile. Sending the publisher an email per receipt is
     // how a batch of fourteen turns into fourteen ignored notifications.
     const cats = Array.from(new Set(rows.map(r => r.category || 'Other')));
+    let minDate = '', maxDate = '';
+    for (let i = 0; i < rows.length; i++) {
+      const d = rows[i].date;
+      if (!d) continue;
+      if (!minDate || d < minDate) minDate = d;
+      if (!maxDate || d > maxDate) maxDate = d;
+    }
     await notifyPublisherSubmission('Expense approval', {
       batch: `${logged} expenses`,
       categories: cats,
-      dates: `${rows.map(r => r.date).sort()[0]} → ${rows.map(r => r.date).sort().slice(-1)[0]}`
+      dates: `${minDate} → ${maxDate}`
     }, `${logged} expenses submitted for approval`);
   }
   renderExpenses();
