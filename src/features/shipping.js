@@ -73,6 +73,8 @@ import { receiptLinkTarget } from '../lib/receipt-links.js';
 import {
   autoMatchPostage,
   carrierFromTracking,
+  findPostageByKey,
+  postageExpenseKey,
   mergeScannedPostageFields,
   postageScanCandidates,
   formatTrackingNumber,
@@ -4695,15 +4697,18 @@ async function onInlinePostageChange(inputEl) {
   }, 1500);
 }
 
-async function confirmSuggestedShippoLink(orderNum, txRef) {
-  const expense = (TAX_CENTER.businessExpenses || []).find(e => e.ref === txRef);
+async function confirmSuggestedShippoLink(orderNum, expenseKey) {
+  // By identity, not `ref`: the suggestion pool now includes counter receipts,
+  // which are created with a blank ref.
+  const expense = findPostageByKey(TAX_CENTER.businessExpenses || [], expenseKey);
   if (!expense) {
-    showToast('Shippo expense not found. Try re-syncing Shippo.', 'err');
+    showToast('That postage receipt was not found. Try re-syncing Shippo.', 'err');
     return;
   }
+  const label = String(expense.ref || '').replace('shippo:', '') || 'that receipt';
   try {
     await persistManualShippingLink(expense, orderNum, () => saveTaxCenter());
-    showToast(`Linked ${orderNum} to ${txRef.replace('shippo:', '')} ✓`, 'success');
+    showToast(`Linked ${orderNum} to ${label} ✓`, 'success');
     renderShippingAnalysisHub();
 
     const row = document.getElementById(`shipping-ledger-row-${escapeHtml(orderNum)}`);
@@ -4745,13 +4750,13 @@ function openManualShippoLinkModal(orderNum) {
         ? '<span class="manual-link-hint">Possible match</span>'
         : '';
     return `
-      <tr class="shippo-link-row" data-ref="${escapeHtml(e.ref)}" data-name="${escapeHtml(recipientRaw.toLowerCase())}">
+      <tr class="shippo-link-row" data-key="${escapeHtml(postageExpenseKey(e))}" data-name="${escapeHtml(recipientRaw.toLowerCase())}">
         <td class="mono">${escapeHtml(reference.slice(0, 20))}${reference.length > 20 ? '…' : ''}</td>
         <td>${recipient}${hint}</td>
         <td>${date}</td>
         <td style="text-align:right; font-weight:600;">CA$${amount}</td>
         <td style="text-align:right; width:60px;">
-          <button class="manual-link-btn" onclick="doManualShippoLink('${escapeHtml(orderNum)}', '${escapeHtml(e.ref)}')">Link</button>
+          <button class="manual-link-btn" onclick="doManualShippoLink('${escapeHtml(orderNum)}', '${escapeHtml(postageExpenseKey(e))}')">Link</button>
         </td>
       </tr>`;
   }).join('');
@@ -4806,15 +4811,19 @@ function filterManualShippoLinkRows(query) {
   });
 }
 
-async function doManualShippoLink(orderNum, txRef) {
-  const expense = (TAX_CENTER.businessExpenses || []).find(e => e.ref === txRef);
+async function doManualShippoLink(orderNum, expenseKey) {
+  // Keyed by identity, not by `ref`: a counter receipt is created with an
+  // empty ref, so `e.ref === txRef` matched whichever ref-less expense came
+  // first — and linked that one's money to this order.
+  const expense = findPostageByKey(TAX_CENTER.businessExpenses || [], expenseKey);
   if (!expense) {
     showToast('Expense not found.', 'err');
     return;
   }
+  const label = String(expense.ref || '').replace('shippo:', '') || 'that receipt';
   try {
     await persistManualShippingLink(expense, orderNum, () => saveTaxCenter());
-    showToast(`Linked ${orderNum} to ${txRef.replace('shippo:', '')} ✓`, 'success');
+    showToast(`Linked ${orderNum} to ${label} ✓`, 'success');
     closeManualShippoLinkModal();
     renderShippingAnalysisHub();
 
@@ -4845,12 +4854,12 @@ async function doManualShippoLink(orderNum, txRef) {
 
 const POSTAGE_MATCH_DOM_PREFIX = 'pm-';
 
-function postageRowDomId(ref, field) {
-  return `${POSTAGE_MATCH_DOM_PREFIX}${field}-${String(ref).replace(/[^A-Za-z0-9_-]/g, '-')}`;
+function postageRowDomId(key, field) {
+  return `${POSTAGE_MATCH_DOM_PREFIX}${field}-${String(key).replace(/[^A-Za-z0-9_-]/g, '-')}`;
 }
 
-function findPostageExpense(ref) {
-  return (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
+function findPostageExpense(key) {
+  return findPostageByKey(TAX_CENTER.businessExpenses || [], key);
 }
 
 /** Every postage cost still waiting to be tied to an order. */
@@ -4910,7 +4919,8 @@ function renderPostageMatchWorklist() {
   const canScan = !!(TAX_CENTER.settings?.geminiKey);
 
   host.innerHTML = expenses.map(expense => {
-    const ref = String(expense.ref || '');
+    const key = postageExpenseKey(expense);
+    const reference = String(expense.ref || '').replace(/^shippo:/, '');
     const recipient = postageRecipientName(expense);
     const tracking = normalizeTrackingNumber(expense.trackingNumber);
     const matches = suggestPostageMatches(expense, orders, { takenOrderNumbers: taken, limit: 6 });
@@ -4947,28 +4957,28 @@ function renderPostageMatchWorklist() {
         : '<span class="postage-match-noreceipt">No receipt attached</span>';
 
     const scanBtn = (canScan && expense.receipt)
-      ? `<button type="button" class="btn sm ghost" id="${postageRowDomId(ref, 'scan')}" onclick="scanPostageReceipt('${escapeHtml(ref)}')" title="Read the recipient and tracking number off the receipt">✨ Read receipt</button>`
+      ? `<button type="button" class="btn sm ghost" id="${postageRowDomId(key, 'scan')}" onclick="scanPostageReceipt('${escapeHtml(key)}')" title="Read the recipient and tracking number off the receipt">✨ Read receipt</button>`
       : '';
 
-    return `<div class="postage-match-row" data-ref="${escapeHtml(ref)}">
+    return `<div class="postage-match-row" data-key="${escapeHtml(key)}">
       <div class="postage-match-cost">
         <strong>${fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
         <span>${escapeHtml(fmtD(expense.date) || expense.date || 'No date')}</span>
         <span class="postage-match-desc">${escapeHtml(expense.desc || 'Postage')}</span>
-        <span class="postage-match-ref">${escapeHtml(String(ref).replace(/^shippo:/, '') || 'No reference')}</span>
+        <span class="postage-match-ref">${escapeHtml(reference || 'No reference')}</span>
         ${receiptLink}
       </div>
 
       <div class="postage-match-fields">
         <div class="postage-match-field">
-          <label for="${postageRowDomId(ref, 'name')}">Recipient on receipt</label>
-          <input type="text" id="${postageRowDomId(ref, 'name')}" value="${escapeHtml(recipient)}"
+          <label for="${postageRowDomId(key, 'name')}">Recipient on receipt</label>
+          <input type="text" id="${postageRowDomId(key, 'name')}" value="${escapeHtml(recipient)}"
             placeholder="e.g. Daniela Dawson" autocomplete="off" spellcheck="false"
-            oninput="onPostageRecipientInput('${escapeHtml(ref)}')">
+            oninput="onPostageRecipientInput('${escapeHtml(key)}')">
         </div>
         <div class="postage-match-field">
-          <label for="${postageRowDomId(ref, 'track')}">Tracking number</label>
-          <input type="text" id="${postageRowDomId(ref, 'track')}" value="${escapeHtml(formatTrackingNumber(tracking))}"
+          <label for="${postageRowDomId(key, 'track')}">Tracking number</label>
+          <input type="text" id="${postageRowDomId(key, 'track')}" value="${escapeHtml(formatTrackingNumber(tracking))}"
             placeholder="e.g. LE 055 214 725 CA" autocomplete="off" spellcheck="false">
         </div>
       </div>
@@ -4976,8 +4986,8 @@ function renderPostageMatchWorklist() {
       <div class="postage-match-suggest">
         ${tierPill}
         ${reason}
-        <label class="sr-only" for="${postageRowDomId(ref, 'order')}">Order for this postage</label>
-        <select id="${postageRowDomId(ref, 'order')}" onchange="this.dataset.userPicked='1'">
+        <label class="sr-only" for="${postageRowDomId(key, 'order')}">Order for this postage</label>
+        <select id="${postageRowDomId(key, 'order')}" onchange="this.dataset.userPicked='1'">
           <option value="">Select an order</option>
           ${options}
           ${rest ? `<optgroup label="All other orders">${rest}</optgroup>` : ''}
@@ -4986,8 +4996,8 @@ function renderPostageMatchWorklist() {
 
       <div class="postage-match-actions">
         ${scanBtn}
-        <button type="button" class="btn gold sm" onclick="linkPostageExpense('${escapeHtml(ref)}')">Link postage</button>
-        <button type="button" class="btn sm ghost" onclick="dismissPostageExpense('${escapeHtml(ref)}')" title="Hide this receipt from the list; it stays in your ledger">✕</button>
+        <button type="button" class="btn gold sm" onclick="linkPostageExpense('${escapeHtml(key)}')">Link postage</button>
+        <button type="button" class="btn sm ghost" onclick="dismissPostageExpense('${escapeHtml(key)}')" title="Hide this receipt from the list; it stays in your ledger">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -4996,19 +5006,19 @@ function renderPostageMatchWorklist() {
 // Re-rank as the owner types a surname, so the suggestion tracks what they are
 // entering instead of waiting for a save to catch up.
 let _postageRecipientDebounce = null;
-function onPostageRecipientInput(ref) {
+function onPostageRecipientInput(key) {
   clearTimeout(_postageRecipientDebounce);
-  _postageRecipientDebounce = setTimeout(() => refreshPostageRowSuggestion(ref), 220);
+  _postageRecipientDebounce = setTimeout(() => refreshPostageRowSuggestion(key), 220);
 }
 
-function refreshPostageRowSuggestion(ref) {
-  const expense = findPostageExpense(ref);
+function refreshPostageRowSuggestion(key) {
+  const expense = findPostageExpense(key);
   if (!expense) return;
-  const row = document.querySelector(`.postage-match-row[data-ref="${CSS.escape(String(ref))}"]`);
-  const select = $(postageRowDomId(ref, 'order'));
+  const row = document.querySelector(`.postage-match-row[data-key="${CSS.escape(String(key))}"]`);
+  const select = $(postageRowDomId(key, 'order'));
   if (!row || !select) return;
 
-  const typed = ($(postageRowDomId(ref, 'name'))?.value || '').trim();
+  const typed = ($(postageRowDomId(key, 'name'))?.value || '').trim();
   const matches = suggestPostageMatches(expense, getShippingReconciliationOrders(), {
     takenOrderNumbers: ordersAlreadyCarryingPostage(),
     recipientOverride: typed,
@@ -5035,15 +5045,15 @@ function refreshPostageRowSuggestion(ref) {
   if (untouched && best) select.value = best.orderNumber;
 }
 
-async function linkPostageExpense(ref) {
-  const expense = findPostageExpense(ref);
+async function linkPostageExpense(key) {
+  const expense = findPostageExpense(key);
   if (!expense) { showToast('That postage receipt was not found', 'err'); return; }
 
-  const orderNumber = normalizeShippingOrderNumber($(postageRowDomId(ref, 'order'))?.value);
+  const orderNumber = normalizeShippingOrderNumber($(postageRowDomId(key, 'order'))?.value);
   if (!orderNumber) { showToast('Choose the order this postage paid for', 'warn'); return; }
 
-  const recipientName = ($(postageRowDomId(ref, 'name'))?.value || '').trim();
-  const trackingInput = ($(postageRowDomId(ref, 'track'))?.value || '').trim();
+  const recipientName = ($(postageRowDomId(key, 'name'))?.value || '').trim();
+  const trackingInput = ($(postageRowDomId(key, 'track'))?.value || '').trim();
   const tracking = normalizeTrackingNumber(trackingInput);
   if (trackingInput && tracking.length < 6) {
     showToast('That tracking number looks too short — check it against the receipt', 'warn');
@@ -5182,8 +5192,8 @@ async function autoMatchPostageReceipts() {
   showToast(`✓ Linked ${applied.length} postage receipt${applied.length === 1 ? '' : 's'} by name`);
 }
 
-async function dismissPostageExpense(ref) {
-  const expense = findPostageExpense(ref);
+async function dismissPostageExpense(key) {
+  const expense = findPostageExpense(key);
   if (!expense) return;
   const hadStatus = Object.prototype.hasOwnProperty.call(expense, 'shippingMatchStatus');
   const priorStatus = expense.shippingMatchStatus;
@@ -5224,12 +5234,12 @@ function applyScannedPostageFields(expense, fields) {
 }
 
 /** Push a scanned expense's stored values back into its visible inputs. */
-function syncPostageRowInputs(ref, expense) {
-  const nameEl = $(postageRowDomId(ref, 'name'));
+function syncPostageRowInputs(key, expense) {
+  const nameEl = $(postageRowDomId(key, 'name'));
   if (nameEl) nameEl.value = postageRecipientName(expense);
-  const trackEl = $(postageRowDomId(ref, 'track'));
+  const trackEl = $(postageRowDomId(key, 'track'));
   if (trackEl) trackEl.value = formatTrackingNumber(expense.trackingNumber || '');
-  refreshPostageRowSuggestion(ref);
+  refreshPostageRowSuggestion(key);
 }
 
 /**
@@ -5239,12 +5249,12 @@ function syncPostageRowInputs(ref, expense) {
  * links. A reader that misreads "DAWSON" must cost a correction, not money
  * attributed to the wrong customer.
  */
-async function scanPostageReceipt(ref) {
-  const expense = findPostageExpense(ref);
+async function scanPostageReceipt(key) {
+  const expense = findPostageExpense(key);
   if (!expense) { showToast('That postage receipt was not found', 'err'); return; }
   if (!expense.receipt) { showToast('There is no receipt attached to this expense', 'warn'); return; }
 
-  const btn = $(postageRowDomId(ref, 'scan'));
+  const btn = $(postageRowDomId(key, 'scan'));
   const original = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
 
@@ -5264,7 +5274,7 @@ async function scanPostageReceipt(ref) {
       Object.assign(expense, snapshot);
       throw error;
     }
-    syncPostageRowInputs(ref, expense);
+    syncPostageRowInputs(key, expense);
     showToast(`✓ Read ${written.join(' and ')} from the receipt — check it, then link`);
   } catch (error) {
     console.error('Postage receipt scan failed', error);
@@ -5328,20 +5338,20 @@ async function scanAllPostageReceipts() {
     for (let i = 0; i < candidates.length; i++) {
       if (batch.cancelled) break;
       const expense = candidates[i];
-      const ref = String(expense.ref || '');
+      const key = postageExpenseKey(expense);
       if (btn) btn.textContent = `Reading ${i + 1} of ${candidates.length}… (tap to stop)`;
 
-      const row = document.querySelector(`.postage-match-row[data-ref="${CSS.escape(ref)}"]`);
+      const row = document.querySelector(`.postage-match-row[data-key="${CSS.escape(key)}"]`);
       if (row) row.classList.add('is-scanning');
 
       try {
         const fields = await readShippingFieldsFromReceipt(expense.receipt);
         const { written } = applyScannedPostageFields(expense, fields);
-        if (written.length) { read++; syncPostageRowInputs(ref, expense); }
+        if (written.length) { read++; syncPostageRowInputs(key, expense); }
         else blank++;
       } catch (error) {
-        console.error('Batch scan failed on', ref, error);
-        failed.push(ref);
+        console.error('Batch scan failed on', key, error);
+        failed.push(key);
       } finally {
         if (row) row.classList.remove('is-scanning');
       }
@@ -5382,8 +5392,8 @@ async function scanAllPostageReceipts() {
 }
 
 /** Add or correct a tracking number from the shipping ledger row. */
-async function promptLedgerTracking(ref) {
-  const expense = findPostageExpense(ref);
+async function promptLedgerTracking(key) {
+  const expense = findPostageExpense(key);
   if (!expense) { showToast('That postage receipt was not found', 'err'); return; }
   const entered = await promptDialog(
     'Type the tracking number printed on the receipt or label.',
@@ -5430,12 +5440,13 @@ function closeManualShippoLinkModal() {
   if (el) el.remove();
 }
 
-async function unlinkShippoExpense(txRef) {
-  const expense = (TAX_CENTER.businessExpenses || []).find(e => e.ref === txRef);
+async function unlinkShippoExpense(expenseKey) {
+  const expense = findPostageByKey(TAX_CENTER.businessExpenses || [], expenseKey);
   if (!expense) {
     showToast('Expense not found.', 'err');
     return;
   }
+  const label = String(expense.ref || '').replace('shippo:', '') || 'that receipt';
 
   delete expense.shippingOrderNumber;
   delete expense.shippingMatchMethod;
@@ -5443,7 +5454,7 @@ async function unlinkShippoExpense(txRef) {
 
   try {
     await saveTaxCenter();
-    showToast(`Unlinked ${txRef.replace('shippo:', '')}`, 'ok');
+    showToast(`Unlinked ${label}`, 'ok');
     renderShippingAnalysisHub();
   } catch (err) {
     console.error('unlinkShippoExpense failed', err);
@@ -6666,7 +6677,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       } else {
         // Actionable rather than a dead dash: this is the one place the owner
         // can put the number in, and every other row already offers it.
-        trackingLinkHtml = `<button class="btn sm ghost" style="font-size:10px; padding:3px 8px;" onclick="promptLedgerTracking('${escapeHtml(primary.ref)}')">+ Add tracking</button>`;
+        trackingLinkHtml = `<button class="btn sm ghost" style="font-size:10px; padding:3px 8px;" onclick="promptLedgerTracking('${escapeHtml(postageExpenseKey(primary))}')">+ Add tracking</button>`;
       }
     } else {
       expenseRefHtml = `<span style="color:var(--text3); font-style:italic;">Unlinked</span>`;
@@ -6675,7 +6686,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       if (isSuggested) {
         const suggestedItem = suggested[0];
         linkBtn = `
-          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(suggestedItem.ref)}')" style="font-size:10px; padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:#fff;">
+          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(postageExpenseKey(suggestedItem))}')" style="font-size:10px; padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:#fff;">
             Confirm Match
           </button>`;
       }
@@ -6691,7 +6702,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     } else if (isLinked || o.manualPostagePaid) {
       const mainBtn = o.manualPostagePaid
         ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Clear manual</button>`
-        : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(linked[0].ref)}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Unlink</button>`;
+        : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(postageExpenseKey(linked[0]))}')" style="font-size:10px; padding:3px 8px; opacity:0.7;">Unlink</button>`;
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
           ${mainBtn}
