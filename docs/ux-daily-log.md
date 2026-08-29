@@ -59,7 +59,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-24 | visual | Consignment tab | Gave the consignment screen one set of headings, so the ledger stops wearing the faintest type in the app | #616 |
 | 2026-08-28 | visual | Book dashboard | Let the copies-on-hand number lead the Inventory panel instead of hiding under the bar | #636 |
 | 2026-08-29 | visual | POS checkout | Grew the register's quantity buttons to a full, tappable size | #643 |
-| 2026-08-29 | visual | Tax Centre | Gave the Business Trips header the same card-level heading its neighbours already have | TBD |
+| 2026-08-29 | visual | Tax Centre | Gave the Business Trips header the same card-level heading its neighbours already have | #644 |
 
 ---
 
