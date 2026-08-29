@@ -14774,9 +14774,9 @@ function renderEditExpenseReceipts() {
         ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(name)}</a>`
         : `<span title="This receipt reference cannot be opened" style="color:var(--text3);">${escapeHtml(name)}</span>`;
     }
-    return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;border:1px solid rgba(255,255,255,0.1);margin-bottom:4px;">
-      <span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;" title="${escapeHtml(name)}">📄 ${viewLink}</span>
-      <div style="display:flex;gap:4px;">
+    return `<div class="exp-receipt-chip">
+      <span class="exp-receipt-name" title="${escapeHtml(name)}">📄 ${viewLink}</span>
+      <div class="exp-receipt-actions">
         <button class="btn tx" type="button" onclick="relinkEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--gold);" title="Change or edit this receipt link">✏️ Relink</button>
         <button class="btn tx" type="button" onclick="removeEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:10px;color:var(--red);" title="Remove receipt attachment">Remove</button>
       </div>

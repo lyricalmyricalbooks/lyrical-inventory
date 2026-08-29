@@ -2204,6 +2204,11 @@ tr.hist-row:hover {
 .tc-storage-row{display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:var(--text3);margin-top:2px;}
 .tc-storage-actions{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center;}
 
+/* Attached-receipt chip (Edit Expense modal) — themed surface, not a fixed white overlay */
+.exp-receipt-chip{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);background:var(--surface-inset);border:1px solid var(--border-default);border-radius:var(--r2);padding:var(--space-2) var(--space-3);margin-bottom:var(--space-1);}
+.exp-receipt-chip .exp-receipt-name{font-size:var(--text-xs);color:var(--content-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;}
+.exp-receipt-chip .exp-receipt-actions{display:flex;gap:var(--space-1);flex-shrink:0;}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    BATCH EXPENSE SHEET — a whole pile of receipts staged, scanned and logged
    in one pass. Deliberately a wide modal: the point of the screen is seeing

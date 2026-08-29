@@ -69,6 +69,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-29 | visual | Customers | Gave the buyer filter panel back its background, in both themes | #653 |
 | 2026-08-29 | visual | Event POS | Made hovering a book card at the register actually lift it in dark mode | #666 |
 | 2026-08-29 | visual | Tax Centre | Gave the subscriptions summary strip one leading figure instead of four equal ones | #654 |
+| 2026-08-29 | visual | Expenses | Made the attached-receipt tag in the edit form actually visible | #656 |
 
 ---
 
