@@ -10,6 +10,10 @@
 **Learning:** In hot loops, replacing array methods like reduce with imperative for loops avoids intermediate allocations and reduces Garbage Collection (GC) overhead.
 **Action:** Use direct imperative iteration for scalar accumulation in frequently updated computations to improve speed.
 
+## 2025-02-24 - Function Re-allocation in Sort Callbacks
+**Learning:** Defining helper arrow functions directly inside loop callbacks like `Array.prototype.sort()` causes the function to be needlessly re-created in memory on every comparison ($O(N \log N)$ times). While modern JS engines try to optimize this, it's safer and structurally cleaner to declare loop-invariant closures outside the hot loop.
+**Action:** Always hoist helper function definitions out of high-frequency loop or sorting callbacks to prevent unnecessary memory reallocation and overhead.
+
 ## 2025-02-24 - Replace chained array combinations in rendering filters
 **Learning:** In functions that filter collections on UI state changes (like `_tcApplyLedgerFilter`), chained methods like `.filter().some()` create multiple intermediate arrays and add significant GC overhead (O(N) allocations) on every re-render.
 **Action:** Collapse complex chained filtering logic into a single imperative loop using early `continue` statements to prevent intermediate array allocations and improve UI responsiveness.

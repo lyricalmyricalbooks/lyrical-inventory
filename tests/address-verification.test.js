@@ -445,6 +445,14 @@ describe('countryFallbackWarning', () => {
   it('stays quiet for an order with no country at all, which the blocker handles', () => {
     expect(countryFallbackWarning('', 'US')).toBe('');
   });
+
+  it('flags a country that resolved to nothing, the same as one defaulted to US', () => {
+    expect(countryFallbackWarning('Wakanda', '')).toMatch(/Wakanda/);
+  });
+
+  it('stays quiet for a country that resolved properly, Serbia included', () => {
+    expect(countryFallbackWarning('Serbia', 'RS')).toBe('');
+  });
 });
 
 describe('describeShippoError', () => {

@@ -1,7 +1,7 @@
-# Gmail add-on — "Send to Lyrical Inventory"
+# Gmail add-on — "Send to Lyricalmyrical Inventory"
 
 Adds a panel inside Gmail. Open a receipt or invoice, confirm the vendor /
-amount / category, and press **Send to Lyrical Inventory**. The receipt shows
+amount / category, and press **Send to Lyricalmyrical Inventory**. The receipt shows
 up live in the app under **Import from Email** as a draft expense, ready to
 review and import.
 
@@ -62,10 +62,10 @@ Gmail, open any email, and approve the authorization prompt the first time
 
 ## Using it
 1. Open a receipt/invoice in Gmail.
-2. The **Send to Lyrical Inventory** panel appears on the right. Fields are
+2. The **Send to Lyricalmyrical Inventory** panel appears on the right. Fields are
    pre-filled by a quick heuristic — correct the amount/vendor/category if
    needed.
-3. Press the button. You'll see "✓ Sent to Lyrical Inventory."
+3. Press the button. You'll see "✓ Sent to Lyricalmyrical Inventory."
 4. In the app, the **📧 Import from Email** button shows a count badge. Open it,
    review the draft(s) in the table, and **Import selected drafts**. Each
    imported row is removed from the queue automatically.

@@ -56,6 +56,14 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-20 | visual | Opening screen | Gave the home screen real headings instead of the faintest type in the app | #598 |
 | 2026-08-20 | visual | Sales by book | Made the per-book sales cards match the chart above them and line their figures up | #601 |
 | 2026-08-20 | visual | QR codes page | Redesigned the payment QR cards so the book title and price lead | #602 |
+| 2026-08-24 | visual | Consignment tab | Gave the consignment screen one set of headings, so the ledger stops wearing the faintest type in the app | #616 |
+| 2026-08-28 | visual | Book dashboard | Let the copies-on-hand number lead the Inventory panel instead of hiding under the bar | #636 |
+| 2026-08-29 | visual | POS checkout | Grew the register's quantity buttons to a full, tappable size | #643 |
+| 2026-08-29 | visual | Tax Centre | Gave the Business Trips header the same card-level heading its neighbours already have | #644 |
+| 2026-08-29 | visual | Web Analytics | Fixed the "Connected" badge so it matches the app's colours in night mode | #646 |
+| 2026-08-29 | visual | Book dashboard | Gave the profit-sharing money row its own proper cards instead of a stretched header style | #650 |
+| 2026-08-29 | visual | Catalog & Stock | Made hovering a book card actually lift it in dark mode | #658 |
+| 2026-08-29 | visual | Settings — Book Catalog | Gave the Book Catalog and Test Book Catalog cards a real heading instead of a plain caption | #651 |
 
 ---
 

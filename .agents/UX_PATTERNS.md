@@ -146,6 +146,17 @@ colour family and matches the card it plots; a `--gold` → `--emerald` ramp ble
 across a single measurement, so the colour change reads as a state change that isn't there. Width
 transitions use `var(--dur-base) var(--ease-entrance)` so they collapse under reduced motion.
 
+**Third reference implementation — `.ps-stat-card`** (the book dashboard's Profit Sharing panel:
+earnings / paid / held / owed). Same anatomy, one addition worth reusing: the row mixes cards that
+just carry a coloured *figure* (`.ps-stat-val.is-positive`/`.is-muted` — earnings, paid) with cards
+that are a genuine call-out (`.ps-stat-card.tone-gold`/`.tone-critical`/`.tone-green` — held, owed),
+which tint the card's background, border and bottom accent together. Reach for a `tone-*` card
+modifier only for the figure that actually needs the call-out; a plain `.ps-stat-val` colour is
+enough for a card that's merely reporting, or every card ends up looking flagged and none of them
+are. **Never reuse `.hs-label`/`.hs-val`** for a card like this — that pair is built for the app
+header's permanently-dark strip (`rgba(255,255,255,.34)` label, fixed `--gold3` figure) and using it
+on a light card means fighting every property back with an inline override, one per card.
+
 ---
 
 ## Tables / lists — `.tbl`
@@ -384,6 +395,23 @@ Four rules it encodes:
   and the rhythm drifts down the screen. It is also its own `@container` (`overview-sec`),
   so the head stacks on a narrow panel without a viewport breakpoint.
 
+The pair generalises past the landing screen — the per-book Consignment tab (accounts /
+invoices / ledger) is the second screen on it. Two things that surfaced there:
+
+- **`.overview-section` and `.sys-sticky-head` coexist.** `container-type: inline-size`
+  applies layout and inline-size containment, not paint containment, so it does **not**
+  become a scroll container and a sticky `th` inside it still resolves `top` against the
+  page. Verified against the real sheet at `--sticky-top: 60px`.
+- **`.sec-head-badges` wraps.** A head's badge slot is not always one pill — these sections
+  hang two or three `.btn`s (and a `.sec-head-note` summary line) off it. Without
+  `flex-wrap`, `flex-shrink:0` squeezes the title column narrower and narrower until the
+  head overflows, well before the 680px container stack takes over. Use `.sec-head-note`
+  for a figure or status line riding alongside those buttons — mono and tabular, one step
+  below the buttons, so the actions still lead the slot.
+- **Replacing `.divider` is the point, not a side effect.** A screen that separates its
+  sections with hairlines is one where the spacing is doing no grouping work. Delete the
+  rules and let the section gap carry it.
+
 ---
 
 ## Dialogs — `.modal`
@@ -447,6 +475,27 @@ Three rules that come with it:
 - **`min-width: 0` on the stage.** Without it a long unbreakable figure — a
   mixed-currency total, a full ISBN — stretches the flex item and widens the
   whole column.
+
+Second surface on this pattern: the book dashboard's Inventory and Break-even
+panels (`.stock-block` / `.stock-stage`, "STOCK BLOCK" in `style.css`). Same
+before-state — five hand-picked margins running 20 / 10 / 17.6 / 9.6 / 12px — and
+the same two-gap fix. Two things it adds:
+
+- **The reading goes ABOVE the bar it explains.** A progress bar is an
+  illustration of a figure, so the figure has to exist first; with the number
+  underneath, the bar is the panel's largest element and the reading is a
+  footnote to it. Order is figure → bar → breakdown pills, all inside one stage.
+- **Scope a bar's height to the panel, not to `.bar-track`.** 5px of trough
+  carries no weight under a 22px figure, but the same class draws the catalogue's
+  own bars, which are sized against a whole shelf of cards. `.stock-block
+  .bar-track{height:8px}` + `.stock-block .bar-fill{height:100%}` leaves those
+  alone.
+
+**Layout that JS resets belongs in a class, not inline.** `#d-recalc-onhand-wrap`
+held `display:flex` in its `style` attribute while `updateDashboard()` reset the
+row with `style.display = ''` on leaving author mode — which clears the inline
+property outright and left the row stacked. Anything a `style.display = ''`
+touches must get its display from CSS (`.stock-actions`).
 
 **Money figures lead on type, not just size.** The sale total on that panel was
 34px Syne 800 — the heading face, proportional — so the digits re-widthed on

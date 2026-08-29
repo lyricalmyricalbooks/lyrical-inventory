@@ -21,6 +21,7 @@ import {
   BOOKS,
   BOOK_LIST,
   TAX_CENTER,
+  commitRecoveredWebsiteOrder,
   _fxRateCache,
   activeBook,
   addLog,
@@ -34,14 +35,15 @@ import {
   orders,
   renderHist,
   renderOrders,
+  saveCatalogWithDeletions,
   saveState,
   sheetsUrl,
   showToast,
   states,
   today,
 } from '../main.js';
-import { renderExpenses, saveReceiptToLocalFile } from './receipts.js';
-import { openM, closeM, confirmDialog, validateFields, clearFieldErrors, _prefersReducedMotion } from '../lib/modal.js';
+import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
+import { openM, closeM, confirmDialog, promptDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
 import {
   extractBigCartelAddress,
   getBigCartelIncluded,
@@ -51,9 +53,37 @@ import {
 } from './bigcartel.js';
 import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
 import { escapeHtml } from '../lib/html.js';
+import {
+  REGION_LABELS,
+  countryIsUnrecognized,
+  countryName,
+  countryOptions,
+  resolveCountryCode,
+  shipmentRegion,
+} from '../lib/countries.js';
 import { csvCell } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
-import { fmt, fmtD, roundCents, cadEquivalentForSale } from '../lib/money.js';
+import { fmt, fmtD, roundCents, cadEquivalentForSale, getBookCurrencyCode } from '../lib/money.js';
+import {
+  buildRecoveredOrderEntry,
+  recoveredOrderPrefill,
+  validateRecoveredOrder,
+} from '../lib/manual-website-order.js';
+import { receiptLinkTarget } from '../lib/receipt-links.js';
+import {
+  autoMatchPostage,
+  carrierFromTracking,
+  mergeScannedPostageFields,
+  postageScanCandidates,
+  formatTrackingNumber,
+  isPostageExpense,
+  isPostageLinked,
+  normalizeTrackingNumber,
+  postageLinkPatch,
+  postageRecipientName,
+  suggestPostageMatches,
+  trackingUrlFor,
+} from '../lib/postage-matching.js';
 import {
   applyShippoExpenseEnrichments,
   enrichShippoExpense,
@@ -89,6 +119,36 @@ import {
   storedVerificationIsCurrent,
   verificationVerdict,
 } from '../lib/address-verification.js';
+import {
+  calculateZonosLandedCost,
+  estimateOfflineLandedCost,
+  resolveDutyPrepaymentRoute,
+  buildZonosPrepayDeepLink,
+  formatDeclarationId,
+  DEFAULT_ZONOS_API_KEY,
+} from '../lib/zonos.js';
+import {
+  getCanadaPostRates,
+  estimateOfflineCanadaPostRates,
+  buyCanadaPostLabel,
+  validateDeclarationId,
+  DEFAULT_CP_API_KEY,
+  DEFAULT_CP_API_SECRET,
+  DEFAULT_CP_CUSTOMER_NUMBER,
+  generateCanadaPostLabelSvg,
+  getLastPurchasedShipmentContext,
+  validateCanadaPostAccount,
+  verifyCanadaPostTrackingPin,
+  resolveCanadaPostEnvironment,
+  getArchivedShipmentContext,
+  listArchivedShipments,
+} from '../lib/canadapost.js';
+import {
+  collectVerifiableShipments,
+  classifyTrackingResult,
+  summarizeTrackingAudit,
+  describeTrackingAudit,
+} from '../lib/tracking-audit.js';
 
 function getShippingReconciliationOrders() {
   const byNumber = new Map();
@@ -104,7 +164,7 @@ function getShippingReconciliationOrders() {
 }
 
 function renderOrderShippingSummary(order) {
-  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => String(expense?.ref || '').startsWith('shippo:'));
+  const expenses = (TAX_CENTER.businessExpenses || []).filter(expense => String(expense?.ref || '').startsWith('shippo:') || String(expense?.ref || '').startsWith('canadapost:'));
   const summary = linkedShippingSummary(order, expenses, 1);
   const customerPaidVal = summary.customerPaid ?? Number(order.shippingPaid || order.shipping_total || 0);
   const parts = [];
@@ -114,7 +174,11 @@ function renderOrderShippingSummary(order) {
   if (summary.postageBase == null && !order.shipped) {
     parts.push(summary.linkedCount ? 'Postage linked' : 'Postage not linked');
   }
-  return parts.length ? `<span class="subtext-mute">${escapeHtml(parts.join(' · '))}</span>` : '';
+  const declId = order.declarationId || order.zonosDeclarationId || '';
+  if (declId) {
+    parts.push(`<span class="zonos-decl-tag" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);background:rgba(46,125,50,0.08);padding:2px 6px;border-radius:4px;border:1px solid rgba(46,125,50,0.2);display:inline-flex;align-items:center;gap:4px;">Decl ID: <strong>${escapeHtml(declId)}</strong> <button type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declId)}');showToast('✓ Copied Declaration ID');" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:11px;" title="Copy Declaration ID">📋</button></span>`);
+  }
+  return parts.length ? `<span class="subtext-mute">${parts.join(' · ')}</span>` : '';
 }
 
 async function backfillShipping() {
@@ -232,9 +296,33 @@ function openLabelModal(histIndex) {
   $('sl-city').value = h.shipCity || '';
   $('sl-province').value = h.shipProvince || '';
   $('sl-postal').value = h.shipPostal || '';
+  populateCountryDatalist('sl-country-options');
   $('sl-country').value = h.shipCountry || 'Canada';
+  renderLabelCountryHint();
   updateShippedStatusUI(h);
   openM('shipping-label');
+}
+
+/**
+ * Warns, on the label form itself, when the typed country is not one this app
+ * can place on a map.
+ *
+ * An unrecognized country used to be invisible: the order saved fine, no label
+ * could ever be bought for it, and every report counted it as a US sale. The
+ * warning is the moment the mistake is cheapest to fix — while the order is
+ * open in front of whoever typed it.
+ */
+function renderLabelCountryHint() {
+  const hint = $('sl-country-hint');
+  if (!hint) return;
+  const typed = $('sl-country')?.value.trim() || '';
+  if (!typed || !countryIsUnrecognized(typed)) {
+    hint.hidden = true;
+    hint.textContent = '';
+    return;
+  }
+  hint.hidden = false;
+  hint.textContent = `“${typed}” isn’t a country we recognize — pick one from the list so this order is counted and shipped correctly.`;
 }
 
 function updateShippedStatusUI(h) {
@@ -279,7 +367,10 @@ function printShippingLabel() {
   h.shipCity = $('sl-city').value.trim();
   h.shipProvince = $('sl-province').value.trim();
   h.shipPostal = $('sl-postal').value.trim();
-  h.shipCountry = $('sl-country').value.trim();
+  // Stored in its canonical spelling so every later reader — the region split,
+  // the ledger filters, the Shippo payload — sees the same country the person
+  // typing meant, however they happened to spell it.
+  h.shipCountry = countryName($('sl-country').value.trim());
   if (!h.shipped) {
     h.shipped = true;
     h.shippedDate = today();
@@ -605,12 +696,12 @@ function renderShippingReconciliationWorklist() {
   const panel = list.closest('.shipping-reconciliation');
   const openButton = $('shipping-reconciliation-open');
   if (panel?.dataset.closed === 'true') {
-    panel.style.display = 'none';
-    if (openButton) openButton.style.display = '';
+    panel.hidden = true;
+    if (openButton) openButton.hidden = false;
     return;
   }
-  if (panel) panel.style.display = '';
-  if (openButton) openButton.style.display = 'none';
+  if (panel) panel.hidden = false;
+  if (openButton) openButton.hidden = true;
   const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
     String(expense?.ref || '').startsWith('shippo:') &&
     expense.shippingMatchStatus !== 'matched' && expense.shippingMatchStatus !== 'dismissed'
@@ -618,7 +709,11 @@ function renderShippingReconciliationWorklist() {
   const knownOrders = getShippingReconciliationOrders();
   count.textContent = `${expenses.length} to review`;
   if (!expenses.length) {
-    list.innerHTML = '<div class="shipping-reconciliation-empty">All imported postage is linked to an order.</div>';
+    list.innerHTML = `<div class="shipping-reconciliation-empty">
+      <span class="recon-empty-mark" aria-hidden="true">\u2713</span>
+      <strong>Every label is linked</strong>
+      <span>All imported postage is matched to an order. New labels appear here after the next import.</span>
+    </div>`;
     return;
   }
 
@@ -630,15 +725,30 @@ function renderShippingReconciliationWorklist() {
       return `<option value="${escapeHtml(number)}"${number === suggested ? ' selected' : ''}>${escapeHtml(number)} · ${escapeHtml(order.shipName || order.customer || 'Customer')}</option>`;
     }).join('');
     const context = [expense.recipientName, expense.recipientPostal, expense.trackingUrl ? 'Tracking saved' : ''].filter(Boolean).join(' · ');
+    // No order to pick means the sale never reached the app at all — the Gmail
+    // scan missed it. Say so plainly and point at the way out, instead of
+    // leaving an empty dropdown that looks like a broken control.
+    const noCandidates = !knownOrders.length;
+    const hint = noCandidates
+      ? '<span class="shipping-reconciliation-hint">No website orders on file yet — add this one to link it.</span>'
+      : (expense.shippingMatchStatus === 'unmatched'
+        ? '<span class="shipping-reconciliation-hint">No order matched this label. Pick one, or add the missing order.</span>'
+        : '');
     return `<div class="shipping-reconciliation-row">
       <div class="shipping-reconciliation-copy">
         <strong>${fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
         <span>${escapeHtml(expense.date || 'Date unavailable')} · ${escapeHtml(context || 'Recipient unavailable')}</span>
         <small>${escapeHtml(expense.shippingMatchStatus || 'unmatched')}</small>
+        ${hint}
       </div>
-      <label for="${domId}">Order</label>
-      <select id="${domId}" aria-label="Order for postage expense"><option value="">Select an order</option>${options}</select>
-      <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)">Link postage</button>
+      <div class="shipping-reconciliation-decision">
+        <label for="${domId}">Order</label>
+        <select id="${domId}" aria-label="Order for postage expense"${noCandidates ? ' disabled' : ''}><option value="">${noCandidates ? 'No orders on file' : 'Select an order'}</option>${options}</select>
+        <div class="shipping-reconciliation-actions">
+          <button class="btn sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="openRecoverWebsiteOrder(this.dataset.ref)">Add missing order</button>
+          <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)"${noCandidates ? ' disabled' : ''}>Link postage</button>
+        </div>
+      </div>
     </div>`;
   }).join('');
 }
@@ -687,6 +797,169 @@ async function clearShippingReconciliationList() {
   }
   renderShippingReconciliationWorklist();
   showToast(`Cleared ${expenses.length} reconciliation item${expenses.length === 1 ? '' : 's'}`);
+}
+
+// ── RECOVERING A MISSING WEBSITE ORDER ──────────────────────────────────
+//
+// The reconciliation worklist can only offer orders the app already knows
+// about. When the Gmail scan missed the confirmation email, there is nothing to
+// offer and the postage is stuck: the customer exists on the label and nowhere
+// else. These three functions turn the label back into the order — prefilled
+// from the recipient Shippo already gave us, written to the ledger through the
+// same path a scanned order takes, and linked to its postage on the way out.
+
+// The worklist row that opened the intake form, so the save can find its way
+// back to the expense without threading the ref through the DOM.
+let _recoverOrderRef = '';
+
+/**
+ * Every order number the app already holds, across all books and both the
+ * applied ledger and the not-yet-applied Gmail queue. Re-using one of these
+ * would double-count a sale, so the recovery form refuses it. Built here from
+ * state this module already reads rather than crossing back into main.js for
+ * one more name.
+ */
+function ledgerOrderNumbers() {
+  const nums = new Set();
+  Object.values(states).forEach(state => (state?.hist || []).forEach(entry => {
+    if (entry?.num) nums.add(String(entry.num));
+  }));
+  (orders || []).forEach(order => { if (order?.orderNum) nums.add(String(order.orderNum)); });
+  return Array.from(nums);
+}
+
+function findShippoExpense(ref) {
+  return (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
+}
+
+function openRecoverWebsiteOrder(ref) {
+  const expense = findShippoExpense(ref);
+  if (!expense) { showToast('Shipping expense was not found', 'err'); return; }
+  if (!BOOK_LIST.length) { showToast('Add a book to your catalogue first', 'warn'); return; }
+  _recoverOrderRef = String(ref);
+
+  const prefill = recoveredOrderPrefill(expense);
+  const bookId = BOOKS[activeBook] ? activeBook : (BOOK_LIST[0]?.id || '');
+  const bookOptions = BOOK_LIST.map(b =>
+    `<option value="${escapeHtml(b.id)}"${b.id === bookId ? ' selected' : ''}>${escapeHtml(b.title)}</option>`
+  ).join('');
+  const bookSelect = $('rwo-book');
+  if (bookSelect) bookSelect.innerHTML = bookOptions;
+
+  const set = (id, value) => { const el = $(id); if (el) el.value = value ?? ''; };
+  set('rwo-num', prefill.orderNumber);
+  set('rwo-date', prefill.date || today());
+  set('rwo-customer', prefill.customer);
+  set('rwo-email', prefill.email);
+  set('rwo-addr1', prefill.addr1);
+  set('rwo-addr2', prefill.addr2);
+  set('rwo-city', prefill.city);
+  set('rwo-province', prefill.province);
+  set('rwo-postal', prefill.postal);
+  set('rwo-country', prefill.country);
+  set('rwo-qty', 1);
+  set('rwo-shipping-paid', '0.00');
+  onRecoverWebsiteOrderBookChange();
+
+  const summary = $('rwo-postage-summary');
+  if (summary) {
+    const tracking = expense.trackingUrl ? ' · tracking saved' : '';
+    summary.textContent = `${fmt(expense.amount || 0, expense.currency || 'CAD')} postage paid ${fmtD(expense.date) || 'on an unknown date'}${tracking}. Saving links it to this order.`;
+  }
+  openM('recover-website-order');
+}
+
+// The price field follows whichever book is selected, so the publisher is
+// correcting a real list price rather than typing one from memory.
+function onRecoverWebsiteOrderBookChange() {
+  const bookId = $('rwo-book')?.value || '';
+  const book = BOOKS[bookId];
+  const priceEl = $('rwo-price');
+  const symEl = $('rwo-price-sym');
+  if (book && priceEl) priceEl.value = Number(book.listPrice || 0).toFixed(2);
+  if (book && symEl) symEl.textContent = getBookCurrencyCode(book);
+  const stockEl = $('rwo-stock-hint');
+  if (stockEl) {
+    const stock = Number(getState(bookId)?.stock ?? 0);
+    const qty = Math.max(1, parseInt($('rwo-qty')?.value || '1', 10) || 1);
+    stockEl.textContent = book
+      ? `${book.title} stock ${stock} → ${Math.max(0, stock - qty)} after saving`
+      : '';
+  }
+}
+
+async function saveRecoverWebsiteOrder() {
+  const expense = findShippoExpense(_recoverOrderRef);
+  if (!expense) { showToast('Shipping expense was not found', 'err'); return; }
+  const overlay = $('m-recover-website-order');
+  clearFieldErrors(overlay || document);
+
+  const form = {
+    orderNumber: ($('rwo-num')?.value || '').trim(),
+    bookId: $('rwo-book')?.value || '',
+    date: ($('rwo-date')?.value || '').trim(),
+    qty: parseInt($('rwo-qty')?.value || '1', 10),
+    price: parseFloat($('rwo-price')?.value || '0'),
+    shippingPaid: parseFloat($('rwo-shipping-paid')?.value || '0'),
+    customer: ($('rwo-customer')?.value || '').trim(),
+    email: ($('rwo-email')?.value || '').trim(),
+    addr1: ($('rwo-addr1')?.value || '').trim(),
+    addr2: ($('rwo-addr2')?.value || '').trim(),
+    city: ($('rwo-city')?.value || '').trim(),
+    province: ($('rwo-province')?.value || '').trim(),
+    postal: ($('rwo-postal')?.value || '').trim(),
+    country: ($('rwo-country')?.value || '').trim(),
+    phone: '',
+  };
+
+  const errors = validateRecoveredOrder(form, { takenOrderNumbers: ledgerOrderNumbers() });
+  if (errors.length) {
+    const fieldIds = {
+      orderNumber: 'rwo-num', bookId: 'rwo-book', qty: 'rwo-qty', price: 'rwo-price',
+      shippingPaid: 'rwo-shipping-paid', date: 'rwo-date', customer: 'rwo-customer',
+    };
+    errors.forEach(error => fieldError(fieldIds[error.field] || 'rwo-num', error.message));
+    showToast(errors[0].message, 'warn');
+    return;
+  }
+
+  const btn = $('rwo-save-btn');
+  if (btn) btn.disabled = true;
+  let entry;
+  try {
+    entry = commitRecoveredWebsiteOrder(form.bookId, form, ({ stockAfter }) =>
+      buildRecoveredOrderEntry(form, { stockAfter }));
+  } catch (error) {
+    console.error('Recovered order save failed', error);
+    if (btn) btn.disabled = false;
+    showToast('Could not save that order. Please try again.', 'err');
+    return;
+  }
+
+  // The order exists now, so the postage has something to point at. A failure
+  // here leaves the order in the ledger and the label in the worklist — the
+  // publisher can retry the link, and nothing is double-counted.
+  try {
+    await persistManualShippingLink(expense, entry.num, () => saveTaxCenter({ rethrow: true }));
+  } catch (error) {
+    console.error('Shipping link save failed after recovery', error);
+    if (btn) btn.disabled = false;
+    closeM('recover-website-order');
+    renderShippingReconciliationWorklist();
+    renderOrders();
+    renderHist();
+    showToast(`${entry.num} was added, but linking the postage failed. Try Link postage again.`, 'warn');
+    return;
+  }
+
+  if (btn) btn.disabled = false;
+  closeM('recover-website-order');
+  _recoverOrderRef = '';
+  renderShippingReconciliationWorklist();
+  renderOrders();
+  renderHist();
+  renderTaxCenter();
+  showToast(`✓ ${entry.num} added and postage linked`);
 }
 
 async function linkShippingExpense(ref) {
@@ -1063,7 +1336,59 @@ function getBookPresetSpecs(book) {
   return resolveBookPresetSpecs(book).specs;
 }
 
+/**
+ * Fills a country <select> from the full ISO list, keeping whatever was already
+ * chosen.
+ *
+ * The markup used to hard-code about forty countries, which is how a Serbian
+ * customer ended up unshippable and then mis-filed as a US sale. Building the
+ * list from the shared table means a destination nobody anticipated is
+ * selectable the first time it comes up.
+ */
+function populateCountrySelect(selectId) {
+  const select = $(selectId);
+  if (!select) return;
+  const previous = select.value;
+  if (select.dataset.isoPopulated !== '1') {
+    const frag = document.createDocumentFragment();
+    countryOptions().forEach((country, index) => {
+      // Canada and the United States stay pinned above a separator, as before.
+      if (index === 2) {
+        const divider = document.createElement('option');
+        divider.disabled = true;
+        divider.textContent = '─'.repeat(10);
+        frag.appendChild(divider);
+      }
+      const opt = document.createElement('option');
+      opt.value = country.code;
+      opt.textContent = country.name;
+      frag.appendChild(opt);
+    });
+    select.replaceChildren(frag);
+    select.dataset.isoPopulated = '1';
+  }
+  if (previous && Array.from(select.options).some(o => o.value === previous)) {
+    select.value = previous;
+  }
+}
+
+/** Fills the label modal's country suggestion list with every ISO name. */
+function populateCountryDatalist(listId) {
+  const list = $(listId);
+  if (!list || list.dataset.isoPopulated === '1') return;
+  const frag = document.createDocumentFragment();
+  countryOptions().forEach(country => {
+    const opt = document.createElement('option');
+    opt.value = country.name;
+    frag.appendChild(opt);
+  });
+  list.replaceChildren(frag);
+  list.dataset.isoPopulated = '1';
+}
+
 function initShippingTab() {
+  populateCountrySelect('sf-country');
+  populateCountrySelect('st-country');
   const shippoKey = TAX_CENTER.settings?.shippoKey || '';
   const indicator = $('ship-key-indicator');
   const statusText = $('ship-key-status-text');
@@ -1159,7 +1484,8 @@ function initShippingTab() {
           city: st.city || '',
           state: st.region || '',
           zip: st.postal || '',
-          country: normalizeCountryCode(st.country || 'CA')
+          country: st.country ? resolveCountryCode(st.country) : 'CA',
+          countryRaw: st.country || '',
         };
         const opt = document.createElement('option');
         opt.value = JSON.stringify(addrObj);
@@ -1190,7 +1516,8 @@ function initShippingTab() {
           city: h.shipCity,
           state: h.shipProvince,
           zip: h.shipPostal,
-          country: normalizeCountryCode(h.shipCountry || 'CA')
+          country: h.shipCountry ? resolveCountryCode(h.shipCountry) : 'CA',
+          countryRaw: h.shipCountry || '',
         };
         const opt = document.createElement('option');
         opt.value = JSON.stringify(addrObj);
@@ -1282,7 +1609,8 @@ function renderCustomShippoDestPicker() {
       city: st.city || '',
       state: st.region || '',
       zip: st.postal || '',
-      country: normalizeCountryCode(st.country || 'CA')
+      country: st.country ? resolveCountryCode(st.country) : 'CA',
+      countryRaw: st.country || '',
     };
 
     items.push({
@@ -1312,7 +1640,8 @@ function renderCustomShippoDestPicker() {
       city: h.shipCity,
       state: h.shipProvince,
       zip: h.shipPostal,
-      country: normalizeCountryCode(h.shipCountry || 'CA')
+      country: h.shipCountry ? resolveCountryCode(h.shipCountry) : 'CA',
+      countryRaw: h.shipCountry || '',
     };
 
     items.push({
@@ -1410,9 +1739,19 @@ function filterShippoDestMenu() {
     const masterIdx = _shippoDestMasterList.indexOf(item);
     // Carriers reject international labels without a recipient phone, so flag those rows up front.
     let destCountry = '';
-    try { destCountry = JSON.parse(item.value).country || ''; } catch (_) { destCountry = ''; }
+    let destCountryRaw = '';
+    try {
+      const parsed = JSON.parse(item.value);
+      destCountry = parsed.country || '';
+      destCountryRaw = parsed.countryRaw || '';
+    } catch (_) { destCountry = ''; }
     const phoneWarning = (item.missingPhone && destCountry && destCountry !== originCountry)
       ? '<span class="custom-dest-item-warn" title="No recipient phone on file — required for international labels">⚠ no phone</span>'
+      : '';
+    // No country means no label. Said here, in the picker, rather than at the
+    // rate call — the row is where someone is choosing who to ship to.
+    const countryWarning = (!destCountry && destCountryRaw)
+      ? `<span class="custom-dest-item-warn" title="${escapeHtml(destCountryRaw)} is not a country we recognize — set the destination country before buying a label">⚠ check country</span>`
       : '';
     return `
       <div class="custom-dest-item ${isSelected ? 'selected' : ''}" onclick="selectShippoDestCustomItem(${masterIdx}, event)">
@@ -1420,7 +1759,7 @@ function filterShippoDestMenu() {
           <span class="custom-dest-item-title">${item.icon} ${escapeHtml(item.title)}</span>
           <span class="custom-dest-item-badge ${item.category}">${escapeHtml(item.catLabel)}</span>
         </div>
-        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${phoneWarning}</div>
+        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${countryWarning}${phoneWarning}</div>
       </div>`;
   }).join('');
 }
@@ -1917,11 +2256,22 @@ function onShippoBookPresetChange() {
   $('sp-weight').value = specs.weight;
   $('sp-weight-unit').value = specs.weight_unit;
   const customsValue = $('sp-customs-value');
-  if (customsValue) customsValue.value = Math.max(1, parseFloat(book.listPrice || book.price || customsValue.value || 25)).toFixed(2);
+  if (customsValue) {
+    customsValue.value = (book.shipCustomsVal != null)
+      ? parseFloat(book.shipCustomsVal).toFixed(2)
+      : Math.max(1, parseFloat(book.listPrice || book.price || customsValue.value || 25)).toFixed(2);
+  }
   const customsDescription = $('sp-customs-description');
-  if (customsDescription) customsDescription.value = `${book.title || 'Printed books'} - printed books`.slice(0, 80);
+  if (customsDescription) {
+    customsDescription.value = book.shipCustomsDesc || `${book.title || 'Printed books'} - printed books`.slice(0, 80);
+  }
   const customsHs = $('sp-customs-hs');
-  if (customsHs) customsHs.value = book.shipHsCode || '490199';
+  if (customsHs) {
+    customsHs.value = book.shipHsCode || '490199';
+  }
+  if (book.shipIncoterm && $('sp-incoterm')) {
+    $('sp-incoterm').value = book.shipIncoterm;
+  }
 
   // Update base specifications cache
   shippoBaseSpecs = {
@@ -1937,10 +2287,154 @@ function onShippoBookPresetChange() {
   renderShippoRateReadiness();
 
   if (source === 'generic') {
-    showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor.`, 'warn', 6000);
+    showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor or click "Save to Book Preset".`, 'warn', 6000);
   } else {
     showToast(`✓ Package preset loaded: ${book.title}`);
   }
+}
+
+/**
+ * Open modal to save the current parcel and customs specifications to a book preset in the catalog.
+ */
+function openSaveBookPresetModal() {
+  const select = $('sbp-target-book');
+  if (!select) return;
+
+  const currentPresetVal = $('ship-preset-book')?.value || activeBook || (BOOK_LIST[0]?.id || '');
+  select.innerHTML = '<option value="">— Select a catalogue book to update —</option>' +
+    BOOK_LIST.map(b => `<option value="${escapeHtml(b.id)}" ${b.id === currentPresetVal ? 'selected' : ''}>${escapeHtml(b.title)} (${escapeHtml(b.id)})</option>`).join('');
+
+  renderSaveBookPresetPreview();
+  openM('save-book-preset');
+}
+
+/**
+ * Render the live preview of dimensions, weight, and customs values to be saved to the book preset.
+ */
+function renderSaveBookPresetPreview() {
+  const preview = $('sbp-specs-preview');
+  if (!preview) return;
+
+  const qty = Math.max(1, parseInt($('sp-qty')?.value || '1', 10));
+  const length = parseFloat($('sp-length')?.value || '0');
+  const width = parseFloat($('sp-width')?.value || '0');
+  const totalHeight = parseFloat($('sp-height')?.value || '0');
+  const dimUnit = $('sp-dim-unit')?.value || 'in';
+  const totalWeight = parseFloat($('sp-weight')?.value || '0');
+  const weightUnit = $('sp-weight-unit')?.value || 'lb';
+  const customsVal = parseFloat($('sp-customs-value')?.value || '0');
+  const customsDesc = $('sp-customs-description')?.value?.trim() || '';
+  const hsCode = $('sp-customs-hs')?.value?.trim() || '';
+  const incoterm = $('sp-incoterm')?.value || 'auto';
+
+  const singleHeight = totalHeight > 0 ? (totalHeight / qty) : 0;
+  const singleWeight = totalWeight > 0 ? (totalWeight / qty) : 0;
+
+  const formattedHeight = singleHeight ? (Math.round(singleHeight * 100) / 100) : '—';
+  const formattedWeight = singleWeight ? (singleWeight >= 10 ? (Math.round(singleWeight * 100) / 100) : (Math.round(singleWeight * 10000) / 10000)) : '—';
+
+  const scalingNote = qty > 1
+    ? `<div class="sbp-scale-note" style="margin-top:10px;padding:8px 10px;background:var(--gold-bg);border-radius:var(--r);font-size:11px;color:var(--gold-text);line-height:1.45;">ℹ Automatically normalized per copy from total quantity of <strong>${qty}</strong>: single-copy height is <strong>${formattedHeight} ${dimUnit}</strong> and weight is <strong>${formattedWeight} ${weightUnit}</strong>.</div>`
+    : '';
+
+  preview.innerHTML = `
+    <div class="sbp-spec-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px;">
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Dimensions (Per Copy)</label>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--text);">${length} × ${width} × ${formattedHeight} ${dimUnit}</span>
+      </div>
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Weight (Per Copy)</label>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--text);">${formattedWeight} ${weightUnit}</span>
+      </div>
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Value (CAD)</label>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--gold);">${customsVal ? customsVal.toFixed(2) + ' CAD' : '—'}</span>
+      </div>
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">HS Tariff Code</label>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:var(--text);">${escapeHtml(hsCode || '—')}</span>
+      </div>
+      <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Default Incoterm</label>
+        <span style="font-size:12px;font-weight:600;color:var(--text);">${escapeHtml(incoterm || 'Auto')}</span>
+      </div>
+      <div class="sbp-spec-item" style="grid-column:1 / -1;display:flex;flex-direction:column;gap:2px;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px;margin-top:2px;">
+        <label style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Description</label>
+        <span style="font-size:12px;color:var(--text2);font-weight:500;">${escapeHtml(customsDesc || 'Printed books')}</span>
+      </div>
+    </div>
+    ${scalingNote}
+  `;
+}
+
+/**
+ * Confirm and save the current specifications to the selected book record in the catalog.
+ */
+async function confirmSaveBookPreset() {
+  const targetId = $('sbp-target-book')?.value;
+  if (!targetId || !BOOKS[targetId]) {
+    showToast('Please select a book to save these specifications to', 'warn');
+    return;
+  }
+
+  const book = BOOKS[targetId];
+  const qty = Math.max(1, parseInt($('sp-qty')?.value || '1', 10));
+  const length = parseFloat($('sp-length')?.value || '0');
+  const width = parseFloat($('sp-width')?.value || '0');
+  const totalHeight = parseFloat($('sp-height')?.value || '0');
+  const dimUnit = $('sp-dim-unit')?.value || 'in';
+  const totalWeight = parseFloat($('sp-weight')?.value || '0');
+  const weightUnit = $('sp-weight-unit')?.value || 'lb';
+  const customsVal = parseFloat($('sp-customs-value')?.value || '0');
+  const customsDesc = $('sp-customs-description')?.value?.trim() || '';
+  const hsCode = $('sp-customs-hs')?.value?.trim() || '';
+  const incoterm = $('sp-incoterm')?.value || 'auto';
+
+  if (!length || !width || !totalHeight || !totalWeight) {
+    showToast('Please specify valid length, width, height, and weight values', 'warn');
+    return;
+  }
+
+  const singleHeight = Math.round((totalHeight / qty) * 100) / 100;
+  const singleWeight = Math.round((totalWeight / qty) * 10000) / 10000;
+
+  // Persist to book object
+  book.shipLength = length;
+  book.shipWidth = width;
+  book.shipHeight = singleHeight;
+  book.shipDimUnit = dimUnit;
+  book.shipWeight = singleWeight;
+  book.shipWeightUnit = weightUnit;
+  if (hsCode) book.shipHsCode = hsCode;
+  if (customsDesc) book.shipCustomsDesc = customsDesc;
+  if (customsVal) book.shipCustomsVal = customsVal;
+  if (incoterm) book.shipIncoterm = incoterm;
+
+  // Update base specifications cache
+  shippoBaseSpecs = {
+    length,
+    width,
+    height: singleHeight,
+    dim_unit: dimUnit,
+    weight: singleWeight,
+    weight_unit: weightUnit
+  };
+
+  // Sync with Firestore & localStorage
+  try {
+    await saveCatalogWithDeletions();
+    localStorage.setItem('lm-catalog-backup', JSON.stringify(BOOKS));
+  } catch (err) {
+    console.error('Error saving book preset:', err);
+  }
+
+  // Update book preset dropdown selection
+  const presetSelect = $('ship-preset-book');
+  if (presetSelect) presetSelect.value = targetId;
+
+  closeM('save-book-preset');
+  showToast(`✓ Saved shipping preset to ${book.title}`, 'ok');
 }
 
 function isCanadaPostRate(rate) {
@@ -2077,6 +2571,448 @@ function saveShippoIncotermPreference(destCountryCode) {
 
 function onShippoDestCountryChange() {
   loadShippoIncotermPreference($('st-country')?.value || '');
+  const sfCountryCode = $('sf-country')?.value || 'CA';
+  const stCountryCode = normalizeCountryCode($('st-country')?.value || 'US');
+
+  // Toggle US Zonos Duty Prepayment Card
+  const usCard = $('us-zonos-duty-card');
+  if (usCard) {
+    if (stCountryCode === 'US') {
+      usCard.style.display = 'block';
+      const declIdInput = $('sp-zonos-declaration-id');
+      if (declIdInput && !declIdInput.value && TAX_CENTER.settings?.cpZonosAutoGenerate !== false) {
+        autoGenerateZonosDeclarationHandler({ silent: true }).catch(() => {});
+      }
+    } else {
+      usCard.style.display = 'none';
+    }
+  }
+
+  if (isInternationalShipment(sfCountryCode, stCountryCode)) {
+    calculateZonosDutiesHandler().catch(() => {});
+  } else {
+    const card = $('zonos-duty-card');
+    if (card) card.style.display = 'none';
+  }
+}
+
+function onZonosDeclarationIdInput(val) {
+  const input = $('sp-zonos-declaration-id');
+  const formatted = formatDeclarationId(val);
+  if (input && input.value !== formatted) input.value = formatted;
+
+  const pill = $('us-zonos-status-pill');
+  const hint = $('zonos-decl-validation-hint');
+  const isValid = validateDeclarationId(formatted);
+
+  if (pill) {
+    if (isValid) {
+      pill.className = 'pill green';
+      pill.textContent = '✓ Declaration ID Ready';
+    } else if (formatted.length > 0) {
+      pill.className = 'pill amber';
+      pill.textContent = `${formatted.length}/13 Characters`;
+    } else {
+      pill.className = 'pill amber';
+      pill.textContent = 'Declaration Required';
+    }
+  }
+
+  if (hint) {
+    hint.textContent = isValid ? 'Valid 13-character code' : '13 alphanumeric characters required';
+    hint.style.color = isValid ? 'var(--green)' : 'var(--text3)';
+  }
+}
+
+async function pasteZonosDeclarationId() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      const clean = formatDeclarationId(text);
+      const input = $('sp-zonos-declaration-id');
+      if (input) {
+        input.value = clean;
+        onZonosDeclarationIdInput(clean);
+        showToast(`Pasted Declaration ID: ${clean}`);
+      }
+    }
+  } catch (_) {
+    showToast('Please paste the 13-character ID manually into the input', 'warn');
+  }
+}
+
+/**
+ * Show that a shipment was simulated rather than purchased.
+ * Called instead of the success path so no expense is booked and no order is marked shipped.
+ */
+function renderSimulatedCanadaPostNotice(result) {
+  const labelPanel = $('cp-purchased-label-panel');
+  if (!labelPanel) return;
+  labelPanel.style.display = 'block';
+  labelPanel.innerHTML = `
+    <div class="cp-purchased-panel" style="border-color:var(--amber,var(--border));">
+      <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:22px;line-height:1.1;">⚠️</span>
+        <div style="flex:1;min-width:220px;">
+          <strong style="font-size:14px;">Simulated shipment — nothing was purchased</strong>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px;">
+            Canada Post could not be reached${result.simulationReason ? ` (${escapeHtml(result.simulationReason)})` : ''},
+            so a placeholder tracking number was produced for layout preview only.
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;">
+            This parcel has <strong>not</strong> been paid for and the number below will not scan.
+            The order was left unshipped and no postage expense was recorded. Reconnect and buy the label again.
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;">
+            Placeholder PIN: <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(result.trackingPin || '—')}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Verify the Canada Post account configuration and, when a PIN is supplied,
+ * confirm the shipment actually exists on Canada Post's tracking system.
+ */
+/**
+ * Check every shipped order's Canada Post tracking number against Canada Post.
+ *
+ * Orders shipped before the app stopped inventing tracking numbers may still be
+ * carrying one, and it is indistinguishable from a real PIN by eye. This asks
+ * Canada Post about each one and lists the parcels it has never heard of.
+ */
+async function verifyShippedTrackingPinsHandler() {
+  const btn = $('cp-verify-shipped-btn');
+  const out = $('cp-account-check-result');
+  const oldText = btn ? btn.innerHTML : '';
+
+  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const isTest = !!TAX_CENTER.settings?.cpTestMode;
+
+  if (!apiKey || !apiSecret) {
+    showToast('⚠ Add your Canada Post API key and secret in Tax Centre settings first', 'warn');
+    return;
+  }
+
+  const shipments = collectVerifiableShipments(getShippingReconciliationOrders());
+  if (!shipments.length) {
+    if (out) {
+      out.style.display = 'block';
+      out.innerHTML = '<div style="font-size:11px;color:var(--text3);">No shipped orders with a Canada Post tracking number to check yet.</div>';
+    }
+    showToast('Nothing to check — no shipped orders carry a Canada Post tracking number', 'ok');
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+
+  const verdicts = [];
+  try {
+    for (let i = 0; i < shipments.length; i++) {
+      const shipment = shipments[i];
+      if (btn) btn.innerHTML = `<span>⏳</span><span>Checking ${i + 1} of ${shipments.length}…</span>`;
+      if (out) {
+        out.style.display = 'block';
+        out.innerHTML = `<div style="font-size:11px;color:var(--text3);">Asking Canada Post about parcel ${i + 1} of ${shipments.length}…</div>`;
+      }
+
+      let verdict;
+      try {
+        const result = await verifyCanadaPostTrackingPin({ pin: shipment.pin, apiKey, apiSecret, isTest });
+        verdict = classifyTrackingResult({ result });
+      } catch (err) {
+        verdict = classifyTrackingResult({ error: err });
+      }
+      verdicts.push({ ...shipment, ...verdict });
+    }
+
+    const summary = summarizeTrackingAudit(verdicts);
+    renderTrackingAuditResult(out, verdicts, summary);
+
+    if (summary.missing) {
+      showToast(`⚠ ${summary.missing} tracking number${summary.missing === 1 ? '' : 's'} Canada Post has no record of`, 'warn');
+    } else if (summary.unchecked === summary.total) {
+      showToast('⚠ Could not reach Canada Post to check any parcels', 'warn');
+    } else {
+      showToast(`✓ ${summary.verified} tracking number${summary.verified === 1 ? '' : 's'} confirmed with Canada Post`, 'ok');
+    }
+  } catch (err) {
+    console.warn('Tracking sweep failed:', err);
+    showToast(`⚠ Tracking check failed: ${err?.message || 'unknown error'}`, 'warn');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = oldText;
+    }
+  }
+}
+
+/** Render the sweep's findings, problems first. */
+function renderTrackingAuditResult(out, verdicts, summary) {
+  if (!out) return;
+
+  const order = { missing: 0, unchecked: 1, verified: 2 };
+  const sorted = [...verdicts].sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
+
+  const rowFor = v => {
+    const tone = v.status === 'missing'
+      ? 'color:var(--red,var(--text));'
+      : v.status === 'verified'
+        ? 'color:var(--green);'
+        : 'color:var(--text3);';
+    const mark = v.status === 'missing' ? '✕' : v.status === 'verified' ? '✓' : '—';
+    return `
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--border-subtle,var(--border));">
+        <span style="${tone}font-weight:700;">${mark}</span>
+        <span class="tnum" style="font-family:'DM Mono',monospace;font-size:11px;">${escapeHtml(v.pin)}</span>
+        ${v.orderNum ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(v.orderNum)}</span>` : ''}
+        <span style="font-size:11px;${tone}flex:1;min-width:140px;">${escapeHtml(v.detail || '')}</span>
+      </div>
+    `;
+  };
+
+  const advice = summary.missing
+    ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.5;">
+         A parcel Canada Post has no record of was never actually bought — most likely the connection dropped
+         during an older purchase. Buy the label again for those orders before telling the customer it is on its way.
+       </div>`
+    : '';
+
+  out.style.display = 'block';
+  out.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:6px;">${escapeHtml(describeTrackingAudit(summary))}</div>
+    ${sorted.map(rowFor).join('')}
+    ${advice}
+  `;
+}
+
+async function checkCanadaPostAccountAndPinHandler() {
+  const btn = $('cp-check-account-btn');
+  const out = $('cp-account-check-result');
+  const oldText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span><span>Checking…</span>';
+  }
+
+  try {
+    const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+    const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+    const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
+    const contractId = TAX_CENTER.settings?.cpContractId || '';
+    const isTest = !!TAX_CENTER.settings?.cpTestMode;
+
+    const audit = validateCanadaPostAccount({ apiKey, apiSecret, customerNumber, contractId, isTest });
+
+    const pin = ($('cp-check-pin')?.value || getLastPurchasedShipmentContext()?.trackingPin || '').trim();
+    let tracking = null;
+    let trackingError = '';
+    if (pin) {
+      try {
+        tracking = await verifyCanadaPostTrackingPin({ pin, apiKey, apiSecret, isTest });
+      } catch (err) {
+        trackingError = err?.message || 'Tracking lookup failed.';
+      }
+    }
+
+    if (out) {
+      const modePill = audit.environment.mode === 'live'
+        ? '<span class="pill green sm">Live Production Mode</span>'
+        : '<span class="pill amber sm">Sandbox Test Mode</span>';
+
+      const rows = [];
+      rows.push(`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${modePill}<span class="tnum" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${escapeHtml(audit.environment.hostname)}</span></div>`);
+      rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:6px;">${escapeHtml(audit.environment.description)}</div>`);
+      rows.push(`<div style="font-size:11px;margin-top:8px;">Customer number: <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(audit.customerNumber || '—')}</span>${audit.configured ? '' : ' <span class="pill gray sm">not configured</span>'}</div>`);
+
+      audit.errors.forEach(e => {
+        rows.push(`<div style="font-size:11px;color:var(--red,var(--text));margin-top:6px;">✕ ${escapeHtml(e)}</div>`);
+      });
+      audit.warnings.forEach(w => {
+        rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:6px;">⚠ ${escapeHtml(w)}</div>`);
+      });
+      if (audit.ok && !audit.errors.length) {
+        rows.push('<div style="font-size:11px;color:var(--green);margin-top:6px;">✓ Account settings look complete — labels will be attached to this customer number.</div>');
+      }
+
+      if (pin) {
+        if (tracking && tracking.found) {
+          rows.push(`<div style="font-size:11px;color:var(--green);margin-top:10px;">✓ Tracking PIN <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(tracking.pin)}</span> found at Canada Post${tracking.status ? ` — ${escapeHtml(tracking.status)}` : ''}.</div>`);
+          if (tracking.expectedDeliveryDate) {
+            rows.push(`<div style="font-size:11px;color:var(--text3);margin-top:3px;">Expected delivery: <span class="tnum">${escapeHtml(tracking.expectedDeliveryDate)}</span></div>`);
+          }
+        } else {
+          rows.push(`<div style="font-size:11px;color:var(--red,var(--text));margin-top:10px;">✕ Tracking PIN <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(pin)}</span> could not be confirmed. ${escapeHtml(trackingError)}</div>`);
+        }
+      }
+
+      out.style.display = 'block';
+      out.innerHTML = rows.join('');
+    }
+
+    if (!audit.ok) {
+      showToast('⚠ Canada Post account settings need attention', 'warn');
+    } else if (pin && tracking?.found) {
+      showToast('✓ Account and tracking PIN verified', 'ok');
+    } else if (pin) {
+      showToast('⚠ Tracking PIN could not be confirmed', 'warn');
+    } else {
+      showToast('✓ Canada Post account settings verified', 'ok');
+    }
+  } catch (err) {
+    console.warn('Canada Post account check failed:', err);
+    showToast(`⚠ Account check failed: ${err?.message || 'unknown error'}`, 'warn');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = oldText;
+    }
+  }
+}
+
+/**
+ * Render an explicit failure state when Zonos does not issue a Declaration ID.
+ * A Declaration ID is the customs identifier Canada Post forwards to U.S. CBP, so an
+ * unissued one is left blank rather than filled with a locally invented code.
+ */
+function renderZonosDeclarationFailure(hint, reason, silent) {
+  const input = $('sp-zonos-declaration-id');
+  if (input) {
+    input.value = '';
+    onZonosDeclarationIdInput('');
+  }
+  if (hint) {
+    hint.style.display = 'block';
+    hint.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:15px;line-height:1.2;">📋</span>
+        <div style="flex:1;min-width:200px;">
+          <strong>A Declaration ID has to be paid for</strong>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px;">${escapeHtml(reason)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5;">
+            <strong>To do it by hand:</strong> open the Zonos Prepay app, pay the duty for this parcel, and paste the
+            13-character ID it gives you into the box above.<br>
+            <strong>To have it happen automatically:</strong> set up a Zonos Verified Account, then save its Account Key
+            in Tax Centre → Zonos. After that Canada Post issues the ID itself every time you buy a label.
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  if (!silent) showToast('⚠ Zonos did not issue a Declaration ID — see the note under the button', 'warn');
+}
+
+/**
+ * Explain — and where possible arrange — how this parcel's U.S. duty gets prepaid.
+ *
+ * This replaces a button that promised to "auto-generate" a Declaration ID by
+ * calling Zonos' declarationCreateWorkflow. That mutation belongs to the Landed
+ * Cost / Checkout product and has no authority to issue a Canada Post
+ * prepayment declaration, so the call never produced one. A Declaration ID is
+ * proof that duty has been paid, so it cannot be conjured before payment: either
+ * a Verified Account pays it automatically at label time, or it is bought by
+ * hand in the Prepay app.
+ */
+async function autoGenerateZonosDeclarationHandler({ silent = false } = {}) {
+  const hint = $('zonos-auto-result-hint');
+  const route = currentDutyPrepaymentRoute();
+
+  if (route.route === 'not-required') {
+    if (!silent) showToast('U.S. duty prepayment only applies to parcels going to the United States', 'ok');
+    return route;
+  }
+
+  if (route.route === 'manual') {
+    if (hint) {
+      hint.style.display = 'block';
+      hint.innerHTML = `
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <strong style="color:var(--green);">✓ Declaration ID ready:</strong>
+          <span class="tnum" style="font-weight:700;letter-spacing:0.5px;font-family:'DM Mono',monospace;font-size:13px;">${escapeHtml(route.declarationId)}</span>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;">It will be sent with the label and printed in the customs header.</div>
+      `;
+    }
+    if (!silent) showToast('✓ Declaration ID already entered', 'ok');
+    return route;
+  }
+
+  if (route.route === 'verified') {
+    if (hint) {
+      hint.style.display = 'block';
+      hint.innerHTML = `
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:14px;">⚡</span>
+          <strong style="color:var(--green);">Zonos Verified Account connected</strong>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">
+          Leave this field empty. Canada Post issues the Declaration ID when you buy the label and bills the duty
+          to your Zonos account — it will appear on the label and against the order automatically.
+        </div>
+      `;
+    }
+    if (!silent) showToast('✓ Verified Account will supply the Declaration ID at purchase', 'ok');
+    return route;
+  }
+
+  renderZonosDeclarationFailure(hint, route.summary, silent);
+  return route;
+}
+
+/**
+ * The Zonos Verified Account key, as saved by the Tax Centre.
+ *
+ * This is what makes the whole flow automatic: sent as X-CPC-Zonos-Key on the
+ * shipment call, it lets Canada Post issue the Declaration ID and bill the duty.
+ * It was previously read here under a name nothing ever wrote
+ * (`cpZonosAccountKey`, while the Tax Centre saves `zonosAccountKey`), so the
+ * key was always blank and the automated route never once fired. The old name is
+ * still read as a fallback in case anything stored one under it.
+ */
+function getZonosAccountKey() {
+  return String(
+    TAX_CENTER.settings?.zonosAccountKey
+    || TAX_CENTER.settings?.cpZonosAccountKey
+    || ''
+  ).trim();
+}
+
+/** Which duty-prepayment route the shipment in the form will take. */
+function currentDutyPrepaymentRoute() {
+  return resolveDutyPrepaymentRoute({
+    destCountry: normalizeCountryCode($('st-country')?.value) || '',
+    accountKey: getZonosAccountKey(),
+    declarationId: ($('sp-zonos-declaration-id')?.value || '').trim()
+  });
+}
+
+function openZonosPrepayAppHandler() {
+  // Prepay has no documented deep-link format, so the form cannot be pre-filled.
+  // The parcel's details are copied to the clipboard instead, to be pasted in.
+  const qty = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
+  const unitVal = Math.max(0.01, parseFloat($('sp-customs-value')?.value) || 25);
+  const hsCode = ($('sp-customs-hs')?.value || '490199').trim();
+  const desc = $('sp-customs-description')?.value || 'Printed books';
+  const stZip = $('st-zip')?.value || '';
+  const stState = $('st-state')?.value || '';
+
+  const details = [
+    `Description: ${desc}`,
+    `HS code: ${hsCode}`,
+    `Quantity: ${qty}`,
+    `Value: CAD $${(unitVal * qty).toFixed(2)}`,
+    `Destination: ${[stState, stZip].filter(Boolean).join(' ')} US`
+  ].join('\n');
+
+  try {
+    navigator.clipboard?.writeText(details);
+  } catch (_) {}
+
+  window.open(buildZonosPrepayDeepLink(), '_blank', 'noopener');
+  showToast('Opened Zonos Prepay — parcel details copied, ready to paste');
 }
 
 function onShippoIncotermChange() {
@@ -2116,11 +3052,833 @@ function renderShippoIncotermHint() {
   }
 }
 
+let _lastZonosLandedCost = null;
+
+async function calculateZonosDutiesHandler({ shippingAmount, carrierName } = {}) {
+  const sfCountryCode = $('sf-country')?.value || 'CA';
+  const stCountryCode = $('st-country')?.value || 'US';
+  const stState = $('st-state')?.value || '';
+  const stZip = $('st-zip')?.value || '';
+  const sfState = $('sf-state')?.value || 'QC';
+  const sfZip = $('sf-zip')?.value || 'H2X 1Y4';
+
+  const isInternational = isInternationalShipment(sfCountryCode, stCountryCode);
+  const card = $('zonos-duty-card');
+  if (!card) return;
+
+  if (!isInternational) {
+    card.style.display = 'none';
+    card.innerHTML = '';
+    return;
+  }
+
+  const qty = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
+  const unitValue = Math.max(0.01, parseFloat($('sp-customs-value')?.value) || 25);
+  const hsCode = ($('sp-customs-hs')?.value || '490199').trim();
+  const description = $('sp-customs-description')?.value || 'Printed books';
+  const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 10);
+  const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 8);
+  const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 1);
+  const dimUnit = $('sp-dim-unit')?.value || 'in';
+  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 1.2);
+  const weightUnit = $('sp-weight-unit')?.value || 'lb';
+  const incoterm = resolveShippoIncoterm(stCountryCode);
+
+  const zonosApiKey = TAX_CENTER.settings?.zonosApiKey || DEFAULT_ZONOS_API_KEY;
+  const isEnabled = TAX_CENTER.settings?.zonosEnabled !== false;
+
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="zonos-duty-header">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="zonos-duty-icon">🌐</span>
+        <strong>Zonos Cross-Border Duties &amp; Taxes</strong>
+      </div>
+      <span class="pill gold" style="animation:pulse-glow 1.5s infinite ease-in-out;">Calculating...</span>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-top:8px;">Fetching real-time landed cost quote from Zonos GraphQL API for destination (${escapeHtml(stCountryCode)})...</div>
+  `;
+
+  const finalShippingAmount = typeof shippingAmount === 'number' ? shippingAmount : 15.00;
+
+  try {
+    let result;
+    if (zonosApiKey && isEnabled && navigator.onLine) {
+      result = await calculateZonosLandedCost({
+        apiKey: zonosApiKey,
+        origin: { countryCode: sfCountryCode, stateCode: sfState, postalCode: sfZip },
+        destination: { countryCode: stCountryCode, stateCode: stState, postalCode: stZip },
+        items: [{
+          amount: unitValue,
+          currencyCode: 'CAD',
+          description,
+          hsCode,
+          quantity: qty
+        }],
+        parcel: { length, width, height, dimUnit, weight, weightUnit },
+        shippingRate: { amount: finalShippingAmount, displayName: carrierName || 'Estimated Postage' },
+        incoterm: incoterm === 'auto' ? (stCountryCode === 'US' ? 'DDP' : 'DAP') : incoterm,
+        currency: 'CAD'
+      });
+      _lastZonosLandedCost = result;
+    } else {
+      result = estimateOfflineLandedCost({
+        destCountryCode: stCountryCode,
+        declaredValueCad: unitValue * qty,
+        shippingCostCad: finalShippingAmount,
+        hsCode
+      });
+      _lastZonosLandedCost = result;
+    }
+
+    renderZonosDutyCard(result, { stCountryCode, qty, unitValue, hsCode });
+  } catch (err) {
+    console.warn('Zonos API calculation fallback:', err);
+    const offlineResult = estimateOfflineLandedCost({
+      destCountryCode: stCountryCode,
+      declaredValueCad: unitValue * qty,
+      shippingCostCad: finalShippingAmount,
+      hsCode
+    });
+    _lastZonosLandedCost = offlineResult;
+    renderZonosDutyCard(offlineResult, { stCountryCode, qty, unitValue, hsCode, errorNote: err.message });
+  }
+}
+
+function renderZonosDutyCard(calc, { stCountryCode, qty, unitValue, hsCode, errorNote } = {}) {
+  const card = $('zonos-duty-card');
+  if (!card) return;
+  card.style.display = 'block';
+
+  const isOffline = !!calc.isOfflineEstimate;
+  const cur = calc.currencyCode || calc.currency || 'CAD';
+  const duty = (calc.dutiesAmount || 0).toFixed(2);
+  const tax = (calc.taxesAmount || 0).toFixed(2);
+  const fee = (calc.feesAmount || 0).toFixed(2);
+  const total = (calc.totalLandedCost || 0).toFixed(2);
+
+  const deMinimisNotes = [];
+  if (Array.isArray(calc.deMinimis) && calc.deMinimis.length > 0) {
+    calc.deMinimis.forEach(dm => {
+      if (dm.note) deMinimisNotes.push(`${dm.type || 'Rule'}: ${dm.note} (${dm.threshold || ''})`);
+    });
+  } else if (calc.deMinimisNote) {
+    deMinimisNotes.push(calc.deMinimisNote);
+  }
+
+  const isFree = parseFloat(total) === 0;
+  const statusBadge = isOffline
+    ? '<span class="pill gray">Offline Estimate</span>'
+    : (isFree ? '<span class="pill green">Duty &amp; Tax Free</span>' : '<span class="pill gold">Landed Cost Quoted</span>');
+
+  const dutyItemRows = (calc.dutiesBreakdown || []).filter(d => d.amount > 0).map(d => `
+    <div class="zonos-detail-row">
+      <span>${escapeHtml(d.description || 'Duty')} ${d.note ? `<small style="color:var(--text3);">(${escapeHtml(d.note)})</small>` : ''}</span>
+      <strong class="tnum">${d.amount.toFixed(2)} ${cur}</strong>
+    </div>
+  `).join('');
+
+  const feeItemRows = (calc.feesBreakdown || []).filter(f => f.amount > 0).map(f => `
+    <div class="zonos-detail-row">
+      <span>${escapeHtml(f.description || 'Clearance Fee')}</span>
+      <strong class="tnum">${f.amount.toFixed(2)} ${cur}</strong>
+    </div>
+  `).join('');
+
+  const taxItemRows = (calc.taxesBreakdown || []).filter(t => t.amount > 0).map(t => `
+    <div class="zonos-detail-row">
+      <span>${escapeHtml(t.description || 'Import Tax')}</span>
+      <strong class="tnum">${t.amount.toFixed(2)} ${cur}</strong>
+    </div>
+  `).join('');
+
+  card.innerHTML = `
+    <div class="zonos-duty-header">
+      <div>
+        <div class="zonos-duty-title">
+          <span class="zonos-duty-icon">🌐</span>
+          <strong>Zonos Landed Cost &amp; Duties</strong>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+          ${escapeHtml(stCountryCode || 'International')} · HS Code <span class="tnum">${escapeHtml(hsCode || '490199')}</span> · Declared <span class="tnum">${(qty * unitValue).toFixed(2)} ${cur}</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        ${statusBadge}
+        <button class="btn sm tag" type="button" onclick="calculateZonosDutiesHandler()" style="font-size:10px;padding:3px 8px;" title="Refresh calculation">↻ Refresh</button>
+      </div>
+    </div>
+
+    <div class="zonos-duty-metrics">
+      <div class="zonos-metric-box">
+        <label>Customs Duty</label>
+        <span class="zonos-metric-val tnum">${duty} ${cur}</span>
+      </div>
+      <div class="zonos-metric-box">
+        <label>Import VAT / Tax</label>
+        <span class="zonos-metric-val tnum">${tax} ${cur}</span>
+      </div>
+      <div class="zonos-metric-box">
+        <label>Clearance / Brokerage</label>
+        <span class="zonos-metric-val tnum">${fee} ${cur}</span>
+      </div>
+      <div class="zonos-metric-box highlighted">
+        <label>Total Landed Cost</label>
+        <span class="zonos-metric-val grand tnum">${total} ${cur}</span>
+      </div>
+    </div>
+
+    ${(dutyItemRows || taxItemRows || feeItemRows) ? `
+      <div class="zonos-breakdown-details">
+        ${dutyItemRows}
+        ${taxItemRows}
+        ${feeItemRows}
+      </div>
+    ` : ''}
+
+    ${deMinimisNotes.length > 0 ? `
+      <div class="zonos-duty-note">
+        ${deMinimisNotes.map(n => `<div>${escapeHtml(n)}</div>`).join('')}
+      </div>
+    ` : ''}
+
+    ${errorNote ? `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic;">Note: Using verified offline table (${escapeHtml(errorNote)})</div>` : ''}
+  `;
+}
+
+/**
+ * Calculate Direct Canada Post Rates for the current shipment form
+ */
+/**
+ * Calculate Direct Canada Post Rates for the current shipment form
+ */
+async function calculateCanadaPostRatesHandler() {
+  const card = $('canadapost-rates-card');
+  if (!card) return;
+
+  const sfZip = $('sf-zip')?.value || 'M4B 1B3';
+  const stCountryCode = normalizeCountryCode($('st-country')?.value) || 'CA';
+  const stZip = $('st-zip')?.value || '';
+
+  const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 20);
+  const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 15);
+  const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 2);
+  const dimUnit = $('sp-dim-unit')?.value || 'cm';
+  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 0.5);
+  const weightUnit = $('sp-weight-unit')?.value || 'kg';
+
+  // Normalize dimensions to cm and weight to kg
+  const lengthCm = dimUnit === 'in' ? length * 2.54 : length;
+  const widthCm = dimUnit === 'in' ? width * 2.54 : width;
+  const heightCm = dimUnit === 'in' ? height * 2.54 : height;
+  let weightKg = weight;
+  if (weightUnit === 'lb') weightKg = weight * 0.45359237;
+  else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
+  else if (weightUnit === 'g') weightKg = weight / 1000;
+
+  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
+  const contractId = TAX_CENTER.settings?.cpContractId || '';
+  const isTest = !!TAX_CENTER.settings?.cpTestMode;
+  const isEnabled = TAX_CENTER.settings?.cpEnabled !== false;
+
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="cp-rate-header">
+      <div class="cp-brand-badge">
+        <span class="cp-flag-icon">🇨🇦</span>
+        <div>
+          <strong style="font-size:13px;color:var(--text);">Canada Post Direct Rates</strong>
+          <div style="font-size:11px;color:var(--text3);">Official Web Services Rating</div>
+        </div>
+      </div>
+      <span class="pill gold" style="animation:pulse-glow 1.5s infinite ease-in-out;">Quoting live...</span>
+    </div>
+    <div style="padding:14px 0;display:flex;flex-direction:column;gap:8px;">
+      <div class="skeleton-line" style="height:44px;border-radius:var(--r);"></div>
+      <div class="skeleton-line" style="height:44px;border-radius:var(--r);"></div>
+    </div>
+  `;
+
+  try {
+    let quotes;
+    if (apiKey && apiSecret && isEnabled && navigator.onLine) {
+      quotes = await getCanadaPostRates({
+        originPostalCode: sfZip || 'M4B1B3',
+        destCountry: stCountryCode,
+        destPostalOrZip: stZip,
+        weightKg,
+        lengthCm,
+        widthCm,
+        heightCm,
+        apiKey,
+        apiSecret,
+        customerNumber,
+        contractId,
+        isTest
+      });
+    } else {
+      quotes = estimateOfflineCanadaPostRates({
+        destCountry: stCountryCode,
+        weightKg,
+        isCommercial: !!customerNumber
+      });
+    }
+
+    renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline: !apiKey || !apiSecret || !navigator.onLine, isTest });
+  } catch (err) {
+    console.warn('Canada Post direct rates fallback:', err);
+    const offlineQuotes = estimateOfflineCanadaPostRates({
+      destCountry: stCountryCode,
+      weightKg,
+      isCommercial: !!customerNumber
+    });
+    renderCanadaPostRatesCard(offlineQuotes, { stCountryCode, isOffline: true, errorNote: err.message, isTest });
+  }
+}
+
+function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote, isTest } = {}) {
+  const card = $('canadapost-rates-card');
+  if (!card) return;
+  card.style.display = 'block';
+
+  const cpApiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+  const cpApiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const cpCustomerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
+  const cpContractId = TAX_CENTER.settings?.cpContractId || '';
+  const env = resolveCanadaPostEnvironment({ isTest });
+  const audit = validateCanadaPostAccount({
+    apiKey: cpApiKey,
+    apiSecret: cpApiSecret,
+    customerNumber: cpCustomerNumber,
+    contractId: cpContractId,
+    isTest
+  });
+
+  let statusBadge = '<span class="pill green">Live Direct Rates</span>';
+  if (isTest) statusBadge = '<span class="pill gold">Sandbox Test Mode</span>';
+  if (isOffline) statusBadge = '<span class="pill gray">Offline Estimate</span>';
+
+  // Which Canada Post account a purchase actually bills is not obvious from the rates alone,
+  // so the environment and customer number are stated before any Buy Label button.
+  const accountBanner = `
+    <div class="cp-account-banner ${env.mode === 'live' ? 'is-live' : 'is-sandbox'}">
+      <div class="cp-account-banner-head">
+        <span class="pill ${env.mode === 'live' ? 'green' : 'gold'} sm">${escapeHtml(env.label)}</span>
+        <span class="tnum cp-account-host">${escapeHtml(env.hostname)}</span>
+        <span class="cp-account-cust">Account <span class="tnum">${escapeHtml(audit.customerNumber || '—')}</span></span>
+      </div>
+      <div class="cp-account-banner-note">${escapeHtml(env.description)}</div>
+      ${audit.errors.map(e => `<div class="cp-account-banner-error">✕ ${escapeHtml(e)}</div>`).join('')}
+      ${audit.warnings.map(w => `<div class="cp-account-banner-warn">⚠ ${escapeHtml(w)}</div>`).join('')}
+      <div class="cp-account-banner-actions">
+        <input type="text" id="cp-check-pin" class="cp-account-pin-input tnum" placeholder="Tracking PIN (optional)" inputmode="numeric" autocomplete="off" aria-label="Canada Post tracking PIN to verify">
+        <button class="btn sm tag cp-label-action-btn" id="cp-check-account-btn" type="button" onclick="checkCanadaPostAccountAndPinHandler()" title="Verify your Canada Post account settings and confirm a tracking PIN exists">
+          <span>🔍</span>
+          <span>Check Account &amp; Tracking PIN</span>
+        </button>
+        <button class="btn sm tag cp-label-action-btn" id="cp-verify-shipped-btn" type="button" onclick="verifyShippedTrackingPinsHandler()" title="Ask Canada Post about every shipped order's tracking number">
+          <span>📦</span>
+          <span>Verify All Shipped Orders</span>
+        </button>
+        <button class="btn sm tag cp-label-action-btn" id="cp-past-labels-btn" type="button" onclick="showArchivedCanadaPostLabels()" title="Reprint a label you already bought — works offline">
+          <span>🗂️</span>
+          <span>Reprint a Past Label</span>
+        </button>
+      </div>
+      <div id="cp-account-check-result" class="cp-account-check-result" style="display:none;"></div>
+    </div>
+  `;
+
+  const rateRows = (quotes || []).map(q => `
+    <div class="cp-rate-row">
+      <div style="flex:1;min-width:180px;">
+        <div style="font-weight:700;font-size:13px;color:var(--text);">${escapeHtml(q.serviceName)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;align-items:center;gap:6px;">
+          <span>⏱️ ${escapeHtml(q.estimatedSpeed || 'Standard')}</span>
+          ${q.deliveryDate ? `<span>· Est. ${escapeHtml(q.deliveryDate)}</span>` : ''}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <div style="text-align:right;">
+          <strong class="tnum" style="font-size:15px;color:var(--text);font-weight:800;">${q.totalPrice.toFixed(2)} CAD</strong>
+          ${q.taxes > 0 ? `<div class="tnum" style="font-size:10px;color:var(--text3);">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
+        </div>
+        <button class="btn sm gold cp-buy-btn" type="button" onclick="buyCanadaPostLabelHandler('${escapeHtml(q.serviceCode)}', '${escapeHtml(q.serviceName)}', ${q.totalPrice})" title="Purchase official ${escapeHtml(q.serviceName)} label with Canada Post API">
+          <span>🏷️</span>
+          <span>Buy Label</span>
+        </button>
+      </div>
+    </div>
+  `).join('');
+
+  card.innerHTML = `
+    <div class="cp-rate-header">
+      <div class="cp-brand-badge">
+        <span class="cp-flag-icon">🇨🇦</span>
+        <div>
+          <strong style="font-size:13px;color:var(--text);">Canada Post Direct Rates &amp; Labels</strong>
+          <div style="font-size:11px;color:var(--text3);">Destination: <strong>${escapeHtml(stCountryCode || 'CA')}</strong> (${(quotes || []).length} available)</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${statusBadge}
+        <button class="btn sm tag cp-label-action-btn" type="button" onclick="calculateCanadaPostRatesHandler()" title="Refresh rates">
+          <span>↻</span>
+          <span>Refresh</span>
+        </button>
+      </div>
+    </div>
+    ${accountBanner}
+    <div class="cp-rates-list">
+      ${rateRows || '<div style="font-size:12px;color:var(--text3);padding:12px 0;text-align:center;">No direct Canada Post services found for this package and route.</div>'}
+    </div>
+    ${errorNote ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;">Note: ${escapeHtml(errorNote)}</div>` : ''}
+    <div id="cp-purchased-label-panel" style="display:none;"></div>
+  `;
+}
+
+/**
+ * Open or print Canada Post purchased shipping label PDF / Vector In-App Modal
+ */
+async function openCanadaPostPurchasedLabel(labelUrl) {
+  const context = getLastPurchasedShipmentContext();
+  showCanadaPostLabelModal(context || { labelUrl });
+}
+
+/**
+ * Reopen a label bought earlier, redrawn from the stored shipment details.
+ * Needs no network and no Canada Post credentials — the postage is already paid.
+ */
+function reprintArchivedCanadaPostLabel(pin) {
+  const context = getArchivedShipmentContext(pin);
+  if (!context) {
+    showToast('⚠ That label is no longer stored on this device', 'warn');
+    return;
+  }
+  showCanadaPostLabelModal(context);
+}
+
+/**
+ * List the labels still held on this device so any of them can be reprinted.
+ */
+function showArchivedCanadaPostLabels() {
+  const out = $('cp-account-check-result');
+  if (!out) return;
+
+  const labels = listArchivedShipments();
+  out.style.display = 'block';
+
+  if (!labels.length) {
+    out.innerHTML = `
+      <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+        No labels stored on this device yet. Every label you buy from here is kept automatically,
+        so you can reprint it later even with no internet.
+      </div>`;
+    return;
+  }
+
+  const rows = labels.map(l => `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border-subtle,var(--border));">
+      <span class="tnum" style="font-family:'DM Mono',monospace;font-size:11px;">${escapeHtml(l.trackingPin || l.pin)}</span>
+      ${l.orderNum ? `<span style="font-size:11px;color:var(--text3);">${escapeHtml(l.orderNum)}</span>` : ''}
+      ${l.destinationName ? `<span style="font-size:11px;color:var(--text3);">→ ${escapeHtml(l.destinationName)}${l.destinationCountry ? ` (${escapeHtml(l.destinationCountry)})` : ''}</span>` : ''}
+      <button class="btn sm tag cp-label-action-btn" type="button" style="margin-left:auto;min-height:36px;padding:6px 12px;" onclick="reprintArchivedCanadaPostLabel('${escapeHtml(l.pin)}')" title="Reopen and reprint this label">
+        🖨️ Reprint
+      </button>
+    </div>
+  `).join('');
+
+  out.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px;">
+      ${labels.length} label${labels.length === 1 ? '' : 's'} stored on this device
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">These reprint without internet — the postage is already paid.</div>
+    ${rows}
+  `;
+}
+
+/**
+ * Interactive In-App Canada Post Shipping Label Inspector Modal
+ */
+function showCanadaPostLabelModal(shipmentContext) {
+  const context = shipmentContext || getLastPurchasedShipmentContext() || {
+    serviceCode: 'DOM.EP',
+    serviceName: 'Expedited Parcel',
+    trackingPin: '7012 3456 7890 1234',
+    sender: { name: 'Lyricalmyrical Books', address1: '123 Main St', city: 'Toronto', province: 'ON', postalCode: 'M4B 1B3' },
+    destination: { name: 'Customer', address1: '123 Destination Way', city: 'Vancouver', province: 'BC', postalCode: 'V6B 2W9', countryCode: 'CA' },
+    parcel: { weightKg: 0.5, lengthCm: 20, widthCm: 15, heightCm: 2 }
+  };
+
+  const existing = document.getElementById('cp-label-modal-overlay');
+  if (existing) existing.remove();
+
+  const svgMarkup = generateCanadaPostLabelSvg(context);
+  const cleanPin = String(context.trackingPin || '7012345678901234').replace(/[^0-9A-Z]/gi, '');
+  const trackingUrl = `https://www.canadapost-postescanada.ca/track-reperage/en#/resultList?searchFor=${encodeURIComponent(cleanPin)}`;
+
+  const modalHtml = `
+    <div id="cp-label-modal-overlay" class="cp-label-modal-overlay" onclick="if(event.target === this) closeCanadaPostLabelModal();">
+      <div class="cp-label-modal-content" role="dialog" aria-label="Canada Post Shipping Label">
+        <div class="cp-label-modal-header">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:20px;">🇨🇦</span>
+            <div>
+              <strong style="font-size:14px;color:var(--text);">Canada Post Shipping Label (4" × 6")</strong>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+                Tracking PIN: <strong class="tnum" style="color:var(--text);letter-spacing:0.5px;">${escapeHtml(cleanPin)}</strong>
+              </div>
+            </div>
+          </div>
+          <button class="btn sm tag cp-label-action-btn" type="button" onclick="closeCanadaPostLabelModal()" style="min-width:36px;padding:6px 10px;" aria-label="Close modal">✕</button>
+        </div>
+        <div class="cp-label-modal-body">
+          <div id="cp-label-preview-container" class="cp-label-preview-container">
+            ${svgMarkup}
+          </div>
+        </div>
+        <div class="cp-label-modal-footer">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button class="btn gold cp-label-action-btn" type="button" onclick="printCanadaPostLabelModal()">
+              <span>🖨️</span>
+              <span>Print Label (4" × 6")</span>
+            </button>
+            <button class="btn outline cp-label-action-btn" type="button" onclick="downloadCanadaPostLabelModal('${escapeHtml(cleanPin)}')">
+              <span>📥</span>
+              <span>Download SVG / PDF</span>
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(cleanPin)}');showToast('✓ Tracking PIN copied to clipboard');">
+              <span>📋</span>
+              <span>Copy PIN</span>
+            </button>
+            <a href="${trackingUrl}" target="_blank" rel="noopener noreferrer" class="btn sm tag cp-label-action-btn" style="text-decoration:none;color:var(--text);">
+              <span>🔍</span>
+              <span>Track Parcel</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeCanadaPostLabelModal() {
+  const modal = document.getElementById('cp-label-modal-overlay');
+  if (modal) modal.remove();
+}
+
+function printCanadaPostLabelModal() {
+  window.print();
+}
+
+function downloadCanadaPostLabelModal(pin) {
+  const context = getArchivedShipmentContext(pin) || getLastPurchasedShipmentContext();
+  const svgText = generateCanadaPostLabelSvg(context || { trackingPin: pin });
+  const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `canadapost-label-${pin || 'package'}.svg`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('✓ Shipping label downloaded', 'ok');
+}
+
+/**
+ * Buy a Canada Post shipping label for the chosen service
+ */
+async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) {
+  const sfName = $('sf-name')?.value?.trim() || 'Lyricalmyrical Books';
+  const sfCompany = $('sf-company')?.value?.trim() || 'Lyricalmyrical Books';
+  const sfPhone = $('sf-phone')?.value?.trim() || '4165550199';
+  const sfAddr = ($('sf-street1')?.value || $('sf-street')?.value || '').trim();
+  const sfAddr2 = ($('sf-street2')?.value || '').trim();
+  const sfCity = $('sf-city')?.value?.trim() || 'Toronto';
+  const sfProv = $('sf-state')?.value?.trim() || 'ON';
+  const sfZip = $('sf-zip')?.value?.trim() || 'M4B 1B3';
+
+  const stName = $('st-name')?.value?.trim() || '';
+  const stCompany = $('st-company')?.value?.trim() || '';
+  const stPhone = $('st-phone')?.value?.trim() || '5555555555';
+  const stAddr = ($('st-street1')?.value || $('st-street')?.value || '').trim();
+  const stAddr2 = ($('st-street2')?.value || '').trim();
+  const stCity = $('st-city')?.value?.trim() || '';
+  const stState = $('st-state')?.value?.trim() || '';
+  const stZip = $('st-zip')?.value?.trim() || '';
+  const stCountryCode = normalizeCountryCode($('st-country')?.value) || 'CA';
+
+  if (!stAddr || !stCity || !stZip) {
+    showToast('⚠ Please fill in recipient street address, city, and postal/zip code before buying a label', 'warn');
+    if (!stAddr) $('st-street1')?.focus();
+    else if (!stCity) $('st-city')?.focus();
+    else if (!stZip) $('st-zip')?.focus();
+    return;
+  }
+
+  const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 20);
+  const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 15);
+  const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 2);
+  const dimUnit = $('sp-dim-unit')?.value || 'cm';
+  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 0.5);
+  const weightUnit = $('sp-weight-unit')?.value || 'kg';
+
+  // Normalize dimensions to cm and weight to kg
+  const lengthCm = dimUnit === 'in' ? length * 2.54 : length;
+  const widthCm = dimUnit === 'in' ? width * 2.54 : width;
+  const heightCm = dimUnit === 'in' ? height * 2.54 : height;
+  let weightKg = weight;
+  if (weightUnit === 'lb') weightKg = weight * 0.45359237;
+  else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
+  else if (weightUnit === 'g') weightKg = weight / 1000;
+
+  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
+  const isTest = !!TAX_CENTER.settings?.cpTestMode;
+
+  // U.S. duty prepayment. Either a Verified Account key rides along on the request
+  // and Canada Post issues the Declaration ID itself, or one bought in the Prepay
+  // app is supplied here. Nothing can invent one, so there is no third option.
+  const dutyRoute = currentDutyPrepaymentRoute();
+  let declarationId = dutyRoute.route === 'manual' ? dutyRoute.declarationId : '';
+
+  if (dutyRoute.needsDeclaration && !declarationId && dutyRoute.route !== 'verified') {
+    const proceed = await confirmDialog({
+      title: 'No prepaid U.S. duty for this parcel',
+      message: `Canada Post needs a 13-character <strong>Declaration ID</strong> proving the U.S. duty is prepaid, and one has to be paid for before it exists.<br><br>`
+        + `<strong>Buy it now:</strong> open the Zonos Prepay app, pay the duty, and paste the ID in before buying the label.<br><br>`
+        + `<strong>Or set it up once:</strong> save a Zonos Verified Account Key in Tax Centre → Zonos and Canada Post will issue the ID automatically from then on.<br><br>`
+        + `You can also carry on without one — the parcel ships with duty unpaid and the recipient settles it on delivery.`,
+      confirmText: 'Carry on without prepaid duty',
+      cancelText: 'Go back'
+    });
+    if (!proceed) return;
+  }
+
+  const confirmed = await confirmDialog({
+    title: '🏷️ Confirm Canada Post Label Purchase',
+    message: `Purchase official <strong>${escapeHtml(serviceName)}</strong> shipping label for <strong>$${quotedPrice.toFixed(2)} CAD</strong> to <strong>${escapeHtml(stName || 'Customer')}</strong> in ${escapeHtml(stCity)}, ${escapeHtml(stCountryCode)}?${declarationId ? `<br><br><span style="font-size:11px;color:var(--green);">✓ Includes Zonos Declaration ID: <strong>${escapeHtml(declarationId)}</strong></span>` : ''}`,
+    confirmText: `Buy Label ($${quotedPrice.toFixed(2)} CAD)`,
+    cancelText: 'Cancel'
+  });
+
+  if (!confirmed) return;
+
+  showToast('⏳ Creating shipment and generating Canada Post label...', 'ok');
+
+  const customs = stCountryCode !== 'CA' ? {
+    quantity: Math.max(1, parseInt($('sp-qty')?.value, 10) || 1),
+    declaredValue: parseFloat($('sp-customs-value')?.value || '25'),
+    description: $('sp-customs-description')?.value || 'Printed books',
+    hsCode: $('sp-customs-hs')?.value || '490199',
+    declarationId
+  } : null;
+
+  const orderNum = $('sp-order-num')?.value || `ORDER-${Date.now().toString().slice(-6)}`;
+
+  try {
+    const result = await buyCanadaPostLabel({
+      serviceCode,
+      sender: {
+        name: sfName,
+        company: sfCompany,
+        phone: sfPhone,
+        address1: sfAddr,
+        address2: sfAddr2,
+        city: sfCity,
+        province: sfProv,
+        postalCode: sfZip
+      },
+      destination: {
+        name: stName || 'Customer',
+        company: stCompany,
+        phone: stPhone,
+        address1: stAddr,
+        address2: stAddr2,
+        city: stCity,
+        province: stState,
+        state: stState,
+        countryCode: stCountryCode,
+        postalCode: stZip
+      },
+      parcel: {
+        lengthCm,
+        widthCm,
+        heightCm,
+        weightKg
+      },
+      orderNum,
+      customs,
+      declarationId,
+      apiKey,
+      apiSecret,
+      customerNumber,
+      zonosAccountKey: getZonosAccountKey(),
+      isTest
+    });
+
+    if (result.isSimulated) {
+      // The gateway was unreachable and a sandbox/demo run produced a placeholder PIN.
+      // Nothing was bought, so the order stays unshipped and the ledger stays untouched.
+      renderSimulatedCanadaPostNotice(result);
+      showToast('⚠ Simulated shipment only — no label was purchased and nothing was charged', 'warn');
+      return;
+    }
+
+    if (result.trackingPin || result.labelUrl) {
+      showToast(`✓ Canada Post label purchased! Tracking PIN: ${result.trackingPin}`, 'ok');
+
+      // Auto-mark prefilled order as Shipped in Order History
+      // A Verified Account purchase returns the Declaration ID Canada Post issued;
+      // prefer it over anything typed in, and show it on the form.
+      if (result.declarationId && result.declarationId !== declarationId) {
+        declarationId = result.declarationId;
+        const declInput = $('sp-zonos-declaration-id');
+        if (declInput) {
+          declInput.value = declarationId;
+          onZonosDeclarationIdInput(declarationId);
+        }
+      }
+
+      const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber || orderNum);
+      if (selectedOrderNumber) {
+        try {
+          const s = getState();
+          const histItem = (s.hist || []).find(h => normalizeShippingOrderNumber(h.num) === selectedOrderNumber);
+          if (histItem) {
+            histItem.shipped = true;
+            histItem.shippedDate = today();
+            histItem.trackingNumber = result.trackingPin || '';
+            histItem.carrier = 'canadapost';
+            histItem.declarationId = declarationId || '';
+            histItem.postagePaid = quotedPrice;
+            saveState(activeBook);
+            renderHist();
+          }
+        } catch (e) {
+          console.warn('Auto-mark order shipped note:', e);
+        }
+      }
+
+      // Record business expense into TAX_CENTER ledger
+      try {
+        if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+        const cpRef = `canadapost:${result.trackingPin || result.shipmentId}`;
+        const alreadyLogged = TAX_CENTER.businessExpenses.some(e => e && e.ref === cpRef);
+        if (!alreadyLogged) {
+          TAX_CENTER.businessExpenses.unshift({
+            id: `exp_cp_${Date.now()}`,
+            date: today(),
+            // Canada Post postage is billed natively in CAD; stored verbatim with no FX conversion.
+            amount: quotedPrice,
+            category: 'Shipping & Postage',
+            vendor: 'Canada Post',
+            desc: `Canada Post ${serviceName} (PIN: ${result.trackingPin || result.shipmentId})${declarationId ? ` · Zonos: ${declarationId}` : ''}`,
+            ref: cpRef,
+            currency: 'CAD',
+            trackingPin: result.trackingPin || '',
+            declarationId: declarationId || '',
+            // This label was generated in-app, so its amount is already exact.
+            // These flags keep the receipt organizer from spending an AI scan re-reading it.
+            source: 'canadapost-label',
+            autoLogged: true,
+            receiptRequired: false,
+            ocrSkip: true
+          });
+        }
+        await saveTaxCenter().catch(() => {});
+        renderTaxCenter();
+        renderShippingAnalysisHub();
+      } catch (e) {
+        console.error('Failed to auto-log Canada Post expense:', e);
+      }
+
+      // Display purchased label panel in card
+      const labelPanel = $('cp-purchased-label-panel');
+      if (labelPanel) {
+        labelPanel.style.display = 'block';
+
+        labelPanel.innerHTML = `
+          <div class="cp-purchased-panel">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:22px;color:var(--green);">✓</span>
+                <div>
+                  <strong style="color:var(--green);font-size:14px;">Label Purchased &amp; Created Successfully</strong>
+                  <div style="font-size:11px;color:var(--text3);margin-top:2px;">Tracking PIN: <strong class="tnum" style="color:var(--text);font-size:12px;">${escapeHtml(result.trackingPin || 'Generated')}</strong></div>
+                </div>
+              </div>
+              <div class="cp-label-actions">
+                <button class="btn gold cp-label-action-btn" type="button" onclick="showCanadaPostLabelModal()" title="Open In-App Label Inspector">
+                  <span>🖨️</span>
+                  <span>Inspect &amp; Print Label (4" × 6")</span>
+                </button>
+                <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(result.trackingPin)}');showToast('✓ Copied PIN to clipboard');" title="Copy tracking number">
+                  <span>📋</span>
+                  <span>Copy PIN</span>
+                </button>
+              </div>
+            </div>
+            ${declarationId ? `
+              <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:16px;">🇺🇸</span>
+                  <div>
+                    <div style="font-size:10px;text-transform:uppercase;color:var(--text3);font-weight:700;">Zonos US Duty Declaration ID</div>
+                    <div class="tnum" style="font-size:13px;font-weight:700;color:var(--green);letter-spacing:1px;">${escapeHtml(declarationId)}</div>
+                  </div>
+                </div>
+                <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declarationId)}');showToast('✓ Copied Zonos Declaration ID');" style="min-height:36px;padding:6px 12px;">
+                  📋 Copy Declaration ID
+                </button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      // Automatically launch the In-App Label Inspector Modal for frictionless printing
+      showCanadaPostLabelModal();
+    }
+  } catch (err) {
+    console.error('Canada Post label purchase error:', err);
+    showToast(`⚠ Label purchase failed: ${err.message}`, 'err');
+  }
+}
+
+// Shippo weighs a customs line as quantity x net_weight and rejects the whole
+// shipment with "Combined weight of all Customs Items on the Customs
+// Declaration cannot be larger than the Parcel Weight" when that product is
+// over the parcel's own weight. net_weight is therefore PER COPY, not the line
+// total, so it is the parcel weight split across the copies in the box.
+//
+// The split is rounded DOWN to the two decimals Shippo stores. Rounding to
+// nearest would let the rounded-up copies push the total back over the parcel
+// weight (1.00 lb over 8 copies rounds 0.125 up to 0.13, and 8 x 0.13 = 1.04),
+// which is the same 400 error by another route.
+function shippoCustomsNetWeight(parcelWeight, quantity) {
+  const weight = Math.max(0.01, parseFloat(parcelWeight) || 0.01);
+  const qty = Math.max(1, parseInt(quantity, 10) || 1);
+  const perUnit = Math.floor((weight / qty) * 100) / 100;
+  // 0.01 is Shippo's smallest accepted net weight. Hitting this floor means the
+  // parcel weight is too low to cover the copies inside it; the rate form warns
+  // about that before we get here, so the declaration stays valid-shaped.
+  return Math.max(0.01, perUnit).toFixed(2);
+}
+
 function buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit }) {
   const quantity = Math.max(1, parseInt($('sp-qty')?.value, 10) || 1);
   const description = readShippoCustomsValue('sp-customs-description', 'Printed books');
   // sp-customs-value is the value of a single copy; Shippo's items[].value_amount
-  // and net_weight are both totals for the line (quantity x per-unit).
+  // is the line total (quantity x per-unit), while net_weight is per copy.
   const unitValue = Math.max(0.01, parseFloat(readShippoCustomsValue('sp-customs-value', '25')) || 25);
   const hsCode = readShippoCustomsValue('sp-customs-hs', '490199');
   const originCountry = normalizeCountryCode(sfCountryCode) || 'CA';
@@ -2136,7 +3894,7 @@ function buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, s
     items: [{
       description,
       quantity,
-      net_weight: Math.max(0.01, spWeight).toFixed(2),
+      net_weight: shippoCustomsNetWeight(spWeight, quantity),
       mass_unit: spWeightUnit,
       value_amount: (unitValue * quantity).toFixed(2),
       value_currency: 'CAD',
@@ -2381,8 +4139,10 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
 function shippoRateRules(opts) {
   const o = opts || {};
   const international = !!o.international;
-  // Injectable so the rules can be exercised without main.js's country table.
-  const supported = o.isSupportedCountry || ((v) => !!normalizeCountryCode(v));
+  // resolveCountryCode, not normalizeCountryCode: the latter falls back to 'US'
+  // and so would call every value supported, including the ones that are the
+  // whole reason this check exists.
+  const supported = o.isSupportedCountry || ((v) => !!resolveCountryCode(v));
   const filled = (v) => String(v ?? '').trim().length > 0;
   const positive = (v) => parseFloat(v) > 0;
 
@@ -2414,6 +4174,19 @@ function shippoRateRules(opts) {
     { id: 'sp-height', label: 'Parcel height', msg: 'Height has to be more than zero.', test: positive },
     { id: 'sp-weight', label: 'Parcel weight', msg: 'Weight has to be more than zero.', test: positive },
   );
+  // Customs splits the parcel weight across the copies inside it, and Shippo
+  // will not accept a copy lighter than 0.01. A box declared at less than that
+  // per copy is a weight that was mistyped, so it is caught on the form rather
+  // than as a 400 from the carrier after the publisher hits Calculate.
+  if (international) {
+    const qty = Math.max(1, parseInt(o.quantity, 10) || 1);
+    rules.push({
+      id: 'sp-weight',
+      label: 'Parcel weight',
+      msg: `Too light for ${qty} copies — customs needs at least ${(qty * 0.01).toFixed(2)} here.`,
+      test: (v) => (parseFloat(v) || 0) >= qty * 0.01
+    });
+  }
   return rules;
 }
 
@@ -2422,7 +4195,7 @@ function shippoRateFormState() {
   const originCode = normalizeCountryCode($('sf-country')?.value || '');
   const destCode = normalizeCountryCode($('st-country')?.value || '');
   const international = !!(originCode && destCode) && isInternationalShipment(originCode, destCode);
-  const rules = shippoRateRules({ international });
+  const rules = shippoRateRules({ international, quantity: $('sp-qty')?.value });
   // A rule whose input is absent from the DOM is not a missing detail — it is a
   // form that has not rendered — so it never counts against the publisher.
   const missing = rules.filter(r => {
@@ -2639,6 +4412,11 @@ async function calculateShippoRates() {
     }
 
     renderShippingChargePrediction(rates);
+
+    if (isInternational) {
+      const cheapestRate = rates.length > 0 ? [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))[0] : null;
+      calculateZonosDutiesHandler({ shippingAmount: cheapestRate ? parseFloat(cheapestRate.amount) : 15.00, carrierName: cheapestRate?.provider || '' }).catch(() => {});
+    }
 
     // Sort rates by amount ascending to find the cheapest
     const sortedByPrice = [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
@@ -2940,20 +4718,36 @@ async function confirmSuggestedShippoLink(orderNum, txRef) {
 }
 
 function openManualShippoLinkModal(orderNum) {
+  // Any unlinked postage receipt, not only a Shippo one. A counter receipt is
+  // the same kind of evidence and belongs in the same picker.
   const unlinkedExpenses = (TAX_CENTER.businessExpenses || []).filter(e =>
-    String(e?.ref || '').startsWith('shippo:') &&
-    e.shippingMatchStatus !== 'matched'
+    isPostageExpense(e) && !isPostageLinked(e) && e.shippingMatchStatus !== 'dismissed'
   );
+  // Best-first, so the surname the owner is looking for is usually the top row
+  // rather than something to hunt for in date order.
+  const order = getShippingReconciliationOrders().find(o =>
+    normalizeShippingOrderNumber(o.num) === normalizeShippingOrderNumber(orderNum));
+  const ranked = order
+    ? unlinkedExpenses
+      .map(e => ({ e, score: (suggestPostageMatches(e, [order], { limit: 1 })[0]?.score) ?? -1 }))
+      .sort((a, b) => b.score - a.score)
+    : unlinkedExpenses.map(e => ({ e, score: -1 }));
 
-  const rows = unlinkedExpenses.map(e => {
-    const txId = e.ref.replace('shippo:', '');
+  const rows = ranked.map(({ e, score }) => {
+    const reference = String(e.ref || '').replace(/^shippo:/, '') || 'No reference';
     const amount = (Number(e.baseAmount) || Number(e.amount) || 0).toFixed(2);
-    const recipient = escapeHtml(e.recipientName || 'Unknown recipient');
+    const recipientRaw = postageRecipientName(e);
+    const recipient = escapeHtml(recipientRaw || 'Unknown recipient');
     const date = escapeHtml(e.date || '—');
+    const hint = score >= 100
+      ? '<span class="manual-link-hint strong">Likely match</span>'
+      : score >= 65
+        ? '<span class="manual-link-hint">Possible match</span>'
+        : '';
     return `
-      <tr class="shippo-link-row" data-ref="${escapeHtml(e.ref)}" data-name="${recipient.toLowerCase()}">
-        <td class="mono">${txId.slice(0, 16)}…</td>
-        <td>${recipient}</td>
+      <tr class="shippo-link-row" data-ref="${escapeHtml(e.ref)}" data-name="${escapeHtml(recipientRaw.toLowerCase())}">
+        <td class="mono">${escapeHtml(reference.slice(0, 20))}${reference.length > 20 ? '…' : ''}</td>
+        <td>${recipient}${hint}</td>
         <td>${date}</td>
         <td style="text-align:right; font-weight:600;">CA$${amount}</td>
         <td style="text-align:right; width:60px;">
@@ -2967,15 +4761,15 @@ function openManualShippoLinkModal(orderNum) {
       <div class="manual-link-modal">
         <div class="manual-link-header">
           <div>
-            <div class="manual-link-eyebrow">Manual Shippo Link</div>
-            <div class="manual-link-title">Link a postage label → <span>${escapeHtml(orderNum)}</span></div>
+            <div class="manual-link-eyebrow">Link postage</div>
+            <div class="manual-link-title">Attach a paid receipt → <span>${escapeHtml(orderNum)}</span></div>
           </div>
           <button class="manual-link-close" onclick="closeManualShippoLinkModal()" aria-label="Close">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
         <div class="manual-link-body">
-          <input type="text" class="manual-link-search" placeholder="Search by recipient name…" oninput="filterManualShippoLinkRows(this.value)" />
+          <input type="text" class="manual-link-search" placeholder="Search by recipient surname…" oninput="filterManualShippoLinkRows(this.value)" />
           ${rows ? `
             <div class="manual-link-table-container">
               <table class="manual-link-table">
@@ -2992,7 +4786,7 @@ function openManualShippoLinkModal(orderNum) {
                   ${rows}
                 </tbody>
               </table>
-            </div>` : `<div class="manual-link-empty">No unlinked Shippo labels found. Try syncing Shippo first.</div>`}
+            </div>` : `<div class="manual-link-empty">Every postage receipt in your ledger is already linked to an order. Import from Shippo, or log a counter receipt in the Tax Centre, to see more here.</div>`}
         </div>
       </div>
     </div>`;
@@ -3033,6 +4827,602 @@ async function doManualShippoLink(orderNum, txRef) {
     console.error('doManualShippoLink failed', err);
     showToast('Could not save link. Please try again.', 'err');
   }
+}
+
+// ── MATCHING COUNTER-BOUGHT POSTAGE TO ITS ORDER ────────────────────────
+//
+// Postage bought at a Canada Post counter arrives in the ledger as a plain
+// expense: a price, a date, a carrier order number, and a receipt PDF. The
+// name of the person it was posted to is on the receipt and nowhere else, so
+// nothing in the app could tie it to a sale — the order sat on "Needs link"
+// and its margin read as pure profit.
+//
+// This worklist closes that gap from the receipt's side. It lists every
+// unlinked postage cost, lets the owner put in the recipient and the tracking
+// number the receipt shows (or read them off the receipt with the AI scanner),
+// ranks the orders by surname, and links the two together with the tracking
+// number attached so the shipping ledger can show it.
+
+const POSTAGE_MATCH_DOM_PREFIX = 'pm-';
+
+function postageRowDomId(ref, field) {
+  return `${POSTAGE_MATCH_DOM_PREFIX}${field}-${String(ref).replace(/[^A-Za-z0-9_-]/g, '-')}`;
+}
+
+function findPostageExpense(ref) {
+  return (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
+}
+
+/** Every postage cost still waiting to be tied to an order. */
+function unlinkedPostageExpenses() {
+  return (TAX_CENTER.businessExpenses || []).filter(expense =>
+    isPostageExpense(expense) && !isPostageLinked(expense) && expense.shippingMatchStatus !== 'dismissed'
+  );
+}
+
+/** Order numbers already carrying postage, so one label cannot claim two. */
+function ordersAlreadyCarryingPostage() {
+  return (TAX_CENTER.businessExpenses || [])
+    .filter(expense => isPostageExpense(expense) && isPostageLinked(expense))
+    .map(expense => expense.shippingOrderNumber);
+}
+
+function renderPostageMatchWorklist() {
+  const host = $('postage-match-list');
+  const count = $('postage-match-count');
+  if (!host) return;
+  if (isAuthor()) { host.innerHTML = ''; return; }
+
+  const expenses = unlinkedPostageExpenses();
+  if (count) count.textContent = `${expenses.length} to match`;
+
+  const autoBtn = $('postage-match-auto');
+  const orders = getShippingReconciliationOrders();
+  const taken = ordersAlreadyCarryingPostage();
+  const autoCount = autoMatchPostage(expenses, orders, { takenOrderNumbers: taken }).length;
+  if (autoBtn) {
+    autoBtn.disabled = autoCount === 0;
+    autoBtn.textContent = autoCount ? `Match ${autoCount} by name` : 'Nothing to auto-match';
+  }
+
+  // Both header buttons say how much they would actually do, so neither is a
+  // guess about whether pressing it is worth the wait or the API allowance.
+  const scanAllBtn = $('postage-match-scan-all');
+  if (scanAllBtn && !_postageBatchScan) {
+    const scanCount = TAX_CENTER.settings?.geminiKey ? postageScanCandidates(expenses).length : 0;
+    scanAllBtn.disabled = scanCount === 0;
+    scanAllBtn.textContent = scanCount
+      ? `Read ${scanCount} receipt${scanCount === 1 ? '' : 's'}`
+      : (TAX_CENTER.settings?.geminiKey ? 'Nothing left to read' : 'Add a Gemini key to read receipts');
+  }
+
+  if (!expenses.length) {
+    host.innerHTML = `<div class="postage-match-empty">
+      <span class="postage-match-empty-icon" aria-hidden="true">📮</span>
+      <div>
+        <strong>Every postage receipt is linked to an order.</strong>
+        <p>Log a counter receipt in the Tax Centre under Shipping &amp; Postage and it will appear here to match.</p>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const canScan = !!(TAX_CENTER.settings?.geminiKey);
+
+  host.innerHTML = expenses.map(expense => {
+    const ref = String(expense.ref || '');
+    const recipient = postageRecipientName(expense);
+    const tracking = normalizeTrackingNumber(expense.trackingNumber);
+    const matches = suggestPostageMatches(expense, orders, { takenOrderNumbers: taken, limit: 6 });
+    const best = matches[0];
+
+    const options = matches.map(match => {
+      const label = `${match.orderNumber} · ${match.orderName || 'Customer'}`;
+      return `<option value="${escapeHtml(match.orderNumber)}"${match === best ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+    // Every other order stays reachable below the ranked ones: a surname the
+    // matcher could not read must never become an order the owner cannot pick.
+    const rest = orders
+      .filter(order => !matches.some(m => m.orderNumber === normalizeShippingOrderNumber(order.num)))
+      .map(order => {
+        const number = normalizeShippingOrderNumber(order.num);
+        if (!number) return '';
+        return `<option value="${escapeHtml(number)}">${escapeHtml(number)} · ${escapeHtml(order.shipName || order.customer || 'Customer')}</option>`;
+      }).join('');
+
+    const tierPill = best
+      ? `<span class="postage-match-tier ${best.tier}">${best.tier === 'confident' ? 'Strong match' : best.tier === 'likely' ? 'Likely match' : 'Weak match'}</span>`
+      : '<span class="postage-match-tier none">No name match yet</span>';
+    const reason = best
+      ? `<span class="postage-match-reason">${escapeHtml(best.reason)}</span>`
+      : `<span class="postage-match-reason">${recipient
+        ? 'No order found for that name in the weeks around this receipt.'
+        : 'Add the recipient from the receipt and a match will be suggested.'}</span>`;
+
+    const receiptTarget = receiptLinkTarget(expense.receipt);
+    const receiptLink = receiptTarget.kind === 'local'
+      ? `<button type="button" class="postage-match-receipt" onclick="viewLocalReceipt('${escapeHtml(receiptTarget.path)}')">View receipt</button>`
+      : receiptTarget.kind === 'url'
+        ? `<a class="postage-match-receipt" href="${escapeHtml(receiptTarget.href)}" target="_blank" rel="noopener">View receipt</a>`
+        : '<span class="postage-match-noreceipt">No receipt attached</span>';
+
+    const scanBtn = (canScan && expense.receipt)
+      ? `<button type="button" class="btn sm ghost" id="${postageRowDomId(ref, 'scan')}" onclick="scanPostageReceipt('${escapeHtml(ref)}')" title="Read the recipient and tracking number off the receipt">✨ Read receipt</button>`
+      : '';
+
+    return `<div class="postage-match-row" data-ref="${escapeHtml(ref)}">
+      <div class="postage-match-cost">
+        <strong>${fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
+        <span>${escapeHtml(fmtD(expense.date) || expense.date || 'No date')}</span>
+        <span class="postage-match-desc">${escapeHtml(expense.desc || 'Postage')}</span>
+        <span class="postage-match-ref">${escapeHtml(String(ref).replace(/^shippo:/, '') || 'No reference')}</span>
+        ${receiptLink}
+      </div>
+
+      <div class="postage-match-fields">
+        <div class="postage-match-field">
+          <label for="${postageRowDomId(ref, 'name')}">Recipient on receipt</label>
+          <input type="text" id="${postageRowDomId(ref, 'name')}" value="${escapeHtml(recipient)}"
+            placeholder="e.g. Daniela Dawson" autocomplete="off" spellcheck="false"
+            oninput="onPostageRecipientInput('${escapeHtml(ref)}')">
+        </div>
+        <div class="postage-match-field">
+          <label for="${postageRowDomId(ref, 'track')}">Tracking number</label>
+          <input type="text" id="${postageRowDomId(ref, 'track')}" value="${escapeHtml(formatTrackingNumber(tracking))}"
+            placeholder="e.g. LE 055 214 725 CA" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="postage-match-suggest">
+        ${tierPill}
+        ${reason}
+        <label class="sr-only" for="${postageRowDomId(ref, 'order')}">Order for this postage</label>
+        <select id="${postageRowDomId(ref, 'order')}" onchange="this.dataset.userPicked='1'">
+          <option value="">Select an order</option>
+          ${options}
+          ${rest ? `<optgroup label="All other orders">${rest}</optgroup>` : ''}
+        </select>
+      </div>
+
+      <div class="postage-match-actions">
+        ${scanBtn}
+        <button type="button" class="btn gold sm" onclick="linkPostageExpense('${escapeHtml(ref)}')">Link postage</button>
+        <button type="button" class="btn sm ghost" onclick="dismissPostageExpense('${escapeHtml(ref)}')" title="Hide this receipt from the list; it stays in your ledger">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Re-rank as the owner types a surname, so the suggestion tracks what they are
+// entering instead of waiting for a save to catch up.
+let _postageRecipientDebounce = null;
+function onPostageRecipientInput(ref) {
+  clearTimeout(_postageRecipientDebounce);
+  _postageRecipientDebounce = setTimeout(() => refreshPostageRowSuggestion(ref), 220);
+}
+
+function refreshPostageRowSuggestion(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) return;
+  const row = document.querySelector(`.postage-match-row[data-ref="${CSS.escape(String(ref))}"]`);
+  const select = $(postageRowDomId(ref, 'order'));
+  if (!row || !select) return;
+
+  const typed = ($(postageRowDomId(ref, 'name'))?.value || '').trim();
+  const matches = suggestPostageMatches(expense, getShippingReconciliationOrders(), {
+    takenOrderNumbers: ordersAlreadyCarryingPostage(),
+    recipientOverride: typed,
+    limit: 6,
+  });
+  const best = matches[0];
+
+  const tierEl = row.querySelector('.postage-match-tier');
+  if (tierEl) {
+    tierEl.className = `postage-match-tier ${best ? best.tier : 'none'}`;
+    tierEl.textContent = best
+      ? (best.tier === 'confident' ? 'Strong match' : best.tier === 'likely' ? 'Likely match' : 'Weak match')
+      : 'No name match yet';
+  }
+  const reasonEl = row.querySelector('.postage-match-reason');
+  if (reasonEl) {
+    reasonEl.textContent = best
+      ? best.reason
+      : (typed ? 'No order found for that name in the weeks around this receipt.' : 'Add the recipient from the receipt and a match will be suggested.');
+  }
+  // Only move the selection while it is still a suggestion. Once the owner has
+  // deliberately chosen an order, typing must not silently steer it elsewhere.
+  const untouched = select.dataset.userPicked !== '1';
+  if (untouched && best) select.value = best.orderNumber;
+}
+
+async function linkPostageExpense(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) { showToast('That postage receipt was not found', 'err'); return; }
+
+  const orderNumber = normalizeShippingOrderNumber($(postageRowDomId(ref, 'order'))?.value);
+  if (!orderNumber) { showToast('Choose the order this postage paid for', 'warn'); return; }
+
+  const recipientName = ($(postageRowDomId(ref, 'name'))?.value || '').trim();
+  const trackingInput = ($(postageRowDomId(ref, 'track'))?.value || '').trim();
+  const tracking = normalizeTrackingNumber(trackingInput);
+  if (trackingInput && tracking.length < 6) {
+    showToast('That tracking number looks too short — check it against the receipt', 'warn');
+    return;
+  }
+
+  const patch = postageLinkPatch(orderNumber, {
+    recipientName,
+    trackingNumber: tracking,
+    method: 'recipient-name',
+  });
+
+  // Snapshot every key the patch touches so a failed save leaves the receipt
+  // exactly as it was, rather than half-linked with no order behind it.
+  const keys = new Set([...Object.keys(patch), 'shippingSuggestedOrderNumber', 'shippingCandidateOrderNumbers']);
+  const prior = new Map(Array.from(keys).map(key => [
+    key, { present: Object.prototype.hasOwnProperty.call(expense, key), value: expense[key] },
+  ]));
+
+  Object.assign(expense, patch);
+  delete expense.shippingSuggestedOrderNumber;
+  delete expense.shippingCandidateOrderNumbers;
+
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    prior.forEach((snapshot, key) => {
+      if (snapshot.present) expense[key] = snapshot.value;
+      else delete expense[key];
+    });
+    console.error('Postage link save failed', error);
+    showToast('Could not save that link. Please try again.', 'err');
+    return;
+  }
+
+  // The tracking number belongs on the order too: that is where the customer
+  // record lives and where a "where is my book" email gets answered from.
+  if (tracking) await storeTrackingOnOrder(orderNumber, tracking, patch.trackingUrl || '');
+
+  renderPostageMatchWorklist();
+  renderShippingAnalysisHub();
+  renderTaxCenter();
+  showToast(`✓ ${fmt(expense.amount || 0, expense.currency || 'CAD')} postage linked to ${orderNumber}`);
+}
+
+/**
+ * Write the tracking number onto the website order's history entry.
+ *
+ * Best-effort by design: the postage link is already saved by this point, so a
+ * failure here must warn rather than roll the link back — the money is
+ * correctly attributed either way, and only the tracking display is missing.
+ */
+async function storeTrackingOnOrder(orderNumber, tracking, trackingUrl) {
+  const target = normalizeShippingOrderNumber(orderNumber);
+  let bookId = '';
+  Object.keys(states).forEach(id => {
+    (states[id]?.hist || []).forEach(entry => {
+      if (!entry || entry.voided) return;
+      if (normalizeShippingOrderNumber(entry.num) !== target) return;
+      entry.trackingNumber = tracking;
+      const carrier = carrierFromTracking(tracking);
+      if (carrier) entry.trackingCarrier = carrier;
+      const url = trackingUrl || trackingUrlFor(tracking, carrier);
+      if (url) entry.trackingUrl = url;
+      entry.shipped = true;
+      bookId = id;
+    });
+  });
+  if (!bookId) return;
+  try {
+    await saveState(bookId);
+  } catch (error) {
+    console.error('Tracking save on order failed', error);
+    showToast('Postage linked, but the tracking number did not save to the order', 'warn');
+  }
+}
+
+/**
+ * Link every receipt whose surname match is unambiguous, in one pass.
+ *
+ * autoMatchPostage() is deliberately strict — a confident top match, a clear
+ * gap to the runner-up, and no two receipts wanting the same order — so this
+ * button never has to guess. Anything it skips stays in the list.
+ */
+async function autoMatchPostageReceipts() {
+  const expenses = unlinkedPostageExpenses();
+  const proposals = autoMatchPostage(expenses, getShippingReconciliationOrders(), {
+    takenOrderNumbers: ordersAlreadyCarryingPostage(),
+  });
+  if (!proposals.length) {
+    showToast('No receipts match a single order clearly enough to link on their own', 'warn');
+    return;
+  }
+
+  const preview = proposals.slice(0, 6)
+    .map(({ expense, match }) => `• ${match.orderName || match.orderNumber} — ${fmt(expense.amount || 0, expense.currency || 'CAD')} → ${match.orderNumber}`)
+    .join('\n');
+  const more = proposals.length > 6 ? `\n…and ${proposals.length - 6} more` : '';
+  const accepted = await confirmDialog(
+    `Link ${proposals.length} postage receipt${proposals.length === 1 ? '' : 's'} to the order with the same name?\n\n${preview}${more}\n\nYou can unlink any of them afterwards.`,
+    { title: 'Match postage by name', okLabel: `Link ${proposals.length}` },
+  );
+  if (!accepted) return;
+
+  const applied = [];
+  proposals.forEach(({ expense, match }) => {
+    const snapshot = { ...expense };
+    Object.assign(expense, postageLinkPatch(match.orderNumber, {
+      recipientName: postageRecipientName(expense),
+      trackingNumber: expense.trackingNumber || '',
+      method: 'recipient-name-auto',
+    }));
+    applied.push({ expense, snapshot });
+  });
+
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    applied.forEach(({ expense, snapshot }) => {
+      Object.keys(expense).forEach(key => { if (!(key in snapshot)) delete expense[key]; });
+      Object.assign(expense, snapshot);
+    });
+    console.error('Auto-match save failed', error);
+    showToast('Could not save those links. Please try again.', 'err');
+    return;
+  }
+
+  for (const { expense, match } of applied) {
+    const tracking = normalizeTrackingNumber(expense.trackingNumber);
+    if (tracking) await storeTrackingOnOrder(match.orderNumber, tracking, expense.trackingUrl || '');
+  }
+
+  renderPostageMatchWorklist();
+  renderShippingAnalysisHub();
+  renderTaxCenter();
+  showToast(`✓ Linked ${applied.length} postage receipt${applied.length === 1 ? '' : 's'} by name`);
+}
+
+async function dismissPostageExpense(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) return;
+  const hadStatus = Object.prototype.hasOwnProperty.call(expense, 'shippingMatchStatus');
+  const priorStatus = expense.shippingMatchStatus;
+  expense.shippingMatchStatus = 'dismissed';
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    if (hadStatus) expense.shippingMatchStatus = priorStatus;
+    else delete expense.shippingMatchStatus;
+    console.error('Postage dismiss failed', error);
+    showToast('Could not hide that receipt. Please try again.', 'err');
+    return;
+  }
+  renderPostageMatchWorklist();
+  showToast('Receipt hidden — it stays in your Shipping & Postage ledger');
+}
+
+/**
+ * Write what a scan read onto the receipt, and refresh its row.
+ *
+ * Deliberately saves. Filling the inputs and leaving it there was fine for one
+ * receipt the owner is looking at, but a fifteen-receipt batch that evaporates
+ * on refresh is worse than not offering the batch at all. Recording a name and
+ * a tracking number attributes no money — the link is still a separate,
+ * deliberate act — so persisting it costs nothing and survives a closed tab.
+ *
+ * Returns the list of field names actually written, so the caller can report
+ * what changed rather than claiming a blanket success.
+ */
+function applyScannedPostageFields(expense, fields) {
+  const patch = mergeScannedPostageFields(expense, fields);
+  const written = [];
+  if (patch.recipientName) written.push('recipient');
+  if (patch.trackingNumber) written.push('tracking');
+  if (!written.length) return { written, patch };
+  Object.assign(expense, patch);
+  return { written, patch };
+}
+
+/** Push a scanned expense's stored values back into its visible inputs. */
+function syncPostageRowInputs(ref, expense) {
+  const nameEl = $(postageRowDomId(ref, 'name'));
+  if (nameEl) nameEl.value = postageRecipientName(expense);
+  const trackEl = $(postageRowDomId(ref, 'track'));
+  if (trackEl) trackEl.value = formatTrackingNumber(expense.trackingNumber || '');
+  refreshPostageRowSuggestion(ref);
+}
+
+/**
+ * Read the recipient and tracking number off one receipt already on file.
+ *
+ * Fills and saves the two fields, then re-ranks the suggestion — but never
+ * links. A reader that misreads "DAWSON" must cost a correction, not money
+ * attributed to the wrong customer.
+ */
+async function scanPostageReceipt(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) { showToast('That postage receipt was not found', 'err'); return; }
+  if (!expense.receipt) { showToast('There is no receipt attached to this expense', 'warn'); return; }
+
+  const btn = $(postageRowDomId(ref, 'scan'));
+  const original = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
+
+  try {
+    const fields = await readShippingFieldsFromReceipt(expense.receipt);
+    const snapshot = { ...expense };
+    const { written } = applyScannedPostageFields(expense, fields);
+
+    if (!written.length) {
+      showToast('Could not find a recipient or tracking number on that receipt — type them in instead', 'warn', 4200);
+      return;
+    }
+    try {
+      await saveTaxCenter({ rethrow: true });
+    } catch (error) {
+      Object.keys(expense).forEach(key => { if (!(key in snapshot)) delete expense[key]; });
+      Object.assign(expense, snapshot);
+      throw error;
+    }
+    syncPostageRowInputs(ref, expense);
+    showToast(`✓ Read ${written.join(' and ')} from the receipt — check it, then link`);
+  } catch (error) {
+    console.error('Postage receipt scan failed', error);
+    showToast(`Could not read that receipt — ${error.message || error}`, 'err', 4600);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = original; }
+  }
+}
+
+// The in-flight batch, so the same button can cancel it. A stack of receipts
+// is a minute or more of API calls; without a way out, a batch started by
+// mistake has to be waited through or the tab closed.
+let _postageBatchScan = null;
+
+/**
+ * Read a whole stack of receipts in one pass.
+ *
+ * Sequential rather than parallel: these are the publisher's own rate-limited
+ * API credits, and fifteen simultaneous requests is how a batch gets throttled
+ * into failure halfway through. Each receipt is saved as it is read, so a
+ * cancel — or a failure on receipt twelve — keeps the eleven already done.
+ */
+async function scanAllPostageReceipts() {
+  if (_postageBatchScan) {
+    _postageBatchScan.cancelled = true;
+    showToast('Stopping after the receipt being read now…');
+    return;
+  }
+  if (!TAX_CENTER.settings?.geminiKey) {
+    showToast('Add your Gemini API key in the Tax Centre config to read receipts', 'warn', 4200);
+    return;
+  }
+
+  const candidates = postageScanCandidates(unlinkedPostageExpenses());
+  if (!candidates.length) {
+    const anyUnlinked = unlinkedPostageExpenses().length;
+    showToast(anyUnlinked
+      ? 'Every receipt here has already been read — nothing left to scan'
+      : 'No postage receipts are waiting to be matched', 'warn', 4200);
+    return;
+  }
+
+  const accepted = await confirmDialog(
+    `Read ${candidates.length} receipt${candidates.length === 1 ? '' : 's'} and fill in the recipient and tracking number on each?\n\n`
+    + 'This uses your Gemini allowance, one call per receipt, and takes a few seconds each. '
+    + 'Nothing is linked to an order — you still confirm every match afterwards.',
+    { title: 'Read all receipts', okLabel: `Read ${candidates.length}` },
+  );
+  if (!accepted) return;
+
+  const batch = { cancelled: false };
+  _postageBatchScan = batch;
+  const btn = $('postage-match-scan-all');
+  const original = btn ? btn.textContent : '';
+
+  let read = 0;
+  let blank = 0;
+  const failed = [];
+
+  try {
+    for (let i = 0; i < candidates.length; i++) {
+      if (batch.cancelled) break;
+      const expense = candidates[i];
+      const ref = String(expense.ref || '');
+      if (btn) btn.textContent = `Reading ${i + 1} of ${candidates.length}… (tap to stop)`;
+
+      const row = document.querySelector(`.postage-match-row[data-ref="${CSS.escape(ref)}"]`);
+      if (row) row.classList.add('is-scanning');
+
+      try {
+        const fields = await readShippingFieldsFromReceipt(expense.receipt);
+        const { written } = applyScannedPostageFields(expense, fields);
+        if (written.length) { read++; syncPostageRowInputs(ref, expense); }
+        else blank++;
+      } catch (error) {
+        console.error('Batch scan failed on', ref, error);
+        failed.push(ref);
+      } finally {
+        if (row) row.classList.remove('is-scanning');
+      }
+    }
+
+    // One save for the whole run rather than one per receipt: this is the
+    // publisher's Firestore write budget, and a batch of fifteen would
+    // otherwise be fifteen round trips for data that is only useful together.
+    if (read) {
+      try {
+        await saveTaxCenter({ rethrow: true });
+      } catch (error) {
+        console.error('Batch scan save failed', error);
+        showToast('Read the receipts, but could not save what they said. Please try again.', 'err', 4600);
+        return;
+      }
+    }
+  } finally {
+    _postageBatchScan = null;
+    if (btn) { btn.textContent = original; btn.disabled = false; }
+  }
+
+  renderPostageMatchWorklist();
+
+  const parts = [];
+  if (read) parts.push(`read ${read}`);
+  if (blank) parts.push(`${blank} had nothing readable`);
+  if (failed.length) parts.push(`${failed.length} could not be opened`);
+  if (batch.cancelled) parts.push('stopped early');
+  const tone = (failed.length || blank) ? 'warn' : 'ok';
+  showToast(
+    read
+      ? `✓ Receipts ${parts.join(', ')} — check the names, then Match by name`
+      : `No receipts could be read — ${parts.join(', ') || 'nothing to report'}`,
+    tone,
+    5200,
+  );
+}
+
+/** Add or correct a tracking number from the shipping ledger row. */
+async function promptLedgerTracking(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) { showToast('That postage receipt was not found', 'err'); return; }
+  const entered = await promptDialog(
+    'Type the tracking number printed on the receipt or label.',
+    formatTrackingNumber(expense.trackingNumber || ''),
+    { title: 'Add tracking number', okLabel: 'Save', placeholder: 'e.g. LE 055 214 725 CA' },
+  );
+  if (entered === null) return;
+  const tracking = normalizeTrackingNumber(entered);
+  if (entered.trim() && tracking.length < 6) {
+    showToast('That tracking number looks too short — check it against the receipt', 'warn');
+    return;
+  }
+
+  const snapshot = {
+    trackingNumber: expense.trackingNumber, trackingCarrier: expense.trackingCarrier, trackingUrl: expense.trackingUrl,
+  };
+  if (tracking) {
+    const patch = postageLinkPatch(expense.shippingOrderNumber || '#NONE-0', { trackingNumber: tracking });
+    expense.trackingNumber = patch.trackingNumber;
+    if (patch.trackingCarrier) expense.trackingCarrier = patch.trackingCarrier;
+    if (patch.trackingUrl) expense.trackingUrl = patch.trackingUrl;
+  } else {
+    delete expense.trackingNumber; delete expense.trackingCarrier; delete expense.trackingUrl;
+  }
+
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    Object.assign(expense, snapshot);
+    console.error('Tracking save failed', error);
+    showToast('Could not save the tracking number. Please try again.', 'err');
+    return;
+  }
+  if (tracking && expense.shippingOrderNumber) {
+    await storeTrackingOnOrder(expense.shippingOrderNumber, tracking, expense.trackingUrl || '');
+  }
+  renderShippingAnalysisHub();
+  renderPostageMatchWorklist();
+  showToast(tracking ? '✓ Tracking number saved' : 'Tracking number cleared');
 }
 
 function closeManualShippoLinkModal() {
@@ -3183,14 +5573,14 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses, optWeightOve
 
   regions.forEach(region => {
     const regOrders = allOrders.filter(o => {
-      const country = normalizeCountryCode(o.shipCountry || 'US');
+      const bucket = shipmentRegion(o.shipCountry);
       const state = String(o.shipState || '').trim().toUpperCase();
       const isON = state === 'ON' || state === 'ONTARIO';
 
-      if (region === 'ON') return country === 'CA' && isON;
-      if (region === 'CA') return country === 'CA' && !isON;
-      if (region === 'US') return country === 'US';
-      return country !== 'CA' && country !== 'US';
+      if (region === 'ON') return bucket === 'CA' && isON;
+      if (region === 'CA') return bucket === 'CA' && !isON;
+      if (region === 'US') return bucket === 'US';
+      return bucket === 'intl';
     });
 
     const values = [];
@@ -3392,14 +5782,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
 
       // C. Region filter
       if (shipAnalysisRegionFilter !== 'all') {
-        const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-        if (shipAnalysisRegionFilter === 'CA') {
-          if (destCountry !== 'CA') return false;
-        } else if (shipAnalysisRegionFilter === 'US') {
-          if (destCountry !== 'US') return false;
-        } else if (shipAnalysisRegionFilter === 'intl') {
-          if (destCountry === 'CA' || destCountry === 'US') return false;
-        }
+        if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
       }
 
       // D. Weight filter
@@ -3722,13 +6105,13 @@ function buildShippingRegionSplitHtml(allOrders, shippoExpenses) {
       ? (Number(o.postagePaid) || 0)
       : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
 
-    const destCountry = normalizeCountryCode(o.shipCountry || 'US');
+    const destRegion = shipmentRegion(o.shipCountry);
 
-    if (destCountry === 'CA') {
+    if (destRegion === 'CA') {
       caCount++;
       caRevenue += revenue;
       caCost += cost;
-    } else if (destCountry === 'US') {
+    } else if (destRegion === 'US') {
       usCount++;
       usRevenue += revenue;
       usCost += cost;
@@ -4169,14 +6552,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
 
     // C. Region filter
       if (shipAnalysisRegionFilter !== 'all') {
-        const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-        if (shipAnalysisRegionFilter === 'CA') {
-          if (destCountry !== 'CA') return false;
-        } else if (shipAnalysisRegionFilter === 'US') {
-          if (destCountry !== 'US') return false;
-        } else if (shipAnalysisRegionFilter === 'intl') {
-          if (destCountry === 'CA' || destCountry === 'US') return false;
-        }
+        if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
       }
 
     // D. Weight filter
@@ -4254,26 +6630,43 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     if (linked.length > 0) {
       const primary = linked[0];
       const parsedCarrier = parseCarrierInfo(primary.desc).provider;
-      const tracking = parseTrackingNumber(primary.desc) || o.trackingNumber || '';
-      const carrier = guessCarrier(tracking, primary.trackingUrl, parsedCarrier);
-      const url = primary.trackingUrl || '';
-      
-      const refLink = primary.receipt
-        ? `<a href="${escapeHtml(primary.receipt)}" target="_blank" class="shipping-pnl-tracking-link" title="Open Shippo label/receipt">${escapeHtml(primary.ref)}</a>`
-        : `<div style="font-weight:600; color:var(--text);">${escapeHtml(primary.ref)}</div>`;
+      // A tracking number stored on the expense wins over one scraped out of
+      // the description: the stored one was typed off the receipt or read from
+      // the label, while the scrape is a guess at a "#…" in free text.
+      const tracking = normalizeTrackingNumber(primary.trackingNumber)
+        || parseTrackingNumber(primary.desc)
+        || normalizeTrackingNumber(o.trackingNumber)
+        || '';
+      const carrier = primary.trackingCarrier || guessCarrier(tracking, primary.trackingUrl, parsedCarrier);
+      const url = primary.trackingUrl || trackingUrlFor(tracking, carrier) || '';
+      const refLabel = String(primary.ref || '').replace(/^shippo:/, '') || 'No reference';
+
+      // `local://…` is a path into the connected folder, not a URL. Rendering
+      // it as an href produced a link that looked ordinary and did nothing at
+      // all when clicked — which is every counter receipt, since those are
+      // saved to the folder rather than to a carrier's website.
+      const refTarget = receiptLinkTarget(primary.receipt);
+      const refLink = refTarget.kind === 'local'
+        ? `<button type="button" class="shipping-pnl-tracking-link as-link" onclick="viewLocalReceipt('${escapeHtml(refTarget.path)}')" title="Open the receipt saved in your folder">${escapeHtml(refLabel)}</button>`
+        : refTarget.kind === 'url'
+          ? `<a href="${escapeHtml(refTarget.href)}" target="_blank" rel="noopener" class="shipping-pnl-tracking-link" title="Open the label or receipt">${escapeHtml(refLabel)}</a>`
+          : `<div style="font-weight:600; color:var(--text);">${escapeHtml(refLabel)}</div>`;
 
       expenseRefHtml = `
         ${refLink}
         <div style="font-size:10px; color:var(--text3); margin-top:2px;">
-          ${escapeHtml(primary.desc || 'Shippo shipping label')}
+          ${escapeHtml(primary.desc || 'Postage')}
         </div>`;
 
       if (tracking) {
+        const shown = formatTrackingNumber(tracking) || tracking;
         trackingLinkHtml = url
-          ? `<a href="${escapeHtml(url)}" target="_blank" class="shipping-pnl-tracking-link">${escapeHtml(carrier)}: ${escapeHtml(tracking)}</a>`
-          : `${escapeHtml(carrier)}: ${escapeHtml(tracking)}`;
+          ? `<a href="${escapeHtml(url)}" target="_blank" class="shipping-pnl-tracking-link">${escapeHtml(carrier || 'Tracking')}: ${escapeHtml(shown)}</a>`
+          : `${escapeHtml(carrier || 'Tracking')}: ${escapeHtml(shown)}`;
       } else {
-        trackingLinkHtml = `<span style="color:var(--text3); font-style:italic;">No tracking</span>`;
+        // Actionable rather than a dead dash: this is the one place the owner
+        // can put the number in, and every other row already offers it.
+        trackingLinkHtml = `<button class="btn sm ghost" style="font-size:10px; padding:3px 8px;" onclick="promptLedgerTracking('${escapeHtml(primary.ref)}')">+ Add tracking</button>`;
       }
     } else {
       expenseRefHtml = `<span style="color:var(--text3); font-style:italic;">Unlinked</span>`;
@@ -4431,7 +6824,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     if (shipAnalysisRegionFilter !== 'all') {
       filterBadges += `
         <span class="shipping-filter-badge">
-          Region: ${shipAnalysisRegionFilter === 'CA' ? 'Canadian' : (shipAnalysisRegionFilter === 'US' ? 'USA' : 'International')}
+          Region: ${REGION_LABELS[shipAnalysisRegionFilter] || shipAnalysisRegionFilter}
           <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisRegionFilter('${shipAnalysisRegionFilter}')" title="Remove filter">✕</span>
         </span>
       `;
@@ -4777,8 +7170,15 @@ function renderShippingAnalysisHub() {
 
   allOrders.sort((a, b) => b._dateMs - a._dateMs);
 
-  // 2. Gather all Shippo postage expenses matching the selected analysis book filter
-  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
+  // 2. Gather every postage cost, whichever carrier it came from.
+  //
+  // This filter used to be `ref.startsWith('shippo:')`, which meant postage
+  // bought at a Canada Post counter and entered by hand was invisible to the
+  // whole hub: no cost against the order, a margin that read as pure profit,
+  // and an order stuck on "Needs link" forever. Every panel below reads from
+  // this one list, so widening it here is what lets a counter receipt appear
+  // in the P&L, the carrier scorecard, the ledger and the insights at once.
+  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(isPostageExpense);
   const relevantExpenses = (shipAnalysisBookFilter === 'all')
     ? shippoExpenses
     : shippoExpenses.filter(e => {
@@ -4811,6 +7211,21 @@ function renderShippingAnalysisHub() {
   hub.innerHTML = `
     ${pnlHtml}
     ${statsHtml}
+    <section class="postage-match" id="postage-match" aria-labelledby="postage-match-title">
+      <header class="shipping-pnl-section-header">
+        <div>
+          <p class="shipping-pnl-eyebrow">Postage receipts</p>
+          <h3 id="postage-match-title">Match a paid receipt to its order</h3>
+          <p class="postage-match-sub">Postage you bought at a counter has the customer's name on the receipt and nowhere else. Put the name in and the matching order is found for you — the tracking number goes on the order at the same time.</p>
+        </div>
+        <div class="postage-match-head-actions">
+          <span class="pill gray" id="postage-match-count">0 to match</span>
+          <button class="btn sm" type="button" id="postage-match-scan-all" onclick="scanAllPostageReceipts()">Read all receipts</button>
+          <button class="btn sm gold" type="button" id="postage-match-auto" onclick="autoMatchPostageReceipts()">Match by name</button>
+        </div>
+      </header>
+      <div id="postage-match-list" aria-live="polite"></div>
+    </section>
     <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
       <header class="shipping-pnl-section-header">
         <div>
@@ -4830,6 +7245,9 @@ function renderShippingAnalysisHub() {
     ${insightsHtml}
   `;
 
+  // Rendered after the hub markup lands, because the worklist paints into a
+  // container the template above just created.
+  renderPostageMatchWorklist();
   setTimeout(updateShippingSimulation, 50);
 }
 
@@ -4940,7 +7358,11 @@ function updateShippingSimulation() {
 }
 
 function downloadFilteredShippingLedgerCSV() {
-  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
+  // Same postage set the on-screen ledger uses. When this said `shippo:` and
+  // the hub said "every carrier", the exported CSV quietly disagreed with the
+  // table it was exported from — the worst kind of wrong number, because it is
+  // the one that gets sent to an accountant.
+  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(isPostageExpense);
   
   const allOrders = [];
   Object.keys(states).forEach(bookId => {
@@ -5001,14 +7423,7 @@ function downloadFilteredShippingLedgerCSV() {
 
     // C. Region filter
       if (shipAnalysisRegionFilter !== 'all') {
-        const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-        if (shipAnalysisRegionFilter === 'CA') {
-          if (destCountry !== 'CA') return false;
-        } else if (shipAnalysisRegionFilter === 'US') {
-          if (destCountry !== 'US') return false;
-        } else if (shipAnalysisRegionFilter === 'intl') {
-          if (destCountry === 'CA' || destCountry === 'US') return false;
-        }
+        if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
       }
 
     // D. Weight filter
@@ -5079,10 +7494,7 @@ function downloadFilteredShippingLedgerCSV() {
       ? 'Manual Override'
       : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
     
-    const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-    let region = 'International';
-    if (destCountry === 'CA') region = 'Canadian';
-    else if (destCountry === 'US') region = 'USA';
+    const region = REGION_LABELS[shipmentRegion(o.shipCountry)];
     const ref = linked.length > 0 ? linked[0].ref : (o.manualPostagePaid ? 'Manual Override' : 'Unlinked');
 
     csv += `${esc(o.num)},${esc(o.shipName || o.name || 'Anonymous')},${esc(book?.title || 'Unknown book')},${o.qty || 1},${weightKg.toFixed(3)},${esc(statusLabel)},${customerPaidBase.toFixed(2)},${postageCostCAD.toFixed(2)},${margin.toFixed(2)},${esc(carrier)},${esc(region)},${esc(ref)}\n`;
@@ -5097,6 +7509,19 @@ function parseCarrierInfo(desc) {
     if (desc && desc.startsWith('Shippo shipping label')) {
       return { provider: 'Shippo', service: 'Postage' };
     }
+    // A carrier the owner typed into a counter-receipt description. Checked
+    // before the "Unknown" bail-out so hand-entered postage reaches the
+    // scorecard under its real carrier instead of being lumped in with
+    // everything unrecognised. Kept inline rather than in a shared helper
+    // because tests/shipping-analysis-hub.test.js extracts this function's
+    // source and evaluates it on its own.
+    const haystack = ` ${String(desc).toLowerCase()} `;
+    const named = [
+      ['canada post', 'Canada Post'], ['postes canada', 'Canada Post'], ['canadapost', 'Canada Post'],
+      ['purolator', 'Purolator'], ['fedex', 'FedEx'], ['usps', 'USPS'], ['dhl', 'DHL'],
+      ['ups ', 'UPS'], ['stallion', 'Stallion Express'], ['chit chats', 'Chit Chats'],
+    ].find(([needle]) => haystack.includes(needle));
+    if (named) return { provider: named[1], service: 'Postage' };
     return { provider: 'Unknown', service: 'Unknown' };
   }
   const content = desc.replace('Shipping Label:', '').trim();
@@ -5125,12 +7550,14 @@ function guessCarrier(trackingNumber, trackingUrl, parsedCarrier) {
   if (url.includes('fedex.com')) return 'FedEx';
   if (url.includes('usps.com')) return 'USPS';
   if (url.includes('dhl.com')) return 'DHL';
-  
-  const num = String(trackingNumber || '');
-  if (num.startsWith('1Z')) return 'UPS';
-  if (/^[0-9]{16}$/.test(num)) return 'Canada Post';
-  
-  return 'Shippo';
+
+  // The number's own shape, via the shared detector, so a Canada Post
+  // "LE 055 214 725 CA" is not reported as Shippo just because it arrived
+  // through a counter receipt rather than the API.
+  const byShape = carrierFromTracking(trackingNumber);
+  if (byShape) return byShape;
+
+  return parsedCarrier || 'Shippo';
 }
 
 function getWeightInLbs(qty, book) {
@@ -5181,6 +7608,7 @@ export {
   backfillShipping,
   _toggleShippingPanel,
   openLabelModal,
+  renderLabelCountryHint,
   updateShippedStatusUI,
   toggleShipped,
   printShippingLabel,
@@ -5195,6 +7623,17 @@ export {
   openShippingReconciliation,
   clearShippingReconciliationList,
   linkShippingExpense,
+  renderPostageMatchWorklist,
+  onPostageRecipientInput,
+  linkPostageExpense,
+  autoMatchPostageReceipts,
+  dismissPostageExpense,
+  scanPostageReceipt,
+  scanAllPostageReceipts,
+  promptLedgerTracking,
+  openRecoverWebsiteOrder,
+  onRecoverWebsiteOrderBookChange,
+  saveRecoverWebsiteOrder,
   processShippoTxToExpense,
   importShippoShippingFromApi,
   openShippoLabel,
@@ -5213,6 +7652,9 @@ export {
   editShippoApiKey,
   onShippoPreFillDestChange,
   onShippoBookPresetChange,
+  openSaveBookPresetModal,
+  confirmSaveBookPreset,
+  renderSaveBookPresetPreview,
   isCanadaPostRate,
   moneyAmount,
   roundShippingCharge,
@@ -5229,10 +7671,29 @@ export {
   updateShippoCustomsTotalHint,
   readShippoCustomsValue,
   buildShippoCustomsDeclaration,
+  shippoCustomsNetWeight,
   collectShippoMessages,
   renderShippoDiagnostics,
   buyShippoLabel,
   calculateShippoRates,
+  calculateZonosDutiesHandler,
+  renderZonosDutyCard,
+  onZonosDeclarationIdInput,
+  pasteZonosDeclarationId,
+  autoGenerateZonosDeclarationHandler,
+  checkCanadaPostAccountAndPinHandler,
+  verifyShippedTrackingPinsHandler,
+  showArchivedCanadaPostLabels,
+  reprintArchivedCanadaPostLabel,
+  openZonosPrepayAppHandler,
+  calculateCanadaPostRatesHandler,
+  renderCanadaPostRatesCard,
+  buyCanadaPostLabelHandler,
+  openCanadaPostPurchasedLabel,
+  showCanadaPostLabelModal,
+  closeCanadaPostLabelModal,
+  printCanadaPostLabelModal,
+  downloadCanadaPostLabelModal,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,

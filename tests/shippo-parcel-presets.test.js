@@ -167,3 +167,41 @@ describe('Incoterm preference memory', () => {
     expect(indexContent).toContain('onchange="onShippoIncotermChange()"');
   });
 });
+
+describe('Save to Book Preset UI & Persistence', () => {
+  it('includes the Save to Book Preset modal and buttons in index.html', () => {
+    expect(indexContent).toContain('id="m-save-book-preset"');
+    expect(indexContent).toContain('id="sbp-target-book"');
+    expect(indexContent).toContain('id="sbp-specs-preview"');
+    expect(indexContent).toContain('id="sbp-confirm-btn"');
+    expect(indexContent).toContain('onclick="openSaveBookPresetModal()"');
+    expect(indexContent).toContain('onclick="confirmSaveBookPreset()"');
+  });
+
+  it('updates a book record with custom metric dimensions, weight, and customs info', () => {
+    const resolveBookPresetSpecs = buildResolver();
+    const photoBook = {
+      id: 'photobook-2026',
+      title: 'Book of Photography',
+      shipLength: 23,
+      shipWidth: 19.5,
+      shipHeight: 2,
+      shipDimUnit: 'cm',
+      shipWeight: 0.367,
+      shipWeightUnit: 'kg',
+      shipHsCode: '4901.99.0070',
+      shipCustomsDesc: 'book of photography',
+      shipCustomsVal: 50,
+      shipIncoterm: 'DDP'
+    };
+
+    const resolved = resolveBookPresetSpecs(photoBook);
+    expect(resolved.source).toBe('book');
+    expect(resolved.specs.length).toBe(23);
+    expect(resolved.specs.width).toBe(19.5);
+    expect(resolved.specs.height).toBe(2);
+    expect(resolved.specs.dim_unit).toBe('cm');
+    expect(resolved.specs.weight).toBe(0.367);
+    expect(resolved.specs.weight_unit).toBe('kg');
+  });
+});

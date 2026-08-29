@@ -8,8 +8,8 @@ import { expect, test } from 'vitest';
 // reject a foreign URL object with "must be of scheme file". Passing a string
 // keeps node's own parser in play, and matches how the rest of tests/ does it.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8').replace(/\r\n/g, '\n');
+const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8').replace(/\r\n/g, '\n');
 
 /** The "All books" landing screen, sliced out of index.html by its panel id. */
 function overviewPanel() {
@@ -49,7 +49,9 @@ test('the three landing-screen sections share one section-head pattern', () => {
 test('the section-head furniture is one shared rule, not a second copy', () => {
   // The consignment classes must alias onto `.sec-head` rather than keep their
   // own duplicate declarations — a second copy is how the two drift apart.
-  const head = styles.match(/\.sec-head,\n\.consignment-summary-head\{([^}]*)\}/);
+  // The Business Trips header joined this same alias list later
+  // (tests/tc-trips-header-sec-head.test.js covers that head specifically).
+  const head = styles.match(/\.sec-head,\n\.consignment-summary-head,\n\.tc-trips-header\{([^}]*)\}/);
   const titles = styles.match(/\.sec-head-titles,\n\.consignment-summary-titles\{([^}]*)\}/);
   const badges = styles.match(/\.sec-head-badges,\n\.consignment-summary-badges\{([^}]*)\}/);
   const kicker = styles.match(/\.sec-kicker,\n\.consignment-kicker\{([^}]*)\}/);

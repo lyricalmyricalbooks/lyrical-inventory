@@ -7,6 +7,8 @@
 ## 1. House-Specific Design Constraints
 Beyond baseline good design (design tokens, dark mode, WCAG AA contrast, real hover/focus/loading states, no blank states), hold to these project-specific rules:
 - **No default/pure red-green-blue.** Use the palette already established in `src/style.css` (Emerald/Teal for success, Rose/Coral for errors, Indigo/Violet for primary).
+- **Canonical Semantic Surfaces Only.** NEVER invent or reference undefined tokens (`var(--surface)`, `var(--surface2)`, `var(--surface3)`, `var(--card)`). Use strictly canonical tokens (`--surface-page`, `--surface-raised`, `--surface-sunken`, `--surface-inset`, `--surface-inverse`).
+- **Preserve Modal Shell Layout Engine.** NEVER add vertical padding (`padding-top/bottom` or `padding: 24px ... !important`) to `.modal` sub-classes. Let `.modal` own `padding: 0 var(--space-6)` and `.modal-title`/`.modal-footer` own pinned headers/footers with hairline scrims.
 - **Touch targets ≥ 44px x 44px** — keeps buttons and interactive elements easy to hit accurately for all users (including those with limited dexterity or using a trackpad), so misclicks during a checkout or ledger edit don't turn into costly mistakes.
 - **Loading states use skeleton wrappers**, not spinner GIFs; form validation is real-time and inline.
 

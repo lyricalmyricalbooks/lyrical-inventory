@@ -778,6 +778,8 @@ function renderOpenCall() {
   }
 
   // Sorting (Suggestion 1)
+  // ⚡ Bolt Optimization: Hoist getProgress function definition outside of the O(N log N) sort callback
+  const getProgress = (c) => OC_STAGES.filter(st => c[st.key]).length;
   list.sort((a, b) => {
     if (ocSortBy === 'nameAsc') {
       return (a.name || '').localeCompare(b.name || '');
@@ -794,7 +796,6 @@ function renderOpenCall() {
       const dB = b.createdAt || '';
       return dA > dB ? -1 : (dA < dB ? 1 : 0);
     } else if (ocSortBy === 'progressDesc' || ocSortBy === 'progressAsc') {
-      const getProgress = (c) => OC_STAGES.filter(st => c[st.key]).length;
       return ocSortBy === 'progressDesc' ? getProgress(b) - getProgress(a) : getProgress(a) - getProgress(b);
     }
     return 0;

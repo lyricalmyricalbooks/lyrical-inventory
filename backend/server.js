@@ -52,6 +52,174 @@ const server = http.createServer(async (req, res) => {
     if (route === 'GET /health') return sendJson(res, 200, { ok: true, uptime: process.uptime() });
     if (route === 'POST /api/auth/login') return handleLogin(req, res);
 
+    // Canada Post Direct API Proxy
+    if (url.pathname === '/api/canadapost/rates' && req.method === 'POST') {
+      const body = await readJson(req, res);
+      if (!body) return;
+      const { xmlPayload, apiKey, apiSecret, isTest, targetEndpoint } = body;
+      const key = apiKey || process.env.CANADAPOST_API_KEY;
+      const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
+      const baseUrl = isTest ? 'https://ct.soa-gw.canadapost.ca' : 'https://soa-gw.canadapost.ca';
+      const endpoint = targetEndpoint || `${baseUrl}/rs/ship/price`;
+
+      if (!key || !secret) {
+        return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
+      }
+
+      try {
+        const authHeader = 'Basic ' + Buffer.from(`${key.trim()}:${secret.trim()}`).toString('base64');
+        const cpRes = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/vnd.cpc.ship.rate-v4+xml',
+            'Content-Type': 'application/vnd.cpc.ship.rate-v4+xml',
+            'Authorization': authHeader,
+            'Accept-language': 'en-CA'
+          },
+          body: xmlPayload
+        });
+
+        const xmlText = await cpRes.text();
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, xml: xmlText });
+      } catch (err) {
+        console.error('Canada Post proxy failed:', err);
+        return sendJson(res, 502, { error: `Canada Post proxy error: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/canadapost/track' && req.method === 'GET') {
+      const pin = url.searchParams.get('pin');
+      const apiKey = req.headers['x-cp-api-key'] || process.env.CANADAPOST_API_KEY;
+      const apiSecret = req.headers['x-cp-api-secret'] || process.env.CANADAPOST_API_SECRET;
+      const isTest = url.searchParams.get('test') === 'true';
+
+      if (!pin) return sendJson(res, 400, { error: 'Missing tracking pin parameter' });
+      if (!apiKey || !apiSecret) return sendJson(res, 400, { error: 'Missing Canada Post API credentials' });
+
+      try {
+        const baseUrl = isTest ? 'https://ct.soa-gw.canadapost.ca' : 'https://soa-gw.canadapost.ca';
+        const authHeader = 'Basic ' + Buffer.from(`${apiKey.trim()}:${apiSecret.trim()}`).toString('base64');
+        const cpRes = await fetch(`${baseUrl}/vis/tracking/pin/${encodeURIComponent(pin)}/summary`, {
+          headers: {
+            'Accept': 'application/vnd.cpc.track+xml',
+            'Authorization': authHeader,
+            'Accept-language': 'en-CA'
+          }
+        });
+        const xmlText = await cpRes.text();
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, xml: xmlText });
+      } catch (err) {
+        return sendJson(res, 502, { error: `Canada Post tracking proxy error: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/canadapost/shipment' && req.method === 'POST') {
+      const body = await readJson(req, res);
+      if (!body) return;
+      const { xmlPayload, apiKey, apiSecret, isTest, targetEndpoint, customerNumber, zonosAccountKey } = body;
+      const key = apiKey || process.env.CANADAPOST_API_KEY;
+      const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
+      const custNum = customerNumber || process.env.CANADAPOST_CUSTOMER_NUMBER || '';
+      const baseUrl = isTest ? 'https://ct.soa-gw.canadapost.ca' : 'https://soa-gw.canadapost.ca';
+      const endpoint = targetEndpoint || `${baseUrl}/rs/${encodeURIComponent(custNum)}/ncshipment`;
+
+      if (!key || !secret) {
+        return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
+      }
+      if (!custNum && !targetEndpoint) {
+        return sendJson(res, 400, { error: 'Missing Canada Post customer number — a shipment cannot be attached to an account without it' });
+      }
+
+      try {
+        const authHeader = 'Basic ' + Buffer.from(`${key.trim()}:${secret.trim()}`).toString('base64');
+        const headers = {
+          'Accept': 'application/vnd.cpc.ncshipment-v4+xml',
+          'Content-Type': 'application/vnd.cpc.ncshipment-v4+xml',
+          'Authorization': authHeader,
+          'Accept-language': 'en-CA'
+        };
+        const zKey = zonosAccountKey || process.env.CANADAPOST_ZONOS_KEY;
+        if (zKey && zKey.trim()) {
+          headers['X-CPC-Zonos-Key'] = zKey.trim();
+        }
+
+        const cpRes = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: xmlPayload
+        });
+
+        const xmlText = await cpRes.text();
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, xml: xmlText });
+      } catch (err) {
+        console.error('Canada Post shipment proxy failed:', err);
+        return sendJson(res, 502, { error: `Canada Post shipment error: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/canadapost/artifact' && req.method === 'GET') {
+      const artifactUrl = url.searchParams.get('url');
+      // Headers only: a key or secret in the query string is written verbatim
+      // into every access log the request touches.
+      const apiKey = req.headers['x-cp-api-key'] || process.env.CANADAPOST_API_KEY;
+      const apiSecret = req.headers['x-cp-api-secret'] || process.env.CANADAPOST_API_SECRET;
+
+      if (!artifactUrl) return sendJson(res, 400, { error: 'Missing artifact url parameter' });
+      if (!apiKey || !apiSecret) return sendJson(res, 400, { error: 'Missing Canada Post credentials' });
+
+      try {
+        const authHeader = 'Basic ' + Buffer.from(`${apiKey.trim()}:${apiSecret.trim()}`).toString('base64');
+        const cpRes = await fetch(artifactUrl, {
+          headers: {
+            'Accept': 'application/pdf',
+            'Authorization': authHeader
+          }
+        });
+
+        if (!cpRes.ok) {
+          return sendJson(res, cpRes.status, { error: `Artifact fetch failed: ${cpRes.statusText}` });
+        }
+
+        const buffer = await cpRes.arrayBuffer();
+        res.writeHead(200, {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'inline; filename="canadapost-shipping-label.pdf"'
+        });
+        res.end(Buffer.from(buffer));
+        return;
+      } catch (err) {
+        return sendJson(res, 502, { error: `Failed to fetch artifact: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/zonos/graphql' && req.method === 'POST') {
+      const body = await readJson(req, res);
+      if (!body) return;
+      const { query, variables, apiKey } = body;
+      const token = apiKey || req.headers['credentialtoken'] || process.env.ZONOS_API_KEY;
+
+      if (!token) {
+        return sendJson(res, 400, { error: 'Missing Zonos API credential token' });
+      }
+
+      try {
+        const zonosRes = await fetch('https://api.zonos.com/graphql', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'credentialToken': token.trim()
+          },
+          body: JSON.stringify({ query, variables })
+        });
+
+        const json = await zonosRes.json();
+        return sendJson(res, zonosRes.status, json);
+      } catch (err) {
+        console.error('Zonos GraphQL proxy failed:', err);
+        return sendJson(res, 502, { error: `Zonos proxy error: ${err.message}` });
+      }
+    }
+
     if (url.pathname === '/api/campaign/send' && req.method === 'POST') {
       const body = await readJson(req, res);
       if (!body) return;
