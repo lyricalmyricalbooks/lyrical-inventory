@@ -58,6 +58,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-20 | visual | QR codes page | Redesigned the payment QR cards so the book title and price lead | #602 |
 | 2026-08-24 | visual | Consignment tab | Gave the consignment screen one set of headings, so the ledger stops wearing the faintest type in the app | #616 |
 | 2026-08-28 | visual | Book dashboard | Let the copies-on-hand number lead the Inventory panel instead of hiding under the bar | #636 |
+| 2026-08-29 | visual | POS checkout | Grew the register's quantity buttons to a full, tappable size | #643 |
 
 ---
 
