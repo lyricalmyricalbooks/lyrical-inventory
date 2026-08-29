@@ -49,7 +49,9 @@ test('the three landing-screen sections share one section-head pattern', () => {
 test('the section-head furniture is one shared rule, not a second copy', () => {
   // The consignment classes must alias onto `.sec-head` rather than keep their
   // own duplicate declarations — a second copy is how the two drift apart.
-  const head = styles.match(/\.sec-head,\n\.consignment-summary-head\{([^}]*)\}/);
+  // The Business Trips header joined this same alias list later
+  // (tests/tc-trips-header-sec-head.test.js covers that head specifically).
+  const head = styles.match(/\.sec-head,\n\.consignment-summary-head,\n\.tc-trips-header\{([^}]*)\}/);
   const titles = styles.match(/\.sec-head-titles,\n\.consignment-summary-titles\{([^}]*)\}/);
   const badges = styles.match(/\.sec-head-badges,\n\.consignment-summary-badges\{([^}]*)\}/);
   const kicker = styles.match(/\.sec-kicker,\n\.consignment-kicker\{([^}]*)\}/);

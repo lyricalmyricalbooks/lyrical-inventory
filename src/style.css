@@ -4444,7 +4444,8 @@ tr.hist-row:hover {
    the neutral slate so the screen keeps one gold entry point instead of
    spending the accent three times. */
 .sec-head,
-.consignment-summary-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4);}
+.consignment-summary-head,
+.tc-trips-header{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4);}
 .sec-head-titles,
 .consignment-summary-titles{min-width:0;flex:1;}
 /* `flex-wrap` because a head's badge slot is not always one pill: the per-book
@@ -10340,14 +10341,14 @@ tr.hist-row:hover {
   margin-bottom: 2rem;
 }
 
+/* Layout/spacing shared with .sec-head above (aliased into that selector list) —
+   this rule only adds what a top-level Tax Centre section needs on top: the
+   wider gap above it that separates it from the Recurring Subscriptions card,
+   and wrapping at narrow widths (the shared rule only stacks to a column inside
+   an `.overview-section` container, which this header isn't nested in). */
 .tc-trips-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
   margin-top: 2.5rem;
-  margin-bottom: 12px;
 }
 
 .tc-trips-view-toggle {
@@ -10596,14 +10597,6 @@ tr.hist-row:hover {
 @keyframes tc-flash-ring {
   from { box-shadow: var(--elev-1); }
   to { box-shadow: var(--focus-ring-halo), var(--elev-2); }
-}
-
-/* Trips header actions: view toggle + the New trip button. */
-.tc-trips-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
 }
 
 /* Create / edit trip modal form. */
