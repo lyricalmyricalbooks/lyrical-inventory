@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { appSource } from './helpers/extract-decl.js';
+import { shipmentRegion } from '../src/lib/countries.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -268,27 +269,15 @@ describe('Shipping Analysis Hub Functions', () => {
       const mockEnvBase = `
         const BOOK_LIST = [{ id: 'book1', title: 'The Hound', shipWeight: 0.8, shipWeightUnit: 'kg' }];
         let shipAnalysisBookFilter = 'all';
-        function normalizeCountryCode(c) { 
-          c = String(c || '').trim().toUpperCase();
-          if (c === 'CANADA' || c === 'CA') return 'CA';
-          if (c === 'USA' || c === 'US') return 'US';
-          return 'intl';
-        }
         function normalizeShippingOrderNumber(num) { return num; }
       `;
 
-      getSmartShippingRecommendations = new Function('allOrders', 'shippoExpenses', 'weightOverride', 'recoMode', 'recoPercentile', `
+      getSmartShippingRecommendations = new Function('shipmentRegion', 'allOrders', 'shippoExpenses', 'weightOverride', 'recoMode', 'recoPercentile', `
         const BOOK_LIST = [{ id: 'book1', title: 'The Hound', shipWeight: 0.8, shipWeightUnit: 'kg' }];
         let shipAnalysisBookFilter = 'all';
         const getShipWeightOverride = () => weightOverride || 'default';
         const getShipRecoMode = () => recoMode || 'blended';
         const getShipRecoPercentile = () => recoPercentile || 75;
-        function normalizeCountryCode(c) { 
-          c = String(c || '').trim().toUpperCase();
-          if (c === 'CANADA' || c === 'CA') return 'CA';
-          if (c === 'USA' || c === 'US') return 'US';
-          return 'intl';
-        }
         function normalizeShippingOrderNumber(num) { return num; }
 
         ${getPercentileMatch[0]}
@@ -298,7 +287,7 @@ describe('Shipping Analysis Hub Functions', () => {
         ${getWeightInKgMatch[0]}
         ${getSmartRecosMatch[0]}
         return getSmartShippingRecommendations(allOrders, shippoExpenses);
-      `);
+      `).bind(null, shipmentRegion);
     });
 
     it('returns weight-based defaults if there are no historical orders', () => {
@@ -431,7 +420,7 @@ describe('Shipping Analysis Hub Functions', () => {
       expect(updateShippingSimulationMatch).not.toBeNull();
 
       updateShippingSimulationFn = new Function(
-        'mockElements', 'mockState', 'mockBookList', 'mockTaxCenter', 'mockCalls',
+        'shipmentRegion', 'mockElements', 'mockState', 'mockBookList', 'mockTaxCenter', 'mockCalls',
         `
         const BOOK_LIST = mockBookList;
         const TAX_CENTER = mockTaxCenter;
@@ -443,12 +432,6 @@ describe('Shipping Analysis Hub Functions', () => {
         const getShipWeightOverride = () => 'default';
         const getShipRecoMode = () => 'blended';
         const getShipRecoPercentile = () => 75;
-        function normalizeCountryCode(c) { 
-          c = String(c || '').trim().toUpperCase();
-          if (c === 'CANADA' || c === 'CA') return 'CA';
-          if (c === 'USA' || c === 'US') return 'US';
-          return 'intl';
-        }
         function normalizeShippingOrderNumber(num) { return num; }
 
         ${getPercentileMatch[0]}
@@ -460,7 +443,7 @@ describe('Shipping Analysis Hub Functions', () => {
         ${updateShippingSimulationMatch[0]}
 
         return updateShippingSimulation();
-      `);
+      `).bind(null, shipmentRegion);
     });
 
     it('correctly calculates and renders simulation results', () => {

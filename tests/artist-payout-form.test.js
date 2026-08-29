@@ -6,8 +6,8 @@ import { describePayout } from '../src/lib/earnings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8');
-const styleCss = fs.readFileSync(path.join(root, 'src/style.css'), 'utf8');
+const mainJs = fs.readFileSync(path.join(root, 'src/main.js'), 'utf8').replace(/\r\n/g, '\n');
+const styleCss = fs.readFileSync(path.join(root, 'src/style.css'), 'utf8').replace(/\r\n/g, '\n');
 
 // ---------------------------------------------------------------------------
 // The verdict shown under the amount field, before anything is saved.

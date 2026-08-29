@@ -74,7 +74,10 @@ export function addressValidationBlocker(address = {}) {
 // Spellings that legitimately mean the United States. Anything else that comes
 // out of country normalization as 'US' was a silent fallback rather than a
 // match — see countryFallbackWarning.
-const US_ALIASES = new Set(['us', 'usa', 'u.s.', 'u.s.a.', 'united states', 'united states of america']);
+const US_ALIASES = new Set([
+  'us', 'usa', 'u.s.', 'u.s.a.', 'america', 'the united states',
+  'united states', 'united states of america',
+]);
 
 /**
  * Catches a country that was defaulted rather than recognised.
@@ -84,11 +87,17 @@ const US_ALIASES = new Set(['us', 'usa', 'u.s.', 'u.s.a.', 'united states', 'uni
  * stored order: a British address checked against US postal data comes back
  * "undeliverable", and the verdict looks authoritative. Better to refuse and
  * name the value than to publish a confident wrong answer.
+ *
+ * The same warning covers the opposite failure, where resolution gives up and
+ * returns nothing: either way the order carries a country nobody can act on,
+ * and the fix is the same.
  */
 export function countryFallbackWarning(rawCountry, resolvedCountry) {
   const raw = str(rawCountry);
-  if (!raw || str(resolvedCountry).toUpperCase() !== 'US') return '';
-  if (US_ALIASES.has(raw.toLowerCase())) return '';
+  if (!raw) return '';
+  const resolved = str(resolvedCountry).toUpperCase();
+  if (resolved && resolved !== 'US') return '';
+  if (resolved === 'US' && US_ALIASES.has(raw.toLowerCase())) return '';
   return `This order's country is saved as “${raw}”, which Shippo does not recognise. Fix the country on the order, then verify it.`;
 }
 

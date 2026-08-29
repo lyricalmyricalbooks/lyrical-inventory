@@ -21,7 +21,9 @@ describe('Business trip creation', () => {
   });
 
   it('styles the new trip form and the planned-trip card states', () => {
-    expect(css).toContain('.tc-trips-actions');
+    // The view toggle + New trip button now live in the shared .sec-head-badges
+    // slot (see tests/tc-trips-header-sec-head.test.js) rather than the old
+    // one-off .tc-trips-actions wrapper.
     expect(css).toContain('.tc-trip-form');
     expect(css).toContain('.tc-trip-form-full');
     expect(css).toContain('.tc-trip-badge-new');
