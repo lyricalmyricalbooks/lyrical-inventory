@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v33)
+/* Lyricalmyrical Inventory — Unified Backend (v34)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -127,6 +127,8 @@
  *      Bump flags v31-and-older as outdated.
  *  31. v33: Cache OAuth 2.0 token in CacheService for 55m to avoid rate limits.
  *      Bump flags v32-and-older as outdated.
+ *  32. v34: Fix 406 Not Acceptable errors by sending 'application/json' headers
+ *      to Canada Post Developer Portal instead of legacy vnd.cpc custom types.
  */
 
 const HEADERS = [
@@ -175,8 +177,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v33',
-    scriptVersion: 'v33',
+    service: 'lyrical-sheets-webhook-v34',
+    scriptVersion: 'v34',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -714,9 +716,9 @@ function doPost(e) {
         } else if (isTracking) {
           headers['Accept'] = 'application/vnd.cpc.track+xml';
         } else if (method === 'POST') {
-          headers['Accept'] = endpoint.indexOf('ncshipment') !== -1 
+          headers['Accept'] = useOAuth ? 'application/json' : (endpoint.indexOf('ncshipment') !== -1 
             ? 'application/vnd.cpc.ncshipment-v4+json' 
-            : 'application/vnd.cpc.ship.rate-v4+json';
+            : 'application/vnd.cpc.ship.rate-v4+json');
           headers['Content-Type'] = headers['Accept'];
         }
         if (zonosAccountKey && zonosAccountKey.trim()) {
