@@ -358,6 +358,9 @@ import {
   openShippingReconciliation,
   clearShippingReconciliationList,
   linkShippingExpense,
+  openRecoverWebsiteOrder,
+  onRecoverWebsiteOrderBookChange,
+  saveRecoverWebsiteOrder,
   processShippoTxToExpense,
   importShippoShippingFromApi,
   openShippoLabel,
@@ -6888,6 +6891,61 @@ export function applyOne(id, { deferRender = false } = {}) {
     renderOrders();
     if (targetBook === activeBook) updateDash();
   }
+}
+
+/**
+ * Write a website order that the Gmail scan never captured straight into a
+ * book's ledger.
+ *
+ * This is applyOne()'s ledger half, reached from the shipping reconciliation
+ * worklist instead of the orders queue: same stock decrement, same channel
+ * stats, same Sheets rows, same scan-memory bookkeeping, so a recovered order
+ * is indistinguishable downstream from a scanned one. The entry itself is
+ * built by lib/manual-website-order.js — the caller passes it in finished.
+ *
+ * Returns the stored entry, or throws when the book is unknown.
+ */
+export function commitRecoveredWebsiteOrder(bookId, form, buildEntry) {
+  const targetState = states[bookId];
+  const targetBook = BOOKS[bookId];
+  if (!targetState || !targetBook) throw new Error('Cannot find that book');
+
+  const qty = Math.max(1, Math.floor(Number(form.qty) || 1));
+  const price = Number(form.price) || 0;
+
+  targetState.stock = Math.max(0, targetState.stock - qty);
+  targetState.sold += qty;
+  targetState.revenue += qty * price;
+  if (!targetState.chStats['Website']) targetState.chStats['Website'] = { txns: 0, units: 0, revenue: 0 };
+  targetState.chStats['Website'].txns++;
+  targetState.chStats['Website'].units += qty;
+  targetState.chStats['Website'].revenue += qty * price;
+
+  const entry = buildEntry({ stockAfter: targetState.stock });
+  targetState.hist.unshift(entry);
+  _appliedIdsCache = null;
+
+  // Record the number as seen so a later Gmail scan that finally turns up the
+  // original confirmation email doesn't offer it as a new order to apply.
+  const mem = getScanMemory();
+  if (!mem.appliedNums) mem.appliedNums = [];
+  if (!mem.appliedNums.includes(entry.num)) mem.appliedNums.push(entry.num);
+  if (mem.cancelledNums) mem.cancelledNums = mem.cancelledNums.filter(num => num !== entry.num);
+  saveScanMemory(mem);
+
+  syncToSheets({
+    type: 'order', book: targetBook.title, date: entry.date, num: entry.num, chan: 'Website',
+    qty, price, total: qty * price, stockAfter: targetState.stock, notes: entry.notes,
+    sheetsId: entry.sheetsId, currency: getBookCurrencyCode(targetBook),
+  });
+  if (entry.shippingPaid > 0) {
+    syncToSheets(shippingPurchaseRowPayload(targetBook, getBookCurrencyCode(targetBook), entry));
+  }
+
+  addLog('log-web', `✓ ${entry.num} (${targetBook.title}) recovered from postage: -${qty} → ${targetState.stock} remaining`, 'ok');
+  if (targetState.stock <= targetBook.threshold) addLog('log-web', `⚠ ${targetBook.title} below threshold!`, 'warn');
+  saveState(bookId);
+  return entry;
 }
 
 function isOrderEligibleForApply(order, appliedIds, cancelledNumsSet) {
@@ -21658,6 +21716,7 @@ function exposeLegacyInlineHandlers() {
     fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
     processShippoTxToExpense, renderShippingReconciliationWorklist, linkShippingExpense,
     closeShippingReconciliation, openShippingReconciliation, clearShippingReconciliationList,
+    openRecoverWebsiteOrder, onRecoverWebsiteOrderBookChange, saveRecoverWebsiteOrder,
     importShippoShippingFromApi, openShippoLabel, submitTaxExpense,
     openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
     addRecurringRateChange, removeRecurringRateChange,

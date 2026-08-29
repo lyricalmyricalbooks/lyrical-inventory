@@ -13,7 +13,11 @@ const featureDir = path.join(root, 'src/features');
 // from main.js, so they no longer count against any feature's seam.
 const MAIN_IMPORT_BUDGET = {
   'opencall.js': 17,
-  'shipping.js': 23,
+  // 23 -> 24 for commitRecoveredWebsiteOrder: the reconciliation worklist can
+  // now rebuild a website order the Gmail scan missed, and writing one to the
+  // ledger touches the applied-ids cache, the scan memory and the Sheets sync —
+  // three main.js internals. One name across the seam is cheaper than three.
+  'shipping.js': 24,
   'bigcartel.js': 16,
   // +1 for ensurePdfJs: the printable trip report rasterises PDF receipts, and
   // that primitive stays in main.js. The receipt-file primitives it used to
