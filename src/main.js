@@ -359,6 +359,13 @@ import {
   openShippingReconciliation,
   clearShippingReconciliationList,
   linkShippingExpense,
+  renderPostageMatchWorklist,
+  onPostageRecipientInput,
+  linkPostageExpense,
+  autoMatchPostageReceipts,
+  dismissPostageExpense,
+  scanPostageReceipt,
+  promptLedgerTracking,
   openRecoverWebsiteOrder,
   onRecoverWebsiteOrderBookChange,
   saveRecoverWebsiteOrder,
@@ -5530,43 +5537,34 @@ function getOwedCardDetails(stats, cur) {
   // artist's net earnings (the publisher's cut held by the artist is tracked
   // separately on the "Held by artist" card, not netted in here).
 
-  let owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor;
+  let owedLabel, owedVal, owedSub, owedTone;
   if (artistOwesPublisher) {
     owedLabel = '⚠ Overpaid to artist';
     owedVal = fmt(Math.abs(owed), cur);
     owedSub = 'credit against future earnings';
-    owedValColor = 'var(--red)';
-    owedSubColor = 'var(--red)';
-    owedCardBg = 'rgba(248,113,113,.12)';
-    owedCardBorder = '1px solid rgba(248,113,113,.4)';
+    owedTone = 'critical';
   } else if (owed > 0.01) {
     owedLabel = '⚠ Owed to artist';
     owedVal = fmt(owed, cur);
     owedSub = 'action needed';
-    owedValColor = 'var(--gold2)';
-    owedSubColor = 'var(--gold2)';
-    owedCardBg = 'rgba(212,175,55,.12)';
-    owedCardBorder = '1px solid rgba(212,175,55,.35)';
+    owedTone = 'gold';
   } else {
     owedLabel = 'Owed to artist';
     owedVal = fmt(0, cur);
     owedSub = 'all settled ✓';
-    owedValColor = 'var(--green)';
-    owedSubColor = 'var(--green)';
-    owedCardBg = 'rgba(74,222,128,.1)';
-    owedCardBorder = '1px solid rgba(74,222,128,.3)';
+    owedTone = 'green';
   }
-  return { owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor, owed };
+  return { owedLabel, owedVal, owedSub, owedTone, owed };
 }
 
 function getArtistHeldHtml(stats, cur) {
   const hasHeld = stats.heldByArtistGross > 0.01;
 
   const heldCardHtml = hasHeld ? `
-      <div class="card" style="margin:0; background:rgba(212,175,55,.08); border:1px solid rgba(212,175,55,.25);">
-        <div class="hs-label" style="color:var(--text3);">Held by artist</div>
-        <div class="hs-val" style="color:var(--gold2); font-size:22px;">${fmt(stats.heldByArtistGross, cur)}</div>
-        <div style="font-size:10px; color:var(--text3); margin-top:2px;">incl. ${fmt(stats.publisherCutHeldByArtist, cur)} your cut</div>
+      <div class="ps-stat-card tone-gold">
+        <div class="ps-stat-label">Held by artist</div>
+        <div class="ps-stat-val">${fmt(stats.heldByArtistGross, cur)}</div>
+        <div class="ps-stat-sub">incl. ${fmt(stats.publisherCutHeldByArtist, cur)} your cut</div>
       </div>` : '';
 
   const heldNoteHtml = hasHeld ? `
@@ -5695,35 +5693,35 @@ function renderProfitSharingBreakdown(bookId) {
 
   const { tierHeader, tierHtml, tiers, nextTier, effectiveCap } = getProfitTiersHtml(book, stats, cur);
   const progressHtml = getRevenueProgressHtml(stats, tiers, nextTier, effectiveCap, cur);
-  const { owedLabel, owedVal, owedSub, owedCardBg, owedCardBorder, owedValColor, owedSubColor, owed } = getOwedCardDetails(stats, cur);
+  const { owedLabel, owedVal, owedSub, owedTone, owed } = getOwedCardDetails(stats, cur);
   const { heldCardHtml, heldNoteHtml, hasHeld } = getArtistHeldHtml(stats, cur);
   const payoutRequestHtml = getPayoutRequestHtml(bookId, stats, cur, owed);
   const payoutHistoryHtml = getPayoutHistoryHtml(stats, bookId, cur);
 
   content.innerHTML = `
-    <div style="display:grid; grid-template-columns:repeat(${hasHeld ? 4 : 3}, 1fr); gap:12px; margin-bottom:1.5rem;">
-      <div class="card" style="margin:0; background:var(--cream2); border:none;">
-        <div class="hs-label" style="color:var(--text3);">Artist earnings</div>
-        <div class="hs-val" style="color:var(--green); font-size:22px;">${fmt(stats.totalArtistEarned, cur)}</div>
-        <div style="font-size:10px; color:var(--text3); margin-top:2px;">lifetime total</div>
+    <div class="ps-stat-grid ${hasHeld ? 'cols-4' : 'cols-3'}">
+      <div class="ps-stat-card">
+        <div class="ps-stat-label">Artist earnings</div>
+        <div class="ps-stat-val is-positive">${fmt(stats.totalArtistEarned, cur)}</div>
+        <div class="ps-stat-sub">lifetime total</div>
       </div>
-      <div class="card" style="margin:0; background:var(--cream2); border:none;">
-        <div class="hs-label" style="color:var(--text3);">Paid to artist</div>
-        <div class="hs-val" style="color:var(--text); font-size:22px; opacity:.85;">${fmt(stats.totalPaidToArtist, cur)}</div>
-        <div style="font-size:10px; color:var(--text3); margin-top:2px;">${stats.payouts?.length || 0} payout${(stats.payouts?.length || 0) !== 1 ? 's' : ''} recorded</div>
+      <div class="ps-stat-card">
+        <div class="ps-stat-label">Paid to artist</div>
+        <div class="ps-stat-val is-muted">${fmt(stats.totalPaidToArtist, cur)}</div>
+        <div class="ps-stat-sub">${stats.payouts?.length || 0} payout${(stats.payouts?.length || 0) !== 1 ? 's' : ''} recorded</div>
       </div>
       ${heldCardHtml}
-      <div class="card" style="margin:0; background:${owedCardBg}; border:${owedCardBorder};">
-        <div class="hs-label" style="color:var(--text3);">${owedLabel}</div>
-        <div class="hs-val" style="color:${owedValColor}; font-size:22px; font-weight:700;">${owedVal}</div>
-        <div style="font-size:10px; color:${owedSubColor}; margin-top:2px; opacity:.8;">${owedSub}</div>
+      <div class="ps-stat-card is-lead tone-${owedTone}">
+        <div class="ps-stat-label">${owedLabel}</div>
+        <div class="ps-stat-val">${owedVal}</div>
+        <div class="ps-stat-sub">${owedSub}</div>
       </div>
     </div>
     ${heldNoteHtml}
     ${payoutRequestHtml}
     <div style="margin-bottom:1rem;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-         <span class="sect" style="font-size:8px; margin:0;">Payout Tiers</span>
+         <span class="sect sect-inline">Payout Tiers</span>
          <span style="font-size:11px; color:var(--text3);">Publisher keeps: <strong style="color:var(--text); font-size:13px;">${fmt(stats.netPublisher, cur)}</strong></span>
        </div>
        ${tierHeader}
@@ -5732,7 +5730,7 @@ function renderProfitSharingBreakdown(bookId) {
     ${progressHtml}
     <div class="ps-payout-section">
       <div class="ps-payout-head">
-        <span class="sect" style="font-size:8px; margin:0;">Artist Payouts</span>
+        <span class="sect sect-inline">Artist Payouts</span>
         <button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>
       </div>
       <div id="artist-payout-form-${bookId}" class="ps-payout-form sys-container" hidden>
@@ -21681,6 +21679,8 @@ function exposeLegacyInlineHandlers() {
     fetchShippoObject, fetchShippoContext, getShippingReconciliationOrders,
     processShippoTxToExpense, renderShippingReconciliationWorklist, linkShippingExpense,
     closeShippingReconciliation, openShippingReconciliation, clearShippingReconciliationList,
+    renderPostageMatchWorklist, onPostageRecipientInput, linkPostageExpense,
+    autoMatchPostageReceipts, dismissPostageExpense, scanPostageReceipt, promptLedgerTracking,
     openRecoverWebsiteOrder, onRecoverWebsiteOrderBookChange, saveRecoverWebsiteOrder,
     importShippoShippingFromApi, openShippoLabel, submitTaxExpense,
     openRecurringEditor, saveRecurringEditor, updateRecurringPreview, toggleRecurringPause,
