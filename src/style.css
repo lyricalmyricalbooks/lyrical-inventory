@@ -1844,6 +1844,11 @@ tr.hist-row:hover {
 /* SECTION */
 .sect{display:flex;align-items:center;gap:10px;font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--text3);margin-bottom:1rem;}
 .sect::after{content:'';flex:1;height:1px;background:var(--border);}
+/* A .sect paired with a button or value in its own flex row (not standing
+   alone above a block) doesn't need the standing 1rem gap — the row's own
+   layout already provides it, and the label's own bottom margin otherwise
+   grows the row taller than the button beside it and knocks off-center. */
+.sect.sect-inline{margin-bottom:0;}
 
 /* TABLES */
 .tbl-wrap{border-radius:var(--r2);overflow:hidden;border:1px solid var(--border);margin-bottom:1.5rem;box-shadow:var(--shadow);}
@@ -12750,6 +12755,80 @@ tr.hist-row:hover {
   .fk-preview{grid-template-columns:minmax(0,1fr);}
   .fk-sheets{display:none;}
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PROFIT SHARING STAT ROW — earnings / paid / held / owed
+   ──────────────────────────────────────────────────────────────────────────
+   These four figures used to reuse .hs-label/.hs-val — a class built for the
+   app header's permanently-dark strip — then fight nearly every property of
+   it back with an inline override per card (a foreground colour reset and a
+   one-off font-size, five times over). Replaced with the same stat-card
+   anatomy as the History and Consignment KPI strips: a label/figure/sub
+   column plus a 3px bottom accent, so this row reads as one system with
+   them instead of a leftover from before that convention existed.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ps-stat-grid{
+  display:grid;
+  gap:var(--space-3);
+  margin-bottom:var(--space-5);
+}
+.ps-stat-grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+.ps-stat-grid.cols-4{grid-template-columns:repeat(4,minmax(0,1fr));}
+@container (max-width:520px){
+  .ps-stat-grid.cols-3,
+  .ps-stat-grid.cols-4{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+.ps-stat-card{
+  position:relative;overflow:hidden;
+  display:flex;flex-direction:column;min-width:0;
+  background:var(--surface-card);
+  border:1px solid var(--border-default);
+  border-radius:var(--r2);
+  padding:var(--space-3) var(--space-4);
+  box-shadow:var(--elev-1);
+}
+.ps-stat-card::after{
+  content:'';position:absolute;inset:auto 0 0;height:3px;
+  background:var(--border-strong);
+}
+.ps-stat-label{
+  font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;color:var(--content-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ps-stat-val{
+  display:block;margin-top:var(--space-1);
+  font-family:'DM Mono',monospace;font-weight:700;
+  font-size:var(--text-xl);line-height:1.15;letter-spacing:var(--tracking-tight);
+  font-feature-settings:"tnum" 1,"zero" 1;
+  color:var(--content-primary);
+}
+.ps-stat-val.is-positive{color:var(--status-positive);}
+.ps-stat-val.is-muted{color:var(--content-secondary);}
+.ps-stat-sub{
+  font-size:var(--text-2xs);color:var(--content-muted);
+  /* auto, not a fixed gap: the lead card's larger figure is taller, so a
+     fixed gap would leave its sub-line sitting above the others'. */
+  margin-top:auto;padding-top:6px;
+}
+/* Exactly one card leads: the balance this panel exists to act on. */
+.ps-stat-card.is-lead{box-shadow:var(--elev-2);}
+.ps-stat-card.is-lead .ps-stat-val{font-size:var(--text-2xl);}
+
+.ps-stat-card.tone-gold{background:var(--gold-bg);border-color:var(--gold-line);}
+.ps-stat-card.tone-gold::after{background:linear-gradient(90deg,var(--gold),var(--gold3));}
+.ps-stat-card.tone-gold .ps-stat-val,
+.ps-stat-card.tone-gold .ps-stat-sub{color:var(--gold-text);}
+
+.ps-stat-card.tone-critical{background:var(--status-critical-bg);border-color:color-mix(in srgb,var(--status-critical) 35%,transparent);}
+.ps-stat-card.tone-critical::after{background:var(--status-critical);}
+.ps-stat-card.tone-critical .ps-stat-val,
+.ps-stat-card.tone-critical .ps-stat-sub{color:var(--status-critical);}
+
+.ps-stat-card.tone-green{background:var(--status-positive-bg);border-color:color-mix(in srgb,var(--status-positive) 30%,transparent);}
+.ps-stat-card.tone-green::after{background:var(--status-positive);}
+.ps-stat-card.tone-green .ps-stat-val,
+.ps-stat-card.tone-green .ps-stat-sub{color:var(--status-positive);}
 
 /* ══════════════════════════════════════════════════════════════════════════
    ARTIST PAYOUTS — the money half of the Profit Sharing panel
