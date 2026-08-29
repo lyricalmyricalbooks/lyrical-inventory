@@ -1844,6 +1844,11 @@ tr.hist-row:hover {
 /* SECTION */
 .sect{display:flex;align-items:center;gap:10px;font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--text3);margin-bottom:1rem;}
 .sect::after{content:'';flex:1;height:1px;background:var(--border);}
+/* A .sect paired with a button or value in its own flex row (not standing
+   alone above a block) doesn't need the standing 1rem gap — the row's own
+   layout already provides it, and the label's own bottom margin otherwise
+   grows the row taller than the button beside it and knocks off-center. */
+.sect.sect-inline{margin-bottom:0;}
 
 /* TABLES */
 .tbl-wrap{border-radius:var(--r2);overflow:hidden;border:1px solid var(--border);margin-bottom:1.5rem;box-shadow:var(--shadow);}
@@ -5111,7 +5116,7 @@ tr.hist-row:hover {
 .catalog-card:hover {
   transform: translateY(-2px);
   border-color: var(--gold-line);
-  box-shadow: 0 8px 24px rgba(14, 12, 10, 0.05);
+  box-shadow: var(--elev-hover);
 }
 .catalog-dot {
   width: 14px;
@@ -12765,6 +12770,80 @@ tr.hist-row:hover {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   PROFIT SHARING STAT ROW — earnings / paid / held / owed
+   ──────────────────────────────────────────────────────────────────────────
+   These four figures used to reuse .hs-label/.hs-val — a class built for the
+   app header's permanently-dark strip — then fight nearly every property of
+   it back with an inline override per card (a foreground colour reset and a
+   one-off font-size, five times over). Replaced with the same stat-card
+   anatomy as the History and Consignment KPI strips: a label/figure/sub
+   column plus a 3px bottom accent, so this row reads as one system with
+   them instead of a leftover from before that convention existed.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ps-stat-grid{
+  display:grid;
+  gap:var(--space-3);
+  margin-bottom:var(--space-5);
+}
+.ps-stat-grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+.ps-stat-grid.cols-4{grid-template-columns:repeat(4,minmax(0,1fr));}
+@container (max-width:520px){
+  .ps-stat-grid.cols-3,
+  .ps-stat-grid.cols-4{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+.ps-stat-card{
+  position:relative;overflow:hidden;
+  display:flex;flex-direction:column;min-width:0;
+  background:var(--surface-card);
+  border:1px solid var(--border-default);
+  border-radius:var(--r2);
+  padding:var(--space-3) var(--space-4);
+  box-shadow:var(--elev-1);
+}
+.ps-stat-card::after{
+  content:'';position:absolute;inset:auto 0 0;height:3px;
+  background:var(--border-strong);
+}
+.ps-stat-label{
+  font-size:var(--text-2xs);font-weight:800;letter-spacing:var(--tracking-label);
+  text-transform:uppercase;color:var(--content-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ps-stat-val{
+  display:block;margin-top:var(--space-1);
+  font-family:'DM Mono',monospace;font-weight:700;
+  font-size:var(--text-xl);line-height:1.15;letter-spacing:var(--tracking-tight);
+  font-feature-settings:"tnum" 1,"zero" 1;
+  color:var(--content-primary);
+}
+.ps-stat-val.is-positive{color:var(--status-positive);}
+.ps-stat-val.is-muted{color:var(--content-secondary);}
+.ps-stat-sub{
+  font-size:var(--text-2xs);color:var(--content-muted);
+  /* auto, not a fixed gap: the lead card's larger figure is taller, so a
+     fixed gap would leave its sub-line sitting above the others'. */
+  margin-top:auto;padding-top:6px;
+}
+/* Exactly one card leads: the balance this panel exists to act on. */
+.ps-stat-card.is-lead{box-shadow:var(--elev-2);}
+.ps-stat-card.is-lead .ps-stat-val{font-size:var(--text-2xl);}
+
+.ps-stat-card.tone-gold{background:var(--gold-bg);border-color:var(--gold-line);}
+.ps-stat-card.tone-gold::after{background:linear-gradient(90deg,var(--gold),var(--gold3));}
+.ps-stat-card.tone-gold .ps-stat-val,
+.ps-stat-card.tone-gold .ps-stat-sub{color:var(--gold-text);}
+
+.ps-stat-card.tone-critical{background:var(--status-critical-bg);border-color:color-mix(in srgb,var(--status-critical) 35%,transparent);}
+.ps-stat-card.tone-critical::after{background:var(--status-critical);}
+.ps-stat-card.tone-critical .ps-stat-val,
+.ps-stat-card.tone-critical .ps-stat-sub{color:var(--status-critical);}
+
+.ps-stat-card.tone-green{background:var(--status-positive-bg);border-color:color-mix(in srgb,var(--status-positive) 30%,transparent);}
+.ps-stat-card.tone-green::after{background:var(--status-positive);}
+.ps-stat-card.tone-green .ps-stat-val,
+.ps-stat-card.tone-green .ps-stat-sub{color:var(--status-positive);}
+
+/* ══════════════════════════════════════════════════════════════════════════
    ARTIST PAYOUTS — the money half of the Profit Sharing panel
    ──────────────────────────────────────────────────────────────────────────
    Recording a payout used to be four 6px-tall inputs with no feedback: you
@@ -13473,6 +13552,273 @@ tr.hist-row:hover {
 
 .tc-toggle-wrap input[type="checkbox"]:focus-visible {
   box-shadow: var(--focus-ring-halo);
+}
+
+/* ── Postage receipt matching ──────────────────────────────────────────── */
+.postage-match {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r3, 16px);
+  margin: 0 20px 20px;
+  padding: 20px;
+  box-shadow: var(--elev-1);
+  container-type: inline-size;
+  container-name: postage-match;
+}
+
+.postage-match-sub {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  margin-top: 4px;
+  max-width: 68ch;
+}
+
+.postage-match-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.postage-match-head-actions .btn {
+  min-height: 44px;
+  padding: 10px 18px;
+}
+
+.postage-match-head-actions .btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+#postage-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.postage-match-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 14px 16px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r2);
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.postage-match-row:hover,
+.postage-match-row:focus-within {
+  border-color: var(--gold-line);
+  box-shadow: var(--elev-hover);
+}
+
+.postage-match-cost {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.postage-match-cost strong {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--gold-text);
+}
+
+.postage-match-cost span {
+  font-size: var(--text-2xs);
+  color: var(--content-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.postage-match-desc { color: var(--content-muted); }
+
+.postage-match-ref {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  color: var(--content-muted);
+}
+
+.postage-match-receipt {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  color: var(--gold-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.postage-match-noreceipt {
+  font-size: var(--text-2xs);
+  font-style: italic;
+  color: var(--content-muted);
+}
+
+.postage-match-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.postage-match-field label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: var(--text-3xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--content-muted);
+}
+
+.postage-match-field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: var(--text-xs);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r);
+  color: var(--content-primary);
+}
+
+.postage-match-field input:focus-visible {
+  outline: none;
+  border-color: var(--gold-line);
+  box-shadow: var(--focus-ring-halo);
+}
+
+.postage-match-suggest {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.postage-match-suggest select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: var(--text-xs);
+  font-family: 'DM Mono', monospace;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r);
+  color: var(--content-primary);
+}
+
+.postage-match-tier {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: var(--text-3xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.postage-match-tier.confident {
+  background: var(--status-active-bg);
+  color: var(--status-active);
+}
+
+.postage-match-tier.likely {
+  background: var(--gold-bg);
+  color: var(--gold-text);
+}
+
+.postage-match-tier.weak,
+.postage-match-tier.none {
+  background: rgba(120, 113, 108, .12);
+  color: var(--content-muted);
+}
+
+.postage-match-reason {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+}
+
+.postage-match-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.postage-match-actions .btn {
+  min-height: 44px;
+  padding: 10px 16px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.postage-match-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 26px 18px;
+  background: var(--surface-sunken);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--r2);
+  text-align: left;
+}
+
+.postage-match-empty-icon { font-size: var(--text-2xl); line-height: 1; }
+
+.postage-match-empty strong {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--content-primary);
+}
+
+.postage-match-empty p {
+  margin-top: 3px;
+  font-size: var(--text-xs);
+  color: var(--content-muted);
+  max-width: 52ch;
+}
+
+.manual-link-hint {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-size: var(--text-3xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  background: var(--gold-bg);
+  color: var(--gold-text);
+}
+
+.manual-link-hint.strong {
+  background: var(--status-active-bg);
+  color: var(--status-active);
+}
+
+@container postage-match (max-width: 900px) {
+  .postage-match-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .postage-match-actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+  .postage-match-actions .btn { flex: 1; }
+}
+
+@container postage-match (max-width: 560px) {
+  .postage-match-row { grid-template-columns: 1fr; }
 }
 
 /* ── Shipping Reconciliation Worklist ──────────────────────────────────── */

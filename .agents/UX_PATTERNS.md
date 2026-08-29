@@ -146,6 +146,17 @@ colour family and matches the card it plots; a `--gold` → `--emerald` ramp ble
 across a single measurement, so the colour change reads as a state change that isn't there. Width
 transitions use `var(--dur-base) var(--ease-entrance)` so they collapse under reduced motion.
 
+**Third reference implementation — `.ps-stat-card`** (the book dashboard's Profit Sharing panel:
+earnings / paid / held / owed). Same anatomy, one addition worth reusing: the row mixes cards that
+just carry a coloured *figure* (`.ps-stat-val.is-positive`/`.is-muted` — earnings, paid) with cards
+that are a genuine call-out (`.ps-stat-card.tone-gold`/`.tone-critical`/`.tone-green` — held, owed),
+which tint the card's background, border and bottom accent together. Reach for a `tone-*` card
+modifier only for the figure that actually needs the call-out; a plain `.ps-stat-val` colour is
+enough for a card that's merely reporting, or every card ends up looking flagged and none of them
+are. **Never reuse `.hs-label`/`.hs-val`** for a card like this — that pair is built for the app
+header's permanently-dark strip (`rgba(255,255,255,.34)` label, fixed `--gold3` figure) and using it
+on a light card means fighting every property back with an inline override, one per card.
+
 ---
 
 ## Tables / lists — `.tbl`
