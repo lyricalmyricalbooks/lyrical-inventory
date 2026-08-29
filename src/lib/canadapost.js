@@ -116,22 +116,25 @@ export function buildRateScenarioJson({
   }
 
   const payload = {
-    mailingScenario: {
-      parcelCharacteristics: {
-        weight: Number(weight.toFixed(3)),
-        dimensions: {
-          length: Number(length.toFixed(1)),
-          width: Number(width.toFixed(1)),
-          height: Number(height.toFixed(1))
-        }
-      },
-      originPostalCode: origin,
-      destination: destJson
-    }
+    parcelCharacteristics: {
+      weight: Number(weight.toFixed(3)),
+      dimensions: {
+        length: Number(length.toFixed(1)),
+        width: Number(width.toFixed(1)),
+        height: Number(height.toFixed(1))
+      }
+    },
+    originPostalCode: origin,
+    destination: destJson
   };
 
-  if (customerNumber) payload.mailingScenario.customerNumber = customerNumber.trim();
-  if (contractId) payload.mailingScenario.contractId = contractId.trim();
+  if (customerNumber) {
+    payload.customerNumber = customerNumber.trim();
+    payload.quoteType = 'commercial';
+    if (contractId) {
+      payload.contractId = contractId.trim();
+    }
+  }
 
   return JSON.stringify(payload);
 }
@@ -1673,7 +1676,7 @@ export function buildNonContractShipmentJson({
     }
   }
 
-  return JSON.stringify({ nonContractShipment: { deliverySpec: deliverySpec } });
+  return JSON.stringify(deliverySpec);
 }
 
 /**
