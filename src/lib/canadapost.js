@@ -880,8 +880,8 @@ export async function executeCanadaPostProxy({
   // 3. Direct fetch to Canada Post Gateway (handles serverless or browser CORS fallback)
   try {
     const headers = {
-      'Accept': isShipment ? 'application/vnd.cpc.ncshipment-v4+json' : 'application/vnd.cpc.ship.rate-v4+json',
-      'Content-Type': isShipment ? 'application/vnd.cpc.ncshipment-v4+json' : 'application/vnd.cpc.ship.rate-v4+json',
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
       'Accept-language': 'en-CA'
     };
     if (zonosAccountKey && zonosAccountKey.trim()) {
