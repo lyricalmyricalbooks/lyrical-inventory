@@ -15204,7 +15204,10 @@ function applyIntegrationSectionState(key, collapsed) {
   const body = document.getElementById(`tc-integration-body-${key}`);
   const chevron = document.getElementById(`tc-integration-chevron-${key}`);
   if (!body || !chevron) return;
-  body.style.display = collapsed ? 'none' : (body.dataset.openDisplay || 'flex');
+  // `hidden`, never an inline display value: the body is a CSS flex COLUMN and
+  // restoring it with an inline `display:flex` used to relay its blocks as a
+  // row, which is what sheared the Shippo panel sideways after one collapse.
+  body.hidden = collapsed;
   chevron.textContent = collapsed ? '▸' : '▾';
   const head = chevron.closest('.oc-collapse-head');
   if (head) head.setAttribute('aria-expanded', String(!collapsed));
@@ -15221,10 +15224,7 @@ document.addEventListener('DOMContentLoaded', () => {
   INTEGRATION_SECTION_KEYS.forEach((key) => {
     const body = document.getElementById(`tc-integration-body-${key}`);
     if (!body) return;
-    body.dataset.openDisplay = body.style.display || 'flex';
-    if (localStorage.getItem(`lm-integrations-collapsed-${key}`) === '1') {
-      applyIntegrationSectionState(key, true);
-    }
+    applyIntegrationSectionState(key, localStorage.getItem(`lm-integrations-collapsed-${key}`) === '1');
   });
 });
 
