@@ -3402,8 +3402,8 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
       </div>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
         <div style="text-align:right;">
-          <strong class="tnum" style="font-size:15px;color:var(--text);font-weight:800;">${q.totalPrice.toFixed(2)} CAD</strong>
-          ${q.taxes > 0 ? `<div class="tnum" style="font-size:10px;color:var(--text3);">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
+          <strong class="cp-rate-price">${q.totalPrice.toFixed(2)} CAD</strong>
+          ${q.taxes > 0 ? `<div class="cp-rate-tax">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
         </div>
         <button class="btn sm gold cp-buy-btn" type="button" onclick="buyCanadaPostLabelHandler('${escapeHtml(q.serviceCode)}', '${escapeHtml(q.serviceName)}', ${q.totalPrice})" title="Purchase official ${escapeHtml(q.serviceName)} label with Canada Post API">
           <span>🏷️</span>

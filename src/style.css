@@ -8957,6 +8957,19 @@ tr.hist-row:hover {
   transform: translateY(-1.5px);
   box-shadow: var(--elev-2);
 }
+.cp-rate-price {
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-lg);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.cp-rate-tax {
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-2xs);
+  color: var(--text3);
+  margin-top: 3px;
+}
 .cp-buy-btn {
   min-height: 44px;
   min-width: 100px;
