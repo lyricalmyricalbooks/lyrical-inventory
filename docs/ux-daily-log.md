@@ -62,6 +62,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-29 | visual | Tax Centre | Gave the Business Trips header the same card-level heading its neighbours already have | #644 |
 | 2026-08-29 | visual | Web Analytics | Fixed the "Connected" badge so it matches the app's colours in night mode | #646 |
 | 2026-08-29 | visual | Book dashboard | Gave the profit-sharing money row its own proper cards instead of a stretched header style | #650 |
+| 2026-08-29 | visual | Catalog & Stock | Made hovering a book card actually lift it in dark mode | TBD |
 
 ---
 
