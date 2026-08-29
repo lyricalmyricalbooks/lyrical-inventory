@@ -316,6 +316,54 @@ export function autoMatchPostage(expenses = [], orders = [], opts = {}) {
 }
 
 /**
+ * The receipts worth pointing the reader at.
+ *
+ * A receipt with both a recipient and a tracking number already recorded has
+ * nothing left to read, and re-reading it would spend an API call to overwrite
+ * good data with a guess. Ordered oldest-first so a long batch works through
+ * the backlog in the order it accumulated.
+ */
+export function postageScanCandidates(expenses = [], { includeComplete = false } = {}) {
+  return expenses
+    .filter(expense => clean(expense.receipt))
+    .filter(expense => includeComplete
+      || !postageRecipientName(expense)
+      || !normalizeTrackingNumber(expense.trackingNumber))
+    .sort((a, b) => clean(a.date).localeCompare(clean(b.date)));
+}
+
+/**
+ * What a scan should write onto a receipt, given what it read.
+ *
+ * Only fills blanks by default. A recipient the owner typed by hand is better
+ * evidence than a reader's guess at smudged toner, so a scan must never
+ * silently replace it. Returns an empty object when there is nothing to add,
+ * which is how the caller knows the scan found nothing usable.
+ */
+export function mergeScannedPostageFields(expense = {}, fields = {}, { overwrite = false } = {}) {
+  const patch = {};
+
+  const recipient = clean(fields.recipient);
+  if (recipient && (overwrite || !postageRecipientName(expense))) {
+    patch.recipientName = recipient;
+  }
+
+  const tracking = normalizeTrackingNumber(fields.tracking);
+  // Six characters is below any real carrier format; anything shorter is the
+  // reader having picked up a fragment, and storing it would put a dead link
+  // in front of a customer.
+  if (tracking.length >= 6 && (overwrite || !normalizeTrackingNumber(expense.trackingNumber))) {
+    patch.trackingNumber = tracking;
+    const carrier = carrierFromTracking(tracking);
+    if (carrier) patch.trackingCarrier = carrier;
+    const url = trackingUrlFor(tracking, carrier);
+    if (url) patch.trackingUrl = url;
+  }
+
+  return patch;
+}
+
+/**
  * The fields a link writes onto the postage expense.
  *
  * Kept here rather than at the call site so the manual path, the auto-match

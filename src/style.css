@@ -13788,6 +13788,45 @@ tr.hist-row:hover {
   max-width: 52ch;
 }
 
+/* A receipt in the connected folder can only be opened by the app, so its
+   control is a <button>. It must still read as the link it replaces. */
+.shipping-pnl-tracking-link.as-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--gold-text);
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: left;
+}
+
+/* The row being read right now during a batch scan. A shimmer on the two
+   fields it is about to fill, so a long run shows where it has got to. */
+.postage-match-row.is-scanning {
+  border-color: var(--gold-line);
+}
+
+.postage-match-row.is-scanning .postage-match-field input {
+  background-image: linear-gradient(90deg, transparent 0%, var(--gold-bg) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: postage-scan-shimmer 1.1s var(--ease-standard) infinite;
+}
+
+@keyframes postage-scan-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .postage-match-row.is-scanning .postage-match-field input {
+    animation: none;
+    background-image: none;
+    background-color: var(--gold-bg);
+  }
+}
+
 .manual-link-hint {
   display: inline-block;
   margin-left: 8px;
