@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v34)
+/* Lyricalmyrical Inventory — Unified Backend (v35)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -129,6 +129,8 @@
  *      Bump flags v32-and-older as outdated.
  *  32. v34: Fix 406 Not Acceptable errors by sending 'application/json' headers
  *      to Canada Post Developer Portal instead of legacy vnd.cpc custom types.
+ *  33. v35: Migrate Tracking and Label Artifact proxy to Canada Post's new
+ *      JSON/OAuth architecture. Bump flags v34-and-older as outdated.
  */
 
 const HEADERS = [
@@ -177,8 +179,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v34',
-    scriptVersion: 'v34',
+    service: 'lyrical-sheets-webhook-v35',
+    scriptVersion: 'v35',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -714,7 +716,7 @@ function doPost(e) {
         if (isArtifact) {
           headers['Accept'] = 'application/pdf';
         } else if (isTracking) {
-          headers['Accept'] = 'application/vnd.cpc.track+xml';
+          headers['Accept'] = 'application/json';
         } else if (method === 'POST') {
           headers['Accept'] = useOAuth ? 'application/json' : (endpoint.indexOf('ncshipment') !== -1 
             ? 'application/vnd.cpc.ncshipment-v4+json' 

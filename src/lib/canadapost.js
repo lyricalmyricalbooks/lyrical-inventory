@@ -108,16 +108,16 @@ export function buildRateScenarioJson({
 
   let destJson = {};
   if (dest === 'CA') {
-    destJson = { domestic: { "postal-code": cleanPostalCode(destPostalOrZip) || 'V6B2W9' } };
+    destJson = { domestic: { postalCode: cleanPostalCode(destPostalOrZip) || 'V6B2W9' } };
   } else if (dest === 'US') {
-    destJson = { "united-states": { "zip-code": String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210' } };
+    destJson = { unitedStates: { zipCode: String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210' } };
   } else {
-    destJson = { international: { "country-code": dest } };
+    destJson = { international: { countryCode: dest } };
   }
 
   const payload = {
-    "mailing-scenario": {
-      "parcel-characteristics": {
+    mailingScenario: {
+      parcelCharacteristics: {
         weight: Number(weight.toFixed(3)),
         dimensions: {
           length: Number(length.toFixed(1)),
@@ -125,13 +125,13 @@ export function buildRateScenarioJson({
           height: Number(height.toFixed(1))
         }
       },
-      "origin-postal-code": origin,
+      originPostalCode: origin,
       destination: destJson
     }
   };
 
-  if (customerNumber) payload["mailing-scenario"]["customer-number"] = customerNumber.trim();
-  if (contractId) payload["mailing-scenario"]["contract-id"] = contractId.trim();
+  if (customerNumber) payload.mailingScenario.customerNumber = customerNumber.trim();
+  if (contractId) payload.mailingScenario.contractId = contractId.trim();
 
   return JSON.stringify(payload);
 }
@@ -166,26 +166,26 @@ export function parseCanadaPostPriceQuotes(jsonText) {
   }
 
   const quotes = [];
-  const priceQuotes = data['price-quotes']?.['price-quote'] || [];
+  const priceQuotes = data.priceQuotes?.priceQuote || [];
   const quoteArray = Array.isArray(priceQuotes) ? priceQuotes : [priceQuotes];
 
   for (const quote of quoteArray) {
     if (!quote) continue;
-    const serviceCode = quote['service-code'] || '';
-    const serviceName = quote['service-name'] || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
+    const serviceCode = quote.serviceCode || '';
+    const serviceName = quote.serviceName || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
 
-    const basePrice = parseFloat(quote['price-details']?.base || 0);
-    const duePrice = parseFloat(quote['price-details']?.due || basePrice);
+    const basePrice = parseFloat(quote.priceDetails?.base || 0);
+    const duePrice = parseFloat(quote.priceDetails?.due || basePrice);
     
     let gstPrice = 0, pstPrice = 0, hstPrice = 0;
-    const taxesObj = quote['price-details']?.taxes || {};
+    const taxesObj = quote.priceDetails?.taxes || {};
     gstPrice = parseFloat(taxesObj.gst || 0);
     pstPrice = parseFloat(taxesObj.pst || 0);
     hstPrice = parseFloat(taxesObj.hst || 0);
     const totalTaxes = Math.round((gstPrice + pstPrice + hstPrice) * 100) / 100;
 
-    const transitDays = quote['service-standard']?.['expected-transit-time'];
-    const deliveryDate = quote['service-standard']?.['expected-delivery-date'] || null;
+    const transitDays = quote.serviceStandard?.expectedTransitTime;
+    const deliveryDate = quote.serviceStandard?.expectedDeliveryDate || null;
 
     quotes.push({
       serviceCode,
@@ -1326,18 +1326,27 @@ export async function testCanadaPostConnection({
 /**
  * Parse a Canada Post tracking summary XML document.
  */
-export function parseCanadaPostTrackingSummary(xmlText) {
-  if (!xmlText || typeof xmlText !== 'string') {
+export function parseCanadaPostTrackingSummary(jsonText) {
+  if (!jsonText || typeof jsonText !== 'string') {
     throw new Error('Empty response from Canada Post Tracking API');
   }
 
-  if (/<messages?[\s>]/.test(xmlText) && xmlText.includes('<description>')) {
-    const code = xmlText.match(/<code>([^<]+)<\/code>/)?.[1] || 'ERROR';
-    const desc = xmlText.match(/<description>([^<]+)<\/description>/)?.[1] || 'Tracking lookup failed';
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch (err) {
+    throw new Error('Invalid JSON response from Canada Post Tracking API');
+  }
+
+  if (data.messages && data.messages.message) {
+    const msg = Array.isArray(data.messages.message) ? data.messages.message[0] : data.messages.message;
+    const code = msg.code || 'ERROR';
+    const desc = msg.description || 'Tracking lookup failed';
     throw new Error(`Canada Post [${code}]: ${desc}`);
   }
 
-  const pin = xmlText.match(/<pin>([^<]+)<\/pin>/)?.[1] || '';
+  const pinSummary = data.trackingSummary?.pinSummary || {};
+  const pin = pinSummary.pin || '';
   if (!pin) {
     throw new Error('Canada Post returned no tracking record for that PIN.');
   }
@@ -1346,16 +1355,16 @@ export function parseCanadaPostTrackingSummary(xmlText) {
     ok: true,
     found: true,
     pin,
-    originPostalId: xmlText.match(/<origin-postal-id>([^<]+)<\/origin-postal-id>/)?.[1] || '',
-    destinationPostalId: xmlText.match(/<destination-postal-id>([^<]+)<\/destination-postal-id>/)?.[1] || '',
-    destinationProvince: xmlText.match(/<destination-province>([^<]+)<\/destination-province>/)?.[1] || '',
-    serviceName: xmlText.match(/<service-name>([^<]+)<\/service-name>/)?.[1] || '',
-    status: xmlText.match(/<event-description>([^<]+)<\/event-description>/)?.[1] || '',
-    eventDateTime: xmlText.match(/<event-date-time>([^<]+)<\/event-date-time>/)?.[1] || '',
-    eventLocation: xmlText.match(/<event-location>([^<]+)<\/event-location>/)?.[1] || '',
-    expectedDeliveryDate: xmlText.match(/<expected-delivery-date>([^<]+)<\/expected-delivery-date>/)?.[1] || '',
-    actualDeliveryDate: xmlText.match(/<actual-delivery-date>([^<]+)<\/actual-delivery-date>/)?.[1] || '',
-    attemptedDate: xmlText.match(/<attempted-date>([^<]+)<\/attempted-date>/)?.[1] || ''
+    originPostalId: pinSummary.originPostalId || '',
+    destinationPostalId: pinSummary.destinationPostalId || '',
+    destinationProvince: pinSummary.destinationProvince || '',
+    serviceName: pinSummary.serviceName || '',
+    status: pinSummary.eventDescription || '',
+    eventDateTime: pinSummary.eventDateTime || '',
+    eventLocation: pinSummary.eventLocation || '',
+    expectedDeliveryDate: pinSummary.expectedDeliveryDate || '',
+    actualDeliveryDate: pinSummary.actualDeliveryDate || '',
+    attemptedDate: pinSummary.attemptedDate || ''
   };
 }
 
@@ -1392,7 +1401,8 @@ export async function verifyCanadaPostTrackingPin({
       const local = await readProxyResponse(proxyResp);
       if (local.kind === 'envelope') {
         unwrapProxyEnvelope(local.json, { endpoint: targetEndpoint, isTest: env.isTest });
-        if (local.json.xml) return { ...parseCanadaPostTrackingSummary(local.json.xml), environment: env };
+        const respText = typeof local.json.json === 'string' ? local.json.json : JSON.stringify(local.json.json || {});
+        if (local.json.json || local.json.xml) return { ...parseCanadaPostTrackingSummary(respText || local.json.xml), environment: env };
       }
     } catch (localErr) {
       if (isDefinitiveProxyError(localErr)) throw localErr;
@@ -1423,7 +1433,8 @@ export async function verifyCanadaPostTrackingPin({
       const relay = await readProxyResponse(gasResp);
       if (relay.kind === 'envelope') {
         unwrapProxyEnvelope(relay.json, { endpoint: targetEndpoint, isTest: env.isTest });
-        if (relay.json.xml) return { ...parseCanadaPostTrackingSummary(relay.json.xml), environment: env };
+        const respText = typeof relay.json.json === 'string' ? relay.json.json : JSON.stringify(relay.json.json || {});
+        if (relay.json.json || relay.json.xml) return { ...parseCanadaPostTrackingSummary(respText || relay.json.xml), environment: env };
       }
       throw new Error(describeAppsScriptProxyFailure(relay));
     } catch (gasErr) {
@@ -1431,11 +1442,15 @@ export async function verifyCanadaPostTrackingPin({
     }
   }
 
-  // 3. Direct fetch
+  // 3. Direct fetch (if bypassing local/AppsScript proxy or testing in Node)
+  // For OAuth endpoints, 'executeCanadaPostProxy' natively routes requests and gets a Bearer token.
+  // Direct fetch for tracking is mostly deprecated without an OAuth token generator in browser,
+  // but if needed, we assume it's routed through proxy.
+  // We'll set the Accept header to JSON just in case.
   const authHeader = 'Basic ' + btoa(`${key}:${secret}`);
   const resp = await fetch(targetEndpoint, {
     headers: {
-      'Accept': 'application/vnd.cpc.track+xml',
+      'Accept': 'application/json',
       'Authorization': authHeader,
       'Accept-language': 'en-CA'
     }
@@ -1586,31 +1601,31 @@ export function buildNonContractShipmentJson({
   const cleanDestState = normalizeStateOrProvince(destination.province || destination.state || '', destCountry);
 
   const deliverySpec = {
-    "service-code": serviceCode,
+    serviceCode: serviceCode,
     sender: {
       name: sender.name || 'Lyricalmyrical Books',
       company: sender.company || 'Lyricalmyrical Books',
-      "contact-phone": sender.phone || '4165550199',
-      "address-details": {
-        "address-line-1": sender.address1 || '123 Main St',
+      contactPhone: sender.phone || '4165550199',
+      addressDetails: {
+        addressLine1: sender.address1 || '123 Main St',
         city: sender.city || 'Toronto',
-        "prov-state": cleanSenderState,
-        "postal-zip-code": cleanOriginZip
+        provState: cleanSenderState,
+        postalZipCode: cleanOriginZip
       }
     },
     destination: {
       name: destination.name || 'Customer',
       company: destination.company || '',
-      "client-voice-number": destination.phone || '5555555555',
-      "address-details": {
-        "address-line-1": destination.address1 || '',
+      clientVoiceNumber: destination.phone || '5555555555',
+      addressDetails: {
+        addressLine1: destination.address1 || '',
         city: destination.city || '',
-        "prov-state": cleanDestState,
-        "country-code": destCountry,
-        "postal-zip-code": cleanDestZip
+        provState: cleanDestState,
+        countryCode: destCountry,
+        postalZipCode: cleanDestZip
       }
     },
-    "parcel-characteristics": {
+    parcelCharacteristics: {
       weight: weightKg,
       dimensions: {
         length: lengthCm,
@@ -1619,16 +1634,16 @@ export function buildNonContractShipmentJson({
       }
     },
     preferences: {
-      "show-packing-instructions": true,
-      "show-postage-rate": true
+      showPackingInstructions: true,
+      showPostageRate: true
     },
     references: {
-      "customer-ref-1": orderNum || 'BOOK-ORDER'
+      customerRef1: orderNum || 'BOOK-ORDER'
     }
   };
 
-  if (sender.address2) deliverySpec.sender["address-details"]["address-line-2"] = sender.address2;
-  if (destination.address2) deliverySpec.destination["address-details"]["address-line-2"] = destination.address2;
+  if (sender.address2) deliverySpec.sender.addressDetails.addressLine2 = sender.address2;
+  if (destination.address2) deliverySpec.destination.addressDetails.addressLine2 = destination.address2;
 
   if (destCountry !== 'CA' && (customs || cleanDeclId)) {
     const qty = Math.max(1, parseInt(customs?.quantity, 10) || 1);
@@ -1638,27 +1653,27 @@ export function buildNonContractShipmentJson({
     
     deliverySpec.customs = {
       currency: "CAD",
-      "conversion-from-cad": 1.0,
-      "reason-for-export": "SOG",
-      "sku-list": {
+      conversionFromCad: 1.0,
+      reasonForExport: "SOG",
+      skuList: {
         item: [
           {
-            "customs-number-of-units": qty,
-            "customs-description": customsDesc,
-            "unit-weight": Number((weightKg / qty).toFixed(3)),
-            "customs-value-per-unit": Number((declaredVal / qty).toFixed(2)),
-            "hs-tariff-code": hsCode,
-            "country-of-origin": "CA"
+            customsNumberOfUnits: qty,
+            customsDescription: customsDesc,
+            unitWeight: Number((weightKg / qty).toFixed(3)),
+            customsValuePerUnit: Number((declaredVal / qty).toFixed(2)),
+            hsTariffCode: hsCode,
+            countryOfOrigin: "CA"
           }
         ]
       }
     };
     if (cleanDeclId) {
-      deliverySpec.customs["declaration-id"] = cleanDeclId;
+      deliverySpec.customs.declarationId = cleanDeclId;
     }
   }
 
-  return JSON.stringify({ "non-contract-shipment": { "delivery-spec": deliverySpec } });
+  return JSON.stringify({ nonContractShipment: { deliverySpec: deliverySpec } });
 }
 
 /**
@@ -1688,9 +1703,9 @@ export function parseCanadaPostShipmentResponse(jsonText) {
     throw new Error(`Canada Post [ERROR]: ${data.fault.faultstring}`);
   }
 
-  const shipmentInfo = data['non-contract-shipment-info'] || {};
-  const shipmentId = shipmentInfo['shipment-id'] || '';
-  const trackingPin = shipmentInfo['tracking-pin'] || '';
+  const shipmentInfo = data.nonContractShipmentInfo || {};
+  const shipmentId = shipmentInfo.shipmentId || '';
+  const trackingPin = shipmentInfo.trackingPin || '';
   
   // Extract links for label artifact
   let labelLink = '';
@@ -1707,7 +1722,7 @@ export function parseCanadaPostShipmentResponse(jsonText) {
 
   // When a Zonos Verified Account key is sent on the request, Canada Post issues
   // the Declaration ID itself and returns it here rather than expecting one in.
-  const rawDeclaration = shipmentInfo['declaration-id'] || shipmentInfo['zonos-declaration-id'] || shipmentInfo['duty-declaration-id'] || '';
+  const rawDeclaration = shipmentInfo.declarationId || shipmentInfo.zonosDeclarationId || shipmentInfo.dutyDeclarationId || '';
   const declarationId = validateDeclarationId(rawDeclaration) ? formatDeclarationId(rawDeclaration) : '';
 
   return {
