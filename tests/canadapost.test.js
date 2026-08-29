@@ -916,7 +916,7 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
     });
 
     const result = await executeCanadaPostProxy({
-      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/ship/price',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/rating/v1/prices',
       jsonPayload: '{"mailing-scenario":{}}',
       apiKey: 'key',
       apiSecret: 'secret',
@@ -1222,7 +1222,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
     });
 
     const result = await executeCanadaPostProxy({
-      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/ship/price',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/rating/v1/prices',
       jsonPayload: '{"mailing-scenario":{}}',
       apiKey: 'key',
       apiSecret: 'secret',
@@ -1237,7 +1237,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     await expect(executeCanadaPostProxy({
-      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/ship/price',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/rating/v1/prices',
       jsonPayload: '{"mailing-scenario":{}}',
       apiKey: 'key',
       apiSecret: 'secret',
@@ -1260,7 +1260,7 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
     });
 
     const result = await executeCanadaPostProxy({
-      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/ship/price',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/rating/v1/prices',
       jsonPayload: '{"mailing-scenario":{}}',
       apiKey: 'key',
       apiSecret: 'secret',

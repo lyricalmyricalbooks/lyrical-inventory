@@ -988,7 +988,7 @@ export async function getCanadaPostRates({
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
   // Based on the new Developer Portal, the rating API URL has changed, but we will
   // assume /rs/ship/price is still properly routed or we use the new host with it.
-  const targetEndpoint = `${baseUrl}/rs/ship/price`;
+  const targetEndpoint = `${baseUrl}/prod/devportal-portaildesdeveloppeurs/rating/v1/prices`;
 
   const result = await executeCanadaPostProxy({
     targetEndpoint,
