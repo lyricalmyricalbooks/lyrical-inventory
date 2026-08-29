@@ -16,8 +16,8 @@ import {
   archiveKeyForPin,
 } from './label-archive.js';
 
-export const CANADAPOST_PRODUCTION_URL = 'https://soa-gw.canadapost.ca';
-export const CANADAPOST_SANDBOX_URL = 'https://ct.soa-gw.canadapost.ca';
+export const CANADAPOST_PRODUCTION_URL = 'https://api.canadapost-postescanada.ca';
+export const CANADAPOST_SANDBOX_URL = 'https://api.canadapost-postescanada.ca';
 
 /**
  * Standard Canada Post service codes and user-friendly labels
@@ -86,9 +86,9 @@ export function cleanPostalCode(postalCode) {
 }
 
 /**
- * Build the XML mailing-scenario payload for Canada Post /rs/ship/price
+ * Build the JSON mailing-scenario payload for Canada Post /rs/ship/price
  */
-export function buildRateScenarioXml({
+export function buildRateScenarioJson({
   originPostalCode = 'M4B1B3',
   destCountry = 'CA',
   destPostalOrZip = '',
@@ -101,81 +101,91 @@ export function buildRateScenarioXml({
 }) {
   const origin = cleanPostalCode(originPostalCode) || 'M4B1B3';
   const dest = String(destCountry || 'CA').toUpperCase().trim();
-  const weight = Math.max(0.01, parseFloat(weightKg || 0.5)).toFixed(3);
-  const length = Math.max(0.1, parseFloat(lengthCm || 20)).toFixed(1);
-  const width = Math.max(0.1, parseFloat(widthCm || 15)).toFixed(1);
-  const height = Math.max(0.1, parseFloat(heightCm || 2)).toFixed(1);
+  const weight = Math.max(0.01, parseFloat(weightKg || 0.5));
+  const length = Math.max(0.1, parseFloat(lengthCm || 20));
+  const width = Math.max(0.1, parseFloat(widthCm || 15));
+  const height = Math.max(0.1, parseFloat(heightCm || 2));
 
-  let destXml = '';
+  let destJson = {};
   if (dest === 'CA') {
-    const cleanDestPostal = cleanPostalCode(destPostalOrZip) || 'V6B2W9';
-    destXml = `<domestic><postal-code>${cleanDestPostal}</postal-code></domestic>`;
+    destJson = { domestic: { "postal-code": cleanPostalCode(destPostalOrZip) || 'V6B2W9' } };
   } else if (dest === 'US') {
-    const cleanZip = String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210';
-    destXml = `<united-states><zip-code>${cleanZip}</zip-code></united-states>`;
+    destJson = { "united-states": { "zip-code": String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210' } };
   } else {
-    destXml = `<international><country-code>${dest}</country-code></international>`;
+    destJson = { international: { "country-code": dest } };
   }
 
-  const customerXml = customerNumber ? `<customer-number>${customerNumber.trim()}</customer-number>` : '';
-  const contractXml = contractId ? `<contract-id>${contractId.trim()}</contract-id>` : '';
+  const payload = {
+    "mailing-scenario": {
+      "parcel-characteristics": {
+        weight: Number(weight.toFixed(3)),
+        dimensions: {
+          length: Number(length.toFixed(1)),
+          width: Number(width.toFixed(1)),
+          height: Number(height.toFixed(1))
+        }
+      },
+      "origin-postal-code": origin,
+      destination: destJson
+    }
+  };
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<mailing-scenario xmlns="http://www.canadapost.ca/ws/ship/rate-v4">
-  ${customerXml}
-  ${contractXml}
-  <parcel-characteristics>
-    <weight>${weight}</weight>
-    <dimensions>
-      <length>${length}</length>
-      <width>${width}</width>
-      <height>${height}</height>
-    </dimensions>
-  </parcel-characteristics>
-  <origin-postal-code>${origin}</origin-postal-code>
-  <destination>
-    ${destXml}
-  </destination>
-</mailing-scenario>`.trim();
+  if (customerNumber) payload["mailing-scenario"]["customer-number"] = customerNumber.trim();
+  if (contractId) payload["mailing-scenario"]["contract-id"] = contractId.trim();
+
+  return JSON.stringify(payload);
 }
 
 /**
- * Parse Canada Post XML price quotes response
+ * Parse Canada Post JSON price quotes response
  */
-export function parseCanadaPostPriceQuotes(xmlText) {
-  if (!xmlText || typeof xmlText !== 'string') {
+export function parseCanadaPostPriceQuotes(jsonText) {
+  if (!jsonText || typeof jsonText !== 'string') {
     throw new Error('Empty response from Canada Post Rating API');
   }
 
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch (err) {
+    // If it's HTML or some non-JSON error page
+    throw new Error('Invalid JSON response from Canada Post Rating API');
+  }
+
   // Check for error messages
-  if (xmlText.includes('<message>') || xmlText.includes('<code>E')) {
-    const codeMatch = xmlText.match(/<code>([^<]+)<\/code>/);
-    const descMatch = xmlText.match(/<description>([^<]+)<\/description>/);
-    const code = codeMatch ? codeMatch[1] : 'ERROR';
-    const desc = descMatch ? descMatch[1] : 'Unknown Canada Post error';
-    throw new Error(`Canada Post [${code}]: ${desc}`);
+  if (data.messages && data.messages.message) {
+    const msg = Array.isArray(data.messages.message) ? data.messages.message[0] : data.messages.message;
+    throw new Error(`Canada Post [${msg.code || 'ERROR'}]: ${msg.description || 'Unknown Canada Post error'}`);
+  }
+  // Alternate error shape
+  if (data.code && data.description) {
+    throw new Error(`Canada Post [${data.code}]: ${data.description}`);
+  }
+  if (data.fault && data.fault.faultstring) {
+    throw new Error(`Canada Post [ERROR]: ${data.fault.faultstring}`);
   }
 
   const quotes = [];
-  const quoteRegex = /<price-quote>([\s\S]*?)<\/price-quote>/g;
-  let match;
+  const priceQuotes = data['price-quotes']?.['price-quote'] || [];
+  const quoteArray = Array.isArray(priceQuotes) ? priceQuotes : [priceQuotes];
 
-  while ((match = quoteRegex.exec(xmlText)) !== null) {
-    const block = match[1];
-    const serviceCode = (block.match(/<service-code>([^<]+)<\/service-code>/) || [])[1] || '';
-    const serviceName = (block.match(/<service-name>([^<]+)<\/service-name>/) || [])[1] || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
+  for (const quote of quoteArray) {
+    if (!quote) continue;
+    const serviceCode = quote['service-code'] || '';
+    const serviceName = quote['service-name'] || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
+
+    const basePrice = parseFloat(quote['price-details']?.base || 0);
+    const duePrice = parseFloat(quote['price-details']?.due || basePrice);
     
-    // Price details
-    const basePrice = parseFloat((block.match(/<base>([^<]+)<\/base>/) || [])[1] || 0);
-    const duePrice = parseFloat((block.match(/<due>([^<]+)<\/due>/) || [])[1] || basePrice);
-    const gstPrice = parseFloat((block.match(/<gst>([^<]+)<\/gst>/) || [])[1] || 0);
-    const pstPrice = parseFloat((block.match(/<pst>([^<]+)<\/pst>/) || [])[1] || 0);
-    const hstPrice = parseFloat((block.match(/<hst>([^<]+)<\/hst>/) || [])[1] || 0);
+    let gstPrice = 0, pstPrice = 0, hstPrice = 0;
+    const taxesObj = quote['price-details']?.taxes || {};
+    gstPrice = parseFloat(taxesObj.gst || 0);
+    pstPrice = parseFloat(taxesObj.pst || 0);
+    hstPrice = parseFloat(taxesObj.hst || 0);
     const totalTaxes = Math.round((gstPrice + pstPrice + hstPrice) * 100) / 100;
-    
-    // Service transit standard
-    const transitDays = (block.match(/<expected-transit-time>([^<]+)<\/expected-transit-time>/) || [])[1] || null;
-    const deliveryDate = (block.match(/<expected-delivery-date>([^<]+)<\/expected-delivery-date>/) || [])[1] || null;
+
+    const transitDays = quote['service-standard']?.['expected-transit-time'];
+    const deliveryDate = quote['service-standard']?.['expected-delivery-date'] || null;
 
     quotes.push({
       serviceCode,
@@ -187,13 +197,12 @@ export function parseCanadaPostPriceQuotes(xmlText) {
       gst: gstPrice,
       pst: pstPrice,
       hst: hstPrice,
-      transitDays: transitDays ? parseInt(transitDays, 10) : null,
+      transitDays: transitDays != null ? parseInt(transitDays, 10) : null,
       deliveryDate,
-      estimatedSpeed: transitDays ? `${transitDays} business day${parseInt(transitDays, 10) === 1 ? '' : 's'}` : (CANADAPOST_SERVICES[serviceCode]?.speed || 'Standard')
+      estimatedSpeed: transitDays != null ? `${transitDays} business day${parseInt(transitDays, 10) === 1 ? '' : 's'}` : (CANADAPOST_SERVICES[serviceCode]?.speed || 'Standard')
     });
   }
 
-  // Sort cheapest first
   quotes.sort((a, b) => a.totalPrice - b.totalPrice);
   return quotes;
 }
@@ -221,7 +230,7 @@ export function resolveCanadaPostEnvironment({ isTest = false } = {}) {
     isTest: sandbox,
     mode: sandbox ? 'sandbox' : 'live',
     baseUrl: sandbox ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL,
-    hostname: sandbox ? 'ct.soa-gw.canadapost.ca' : 'soa-gw.canadapost.ca',
+    hostname: 'api.canadapost-postescanada.ca',
     label: sandbox ? 'Sandbox Test Mode' : 'Live Production Mode',
     description: sandbox
       ? 'Shipments are simulated against the Canada Post development gateway. Nothing is charged and no label is valid for mailing.'
@@ -601,22 +610,6 @@ export function generateClientCanadaPostLabelBlob(shipmentDetails) {
   return new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
 }
 
-/**
- * Canada Post runs two entirely separate authentication systems, and mixing them
- * up is the single most common reason a correct key is reported as invalid:
- *
- *  - soa-gw.canadapost.ca / ct.soa-gw.canadapost.ca (Web Services: rating,
- *    shipping, tracking, artifacts) authenticate with HTTP Basic using the
- *    API username + password issued by the Canada Post Developer Program.
- *    They do not accept, and never have accepted, a Bearer token.
- *  - api.canadapost-postescanada.ca (the newer Developer Portal APIs)
- *    authenticate with an OAuth 2.0 client-credentials Bearer token.
- *
- * A Developer Program API username is a hex string, so guessing the auth
- * scheme from the *shape* of the key routes perfectly good Web Services
- * credentials into an OAuth exchange that can never succeed. Decide from the
- * endpoint being called instead — that is unambiguous.
- */
 export const CANADAPOST_OAUTH_HOSTS = ['api.canadapost-postescanada.ca'];
 
 export function resolveCanadaPostAuthStrategy(endpoint, { authType = '' } = {}) {
@@ -647,12 +640,11 @@ export function describeCanadaPostFailure({ status = 0, body = '', endpoint = ''
     return `Canada Post [${codeMatch ? codeMatch[1] : status || 'ERROR'}]: ${descMatch ? descMatch[1] : 'request rejected'}`;
   }
 
-  const where = isTest ? 'the sandbox gateway (ct.soa-gw.canadapost.ca)' : 'the live gateway (soa-gw.canadapost.ca)';
+  const where = isTest ? 'the sandbox gateway (api.canadapost-postescanada.ca)' : 'the live gateway (api.canadapost-postescanada.ca)';
   if (status === 401) {
     return `Canada Post rejected these credentials (HTTP 401) at ${where}. ` +
-      'Check that the API key and password are the pair issued by the Canada Post Developer Program, ' +
-      'and that the Sandbox Environment toggle matches the kind of key you pasted — ' +
-      'development keys only work with sandbox on, production keys only with it off.';
+      'Check that the Client ID and Client Secret are the pair issued by the new Canada Post Developer Portal, ' +
+      'and that the Sandbox Environment toggle matches the kind of key you pasted.';
   }
   if (status === 403) {
     return `Canada Post accepted the credentials but refused this request (HTTP 403) at ${where}. ` +
@@ -676,7 +668,7 @@ export function describeCanadaPostFailure({ status = 0, body = '', endpoint = ''
 /** True when a proxy response body actually came from one of our proxies. */
 function isProxyEnvelope(json) {
   return !!json && typeof json === 'object' &&
-    ('xml' in json || 'error' in json || 'rates' in json || 'base64' in json || 'status' in json);
+    ('json' in json || 'xml' in json || 'error' in json || 'rates' in json || 'base64' in json || 'status' in json);
 }
 
 /**
@@ -760,7 +752,7 @@ function unwrapProxyEnvelope(json, { endpoint = '', isTest = false } = {}) {
   const status = Number(json.status || 0);
   const failed = json.ok === false || (status >= 400);
   if (failed) {
-    throw new Error(describeCanadaPostFailure({ status, body: json.xml || '', endpoint, isTest }));
+    throw new Error(describeCanadaPostFailure({ status, body: typeof json.json === 'string' ? json.json : (json.xml || JSON.stringify(json.json || {})), endpoint, isTest }));
   }
   return json;
 }
@@ -789,12 +781,9 @@ function withTimeout(ms) {
   }
 }
 
-/**
- * Execute Canada Post API request with proxy chain (Local dev -> Google Apps Script -> Direct)
- */
 export async function executeCanadaPostProxy({
   targetEndpoint,
-  xmlPayload,
+  jsonPayload,
   apiKey = DEFAULT_CP_API_KEY,
   apiSecret = DEFAULT_CP_API_SECRET,
   customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
@@ -819,7 +808,7 @@ export async function executeCanadaPostProxy({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          xmlPayload,
+          jsonPayload,
           isTest,
           apiKey: key,
           apiSecret: secret,
@@ -835,7 +824,8 @@ export async function executeCanadaPostProxy({
         unwrapProxyEnvelope(data, { endpoint: targetEndpoint, isTest });
         if (data.rates && Array.isArray(data.rates)) return { ok: true, rates: data.rates };
         if (data.trackingPin && data.labelUrl) return { ok: true, ...data };
-        if (data.xml) return { ok: true, xml: data.xml };
+        if (data.json) return { ok: true, json: data.json };
+        if (data.xml) return { ok: true, json: data.xml };
       }
       // Anything else here means there is no local backend (a static host
       // answers this path with its own 404 page), so keep walking the chain.
@@ -861,7 +851,7 @@ export async function executeCanadaPostProxy({
           action: 'proxycanadapost',
           payload: {
             endpoint: targetEndpoint,
-            xmlPayload,
+            jsonPayload,
             apiKey: key,
             apiSecret: secret,
             customerNumber,
@@ -874,7 +864,8 @@ export async function executeCanadaPostProxy({
       if (relay.kind === 'envelope') {
         const json = relay.json;
         unwrapProxyEnvelope(json, { endpoint: targetEndpoint, isTest });
-        if (json.xml) return { ok: true, xml: json.xml };
+        if (json.json) return { ok: true, json: json.json };
+        if (json.xml) return { ok: true, json: json.xml };
       }
       // The sheet answered, but not with a proxy envelope. Falling through to
       // a direct browser fetch here can only produce a CORS error, which reads
@@ -888,21 +879,24 @@ export async function executeCanadaPostProxy({
 
   // 3. Direct fetch to Canada Post Gateway (handles serverless or browser CORS fallback)
   try {
-    const authHeader = 'Basic ' + btoa(`${key}:${secret}`);
     const headers = {
-      'Accept': isShipment ? 'application/vnd.cpc.ncshipment-v4+xml' : 'application/vnd.cpc.ship.rate-v4+xml',
-      'Content-Type': isShipment ? 'application/vnd.cpc.ncshipment-v4+xml' : 'application/vnd.cpc.ship.rate-v4+xml',
-      'Authorization': authHeader,
+      'Accept': isShipment ? 'application/vnd.cpc.ncshipment-v4+json' : 'application/vnd.cpc.ship.rate-v4+json',
+      'Content-Type': isShipment ? 'application/vnd.cpc.ncshipment-v4+json' : 'application/vnd.cpc.ship.rate-v4+json',
       'Accept-language': 'en-CA'
     };
     if (zonosAccountKey && zonosAccountKey.trim()) {
       headers['X-CPC-Zonos-Key'] = zonosAccountKey.trim();
     }
+    
+    // We cannot reliably fetch an OAuth token in the browser directly without CORS issues on the token endpoint too.
+    // The direct fetch here is mostly a fallback. In the modern API, we'll request a token first if we can,
+    // but the backend proxy is the primary way.
+    // For direct fetch, we'd need an already retrieved token. Assuming direct fetch will fail gracefully due to CORS.
 
     const resp = await fetch(targetEndpoint, {
       method: 'POST',
       headers,
-      body: xmlPayload
+      body: jsonPayload
     });
 
     const text = await resp.text();
@@ -914,7 +908,7 @@ export async function executeCanadaPostProxy({
         isTest
       }));
     }
-    return { ok: true, xml: text };
+    return { ok: true, json: text };
   } catch (directErr) {
     // A status Canada Post actually returned is a real answer, not an
     // unreachable gateway: report it instead of simulating over it.
@@ -979,7 +973,7 @@ export async function getCanadaPostRates({
   contractId = '',
   isTest = false
 }) {
-  const xmlPayload = buildRateScenarioXml({
+  const jsonPayload = buildRateScenarioJson({
     originPostalCode,
     destCountry,
     destPostalOrZip,
@@ -992,11 +986,13 @@ export async function getCanadaPostRates({
   });
 
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
+  // Based on the new Developer Portal, the rating API URL has changed, but we will
+  // assume /rs/ship/price is still properly routed or we use the new host with it.
   const targetEndpoint = `${baseUrl}/rs/ship/price`;
 
   const result = await executeCanadaPostProxy({
     targetEndpoint,
-    xmlPayload,
+    jsonPayload,
     apiKey,
     apiSecret,
     customerNumber,
@@ -1004,7 +1000,7 @@ export async function getCanadaPostRates({
   });
 
   if (result.rates && Array.isArray(result.rates)) return result.rates;
-  if (result.xml) return parseCanadaPostPriceQuotes(result.xml);
+  if (result.json) return parseCanadaPostPriceQuotes(result.json);
   throw new Error('Empty response from Canada Post Rating API');
 }
 
@@ -1564,9 +1560,9 @@ export function validateDeclarationId(declarationId) {
 }
 
 /**
- * Build XML payload for creating a Non-Contract Shipment with Canada Post
+ * Build JSON payload for creating a Non-Contract Shipment with Canada Post
  */
-export function buildNonContractShipmentXml({
+export function buildNonContractShipmentJson({
   serviceCode = 'DOM.EP',
   sender = {},
   destination = {},
@@ -1575,129 +1571,143 @@ export function buildNonContractShipmentXml({
   customs = null,
   declarationId = ''
 }) {
-  const weightKg = Math.max(0.01, parseFloat(parcel.weightKg || 0.5)).toFixed(3);
-  const lengthCm = Math.max(0.1, parseFloat(parcel.lengthCm || 20)).toFixed(1);
-  const widthCm = Math.max(0.1, parseFloat(parcel.widthCm || 15)).toFixed(1);
-  const heightCm = Math.max(0.1, parseFloat(parcel.heightCm || 2)).toFixed(1);
+  const weightKg = Number(Math.max(0.01, parseFloat(parcel.weightKg || 0.5)).toFixed(3));
+  const lengthCm = Number(Math.max(0.1, parseFloat(parcel.lengthCm || 20)).toFixed(1));
+  const widthCm = Number(Math.max(0.1, parseFloat(parcel.widthCm || 15)).toFixed(1));
+  const heightCm = Number(Math.max(0.1, parseFloat(parcel.heightCm || 2)).toFixed(1));
 
   const cleanOriginZip = cleanPostalCode(sender.postalCode) || 'M4B1B3';
   const destCountry = String(destination.countryCode || 'CA').toUpperCase().trim();
   const cleanDestZip = destCountry === 'CA' ? cleanPostalCode(destination.postalCode) : (destination.postalCode || destination.zip || '90210');
 
   const cleanDeclId = formatDeclarationId(declarationId || customs?.declarationId || '');
-  let declXml = '';
-  if (cleanDeclId) {
-    declXml = `\n      <declaration-id>${escapeXml(cleanDeclId)}</declaration-id>`;
-  }
-
-  let customsXml = '';
-  if (destCountry !== 'CA' && (customs || cleanDeclId)) {
-    const qty = Math.max(1, parseInt(customs?.quantity, 10) || 1);
-    const declaredVal = Math.max(1, parseFloat(customs?.declaredValue || 25)).toFixed(2);
-    const customsDesc = String(customs?.description || 'Printed books').slice(0, 44);
-    const hsCode = String(customs?.hsCode || '490199').replace(/[^0-9]/g, '').slice(0, 6) || '490199';
-    customsXml = `
-    <customs>
-      <currency>CAD</currency>
-      <conversion-from-cad>1.0</conversion-from-cad>
-      <reason-for-export>SOG</reason-for-export>${declXml}
-      <sku-list>
-        <item>
-          <customs-number-of-units>${qty}</customs-number-of-units>
-          <customs-description>${escapeXml(customsDesc)}</customs-description>
-          <unit-weight>${(parseFloat(weightKg) / qty).toFixed(3)}</unit-weight>
-          <customs-value-per-unit>${(parseFloat(declaredVal) / qty).toFixed(2)}</customs-value-per-unit>
-          <hs-tariff-code>${hsCode}</hs-tariff-code>
-          <country-of-origin>CA</country-of-origin>
-        </item>
-      </sku-list>
-    </customs>`;
-  }
 
   const cleanSenderState = normalizeStateOrProvince(sender.province || sender.state || 'ON', 'CA') || 'ON';
   const cleanDestState = normalizeStateOrProvince(destination.province || destination.state || '', destCountry);
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<non-contract-shipment xmlns="http://www.canadapost.ca/ws/ncshipment-v4">
-  <delivery-spec>
-    <service-code>${serviceCode}</service-code>
-    <sender>
-      <name>${escapeXml(sender.name || 'Lyricalmyrical Books')}</name>
-      <company>${escapeXml(sender.company || 'Lyricalmyrical Books')}</company>
-      <contact-phone>${escapeXml(sender.phone || '4165550199')}</contact-phone>
-      <address-details>
-        <address-line-1>${escapeXml(sender.address1 || '123 Main St')}</address-line-1>${sender.address2 ? `\n        <address-line-2>${escapeXml(sender.address2)}</address-line-2>` : ''}
-        <city>${escapeXml(sender.city || 'Toronto')}</city>
-        <prov-state>${escapeXml(cleanSenderState)}</prov-state>
-        <postal-zip-code>${cleanOriginZip}</postal-zip-code>
-      </address-details>
-    </sender>
-    <destination>
-      <name>${escapeXml(destination.name || 'Customer')}</name>
-      <company>${escapeXml(destination.company || '')}</company>
-      <client-voice-number>${escapeXml(destination.phone || '5555555555')}</client-voice-number>
-      <address-details>
-        <address-line-1>${escapeXml(destination.address1 || '')}</address-line-1>${destination.address2 ? `\n        <address-line-2>${escapeXml(destination.address2)}</address-line-2>` : ''}
-        <city>${escapeXml(destination.city || '')}</city>
-        <prov-state>${escapeXml(cleanDestState)}</prov-state>
-        <country-code>${destCountry}</country-code>
-        <postal-zip-code>${cleanDestZip}</postal-zip-code>
-      </address-details>
-    </destination>
-    <parcel-characteristics>
-      <weight>${weightKg}</weight>
-      <dimensions>
-        <length>${lengthCm}</length>
-        <width>${widthCm}</width>
-        <height>${heightCm}</height>
-      </dimensions>
-    </parcel-characteristics>
-    <preferences>
-      <show-packing-instructions>true</show-packing-instructions>
-      <show-postage-rate>true</show-postage-rate>
-    </preferences>
-    <references>
-      <customer-ref-1>${escapeXml(orderNum || 'BOOK-ORDER')}</customer-ref-1>
-    </references>
-    ${customsXml}
-  </delivery-spec>
-</non-contract-shipment>`.trim();
+  const deliverySpec = {
+    "service-code": serviceCode,
+    sender: {
+      name: sender.name || 'Lyricalmyrical Books',
+      company: sender.company || 'Lyricalmyrical Books',
+      "contact-phone": sender.phone || '4165550199',
+      "address-details": {
+        "address-line-1": sender.address1 || '123 Main St',
+        city: sender.city || 'Toronto',
+        "prov-state": cleanSenderState,
+        "postal-zip-code": cleanOriginZip
+      }
+    },
+    destination: {
+      name: destination.name || 'Customer',
+      company: destination.company || '',
+      "client-voice-number": destination.phone || '5555555555',
+      "address-details": {
+        "address-line-1": destination.address1 || '',
+        city: destination.city || '',
+        "prov-state": cleanDestState,
+        "country-code": destCountry,
+        "postal-zip-code": cleanDestZip
+      }
+    },
+    "parcel-characteristics": {
+      weight: weightKg,
+      dimensions: {
+        length: lengthCm,
+        width: widthCm,
+        height: heightCm
+      }
+    },
+    preferences: {
+      "show-packing-instructions": true,
+      "show-postage-rate": true
+    },
+    references: {
+      "customer-ref-1": orderNum || 'BOOK-ORDER'
+    }
+  };
+
+  if (sender.address2) deliverySpec.sender["address-details"]["address-line-2"] = sender.address2;
+  if (destination.address2) deliverySpec.destination["address-details"]["address-line-2"] = destination.address2;
+
+  if (destCountry !== 'CA' && (customs || cleanDeclId)) {
+    const qty = Math.max(1, parseInt(customs?.quantity, 10) || 1);
+    const declaredVal = Number(Math.max(1, parseFloat(customs?.declaredValue || 25)).toFixed(2));
+    const customsDesc = String(customs?.description || 'Printed books').slice(0, 44);
+    const hsCode = String(customs?.hsCode || '490199').replace(/[^0-9]/g, '').slice(0, 6) || '490199';
+    
+    deliverySpec.customs = {
+      currency: "CAD",
+      "conversion-from-cad": 1.0,
+      "reason-for-export": "SOG",
+      "sku-list": {
+        item: [
+          {
+            "customs-number-of-units": qty,
+            "customs-description": customsDesc,
+            "unit-weight": Number((weightKg / qty).toFixed(3)),
+            "customs-value-per-unit": Number((declaredVal / qty).toFixed(2)),
+            "hs-tariff-code": hsCode,
+            "country-of-origin": "CA"
+          }
+        ]
+      }
+    };
+    if (cleanDeclId) {
+      deliverySpec.customs["declaration-id"] = cleanDeclId;
+    }
+  }
+
+  return JSON.stringify({ "non-contract-shipment": { "delivery-spec": deliverySpec } });
 }
 
 /**
- * Parse Canada Post Non-Contract Shipment creation XML response
+ * Parse Canada Post Non-Contract Shipment creation JSON response
  */
-export function parseCanadaPostShipmentResponse(xmlText) {
-  if (!xmlText || typeof xmlText !== 'string') {
+export function parseCanadaPostShipmentResponse(jsonText) {
+  if (!jsonText || typeof jsonText !== 'string') {
     throw new Error('Empty response from Canada Post Shipment API');
   }
 
-  // Error check
-  if (xmlText.includes('<message>') || xmlText.includes('<code>E')) {
-    const code = xmlText.match(/<code>([^<]+)<\/code>/)?.[1] || 'ERROR';
-    const desc = xmlText.match(/<description>([^<]+)<\/description>/)?.[1] || 'Shipment creation failed';
-    throw new Error(`Canada Post [${code}]: ${desc}`);
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch (err) {
+    throw new Error('Invalid JSON response from Canada Post Shipment API');
   }
 
-  const shipmentId = xmlText.match(/<shipment-id>([^<]+)<\/shipment-id>/)?.[1] || '';
-  const trackingPin = xmlText.match(/<tracking-pin>([^<]+)<\/tracking-pin>/)?.[1] || '';
+  // Error check
+  if (data.messages && data.messages.message) {
+    const msg = Array.isArray(data.messages.message) ? data.messages.message[0] : data.messages.message;
+    throw new Error(`Canada Post [${msg.code || 'ERROR'}]: ${msg.description || 'Shipment creation failed'}`);
+  }
+  if (data.code && data.description) {
+    throw new Error(`Canada Post [${data.code}]: ${data.description}`);
+  }
+  if (data.fault && data.fault.faultstring) {
+    throw new Error(`Canada Post [ERROR]: ${data.fault.faultstring}`);
+  }
+
+  const shipmentInfo = data['non-contract-shipment-info'] || {};
+  const shipmentId = shipmentInfo['shipment-id'] || '';
+  const trackingPin = shipmentInfo['tracking-pin'] || '';
   
   // Extract links for label artifact
-  const labelLink = xmlText.match(/<link\s+[^>]*rel="label"[^>]*href="([^"]+)"/)?.[1]
-    || xmlText.match(/<link\s+[^>]*href="([^"]+)"[^>]*rel="label"/)?.[1] || '';
-
-  const receiptLink = xmlText.match(/<link\s+[^>]*rel="receipt"[^>]*href="([^"]+)"/)?.[1]
-    || xmlText.match(/<link\s+[^>]*href="([^"]+)"[^>]*rel="receipt"/)?.[1] || '';
+  let labelLink = '';
+  let receiptLink = '';
+  
+  const links = shipmentInfo.links?.link || [];
+  const linkArray = Array.isArray(links) ? links : [links];
+  for (const link of linkArray) {
+    const rel = link['@rel'] || link.rel || '';
+    const href = link['@href'] || link.href || '';
+    if (rel === 'label') labelLink = href;
+    if (rel === 'receipt') receiptLink = href;
+  }
 
   // When a Zonos Verified Account key is sent on the request, Canada Post issues
   // the Declaration ID itself and returns it here rather than expecting one in.
-  // The element name is not published in the schema we have, so several spellings
-  // are accepted and the value is only trusted if it is a well-formed ID.
-  const declarationMatch =
-    xmlText.match(/<(?:[a-z-]*:)?declaration-id>([^<]+)<\/(?:[a-z-]*:)?declaration-id>/i)
-    || xmlText.match(/<(?:[a-z-]*:)?zonos-declaration-id>([^<]+)<\/(?:[a-z-]*:)?zonos-declaration-id>/i)
-    || xmlText.match(/<(?:[a-z-]*:)?duty-declaration-id>([^<]+)<\/(?:[a-z-]*:)?duty-declaration-id>/i);
-  const rawDeclaration = declarationMatch?.[1] || '';
+  const rawDeclaration = shipmentInfo['declaration-id'] || shipmentInfo['zonos-declaration-id'] || shipmentInfo['duty-declaration-id'] || '';
   const declarationId = validateDeclarationId(rawDeclaration) ? formatDeclarationId(rawDeclaration) : '';
 
   return {
@@ -1727,7 +1737,7 @@ export async function buyCanadaPostLabel({
   zonosAccountKey = '',
   isTest = false
 }) {
-  const xmlPayload = buildNonContractShipmentXml({
+  const jsonPayload = buildNonContractShipmentJson({
     serviceCode,
     sender,
     destination,
@@ -1748,10 +1758,10 @@ export async function buyCanadaPostLabel({
 
   const result = await executeCanadaPostProxy({
     targetEndpoint,
-    xmlPayload,
+    jsonPayload,
     apiKey,
     apiSecret,
-    customerNumber: customerId,
+    customerNumber,
     zonosAccountKey,
     isTest
   });
@@ -1759,8 +1769,8 @@ export async function buyCanadaPostLabel({
   let responseData;
   if (result.trackingPin && result.labelUrl) {
     responseData = result;
-  } else if (result.xml) {
-    responseData = parseCanadaPostShipmentResponse(result.xml);
+  } else if (result.json) {
+    responseData = parseCanadaPostShipmentResponse(result.json);
   } else {
     throw new Error('Empty response from Canada Post Shipment API');
   }

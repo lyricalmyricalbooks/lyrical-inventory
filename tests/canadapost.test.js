@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   cleanPostalCode,
-  buildRateScenarioXml,
+  buildRateScenarioJson,
   parseCanadaPostPriceQuotes,
   estimateOfflineCanadaPostRates,
   CANADAPOST_SERVICES
@@ -15,8 +15,8 @@ describe('Canada Post XML & Postal Code Helpers', () => {
     expect(cleanPostalCode('')).toBe('');
   });
 
-  it('builds valid domestic XML mailing scenario payload', () => {
-    const xml = buildRateScenarioXml({
+  it('builds valid domestic JSON mailing scenario payload', () => {
+    const jsonStr = buildRateScenarioJson({
       originPostalCode: 'M4B 1B3',
       destCountry: 'CA',
       destPostalOrZip: 'V6B 2W9',
@@ -28,68 +28,72 @@ describe('Canada Post XML & Postal Code Helpers', () => {
       contractId: '4299100'
     });
 
-    expect(xml).toContain('<origin-postal-code>M4B1B3</origin-postal-code>');
-    expect(xml).toContain('<postal-code>V6B2W9</postal-code>');
-    expect(xml).toContain('<weight>0.850</weight>');
-    expect(xml).toContain('<length>23.0</length>');
-    expect(xml).toContain('<width>19.5</width>');
-    expect(xml).toContain('<height>2.0</height>');
-    expect(xml).toContain('<customer-number>0007123456</customer-number>');
-    expect(xml).toContain('<contract-id>4299100</contract-id>');
+    expect(jsonStr).toContain('"origin-postal-code":"M4B1B3"');
+    expect(jsonStr).toContain('"postal-code":"V6B2W9"');
+    expect(jsonStr).toContain('"weight":0.85');
+    expect(jsonStr).toContain('"length":23');
+    expect(jsonStr).toContain('"width":19.5');
+    expect(jsonStr).toContain('"height":2');
+    expect(jsonStr).toContain('"customer-number":"0007123456"');
+    expect(jsonStr).toContain('"contract-id":"4299100"');
   });
 
-  it('builds valid US and International XML destinations', () => {
-    const usXml = buildRateScenarioXml({
+  it('builds valid US and International JSON destinations', () => {
+    const usJson = buildRateScenarioJson({
       destCountry: 'US',
       destPostalOrZip: '90210'
     });
-    expect(usXml).toContain('<united-states><zip-code>90210</zip-code></united-states>');
+    expect(usJson).toContain('"united-states"');
+    expect(usJson).toContain('"zip-code":"90210"');
 
-    const intXml = buildRateScenarioXml({
+    const intJson = buildRateScenarioJson({
       destCountry: 'GB'
     });
-    expect(intXml).toContain('<international><country-code>GB</country-code></international>');
+    expect(intJson).toContain('"country-code":"GB"');
   });
 });
 
 describe('Canada Post Price Quotes Parser', () => {
-  const sampleXmlResponse = `<?xml version="1.0" encoding="UTF-8"?>
-<price-quotes xmlns="http://www.canadapost.ca/ws/ship/rate-v4">
-  <price-quote>
-    <service-code>DOM.RP</service-code>
-    <service-name>Regular Parcel</service-name>
-    <price-details>
-      <base>12.45</base>
-      <due>14.07</due>
-      <taxes>
-        <gst>0.62</gst>
-        <pst>1.00</pst>
-      </taxes>
-    </price-details>
-    <service-standard>
-      <expected-transit-time>5</expected-transit-time>
-      <expected-delivery-date>2026-08-28</expected-delivery-date>
-    </service-standard>
-  </price-quote>
-  <price-quote>
-    <service-code>DOM.XP</service-code>
-    <service-name>Xpresspost</service-name>
-    <price-details>
-      <base>18.50</base>
-      <due>20.91</due>
-      <taxes>
-        <hst>2.41</hst>
-      </taxes>
-    </price-details>
-    <service-standard>
-      <expected-transit-time>2</expected-transit-time>
-      <expected-delivery-date>2026-08-25</expected-delivery-date>
-    </service-standard>
-  </price-quote>
-</price-quotes>`;
+  const sampleJsonResponse = JSON.stringify({
+    "price-quotes": {
+      "price-quote": [
+        {
+          "service-code": "DOM.RP",
+          "service-name": "Regular Parcel",
+          "price-details": {
+            "base": 12.45,
+            "due": 14.07,
+            "taxes": {
+              "gst": 0.62,
+              "pst": 1.00
+            }
+          },
+          "service-standard": {
+            "expected-transit-time": 5,
+            "expected-delivery-date": "2026-08-28"
+          }
+        },
+        {
+          "service-code": "DOM.XP",
+          "service-name": "Xpresspost",
+          "price-details": {
+            "base": 18.50,
+            "due": 20.91,
+            "taxes": {
+              "hst": 2.41
+            }
+          },
+          "service-standard": {
+            "expected-transit-time": 2,
+            "expected-delivery-date": "2026-08-25"
+          }
+        }
+      ]
+    }
+  });
 
-  it('parses XML price quotes into sorted rate objects', () => {
-    const quotes = parseCanadaPostPriceQuotes(sampleXmlResponse);
+  it('parses JSON price quotes into sorted rate objects', () => {
+    const quotes = parseCanadaPostPriceQuotes(sampleJsonResponse);
     expect(quotes).toHaveLength(2);
     
     // Sorted cheapest first
@@ -109,15 +113,18 @@ describe('Canada Post Price Quotes Parser', () => {
   });
 
   it('throws helpful error on Canada Post error messages', () => {
-    const errorXml = `<?xml version="1.0" encoding="UTF-8"?>
-<messages xmlns="http://www.canadapost.ca/ws/messages">
-  <message>
-    <code>E002</code>
-    <description>AAA Authentication Failure</description>
-  </message>
-</messages>`;
+    const errorJson = JSON.stringify({
+      messages: {
+        message: [
+          {
+            code: "E002",
+            description: "AAA Authentication Failure"
+          }
+        ]
+      }
+    });
 
-    expect(() => parseCanadaPostPriceQuotes(errorXml)).toThrow('Canada Post [E002]: AAA Authentication Failure');
+    expect(() => parseCanadaPostPriceQuotes(errorJson)).toThrow('Canada Post [E002]: AAA Authentication Failure');
   });
 });
 
@@ -136,9 +143,9 @@ describe('Offline Canada Post Rate Estimator', () => {
 });
 
 describe('Canada Post Label & Shipment Creation', () => {
-  it('builds valid Non-Contract Shipment XML with sender, recipient, and customs', async () => {
-    const { buildNonContractShipmentXml } = await import('../src/lib/canadapost.js');
-    const xml = buildNonContractShipmentXml({
+  it('builds valid Non-Contract Shipment JSON with sender, recipient, and customs', async () => {
+    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const jsonStr = buildNonContractShipmentJson({
       serviceCode: 'USA.TP',
       sender: {
         name: 'Lyrical Books',
@@ -174,38 +181,41 @@ describe('Canada Post Label & Shipment Creation', () => {
       }
     });
 
-    expect(xml).toContain('<service-code>USA.TP</service-code>');
-    expect(xml).toContain('<postal-zip-code>M4B1B3</postal-zip-code>');
-    expect(xml).toContain('<country-code>US</country-code>');
-    expect(xml).toContain('<postal-zip-code>10001</postal-zip-code>');
-    expect(xml).toContain('<customs-description>Hardcover poetry books</customs-description>');
-    expect(xml).toContain('<hs-tariff-code>490199</hs-tariff-code>');
-    expect(xml).toContain('<customer-ref-1>ORD-2026-99</customer-ref-1>');
+    expect(jsonStr).toContain('"service-code":"USA.TP"');
+    expect(jsonStr).toContain('"postal-zip-code":"M4B1B3"');
+    expect(jsonStr).toContain('"country-code":"US"');
+    expect(jsonStr).toContain('"postal-zip-code":"10001"');
+    expect(jsonStr).toContain('"customs-description":"Hardcover poetry books"');
+    expect(jsonStr).toContain('"hs-tariff-code":"490199"');
+    expect(jsonStr).toContain('"customer-ref-1":"ORD-2026-99"');
   });
 
   it('parses successful shipment response with tracking PIN and label artifact link', async () => {
     const { parseCanadaPostShipmentResponse } = await import('../src/lib/canadapost.js');
-    const sampleShipmentXml = `<?xml version="1.0" encoding="UTF-8"?>
-<non-contract-shipment-info xmlns="http://www.canadapost.ca/ws/ncshipment-v4">
-  <shipment-id>123456789012345678</shipment-id>
-  <tracking-pin>1234567890123456</tracking-pin>
-  <links>
-    <link rel="self" href="https://soa-gw.canadapost.ca/rs/0007123456/ncshipment/123456789012345678" media-type="application/vnd.cpc.ncshipment-v4+xml"/>
-    <link rel="label" href="https://soa-gw.canadapost.ca/rs/artifact/6e933e69452/10000/0" media-type="application/pdf"/>
-    <link rel="receipt" href="https://soa-gw.canadapost.ca/rs/0007123456/ncshipment/123456789012345678/receipt" media-type="application/vnd.cpc.ncshipment-v4+xml"/>
-  </links>
-</non-contract-shipment-info>`;
+    const sampleShipmentJson = JSON.stringify({
+      "non-contract-shipment-info": {
+        "shipment-id": "123456789012345678",
+        "tracking-pin": "1234567890123456",
+        "links": {
+          "link": [
+            { "@rel": "self", "@href": "https://api.canadapost-postescanada.ca/rs/0007123456/ncshipment/123456789012345678", "@media-type": "application/vnd.cpc.ncshipment-v4+xml" },
+            { "@rel": "label", "@href": "https://api.canadapost-postescanada.ca/rs/artifact/6e933e69452/10000/0", "@media-type": "application/pdf" },
+            { "@rel": "receipt", "@href": "https://api.canadapost-postescanada.ca/rs/0007123456/ncshipment/123456789012345678/receipt", "@media-type": "application/vnd.cpc.ncshipment-v4+xml" }
+          ]
+        }
+      }
+    });
 
-    const parsed = parseCanadaPostShipmentResponse(sampleShipmentXml);
+    const parsed = parseCanadaPostShipmentResponse(sampleShipmentJson);
     expect(parsed.ok).toBe(true);
     expect(parsed.shipmentId).toBe('123456789012345678');
     expect(parsed.trackingPin).toBe('1234567890123456');
-    expect(parsed.labelUrl).toBe('https://soa-gw.canadapost.ca/rs/artifact/6e933e69452/10000/0');
-    expect(parsed.receiptUrl).toBe('https://soa-gw.canadapost.ca/rs/0007123456/ncshipment/123456789012345678/receipt');
+    expect(parsed.labelUrl).toBe('https://api.canadapost-postescanada.ca/rs/artifact/6e933e69452/10000/0');
+    expect(parsed.receiptUrl).toBe('https://api.canadapost-postescanada.ca/rs/0007123456/ncshipment/123456789012345678/receipt');
   });
 
   it('validates 13-character Zonos Declaration ID format and embeds it in customs XML', async () => {
-    const { validateDeclarationId, formatDeclarationId, buildNonContractShipmentXml } = await import('../src/lib/canadapost.js');
+    const { validateDeclarationId, formatDeclarationId, buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
 
     expect(validateDeclarationId('0rd4dpkrvc1y9')).toBe(true);
     expect(validateDeclarationId('0RD4DPKRVC1Y9')).toBe(true);
@@ -220,26 +230,26 @@ describe('Canada Post Label & Shipment Creation', () => {
     expect(formatDeclarationId('')).toBe('');
     expect(formatDeclarationId(null)).toBe('');
 
-    const xml = buildNonContractShipmentXml({
+    const jsonStr = buildNonContractShipmentJson({
       serviceCode: 'USA.TP',
       destination: { countryCode: 'US', postalCode: '90210' },
       parcel: { weightKg: 0.5 },
       declarationId: '0rd4dpkrvc1y9'
     });
 
-    expect(xml).toContain('<declaration-id>0rd4dpkrvc1y9</declaration-id>');
-    expect(xml).not.toContain('<declaration-id>0RD4DPKRVC1Y9</declaration-id>');
+    expect(jsonStr).toContain('"declaration-id":"0rd4dpkrvc1y9"');
+    expect(jsonStr).not.toContain('"declaration-id":"0RD4DPKRVC1Y9"');
   });
 
   it('keeps a Zonos Declaration ID lowercase even when it arrives upper-cased', async () => {
-    const { buildNonContractShipmentXml } = await import('../src/lib/canadapost.js');
-    const xml = buildNonContractShipmentXml({
+    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const jsonStr = buildNonContractShipmentJson({
       serviceCode: 'USA.TP',
       destination: { countryCode: 'US', postalCode: '90210' },
       parcel: { weightKg: 0.5 },
       customs: { declarationId: '0RCVXJ2TKBNWR', declaredValue: 25, quantity: 1 }
     });
-    expect(xml).toContain('<declaration-id>0rcvxj2tkbnwr</declaration-id>');
+    expect(jsonStr).toContain('"declaration-id":"0rcvxj2tkbnwr"');
   });
 
   it('normalizes full state and province names to 2-letter postal codes', async () => {
@@ -254,9 +264,9 @@ describe('Canada Post Label & Shipment Creation', () => {
     expect(normalizeStateOrProvince('WA')).toBe('WA');
   });
 
-  it('correctly formats multi-line addresses and normalized states in shipment XML', async () => {
-    const { buildNonContractShipmentXml } = await import('../src/lib/canadapost.js');
-    const xml = buildNonContractShipmentXml({
+  it('correctly formats multi-line addresses and normalized states in shipment JSON', async () => {
+    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const jsonStr = buildNonContractShipmentJson({
       serviceCode: 'USA.TP',
       sender: {
         name: 'Lyricalmyrical Books',
@@ -278,15 +288,15 @@ describe('Canada Post Label & Shipment Creation', () => {
       parcel: { weightKg: 0.357, lengthCm: 19.5, widthCm: 15, heightCm: 2 }
     });
 
-    expect(xml).toContain('<address-line-1>123 Bookish Way</address-line-1>');
-    expect(xml).toContain('<address-line-2>Suite 400</address-line-2>');
-    expect(xml).toContain('<prov-state>ON</prov-state>');
-    expect(xml).toContain('<name>Daniela Dawson</name>');
-    expect(xml).toContain('<address-line-1>PO Box 897</address-line-1>');
-    expect(xml).toContain('<address-line-2>29e laundry hill road</address-line-2>');
-    expect(xml).toContain('<city>Bisbee</city>');
-    expect(xml).toContain('<prov-state>AZ</prov-state>');
-    expect(xml).toContain('<postal-zip-code>85603</postal-zip-code>');
+    expect(jsonStr).toContain('"address-line-1":"123 Bookish Way"');
+    expect(jsonStr).toContain('"address-line-2":"Suite 400"');
+    expect(jsonStr).toContain('"prov-state":"ON"');
+    expect(jsonStr).toContain('"name":"Daniela Dawson"');
+    expect(jsonStr).toContain('"address-line-1":"PO Box 897"');
+    expect(jsonStr).toContain('"address-line-2":"29e laundry hill road"');
+    expect(jsonStr).toContain('"city":"Bisbee"');
+    expect(jsonStr).toContain('"prov-state":"AZ"');
+    expect(jsonStr).toContain('"postal-zip-code":"85603"');
   });
 
   it('generates authentic Code 128 barcode SVG rect elements', async () => {
@@ -343,18 +353,17 @@ describe('Canada Post Label & Shipment Creation', () => {
 describe('Canada Post Account & Environment Validation', () => {
   it('resolves the live and sandbox gateways to distinct hosts', async () => {
     const { resolveCanadaPostEnvironment } = await import('../src/lib/canadapost.js');
-
     const live = resolveCanadaPostEnvironment({ isTest: false });
     expect(live.mode).toBe('live');
-    expect(live.hostname).toBe('soa-gw.canadapost.ca');
-    expect(live.baseUrl).toBe('https://soa-gw.canadapost.ca');
+    expect(live.hostname).toBe('api.canadapost-postescanada.ca');
+    expect(live.baseUrl).toBe('https://api.canadapost-postescanada.ca');
     expect(live.label).toBe('Live Production Mode');
 
-    const sandbox = resolveCanadaPostEnvironment({ isTest: true });
-    expect(sandbox.mode).toBe('sandbox');
-    expect(sandbox.hostname).toBe('ct.soa-gw.canadapost.ca');
-    expect(sandbox.baseUrl).toBe('https://ct.soa-gw.canadapost.ca');
-    expect(sandbox.label).toBe('Sandbox Test Mode');
+    const testEnv = resolveCanadaPostEnvironment({ isTest: true });
+    expect(testEnv.mode).toBe('sandbox');
+    expect(testEnv.hostname).toBe('api.canadapost-postescanada.ca');
+    expect(testEnv.baseUrl).toBe('https://api.canadapost-postescanada.ca');
+    expect(testEnv.label).toBe('Sandbox Test Mode');
   });
 
   it('accepts 7 to 10 digit Canada Post customer numbers only', async () => {
@@ -444,8 +453,8 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     await expect(executeCanadaPostProxy({
-      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/0042998877/ncshipment',
-      xmlPayload: '<non-contract-shipment/>',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/0042998877/ncshipment',
+      jsonPayload: '{"non-contract-shipment":{}}',
       ...realCreds,
       isTest: false
     })).rejects.toThrow(/no label was purchased/i);
@@ -456,8 +465,8 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     const result = await executeCanadaPostProxy({
-      targetEndpoint: 'https://ct.soa-gw.canadapost.ca/rs/0042998877/ncshipment',
-      xmlPayload: '<non-contract-shipment/>',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/0042998877/ncshipment',
+      jsonPayload: '{"non-contract-shipment":{}}',
       ...realCreds,
       isTest: true
     });
@@ -486,28 +495,31 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     await expect(executeCanadaPostProxy({
-      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/0042998877/ncshipment',
-      xmlPayload: '<non-contract-shipment/>',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/0042998877/ncshipment',
+      jsonPayload: '{"non-contract-shipment":{}}',
       isTest: false
     })).rejects.toThrow(/no label was purchased/i);
   });
 
   it('routes a purchase through the merchant customer number endpoint', async () => {
     const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
-    const successXml = `<?xml version="1.0" encoding="UTF-8"?>
-      <non-contract-shipment-info>
-        <shipment-id>406951321983787352</shipment-id>
-        <tracking-pin>70123456789012345</tracking-pin>
-        <links>
-          <link rel="label" href="https://soa-gw.canadapost.ca/rs/artifact/abc/10000/0"/>
-        </links>
-      </non-contract-shipment-info>`;
+    const successJson = JSON.stringify({
+      "non-contract-shipment-info": {
+        "shipment-id": "406951321983787352",
+        "tracking-pin": "70123456789012345",
+        "links": {
+          "link": [
+            { "@rel": "label", "@href": "https://soa-gw.canadapost.ca/rs/artifact/abc/10000/0" }
+          ]
+        }
+      }
+    });
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, xml: successXml }),
-      text: async () => successXml,
-      headers: { get: () => 'application/xml' }
+      json: async () => ({ ok: true, json: successJson }),
+      text: async () => successJson,
+      headers: { get: () => 'application/json' }
     });
 
     const result = await buyCanadaPostLabel({
@@ -526,8 +538,8 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
 
     const proxyCall = global.fetch.mock.calls[0];
     const proxyBody = JSON.parse(proxyCall[1].body);
-    expect(proxyBody.targetEndpoint).toBe('https://soa-gw.canadapost.ca/rs/0042998877/ncshipment');
-    expect(proxyBody.xmlPayload).toContain('<declaration-id>0rd4dpkrvc1y9</declaration-id>');
+    expect(proxyBody.targetEndpoint).toBe('https://api.canadapost-postescanada.ca/rs/0042998877/ncshipment');
+    expect(proxyBody.jsonPayload).toContain('"declaration-id":"0rd4dpkrvc1y9"');
   });
 });
 
@@ -538,21 +550,26 @@ describe('Purchased labels stay reprintable offline', () => {
     customerNumber: '0042998877'
   };
 
-  const shipmentXml = pin => `<?xml version="1.0" encoding="UTF-8"?>
-    <non-contract-shipment-info>
-      <shipment-id>4069513219837873${pin.slice(-2)}</shipment-id>
-      <tracking-pin>${pin}</tracking-pin>
-      <links><link rel="label" href="https://soa-gw.canadapost.ca/rs/artifact/abc/10000/0"/></links>
-    </non-contract-shipment-info>`;
+  const shipmentJson = pin => JSON.stringify({
+    "non-contract-shipment-info": {
+      "shipment-id": `4069513219837873${pin.slice(-2)}`,
+      "tracking-pin": pin,
+      "links": {
+        "link": [
+          { "@rel": "label", "@href": "https://soa-gw.canadapost.ca/rs/artifact/abc/10000/0" }
+        ]
+      }
+    }
+  });
 
   const buy = async (pin, orderNum) => {
     const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
-    const xml = shipmentXml(pin);
+    const jsonStr = shipmentJson(pin);
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, xml }),
-      text: async () => xml,
-      headers: { get: () => 'application/xml' }
+      json: async () => ({ ok: true, json: jsonStr }),
+      text: async () => jsonStr,
+      headers: { get: () => 'application/json' }
     });
     return buyCanadaPostLabel({
       serviceCode: 'DOM.EP',
@@ -616,8 +633,8 @@ describe('Purchased labels stay reprintable offline', () => {
 
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
     const sim = await executeCanadaPostProxy({
-      targetEndpoint: 'https://ct.soa-gw.canadapost.ca/rs/0042998877/ncshipment',
-      xmlPayload: '<non-contract-shipment/>',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/0042998877/ncshipment',
+      jsonPayload: '{"non-contract-shipment":{}}',
       ...realCreds,
       isTest: true
     });
@@ -637,17 +654,19 @@ describe('Zonos Verified Account key reaches Canada Post', () => {
 
   it('sends the account key on the shipment request so Canada Post can issue the Declaration ID', async () => {
     const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
-    const xml = `<non-contract-shipment-info>
-      <shipment-id>1</shipment-id>
-      <tracking-pin>70123456789012345</tracking-pin>
-      <declaration-id>0rd4dpkrvc1y9</declaration-id>
-    </non-contract-shipment-info>`;
+    const jsonStr = JSON.stringify({
+      "non-contract-shipment-info": {
+        "shipment-id": "1",
+        "tracking-pin": "70123456789012345",
+        "declaration-id": "0rd4dpkrvc1y9"
+      }
+    });
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, xml }),
-      text: async () => xml,
-      headers: { get: () => 'application/xml' }
+      json: async () => ({ ok: true, json: jsonStr }),
+      text: async () => jsonStr,
+      headers: { get: () => 'application/json' }
     });
 
     const result = await buyCanadaPostLabel({
@@ -672,13 +691,18 @@ describe('Zonos Verified Account key reaches Canada Post', () => {
 
   it('keeps a Declaration ID bought by hand when the carrier issues none', async () => {
     const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
-    const xml = '<non-contract-shipment-info><shipment-id>1</shipment-id><tracking-pin>70123456789012345</tracking-pin></non-contract-shipment-info>';
+    const jsonStr = JSON.stringify({
+      "non-contract-shipment-info": {
+        "shipment-id": "1",
+        "tracking-pin": "70123456789012345"
+      }
+    });
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, xml }),
-      text: async () => xml,
-      headers: { get: () => 'application/xml' }
+      json: async () => ({ ok: true, json: jsonStr }),
+      text: async () => jsonStr,
+      headers: { get: () => 'application/json' }
     });
 
     const result = await buyCanadaPostLabel({
@@ -699,7 +723,13 @@ describe('Zonos Verified Account key reaches Canada Post', () => {
   it('ignores a malformed declaration id in the response', async () => {
     const { parseCanadaPostShipmentResponse } = await import('../src/lib/canadapost.js');
     const parsed = parseCanadaPostShipmentResponse(
-      '<a><shipment-id>1</shipment-id><tracking-pin>7012345678901</tracking-pin><declaration-id>NOT-AN-ID</declaration-id></a>'
+      JSON.stringify({
+        "non-contract-shipment-info": {
+          "shipment-id": "1",
+          "tracking-pin": "7012345678901",
+          "declaration-id": "NOT-AN-ID"
+        }
+      })
     );
     expect(parsed.declarationId).toBe('');
   });
@@ -886,14 +916,14 @@ describe('Proxy failures reach the publisher instead of being swallowed', () => 
     });
 
     const result = await executeCanadaPostProxy({
-      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
-      xmlPayload: '<mailing-scenario/>',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/ship/price',
+      jsonPayload: '{"mailing-scenario":{}}',
       apiKey: 'key',
       apiSecret: 'secret',
       isTest: false
     });
     expect(result.ok).toBe(true);
-    expect(result.xml).toContain('DOM.EP');
+    expect(result.json).toContain('DOM.EP');
   });
 
   it('never puts the API secret in the label-download URL', async () => {
@@ -1192,14 +1222,14 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
     });
 
     const result = await executeCanadaPostProxy({
-      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
-      xmlPayload: '<mailing-scenario/>',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/ship/price',
+      jsonPayload: '{"mailing-scenario":{}}',
       apiKey: 'key',
       apiSecret: 'secret',
       isTest: false
     });
     expect(result.ok).toBe(true);
-    expect(result.xml).toContain('DOM.EP');
+    expect(result.json).toContain('DOM.EP');
   });
 
   it('keeps the original advice when no sheet is configured at all', async () => {
@@ -1207,8 +1237,8 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
     global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
     await expect(executeCanadaPostProxy({
-      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
-      xmlPayload: '<mailing-scenario/>',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/ship/price',
+      jsonPayload: '{"mailing-scenario":{}}',
       apiKey: 'key',
       apiSecret: 'secret',
       isTest: false
@@ -1225,18 +1255,18 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
       return {
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({ ok: true, status: 200, authMode: 'basic', xml: priceXml })
+        text: async () => JSON.stringify({ ok: true, status: 200, authMode: 'oauth2', json: priceXml })
       };
     });
 
     const result = await executeCanadaPostProxy({
-      targetEndpoint: 'https://soa-gw.canadapost.ca/rs/ship/price',
-      xmlPayload: '<mailing-scenario/>',
+      targetEndpoint: 'https://api.canadapost-postescanada.ca/rs/ship/price',
+      jsonPayload: '{"mailing-scenario":{}}',
       apiKey: 'key',
       apiSecret: 'secret',
       isTest: false
     });
-    expect(result.xml).toContain('DOM.EP');
+    expect(result.json).toContain('DOM.EP');
   });
 
   it('describes each way an Apps Script deployment goes wrong', async () => {
