@@ -3268,44 +3268,46 @@ function buildBookSwitcher() {
   const items = [{ id: 'all', title: 'All books', accent: 'rgba(255,255,255,.25)' }]
     .concat(BOOK_LIST.map(b => ({ id: b.id, title: b.title, accent: b.accent })));
 
-  items.forEach((it, idx) => {
+  items.forEach((it) => {
     const isActive = (activeBook || 'all') === it.id;
-    const item = document.createElement('div');
+    const item = document.createElement('button');
+    item.type = 'button';
     item.className = 'book-dd-item' + (isActive ? ' active' : '');
     item.dataset.id = it.id;
-    item.style.cssText = `display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;font-family:'Syne',sans-serif;font-size:12px;font-weight:600;color:${isActive ? 'var(--gold3)' : 'rgba(255,255,255,.7)'};background:${isActive ? 'rgba(255,255,255,.04)' : ''};border-bottom:1px solid rgba(255,255,255,${idx === 0 ? '.06' : '.04'});transition:background .12s;`;
-    item.onmouseover = () => { if (!item.classList.contains('active')) item.style.background = 'rgba(255,255,255,.06)'; };
-    item.onmouseout = () => { if (!item.classList.contains('active')) item.style.background = ''; };
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', String(isActive));
     item.onclick = (e) => { e.stopPropagation(); switchBook(it.id); closeBookDropdown(); };
-    item.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:${it.accent};flex-shrink:0;"></div>${escapeHtml(it.title)}`;
+    item.innerHTML = `<span class="book-dd-dot" style="background:${it.accent};"></span>${escapeHtml(it.title)}`;
     menu.appendChild(item);
   });
 }
 
 function toggleBookDropdown() {
-  const menu = $('book-dropdown-menu');
-  if (!menu) return;
-  if (menu.style.display === 'block') {
+  const wrap = $('book-dropdown');
+  if (!wrap) return;
+  if (wrap.classList.contains('open')) {
     closeBookDropdown();
   } else {
     // Rebuild so highlight reflects current activeBook
     buildBookSwitcher();
-    menu.style.display = 'block';
+    wrap.classList.add('open');
+    $('book-dropdown-btn')?.setAttribute('aria-expanded', 'true');
     // Defer outside-click listener so it doesn't fire on the click that opened the menu
     setTimeout(() => {
       if (_bookDropdownOutsideHandler) {
         document.removeEventListener('click', _bookDropdownOutsideHandler, true);
       }
       _bookDropdownOutsideHandler = (e) => {
-        if (!$('book-dropdown')?.contains(e.target)) closeBookDropdown();
+        if (!wrap.contains(e.target)) closeBookDropdown();
       };
       document.addEventListener('click', _bookDropdownOutsideHandler, true);
     }, 0);
   }
 }
 function closeBookDropdown() {
-  const menu = $('book-dropdown-menu');
-  if (menu) menu.style.display = 'none';
+  const wrap = $('book-dropdown');
+  if (wrap) wrap.classList.remove('open');
+  $('book-dropdown-btn')?.setAttribute('aria-expanded', 'false');
   if (_bookDropdownOutsideHandler) {
     document.removeEventListener('click', _bookDropdownOutsideHandler, true);
     _bookDropdownOutsideHandler = null;
@@ -3873,11 +3875,12 @@ function switchBook(bookId) {
     if (label) label.textContent = book.title;
     if (dot) dot.style.background = book.accent;
   }
-  // Highlight active item in menu
+  // Highlight active item in menu (buildBookSwitcher() also rebuilds this fresh
+  // on next open, but keep it in sync in case the menu is still in the DOM).
   document.querySelectorAll('.book-dd-item').forEach(el => {
     const isActive = el.dataset.id === bookId;
-    el.style.color = isActive ? 'var(--gold3)' : 'rgba(255,255,255,.7)';
-    el.style.background = isActive ? 'rgba(255,255,255,.04)' : '';
+    el.classList.toggle('active', isActive);
+    el.setAttribute('aria-selected', String(isActive));
   });
 
   if (bookId === 'all') {

@@ -70,6 +70,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-29 | visual | Event POS | Made hovering a book card at the register actually lift it in dark mode | #666 |
 | 2026-08-29 | visual | Tax Centre | Gave the subscriptions summary strip one leading figure instead of four equal ones | #654 |
 | 2026-08-29 | visual | Financials | Fixed an unreadable "missing receipts" tag on the expense breakdown table | #655 |
+| 2026-08-29 | visual | Header — book switcher | Gave the book switcher a visible focus ring and made its menu keyboard-usable | #664 |
 
 ---
 

@@ -368,14 +368,14 @@
   <div id="book-switcher-wrap">
     <div class="book-switcher" id="book-switcher" style="position:relative;">
       <div id="book-dropdown" style="position:relative;display:inline-block;">
-        <button id="book-dropdown-btn" onclick="toggleBookDropdown()" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:var(--r2);color:var(--on-inverse);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;outline:none;min-width:150px;justify-content:space-between;">
+        <button id="book-dropdown-btn" class="book-dropdown-btn" onclick="toggleBookDropdown()" aria-haspopup="listbox" aria-expanded="false">
           <div style="display:flex;align-items:center;gap:8px;">
             <div id="book-dropdown-dot" style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);flex-shrink:0;"></div>
             <span id="book-dropdown-label">All books</span>
           </div>
-          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style="flex-shrink:0;opacity:.4;"><path d="M0 0l5 6 5-6z" fill="white"/></svg>
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none" class="book-dropdown-caret"><path d="M0 0l5 6 5-6z" fill="white"/></svg>
         </button>
-        <div id="book-dropdown-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,.1);border-radius:var(--r2);box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:999;overflow:hidden;">
+        <div id="book-dropdown-menu" class="book-dropdown-menu" role="listbox" aria-label="Books">
           <!-- Options injected by JS -->
         </div>
       </div>
