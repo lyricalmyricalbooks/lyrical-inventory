@@ -743,22 +743,23 @@ describe('Canada Post Tracking PIN Verification', () => {
 
   it('parses a tracking summary into a shipment status record', async () => {
     const { parseCanadaPostTrackingSummary } = await import('../src/lib/canadapost.js');
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-      <tracking-summary>
-        <pin-summary>
-          <pin>70123456789012345</pin>
-          <origin-postal-id>M4B</origin-postal-id>
-          <destination-postal-id>V6B</destination-postal-id>
-          <service-name>Expedited Parcel</service-name>
-          <event-description>Delivered</event-description>
-          <event-date-time>20260824:101500</event-date-time>
-          <event-location>VANCOUVER, BC</event-location>
-          <expected-delivery-date>2026-08-25</expected-delivery-date>
-          <actual-delivery-date>2026-08-24</actual-delivery-date>
-        </pin-summary>
-      </tracking-summary>`;
+    const jsonStr = JSON.stringify({
+      trackingSummary: {
+        pinSummary: {
+          pin: '70123456789012345',
+          originPostalId: 'M4B',
+          destinationPostalId: 'V6B',
+          serviceName: 'Expedited Parcel',
+          eventDescription: 'Delivered',
+          eventDateTime: '20260824:101500',
+          eventLocation: 'VANCOUVER, BC',
+          expectedDeliveryDate: '2026-08-25',
+          actualDeliveryDate: '2026-08-24'
+        }
+      }
+    });
 
-    const parsed = parseCanadaPostTrackingSummary(xml);
+    const parsed = parseCanadaPostTrackingSummary(jsonStr);
     expect(parsed.found).toBe(true);
     expect(parsed.pin).toBe('70123456789012345');
     expect(parsed.status).toBe('Delivered');
@@ -768,26 +769,27 @@ describe('Canada Post Tracking PIN Verification', () => {
 
   it('surfaces a Canada Post error document rather than reporting a phantom shipment', async () => {
     const { parseCanadaPostTrackingSummary } = await import('../src/lib/canadapost.js');
-    const errXml = `<?xml version="1.0" encoding="UTF-8"?>
-      <messages>
-        <message>
-          <code>004</code>
-          <description>No Pin History</description>
-        </message>
-      </messages>`;
+    const errJson = JSON.stringify({
+      messages: {
+        message: {
+          code: '004',
+          description: 'No Pin History'
+        }
+      }
+    });
 
-    expect(() => parseCanadaPostTrackingSummary(errXml)).toThrow(/No Pin History/);
+    expect(() => parseCanadaPostTrackingSummary(errJson)).toThrow(/No Pin History/);
     expect(() => parseCanadaPostTrackingSummary('')).toThrow(/Empty response/);
   });
 
   it('verifies a tracking PIN against the correct environment endpoint', async () => {
     const { verifyCanadaPostTrackingPin } = await import('../src/lib/canadapost.js');
-    const xml = '<tracking-summary><pin-summary><pin>70123456789012345</pin><event-description>In Transit</event-description></pin-summary></tracking-summary>';
+    const jsonStr = JSON.stringify({ trackingSummary: { pinSummary: { pin: '70123456789012345', eventDescription: 'In Transit' } } });
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, xml }),
-      text: async () => xml
+      json: async () => ({ ok: true, json: jsonStr }),
+      text: async () => jsonStr
     });
 
     const result = await verifyCanadaPostTrackingPin({

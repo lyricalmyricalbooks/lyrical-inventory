@@ -1326,18 +1326,27 @@ export async function testCanadaPostConnection({
 /**
  * Parse a Canada Post tracking summary XML document.
  */
-export function parseCanadaPostTrackingSummary(xmlText) {
-  if (!xmlText || typeof xmlText !== 'string') {
+export function parseCanadaPostTrackingSummary(jsonText) {
+  if (!jsonText || typeof jsonText !== 'string') {
     throw new Error('Empty response from Canada Post Tracking API');
   }
 
-  if (/<messages?[\s>]/.test(xmlText) && xmlText.includes('<description>')) {
-    const code = xmlText.match(/<code>([^<]+)<\/code>/)?.[1] || 'ERROR';
-    const desc = xmlText.match(/<description>([^<]+)<\/description>/)?.[1] || 'Tracking lookup failed';
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch (err) {
+    throw new Error('Invalid JSON response from Canada Post Tracking API');
+  }
+
+  if (data.messages && data.messages.message) {
+    const msg = Array.isArray(data.messages.message) ? data.messages.message[0] : data.messages.message;
+    const code = msg.code || 'ERROR';
+    const desc = msg.description || 'Tracking lookup failed';
     throw new Error(`Canada Post [${code}]: ${desc}`);
   }
 
-  const pin = xmlText.match(/<pin>([^<]+)<\/pin>/)?.[1] || '';
+  const pinSummary = data.trackingSummary?.pinSummary || {};
+  const pin = pinSummary.pin || '';
   if (!pin) {
     throw new Error('Canada Post returned no tracking record for that PIN.');
   }
@@ -1346,16 +1355,16 @@ export function parseCanadaPostTrackingSummary(xmlText) {
     ok: true,
     found: true,
     pin,
-    originPostalId: xmlText.match(/<origin-postal-id>([^<]+)<\/origin-postal-id>/)?.[1] || '',
-    destinationPostalId: xmlText.match(/<destination-postal-id>([^<]+)<\/destination-postal-id>/)?.[1] || '',
-    destinationProvince: xmlText.match(/<destination-province>([^<]+)<\/destination-province>/)?.[1] || '',
-    serviceName: xmlText.match(/<service-name>([^<]+)<\/service-name>/)?.[1] || '',
-    status: xmlText.match(/<event-description>([^<]+)<\/event-description>/)?.[1] || '',
-    eventDateTime: xmlText.match(/<event-date-time>([^<]+)<\/event-date-time>/)?.[1] || '',
-    eventLocation: xmlText.match(/<event-location>([^<]+)<\/event-location>/)?.[1] || '',
-    expectedDeliveryDate: xmlText.match(/<expected-delivery-date>([^<]+)<\/expected-delivery-date>/)?.[1] || '',
-    actualDeliveryDate: xmlText.match(/<actual-delivery-date>([^<]+)<\/actual-delivery-date>/)?.[1] || '',
-    attemptedDate: xmlText.match(/<attempted-date>([^<]+)<\/attempted-date>/)?.[1] || ''
+    originPostalId: pinSummary.originPostalId || '',
+    destinationPostalId: pinSummary.destinationPostalId || '',
+    destinationProvince: pinSummary.destinationProvince || '',
+    serviceName: pinSummary.serviceName || '',
+    status: pinSummary.eventDescription || '',
+    eventDateTime: pinSummary.eventDateTime || '',
+    eventLocation: pinSummary.eventLocation || '',
+    expectedDeliveryDate: pinSummary.expectedDeliveryDate || '',
+    actualDeliveryDate: pinSummary.actualDeliveryDate || '',
+    attemptedDate: pinSummary.attemptedDate || ''
   };
 }
 
@@ -1392,7 +1401,8 @@ export async function verifyCanadaPostTrackingPin({
       const local = await readProxyResponse(proxyResp);
       if (local.kind === 'envelope') {
         unwrapProxyEnvelope(local.json, { endpoint: targetEndpoint, isTest: env.isTest });
-        if (local.json.xml) return { ...parseCanadaPostTrackingSummary(local.json.xml), environment: env };
+        const respText = typeof local.json.json === 'string' ? local.json.json : JSON.stringify(local.json.json || {});
+        if (local.json.json || local.json.xml) return { ...parseCanadaPostTrackingSummary(respText || local.json.xml), environment: env };
       }
     } catch (localErr) {
       if (isDefinitiveProxyError(localErr)) throw localErr;
@@ -1423,7 +1433,8 @@ export async function verifyCanadaPostTrackingPin({
       const relay = await readProxyResponse(gasResp);
       if (relay.kind === 'envelope') {
         unwrapProxyEnvelope(relay.json, { endpoint: targetEndpoint, isTest: env.isTest });
-        if (relay.json.xml) return { ...parseCanadaPostTrackingSummary(relay.json.xml), environment: env };
+        const respText = typeof relay.json.json === 'string' ? relay.json.json : JSON.stringify(relay.json.json || {});
+        if (relay.json.json || relay.json.xml) return { ...parseCanadaPostTrackingSummary(respText || relay.json.xml), environment: env };
       }
       throw new Error(describeAppsScriptProxyFailure(relay));
     } catch (gasErr) {
@@ -1431,11 +1442,15 @@ export async function verifyCanadaPostTrackingPin({
     }
   }
 
-  // 3. Direct fetch
+  // 3. Direct fetch (if bypassing local/AppsScript proxy or testing in Node)
+  // For OAuth endpoints, 'executeCanadaPostProxy' natively routes requests and gets a Bearer token.
+  // Direct fetch for tracking is mostly deprecated without an OAuth token generator in browser,
+  // but if needed, we assume it's routed through proxy.
+  // We'll set the Accept header to JSON just in case.
   const authHeader = 'Basic ' + btoa(`${key}:${secret}`);
   const resp = await fetch(targetEndpoint, {
     headers: {
-      'Accept': 'application/vnd.cpc.track+xml',
+      'Accept': 'application/json',
       'Authorization': authHeader,
       'Accept-language': 'en-CA'
     }
