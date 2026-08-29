@@ -14394,7 +14394,7 @@ function renderFinancials() {
     const sortedCats = Object.entries(fin.expCats).sort((a, b) => b[1].total - a[1].total);
     expBody.innerHTML = sortedCats.map(([cat, val]) => `
       <tr>
-        <td style="font-weight:600; display:flex; align-items:center;">${cat} ${val.missingReceipts ? `<span class="pill" style="margin-left:8px; font-size:9px; background:var(--red); color:var(--dark); font-weight:600;">${val.missingReceipts} missing</span>` : ''}</td>
+        <td style="font-weight:600; display:flex; align-items:center;">${cat} ${val.missingReceipts ? `<span class="pill red" style="margin-left:8px;">${val.missingReceipts} missing</span>` : ''}</td>
         <td class="r">${val.count} txn</td>
         <td class="r" style="font-weight:700; color:var(--red);">${fmt(val.total, cur)}</td>
       </tr>

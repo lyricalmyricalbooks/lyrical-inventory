@@ -61,6 +61,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-29 | visual | POS checkout | Grew the register's quantity buttons to a full, tappable size | #643 |
 | 2026-08-29 | visual | Tax Centre | Gave the Business Trips header the same card-level heading its neighbours already have | #644 |
 | 2026-08-29 | visual | Web Analytics | Fixed the "Connected" badge so it matches the app's colours in night mode | #646 |
+| 2026-08-29 | visual | Financials | Fixed an unreadable "missing receipts" tag on the expense breakdown table | #655 |
 
 ---
 
