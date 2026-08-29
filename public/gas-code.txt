@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v31)
+/* Lyricalmyrical Inventory — Unified Backend (v32)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -121,6 +121,10 @@
  *      own status code always reaches the client. Responses now also carry
  *      authMode and oauthNote for diagnostics. Bump flags v30-and-older as
  *      outdated so the publisher redeploys.
+ *  30. v32: Transitioned Canada Post API from legacy XML and Basic Auth to the
+ *      modern JSON/OAuth 2.0 Developer Portal API. 'proxycanadapost' now uses
+ *      JSON payloads and 'application/vnd.cpc...json' headers instead of XML.
+ *      Bump flags v31-and-older as outdated.
  */
 
 const HEADERS = [
@@ -169,8 +173,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v31',
-    scriptVersion: 'v31',
+    service: 'lyrical-sheets-webhook-v32',
+    scriptVersion: 'v32',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -616,8 +620,8 @@ function doPost(e) {
     if (action === 'proxycanadapost') {
       const d = payload.payload || {};
       const endpoint = d.endpoint || d.targetEndpoint;
-      const xmlPayload = d.xmlPayload || d.body || '';
-      const method = (d.method || (xmlPayload ? 'POST' : 'GET')).toUpperCase();
+      const jsonPayload = d.jsonPayload || d.body || '';
+      const method = (d.method || (jsonPayload ? 'POST' : 'GET')).toUpperCase();
       const apiKey = d.apiKey || '';
       const apiSecret = d.apiSecret || '';
       const zonosAccountKey = d.zonosAccountKey || '';
@@ -700,8 +704,8 @@ function doPost(e) {
           headers['Accept'] = 'application/vnd.cpc.track+xml';
         } else if (method === 'POST') {
           headers['Accept'] = endpoint.indexOf('ncshipment') !== -1 
-            ? 'application/vnd.cpc.ncshipment-v4+xml' 
-            : 'application/vnd.cpc.ship.rate-v4+xml';
+            ? 'application/vnd.cpc.ncshipment-v4+json' 
+            : 'application/vnd.cpc.ship.rate-v4+json';
           headers['Content-Type'] = headers['Accept'];
         }
         if (zonosAccountKey && zonosAccountKey.trim()) {
@@ -713,8 +717,8 @@ function doPost(e) {
           headers: headers,
           muteHttpExceptions: true
         };
-        if (xmlPayload && method === 'POST') {
-          options.payload = xmlPayload;
+        if (jsonPayload && method === 'POST') {
+          options.payload = jsonPayload;
         }
 
         const resp = UrlFetchApp.fetch(endpoint, options);
@@ -731,13 +735,13 @@ function doPost(e) {
           });
         }
 
-        const xmlText = resp.getContentText();
+        const textContent = resp.getContentText();
         return jsonOut_({
           ok: code >= 200 && code < 300,
           status: code,
           authMode: authHeader.indexOf('Bearer ') === 0 ? 'oauth' : 'basic',
           oauthNote: oauthError || '',
-          xml: xmlText
+          json: textContent
         });
       } catch (err) {
         return jsonOut_({ error: 'Canada Post proxy failed: ' + String(err) });
