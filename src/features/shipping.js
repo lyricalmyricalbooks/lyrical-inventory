@@ -69,9 +69,12 @@ import {
   recoveredOrderPrefill,
   validateRecoveredOrder,
 } from '../lib/manual-website-order.js';
+import { receiptLinkTarget } from '../lib/receipt-links.js';
 import {
   autoMatchPostage,
   carrierFromTracking,
+  mergeScannedPostageFields,
+  postageScanCandidates,
   formatTrackingNumber,
   isPostageExpense,
   isPostageLinked,
@@ -4882,6 +4885,17 @@ function renderPostageMatchWorklist() {
     autoBtn.textContent = autoCount ? `Match ${autoCount} by name` : 'Nothing to auto-match';
   }
 
+  // Both header buttons say how much they would actually do, so neither is a
+  // guess about whether pressing it is worth the wait or the API allowance.
+  const scanAllBtn = $('postage-match-scan-all');
+  if (scanAllBtn && !_postageBatchScan) {
+    const scanCount = TAX_CENTER.settings?.geminiKey ? postageScanCandidates(expenses).length : 0;
+    scanAllBtn.disabled = scanCount === 0;
+    scanAllBtn.textContent = scanCount
+      ? `Read ${scanCount} receipt${scanCount === 1 ? '' : 's'}`
+      : (TAX_CENTER.settings?.geminiKey ? 'Nothing left to read' : 'Add a Gemini key to read receipts');
+  }
+
   if (!expenses.length) {
     host.innerHTML = `<div class="postage-match-empty">
       <span class="postage-match-empty-icon" aria-hidden="true">📮</span>
@@ -4925,11 +4939,12 @@ function renderPostageMatchWorklist() {
         ? 'No order found for that name in the weeks around this receipt.'
         : 'Add the recipient from the receipt and a match will be suggested.'}</span>`;
 
-    const receiptLink = expense.receipt
-      ? (String(expense.receipt).startsWith('local://')
-        ? `<button type="button" class="postage-match-receipt" onclick="viewLocalReceipt('${escapeHtml(String(expense.receipt).replace('local://', ''))}')">View receipt</button>`
-        : `<a class="postage-match-receipt" href="${escapeHtml(expense.receipt)}" target="_blank" rel="noopener">View receipt</a>`)
-      : '<span class="postage-match-noreceipt">No receipt attached</span>';
+    const receiptTarget = receiptLinkTarget(expense.receipt);
+    const receiptLink = receiptTarget.kind === 'local'
+      ? `<button type="button" class="postage-match-receipt" onclick="viewLocalReceipt('${escapeHtml(receiptTarget.path)}')">View receipt</button>`
+      : receiptTarget.kind === 'url'
+        ? `<a class="postage-match-receipt" href="${escapeHtml(receiptTarget.href)}" target="_blank" rel="noopener">View receipt</a>`
+        : '<span class="postage-match-noreceipt">No receipt attached</span>';
 
     const scanBtn = (canScan && expense.receipt)
       ? `<button type="button" class="btn sm ghost" id="${postageRowDomId(ref, 'scan')}" onclick="scanPostageReceipt('${escapeHtml(ref)}')" title="Read the recipient and tracking number off the receipt">✨ Read receipt</button>`
@@ -5187,11 +5202,42 @@ async function dismissPostageExpense(ref) {
 }
 
 /**
- * Read the recipient and tracking number off a receipt already on file.
+ * Write what a scan read onto the receipt, and refresh its row.
  *
- * Fills the row's two inputs and re-ranks the suggestion, but deliberately
- * saves nothing: the owner still confirms before any money is attributed. A
- * reader that misreads "DAWSON" must cost a correction, not a wrong link.
+ * Deliberately saves. Filling the inputs and leaving it there was fine for one
+ * receipt the owner is looking at, but a fifteen-receipt batch that evaporates
+ * on refresh is worse than not offering the batch at all. Recording a name and
+ * a tracking number attributes no money — the link is still a separate,
+ * deliberate act — so persisting it costs nothing and survives a closed tab.
+ *
+ * Returns the list of field names actually written, so the caller can report
+ * what changed rather than claiming a blanket success.
+ */
+function applyScannedPostageFields(expense, fields) {
+  const patch = mergeScannedPostageFields(expense, fields);
+  const written = [];
+  if (patch.recipientName) written.push('recipient');
+  if (patch.trackingNumber) written.push('tracking');
+  if (!written.length) return { written, patch };
+  Object.assign(expense, patch);
+  return { written, patch };
+}
+
+/** Push a scanned expense's stored values back into its visible inputs. */
+function syncPostageRowInputs(ref, expense) {
+  const nameEl = $(postageRowDomId(ref, 'name'));
+  if (nameEl) nameEl.value = postageRecipientName(expense);
+  const trackEl = $(postageRowDomId(ref, 'track'));
+  if (trackEl) trackEl.value = formatTrackingNumber(expense.trackingNumber || '');
+  refreshPostageRowSuggestion(ref);
+}
+
+/**
+ * Read the recipient and tracking number off one receipt already on file.
+ *
+ * Fills and saves the two fields, then re-ranks the suggestion — but never
+ * links. A reader that misreads "DAWSON" must cost a correction, not money
+ * attributed to the wrong customer.
  */
 async function scanPostageReceipt(ref) {
   const expense = findPostageExpense(ref);
@@ -5204,27 +5250,135 @@ async function scanPostageReceipt(ref) {
 
   try {
     const fields = await readShippingFieldsFromReceipt(expense.receipt);
-    const filled = [];
+    const snapshot = { ...expense };
+    const { written } = applyScannedPostageFields(expense, fields);
 
-    const nameEl = $(postageRowDomId(ref, 'name'));
-    if (nameEl && fields.recipient) { nameEl.value = fields.recipient; filled.push('recipient'); }
-
-    const trackEl = $(postageRowDomId(ref, 'track'));
-    const tracking = normalizeTrackingNumber(fields.tracking);
-    if (trackEl && tracking.length >= 6) { trackEl.value = formatTrackingNumber(tracking); filled.push('tracking'); }
-
-    if (!filled.length) {
+    if (!written.length) {
       showToast('Could not find a recipient or tracking number on that receipt — type them in instead', 'warn', 4200);
       return;
     }
-    refreshPostageRowSuggestion(ref);
-    showToast(`✓ Read ${filled.join(' and ')} from the receipt — check it, then link`);
+    try {
+      await saveTaxCenter({ rethrow: true });
+    } catch (error) {
+      Object.keys(expense).forEach(key => { if (!(key in snapshot)) delete expense[key]; });
+      Object.assign(expense, snapshot);
+      throw error;
+    }
+    syncPostageRowInputs(ref, expense);
+    showToast(`✓ Read ${written.join(' and ')} from the receipt — check it, then link`);
   } catch (error) {
     console.error('Postage receipt scan failed', error);
     showToast(`Could not read that receipt — ${error.message || error}`, 'err', 4600);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = original; }
   }
+}
+
+// The in-flight batch, so the same button can cancel it. A stack of receipts
+// is a minute or more of API calls; without a way out, a batch started by
+// mistake has to be waited through or the tab closed.
+let _postageBatchScan = null;
+
+/**
+ * Read a whole stack of receipts in one pass.
+ *
+ * Sequential rather than parallel: these are the publisher's own rate-limited
+ * API credits, and fifteen simultaneous requests is how a batch gets throttled
+ * into failure halfway through. Each receipt is saved as it is read, so a
+ * cancel — or a failure on receipt twelve — keeps the eleven already done.
+ */
+async function scanAllPostageReceipts() {
+  if (_postageBatchScan) {
+    _postageBatchScan.cancelled = true;
+    showToast('Stopping after the receipt being read now…');
+    return;
+  }
+  if (!TAX_CENTER.settings?.geminiKey) {
+    showToast('Add your Gemini API key in the Tax Centre config to read receipts', 'warn', 4200);
+    return;
+  }
+
+  const candidates = postageScanCandidates(unlinkedPostageExpenses());
+  if (!candidates.length) {
+    const anyUnlinked = unlinkedPostageExpenses().length;
+    showToast(anyUnlinked
+      ? 'Every receipt here has already been read — nothing left to scan'
+      : 'No postage receipts are waiting to be matched', 'warn', 4200);
+    return;
+  }
+
+  const accepted = await confirmDialog(
+    `Read ${candidates.length} receipt${candidates.length === 1 ? '' : 's'} and fill in the recipient and tracking number on each?\n\n`
+    + 'This uses your Gemini allowance, one call per receipt, and takes a few seconds each. '
+    + 'Nothing is linked to an order — you still confirm every match afterwards.',
+    { title: 'Read all receipts', okLabel: `Read ${candidates.length}` },
+  );
+  if (!accepted) return;
+
+  const batch = { cancelled: false };
+  _postageBatchScan = batch;
+  const btn = $('postage-match-scan-all');
+  const original = btn ? btn.textContent : '';
+
+  let read = 0;
+  let blank = 0;
+  const failed = [];
+
+  try {
+    for (let i = 0; i < candidates.length; i++) {
+      if (batch.cancelled) break;
+      const expense = candidates[i];
+      const ref = String(expense.ref || '');
+      if (btn) btn.textContent = `Reading ${i + 1} of ${candidates.length}… (tap to stop)`;
+
+      const row = document.querySelector(`.postage-match-row[data-ref="${CSS.escape(ref)}"]`);
+      if (row) row.classList.add('is-scanning');
+
+      try {
+        const fields = await readShippingFieldsFromReceipt(expense.receipt);
+        const { written } = applyScannedPostageFields(expense, fields);
+        if (written.length) { read++; syncPostageRowInputs(ref, expense); }
+        else blank++;
+      } catch (error) {
+        console.error('Batch scan failed on', ref, error);
+        failed.push(ref);
+      } finally {
+        if (row) row.classList.remove('is-scanning');
+      }
+    }
+
+    // One save for the whole run rather than one per receipt: this is the
+    // publisher's Firestore write budget, and a batch of fifteen would
+    // otherwise be fifteen round trips for data that is only useful together.
+    if (read) {
+      try {
+        await saveTaxCenter({ rethrow: true });
+      } catch (error) {
+        console.error('Batch scan save failed', error);
+        showToast('Read the receipts, but could not save what they said. Please try again.', 'err', 4600);
+        return;
+      }
+    }
+  } finally {
+    _postageBatchScan = null;
+    if (btn) { btn.textContent = original; btn.disabled = false; }
+  }
+
+  renderPostageMatchWorklist();
+
+  const parts = [];
+  if (read) parts.push(`read ${read}`);
+  if (blank) parts.push(`${blank} had nothing readable`);
+  if (failed.length) parts.push(`${failed.length} could not be opened`);
+  if (batch.cancelled) parts.push('stopped early');
+  const tone = (failed.length || blank) ? 'warn' : 'ok';
+  showToast(
+    read
+      ? `✓ Receipts ${parts.join(', ')} — check the names, then Match by name`
+      : `No receipts could be read — ${parts.join(', ') || 'nothing to report'}`,
+    tone,
+    5200,
+  );
 }
 
 /** Add or correct a tracking number from the shipping ledger row. */
@@ -6487,9 +6641,16 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       const url = primary.trackingUrl || trackingUrlFor(tracking, carrier) || '';
       const refLabel = String(primary.ref || '').replace(/^shippo:/, '') || 'No reference';
 
-      const refLink = primary.receipt
-        ? `<a href="${escapeHtml(primary.receipt)}" target="_blank" class="shipping-pnl-tracking-link" title="Open the label or receipt">${escapeHtml(refLabel)}</a>`
-        : `<div style="font-weight:600; color:var(--text);">${escapeHtml(refLabel)}</div>`;
+      // `local://…` is a path into the connected folder, not a URL. Rendering
+      // it as an href produced a link that looked ordinary and did nothing at
+      // all when clicked — which is every counter receipt, since those are
+      // saved to the folder rather than to a carrier's website.
+      const refTarget = receiptLinkTarget(primary.receipt);
+      const refLink = refTarget.kind === 'local'
+        ? `<button type="button" class="shipping-pnl-tracking-link as-link" onclick="viewLocalReceipt('${escapeHtml(refTarget.path)}')" title="Open the receipt saved in your folder">${escapeHtml(refLabel)}</button>`
+        : refTarget.kind === 'url'
+          ? `<a href="${escapeHtml(refTarget.href)}" target="_blank" rel="noopener" class="shipping-pnl-tracking-link" title="Open the label or receipt">${escapeHtml(refLabel)}</a>`
+          : `<div style="font-weight:600; color:var(--text);">${escapeHtml(refLabel)}</div>`;
 
       expenseRefHtml = `
         ${refLink}
@@ -7059,6 +7220,7 @@ function renderShippingAnalysisHub() {
         </div>
         <div class="postage-match-head-actions">
           <span class="pill gray" id="postage-match-count">0 to match</span>
+          <button class="btn sm" type="button" id="postage-match-scan-all" onclick="scanAllPostageReceipts()">Read all receipts</button>
           <button class="btn sm gold" type="button" id="postage-match-auto" onclick="autoMatchPostageReceipts()">Match by name</button>
         </div>
       </header>
@@ -7467,6 +7629,7 @@ export {
   autoMatchPostageReceipts,
   dismissPostageExpense,
   scanPostageReceipt,
+  scanAllPostageReceipts,
   promptLedgerTracking,
   openRecoverWebsiteOrder,
   onRecoverWebsiteOrderBookChange,

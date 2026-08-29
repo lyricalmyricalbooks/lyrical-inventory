@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  mergeScannedPostageFields,
+  postageScanCandidates,
   normalizeName,
   personNameParts,
   normalizeTrackingNumber,
@@ -238,6 +240,114 @@ describe('what a link writes onto the receipt', () => {
   });
 });
 
+describe('reading a stack of receipts', () => {
+  const withReceipt = (over = {}) => ({
+    ref: 'D1', cat: 'Shipping & Postage', amount: 15.97, date: '2026-08-22',
+    desc: 'Canada Post — Tracked Packet - USA postage', receipt: 'local://r.pdf', ...over,
+  });
+
+  it('offers only receipts that still have something to read', () => {
+    const all = [
+      withReceipt({ ref: 'D1' }),
+      withReceipt({ ref: 'D2', recipientName: 'Daniela Dawson' }),
+      withReceipt({ ref: 'D3', recipientName: 'Colin Smith', trackingNumber: 'LE055214725CA' }),
+    ];
+    // D3 has both fields already; re-reading it would spend a call to
+    // overwrite good data with a guess.
+    expect(postageScanCandidates(all).map(e => e.ref)).toEqual(['D1', 'D2']);
+  });
+
+  it('skips a receipt with no file to read', () => {
+    expect(postageScanCandidates([withReceipt({ receipt: '' })])).toEqual([]);
+  });
+
+  it('works oldest-first, the order the backlog built up in', () => {
+    const all = [
+      withReceipt({ ref: 'NEW', date: '2026-08-25' }),
+      withReceipt({ ref: 'OLD', date: '2026-08-01' }),
+    ];
+    expect(postageScanCandidates(all).map(e => e.ref)).toEqual(['OLD', 'NEW']);
+  });
+
+  it('can be told to re-read everything', () => {
+    const done = withReceipt({ recipientName: 'A B', trackingNumber: 'LE055214725CA' });
+    expect(postageScanCandidates([done], { includeComplete: true })).toHaveLength(1);
+  });
+});
+
+describe('what a scan is allowed to write', () => {
+  const blank = { ref: 'D1', cat: 'Shipping & Postage', amount: 15.97, desc: 'Canada Post postage' };
+
+  it('fills both fields on a receipt that had neither', () => {
+    expect(mergeScannedPostageFields(blank, { recipient: 'Daniela Dawson', tracking: 'LE 055 214 725 CA' }))
+      .toEqual({
+        recipientName: 'Daniela Dawson',
+        trackingNumber: 'LE055214725CA',
+        trackingCarrier: 'Canada Post',
+        trackingUrl: expect.stringContaining('canadapost'),
+      });
+  });
+
+  it('never overwrites a name the owner typed by hand', () => {
+    // Their reading of smudged toner beats the reader's.
+    const typed = { ...blank, recipientName: 'Daniela Dawson' };
+    expect(mergeScannedPostageFields(typed, { recipient: 'DANIEIA OAWSON' })).toEqual({});
+  });
+
+  it('overwrites only when explicitly asked to', () => {
+    const typed = { ...blank, recipientName: 'Old Name' };
+    expect(mergeScannedPostageFields(typed, { recipient: 'New Name' }, { overwrite: true }))
+      .toMatchObject({ recipientName: 'New Name' });
+  });
+
+  it('rejects a tracking fragment too short to be any real carrier format', () => {
+    // Storing it would put a dead tracking link in front of a customer.
+    expect(mergeScannedPostageFields(blank, { tracking: 'LE 05' })).toEqual({});
+  });
+
+  it('reports nothing to write when the reader found nothing', () => {
+    expect(mergeScannedPostageFields(blank, {})).toEqual({});
+    expect(mergeScannedPostageFields(blank, { recipient: '  ', tracking: '' })).toEqual({});
+  });
+
+  it('stores a valid number with no carrier when the shape is unfamiliar', () => {
+    const patch = mergeScannedPostageFields(blank, { tracking: 'ABC123456' });
+    expect(patch.trackingNumber).toBe('ABC123456');
+    expect('trackingCarrier' in patch).toBe(false);
+  });
+});
+
+describe('the batch scanner is wired up safely', () => {
+  it('saves what it reads, so a long run survives a closed tab', () => {
+    expect(appSource).toContain('applyScannedPostageFields');
+    expect(appSource).toMatch(/scanAllPostageReceipts[\s\S]{0,3000}saveTaxCenter/);
+  });
+
+  it('reads one receipt at a time rather than firing them all at once', () => {
+    // Parallel requests are how a rate-limited batch fails halfway through.
+    expect(appSource).toMatch(/for \(let i = 0; i < candidates\.length; i\+\+\)/);
+    expect(appSource).toMatch(/scanAllPostageReceipts[\s\S]{0,2200}await readShippingFieldsFromReceipt/);
+  });
+
+  it('can be stopped mid-run', () => {
+    expect(appSource).toContain('_postageBatchScan');
+    expect(appSource).toContain('batch.cancelled');
+  });
+
+  it('links nothing on its own', () => {
+    // The whole safety posture: reading a name attributes no money.
+    const batch = appSource.slice(appSource.indexOf('async function scanAllPostageReceipts'));
+    const body = batch.slice(0, batch.indexOf('\n}\n'));
+    expect(body).not.toContain('postageLinkPatch');
+    expect(body).not.toContain('storeTrackingOnOrder');
+  });
+
+  it('exposes the batch handler to its inline onclick', () => {
+    expect(appSource).toContain('scanAllPostageReceipts');
+    expect(appSource).toContain('onclick="scanAllPostageReceipts()"');
+  });
+});
+
 describe('the shipping hub counts every carrier', () => {
   it('feeds all postage into the hub, not only Shippo labels', () => {
     // One filter feeds the P&L, scorecard, ledger and insights. If it narrows
@@ -251,7 +361,12 @@ describe('the shipping hub counts every carrier', () => {
   });
 
   it('exposes the worklist handlers to the inline onclick attributes', () => {
-    expect(appSource).toContain('autoMatchPostageReceipts, dismissPostageExpense, scanPostageReceipt, promptLedgerTracking');
+    // Asserted per name rather than as one exact line, so adding a handler
+    // does not fail a test that is really about them all being reachable.
+    ['renderPostageMatchWorklist', 'onPostageRecipientInput', 'linkPostageExpense',
+      'autoMatchPostageReceipts', 'dismissPostageExpense', 'scanPostageReceipt',
+      'scanAllPostageReceipts', 'promptLedgerTracking',
+    ].forEach(name => expect(appSource).toContain(name));
   });
 
   it('puts the tracking number on the order, not only on the receipt', () => {
