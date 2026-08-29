@@ -4493,6 +4493,71 @@
 </div>
 
 <!-- SAVE BOOK PRESET MODAL -->
+<!-- RECOVER A WEBSITE ORDER THE GMAIL SCAN MISSED (from the shipping reconciliation worklist) -->
+<div class="overlay" id="m-recover-website-order" style="display:none;">
+  <div class="modal rwo-modal" role="dialog" aria-modal="true" aria-labelledby="rwo-title" style="max-width:640px;max-height:92vh;overflow-y:auto;">
+    <div class="modal-title" id="rwo-title">Add the missing website order</div>
+    <p class="rwo-intro">This label was paid for, but the order behind it never reached the app. Fill in what was sold and it joins your ledger, your stock count and the shipping portal — with this postage linked to it.</p>
+    <div class="rwo-postage" id="rwo-postage-summary" role="status"></div>
+
+    <div class="rwo-section-label">Order</div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="rwo-num">Order number</label>
+        <input type="text" id="rwo-num" placeholder="e.g. GPWT-916083" autocomplete="off" spellcheck="false">
+        <span class="rwo-field-hint">Copy it from your storefront if you have it — otherwise keep the suggested one.</span>
+      </div>
+      <div class="form-group">
+        <label for="rwo-date">Order date</label>
+        <input type="date" id="rwo-date">
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="rwo-book">Book sold</label>
+        <select id="rwo-book" onchange="onRecoverWebsiteOrderBookChange()"></select>
+        <span class="rwo-field-hint" id="rwo-stock-hint"></span>
+      </div>
+      <div class="form-group">
+        <label for="rwo-qty">Copies</label>
+        <input type="number" inputmode="numeric" id="rwo-qty" value="1" min="1" step="1" oninput="onRecoverWebsiteOrderBookChange()">
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="rwo-price">Price paid per copy</label>
+        <div class="price-wrap"><span class="sym" id="rwo-price-sym">CAD</span><input type="number" inputmode="decimal" id="rwo-price" step="0.01" min="0" value="0.00"></div>
+      </div>
+      <div class="form-group">
+        <label for="rwo-shipping-paid">Shipping the customer paid</label>
+        <input type="number" inputmode="decimal" id="rwo-shipping-paid" step="0.01" min="0" value="0.00">
+        <span class="rwo-field-hint">Leave at zero if shipping was free.</span>
+      </div>
+    </div>
+
+    <div class="rwo-section-label">Where it went</div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="rwo-customer">Customer name</label><input type="text" id="rwo-customer" autocomplete="off"></div>
+      <div class="form-group"><label for="rwo-email">Email</label><input type="email" id="rwo-email" placeholder="optional" autocomplete="off"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;"><label for="rwo-addr1">Address</label><input type="text" id="rwo-addr1" autocomplete="off"></div>
+    <div class="form-group" style="margin-bottom:12px;"><label for="rwo-addr2">Address line 2</label><input type="text" id="rwo-addr2" placeholder="optional" autocomplete="off"></div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="rwo-city">City</label><input type="text" id="rwo-city" autocomplete="off"></div>
+      <div class="form-group"><label for="rwo-province">Province / state</label><input type="text" id="rwo-province" autocomplete="off"></div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="rwo-postal">Postal / ZIP</label><input type="text" id="rwo-postal" autocomplete="off"></div>
+      <div class="form-group"><label for="rwo-country">Country</label><input type="text" id="rwo-country" autocomplete="off"></div>
+    </div>
+
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button class="btn" type="button" onclick="attemptCloseModal('recover-website-order')">Cancel</button>
+      <button class="btn gold" type="button" id="rwo-save-btn" onclick="saveRecoverWebsiteOrder()">Add order &amp; link postage</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="m-save-book-preset" style="display:none;">
   <div class="modal" role="dialog" aria-modal="true" style="max-width:520px;">
     <div class="modal-title" role="dialog" aria-modal="true">📦 Save Parcel Specs to Book Preset</div>

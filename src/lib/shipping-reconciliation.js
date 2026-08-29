@@ -110,6 +110,18 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
     recipientPostal: recipient.zip || '',
     date: expense.date,
   };
+  // The rest of the label's delivery address. Matching never needs it — but a
+  // label with no website order behind it is the one case where the address is
+  // the only surviving record of where the book went, and rebuilding the
+  // missing order from the worklist needs somewhere to read it from.
+  const recipientAddress = {
+    recipientStreet1: recipient.street1 || '',
+    recipientStreet2: recipient.street2 || '',
+    recipientCity: recipient.city || '',
+    recipientState: recipient.state || '',
+    recipientCountry: recipient.country || '',
+    recipientPhone: recipient.phone || '',
+  };
   return {
     ...accountingFields,
     shippoTransactionId: String(transaction.object_id || '').trim(),
@@ -118,6 +130,7 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
     recipientEmail: source.recipientEmail,
     recipientName: source.recipientName,
     recipientPostal: source.recipientPostal,
+    ...recipientAddress,
     ...reconcileShippingExpense(source, orders),
   };
 }

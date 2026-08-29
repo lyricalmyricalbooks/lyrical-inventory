@@ -21,6 +21,7 @@ import {
   BOOKS,
   BOOK_LIST,
   TAX_CENTER,
+  commitRecoveredWebsiteOrder,
   _fxRateCache,
   activeBook,
   addLog,
@@ -42,7 +43,7 @@ import {
   today,
 } from '../main.js';
 import { renderExpenses, saveReceiptToLocalFile } from './receipts.js';
-import { openM, closeM, confirmDialog, validateFields, clearFieldErrors, _prefersReducedMotion } from '../lib/modal.js';
+import { openM, closeM, confirmDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
 import {
   extractBigCartelAddress,
   getBigCartelIncluded,
@@ -54,7 +55,12 @@ import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
 import { escapeHtml } from '../lib/html.js';
 import { csvCell } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
-import { fmt, fmtD, roundCents, cadEquivalentForSale } from '../lib/money.js';
+import { fmt, fmtD, roundCents, cadEquivalentForSale, getBookCurrencyCode } from '../lib/money.js';
+import {
+  buildRecoveredOrderEntry,
+  recoveredOrderPrefill,
+  validateRecoveredOrder,
+} from '../lib/manual-website-order.js';
 import {
   applyShippoExpenseEnrichments,
   enrichShippoExpense,
@@ -669,16 +675,29 @@ function renderShippingReconciliationWorklist() {
       return `<option value="${escapeHtml(number)}"${number === suggested ? ' selected' : ''}>${escapeHtml(number)} · ${escapeHtml(order.shipName || order.customer || 'Customer')}</option>`;
     }).join('');
     const context = [expense.recipientName, expense.recipientPostal, expense.trackingUrl ? 'Tracking saved' : ''].filter(Boolean).join(' · ');
+    // No order to pick means the sale never reached the app at all — the Gmail
+    // scan missed it. Say so plainly and point at the way out, instead of
+    // leaving an empty dropdown that looks like a broken control.
+    const noCandidates = !knownOrders.length;
+    const hint = noCandidates
+      ? '<span class="shipping-reconciliation-hint">No website orders on file yet — add this one to link it.</span>'
+      : (expense.shippingMatchStatus === 'unmatched'
+        ? '<span class="shipping-reconciliation-hint">No order matched this label. Pick one, or add the missing order.</span>'
+        : '');
     return `<div class="shipping-reconciliation-row">
       <div class="shipping-reconciliation-copy">
         <strong>${fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
         <span>${escapeHtml(expense.date || 'Date unavailable')} · ${escapeHtml(context || 'Recipient unavailable')}</span>
         <small>${escapeHtml(expense.shippingMatchStatus || 'unmatched')}</small>
+        ${hint}
       </div>
       <div class="shipping-reconciliation-decision">
         <label for="${domId}">Order</label>
-        <select id="${domId}" aria-label="Order for postage expense"><option value="">Select an order</option>${options}</select>
-        <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)">Link postage</button>
+        <select id="${domId}" aria-label="Order for postage expense"${noCandidates ? ' disabled' : ''}><option value="">${noCandidates ? 'No orders on file' : 'Select an order'}</option>${options}</select>
+        <div class="shipping-reconciliation-actions">
+          <button class="btn sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="openRecoverWebsiteOrder(this.dataset.ref)">Add missing order</button>
+          <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)"${noCandidates ? ' disabled' : ''}>Link postage</button>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -728,6 +747,169 @@ async function clearShippingReconciliationList() {
   }
   renderShippingReconciliationWorklist();
   showToast(`Cleared ${expenses.length} reconciliation item${expenses.length === 1 ? '' : 's'}`);
+}
+
+// ── RECOVERING A MISSING WEBSITE ORDER ──────────────────────────────────
+//
+// The reconciliation worklist can only offer orders the app already knows
+// about. When the Gmail scan missed the confirmation email, there is nothing to
+// offer and the postage is stuck: the customer exists on the label and nowhere
+// else. These three functions turn the label back into the order — prefilled
+// from the recipient Shippo already gave us, written to the ledger through the
+// same path a scanned order takes, and linked to its postage on the way out.
+
+// The worklist row that opened the intake form, so the save can find its way
+// back to the expense without threading the ref through the DOM.
+let _recoverOrderRef = '';
+
+/**
+ * Every order number the app already holds, across all books and both the
+ * applied ledger and the not-yet-applied Gmail queue. Re-using one of these
+ * would double-count a sale, so the recovery form refuses it. Built here from
+ * state this module already reads rather than crossing back into main.js for
+ * one more name.
+ */
+function ledgerOrderNumbers() {
+  const nums = new Set();
+  Object.values(states).forEach(state => (state?.hist || []).forEach(entry => {
+    if (entry?.num) nums.add(String(entry.num));
+  }));
+  (orders || []).forEach(order => { if (order?.orderNum) nums.add(String(order.orderNum)); });
+  return Array.from(nums);
+}
+
+function findShippoExpense(ref) {
+  return (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
+}
+
+function openRecoverWebsiteOrder(ref) {
+  const expense = findShippoExpense(ref);
+  if (!expense) { showToast('Shipping expense was not found', 'err'); return; }
+  if (!BOOK_LIST.length) { showToast('Add a book to your catalogue first', 'warn'); return; }
+  _recoverOrderRef = String(ref);
+
+  const prefill = recoveredOrderPrefill(expense);
+  const bookId = BOOKS[activeBook] ? activeBook : (BOOK_LIST[0]?.id || '');
+  const bookOptions = BOOK_LIST.map(b =>
+    `<option value="${escapeHtml(b.id)}"${b.id === bookId ? ' selected' : ''}>${escapeHtml(b.title)}</option>`
+  ).join('');
+  const bookSelect = $('rwo-book');
+  if (bookSelect) bookSelect.innerHTML = bookOptions;
+
+  const set = (id, value) => { const el = $(id); if (el) el.value = value ?? ''; };
+  set('rwo-num', prefill.orderNumber);
+  set('rwo-date', prefill.date || today());
+  set('rwo-customer', prefill.customer);
+  set('rwo-email', prefill.email);
+  set('rwo-addr1', prefill.addr1);
+  set('rwo-addr2', prefill.addr2);
+  set('rwo-city', prefill.city);
+  set('rwo-province', prefill.province);
+  set('rwo-postal', prefill.postal);
+  set('rwo-country', prefill.country);
+  set('rwo-qty', 1);
+  set('rwo-shipping-paid', '0.00');
+  onRecoverWebsiteOrderBookChange();
+
+  const summary = $('rwo-postage-summary');
+  if (summary) {
+    const tracking = expense.trackingUrl ? ' · tracking saved' : '';
+    summary.textContent = `${fmt(expense.amount || 0, expense.currency || 'CAD')} postage paid ${fmtD(expense.date) || 'on an unknown date'}${tracking}. Saving links it to this order.`;
+  }
+  openM('recover-website-order');
+}
+
+// The price field follows whichever book is selected, so the publisher is
+// correcting a real list price rather than typing one from memory.
+function onRecoverWebsiteOrderBookChange() {
+  const bookId = $('rwo-book')?.value || '';
+  const book = BOOKS[bookId];
+  const priceEl = $('rwo-price');
+  const symEl = $('rwo-price-sym');
+  if (book && priceEl) priceEl.value = Number(book.listPrice || 0).toFixed(2);
+  if (book && symEl) symEl.textContent = getBookCurrencyCode(book);
+  const stockEl = $('rwo-stock-hint');
+  if (stockEl) {
+    const stock = Number(getState(bookId)?.stock ?? 0);
+    const qty = Math.max(1, parseInt($('rwo-qty')?.value || '1', 10) || 1);
+    stockEl.textContent = book
+      ? `${book.title} stock ${stock} → ${Math.max(0, stock - qty)} after saving`
+      : '';
+  }
+}
+
+async function saveRecoverWebsiteOrder() {
+  const expense = findShippoExpense(_recoverOrderRef);
+  if (!expense) { showToast('Shipping expense was not found', 'err'); return; }
+  const overlay = $('m-recover-website-order');
+  clearFieldErrors(overlay || document);
+
+  const form = {
+    orderNumber: ($('rwo-num')?.value || '').trim(),
+    bookId: $('rwo-book')?.value || '',
+    date: ($('rwo-date')?.value || '').trim(),
+    qty: parseInt($('rwo-qty')?.value || '1', 10),
+    price: parseFloat($('rwo-price')?.value || '0'),
+    shippingPaid: parseFloat($('rwo-shipping-paid')?.value || '0'),
+    customer: ($('rwo-customer')?.value || '').trim(),
+    email: ($('rwo-email')?.value || '').trim(),
+    addr1: ($('rwo-addr1')?.value || '').trim(),
+    addr2: ($('rwo-addr2')?.value || '').trim(),
+    city: ($('rwo-city')?.value || '').trim(),
+    province: ($('rwo-province')?.value || '').trim(),
+    postal: ($('rwo-postal')?.value || '').trim(),
+    country: ($('rwo-country')?.value || '').trim(),
+    phone: '',
+  };
+
+  const errors = validateRecoveredOrder(form, { takenOrderNumbers: ledgerOrderNumbers() });
+  if (errors.length) {
+    const fieldIds = {
+      orderNumber: 'rwo-num', bookId: 'rwo-book', qty: 'rwo-qty', price: 'rwo-price',
+      shippingPaid: 'rwo-shipping-paid', date: 'rwo-date', customer: 'rwo-customer',
+    };
+    errors.forEach(error => fieldError(fieldIds[error.field] || 'rwo-num', error.message));
+    showToast(errors[0].message, 'warn');
+    return;
+  }
+
+  const btn = $('rwo-save-btn');
+  if (btn) btn.disabled = true;
+  let entry;
+  try {
+    entry = commitRecoveredWebsiteOrder(form.bookId, form, ({ stockAfter }) =>
+      buildRecoveredOrderEntry(form, { stockAfter }));
+  } catch (error) {
+    console.error('Recovered order save failed', error);
+    if (btn) btn.disabled = false;
+    showToast('Could not save that order. Please try again.', 'err');
+    return;
+  }
+
+  // The order exists now, so the postage has something to point at. A failure
+  // here leaves the order in the ledger and the label in the worklist — the
+  // publisher can retry the link, and nothing is double-counted.
+  try {
+    await persistManualShippingLink(expense, entry.num, () => saveTaxCenter({ rethrow: true }));
+  } catch (error) {
+    console.error('Shipping link save failed after recovery', error);
+    if (btn) btn.disabled = false;
+    closeM('recover-website-order');
+    renderShippingReconciliationWorklist();
+    renderOrders();
+    renderHist();
+    showToast(`${entry.num} was added, but linking the postage failed. Try Link postage again.`, 'warn');
+    return;
+  }
+
+  if (btn) btn.disabled = false;
+  closeM('recover-website-order');
+  _recoverOrderRef = '';
+  renderShippingReconciliationWorklist();
+  renderOrders();
+  renderHist();
+  renderTaxCenter();
+  showToast(`✓ ${entry.num} added and postage linked`);
 }
 
 async function linkShippingExpense(ref) {
@@ -6673,6 +6855,9 @@ export {
   openShippingReconciliation,
   clearShippingReconciliationList,
   linkShippingExpense,
+  openRecoverWebsiteOrder,
+  onRecoverWebsiteOrderBookChange,
+  saveRecoverWebsiteOrder,
   processShippoTxToExpense,
   importShippoShippingFromApi,
   openShippoLabel,
