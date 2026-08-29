@@ -5745,10 +5745,10 @@ tr.hist-row:hover {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-3);
   margin: var(--space-4) 0 var(--space-3);
-  background: var(--cream-bg);
+  background: var(--surface-sunken);
   padding: var(--space-3);
   border-radius: var(--r2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
 }
 
 /* ── Active-segment bar ─────────────────────────────────────────────────────
