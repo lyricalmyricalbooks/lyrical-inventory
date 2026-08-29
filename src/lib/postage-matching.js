@@ -120,16 +120,92 @@ export function trackingUrlFor(value, carrierHint = '') {
 }
 
 /**
+ * A stable identity for one postage expense.
+ *
+ * NOT `ref`. Every hand-entered expense is created with `ref: ''` (main.js
+ * submitTaxExpense), and `ref` stays a free-text field the owner can edit or
+ * leave blank. Keying rows off it meant every ref-less receipt shared one
+ * identity: a lookup found whichever came first, and the rows shared DOM ids,
+ * so a dismiss hit the wrong receipt and a second receipt's inputs read the
+ * first one's values. `id` is what the rest of the app keys expenses by.
+ */
+export function postageExpenseKey(expense = {}) {
+  const id = clean(expense.id);
+  if (id) return `id:${id}`;
+  const ref = clean(expense.ref);
+  if (ref) return `ref:${ref}`;
+  // Nothing stable to key on. A content hash is still better than a shared
+  // blank: two different receipts almost never agree on all four.
+  return `x:${clean(expense.date)}|${clean(expense.amount)}|${clean(expense.desc).slice(0, 40)}|${clean(expense.currency)}`;
+}
+
+/** Find one postage expense by the key postageExpenseKey() produced. */
+export function findPostageByKey(expenses = [], key) {
+  const wanted = String(key ?? '');
+  return expenses.find(expense => postageExpenseKey(expense) === wanted) || null;
+}
+
+// Words that mean "this bought a parcel's carriage". Checked FIRST, so a real
+// service whose name happens to contain a supply word — "Priority Mail Flat
+// Rate Box" is postage, not a box — is never mistaken for equipment.
+const POSTAGE_SIGNALS = [
+  'canada post', 'postes canada', 'canadapost', 'shippo', 'usps', 'ups ', 'fedex', 'dhl',
+  'purolator', 'stallion', 'chit chats', 'royal mail', 'auspost',
+  'postage', 'shipping label', 'tracked packet', 'xpresspost', 'expedited parcel',
+  'priority mail', 'first class', 'ground advantage', 'flat rate', 'stamp', 'small packet',
+];
+
+// Words that mean "this bought a thing you keep". Shipping supplies and
+// equipment are genuine shipping costs, but they are not the carriage of any
+// one parcel, so they can never be matched to an order and must not be counted
+// as a carrier's spend. Deliberately excludes a bare "label", which would
+// swallow every Shippo label.
+const SUPPLY_SIGNALS = [
+  'scale', 'weighing', 'box of', 'boxes', 'carton', 'tape', 'envelope', 'mailer',
+  'bubble', 'wrap', 'packaging', 'packing material', 'printer', 'ink', 'toner',
+  'label stock', 'label roll', 'dispenser', 'trolley', 'shelving', 'cutter',
+  'scissors', 'stationery', 'ruler', 'pallet',
+];
+
+/**
+ * Whether this expense is the carriage of a parcel, rather than kit bought to
+ * help ship parcels.
+ *
+ * Anything already tied to a shipment — a Shippo import, a recorded recipient
+ * or tracking number, an existing link — is postage by evidence and never
+ * reaches the wording test, so the heuristic can only ever misjudge an
+ * untouched, hand-typed description. It defaults to "yes" on an unrecognised
+ * one, because a false positive is clutter the owner can dismiss while a false
+ * negative silently hides real postage from the only screen that would catch
+ * it.
+ */
+export function looksLikeParcelPostage(expense = {}) {
+  if (String(expense.ref || '').startsWith('shippo:')) return true;
+  if (clean(expense.recipientName) || clean(expense.trackingNumber)) return true;
+  if (clean(expense.shippingOrderNumber)) return true;
+
+  const haystack = ` ${clean(expense.desc).toLowerCase()} `;
+  if (POSTAGE_SIGNALS.some(word => haystack.includes(word))) return true;
+  if (SUPPLY_SIGNALS.some(word => haystack.includes(word))) return false;
+  return true;
+}
+
+/**
  * Every postage cost in the ledger, whichever carrier it came from.
  *
  * A refund credit carries the same category and a negative amount; it reverses
  * a label rather than paying for one, so it can never be the postage behind an
- * order and is excluded here rather than at each call site.
+ * order and is excluded here rather than at each call site. Shipping equipment
+ * filed under the same category is excluded for the same reason — it is a real
+ * cost, but not any parcel's, and the carrier scorecard sums this list whether
+ * or not an entry is linked, so a luggage scale left in it becomes carrier
+ * spend that no carrier was ever paid.
  */
 export function isPostageExpense(expense = {}) {
   if (expense.cat !== POSTAGE_CATEGORY) return false;
   if (String(expense.ref || '').startsWith('shippo-refund:')) return false;
-  return (Number(expense.amount) || 0) > 0;
+  if ((Number(expense.amount) || 0) <= 0) return false;
+  return looksLikeParcelPostage(expense);
 }
 
 /** True once a postage expense is tied to an order. */
@@ -313,6 +389,54 @@ export function autoMatchPostage(expenses = [], orders = [], opts = {}) {
   });
 
   return proposals.filter(({ match }) => wanted.get(match.orderNumber.toUpperCase()) === 1);
+}
+
+/**
+ * The receipts worth pointing the reader at.
+ *
+ * A receipt with both a recipient and a tracking number already recorded has
+ * nothing left to read, and re-reading it would spend an API call to overwrite
+ * good data with a guess. Ordered oldest-first so a long batch works through
+ * the backlog in the order it accumulated.
+ */
+export function postageScanCandidates(expenses = [], { includeComplete = false } = {}) {
+  return expenses
+    .filter(expense => clean(expense.receipt))
+    .filter(expense => includeComplete
+      || !postageRecipientName(expense)
+      || !normalizeTrackingNumber(expense.trackingNumber))
+    .sort((a, b) => clean(a.date).localeCompare(clean(b.date)));
+}
+
+/**
+ * What a scan should write onto a receipt, given what it read.
+ *
+ * Only fills blanks by default. A recipient the owner typed by hand is better
+ * evidence than a reader's guess at smudged toner, so a scan must never
+ * silently replace it. Returns an empty object when there is nothing to add,
+ * which is how the caller knows the scan found nothing usable.
+ */
+export function mergeScannedPostageFields(expense = {}, fields = {}, { overwrite = false } = {}) {
+  const patch = {};
+
+  const recipient = clean(fields.recipient);
+  if (recipient && (overwrite || !postageRecipientName(expense))) {
+    patch.recipientName = recipient;
+  }
+
+  const tracking = normalizeTrackingNumber(fields.tracking);
+  // Six characters is below any real carrier format; anything shorter is the
+  // reader having picked up a fragment, and storing it would put a dead link
+  // in front of a customer.
+  if (tracking.length >= 6 && (overwrite || !normalizeTrackingNumber(expense.trackingNumber))) {
+    patch.trackingNumber = tracking;
+    const carrier = carrierFromTracking(tracking);
+    if (carrier) patch.trackingCarrier = carrier;
+    const url = trackingUrlFor(tracking, carrier);
+    if (url) patch.trackingUrl = url;
+  }
+
+  return patch;
 }
 
 /**

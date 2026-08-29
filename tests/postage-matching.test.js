@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
+  postageExpenseKey,
+  findPostageByKey,
+  looksLikeParcelPostage,
+  mergeScannedPostageFields,
+  postageScanCandidates,
   normalizeName,
   personNameParts,
   normalizeTrackingNumber,
@@ -238,6 +243,223 @@ describe('what a link writes onto the receipt', () => {
   });
 });
 
+describe('identifying one receipt among many', () => {
+  // Every hand-entered expense is created with `ref: ''` (submitTaxExpense),
+  // so `ref` is blank on exactly the receipts this worklist exists for.
+  const counterA = { id: 1755000000001, ref: '', cat: 'Shipping & Postage', amount: 15.97, date: '2026-08-21', desc: 'Canada Post postage' };
+  const counterB = { id: 1755000000002, ref: '', cat: 'Shipping & Postage', amount: 21.40, date: '2026-08-22', desc: 'Canada Post postage' };
+  const shippo = { id: 1755000000003, ref: 'shippo:abc123', cat: 'Shipping & Postage', amount: 9.10, date: '2026-08-23', desc: 'Shippo shipping label' };
+
+  it('gives two ref-less receipts different identities', () => {
+    // The bug: both were keyed as '' and shared one identity, so dismissing
+    // one hit the other and their inputs collided on duplicate DOM ids.
+    expect(postageExpenseKey(counterA)).not.toBe(postageExpenseKey(counterB));
+  });
+
+  it('keys off id, which the rest of the app already uses', () => {
+    expect(postageExpenseKey(counterA)).toBe('id:1755000000001');
+  });
+
+  it('finds exactly the receipt asked for, not the first blank one', () => {
+    const all = [counterA, counterB, shippo];
+    expect(findPostageByKey(all, postageExpenseKey(counterB))).toBe(counterB);
+    expect(findPostageByKey(all, postageExpenseKey(shippo))).toBe(shippo);
+  });
+
+  it('returns null rather than a wrong receipt for an unknown key', () => {
+    expect(findPostageByKey([counterA], 'id:nope')).toBeNull();
+    expect(findPostageByKey([counterA], '')).toBeNull();
+    expect(findPostageByKey([], 'id:1')).toBeNull();
+  });
+
+  it('still separates two receipts that somehow have no id either', () => {
+    const a = { ref: '', date: '2026-08-21', amount: 15.97, desc: 'Postage', currency: 'CAD' };
+    const b = { ref: '', date: '2026-08-22', amount: 21.40, desc: 'Postage', currency: 'CAD' };
+    expect(postageExpenseKey(a)).not.toBe(postageExpenseKey(b));
+  });
+
+  it('produces a key safe to put in a DOM id and a CSS selector', () => {
+    const key = postageExpenseKey(shippo);
+    expect(key.replace(/[^A-Za-z0-9_-]/g, '-')).not.toBe('');
+    expect(key).not.toContain('"');
+  });
+});
+
+describe('telling postage from the kit you ship with', () => {
+  const base = { cat: 'Shipping & Postage', amount: 13.16, date: '2026-07-16' };
+
+  it('excludes a luggage scale filed under Shipping & Postage', () => {
+    // Reported: it appeared in the match list, where it can never be matched,
+    // and the carrier scorecard sums this list linked or not — so it became
+    // carrier spend no carrier was ever paid.
+    const scale = { ...base, ref: '', desc: 'Luggage scale device for measuring luggage weight' };
+    expect(looksLikeParcelPostage(scale)).toBe(false);
+    expect(isPostageExpense(scale)).toBe(false);
+  });
+
+  it('excludes the usual packing supplies', () => {
+    ['Cardboard boxes 20 pack', 'Packing tape refill', 'Bubble wrap roll',
+      'Padded envelope bundle', 'Label printer', 'Toner cartridge',
+    ].forEach(desc => expect(isPostageExpense({ ...base, ref: '', desc })).toBe(false));
+  });
+
+  it('keeps real postage that happens to name a supply word', () => {
+    // "Priority Mail Flat Rate Box" is carriage, not a box.
+    expect(looksLikeParcelPostage({ ...base, desc: 'USPS Priority Mail Flat Rate Box' })).toBe(true);
+    expect(looksLikeParcelPostage({ ...base, desc: 'Canada Post Xpresspost box rate' })).toBe(true);
+  });
+
+  it('never second-guesses a receipt already tied to a shipment', () => {
+    // Evidence beats wording: these can never be wrongly hidden.
+    expect(looksLikeParcelPostage({ ...base, ref: 'shippo:x', desc: 'scale' })).toBe(true);
+    expect(looksLikeParcelPostage({ ...base, desc: 'scale', recipientName: 'Daniela Dawson' })).toBe(true);
+    expect(looksLikeParcelPostage({ ...base, desc: 'scale', trackingNumber: 'LE055214725CA' })).toBe(true);
+    expect(looksLikeParcelPostage({ ...base, desc: 'scale', shippingOrderNumber: '#ABCD-111111' })).toBe(true);
+  });
+
+  it('keeps a plain description it does not recognise', () => {
+    // A false negative silently hides real postage; a false positive is
+    // clutter the owner can dismiss. Default to showing.
+    expect(looksLikeParcelPostage({ ...base, desc: 'Parcel to Toronto' })).toBe(true);
+    expect(looksLikeParcelPostage({ ...base, desc: '' })).toBe(true);
+  });
+
+  it('does not swallow a Shippo label over the word "label"', () => {
+    expect(isPostageExpense({ ...base, ref: 'shippo:x', desc: 'Shippo shipping label #LE055214725CA' })).toBe(true);
+  });
+});
+
+describe('reading a stack of receipts', () => {
+  const withReceipt = (over = {}) => ({
+    ref: 'D1', cat: 'Shipping & Postage', amount: 15.97, date: '2026-08-22',
+    desc: 'Canada Post — Tracked Packet - USA postage', receipt: 'local://r.pdf', ...over,
+  });
+
+  it('offers only receipts that still have something to read', () => {
+    const all = [
+      withReceipt({ ref: 'D1' }),
+      withReceipt({ ref: 'D2', recipientName: 'Daniela Dawson' }),
+      withReceipt({ ref: 'D3', recipientName: 'Colin Smith', trackingNumber: 'LE055214725CA' }),
+    ];
+    // D3 has both fields already; re-reading it would spend a call to
+    // overwrite good data with a guess.
+    expect(postageScanCandidates(all).map(e => e.ref)).toEqual(['D1', 'D2']);
+  });
+
+  it('skips a receipt with no file to read', () => {
+    expect(postageScanCandidates([withReceipt({ receipt: '' })])).toEqual([]);
+  });
+
+  it('works oldest-first, the order the backlog built up in', () => {
+    const all = [
+      withReceipt({ ref: 'NEW', date: '2026-08-25' }),
+      withReceipt({ ref: 'OLD', date: '2026-08-01' }),
+    ];
+    expect(postageScanCandidates(all).map(e => e.ref)).toEqual(['OLD', 'NEW']);
+  });
+
+  it('can be told to re-read everything', () => {
+    const done = withReceipt({ recipientName: 'A B', trackingNumber: 'LE055214725CA' });
+    expect(postageScanCandidates([done], { includeComplete: true })).toHaveLength(1);
+  });
+});
+
+describe('what a scan is allowed to write', () => {
+  const blank = { ref: 'D1', cat: 'Shipping & Postage', amount: 15.97, desc: 'Canada Post postage' };
+
+  it('fills both fields on a receipt that had neither', () => {
+    expect(mergeScannedPostageFields(blank, { recipient: 'Daniela Dawson', tracking: 'LE 055 214 725 CA' }))
+      .toEqual({
+        recipientName: 'Daniela Dawson',
+        trackingNumber: 'LE055214725CA',
+        trackingCarrier: 'Canada Post',
+        trackingUrl: expect.stringContaining('canadapost'),
+      });
+  });
+
+  it('never overwrites a name the owner typed by hand', () => {
+    // Their reading of smudged toner beats the reader's.
+    const typed = { ...blank, recipientName: 'Daniela Dawson' };
+    expect(mergeScannedPostageFields(typed, { recipient: 'DANIEIA OAWSON' })).toEqual({});
+  });
+
+  it('overwrites only when explicitly asked to', () => {
+    const typed = { ...blank, recipientName: 'Old Name' };
+    expect(mergeScannedPostageFields(typed, { recipient: 'New Name' }, { overwrite: true }))
+      .toMatchObject({ recipientName: 'New Name' });
+  });
+
+  it('rejects a tracking fragment too short to be any real carrier format', () => {
+    // Storing it would put a dead tracking link in front of a customer.
+    expect(mergeScannedPostageFields(blank, { tracking: 'LE 05' })).toEqual({});
+  });
+
+  it('reports nothing to write when the reader found nothing', () => {
+    expect(mergeScannedPostageFields(blank, {})).toEqual({});
+    expect(mergeScannedPostageFields(blank, { recipient: '  ', tracking: '' })).toEqual({});
+  });
+
+  it('stores a valid number with no carrier when the shape is unfamiliar', () => {
+    const patch = mergeScannedPostageFields(blank, { tracking: 'ABC123456' });
+    expect(patch.trackingNumber).toBe('ABC123456');
+    expect('trackingCarrier' in patch).toBe(false);
+  });
+});
+
+describe('the batch scanner is wired up safely', () => {
+  it('saves what it reads, so a long run survives a closed tab', () => {
+    expect(appSource).toContain('applyScannedPostageFields');
+    expect(appSource).toMatch(/scanAllPostageReceipts[\s\S]{0,3000}saveTaxCenter/);
+  });
+
+  it('reads one receipt at a time rather than firing them all at once', () => {
+    // Parallel requests are how a rate-limited batch fails halfway through.
+    expect(appSource).toMatch(/for \(let i = 0; i < candidates\.length; i\+\+\)/);
+    expect(appSource).toMatch(/scanAllPostageReceipts[\s\S]{0,2200}await readShippingFieldsFromReceipt/);
+  });
+
+  it('can be stopped mid-run', () => {
+    expect(appSource).toContain('_postageBatchScan');
+    expect(appSource).toContain('batch.cancelled');
+  });
+
+  it('links nothing on its own', () => {
+    // The whole safety posture: reading a name attributes no money.
+    const batch = appSource.slice(appSource.indexOf('async function scanAllPostageReceipts'));
+    const body = batch.slice(0, batch.indexOf('\n}\n'));
+    expect(body).not.toContain('postageLinkPatch');
+    expect(body).not.toContain('storeTrackingOnOrder');
+  });
+
+  it('keys every worklist control by identity, never by the ref field', () => {
+    // A ref-less receipt shared one identity with every other ref-less one:
+    // the dismiss hit the wrong row and two rows collided on the same DOM id.
+    expect(appSource).not.toContain("postageRowDomId(ref,");
+    expect(appSource).not.toContain('data-ref="${escapeHtml(ref)}"');
+    expect(appSource).toContain('data-key="${escapeHtml(key)}"');
+    expect(appSource).toContain('function findPostageExpense(key)');
+    expect(appSource).toContain('findPostageByKey(TAX_CENTER.businessExpenses || [], key)');
+  });
+
+  it('leaves the Shippo-only worklist keyed by ref, where that is safe', () => {
+    // That older list filters to `ref: "shippo:<id>"`, which is always present
+    // and unique — so this is not the same bug, and rekeying it would be
+    // churn. The guard is that it still restricts itself to Shippo refs.
+    expect(appSource).toContain("String(expense?.ref || '').startsWith('shippo:')");
+  });
+
+  it('keys the order-side link picker the same way', () => {
+    // Widening it to counter receipts gave it the same blank-ref collision.
+    expect(appSource).not.toContain("find(e => e.ref === txRef)");
+    expect(appSource).toContain("doManualShippoLink('${escapeHtml(orderNum)}', '${escapeHtml(postageExpenseKey(e))}')");
+  });
+
+  it('exposes the batch handler to its inline onclick', () => {
+    expect(appSource).toContain('scanAllPostageReceipts');
+    expect(appSource).toContain('onclick="scanAllPostageReceipts()"');
+  });
+});
+
 describe('the shipping hub counts every carrier', () => {
   it('feeds all postage into the hub, not only Shippo labels', () => {
     // One filter feeds the P&L, scorecard, ledger and insights. If it narrows
@@ -251,7 +473,12 @@ describe('the shipping hub counts every carrier', () => {
   });
 
   it('exposes the worklist handlers to the inline onclick attributes', () => {
-    expect(appSource).toContain('autoMatchPostageReceipts, dismissPostageExpense, scanPostageReceipt, promptLedgerTracking');
+    // Asserted per name rather than as one exact line, so adding a handler
+    // does not fail a test that is really about them all being reachable.
+    ['renderPostageMatchWorklist', 'onPostageRecipientInput', 'linkPostageExpense',
+      'autoMatchPostageReceipts', 'dismissPostageExpense', 'scanPostageReceipt',
+      'scanAllPostageReceipts', 'promptLedgerTracking',
+    ].forEach(name => expect(appSource).toContain(name));
   });
 
   it('puts the tracking number on the order, not only on the receipt', () => {
