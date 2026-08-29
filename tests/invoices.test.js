@@ -7,6 +7,14 @@ import {
   invoicesForBook,
   findInvoiceAcrossBooks,
   otherBookTitles,
+  lineItemBookId,
+  invoiceBookSplit,
+  invoiceShareForBook,
+  neutralInvoicePrefix,
+  invoiceNumberPrefix,
+  nextInvoiceSeq,
+  buildInvoiceNumber,
+  NEUTRAL_PREFIX_FALLBACK,
 } from '../src/lib/invoices.js';
 
 // The reported bug: an invoice billing two titles was only reachable from the
@@ -171,5 +179,140 @@ describe('invoiceCoversBook', () => {
     expect(invoiceCoversBook(inv, 'altrove', 'hound', BOOKS)).toBe(true);
     expect(invoiceCoversBook(inv, 'altrove', 'altrove', BOOKS)).toBe(true);
     expect(invoiceCoversBook(inv, 'altrove', 'other', BOOKS)).toBe(false);
+  });
+});
+
+describe('lineItemBookId', () => {
+  it('uses the title the publisher picked, over anything in the text', () => {
+    const it = { description: 'The Hound — restock', bookId: 'altrove' };
+    expect(lineItemBookId(it, 'hound', BOOKS)).toBe('altrove');
+  });
+
+  it('falls back to the title the description names', () => {
+    expect(lineItemBookId({ description: 'The Hound — restock' }, 'altrove', BOOKS)).toBe('hound');
+  });
+
+  it('falls back to the issuing book when the line names no title', () => {
+    expect(lineItemBookId({ description: 'Shipping' }, 'altrove', BOOKS)).toBe('altrove');
+  });
+});
+
+// A shop pays one bill covering several books; the publisher still has to know
+// what each title earned, since that is what each author's share comes from.
+describe('invoiceBookSplit', () => {
+  it('splits the reported two-title invoice by what each title billed', () => {
+    // 3 × 60 = 180 for Altrove, 4 × 65 = 260 for The Hound, total 440.
+    const split = invoiceBookSplit(twoTitleInvoice({ total: 440 }), 'altrove', BOOKS);
+    expect(split.map(r => r.bookId)).toEqual(['altrove', 'hound']);
+    expect(split[0].subtotal).toBeCloseTo(180, 2);
+    expect(split[1].subtotal).toBeCloseTo(260, 2);
+    expect(split[0].total).toBeCloseTo(180, 2);
+    expect(split[1].total).toBeCloseTo(260, 2);
+  });
+
+  it('shares a discount out in proportion, and still sums to the invoice total', () => {
+    // 440 billed, 40 off → 400 collected: 180/440 and 260/440 of it.
+    const split = invoiceBookSplit(twoTitleInvoice({ total: 400 }), 'altrove', BOOKS);
+    expect(split[0].total + split[1].total).toBeCloseTo(400, 2);
+    expect(split[0].total).toBeCloseTo(163.64, 2);
+    expect(split[1].total).toBeCloseTo(236.36, 2);
+  });
+
+  it('never loses or invents a cent, however the split falls', () => {
+    // Three equal lines against a total that will not divide into whole cents.
+    const inv = {
+      total: 100,
+      items: [
+        { description: 'a', qty: 1, unitPrice: 10, bookId: 'altrove' },
+        { description: 'b', qty: 1, unitPrice: 10, bookId: 'hound' },
+        { description: 'c', qty: 1, unitPrice: 10, bookId: 'other' },
+      ],
+    };
+    const split = invoiceBookSplit(inv, 'altrove', BOOKS);
+    const sum = split.reduce((a, r) => a + r.total, 0);
+    expect(Math.round(sum * 100)).toBe(10000);
+    expect(split.every(r => Number.isInteger(Math.round(r.total * 100)))).toBe(true);
+  });
+
+  it('groups several lines of the same title into one row', () => {
+    const inv = {
+      total: 300,
+      items: [
+        { description: 'The Hound — May', qty: 1, unitPrice: 100, bookId: 'hound' },
+        { description: 'The Hound — June', qty: 1, unitPrice: 200, bookId: 'hound' },
+      ],
+    };
+    const split = invoiceBookSplit(inv, 'hound', BOOKS);
+    expect(split).toHaveLength(1);
+    expect(split[0].subtotal).toBeCloseTo(300, 2);
+    expect(split[0].share).toBeCloseTo(1, 6);
+  });
+
+  it('falls back to the line sum when the invoice has no stored total', () => {
+    const split = invoiceBookSplit(twoTitleInvoice(), 'altrove', BOOKS);
+    expect(split[0].total + split[1].total).toBeCloseTo(440, 2);
+  });
+
+  it('gives a free invoice to its first title rather than inventing a split', () => {
+    const inv = { total: 0, items: [{ description: 'Gift copies', qty: 2, unitPrice: 0, bookId: 'hound' }] };
+    const split = invoiceBookSplit(inv, 'hound', BOOKS);
+    expect(split).toHaveLength(1);
+    expect(split[0].total).toBe(0);
+  });
+
+  it('is empty for an invoice with no line items', () => {
+    expect(invoiceBookSplit({ total: 50, items: [] }, 'hound', BOOKS)).toEqual([]);
+  });
+});
+
+describe('invoiceShareForBook', () => {
+  it('answers what one title is owed out of a shared bill', () => {
+    const share = invoiceShareForBook(twoTitleInvoice({ total: 440 }), 'altrove', 'hound', BOOKS);
+    expect(share.total).toBeCloseTo(260, 2);
+  });
+
+  it('is null for a title not on the invoice', () => {
+    expect(invoiceShareForBook(twoTitleInvoice(), 'altrove', 'other', BOOKS)).toBeNull();
+  });
+});
+
+// A number naming one title reads as an error on a bill charging for two.
+describe('invoice numbering', () => {
+  it('builds a neutral prefix from the business initials', () => {
+    expect(neutralInvoicePrefix('Lyricalmyrical Books')).toBe('LB');
+    expect(neutralInvoicePrefix('Lyricalmyrical Books & Co')).toBe('LBC');
+  });
+
+  it('keeps a one-word business name recognisable', () => {
+    expect(neutralInvoicePrefix('Nightjar')).toBe('NIGHT');
+  });
+
+  it('falls back when there is no usable name', () => {
+    expect(neutralInvoicePrefix('')).toBe(NEUTRAL_PREFIX_FALLBACK);
+    expect(neutralInvoicePrefix('  —  ')).toBe(NEUTRAL_PREFIX_FALLBACK);
+  });
+
+  it('reads the prefix back off a number', () => {
+    expect(invoiceNumberPrefix('INV-ALTROV-2026-004')).toBe('ALTROV');
+    expect(invoiceNumberPrefix('INV-LMB-2026-004')).toBe('LMB');
+    expect(invoiceNumberPrefix('handwritten 42')).toBe('');
+  });
+
+  it('counts a shared sequence across every book, not one list', () => {
+    // The neutral run is spread over two books; the next number must clear both.
+    const all = [
+      { num: 'INV-LMB-2026-001' },
+      { num: 'INV-ALTROV-2026-009' },
+      { num: 'INV-LMB-2026-004' },
+      { num: 'INV-LMB-2025-011' },   // last year — must not count
+    ];
+    expect(nextInvoiceSeq(all, 'LMB', 2026)).toBe(5);
+    expect(nextInvoiceSeq(all, 'ALTROV', 2026)).toBe(10);
+    expect(nextInvoiceSeq(all, 'HOUND', 2026)).toBe(1);
+  });
+
+  it('pads the sequence so numbers sort', () => {
+    expect(buildInvoiceNumber('LMB', 2026, 7)).toBe('INV-LMB-2026-007');
+    expect(buildInvoiceNumber('LMB', 2026, 123)).toBe('INV-LMB-2026-123');
   });
 });

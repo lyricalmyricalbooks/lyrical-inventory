@@ -1173,7 +1173,7 @@ function summarizeReceiptProblems(problems) {
 function formatReceiptDiagnostic(problems, context = {}) {
   const groups = summarizeReceiptProblems(problems);
   const lines = [
-    'Lyrical Inventory — receipt move diagnostic',
+    'Lyricalmyrical Inventory — receipt move diagnostic',
     `When: ${new Date().toISOString()}`,
     `Attempted: ${problems.length} receipt${problems.length === 1 ? '' : 's'}`,
   ];
@@ -3035,7 +3035,13 @@ const RECEIPT_SCAN_SCHEMA = {
     description: { type: 'STRING' },
     reference: { type: 'STRING' },
     category: { type: 'STRING', enum: EXPENSE_CATEGORIES },
-    confidence: { type: 'NUMBER' }
+    confidence: { type: 'NUMBER' },
+    // Shipping receipts only. On a postage receipt the addressee's name and
+    // the tracking number are the only things that also identify the website
+    // order it paid for, and they appear nowhere but on the paper — so the
+    // reader that is already looking at the document may as well lift them.
+    shipRecipient: { type: 'STRING' },
+    shipTracking: { type: 'STRING' }
   },
   required: ['vendor', 'date', 'amount', 'currency']
 };
@@ -3053,6 +3059,8 @@ description — a short plain label for what was bought, 60 characters or less.
 reference — the invoice, order, or receipt number if one is printed, otherwise "".
 category — the single best fit from the allowed list.
 confidence — 0 to 1, covering how certain you are of the amount and date together.
+shipRecipient — ONLY on a shipping/postage receipt or label: the full name of the person the parcel is addressed TO. Never the sender, and never the publisher's own name or business name. Return "" on any other kind of receipt.
+shipTracking — ONLY on a shipping/postage receipt or label: the tracking, article, or barcode number for the parcel, exactly as printed. Prefer a number labelled "Tracking Number", "Numéro de repérage", or "Article". Not the order number, not the authorization code, not the postage-paid or account number. Return "" if none is printed or on any other kind of receipt.
 
 If the image is blurry, cropped, or partly unreadable, still return your best reading and set confidence below 0.4.`;
 }
@@ -3111,6 +3119,73 @@ async function _extractReceiptFromFile(apiKey, file, opts = {}) {
   });
 
   return _parseReceiptJson(out?.text || '') || {};
+}
+
+/**
+ * Re-open a receipt that is already filed, as a File the scanner can read.
+ *
+ * The scan path elsewhere always has a live <input type=file> to read from.
+ * Re-reading a receipt logged weeks ago has no such input, so this walks the
+ * same folder → cached-copy → URL ladder viewLocalReceipt() uses. Returns null
+ * when the file cannot be found anywhere, so callers can say so plainly.
+ */
+async function loadReceiptFileForScan(receiptRef) {
+  const ref = String(receiptRef || '').trim();
+  if (!ref) return null;
+
+  if (!ref.startsWith('local://')) {
+    const res = await fetch(ref);
+    if (!res.ok) throw new Error(`could not be downloaded (HTTP ${res.status})`);
+    const blob = await res.blob();
+    return new File([blob], ref.split('/').pop() || 'receipt', { type: blob.type || 'application/octet-stream' });
+  }
+
+  const path = ref.replace('local://', '');
+  const dirHandle = await loadReceiptFolderHandle().catch(() => null);
+  if (dirHandle) {
+    try {
+      const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
+      if (permission === 'granted' || await dirHandle.requestPermission({ mode: 'readwrite' }) === 'granted') {
+        const file = await resolveLocalReceiptFile(dirHandle, path);
+        cacheReceiptFile(path, file);
+        _noteReceiptFolderHealth(true);
+        return file;
+      }
+    } catch (e) {
+      console.warn('Receipt not reachable in folder, trying cached copy', e);
+    }
+  }
+
+  const cached = await readCachedReceipt(path);
+  if (cached?.blob) {
+    _noteReceiptFolderHealth(false);
+    return new File([cached.blob], path.split('/').pop() || 'receipt', {
+      type: cached.blob.type || 'application/octet-stream',
+    });
+  }
+  return null;
+}
+
+/**
+ * Read the two things only a postage receipt carries: who it was posted to,
+ * and the tracking number.
+ *
+ * Shares the receipt reader the expense form already uses, so there is one
+ * prompt and one schema rather than a second one to drift out of step. The
+ * caller decides what to do with the answer — nothing here writes to the
+ * ledger, because a misread name must never link money on its own.
+ */
+async function readShippingFieldsFromReceipt(receiptRef, { signal } = {}) {
+  const apiKey = TAX_CENTER.settings?.geminiKey || '';
+  if (!apiKey) throw new Error('add your Gemini key in the Tax Centre config first');
+  const file = await loadReceiptFileForScan(receiptRef);
+  if (!file) throw new Error('the receipt file could not be opened from your folder');
+  const parsed = await _extractReceiptFromFile(apiKey, file, { signal });
+  return {
+    recipient: String(parsed?.shipRecipient || '').trim(),
+    tracking: String(parsed?.shipTracking || '').trim(),
+    reference: String(parsed?.reference || '').trim(),
+  };
 }
 
 // In-flight scan, so a second click cancels instead of hitting a dead button.
@@ -5349,7 +5424,9 @@ function calcExpenseFx() {
 
 export {
   calcExpenseFx,
+  loadReceiptFileForScan,
   onExpenseCurrencyChange,
+  readShippingFieldsFromReceipt,
   EXPENSE_CATEGORIES,
   RECEIPT_SCAN_SCHEMA,
   _applyScanCategory,
