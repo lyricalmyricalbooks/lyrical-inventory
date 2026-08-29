@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
-<title>Lyricalmyrical Books · Inventory App</title>
+<title>Lyricalmyrical Inventory</title>
 
 <!-- Firebase -->
 
@@ -21,7 +21,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Lyrical-Inv">
+<meta name="apple-mobile-web-app-title" content="Lyricalmyrical Inventory">
 <meta name="theme-color" content="#0e0c0a">
 
 <!-- THEME BOOTSTRAP — must run before first paint, and before the module
@@ -162,6 +162,7 @@
   .inv-item-row td{padding:6px 4px;}
   .inv-item-row input{width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);}
   .inv-item-row input[type=number]{font-family:'DM Mono',monospace;text-align:right;}
+  .inv-item-row .inv-item-book{width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);height:auto;margin:0;}
   .inv-item-row .inv-item-amt{display:block;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--text);padding:7px 6px;}
   .inv-item-row .inv-item-remove{background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;}
   .inv-item-row .inv-item-remove:hover{color:#a13a1b;}
@@ -556,27 +557,48 @@
 </div>
 
 <!-- QR CODES (publisher only, all books) -->
-<div class="tab-panel" id="tab-qrcodes" style="display:none;">
-  <div class="sect">Payment QR Codes — all books</div>
-  <p style="font-size:12px;color:var(--text3);margin-bottom:1.5rem;line-height:1.6;">Each QR code links directly to the book's Stripe payment page. Download or print and hand to an artist for in-person sales. Set or update the Stripe link via <strong>Book Catalog → Edit</strong>.</p>
-  <div id="qr-all-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1.5rem;"></div>
+<div class="tab-panel qr-page" id="tab-qrcodes" style="display:none;">
+  <div class="sec-head is-muted">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Payments</div>
+      <div class="section-hed sec-head-title">Payment QR codes — all books</div>
+      <p class="section-subcopy">Each code opens the book's Stripe page. Download or print one and hand it to an artist for in-person sales. Change the link in <strong>Book Catalog → Edit</strong>.</p>
+    </div>
+  </div>
+  <div id="qr-all-grid" class="qr-grid"></div>
 </div>
 
 <!-- COMBINED OVERVIEW (shown when book = 'all') -->
 <div class="tab-panel active" id="tab-all-overview">
   <div id="all-pending-approvals-alert" style="display:none; margin-bottom: 1.5rem;"></div>
 
-  <div class="sect">All books — inventory overview</div>
-  <div id="all-books-list"><!-- rendered by JS --></div>
+  <div class="overview-section">
+    <div class="sec-head">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Catalogue</div>
+        <div class="section-hed sec-head-title">All books — inventory overview</div>
+        <p class="section-subcopy">Every title you publish, with its print run, stock on hand and where those copies currently sit.</p>
+      </div>
+    </div>
+    <div id="all-books-list"><!-- rendered by JS --></div>
+  </div>
 
-  <div class="sect">Combined sales by channel</div>
-  <div id="all-ch-analytics" class="ch-analytics"></div>
+  <div class="overview-section">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Sales Performance</div>
+        <div class="section-hed sec-head-title">Combined sales by channel</div>
+        <p class="section-subcopy">Where the whole catalogue actually sells — in person, online and through consignment partners.</p>
+      </div>
+    </div>
+    <div id="all-ch-analytics" class="ch-analytics"></div>
+  </div>
 
   <div class="consignment-summary-panel sys-container" id="all-consignment-summary-panel">
     <div class="consignment-summary-head">
       <div class="consignment-summary-titles">
         <div class="consignment-kicker"><span class="con-kicker-dot"></span>Retail &amp; Consignment Network</div>
-        <div class="sect consignment-summary-title">Combined consignment summary</div>
+        <div class="section-hed consignment-summary-title">Combined consignment summary</div>
         <p class="section-subcopy">Track every consignment account across the full catalogue, with active stock and settled partners surfaced at a glance.</p>
       </div>
       <div class="consignment-summary-badges">
@@ -714,9 +736,9 @@
   </div>
 
   <div class="kpi-grid kpi-grid-primary">
-    <div class="kpi"><div class="kpi-label">Stock on hand</div><div class="kpi-value gold" id="d-stock">—</div><div class="kpi-sub" id="d-stock-sub">of — printed</div></div>
-    <div class="kpi"><div class="kpi-label">Revenue</div><div class="kpi-value gold" id="d-revenue">—</div><div class="kpi-sub" id="d-revenue-sub">total collected</div></div>
-    <div class="kpi" id="d-net-publisher-kpi" style="display:none;"><div class="kpi-label">Publisher keeps</div><div class="kpi-value gold" id="d-net-publisher">—</div><div class="kpi-sub">after artist payout</div></div>
+    <div class="kpi is-lead"><div class="kpi-label">Stock on hand</div><div class="kpi-value gold" id="d-stock">—</div><div class="kpi-sub" id="d-stock-sub">of — printed</div></div>
+    <div class="kpi"><div class="kpi-label">Revenue</div><div class="kpi-value" id="d-revenue">—</div><div class="kpi-sub" id="d-revenue-sub">total collected</div></div>
+    <div class="kpi" id="d-net-publisher-kpi" style="display:none;"><div class="kpi-label">Publisher keeps</div><div class="kpi-value" id="d-net-publisher">—</div><div class="kpi-sub">after artist payout</div></div>
     <div class="kpi"><div class="kpi-label">Units sold</div><div class="kpi-value" id="d-sold">—</div><div class="kpi-sub" id="d-avg-sub">avg —</div></div>
     <div class="kpi"><div class="kpi-label">On consignment</div><div class="kpi-value" id="d-consigned">—</div><div class="kpi-sub">across <span id="d-stores">0</span> stores</div></div>
   </div>
@@ -752,30 +774,41 @@
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Store</th><th class="r">Sent</th><th class="r">Sold</th><th class="r">Returned</th><th class="r">Outstanding</th><th>Status</th></tr></thead><tbody id="dash-con-body"></tbody></table></div>
   <div class="sect">Inventory</div>
   <div class="stock-block">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;">
-      <div><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
+    <div class="stock-head">
+      <div class="stock-head-titles"><div class="stock-title" id="d-book-title">—</div><div class="stock-author" id="d-book-author">—</div></div>
       <span class="pill gold" id="d-book-isbn">—</span>
     </div>
-    <div class="bar-track"><div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);"></div></div>
-    <div class="bar-meta"><span id="d-bar-label">— / — on hand</span><span id="d-thresh-label">Alert at — units</span></div>
+    <div class="stock-stage">
+      <div class="bar-meta"><span class="bar-meta-lead" id="d-bar-label">— / — on hand</span><span class="bar-meta-note" id="d-thresh-label">Alert at — units</span></div>
+      <div class="bar-track" id="d-bar-track" style="display:flex;overflow:hidden;border-radius:9999px;">
+        <div class="bar-fill" id="d-bar" style="width:100%;background:var(--gold2);transition:width var(--dur-base) var(--ease-entrance);"></div>
+        <div class="bar-fill bar-fill-author" id="d-bar-author" style="width:0%;display:none;background:var(--violet, #8b5cf6);transition:width var(--dur-base) var(--ease-entrance);"></div>
+      </div>
+      <div id="d-stock-breakdown-pills" class="stock-breakdown-pills" style="display:none;"></div>
+    </div>
     <div class="stock-alert ok" id="d-alert">Loading…</div>
-    <div id="d-recalc-onhand-wrap" style="margin-top:0.75rem;text-align:right;">
-      <button class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
+    <div class="stock-actions" id="d-recalc-onhand-wrap">
+      <button type="button" class="btn sm ink" id="d-transfer-stock-btn" onclick="openStockTransferModal()" title="Transfer stock between publisher and author" style="display:none;">⇄ Transfer stock</button>
+      <div style="margin-left:auto;">
+        <button type="button" class="btn sm" onclick="recalcOnHand()" title="Rebuild on-hand from your sales and consignment records — fixes drift after a missed deduction or offline merge">↻ Recalculate on-hand</button>
+      </div>
     </div>
   </div>
   <div id="d-breakeven-block" style="display:none;">
     <div class="sect">Break-even tracker</div>
     <div class="stock-block">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;">
-        <div>
+      <div class="stock-head">
+        <div class="stock-head-titles">
           <div class="stock-title" id="d-be-title">—</div>
           <div class="stock-author" id="d-be-sub">—</div>
         </div>
         <span class="pill" id="d-be-pill" style="background:rgba(200,145,58,.15);color:var(--gold2);">—</span>
       </div>
-      <div class="bar-track" id="d-be-bar-track"><div class="bar-fill" id="d-be-bar" style="width:0%;background:var(--gold2);"></div></div>
-      <div class="bar-meta"><span id="d-be-bar-label">—</span><span id="d-be-bar-right">—</span></div>
-      <div class="stock-alert" id="d-be-alert" style="margin-top:1.1rem;">—</div>
+      <div class="stock-stage">
+        <div class="bar-meta"><span class="bar-meta-lead" id="d-be-bar-label">—</span><span class="bar-meta-note" id="d-be-bar-right">—</span></div>
+        <div class="bar-track" id="d-be-bar-track"><div class="bar-fill" id="d-be-bar" style="width:0%;background:var(--gold2);"></div></div>
+      </div>
+      <div class="stock-alert" id="d-be-alert">—</div>
     </div>
   </div>
   <!-- REIMBURSEMENT REQUESTS (publisher only) -->
@@ -1005,8 +1038,8 @@
     </div>
 
     <div id="cust-stripe-status" style="font-size:11px;color:var(--text3);margin-bottom:10px;min-height:14px;line-height:1.5;"></div>
-    <div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th>Name</th><th>Email</th><th class="r">Orders</th><th class="r">Units</th><th>Books</th><th>Spend</th><th>Last order</th><th>Source</th><th>Action</th></tr></thead>
+    <div class="tbl-wrap sys-sticky-head"><table class="tbl">
+      <thead><tr><th>Name</th><th>Email</th><th class="r">Orders</th><th class="r">Units</th><th>Books</th><th class="r">Spend</th><th>Last order</th><th>Source</th><th>Action</th></tr></thead>
       <tbody id="cust-body"></tbody>
     </table></div>
   </div>
@@ -1047,7 +1080,7 @@
         </label>
       </div>
 
-      <div class="tbl-wrap" style="margin-top:14px;"><table class="tbl">
+      <div class="tbl-wrap sys-sticky-head" style="margin-top:14px;"><table class="tbl">
         <thead><tr><th>Name</th><th>Email</th><th>Added</th><th>Source</th><th>Action</th></tr></thead>
         <tbody id="ml-body"></tbody>
       </table></div>
@@ -1281,43 +1314,65 @@
     <div class="book-context-dot"></div>
     <div><div class="book-context-title" id="bc-title-con">—</div><div class="book-context-meta">Consignment accounts & ledger</div></div>
   </div>
-  <div class="row-between">
-    <div class="section-hed">Consignment accounts</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn" onclick="openBulkSend()" title="Send books to several stores at once">📦 Bulk send</button>
-      <button class="btn gold" onclick="openM('add-store')">+ Add store</button>
+  <!-- Three sections, one head system. This screen used to run two serif
+       `.section-hed` heads and then drop the ledger — the longest and most
+       consequential thing on it — onto the 9px `.sect` micro-label tier, with
+       hairline `.divider`s standing in for a spacing rhythm. `.sec-head` +
+       `.overview-section` is the furniture the landing screen already proved;
+       gold is spent once, on the accounts the screen exists to manage. -->
+  <div class="overview-section">
+    <div class="sec-head">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Retail Partners</div>
+        <div class="section-hed sec-head-title">Consignment accounts</div>
+        <p class="section-subcopy">Every store holding copies of this title — what they still have on their shelves and what they owe you for.</p>
+      </div>
+      <div class="sec-head-badges">
+        <button class="btn" onclick="openBulkSend()" title="Send books to several stores at once">📦 Bulk send</button>
+        <button class="btn gold" onclick="openM('add-store')">+ Add store</button>
+      </div>
     </div>
+    <div id="stores-list"><div class="empty-state"><div class="e-icon">🏪</div>No stores yet.<div style="margin-top:12px;"><button class="btn gold" onclick="openM('add-store')">+ Add store</button></div></div></div>
   </div>
-  <div id="stores-list"><div class="empty-state"><div class="e-icon">🏪</div>No stores yet.<div style="margin-top:12px;"><button class="btn gold" onclick="openM('add-store')">+ Add store</button></div></div></div>
-  <div class="divider"></div>
 
   <!-- INVOICES (publisher only) -->
-  <div id="invoices-section" style="display:none;">
-    <div class="row-between">
-      <div class="section-hed">Invoices</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div id="inv-summary" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;"></div>
+  <div class="overview-section" id="invoices-section" style="display:none;">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Billing</div>
+        <div class="section-hed sec-head-title">Invoices</div>
+        <p class="section-subcopy">Bills raised against these stores, and how much of that is still waiting to be paid.</p>
+      </div>
+      <div class="sec-head-badges">
+        <div id="inv-summary" class="sec-head-note"></div>
         <button class="btn ink" onclick="openInvoiceTemplateSettings()" title="Edit publisher details & default terms">⚙ Settings</button>
         <button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button>
       </div>
     </div>
     <div id="invoices-list"><div class="empty-state"><div class="e-icon">📄</div>No invoices yet. Click <strong>+ New invoice</strong> to bill a consignment store.<div style="margin-top:12px;"><button class="btn gold" onclick="openCreateInvoice()">+ New invoice</button></div></div></div>
-    <div class="divider"></div>
   </div>
 
-  <div class="row-between" style="margin-bottom:1rem;">
-    <div class="sect" style="margin-bottom:0;flex:1;">Consignment ledger</div>
-    <button class="btn" onclick="exportConsignmentLedgerCSV()" title="Download this book's consignment ledger as a CSV">⤓ Export CSV</button>
+  <div class="overview-section">
+    <div class="sec-head is-muted">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Audit Trail</div>
+        <div class="section-hed sec-head-title">Consignment ledger</div>
+        <p class="section-subcopy">Every shipment, return, sale and payment recorded against this title, newest first.</p>
+      </div>
+      <div class="sec-head-badges">
+        <button class="btn" onclick="exportConsignmentLedgerCSV()" title="Download this book's consignment ledger as a CSV">⤓ Export CSV</button>
+      </div>
+    </div>
+    <!-- Both children are filled by renderLedgerFilterBar(). The status line is a
+         permanent node rather than part of that render so its aria-live region
+         survives each rebuild — a live region replaced wholesale announces
+         nothing. -->
+    <div class="ledger-filter-bar" id="con-ledger-filter" role="group" aria-label="Narrow the consignment ledger" hidden>
+      <div class="ledger-filter-row" id="con-ledger-controls"></div>
+      <p class="ledger-filter-status" id="con-ledger-status" aria-live="polite"></p>
+    </div>
+    <div class="tbl-wrap sys-sticky-head"><table class="tbl"><thead><tr><th>Date</th><th>Store</th><th>Type</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Due to you</th><th>Notes</th><th>Status</th></tr></thead><tbody id="ledger-body" class="sys-long-list"></tbody><tfoot id="ledger-foot"></tfoot></table></div>
   </div>
-  <!-- Both children are filled by renderLedgerFilterBar(). The status line is a
-       permanent node rather than part of that render so its aria-live region
-       survives each rebuild — a live region replaced wholesale announces
-       nothing. -->
-  <div class="ledger-filter-bar" id="con-ledger-filter" role="group" aria-label="Narrow the consignment ledger" hidden>
-    <div class="ledger-filter-row" id="con-ledger-controls"></div>
-    <p class="ledger-filter-status" id="con-ledger-status" aria-live="polite"></p>
-  </div>
-  <div class="tbl-wrap sys-sticky-head"><table class="tbl"><thead><tr><th>Date</th><th>Store</th><th>Type</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Due to you</th><th>Notes</th><th>Status</th></tr></thead><tbody id="ledger-body" class="sys-long-list"></tbody><tfoot id="ledger-foot"></tfoot></table></div>
 </div>
 
 <!-- HISTORY -->
@@ -2327,12 +2382,13 @@
     </table></div>
   </div>
 
-  <div class="tc-trips-header">
-    <div>
-      <div class="section-hed" style="margin-bottom:2px;">Business Trips & Event Portfolio</div>
-      <div style="font-size:11px;color:var(--text3);">Group multi-expense business trips & fairs while maintaining tax-deductible category totals.</div>
+  <div class="tc-trips-header sec-head is-muted">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Trip Tracking</div>
+      <div class="section-hed sec-head-title">Business Trips & Event Portfolio</div>
+      <p class="section-subcopy">Group multi-expense business trips & fairs while maintaining tax-deductible category totals.</p>
     </div>
-    <div class="tc-trips-actions">
+    <div class="sec-head-badges">
       <div class="tc-trips-view-toggle">
         <button class="tc-trips-view-btn active" id="tc-trips-btn-cards" onclick="tcSetTripsView('cards')">🖼 Cards</button>
         <button class="tc-trips-view-btn" id="tc-trips-btn-table" onclick="tcSetTripsView('table')">📋 Table</button>
@@ -2476,118 +2532,250 @@
   <!-- 3. INTEGRATIONS & APIS SECTION -->
   <div id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations" style="display:none;">
     <!-- INTEGRATIONS & API SERVICES -->
-    <div class="card tc-integrations-card" style="margin-bottom:1.5rem;">
-      <div class="rec-head tc-integrations-head">
-          <div>
-            <div class="rec-card-title tc-integrations-title">
-              <span class="tc-integrations-icon">🔌</span>
-              <span>Integrations &amp; API Services</span>
-            </div>
-            <div class="rec-card-sub tc-integrations-sub">
-              Connect external services to automate expense scanning, shipping logs, and processing fee reconciliation.
-            </div>
+    <div class="card tc-integrations-card">
+      <div class="tc-integrations-head">
+        <div class="tc-integrations-icon-badge" aria-hidden="true">⚡</div>
+        <div class="tc-integrations-headings">
+          <div class="tc-integrations-title">
+            <span>Integrations &amp; API Services</span>
+          </div>
+          <div class="tc-integrations-sub">
+            Connect external cloud services to automate receipt AI extraction, carrier postage syncing, international duties calculation, and Stripe processing fees.
           </div>
         </div>
-        
-        <div style="display:flex;flex-direction:column;gap:1.25rem;">
-          
-          <!-- Gemini API Section -->
-          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
-            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-gemini" onclick="toggleIntegrationSection('gemini')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('gemini');}">
-              <div>
-                <strong style="font-size:13px;color:var(--text1);">♊ Gemini AI Assistant</strong>
-                <div style="font-size:11px;color:var(--text3);">Used to analyze and automatically categorize receipt photos during upload.</div>
-              </div>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-gemini">▾</span>
-            </div>
-            <div class="oc-collapse-body" id="tc-integration-body-gemini" style="display:flex;flex-direction:column;gap:0.75rem;">
-              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-                <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Gemini API Key</label>
-                  <input type="password" id="tc-api-key" placeholder="AI Studio key (AI_KEY)..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <div class="form-group" style="flex:1;min-width:120px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Base Currency</label>
-                  <select id="tc-base-cur" onchange="saveTaxCenterSettings()" disabled style="width:100%;font-size:12px;height:35px;background:rgba(255,255,255,0.03);">
-                    <option value="CAD">CAD (Default)</option>
-                  </select>
-                </div>
-                <button id="tc-save-config-btn" class="btn gold" style="height:35px;padding:0 16px;font-size:12px;" onclick="saveTaxCenterSettings()">Save Config</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Shippo API Section -->
-          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;padding-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,0.06);">
-            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-shippo" onclick="toggleIntegrationSection('shippo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('shippo');}">
-              <div>
-                <strong style="font-size:13px;color:var(--text1);">📦 Shippo Live Import</strong>
-                <div style="font-size:11px;color:var(--text3);">Syncs non-refunded transaction rates straight into your Shipping &amp; Postage ledger.</div>
-              </div>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-shippo">▾</span>
-            </div>
-            <div class="oc-collapse-body" id="tc-integration-body-shippo" style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
-              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-                <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Shippo Live API Key</label>
-                  <input type="password" id="tc-shippo-key" placeholder="shippo_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <button class="btn gold outline" id="tc-shippo-btn" style="height:35px;padding:0 16px;white-space:nowrap;font-size:12px;" onclick="importShippoShippingFromApi()">Import Shippo Shipping</button>
-              </div>
-              <div id="tc-shippo-status" style="font-size:11px;color:var(--text3);">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
-              <section class="shipping-reconciliation" aria-labelledby="shipping-reconciliation-title">
-                <div class="shipping-reconciliation-head">
-                  <div>
-                    <strong id="shipping-reconciliation-title">Shipping reconciliation</strong>
-                    <p>Link paid postage to its website order. Suggested matches always need your confirmation.</p>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-                    <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
-                    <button class="btn sm" id="shipping-reconciliation-clear" type="button" onclick="clearShippingReconciliationList()">Clear list</button>
-                    <button class="btn sm" id="shipping-reconciliation-close" type="button" onclick="closeShippingReconciliation()" aria-label="Close shipping reconciliation">Close</button>
-                  </div>
-                </div>
-                <div id="shipping-reconciliation-list" aria-live="polite"></div>
-              </section>
-              <button class="btn sm" id="shipping-reconciliation-open" type="button" onclick="openShippingReconciliation()" style="display:none;justify-self:start;">Open reconciliation</button>
-            </div>
-          </div>
-
-          <!-- Stripe API Section -->
-          <div style="display:grid;grid-template-columns:1fr;gap:0.75rem;">
-            <div class="oc-collapse-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
-              <div>
-                <strong style="font-size:13px;color:var(--text1);">💳 Stripe Processing Fees</strong>
-                <div style="font-size:11px;color:var(--text3);">
-                  Fetch annual balance transactions processing fees.
-                   <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--gold-text);">Create restricted key in Stripe →</a>
-                </div>
-              </div>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-stripe">▾</span>
-            </div>
-            <div class="oc-collapse-body" id="tc-integration-body-stripe" style="display:flex;flex-direction:column;gap:0.75rem;">
-              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-                <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
-                  <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:4px;">Restricted Stripe API Key</label>
-                  <input type="password" id="stripe-fees-key" placeholder="rk_live_... or sk_live_..." style="width:100%;font-size:12px;padding:8px 12px;" autocomplete="off">
-                </div>
-                <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn" style="height:35px;padding:0 16px;font-size:12px;">Fetch Stripe Fees</button>
-              </div>
-              <div id="stripe-fees-status" style="font-size:11px;color:var(--text3);min-height:16px;"></div>
-              <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
-              <div id="stripe-fees-results-wrap" style="display:none;"></div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
-                <select id="stripe-fees-year" style="display:none;height:34px;font-size:12px;background:rgba(255,255,255,0.03);"><option value="all">All years</option></select>
-                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;font-size:11px;height:34px;padding:0 12px;">➕ Insert fees into ledger</button>
-                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⚖ Reconcile against sales</button>
-                <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;font-size:11px;height:34px;padding:0 12px;">⬇ Download audit CSV</button>
-                <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;font-size:11px;height:34px;padding:0 12px;">Forget key</button>
-              </div>
-            </div>
-          </div>
-
-        </div>
+        <div class="tc-integrations-summary" id="tc-integrations-summary" aria-live="polite"></div>
       </div>
+
+      <div class="tc-integrations-list">
+
+        <!-- Gemini API Section -->
+        <div class="tc-integration-section" id="tc-integration-card-gemini">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-gemini" onclick="toggleIntegrationSection('gemini')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('gemini');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-gemini" aria-hidden="true">♊</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Gemini AI Assistant</strong>
+                <div class="tc-service-desc">Used to analyze and automatically categorize receipt photos during upload.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-gemini">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-gemini" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-gemini">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-api-key">Gemini API Key</label>
+                <input type="password" id="tc-api-key" class="tc-form-input" placeholder="AI Studio key (AI_KEY)…" autocomplete="off">
+                <div class="tc-form-hint">Paste the key from Google AI Studio. It is stored on your own account, never shared.</div>
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-base-cur">Base Currency</label>
+                <select id="tc-base-cur" class="tc-form-select" onchange="saveTaxCenterSettings()" disabled>
+                  <option value="CAD">CAD (Default)</option>
+                </select>
+                <div class="tc-form-hint">Every imported receipt is converted into this currency.</div>
+              </div>
+            </div>
+            <div class="tc-form-actions-row">
+              <button id="tc-save-config-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shippo API Section -->
+        <div class="tc-integration-section" id="tc-integration-card-shippo">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-shippo" onclick="toggleIntegrationSection('shippo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('shippo');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-shippo" aria-hidden="true">📦</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Shippo Live Import</strong>
+                <div class="tc-service-desc">Syncs non-refunded transaction rates straight into your Shipping &amp; Postage ledger.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-shippo">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-shippo" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-shippo">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-shippo-key">Shippo Live API Key</label>
+                <input type="password" id="tc-shippo-key" class="tc-form-input" placeholder="shippo_live_…" autocomplete="off">
+                <div class="tc-form-hint">Found in Shippo under Settings → API. Only live keys import real postage.</div>
+              </div>
+            </div>
+            <div class="tc-form-actions-row">
+              <button class="btn gold outline" id="tc-shippo-btn" onclick="importShippoShippingFromApi()">Import Shippo Shipping</button>
+            </div>
+            <div id="tc-shippo-status" class="tc-status-msg">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
+
+            <section class="shipping-reconciliation" aria-labelledby="shipping-reconciliation-title">
+              <div class="shipping-reconciliation-head">
+                <div class="shipping-reconciliation-headings">
+                  <strong id="shipping-reconciliation-title">Shipping reconciliation</strong>
+                  <p>Link paid postage to its website order. Suggested matches always need your confirmation.</p>
+                </div>
+                <div class="shipping-reconciliation-actions">
+                  <span class="pill gray" id="shipping-reconciliation-count">0 to review</span>
+                  <button class="btn sm" id="shipping-reconciliation-clear" type="button" onclick="clearShippingReconciliationList()">Clear list</button>
+                  <button class="btn sm" id="shipping-reconciliation-close" type="button" onclick="closeShippingReconciliation()" aria-label="Close shipping reconciliation">Close</button>
+                </div>
+              </div>
+              <div id="shipping-reconciliation-list" class="shipping-reconciliation-list" aria-live="polite"></div>
+            </section>
+            <div class="tc-form-actions-row">
+              <button class="btn sm" id="shipping-reconciliation-open" type="button" onclick="openShippingReconciliation()" hidden>Open reconciliation</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Zonos API Section -->
+        <div class="tc-integration-section" id="tc-integration-card-zonos">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-zonos" onclick="toggleIntegrationSection('zonos')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('zonos');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-zonos" aria-hidden="true">🌐</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Zonos Cross-Border Duties &amp; Taxes</strong>
+                <div class="tc-service-desc">Calculate real-time customs duties, import VAT/GST, carrier clearance fees, and landed costs for international orders.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-zonos">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-zonos" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-zonos">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-zonos-key">Zonos Live API Key <span class="tc-form-label-note">credentialToken</span></label>
+                <input type="password" id="tc-zonos-key" class="tc-form-input" placeholder="credential_live_…" autocomplete="off">
+                <div class="tc-form-hint">Used for every live duty and landed-cost quote.</div>
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-zonos-account-key">Zonos Account Key <span class="tc-form-label-note">automates U.S. duty</span></label>
+                <input type="text" id="tc-zonos-account-key" class="tc-form-input" placeholder="Zonos Dashboard → Settings → Integrations" autocomplete="off">
+                <div class="tc-form-hint">Saving a Verified Account key lets Canada Post add the U.S. Declaration ID to every label automatically and bill the duty to Zonos — no per-parcel prepayment.</div>
+              </div>
+            </div>
+            <div class="tc-form-actions-row">
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="tc-zonos-enabled" checked>
+                <span>Enable Duties API</span>
+              </label>
+              <div class="tc-form-actions-buttons">
+                <button id="tc-zonos-test-btn" class="btn gold outline" onclick="testZonosConnectionHandler()">Test Connection</button>
+                <button id="tc-save-zonos-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
+              </div>
+            </div>
+            <div id="tc-zonos-status" class="tc-status-msg"></div>
+          </div>
+        </div>
+
+        <!-- Canada Post Direct API Section -->
+        <div class="tc-integration-section" id="tc-integration-card-canadapost">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-canadapost" onclick="toggleIntegrationSection('canadapost')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('canadapost');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-canadapost" aria-hidden="true">🇨🇦</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Canada Post Direct API</strong>
+                <div class="tc-service-desc">Official Canada Post Web Services for direct live rate quotes, Small Business / Contract pricing, and tracking.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-canadapost">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-canadapost" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-canadapost">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cp-key">API Key / Username / Client ID</label>
+                <input type="text" id="tc-cp-key" class="tc-form-input" placeholder="Your Canada Post API key" autocomplete="off">
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cp-secret">API Secret / Password</label>
+                <input type="password" id="tc-cp-secret" class="tc-form-input" placeholder="Your Canada Post API secret" autocomplete="off">
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cp-customer-number">Customer # <span class="tc-form-label-note">optional</span></label>
+                <input type="text" id="tc-cp-customer-number" class="tc-form-input" placeholder="7–10 digits" autocomplete="off">
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cp-contract-id">Contract ID <span class="tc-form-label-note">optional</span></label>
+                <input type="text" id="tc-cp-contract-id" class="tc-form-input" placeholder="e.g. 4299100" autocomplete="off">
+              </div>
+            </div>
+            <div class="tc-toggle-row">
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="tc-cp-enabled" checked>
+                <span>Enable Direct Canada Post API</span>
+              </label>
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="tc-cp-test-mode">
+                <span>Sandbox Environment (ct.soa-gw)</span>
+              </label>
+              <label class="tc-toggle-wrap" title="Automatically generate 13-character Zonos Declaration IDs for US-bound packages">
+                <input type="checkbox" id="tc-cp-zonos-auto" checked>
+                <span>Auto-Prepay US Duties (Zonos)</span>
+              </label>
+            </div>
+            <div class="tc-form-actions-row">
+              <div class="tc-form-actions-buttons">
+                <button id="tc-cp-test-btn" class="btn gold outline" onclick="testCanadaPostConnectionHandler()">Test Connection</button>
+                <button id="tc-cp-diagnose-btn" class="btn outline" onclick="diagnoseCanadaPostHandler()" title="Try this key against both Canada Post gateways, with and without the customer number, and report which combination works">Diagnose</button>
+                <button id="tc-save-cp-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
+              </div>
+            </div>
+            <div id="tc-cp-status" class="tc-status-msg"></div>
+          </div>
+        </div>
+
+        <!-- Stripe API Section -->
+        <div class="tc-integration-section" id="tc-integration-card-stripe">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-stripe" aria-hidden="true">💳</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Stripe Processing Fees</strong>
+                <div class="tc-service-desc">Fetch annual balance transaction processing fees straight into your ledger.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-stripe">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-stripe" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-stripe">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="stripe-fees-key">Restricted Stripe API Key</label>
+                <input type="password" id="stripe-fees-key" class="tc-form-input" placeholder="rk_live_… or sk_live_…" autocomplete="off">
+                <div class="tc-form-hint">A read-only restricted key is enough. <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener">Create one in Stripe →</a></div>
+              </div>
+            </div>
+            <div class="tc-form-actions-row">
+              <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn">Fetch Stripe Fees</button>
+            </div>
+            <div id="stripe-fees-status" class="tc-status-msg"></div>
+            <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
+            <div id="stripe-fees-results-wrap" style="display:none;"></div>
+            <div class="tc-form-actions-row">
+              <select id="stripe-fees-year" class="tc-form-select" style="display:none;width:auto;"><option value="all">All years</option></select>
+              <div class="tc-form-actions-buttons">
+                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;">➕ Insert fees into ledger</button>
+                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;">⚖ Reconcile against sales</button>
+                <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;">⬇ Download audit CSV</button>
+                <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;">Forget key</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
   </div> <!-- /#tc-sec-integrations -->
 </div>
 
@@ -2769,7 +2957,10 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Load Package From</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="margin-bottom:0;">Load Package From</label>
+              <button type="button" class="btn sm tag" id="ship-save-preset-quick-btn" onclick="openSaveBookPresetModal()" style="font-size:10px; padding:2px 8px; height:24px; min-height:24px;" title="Save current specifications to a book preset">💾 Save to Preset</button>
+            </div>
             <select id="ship-preset-book" onchange="onShippoBookPresetChange()">
               <option value="">— Select book preset —</option>
             </select>
@@ -2800,42 +2991,11 @@
             <div class="form-group" style="margin-bottom:8px;">
               <label>Country</label>
               <select id="sf-country" onchange="renderShippoIncotermHint()">
+                <!-- Filled with the full ISO country list by populateCountrySelect()
+                     in src/features/shipping.js. These two are the static fallback
+                     and the pinned defaults; do not hand-add countries here. -->
                 <option value="CA">Canada</option>
                 <option value="US">United States</option>
-                <option disabled>──────────</option>
-                <option value="AU">Australia</option>
-                <option value="AT">Austria</option>
-                <option value="BE">Belgium</option>
-                <option value="BR">Brazil</option>
-                <option value="CN">China</option>
-                <option value="CZ">Czech Republic</option>
-                <option value="DK">Denmark</option>
-                <option value="FI">Finland</option>
-                <option value="FR">France</option>
-                <option value="DE">Germany</option>
-                <option value="GR">Greece</option>
-                <option value="HU">Hungary</option>
-                <option value="IS">Iceland</option>
-                <option value="IN">India</option>
-                <option value="IE">Ireland</option>
-                <option value="IL">Israel</option>
-                <option value="IT">Italy</option>
-                <option value="JP">Japan</option>
-                <option value="MX">Mexico</option>
-                <option value="NL">Netherlands</option>
-                <option value="NZ">New Zealand</option>
-                <option value="NO">Norway</option>
-                <option value="PL">Poland</option>
-                <option value="PT">Portugal</option>
-                <option value="SG">Singapore</option>
-                <option value="ZA">South Africa</option>
-                <option value="KR">South Korea</option>
-                <option value="ES">Spain</option>
-                <option value="SE">Sweden</option>
-                <option value="CH">Switzerland</option>
-                <option value="TR">Turkey</option>
-                <option value="UA">Ukraine</option>
-                <option value="GB">United Kingdom</option>
               </select>
             </div>
           </div>
@@ -2861,42 +3021,11 @@
             <div class="form-group" style="margin-bottom:8px;">
               <label>Country</label>
               <select id="st-country" onchange="onShippoDestCountryChange()">
+                <!-- Filled with the full ISO country list by populateCountrySelect()
+                     in src/features/shipping.js. These two are the static fallback
+                     and the pinned defaults; do not hand-add countries here. -->
                 <option value="US">United States</option>
                 <option value="CA">Canada</option>
-                <option disabled>──────────</option>
-                <option value="AU">Australia</option>
-                <option value="AT">Austria</option>
-                <option value="BE">Belgium</option>
-                <option value="BR">Brazil</option>
-                <option value="CN">China</option>
-                <option value="CZ">Czech Republic</option>
-                <option value="DK">Denmark</option>
-                <option value="FI">Finland</option>
-                <option value="FR">France</option>
-                <option value="DE">Germany</option>
-                <option value="GR">Greece</option>
-                <option value="HU">Hungary</option>
-                <option value="IS">Iceland</option>
-                <option value="IN">India</option>
-                <option value="IE">Ireland</option>
-                <option value="IL">Israel</option>
-                <option value="IT">Italy</option>
-                <option value="JP">Japan</option>
-                <option value="MX">Mexico</option>
-                <option value="NL">Netherlands</option>
-                <option value="NZ">New Zealand</option>
-                <option value="NO">Norway</option>
-                <option value="PL">Poland</option>
-                <option value="PT">Portugal</option>
-                <option value="SG">Singapore</option>
-                <option value="ZA">South Africa</option>
-                <option value="KR">South Korea</option>
-                <option value="ES">Spain</option>
-                <option value="SE">Sweden</option>
-                <option value="CH">Switzerland</option>
-                <option value="TR">Turkey</option>
-                <option value="UA">Ukraine</option>
-                <option value="GB">United Kingdom</option>
               </select>
             </div>
           </div>
@@ -2908,8 +3037,11 @@
 
       <!-- Parcel Specs Card -->
       <div class="card" style="margin-top:1.25rem;">
-        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
-          <span>Parcel Specifications</span>
+        <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span>Parcel Specifications</span>
+            <button type="button" class="btn sm outline" onclick="openSaveBookPresetModal()" style="font-size:11px; padding:3px 10px; height:28px; min-height:28px; display:inline-flex; align-items:center; gap:4px;" title="Save these dimensions, weight, and customs info into a book preset">💾 Save to Book Preset</button>
+          </div>
           <span style="font-size:10px; font-weight:400; text-transform:none; color:var(--text3);">Auto-scales height &amp; weight with quantity</span>
         </div>
         <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
@@ -2973,6 +3105,53 @@
           International Shippo rates include this customs declaration automatically. The declared value is <strong>per copy</strong> and is multiplied by the quantity above. If Canada Post still does not appear, connect or enable your Canada Post carrier account in Shippo.
         </div>
 
+        <!-- 🇺🇸 US Duty Prepayment (Zonos & Canada Post Mandate) -->
+        <div id="us-zonos-duty-card" class="us-zonos-duty-card" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:18px;">🇺🇸</span>
+              <div>
+                <strong style="font-size:13px;color:var(--text);">US Duty Prepayment (Zonos Mandate)</strong>
+                <div style="font-size:10px;color:var(--text3);">Required by Canada Post for all U.S.-bound parcels</div>
+              </div>
+            </div>
+            <span id="us-zonos-status-pill" class="pill amber" style="font-size:10px;">Declaration Required</span>
+          </div>
+
+          <div style="font-size:11px;color:var(--text2);line-height:1.5;margin-top:8px;">
+            Canada Post needs a <strong>13-character Declaration ID</strong> proving U.S. duty is prepaid before it will accept the parcel. Printed books (<span class="tnum">HS 4901</span>) carry no duty, but the declaration is still required.
+          </div>
+          <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:6px;">
+            The ID is proof that duty was <em>paid</em>, so it cannot be generated on demand. Either connect a <strong>Zonos Verified Account</strong> once and Canada Post issues it automatically with every label, or buy each declaration in the <strong>Zonos Prepay</strong> app and paste it in.
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
+                <span>Zonos Declaration ID (13 characters)</span>
+                <span id="zonos-decl-validation-hint" style="font-size:10px;color:var(--text3);">From Zonos Prepay — or left empty with a Verified Account</span>
+              </label>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input type="text" id="sp-zonos-declaration-id" maxlength="13" placeholder="e.g. 0rd4dpkrvc1y9" style="font-family:'DM Mono',monospace;font-size:13px;letter-spacing:1px;text-transform:lowercase;" oninput="onZonosDeclarationIdInput(this.value)">
+                <button class="btn sm tag" type="button" onclick="pasteZonosDeclarationId()" style="height:36px;padding:0 10px;font-size:11px;white-space:nowrap;" title="Paste Declaration ID from clipboard">📋 Paste</button>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
+              <button class="btn sm gold" id="sp-auto-gen-zonos-btn" type="button" onclick="autoGenerateZonosDeclarationHandler()" style="flex:1;min-width:170px;height:34px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Show how this parcel's U.S. duty will be prepaid">
+                <span>⚡</span>
+                <span>Check Duty Prepayment</span>
+              </button>
+              <button class="btn sm outline" id="sp-open-zonos-prepay-btn" type="button" onclick="openZonosPrepayAppHandler()" style="flex:1;min-width:170px;height:34px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Open the Zonos Prepay app to buy a declaration — parcel details are copied ready to paste">
+                <span>📱</span>
+                <span>Buy in Zonos Prepay App</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="zonos-auto-result-hint" style="display:none;font-size:11px;margin-top:8px;padding:8px 10px;border-radius:var(--r);background:rgba(46,125,50,0.08);border:1px solid var(--green);color:var(--text);"></div>
+        </div>
+
         <div class="shipping-predictor-settings">
           <div class="form-group">
             <label>Packaging / handling buffer (CAD)</label>
@@ -3001,15 +3180,33 @@
         <!-- Live "what's still missing" line, filled in by renderShippoRateReadiness(). -->
         <div id="ship-rate-readiness" class="ship-readiness" role="status" aria-live="polite"></div>
 
-        <button class="btn gold" style="width:100%; margin-top:0.75rem; height:46px; font-size:14px;" onclick="calculateShippoRates()">
-          ⚡ Calculate Rates & Predict Customer Charge
-        </button>
+        <div class="ship-actions-container" style="margin-top:1rem;display:flex;flex-direction:column;gap:10px;">
+          <button class="btn gold" id="ship-calc-main-btn" style="width:100%;height:46px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(200,145,58,0.25);" onclick="calculateShippoRates()">
+            <span>⚡</span>
+            <span>Calculate Shipping Rates &amp; Prediction</span>
+          </button>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <button class="btn outline" type="button" onclick="calculateCanadaPostRatesHandler()" style="height:42px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(216,42,42,0.06);border-color:rgba(216,42,42,0.3);color:var(--text);" title="Calculate rates and buy official postage labels directly via Canada Post API">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
+                <path d="M12 2L14 8L19 7L16 12L21 15L15 17L16 22L12 18L8 22L9 17L3 15L8 12L5 7L10 8L12 2Z" fill="#D82A2A"/>
+              </svg>
+              <span>Canada Post Direct</span>
+            </button>
+            <button class="btn tag" type="button" onclick="calculateZonosDutiesHandler()" style="height:42px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Calculate destination customs duties and import taxes with Zonos">
+              <span>🌐</span>
+              <span>Landed Cost (Zonos)</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Results Side -->
     <div class="shipping-results-container">
       <div class="card" style="min-height:300px; height:100%; display:flex; flex-direction:column;">
+        <div id="canadapost-rates-card" class="canadapost-rates-card card" style="display:none; margin-bottom:12px; background:var(--surface-card); border:1px solid var(--border); border-radius:var(--r2); padding:12px 14px;"></div>
+        <div id="zonos-duty-card" class="zonos-duty-card" style="display:none; margin-bottom:12px;"></div>
         <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Customer Charge Prediction</div>
         <div id="ship-prediction-card" class="shipping-prediction-card" style="display:none;"></div>
         <div style="font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:12px;">Carrier Rates Comparison</div>
@@ -3454,25 +3651,29 @@
   <div id="settings-sec-catalog" class="settings-section">
     <!-- BOOK CATALOG SETTINGS -->
     <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
-        <div>
-          <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;">Book Catalog</div>
-          <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage the books available in your library. Changes here update the switcher and dashboards.</div>
+      <div class="sec-head cat-settings-head">
+        <div class="sec-head-titles">
+          <div class="sec-kicker"><span class="sec-kicker-dot"></span>Library Settings</div>
+          <div class="section-hed sec-head-title">Book Catalog</div>
+          <p class="section-subcopy">Manage the books available in your library. Changes here update the switcher and dashboards.</p>
         </div>
-        <button class="btn gold" onclick="openAddBookModal()">+ Add new book</button>
+        <div class="sec-head-badges">
+          <button class="btn gold" onclick="openAddBookModal()">+ Add new book</button>
+        </div>
       </div>
       <div id="catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
     </div>
 
     <!-- TEST BOOK CATALOG SETTINGS -->
     <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--gold-line);">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
-        <div>
-          <div style="font-family:'Playfair Display',serif;font-size:17px;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span>Test Book Catalog</span>
-            <span style="font-size:10px;font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:12px;font-weight:600;letter-spacing:0.5px;border:1px solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
-          </div>
-          <div style="font-size:12px;color:var(--text3);line-height:1.6;">Manage test books in an isolated sandbox environment. Test book activity is strictly blocked from syncing to Google Sheets and excluded from financial ledgers.</div>
+      <div class="sec-head cat-settings-head is-muted">
+        <div class="sec-head-titles">
+          <div class="sec-kicker"><span class="sec-kicker-dot"></span>Sandbox</div>
+          <div class="section-hed sec-head-title">Test Book Catalog</div>
+          <p class="section-subcopy">Manage test books in an isolated sandbox environment. Test book activity is strictly blocked from syncing to Google Sheets and excluded from financial ledgers.</p>
+        </div>
+        <div class="sec-head-badges">
+          <span style="font-size:10px;font-family:sans-serif;background:rgba(109,40,217,0.1);color:var(--violet-deep);padding:2px 8px;border-radius:12px;font-weight:600;letter-spacing:0.5px;border:1px solid rgba(109,40,217,0.25);">ISOLATED TEST SANDBOX</span>
         </div>
       </div>
       <div id="test-catalog-list" style="display:flex;flex-direction:column;gap:12px;"></div>
@@ -3557,12 +3758,18 @@
               <div style="font-size:11.5px;color:var(--on-status);background:var(--red);padding:6px 10px;border-radius:4px;margin-bottom:8px;font-weight:600;line-height:1.4;">⚠ Every code change needs a NEW deployment — not "Manage deployments". Copy the new URL each time.</div>
               <div class="gas-code-container">
                 <div class="gas-code-header">
-                  <span class="gas-code-lang">Google Apps Script</span>
-                  <button class="btn sm" style="background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.15);" onclick="copyGasCode()">Copy Code</button>
+                  <div class="gas-code-header-left">
+                    <span class="gas-code-lang">Google Apps Script</span>
+                    <span class="gas-version-tag" id="gas-script-ver-tag">v29</span>
+                  </div>
+                  <button id="copy-gas-code-btn" class="btn sm copy-gas-btn" onclick="copyGasCode()">
+                    <span class="copy-gas-btn-icon" aria-hidden="true">📋</span>
+                    <span class="copy-gas-btn-label">Copy Code</span>
+                  </button>
                 </div>
                 <pre id="gas-code" class="gas-code-pre">Loading the latest backend code…</pre>
               </div>
-              <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This v19 script syncs inventory events, scans Big Cartel order emails, and captures customer-paid shipping as separate Sheets rows for later shipping/postage analysis.</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.6;">This <span id="gas-script-ver">v29</span> script syncs inventory events, scans Big Cartel order emails, and captures customer-paid shipping as separate Sheets rows for later shipping/postage analysis.</div>
               <details style="margin-top:12px;font-size:12px;color:var(--text3);line-height:1.6;border-top:1px dashed var(--border);padding-top:10px;">
                 <summary style="cursor:pointer;font-weight:700;color:var(--text2);">Optional: send "Email artist for payment" from the app, not your Gmail</summary>
                 <div style="margin-top:8px;">
@@ -3571,7 +3778,7 @@
                     <li><code>MAIL_PROVIDER</code> — one of <code>resend</code>, <code>brevo</code>, <code>sendgrid</code>, <code>mailgun</code>, <code>postmark</code></li>
                     <li><code>MAIL_API_KEY</code> — your provider's API key (stays on Google's servers, never in this app)</li>
                     <li><code>MAIL_FROM</code> — the verified sender, e.g. <code>noreply@yourdomain</code></li>
-                    <li><code>MAIL_FROM_NAME</code> — display name (optional, e.g. <code>Lyrical Inventory</code>)</li>
+                    <li><code>MAIL_FROM_NAME</code> — display name (optional, e.g. <code>Lyricalmyrical Inventory</code>)</li>
                     <li><code>MAIL_REPLY_TO</code> — where replies should go (optional; leave blank to keep your address hidden)</li>
                   </ul>
                   <div style="margin-top:6px;">Mailgun also needs <code>MAIL_DOMAIN</code> (and <code>MAIL_REGION=eu</code> for the EU region). Redeploy after saving. If these aren't set, the email still sends from your Gmail as before.</div>
@@ -3642,7 +3849,7 @@
             <div style="font-weight:700;font-size:14px;color:var(--green);margin-bottom:4px;">✓ Google Sheets connected — all books sync here</div>
             <div style="font-size:12px;color:var(--text3);word-break:break-all;" id="sheets-url-display"></div>
             <div id="sheets-version-warning" style="display:none;font-size:12px;color:var(--amber);margin-top:6px;font-weight:600;line-height:1.4;">
-              ⚠ Outdated script version detected (running <span id="sheets-deployed-version"></span>, expected <span id="sheets-expected-version">v19</span>). Please copy the latest code below and deploy a new version.
+              ⚠ Outdated script version detected (running <span id="sheets-deployed-version"></span>, expected <span id="sheets-expected-version">v29</span>). Please copy the latest code below and deploy a new version.
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
@@ -4042,7 +4249,7 @@
   </div>
   <div class="tbl-wrap" style="margin-bottom:8px;">
     <table class="tbl" style="font-size:12px;">
-      <thead><tr><th style="width:42%;">Description</th><th class="r" style="width:10%;">Qty</th><th class="r" style="width:18%;">Unit price</th><th class="r" style="width:18%;">Amount</th><th></th></tr></thead>
+      <thead><tr><th style="width:32%;">Description</th><th style="width:18%;">Title</th><th class="r" style="width:9%;">Qty</th><th class="r" style="width:16%;">Unit price</th><th class="r" style="width:16%;">Amount</th><th></th></tr></thead>
       <tbody id="inv-items-body"></tbody>
     </table>
   </div>
@@ -4121,6 +4328,7 @@
   </div>
 
   <div style="overflow:auto;max-height:calc(94vh - 68px);padding:24px;background:var(--cream2);">
+    <div id="inv-split-panel" class="no-print" style="display:none;"></div>
     <div id="invoice-print-area" class="invoice-paper"></div>
   </div>
 </div></div>
@@ -4203,7 +4411,12 @@
     </div>
     <div class="g2" style="margin-bottom:1.25rem;">
       <div class="form-group" style="margin:0;"><label for="sl-postal">Postal / ZIP</label><input type="text" id="sl-postal" placeholder="e.g. M5V 2T6"></div>
-      <div class="form-group" style="margin:0;"><label for="sl-country">Country</label><input type="text" id="sl-country" placeholder="e.g. Canada" value="Canada"></div>
+      <div class="form-group" style="margin:0;">
+        <label for="sl-country">Country</label>
+        <input type="text" id="sl-country" list="sl-country-options" placeholder="e.g. Canada" value="Canada" oninput="renderLabelCountryHint()">
+        <datalist id="sl-country-options"></datalist>
+        <div id="sl-country-hint" class="field-warn" hidden></div>
+      </div>
     </div>
 
     <div id="sl-shipped-status" style="display:none;font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:6px;background:var(--green-bg);color:var(--green);border:1px solid var(--green-bg);"></div>
@@ -4239,101 +4452,384 @@
   </div>
 </div>
 
-<!-- ADD BOOK MODAL -->
-<div class="overlay" id="m-add-book" style="display:none;"><div class="modal" role="dialog" aria-modal="true" style="max-width:550px;">
+<!-- SAVE BOOK PRESET MODAL -->
+<!-- RECOVER A WEBSITE ORDER THE GMAIL SCAN MISSED (from the shipping reconciliation worklist) -->
+<div class="overlay" id="m-recover-website-order" style="display:none;">
+  <div class="modal rwo-modal" role="dialog" aria-modal="true" aria-labelledby="rwo-title" style="max-width:640px;max-height:92vh;overflow-y:auto;">
+    <div class="modal-title" id="rwo-title">Add the missing website order</div>
+    <p class="rwo-intro">This label was paid for, but the order behind it never reached the app. Fill in what was sold and it joins your ledger, your stock count and the shipping portal — with this postage linked to it.</p>
+    <div class="rwo-postage" id="rwo-postage-summary" role="status"></div>
+
+    <div class="rwo-section-label">Order</div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="rwo-num">Order number</label>
+        <input type="text" id="rwo-num" placeholder="e.g. GPWT-916083" autocomplete="off" spellcheck="false">
+        <span class="rwo-field-hint">Copy it from your storefront if you have it — otherwise keep the suggested one.</span>
+      </div>
+      <div class="form-group">
+        <label for="rwo-date">Order date</label>
+        <input type="date" id="rwo-date">
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="rwo-book">Book sold</label>
+        <select id="rwo-book" onchange="onRecoverWebsiteOrderBookChange()"></select>
+        <span class="rwo-field-hint" id="rwo-stock-hint"></span>
+      </div>
+      <div class="form-group">
+        <label for="rwo-qty">Copies</label>
+        <input type="number" inputmode="numeric" id="rwo-qty" value="1" min="1" step="1" oninput="onRecoverWebsiteOrderBookChange()">
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="rwo-price">Price paid per copy</label>
+        <div class="price-wrap"><span class="sym" id="rwo-price-sym">CAD</span><input type="number" inputmode="decimal" id="rwo-price" step="0.01" min="0" value="0.00"></div>
+      </div>
+      <div class="form-group">
+        <label for="rwo-shipping-paid">Shipping the customer paid</label>
+        <input type="number" inputmode="decimal" id="rwo-shipping-paid" step="0.01" min="0" value="0.00">
+        <span class="rwo-field-hint">Leave at zero if shipping was free.</span>
+      </div>
+    </div>
+
+    <div class="rwo-section-label">Where it went</div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="rwo-customer">Customer name</label><input type="text" id="rwo-customer" autocomplete="off"></div>
+      <div class="form-group"><label for="rwo-email">Email</label><input type="email" id="rwo-email" placeholder="optional" autocomplete="off"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;"><label for="rwo-addr1">Address</label><input type="text" id="rwo-addr1" autocomplete="off"></div>
+    <div class="form-group" style="margin-bottom:12px;"><label for="rwo-addr2">Address line 2</label><input type="text" id="rwo-addr2" placeholder="optional" autocomplete="off"></div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="rwo-city">City</label><input type="text" id="rwo-city" autocomplete="off"></div>
+      <div class="form-group"><label for="rwo-province">Province / state</label><input type="text" id="rwo-province" autocomplete="off"></div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group"><label for="rwo-postal">Postal / ZIP</label><input type="text" id="rwo-postal" autocomplete="off"></div>
+      <div class="form-group"><label for="rwo-country">Country</label><input type="text" id="rwo-country" autocomplete="off"></div>
+    </div>
+
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button class="btn" type="button" onclick="attemptCloseModal('recover-website-order')">Cancel</button>
+      <button class="btn gold" type="button" id="rwo-save-btn" onclick="saveRecoverWebsiteOrder()">Add order &amp; link postage</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="m-save-book-preset" style="display:none;">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:520px;">
+    <div class="modal-title" role="dialog" aria-modal="true">📦 Save Parcel Specs to Book Preset</div>
+    <div style="font-size:12px; color:var(--text3); margin-bottom:1rem;">
+      Save current dimensions, weight, and customs declarations directly onto a catalogue book record. Future shipments for this book will load these specifications automatically.
+    </div>
+
+    <div class="form-group" style="margin-bottom:1rem;">
+      <label for="sbp-target-book" style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text2); margin-bottom:6px;">Target Catalogue Book</label>
+      <select id="sbp-target-book" style="width:100%; height:40px; font-size:13px;" onchange="renderSaveBookPresetPreview()">
+        <option value="">— Select a catalogue book to update —</option>
+      </select>
+    </div>
+
+    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-bottom:8px;">Specifications Summary</div>
+    <div id="sbp-specs-preview" style="margin-bottom:1.25rem;"></div>
+
+    <div class="modal-footer" role="dialog" aria-modal="true" style="justify-content:space-between;">
+      <button class="btn" type="button" onclick="attemptCloseModal('save-book-preset')">Cancel</button>
+      <button class="btn gold" id="sbp-confirm-btn" type="button" onclick="confirmSaveBookPreset()">💾 Save Preset to Book</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD / EDIT BOOK MODAL (LUXURY REDESIGN) -->
+<div class="overlay" id="m-add-book" style="display:none;"><div class="modal book-editor-modal" role="dialog" aria-modal="true">
   <div class="modal-title" role="dialog" aria-modal="true" id="add-book-modal-title">Add new book</div>
   
-  <!-- Sub-Tabs for Book Modal -->
-  <div class="modal-tabs" role="dialog" aria-modal="true" style="display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;gap:8px;">
-    <button type="button" class="modal-tab-btn active" id="book-modal-tab-general" onclick="switchBookModalTab('general')">Metadata</button>
-    <button type="button" class="modal-tab-btn" id="book-modal-tab-sales" onclick="switchBookModalTab('sales')">Sales & Pricing</button>
-    <button type="button" class="modal-tab-btn" id="book-modal-tab-costs" onclick="switchBookModalTab('costs')">Costs & Payouts</button>
+  <div class="book-modal-header-meta">
+    <div class="book-modal-badge-row">
+      <span class="modal-badge-pill" id="book-modal-badge">📖 Project Settings</span>
+      <span class="modal-subtitle" id="book-modal-subtitle">Step 1 of 3: Core Identity &amp; Contributor Access</span>
+    </div>
+    <button class="modal-close-btn" type="button" onclick="closeAddBookModal()" aria-label="Close dialog">×</button>
+  </div>
+  
+  <!-- Walkthrough Stepper Tabs -->
+  <div class="book-modal-stepper-wrap">
+    <div class="book-modal-stepper" role="tablist" aria-label="Book Editor Steps">
+      <button type="button" class="modal-tab-btn active" id="book-modal-tab-general" onclick="switchBookModalTab('general')" role="tab" aria-selected="true" aria-controls="book-panel-general">
+        <span class="tab-step-num">1</span>
+        <span class="tab-label">Identity &amp; Metadata</span>
+      </button>
+      <button type="button" class="modal-tab-btn" id="book-modal-tab-sales" onclick="switchBookModalTab('sales')" role="tab" aria-selected="false" aria-controls="book-panel-sales">
+        <span class="tab-step-num">2</span>
+        <span class="tab-label">Sales &amp; Shipping</span>
+      </button>
+      <button type="button" class="modal-tab-btn" id="book-modal-tab-costs" onclick="switchBookModalTab('costs')" role="tab" aria-selected="false" aria-controls="book-panel-costs">
+        <span class="tab-step-num">3</span>
+        <span class="tab-label">Costs &amp; Payouts</span>
+      </button>
+    </div>
   </div>
 
-  <!-- Panel 1: Metadata -->
-  <div id="book-panel-general">
-    <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="nb-id">Book ID (URL safe) *</label><input id="nb-id" placeholder="e.g. photobook-2026"></div><div class="form-group"><label for="nb-title">Title *</label><input id="nb-title" placeholder="e.g. My Awesome Book"></div></div>
-    <div class="g2" style="margin-bottom:12px;"><div class="form-group"><label for="nb-author">Author</label><input id="nb-author" placeholder="Author name"></div><div class="form-group"><label for="nb-isbn">ISBN</label><input id="nb-isbn" placeholder="—"></div></div>
+  <!-- Panel 1: Identity & Metadata -->
+  <div id="book-panel-general" role="tabpanel" aria-labelledby="book-modal-tab-general">
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label for="nb-accent">Accent Color</label><input id="nb-accent" type="color" value="#c8913a"></div>
-      <div class="form-group"><label for="nb-thresh">Low Stock Threshold</label><input id="nb-thresh" type="number" inputmode="numeric" value="10"></div>
+      <div class="form-group">
+        <label for="nb-id">Book ID (URL safe) * <span style="font-weight:400;font-size:10px;color:var(--text3);">(Permanent database slug)</span></label>
+        <div style="position:relative;">
+          <input id="nb-id" placeholder="e.g. collective-photobook" style="font-family:'DM Mono',monospace;font-size:12.5px;">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="nb-title">Title *</label>
+        <input id="nb-title" placeholder="e.g. Collective Photobook" oninput="onBookTitleInput(this.value)">
+      </div>
     </div>
-    <div class="form-group" style="margin-bottom:12px;"><label for="nb-pw">Author Google Email</label><input type="email" id="nb-pw" placeholder="Used for author sign-in access"></div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="nb-author">Author / Contributor</label>
+        <input id="nb-author" placeholder="e.g. Lyricalmyrical Books or Artist Name">
+      </div>
+      <div class="form-group">
+        <label for="nb-isbn">ISBN-13</label>
+        <input id="nb-isbn" placeholder="978-X-XXXX-XXXX-X or —" style="font-family:'DM Mono',monospace;">
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div class="form-group">
+        <label for="nb-accent">Project Accent Theme</label>
+        <div class="accent-picker-wrap">
+          <div class="accent-swatches" id="nb-accent-swatches">
+            <button type="button" class="accent-swatch-btn" style="background:#c8913a;" onclick="selectBookAccentPreset('#c8913a')" title="Lyrical Gold"></button>
+            <button type="button" class="accent-swatch-btn" style="background:#10b981;" onclick="selectBookAccentPreset('#10b981')" title="Emerald"></button>
+            <button type="button" class="accent-swatch-btn" style="background:#6366f1;" onclick="selectBookAccentPreset('#6366f1')" title="Indigo"></button>
+            <button type="button" class="accent-swatch-btn" style="background:#f43f5e;" onclick="selectBookAccentPreset('#f43f5e')" title="Rose / Crimson"></button>
+            <button type="button" class="accent-swatch-btn" style="background:#f59e0b;" onclick="selectBookAccentPreset('#f59e0b')" title="Warm Amber"></button>
+            <button type="button" class="accent-swatch-btn" style="background:#8b5cf6;" onclick="selectBookAccentPreset('#8b5cf6')" title="Amethyst / Velvet"></button>
+            <button type="button" class="accent-swatch-btn" style="background:#0ea5e9;" onclick="selectBookAccentPreset('#0ea5e9')" title="Sky"></button>
+            <button type="button" class="accent-swatch-btn" style="background:#64748b;" onclick="selectBookAccentPreset('#64748b')" title="Slate Neutral"></button>
+          </div>
+          <div class="accent-custom-picker">
+            <input id="nb-accent" type="color" value="#c8913a" oninput="onCustomAccentInput(this.value)">
+            <span class="accent-hex-display" id="nb-accent-hex">#c8913a</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="nb-thresh">Low Stock Alert Threshold</label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input id="nb-thresh" type="number" inputmode="numeric" value="10" min="0" style="font-family:'DM Mono',monospace;">
+          <span style="font-size:11px;color:var(--text3);white-space:nowrap;">copies remaining</span>
+        </div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:6px;">
+      <label for="nb-pw">Author Google Email <span style="font-weight:400;font-size:10px;color:var(--text3);">(Contributor Sign-In Access)</span></label>
+      <input type="email" id="nb-pw" placeholder="artist@gmail.com">
+      <div class="book-modal-callout" style="margin-top:6px;">
+        🔐 <strong>Author Mode:</strong> When this author signs in with Google, they enter an isolated portal to view their sales timeline, request balance payouts, and download custom QR codes.
+      </div>
+    </div>
   </div>
 
   <!-- Panel 2: Sales & Pricing -->
-  <div id="book-panel-sales" style="display:none;">
-    <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group">
-        <label for="nb-cur">Currency</label>
-        <select id="nb-cur">
-          <option value="€">Euro (€)</option>
-          <option value="CA$">Canadian Dollar (CA$)</option>
-        </select>
+  <div id="book-panel-sales" style="display:none;" role="tabpanel" aria-labelledby="book-modal-tab-sales">
+    <!-- Live Financial Metric Snapshot Bar -->
+    <div class="book-modal-financial-strip">
+      <div class="bm-metric-card">
+        <span class="bm-metric-label">Gross Potential</span>
+        <span class="bm-metric-val tnum" id="bm-metric-gross">€4,000.00</span>
       </div>
-      <div class="form-group"><label for="nb-max">Print Run</label><input id="nb-max" type="number" inputmode="numeric" value="100"></div>
-    </div>
-    <div class="form-group" style="margin-bottom:12px;"><label for="nb-price">List Price</label><input id="nb-price" type="number" inputmode="numeric" value="40"></div>
-    <div class="form-group" style="margin-top:4px;">
-      <label>Stripe Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(used for QR codes)</span></label>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-        <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;">
-        <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
+      <div class="bm-metric-card">
+        <span class="bm-metric-label">Unit Mfg Cost</span>
+        <span class="bm-metric-val tnum" id="bm-metric-unitcost">€0.00</span>
       </div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.5;">
-        Paste a link from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a>, or click <strong>Generate SKU link</strong> to create one tagged with this book's SKU.
+      <div class="bm-metric-card">
+        <span class="bm-metric-label">Gross Margin</span>
+        <span class="bm-metric-val tnum" id="bm-metric-margin">€40.00 (100%)</span>
+      </div>
+      <div class="bm-metric-card">
+        <span class="bm-metric-label">Break-Even</span>
+        <span class="bm-metric-val tnum" id="bm-metric-breakeven">0 copies</span>
       </div>
     </div>
 
-    <!-- Default Shipping Specs (for Shippo Calculator) -->
-    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-top:16px; margin-bottom:8px; border-top:1px solid var(--border); padding-top:12px;">Default Shipping Specs (for Shippo Calculator)</div>
-    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:12px;">
-      <div class="form-group"><label>Length</label><input id="nb-ship-length" type="number" placeholder="Length" step="0.1"></div>
-      <div class="form-group"><label>Width</label><input id="nb-ship-width" type="number" placeholder="Width" step="0.1"></div>
-      <div class="form-group"><label>Height</label><input id="nb-ship-height" type="number" placeholder="Height" step="0.1"></div>
+    <div class="g2" style="margin-bottom:12px;">
       <div class="form-group">
-        <label>Dim. Unit</label>
+        <label for="nb-cur">Native Currency</label>
+        <select id="nb-cur" onchange="updateBookModalFinancials()">
+          <option value="€">Euro (€ - EUR)</option>
+          <option value="CA$">Canadian Dollar (CA$ - CAD)</option>
+          <option value="$">US Dollar ($ - USD)</option>
+          <option value="£">British Pound (£ - GBP)</option>
+          <option value="MX$">Mexican Peso (MX$ - MXN)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="nb-max">Print Run Edition Size</label>
+        <input id="nb-max" type="number" inputmode="numeric" value="100" min="1" oninput="updateBookModalFinancials()" style="font-family:'DM Mono',monospace;">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label for="nb-price">Retail List Price</label>
+      <input id="nb-price" type="number" step="0.01" inputmode="decimal" value="40" min="0" oninput="updateBookModalFinancials()" style="font-family:'DM Mono',monospace;">
+    </div>
+    <div class="form-group" style="margin-top:4px;margin-bottom:14px;">
+      <label>Stripe Direct Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(Embedded in QR Codes &amp; POS)</span></label>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+        <input type="url" id="nb-paylink" placeholder="https://buy.stripe.com/…" style="flex:1;font-family:'DM Mono',monospace;font-size:12px;">
+        <button type="button" class="btn gold sm" id="nb-gen-stripe-btn" onclick="generateBookStripeLink()" style="white-space:nowrap;">⚡ Generate SKU link</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.45;">
+        Paste from your <a href="https://dashboard.stripe.com/payment-links" target="_blank" style="color:var(--gold);">Stripe Dashboard</a> or click <strong>Generate SKU link</strong> to create an auto-tagged payment link.
+      </div>
+    </div>
+
+    <!-- Default Shipping Specs (for Shippo & Canada Post Calculator) -->
+    <div style="font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text3); margin-top:16px; margin-bottom:8px; border-top:1px solid var(--border); padding-top:12px;">
+      Default Shipping Specs (for Canada Post &amp; Shippo)
+    </div>
+    
+    <!-- Quick Preset Parcel Chips -->
+    <div class="preset-chips-wrap">
+      <span style="font-size:10.5px;color:var(--text3);align-self:center;margin-right:2px;">Presets:</span>
+      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('trade')">📘 Standard Trade (22×15×2 cm · 450g)</button>
+      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('monograph')">📖 Hardcover (30×24×3 cm · 1.1kg)</button>
+      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('zine')">📄 Zine (21×14×0.5 cm · 120g)</button>
+      <button type="button" class="preset-chip-btn" onclick="applyBookParcelPreset('boxset')">📦 Box Set (32×26×8 cm · 2.5kg)</button>
+    </div>
+
+    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:12px;">
+      <div class="form-group"><label for="nb-ship-length">Length</label><input id="nb-ship-length" type="number" placeholder="Length" step="0.1" style="font-family:'DM Mono',monospace;"></div>
+      <div class="form-group"><label for="nb-ship-width">Width</label><input id="nb-ship-width" type="number" placeholder="Width" step="0.1" style="font-family:'DM Mono',monospace;"></div>
+      <div class="form-group"><label for="nb-ship-height">Height</label><input id="nb-ship-height" type="number" placeholder="Height" step="0.1" style="font-family:'DM Mono',monospace;"></div>
+      <div class="form-group">
+        <label for="nb-ship-dim-unit">Dim. Unit</label>
         <select id="nb-ship-dim-unit">
-          <option value="in">Inches (in)</option>
           <option value="cm">Centimeters (cm)</option>
+          <option value="in">Inches (in)</option>
         </select>
       </div>
     </div>
-    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
-      <div class="form-group" style="margin:0;"><label for="nb-ship-weight">Weight</label><input id="nb-ship-weight" type="number" placeholder="Weight" step="0.01"></div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-bottom:6px;">
+      <div class="form-group" style="margin:0;"><label for="nb-ship-weight">Weight</label><input id="nb-ship-weight" type="number" placeholder="Weight" step="0.01" style="font-family:'DM Mono',monospace;"></div>
       <div class="form-group" style="margin:0;">
         <label for="nb-ship-weight-unit">Weight Unit</label>
         <select id="nb-ship-weight-unit">
-          <option value="lb">Pounds (lb)</option>
-          <option value="oz">Ounces (oz)</option>
           <option value="kg">Kilograms (kg)</option>
           <option value="g">Grams (g)</option>
+          <option value="lb">Pounds (lb)</option>
+          <option value="oz">Ounces (oz)</option>
         </select>
       </div>
-      <div class="form-group" style="margin:0;"><label for="nb-ship-hs">HS Tariff Code</label><input id="nb-ship-hs" type="text" placeholder="e.g. 490199" value="490199"></div>
+      <div class="form-group" style="margin:0;"><label for="nb-ship-hs">HS Tariff Code</label><input id="nb-ship-hs" type="text" placeholder="e.g. 490199" value="490199" style="font-family:'DM Mono',monospace;"></div>
     </div>
   </div>
 
   <!-- Panel 3: Costs & Payouts -->
-  <div id="book-panel-costs" style="display:none;">
+  <div id="book-panel-costs" style="display:none;" role="tabpanel" aria-labelledby="book-modal-tab-costs">
     <div class="form-group" style="margin-bottom:12px;">
-      <label for="nb-prod">Initial Production Cost (Break-even target)</label>
-      <input id="nb-prod" type="number" inputmode="numeric" value="0">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
+        <label for="nb-prod" style="margin:0;">Total Production / Printing Expense <span style="font-weight:400;font-size:10px;color:var(--text3);">(Break-even target)</span></label>
+        <button type="button" class="btn sm secondary" onclick="openProductionCostCalculator()" style="font-size:var(--text-xs);padding:3px 8px;display:inline-flex;align-items:center;gap:4px;" title="Search and sum production expenses from Tax Centre">
+          <span>🔍</span><span>Sum from Tax Centre</span>
+        </button>
+      </div>
+      <input id="nb-prod" type="number" step="0.01" inputmode="decimal" value="0" min="0" oninput="updateBookModalFinancials()" style="font-family:'DM Mono',monospace;">
+      <div class="book-modal-callout" style="margin-top:6px;">
+        💡 <strong>Publisher Recovery:</strong> This manufacturing cost sets the first 100% publisher recovery tier before artist profit splits begin.
+      </div>
     </div>
     <div class="form-group" style="margin-bottom:12px;">
-      <label for="nb-payment-link">Publisher Payment Link (For Artist Dues)</label>
-      <input type="url" id="nb-payment-link" placeholder="https://paypal.me/… or email@interac.ca">
-      <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5;">
-        When the artist owes the publisher money (e.g. negative balance), this link appears in their dashboard so they can settle up directly.
+      <label for="nb-payment-link">Publisher Payment Link <span style="font-weight:400;font-size:10px;color:var(--text3);">(For Artist Dues / Balance Settlement)</span></label>
+      <input type="url" id="nb-payment-link" placeholder="https://paypal.me/lyricalmyricalbooks or email@interac.ca" style="font-family:'DM Mono',monospace;font-size:12px;">
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.45;">
+        When the artist owes the publisher money (e.g. negative balance from shipping/advances), this payment link appears in their private author portal.
       </div>
     </div>
     <div class="g2" style="margin-bottom:12px;">
-      <div class="form-group"><label for="nb-pub-grat">Publisher gratuity copies</label><input id="nb-pub-grat" type="number" inputmode="numeric" min="0" value="0"></div>
-      <div class="form-group"><label for="nb-author-grat">Author gratuity copies</label><input id="nb-author-grat" type="number" inputmode="numeric" min="0" value="0"></div>
+      <div class="form-group">
+        <label for="nb-pub-grat">Publisher Gratuity Copies</label>
+        <input id="nb-pub-grat" type="number" inputmode="numeric" min="0" value="0" style="font-family:'DM Mono',monospace;">
+        <span style="font-size:10.5px;color:var(--text3);">Archive &amp; promotional copies</span>
+      </div>
+      <div class="form-group">
+        <label for="nb-author-grat">Author Gratuity Copies</label>
+        <input id="nb-author-grat" type="number" inputmode="numeric" min="0" value="0" style="font-family:'DM Mono',monospace;">
+        <span style="font-size:10.5px;color:var(--text3);">Contractual complimentary copies</span>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:6px;">
+      <label for="nb-author-stock">Author-Held Stock <span style="font-weight:400;font-size:10px;color:var(--text3);">(Physical Copies with Author)</span></label>
+      <input id="nb-author-stock" type="number" inputmode="numeric" min="0" value="0" placeholder="0" style="font-family:'DM Mono',monospace;">
+      <div class="book-modal-callout" style="margin-top:6px;">
+        📦 Physical copies currently in the author's hands for their own events. Automatically deducted from available publisher warehouse stock.
+      </div>
     </div>
   </div>
 
-  <div class="modal-footer" role="dialog" aria-modal="true"><span id="add-book-unsaved-indicator" class="save-indicator" role="status" aria-hidden="true">● Unsaved changes</span><button class="btn" onclick="closeAddBookModal()">Cancel</button><button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button></div>
+  <!-- Walkthrough Modal Footer -->
+  <div class="modal-footer book-modal-footer" role="dialog" aria-modal="true">
+    <div class="book-footer-left">
+      <span id="add-book-unsaved-indicator" class="save-indicator" role="status" aria-hidden="true">● Unsaved changes</span>
+    </div>
+    <div class="book-footer-right">
+      <button class="btn" type="button" onclick="closeAddBookModal()">Cancel</button>
+      <button class="btn" type="button" id="book-modal-prev-btn" onclick="stepBookModal(-1)" style="display:none;">← Back</button>
+      <button class="btn" type="button" id="book-modal-next-btn" onclick="stepBookModal(1)">Next: Sales &amp; Shipping →</button>
+      <button class="btn gold" id="add-book-save-btn" onclick="saveBookFromModal()">Save Book</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- TAX CENTRE PRODUCTION COST CALCULATOR MODAL -->
+<div class="overlay" id="m-tc-prod-cost-calc" style="display:none;"><div class="modal prod-cost-calc-modal" role="dialog" aria-modal="true">
+  <div class="modal-title" role="dialog" aria-modal="true" id="tcc-modal-title">Sum Production Costs from Tax Centre</div>
+  
+  <div class="book-modal-header-meta">
+    <div class="book-modal-badge-row">
+      <span class="modal-badge-pill" id="tcc-modal-badge">📊 Tax Centre Link</span>
+      <span class="modal-subtitle" id="tcc-modal-subtitle">Select expenses to calculate break-even production cost</span>
+    </div>
+    <button class="modal-close-btn" type="button" onclick="closeProductionCostCalculator()" aria-label="Close dialog">×</button>
+  </div>
+
+  <!-- Search & Quick Filters Bar -->
+  <div class="tcc-controls-bar">
+    <div class="tcc-search-wrap">
+      <input id="tcc-search" type="search" placeholder="Search by vendor, description, or keyword..." oninput="renderProdCostCalcList()" style="width:100%;font-size:var(--text-sm);">
+    </div>
+    <div class="tcc-filter-pills">
+      <button type="button" class="tcc-filter-pill active" id="tcc-filter-prod" onclick="setProdCostCalcFilter('production')">🏭 Production &amp; Printing</button>
+      <button type="button" class="tcc-filter-pill" id="tcc-filter-book" onclick="setProdCostCalcFilter('this-book')">📖 Tagged to This Book</button>
+      <button type="button" class="tcc-filter-pill" id="tcc-filter-all" onclick="setProdCostCalcFilter('all')">📋 All Expenses</button>
+    </div>
+    <div class="tcc-quick-actions">
+      <button type="button" class="btn sm" onclick="toggleAllFilteredProdCost(true)">Select All Filtered</button>
+      <button type="button" class="btn sm" onclick="toggleAllFilteredProdCost(false)">Deselect All</button>
+    </div>
+  </div>
+
+  <!-- Expense Items List -->
+  <div class="tcc-list-container" id="tcc-expense-list" role="region" aria-label="Tax Centre Expenses">
+    <!-- Rendered dynamically -->
+  </div>
+
+  <!-- Sticky Tally & Action Footer -->
+  <div class="modal-footer tcc-modal-footer" role="dialog" aria-modal="true">
+    <div class="tcc-footer-summary">
+      <div style="font-size:var(--text-xs);color:var(--text3);text-transform:uppercase;font-weight:700;letter-spacing:var(--tracking-caps, 0.08em);" id="tcc-selected-count">0 expenses selected</div>
+      <div style="display:flex;align-items:baseline;gap:6px;">
+        <span style="font-size:var(--text-xs);color:var(--text2);">Total:</span>
+        <span class="tcc-total-val" id="tcc-selected-total">$0.00 CAD</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button class="btn" type="button" onclick="closeProductionCostCalculator()">Cancel</button>
+      <button class="btn gold" id="tcc-apply-btn" type="button" onclick="applyCalculatedProdCost()">✓ Apply $0.00 to Production Cost</button>
+    </div>
+  </div>
 </div></div>
 
 <!-- PAYMENT QR MODAL -->
@@ -4534,13 +5030,13 @@
     <div>Myrical</div>
     <div class="pw-logo-outline">Books</div>
   </div>
-  <div class="updating-screen-title">Updating Lyrical Inventory…</div>
+  <div class="updating-screen-title">Updating Lyricalmyrical Inventory…</div>
   <div class="updating-screen-copy">Polishing the latest version. This will take just a moment.</div>
   <div class="updating-screen-orbit" aria-hidden="true"></div>
 </div>
 
 <!-- PWA UPDATE PROMPT BANNER -->
-<div id="pwa-update-prompt" class="pwa-prompt" role="button" tabindex="0" aria-label="Update Lyrical Inventory to the latest version">
+<div id="pwa-update-prompt" class="pwa-prompt" role="button" tabindex="0" aria-label="Update Lyricalmyrical Inventory to the latest version">
   <div class="pwa-prompt-content">
     <div class="pwa-prompt-icon">✨</div>
     <div class="pwa-prompt-text">
@@ -4667,9 +5163,59 @@
     <div class="send-progress-track">
       <div class="send-progress-fill" id="c-send-progress-fill"></div>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Please keep Lyrical Inventory open until sending finishes.</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Please keep Lyricalmyrical Inventory open until sending finishes.</div>
     <button class="btn sm" id="c-send-cancel-btn" onclick="cancelCampaignSending()">✕ Abort Send</button>
     <div class="send-log-console" id="c-send-log-console"></div>
+  </div>
+</div>
+
+<!-- STOCK TRANSFER MODAL (Publisher to/from Author) -->
+<div class="overlay" id="m-stock-transfer" style="display:none;z-index:1200;">
+  <div class="modal" role="dialog" aria-modal="true" style="max-width:480px;">
+    <div class="modal-title" role="dialog" aria-modal="true" id="st-modal-title">Transfer stock</div>
+    <p class="lead-note" id="st-modal-sub" style="margin-bottom:14px;">Move physical inventory between publisher warehouse and author.</p>
+    
+    <div class="st-balance-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div class="card" style="padding:10px 14px;background:var(--cream2);">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);font-weight:700;">Publisher On-Hand</div>
+        <div id="st-cur-publisher" class="mono-num" style="font-size:22px;font-weight:600;color:var(--gold2);margin-top:2px;">—</div>
+      </div>
+      <div class="card" style="padding:10px 14px;background:var(--cream2);">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);font-weight:700;">Author Held</div>
+        <div id="st-cur-author" class="mono-num" style="font-size:22px;font-weight:600;color:var(--violet, #8b5cf6);margin-top:2px;">—</div>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Transfer Direction</label>
+      <div class="st-dir-toggle" style="display:flex;gap:8px;margin-top:4px;">
+        <button type="button" class="btn sm is-on st-dir-btn" id="st-dir-to-author" onclick="setStockTransferDirection('to_author')" style="flex:1;">🏢 → 👤 Hand off to Author</button>
+        <button type="button" class="btn sm st-dir-btn" id="st-dir-from-author" onclick="setStockTransferDirection('from_author')" style="flex:1;">👤 → 🏢 Return to Publisher</button>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px;">
+      <label for="st-qty">Quantity <span id="st-qty-limit-label" class="muted-note" style="font-size:11px;color:var(--text3);"></span></label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button type="button" class="btn sm" onclick="stepStockTransfer(-1)">−1</button>
+        <input type="number" id="st-qty" min="1" step="1" inputmode="numeric" value="1" style="flex:1;text-align:center;font-family:'DM Mono',monospace;font-size:16px;font-weight:600;" oninput="onStockTransferQtyChange()">
+        <button type="button" class="btn sm" onclick="stepStockTransfer(1)">+1</button>
+        <button type="button" class="btn sm" onclick="stepStockTransfer(5)">+5</button>
+        <button type="button" class="btn sm" onclick="stepStockTransfer(10)">+10</button>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px;">
+      <label for="st-note">Transfer Note / Reason <span class="muted-note" style="font-weight:400;font-size:10px;color:var(--text3);">(optional)</span></label>
+      <input type="text" id="st-note" placeholder="e.g. Fair copies, Book launch stock">
+    </div>
+
+    <div id="st-preview" class="field-note" style="margin-bottom:14px;padding:8px 12px;background:rgba(200,145,58,0.08);border-radius:var(--r2);font-size:12px;color:var(--text2);line-height:1.5;"></div>
+
+    <div class="modal-footer" role="dialog" aria-modal="true">
+      <button type="button" class="btn" onclick="attemptCloseModal('stock-transfer')">Cancel</button>
+      <button type="button" class="btn gold" id="st-submit-btn" onclick="submitStockTransfer()">Confirm Transfer</button>
+    </div>
   </div>
 </div>
 

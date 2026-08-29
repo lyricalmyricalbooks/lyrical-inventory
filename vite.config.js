@@ -60,6 +60,15 @@ export default defineConfig({
   define: {
     __GIT_COMMIT_DATE__: JSON.stringify(commitDate),
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  },
   test: {
     // There was no test config at all before this, so vitest ran with no DOM.
     // That is the reason so much of the suite asserts on the *text* of

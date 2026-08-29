@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { appSource } from './helpers/extract-decl.js';
+import { resolveCountryCode } from '../src/lib/countries.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,10 +27,8 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
 
     matchBigCartelOrderToCatalog = new Function('order', 'included', 'BOOKS', 'function escapeHTML(s){return String(s||"");}\n' + extractItemsFunc[0] + '\n' + matchFunc[0] + '\nreturn matchBigCartelOrderToCatalog(order, included, BOOKS);');
     const extractAddrFunc = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
-    const countryCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);
-    const normCountryMatch = mainContent.match(/function normalizeCountryCode\([^)]*\)\s*\{([\s\S]+?)\n\}/);
 
-    formatBigCartelOrderAddress = new Function('order', countryCodesMatch[0] + '\n' + normCountryMatch[0] + '\n' + extractAddrFunc[0] + '\n' + formatFunc[0] + '\nreturn formatBigCartelOrderAddress(order);');
+    formatBigCartelOrderAddress = new Function('resolveCountryCode', 'order', extractAddrFunc[0] + '\n' + formatFunc[0] + '\nreturn formatBigCartelOrderAddress(order);').bind(null, resolveCountryCode);
     extractBigCartelOrderItems = new Function('order', 'included', 'customBooks', 'function escapeHTML(s){return String(s||"");}\n' + extractItemsFunc[0] + '\nreturn extractBigCartelOrderItems(order, included, customBooks);');
   });
 
@@ -157,15 +156,11 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
 
     beforeEach(() => {
       const mainContent = appSource;
-      const countryCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);
       const extractFuncMatch = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
-      const normCountryMatch = mainContent.match(/function normalizeCountryCode\([^)]*\)\s*\{([\s\S]+?)\n\}/);
 
-      expect(countryCodesMatch).not.toBeNull();
       expect(extractFuncMatch).not.toBeNull();
-      expect(normCountryMatch).not.toBeNull();
 
-      extractBigCartelAddress = new Function('attr', 'orderId', countryCodesMatch[0] + '\n' + normCountryMatch[0] + '\n' + extractFuncMatch[0] + '\nreturn extractBigCartelAddress(attr, orderId);');
+      extractBigCartelAddress = new Function('resolveCountryCode', 'attr', 'orderId', extractFuncMatch[0] + '\nreturn extractBigCartelAddress(attr, orderId);').bind(null, resolveCountryCode);
     });
 
     it('extracts recipient and address fields correctly from flat shipping attributes', () => {
@@ -215,6 +210,36 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
       expect(result.zip).toBe('98101');
       expect(result.country).toBe('US');
     });
+
+    // The order that started this: a Serbian customer arrived with the country
+    // only in shipping_country_name, behind a numeric shipping_country_id that
+    // used to win the || chain and resolve to nothing — so the whole address
+    // fell through to a blanket 'US' default and the sale was counted as
+    // American everywhere in the app.
+    it('reads the country name past a numeric Big Cartel country id', () => {
+      const attr = {
+        shipping_name: 'Mila Vukojev',
+        shipping_address_1: 'Jugoslovenske Armije 204',
+        shipping_city: 'Bačka Palanka',
+        shipping_zip: '21400',
+        shipping_country_id: 188,
+        shipping_country_name: 'Serbia',
+      };
+
+      const result = extractBigCartelAddress(attr, 'SUVG-483215');
+      expect(result.country).toBe('RS');
+      expect(result.country).not.toBe('US');
+    });
+
+    it('leaves the country blank, and says what it saw, when it cannot place it', () => {
+      const result = extractBigCartelAddress({
+        shipping_name: 'Nobody',
+        shipping_city: 'Nowhere',
+        shipping_country_name: 'Wakanda',
+      }, 'ORD-003');
+      expect(result.country).toBe('');
+      expect(result.countryRaw).toBe('Wakanda');
+    });
   });
 
   describe('extractBigCartelAddress JSON:API relationship resolution', () => {
@@ -222,13 +247,11 @@ describe('Big Cartel Orders Enhancements (#2, #3, #4, #6)', () => {
 
     beforeEach(() => {
       const mainContent = appSource;
-      const countryCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);
       const extractFuncMatch = mainContent.match(/function extractBigCartelAddress\([^)]*\)\s*\{([\s\S]+?)\n\}/);
-      const normCountryMatch = mainContent.match(/function normalizeCountryCode\([^)]*\)\s*\{([\s\S]+?)\n\}/);
 
-      extractBigCartelAddress = new Function('order', 'orderId', 'included',
-        countryCodesMatch[0] + '\n' + normCountryMatch[0] + '\n' + extractFuncMatch[0] +
-        '\nreturn extractBigCartelAddress(order, orderId, included);');
+      extractBigCartelAddress = new Function('resolveCountryCode', 'order', 'orderId', 'included',
+        extractFuncMatch[0] +
+        '\nreturn extractBigCartelAddress(order, orderId, included);').bind(null, resolveCountryCode);
     });
 
     const buildOrder = () => ({

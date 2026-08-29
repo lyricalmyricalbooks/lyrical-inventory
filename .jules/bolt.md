@@ -9,3 +9,7 @@
 ## 2025-02-23 - Replace reduce with for loops
 **Learning:** In hot loops, replacing array methods like reduce with imperative for loops avoids intermediate allocations and reduces Garbage Collection (GC) overhead.
 **Action:** Use direct imperative iteration for scalar accumulation in frequently updated computations to improve speed.
+
+## 2025-02-24 - Function Re-allocation in Sort Callbacks
+**Learning:** Defining helper arrow functions directly inside loop callbacks like `Array.prototype.sort()` causes the function to be needlessly re-created in memory on every comparison ($O(N \log N)$ times). While modern JS engines try to optimize this, it's safer and structurally cleaner to declare loop-invariant closures outside the hot loop.
+**Action:** Always hoist helper function definitions out of high-frequency loop or sorting callbacks to prevent unnecessary memory reallocation and overhead.

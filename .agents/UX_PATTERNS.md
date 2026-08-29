@@ -156,6 +156,17 @@ colour family and matches the card it plots; a `--gold` → `--emerald` ramp ble
 across a single measurement, so the colour change reads as a state change that isn't there. Width
 transitions use `var(--dur-base) var(--ease-entrance)` so they collapse under reduced motion.
 
+**Third reference implementation — `.ps-stat-card`** (the book dashboard's Profit Sharing panel:
+earnings / paid / held / owed). Same anatomy, one addition worth reusing: the row mixes cards that
+just carry a coloured *figure* (`.ps-stat-val.is-positive`/`.is-muted` — earnings, paid) with cards
+that are a genuine call-out (`.ps-stat-card.tone-gold`/`.tone-critical`/`.tone-green` — held, owed),
+which tint the card's background, border and bottom accent together. Reach for a `tone-*` card
+modifier only for the figure that actually needs the call-out; a plain `.ps-stat-val` colour is
+enough for a card that's merely reporting, or every card ends up looking flagged and none of them
+are. **Never reuse `.hs-label`/`.hs-val`** for a card like this — that pair is built for the app
+header's permanently-dark strip (`rgba(255,255,255,.34)` label, fixed `--gold3` figure) and using it
+on a light card means fighting every property back with an inline override, one per card.
+
 ---
 
 ## Tables / lists — `.tbl`
@@ -225,6 +236,29 @@ columns before its figure. Three rules every footer here follows:
   swap the label ("All settled", "All reimbursed") and the pill, and keep a sub-line naming what
   *has* been settled.
 
+**Column roles on a wide table.** `td.r` is the whole vocabulary a five-column table
+needs. Past about seven columns the numbers stop being the only thing in the row and
+quietly lose the argument — a money column left in proportional body type at the same
+size and colour as the free text beside it cannot be compared down the page. Four
+classes on `.tbl td` say which cell leads, which anchors, and which recede:
+
+- `.lead-cell` — the row's subject (a buyer's name, a store name). Syne 600, primary
+  text. **One per row**; a second one leaves the row with no entry point again.
+- `.money-cell` — pairs with `.r`; the row's headline figure. Primary text at
+  `font-weight:500`, not 600 — DM Mono is loaded at 400/500 only (see the font link in
+  `index.html`), so a heavier request is synthesised and faux-bold smears the digits it
+  is meant to strengthen. Every DM Mono rule in `style.css` uses 500; match it.
+- `.date-cell` — reads left-aligned like text but in DM Mono, so a column of dates lines
+  up. This is the treatment the consignment and history ledgers already re-type inline
+  (`class="mono-num" style="font-size:12px;color:var(--text3)"`) — prefer the class.
+- `.text-cell` — free text sitting between the figures. Recedes to `--content-muted` at
+  `--text-sm`, and its **inner `<span>`** carries `max-width:26ch` so one long value
+  can't squeeze the money column. The cap must live on the span: `max-width` on a `td`
+  is unreliable under auto table layout. It wraps rather than truncating — a list of
+  what someone bought is data, not a label, so no `text-overflow` here.
+
+Reference: the Discovered Buyers and Curated Mailing List tables on the Customers tab.
+
 **A row of cards that behaves like a table** (`.invoice-card` is the reference — a CSS grid of
 label/figure cells rather than a `<table>`): it loses the alignment `.tbl` gets for free from
 `th.r`/`td.r`, so put it back explicitly. Four rules:
@@ -241,6 +275,21 @@ label/figure cells rather than a `<table>`): it loses the alignment `.tbl` gets 
   caption's tracking. At body size a caption and its own figure read as one run of text.
 - **`--gold-text`, never `--gold`, for a figure you want to sing.** Raw `--gold` is a fill/accent
   colour and does not clear AA as text on a card surface in either theme.
+
+**Repeated rows inside one card** (a legend, a mini ledger, any run of label + % + amount)
+align with **column subgrid on the card, not `auto` tracks on each row** — `.ch-legend` /
+`.ch-leg-row` is the reference. Each row being its own grid looks identical in a mock-up with
+one row in it and falls apart with four: `auto` tracks size to each row's own content, so a
+card reading 62% / 8% / 30% steps its percentage and money columns in and out down the card.
+The card declares the tracks; every row takes `grid-column: 1 / -1` plus
+`grid-template-columns: subgrid`. Two rules come with it:
+- **Keep the plain tracks in the base rule and put `subgrid` behind
+  `@supports (grid-template-columns: subgrid)`.** An unsupported `subgrid` value is dropped,
+  which would leave the row a one-column grid — a worse fallback than today's ragged one.
+- **Padding and margin go on *every* row, not just the interactive ones.** Padding on a
+  subgrid item insets that item's own tracks, so a hover pill given to the clickable rows
+  only pushes exactly those rows out of the shared edges. Give all rows the geometry and let
+  the interactive modifier carry nothing but paint.
 
 Empty body row: always `colspan` = the real column count, wrapping `.empty-state` —
 `<tr><td colspan="N"><div class="empty-state" style="padding:1rem;">No X yet.</div></td></tr>`.
@@ -266,6 +315,30 @@ today's plain header rather than to a broken one.
 
 ---
 
+## Metric bands — `.kpi-grid` / `.kpi` / `.kpi.is-lead`
+
+The dashboard's numbers band is the reference for any row of headline figures.
+Three rules it now encodes, worth keeping on any other metric row:
+
+- **One tile leads, and it is marked in the markup.** `.kpi.is-lead` gets the figure at
+  `var(--text-3xl)` (a clamp, so the step over the 28px body figure survives the ≤480px drop to
+  22px), a brighter label, an accent-tinted border and `--elev-3`. Everything else stays neutral.
+  Pick the lead by what the *screen* is about, not by which number is biggest — the dashboard leads
+  on stock on hand because the inventory bar, the threshold alert and the drift banner below it all
+  elaborate that one figure.
+- **The book accent marks exactly one tile.** `.tab-panel .kpi::before` used to paint the accent
+  hairline across every tile in the band, which is the same as painting it on none; it is now split
+  into `.kpi.is-lead::before` (accent gradient) and `.kpi:not(.is-lead)::before` (a plain neutral
+  rule). Same for the figure colour: only the lead keeps `.kpi-value.gold`, which
+  `.tab-panel .kpi-value.gold` resolves to the live book accent.
+- **Tracks are `auto-fit`, never a fixed count, when the tile count varies.** The primary band shows
+  four tiles, or five once a book has profit sharing configured. At `repeat(4, …)` that fifth tile
+  stranded alone at quarter width on a second line; `repeat(auto-fit, minmax(180px, 1fr))` lets
+  whatever a book's setup shows fill one row evenly. Only reach for this where the count really is
+  variable — a fixed 3-column grid holding six tiles still beats auto-fit's 5-plus-orphan.
+
+---
+
 ## Empty states — `.empty-state`
 Two tiers exist; use the richer one whenever the empty state is a primary destination
 (a whole tab/panel), and the plain one only for small nested table bodies.
@@ -286,6 +359,68 @@ Two tiers exist; use the richer one whenever the empty state is a primary destin
 Real examples: `main.js:8389` (stores), `main.js:8899` (invoices), `main.js:18579` (Stripe
 reconciliation). Grep `e-icon` before adding a new empty-state icon convention — most already
 carry a single emoji that matches the section's theme (💳 payments, 📄 invoices, 🔍 filtered-empty).
+
+---
+
+## Section heads — `.sec-head`
+
+A screen's sections are headed one of two ways, and mixing the two on one screen is
+what `.sec-head` exists to stop. The app has a micro-label tier (`.sect` — 9px uppercase
+grey with a trailing hairline) and a heading tier (`.section-hed` — 20px Playfair serif).
+Before this landed, the "All books" landing screen ran two `.sect` labels above a section
+that had a gold kicker, a heading and a line of subcopy — so the first screen the publisher
+sees carried the faintest headings in the app, and the only part that looked designed was
+the supporting section at the bottom.
+
+Use `.sect` for a label *inside* a panel (a sub-divider). Use `.sec-head` for a section that
+is one of a screen's top-level parts:
+
+```html
+<div class="overview-section">
+  <div class="sec-head is-muted">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Sales Performance</div>
+      <div class="section-hed sec-head-title">Combined sales by channel</div>
+      <p class="section-subcopy">Where the whole catalogue actually sells.</p>
+    </div>
+    <div class="sec-head-badges"><span class="pill gold">4 channels</span></div>
+  </div>
+  …section content…
+</div>
+```
+
+Four rules it encodes:
+- **The heading tier is `.section-hed`, not a new class.** `.sec-head-title` only owns the
+  spacing inside the head. A section that invents its own heading size is how a screen ends
+  up with three heading tiers.
+- **`--sec-accent` tints one head's kicker, and gold is spent once per screen.** Default is
+  gold; `.is-muted` re-points it at `var(--slate)`. Reach for the custom property rather
+  than a hardcoded colour so it themes itself in both directions. A screen where every
+  kicker is gold has no entry point left.
+- **`.consignment-summary-head` and friends alias onto these rules** rather than keeping a
+  second copy. Extend the selector list; don't fork the declarations.
+- **Space between sections has to beat space within one.** `.overview-section` is
+  `var(--space-6)`, and it zeroes the trailing margin of the last card inside itself — the
+  cards already carry 14–16px of their own, and left alone that sums with the section gap
+  and the rhythm drifts down the screen. It is also its own `@container` (`overview-sec`),
+  so the head stacks on a narrow panel without a viewport breakpoint.
+
+The pair generalises past the landing screen — the per-book Consignment tab (accounts /
+invoices / ledger) is the second screen on it. Two things that surfaced there:
+
+- **`.overview-section` and `.sys-sticky-head` coexist.** `container-type: inline-size`
+  applies layout and inline-size containment, not paint containment, so it does **not**
+  become a scroll container and a sticky `th` inside it still resolves `top` against the
+  page. Verified against the real sheet at `--sticky-top: 60px`.
+- **`.sec-head-badges` wraps.** A head's badge slot is not always one pill — these sections
+  hang two or three `.btn`s (and a `.sec-head-note` summary line) off it. Without
+  `flex-wrap`, `flex-shrink:0` squeezes the title column narrower and narrower until the
+  head overflows, well before the 680px container stack takes over. Use `.sec-head-note`
+  for a figure or status line riding alongside those buttons — mono and tabular, one step
+  below the buttons, so the actions still lead the slot.
+- **Replacing `.divider` is the point, not a side effect.** A screen that separates its
+  sections with hairlines is one where the spacing is doing no grouping work. Delete the
+  rules and let the section gap carry it.
 
 ---
 
@@ -350,6 +485,27 @@ Three rules that come with it:
 - **`min-width: 0` on the stage.** Without it a long unbreakable figure — a
   mixed-currency total, a full ISBN — stretches the flex item and widens the
   whole column.
+
+Second surface on this pattern: the book dashboard's Inventory and Break-even
+panels (`.stock-block` / `.stock-stage`, "STOCK BLOCK" in `style.css`). Same
+before-state — five hand-picked margins running 20 / 10 / 17.6 / 9.6 / 12px — and
+the same two-gap fix. Two things it adds:
+
+- **The reading goes ABOVE the bar it explains.** A progress bar is an
+  illustration of a figure, so the figure has to exist first; with the number
+  underneath, the bar is the panel's largest element and the reading is a
+  footnote to it. Order is figure → bar → breakdown pills, all inside one stage.
+- **Scope a bar's height to the panel, not to `.bar-track`.** 5px of trough
+  carries no weight under a 22px figure, but the same class draws the catalogue's
+  own bars, which are sized against a whole shelf of cards. `.stock-block
+  .bar-track{height:8px}` + `.stock-block .bar-fill{height:100%}` leaves those
+  alone.
+
+**Layout that JS resets belongs in a class, not inline.** `#d-recalc-onhand-wrap`
+held `display:flex` in its `style` attribute while `updateDashboard()` reset the
+row with `style.display = ''` on leaving author mode — which clears the inline
+property outright and left the row stacked. Anything a `style.display = ''`
+touches must get its display from CSS (`.stock-actions`).
 
 **Money figures lead on type, not just size.** The sale total on that panel was
 34px Syne 800 — the heading face, proportional — so the digits re-widthed on
