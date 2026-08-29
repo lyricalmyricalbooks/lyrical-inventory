@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { appSource } from './helpers/extract-decl.js';
+import { resolveCountryCode } from '../src/lib/countries.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -20,10 +21,6 @@ describe('Shippo Customs & Country Helpers', () => {
   beforeEach(() => {
     const mainContent = appSource;
 
-    // Extract SHIPPO_COUNTRY_CODES object
-    const shippoCodesMatch = mainContent.match(/const SHIPPO_COUNTRY_CODES = \{[\s\S]+?\};/);
-    expect(shippoCodesMatch).not.toBeNull();
-
     // Extract helper functions
     const normMatch = mainContent.match(/function normalizeCountryCode\(code\) \{([\s\S]+?)\n\}/);
     const interMatch = mainContent.match(/function isInternationalShipment\(fromCountry, toCountry\) \{([\s\S]+?)\n\}/);
@@ -40,12 +37,12 @@ describe('Shippo Customs & Country Helpers', () => {
     expect(incotermMatch).not.toBeNull();
 
     // Reconstruct them with new Function
-    normalizeCountryCode = new Function('code', 
-      shippoCodesMatch[0] + '\n' + normMatch[0] + '\nreturn normalizeCountryCode(code);'
-    );
-    isInternationalShipment = new Function('fromCountry', 'toCountry', 
-      shippoCodesMatch[0] + '\n' + normMatch[0] + '\n' + interMatch[0] + '\nreturn isInternationalShipment(fromCountry, toCountry);'
-    );
+    normalizeCountryCode = new Function('resolveCountryCode', 'code',
+      normMatch[0] + '\nreturn normalizeCountryCode(code);'
+    ).bind(null, resolveCountryCode);
+    isInternationalShipment = new Function('resolveCountryCode', 'fromCountry', 'toCountry',
+      normMatch[0] + '\n' + interMatch[0] + '\nreturn isInternationalShipment(fromCountry, toCountry);'
+    ).bind(null, resolveCountryCode);
     
     // We will provide a custom $ function to the environment inside the Function call
     readShippoCustomsValue = new Function('$', 'id', 'fallback', 

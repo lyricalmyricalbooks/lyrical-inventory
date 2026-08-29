@@ -24,7 +24,6 @@ import {
   classifyStripePayment,
   escapeHTML,
   getReconMemory,
-  normalizeCountryCode,
   renderReconcile,
   saveReconMemory,
   sheetsUrl,
@@ -41,6 +40,7 @@ import {
   shippingPurchaseRowPayload,
 } from './shipping.js';
 import { escapeHtml } from '../lib/html.js';
+import { resolveCountryCode } from '../lib/countries.js';
 import { getBookCurrencyCode } from '../lib/money.js';
 import { normalizeShippingOrderNumber } from '../lib/shipping-reconciliation.js';
 
@@ -181,11 +181,29 @@ function extractBigCartelAddress(orderOrAttr = {}, orderId = '', included = []) 
   const zip = (attr.shipping_zip || attr.zip || attr.postal_code || shippingAddrObj.zip || incZip || '').trim();
   const company = (attr.shipping_company || attr.company || shippingAddrObj.company || incCompany || '').trim();
 
-  let rawCountry = attr.shipping_country_code || attr.shipping_country_id || attr.shipping_country_name || attr.shipping_country || shippingAddrObj.country_code || shippingAddrObj.country || incCountry;
-  if (typeof rawCountry === 'object' && rawCountry !== null) {
-    rawCountry = rawCountry.code || rawCountry.id || rawCountry.country_code || rawCountry.name;
+  // Big Cartel spreads the country across several fields and not every order
+  // carries the same ones, so each candidate is tried until one actually
+  // resolves rather than taking the first that is merely non-empty. That
+  // ordering mattered: `shipping_country_id` is a Big Cartel row number, and
+  // preferring it meant a real country name sitting in the next field was never
+  // read — which is how a Serbian order arrived with no usable country at all.
+  const countryCandidates = [
+    attr.shipping_country_code,
+    attr.shipping_country_name,
+    attr.shipping_country,
+    shippingAddrObj.country_code,
+    shippingAddrObj.country,
+    incCountry,
+    attr.shipping_country_id,
+  ];
+  let country = '';
+  let rawCountry = '';
+  for (const candidate of countryCandidates) {
+    if (!candidate) continue;
+    const resolved = resolveCountryCode(candidate);
+    if (!rawCountry) rawCountry = typeof candidate === 'object' ? (candidate.name || candidate.code || '') : String(candidate);
+    if (resolved) { country = resolved; break; }
   }
-  const country = normalizeCountryCode(rawCountry || 'US');
 
   return {
     orderNumber: orderId || orderOrAttr.id || '',
@@ -197,7 +215,11 @@ function extractBigCartelAddress(orderOrAttr = {}, orderId = '', included = []) 
     city,
     state,
     zip,
-    country
+    country,
+    // What the storefront actually said, kept even when it could not be placed
+    // — the pickers show it so an unshippable order names its own problem
+    // instead of quietly presenting as a US address.
+    countryRaw: rawCountry,
   };
 }
 
@@ -939,12 +961,18 @@ function prefillShippingFromBigCartelOrder(orderId) {
   $('st-state').value = addr.state;
   $('st-zip').value = addr.zip;
 
-  // Set the country dropdown
+  // Set the country dropdown. A country the storefront sent but this app cannot
+  // place is called out rather than quietly swapped for the United States —
+  // buying a US label for an order bound elsewhere is worse than stopping.
   const countrySelect = $('st-country');
   if (countrySelect) {
-    const normCountry = normalizeCountryCode(addr.country);
-    const optionExists = Array.from(countrySelect.options).some(opt => opt.value === normCountry);
-    countrySelect.value = optionExists ? normCountry : 'US';
+    const optionExists = addr.country
+      && Array.from(countrySelect.options).some(opt => opt.value === addr.country);
+    if (optionExists) {
+      countrySelect.value = addr.country;
+    } else if (addr.countryRaw) {
+      showToast(`“${addr.countryRaw}” isn’t a country we recognize — pick the destination country before buying a label.`, 'warn');
+    }
   }
 
   // Link the order number to the shipping prefill dataset so reconciliation can trace it
