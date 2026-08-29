@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v32)
+/* Lyricalmyrical Inventory — Unified Backend (v33)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -125,6 +125,8 @@
  *      modern JSON/OAuth 2.0 Developer Portal API. 'proxycanadapost' now uses
  *      JSON payloads and 'application/vnd.cpc...json' headers instead of XML.
  *      Bump flags v31-and-older as outdated.
+ *  31. v33: Cache OAuth 2.0 token in CacheService for 55m to avoid rate limits.
+ *      Bump flags v32-and-older as outdated.
  */
 
 const HEADERS = [
@@ -173,8 +175,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v32',
-    scriptVersion: 'v32',
+    service: 'lyrical-sheets-webhook-v33',
+    scriptVersion: 'v33',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -662,24 +664,33 @@ function doPost(e) {
         if (useOAuth) {
           try {
             const tokenUrl = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token';
-            const basicAuth = Utilities.base64Encode(keyTrim + ':' + secretTrim);
-            const scope = encodeURIComponent((d.scope || 'merchant').trim());
-            const tokenResp = UrlFetchApp.fetch(tokenUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': 'Basic ' + basicAuth
-              },
-              payload: 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim) + '&scope=' + scope,
-              muteHttpExceptions: true
-            });
-            const tokenJson = JSON.parse(tokenResp.getContentText() || '{}');
-            if (tokenJson && tokenJson.access_token) {
-              authHeader = 'Bearer ' + tokenJson.access_token;
-            } else if (tokenJson && tokenJson.error_description) {
-              oauthError = tokenJson.error_description;
-            } else if (tokenJson && tokenJson.error) {
-              oauthError = tokenJson.error;
+            const cacheKey = 'cp_oauth_token_' + Utilities.base64Encode(keyTrim).substring(0, 32);
+            const cache = CacheService.getScriptCache();
+            const cachedToken = cache.get(cacheKey);
+            
+            if (cachedToken) {
+              authHeader = 'Bearer ' + cachedToken;
+            } else {
+              const basicAuth = Utilities.base64Encode(keyTrim + ':' + secretTrim);
+              const scope = encodeURIComponent((d.scope || 'merchant').trim());
+              const tokenResp = UrlFetchApp.fetch(tokenUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                  'Authorization': 'Basic ' + basicAuth
+                },
+                payload: 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim) + '&scope=' + scope,
+                muteHttpExceptions: true
+              });
+              const tokenJson = JSON.parse(tokenResp.getContentText() || '{}');
+              if (tokenJson && tokenJson.access_token) {
+                authHeader = 'Bearer ' + tokenJson.access_token;
+                cache.put(cacheKey, tokenJson.access_token, 3300); // 55 minutes
+              } else if (tokenJson && tokenJson.error_description) {
+                oauthError = tokenJson.error_description;
+              } else if (tokenJson && tokenJson.error) {
+                oauthError = tokenJson.error;
+              }
             }
           } catch (e) {
             oauthError = String(e);
