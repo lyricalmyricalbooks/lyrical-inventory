@@ -2283,6 +2283,57 @@ function _tcBuildLedger(selectedYear) {
   return { totalGrossSales, totalOperatingExpenses, allLedger };
 }
 
+/* ── Integration connection pills ─────────────────────────────────────────
+   Each service header carries a one-word verdict — Connected, Not connected,
+   Turned off — so the owner can see at a glance which services are actually
+   wired up without opening five panels. Derived from the fields on screen,
+   so it stays true the moment a key is typed, saved or cleared. */
+const INTEGRATION_PILL_SPECS = [
+  { key: 'gemini', fields: ['tc-api-key'] },
+  { key: 'shippo', fields: ['tc-shippo-key'] },
+  { key: 'zonos', fields: ['tc-zonos-key'], toggle: 'tc-zonos-enabled' },
+  { key: 'canadapost', fields: ['tc-cp-key', 'tc-cp-secret'], toggle: 'tc-cp-enabled', requireAll: true },
+  { key: 'stripe', fields: ['stripe-fees-key'] },
+];
+
+function refreshIntegrationStatusPills() {
+  let connected = 0;
+  let total = 0;
+  INTEGRATION_PILL_SPECS.forEach(spec => {
+    const pill = $(`tc-service-status-${spec.key}`);
+    if (!pill) return;
+    total += 1;
+    const values = spec.fields.map(id => ($(id)?.value || '').trim());
+    const filled = spec.requireAll ? values.every(Boolean) : values.some(Boolean);
+    const partial = !filled && values.some(Boolean);
+    const toggleEl = spec.toggle ? $(spec.toggle) : null;
+    const turnedOff = !!toggleEl && !toggleEl.checked;
+
+    let cls = 'is-idle';
+    let label = 'Not connected';
+    if (filled && turnedOff) { cls = 'is-off'; label = 'Turned off'; }
+    else if (filled) { cls = 'is-ready'; label = 'Connected'; connected += 1; }
+    else if (partial) { cls = 'is-attention'; label = 'Finish setup'; }
+
+    pill.className = `tc-service-status ${cls}`;
+    pill.textContent = label;
+  });
+
+  const summary = $('tc-integrations-summary');
+  if (summary && total) summary.textContent = `${connected} of ${total} services connected`;
+}
+
+// One delegated listener keeps the pills honest while the owner types.
+let _integrationPillsWired = false;
+function wireIntegrationStatusPills() {
+  if (_integrationPillsWired) return;
+  const card = document.querySelector('.tc-integrations-card');
+  if (!card) return;
+  _integrationPillsWired = true;
+  card.addEventListener('input', refreshIntegrationStatusPills);
+  card.addEventListener('change', refreshIntegrationStatusPills);
+}
+
 function _tcRenderStatusHeaders() {
   if ($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
   if ($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
@@ -2312,7 +2363,7 @@ function _tcRenderStatusHeaders() {
   if (_zonosStatusEl && TAX_CENTER.settings?.zonosLastTestAt) {
     const last = new Date(TAX_CENTER.settings.zonosLastTestAt);
     if (!isNaN(last)) {
-      _zonosStatusEl.innerHTML = `<span style="color:var(--green);font-weight:600;">✓ API connection active</span> <span style="color:var(--text3);font-size:10px;">(tested ${last.toLocaleDateString()} ${last.toLocaleTimeString()})</span>`;
+      _zonosStatusEl.innerHTML = `<span class="tc-status-ok">✓ API connection active</span> <span class="tc-status-meta">(tested ${last.toLocaleDateString()} ${last.toLocaleTimeString()})</span>`;
     }
   }
 
@@ -2327,9 +2378,12 @@ function _tcRenderStatusHeaders() {
   if (_cpStatusEl && TAX_CENTER.settings?.cpLastTestAt) {
     const last = new Date(TAX_CENTER.settings.cpLastTestAt);
     if (!isNaN(last)) {
-      _cpStatusEl.innerHTML = `<span style="color:var(--green);font-weight:600;">✓ API connection active</span> <span style="color:var(--text3);font-size:10px;">(tested ${last.toLocaleDateString()} ${last.toLocaleTimeString()})</span>`;
+      _cpStatusEl.innerHTML = `<span class="tc-status-ok">✓ API connection active</span> <span class="tc-status-meta">(tested ${last.toLocaleDateString()} ${last.toLocaleTimeString()})</span>`;
     }
   }
+
+  wireIntegrationStatusPills();
+  refreshIntegrationStatusPills();
 
   // Update the receipt storage status shown inline next to the Receipt
   // input on Log Business Expense.
@@ -3488,6 +3542,7 @@ async function saveTaxCenterSettings() {
     TAX_CENTER.settings.cpZonosAutoGenerate = cpZonosAutoGenerate;
 
     await saveTaxCenter();
+    refreshIntegrationStatusPills();
     showToast('✓ Settings saved to Firebase');
   } catch (e) {
     console.error(e);

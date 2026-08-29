@@ -681,12 +681,12 @@ function renderShippingReconciliationWorklist() {
   const panel = list.closest('.shipping-reconciliation');
   const openButton = $('shipping-reconciliation-open');
   if (panel?.dataset.closed === 'true') {
-    panel.style.display = 'none';
-    if (openButton) openButton.style.display = '';
+    panel.hidden = true;
+    if (openButton) openButton.hidden = false;
     return;
   }
-  if (panel) panel.style.display = '';
-  if (openButton) openButton.style.display = 'none';
+  if (panel) panel.hidden = false;
+  if (openButton) openButton.hidden = true;
   const expenses = (TAX_CENTER.businessExpenses || []).filter(expense =>
     String(expense?.ref || '').startsWith('shippo:') &&
     expense.shippingMatchStatus !== 'matched' && expense.shippingMatchStatus !== 'dismissed'
@@ -694,7 +694,11 @@ function renderShippingReconciliationWorklist() {
   const knownOrders = getShippingReconciliationOrders();
   count.textContent = `${expenses.length} to review`;
   if (!expenses.length) {
-    list.innerHTML = '<div class="shipping-reconciliation-empty">All imported postage is linked to an order.</div>';
+    list.innerHTML = `<div class="shipping-reconciliation-empty">
+      <span class="recon-empty-mark" aria-hidden="true">\u2713</span>
+      <strong>Every label is linked</strong>
+      <span>All imported postage is matched to an order. New labels appear here after the next import.</span>
+    </div>`;
     return;
   }
 
@@ -722,11 +726,13 @@ function renderShippingReconciliationWorklist() {
         <small>${escapeHtml(expense.shippingMatchStatus || 'unmatched')}</small>
         ${hint}
       </div>
-      <label for="${domId}">Order</label>
-      <select id="${domId}" aria-label="Order for postage expense"${noCandidates ? ' disabled' : ''}><option value="">${noCandidates ? 'No orders on file' : 'Select an order'}</option>${options}</select>
-      <div class="shipping-reconciliation-actions">
-        <button class="btn sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="openRecoverWebsiteOrder(this.dataset.ref)">Add missing order</button>
-        <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)"${noCandidates ? ' disabled' : ''}>Link postage</button>
+      <div class="shipping-reconciliation-decision">
+        <label for="${domId}">Order</label>
+        <select id="${domId}" aria-label="Order for postage expense"${noCandidates ? ' disabled' : ''}><option value="">${noCandidates ? 'No orders on file' : 'Select an order'}</option>${options}</select>
+        <div class="shipping-reconciliation-actions">
+          <button class="btn sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="openRecoverWebsiteOrder(this.dataset.ref)">Add missing order</button>
+          <button class="btn gold sm" type="button" data-ref="${escapeHtml(expense.ref)}" onclick="linkShippingExpense(this.dataset.ref)"${noCandidates ? ' disabled' : ''}>Link postage</button>
+        </div>
       </div>
     </div>`;
   }).join('');
