@@ -12545,6 +12545,8 @@ let _gasCodeLoaded = false;
 async function loadGasCode() {
   const scriptVerEl = $('gas-script-ver');
   if (scriptVerEl) scriptVerEl.textContent = EXPECTED_SCRIPT_VERSION;
+  const scriptVerTagEl = $('gas-script-ver-tag');
+  if (scriptVerTagEl) scriptVerTagEl.textContent = EXPECTED_SCRIPT_VERSION;
   const expectedEl = $('sheets-expected-version');
   if (expectedEl) expectedEl.textContent = EXPECTED_SCRIPT_VERSION;
   if (_gasCodeLoaded) return;
@@ -12560,9 +12562,25 @@ async function loadGasCode() {
   }
 }
 function copyGasCode() {
-  const text = $('gas-code').textContent;
+  const el = $('gas-code');
+  const text = el ? el.textContent : '';
   if (!_gasCodeLoaded || !text) { showToast('Code still loading — try again in a moment', 'warn'); return; }
-  navigator.clipboard.writeText(text).then(() => showToast('✓ Code copied!'));
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('✓ Code copied to clipboard!');
+    const btn = $('copy-gas-code-btn');
+    if (btn) {
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = '<span class="copy-gas-btn-icon" aria-hidden="true">✓</span><span class="copy-gas-btn-label">Copied!</span>';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.innerHTML = origHtml;
+        btn.classList.remove('copied');
+      }, 2000);
+    }
+  }).catch((err) => {
+    console.error('[gas-code] copy failed', err);
+    showToast('Failed to copy to clipboard', 'err');
+  });
 }
 async function verifyUrl() {
   if (!sheetsUrl) return;

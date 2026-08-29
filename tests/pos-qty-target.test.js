@@ -14,9 +14,9 @@ test('POS quantity stepper buttons meet the 44px touch target and have a full st
   // The base rule is the multi-line block (a mobile breakpoint further up the
   // file also sets `.pos-qty-btn{...}` on one line with no interior newline,
   // which a lazy `[\s\S]*?\n\}` would otherwise skate straight past).
-  const btn = styles.match(/\.pos-qty-btn \{\n([\s\S]*?)\n\}/);
-  const active = styles.match(/\.pos-qty-btn:active \{\n([\s\S]*?)\n\}/);
-  const focusVisible = styles.match(/\.pos-qty-btn:focus-visible \{\n([\s\S]*?)\n\}/);
+  const btn = styles.match(/\.pos-qty-btn \{\r?\n([\s\S]*?)\r?\n\}/);
+  const active = styles.match(/\.pos-qty-btn:active \{\r?\n([\s\S]*?)\r?\n\}/);
+  const focusVisible = styles.match(/\.pos-qty-btn:focus-visible \{\r?\n([\s\S]*?)\r?\n\}/);
 
   expect(btn).not.toBeNull();
   expect(btn[1]).toMatch(/width:\s*var\(--target-min\)/);
