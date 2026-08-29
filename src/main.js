@@ -344,6 +344,7 @@ import {
   backfillShipping,
   _toggleShippingPanel,
   openLabelModal,
+  renderLabelCountryHint,
   updateShippedStatusUI,
   toggleShipped,
   printShippingLabel,
@@ -572,6 +573,7 @@ import { histMirrorForLedger, stampLedgerInvoiceLink, reconcileConsignmentMirror
 import { deriveInvoiceBookIds, invoicesForBook, findInvoiceAcrossBooks, otherBookTitles, lineItemBookId, invoiceBookSplit, invoiceShareForBook, neutralInvoicePrefix, invoiceNumberPrefix, nextInvoiceSeq, buildInvoiceNumber } from './lib/invoices.js';
 import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerStoreOptions, filterLedgerEntries, ledgerTypeCounts, describeLedgerFilter, ledgerTotalsScope } from './lib/consignment-ledger-filter.js';
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
+import { resolveCountryCode } from './lib/countries.js';
 
 // ─────────────────────────────────────────────
 // CLIENT ERROR REPORTING
@@ -20793,7 +20795,7 @@ Object.assign(window, {
   openRet, confirmReturn, openEditHist, openEditLedger, saveEntryEdit, convertKeptAllToReceived, voidEntry,
   restoreBookDataFromSheets, resetBookData, connectSheets, disconnectSheets, testSheets, verifyUrl, checkSheetsVersion,
   pushAllToSheets, backfillAndResync, copyGasCode, saveProductionCosts, savePaymentLinks,
-  handleImportFile, confirmImport, openLabelModal, printShippingLabel, toggleShipped, backfillShipping,
+  handleImportFile, confirmImport, openLabelModal, renderLabelCountryHint, printShippingLabel, toggleShipped, backfillShipping,
   saveArtistPaymentLink, markArtistTransferReceived, settleArtistTransferKeepShare, settleArtistTransferKeepAll, markExpenseReceived,
   submitExpense, voidExpense, toggleExpenseReceiptFilter, toggleExpenseReimburseSelect, requestBulkReimbursement, markPaid, markHistoryConsignmentPaid, removeStore, addProfitTier, removeProfitTier,
   saveProfitTiers, renderProfitSettings, updateProfitTierField, renderProfitTierList,
@@ -21392,58 +21394,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- SHIPPO SHIPPING CALCULATOR AND QUANTITY SCALING ---
 
-const SHIPPO_COUNTRY_CODES = {
-  canada: 'CA', ca: 'CA', can: 'CA',
-  'united states': 'US', 'united states of america': 'US', usa: 'US', us: 'US',
-  'united kingdom': 'GB', uk: 'GB', gb: 'GB', 'great britain': 'GB', england: 'GB',
-  italy: 'IT', it: 'IT', italia: 'IT',
-  germany: 'DE', de: 'DE', deutschland: 'DE',
-  france: 'FR', fr: 'FR',
-  australia: 'AU', au: 'AU',
-  austria: 'AT', at: 'AT',
-  belgium: 'BE', be: 'BE',
-  brazil: 'BR', br: 'BR',
-  china: 'CN', cn: 'CN',
-  'czech republic': 'CZ', cz: 'CZ',
-  denmark: 'DK', dk: 'DK',
-  finland: 'FI', fi: 'FI',
-  greece: 'GR', gr: 'GR',
-  hungary: 'HU', hu: 'HU',
-  iceland: 'IS', is: 'IS',
-  india: 'IN', in: 'IN',
-  ireland: 'IE', ie: 'IE',
-  israel: 'IL', il: 'IL',
-  japan: 'JP', jp: 'JP',
-  mexico: 'MX', mx: 'MX',
-  netherlands: 'NL', holland: 'NL', nl: 'NL',
-  'new zealand': 'NZ', nz: 'NZ',
-  norway: 'NO', no: 'NO',
-  poland: 'PL', pl: 'PL',
-  portugal: 'PT', pt: 'PT',
-  singapore: 'SG', sg: 'SG',
-  'south africa': 'ZA', za: 'ZA',
-  'south korea': 'KR', kr: 'KR',
-  spain: 'ES', es: 'ES', españa: 'ES',
-  sweden: 'SE', se: 'SE',
-  switzerland: 'CH', ch: 'CH', suisse: 'CH',
-  turkey: 'TR', tr: 'TR',
-  ukraine: 'UA', ua: 'UA'
-};
-
+// ISO country resolution lives in src/lib/countries.js. This used to be a
+// hand-kept table of about forty countries with a blanket 'US' fallback, which
+// filed a Serbian order under the United States because Serbia was simply not
+// in the list. The table is now the full ISO 3166-1 set and the fallback is
+// gone from every place that classifies an order.
 export function normalizeCountryCode(code) {
-  if (!code) return 'US';
-  if (typeof code === 'object' && code !== null) {
-    code = code.code || code.id || code.iso2 || code.country_code || code.name || 'US';
-  }
-  const raw = String(code).trim();
-  if (!raw) return 'US';
+  const resolved = resolveCountryCode(code);
+  if (resolved) return resolved;
 
-  const normalized = SHIPPO_COUNTRY_CODES[raw.toLowerCase()];
-  if (normalized) return normalized;
-  if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
-
+  // Not a country this app knows. Before defaulting, honour whatever the
+  // destination picker is actually offering — it is populated from the same
+  // ISO table, so this only matters if that list is ever extended by hand.
+  const raw = String(code ?? '').trim();
   const select = typeof document !== 'undefined' ? document.getElementById('st-country') : null;
-  if (select && select.options) {
+  if (raw && select && select.options) {
     const rawLower = raw.toLowerCase();
     for (const opt of select.options) {
       if (opt.value && (opt.value.toLowerCase() === rawLower || opt.textContent.toLowerCase() === rawLower)) {
@@ -21452,6 +21417,10 @@ export function normalizeCountryCode(code) {
     }
   }
 
+  // Kept only so the Shipping tab's own form still has a country selected on
+  // first load. Nothing that buckets an order by region may rely on it — those
+  // callers use shipmentRegion, which sends an unplaceable country to
+  // "International" rather than to the United States.
   return 'US';
 }
 

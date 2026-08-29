@@ -52,6 +52,14 @@ import {
 } from './bigcartel.js';
 import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
 import { escapeHtml } from '../lib/html.js';
+import {
+  REGION_LABELS,
+  countryIsUnrecognized,
+  countryName,
+  countryOptions,
+  resolveCountryCode,
+  shipmentRegion,
+} from '../lib/countries.js';
 import { csvCell } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { fmt, fmtD, roundCents, cadEquivalentForSale } from '../lib/money.js';
@@ -267,9 +275,33 @@ function openLabelModal(histIndex) {
   $('sl-city').value = h.shipCity || '';
   $('sl-province').value = h.shipProvince || '';
   $('sl-postal').value = h.shipPostal || '';
+  populateCountryDatalist('sl-country-options');
   $('sl-country').value = h.shipCountry || 'Canada';
+  renderLabelCountryHint();
   updateShippedStatusUI(h);
   openM('shipping-label');
+}
+
+/**
+ * Warns, on the label form itself, when the typed country is not one this app
+ * can place on a map.
+ *
+ * An unrecognized country used to be invisible: the order saved fine, no label
+ * could ever be bought for it, and every report counted it as a US sale. The
+ * warning is the moment the mistake is cheapest to fix — while the order is
+ * open in front of whoever typed it.
+ */
+function renderLabelCountryHint() {
+  const hint = $('sl-country-hint');
+  if (!hint) return;
+  const typed = $('sl-country')?.value.trim() || '';
+  if (!typed || !countryIsUnrecognized(typed)) {
+    hint.hidden = true;
+    hint.textContent = '';
+    return;
+  }
+  hint.hidden = false;
+  hint.textContent = `“${typed}” isn’t a country we recognize — pick one from the list so this order is counted and shipped correctly.`;
 }
 
 function updateShippedStatusUI(h) {
@@ -314,7 +346,10 @@ function printShippingLabel() {
   h.shipCity = $('sl-city').value.trim();
   h.shipProvince = $('sl-province').value.trim();
   h.shipPostal = $('sl-postal').value.trim();
-  h.shipCountry = $('sl-country').value.trim();
+  // Stored in its canonical spelling so every later reader — the region split,
+  // the ledger filters, the Shippo payload — sees the same country the person
+  // typing meant, however they happened to spell it.
+  h.shipCountry = countryName($('sl-country').value.trim());
   if (!h.shipped) {
     h.shipped = true;
     h.shippedDate = today();
@@ -1098,7 +1133,59 @@ function getBookPresetSpecs(book) {
   return resolveBookPresetSpecs(book).specs;
 }
 
+/**
+ * Fills a country <select> from the full ISO list, keeping whatever was already
+ * chosen.
+ *
+ * The markup used to hard-code about forty countries, which is how a Serbian
+ * customer ended up unshippable and then mis-filed as a US sale. Building the
+ * list from the shared table means a destination nobody anticipated is
+ * selectable the first time it comes up.
+ */
+function populateCountrySelect(selectId) {
+  const select = $(selectId);
+  if (!select) return;
+  const previous = select.value;
+  if (select.dataset.isoPopulated !== '1') {
+    const frag = document.createDocumentFragment();
+    countryOptions().forEach((country, index) => {
+      // Canada and the United States stay pinned above a separator, as before.
+      if (index === 2) {
+        const divider = document.createElement('option');
+        divider.disabled = true;
+        divider.textContent = '─'.repeat(10);
+        frag.appendChild(divider);
+      }
+      const opt = document.createElement('option');
+      opt.value = country.code;
+      opt.textContent = country.name;
+      frag.appendChild(opt);
+    });
+    select.replaceChildren(frag);
+    select.dataset.isoPopulated = '1';
+  }
+  if (previous && Array.from(select.options).some(o => o.value === previous)) {
+    select.value = previous;
+  }
+}
+
+/** Fills the label modal's country suggestion list with every ISO name. */
+function populateCountryDatalist(listId) {
+  const list = $(listId);
+  if (!list || list.dataset.isoPopulated === '1') return;
+  const frag = document.createDocumentFragment();
+  countryOptions().forEach(country => {
+    const opt = document.createElement('option');
+    opt.value = country.name;
+    frag.appendChild(opt);
+  });
+  list.replaceChildren(frag);
+  list.dataset.isoPopulated = '1';
+}
+
 function initShippingTab() {
+  populateCountrySelect('sf-country');
+  populateCountrySelect('st-country');
   const shippoKey = TAX_CENTER.settings?.shippoKey || '';
   const indicator = $('ship-key-indicator');
   const statusText = $('ship-key-status-text');
@@ -1194,7 +1281,8 @@ function initShippingTab() {
           city: st.city || '',
           state: st.region || '',
           zip: st.postal || '',
-          country: normalizeCountryCode(st.country || 'CA')
+          country: st.country ? resolveCountryCode(st.country) : 'CA',
+          countryRaw: st.country || '',
         };
         const opt = document.createElement('option');
         opt.value = JSON.stringify(addrObj);
@@ -1225,7 +1313,8 @@ function initShippingTab() {
           city: h.shipCity,
           state: h.shipProvince,
           zip: h.shipPostal,
-          country: normalizeCountryCode(h.shipCountry || 'CA')
+          country: h.shipCountry ? resolveCountryCode(h.shipCountry) : 'CA',
+          countryRaw: h.shipCountry || '',
         };
         const opt = document.createElement('option');
         opt.value = JSON.stringify(addrObj);
@@ -1317,7 +1406,8 @@ function renderCustomShippoDestPicker() {
       city: st.city || '',
       state: st.region || '',
       zip: st.postal || '',
-      country: normalizeCountryCode(st.country || 'CA')
+      country: st.country ? resolveCountryCode(st.country) : 'CA',
+      countryRaw: st.country || '',
     };
 
     items.push({
@@ -1347,7 +1437,8 @@ function renderCustomShippoDestPicker() {
       city: h.shipCity,
       state: h.shipProvince,
       zip: h.shipPostal,
-      country: normalizeCountryCode(h.shipCountry || 'CA')
+      country: h.shipCountry ? resolveCountryCode(h.shipCountry) : 'CA',
+      countryRaw: h.shipCountry || '',
     };
 
     items.push({
@@ -1445,9 +1536,19 @@ function filterShippoDestMenu() {
     const masterIdx = _shippoDestMasterList.indexOf(item);
     // Carriers reject international labels without a recipient phone, so flag those rows up front.
     let destCountry = '';
-    try { destCountry = JSON.parse(item.value).country || ''; } catch (_) { destCountry = ''; }
+    let destCountryRaw = '';
+    try {
+      const parsed = JSON.parse(item.value);
+      destCountry = parsed.country || '';
+      destCountryRaw = parsed.countryRaw || '';
+    } catch (_) { destCountry = ''; }
     const phoneWarning = (item.missingPhone && destCountry && destCountry !== originCountry)
       ? '<span class="custom-dest-item-warn" title="No recipient phone on file — required for international labels">⚠ no phone</span>'
+      : '';
+    // No country means no label. Said here, in the picker, rather than at the
+    // rate call — the row is where someone is choosing who to ship to.
+    const countryWarning = (!destCountry && destCountryRaw)
+      ? `<span class="custom-dest-item-warn" title="${escapeHtml(destCountryRaw)} is not a country we recognize — set the destination country before buying a label">⚠ check country</span>`
       : '';
     return `
       <div class="custom-dest-item ${isSelected ? 'selected' : ''}" onclick="selectShippoDestCustomItem(${masterIdx}, event)">
@@ -1455,7 +1556,7 @@ function filterShippoDestMenu() {
           <span class="custom-dest-item-title">${item.icon} ${escapeHtml(item.title)}</span>
           <span class="custom-dest-item-badge ${item.category}">${escapeHtml(item.catLabel)}</span>
         </div>
-        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${phoneWarning}</div>
+        <div class="custom-dest-item-sub">${escapeHtml(item.sub)}${countryWarning}${phoneWarning}</div>
       </div>`;
   }).join('');
 }
@@ -3835,8 +3936,10 @@ async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
 function shippoRateRules(opts) {
   const o = opts || {};
   const international = !!o.international;
-  // Injectable so the rules can be exercised without main.js's country table.
-  const supported = o.isSupportedCountry || ((v) => !!normalizeCountryCode(v));
+  // resolveCountryCode, not normalizeCountryCode: the latter falls back to 'US'
+  // and so would call every value supported, including the ones that are the
+  // whole reason this check exists.
+  const supported = o.isSupportedCountry || ((v) => !!resolveCountryCode(v));
   const filled = (v) => String(v ?? '').trim().length > 0;
   const positive = (v) => parseFloat(v) > 0;
 
@@ -4655,14 +4758,14 @@ function getSmartShippingRecommendations(allOrders, shippoExpenses, optWeightOve
 
   regions.forEach(region => {
     const regOrders = allOrders.filter(o => {
-      const country = normalizeCountryCode(o.shipCountry || 'US');
+      const bucket = shipmentRegion(o.shipCountry);
       const state = String(o.shipState || '').trim().toUpperCase();
       const isON = state === 'ON' || state === 'ONTARIO';
 
-      if (region === 'ON') return country === 'CA' && isON;
-      if (region === 'CA') return country === 'CA' && !isON;
-      if (region === 'US') return country === 'US';
-      return country !== 'CA' && country !== 'US';
+      if (region === 'ON') return bucket === 'CA' && isON;
+      if (region === 'CA') return bucket === 'CA' && !isON;
+      if (region === 'US') return bucket === 'US';
+      return bucket === 'intl';
     });
 
     const values = [];
@@ -4864,14 +4967,7 @@ function buildShippingPnLHtml(allOrders, relevantExpenses, shippoExpenses, bookF
 
       // C. Region filter
       if (shipAnalysisRegionFilter !== 'all') {
-        const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-        if (shipAnalysisRegionFilter === 'CA') {
-          if (destCountry !== 'CA') return false;
-        } else if (shipAnalysisRegionFilter === 'US') {
-          if (destCountry !== 'US') return false;
-        } else if (shipAnalysisRegionFilter === 'intl') {
-          if (destCountry === 'CA' || destCountry === 'US') return false;
-        }
+        if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
       }
 
       // D. Weight filter
@@ -5194,13 +5290,13 @@ function buildShippingRegionSplitHtml(allOrders, shippoExpenses) {
       ? (Number(o.postagePaid) || 0)
       : linked.reduce((sum, e) => sum + (Number(e.baseAmount) || Number(e.amount) || 0), 0);
 
-    const destCountry = normalizeCountryCode(o.shipCountry || 'US');
+    const destRegion = shipmentRegion(o.shipCountry);
 
-    if (destCountry === 'CA') {
+    if (destRegion === 'CA') {
       caCount++;
       caRevenue += revenue;
       caCost += cost;
-    } else if (destCountry === 'US') {
+    } else if (destRegion === 'US') {
       usCount++;
       usRevenue += revenue;
       usCost += cost;
@@ -5641,14 +5737,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
 
     // C. Region filter
       if (shipAnalysisRegionFilter !== 'all') {
-        const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-        if (shipAnalysisRegionFilter === 'CA') {
-          if (destCountry !== 'CA') return false;
-        } else if (shipAnalysisRegionFilter === 'US') {
-          if (destCountry !== 'US') return false;
-        } else if (shipAnalysisRegionFilter === 'intl') {
-          if (destCountry === 'CA' || destCountry === 'US') return false;
-        }
+        if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
       }
 
     // D. Weight filter
@@ -5903,7 +5992,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     if (shipAnalysisRegionFilter !== 'all') {
       filterBadges += `
         <span class="shipping-filter-badge">
-          Region: ${shipAnalysisRegionFilter === 'CA' ? 'Canadian' : (shipAnalysisRegionFilter === 'US' ? 'USA' : 'International')}
+          Region: ${REGION_LABELS[shipAnalysisRegionFilter] || shipAnalysisRegionFilter}
           <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisRegionFilter('${shipAnalysisRegionFilter}')" title="Remove filter">✕</span>
         </span>
       `;
@@ -6473,14 +6562,7 @@ function downloadFilteredShippingLedgerCSV() {
 
     // C. Region filter
       if (shipAnalysisRegionFilter !== 'all') {
-        const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-        if (shipAnalysisRegionFilter === 'CA') {
-          if (destCountry !== 'CA') return false;
-        } else if (shipAnalysisRegionFilter === 'US') {
-          if (destCountry !== 'US') return false;
-        } else if (shipAnalysisRegionFilter === 'intl') {
-          if (destCountry === 'CA' || destCountry === 'US') return false;
-        }
+        if (shipmentRegion(o.shipCountry) !== shipAnalysisRegionFilter) return false;
       }
 
     // D. Weight filter
@@ -6551,10 +6633,7 @@ function downloadFilteredShippingLedgerCSV() {
       ? 'Manual Override'
       : (linked.length > 0 ? parseCarrierInfo(linked[0].desc).provider : 'Unlinked');
     
-    const destCountry = normalizeCountryCode(o.shipCountry || 'US');
-    let region = 'International';
-    if (destCountry === 'CA') region = 'Canadian';
-    else if (destCountry === 'US') region = 'USA';
+    const region = REGION_LABELS[shipmentRegion(o.shipCountry)];
     const ref = linked.length > 0 ? linked[0].ref : (o.manualPostagePaid ? 'Manual Override' : 'Unlinked');
 
     csv += `${esc(o.num)},${esc(o.shipName || o.name || 'Anonymous')},${esc(book?.title || 'Unknown book')},${o.qty || 1},${weightKg.toFixed(3)},${esc(statusLabel)},${customerPaidBase.toFixed(2)},${postageCostCAD.toFixed(2)},${margin.toFixed(2)},${esc(carrier)},${esc(region)},${esc(ref)}\n`;
@@ -6653,6 +6732,7 @@ export {
   backfillShipping,
   _toggleShippingPanel,
   openLabelModal,
+  renderLabelCountryHint,
   updateShippedStatusUI,
   toggleShipped,
   printShippingLabel,

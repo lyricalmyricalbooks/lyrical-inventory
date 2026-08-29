@@ -3015,6 +3015,18 @@ tr.hist-row:hover {
   display:flex;align-items:center;gap:5px;
 }
 .field-error::before{content:'⚠';font-size:11px;}
+/* Same shape as .field-error but amber: the entry is usable, it just needs a
+   second look before it reaches a carrier or a report. */
+.field-warn{
+  color:var(--amber);
+  font-size:var(--text-xs);
+  font-weight:600;
+  margin-top:var(--space-1);
+  font-family:'Syne',sans-serif;
+  display:flex;align-items:flex-start;gap:5px;
+  line-height:var(--leading-snug);
+}
+.field-warn::before{content:'⚠';line-height:var(--leading-snug);}
 
 /* TOOLTIPS (#10) — add data-tip="..." to any element. */
 .tip{position:relative;cursor:help;}
