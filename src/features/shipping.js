@@ -42,8 +42,8 @@ import {
   states,
   today,
 } from '../main.js';
-import { renderExpenses, saveReceiptToLocalFile } from './receipts.js';
-import { openM, closeM, confirmDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
+import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
+import { openM, closeM, confirmDialog, promptDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
 import {
   extractBigCartelAddress,
   getBigCartelIncluded,
@@ -69,6 +69,18 @@ import {
   recoveredOrderPrefill,
   validateRecoveredOrder,
 } from '../lib/manual-website-order.js';
+import {
+  autoMatchPostage,
+  carrierFromTracking,
+  formatTrackingNumber,
+  isPostageExpense,
+  isPostageLinked,
+  normalizeTrackingNumber,
+  postageLinkPatch,
+  postageRecipientName,
+  suggestPostageMatches,
+  trackingUrlFor,
+} from '../lib/postage-matching.js';
 import {
   applyShippoExpenseEnrichments,
   enrichShippoExpense,
@@ -4703,20 +4715,36 @@ async function confirmSuggestedShippoLink(orderNum, txRef) {
 }
 
 function openManualShippoLinkModal(orderNum) {
+  // Any unlinked postage receipt, not only a Shippo one. A counter receipt is
+  // the same kind of evidence and belongs in the same picker.
   const unlinkedExpenses = (TAX_CENTER.businessExpenses || []).filter(e =>
-    String(e?.ref || '').startsWith('shippo:') &&
-    e.shippingMatchStatus !== 'matched'
+    isPostageExpense(e) && !isPostageLinked(e) && e.shippingMatchStatus !== 'dismissed'
   );
+  // Best-first, so the surname the owner is looking for is usually the top row
+  // rather than something to hunt for in date order.
+  const order = getShippingReconciliationOrders().find(o =>
+    normalizeShippingOrderNumber(o.num) === normalizeShippingOrderNumber(orderNum));
+  const ranked = order
+    ? unlinkedExpenses
+      .map(e => ({ e, score: (suggestPostageMatches(e, [order], { limit: 1 })[0]?.score) ?? -1 }))
+      .sort((a, b) => b.score - a.score)
+    : unlinkedExpenses.map(e => ({ e, score: -1 }));
 
-  const rows = unlinkedExpenses.map(e => {
-    const txId = e.ref.replace('shippo:', '');
+  const rows = ranked.map(({ e, score }) => {
+    const reference = String(e.ref || '').replace(/^shippo:/, '') || 'No reference';
     const amount = (Number(e.baseAmount) || Number(e.amount) || 0).toFixed(2);
-    const recipient = escapeHtml(e.recipientName || 'Unknown recipient');
+    const recipientRaw = postageRecipientName(e);
+    const recipient = escapeHtml(recipientRaw || 'Unknown recipient');
     const date = escapeHtml(e.date || '—');
+    const hint = score >= 100
+      ? '<span class="manual-link-hint strong">Likely match</span>'
+      : score >= 65
+        ? '<span class="manual-link-hint">Possible match</span>'
+        : '';
     return `
-      <tr class="shippo-link-row" data-ref="${escapeHtml(e.ref)}" data-name="${recipient.toLowerCase()}">
-        <td class="mono">${txId.slice(0, 16)}…</td>
-        <td>${recipient}</td>
+      <tr class="shippo-link-row" data-ref="${escapeHtml(e.ref)}" data-name="${escapeHtml(recipientRaw.toLowerCase())}">
+        <td class="mono">${escapeHtml(reference.slice(0, 20))}${reference.length > 20 ? '…' : ''}</td>
+        <td>${recipient}${hint}</td>
         <td>${date}</td>
         <td style="text-align:right; font-weight:600;">CA$${amount}</td>
         <td style="text-align:right; width:60px;">
@@ -4730,15 +4758,15 @@ function openManualShippoLinkModal(orderNum) {
       <div class="manual-link-modal">
         <div class="manual-link-header">
           <div>
-            <div class="manual-link-eyebrow">Manual Shippo Link</div>
-            <div class="manual-link-title">Link a postage label → <span>${escapeHtml(orderNum)}</span></div>
+            <div class="manual-link-eyebrow">Link postage</div>
+            <div class="manual-link-title">Attach a paid receipt → <span>${escapeHtml(orderNum)}</span></div>
           </div>
           <button class="manual-link-close" onclick="closeManualShippoLinkModal()" aria-label="Close">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
         <div class="manual-link-body">
-          <input type="text" class="manual-link-search" placeholder="Search by recipient name…" oninput="filterManualShippoLinkRows(this.value)" />
+          <input type="text" class="manual-link-search" placeholder="Search by recipient surname…" oninput="filterManualShippoLinkRows(this.value)" />
           ${rows ? `
             <div class="manual-link-table-container">
               <table class="manual-link-table">
@@ -4755,7 +4783,7 @@ function openManualShippoLinkModal(orderNum) {
                   ${rows}
                 </tbody>
               </table>
-            </div>` : `<div class="manual-link-empty">No unlinked Shippo labels found. Try syncing Shippo first.</div>`}
+            </div>` : `<div class="manual-link-empty">Every postage receipt in your ledger is already linked to an order. Import from Shippo, or log a counter receipt in the Tax Centre, to see more here.</div>`}
         </div>
       </div>
     </div>`;
@@ -4796,6 +4824,451 @@ async function doManualShippoLink(orderNum, txRef) {
     console.error('doManualShippoLink failed', err);
     showToast('Could not save link. Please try again.', 'err');
   }
+}
+
+// ── MATCHING COUNTER-BOUGHT POSTAGE TO ITS ORDER ────────────────────────
+//
+// Postage bought at a Canada Post counter arrives in the ledger as a plain
+// expense: a price, a date, a carrier order number, and a receipt PDF. The
+// name of the person it was posted to is on the receipt and nowhere else, so
+// nothing in the app could tie it to a sale — the order sat on "Needs link"
+// and its margin read as pure profit.
+//
+// This worklist closes that gap from the receipt's side. It lists every
+// unlinked postage cost, lets the owner put in the recipient and the tracking
+// number the receipt shows (or read them off the receipt with the AI scanner),
+// ranks the orders by surname, and links the two together with the tracking
+// number attached so the shipping ledger can show it.
+
+const POSTAGE_MATCH_DOM_PREFIX = 'pm-';
+
+function postageRowDomId(ref, field) {
+  return `${POSTAGE_MATCH_DOM_PREFIX}${field}-${String(ref).replace(/[^A-Za-z0-9_-]/g, '-')}`;
+}
+
+function findPostageExpense(ref) {
+  return (TAX_CENTER.businessExpenses || []).find(item => String(item.ref) === String(ref));
+}
+
+/** Every postage cost still waiting to be tied to an order. */
+function unlinkedPostageExpenses() {
+  return (TAX_CENTER.businessExpenses || []).filter(expense =>
+    isPostageExpense(expense) && !isPostageLinked(expense) && expense.shippingMatchStatus !== 'dismissed'
+  );
+}
+
+/** Order numbers already carrying postage, so one label cannot claim two. */
+function ordersAlreadyCarryingPostage() {
+  return (TAX_CENTER.businessExpenses || [])
+    .filter(expense => isPostageExpense(expense) && isPostageLinked(expense))
+    .map(expense => expense.shippingOrderNumber);
+}
+
+function renderPostageMatchWorklist() {
+  const host = $('postage-match-list');
+  const count = $('postage-match-count');
+  if (!host) return;
+  if (isAuthor()) { host.innerHTML = ''; return; }
+
+  const expenses = unlinkedPostageExpenses();
+  if (count) count.textContent = `${expenses.length} to match`;
+
+  const autoBtn = $('postage-match-auto');
+  const orders = getShippingReconciliationOrders();
+  const taken = ordersAlreadyCarryingPostage();
+  const autoCount = autoMatchPostage(expenses, orders, { takenOrderNumbers: taken }).length;
+  if (autoBtn) {
+    autoBtn.disabled = autoCount === 0;
+    autoBtn.textContent = autoCount ? `Match ${autoCount} by name` : 'Nothing to auto-match';
+  }
+
+  if (!expenses.length) {
+    host.innerHTML = `<div class="postage-match-empty">
+      <span class="postage-match-empty-icon" aria-hidden="true">📮</span>
+      <div>
+        <strong>Every postage receipt is linked to an order.</strong>
+        <p>Log a counter receipt in the Tax Centre under Shipping &amp; Postage and it will appear here to match.</p>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const canScan = !!(TAX_CENTER.settings?.geminiKey);
+
+  host.innerHTML = expenses.map(expense => {
+    const ref = String(expense.ref || '');
+    const recipient = postageRecipientName(expense);
+    const tracking = normalizeTrackingNumber(expense.trackingNumber);
+    const matches = suggestPostageMatches(expense, orders, { takenOrderNumbers: taken, limit: 6 });
+    const best = matches[0];
+
+    const options = matches.map(match => {
+      const label = `${match.orderNumber} · ${match.orderName || 'Customer'}`;
+      return `<option value="${escapeHtml(match.orderNumber)}"${match === best ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+    // Every other order stays reachable below the ranked ones: a surname the
+    // matcher could not read must never become an order the owner cannot pick.
+    const rest = orders
+      .filter(order => !matches.some(m => m.orderNumber === normalizeShippingOrderNumber(order.num)))
+      .map(order => {
+        const number = normalizeShippingOrderNumber(order.num);
+        if (!number) return '';
+        return `<option value="${escapeHtml(number)}">${escapeHtml(number)} · ${escapeHtml(order.shipName || order.customer || 'Customer')}</option>`;
+      }).join('');
+
+    const tierPill = best
+      ? `<span class="postage-match-tier ${best.tier}">${best.tier === 'confident' ? 'Strong match' : best.tier === 'likely' ? 'Likely match' : 'Weak match'}</span>`
+      : '<span class="postage-match-tier none">No name match yet</span>';
+    const reason = best
+      ? `<span class="postage-match-reason">${escapeHtml(best.reason)}</span>`
+      : `<span class="postage-match-reason">${recipient
+        ? 'No order found for that name in the weeks around this receipt.'
+        : 'Add the recipient from the receipt and a match will be suggested.'}</span>`;
+
+    const receiptLink = expense.receipt
+      ? (String(expense.receipt).startsWith('local://')
+        ? `<button type="button" class="postage-match-receipt" onclick="viewLocalReceipt('${escapeHtml(String(expense.receipt).replace('local://', ''))}')">View receipt</button>`
+        : `<a class="postage-match-receipt" href="${escapeHtml(expense.receipt)}" target="_blank" rel="noopener">View receipt</a>`)
+      : '<span class="postage-match-noreceipt">No receipt attached</span>';
+
+    const scanBtn = (canScan && expense.receipt)
+      ? `<button type="button" class="btn sm ghost" id="${postageRowDomId(ref, 'scan')}" onclick="scanPostageReceipt('${escapeHtml(ref)}')" title="Read the recipient and tracking number off the receipt">✨ Read receipt</button>`
+      : '';
+
+    return `<div class="postage-match-row" data-ref="${escapeHtml(ref)}">
+      <div class="postage-match-cost">
+        <strong>${fmt(expense.amount || 0, expense.currency || 'CAD')}</strong>
+        <span>${escapeHtml(fmtD(expense.date) || expense.date || 'No date')}</span>
+        <span class="postage-match-desc">${escapeHtml(expense.desc || 'Postage')}</span>
+        <span class="postage-match-ref">${escapeHtml(String(ref).replace(/^shippo:/, '') || 'No reference')}</span>
+        ${receiptLink}
+      </div>
+
+      <div class="postage-match-fields">
+        <div class="postage-match-field">
+          <label for="${postageRowDomId(ref, 'name')}">Recipient on receipt</label>
+          <input type="text" id="${postageRowDomId(ref, 'name')}" value="${escapeHtml(recipient)}"
+            placeholder="e.g. Daniela Dawson" autocomplete="off" spellcheck="false"
+            oninput="onPostageRecipientInput('${escapeHtml(ref)}')">
+        </div>
+        <div class="postage-match-field">
+          <label for="${postageRowDomId(ref, 'track')}">Tracking number</label>
+          <input type="text" id="${postageRowDomId(ref, 'track')}" value="${escapeHtml(formatTrackingNumber(tracking))}"
+            placeholder="e.g. LE 055 214 725 CA" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="postage-match-suggest">
+        ${tierPill}
+        ${reason}
+        <label class="sr-only" for="${postageRowDomId(ref, 'order')}">Order for this postage</label>
+        <select id="${postageRowDomId(ref, 'order')}" onchange="this.dataset.userPicked='1'">
+          <option value="">Select an order</option>
+          ${options}
+          ${rest ? `<optgroup label="All other orders">${rest}</optgroup>` : ''}
+        </select>
+      </div>
+
+      <div class="postage-match-actions">
+        ${scanBtn}
+        <button type="button" class="btn gold sm" onclick="linkPostageExpense('${escapeHtml(ref)}')">Link postage</button>
+        <button type="button" class="btn sm ghost" onclick="dismissPostageExpense('${escapeHtml(ref)}')" title="Hide this receipt from the list; it stays in your ledger">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Re-rank as the owner types a surname, so the suggestion tracks what they are
+// entering instead of waiting for a save to catch up.
+let _postageRecipientDebounce = null;
+function onPostageRecipientInput(ref) {
+  clearTimeout(_postageRecipientDebounce);
+  _postageRecipientDebounce = setTimeout(() => refreshPostageRowSuggestion(ref), 220);
+}
+
+function refreshPostageRowSuggestion(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) return;
+  const row = document.querySelector(`.postage-match-row[data-ref="${CSS.escape(String(ref))}"]`);
+  const select = $(postageRowDomId(ref, 'order'));
+  if (!row || !select) return;
+
+  const typed = ($(postageRowDomId(ref, 'name'))?.value || '').trim();
+  const matches = suggestPostageMatches(expense, getShippingReconciliationOrders(), {
+    takenOrderNumbers: ordersAlreadyCarryingPostage(),
+    recipientOverride: typed,
+    limit: 6,
+  });
+  const best = matches[0];
+
+  const tierEl = row.querySelector('.postage-match-tier');
+  if (tierEl) {
+    tierEl.className = `postage-match-tier ${best ? best.tier : 'none'}`;
+    tierEl.textContent = best
+      ? (best.tier === 'confident' ? 'Strong match' : best.tier === 'likely' ? 'Likely match' : 'Weak match')
+      : 'No name match yet';
+  }
+  const reasonEl = row.querySelector('.postage-match-reason');
+  if (reasonEl) {
+    reasonEl.textContent = best
+      ? best.reason
+      : (typed ? 'No order found for that name in the weeks around this receipt.' : 'Add the recipient from the receipt and a match will be suggested.');
+  }
+  // Only move the selection while it is still a suggestion. Once the owner has
+  // deliberately chosen an order, typing must not silently steer it elsewhere.
+  const untouched = select.dataset.userPicked !== '1';
+  if (untouched && best) select.value = best.orderNumber;
+}
+
+async function linkPostageExpense(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) { showToast('That postage receipt was not found', 'err'); return; }
+
+  const orderNumber = normalizeShippingOrderNumber($(postageRowDomId(ref, 'order'))?.value);
+  if (!orderNumber) { showToast('Choose the order this postage paid for', 'warn'); return; }
+
+  const recipientName = ($(postageRowDomId(ref, 'name'))?.value || '').trim();
+  const trackingInput = ($(postageRowDomId(ref, 'track'))?.value || '').trim();
+  const tracking = normalizeTrackingNumber(trackingInput);
+  if (trackingInput && tracking.length < 6) {
+    showToast('That tracking number looks too short — check it against the receipt', 'warn');
+    return;
+  }
+
+  const patch = postageLinkPatch(orderNumber, {
+    recipientName,
+    trackingNumber: tracking,
+    method: 'recipient-name',
+  });
+
+  // Snapshot every key the patch touches so a failed save leaves the receipt
+  // exactly as it was, rather than half-linked with no order behind it.
+  const keys = new Set([...Object.keys(patch), 'shippingSuggestedOrderNumber', 'shippingCandidateOrderNumbers']);
+  const prior = new Map(Array.from(keys).map(key => [
+    key, { present: Object.prototype.hasOwnProperty.call(expense, key), value: expense[key] },
+  ]));
+
+  Object.assign(expense, patch);
+  delete expense.shippingSuggestedOrderNumber;
+  delete expense.shippingCandidateOrderNumbers;
+
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    prior.forEach((snapshot, key) => {
+      if (snapshot.present) expense[key] = snapshot.value;
+      else delete expense[key];
+    });
+    console.error('Postage link save failed', error);
+    showToast('Could not save that link. Please try again.', 'err');
+    return;
+  }
+
+  // The tracking number belongs on the order too: that is where the customer
+  // record lives and where a "where is my book" email gets answered from.
+  if (tracking) await storeTrackingOnOrder(orderNumber, tracking, patch.trackingUrl || '');
+
+  renderPostageMatchWorklist();
+  renderShippingAnalysisHub();
+  renderTaxCenter();
+  showToast(`✓ ${fmt(expense.amount || 0, expense.currency || 'CAD')} postage linked to ${orderNumber}`);
+}
+
+/**
+ * Write the tracking number onto the website order's history entry.
+ *
+ * Best-effort by design: the postage link is already saved by this point, so a
+ * failure here must warn rather than roll the link back — the money is
+ * correctly attributed either way, and only the tracking display is missing.
+ */
+async function storeTrackingOnOrder(orderNumber, tracking, trackingUrl) {
+  const target = normalizeShippingOrderNumber(orderNumber);
+  let bookId = '';
+  Object.keys(states).forEach(id => {
+    (states[id]?.hist || []).forEach(entry => {
+      if (!entry || entry.voided) return;
+      if (normalizeShippingOrderNumber(entry.num) !== target) return;
+      entry.trackingNumber = tracking;
+      const carrier = carrierFromTracking(tracking);
+      if (carrier) entry.trackingCarrier = carrier;
+      const url = trackingUrl || trackingUrlFor(tracking, carrier);
+      if (url) entry.trackingUrl = url;
+      entry.shipped = true;
+      bookId = id;
+    });
+  });
+  if (!bookId) return;
+  try {
+    await saveState(bookId);
+  } catch (error) {
+    console.error('Tracking save on order failed', error);
+    showToast('Postage linked, but the tracking number did not save to the order', 'warn');
+  }
+}
+
+/**
+ * Link every receipt whose surname match is unambiguous, in one pass.
+ *
+ * autoMatchPostage() is deliberately strict — a confident top match, a clear
+ * gap to the runner-up, and no two receipts wanting the same order — so this
+ * button never has to guess. Anything it skips stays in the list.
+ */
+async function autoMatchPostageReceipts() {
+  const expenses = unlinkedPostageExpenses();
+  const proposals = autoMatchPostage(expenses, getShippingReconciliationOrders(), {
+    takenOrderNumbers: ordersAlreadyCarryingPostage(),
+  });
+  if (!proposals.length) {
+    showToast('No receipts match a single order clearly enough to link on their own', 'warn');
+    return;
+  }
+
+  const preview = proposals.slice(0, 6)
+    .map(({ expense, match }) => `• ${match.orderName || match.orderNumber} — ${fmt(expense.amount || 0, expense.currency || 'CAD')} → ${match.orderNumber}`)
+    .join('\n');
+  const more = proposals.length > 6 ? `\n…and ${proposals.length - 6} more` : '';
+  const accepted = await confirmDialog(
+    `Link ${proposals.length} postage receipt${proposals.length === 1 ? '' : 's'} to the order with the same name?\n\n${preview}${more}\n\nYou can unlink any of them afterwards.`,
+    { title: 'Match postage by name', okLabel: `Link ${proposals.length}` },
+  );
+  if (!accepted) return;
+
+  const applied = [];
+  proposals.forEach(({ expense, match }) => {
+    const snapshot = { ...expense };
+    Object.assign(expense, postageLinkPatch(match.orderNumber, {
+      recipientName: postageRecipientName(expense),
+      trackingNumber: expense.trackingNumber || '',
+      method: 'recipient-name-auto',
+    }));
+    applied.push({ expense, snapshot });
+  });
+
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    applied.forEach(({ expense, snapshot }) => {
+      Object.keys(expense).forEach(key => { if (!(key in snapshot)) delete expense[key]; });
+      Object.assign(expense, snapshot);
+    });
+    console.error('Auto-match save failed', error);
+    showToast('Could not save those links. Please try again.', 'err');
+    return;
+  }
+
+  for (const { expense, match } of applied) {
+    const tracking = normalizeTrackingNumber(expense.trackingNumber);
+    if (tracking) await storeTrackingOnOrder(match.orderNumber, tracking, expense.trackingUrl || '');
+  }
+
+  renderPostageMatchWorklist();
+  renderShippingAnalysisHub();
+  renderTaxCenter();
+  showToast(`✓ Linked ${applied.length} postage receipt${applied.length === 1 ? '' : 's'} by name`);
+}
+
+async function dismissPostageExpense(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) return;
+  const hadStatus = Object.prototype.hasOwnProperty.call(expense, 'shippingMatchStatus');
+  const priorStatus = expense.shippingMatchStatus;
+  expense.shippingMatchStatus = 'dismissed';
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    if (hadStatus) expense.shippingMatchStatus = priorStatus;
+    else delete expense.shippingMatchStatus;
+    console.error('Postage dismiss failed', error);
+    showToast('Could not hide that receipt. Please try again.', 'err');
+    return;
+  }
+  renderPostageMatchWorklist();
+  showToast('Receipt hidden — it stays in your Shipping & Postage ledger');
+}
+
+/**
+ * Read the recipient and tracking number off a receipt already on file.
+ *
+ * Fills the row's two inputs and re-ranks the suggestion, but deliberately
+ * saves nothing: the owner still confirms before any money is attributed. A
+ * reader that misreads "DAWSON" must cost a correction, not a wrong link.
+ */
+async function scanPostageReceipt(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) { showToast('That postage receipt was not found', 'err'); return; }
+  if (!expense.receipt) { showToast('There is no receipt attached to this expense', 'warn'); return; }
+
+  const btn = $(postageRowDomId(ref, 'scan'));
+  const original = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
+
+  try {
+    const fields = await readShippingFieldsFromReceipt(expense.receipt);
+    const filled = [];
+
+    const nameEl = $(postageRowDomId(ref, 'name'));
+    if (nameEl && fields.recipient) { nameEl.value = fields.recipient; filled.push('recipient'); }
+
+    const trackEl = $(postageRowDomId(ref, 'track'));
+    const tracking = normalizeTrackingNumber(fields.tracking);
+    if (trackEl && tracking.length >= 6) { trackEl.value = formatTrackingNumber(tracking); filled.push('tracking'); }
+
+    if (!filled.length) {
+      showToast('Could not find a recipient or tracking number on that receipt — type them in instead', 'warn', 4200);
+      return;
+    }
+    refreshPostageRowSuggestion(ref);
+    showToast(`✓ Read ${filled.join(' and ')} from the receipt — check it, then link`);
+  } catch (error) {
+    console.error('Postage receipt scan failed', error);
+    showToast(`Could not read that receipt — ${error.message || error}`, 'err', 4600);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = original; }
+  }
+}
+
+/** Add or correct a tracking number from the shipping ledger row. */
+async function promptLedgerTracking(ref) {
+  const expense = findPostageExpense(ref);
+  if (!expense) { showToast('That postage receipt was not found', 'err'); return; }
+  const entered = await promptDialog(
+    'Type the tracking number printed on the receipt or label.',
+    formatTrackingNumber(expense.trackingNumber || ''),
+    { title: 'Add tracking number', okLabel: 'Save', placeholder: 'e.g. LE 055 214 725 CA' },
+  );
+  if (entered === null) return;
+  const tracking = normalizeTrackingNumber(entered);
+  if (entered.trim() && tracking.length < 6) {
+    showToast('That tracking number looks too short — check it against the receipt', 'warn');
+    return;
+  }
+
+  const snapshot = {
+    trackingNumber: expense.trackingNumber, trackingCarrier: expense.trackingCarrier, trackingUrl: expense.trackingUrl,
+  };
+  if (tracking) {
+    const patch = postageLinkPatch(expense.shippingOrderNumber || '#NONE-0', { trackingNumber: tracking });
+    expense.trackingNumber = patch.trackingNumber;
+    if (patch.trackingCarrier) expense.trackingCarrier = patch.trackingCarrier;
+    if (patch.trackingUrl) expense.trackingUrl = patch.trackingUrl;
+  } else {
+    delete expense.trackingNumber; delete expense.trackingCarrier; delete expense.trackingUrl;
+  }
+
+  try {
+    await saveTaxCenter({ rethrow: true });
+  } catch (error) {
+    Object.assign(expense, snapshot);
+    console.error('Tracking save failed', error);
+    showToast('Could not save the tracking number. Please try again.', 'err');
+    return;
+  }
+  if (tracking && expense.shippingOrderNumber) {
+    await storeTrackingOnOrder(expense.shippingOrderNumber, tracking, expense.trackingUrl || '');
+  }
+  renderShippingAnalysisHub();
+  renderPostageMatchWorklist();
+  showToast(tracking ? '✓ Tracking number saved' : 'Tracking number cleared');
 }
 
 function closeManualShippoLinkModal() {
@@ -6003,26 +6476,36 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     if (linked.length > 0) {
       const primary = linked[0];
       const parsedCarrier = parseCarrierInfo(primary.desc).provider;
-      const tracking = parseTrackingNumber(primary.desc) || o.trackingNumber || '';
-      const carrier = guessCarrier(tracking, primary.trackingUrl, parsedCarrier);
-      const url = primary.trackingUrl || '';
-      
+      // A tracking number stored on the expense wins over one scraped out of
+      // the description: the stored one was typed off the receipt or read from
+      // the label, while the scrape is a guess at a "#…" in free text.
+      const tracking = normalizeTrackingNumber(primary.trackingNumber)
+        || parseTrackingNumber(primary.desc)
+        || normalizeTrackingNumber(o.trackingNumber)
+        || '';
+      const carrier = primary.trackingCarrier || guessCarrier(tracking, primary.trackingUrl, parsedCarrier);
+      const url = primary.trackingUrl || trackingUrlFor(tracking, carrier) || '';
+      const refLabel = String(primary.ref || '').replace(/^shippo:/, '') || 'No reference';
+
       const refLink = primary.receipt
-        ? `<a href="${escapeHtml(primary.receipt)}" target="_blank" class="shipping-pnl-tracking-link" title="Open Shippo label/receipt">${escapeHtml(primary.ref)}</a>`
-        : `<div style="font-weight:600; color:var(--text);">${escapeHtml(primary.ref)}</div>`;
+        ? `<a href="${escapeHtml(primary.receipt)}" target="_blank" class="shipping-pnl-tracking-link" title="Open the label or receipt">${escapeHtml(refLabel)}</a>`
+        : `<div style="font-weight:600; color:var(--text);">${escapeHtml(refLabel)}</div>`;
 
       expenseRefHtml = `
         ${refLink}
         <div style="font-size:10px; color:var(--text3); margin-top:2px;">
-          ${escapeHtml(primary.desc || 'Shippo shipping label')}
+          ${escapeHtml(primary.desc || 'Postage')}
         </div>`;
 
       if (tracking) {
+        const shown = formatTrackingNumber(tracking) || tracking;
         trackingLinkHtml = url
-          ? `<a href="${escapeHtml(url)}" target="_blank" class="shipping-pnl-tracking-link">${escapeHtml(carrier)}: ${escapeHtml(tracking)}</a>`
-          : `${escapeHtml(carrier)}: ${escapeHtml(tracking)}`;
+          ? `<a href="${escapeHtml(url)}" target="_blank" class="shipping-pnl-tracking-link">${escapeHtml(carrier || 'Tracking')}: ${escapeHtml(shown)}</a>`
+          : `${escapeHtml(carrier || 'Tracking')}: ${escapeHtml(shown)}`;
       } else {
-        trackingLinkHtml = `<span style="color:var(--text3); font-style:italic;">No tracking</span>`;
+        // Actionable rather than a dead dash: this is the one place the owner
+        // can put the number in, and every other row already offers it.
+        trackingLinkHtml = `<button class="btn sm ghost" style="font-size:10px; padding:3px 8px;" onclick="promptLedgerTracking('${escapeHtml(primary.ref)}')">+ Add tracking</button>`;
       }
     } else {
       expenseRefHtml = `<span style="color:var(--text3); font-style:italic;">Unlinked</span>`;
@@ -6526,8 +7009,15 @@ function renderShippingAnalysisHub() {
 
   allOrders.sort((a, b) => b._dateMs - a._dateMs);
 
-  // 2. Gather all Shippo postage expenses matching the selected analysis book filter
-  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
+  // 2. Gather every postage cost, whichever carrier it came from.
+  //
+  // This filter used to be `ref.startsWith('shippo:')`, which meant postage
+  // bought at a Canada Post counter and entered by hand was invisible to the
+  // whole hub: no cost against the order, a margin that read as pure profit,
+  // and an order stuck on "Needs link" forever. Every panel below reads from
+  // this one list, so widening it here is what lets a counter receipt appear
+  // in the P&L, the carrier scorecard, the ledger and the insights at once.
+  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(isPostageExpense);
   const relevantExpenses = (shipAnalysisBookFilter === 'all')
     ? shippoExpenses
     : shippoExpenses.filter(e => {
@@ -6560,6 +7050,20 @@ function renderShippingAnalysisHub() {
   hub.innerHTML = `
     ${pnlHtml}
     ${statsHtml}
+    <section class="postage-match" id="postage-match" aria-labelledby="postage-match-title">
+      <header class="shipping-pnl-section-header">
+        <div>
+          <p class="shipping-pnl-eyebrow">Postage receipts</p>
+          <h3 id="postage-match-title">Match a paid receipt to its order</h3>
+          <p class="postage-match-sub">Postage you bought at a counter has the customer's name on the receipt and nowhere else. Put the name in and the matching order is found for you — the tracking number goes on the order at the same time.</p>
+        </div>
+        <div class="postage-match-head-actions">
+          <span class="pill gray" id="postage-match-count">0 to match</span>
+          <button class="btn sm gold" type="button" id="postage-match-auto" onclick="autoMatchPostageReceipts()">Match by name</button>
+        </div>
+      </header>
+      <div id="postage-match-list" aria-live="polite"></div>
+    </section>
     <section class="shipping-pnl-ledger" id="shipping-pnl-ledger" aria-labelledby="shipping-pnl-ledger-title">
       <header class="shipping-pnl-section-header">
         <div>
@@ -6579,6 +7083,9 @@ function renderShippingAnalysisHub() {
     ${insightsHtml}
   `;
 
+  // Rendered after the hub markup lands, because the worklist paints into a
+  // container the template above just created.
+  renderPostageMatchWorklist();
   setTimeout(updateShippingSimulation, 50);
 }
 
@@ -6689,7 +7196,11 @@ function updateShippingSimulation() {
 }
 
 function downloadFilteredShippingLedgerCSV() {
-  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(e => String(e?.ref || '').startsWith('shippo:'));
+  // Same postage set the on-screen ledger uses. When this said `shippo:` and
+  // the hub said "every carrier", the exported CSV quietly disagreed with the
+  // table it was exported from — the worst kind of wrong number, because it is
+  // the one that gets sent to an accountant.
+  const shippoExpenses = (TAX_CENTER.businessExpenses || []).filter(isPostageExpense);
   
   const allOrders = [];
   Object.keys(states).forEach(bookId => {
@@ -6836,6 +7347,19 @@ function parseCarrierInfo(desc) {
     if (desc && desc.startsWith('Shippo shipping label')) {
       return { provider: 'Shippo', service: 'Postage' };
     }
+    // A carrier the owner typed into a counter-receipt description. Checked
+    // before the "Unknown" bail-out so hand-entered postage reaches the
+    // scorecard under its real carrier instead of being lumped in with
+    // everything unrecognised. Kept inline rather than in a shared helper
+    // because tests/shipping-analysis-hub.test.js extracts this function's
+    // source and evaluates it on its own.
+    const haystack = ` ${String(desc).toLowerCase()} `;
+    const named = [
+      ['canada post', 'Canada Post'], ['postes canada', 'Canada Post'], ['canadapost', 'Canada Post'],
+      ['purolator', 'Purolator'], ['fedex', 'FedEx'], ['usps', 'USPS'], ['dhl', 'DHL'],
+      ['ups ', 'UPS'], ['stallion', 'Stallion Express'], ['chit chats', 'Chit Chats'],
+    ].find(([needle]) => haystack.includes(needle));
+    if (named) return { provider: named[1], service: 'Postage' };
     return { provider: 'Unknown', service: 'Unknown' };
   }
   const content = desc.replace('Shipping Label:', '').trim();
@@ -6864,12 +7388,14 @@ function guessCarrier(trackingNumber, trackingUrl, parsedCarrier) {
   if (url.includes('fedex.com')) return 'FedEx';
   if (url.includes('usps.com')) return 'USPS';
   if (url.includes('dhl.com')) return 'DHL';
-  
-  const num = String(trackingNumber || '');
-  if (num.startsWith('1Z')) return 'UPS';
-  if (/^[0-9]{16}$/.test(num)) return 'Canada Post';
-  
-  return 'Shippo';
+
+  // The number's own shape, via the shared detector, so a Canada Post
+  // "LE 055 214 725 CA" is not reported as Shippo just because it arrived
+  // through a counter receipt rather than the API.
+  const byShape = carrierFromTracking(trackingNumber);
+  if (byShape) return byShape;
+
+  return parsedCarrier || 'Shippo';
 }
 
 function getWeightInLbs(qty, book) {
@@ -6935,6 +7461,13 @@ export {
   openShippingReconciliation,
   clearShippingReconciliationList,
   linkShippingExpense,
+  renderPostageMatchWorklist,
+  onPostageRecipientInput,
+  linkPostageExpense,
+  autoMatchPostageReceipts,
+  dismissPostageExpense,
+  scanPostageReceipt,
+  promptLedgerTracking,
   openRecoverWebsiteOrder,
   onRecoverWebsiteOrderBookChange,
   saveRecoverWebsiteOrder,
