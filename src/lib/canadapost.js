@@ -108,16 +108,16 @@ export function buildRateScenarioJson({
 
   let destJson = {};
   if (dest === 'CA') {
-    destJson = { domestic: { "postal-code": cleanPostalCode(destPostalOrZip) || 'V6B2W9' } };
+    destJson = { domestic: { postalCode: cleanPostalCode(destPostalOrZip) || 'V6B2W9' } };
   } else if (dest === 'US') {
-    destJson = { "united-states": { "zip-code": String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210' } };
+    destJson = { unitedStates: { zipCode: String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210' } };
   } else {
-    destJson = { international: { "country-code": dest } };
+    destJson = { international: { countryCode: dest } };
   }
 
   const payload = {
-    "mailing-scenario": {
-      "parcel-characteristics": {
+    mailingScenario: {
+      parcelCharacteristics: {
         weight: Number(weight.toFixed(3)),
         dimensions: {
           length: Number(length.toFixed(1)),
@@ -125,13 +125,13 @@ export function buildRateScenarioJson({
           height: Number(height.toFixed(1))
         }
       },
-      "origin-postal-code": origin,
+      originPostalCode: origin,
       destination: destJson
     }
   };
 
-  if (customerNumber) payload["mailing-scenario"]["customer-number"] = customerNumber.trim();
-  if (contractId) payload["mailing-scenario"]["contract-id"] = contractId.trim();
+  if (customerNumber) payload.mailingScenario.customerNumber = customerNumber.trim();
+  if (contractId) payload.mailingScenario.contractId = contractId.trim();
 
   return JSON.stringify(payload);
 }
@@ -166,26 +166,26 @@ export function parseCanadaPostPriceQuotes(jsonText) {
   }
 
   const quotes = [];
-  const priceQuotes = data['price-quotes']?.['price-quote'] || [];
+  const priceQuotes = data.priceQuotes?.priceQuote || [];
   const quoteArray = Array.isArray(priceQuotes) ? priceQuotes : [priceQuotes];
 
   for (const quote of quoteArray) {
     if (!quote) continue;
-    const serviceCode = quote['service-code'] || '';
-    const serviceName = quote['service-name'] || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
+    const serviceCode = quote.serviceCode || '';
+    const serviceName = quote.serviceName || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
 
-    const basePrice = parseFloat(quote['price-details']?.base || 0);
-    const duePrice = parseFloat(quote['price-details']?.due || basePrice);
+    const basePrice = parseFloat(quote.priceDetails?.base || 0);
+    const duePrice = parseFloat(quote.priceDetails?.due || basePrice);
     
     let gstPrice = 0, pstPrice = 0, hstPrice = 0;
-    const taxesObj = quote['price-details']?.taxes || {};
+    const taxesObj = quote.priceDetails?.taxes || {};
     gstPrice = parseFloat(taxesObj.gst || 0);
     pstPrice = parseFloat(taxesObj.pst || 0);
     hstPrice = parseFloat(taxesObj.hst || 0);
     const totalTaxes = Math.round((gstPrice + pstPrice + hstPrice) * 100) / 100;
 
-    const transitDays = quote['service-standard']?.['expected-transit-time'];
-    const deliveryDate = quote['service-standard']?.['expected-delivery-date'] || null;
+    const transitDays = quote.serviceStandard?.expectedTransitTime;
+    const deliveryDate = quote.serviceStandard?.expectedDeliveryDate || null;
 
     quotes.push({
       serviceCode,
@@ -1586,31 +1586,31 @@ export function buildNonContractShipmentJson({
   const cleanDestState = normalizeStateOrProvince(destination.province || destination.state || '', destCountry);
 
   const deliverySpec = {
-    "service-code": serviceCode,
+    serviceCode: serviceCode,
     sender: {
       name: sender.name || 'Lyricalmyrical Books',
       company: sender.company || 'Lyricalmyrical Books',
-      "contact-phone": sender.phone || '4165550199',
-      "address-details": {
-        "address-line-1": sender.address1 || '123 Main St',
+      contactPhone: sender.phone || '4165550199',
+      addressDetails: {
+        addressLine1: sender.address1 || '123 Main St',
         city: sender.city || 'Toronto',
-        "prov-state": cleanSenderState,
-        "postal-zip-code": cleanOriginZip
+        provState: cleanSenderState,
+        postalZipCode: cleanOriginZip
       }
     },
     destination: {
       name: destination.name || 'Customer',
       company: destination.company || '',
-      "client-voice-number": destination.phone || '5555555555',
-      "address-details": {
-        "address-line-1": destination.address1 || '',
+      clientVoiceNumber: destination.phone || '5555555555',
+      addressDetails: {
+        addressLine1: destination.address1 || '',
         city: destination.city || '',
-        "prov-state": cleanDestState,
-        "country-code": destCountry,
-        "postal-zip-code": cleanDestZip
+        provState: cleanDestState,
+        countryCode: destCountry,
+        postalZipCode: cleanDestZip
       }
     },
-    "parcel-characteristics": {
+    parcelCharacteristics: {
       weight: weightKg,
       dimensions: {
         length: lengthCm,
@@ -1619,16 +1619,16 @@ export function buildNonContractShipmentJson({
       }
     },
     preferences: {
-      "show-packing-instructions": true,
-      "show-postage-rate": true
+      showPackingInstructions: true,
+      showPostageRate: true
     },
     references: {
-      "customer-ref-1": orderNum || 'BOOK-ORDER'
+      customerRef1: orderNum || 'BOOK-ORDER'
     }
   };
 
-  if (sender.address2) deliverySpec.sender["address-details"]["address-line-2"] = sender.address2;
-  if (destination.address2) deliverySpec.destination["address-details"]["address-line-2"] = destination.address2;
+  if (sender.address2) deliverySpec.sender.addressDetails.addressLine2 = sender.address2;
+  if (destination.address2) deliverySpec.destination.addressDetails.addressLine2 = destination.address2;
 
   if (destCountry !== 'CA' && (customs || cleanDeclId)) {
     const qty = Math.max(1, parseInt(customs?.quantity, 10) || 1);
@@ -1638,27 +1638,27 @@ export function buildNonContractShipmentJson({
     
     deliverySpec.customs = {
       currency: "CAD",
-      "conversion-from-cad": 1.0,
-      "reason-for-export": "SOG",
-      "sku-list": {
+      conversionFromCad: 1.0,
+      reasonForExport: "SOG",
+      skuList: {
         item: [
           {
-            "customs-number-of-units": qty,
-            "customs-description": customsDesc,
-            "unit-weight": Number((weightKg / qty).toFixed(3)),
-            "customs-value-per-unit": Number((declaredVal / qty).toFixed(2)),
-            "hs-tariff-code": hsCode,
-            "country-of-origin": "CA"
+            customsNumberOfUnits: qty,
+            customsDescription: customsDesc,
+            unitWeight: Number((weightKg / qty).toFixed(3)),
+            customsValuePerUnit: Number((declaredVal / qty).toFixed(2)),
+            hsTariffCode: hsCode,
+            countryOfOrigin: "CA"
           }
         ]
       }
     };
     if (cleanDeclId) {
-      deliverySpec.customs["declaration-id"] = cleanDeclId;
+      deliverySpec.customs.declarationId = cleanDeclId;
     }
   }
 
-  return JSON.stringify({ "non-contract-shipment": { "delivery-spec": deliverySpec } });
+  return JSON.stringify({ nonContractShipment: { deliverySpec: deliverySpec } });
 }
 
 /**
@@ -1688,9 +1688,9 @@ export function parseCanadaPostShipmentResponse(jsonText) {
     throw new Error(`Canada Post [ERROR]: ${data.fault.faultstring}`);
   }
 
-  const shipmentInfo = data['non-contract-shipment-info'] || {};
-  const shipmentId = shipmentInfo['shipment-id'] || '';
-  const trackingPin = shipmentInfo['tracking-pin'] || '';
+  const shipmentInfo = data.nonContractShipmentInfo || {};
+  const shipmentId = shipmentInfo.shipmentId || '';
+  const trackingPin = shipmentInfo.trackingPin || '';
   
   // Extract links for label artifact
   let labelLink = '';
@@ -1707,7 +1707,7 @@ export function parseCanadaPostShipmentResponse(jsonText) {
 
   // When a Zonos Verified Account key is sent on the request, Canada Post issues
   // the Declaration ID itself and returns it here rather than expecting one in.
-  const rawDeclaration = shipmentInfo['declaration-id'] || shipmentInfo['zonos-declaration-id'] || shipmentInfo['duty-declaration-id'] || '';
+  const rawDeclaration = shipmentInfo.declarationId || shipmentInfo.zonosDeclarationId || shipmentInfo.dutyDeclarationId || '';
   const declarationId = validateDeclarationId(rawDeclaration) ? formatDeclarationId(rawDeclaration) : '';
 
   return {
