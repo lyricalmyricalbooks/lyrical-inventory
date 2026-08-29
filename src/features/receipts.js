@@ -45,6 +45,7 @@ import {
   updateDash,
 } from '../main.js';
 import { escapeHtml } from '../lib/html.js';
+import { followableUrl } from '../lib/receipt-links.js';
 import { fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
 import { expenseLedgerTotals, expenseTotalsCopy } from '../lib/expense-totals.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
@@ -787,7 +788,10 @@ function _localReceiptCell(item) {
       return `<a href="#" title="${expired ? 'This saved link has expired — opens a fresh one from Shippo' : 'Opens a fresh link from Shippo'}" onclick="event.preventDefault(); openShippoLabel('${escapeHtml(String(item.ref))}')" style="color:var(--gold3);text-decoration:underline;">${label}${expired ? ' ↻' : ''}</a>`;
     }
     const label = multi ? `Receipt ${idx + 1}` : 'Receipt';
-    return `<a href="${r}" target="_blank" rel="noopener" style="color:var(--gold3);">${label}</a>`;
+    const href = followableUrl(r);
+    return href
+      ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener" style="color:var(--gold3);">${label}</a>`
+      : `<span style="color:var(--text3);" title="This receipt reference cannot be opened">${label}</span>`;
   }).join(' · ');
 }
 
@@ -5233,7 +5237,12 @@ function renderExpenses() {
     const baseReceiptLink = e.receipt ? (
       e.receipt.startsWith('local://')
         ? `<a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(e.receipt.replace('local://', ''))}')" style="font-size:11px;color:var(--gold);text-decoration:underline;">View Local</a>`
-        : `<a href="${e.receipt}" target="_blank" style="font-size:11px;color:var(--gold);">View</a>`
+        : (followableUrl(e.receipt)
+          ? `<a href="${escapeHtml(followableUrl(e.receipt))}" target="_blank" rel="noopener" style="font-size:11px;color:var(--gold);">View</a>`
+          // Not local and not a followable address — a link here would look
+          // ordinary and do nothing, which is how the shipping ledger's dead
+          // reference link went unnoticed for so long.
+          : `<span class="pill gray" style="font-size:10px;" title="This receipt reference cannot be opened">Unopenable ref</span>`)
     ) : isGratuity
       ? `<span class="pill gray" style="font-size:10px;" title="Gifted / promotional author copy (receipt exempt)">Gratuity copy</span>`
       : isRentExpense(e)
@@ -5244,8 +5253,11 @@ function renderExpenses() {
         : expenseMissingReceipt(e)
           ? `<span class="pill amber" style="font-size:10px;" title="No receipt attached — this is the expense an accountant will ask you to produce at tax time">⚠ No receipt</span>`
           : `<span class="pill gray" style="font-size:10px;" title="Backed by the reference in the Ref column">Ref on file</span>`;
-    const trackLink = e.trackingUrl
-      ? ` <a href="${e.trackingUrl}" target="_blank" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
+    // A tracking URL can arrive straight from a carrier API response, so it is
+    // external text reaching an href — allow-listed and escaped like any other.
+    const trackHref = followableUrl(e.trackingUrl);
+    const trackLink = trackHref
+      ? ` <a href="${escapeHtml(trackHref)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--text3);" title="Track shipment">· Track</a>`
       : '';
     const receiptCell = baseReceiptLink + trackLink;
 
