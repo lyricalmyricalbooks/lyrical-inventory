@@ -873,17 +873,20 @@
 
 <!-- PAYMENTS / STRIPE RECONCILIATION -->
 <div class="tab-panel" id="tab-reconcile" style="display:none;">
-  <div class="row-between">
-    <div class="section-hed">Stripe payments to reconcile</div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <span id="recon-last-sync" style="font-size:11px;color:var(--text3);">Not synced yet</span>
+  <div class="sec-head">
+    <div class="sec-head-titles">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Payments</div>
+      <div class="section-hed sec-head-title">Stripe payments to reconcile</div>
+      <p class="section-subcopy">
+        Pulls your recent Stripe payments and checks each one against your inventory. Invoices (INV-…), Big Cartel
+        orders, and SKU-tagged links match automatically — the rest land in a short worklist where you pick the book and log the sale.
+      </p>
+    </div>
+    <div class="sec-head-badges">
       <button class="btn ink" id="recon-sync-btn" onclick="reconcileSync()">↻ Sync from Stripe</button>
+      <span class="sec-head-note" id="recon-last-sync">Not synced yet</span>
     </div>
   </div>
-  <p style="font-size:12px;color:var(--text3);margin:6px 0 14px;line-height:1.6;">
-    Pulls your recent Stripe payments and checks each one against your inventory. Invoices (INV-…), Big Cartel
-    orders, and SKU-tagged links match automatically — the rest land in a short worklist where you pick the book and log the sale.
-  </p>
   <div id="recon-keyrow" style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
     <input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" style="flex:1;" autocomplete="off">
   </div>
