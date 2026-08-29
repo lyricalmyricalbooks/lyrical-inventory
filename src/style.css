@@ -10467,6 +10467,14 @@ tr.hist-row:hover {
   margin-top: 2.5rem;
 }
 
+/* Book Catalog / Test Book Catalog settings cards: same off-container case as
+   `.tc-trips-header` above — the head sits directly in a `.card`, not an
+   `.overview-section`, so the shared `@container overview-sec` stack rule
+   never fires and the title needs its own wrap. */
+.cat-settings-head {
+  flex-wrap: wrap;
+}
+
 .tc-trips-view-toggle {
   display: flex;
   background: var(--cream2, #efe9dc);
