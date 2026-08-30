@@ -138,7 +138,8 @@ const CHECK_WARN = 'warn';
  * Assess whether a real label can be bought right now.
  *
  * @param {object}  input
- * @param {object}  input.settings      Tax Centre settings (cpEnabled, cpApiKey, cpTestMode…).
+ * @param {object}  input.settings      Tax Centre settings (cpEnabled, cpTestMode…).
+ * @param {object}  input.credentials   Resolved credentials from resolveCanadaPostCredentials — the SET actually in use, since sandbox and live are saved separately.
  * @param {object}  input.accountAudit  Result of validateCanadaPostAccount — passed in, not computed, to keep this a leaf.
  * @param {object}  input.sender        Sender fields as the form has them.
  * @param {object}  input.destination   Destination fields, including countryCode.
@@ -147,6 +148,7 @@ const CHECK_WARN = 'warn';
  */
 export function assessLiveShippingReadiness({
   settings = {},
+  credentials = null,
   accountAudit = null,
   sender = {},
   destination = {},
@@ -171,18 +173,28 @@ export function assessLiveShippingReadiness({
   }
 
   // ── 2. Credentials and account ─────────────────────────────────────────
-  const kind = describeKeyKind(settings.cpApiKey);
+  // Judge the set actually in use. Sandbox and live keys are saved separately,
+  // so reading a raw setting here would report on whichever happened to be
+  // written last rather than the one the Sandbox toggle has selected.
+  const activeKey = credentials ? credentials.apiKey : settings.cpApiKey;
+  const kind = describeKeyKind(activeKey);
   if (kind === 'missing') {
-    add('key', 'API key', CHECK_BLOCKED, 'No Canada Post key saved.', 'Paste your Client ID from the Canada Post Developer Portal.');
+    add('key', 'API key', CHECK_BLOCKED,
+      isTest
+        ? 'No sandbox key saved. The Sandbox toggle is on, so the sandbox boxes are the ones in use.'
+        : 'No live key saved. The Sandbox toggle is off, so the live boxes are the ones in use.',
+      'Paste your Client ID from the Canada Post Developer Portal into the boxes for this mode.');
   } else if (kind === 'legacy-combined') {
     add('key', 'API key', CHECK_BLOCKED,
       'That key is in the old “username:password” form, which this gateway does not accept.',
       'Get a Client ID and Client Secret from the Canada Post Developer Portal and paste them in the two boxes.');
   } else if (kind === 'portal-client-id') {
-    add('key', 'API key', CHECK_OK, 'A Developer Portal Client ID is saved.');
+    add('key', 'API key', CHECK_OK,
+      `A Developer Portal Client ID is saved in the ${isTest ? 'sandbox' : 'live'} boxes, and that is the one in use.`);
   } else {
     add('key', 'API key', CHECK_WARN,
-      'This key is not the usual 32-character Client ID. It may still work, but check it came from the Developer Portal.');
+      `The key in the ${isTest ? 'sandbox' : 'live'} boxes is not the usual 32-character Client ID. `
+      + 'It may still work, but check it came from the Developer Portal.');
   }
 
   const auditErrors = Array.isArray(accountAudit?.errors) ? accountAudit.errors : [];
@@ -253,12 +265,21 @@ export function assessLiveShippingReadiness({
   }
 
   // ── 6. Which environment this actually is ──────────────────────────────
+  if (isTest && credentials && !credentials.liveConfigured) {
+    add('other-set', 'No live keys saved yet', CHECK_WARN,
+      'Only the sandbox boxes are filled in, so turning the Sandbox toggle off would leave nothing to ship with.',
+      'Paste your production Client ID and Secret into the live boxes before you switch over.');
+  } else if (!isTest && credentials && !credentials.testConfigured) {
+    add('other-set', 'No sandbox keys saved', CHECK_OK,
+      'Only the live boxes are filled in. That is fine for shipping — sandbox keys are only needed to rehearse without spending.');
+  }
+
   if (isTest) {
     add('mode', 'Sandbox keys are switched on', CHECK_WARN,
-      'Canada Post serves test and live from the same address, so this is only a test if the key above is a development key. With a production key this buys real, billable labels.',
-      'Turn off “Sandbox keys” once you are ready to ship for real.');
+      'Requests use the sandbox boxes. Canada Post serves test and live from the same address, so this is only a test if what is in them is a development key.',
+      'Turn off “Sandbox keys” to switch to your live boxes once you are ready to ship for real.');
   } else {
-    add('mode', 'Live purchasing', CHECK_OK, 'Labels bought here are real, charged to your account, and can be mailed.');
+    add('mode', 'Live purchasing', CHECK_OK, 'Requests use the live boxes. Labels bought here are real, charged to your account, and can be mailed.');
   }
 
   const blockers = checks.filter(c => c.status === CHECK_BLOCKED).map(c => c.detail);

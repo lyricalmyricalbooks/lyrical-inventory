@@ -9226,6 +9226,109 @@ tr.hist-row:hover {
   flex-wrap: wrap;
 }
 
+/* ─── Canada Post: two key sets side by side ──────────────────────────────
+   Sandbox and live keys are both used against the same gateway, so the key is
+   the only thing separating a rehearsal from a real charge. Both sets are on
+   screen at once — swapping which one is visible would hide exactly the fact
+   that matters — and the active one is marked on the panel itself rather than
+   only by a switch further down the card.
+   A container query, not a viewport one: this card sits in a column that is
+   full width on its own tab and narrower beside the integrations list. */
+.tc-cp-sets-intro {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--content-secondary);
+}
+.tc-cp-sets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  container-type: inline-size;
+  container-name: cpkeysets;
+}
+@container cpkeysets (max-width: 620px) {
+  .tc-cp-sets { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .tc-cp-sets { grid-template-columns: 1fr; }
+}
+.tc-cp-set {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+  background: var(--surface-sunken);
+  transition: border-color var(--dur-fast) var(--ease-standard),
+              background var(--dur-fast) var(--ease-standard),
+              opacity var(--dur-fast) var(--ease-standard);
+}
+/* The set every rate and label will actually use. */
+.tc-cp-set.is-active {
+  border-color: var(--status-active);
+  background: color-mix(in oklab, var(--status-active) 7%, var(--surface-raised));
+}
+/* Dimmed, never hidden: the keys you are not using are still worth seeing. */
+.tc-cp-set:not(.is-active) { opacity: 0.72; }
+.tc-cp-set:not(.is-active):hover,
+.tc-cp-set:not(.is-active):focus-within { opacity: 1; }
+.tc-cp-set-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.tc-cp-set-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--content-primary);
+}
+.tc-cp-set-note {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+.tc-cp-set-badge {
+  font-size: var(--text-3xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.tc-cp-set-badge.is-active { background: var(--status-active-bg); color: var(--status-active); }
+.tc-cp-set-badge.is-missing { background: var(--status-critical-bg); color: var(--status-critical); }
+.tc-cp-set-badge.is-idle { background: var(--status-neutral-bg); color: var(--status-neutral); }
+/* Inside a set the grid is two columns at most, since the set itself is
+   already half the card. */
+.tc-cp-set .tc-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-3); }
+@container cpkeysets (max-width: 420px) {
+  .tc-cp-set .tc-form-grid { grid-template-columns: 1fr; }
+}
+
+/* Where a pre-split key was put, and why that guess needs checking.
+   Visibility is a class rather than an inline style: setting `style.display`
+   from JS wins over this rule and silently flattened the two lines into one. */
+.tc-cp-migration-note { display: none; }
+.tc-cp-migration-note.is-shown {
+  display: grid;
+  gap: 2px;
+  margin-bottom: var(--space-3);
+  padding: 10px 14px;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--status-active);
+  border-radius: var(--r2);
+  background: var(--status-active-bg);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+.tc-cp-migration-note strong { color: var(--content-primary); }
+
 /* ─── Go-live readiness checklist ──────────────────────────────────────────
    Every condition for buying a REAL Canada Post label, each with what to do
    about it. Since the Developer Portal migration there is no longer anything
