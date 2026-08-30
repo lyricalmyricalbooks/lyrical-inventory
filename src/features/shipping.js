@@ -144,6 +144,7 @@ import {
   resolveCanadaPostEnvironment,
   getArchivedShipmentContext,
   listArchivedShipments,
+  fetchCanadaPostLabelArtifact,
 } from '../lib/canadapost.js';
 import {
   collectVerifiableShipments,
@@ -3334,7 +3335,16 @@ async function calculateCanadaPostRatesHandler() {
       });
     }
 
-    renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline: !apiKey || !apiSecret || !navigator.onLine, isTest });
+    // isEnabled belongs in this test: with the integration switched off the
+    // quotes above came from the offline estimate table, and leaving it out
+    // stamped guessed prices with a "Live Direct Rates" badge and offered a
+    // Buy Label button beside each one.
+    renderCanadaPostRatesCard(quotes, {
+      stCountryCode,
+      isOffline: !apiKey || !apiSecret || !isEnabled || !navigator.onLine,
+      isDisabled: !isEnabled,
+      isTest
+    });
   } catch (err) {
     console.warn('Canada Post direct rates fallback:', err);
     const offlineQuotes = estimateOfflineCanadaPostRates({
@@ -3342,11 +3352,11 @@ async function calculateCanadaPostRatesHandler() {
       weightKg,
       isCommercial: !!customerNumber
     });
-    renderCanadaPostRatesCard(offlineQuotes, { stCountryCode, isOffline: true, errorNote: err.message, isTest });
+    renderCanadaPostRatesCard(offlineQuotes, { stCountryCode, isOffline: true, isDisabled: !isEnabled, errorNote: err.message, isTest });
   }
 }
 
-function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote, isTest } = {}) {
+function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisabled, errorNote, isTest } = {}) {
   const card = $('canadapost-rates-card');
   if (!card) return;
   card.style.display = 'block';
@@ -3367,6 +3377,16 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
   let statusBadge = '<span class="pill green">Live Direct Rates</span>';
   if (isTest) statusBadge = '<span class="pill gold">Sandbox Test Mode</span>';
   if (isOffline) statusBadge = '<span class="pill gray">Offline Estimate</span>';
+
+  // A label can only be bought when the prices on screen are Canada Post's own
+  // and the account they would bill is complete. Anything else and the button
+  // is disabled with the reason on it, rather than failing after the
+  // confirmation — which is where the publisher has already decided to spend.
+  let blockedReason = '';
+  if (isDisabled) blockedReason = 'Direct Canada Post API is switched off in Tax Centre → Canada Post.';
+  else if (isOffline) blockedReason = 'These are the app\u2019s own estimates, not Canada Post quotes. Reconnect and refresh to buy.';
+  else if (!audit.ok) blockedReason = audit.errors[0];
+  const canBuy = !blockedReason;
 
   // Which Canada Post account a purchase actually bills is not obvious from the rates alone,
   // so the environment and customer number are stated before any Buy Label button.
@@ -3413,8 +3433,11 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
           <strong class="tnum" style="font-size:15px;color:var(--text);font-weight:800;">${q.totalPrice.toFixed(2)} CAD</strong>
           ${q.taxes > 0 ? `<div class="tnum" style="font-size:10px;color:var(--text3);">incl. ${q.taxes.toFixed(2)} tax</div>` : ''}
         </div>
-        <button class="btn sm gold cp-buy-btn" type="button" onclick="buyCanadaPostLabelHandler('${escapeHtml(q.serviceCode)}', '${escapeHtml(q.serviceName)}', ${q.totalPrice})" title="Purchase official ${escapeHtml(q.serviceName)} label with Canada Post API">
-          <span>🏷️</span>
+        <button class="btn sm gold cp-buy-btn" type="button"
+          ${canBuy ? '' : 'disabled aria-disabled="true"'}
+          onclick="buyCanadaPostLabelHandler('${escapeHtml(q.serviceCode)}', '${escapeHtml(q.serviceName)}', ${q.totalPrice}, this)"
+          title="${canBuy ? `Buy an official ${escapeHtml(q.serviceName)} label from Canada Post` : escapeHtml(blockedReason)}">
+          <span aria-hidden="true">🏷️</span>
           <span>Buy Label</span>
         </button>
       </div>
@@ -3439,6 +3462,7 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
       </div>
     </div>
     ${accountBanner}
+    ${blockedReason ? `<div class="cp-buy-blocked" role="status">🔒 <span>${escapeHtml(blockedReason)}</span></div>` : ''}
     <div class="cp-rates-list">
       ${rateRows || '<div style="font-size:12px;color:var(--text3);padding:12px 0;text-align:center;">No direct Canada Post services found for this package and route.</div>'}
     </div>
@@ -3452,7 +3476,11 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, errorNote
  */
 async function openCanadaPostPurchasedLabel(labelUrl) {
   const context = getLastPurchasedShipmentContext();
-  showCanadaPostLabelModal(context || { labelUrl });
+  // Prefer the stored shipment, but keep an explicitly-passed artifact address:
+  // it is what the official PDF is fetched from.
+  return showCanadaPostLabelModal(
+    context ? { ...context, labelUrl: labelUrl || context.labelUrl || '' } : null
+  );
 }
 
 /**
@@ -3508,102 +3536,251 @@ function showArchivedCanadaPostLabels() {
 }
 
 /**
- * Interactive In-App Canada Post Shipping Label Inspector Modal
+ * In-app Canada Post label inspector.
+ *
+ * Shows the OFFICIAL label — the PDF artifact Canada Post returns — whenever it
+ * can be fetched, because that is the only thing a post office accepts. The
+ * app's own drawn sheet is the fallback, and it is labelled as a reference copy
+ * so it cannot be printed and taken to the counter by mistake. The two used to
+ * be indistinguishable here: the drawn sheet was all this modal ever showed,
+ * for real purchases included.
  */
-function showCanadaPostLabelModal(shipmentContext) {
-  const context = shipmentContext || getLastPurchasedShipmentContext() || {
-    serviceCode: 'DOM.EP',
-    serviceName: 'Expedited Parcel',
-    trackingPin: '7012 3456 7890 1234',
-    sender: { name: 'Lyricalmyrical Books', address1: '123 Main St', city: 'Toronto', province: 'ON', postalCode: 'M4B 1B3' },
-    destination: { name: 'Customer', address1: '123 Destination Way', city: 'Vancouver', province: 'BC', postalCode: 'V6B 2W9', countryCode: 'CA' },
-    parcel: { weightKg: 0.5, lengthCm: 20, widthCm: 15, heightCm: 2 }
-  };
+let _cpLabelObjectUrl = '';
+let _cpLabelArtifact = null;
+let _cpLabelContext = null;
 
-  const existing = document.getElementById('cp-label-modal-overlay');
-  if (existing) existing.remove();
+async function showCanadaPostLabelModal(shipmentContext) {
+  const context = shipmentContext || getLastPurchasedShipmentContext();
 
-  const svgMarkup = generateCanadaPostLabelSvg(context);
-  const cleanPin = String(context.trackingPin || '7012345678901234').replace(/[^0-9A-Z]/gi, '');
+  closeCanadaPostLabelModal();
+  // Held for the footer buttons: reprinting an archived label must download
+  // THAT label, not whichever one happens to be the most recent purchase.
+  _cpLabelContext = context;
+
+  // No shipment to show. This used to fall back to a worked example with an
+  // invented tracking number, which reads exactly like a real purchased label.
+  if (!context) {
+    showToast('No label to show yet — buy one, or reopen a stored label from “Reprint a Past Label”', 'warn');
+    return;
+  }
+
+  const cleanPin = String(context.trackingPin || '').replace(/[^0-9A-Z]/gi, '');
   const trackingUrl = `https://www.canadapost-postescanada.ca/track-reperage/en#/resultList?searchFor=${encodeURIComponent(cleanPin)}`;
 
-  const modalHtml = `
+  document.body.insertAdjacentHTML('beforeend', `
     <div id="cp-label-modal-overlay" class="cp-label-modal-overlay" onclick="if(event.target === this) closeCanadaPostLabelModal();">
-      <div class="cp-label-modal-content" role="dialog" aria-label="Canada Post Shipping Label">
+      <div class="cp-label-modal-content" role="dialog" aria-modal="true" aria-labelledby="cp-label-modal-title">
         <div class="cp-label-modal-header">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:20px;">🇨🇦</span>
-            <div>
-              <strong style="font-size:14px;color:var(--text);">Canada Post Shipping Label (4" × 6")</strong>
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+            <span style="font-size:20px;" aria-hidden="true">🇨🇦</span>
+            <div style="min-width:0;">
+              <strong id="cp-label-modal-title" style="font-size:14px;color:var(--text);">Canada Post Shipping Label</strong>
               <div style="font-size:11px;color:var(--text3);margin-top:2px;">
-                Tracking PIN: <strong class="tnum" style="color:var(--text);letter-spacing:0.5px;">${escapeHtml(cleanPin)}</strong>
+                ${cleanPin
+                  ? `Tracking PIN: <strong class="tnum" style="color:var(--text);letter-spacing:0.5px;">${escapeHtml(cleanPin)}</strong>`
+                  : 'No tracking number on this shipment'}
               </div>
             </div>
           </div>
-          <button class="btn sm tag cp-label-action-btn" type="button" onclick="closeCanadaPostLabelModal()" style="min-width:36px;padding:6px 10px;" aria-label="Close modal">✕</button>
+          <button class="btn sm tag cp-label-action-btn" type="button" onclick="closeCanadaPostLabelModal()" style="min-width:44px;min-height:44px;padding:6px 10px;" aria-label="Close label inspector">✕</button>
+        </div>
+        <div id="cp-label-status" class="cp-label-status" role="status" aria-live="polite">
+          <span class="cp-label-status-spinner" aria-hidden="true"></span>
+          <span>Fetching your official label from Canada Post…</span>
         </div>
         <div class="cp-label-modal-body">
           <div id="cp-label-preview-container" class="cp-label-preview-container">
-            ${svgMarkup}
+            <div class="skeleton-line" style="height:420px;border-radius:6px;"></div>
           </div>
         </div>
         <div class="cp-label-modal-footer">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <button class="btn gold cp-label-action-btn" type="button" onclick="printCanadaPostLabelModal()">
-              <span>🖨️</span>
+            <button class="btn gold cp-label-action-btn" id="cp-label-print-btn" type="button" onclick="printCanadaPostLabelModal()" disabled>
+              <span aria-hidden="true">🖨️</span>
               <span>Print Label (4" × 6")</span>
             </button>
-            <button class="btn outline cp-label-action-btn" type="button" onclick="downloadCanadaPostLabelModal('${escapeHtml(cleanPin)}')">
-              <span>📥</span>
-              <span>Download SVG / PDF</span>
+            <button class="btn outline cp-label-action-btn" id="cp-label-download-btn" type="button" onclick="downloadCanadaPostLabelModal()" disabled>
+              <span aria-hidden="true">📥</span>
+              <span>Download</span>
             </button>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(cleanPin)}');showToast('✓ Tracking PIN copied to clipboard');">
-              <span>📋</span>
-              <span>Copy PIN</span>
-            </button>
-            <a href="${trackingUrl}" target="_blank" rel="noopener noreferrer" class="btn sm tag cp-label-action-btn" style="text-decoration:none;color:var(--text);">
-              <span>🔍</span>
-              <span>Track Parcel</span>
-            </a>
+            ${cleanPin ? `
+              <button class="btn sm tag cp-label-action-btn" type="button" onclick="copyCanadaPostPin('${escapeHtml(cleanPin)}')">
+                <span aria-hidden="true">📋</span>
+                <span>Copy PIN</span>
+              </button>
+              <a href="${escapeHtml(trackingUrl)}" target="_blank" rel="noopener noreferrer" class="btn sm tag cp-label-action-btn" style="text-decoration:none;color:var(--text);">
+                <span aria-hidden="true">🔍</span>
+                <span>Track Parcel</span>
+              </a>
+            ` : ''}
           </div>
         </div>
       </div>
     </div>
-  `;
+  `);
 
-  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
+  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+
+  let artifact = null;
+  try {
+    artifact = await fetchCanadaPostLabelArtifact({
+      labelUrl: context.labelUrl || '',
+      apiKey,
+      apiSecret,
+      shipmentContext: context
+    });
+  } catch (err) {
+    console.warn('Canada Post label fetch failed:', err);
+  }
+
+  // The dialog may have been closed while the download was in flight.
+  if (!document.getElementById('cp-label-modal-overlay')) return;
+
+  renderCanadaPostLabelArtifact(artifact, context);
+}
+
+/** Paint whichever label came back, and say plainly which one it is. */
+function renderCanadaPostLabelArtifact(artifact, context) {
+  const container = $('cp-label-preview-container');
+  const status = $('cp-label-status');
+  const printBtn = $('cp-label-print-btn');
+  const downloadBtn = $('cp-label-download-btn');
+  if (!container || !status) return;
+
+  _cpLabelArtifact = artifact;
+  if (_cpLabelObjectUrl) { URL.revokeObjectURL(_cpLabelObjectUrl); _cpLabelObjectUrl = ''; }
+
+  if (artifact && artifact.kind === 'pdf') {
+    _cpLabelObjectUrl = URL.createObjectURL(artifact.blob);
+    container.classList.add('is-pdf');
+    container.innerHTML = `<iframe id="cp-label-frame" class="cp-label-frame" src="${_cpLabelObjectUrl}" title="Official Canada Post shipping label"></iframe>`;
+    status.className = 'cp-label-status is-official';
+    status.innerHTML = `<span aria-hidden="true">✓</span><span><strong>Official Canada Post label.</strong> Print at 100% scale on 4&quot; × 6&quot; stock or plain paper, and tape it flat over the whole parcel face.</span>`;
+    if (printBtn) printBtn.disabled = false;
+    if (downloadBtn) downloadBtn.disabled = false;
+    return;
+  }
+
+  container.classList.remove('is-pdf');
+
+  if (!artifact) {
+    status.className = 'cp-label-status is-warn';
+    status.innerHTML = `<span aria-hidden="true">⚠</span><span>There is nothing stored for this shipment to show.</span>`;
+    container.innerHTML = `
+      <div class="cp-label-empty">
+        <div class="cp-label-empty-icon" aria-hidden="true">🏷️</div>
+        <strong>No label to display</strong>
+        <p>This shipment has no stored label details. If you bought it on another device, download it from your Canada Post account.</p>
+      </div>`;
+    if (printBtn) printBtn.disabled = true;
+    if (downloadBtn) downloadBtn.disabled = true;
+    return;
+  }
+
+  // The drawn copy. Say so before anyone reaches for the printer.
+  container.innerHTML = generateCanadaPostLabelSvg(context);
+  status.className = 'cp-label-status is-warn';
+  status.innerHTML = `
+    <span aria-hidden="true">⚠</span>
+    <span>
+      <strong>This is a reference copy — Canada Post will not accept it at the counter.</strong>
+      The official label could not be downloaded${artifact.reason ? ` (${escapeHtml(artifact.reason)})` : ''}.
+      The postage is still paid: sign in to your Canada Post account to print the real label, or reopen this once you are back online.
+    </span>`;
+  if (printBtn) printBtn.disabled = false;
+  if (downloadBtn) downloadBtn.disabled = false;
 }
 
 function closeCanadaPostLabelModal() {
   const modal = document.getElementById('cp-label-modal-overlay');
   if (modal) modal.remove();
+  if (_cpLabelObjectUrl) { URL.revokeObjectURL(_cpLabelObjectUrl); _cpLabelObjectUrl = ''; }
+  _cpLabelArtifact = null;
+  _cpLabelContext = null;
 }
 
-function printCanadaPostLabelModal() {
-  window.print();
-}
-
-function downloadCanadaPostLabelModal(pin) {
-  const context = getArchivedShipmentContext(pin) || getLastPurchasedShipmentContext();
-  const svgText = generateCanadaPostLabelSvg(context || { trackingPin: pin });
-  const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `canadapost-label-${pin || 'package'}.svg`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  showToast('✓ Shipping label downloaded', 'ok');
+function copyCanadaPostPin(pin) {
+  try {
+    navigator.clipboard?.writeText(String(pin || ''));
+    showToast('✓ Tracking PIN copied to clipboard');
+  } catch (_) {
+    showToast('⚠ Could not copy — select the number and copy it by hand', 'warn');
+  }
 }
 
 /**
- * Buy a Canada Post shipping label for the chosen service
+ * Print what is on screen. A PDF prints from its own frame so Canada Post's
+ * exact page geometry is preserved; the drawn copy prints through the page's
+ * print stylesheet, which crops it to 4x6.
  */
-async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) {
+function printCanadaPostLabelModal() {
+  const frame = document.getElementById('cp-label-frame');
+  if (frame && _cpLabelArtifact?.kind === 'pdf') {
+    try {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+      return;
+    } catch (err) {
+      // Cross-origin-ish blob quirks in some browsers: fall back to opening the
+      // PDF in a tab rather than silently printing the wrong thing.
+      console.warn('Frame print unavailable, opening label in a new tab:', err);
+      if (_cpLabelObjectUrl) {
+        window.open(_cpLabelObjectUrl, '_blank', 'noopener');
+        showToast('Opened the label in a new tab — print it from there', 'ok');
+        return;
+      }
+    }
+  }
+  window.print();
+}
+
+/**
+ * Save the label. A real PDF is saved as a PDF; the drawn copy is saved as an
+ * SVG named so the difference survives the download folder.
+ */
+function downloadCanadaPostLabelModal() {
+  const artifact = _cpLabelArtifact;
+  if (!artifact) {
+    showToast('⚠ Nothing to download for this shipment', 'warn');
+    return;
+  }
+
+  const pin = String(_cpLabelContext?.trackingPin || '').replace(/[^0-9A-Z]/gi, '') || 'package';
+  const isPdf = artifact.kind === 'pdf';
+  const filename = isPdf
+    ? `canadapost-label-${pin}.pdf`
+    : `canadapost-REFERENCE-COPY-${pin}.svg`;
+
+  const url = URL.createObjectURL(artifact.blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  showToast(isPdf ? '✓ Official label downloaded' : '✓ Reference copy downloaded — not valid for mailing', isPdf ? 'ok' : 'warn');
+}
+
+
+/**
+ * Buy a Canada Post shipping label for the chosen service.
+ *
+ * Guarded against re-entry: every press of this button is a real charge against
+ * a real account, and a slow network is exactly when someone presses it twice.
+ * Two presses used to mean two labels and two charges, with only one of them
+ * ever reaching the ledger or the order.
+ */
+let _cpPurchaseInFlight = false;
+
+async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, buttonEl = null) {
+  if (_cpPurchaseInFlight) {
+    showToast('A label purchase is already running — give it a moment', 'warn');
+    return;
+  }
   const sfName = $('sf-name')?.value?.trim() || 'Lyricalmyrical Books';
   const sfCompany = $('sf-company')?.value?.trim() || 'Lyricalmyrical Books';
   const sfPhone = $('sf-phone')?.value?.trim() || '4165550199';
@@ -3650,7 +3827,30 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
   const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
   const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
   const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
+  const contractId = TAX_CENTER.settings?.cpContractId || '';
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
+  const isEnabled = TAX_CENTER.settings?.cpEnabled !== false;
+
+  // Pre-flight, before any dialog: the same audit the rates card runs, so what
+  // stops a purchase here is the same thing shown on the card rather than a
+  // stray error thrown from inside the API client after the confirmation.
+  const audit = validateCanadaPostAccount({ apiKey, apiSecret, customerNumber, contractId, isTest });
+
+  if (!isEnabled) {
+    showToast('⚠ Direct Canada Post API is switched off — turn it on in Tax Centre → Canada Post to buy labels', 'warn');
+    return;
+  }
+  if (!audit.ok) {
+    showToast(`⚠ ${audit.errors[0]}`, 'err');
+    return;
+  }
+  // Prices shown while offline are the app's own estimates, not Canada Post
+  // quotes. Buying against one would post a guessed amount to the ledger as if
+  // it were the real charge, and the purchase itself needs the network anyway.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    showToast('⚠ You are offline. Reconnect before buying a label — the prices shown are estimates, not Canada Post quotes.', 'warn');
+    return;
+  }
 
   // U.S. duty prepayment. Either a Verified Account key rides along on the request
   // and Canada Post issues the Declaration ID itself, or one bought in the Prepay
@@ -3659,23 +3859,50 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
   let declarationId = dutyRoute.route === 'manual' ? dutyRoute.declarationId : '';
 
   if (dutyRoute.needsDeclaration && !declarationId && dutyRoute.route !== 'verified') {
-    const proceed = await confirmDialog({
-      title: 'No prepaid U.S. duty for this parcel',
-      message: `Canada Post needs a 13-character <strong>Declaration ID</strong> proving the U.S. duty is prepaid, and one has to be paid for before it exists.<br><br>`
-        + `<strong>Buy it now:</strong> open the Zonos Prepay app, pay the duty, and paste the ID in before buying the label.<br><br>`
-        + `<strong>Or set it up once:</strong> save a Zonos Verified Account Key in Tax Centre → Zonos and Canada Post will issue the ID automatically from then on.<br><br>`
-        + `You can also carry on without one — the parcel ships with duty unpaid and the recipient settles it on delivery.`,
-      confirmText: 'Carry on without prepaid duty',
-      cancelText: 'Go back'
-    });
+    const proceed = await confirmDialog(
+      'Canada Post needs a 13-character Declaration ID proving the U.S. duty is prepaid, '
+      + 'and one has to be paid for before it exists.\n\n'
+      + 'Buy it now: open the Zonos Prepay app, pay the duty, and paste the ID in before buying the label.\n\n'
+      + 'Or set it up once: save a Zonos Verified Account Key in Tax Centre → Zonos and Canada Post will issue '
+      + 'the ID automatically from then on.\n\n'
+      + 'You can also carry on without one — the parcel ships with duty unpaid and the recipient settles it on delivery.',
+      {
+        title: 'No prepaid U.S. duty for this parcel',
+        okLabel: 'Carry on without prepaid duty',
+        cancelLabel: 'Go back'
+      }
+    );
     if (!proceed) return;
   }
 
-  const confirmed = await confirmDialog({
-    title: '🏷️ Confirm Canada Post Label Purchase',
-    message: `Purchase official <strong>${escapeHtml(serviceName)}</strong> shipping label for <strong>$${quotedPrice.toFixed(2)} CAD</strong> to <strong>${escapeHtml(stName || 'Customer')}</strong> in ${escapeHtml(stCity)}, ${escapeHtml(stCountryCode)}?${declarationId ? `<br><br><span style="font-size:11px;color:var(--green);">✓ Includes Zonos Declaration ID: <strong>${escapeHtml(declarationId)}</strong></span>` : ''}`,
-    confirmText: `Buy Label ($${quotedPrice.toFixed(2)} CAD)`,
-    cancelText: 'Cancel'
+  // Everything that decides whether this is the right thing to spend money on:
+  // what is being bought, where it is going, how much, and which account pays.
+  const destinationLine = [stCity, stState, stCountryCode].filter(Boolean).join(', ');
+  const shipTo = [
+    stName || 'Customer',
+    [stAddr, stAddr2].filter(Boolean).join(', '),
+    [destinationLine, stZip].filter(Boolean).join(' ')
+  ].filter(Boolean).join('\n');
+
+  const details = [
+    ['Service', serviceName],
+    ['Ship to', shipTo],
+    ['Price', `$${quotedPrice.toFixed(2)} CAD (quoted)`],
+    ['Account', `Canada Post ${audit.customerNumber || '—'}`]
+  ];
+  if (declarationId) details.push(['U.S. duty', `Prepaid · ${declarationId}`]);
+
+  const billingWarning = isTest
+    ? 'Sandbox Test Mode is on, but Canada Post serves test and live from the same address. '
+      + 'If the key saved in Tax Centre is a production key, this buys a real label and charges your account.'
+    : 'This charges your live Canada Post account and cannot be undone from here — '
+      + 'a label bought by mistake has to be refunded through Canada Post.';
+
+  const confirmed = await confirmDialog(billingWarning, {
+    title: 'Buy this Canada Post label?',
+    details,
+    okLabel: `Buy Label · $${quotedPrice.toFixed(2)} CAD`,
+    cancelLabel: 'Cancel'
   });
 
   if (!confirmed) return;
@@ -3691,6 +3918,10 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
   } : null;
 
   const orderNum = $('sp-order-num')?.value || `ORDER-${Date.now().toString().slice(-6)}`;
+
+  // Locked immediately before the try, so the matching finally always unlocks
+  // it — a stranded button would leave the publisher unable to ship at all.
+  setCanadaPostPurchaseBusy(true, buttonEl);
 
   try {
     const result = await buyCanadaPostLabel({
@@ -3742,6 +3973,14 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
     }
 
     if (result.trackingPin || result.labelUrl) {
+      // The request asks Canada Post to return the postage rate, so when it
+      // does, that is what the account was billed. The quote next to the button
+      // is only a fallback: it drifts from the invoice on surcharges and tax.
+      const chargedPrice = Number.isFinite(result.postageCharged) && result.postageCharged > 0
+        ? result.postageCharged
+        : quotedPrice;
+      const priceIsConfirmed = chargedPrice !== quotedPrice || Number.isFinite(result.postageCharged);
+
       showToast(`✓ Canada Post label purchased! Tracking PIN: ${result.trackingPin}`, 'ok');
 
       // Auto-mark prefilled order as Shipped in Order History
@@ -3767,7 +4006,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
             histItem.trackingNumber = result.trackingPin || '';
             histItem.carrier = 'canadapost';
             histItem.declarationId = declarationId || '';
-            histItem.postagePaid = quotedPrice;
+            histItem.postagePaid = chargedPrice;
             saveState(activeBook);
             renderHist();
           }
@@ -3786,10 +4025,14 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
             id: `exp_cp_${Date.now()}`,
             date: today(),
             // Canada Post postage is billed natively in CAD; stored verbatim with no FX conversion.
-            amount: quotedPrice,
+            amount: chargedPrice,
             category: 'Shipping & Postage',
             vendor: 'Canada Post',
             desc: `Canada Post ${serviceName} (PIN: ${result.trackingPin || result.shipmentId})${declarationId ? ` · Zonos: ${declarationId}` : ''}`,
+            // Distinguishes a figure Canada Post confirmed from the quote we
+            // fell back to, so a later reconciliation knows which to trust.
+            amountConfirmed: priceIsConfirmed,
+            quotedAmount: quotedPrice,
             ref: cpRef,
             currency: 'CAD',
             trackingPin: result.trackingPin || '',
@@ -3820,17 +4063,20 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
               <div style="display:flex;align-items:center;gap:10px;">
                 <span style="font-size:22px;color:var(--green);">✓</span>
                 <div>
-                  <strong style="color:var(--green);font-size:14px;">Label Purchased &amp; Created Successfully</strong>
-                  <div style="font-size:11px;color:var(--text3);margin-top:2px;">Tracking PIN: <strong class="tnum" style="color:var(--text);font-size:12px;">${escapeHtml(result.trackingPin || 'Generated')}</strong></div>
+                  <strong style="color:var(--green);font-size:14px;">Label purchased</strong>
+                  <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+                    Tracking PIN: <strong class="tnum" style="color:var(--text);font-size:12px;">${escapeHtml(result.trackingPin || '—')}</strong>
+                    · Charged <strong class="tnum">$${chargedPrice.toFixed(2)} CAD</strong>${priceIsConfirmed ? '' : ' (quoted)'}
+                  </div>
                 </div>
               </div>
               <div class="cp-label-actions">
-                <button class="btn gold cp-label-action-btn" type="button" onclick="showCanadaPostLabelModal()" title="Open In-App Label Inspector">
-                  <span>🖨️</span>
-                  <span>Inspect &amp; Print Label (4" × 6")</span>
+                <button class="btn gold cp-label-action-btn" type="button" onclick="showCanadaPostLabelModal()" title="Open the label to print it">
+                  <span aria-hidden="true">🖨️</span>
+                  <span>Open &amp; Print Label</span>
                 </button>
-                <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(result.trackingPin)}');showToast('✓ Copied PIN to clipboard');" title="Copy tracking number">
-                  <span>📋</span>
+                <button class="btn sm tag cp-label-action-btn" type="button" onclick="copyCanadaPostPin('${escapeHtml(result.trackingPin || '')}')" title="Copy tracking number">
+                  <span aria-hidden="true">📋</span>
                   <span>Copy PIN</span>
                 </button>
               </div>
@@ -3853,13 +4099,47 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice) 
         `;
       }
 
-      // Automatically launch the In-App Label Inspector Modal for frictionless printing
-      showCanadaPostLabelModal();
+      // Open the label straight away — the next thing anyone does after buying
+      // postage is print it. Awaited so a failure to fetch the official PDF is
+      // reported here rather than escaping as an unhandled rejection.
+      await showCanadaPostLabelModal();
     }
   } catch (err) {
     console.error('Canada Post label purchase error:', err);
     showToast(`⚠ Label purchase failed: ${err.message}`, 'err');
+  } finally {
+    setCanadaPostPurchaseBusy(false, buttonEl);
   }
+}
+
+/**
+ * Lock every Buy Label button on the card while one purchase is in flight —
+ * not just the one that was pressed, since they all spend from the same
+ * account and only one label is wanted.
+ */
+function setCanadaPostPurchaseBusy(busy, buttonEl) {
+  _cpPurchaseInFlight = busy;
+  document.querySelectorAll('.cp-buy-btn').forEach(btn => {
+    if (busy) {
+      // Remember the pre-lock state: a button the card disabled for its own
+      // reason (offline estimates, incomplete account) must stay disabled when
+      // this unlocks, not be quietly switched on.
+      btn.dataset.cpWasDisabled = btn.disabled ? '1' : '';
+      if (!btn.dataset.cpIdleLabel) btn.dataset.cpIdleLabel = btn.innerHTML;
+      btn.disabled = true;
+      btn.setAttribute('aria-disabled', 'true');
+      if (btn === buttonEl) btn.innerHTML = '<span aria-hidden="true">⏳</span><span>Buying…</span>';
+    } else {
+      if (btn.dataset.cpIdleLabel) { btn.innerHTML = btn.dataset.cpIdleLabel; delete btn.dataset.cpIdleLabel; }
+      const wasDisabled = btn.dataset.cpWasDisabled === '1';
+      delete btn.dataset.cpWasDisabled;
+      btn.disabled = wasDisabled;
+      if (wasDisabled) btn.setAttribute('aria-disabled', 'true');
+      else btn.removeAttribute('aria-disabled');
+    }
+  });
+  if (busy && buttonEl) buttonEl.setAttribute('aria-busy', 'true');
+  else if (buttonEl) buttonEl.removeAttribute('aria-busy');
 }
 
 // Shippo weighs a customs line as quantity x net_weight and rejects the whole
@@ -7711,6 +7991,7 @@ export {
   closeCanadaPostLabelModal,
   printCanadaPostLabelModal,
   downloadCanadaPostLabelModal,
+  copyCanadaPostPin,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,

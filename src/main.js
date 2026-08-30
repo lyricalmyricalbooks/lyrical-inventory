@@ -423,6 +423,7 @@ import {
   closeCanadaPostLabelModal,
   printCanadaPostLabelModal,
   downloadCanadaPostLabelModal,
+  copyCanadaPostPin,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,
@@ -21825,7 +21826,7 @@ function exposeLegacyInlineHandlers() {
     toggleIntegrationSection,
     testZonosConnectionHandler, calculateZonosDutiesHandler, renderZonosDutyCard,
     testCanadaPostConnectionHandler, diagnoseCanadaPostHandler, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard, buyCanadaPostLabelHandler,
-    showCanadaPostLabelModal, closeCanadaPostLabelModal, printCanadaPostLabelModal, downloadCanadaPostLabelModal,
+    showCanadaPostLabelModal, closeCanadaPostLabelModal, printCanadaPostLabelModal, downloadCanadaPostLabelModal, copyCanadaPostPin,
     openSaveBookPresetModal, confirmSaveBookPreset, renderSaveBookPresetPreview,
     setThemePreference, cycleThemePreference, toggleTheme
   });
@@ -21894,6 +21895,7 @@ window.showCanadaPostLabelModal = showCanadaPostLabelModal;
 window.closeCanadaPostLabelModal = closeCanadaPostLabelModal;
 window.printCanadaPostLabelModal = printCanadaPostLabelModal;
 window.downloadCanadaPostLabelModal = downloadCanadaPostLabelModal;
+window.copyCanadaPostPin = copyCanadaPostPin;
 window.buyShippoLabel = buyShippoLabel;
 window.verifyDestinationAddress = verifyDestinationAddress;
 window.applyVerifiedAddressCorrections = applyVerifiedAddressCorrections;

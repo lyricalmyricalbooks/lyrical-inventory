@@ -166,10 +166,99 @@ export async function attemptCloseModal(id) {
   return true;
 }
 
+// Both call shapes below are supported, because both are in use and the
+// object form used to fail silently: the object landed in `message`, the body
+// rendered the string "[object Object]", and the title and button labels fell
+// back to their defaults. A money-spending confirmation that says
+// "Are you sure? / [object Object] / Confirm" is worse than no dialog at all,
+// so the shape is normalised here rather than trusted at ~70 call sites.
+//
+//   confirmDialog('Discard this?', { okLabel: 'Discard', danger: true })
+//   confirmDialog({ title: 'Discard?', message: 'Discard this?',
+//                   confirmText: 'Discard', cancelText: 'Keep', danger: true })
+//
+// `message` may also carry simple HTML (<strong>, <br>) — the body is a text
+// node, so it is flattened to plain text instead of being printed as tags.
+export function normalizeConfirmArgs(message, opts = {}) {
+  let text = message;
+  let options = opts;
+  if (message && typeof message === 'object' && !Array.isArray(message)) {
+    const o = message;
+    text = o.message ?? o.body ?? o.text ?? '';
+    options = { ...o, ...opts };
+  }
+  return {
+    message: htmlToPlainText(text),
+    title: options.title || '',
+    okLabel: options.okLabel || options.confirmText || '',
+    cancelLabel: options.cancelLabel || options.cancelText || '',
+    danger: !!options.danger,
+    // Optional [label, value] rows rendered as an aligned table ABOVE the prose.
+    // A purchase confirmation has facts to check (service, price, account) and
+    // a caution to read, and the two want different typography: padding the
+    // facts into columns with spaces only lines up in a monospace body, which
+    // then makes the caution — the sentence that matters most — the hardest
+    // thing on the dialog to read.
+    details: Array.isArray(options.details)
+      ? options.details.filter(row => Array.isArray(row) && row.length >= 2)
+      : [],
+  };
+}
+
+// The confirm body is a text node with white-space:pre-wrap, so markup in a
+// message would otherwise be shown literally ("<strong>$12.32</strong>").
+// Block-ish tags become line breaks and the rest are dropped, which keeps a
+// message authored with light HTML readable rather than turning it into soup.
+export function htmlToPlainText(value) {
+  const raw = String(value ?? '');
+  if (!/[<&]/.test(raw)) return raw;
+  return raw
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\s*\/\s*(p|div|li|tr|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&apos;/gi, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// Fill the confirm body: the detail rows first, then the message. Built with
+// textContent per cell rather than an HTML string, so a value carrying an
+// address, a customer name or an API error can never inject markup here.
+function renderConfirmBody(body, args) {
+  body.textContent = '';
+  body.classList.toggle('has-details', args.details.length > 0);
+
+  if (args.details.length) {
+    const table = document.createElement('dl');
+    table.className = 'confirm-details';
+    for (const [label, value] of args.details) {
+      const dt = document.createElement('dt');
+      dt.textContent = String(label ?? '');
+      const dd = document.createElement('dd');
+      dd.textContent = String(value ?? '');
+      table.append(dt, dd);
+    }
+    body.appendChild(table);
+  }
+
+  if (args.message) {
+    const text = document.createElement('p');
+    text.className = 'confirm-message';
+    text.textContent = args.message;
+    body.appendChild(text);
+  }
+}
+
 // Styled replacement for window.confirm — returns a Promise<boolean>.
 // Falls back to native confirm() if the modal isn't present (e.g. very
 // early bootstrap or unit tests).
 export function confirmDialog(message, opts = {}) {
+  const args = normalizeConfirmArgs(message, opts);
   const overlay = $('m-confirm');
   const body = $('m-confirm-body');
   const titleEl = $('m-confirm-title');
@@ -178,14 +267,14 @@ export function confirmDialog(message, opts = {}) {
   if (!overlay || !body || !ok || !cancel) {
     // Should never happen in production, but keep a working fallback.
 
-    return Promise.resolve(window.confirm(message));
+    return Promise.resolve(window.confirm(args.message));
   }
-  body.textContent = String(message ?? '');
-  if (titleEl) titleEl.textContent = opts.title || 'Are you sure?';
-  ok.textContent = opts.okLabel || 'Confirm';
-  cancel.textContent = opts.cancelLabel || 'Cancel';
-  ok.classList.toggle('danger-btn', !!opts.danger);
-  ok.classList.toggle('gold', !opts.danger);
+  renderConfirmBody(body, args);
+  if (titleEl) titleEl.textContent = args.title || 'Are you sure?';
+  ok.textContent = args.okLabel || 'Confirm';
+  cancel.textContent = args.cancelLabel || 'Cancel';
+  ok.classList.toggle('danger-btn', args.danger);
+  ok.classList.toggle('gold', !args.danger);
 
   return new Promise(resolve => {
     const cleanup = (result) => {
@@ -210,7 +299,7 @@ export function confirmDialog(message, opts = {}) {
 
     openM('confirm');
     // Focus the safe (cancel) button by default for destructive prompts.
-    setTimeout(() => (opts.danger ? cancel : ok).focus(), 0);
+    setTimeout(() => (args.danger ? cancel : ok).focus(), 0);
   });
 }
 

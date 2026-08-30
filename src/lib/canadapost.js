@@ -16,6 +16,11 @@ import {
   archiveKeyForPin,
 } from './label-archive.js';
 
+// The modern Developer Portal serves both environments from ONE host. The old
+// ct.soa-gw / soa-gw split is gone, so which environment a request lands in is
+// decided by the credentials, not the URL. Nothing in this file can tell a
+// development key from a production one, which is why sandbox mode is worded as
+// a property of the key rather than a promise that nothing will be charged.
 export const CANADAPOST_PRODUCTION_URL = 'https://api.canadapost-postescanada.ca';
 export const CANADAPOST_SANDBOX_URL = 'https://api.canadapost-postescanada.ca';
 
@@ -224,8 +229,12 @@ export const DEFAULT_CP_CUSTOMER_NUMBER = '';
 
 /**
  * Resolve which Canada Post environment a set of settings will actually hit.
- * Sandbox shipments are never charged and never enter the Online Business Centre;
- * live shipments bill the merchant's real account, so the two must be told apart.
+ *
+ * Both modes now address the same gateway (see the URL constants above), so
+ * this deliberately does NOT claim a sandbox shipment is free. It used to, and
+ * that was the most expensive sentence in the app: with Sandbox Test Mode on
+ * and a production key pasted in, "Nothing is charged and no label is valid for
+ * mailing" sat directly above a Buy Label button that charged a real account.
  */
 export function resolveCanadaPostEnvironment({ isTest = false } = {}) {
   const sandbox = !!isTest;
@@ -234,9 +243,11 @@ export function resolveCanadaPostEnvironment({ isTest = false } = {}) {
     mode: sandbox ? 'sandbox' : 'live',
     baseUrl: sandbox ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL,
     hostname: 'api.canadapost-postescanada.ca',
+    sharedGateway: true,
     label: sandbox ? 'Sandbox Test Mode' : 'Live Production Mode',
     description: sandbox
-      ? 'Shipments are simulated against the Canada Post development gateway. Nothing is charged and no label is valid for mailing.'
+      ? 'Canada Post serves test and live from the same address, so your credentials decide which one you get. '
+        + 'With a Developer Portal development key nothing is charged; with a production key this buys a real, billable label.'
       : 'Shipments are created against your live Canada Post account, charged to your card on file, and appear in the Online Business Centre.'
   };
 }
@@ -297,7 +308,8 @@ export function validateCanadaPostAccount({
   }
 
   if (env.isTest) {
-    warnings.push('Sandbox Test Mode is on. Labels created here are not real, are not charged, and cannot be mailed.');
+    warnings.push('Sandbox Test Mode is on, but Canada Post serves test and live from the same address. '
+      + 'This is only a test if the key above is a Developer Portal development key — a production key still buys a real label and charges your account.');
   }
   if (contractId && !env.isTest && !custDigits) {
     warnings.push('A contract ID is set without a customer number; contract rates will not be applied.');
@@ -330,52 +342,121 @@ export function getSavedSheetsUrl() {
   return '';
 }
 
+// Code 128 symbol patterns, one per code value 0-106. Each string is the six
+// module widths of that symbol, starting with a bar and alternating
+// bar/space; 106 (Stop) carries a seventh module for the termination bar.
+// 103/104/105 are Start A/B/C.
+const CODE128_PATTERNS = [
+  '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
+  '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
+  '221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211',
+  '212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313',
+  '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331',
+  '231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111',
+  '314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214',
+  '112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111',
+  '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141',
+  '214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141',
+  '114131', '311141', '411131', '211412', '211214', '211232', '2331112'
+];
+
+const CODE128_START_B = 104;
+const CODE128_START_C = 105;
+const CODE128_STOP = 106;
+
 /**
- * Generate Code 128 barcode pattern (B subset) as SVG rect elements
+ * Encode a string as a real Code 128 symbol.
+ *
+ * This used to be a decorative pattern derived from a per-character hash — bars
+ * that looked like a barcode and scanned as nothing. A courier label whose
+ * barcode does not carry the tracking number is worse than one with no barcode
+ * at all, because the failure only shows up at the counter.
+ *
+ * Numeric payloads of even length go through Set C (two digits per symbol,
+ * which is what carrier labels use); everything else goes through Set B.
+ * Returns null for input Code 128 cannot represent, so callers can fall back
+ * to printing the number rather than drawing meaningless bars.
+ *
+ * @returns {{modules: string, codes: number[], checksum: number}|null}
  */
-export function generateCode128SvgBars(text, { x = 0, y = 0, width = 400, height = 80 } = {}) {
-  const clean = String(text || '').replace(/[^A-Z0-9 -]/gi, '').toUpperCase();
-  if (!clean) return '';
+export function encodeCode128(text) {
+  const value = String(text ?? '');
+  if (!value) return null;
 
-  // Generate deterministic bar widths based on input string hash/characters
-  let binaryString = '11010010000'; // Start B
-  let checksum = 104;
-
-  for (let i = 0; i < clean.length; i++) {
-    const charCode = clean.charCodeAt(i);
-    const val = charCode - 32;
-    checksum += val * (i + 1);
-    // Pseudo-code128 11-module alternating pattern for visual clarity
-    const patternVal = ((charCode * 17) % 64) + 64;
-    binaryString += patternVal.toString(2).padStart(11, '0').slice(0, 11);
-  }
-
-  // Add checksum & stop pattern
-  const checkVal = (checksum % 103) + 64;
-  binaryString += checkVal.toString(2).padStart(11, '0').slice(0, 11);
-  binaryString += '1100011101011'; // Stop
-
-  const totalModules = binaryString.length;
-  const moduleWidth = width / totalModules;
-
-  let rects = '';
-  let currentRun = 0;
-  let startX = 0;
-
-  for (let i = 0; i < binaryString.length; i++) {
-    if (binaryString[i] === '1') {
-      if (currentRun === 0) startX = i * moduleWidth;
-      currentRun++;
-    } else {
-      if (currentRun > 0) {
-        rects += `<rect x="${(x + startX).toFixed(2)}" y="${y}" width="${(currentRun * moduleWidth).toFixed(2)}" height="${height}" fill="#000000"/>`;
-        currentRun = 0;
-      }
+  const codes = [];
+  const useSetC = /^\d+$/.test(value) && value.length >= 4 && value.length % 2 === 0;
+  if (useSetC) {
+    codes.push(CODE128_START_C);
+    for (let i = 0; i < value.length; i += 2) codes.push(parseInt(value.slice(i, i + 2), 10));
+  } else {
+    codes.push(CODE128_START_B);
+    for (const ch of value) {
+      const point = ch.charCodeAt(0);
+      // Set B covers ASCII 32-126. Anything else cannot be encoded, and
+      // silently dropping it would produce a barcode for a different string.
+      if (point < 32 || point > 126) return null;
+      codes.push(point - 32);
     }
   }
-  if (currentRun > 0) {
-    rects += `<rect x="${(x + startX).toFixed(2)}" y="${y}" width="${(currentRun * moduleWidth).toFixed(2)}" height="${height}" fill="#000000"/>`;
+
+  // Modulo-103 weighted checksum: start symbol x1, then position 1, 2, 3...
+  let checksum = codes[0];
+  for (let i = 1; i < codes.length; i++) checksum += codes[i] * i;
+  checksum %= 103;
+  codes.push(checksum);
+  codes.push(CODE128_STOP);
+
+  let modules = '';
+  for (const code of codes) {
+    const widths = CODE128_PATTERNS[code];
+    if (!widths) return null;
+    let isBar = true;
+    for (const w of widths) {
+      modules += (isBar ? '1' : '0').repeat(Number(w));
+      isBar = !isBar;
+    }
   }
+
+  return { modules, codes, checksum };
+}
+
+/**
+ * Draw a scannable Code 128 barcode as SVG <rect> elements.
+ *
+ * `width` is the full drawing width including the 10-module quiet zone Code 128
+ * requires on each side; without it a scanner has nothing to lock onto, however
+ * crisp the bars themselves are.
+ */
+export function generateCode128SvgBars(text, { x = 0, y = 0, width = 400, height = 80 } = {}) {
+  // Set B has no lowercase problem, but Canada Post PINs are digits and the
+  // callers pass formatted values ("7012 3456 ..."), so separators go first.
+  const clean = String(text || '').replace(/[^A-Za-z0-9 \-]/g, '').replace(/\s+/g, '').toUpperCase();
+  if (!clean) return '';
+
+  const encoded = encodeCode128(clean);
+  if (!encoded) return '';
+
+  const QUIET_MODULES = 10;
+  const totalModules = encoded.modules.length + QUIET_MODULES * 2;
+  const moduleWidth = width / totalModules;
+  const originX = x + QUIET_MODULES * moduleWidth;
+
+  let rects = '';
+  let runStart = -1;
+  const flush = (endIndex) => {
+    if (runStart < 0) return;
+    const runWidth = (endIndex - runStart) * moduleWidth;
+    rects += `<rect x="${(originX + runStart * moduleWidth).toFixed(3)}" y="${y}" width="${runWidth.toFixed(3)}" height="${height}" fill="#000000"/>`;
+    runStart = -1;
+  };
+  for (let i = 0; i < encoded.modules.length; i++) {
+    if (encoded.modules[i] === '1') {
+      if (runStart < 0) runStart = i;
+    } else {
+      flush(i);
+    }
+  }
+  flush(encoded.modules.length);
 
   return rects;
 }
@@ -443,7 +524,14 @@ export function getLastPurchasedShipmentContext() {
 }
 
 /**
- * Generate an authentic 4x6 inch vector Canada Post shipping label SVG
+ * Draw the app's own 4x6 reference copy of a shipment.
+ *
+ * This is NOT a mailable label and never was — only the PDF artifact Canada
+ * Post returns can be presented at a counter. It is drawn so a shipment can be
+ * reviewed, filed and reprinted offline, and it is marked on its face so a copy
+ * that reaches a printer cannot be mistaken for the real thing. It used to
+ * carry a "POSTAGE PAID / PORT PAYÉ" indicia and nothing to contradict it,
+ * which is exactly the wrong way round.
  */
 export function generateCanadaPostLabelSvg({
   serviceCode = 'DOM.EP',
@@ -503,11 +591,11 @@ export function generateCanadaPostLabelSvg({
       <text x="65" y="52" fill="#ffffff" font-size="16" font-weight="700" letter-spacing="0.5">POSTES CANADA</text>
     </g>
 
-    <!-- POSTAGE PAID INDICIA BOX -->
+    <!-- REFERENCE-COPY BOX (occupies the footprint of a real indicia) -->
     <rect x="550" y="25" width="220" height="75" fill="#ffffff" stroke="#000000" stroke-width="2"/>
-    <text x="660" y="45" font-size="11" font-weight="800" text-anchor="middle" fill="#000000">POSTAGE PAID / PORT PAYÉ</text>
-    <text x="660" y="62" font-size="10" font-weight="600" text-anchor="middle" fill="#333333">Cust #: ${escapeXml(customerNumber || '—')}</text>
-    <text x="660" y="78" font-size="9" font-weight="600" text-anchor="middle" fill="#333333">${todayDate} · ${escapeXml(sfZip)}</text>
+    <text x="660" y="45" font-size="12" font-weight="900" text-anchor="middle" fill="#B00020">NOT VALID FOR MAILING</text>
+    <text x="660" y="61" font-size="9" font-weight="700" text-anchor="middle" fill="#B00020">REFERENCE COPY / COPIE DE RÉFÉRENCE</text>
+    <text x="660" y="78" font-size="9" font-weight="600" text-anchor="middle" fill="#333333">Cust #: ${escapeXml(customerNumber || '—')} · ${todayDate}</text>
 
     <!-- SERVICE NAME STRIP -->
     <rect x="15" y="110" width="770" height="50" fill="#000000"/>
@@ -602,6 +690,14 @@ export function generateCanadaPostLabelSvg({
         </g>
       </g>
     `}
+
+    <!-- Drawn last so it survives on top of every block above, including in
+         print. Non-interactive and translucent enough to leave the sheet
+         readable while making its status impossible to miss. -->
+    <g opacity="0.16" transform="rotate(-32 400 600)" style="pointer-events:none;">
+      <text x="400" y="560" font-size="86" font-weight="900" fill="#B00020" text-anchor="middle" letter-spacing="4">REFERENCE COPY</text>
+      <text x="400" y="650" font-size="58" font-weight="900" fill="#B00020" text-anchor="middle" letter-spacing="3">NOT FOR MAILING</text>
+    </g>
   </svg>`;
 }
 
@@ -1734,7 +1830,50 @@ export function parseCanadaPostShipmentResponse(jsonText) {
     trackingPin,
     labelUrl: labelLink,
     receiptUrl: receiptLink,
-    declarationId
+    declarationId,
+    ...parseShipmentPrice(shipmentInfo)
+  };
+}
+
+/**
+ * Read what Canada Post actually charged for a shipment.
+ *
+ * The request asks for showPostageRate, so the response carries the real price;
+ * without reading it the ledger records the *quote* shown next to the button,
+ * which drifts from the invoice whenever a surcharge, fuel adjustment or tax
+ * difference applies. Returns an empty object when the block is absent, so the
+ * caller can fall back to the quote knowingly rather than by accident.
+ */
+export function parseShipmentPrice(shipmentInfo = {}) {
+  const price = shipmentInfo.shipmentPrice || shipmentInfo['shipment-price'] || null;
+  if (!price || typeof price !== 'object') return {};
+
+  const num = (...keys) => {
+    for (const k of keys) {
+      const raw = price[k];
+      if (raw === undefined || raw === null || raw === '') continue;
+      const parsed = parseFloat(raw);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+  };
+
+  const due = num('dueAmount', 'due-amount');
+  const base = num('baseAmount', 'base-amount');
+  // Only a positive charge is worth overriding the quote with; a zero or
+  // missing due amount means Canada Post did not price this shipment here.
+  if (!(due > 0)) return base > 0 ? { postageBase: base } : {};
+
+  const taxes = ['gstAmount', 'gst-amount', 'pstAmount', 'pst-amount', 'hstAmount', 'hst-amount']
+    .reduce((sum, k) => {
+      const parsed = parseFloat(price[k]);
+      return Number.isFinite(parsed) ? sum + parsed : sum;
+    }, 0);
+
+  return {
+    postageCharged: Number(due.toFixed(2)),
+    postageBase: base > 0 ? Number(base.toFixed(2)) : null,
+    postageTaxes: Number(taxes.toFixed(2))
   };
 }
 
@@ -1807,6 +1946,11 @@ export async function buyCanadaPostLabel({
     serviceName: CANADAPOST_SERVICES[serviceCode]?.name || 'Expedited Parcel',
     trackingPin: responseData.trackingPin,
     shipmentId: responseData.shipmentId,
+    // Kept so a reprint days later can re-fetch the official Canada Post PDF
+    // instead of falling straight through to the redrawn preview.
+    labelUrl: responseData.labelUrl || '',
+    receiptUrl: responseData.receiptUrl || '',
+    postageCharged: responseData.postageCharged ?? null,
     orderNum,
     sender,
     destination,
@@ -1833,9 +1977,23 @@ export async function buyCanadaPostLabel({
 }
 
 /**
- * Fetch shipping label as a Blob for viewing or printing (bypassing CORS via proxy with vector fallback)
+ * Fetch the official Canada Post label artifact (a print-ready PDF).
+ *
+ * This is the label the post office accepts. The app also draws its own 4x6
+ * preview, and for a long time that preview was the ONLY thing the shipping
+ * screen ever showed or printed — this function existed but nothing called it,
+ * so a publisher could buy real postage, print the redrawn sheet, and be turned
+ * away at the counter. The two are kept apart deliberately here:
+ *
+ *   kind: 'pdf'  -> the real artifact, safe to print and mail
+ *   kind: 'svg'  -> our own preview, NOT mailable, for reference/reprint only
+ *
+ * Callers must show that difference; `mailable` is on the result so it cannot
+ * be missed. Returns null only when there is nothing at all to show.
+ *
+ * @returns {Promise<{blob: Blob, kind: 'pdf'|'svg', mailable: boolean, source: string, reason?: string}|null>}
  */
-export async function fetchCanadaPostLabelBlob({
+export async function fetchCanadaPostLabelArtifact({
   labelUrl,
   apiKey = DEFAULT_CP_API_KEY,
   apiSecret = DEFAULT_CP_API_SECRET,
@@ -1844,36 +2002,43 @@ export async function fetchCanadaPostLabelBlob({
   const key = sanitizeCanadaPostCredential(apiKey || DEFAULT_CP_API_KEY).value;
   const secret = sanitizeCanadaPostCredential(apiSecret || DEFAULT_CP_API_SECRET).value;
   const context = shipmentContext || getLastPurchasedShipmentContext();
+  const url = String(labelUrl || context?.labelUrl || '');
+  const preview = (reason) => {
+    if (!context) return null;
+    return { blob: generateClientCanadaPostLabelBlob(context), kind: 'svg', mailable: false, source: 'preview', reason };
+  };
 
-  // If local URI or mock URL, generate high-res vector label blob directly
-  if (labelUrl && (labelUrl.startsWith('local://') || labelUrl.startsWith('blob:') || labelUrl.startsWith('data:'))) {
-    if (context) return generateClientCanadaPostLabelBlob(context);
+  // A simulated or placeholder shipment never had an artifact to fetch.
+  const isRemote = /^https?:\/\//i.test(url);
+  if (!isRemote) {
+    return preview(url ? 'This shipment has no Canada Post label artifact.' : 'No label address was returned for this shipment.');
   }
 
-  // 1. Try local dev proxy if running in browser
-  if (typeof window !== 'undefined' && labelUrl && !labelUrl.startsWith('local://')) {
+  const attempts = [];
+
+  // 1. Local dev / backend proxy. Credentials travel in headers only: a key in
+  //    the query string is written verbatim into every access log it passes.
+  if (typeof window !== 'undefined') {
     try {
-      // Credentials travel in headers only. They used to be repeated in the
-      // query string, which writes a live shipping secret into every access
-      // log, proxy log and browser history entry the request passes through.
-      const proxyResp = await fetch(`/api/canadapost/artifact?url=${encodeURIComponent(labelUrl)}`, {
-        headers: {
-          'x-cp-api-key': key,
-          'x-cp-api-secret': secret
-        }
+      const proxyResp = await fetch(`/api/canadapost/artifact?url=${encodeURIComponent(url)}`, {
+        headers: { 'x-cp-api-key': key, 'x-cp-api-secret': secret }
       });
       if (proxyResp.ok) {
-        const contentType = proxyResp.headers.get('content-type') || '';
-        if (contentType.includes('pdf') || contentType.includes('octet-stream')) {
-          return await proxyResp.blob();
+        const contentType = proxyResp.headers?.get?.('content-type') || '';
+        if (/pdf|octet-stream/i.test(contentType)) {
+          return { blob: await proxyResp.blob(), kind: 'pdf', mailable: true, source: 'backend' };
         }
       }
-    } catch (_) {}
+      attempts.push(`local proxy returned ${proxyResp.status}`);
+    } catch (err) {
+      attempts.push(`local proxy unavailable (${err.message})`);
+    }
   }
 
-  // 2. Try Google Apps Script proxy (bypasses browser CORS on GitHub Pages)
+  // 2. Google Apps Script relay — the path that works on GitHub Pages, where
+  //    there is no backend and Canada Post rejects direct browser requests.
   const sheetsUrl = getSavedSheetsUrl();
-  if (sheetsUrl && !sheetsUrl.includes('mock-test') && labelUrl && !labelUrl.startsWith('local://')) {
+  if (sheetsUrl && !sheetsUrl.includes('mock-test')) {
     try {
       const gasResp = await fetch(sheetsUrl, {
         method: 'POST',
@@ -1881,52 +2046,70 @@ export async function fetchCanadaPostLabelBlob({
         body: JSON.stringify({
           version: 2,
           action: 'proxycanadapost',
-          payload: {
-            endpoint: labelUrl,
-            apiKey: key,
-            apiSecret: secret,
-            isArtifact: true
-          }
+          payload: { endpoint: url, apiKey: key, apiSecret: secret, isArtifact: true }
         })
       });
       if (gasResp.ok) {
         const json = await gasResp.json();
         if (json && json.base64) {
           const byteChars = atob(json.base64);
-          const byteNums = new Array(byteChars.length);
-          for (let i = 0; i < byteChars.length; i++) {
-            byteNums[i] = byteChars.charCodeAt(i);
-          }
-          return new Blob([new Uint8Array(byteNums)], { type: 'application/pdf' });
+          const bytes = new Uint8Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+          return {
+            blob: new Blob([bytes], { type: json.mime || 'application/pdf' }),
+            kind: 'pdf',
+            mailable: true,
+            source: 'sheet'
+          };
         }
+        attempts.push(json?.error ? `Google Sheet relay: ${json.error}` : 'Google Sheet relay returned no label data');
+      } else {
+        attempts.push(`Google Sheet relay returned ${gasResp.status}`);
       }
-    } catch (_) {}
+    } catch (err) {
+      attempts.push(`Google Sheet relay failed (${err.message})`);
+    }
+  } else {
+    attempts.push('no Google Sheet connected to relay the download');
   }
 
-  // 3. Direct fetch (if server/CORS permits)
-  if (labelUrl && !labelUrl.startsWith('local://')) {
-    try {
-      const authHeader = 'Basic ' + btoa(`${key}:${secret}`);
-      const resp = await fetch(labelUrl, {
-        headers: {
-          'Accept': 'application/pdf',
-          'Authorization': authHeader
-        }
-      });
-      if (resp.ok) return await resp.blob();
-    } catch (_) {}
+  // 3. Direct fetch, for a serverless host that permits it.
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        'Accept': 'application/pdf',
+        'Authorization': 'Basic ' + btoa(`${key}:${secret}`)
+      }
+    });
+    if (resp.ok) return { blob: await resp.blob(), kind: 'pdf', mailable: true, source: 'direct' };
+    attempts.push(`Canada Post returned ${resp.status}`);
+  } catch (err) {
+    attempts.push(`direct download blocked (${err.message})`);
   }
 
-  // 4. Guaranteed Client-Side Vector Label Generation fallback
-  if (context) {
-    return generateClientCanadaPostLabelBlob(context);
-  }
+  return preview(attempts.join('; '));
+}
 
-  // Minimal fallback context
+/**
+ * Backwards-compatible Blob-only wrapper around fetchCanadaPostLabelArtifact.
+ * Prefer the artifact form: a caller that only gets a Blob back cannot tell the
+ * official PDF from the preview, and printing the wrong one costs a trip to the
+ * post office.
+ */
+export async function fetchCanadaPostLabelBlob({
+  labelUrl,
+  apiKey = DEFAULT_CP_API_KEY,
+  apiSecret = DEFAULT_CP_API_SECRET,
+  shipmentContext = null
+}) {
+  const artifact = await fetchCanadaPostLabelArtifact({ labelUrl, apiKey, apiSecret, shipmentContext });
+  if (artifact) return artifact.blob;
+
+  // Nothing stored and nothing fetchable: draw from the tracking number alone
+  // so the screen has something to show rather than nothing.
   return generateClientCanadaPostLabelBlob({
-    trackingPin: labelUrl?.split('/')?.pop() || '7012345678901234',
+    trackingPin: String(labelUrl || '').split('/').pop() || '',
     sender: { name: 'Lyricalmyrical Books' },
     destination: { name: 'Customer' }
   });
 }
-
