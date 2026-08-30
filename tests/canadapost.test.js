@@ -350,6 +350,17 @@ describe('Canada Post Label & Shipment Creation', () => {
 
 
 
+// A live shipment is refused without a real return address and sender phone, so
+// every live-mode purchase below ships with one. Only sandbox runs may omit it.
+const realSender = {
+  name: 'Lyricalmyrical Books',
+  phone: '4165550142',
+  address1: '88 Bookish Way',
+  city: 'Toronto',
+  province: 'ON',
+  postalCode: 'M4B 1B3',
+};
+
 describe('Canada Post Account & Environment Validation', () => {
   it('serves both modes from one gateway and never promises a free sandbox', async () => {
     const { resolveCanadaPostEnvironment } = await import('../src/lib/canadapost.js');
@@ -539,6 +550,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
 
     const result = await buyCanadaPostLabel({
       serviceCode: 'USA.TP',
+      sender: realSender,
       destination: { countryCode: 'US', postalCode: '90210', address1: '1 Palm Dr', city: 'Beverly Hills', state: 'CA' },
       parcel: { weightKg: 0.5 },
       declarationId: '0rd4dpkrvc1y9',
@@ -588,6 +600,7 @@ describe('Purchased labels stay reprintable offline', () => {
     });
     return buyCanadaPostLabel({
       serviceCode: 'DOM.EP',
+      sender: realSender,
       orderNum,
       destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
       parcel: { weightKg: 0.5 },
@@ -686,6 +699,7 @@ describe('Zonos Verified Account key reaches Canada Post', () => {
 
     const result = await buyCanadaPostLabel({
       serviceCode: 'USA.TP',
+      sender: realSender,
       destination: { countryCode: 'US', postalCode: '90210', address1: '1 Palm Dr', city: 'Beverly Hills', state: 'CA' },
       parcel: { weightKg: 0.5 },
       apiKey: 'merchant_key_abc',
@@ -722,6 +736,7 @@ describe('Zonos Verified Account key reaches Canada Post', () => {
 
     const result = await buyCanadaPostLabel({
       serviceCode: 'USA.TP',
+      sender: realSender,
       destination: { countryCode: 'US', postalCode: '90210', address1: '1 Palm Dr', city: 'Beverly Hills', state: 'CA' },
       parcel: { weightKg: 0.5 },
       declarationId: '0rcvxj2tkbnwr',

@@ -147,11 +147,41 @@ import {
   fetchCanadaPostLabelArtifact,
 } from '../lib/canadapost.js';
 import {
+  assessLiveShippingReadiness,
+  inspectZonosAccountKey,
+} from '../lib/shipping-readiness.js';
+import {
   collectVerifiableShipments,
   classifyTrackingResult,
   summarizeTrackingAudit,
   describeTrackingAudit,
 } from '../lib/tracking-audit.js';
+
+/**
+ * The return address as last saved on the shipping form.
+ *
+ * Read from storage rather than the DOM because the go-live checklist can be
+ * run from the Tax Centre, where the shipping form has not been populated yet —
+ * and an empty input there is "this tab has not been opened", not "this
+ * publisher has no address". Reporting the latter would send someone off to fix
+ * an address that is already saved.
+ */
+function savedShippingOrigin() {
+  const read = (key) => {
+    try { return localStorage.getItem(key) || ''; } catch (_) { return ''; }
+  };
+  return {
+    name: read('lm-shippo-origin-name'),
+    company: read('lm-shippo-origin-company'),
+    phone: read('lm-shippo-origin-phone'),
+    street1: read('lm-shippo-origin-street1'),
+    street2: read('lm-shippo-origin-street2'),
+    city: read('lm-shippo-origin-city'),
+    state: read('lm-shippo-origin-state'),
+    zip: read('lm-shippo-origin-zip'),
+    country: read('lm-shippo-origin-country') || 'CA'
+  };
+}
 
 function getShippingReconciliationOrders() {
   const byNumber = new Map();
@@ -1422,17 +1452,7 @@ function initShippingTab() {
   }
 
   // Load Saved Origin from localStorage
-  const savedOrigin = {
-    name: localStorage.getItem('lm-shippo-origin-name') || '',
-    company: localStorage.getItem('lm-shippo-origin-company') || '',
-    phone: localStorage.getItem('lm-shippo-origin-phone') || '',
-    street1: localStorage.getItem('lm-shippo-origin-street1') || '',
-    street2: localStorage.getItem('lm-shippo-origin-street2') || '',
-    city: localStorage.getItem('lm-shippo-origin-city') || '',
-    state: localStorage.getItem('lm-shippo-origin-state') || '',
-    zip: localStorage.getItem('lm-shippo-origin-zip') || '',
-    country: localStorage.getItem('lm-shippo-origin-country') || 'CA'
-  };
+  const savedOrigin = savedShippingOrigin();
 
   $('sf-name').value = savedOrigin.name || '';
   $('sf-company').value = savedOrigin.company || '';
@@ -2989,6 +3009,135 @@ function getZonosAccountKey() {
   ).trim();
 }
 
+/**
+ * Everything the live-readiness check needs, read from the form and settings.
+ *
+ * The sender and recipient panels live on the shipping tab and the credentials
+ * on the Tax Centre tab, but both are in the same document, so this answers the
+ * same way from either screen.
+ */
+function currentLiveReadiness() {
+  const settings = TAX_CENTER.settings || {};
+  const accountAudit = validateCanadaPostAccount({
+    apiKey: settings.cpApiKey || DEFAULT_CP_API_KEY,
+    apiSecret: settings.cpApiSecret || DEFAULT_CP_API_SECRET,
+    customerNumber: settings.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER,
+    contractId: settings.cpContractId || '',
+    isTest: !!settings.cpTestMode,
+  });
+
+  // Prefer what is on the form; fall back to what was saved, so the answer is
+  // the same whether this runs from the shipping screen or the Tax Centre.
+  const saved = savedShippingOrigin();
+  const field = (id, fallback) => ($(id)?.value?.trim() || fallback || '');
+
+  return assessLiveShippingReadiness({
+    settings,
+    accountAudit,
+    sender: {
+      name: field('sf-name', saved.name),
+      phone: field('sf-phone', saved.phone),
+      address1: ($('sf-street1')?.value || $('sf-street')?.value || '').trim() || saved.street1,
+      city: field('sf-city', saved.city),
+      province: field('sf-state', saved.state),
+      postalCode: field('sf-zip', saved.zip),
+    },
+    destination: {
+      phone: $('st-phone')?.value?.trim() || '',
+      countryCode: normalizeCountryCode($('st-country')?.value) || '',
+    },
+    dutyRoute: currentDutyPrepaymentRoute(),
+  });
+}
+
+const READINESS_ICONS = { ok: '✓', warn: '!', blocked: '✕' };
+
+/**
+ * The go-live checklist: every condition for buying a real label, each with
+ * what to do about it. Rendered wherever a host element exists, so the same
+ * answer appears on the settings card and on the shipping screen.
+ */
+function renderLiveReadinessChecklist(hostId = 'cp-live-readiness') {
+  const host = $(hostId);
+  if (!host) return null;
+
+  const readiness = currentLiveReadiness();
+  const blocked = readiness.checks.filter(c => c.status === 'blocked').length;
+  const warned = readiness.checks.filter(c => c.status === 'warn').length;
+
+  let headline;
+  if (blocked) {
+    headline = `<span class="pill red">${blocked} thing${blocked === 1 ? '' : 's'} to fix</span>`
+      + '<span class="cp-ready-note">A real label cannot be bought until these are sorted.</span>';
+  } else if (readiness.mode === 'test') {
+    headline = '<span class="pill gold">Ready, in sandbox</span>'
+      + '<span class="cp-ready-note">Everything checks out. Turn off sandbox keys to ship for real.</span>';
+  } else {
+    headline = '<span class="pill green">Ready to ship live</span>'
+      + `<span class="cp-ready-note">Labels bought here are real and charged to your account.${warned ? ` ${warned} thing${warned === 1 ? '' : 's'} worth a look below.` : ''}</span>`;
+  }
+
+  host.innerHTML = `
+    <div class="cp-ready-head">${headline}</div>
+    <ul class="cp-ready-list">
+      ${readiness.checks.map(c => `
+        <li class="cp-ready-item is-${escapeHtml(c.status)}">
+          <span class="cp-ready-icon" aria-hidden="true">${READINESS_ICONS[c.status] || '·'}</span>
+          <span class="cp-ready-body">
+            <strong>${escapeHtml(c.label)}</strong>
+            <span class="cp-ready-detail">${escapeHtml(c.detail)}</span>
+            ${c.fix ? `<span class="cp-ready-fix">→ ${escapeHtml(c.fix)}</span>` : ''}
+          </span>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+  host.style.display = 'block';
+  return readiness;
+}
+
+/**
+ * Say what the Zonos Account Key in the settings box is, before it is saved.
+ *
+ * The key is sent as X-CPC-Zonos-Key on every U.S. shipment, so a wrong value
+ * pasted here does not fail loudly — Canada Post simply declines to issue the
+ * Declaration ID, and the parcel ships with duty unpaid. The commonest mistakes
+ * have a recognisable shape (an email address, a Declaration ID in the wrong
+ * box), so they are named on the card rather than discovered on a live parcel.
+ */
+function renderZonosAccountKeyHint() {
+  const host = $('tc-zonos-account-key-hint');
+  const input = $('tc-zonos-account-key');
+  if (!host || !input) return;
+
+  const verdict = inspectZonosAccountKey(input.value);
+  if (!verdict.present) {
+    host.className = 'tc-form-hint';
+    host.textContent = 'Saving a Verified Account key lets Canada Post add the U.S. Declaration ID to every label automatically and bill the duty to Zonos — no per-parcel prepayment.';
+    return;
+  }
+  if (!verdict.plausible) {
+    host.className = 'tc-form-hint is-warn';
+    host.textContent = `⚠ ${verdict.problem}`;
+    return;
+  }
+  host.className = 'tc-form-hint is-ok';
+  host.textContent = '✓ Looks like an Account Key. U.S. parcels will have their duty prepaid automatically once this is saved.';
+}
+
+/** Refresh the checklist and say what it found, for the button on the card. */
+function checkLiveShippingReadinessHandler() {
+  const readiness = renderLiveReadinessChecklist();
+  if (!readiness) return;
+  if (readiness.blockers.length) {
+    showToast(`⚠ ${readiness.blockers.length} thing${readiness.blockers.length === 1 ? '' : 's'} to fix before you can buy a real label`, 'warn');
+  } else if (readiness.mode === 'test') {
+    showToast('✓ Setup checks out — turn off sandbox keys to ship for real', 'ok');
+  } else {
+    showToast('✓ Ready to buy real Canada Post labels', 'ok');
+  }
+}
+
 /** Which duty-prepayment route the shipment in the form will take. */
 function currentDutyPrepaymentRoute() {
   return resolveDutyPrepaymentRoute({
@@ -3386,6 +3535,13 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
   if (isDisabled) blockedReason = 'Direct Canada Post API is switched off in Tax Centre → Canada Post.';
   else if (isOffline) blockedReason = 'These are the app\u2019s own estimates, not Canada Post quotes. Reconnect and refresh to buy.';
   else if (!audit.ok) blockedReason = audit.errors[0];
+  else {
+    // Beyond the account itself: a live label also needs a real return address
+    // and a sender phone, and without them Canada Post answers with a schema
+    // error after the money screen rather than before it.
+    const readiness = currentLiveReadiness();
+    if (readiness.blockers.length) blockedReason = readiness.blockers[0];
+  }
   const canBuy = !blockedReason;
 
   // Which Canada Post account a purchase actually bills is not obvious from the rates alone,
@@ -3844,6 +4000,15 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
     showToast(`⚠ ${audit.errors[0]}`, 'err');
     return;
   }
+  // The full go-live check, not just the account: a live purchase with the
+  // example return address still on the form would print a label that a
+  // returned parcel could never come back to.
+  const readiness = currentLiveReadiness();
+  if (readiness.blockers.length) {
+    showToast(`⚠ ${readiness.blockers[0]}`, 'err');
+    renderLiveReadinessChecklist();
+    return;
+  }
   // Prices shown while offline are the app's own estimates, not Canada Post
   // quotes. Buying against one would post a guessed amount to the ledger as if
   // it were the real charge, and the purchase itself needs the network anyway.
@@ -3891,6 +4056,11 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
     ['Account', `Canada Post ${audit.customerNumber || '—'}`]
   ];
   if (declarationId) details.push(['U.S. duty', `Prepaid · ${declarationId}`]);
+  else if (stCountryCode === 'US') {
+    details.push(['U.S. duty', dutyRoute.route === 'verified'
+      ? 'Prepaid automatically by your Zonos Verified Account'
+      : 'NOT prepaid — the customer is billed on delivery']);
+  }
 
   const billingWarning = isTest
     ? 'Sandbox Test Mode is on, but Canada Post serves test and live from the same address. '
@@ -7992,6 +8162,9 @@ export {
   printCanadaPostLabelModal,
   downloadCanadaPostLabelModal,
   copyCanadaPostPin,
+  checkLiveShippingReadinessHandler,
+  renderLiveReadinessChecklist,
+  renderZonosAccountKeyHint,
   editPostageCost,
   unlinkManualPostage,
   dismissShippingAnalysisOrder,

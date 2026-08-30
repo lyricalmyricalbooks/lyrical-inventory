@@ -2646,8 +2646,8 @@
               </div>
               <div class="tc-form-group">
                 <label class="tc-form-label" for="tc-zonos-account-key">Zonos Account Key <span class="tc-form-label-note">automates U.S. duty</span></label>
-                <input type="text" id="tc-zonos-account-key" class="tc-form-input" placeholder="Zonos Dashboard → Settings → Integrations" autocomplete="off">
-                <div class="tc-form-hint">Saving a Verified Account key lets Canada Post add the U.S. Declaration ID to every label automatically and bill the duty to Zonos — no per-parcel prepayment.</div>
+                <input type="text" id="tc-zonos-account-key" class="tc-form-input" placeholder="Zonos Dashboard → Settings → Integrations" autocomplete="off" oninput="renderZonosAccountKeyHint()">
+                <div class="tc-form-hint" id="tc-zonos-account-key-hint">Saving a Verified Account key lets Canada Post add the U.S. Declaration ID to every label automatically and bill the duty to Zonos — no per-parcel prepayment.</div>
               </div>
             </div>
             <div class="tc-form-actions-row">
@@ -2707,18 +2707,20 @@
                 <input type="checkbox" id="tc-cp-test-mode">
                 <span>Sandbox keys (test account)</span>
               </label>
-              <label class="tc-toggle-wrap" title="Automatically generate 13-character Zonos Declaration IDs for US-bound packages">
+              <label class="tc-toggle-wrap" title="When the destination is set to the United States, check the duty position straight away instead of waiting to be asked">
                 <input type="checkbox" id="tc-cp-zonos-auto" checked>
-                <span>Auto-Prepay US Duties (Zonos)</span>
+                <span>Check U.S. duty automatically</span>
               </label>
             </div>
             <div class="tc-form-actions-row">
               <div class="tc-form-actions-buttons">
                 <button id="tc-cp-test-btn" class="btn gold outline" onclick="testCanadaPostConnectionHandler()">Test Connection</button>
                 <button id="tc-cp-diagnose-btn" class="btn outline" onclick="diagnoseCanadaPostHandler()" title="Try this key against both Canada Post gateways, with and without the customer number, and report which combination works">Diagnose</button>
+                <button id="tc-cp-readiness-btn" class="btn outline" onclick="checkLiveShippingReadinessHandler()" title="Check everything needed to buy a real, mailable label">Check Live Readiness</button>
                 <button id="tc-save-cp-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
               </div>
             </div>
+            <div id="cp-live-readiness" class="cp-ready-panel" style="display:none;"></div>
             <div id="tc-cp-status" class="tc-status-msg"></div>
           </div>
         </div>

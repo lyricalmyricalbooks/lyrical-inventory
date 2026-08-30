@@ -2390,8 +2390,8 @@ function _tcRenderStatusHeaders() {
       _shippoStatusEl.textContent = `Last synced ${ago} (${last.toISOString().slice(0, 10)}). Imports non-refunded transaction rates as Shipping & Postage expenses.`;
     }
   }
-  if ($('tc-zonos-key') && TAX_CENTER.settings?.zonosApiKey) $('tc-zonos-key').value = TAX_CENTER.settings.zonosApiKey;
-  if ($('tc-zonos-account-key') && TAX_CENTER.settings?.zonosAccountKey) $('tc-zonos-account-key').value = TAX_CENTER.settings.zonosAccountKey;
+  hydrateCredentialField('tc-zonos-key', TAX_CENTER.settings?.zonosApiKey);
+  hydrateCredentialField('tc-zonos-account-key', TAX_CENTER.settings?.zonosAccountKey);
   if ($('tc-zonos-enabled') && TAX_CENTER.settings?.zonosEnabled !== undefined) $('tc-zonos-enabled').checked = TAX_CENTER.settings.zonosEnabled !== false;
   const _zonosStatusEl = $('tc-zonos-status');
   if (_zonosStatusEl && TAX_CENTER.settings?.zonosLastTestAt) {
@@ -2401,10 +2401,10 @@ function _tcRenderStatusHeaders() {
     }
   }
 
-  if ($('tc-cp-key') && TAX_CENTER.settings?.cpApiKey) $('tc-cp-key').value = TAX_CENTER.settings.cpApiKey;
-  if ($('tc-cp-secret') && TAX_CENTER.settings?.cpApiSecret) $('tc-cp-secret').value = TAX_CENTER.settings.cpApiSecret;
-  if ($('tc-cp-customer-number') && TAX_CENTER.settings?.cpCustomerNumber) $('tc-cp-customer-number').value = TAX_CENTER.settings.cpCustomerNumber;
-  if ($('tc-cp-contract-id') && TAX_CENTER.settings?.cpContractId) $('tc-cp-contract-id').value = TAX_CENTER.settings.cpContractId;
+  hydrateCredentialField('tc-cp-key', TAX_CENTER.settings?.cpApiKey);
+  hydrateCredentialField('tc-cp-secret', TAX_CENTER.settings?.cpApiSecret);
+  hydrateCredentialField('tc-cp-customer-number', TAX_CENTER.settings?.cpCustomerNumber);
+  hydrateCredentialField('tc-cp-contract-id', TAX_CENTER.settings?.cpContractId);
   if ($('tc-cp-test-mode') && TAX_CENTER.settings?.cpTestMode !== undefined) $('tc-cp-test-mode').checked = !!TAX_CENTER.settings.cpTestMode;
   if ($('tc-cp-enabled') && TAX_CENTER.settings?.cpEnabled !== undefined) $('tc-cp-enabled').checked = TAX_CENTER.settings.cpEnabled !== false;
   if ($('tc-cp-zonos-auto') && TAX_CENTER.settings?.cpZonosAutoGenerate !== undefined) $('tc-cp-zonos-auto').checked = TAX_CENTER.settings.cpZonosAutoGenerate !== false;
@@ -3541,20 +3541,49 @@ async function openEditArtistPayout(bid, itemId) {
   }
 }
 
+/**
+ * Put a saved credential into its box and mark the box as showing the truth.
+ *
+ * The marker is what lets Save clear a field. Save used to write a credential
+ * only when the box was non-empty (`if (key) settings.key = key`), so deleting
+ * a wrong Canada Post secret or a stale Zonos Account Key was impossible — the
+ * old value stayed in Firebase and kept riding on every request, while the card
+ * showed an empty box. Without the marker the alternative is worse: a Save
+ * triggered before the card was populated would wipe every credential.
+ */
+function hydrateCredentialField(id, value) {
+  const el = $(id);
+  if (!el) return;
+  el.value = value || '';
+  el.dataset.hydrated = '1';
+}
+
+/**
+ * Read a credential box. Returns undefined — meaning "leave the stored value
+ * alone" — when the box was never populated from settings, and '' when the
+ * publisher genuinely emptied it.
+ */
+function readCredentialField(id) {
+  const el = $(id);
+  if (!el) return undefined;
+  if (!el.dataset.hydrated) return el.value.trim() || undefined;
+  return el.value.trim();
+}
+
 async function saveTaxCenterSettings() {
   const btn = $('tc-save-config-btn') || $('tc-save-zonos-btn') || $('tc-save-cp-btn');
   const oldText = btn ? btn.textContent : 'Save Config';
   if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
 
   const geminiKey = $('tc-api-key')?.value.trim() || '';
-  const zonosApiKey = $('tc-zonos-key')?.value.trim() || '';
-  const zonosAccountKey = $('tc-zonos-account-key')?.value.trim() || '';
+  const zonosApiKey = readCredentialField('tc-zonos-key');
+  const zonosAccountKey = readCredentialField('tc-zonos-account-key');
   const zonosEnabled = $('tc-zonos-enabled') ? $('tc-zonos-enabled').checked : true;
 
-  const cpApiKey = $('tc-cp-key')?.value.trim() || '';
-  const cpApiSecret = $('tc-cp-secret')?.value.trim() || '';
-  const cpCustomerNumber = $('tc-cp-customer-number')?.value.trim() || '';
-  const cpContractId = $('tc-cp-contract-id')?.value.trim() || '';
+  const cpApiKey = readCredentialField('tc-cp-key');
+  const cpApiSecret = readCredentialField('tc-cp-secret');
+  const cpCustomerNumber = readCredentialField('tc-cp-customer-number');
+  const cpContractId = readCredentialField('tc-cp-contract-id');
   const cpTestMode = $('tc-cp-test-mode') ? $('tc-cp-test-mode').checked : false;
   const cpEnabled = $('tc-cp-enabled') ? $('tc-cp-enabled').checked : true;
 
@@ -3562,14 +3591,17 @@ async function saveTaxCenterSettings() {
     await loadTaxCenter();
     if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
     TAX_CENTER.settings.geminiKey = geminiKey;
-    if (zonosApiKey) TAX_CENTER.settings.zonosApiKey = zonosApiKey;
-    if (zonosAccountKey) TAX_CENTER.settings.zonosAccountKey = zonosAccountKey;
+    // undefined means the box was never populated from settings, so the stored
+    // value stands; '' means it was deliberately emptied and must be cleared.
+    const put = (key, value) => { if (value !== undefined) TAX_CENTER.settings[key] = value; };
+    put('zonosApiKey', zonosApiKey);
+    put('zonosAccountKey', zonosAccountKey);
     TAX_CENTER.settings.zonosEnabled = zonosEnabled;
 
-    if (cpApiKey) TAX_CENTER.settings.cpApiKey = cpApiKey;
-    if (cpApiSecret) TAX_CENTER.settings.cpApiSecret = cpApiSecret;
-    if (cpCustomerNumber) TAX_CENTER.settings.cpCustomerNumber = cpCustomerNumber;
-    if (cpContractId) TAX_CENTER.settings.cpContractId = cpContractId;
+    put('cpApiKey', cpApiKey);
+    put('cpApiSecret', cpApiSecret);
+    put('cpCustomerNumber', cpCustomerNumber);
+    put('cpContractId', cpContractId);
     TAX_CENTER.settings.cpTestMode = cpTestMode;
     TAX_CENTER.settings.cpEnabled = cpEnabled;
     const cpZonosAutoGenerate = $('tc-cp-zonos-auto') ? $('tc-cp-zonos-auto').checked : true;
