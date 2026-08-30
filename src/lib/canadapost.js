@@ -231,6 +231,133 @@ export const DEFAULT_CP_API_KEY = '';
 export const DEFAULT_CP_API_SECRET = '';
 export const DEFAULT_CP_CUSTOMER_NUMBER = '';
 
+// ── TWO CREDENTIAL SETS ───────────────────────────────────────────────────
+//
+// Canada Post's Developer Portal issues a separate Client ID and Secret for
+// sandbox and for production, and both are used against the SAME gateway — the
+// key is the only thing that decides which environment a request lands in.
+// One shared pair therefore meant switching environments was a retype: paste
+// the sandbox key to rehearse, paste the live key to ship, and hope the toggle
+// matched whichever was in the box. Holding both lets the Sandbox toggle
+// actually select a set instead of only relabelling the screen.
+export const CANADAPOST_CREDENTIAL_FIELDS = {
+  live: {
+    apiKey: 'cpLiveApiKey',
+    apiSecret: 'cpLiveApiSecret',
+    customerNumber: 'cpLiveCustomerNumber',
+    contractId: 'cpLiveContractId',
+  },
+  test: {
+    apiKey: 'cpTestApiKey',
+    apiSecret: 'cpTestApiSecret',
+    customerNumber: 'cpTestCustomerNumber',
+    contractId: 'cpTestContractId',
+  },
+};
+
+// The single set that existed before. Still read, so a configuration saved by
+// an earlier version keeps working untouched until it is migrated.
+const CANADAPOST_LEGACY_FIELDS = {
+  apiKey: 'cpApiKey',
+  apiSecret: 'cpApiSecret',
+  customerNumber: 'cpCustomerNumber',
+  contractId: 'cpContractId',
+};
+
+const asText = (value) => String(value ?? '').trim();
+
+/** Read one named credential set verbatim, with no fallback to the other. */
+export function readCanadaPostCredentialSet(settings = {}, mode = 'live') {
+  const fields = CANADAPOST_CREDENTIAL_FIELDS[mode] || CANADAPOST_CREDENTIAL_FIELDS.live;
+  return {
+    apiKey: asText(settings[fields.apiKey]),
+    apiSecret: asText(settings[fields.apiSecret]),
+    customerNumber: asText(settings[fields.customerNumber]),
+    contractId: asText(settings[fields.contractId]),
+  };
+}
+
+/** True when a set has both halves of a usable credential. */
+export function credentialSetIsConfigured(set = {}) {
+  return !!(asText(set.apiKey) && asText(set.apiSecret));
+}
+
+/**
+ * Which credentials a request will actually be sent with.
+ *
+ * The Sandbox toggle picks the set. When the chosen set is empty but a
+ * pre-split configuration exists, those legacy values stand in — they were
+ * saved for whichever mode was active at the time, so they belong to the mode
+ * asking for them now, and falling back keeps an existing setup working on the
+ * first load after this change rather than silently losing its key.
+ */
+export function resolveCanadaPostCredentials(settings = {}) {
+  const isTest = !!settings.cpTestMode;
+  const mode = isTest ? 'test' : 'live';
+  const chosen = readCanadaPostCredentialSet(settings, mode);
+  const legacy = {
+    apiKey: asText(settings[CANADAPOST_LEGACY_FIELDS.apiKey]),
+    apiSecret: asText(settings[CANADAPOST_LEGACY_FIELDS.apiSecret]),
+    customerNumber: asText(settings[CANADAPOST_LEGACY_FIELDS.customerNumber]),
+    contractId: asText(settings[CANADAPOST_LEGACY_FIELDS.contractId]),
+  };
+
+  const usingLegacy = !credentialSetIsConfigured(chosen) && credentialSetIsConfigured(legacy);
+  const active = usingLegacy ? legacy : chosen;
+
+  return {
+    ...active,
+    mode,
+    isTest,
+    usingLegacy,
+    // Whether the OTHER set is ready, so the screen can say what switching the
+    // toggle would do before the toggle is switched.
+    liveConfigured: credentialSetIsConfigured(readCanadaPostCredentialSet(settings, 'live')) || (!isTest && usingLegacy),
+    testConfigured: credentialSetIsConfigured(readCanadaPostCredentialSet(settings, 'test')) || (isTest && usingLegacy),
+  };
+}
+
+/**
+ * Move a pre-split configuration into the set it belongs to.
+ *
+ * The old fields were used for whichever mode was active when they were saved,
+ * so that is the set they go into — putting a production key in the sandbox
+ * boxes would make "sandbox" purchases real, and the reverse would make live
+ * shipping fail. Returns which set was written so the card can say so; a
+ * publisher who had the toggle wrong can then move it themselves.
+ *
+ * Mutates `settings` in place and does NOT persist — the next save writes it.
+ *
+ * @returns {{migrated: boolean, mode: string}}
+ */
+export function migrateCanadaPostCredentials(settings) {
+  if (!settings || typeof settings !== 'object') return { migrated: false, mode: '' };
+
+  const legacyKey = asText(settings[CANADAPOST_LEGACY_FIELDS.apiKey]);
+  const legacySecret = asText(settings[CANADAPOST_LEGACY_FIELDS.apiSecret]);
+  if (!legacyKey && !legacySecret) return { migrated: false, mode: '' };
+
+  const mode = settings.cpTestMode ? 'test' : 'live';
+  const fields = CANADAPOST_CREDENTIAL_FIELDS[mode];
+
+  // Never overwrite a set the publisher has already filled in themselves.
+  if (credentialSetIsConfigured(readCanadaPostCredentialSet(settings, mode))) {
+    return { migrated: false, mode };
+  }
+
+  settings[fields.apiKey] = legacyKey;
+  settings[fields.apiSecret] = legacySecret;
+  settings[fields.customerNumber] = asText(settings[CANADAPOST_LEGACY_FIELDS.customerNumber]);
+  settings[fields.contractId] = asText(settings[CANADAPOST_LEGACY_FIELDS.contractId]);
+
+  // Clear the old fields so there is exactly one place each credential lives.
+  for (const legacyField of Object.values(CANADAPOST_LEGACY_FIELDS)) {
+    settings[legacyField] = '';
+  }
+
+  return { migrated: true, mode };
+}
+
 /**
  * Resolve which Canada Post environment a set of settings will actually hit.
  *

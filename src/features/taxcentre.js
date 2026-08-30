@@ -58,7 +58,7 @@ import { buildCashFlowBuckets, cashFlowDelta, computeCashFlowMetrics } from '../
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
-import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl, diagnoseCanadaPostConnection, inspectCanadaPostCredentials } from '../lib/canadapost.js';
+import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl, diagnoseCanadaPostConnection, inspectCanadaPostCredentials, resolveCanadaPostCredentials, migrateCanadaPostCredentials, readCanadaPostCredentialSet, credentialSetIsConfigured, CANADAPOST_CREDENTIAL_FIELDS } from '../lib/canadapost.js';
 import {
   RECURRING_FREQUENCIES,
   amountOnDate,
@@ -2326,7 +2326,7 @@ const INTEGRATION_PILL_SPECS = [
   { key: 'gemini', fields: ['tc-api-key'] },
   { key: 'shippo', fields: ['tc-shippo-key'] },
   { key: 'zonos', fields: ['tc-zonos-key'], toggle: 'tc-zonos-enabled' },
-  { key: 'canadapost', fields: ['tc-cp-key', 'tc-cp-secret'], toggle: 'tc-cp-enabled', requireAll: true },
+  { key: 'canadapost', fields: ['tc-cp-live-key', 'tc-cp-live-secret', 'tc-cp-test-key', 'tc-cp-test-secret'], toggle: 'tc-cp-enabled', requireAll: false },
   { key: 'stripe', fields: ['stripe-fees-key'] },
 ];
 
@@ -2401,10 +2401,19 @@ function _tcRenderStatusHeaders() {
     }
   }
 
-  hydrateCredentialField('tc-cp-key', TAX_CENTER.settings?.cpApiKey);
-  hydrateCredentialField('tc-cp-secret', TAX_CENTER.settings?.cpApiSecret);
-  hydrateCredentialField('tc-cp-customer-number', TAX_CENTER.settings?.cpCustomerNumber);
-  hydrateCredentialField('tc-cp-contract-id', TAX_CENTER.settings?.cpContractId);
+  // A pre-split configuration is moved into the set it belongs to before the
+  // boxes are filled, so the key appears where it will actually be used rather
+  // than vanishing from a card that now has two homes for it.
+  const migration = migrateCanadaPostCredentials(TAX_CENTER.settings || {});
+  for (const mode of ['live', 'test']) {
+    const set = readCanadaPostCredentialSet(TAX_CENTER.settings || {}, mode);
+    hydrateCredentialField(`tc-cp-${mode}-key`, set.apiKey);
+    hydrateCredentialField(`tc-cp-${mode}-secret`, set.apiSecret);
+    hydrateCredentialField(`tc-cp-${mode}-customer-number`, set.customerNumber);
+    hydrateCredentialField(`tc-cp-${mode}-contract-id`, set.contractId);
+  }
+  if (migration.migrated) _cpMigrationNotice = migration.mode;
+  renderCanadaPostKeySets();
   if ($('tc-cp-test-mode') && TAX_CENTER.settings?.cpTestMode !== undefined) $('tc-cp-test-mode').checked = !!TAX_CENTER.settings.cpTestMode;
   if ($('tc-cp-enabled') && TAX_CENTER.settings?.cpEnabled !== undefined) $('tc-cp-enabled').checked = TAX_CENTER.settings.cpEnabled !== false;
   if ($('tc-cp-zonos-auto') && TAX_CENTER.settings?.cpZonosAutoGenerate !== undefined) $('tc-cp-zonos-auto').checked = TAX_CENTER.settings.cpZonosAutoGenerate !== false;
@@ -3541,6 +3550,110 @@ async function openEditArtistPayout(bid, itemId) {
   }
 }
 
+// Set when a pre-split configuration is moved into one of the two sets, so the
+// card can say which boxes the old key landed in. A publisher whose Sandbox
+// toggle was wrong at the time can then move it themselves — nothing else in
+// the app can tell a development key from a production one.
+let _cpMigrationNotice = '';
+
+/** Which of the two Canada Post modes the Sandbox toggle currently selects. */
+function activeCanadaPostMode() {
+  const toggle = $('tc-cp-test-mode');
+  const isTest = toggle ? toggle.checked : !!TAX_CENTER.settings?.cpTestMode;
+  return isTest ? 'test' : 'live';
+}
+
+/**
+ * The credentials Test Connection and Diagnose should act on.
+ *
+ * What is typed into the active set's boxes wins over what is saved, so a key
+ * can be tried before it is committed; the saved set stands in for anything
+ * left blank. Reading the boxes for the INACTIVE mode would test credentials
+ * that no request is going to use.
+ */
+function canadaPostCredentialsUnderTest() {
+  const mode = activeCanadaPostMode();
+  const saved = readCanadaPostCredentialSet(TAX_CENTER.settings || {}, mode);
+  const resolved = resolveCanadaPostCredentials({ ...(TAX_CENTER.settings || {}), cpTestMode: mode === 'test' });
+  const typed = (field, fallback) => ($(`tc-cp-${mode}-${field}`)?.value.trim() || fallback || '');
+  return {
+    mode,
+    isTest: mode === 'test',
+    apiKey: typed('key', saved.apiKey || resolved.apiKey),
+    apiSecret: typed('secret', saved.apiSecret || resolved.apiSecret),
+    customerNumber: typed('customer-number', saved.customerNumber || resolved.customerNumber),
+    contractId: typed('contract-id', saved.contractId || resolved.contractId),
+  };
+}
+
+/**
+ * Keep the two key panels honest about which one is in use.
+ *
+ * With both sets on screen the only thing separating "the keys I ship with"
+ * from "the keys I rehearse with" is the Sandbox switch, and that switch is
+ * further down the card. So the state is written onto the panels themselves —
+ * an ACTIVE badge on the selected one, dimmed on the other — and it moves the
+ * moment the switch is flipped rather than after a save.
+ */
+function renderCanadaPostKeySets() {
+  const activeMode = activeCanadaPostMode();
+
+  for (const mode of ['live', 'test']) {
+    const panel = $(`tc-cp-set-${mode}`);
+    const badge = $(`tc-cp-set-${mode}-badge`);
+    if (!panel || !badge) continue;
+
+    const isActive = mode === activeMode;
+    // Read the boxes, not the saved settings: a key just typed in counts.
+    const filled = credentialSetIsConfigured({
+      apiKey: $(`tc-cp-${mode}-key`)?.value,
+      apiSecret: $(`tc-cp-${mode}-secret`)?.value,
+    });
+
+    panel.classList.toggle('is-active', isActive);
+    panel.classList.toggle('is-empty', !filled);
+
+    if (isActive && filled) {
+      badge.className = 'tc-cp-set-badge is-active';
+      badge.textContent = 'In use';
+    } else if (isActive) {
+      badge.className = 'tc-cp-set-badge is-missing';
+      badge.textContent = 'In use — but empty';
+    } else if (filled) {
+      badge.className = 'tc-cp-set-badge is-idle';
+      badge.textContent = 'Saved, not in use';
+    } else {
+      badge.className = 'tc-cp-set-badge is-idle';
+      badge.textContent = 'Not set up';
+    }
+  }
+
+  renderCanadaPostMigrationNote();
+}
+
+/**
+ * Say where a pre-split key was put.
+ *
+ * Nothing here can tell a development key from a production one, so the old
+ * single key goes into whichever set the Sandbox switch pointed at when it was
+ * saved — and that guess needs checking by someone who knows. Shown once, until
+ * the card is next rebuilt.
+ */
+function renderCanadaPostMigrationNote() {
+  const host = $('tc-cp-migration-note');
+  if (!host) return;
+  if (!_cpMigrationNotice) { host.classList.remove('is-shown'); host.innerHTML = ''; return; }
+
+  const where = _cpMigrationNotice === 'test' ? 'Sandbox keys' : 'Live keys';
+  const other = _cpMigrationNotice === 'test' ? 'Live keys' : 'Sandbox keys';
+  host.classList.add('is-shown');
+  host.innerHTML = `
+    <strong>Your existing Canada Post key moved into “${where}”.</strong>
+    <span>There is a separate box for each environment now. It went where it did because that is what the
+    Sandbox switch was set to — if that key is really your ${other.toLowerCase().replace(' keys', '')} one,
+    move it across before you ship.</span>`;
+}
+
 /**
  * Put a saved credential into its box and mark the box as showing the truth.
  *
@@ -3580,10 +3693,15 @@ async function saveTaxCenterSettings() {
   const zonosAccountKey = readCredentialField('tc-zonos-account-key');
   const zonosEnabled = $('tc-zonos-enabled') ? $('tc-zonos-enabled').checked : true;
 
-  const cpApiKey = readCredentialField('tc-cp-key');
-  const cpApiSecret = readCredentialField('tc-cp-secret');
-  const cpCustomerNumber = readCredentialField('tc-cp-customer-number');
-  const cpContractId = readCredentialField('tc-cp-contract-id');
+  const cpSets = {};
+  for (const mode of ['live', 'test']) {
+    cpSets[mode] = {
+      apiKey: readCredentialField(`tc-cp-${mode}-key`),
+      apiSecret: readCredentialField(`tc-cp-${mode}-secret`),
+      customerNumber: readCredentialField(`tc-cp-${mode}-customer-number`),
+      contractId: readCredentialField(`tc-cp-${mode}-contract-id`),
+    };
+  }
   const cpTestMode = $('tc-cp-test-mode') ? $('tc-cp-test-mode').checked : false;
   const cpEnabled = $('tc-cp-enabled') ? $('tc-cp-enabled').checked : true;
 
@@ -3598,17 +3716,27 @@ async function saveTaxCenterSettings() {
     put('zonosAccountKey', zonosAccountKey);
     TAX_CENTER.settings.zonosEnabled = zonosEnabled;
 
-    put('cpApiKey', cpApiKey);
-    put('cpApiSecret', cpApiSecret);
-    put('cpCustomerNumber', cpCustomerNumber);
-    put('cpContractId', cpContractId);
+    // Migrate first, so a set the publisher just typed into is not overwritten
+    // by legacy values that were only ever a stand-in for it.
+    migrateCanadaPostCredentials(TAX_CENTER.settings);
+    for (const [mode, values] of Object.entries(cpSets)) {
+      const fields = CANADAPOST_CREDENTIAL_FIELDS[mode];
+      put(fields.apiKey, values.apiKey);
+      put(fields.apiSecret, values.apiSecret);
+      put(fields.customerNumber, values.customerNumber);
+      put(fields.contractId, values.contractId);
+    }
     TAX_CENTER.settings.cpTestMode = cpTestMode;
     TAX_CENTER.settings.cpEnabled = cpEnabled;
     const cpZonosAutoGenerate = $('tc-cp-zonos-auto') ? $('tc-cp-zonos-auto').checked : true;
     TAX_CENTER.settings.cpZonosAutoGenerate = cpZonosAutoGenerate;
 
     await saveTaxCenter();
+    // The split is persisted now, so the "your key moved" note has served its
+    // purpose and should not reappear on every visit.
+    _cpMigrationNotice = '';
     refreshIntegrationStatusPills();
+    renderCanadaPostKeySets();
     showToast('✓ Settings saved to Firebase');
   } catch (e) {
     console.error(e);
@@ -3670,22 +3798,15 @@ async function testZonosConnectionHandler() {
  * failure" into a specific instruction.
  */
 async function diagnoseCanadaPostHandler() {
-  const keyInput = $('tc-cp-key');
-  const secretInput = $('tc-cp-secret');
-  const customerInput = $('tc-cp-customer-number');
-  const contractInput = $('tc-cp-contract-id');
-  const testModeInput = $('tc-cp-test-mode');
   const statusEl = $('tc-cp-status');
   const btn = $('tc-cp-diagnose-btn');
 
-  const apiKey = keyInput?.value || TAX_CENTER.settings?.cpApiKey || '';
-  const apiSecret = secretInput?.value || TAX_CENTER.settings?.cpApiSecret || '';
-  const customerNumber = customerInput?.value || TAX_CENTER.settings?.cpCustomerNumber || '';
-  const contractId = contractInput?.value || TAX_CENTER.settings?.cpContractId || '';
-  const isTest = testModeInput ? testModeInput.checked : !!TAX_CENTER.settings?.cpTestMode;
+  const { mode, isTest, apiKey, apiSecret, customerNumber, contractId } = canadaPostCredentialsUnderTest();
+  const keyInput = $(`tc-cp-${mode}-key`);
 
   if (!apiKey.trim() || !apiSecret.trim()) {
-    showToast('⚠ Enter your Canada Post API key and password first', 'warn');
+    showToast(`⚠ Enter your ${isTest ? 'sandbox' : 'live'} Canada Post key and password first`, 'warn');
+    keyInput?.focus();
     return;
   }
 
@@ -3763,20 +3884,18 @@ async function diagnoseCanadaPostHandler() {
 }
 
 async function testCanadaPostConnectionHandler() {
-  const keyInput = $('tc-cp-key');
-  const secretInput = $('tc-cp-secret');
-  const customerInput = $('tc-cp-customer-number');
-  const testModeInput = $('tc-cp-test-mode');
   const statusEl = $('tc-cp-status');
   const testBtn = $('tc-cp-test-btn');
 
-  const apiKey = keyInput?.value.trim() || TAX_CENTER.settings?.cpApiKey || '';
-  const apiSecret = secretInput?.value.trim() || TAX_CENTER.settings?.cpApiSecret || '';
-  const customerNumber = customerInput?.value.trim() || TAX_CENTER.settings?.cpCustomerNumber || '';
-  const isTest = testModeInput ? testModeInput.checked : !!TAX_CENTER.settings?.cpTestMode;
+  // Test the set the Sandbox toggle selects — that is the one requests use.
+  const { mode, isTest, apiKey, apiSecret, customerNumber } = canadaPostCredentialsUnderTest();
+  const keyInput = $(`tc-cp-${mode}-key`);
+  const secretInput = $(`tc-cp-${mode}-secret`);
+  const customerInput = $(`tc-cp-${mode}-customer-number`);
 
   if (!apiKey || !apiSecret) {
-    showToast('⚠ Please enter both your Canada Post API Key and Secret / Password first', 'warn');
+    const which = isTest ? 'sandbox' : 'live';
+    showToast(`⚠ Enter both the ${which} Canada Post Client ID and Secret first`, 'warn');
     if (!apiKey && keyInput) keyInput.focus();
     else if (!apiSecret && secretInput) secretInput.focus();
     return;
@@ -3842,10 +3961,14 @@ async function testCanadaPostConnectionHandler() {
       }
       showToast(`✓ Connected to Canada Post — ${audit.environment.label}`);
       if (!TAX_CENTER.settings) TAX_CENTER.settings = {};
-      TAX_CENTER.settings.cpApiKey = apiKey;
-      TAX_CENTER.settings.cpApiSecret = apiSecret;
-      if (customerNumber) TAX_CENTER.settings.cpCustomerNumber = customerNumber;
+      // Save into the set that was tested. Writing the shared slot would put a
+      // sandbox key where live shipping reads from, or the reverse.
+      const fields = CANADAPOST_CREDENTIAL_FIELDS[mode];
+      TAX_CENTER.settings[fields.apiKey] = apiKey;
+      TAX_CENTER.settings[fields.apiSecret] = apiSecret;
+      if (customerNumber) TAX_CENTER.settings[fields.customerNumber] = customerNumber;
       TAX_CENTER.settings.cpTestMode = isTest;
+      TAX_CENTER.settings[mode === 'test' ? 'cpTestKeyVerifiedAt' : 'cpLiveKeyVerifiedAt'] = new Date().toISOString();
       TAX_CENTER.settings.cpLastTestAt = new Date().toISOString();
       await saveTaxCenter().catch(() => {});
     }
@@ -4440,6 +4563,7 @@ export {
   testZonosConnectionHandler,
   testCanadaPostConnectionHandler,
   diagnoseCanadaPostHandler,
+  renderCanadaPostKeySets,
   setTcGalleryPage,
   setTcLedgerPage,
   snoozePendingExpense,

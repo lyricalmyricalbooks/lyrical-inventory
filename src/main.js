@@ -278,6 +278,7 @@ import {
   testZonosConnectionHandler,
   testCanadaPostConnectionHandler,
   diagnoseCanadaPostHandler,
+  renderCanadaPostKeySets,
   setTcGalleryPage,
   setTcLedgerPage,
   snoozePendingExpense,
@@ -21828,7 +21829,7 @@ function exposeLegacyInlineHandlers() {
     getShipRecoPercentile, setShipRecoPercentile, onShipRecoPercentileChange, updateShippingSimulation,
     toggleIntegrationSection,
     testZonosConnectionHandler, calculateZonosDutiesHandler, renderZonosDutyCard,
-    testCanadaPostConnectionHandler, diagnoseCanadaPostHandler, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard, buyCanadaPostLabelHandler,
+    testCanadaPostConnectionHandler, diagnoseCanadaPostHandler, renderCanadaPostKeySets, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard, buyCanadaPostLabelHandler,
     showCanadaPostLabelModal, closeCanadaPostLabelModal, printCanadaPostLabelModal, downloadCanadaPostLabelModal, copyCanadaPostPin,
     checkLiveShippingReadinessHandler, renderLiveReadinessChecklist, renderZonosAccountKeyHint,
     openSaveBookPresetModal, confirmSaveBookPreset, renderSaveBookPresetPreview,
@@ -21892,6 +21893,7 @@ window.openZonosPrepayAppHandler = openZonosPrepayAppHandler;
 window.calculateCanadaPostRatesHandler = calculateCanadaPostRatesHandler;
 window.testCanadaPostConnectionHandler = testCanadaPostConnectionHandler;
 window.diagnoseCanadaPostHandler = diagnoseCanadaPostHandler;
+window.renderCanadaPostKeySets = renderCanadaPostKeySets;
 window.renderCanadaPostRatesCard = renderCanadaPostRatesCard;
 window.buyCanadaPostLabelHandler = buyCanadaPostLabelHandler;
 window.openCanadaPostPurchasedLabel = openCanadaPostPurchasedLabel;

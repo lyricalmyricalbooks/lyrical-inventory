@@ -134,9 +134,6 @@ import {
   estimateOfflineCanadaPostRates,
   buyCanadaPostLabel,
   validateDeclarationId,
-  DEFAULT_CP_API_KEY,
-  DEFAULT_CP_API_SECRET,
-  DEFAULT_CP_CUSTOMER_NUMBER,
   generateCanadaPostLabelSvg,
   getLastPurchasedShipmentContext,
   validateCanadaPostAccount,
@@ -145,6 +142,7 @@ import {
   getArchivedShipmentContext,
   listArchivedShipments,
   fetchCanadaPostLabelArtifact,
+  resolveCanadaPostCredentials,
 } from '../lib/canadapost.js';
 import {
   assessLiveShippingReadiness,
@@ -2717,8 +2715,7 @@ async function verifyShippedTrackingPinsHandler() {
   const out = $('cp-account-check-result');
   const oldText = btn ? btn.innerHTML : '';
 
-  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
-  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const { apiKey, apiSecret } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
 
   if (!apiKey || !apiSecret) {
@@ -2828,10 +2825,7 @@ async function checkCanadaPostAccountAndPinHandler() {
   }
 
   try {
-    const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
-    const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
-    const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
-    const contractId = TAX_CENTER.settings?.cpContractId || '';
+    const { apiKey, apiSecret, customerNumber, contractId } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
     const isTest = !!TAX_CENTER.settings?.cpTestMode;
 
     const audit = validateCanadaPostAccount({ apiKey, apiSecret, customerNumber, contractId, isTest });
@@ -3018,13 +3012,8 @@ function getZonosAccountKey() {
  */
 function currentLiveReadiness() {
   const settings = TAX_CENTER.settings || {};
-  const accountAudit = validateCanadaPostAccount({
-    apiKey: settings.cpApiKey || DEFAULT_CP_API_KEY,
-    apiSecret: settings.cpApiSecret || DEFAULT_CP_API_SECRET,
-    customerNumber: settings.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER,
-    contractId: settings.cpContractId || '',
-    isTest: !!settings.cpTestMode,
-  });
+  const credentials = resolveCanadaPostCredentials(settings);
+  const accountAudit = validateCanadaPostAccount({ ...credentials, isTest: credentials.isTest });
 
   // Prefer what is on the form; fall back to what was saved, so the answer is
   // the same whether this runs from the shipping screen or the Tax Centre.
@@ -3033,6 +3022,7 @@ function currentLiveReadiness() {
 
   return assessLiveShippingReadiness({
     settings,
+    credentials,
     accountAudit,
     sender: {
       name: field('sf-name', saved.name),
@@ -3434,10 +3424,7 @@ async function calculateCanadaPostRatesHandler() {
   else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
   else if (weightUnit === 'g') weightKg = weight / 1000;
 
-  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
-  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
-  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
-  const contractId = TAX_CENTER.settings?.cpContractId || '';
+  const { apiKey, apiSecret, customerNumber, contractId } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
   const isEnabled = TAX_CENTER.settings?.cpEnabled !== false;
 
@@ -3510,10 +3497,12 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
   if (!card) return;
   card.style.display = 'block';
 
-  const cpApiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
-  const cpApiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
-  const cpCustomerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
-  const cpContractId = TAX_CENTER.settings?.cpContractId || '';
+  const {
+    apiKey: cpApiKey,
+    apiSecret: cpApiSecret,
+    customerNumber: cpCustomerNumber,
+    contractId: cpContractId,
+  } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
   const env = resolveCanadaPostEnvironment({ isTest });
   const audit = validateCanadaPostAccount({
     apiKey: cpApiKey,
@@ -3777,8 +3766,7 @@ async function showCanadaPostLabelModal(shipmentContext) {
     </div>
   `);
 
-  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
-  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
+  const { apiKey, apiSecret } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
 
   let artifact = null;
   try {
@@ -3980,10 +3968,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
   else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
   else if (weightUnit === 'g') weightKg = weight / 1000;
 
-  const apiKey = TAX_CENTER.settings?.cpApiKey || DEFAULT_CP_API_KEY;
-  const apiSecret = TAX_CENTER.settings?.cpApiSecret || DEFAULT_CP_API_SECRET;
-  const customerNumber = TAX_CENTER.settings?.cpCustomerNumber || DEFAULT_CP_CUSTOMER_NUMBER;
-  const contractId = TAX_CENTER.settings?.cpContractId || '';
+  const { apiKey, apiSecret, customerNumber, contractId } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
   const isEnabled = TAX_CENTER.settings?.cpEnabled !== false;
 

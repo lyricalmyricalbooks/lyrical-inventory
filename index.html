@@ -2680,31 +2680,71 @@
             </div>
           </div>
           <div class="oc-collapse-body" id="tc-integration-body-canadapost">
-            <div class="tc-form-grid">
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-cp-key">API Key / Username / Client ID</label>
-                <input type="text" id="tc-cp-key" class="tc-form-input" placeholder="Your Canada Post API key" autocomplete="off">
-              </div>
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-cp-secret">API Secret / Password</label>
-                <input type="password" id="tc-cp-secret" class="tc-form-input" placeholder="Your Canada Post API secret" autocomplete="off">
-              </div>
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-cp-customer-number">Customer # <span class="tc-form-label-note">optional</span></label>
-                <input type="text" id="tc-cp-customer-number" class="tc-form-input" placeholder="7–10 digits" autocomplete="off">
-              </div>
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-cp-contract-id">Contract ID <span class="tc-form-label-note">optional</span></label>
-                <input type="text" id="tc-cp-contract-id" class="tc-form-input" placeholder="e.g. 4299100" autocomplete="off">
-              </div>
+            <div id="tc-cp-migration-note" class="tc-cp-migration-note"></div>
+            <p class="tc-cp-sets-intro">
+              Canada Post issues you two separate sets of keys — one for testing and one for real shipping — and both
+              are used at the same web address. Keep both here, and the <strong>Sandbox keys</strong> switch below
+              decides which set every rate and label actually uses.
+            </p>
+            <div class="tc-cp-sets">
+              <section class="tc-cp-set" id="tc-cp-set-live" aria-labelledby="tc-cp-set-live-title">
+                <header class="tc-cp-set-head">
+                  <h4 class="tc-cp-set-title" id="tc-cp-set-live-title">🚀 Live keys</h4>
+                  <span class="tc-cp-set-badge" id="tc-cp-set-live-badge"></span>
+                </header>
+                <p class="tc-cp-set-note">Real labels, charged to your Canada Post account.</p>
+                <div class="tc-form-grid">
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-live-key">Client ID</label>
+                    <input type="text" id="tc-cp-live-key" class="tc-form-input" placeholder="Production Client ID" autocomplete="off" oninput="renderCanadaPostKeySets()">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-live-secret">Client Secret</label>
+                    <input type="password" id="tc-cp-live-secret" class="tc-form-input" placeholder="Production Client Secret" autocomplete="off" oninput="renderCanadaPostKeySets()">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-live-customer-number">Customer #</label>
+                    <input type="text" id="tc-cp-live-customer-number" class="tc-form-input" placeholder="7–10 digits" autocomplete="off">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-live-contract-id">Contract ID <span class="tc-form-label-note">optional</span></label>
+                    <input type="text" id="tc-cp-live-contract-id" class="tc-form-input" placeholder="e.g. 4299100" autocomplete="off">
+                  </div>
+                </div>
+              </section>
+              <section class="tc-cp-set" id="tc-cp-set-test" aria-labelledby="tc-cp-set-test-title">
+                <header class="tc-cp-set-head">
+                  <h4 class="tc-cp-set-title" id="tc-cp-set-test-title">🧪 Sandbox keys</h4>
+                  <span class="tc-cp-set-badge" id="tc-cp-set-test-badge"></span>
+                </header>
+                <p class="tc-cp-set-note">Rehearsing only. Nothing is charged and no label can be mailed.</p>
+                <div class="tc-form-grid">
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-test-key">Client ID</label>
+                    <input type="text" id="tc-cp-test-key" class="tc-form-input" placeholder="Development Client ID" autocomplete="off" oninput="renderCanadaPostKeySets()">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-test-secret">Client Secret</label>
+                    <input type="password" id="tc-cp-test-secret" class="tc-form-input" placeholder="Development Client Secret" autocomplete="off" oninput="renderCanadaPostKeySets()">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-test-customer-number">Customer #</label>
+                    <input type="text" id="tc-cp-test-customer-number" class="tc-form-input" placeholder="7–10 digits" autocomplete="off">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-test-contract-id">Contract ID <span class="tc-form-label-note">optional</span></label>
+                    <input type="text" id="tc-cp-test-contract-id" class="tc-form-input" placeholder="e.g. 4299100" autocomplete="off">
+                  </div>
+                </div>
+              </section>
             </div>
             <div class="tc-toggle-row">
               <label class="tc-toggle-wrap">
                 <input type="checkbox" id="tc-cp-enabled" checked>
                 <span>Enable Direct Canada Post API</span>
               </label>
-              <label class="tc-toggle-wrap" title="Canada Post serves test and live from the same address — this is only a test if the key above is a Developer Portal development key">
-                <input type="checkbox" id="tc-cp-test-mode">
+              <label class="tc-toggle-wrap" title="Switches which of the two sets above every rate and label uses. Canada Post serves test and live from the same address, so the key is the only thing that decides.">
+                <input type="checkbox" id="tc-cp-test-mode" onchange="renderCanadaPostKeySets()">
                 <span>Sandbox keys (test account)</span>
               </label>
               <label class="tc-toggle-wrap" title="When the destination is set to the United States, check the duty position straight away instead of waiting to be asked">
@@ -2714,8 +2754,8 @@
             </div>
             <div class="tc-form-actions-row">
               <div class="tc-form-actions-buttons">
-                <button id="tc-cp-test-btn" class="btn gold outline" onclick="testCanadaPostConnectionHandler()">Test Connection</button>
-                <button id="tc-cp-diagnose-btn" class="btn outline" onclick="diagnoseCanadaPostHandler()" title="Try this key against both Canada Post gateways, with and without the customer number, and report which combination works">Diagnose</button>
+                <button id="tc-cp-test-btn" class="btn gold outline" onclick="testCanadaPostConnectionHandler()" title="Test whichever set of keys the Sandbox switch has selected">Test Connection</button>
+                <button id="tc-cp-diagnose-btn" class="btn outline" onclick="diagnoseCanadaPostHandler()" title="Try the selected set of keys against both Canada Post gateways, with and without the customer number, and report which combination works">Diagnose</button>
                 <button id="tc-cp-readiness-btn" class="btn outline" onclick="checkLiveShippingReadinessHandler()" title="Check everything needed to buy a real, mailable label">Check Live Readiness</button>
                 <button id="tc-save-cp-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
               </div>
