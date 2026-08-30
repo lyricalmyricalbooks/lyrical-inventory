@@ -16103,10 +16103,20 @@ window.posCheckout = function () {
     return;
   }
 
-  const hasMissingFx = rows.some((row) => row.convertedLine === null);
+  // ⚡ Bolt Optimization: Loop fusion - Combine the `.some()` check and `.reduce()` accumulation into a single imperative loop.
+  let hasMissingFx = false;
+  let convertedSum = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].convertedLine === null) {
+      hasMissingFx = true;
+      break;
+    }
+    convertedSum += rows[i].convertedLine || 0;
+  }
+
   const totalCharged = hasMissingFx
     ? rows.map((row) => `${row.sourceCode} ${row.sourceLine.toFixed(2)}`).join(' + ')
-    : posFormat(rows.reduce((sum, row) => sum + (row.convertedLine || 0), 0), posTransactionCurrency);
+    : posFormat(convertedSum, posTransactionCurrency);
 
   const timestamp = new Date();
   const localeTs = timestamp.toLocaleString('en-CA');
