@@ -9226,6 +9226,142 @@ tr.hist-row:hover {
   flex-wrap: wrap;
 }
 
+/* Facts to check, then the caution to read. The two-column grid aligns the
+   values without space-padding, so the prose underneath keeps the body font
+   instead of being dragged into a monospace face with it. */
+.confirm-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-4);
+  margin: 0 0 var(--space-4);
+  /* A panel here reads as an empty box: --surface-sunken and the dialog's own
+     --surface-page are near-identical, so the fill never lands. A rule between
+     the facts and the caution below does the separating instead. */
+  padding: 0 0 var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+  white-space: normal;
+}
+.confirm-details dt {
+  margin: 0;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--content-secondary);
+  align-self: start;
+  padding-top: 2px;
+}
+.confirm-details dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--content-primary);
+  /* Values are money, tracking numbers and account numbers — the app's tabular
+     figure rule applies. The multi-line address keeps its own line breaks. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  white-space: pre-line;
+}
+#m-confirm-body.has-details { white-space: normal; }
+.confirm-message { margin: 0; }
+
+/* The status line above the label answers the one question that matters before
+   anyone reaches for the printer: is this the official Canada Post label, or
+   the app's own reference copy? It is a banner rather than a footnote because
+   printing the wrong one is a wasted trip to the post office. */
+.cp-label-status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  /* A tinted background alone is an 8% wash and reads as plain white at a
+     glance. The left bar carries the signal instead, so "this one cannot be
+     mailed" is visible before the sentence is read. */
+  border-left: 3px solid var(--border-strong);
+  padding: 10px var(--space-5);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border-default);
+}
+.cp-label-status strong { color: var(--content-primary); }
+/* The *-bg status tokens are an 8% wash, which reads as plain white behind a
+   full-width band — and this band is the difference between a label that can be
+   mailed and one that cannot. Mixed against the panel surface so the tint is
+   actually visible, in both themes, without introducing a raw colour. */
+.cp-label-status.is-official {
+  background: color-mix(in oklab, var(--status-positive) 12%, var(--surface-raised));
+  border-left-color: var(--status-positive);
+  color: var(--status-positive);
+}
+.cp-label-status.is-official strong { color: var(--status-positive); }
+.cp-label-status.is-warn {
+  background: color-mix(in oklab, var(--status-active) 16%, var(--surface-raised));
+  border-left-color: var(--status-active);
+  color: var(--status-active);
+}
+.cp-label-status.is-warn strong { color: var(--status-active); }
+.cp-label-status-spinner {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  margin-top: 1px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--status-active);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cp-label-status-spinner { animation: none; }
+}
+
+/* A PDF needs room to be legible; the drawn copy is a fixed-ratio sheet and
+   keeps the narrower column it has always had. */
+.cp-label-preview-container.is-pdf {
+  max-width: 100%;
+  aspect-ratio: 4 / 6;
+  max-height: 62vh;
+  background: var(--surface-raised);
+}
+.cp-label-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  border: 0;
+  display: block;
+  /* The PDF paints its own white page; this only stops a flash of the page
+     ground while the viewer loads. */
+  background: var(--surface-raised);
+}
+
+.cp-label-empty {
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+  color: var(--content-secondary);
+}
+.cp-label-empty-icon { font-size: var(--text-2xl); display: block; margin-bottom: var(--space-2); }
+.cp-label-empty strong { display: block; color: var(--content-primary); font-size: var(--text-sm); }
+.cp-label-empty p { margin: var(--space-2) 0 0; font-size: var(--text-xs); line-height: var(--leading-normal); }
+
+/* Why every Buy Label button on the card is inert. Sits above the list so the
+   reason is read before a disabled button is poked at. */
+.cp-buy-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: 10px 14px;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--status-neutral);
+  border-radius: var(--r2);
+  background: var(--status-neutral-bg);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+.cp-buy-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.cp-buy-btn:disabled:hover { transform: none; }
+
 @media print {
   body * {
     visibility: hidden;
@@ -9239,10 +9375,14 @@ tr.hist-row:hover {
     top: 0;
     width: 4in !important;
     height: 6in !important;
+    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
   }
+  /* A PDF prints from its own frame (printCanadaPostLabelModal), so this
+     stylesheet must not also try to lay it out on the page. */
+  .cp-label-preview-container.is-pdf { display: none !important; }
 }
 
 /* ─── Rate-form readiness line ────────────────────────────────────────────

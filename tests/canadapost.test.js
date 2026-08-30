@@ -351,7 +351,7 @@ describe('Canada Post Label & Shipment Creation', () => {
 
 
 describe('Canada Post Account & Environment Validation', () => {
-  it('resolves the live and sandbox gateways to distinct hosts', async () => {
+  it('serves both modes from one gateway and never promises a free sandbox', async () => {
     const { resolveCanadaPostEnvironment } = await import('../src/lib/canadapost.js');
     const live = resolveCanadaPostEnvironment({ isTest: false });
     expect(live.mode).toBe('live');
@@ -361,9 +361,19 @@ describe('Canada Post Account & Environment Validation', () => {
 
     const testEnv = resolveCanadaPostEnvironment({ isTest: true });
     expect(testEnv.mode).toBe('sandbox');
-    expect(testEnv.hostname).toBe('api.canadapost-postescanada.ca');
-    expect(testEnv.baseUrl).toBe('https://api.canadapost-postescanada.ca');
     expect(testEnv.label).toBe('Sandbox Test Mode');
+
+    // The Developer Portal retired the ct.soa-gw / soa-gw split, so sandbox and
+    // live now address the SAME host and only the credentials differ. The
+    // description has to say so: it sits directly above the Buy Label button,
+    // and it used to read "Nothing is charged and no label is valid for
+    // mailing" while a production key charged a real account.
+    expect(testEnv.baseUrl).toBe(live.baseUrl);
+    expect(testEnv.hostname).toBe(live.hostname);
+    expect(testEnv.sharedGateway).toBe(true);
+    expect(testEnv.description).not.toMatch(/nothing is charged\.|no label is valid for mailing/i);
+    expect(testEnv.description).toMatch(/same address/i);
+    expect(testEnv.description).toMatch(/production key/i);
   });
 
   it('accepts 7 to 10 digit Canada Post customer numbers only', async () => {
@@ -432,7 +442,12 @@ describe('Canada Post Account & Environment Validation', () => {
       isTest: true
     });
     expect(sandbox.ok).toBe(true);
-    expect(sandbox.warnings.join(' ')).toMatch(/not real/i);
+    // Warn about what is actually true: the gateway is shared, so only a
+    // development key makes this a test.
+    const sandboxWarning = sandbox.warnings.join(' ');
+    expect(sandboxWarning).toMatch(/same address/i);
+    expect(sandboxWarning).toMatch(/development key/i);
+    expect(sandboxWarning).toMatch(/charges your account/i);
   });
 });
 

@@ -36,6 +36,62 @@ let store = readStore();
 
 let mockEmailMutex = Promise.resolve();
 
+// ── Canada Post auth ──────────────────────────────────────────────────────
+// api.canadapost-postescanada.ca is the Developer Portal gateway and wants an
+// OAuth 2.0 client-credentials Bearer token; the retired soa-gw hosts wanted
+// HTTP Basic. Decide from the endpoint, never from the shape of the key — a
+// Developer Program username is also hex, and guessing sent correct Basic
+// credentials into a token exchange that could not succeed.
+const CANADAPOST_OAUTH_HOST = 'api.canadapost-postescanada.ca';
+const CANADAPOST_TOKEN_URL = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token';
+const cpTokenCache = new Map();
+
+function canadaPostUsesOAuth(endpoint) {
+  try {
+    const host = new URL(String(endpoint)).hostname.toLowerCase();
+    return host === CANADAPOST_OAUTH_HOST || host.endsWith('.' + CANADAPOST_OAUTH_HOST);
+  } catch {
+    return false;
+  }
+}
+
+async function canadaPostAuthHeader(key, secret, endpoint) {
+  const basic = 'Basic ' + Buffer.from(`${key.trim()}:${secret.trim()}`).toString('base64');
+  if (!canadaPostUsesOAuth(endpoint)) return { header: basic, mode: 'basic' };
+
+  const cacheKey = key.trim();
+  const cached = cpTokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { header: `Bearer ${cached.token}`, mode: 'oauth' };
+  }
+
+  try {
+    const tokenRes = await fetch(CANADAPOST_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': basic
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: key.trim(),
+        client_secret: secret.trim(),
+        scope: 'merchant'
+      })
+    });
+    const tokenJson = await tokenRes.json().catch(() => ({}));
+    if (tokenJson && tokenJson.access_token) {
+      cpTokenCache.set(cacheKey, { token: tokenJson.access_token, expiresAt: Date.now() + 55 * 60 * 1000 });
+      return { header: `Bearer ${tokenJson.access_token}`, mode: 'oauth' };
+    }
+    // Fall back to Basic rather than aborting: Canada Post's own status code is
+    // a better error than one guessed here, and it reaches the client verbatim.
+    return { header: basic, mode: 'basic', oauthNote: tokenJson?.error_description || tokenJson?.error || '' };
+  } catch (err) {
+    return { header: basic, mode: 'basic', oauthNote: err.message };
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     setCors(res);
@@ -56,31 +112,37 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/canadapost/rates' && req.method === 'POST') {
       const body = await readJson(req, res);
       if (!body) return;
-      const { xmlPayload, apiKey, apiSecret, isTest, targetEndpoint } = body;
+      // jsonPayload since the client moved to the JSON API; xmlPayload is read
+      // as a fallback so an older cached bundle keeps working rather than
+      // POSTing `undefined` as its body.
+      const { jsonPayload, xmlPayload, apiKey, apiSecret, targetEndpoint } = body;
+      const payload = jsonPayload || xmlPayload;
       const key = apiKey || process.env.CANADAPOST_API_KEY;
       const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
-      const baseUrl = isTest ? 'https://ct.soa-gw.canadapost.ca' : 'https://soa-gw.canadapost.ca';
-      const endpoint = targetEndpoint || `${baseUrl}/rs/ship/price`;
+      const endpoint = targetEndpoint || 'https://api.canadapost-postescanada.ca/rs/ship/price';
 
       if (!key || !secret) {
         return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
       }
+      if (!payload) {
+        return sendJson(res, 400, { error: 'Missing Canada Post rating payload' });
+      }
 
       try {
-        const authHeader = 'Basic ' + Buffer.from(`${key.trim()}:${secret.trim()}`).toString('base64');
+        const auth = await canadaPostAuthHeader(key, secret, endpoint);
         const cpRes = await fetch(endpoint, {
           method: 'POST',
           headers: {
-            'Accept': 'application/vnd.cpc.ship.rate-v4+xml',
-            'Content-Type': 'application/vnd.cpc.ship.rate-v4+xml',
-            'Authorization': authHeader,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': auth.header,
             'Accept-language': 'en-CA'
           },
-          body: xmlPayload
+          body: payload
         });
 
-        const xmlText = await cpRes.text();
-        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, xml: xmlText });
+        const text = await cpRes.text();
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, authMode: auth.mode, oauthNote: auth.oauthNote || '', json: text });
       } catch (err) {
         console.error('Canada Post proxy failed:', err);
         return sendJson(res, 502, { error: `Canada Post proxy error: ${err.message}` });
@@ -91,23 +153,21 @@ const server = http.createServer(async (req, res) => {
       const pin = url.searchParams.get('pin');
       const apiKey = req.headers['x-cp-api-key'] || process.env.CANADAPOST_API_KEY;
       const apiSecret = req.headers['x-cp-api-secret'] || process.env.CANADAPOST_API_SECRET;
-      const isTest = url.searchParams.get('test') === 'true';
-
       if (!pin) return sendJson(res, 400, { error: 'Missing tracking pin parameter' });
       if (!apiKey || !apiSecret) return sendJson(res, 400, { error: 'Missing Canada Post API credentials' });
 
       try {
-        const baseUrl = isTest ? 'https://ct.soa-gw.canadapost.ca' : 'https://soa-gw.canadapost.ca';
-        const authHeader = 'Basic ' + Buffer.from(`${apiKey.trim()}:${apiSecret.trim()}`).toString('base64');
-        const cpRes = await fetch(`${baseUrl}/vis/tracking/pin/${encodeURIComponent(pin)}/summary`, {
+        const endpoint = `https://api.canadapost-postescanada.ca/vis/tracking/pin/${encodeURIComponent(pin)}/summary`;
+        const auth = await canadaPostAuthHeader(apiKey, apiSecret, endpoint);
+        const cpRes = await fetch(endpoint, {
           headers: {
-            'Accept': 'application/vnd.cpc.track+xml',
-            'Authorization': authHeader,
+            'Accept': 'application/json',
+            'Authorization': auth.header,
             'Accept-language': 'en-CA'
           }
         });
-        const xmlText = await cpRes.text();
-        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, xml: xmlText });
+        const text = await cpRes.text();
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, authMode: auth.mode, json: text });
       } catch (err) {
         return sendJson(res, 502, { error: `Canada Post tracking proxy error: ${err.message}` });
       }
@@ -116,12 +176,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/canadapost/shipment' && req.method === 'POST') {
       const body = await readJson(req, res);
       if (!body) return;
-      const { xmlPayload, apiKey, apiSecret, isTest, targetEndpoint, customerNumber, zonosAccountKey } = body;
+      const { jsonPayload, xmlPayload, apiKey, apiSecret, targetEndpoint, customerNumber, zonosAccountKey } = body;
+      const payload = jsonPayload || xmlPayload;
       const key = apiKey || process.env.CANADAPOST_API_KEY;
       const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
       const custNum = customerNumber || process.env.CANADAPOST_CUSTOMER_NUMBER || '';
-      const baseUrl = isTest ? 'https://ct.soa-gw.canadapost.ca' : 'https://soa-gw.canadapost.ca';
-      const endpoint = targetEndpoint || `${baseUrl}/rs/${encodeURIComponent(custNum)}/ncshipment`;
+      const endpoint = targetEndpoint || `https://api.canadapost-postescanada.ca/rs/${encodeURIComponent(custNum)}/ncshipment`;
 
       if (!key || !secret) {
         return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
@@ -129,13 +189,19 @@ const server = http.createServer(async (req, res) => {
       if (!custNum && !targetEndpoint) {
         return sendJson(res, 400, { error: 'Missing Canada Post customer number — a shipment cannot be attached to an account without it' });
       }
+      // A shipment request with no body would be answered by Canada Post with a
+      // schema error, which reads as "your address is wrong" rather than "this
+      // proxy dropped the payload". Catch it here instead.
+      if (!payload) {
+        return sendJson(res, 400, { error: 'Missing Canada Post shipment payload — no label was created' });
+      }
 
       try {
-        const authHeader = 'Basic ' + Buffer.from(`${key.trim()}:${secret.trim()}`).toString('base64');
+        const auth = await canadaPostAuthHeader(key, secret, endpoint);
         const headers = {
-          'Accept': 'application/vnd.cpc.ncshipment-v4+xml',
-          'Content-Type': 'application/vnd.cpc.ncshipment-v4+xml',
-          'Authorization': authHeader,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': auth.header,
           'Accept-language': 'en-CA'
         };
         const zKey = zonosAccountKey || process.env.CANADAPOST_ZONOS_KEY;
@@ -143,14 +209,10 @@ const server = http.createServer(async (req, res) => {
           headers['X-CPC-Zonos-Key'] = zKey.trim();
         }
 
-        const cpRes = await fetch(endpoint, {
-          method: 'POST',
-          headers,
-          body: xmlPayload
-        });
+        const cpRes = await fetch(endpoint, { method: 'POST', headers, body: payload });
 
-        const xmlText = await cpRes.text();
-        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, xml: xmlText });
+        const text = await cpRes.text();
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, authMode: auth.mode, oauthNote: auth.oauthNote || '', json: text });
       } catch (err) {
         console.error('Canada Post shipment proxy failed:', err);
         return sendJson(res, 502, { error: `Canada Post shipment error: ${err.message}` });
@@ -168,11 +230,11 @@ const server = http.createServer(async (req, res) => {
       if (!apiKey || !apiSecret) return sendJson(res, 400, { error: 'Missing Canada Post credentials' });
 
       try {
-        const authHeader = 'Basic ' + Buffer.from(`${apiKey.trim()}:${apiSecret.trim()}`).toString('base64');
+        const auth = await canadaPostAuthHeader(apiKey, apiSecret, artifactUrl);
         const cpRes = await fetch(artifactUrl, {
           headers: {
             'Accept': 'application/pdf',
-            'Authorization': authHeader
+            'Authorization': auth.header
           }
         });
 
