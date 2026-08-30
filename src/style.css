@@ -9226,6 +9226,84 @@ tr.hist-row:hover {
   flex-wrap: wrap;
 }
 
+/* ─── Go-live readiness checklist ──────────────────────────────────────────
+   Every condition for buying a REAL Canada Post label, each with what to do
+   about it. Since the Developer Portal migration there is no longer anything
+   structural separating test from live — both address the same gateway — so
+   this list is the only place the answer is stated in one piece. */
+.cp-ready-panel {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+  background: var(--surface-sunken);
+  container-type: inline-size;
+  container-name: cpready;
+}
+.cp-ready-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+.cp-ready-note {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+  min-width: 0;
+}
+.cp-ready-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.cp-ready-item {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.cp-ready-item:first-child { border-top: 0; padding-top: 0; }
+.cp-ready-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  line-height: 1;
+}
+.cp-ready-item.is-ok .cp-ready-icon { background: var(--status-positive-bg); color: var(--status-positive); }
+.cp-ready-item.is-warn .cp-ready-icon { background: var(--status-active-bg); color: var(--status-active); }
+.cp-ready-item.is-blocked .cp-ready-icon { background: var(--status-critical-bg); color: var(--status-critical); }
+.cp-ready-body { display: grid; gap: 2px; min-width: 0; }
+.cp-ready-body strong { font-size: var(--text-sm); color: var(--content-primary); }
+.cp-ready-detail {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+/* The fix is the actionable half, so it stays legible rather than fading out
+   with the explanation above it. */
+.cp-ready-fix {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  font-weight: 600;
+  color: var(--content-primary);
+}
+.cp-ready-item.is-ok .cp-ready-fix { display: none; }
+@container cpready (max-width: 380px) {
+  .cp-ready-item { grid-template-columns: 1fr; }
+  .cp-ready-icon { display: none; }
+}
+
+/* The Zonos Account Key hint changes role as the box is typed into: a wrong
+   key here fails silently on a live parcel, so the verdict has to be visible
+   before Save, not after a customer is billed duty on delivery. */
+.tc-form-hint.is-ok { color: var(--status-positive); font-weight: 600; }
+.tc-form-hint.is-warn { color: var(--status-active); font-weight: 600; }
+
 /* Facts to check, then the caution to read. The two-column grid aligns the
    values without space-padding, so the prose underneath keeps the body font
    instead of being dragged into a monospace face with it. */

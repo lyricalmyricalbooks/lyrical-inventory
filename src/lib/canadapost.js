@@ -15,6 +15,10 @@ import {
   listArchivedLabels,
   archiveKeyForPin,
 } from './label-archive.js';
+import {
+  missingSenderFields,
+  senderAddressIsPlaceholder,
+} from './shipping-readiness.js';
 
 // The modern Developer Portal serves both environments from ONE host. The old
 // ct.soa-gw / soa-gw split is gone, so which environment a request lands in is
@@ -1683,14 +1687,19 @@ export function buildNonContractShipmentJson({
   parcel = {},
   orderNum = '',
   customs = null,
-  declarationId = ''
+  declarationId = '',
+  // Stand-in sender details keep the screen usable while rehearsing without an
+  // address saved. buyCanadaPostLabel refuses a live purchase before reaching
+  // here, so in practice these only ever reach the sandbox.
+  allowPlaceholders = true
 }) {
   const weightKg = Number(Math.max(0.01, parseFloat(parcel.weightKg || 0.5)).toFixed(3));
   const lengthCm = Number(Math.max(0.1, parseFloat(parcel.lengthCm || 20)).toFixed(1));
   const widthCm = Number(Math.max(0.1, parseFloat(parcel.widthCm || 15)).toFixed(1));
   const heightCm = Number(Math.max(0.1, parseFloat(parcel.heightCm || 2)).toFixed(1));
 
-  const cleanOriginZip = cleanPostalCode(sender.postalCode) || 'M4B1B3';
+  const ph = (value, stand) => (allowPlaceholders ? (value || stand) : (value || ''));
+  const cleanOriginZip = ph(cleanPostalCode(sender.postalCode), 'M4B1B3');
   const destCountry = String(destination.countryCode || 'CA').toUpperCase().trim();
   const cleanDestZip = destCountry === 'CA' ? cleanPostalCode(destination.postalCode) : (destination.postalCode || destination.zip || '90210');
 
@@ -1702,12 +1711,12 @@ export function buildNonContractShipmentJson({
   const deliverySpec = {
     serviceCode: serviceCode,
     sender: {
-      name: sender.name || 'Lyricalmyrical Books',
-      company: sender.company || 'Lyricalmyrical Books',
-      contactPhone: sender.phone || '4165550199',
+      name: ph(sender.name, 'Lyricalmyrical Books'),
+      company: sender.company || ph(sender.name, 'Lyricalmyrical Books'),
+      contactPhone: ph(sender.phone, '4165550199'),
       addressDetails: {
-        addressLine1: sender.address1 || '123 Main St',
-        city: sender.city || 'Toronto',
+        addressLine1: ph(sender.address1, '123 Main St'),
+        city: ph(sender.city, 'Toronto'),
         provState: cleanSenderState,
         postalZipCode: cleanOriginZip
       }
@@ -1715,7 +1724,6 @@ export function buildNonContractShipmentJson({
     destination: {
       name: destination.name || 'Customer',
       company: destination.company || '',
-      clientVoiceNumber: destination.phone || '5555555555',
       addressDetails: {
         addressLine1: destination.address1 || '',
         city: destination.city || '',
@@ -1740,6 +1748,12 @@ export function buildNonContractShipmentJson({
       customerRef1: orderNum || 'BOOK-ORDER'
     }
   };
+
+  // Canada Post treats an empty clientVoiceNumber as a malformed value rather
+  // than an absent one, so the key is only added when there is a number to put
+  // in it (or, while rehearsing, the stand-in).
+  const destPhone = ph(destination.phone, '5555555555');
+  if (destPhone) deliverySpec.destination.clientVoiceNumber = destPhone;
 
   if (sender.address2) deliverySpec.sender.addressDetails.addressLine2 = sender.address2;
   if (destination.address2) deliverySpec.destination.addressDetails.addressLine2 = destination.address2;
@@ -1901,13 +1915,44 @@ export async function buyCanadaPostLabel({
     parcel,
     orderNum,
     customs,
-    declarationId
+    declarationId,
+    allowPlaceholders: !!isTest
   });
 
   // Confirm the shipment will be billed to a real, correctly-formatted account before spending money.
   const audit = validateCanadaPostAccount({ apiKey, apiSecret, customerNumber, isTest });
   if (!audit.ok) {
     throw new Error(audit.errors.join(' '));
+  }
+
+  // The sender fields fall back to a worked example ("123 Main St, Toronto"),
+  // which is fine while rehearsing the screen and quietly destructive once the
+  // postage is real: an undeliverable parcel is returned to an address that does
+  // not exist. So the substitution is confined to test mode, and a live purchase
+  // is refused here — before the network call — rather than printed and posted.
+  if (!isTest) {
+    const missing = missingSenderFields(sender);
+    if (missing.length) {
+      throw new Error(
+        `Your own ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} missing from the Sender panel. ` +
+        'A live label needs a real return address, so no label was bought.'
+      );
+    }
+    if (senderAddressIsPlaceholder(sender)) {
+      throw new Error(
+        'The return address is still the example one (123 Main St, Toronto). ' +
+        'Put your real address in the Sender panel before buying a live label — nothing was bought.'
+      );
+    }
+    // Canada Post requires a sender contact number. Without the stand-in this
+    // would go out empty and come back as a schema error that reads like an
+    // address fault, so name the real cause here instead.
+    if (!String(sender.phone ?? '').trim()) {
+      throw new Error(
+        'Your phone number is missing from the Sender panel, and Canada Post needs a sender contact number ' +
+        'on every shipment. No label was bought.'
+      );
+    }
   }
 
   const customerId = audit.customerNumber || normalizeCustomerNumber(DEFAULT_CP_CUSTOMER_NUMBER);
