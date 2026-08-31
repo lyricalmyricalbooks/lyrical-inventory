@@ -17,3 +17,6 @@
 ## 2025-02-24 - Replace chained array combinations in rendering filters
 **Learning:** In functions that filter collections on UI state changes (like `_tcApplyLedgerFilter`), chained methods like `.filter().some()` create multiple intermediate arrays and add significant GC overhead (O(N) allocations) on every re-render.
 **Action:** Collapse complex chained filtering logic into a single imperative loop using early `continue` statements to prevent intermediate array allocations and improve UI responsiveness.
+## 2025-02-28 - Loop Fusion in POS Cart Evaluation
+**Learning:** In the POS cart evaluation (`posGenerateSaleQR` and `posCheckout`), chaining `.some()` to check for missing FX rates and `.reduce()` to calculate the total sum creates multiple O(N) array traversals. Fusing these checks into a single imperative loop eliminates redundant iterations and improves performance for larger cart sizes.
+**Action:** When evaluating an array for a condition and simultaneously accumulating a sum, combine them into a single imperative loop instead of chaining array methods.
