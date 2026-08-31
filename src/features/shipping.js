@@ -3616,6 +3616,36 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
     </div>
   `;
 
+  // Canada Post returns an empty list for a route the account has no agreement
+  // on, and separately for a parcel no service can carry. Those need different
+  // answers, and "no services found" answers neither.
+  const usedRetailFallback = (quotes || []).some(q => q.commercialUnavailable);
+  const isUsBound = String(stCountryCode || '').toUpperCase() === 'US';
+
+  const retailNote = usedRetailFallback ? `
+    <div class="cp-rate-note">
+      <strong>Showing Canada Post's published retail prices.</strong>
+      Your account <span class="tnum">${escapeHtml(audit.customerNumber || '')}</span> has no negotiated contract rates for
+      ${escapeHtml(stCountryCode || 'this destination')}, so Canada Post returned nothing for the commercial request and these
+      counter prices were fetched instead. They are real, live prices you can buy at — a contract with Canada Post
+      covering this route would make them cheaper.
+    </div>
+  ` : '';
+
+  const emptyStateHtml = isOffline
+    ? 'No direct Canada Post services found for this package and route.'
+    : `
+      <strong>Canada Post returned no services for this parcel.</strong>
+      <div style="margin-top:6px;line-height:1.55;">
+        The connection worked — Canada Post simply offered nothing for this combination. Usually one of:
+        <ul style="margin:6px 0 0;padding-left:18px;">
+          <li>The parcel's weight or size is outside every service${isUsBound ? ' for United States delivery' : ''}.</li>
+          ${isUsBound ? '<li>Canada Post has periodically paused United States shipping while U.S. customs rules change. Shippo can still carry these orders.</li>' : ''}
+          <li>This account is not set up to ship to ${escapeHtml(stCountryCode || 'this destination')}.</li>
+        </ul>
+      </div>
+    `;
+
   const rateRows = (quotes || []).map(q => `
     <div class="cp-rate-row">
       <div style="flex:1;min-width:180px;">
@@ -3661,7 +3691,8 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
     ${accountBanner}
     ${blockedReason ? `<div class="cp-buy-blocked" role="status">🔒 <span>${escapeHtml(blockedReason)}</span></div>` : ''}
     <div class="cp-rates-list">
-      ${rateRows || '<div style="font-size:12px;color:var(--text3);padding:12px 0;text-align:center;">No direct Canada Post services found for this package and route.</div>'}
+      ${retailNote}
+      ${rateRows || `<div class="cp-rate-empty">${emptyStateHtml}</div>`}
     </div>
     ${errorNote ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;">Note: ${escapeHtml(errorNote)}</div>` : ''}
     <div id="cp-purchased-label-panel" style="display:none;"></div>
