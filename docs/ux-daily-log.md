@@ -72,6 +72,7 @@ did both is `visual` only if a screenshot with the words blurred out would show 
 | 2026-08-29 | visual | Financials | Fixed an unreadable "missing receipts" tag on the expense breakdown table | #655 |
 | 2026-08-29 | visual | Header — book switcher | Gave the book switcher a visible focus ring and made its menu keyboard-usable | #664 |
 | 2026-08-30 | visual | Order History | Fixed the sale-channel tags so they still show their colour tint in dark mode | #673 |
+| 2026-08-31 | visual | Tax Centre — Receipts Vault | Made the Overview/Gallery view switcher actually show which view you're on | TBD |
 
 ---
 
