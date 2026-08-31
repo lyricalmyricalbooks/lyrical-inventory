@@ -193,25 +193,39 @@ export async function persistManualShippingLink(expense, orderNumber, persist) {
 
 export function linkedShippingSummary(order = {}, expenses = [], orderRateToBase = 1) {
   const orderNumber = normalizeShippingOrderNumber(order.num || order.orderNum);
-  const linked = orderNumber ? expenses.filter(expense =>
-    expense.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(expense.shippingOrderNumber) === orderNumber
-  ) : [];
+
+  let linkedCount = 0;
+  let hasMissingFx = false;
+  let postageBaseAccumulator = 0;
+
+  if (orderNumber) {
+    for (const expense of expenses) {
+      if (expense.shippingMatchStatus === 'matched' && normalizeShippingOrderNumber(expense.shippingOrderNumber) === orderNumber) {
+        linkedCount++;
+        if (expense.baseAmount == null || expense.fxMissing) {
+          hasMissingFx = true;
+        } else if (!hasMissingFx) {
+          postageBaseAccumulator = roundCents(postageBaseAccumulator + roundCents(Number(expense.baseAmount) || 0));
+        }
+      }
+    }
+  }
+
   const customerPaid = roundCents(Number(order.shippingPaid) || 0);
   const rate = Number(orderRateToBase);
   const customerBase = Number.isFinite(rate) && rate > 0 ? roundCents(customerPaid * rate) : null;
-  if (!linked.length) return { customerPaid, customerBase, postageBase: null, marginBase: null, linkedCount: 0 };
-  if (linked.some(expense => expense.baseAmount == null || expense.fxMissing)) {
-    return { customerPaid, customerBase, postageBase: null, marginBase: null, linkedCount: linked.length };
+
+  if (linkedCount === 0) return { customerPaid, customerBase, postageBase: null, marginBase: null, linkedCount: 0 };
+  if (hasMissingFx) {
+    return { customerPaid, customerBase, postageBase: null, marginBase: null, linkedCount };
   }
-  const postageBase = linked.reduce(
-    (sum, expense) => roundCents(sum + roundCents(Number(expense.baseAmount) || 0)),
-    0,
-  );
+
+  const postageBase = postageBaseAccumulator;
   return {
     customerPaid,
     customerBase,
     postageBase,
     marginBase: customerBase == null ? null : roundCents(customerBase - postageBase),
-    linkedCount: linked.length,
+    linkedCount,
   };
 }
