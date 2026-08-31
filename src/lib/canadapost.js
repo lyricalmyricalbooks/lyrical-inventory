@@ -117,26 +117,23 @@ export function buildRateScenarioJson({
 
   let destJson = {};
   if (dest === 'CA') {
-    const pCode = cleanPostalCode(destPostalOrZip) || 'V6B2W9';
-    destJson = { domestic: { postalCode: pCode, 'postal-code': pCode } };
+    destJson = { domestic: { postalCode: cleanPostalCode(destPostalOrZip) || 'V6B2W9' } };
   } else if (dest === 'US') {
-    const zCode = String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210';
-    destJson = { unitedStates: { zipCode: zCode, 'zip-code': zCode }, 'united-states': { zipCode: zCode, 'zip-code': zCode } };
+    destJson = { unitedStates: { zipCode: String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210' } };
   } else {
-    destJson = { international: { countryCode: dest, 'country-code': dest } };
+    destJson = { international: { countryCode: dest } };
   }
 
-  const dims = {
-    length: Number(length.toFixed(1)),
-    width: Number(width.toFixed(1)),
-    height: Number(height.toFixed(1))
-  };
-
   const payload = {
-    parcelCharacteristics: { weight: Number(weight.toFixed(3)), dimensions: dims },
-    'parcel-characteristics': { weight: Number(weight.toFixed(3)), dimensions: dims },
+    parcelCharacteristics: {
+      weight: Number(weight.toFixed(3)),
+      dimensions: {
+        length: Number(length.toFixed(1)),
+        width: Number(width.toFixed(1)),
+        height: Number(height.toFixed(1))
+      }
+    },
     originPostalCode: origin,
-    'origin-postal-code': origin,
     destination: destJson
   };
 
