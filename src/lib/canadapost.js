@@ -117,23 +117,26 @@ export function buildRateScenarioJson({
 
   let destJson = {};
   if (dest === 'CA') {
-    destJson = { domestic: { postalCode: cleanPostalCode(destPostalOrZip) || 'V6B2W9' } };
+    const pCode = cleanPostalCode(destPostalOrZip) || 'V6B2W9';
+    destJson = { domestic: { postalCode: pCode, 'postal-code': pCode } };
   } else if (dest === 'US') {
-    destJson = { unitedStates: { zipCode: String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210' } };
+    const zCode = String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210';
+    destJson = { unitedStates: { zipCode: zCode, 'zip-code': zCode }, 'united-states': { zipCode: zCode, 'zip-code': zCode } };
   } else {
-    destJson = { international: { countryCode: dest } };
+    destJson = { international: { countryCode: dest, 'country-code': dest } };
   }
 
+  const dims = {
+    length: Number(length.toFixed(1)),
+    width: Number(width.toFixed(1)),
+    height: Number(height.toFixed(1))
+  };
+
   const payload = {
-    parcelCharacteristics: {
-      weight: Number(weight.toFixed(3)),
-      dimensions: {
-        length: Number(length.toFixed(1)),
-        width: Number(width.toFixed(1)),
-        height: Number(height.toFixed(1))
-      }
-    },
+    parcelCharacteristics: { weight: Number(weight.toFixed(3)), dimensions: dims },
+    'parcel-characteristics': { weight: Number(weight.toFixed(3)), dimensions: dims },
     originPostalCode: origin,
+    'origin-postal-code': origin,
     destination: destJson
   };
 
@@ -178,26 +181,29 @@ export function parseCanadaPostPriceQuotes(jsonText) {
   }
 
   const quotes = [];
-  const priceQuotes = data.priceQuotes?.priceQuote || [];
+  const rootQuotes = data.priceQuotes || data['price-quotes'] || {};
+  const priceQuotes = rootQuotes.priceQuote || rootQuotes['price-quote'] || [];
   const quoteArray = Array.isArray(priceQuotes) ? priceQuotes : [priceQuotes];
 
   for (const quote of quoteArray) {
     if (!quote) continue;
-    const serviceCode = quote.serviceCode || '';
-    const serviceName = quote.serviceName || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
+    const serviceCode = quote.serviceCode || quote['service-code'] || '';
+    const serviceName = quote.serviceName || quote['service-name'] || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
 
-    const basePrice = parseFloat(quote.priceDetails?.base || 0);
-    const duePrice = parseFloat(quote.priceDetails?.due || basePrice);
+    const priceDetails = quote.priceDetails || quote['price-details'] || {};
+    const basePrice = parseFloat(priceDetails.base || 0);
+    const duePrice = parseFloat(priceDetails.due || basePrice);
     
     let gstPrice = 0, pstPrice = 0, hstPrice = 0;
-    const taxesObj = quote.priceDetails?.taxes || {};
+    const taxesObj = priceDetails.taxes || {};
     gstPrice = parseFloat(taxesObj.gst || 0);
     pstPrice = parseFloat(taxesObj.pst || 0);
     hstPrice = parseFloat(taxesObj.hst || 0);
     const totalTaxes = Math.round((gstPrice + pstPrice + hstPrice) * 100) / 100;
 
-    const transitDays = quote.serviceStandard?.expectedTransitTime;
-    const deliveryDate = quote.serviceStandard?.expectedDeliveryDate || null;
+    const serviceStandard = quote.serviceStandard || quote['service-standard'] || {};
+    const transitDays = serviceStandard.expectedTransitTime || serviceStandard['expected-transit-time'];
+    const deliveryDate = serviceStandard.expectedDeliveryDate || serviceStandard['expected-delivery-date'] || null;
 
     quotes.push({
       serviceCode,
