@@ -92,6 +92,7 @@ import {
   linkedShippingSummary,
   normalizeShippingOrderNumber,
   persistManualShippingLink,
+  reconcileShippingExpense,
   stageShippoExpenseEnrichment,
 } from '../lib/shipping-reconciliation.js';
 import {
@@ -993,6 +994,57 @@ async function saveRecoverWebsiteOrder() {
   renderHist();
   renderTaxCenter();
   showToast(`✓ ${entry.num} added and postage linked`);
+}
+
+/**
+ * Link any stranded postage to an order that has just been added to the ledger.
+ *
+ * When a website order was missing, its paid label sat in the reconciliation
+ * worklist as "unmatched" — there was literally nothing to match it to. The
+ * moment the order exists, that label usually has an unambiguous home: the
+ * order number is in the label's own metadata, or the recipient and date line
+ * up. Rather than making the publisher go back to the worklist and re-link by
+ * hand, this runs the same matcher the import uses, restricted to the one new
+ * order, and links whatever it is confident about.
+ *
+ * Only exact metadata matches and single-candidate recipient matches are taken.
+ * An ambiguous label is left in the worklist for a human, because attaching the
+ * wrong postage to an order quietly misstates that sale's margin.
+ *
+ * Returns the number of labels linked. Never throws: this is a convenience on
+ * top of a save that has already succeeded, and a failure here must not read as
+ * the order failing to save.
+ */
+async function autoLinkPostageForOrder(order) {
+  if (!order || !order.num) return 0;
+  const candidates = (TAX_CENTER.businessExpenses || []).filter(expense =>
+    String(expense?.ref || '').startsWith('shippo:')
+    && expense.shippingMatchStatus !== 'matched'
+    && expense.shippingMatchStatus !== 'dismissed'
+  );
+  if (!candidates.length) return 0;
+
+  let linked = 0;
+  for (const expense of candidates) {
+    const verdict = reconcileShippingExpense({
+      sourceOrderNumber: expense.sourceOrderNumber || expense.shippingOrderNumber,
+      sourceOrderMethod: expense.sourceOrderMethod,
+      recipientEmail: expense.recipientEmail,
+      recipientName: expense.recipientName,
+      recipientPostal: expense.recipientPostal,
+      date: expense.date,
+    }, [order]);
+    const match = verdict.shippingOrderNumber || verdict.shippingSuggestedOrderNumber;
+    if (!match) continue;
+    try {
+      await persistManualShippingLink(expense, match, () => saveTaxCenter({ rethrow: true }));
+      linked++;
+    } catch (error) {
+      console.warn('Could not auto-link postage to ' + order.num, error);
+    }
+  }
+  if (linked) renderShippingReconciliationWorklist();
+  return linked;
 }
 
 async function linkShippingExpense(ref) {
@@ -8086,6 +8138,7 @@ export {
   fetchShippoObject,
   fetchShippoContext,
   renderShippingReconciliationWorklist,
+  autoLinkPostageForOrder,
   closeShippingReconciliation,
   openShippingReconciliation,
   clearShippingReconciliationList,
