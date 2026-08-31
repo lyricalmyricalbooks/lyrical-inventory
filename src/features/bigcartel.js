@@ -22,27 +22,41 @@ import {
   _reconSession,
   applyOne,
   classifyStripePayment,
+  commitRecoveredWebsiteOrder,
   escapeHTML,
   getReconMemory,
+  getScanMemory,
   renderReconcile,
   saveReconMemory,
+  saveScanMemory,
+  scheduleRender,
   sheetsUrl,
   showToast,
   states,
   switchTab,
   syncToSheets,
 } from '../main.js';
-import { openM, closeM } from '../lib/modal.js';
+import { openM, closeM, confirmDialog } from '../lib/modal.js';
 import {
   _shippoDestMasterList,
+  autoLinkPostageForOrder,
   getFallbackShippingPhone,
+  getShippingReconciliationOrders,
   renderShippingAnalysisHub,
   shippingPurchaseRowPayload,
 } from './shipping.js';
 import { escapeHtml } from '../lib/html.js';
 import { resolveCountryCode } from '../lib/countries.js';
-import { getBookCurrencyCode } from '../lib/money.js';
+import { fmt, getBookCurrencyCode } from '../lib/money.js';
 import { normalizeShippingOrderNumber } from '../lib/shipping-reconciliation.js';
+import {
+  bigCartelOrderNumber,
+  buildBigCartelOrderEntry,
+  describeGapSummary,
+  findLedgerGaps,
+  findRecoveredOrderConflicts,
+  sameOrderNumber,
+} from '../lib/bigcartel-ledger-gap.js';
 
 function reconcileApplyBigCartel(idSafe) {
   const p = _reconFindPayment(idSafe);
@@ -260,6 +274,12 @@ async function renderBigCartelTab() {
       renderBigCartelProducts(bigCartelData.products);
       renderBigCartelOrders(bigCartelData.orders);
     }
+    // Paint whatever the last check found straight away, then refresh it in the
+    // background. Opening this tab is the moment the publisher is asking "what
+    // does the storefront say?", so a stale answer now beats a blank panel.
+    renderBigCartelLedgerGaps();
+    renderBigCartelGapBadge();
+    autoCheckBigCartelLedgerGaps();
   } else {
     $('bc-dashboard-content').style.display = 'none';
   }
@@ -882,6 +902,24 @@ function getCachedBigCartelOrder(orderId) {
     || normalizeShippingOrderNumber(o.id) === key) || null;
 }
 
+/**
+ * "Is this sale in my ledger?" — the one thing the orders table never said.
+ *
+ * Read off the last gap check rather than recomputed per row, so the table stays
+ * cheap; when no check has run yet the badge is omitted entirely rather than
+ * claiming an order is fine on no evidence.
+ */
+function ledgerBadgeHtml(order) {
+  if (!_bcGapResult) return '';
+  const num = bigCartelOrderNumber(order);
+  if (!num) return '';
+  if (isCancelledStatus(order)) return '';
+  const missing = (_bcGapResult.missing || []).some(gap => sameOrderNumber(gap.num, num));
+  return missing
+    ? '<br><span class="bc-match-pill unmatched" title="This sale has never been recorded — no stock was deducted">⚠️ Not in ledger</span>'
+    : '<br><span class="bc-match-pill matched" title="Recorded in your ledger">✓ In ledger</span>';
+}
+
 function renderBigCartelOrders(orders, included = []) {
   const list = $('bc-orders-list');
   list.innerHTML = '';
@@ -909,6 +947,11 @@ function renderBigCartelOrders(orders, included = []) {
     } else {
       matchPillHtml = `<br><span class="bc-match-pill unmatched" title="Product is not linked to catalog book">⚠️ Unmatched</span>`;
     }
+
+    // Whether this sale is in the ledger at all — the fact the table never
+    // showed. Buying a label for an order that was never recorded is how a sale
+    // ends up with postage, a customer and no order behind it.
+    matchPillHtml += ledgerBadgeHtml(o);
 
     const itemsHtml = extractBigCartelOrderItems(o, included) + matchPillHtml;
 
@@ -1154,22 +1197,541 @@ async function hydrateShippingDestinationPhone(orderId) {
   }
 }
 
+// ── ORDERS THE LEDGER NEVER RECEIVED ────────────────────────────────────
+//
+// The Gmail scan is a lossy intake path: a confirmation email can be filtered,
+// deleted, or simply older than the scan window, and when it is, the sale exists
+// nowhere in this app. No history row, no stock deduction, no destination for a
+// label to link to. The storefront knew about it the whole time — this section
+// is the comparison that turns that knowledge into a fix.
+//
+// Everything here is a thin shell around src/lib/bigcartel-ledger-gap.js, which
+// holds the rules, and around commitRecoveredWebsiteOrder() in main.js, which
+// already owns writing a website order to the ledger. No new ledger-mutation
+// code lives here on purpose.
+
+/** Storefront statuses that are not owed a ledger row. Mirrors the pure module's rule. */
+function isCancelledStatus(order) {
+  const status = String(order?.attributes?.status || '').trim().toLowerCase();
+  return status === 'cancelled' || status === 'canceled' || status === 'voided' || status === 'abandoned';
+}
+
+const BC_GAP_CACHE_KEY = 'lm-bc-gap-cache';
+const BC_GAP_DISMISSED_KEY = 'lm-bc-gap-dismissed';
+const BC_GAP_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+let _bcGapResult = null;
+let _bcGapConflicts = { renumber: [], duplicate: [] };
+let _bcGapChecking = false;
+
+function readBcGapDismissed() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BC_GAP_DISMISSED_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) { return []; }
+}
+
+function writeBcGapDismissed(nums) {
+  try { localStorage.setItem(BC_GAP_DISMISSED_KEY, JSON.stringify(nums)); } catch (e) { /* storage full or blocked */ }
+}
+
+function readBcGapCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BC_GAP_CACHE_KEY) || 'null');
+    if (!raw || !raw.checkedAt) return null;
+    return raw;
+  } catch (e) { return null; }
+}
+
+function writeBcGapCache(payload) {
+  try { localStorage.setItem(BC_GAP_CACHE_KEY, JSON.stringify(payload)); } catch (e) { /* storage full or blocked */ }
+}
+
+/**
+ * Every order number the app already accounts for.
+ *
+ * getShippingReconciliationOrders() already unions applied history across all
+ * books with the not-yet-applied Gmail queue, which is exactly the set that
+ * matters. The scan memory's applied list is added on top: it survives a book
+ * being removed from view and records orders the publisher chose to record
+ * without a history row surviving, so leaving it out would offer to add an
+ * order for the second time.
+ */
+function bigCartelLedgerNumbers() {
+  const nums = new Set();
+  getShippingReconciliationOrders().forEach(order => {
+    const num = normalizeShippingOrderNumber(order.num || order.orderNum);
+    if (num) nums.add(num);
+  });
+  const mem = getScanMemory();
+  (mem.appliedNums || []).forEach(value => {
+    const num = normalizeShippingOrderNumber(value);
+    if (num) nums.add(num);
+  });
+  return Array.from(nums);
+}
+
+/** Every website history row across every book, for the placeholder repair scan. */
+function allWebsiteLedgerEntries() {
+  const entries = [];
+  Object.values(states).forEach(state => {
+    (state?.hist || []).forEach(entry => {
+      if (entry && entry.chan === 'Website') entries.push(entry);
+    });
+  });
+  return entries;
+}
+
+/** Resolve the connected store once, so both the gap check and the shipping sync can use it. */
+async function ensureBigCartelStore() {
+  if (bigCartelData.store) return bigCartelData.store;
+  const config = await loadBigCartelConfig();
+  const accountsRes = await fetchBigCartel('');
+  if (accountsRes.data && accountsRes.data.length > 0) {
+    bigCartelData.store = accountsRes.data.find(acc => acc.attributes.subdomain === config.subdomain) || accountsRes.data[0];
+  }
+  if (!bigCartelData.store) throw new Error('Big Cartel store info not found.');
+  return bigCartelData.store;
+}
+
+function bigCartelConfigured(config) {
+  return !!(config && config.subdomain && config.username && config.password);
+}
+
+/**
+ * Compare the storefront's orders against the ledger.
+ *
+ * `silent` is for the automatic check that runs when the app opens: it must
+ * never interrupt with a toast or leave a spinner behind if the store is not
+ * configured or the network is down. The button passes silent:false and gets
+ * the full reporting.
+ */
+async function checkBigCartelLedgerGaps({ silent = false } = {}) {
+  if (_bcGapChecking) return _bcGapResult;
+  const config = await loadBigCartelConfig();
+  if (!bigCartelConfigured(config)) {
+    if (!silent) showToast('⚠️ Big Cartel is not configured. Add your credentials first.', 'warn');
+    return null;
+  }
+  if (!sheetsUrl) {
+    if (!silent) showToast('Connect Google Sheets first — it proxies the Big Cartel API.', 'warn');
+    return null;
+  }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    if (!silent) showToast('You are offline — showing the last check.', 'warn');
+    return _bcGapResult;
+  }
+
+  _bcGapChecking = true;
+  const btn = $('bc-gap-check-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  try {
+    const store = await ensureBigCartelStore();
+    const ordersRes = await fetchAllBigCartelOrders(store.id);
+    const bcOrders = ordersRes.data || [];
+    const included = ordersRes.included || [];
+    bigCartelData.orders = bcOrders;
+    cacheBigCartelOrders(bcOrders, included);
+
+    _bcGapResult = findLedgerGaps(bcOrders, included, {
+      ledgerNumbers: bigCartelLedgerNumbers(),
+      books: BOOKS,
+      dismissedNums: readBcGapDismissed(),
+    });
+    _bcGapConflicts = findRecoveredOrderConflicts(bcOrders, allWebsiteLedgerEntries());
+    writeBcGapCache({ checkedAt: Date.now(), result: _bcGapResult, conflicts: _bcGapConflicts });
+
+    renderBigCartelLedgerGaps();
+    renderBigCartelGapBadge();
+    if (!silent) {
+      const n = _bcGapResult.missing.length;
+      showToast(n
+        ? `⚠️ ${n} Big Cartel order${n === 1 ? '' : 's'} missing from your ledger`
+        : '✓ Every Big Cartel order is in your ledger', n ? 'warn' : 'ok');
+    }
+    return _bcGapResult;
+  } catch (e) {
+    console.error('Big Cartel ledger gap check failed:', e);
+    if (!silent) showToast('Could not check Big Cartel: ' + e.message, 'err');
+    return null;
+  } finally {
+    _bcGapChecking = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Check for missing orders'; }
+  }
+}
+
+/**
+ * The automatic check, run once when the app has finished loading.
+ *
+ * Served from cache when a check ran recently, so switching tabs never costs a
+ * round trip, and always silent — its whole job is to put a number on the tab
+ * badge before anyone thinks to look.
+ */
+async function autoCheckBigCartelLedgerGaps() {
+  const cached = readBcGapCache();
+  if (cached?.result && (Date.now() - cached.checkedAt) < BC_GAP_MAX_AGE_MS) {
+    // Restored whole, counts included, so the summary line still reports what
+    // was actually checked rather than re-deriving it from the missing list.
+    _bcGapResult = cached.result;
+    _bcGapConflicts = cached.conflicts || { renumber: [], duplicate: [] };
+    renderBigCartelLedgerGaps();
+    renderBigCartelGapBadge();
+    return;
+  }
+  await checkBigCartelLedgerGaps({ silent: true });
+}
+
+/** The count badge on the Big Cartel tab button and the Website orders strip. */
+function renderBigCartelGapBadge() {
+  const total = (_bcGapResult?.missing?.length || 0)
+    + (_bcGapConflicts?.renumber?.length || 0)
+    + (_bcGapConflicts?.duplicate?.length || 0);
+  document.querySelectorAll('.bc-gap-badge').forEach(node => {
+    node.textContent = total ? String(total) : '';
+    node.hidden = !total;
+  });
+  const strip = $('web-bc-gap-strip');
+  if (strip) {
+    const missing = _bcGapResult?.missing?.length || 0;
+    strip.hidden = !missing;
+    if (missing) {
+      const label = $('web-bc-gap-strip-text');
+      if (label) {
+        label.textContent = `${missing} Big Cartel order${missing === 1 ? '' : 's'} ${missing === 1 ? 'is' : 'are'} not in your ledger. Stock has not been deducted for ${missing === 1 ? 'it' : 'them'}.`;
+      }
+    }
+  }
+}
+
+/** The catalogue as a list. BOOKS is already across the seam; BOOK_LIST would be a second name for the same data. */
+function catalogBooks() {
+  return Object.values(BOOKS).filter(book => book && book.id);
+}
+
+function gapBookOptions(selectedId) {
+  return catalogBooks().map(book =>
+    `<option value="${escapeHtml(book.id)}"${book.id === selectedId ? ' selected' : ''}>${escapeHtml(book.title)}</option>`
+  ).join('');
+}
+
+function renderBigCartelLedgerGaps() {
+  const panel = $('bc-gap-panel');
+  if (!panel) return;
+  const summary = $('bc-gap-summary');
+  const list = $('bc-gap-list');
+  const repairs = $('bc-gap-repairs');
+  if (summary) summary.textContent = _bcGapResult ? describeGapSummary(_bcGapResult) : 'Not checked yet.';
+
+  const missing = _bcGapResult?.missing || [];
+  if (list) {
+    list.innerHTML = missing.length
+      ? missing.map(gapRowHtml).join('')
+      : `<div class="empty-state" style="padding:1.5rem;">
+           <div class="e-icon">✓</div>
+           Every Big Cartel order is recorded in your ledger.
+           <div style="font-size:11px;color:var(--text3);margin-top:6px;">Nothing to add. Run the check again after your next sale.</div>
+         </div>`;
+  }
+
+  if (repairs) {
+    const rows = [
+      ..._bcGapConflicts.renumber.map(c => repairRowHtml(c, 'renumber')),
+      ..._bcGapConflicts.duplicate.map(c => repairRowHtml(c, 'duplicate')),
+    ];
+    repairs.innerHTML = rows.join('');
+    const wrap = $('bc-gap-repairs-wrap');
+    if (wrap) wrap.hidden = !rows.length;
+  }
+}
+
+function gapRowHtml(gap) {
+  const idSafe = escapeHtml(gap.orderId || gap.num);
+  const items = gap.lines.length
+    ? gap.lines.map(line => `${escapeHtml(line.title)} ×${line.qty}`).join(', ')
+    : 'No items listed by the storefront';
+  // A book resolved from the price rather than the product name is a guess, and
+  // a guess that moves stock has to say so before it is accepted.
+  const guess = gap.confidence === 'price'
+    ? '<span class="pill amber" style="font-size:10px;">Book guessed from price — check it</span>'
+    : (gap.confidence === 'none' ? '<span class="pill red" style="font-size:10px;">Pick the book</span>' : '');
+  return `<div class="bc-gap-row" data-order="${idSafe}">
+    <div class="bc-gap-copy">
+      <strong>${escapeHtml(gap.num)}</strong>
+      <span>${escapeHtml(gap.date || 'Date unknown')} · ${escapeHtml(gap.customer || gap.email || 'Customer')}</span>
+      <small>${escapeHtml(items)} · ${escapeHtml(fmt(gap.totalPaid || 0, 'CAD'))} paid</small>
+      ${guess}
+    </div>
+    <div class="bc-gap-decision">
+      <label for="bc-gap-book-${idSafe}">Book</label>
+      <select id="bc-gap-book-${idSafe}" aria-label="Book sold on order ${escapeHtml(gap.num)}">${gapBookOptions(gap.bookId || catalogBooks()[0]?.id)}</select>
+      <label for="bc-gap-qty-${idSafe}">Copies</label>
+      <input id="bc-gap-qty-${idSafe}" type="number" min="1" step="1" value="${gap.qty || 1}" aria-label="Copies sold on order ${escapeHtml(gap.num)}">
+      <div class="bc-gap-actions">
+        <button class="btn sm" type="button" data-order="${idSafe}" onclick="dismissBigCartelGap(this.dataset.order)">Not a sale</button>
+        <button class="btn gold sm" type="button" data-order="${idSafe}" onclick="addBigCartelOrderToLedger(this.dataset.order)">Add to ledger</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function repairRowHtml(conflict, kind) {
+  const isDuplicate = kind === 'duplicate';
+  return `<div class="bc-gap-row bc-gap-repair" data-placeholder="${escapeHtml(conflict.placeholderNum)}">
+    <div class="bc-gap-copy">
+      <strong>${escapeHtml(conflict.placeholderNum)} → ${escapeHtml(conflict.realNum)}</strong>
+      <span>${escapeHtml(conflict.customer || 'Customer')} · ${escapeHtml(conflict.date || 'Date unknown')}</span>
+      <small>${isDuplicate
+        ? 'This sale is recorded twice — once under a placeholder number and once properly. Stock was deducted twice.'
+        : 'Recorded under a placeholder number. Renaming it to the real order number links it to the storefront and stops a second copy being added later.'}</small>
+    </div>
+    <div class="bc-gap-decision">
+      <div class="bc-gap-actions">
+        ${isDuplicate
+          ? `<button class="btn danger-btn sm" type="button" data-placeholder="${escapeHtml(conflict.placeholderNum)}" onclick="voidPlaceholderDuplicate(this.dataset.placeholder)">Void the duplicate</button>`
+          : `<button class="btn gold sm" type="button" data-placeholder="${escapeHtml(conflict.placeholderNum)}" data-real="${escapeHtml(conflict.realNum)}" onclick="renumberPlaceholderOrder(this.dataset.placeholder, this.dataset.real)">Use the real order number</button>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+function findGap(orderId) {
+  return (_bcGapResult?.missing || []).find(gap =>
+    String(gap.orderId) === String(orderId) || sameOrderNumber(gap.num, orderId)
+  );
+}
+
+/**
+ * Add one storefront order to the ledger.
+ *
+ * The write itself is commitRecoveredWebsiteOrder() in main.js — the same
+ * function the shipping worklist's recovery uses, which already handles the
+ * stock decrement, the channel stats, the history row, the applied-numbers
+ * memory that stops a later Gmail scan double-applying, the Sheets rows, the
+ * low-stock warning and the save. Only the entry differs, and that is built by
+ * the pure module in the shape applyOne() writes.
+ */
+async function addBigCartelOrderToLedger(orderId) {
+  const gap = findGap(orderId);
+  if (!gap) { showToast('That order is no longer in the list — run the check again', 'warn'); return; }
+  if (!catalogBooks().length) { showToast('Add a book to your catalogue first', 'warn'); return; }
+
+  const idSafe = gap.orderId || gap.num;
+  const bookId = $(`bc-gap-book-${idSafe}`)?.value || gap.bookId;
+  const qty = Math.max(1, parseInt($(`bc-gap-qty-${idSafe}`)?.value || String(gap.qty || 1), 10) || 1);
+  if (!bookId || !BOOKS[bookId]) { showToast('Choose which book was sold', 'warn'); return; }
+
+  // Guard against the review list being stale: another device, or an earlier
+  // click, may have recorded this order since the check ran. Adding it twice is
+  // exactly the failure this feature exists to prevent.
+  if (bigCartelLedgerNumbers().some(num => sameOrderNumber(num, gap.num))) {
+    showToast(`${gap.num} is already in your ledger`, 'warn');
+    _bcGapResult.missing = _bcGapResult.missing.filter(item => item !== gap);
+    renderBigCartelLedgerGaps();
+    renderBigCartelGapBadge();
+    return;
+  }
+
+  const cached = getCachedBigCartelOrder(gap.orderId) || bigCartelData.orders.find(o => String(o.id) === String(gap.orderId));
+  const address = cached ? extractBigCartelAddress(cached, gap.orderId, getBigCartelIncluded()) : {};
+  const price = gap.unitPrice != null && gap.unitPrice > 0
+    ? gap.unitPrice
+    : Number(BOOKS[bookId]?.listPrice || 0);
+
+  let entry;
+  try {
+    entry = commitRecoveredWebsiteOrder(bookId, { qty, price }, ({ stockAfter }) =>
+      buildBigCartelOrderEntry(gap, {
+        bookId, qty, price, stockAfter,
+        address: { ...address, email: gap.email || address.email },
+      }));
+  } catch (error) {
+    console.error('Big Cartel order add failed', error);
+    showToast('Could not add that order. Please try again.', 'err');
+    return;
+  }
+
+  _bcGapResult.missing = _bcGapResult.missing.filter(item => item !== gap);
+  renderBigCartelLedgerGaps();
+  renderBigCartelGapBadge();
+  scheduleRender();
+
+  // The order exists now, so a label that was stranded in the reconciliation
+  // worklist may finally have something to point at. A failure to link is not a
+  // failure to save — the order is in the ledger either way.
+  let linked = 0;
+  try {
+    linked = await autoLinkPostageForOrder(entry);
+  } catch (error) {
+    console.warn('Postage auto-link after Big Cartel add failed', error);
+  }
+  showToast(linked
+    ? `✓ ${entry.num} added and ${linked} label${linked === 1 ? '' : 's'} linked`
+    : `✓ ${entry.num} added to ${BOOKS[bookId].title}`);
+}
+
+/** Set an order aside as "not a sale to record" without pretending it is in the ledger. */
+async function dismissBigCartelGap(orderId) {
+  const gap = findGap(orderId);
+  if (!gap) return;
+  const accepted = await confirmDialog(
+    `Leave ${gap.num} out of your ledger?\n\nIt stays on Big Cartel and no stock is deducted. Use this for test orders or copies you handled another way.`,
+    { title: 'Not a sale to record', okLabel: 'Leave it out' },
+  );
+  if (!accepted) return;
+  const dismissed = readBcGapDismissed();
+  if (!dismissed.includes(gap.num)) dismissed.push(gap.num);
+  writeBcGapDismissed(dismissed);
+  _bcGapResult.missing = _bcGapResult.missing.filter(item => item !== gap);
+  _bcGapResult.skipped = (_bcGapResult.skipped || 0) + 1;
+  renderBigCartelLedgerGaps();
+  renderBigCartelGapBadge();
+  showToast(`${gap.num} left out of the ledger`);
+}
+
+/** Put every set-aside order back in the review list. */
+async function restoreBigCartelGaps() {
+  const dismissed = readBcGapDismissed();
+  if (!dismissed.length) { showToast('Nothing has been set aside', 'warn'); return; }
+  writeBcGapDismissed([]);
+  showToast(`Restored ${dismissed.length} set-aside order${dismissed.length === 1 ? '' : 's'}`);
+  await checkBigCartelLedgerGaps({ silent: false });
+}
+
+function findLedgerEntryByNumber(num) {
+  for (const [bookId, state] of Object.entries(states)) {
+    const entry = (state?.hist || []).find(h => h && h.chan === 'Website' && sameOrderNumber(h.num, num));
+    if (entry) return { bookId, state, entry };
+  }
+  return null;
+}
+
+/**
+ * Give a placeholder row its real storefront order number.
+ *
+ * A `#RECOV-` row is a real sale carrying an invented number, which is what
+ * made this whole situation confusing: the storefront's shipping sync could
+ * never find it, its Google Sheets row was a separate row, and a later Gmail
+ * scan turning up the real confirmation email would have applied the same sale
+ * a second time. Renaming it — number and Sheets id together — collapses the
+ * two identities back into one. The old Sheets row is deleted rather than
+ * orphaned, or the spreadsheet would keep showing the sale twice.
+ */
+async function renumberPlaceholderOrder(placeholderNum, realNum) {
+  const found = findLedgerEntryByNumber(placeholderNum);
+  if (!found) { showToast('That order is no longer in your ledger', 'warn'); return; }
+  if (findLedgerEntryByNumber(realNum)) {
+    showToast(`${realNum} is already in your ledger — this looks like a duplicate instead`, 'warn');
+    return;
+  }
+  const accepted = await confirmDialog(
+    `Rename ${placeholderNum} to ${realNum}?\n\nThis is the same sale. Using the real order number links it to Big Cartel and stops a second copy being added later. Stock is not changed.`,
+    { title: 'Use the real order number', okLabel: 'Rename it' },
+  );
+  if (!accepted) return;
+
+  const { bookId, entry } = found;
+  const book = BOOKS[bookId];
+  const oldSheetsId = entry.sheetsId;
+  const newNum = normalizeShippingOrderNumber(realNum) || realNum;
+
+  entry.num = newNum;
+  entry.sheetsId = 'bc-' + newNum.replace(/^#/, '').replace(/[^A-Za-z0-9-]/g, '');
+  entry.notes = 'Big Cartel';
+  delete entry.recoveredFromPostage;
+  entry.renumberedFrom = placeholderNum;
+
+  // Record the real number as seen, so a Gmail scan that finally turns up the
+  // original confirmation email does not offer this sale as a new order.
+  const mem = getScanMemory();
+  if (!mem.appliedNums) mem.appliedNums = [];
+  if (!mem.appliedNums.includes(newNum)) mem.appliedNums.push(newNum);
+  saveScanMemory(mem);
+
+  if (book) {
+    if (oldSheetsId) {
+      syncToSheets({ action: 'delete', type: 'order', book: book.title, sheetsId: oldSheetsId });
+      syncToSheets({ action: 'delete', type: 'shipping', book: book.title, sheetsId: oldSheetsId + '-shipping' });
+    }
+    syncToSheets({
+      type: 'order', book: book.title, date: entry.date, num: entry.num, chan: 'Website',
+      qty: entry.qty, price: entry.price, total: entry.qty * entry.price, stockAfter: entry.after,
+      notes: entry.notes, sheetsId: entry.sheetsId, currency: getBookCurrencyCode(book),
+    });
+    if (entry.shippingPaid > 0) {
+      syncToSheets(shippingPurchaseRowPayload(book, getBookCurrencyCode(book), entry));
+    }
+  }
+
+  await window.saveState(bookId);
+  _bcGapConflicts.renumber = _bcGapConflicts.renumber.filter(c => c.placeholderNum !== placeholderNum);
+  renderBigCartelLedgerGaps();
+  renderBigCartelGapBadge();
+  scheduleRender();
+  try { await autoLinkPostageForOrder(entry); } catch (e) { console.warn('Postage relink after renumber failed', e); }
+  showToast(`✓ ${placeholderNum} is now ${newNum}`);
+}
+
+/**
+ * Void a placeholder row whose sale is also recorded properly.
+ *
+ * Stock was deducted twice for one sale, so one row has to go. The placeholder
+ * is the one voided — the properly numbered row is the one the storefront, the
+ * spreadsheet and any linked postage already agree on. Voiding rather than
+ * deleting keeps the correction visible in the history.
+ */
+async function voidPlaceholderDuplicate(placeholderNum) {
+  const found = findLedgerEntryByNumber(placeholderNum);
+  if (!found) { showToast('That order is no longer in your ledger', 'warn'); return; }
+  const { bookId, state, entry } = found;
+  const book = BOOKS[bookId];
+  const accepted = await confirmDialog(
+    `Void ${placeholderNum}?\n\nThis sale is recorded twice, so ${entry.qty} cop${entry.qty === 1 ? 'y was' : 'ies were'} taken off your stock twice. Voiding this row puts ${entry.qty === 1 ? 'it' : 'them'} back and leaves the properly numbered order in place.`,
+    { title: 'Void the duplicate', okLabel: 'Void it' },
+  );
+  if (!accepted) return;
+
+  entry.voided = true;
+  entry.voidedReason = `Duplicate of ${placeholderNum === entry.num ? 'the storefront order' : entry.num}`;
+  state.stock = (Number(state.stock) || 0) + (Number(entry.qty) || 0);
+  state.sold = Math.max(0, (Number(state.sold) || 0) - (Number(entry.qty) || 0));
+  state.revenue = Math.max(0, (Number(state.revenue) || 0) - (Number(entry.qty) || 0) * (Number(entry.price) || 0));
+  if (state.chStats && state.chStats['Website']) {
+    const ch = state.chStats['Website'];
+    ch.txns = Math.max(0, ch.txns - 1);
+    ch.units = Math.max(0, ch.units - (Number(entry.qty) || 0));
+    ch.revenue = Math.max(0, ch.revenue - (Number(entry.qty) || 0) * (Number(entry.price) || 0));
+  }
+
+  if (book && entry.sheetsId) {
+    syncToSheets({ action: 'delete', type: 'order', book: book.title, sheetsId: entry.sheetsId });
+    syncToSheets({ action: 'delete', type: 'shipping', book: book.title, sheetsId: entry.sheetsId + '-shipping' });
+  }
+  await window.saveState(bookId);
+  _bcGapConflicts.duplicate = _bcGapConflicts.duplicate.filter(c => c.placeholderNum !== placeholderNum);
+  renderBigCartelLedgerGaps();
+  renderBigCartelGapBadge();
+  scheduleRender();
+  showToast(`✓ ${placeholderNum} voided — ${entry.qty} cop${entry.qty === 1 ? 'y' : 'ies'} back in stock`);
+}
+
 async function syncBigCartelShippingPaid(bcOrders) {
   if (!bcOrders || bcOrders.length === 0) return;
 
   let updateCount = 0;
+  let missingCount = 0;
   const affectedBooks = new Set();
 
   bcOrders.forEach(bcOrder => {
     const bcId = bcOrder.id;
-    const normalizedBcId = normalizeShippingOrderNumber(bcId);
     const shippingPaid = parseFloat(bcOrder.attributes?.shipping_total || 0);
+    let sawLedgerRow = false;
 
     Object.keys(states).forEach(bookId => {
       const s = states[bookId];
       if (s && Array.isArray(s.hist)) {
         s.hist.forEach(h => {
-          if (h && h.chan === 'Website' && normalizeShippingOrderNumber(h.num) === normalizedBcId) {
+          if (h && h.chan === 'Website' && sameOrderNumber(h.num, bcId)) {
+            sawLedgerRow = true;
             if (!h.manualShippingPaid && h.shippingPaid !== shippingPaid) {
               h.shippingPaid = shippingPaid;
               affectedBooks.add(bookId);
@@ -1202,6 +1764,12 @@ async function syncBigCartelShippingPaid(bcOrders) {
         });
       }
     });
+
+    // A storefront order with no ledger row anywhere is a sale this app has
+    // never recorded — no history, no stock deducted. This loop has always been
+    // in a position to notice and always stayed silent, which is exactly how two
+    // orders came to have shipping labels and no order behind them.
+    if (!sawLedgerRow && !isCancelledStatus(bcOrder) && bigCartelOrderNumber(bcOrder)) missingCount++;
   });
 
   if (updateCount > 0) {
@@ -1210,6 +1778,9 @@ async function syncBigCartelShippingPaid(bcOrders) {
     }
     showToast(`✓ Auto-synced ${updateCount} shipping costs from Big Cartel`, 'ok');
     renderShippingAnalysisHub();
+  }
+  if (missingCount > 0) {
+    showToast(`⚠️ ${missingCount} Big Cartel order${missingCount === 1 ? '' : 's'} ${missingCount === 1 ? 'is' : 'are'} not in your ledger — open Big Cartel to add ${missingCount === 1 ? 'it' : 'them'}`, 'warn');
   }
 }
 
@@ -1242,18 +1813,20 @@ async function triggerBigCartelShippingSync() {
     bigCartelData.orders = ordersRes.data || [];
 
     let updateCount = 0;
+    let missingCount = 0;
     const affectedBooks = new Set();
 
     bigCartelData.orders.forEach(bcOrder => {
       const bcId = bcOrder.id;
-      const normalizedBcId = normalizeShippingOrderNumber(bcId);
       const shippingPaid = parseFloat(bcOrder.attributes?.shipping_total || 0);
+      let sawLedgerRow = false;
 
       Object.keys(states).forEach(bookId => {
         const s = states[bookId];
         if (s && Array.isArray(s.hist)) {
           s.hist.forEach(h => {
-            if (h && h.chan === 'Website' && normalizeShippingOrderNumber(h.num) === normalizedBcId) {
+            if (h && h.chan === 'Website' && sameOrderNumber(h.num, bcId)) {
+              sawLedgerRow = true;
               if (!h.manualShippingPaid && h.shippingPaid !== shippingPaid) {
                 h.shippingPaid = shippingPaid;
                 affectedBooks.add(bookId);
@@ -1286,6 +1859,8 @@ async function triggerBigCartelShippingSync() {
           });
         }
       });
+
+      if (!sawLedgerRow && !isCancelledStatus(bcOrder) && bigCartelOrderNumber(bcOrder)) missingCount++;
     });
 
     if (updateCount > 0) {
@@ -1294,8 +1869,15 @@ async function triggerBigCartelShippingSync() {
       }
       showToast(`✓ Synced ${updateCount} shipping costs from Big Cartel`, 'ok');
       renderShippingAnalysisHub();
-    } else {
+    } else if (!missingCount) {
       showToast('✓ Shipping costs are already up to date', 'ok');
+    }
+
+    // Never report "all up to date" over the top of orders that were never
+    // recorded: that reading is what let two sales stay invisible.
+    if (missingCount > 0) {
+      showToast(`⚠️ ${missingCount} Big Cartel order${missingCount === 1 ? '' : 's'} ${missingCount === 1 ? 'is' : 'are'} not in your ledger — open Big Cartel to add ${missingCount === 1 ? 'it' : 'them'}`, 'warn');
+      await checkBigCartelLedgerGaps({ silent: true });
     }
   } catch (e) {
     console.error('Error syncing Big Cartel shipping:', e);
@@ -1308,6 +1890,14 @@ async function triggerBigCartelShippingSync() {
   }
 }
 export {
+  addBigCartelOrderToLedger,
+  autoCheckBigCartelLedgerGaps,
+  checkBigCartelLedgerGaps,
+  dismissBigCartelGap,
+  renderBigCartelLedgerGaps,
+  renumberPlaceholderOrder,
+  restoreBigCartelGaps,
+  voidPlaceholderDuplicate,
   reconcileApplyBigCartel,
   extractBigCartelAddress,
   loadBigCartelConfig,

@@ -14603,3 +14603,234 @@ tr.hist-row:hover {
     transform: none;
   }
 }
+
+/* ── ORDERS THE LEDGER NEVER RECEIVED ─────────────────────────────────────
+   The Big Cartel review queue and the strip that points at it from the Website
+   orders screen.
+
+   Deliberately the same anatomy as the shipping reconciliation worklist above
+   (`.shipping-reconciliation-row`): sunken plate, evidence on the left, the
+   decision on the right, 44px controls. The two screens ask the publisher the
+   same kind of question — "here is something unaccounted for, what is it?" —
+   and answering them should not feel like learning two interfaces. Tokens only;
+   no new colour or spacing values are introduced here.
+
+   The one deviation is the accent bar. A missing order is not a neutral to-do:
+   stock has not been deducted for a sale that happened, so the panel carries the
+   critical inset bar the system already uses for that (`.sys-failed`), rather
+   than a background wash that would read as decoration. */
+.bc-gap-panel {
+  box-shadow: inset 3px 0 0 var(--status-critical);
+}
+
+.bc-gap-panel:not(:has(.bc-gap-row)) {
+  box-shadow: inset 3px 0 0 var(--status-positive);
+}
+
+.bc-gap-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-bottom: var(--space-4);
+}
+
+.bc-gap-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.bc-gap-head-actions .btn {
+  min-height: 44px;
+}
+
+.bc-gap-summary {
+  font-size: var(--text-xs);
+  color: var(--content-muted);
+  line-height: var(--leading-snug);
+  margin-top: 4px;
+  max-width: 62ch;
+}
+
+.bc-gap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bc-gap-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r2);
+  padding: 12px 14px;
+  transition: transform var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.bc-gap-row:hover {
+  border-color: var(--gold-line);
+  box-shadow: var(--elev-hover);
+  transform: translateY(-1px);
+}
+
+.bc-gap-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 260px;
+  gap: 3px;
+}
+
+/* The order number is the identity of the row, and the whole point of this
+   feature is that it is the storefront's real number — so it gets the tabular
+   monospace treatment every other order number in the app has. */
+.bc-gap-copy strong {
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--gold-text);
+}
+
+.bc-gap-copy span {
+  font-size: var(--text-xs);
+  color: var(--content-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bc-gap-copy small {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-snug);
+  color: var(--content-muted);
+  white-space: normal;
+}
+
+.bc-gap-copy .pill {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.bc-gap-decision {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 340px;
+  min-width: 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.bc-gap-row label {
+  font-size: var(--text-3xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--content-muted);
+  flex-shrink: 0;
+}
+
+.bc-gap-row select,
+.bc-gap-row input[type="number"] {
+  height: 44px;
+  padding: 0 10px;
+  font-size: var(--text-xs);
+  font-family: 'DM Mono', monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+  color: var(--content-primary);
+  min-width: 0;
+}
+
+.bc-gap-row select { flex: 1 1 140px; }
+.bc-gap-row input[type="number"] { width: 76px; flex: 0 0 auto; }
+
+.bc-gap-row select:focus,
+.bc-gap-row input[type="number"]:focus {
+  outline: none;
+  border-color: var(--focus-ring-color);
+  box-shadow: var(--focus-ring-halo);
+}
+
+.bc-gap-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bc-gap-actions .btn {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
+/* A repair row is corrective rather than additive — it is fixing a record that
+   already exists — so it takes the neutral bar, keeping the critical accent for
+   the sales that are genuinely still unrecorded. */
+.bc-gap-repair {
+  box-shadow: inset 3px 0 0 var(--status-neutral);
+}
+
+/* The count that appears on the Big Cartel tab and in the sidebar. Hidden by
+   `hidden` when zero rather than rendered empty, so a clean ledger shows no
+   ornament at all. */
+.bc-gap-badge {
+  margin-left: 6px;
+  font-size: var(--text-3xs);
+  padding: 1px 6px;
+  vertical-align: middle;
+}
+
+/* The strip on the Website orders screen. The Gmail scan reports its own status
+   a few lines below this; when the storefront disagrees with it, that has to be
+   visible at the same glance rather than one tab away. */
+.bc-gap-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--status-critical);
+  border-radius: var(--r2);
+  background: var(--status-critical-bg);
+  color: var(--status-critical);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+
+.bc-gap-strip-icon {
+  font-size: var(--text-md);
+  line-height: 1;
+}
+
+.bc-gap-strip .btn {
+  margin-left: auto;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+  .bc-gap-row,
+  .bc-gap-decision,
+  .bc-gap-head { flex-direction: column; align-items: stretch; }
+  .bc-gap-decision { justify-content: stretch; }
+  .bc-gap-actions .btn { flex: 1; justify-content: center; }
+  .bc-gap-strip .btn { margin-left: 0; width: 100%; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-gap-row { transition: none; }
+  .bc-gap-row:hover { transform: none; }
+}
