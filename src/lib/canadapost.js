@@ -106,7 +106,8 @@ export function buildRateScenarioJson({
   widthCm = 15,
   heightCm = 2,
   customerNumber = '',
-  contractId = ''
+  contractId = '',
+  quoteType = 'auto'
 }) {
   const origin = cleanPostalCode(originPostalCode) || 'M4B1B3';
   const dest = String(destCountry || 'CA').toUpperCase().trim();
@@ -137,12 +138,31 @@ export function buildRateScenarioJson({
     destination: destJson
   };
 
-  if (customerNumber) {
+  // Canada Post offers two kinds of quote and they are mutually exclusive:
+  //
+  //   commercial — the account's negotiated rates. Requires a customer number,
+  //                and the account must actually be set up for the route being
+  //                quoted. An account with no US agreement gets an EMPTY list
+  //                back, not an error.
+  //   counter    — published retail rates. Requires that NO customer number or
+  //                contract id be sent at all.
+  //
+  // 'auto' means commercial when a customer number exists, which is the right
+  // first choice; getCanadaPostRates falls back to counter when that comes back
+  // empty. Payload keys are strictly camelCase: the gateway validates with
+  // additionalProperties:false and rejects hyphenated variants with a 400.
+  const resolvedType = quoteType === 'auto'
+    ? (customerNumber ? 'commercial' : 'counter')
+    : quoteType;
+
+  if (resolvedType === 'commercial' && customerNumber) {
     payload.customerNumber = customerNumber.trim();
     payload.quoteType = 'commercial';
     if (contractId) {
       payload.contractId = contractId.trim();
     }
+  } else {
+    payload.quoteType = 'counter';
   }
 
   return JSON.stringify(payload);
@@ -1206,35 +1226,56 @@ export async function getCanadaPostRates({
   contractId = '',
   isTest = false
 }) {
-  const jsonPayload = buildRateScenarioJson({
-    originPostalCode,
-    destCountry,
-    destPostalOrZip,
-    weightKg,
-    lengthCm,
-    widthCm,
-    heightCm,
-    customerNumber,
-    contractId
-  });
-
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
-  // Based on the new Developer Portal, the rating API URL has changed, but we will
-  // assume /rs/ship/price is still properly routed or we use the new host with it.
   const targetEndpoint = `${baseUrl}/prod/devportal-portaildesdeveloppeurs/rating/v1/prices`;
 
-  const result = await executeCanadaPostProxy({
-    targetEndpoint,
-    jsonPayload,
-    apiKey,
-    apiSecret,
-    customerNumber,
-    isTest
-  });
+  const quoteOnce = async (quoteType) => {
+    const jsonPayload = buildRateScenarioJson({
+      originPostalCode,
+      destCountry,
+      destPostalOrZip,
+      weightKg,
+      lengthCm,
+      widthCm,
+      heightCm,
+      customerNumber,
+      contractId,
+      quoteType
+    });
 
-  if (result.rates && Array.isArray(result.rates)) return result.rates;
-  if (result.json) return parseCanadaPostPriceQuotes(result.json);
-  throw new Error('Empty response from Canada Post Rating API');
+    const result = await executeCanadaPostProxy({
+      targetEndpoint,
+      jsonPayload,
+      apiKey,
+      apiSecret,
+      customerNumber,
+      isTest
+    });
+
+    if (result.rates && Array.isArray(result.rates)) return result.rates;
+    if (result.json) return parseCanadaPostPriceQuotes(result.json);
+    throw new Error('Empty response from Canada Post Rating API');
+  };
+
+  // A commercial quote is the right first ask when there is a customer number:
+  // it returns the account's negotiated prices. But Canada Post answers a
+  // commercial request for a route the account has no agreement on with an
+  // EMPTY list and HTTP 200 — no error, no explanation. Read literally that
+  // says "no services exist to the United States", which is not true; it says
+  // this account has no US contract.
+  //
+  // So when commercial comes back empty, ask again for the published retail
+  // rates. Those require the customer number and contract id to be absent
+  // entirely, which is why this is a second request rather than a flag.
+  const wantsCommercial = !!String(customerNumber || '').trim();
+  const first = await quoteOnce(wantsCommercial ? 'commercial' : 'counter');
+
+  if (first.length > 0 || !wantsCommercial) {
+    return first.map(q => ({ ...q, quoteType: wantsCommercial ? 'commercial' : 'counter' }));
+  }
+
+  const retail = await quoteOnce('counter');
+  return retail.map(q => ({ ...q, quoteType: 'counter', commercialUnavailable: true }));
 }
 
 /**
