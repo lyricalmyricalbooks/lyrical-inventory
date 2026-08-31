@@ -10844,15 +10844,19 @@ tr.hist-row:hover {
   flex-wrap: wrap;
 }
 
-.tc-trips-view-toggle {
+.tc-trips-view-toggle,
+.tc-vault-view-switch {
   display: flex;
   background: var(--cream2, #efe9dc);
   border: 1px solid var(--gold-line, rgba(200, 145, 58, 0.3));
   border-radius: 8px;
   padding: 3px;
+  gap: 0;
+  margin-bottom: 1.25rem;
 }
 
-.tc-trips-view-btn {
+.tc-trips-view-btn,
+.tc-vault-view-btn {
   background: transparent;
   border: none;
   color: var(--text2, #4a4540);
@@ -10867,11 +10871,25 @@ tr.hist-row:hover {
   gap: 6px;
 }
 
-.tc-trips-view-btn.active {
+.tc-trips-view-btn.active,
+.tc-vault-view-btn.active {
   background: var(--surface-card);
   color: var(--text, #0e0c0a);
   font-weight: 700;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.tc-trips-view-btn:focus-visible,
+.tc-vault-view-btn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-trips-view-btn,
+  .tc-vault-view-btn {
+    transition: none;
+  }
 }
 
 /* Expense Categorization table ("Ledger Plus") — % of total column with a
