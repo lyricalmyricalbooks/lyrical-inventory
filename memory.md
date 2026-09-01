@@ -69,6 +69,15 @@ The app stores global configurations via Firebase settings and local storage:
    - Payments without direct matches are placed in the Reconciliation list.
    - Publishers manually select the corresponding book, adjust quantities, and record the sale (deducting stock and documenting earnings) or dismiss it.
 
+### Big Cartel ↔ Ledger Reconciliation
+- **Problem it solves**: the Gmail scan (`fetchOrders` → `applyOne`) was the only intake path for website orders. An order whose confirmation email was filtered, deleted, or older than the `daysBack` window never entered the app at all — no history row, no stock deduction, nothing for a paid shipping label to link to.
+- **Comparison**: `src/lib/bigcartel-ledger-gap.js` (pure) compares `fetchAllBigCartelOrders()` output against every order number the ledger knows (`getShippingReconciliationOrders()` + scan-memory `appliedNums`). Runs automatically once after `loadAllBooks()` resolves, cached in `localStorage` for 6 hours, and on demand from the Big Cartel tab.
+- **Review queue**: missing orders appear in a panel on the Big Cartel tab; each is added with one click via `commitRecoveredWebsiteOrder()` — the same ledger write path a scanned order takes. Entries carry the **real** storefront order number and the deterministic `bc-<number>` `sheetsId`, so an added order is indistinguishable downstream from a scanned one.
+- **Repair**: `findRecoveredOrderConflicts()` matches legacy `#RECOV-` placeholder rows (created by the shipping worklist's older recovery flow) to their real storefront orders, offering a renumber, or a void when the sale is recorded twice.
+- **Alarm**: `syncBigCartelShippingPaid` / `triggerBigCartelShippingSync` now count storefront orders with no ledger row and warn, instead of reporting "already up to date" over them.
+- **Fixed while here**: both sync loops compared `normalizeShippingOrderNumber(a) === normalizeShippingOrderNumber(b)`, which returns `''` for any number without a hyphen — so two *unidentifiable* orders compared equal and one could overwrite the other's `shippingPaid`. Now guarded by `sameOrderNumber()`.
+- **No Apps Script change**: the `proxybigcartel` action already exists (`Code.gs` v35), so no `scriptVersion` bump and no `gas-code.txt` copy was required.
+
 ### Google Sheets Real-Time Sync
 - Implemented as a bidirectional synchronization flow.
 - Writes and appends ledger orders to Google Sheets using Apps Script endpoint calls.

@@ -1310,3 +1310,147 @@ describe('A Google Sheet relay that answers with a web page is reported, not hid
       .toMatch(/\/exec|out of date/i);
   });
 });
+
+describe('Commercial rates that come back empty fall back to retail', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete global.fetch;
+    localStorage.removeItem('lm-sheets-url');
+  });
+
+  const usQuotes = JSON.stringify({
+    priceQuotes: {
+      priceQuote: [
+        { serviceCode: 'USA.TP', serviceName: 'Tracked Packet - USA', priceDetails: { base: 22.4, due: 24.1 } },
+        { serviceCode: 'USA.XP', serviceName: 'Xpresspost - USA', priceDetails: { base: 48.0, due: 51.2 } }
+      ]
+    }
+  });
+  const noQuotes = JSON.stringify({ priceQuotes: { priceQuote: [] } });
+
+  const relay = (bodies) => {
+    let call = 0;
+    return vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      const body = bodies[Math.min(call, bodies.length - 1)];
+      call += 1;
+      return { ok: true, status: 200, text: async () => body };
+    });
+  };
+
+  it('asks for commercial first when a customer number is set', async () => {
+    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    const sent = [];
+    global.fetch = vi.fn(async (url, opts) => {
+      if (String(url).startsWith('/api/')) {
+        sent.push(JSON.parse(JSON.parse(opts.body).jsonPayload || '{}'));
+        throw new Error('Failed to fetch');
+      }
+      return { ok: true, status: 200, text: async () => usQuotes };
+    });
+
+    const quotes = await getCanadaPostRates({
+      destCountry: 'US', destPostalOrZip: '10009',
+      apiKey: 'k', apiSecret: 's', customerNumber: '0001298882', isTest: false
+    });
+    expect(quotes[0].quoteType).toBe('commercial');
+  });
+
+  it('retries as a counter quote when the commercial one returns nothing', async () => {
+    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    // This is the reported symptom: a US route on an account with no US
+    // contract answers 200 with an empty list, which used to surface as
+    // "no services found" and nothing else.
+    global.fetch = relay([noQuotes, usQuotes]);
+
+    const quotes = await getCanadaPostRates({
+      destCountry: 'US', destPostalOrZip: '10009',
+      apiKey: 'k', apiSecret: 's', customerNumber: '0001298882', isTest: false
+    });
+
+    expect(quotes).toHaveLength(2);
+    expect(quotes[0].serviceCode).toBe('USA.TP');
+    expect(quotes.every(q => q.quoteType === 'counter')).toBe(true);
+    expect(quotes.every(q => q.commercialUnavailable)).toBe(true);
+  });
+
+  it('does not make a second request when commercial already worked', async () => {
+    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    let gatewayCalls = 0;
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      gatewayCalls += 1;
+      return { ok: true, status: 200, text: async () => usQuotes };
+    });
+
+    await getCanadaPostRates({
+      destCountry: 'US', destPostalOrZip: '10009',
+      apiKey: 'k', apiSecret: 's', customerNumber: '0001298882', isTest: false
+    });
+    expect(gatewayCalls).toBe(1);
+  });
+
+  it('returns an honest empty list when neither quote type has services', async () => {
+    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    global.fetch = relay([noQuotes, noQuotes]);
+
+    const quotes = await getCanadaPostRates({
+      destCountry: 'US', destPostalOrZip: '10009',
+      apiKey: 'k', apiSecret: 's', customerNumber: '0001298882', isTest: false
+    });
+    expect(quotes).toEqual([]);
+  });
+
+  it('asks for counter directly when there is no customer number', async () => {
+    const { getCanadaPostRates } = await import('../src/lib/canadapost.js');
+    let gatewayCalls = 0;
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).startsWith('/api/')) throw new Error('Failed to fetch');
+      gatewayCalls += 1;
+      return { ok: true, status: 200, text: async () => usQuotes };
+    });
+
+    const quotes = await getCanadaPostRates({
+      destCountry: 'US', destPostalOrZip: '10009',
+      apiKey: 'k', apiSecret: 's', customerNumber: '', isTest: false
+    });
+    expect(gatewayCalls).toBe(1);
+    expect(quotes.every(q => q.quoteType === 'counter')).toBe(true);
+  });
+});
+
+describe('Rate payloads obey the gateway’s strict schema', () => {
+  it('sends only camelCase keys, never hyphenated variants', async () => {
+    const { buildRateScenarioJson } = await import('../src/lib/canadapost.js');
+    // The Apigee gateway validates with additionalProperties:false, so a
+    // defensive hyphenated key alongside the camelCase one is a 400.
+    const payload = buildRateScenarioJson({
+      destCountry: 'US', destPostalOrZip: '10009', customerNumber: '0001298882', contractId: '4299100'
+    });
+    expect(payload).not.toMatch(/"[a-z]+-[a-z]/);
+    const parsed = JSON.parse(payload);
+    expect(parsed.parcelCharacteristics).toBeTruthy();
+    expect(parsed.originPostalCode).toBeTruthy();
+    expect(parsed.destination.unitedStates.zipCode).toBe('10009');
+  });
+
+  it('omits the customer and contract entirely on a counter quote', async () => {
+    const { buildRateScenarioJson } = await import('../src/lib/canadapost.js');
+    // Rule 9114: counter rates are refused if either is present.
+    const parsed = JSON.parse(buildRateScenarioJson({
+      destCountry: 'US', destPostalOrZip: '10009',
+      customerNumber: '0001298882', contractId: '4299100', quoteType: 'counter'
+    }));
+    expect(parsed.quoteType).toBe('counter');
+    expect('customerNumber' in parsed).toBe(false);
+    expect('contractId' in parsed).toBe(false);
+  });
+
+  it('never sends a contract id without its customer number', async () => {
+    const { buildRateScenarioJson } = await import('../src/lib/canadapost.js');
+    const parsed = JSON.parse(buildRateScenarioJson({
+      destCountry: 'CA', destPostalOrZip: 'V6B2W9', customerNumber: '', contractId: '4299100'
+    }));
+    expect('contractId' in parsed).toBe(false);
+  });
+});

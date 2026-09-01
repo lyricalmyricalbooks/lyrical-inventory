@@ -18,7 +18,15 @@ const MAIN_IMPORT_BUDGET = {
   // ledger touches the applied-ids cache, the scan memory and the Sheets sync —
   // three main.js internals. One name across the seam is cheaper than three.
   'shipping.js': 24,
-  'bigcartel.js': 16,
+  // 16 -> 19 when the storefront became the ledger's reconciliation source.
+  // Comparing Big Cartel's orders against the ledger and adding a missing one
+  // needs three main.js internals and no more: commitRecoveredWebsiteOrder (the
+  // single write path a website order takes, already shared with shipping.js),
+  // the scan memory (so a later Gmail scan cannot re-apply an order added here),
+  // and scheduleRender. The alternative was nine names — BOOK_LIST, activeBook,
+  // saveState and three separate renderers among them — every one of which had a
+  // cheaper equivalent already across the seam.
+  'bigcartel.js': 19,
   // +1 for ensurePdfJs: the printable trip report rasterises PDF receipts, and
   // that primitive stays in main.js. The receipt-file primitives it used to
   // take from main.js now come from receipts.js instead. Dropped again when the

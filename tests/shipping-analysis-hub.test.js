@@ -210,6 +210,17 @@ describe('Shipping Analysis Hub Functions', () => {
         const states = mockStates;
         const BOOKS = { 'book1': { title: 'Test Book' } };
         const normalizeShippingOrderNumber = (val) => '#' + String(val).trim().replace(/^#/, '');
+        // The sync no longer compares normalized numbers with ===: two orders it
+        // could not identify used to come back as '' on both sides and match each
+        // other. sameOrderNumber() is that guard, mirrored here on the same stub.
+        const sameOrderNumber = (a, b) => {
+          const l = normalizeShippingOrderNumber(a), r = normalizeShippingOrderNumber(b);
+          return !!l && !!r && l !== '#' && r !== '#' && l === r;
+        };
+        const bigCartelOrderNumber = (o) => normalizeShippingOrderNumber((o && o.id) || '');
+        const isCancelledStatus = (o) => ['cancelled', 'canceled', 'voided', 'abandoned']
+          .includes(String((o && o.attributes && o.attributes.status) || '').toLowerCase());
+        const checkBigCartelLedgerGaps = async () => { mockCalls.push('gapCheck'); };
         const getBookCurrencyCode = () => 'CAD';
         const shippingPurchaseRowPayload = (book, cur, h) => ({ type: 'shipping', sheetsId: h.sheetsId + '-shipping', total: h.shippingPaid });
         const syncToSheets = (payload) => { mockSheetsQueue.push(payload); };

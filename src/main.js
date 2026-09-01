@@ -328,8 +328,15 @@ import {
 } from './features/taxcentre.js';
 import {
   reconcileApplyBigCartel,
+  addBigCartelOrderToLedger,
+  autoCheckBigCartelLedgerGaps,
+  checkBigCartelLedgerGaps,
+  dismissBigCartelGap,
   extractBigCartelAddress,
+  renderBigCartelLedgerGaps,
   renderBigCartelTab,
+  renumberPlaceholderOrder,
+  restoreBigCartelGaps,
   testBigCartelConnection,
   saveBigCartelSettings,
   loadBigCartelData,
@@ -338,7 +345,10 @@ import {
   prefillShippingFromBigCartelOrder,
   switchBigCartelSubTab,
   syncBigCartelShippingPaid,
+  toggleBigCartelGapPanel,
   triggerBigCartelShippingSync,
+  undoBigCartelGapDismiss,
+  voidPlaceholderDuplicate,
 } from './features/bigcartel.js';
 import {
   getShippingReconciliationOrders,
@@ -5996,7 +6006,7 @@ function renderCurrent() {
 // on the next frame. State is mutated synchronously before each call, so the
 // single deferred render always reflects the latest data.
 let _renderScheduled = false;
-function scheduleRender() {
+export function scheduleRender() {
   if (_renderScheduled) return;
   _renderScheduled = true;
   const run = () => { _renderScheduled = false; renderCurrent(); };
@@ -6469,10 +6479,10 @@ export function renderHist() {
 
 // ── WEBSITE ORDERS — persistent scan memory
 const SCAN_MEMORY_KEY = 'lm-scan-memory';
-function getScanMemory() {
+export function getScanMemory() {
   try { return JSON.parse(localStorage.getItem(SCAN_MEMORY_KEY) || '{}'); } catch (e) { return {}; }
 }
-function saveScanMemory(mem) {
+export function saveScanMemory(mem) {
   localStorage.setItem(SCAN_MEMORY_KEY, JSON.stringify(mem));
 }
 
@@ -14549,6 +14559,12 @@ async function boot(forcedBook) {
       loadAllBooks().then(() => {
         maybeRunDailyBackup(true); startDailyBackupWatcher();
         window.posConfigureRates({ silent: true });
+        // Ask the storefront whether any sale is missing from the ledger. Runs
+        // only once the books are loaded (the comparison needs the history it
+        // is comparing against), silent by design, and served from a recent
+        // cache when there is one. A website order that never reached the app
+        // is invisible everywhere until something goes looking for it.
+        autoCheckBigCartelLedgerGaps().catch(() => { /* offline or not configured */ });
       });
       updateRoleToggleButton();
       syncRoleUI();
@@ -21859,6 +21875,16 @@ exposeLegacyInlineHandlers();
 
 window.testBigCartelConnection = testBigCartelConnection;
 window.saveBigCartelSettings = saveBigCartelSettings;
+window.checkBigCartelLedgerGaps = checkBigCartelLedgerGaps;
+window.addBigCartelOrderToLedger = addBigCartelOrderToLedger;
+window.dismissBigCartelGap = dismissBigCartelGap;
+window.undoBigCartelGapDismiss = undoBigCartelGapDismiss;
+window.toggleBigCartelGapPanel = toggleBigCartelGapPanel;
+window.restoreBigCartelGaps = restoreBigCartelGaps;
+window.renumberPlaceholderOrder = renumberPlaceholderOrder;
+window.voidPlaceholderDuplicate = voidPlaceholderDuplicate;
+window.renderBigCartelLedgerGaps = renderBigCartelLedgerGaps;
+window.autoCheckBigCartelLedgerGaps = autoCheckBigCartelLedgerGaps;
 window.switchBigCartelSubTab = switchBigCartelSubTab;
 window.loadBigCartelData = loadBigCartelData;
 window.renderBigCartelTab = renderBigCartelTab;
