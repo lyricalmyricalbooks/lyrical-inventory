@@ -406,3 +406,69 @@ describe('The label inspector never invents a shipment', () => {
     expect(download).toMatch(/canadapost-label-\$\{pin\}\.pdf/);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// A sandbox run has to reach the end.
+//
+// It used to stop at a dead end: the handler saw `isSimulated` and returned
+// before the order, the ledger, the archive or the label modal were touched.
+// So the half of the flow a test run exists to rehearse was never rehearsed,
+// and the screen said "nothing was purchased" without saying what to do next.
+// Now it completes, and every record it writes is stamped as a test.
+// ─────────────────────────────────────────────────────────────────────────
+describe('a sandbox run completes the whole flow, marked as a test', () => {
+  const purchaseHandler = shippingSrc.slice(
+    shippingSrc.indexOf('const isSim = !!result.isSimulated;'),
+    shippingSrc.indexOf('// Open the label straight away')
+  );
+
+  it('has no early return that skips the rest of the purchase flow', () => {
+    expect(purchaseHandler).not.toMatch(/if \(result\.isSimulated\)/);
+    expect(purchaseHandler.slice(0, purchaseHandler.indexOf('if (result.trackingPin'))).not.toMatch(/\breturn;/);
+  });
+
+  it('marks the order so a practice number is never read out as a real one', () => {
+    expect(purchaseHandler).toMatch(/histItem\.simulated = isSim;/);
+    expect(purchaseHandler).toMatch(/histItem\.trackingSimulated = isSim;/);
+  });
+
+  it('marks the postage entry on the row, not only in its wording', () => {
+    expect(purchaseHandler).toMatch(/simulated: isSim,/);
+    expect(purchaseHandler).toMatch(/SANDBOX TEST — not a real charge/);
+  });
+
+  it('says test rather than purchased on screen, and never claims a charge', () => {
+    expect(purchaseHandler).toMatch(/Test label created/);
+    expect(purchaseHandler).toMatch(/nothing was bought and nothing was charged/);
+    expect(purchaseHandler).toMatch(/will not scan/);
+  });
+});
+
+describe('label creation refuses to guess a Canada Post endpoint', () => {
+  it('sends a purchase to the endpoint registry rather than building a path inline', async () => {
+    const libSrc = fs.readFileSync(path.join(root, 'src/lib/canadapost.js'), 'utf8');
+    expect(libSrc).toMatch(/resolveShipmentEndpoint\(\{/);
+    // The retired path shape must not reappear as a live call site.
+    expect(libSrc).not.toMatch(/\$\{[^}]*baseUrl\}\/rs\//);
+  });
+
+  it('completes a sandbox purchase without a network call when nothing is configured', async () => {
+    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+    const { configureCanadaPostShippingApi } = await import('../src/lib/canadapost-endpoints.js');
+    configureCanadaPostShippingApi(null);
+
+    global.fetch = vi.fn().mockRejectedValue(new Error('should never be called'));
+
+    const result = await buyCanadaPostLabel({
+      serviceCode: 'DOM.EP',
+      destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
+      parcel: { weightKg: 0.5 },
+      apiKey: 'key', apiSecret: 'secret', customerNumber: '0001298882',
+      isTest: true,
+    });
+
+    expect(result.isSimulated).toBe(true);
+    expect(result.trackingPin).toBeTruthy();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});

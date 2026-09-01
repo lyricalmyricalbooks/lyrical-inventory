@@ -2720,36 +2720,6 @@ async function pasteZonosDeclarationId() {
   }
 }
 
-/**
- * Show that a shipment was simulated rather than purchased.
- * Called instead of the success path so no expense is booked and no order is marked shipped.
- */
-function renderSimulatedCanadaPostNotice(result) {
-  const labelPanel = $('cp-purchased-label-panel');
-  if (!labelPanel) return;
-  labelPanel.style.display = 'block';
-  labelPanel.innerHTML = `
-    <div class="cp-purchased-panel" style="border-color:var(--amber,var(--border));">
-      <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;">
-        <span style="font-size:22px;line-height:1.1;">⚠️</span>
-        <div style="flex:1;min-width:220px;">
-          <strong style="font-size:14px;">Simulated shipment — nothing was purchased</strong>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px;">
-            Canada Post could not be reached${result.simulationReason ? ` (${escapeHtml(result.simulationReason)})` : ''},
-            so a placeholder tracking number was produced for layout preview only.
-          </div>
-          <div style="font-size:11px;color:var(--text3);margin-top:6px;">
-            This parcel has <strong>not</strong> been paid for and the number below will not scan.
-            The order was left unshipped and no postage expense was recorded. Reconnect and buy the label again.
-          </div>
-          <div style="font-size:11px;color:var(--text3);margin-top:6px;">
-            Placeholder PIN: <span class="tnum" style="font-family:'DM Mono',monospace;">${escapeHtml(result.trackingPin || '—')}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
 
 /**
  * Verify the Canada Post account configuration and, when a PIN is supplied,
@@ -4212,13 +4182,12 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
       isTest
     });
 
-    if (result.isSimulated) {
-      // The gateway was unreachable and a sandbox/demo run produced a placeholder PIN.
-      // Nothing was bought, so the order stays unshipped and the ledger stays untouched.
-      renderSimulatedCanadaPostNotice(result);
-      showToast('⚠ Simulated shipment only — no label was purchased and nothing was charged', 'warn');
-      return;
-    }
+    // A test run walks the same path a real purchase does — order, ledger,
+    // archive, label modal — so the sandbox actually rehearses the thing it is
+    // meant to rehearse. It used to stop dead here, which left the whole second
+    // half of the flow untested. Every record it writes is stamped `simulated`
+    // and shown as a test, so nothing it leaves behind can pass for a purchase.
+    const isSim = !!result.isSimulated;
 
     if (result.trackingPin || result.labelUrl) {
       // The request asks Canada Post to return the postage rate, so when it
@@ -4229,7 +4198,12 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
         : quotedPrice;
       const priceIsConfirmed = chargedPrice !== quotedPrice || Number.isFinite(result.postageCharged);
 
-      showToast(`✓ Canada Post label purchased! Tracking PIN: ${result.trackingPin}`, 'ok');
+      showToast(
+        isSim
+          ? `✓ Test run complete — practice label created (not mailable). Reference: ${result.trackingPin}`
+          : `✓ Canada Post label purchased! Tracking PIN: ${result.trackingPin}`,
+        isSim ? 'warn' : 'ok'
+      );
 
       // Auto-mark prefilled order as Shipped in Order History
       // A Verified Account purchase returns the Declaration ID Canada Post issued;
@@ -4255,6 +4229,11 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             histItem.carrier = 'canadapost';
             histItem.declarationId = declarationId || '';
             histItem.postagePaid = chargedPrice;
+            // A test run's number will not scan at Canada Post. Flagging it on
+            // the order is what stops it being read out to a customer as a real
+            // tracking number, and lets a later sweep clear practice runs out.
+            histItem.simulated = isSim;
+            histItem.trackingSimulated = isSim;
             saveState(activeBook);
             renderHist();
           }
@@ -4276,7 +4255,11 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             amount: chargedPrice,
             category: 'Shipping & Postage',
             vendor: 'Canada Post',
-            desc: `Canada Post ${serviceName} (PIN: ${result.trackingPin || result.shipmentId})${declarationId ? ` · Zonos: ${declarationId}` : ''}`,
+            desc: `${isSim ? '[SANDBOX TEST — not a real charge] ' : ''}Canada Post ${serviceName} (PIN: ${result.trackingPin || result.shipmentId})${declarationId ? ` · Zonos: ${declarationId}` : ''}`,
+            // Marked on the row itself as well as in its description, so a test
+            // run can be filtered out of the books rather than only spotted by
+            // reading the wording.
+            simulated: isSim,
             // Distinguishes a figure Canada Post confirmed from the quote we
             // fell back to, so a later reconciliation knows which to trust.
             amountConfirmed: priceIsConfirmed,
@@ -4306,15 +4289,26 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
         labelPanel.style.display = 'block';
 
         labelPanel.innerHTML = `
-          <div class="cp-purchased-panel">
+          <div class="cp-purchased-panel"${isSim ? ' style="border-color:var(--amber,var(--border));"' : ''}>
+            ${isSim ? `
+              <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--surface-card);border:1px solid var(--amber,var(--border));border-radius:var(--r);">
+                <span style="font-size:18px;line-height:1.1;" aria-hidden="true">🧪</span>
+                <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+                  <strong style="font-size:12px;color:var(--text);">This was a test run — nothing was bought and nothing was charged.</strong><br>
+                  ${escapeHtml(result.simulationReason || 'Canada Post could not be reached.')}
+                  The number below will not scan, and the label is a practice copy that Canada Post will not accept at the counter.
+                  The order and the postage entry it created are both marked as a test so you can find and clear them.
+                </div>
+              </div>
+            ` : ''}
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
               <div style="display:flex;align-items:center;gap:10px;">
-                <span style="font-size:22px;color:var(--green);">✓</span>
+                <span style="font-size:22px;color:${isSim ? 'var(--amber,var(--text3))' : 'var(--green)'};">${isSim ? '🧪' : '✓'}</span>
                 <div>
-                  <strong style="color:var(--green);font-size:14px;">Label purchased</strong>
+                  <strong style="color:${isSim ? 'var(--amber,var(--text))' : 'var(--green)'};font-size:14px;">${isSim ? 'Test label created' : 'Label purchased'}</strong>
                   <div style="font-size:11px;color:var(--text3);margin-top:2px;">
-                    Tracking PIN: <strong class="tnum" style="color:var(--text);font-size:12px;">${escapeHtml(result.trackingPin || '—')}</strong>
-                    · Charged <strong class="tnum">$${chargedPrice.toFixed(2)} CAD</strong>${priceIsConfirmed ? '' : ' (quoted)'}
+                    ${isSim ? 'Reference' : 'Tracking PIN'}: <strong class="tnum" style="color:var(--text);font-size:12px;">${escapeHtml(result.trackingPin || '—')}</strong>
+                    · ${isSim ? 'Would cost' : 'Charged'} <strong class="tnum">$${chargedPrice.toFixed(2)} CAD</strong>${priceIsConfirmed ? '' : ' (quoted)'}
                   </div>
                 </div>
               </div>

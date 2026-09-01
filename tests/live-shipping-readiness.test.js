@@ -135,6 +135,11 @@ describe('A live purchase refuses stand-in sender details', () => {
   });
 
   it('still lets a sandbox run rehearse the screen without an address', async () => {
+    const { configureCanadaPostShippingApi } = await import('../src/lib/canadapost-endpoints.js');
+    configureCanadaPostShippingApi({
+      createShipmentPath: '/prod/devportal-portaildesdeveloppeurs/shipping/v1/customers/{customerNumber}/shipments',
+    });
+
     const shipmentJson = JSON.stringify({
       nonContractShipmentInfo: { shipmentId: 'S1', trackingPin: '70123456789012345' },
     });
@@ -149,6 +154,31 @@ describe('A live purchase refuses stand-in sender details', () => {
       serviceCode: 'DOM.EP', destination: dest, parcel: { weightKg: 0.5 }, ...creds, isTest: true,
     });
     expect(result.trackingPin).toBe('70123456789012345');
+    configureCanadaPostShippingApi(null);
+  });
+
+  it('completes a sandbox run as a flagged test when label creation is not configured yet', async () => {
+    // No network call is made at all: there is no path to call, and inventing
+    // one is what produced a confident 404 against the live gateway before.
+    global.fetch = vi.fn().mockRejectedValue(new Error('should never be called'));
+
+    const result = await buyCanadaPostLabel({
+      serviceCode: 'DOM.EP', destination: dest, parcel: { weightKg: 0.5 }, ...creds, isTest: true,
+    });
+
+    expect(result.isSimulated).toBe(true);
+    expect(result.trackingPin).toMatch(/^\d{10,}$/);
+    expect(result.simulationReason).toMatch(/not switched on yet/i);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('refuses a live purchase outright when label creation is not configured', async () => {
+    await expect(buyCanadaPostLabel({
+      serviceCode: 'DOM.EP',
+      sender: goodSender,
+      destination: dest, parcel: { weightKg: 0.5 }, ...creds, isTest: false,
+    })).rejects.toThrow(/label creation is not switched on/i);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });
 

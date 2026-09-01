@@ -81,14 +81,15 @@ describe('finding a stored label again', () => {
 });
 
 describe('pruning what cannot be reprinted', () => {
-  it('drops simulated shipments, which were never actually bought', () => {
+  it('keeps simulated shipments, flagged, so a test run stays reprintable', () => {
     const archive = [
       ctx('7012345678900001'),
       ctx('7012345678900002', { isSimulated: true }),
     ];
     const pruned = pruneLabelArchive(archive);
-    expect(pruned).toHaveLength(1);
-    expect(pruned[0].trackingPin).toBe('7012345678900001');
+    expect(pruned).toHaveLength(2);
+    expect(pruned.map(e => e.trackingPin)).toEqual(['7012345678900001', '7012345678900002']);
+    expect(pruned[1].isSimulated).toBe(true);
   });
 
   it('drops entries with no PIN and survives junk', () => {
@@ -96,9 +97,11 @@ describe('pruning what cannot be reprinted', () => {
     expect(pruneLabelArchive(null)).toEqual([]);
   });
 
-  it('never archives a simulated purchase in the first place', () => {
+  it('keeps a test-mode purchase so a sandbox run can rehearse the reprint', () => {
     const archive = addLabelToArchive([], ctx('7012345678900009', { isSimulated: true }));
-    expect(pruneLabelArchive(archive)).toEqual([]);
+    const pruned = pruneLabelArchive(archive);
+    expect(pruned).toHaveLength(1);
+    expect(pruned[0].isSimulated).toBe(true);
   });
 });
 
