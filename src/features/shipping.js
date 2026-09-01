@@ -3464,17 +3464,22 @@ async function calculateCanadaPostRatesHandler() {
   const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 15);
   const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 2);
   const dimUnit = $('sp-dim-unit')?.value || 'cm';
-  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 0.5);
+  const rawWeight = parseFloat($('sp-weight')?.value) || 0.5;
   const weightUnit = $('sp-weight-unit')?.value || 'kg';
 
   // Normalize dimensions to cm and weight to kg
   const lengthCm = dimUnit === 'in' ? length * 2.54 : length;
   const widthCm = dimUnit === 'in' ? width * 2.54 : width;
   const heightCm = dimUnit === 'in' ? height * 2.54 : height;
-  let weightKg = weight;
-  if (weightUnit === 'lb') weightKg = weight * 0.45359237;
-  else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
-  else if (weightUnit === 'g') weightKg = weight / 1000;
+  let weightKg = rawWeight;
+  if (weightUnit === 'lb') weightKg = rawWeight * 0.45359237;
+  else if (weightUnit === 'oz') weightKg = rawWeight * 0.0283495;
+  else if (weightUnit === 'g') {
+    // If entered as e.g. 0.367 g, it was typed in kilograms (0.367 kg = 367 g)
+    weightKg = rawWeight < 1.0 ? rawWeight : rawWeight / 1000;
+  }
+  // Enforce parcel floor of 0.1 kg (100g) for parcel rating
+  weightKg = Math.max(0.1, weightKg);
 
   const { apiKey, apiSecret, customerNumber, contractId } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
@@ -3564,7 +3569,10 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
     isTest
   });
 
-  let statusBadge = '<span class="pill green">Live Direct Rates</span>';
+  const isRetail = (quotes || []).some(q => q.quoteType === 'counter' || q.isRetail || q.commercialUnavailable);
+  let statusBadge = isRetail
+    ? '<span class="pill green">Live Direct Rates · Retail</span>'
+    : '<span class="pill green">Live Direct Rates</span>';
   if (isTest) statusBadge = '<span class="pill gold">Sandbox Test Mode</span>';
   if (isOffline) statusBadge = '<span class="pill gray">Offline Estimate</span>';
 
@@ -3617,18 +3625,17 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
   `;
 
   // Canada Post returns an empty list for a route the account has no agreement
-  // on, and separately for a parcel no service can carry. Those need different
-  // answers, and "no services found" answers neither.
-  const usedRetailFallback = (quotes || []).some(q => q.commercialUnavailable);
+  // on, and separately for a parcel no service can carry.
+  const usedRetailFallback = (quotes || []).some(q => q.commercialUnavailable || q.isRetail || q.quoteType === 'counter');
   const isUsBound = String(stCountryCode || '').toUpperCase() === 'US';
 
   const retailNote = usedRetailFallback ? `
-    <div class="cp-rate-note">
-      <strong>Showing Canada Post's published retail prices.</strong>
-      Your account <span class="tnum">${escapeHtml(audit.customerNumber || '')}</span> has no negotiated contract rates for
-      ${escapeHtml(stCountryCode || 'this destination')}, so Canada Post returned nothing for the commercial request and these
-      counter prices were fetched instead. They are real, live prices you can buy at — a contract with Canada Post
-      covering this route would make them cheaper.
+    <div class="cp-rate-note" style="margin-bottom:12px;padding:10px 14px;background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--r);font-size:12px;color:var(--text2);line-height:1.5;">
+      <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:var(--text);margin-bottom:2px;">
+        <span>🛒</span>
+        <span>Showing Canada Post Published Retail (Counter) Rates</span>
+      </div>
+      Live pricing retrieved directly from Canada Post's retail rate schedule for destination <strong>${escapeHtml(stCountryCode || 'CA')}</strong>. Standard consumer pricing — no commercial volume contract required.
     </div>
   ` : '';
 
@@ -4039,17 +4046,20 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
   const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 15);
   const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 2);
   const dimUnit = $('sp-dim-unit')?.value || 'cm';
-  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 0.5);
+  const rawWeight = parseFloat($('sp-weight')?.value) || 0.5;
   const weightUnit = $('sp-weight-unit')?.value || 'kg';
 
   // Normalize dimensions to cm and weight to kg
   const lengthCm = dimUnit === 'in' ? length * 2.54 : length;
   const widthCm = dimUnit === 'in' ? width * 2.54 : width;
   const heightCm = dimUnit === 'in' ? height * 2.54 : height;
-  let weightKg = weight;
-  if (weightUnit === 'lb') weightKg = weight * 0.45359237;
-  else if (weightUnit === 'oz') weightKg = weight * 0.0283495;
-  else if (weightUnit === 'g') weightKg = weight / 1000;
+  let weightKg = rawWeight;
+  if (weightUnit === 'lb') weightKg = rawWeight * 0.45359237;
+  else if (weightUnit === 'oz') weightKg = rawWeight * 0.0283495;
+  else if (weightUnit === 'g') {
+    weightKg = rawWeight < 1.0 ? rawWeight : rawWeight / 1000;
+  }
+  weightKg = Math.max(0.1, weightKg);
 
   const { apiKey, apiSecret, customerNumber, contractId } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
