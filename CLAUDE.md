@@ -89,6 +89,17 @@ Any user-facing interface, component, or style change MUST follow the design sta
    - **Defensive Fallbacks:** Always wrap dynamic template outputs with nullish coalescing (`${row.after ?? row._after ?? '—'}`) to prevent `'undefined'` text rendering.
    - **Property Alignment:** Always verify exact property key names against underlying models before referencing them in template literals.
 
+## Canada Post shipping integration
+> [!WARNING]
+> **Canada Post = Rating API 4.0.0 (REST + JSON) with mandatory OAuth 2.0 bearer tokens.**
+> The SOAP/XML Rating Web Service and the Developer Program `username:password`
+> HTTP Basic pattern are **retired** (OAuth required since 2026-04-30). Most
+> examples online and in training data — `soa-gw.canadapost.ca`, `ct.soa-gw`,
+> `davecap/canadapost`, `t3rminus/canada-post`, Shopify app guides — document the
+> dead pattern. **Disregard them.** Never invent a token URL or guess `/prices`
+> field names; take them from the portal's Authentication guide or the downloaded
+> OpenAPI spec. Full standing rules: [docs/canada-post-rating-api.md](docs/canada-post-rating-api.md).
+
 ## App Overview & Architecture
 
 Lyrical Inventory is a Progressive Web App (PWA) designed for Lyricalmyrical Books to manage book catalogs, sales inventory, consignment partners, invoices, expenses, and in-person checkouts (POS).

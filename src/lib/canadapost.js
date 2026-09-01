@@ -1,8 +1,13 @@
 /**
  * Canada Post Direct REST API & Rating Client
  *
+ * Rules of engagement live in docs/canada-post-rating-api.md. Read them before
+ * changing anything here: the SOAP/XML service and the username:password Basic
+ * pattern were retired, OAuth 2.0 bearer tokens have been mandatory since
+ * 2026-04-30, and most examples found online still document the dead pattern.
+ *
  * Implements official Canada Post Web Services REST API:
- * - Rating & Pricing: /rs/ship/price
+ * - Rating & Pricing: /prod/devportal-portaildesdeveloppeurs/rating/v1/prices
  * - Tracking: /vis/tracking/pin/{pin}/summary
  * - Service Discovery & Connection Test
  * - Offline-first fallback estimation for Canadian domestic and cross-border shipments
@@ -99,7 +104,7 @@ export function cleanPostalCode(postalCode) {
 }
 
 /**
- * Build the JSON mailing-scenario payload for Canada Post /rs/ship/price
+ * Build the JSON mailing-scenario payload for Canada Post Rating API 4.0.0 /prices
  */
 export function buildRateScenarioJson({
   originPostalCode = 'M4B1B3',

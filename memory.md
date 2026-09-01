@@ -9,6 +9,8 @@ This file acts as a persistent memory of the project's architecture, patterns, k
 - **Google Sheets Integration**: Integrates with Google Sheets using Apps Script (`apps-script/Code.gs`).
   - **CRITICAL RULE**: Whenever `apps-script/Code.gs` is modified, it must be copied verbatim (no HTML-escaping) to `public/gas-code.txt`. The client fetches it via `loadGasCode()` when opening the "Connect your Google Sheet" tab. Vite's `syncAppsScriptPlugin` also copies it on build/dev change, but the updated file must be committed.
 
+- **Canada Post**: Rating API 4.0.0 (REST+JSON) with mandatory OAuth 2.0 client-credentials bearer tokens; the SOAP/XML service and username:password Basic auth are retired. Standing rules live in `docs/canada-post-rating-api.md` — read it before any Canada Post change.
+
 ---
 
 ## 2. Key Decisions & Architectural Lessons
