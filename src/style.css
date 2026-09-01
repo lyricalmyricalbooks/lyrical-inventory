@@ -14938,3 +14938,31 @@ tr.hist-row:hover {
   .bc-gap-dismiss { transition: none; }
   .bc-gap-row:hover { transform: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INVOICE MODAL — store billing-details preview
+   Was a translucent-white fill/border meant for a dark backdrop; sitting on
+   the modal's cream surface it rendered as bare text with no visible card at
+   all. Matches the padding/radius of the totals box lower in the same modal
+   so the two "grouped info" boxes read as one system, in both themes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.inv-store-preview {
+  display: none;
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--content-secondary);
+}
+
+.inv-store-preview strong {
+  font-size: var(--text-3xs);
+  font-weight: 800;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--content-muted);
+  margin-right: var(--space-1);
+}
