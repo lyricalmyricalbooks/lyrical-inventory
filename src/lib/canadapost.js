@@ -202,9 +202,27 @@ export function parseCanadaPostPriceQuotes(jsonText) {
   }
 
   // Check for error messages
-  if (data.messages && data.messages.message) {
-    const msg = Array.isArray(data.messages.message) ? data.messages.message[0] : data.messages.message;
-    throw new Error(`Canada Post [${msg.code || 'ERROR'}]: ${msg.description || 'Unknown Canada Post error'}`);
+  // The Developer Portal returns errors as a flat array — {"messages":[{code,
+  // description}]} — while the legacy gateway nested them as messages.message.
+  // Only the nested shape was checked, so a real Portal error fell through
+  // every branch below and surfaced as an empty service list: Canada Post was
+  // saying exactly what was wrong and the card showed "0 available".
+  const messageList = Array.isArray(data.messages)
+    ? data.messages
+    : (data.messages && data.messages.message
+        ? (Array.isArray(data.messages.message) ? data.messages.message : [data.messages.message])
+        : null);
+
+  if (messageList && messageList.length) {
+    const msg = messageList[0] || {};
+    const code = msg.code || 'ERROR';
+    const err = new Error(`Canada Post [${code}]: ${msg.description || 'Unknown Canada Post error'}`);
+    err.canadaPostCode = String(code);
+    // More than one message can come back at once; keep the rest for the log.
+    if (messageList.length > 1) {
+      err.additionalMessages = messageList.slice(1).map(m => `[${m.code}] ${m.description}`);
+    }
+    throw err;
   }
   // Alternate error shape
   if (data.code && data.description) {
@@ -951,6 +969,16 @@ export function describeCanadaPostFailure({ status = 0, body = '', endpoint = ''
   }
   if (status === 429) {
     return 'Canada Post is rate-limiting this account (HTTP 429). Wait a moment and try again.';
+  }
+  if (status === 504) {
+    // 503 genuinely announces an unavailable service, but 504 is a gateway
+    // timeout — and a gateway that cannot route a request (a media type it does
+    // not recognise, say) times out exactly like a service that is down. Calling
+    // it an outage was a guess, and a wrong one sends the publisher off to wait
+    // for a recovery that is not coming.
+    return 'Canada Post\'s gateway did not answer in time (HTTP 504). ' +
+      'That is usually temporary and worth retrying in a minute. If every attempt times out, ' +
+      'the request is more likely being refused than the service being down.';
   }
   if (status >= 500) {
     return `Canada Post's own gateway returned HTTP ${status}. This is an outage on their side, not a problem with your key.`;
