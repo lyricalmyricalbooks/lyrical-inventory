@@ -36,10 +36,14 @@ export const CANADAPOST_SERVICES = {
   'DOM.EP': { name: 'Expedited Parcel', category: 'domestic', speed: '1-7 business days' },
   'DOM.XP': { name: 'Xpresspost', category: 'domestic', speed: '1-2 business days' },
   'DOM.PC': { name: 'Priority', category: 'domestic', speed: 'Next business day' },
+  'USA.SP.AIR': { name: 'Small Packet - USA Air', category: 'usa', speed: '5-8 business days' },
+  'USA.SP.SURF': { name: 'Small Packet - USA Surface', category: 'usa', speed: '2-3 weeks' },
   'USA.TP': { name: 'Tracked Packet - USA', category: 'usa', speed: '4-7 business days' },
   'USA.XP': { name: 'Xpresspost - USA', category: 'usa', speed: '2-3 business days' },
   'USA.EP': { name: 'Expedited Parcel - USA', category: 'usa', speed: '4-7 business days' },
   'USA.PW.PARCEL': { name: 'Priority Worldwide - USA', category: 'usa', speed: '1 business day' },
+  'INT.SP.AIR': { name: 'Small Packet - International Air', category: 'international', speed: '6-12 business days' },
+  'INT.SP.SURF': { name: 'Small Packet - International Surface', category: 'international', speed: '4-12 weeks' },
   'INT.TP': { name: 'Tracked Packet - International', category: 'international', speed: '6-10 business days' },
   'INT.XP': { name: 'Xpresspost - International', category: 'international', speed: '4-7 business days' },
   'INT.IP.AIR': { name: 'International Parcel - Air', category: 'international', speed: '12+ business days' },
@@ -1227,6 +1231,7 @@ export async function getCanadaPostRates({
   isTest = false
 }) {
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
+  // Based on the new Developer Portal, the rating API URL has changed
   const targetEndpoint = `${baseUrl}/prod/devportal-portaildesdeveloppeurs/rating/v1/prices`;
 
   const quoteOnce = async (quoteType) => {
@@ -1427,6 +1432,24 @@ export async function diagnoseCanadaPostConnection({
   const key = pair.apiKey;
   const secret = pair.apiSecret;
   const cust = inspection.customerNumber;
+  const splitKeyKind = classifyCanadaPostKeyKind(key);
+
+  if (splitKeyKind === 'legacy' || splitKeyKind === 'legacy-combined') {
+    return {
+      ok: false,
+      verdict: 'wrong-key-system',
+      headline: 'This legacy API key is no longer accepted by Canada Post.',
+      steps: [
+        'Canada Post retired its older "Developer Program" (which issued username:password keys joined by a colon) in April 2026.',
+        'The new Developer Portal API strictly requires an OAuth 2.0 Client ID (a 32-character code without a colon).',
+        'Sign in at https://developer-developpeur.canadapost-postescanada.ca/ to register a new App and get an OAuth Client ID and Secret.',
+        'Paste the new Client ID into the key box and the Client Secret into the password box, then test again.'
+      ],
+      attempts: [],
+      inspection,
+      keySplit: pair.split
+    };
+  }
 
   if (!key || !secret) {
     return {
@@ -1514,32 +1537,16 @@ export function classifyCanadaPostDiagnosis({ attempts = [], success = null, isT
 
   const allAuth = attempts.length > 0 && attempts.every(a => isCanadaPostAuthFailure(a.error));
   if (allAuth) {
-    // A Developer Portal client ID can never authenticate here, so say that
-    // instead of sending the publisher round the credential-checking loop
-    // again with a key that was never going to work.
-    if (inspection?.keyKind === 'portal-client-id') {
-      return {
-        ok: false,
-        verdict: 'wrong-key-system',
-        headline: 'This key is for a different Canada Post system, so it will never be accepted here.',
-        steps: [
-          'Canada Post runs two separate developer systems. The newer Developer Portal issues a Client ID and Client Secret; the older Developer Program issues an API key written as two parts joined by a colon. This app uses the older one.',
-          'What you have pasted is a Developer Portal Client ID, which the older service cannot accept under any setting.',
-          'Sign in at canadapost-postescanada.ca, go to the Developer Program section, and get your API keys there. You will be given two — one for development and one for production — each shown as "username:password".',
-          'Paste the part before the colon into the key box and the part after it into the password box, then test again.'
-        ]
-      };
-    }
     return {
       ok: false,
       verdict: 'bad-credentials',
-      headline: 'Canada Post refused this key and password on both gateways, with and without the customer number.',
+      headline: 'Canada Post refused this Client ID and Secret on both gateways, with and without the customer number.',
       steps: [
-        'The key and password themselves are the problem, so no combination of settings in this app will fix it.',
-        'Sign in to the Canada Post Developer Program and open your API keys page, then copy the key and the password again from there.',
-        'Make sure you are copying the generated API password, not the password you sign in to canadapost.ca with.',
-        'A brand new production key can take up to a business day to activate, while the development key works immediately — if the account is new, try the development key with Sandbox Environment turned on.',
-        'If the key is definitely correct and still refused, the account may not be switched on for rate lookups. Canada Post support can enable it: 1-866-511-0546.'
+        'The keys themselves are the problem, so no combination of settings in this app will fix it.',
+        'Sign in to the Canada Post Developer Portal and open your App credentials page, then copy the Client ID and Secret again from there.',
+        'Make sure you are copying the Client Secret, not a general account password.',
+        'A brand new production key can take up to a business day to activate, while the test key works immediately — if the account is new, try the test key with Sandbox Environment turned on.',
+        'If the key is definitely correct and still refused, the account may not be subscribed to the Rating API. Check your App subscriptions in the portal.'
       ]
     };
   }
@@ -1573,6 +1580,26 @@ export async function testCanadaPostConnection({
 }) {
   if (!apiKey || !apiSecret) {
     throw new Error('API Key and Secret / Password are required');
+  }
+
+  const inspection = {
+    keyKind: classifyCanadaPostKeyKind(apiKey),
+    secretKind: classifyCanadaPostKeyKind(apiSecret),
+    customerNumber
+  };
+
+  if (inspection.keyKind === 'legacy' || inspection.keyKind === 'legacy-combined') {
+    return {
+      ok: false,
+      verdict: 'wrong-key-system',
+      headline: 'This legacy API key is no longer accepted by Canada Post.',
+      steps: [
+        'Canada Post retired its older "Developer Program" (which issued username:password keys joined by a colon) in April 2026.',
+        'The new Developer Portal API strictly requires an OAuth 2.0 Client ID (a 32-character code without a colon).',
+        'Sign in at https://developer-developpeur.canadapost-postescanada.ca/ to register a new App and get an OAuth Client ID and Secret.',
+        'Paste the new Client ID into the key box and the Client Secret into the password box, then test again.'
+      ]
+    };
   }
 
   // Test rating quote from Toronto to Vancouver
@@ -1784,9 +1811,23 @@ export function estimateOfflineCanadaPostRates({
     const base = Math.max(14.00, 14.00 + (weight - 0.5) * 4.00);
     return [
       {
+        serviceCode: 'USA.SP.AIR',
+        serviceName: 'Small Packet - USA Air',
+        totalPrice: Math.round((base - 4.00) * discount * 100) / 100,
+        currency: 'CAD',
+        estimatedSpeed: '5-8 business days'
+      },
+      {
         serviceCode: 'USA.TP',
         serviceName: 'Tracked Packet - USA',
         totalPrice: Math.round(base * discount * 100) / 100,
+        currency: 'CAD',
+        estimatedSpeed: '4-7 business days'
+      },
+      {
+        serviceCode: 'USA.EP',
+        serviceName: 'Expedited Parcel - USA',
+        totalPrice: Math.round((base + 6.00) * discount * 100) / 100,
         currency: 'CAD',
         estimatedSpeed: '4-7 business days'
       },
@@ -1803,6 +1844,13 @@ export function estimateOfflineCanadaPostRates({
   // International
   const base = Math.max(22.00, 22.00 + (weight - 0.5) * 8.00);
   return [
+    {
+      serviceCode: 'INT.SP.AIR',
+      serviceName: 'Small Packet - International Air',
+      totalPrice: Math.round((base - 8.00) * discount * 100) / 100,
+      currency: 'CAD',
+      estimatedSpeed: '6-12 business days'
+    },
     {
       serviceCode: 'INT.TP',
       serviceName: 'Tracked Packet - International',
