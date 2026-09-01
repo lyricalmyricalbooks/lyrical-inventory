@@ -5221,6 +5221,48 @@ async function onInlinePostageChange(inputEl) {
   }, 1500);
 }
 
+async function onInlineShippingPaidChange(inputEl) {
+  const bookId = inputEl.dataset.bookId;
+  const orderIdentifier = inputEl.dataset.orderId;
+  const val = parseFloat(inputEl.value);
+
+  if (isNaN(val) || val < 0) {
+    showToast('Invalid shipping paid amount', 'err');
+    renderShippingAnalysisHub();
+    return;
+  }
+
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+
+  h.shippingPaid = val;
+  h.manualShippingPaid = true;
+  await window.saveState(bookId);
+  
+  shipAnalysisRecentlySavedOrderId = orderIdentifier;
+  showToast(`Customer paid amount updated for Order #${h.num}`, 'ok');
+  renderShippingAnalysisHub();
+
+  setTimeout(() => {
+    shipAnalysisRecentlySavedOrderId = '';
+  }, 1500);
+}
+
+async function unlinkManualShippingPaid(bookId, orderIdentifier) {
+  const s = states[bookId];
+  if (!s || !s.hist) return;
+  const h = s.hist.find(x => x.id === orderIdentifier || x.num === orderIdentifier);
+  if (!h) return;
+
+  delete h.manualShippingPaid;
+  await window.saveState(bookId);
+  
+  showToast(`Cleared manual customer paid amount for Order #${h.num}`, 'ok');
+  renderShippingAnalysisHub();
+}
+
 async function confirmSuggestedShippoLink(orderNum, expenseKey) {
   // By identity, not `ref`: the suggestion pool now includes counter receipts,
   // which are created with a blank ref.
@@ -7254,7 +7296,17 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
           </div>
         </td>
         <td class="shipping-pnl-money" data-label="Customer paid">
-          <strong>${(Number(o.shippingPaid) || 0).toFixed(2)} CAD</strong>
+          <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
+            ${o.manualShippingPaid ? `<button class="btn sm ghost" onclick="unlinkManualShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Clear manual override" style="padding:0 4px; font-size:10px; opacity:0.6; min-width: unset; height: auto;">✕</button>` : ''}
+            <input type="number" step="0.01" min="0" 
+              class="inline-postage-input" 
+              value="${(Number(o.shippingPaid) || 0).toFixed(2)}" 
+              data-book-id="${escapeHtml(o.bookId)}" 
+              data-order-id="${escapeHtml(o.id || o.num)}" 
+              onchange="onInlineShippingPaidChange(this)"
+            />
+            <span style="font-size: 10px; color: var(--text3); font-weight: 600;">CAD</span>
+          </div>
         </td>
         <td class="shipping-pnl-money" data-label="Postage">
           <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
@@ -8250,6 +8302,8 @@ export {
   setShipAnalysisMarginFilter,
   onShipAnalysisSearch,
   onInlinePostageChange,
+  onInlineShippingPaidChange,
+  unlinkManualShippingPaid,
   confirmSuggestedShippoLink,
   openManualShippoLinkModal,
   filterManualShippoLinkRows,

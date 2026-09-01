@@ -376,7 +376,7 @@ describe('Buy Label is only offered when the price and the account are real', ()
     expect(shippingSrc).toMatch(/if \(_cpPurchaseInFlight\)/);
     expect(shippingSrc).toMatch(/setCanadaPostPurchaseBusy\(true, buttonEl\);/);
     // The unlock has to be in a finally, or a failed purchase locks the screen.
-    expect(shippingSrc).toMatch(/\} finally \{\n\s+setCanadaPostPurchaseBusy\(false, buttonEl\);/);
+    expect(shippingSrc).toMatch(/\} finally \{\r?\n\s+setCanadaPostPurchaseBusy\(false, buttonEl\);/);
   });
 });
 

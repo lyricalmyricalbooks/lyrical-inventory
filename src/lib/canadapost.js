@@ -1646,8 +1646,14 @@ export function parseCanadaPostTrackingSummary(jsonText) {
     throw new Error(`Canada Post [${code}]: ${desc}`);
   }
 
-  const pinSummary = data.trackingSummary?.pinSummary || {};
-  const pin = pinSummary.pin || '';
+  // Handle Developer Portal and legacy shapes (pins[0].summaries[0], pinSummaries.pinSummary, trackingSummary.pinSummary)
+  const pinSummary = data.trackingSummary?.pinSummary ||
+    (Array.isArray(data.pinSummaries?.pinSummary) ? data.pinSummaries.pinSummary[0] : data.pinSummaries?.pinSummary) ||
+    (Array.isArray(data.pins) ? (data.pins[0]?.summaries?.[0] || data.pins[0]) : null) ||
+    (Array.isArray(data.pinSummary) ? data.pinSummary[0] : data.pinSummary) ||
+    data;
+
+  const pin = pinSummary.pin || pinSummary.pinNumber || '';
   if (!pin) {
     throw new Error('Canada Post returned no tracking record for that PIN.');
   }
@@ -1656,14 +1662,14 @@ export function parseCanadaPostTrackingSummary(jsonText) {
     ok: true,
     found: true,
     pin,
-    originPostalId: pinSummary.originPostalId || '',
-    destinationPostalId: pinSummary.destinationPostalId || '',
+    originPostalId: pinSummary.originPostalId || pinSummary.originPostalCode || '',
+    destinationPostalId: pinSummary.destinationPostalId || pinSummary.destinationPostalCode || '',
     destinationProvince: pinSummary.destinationProvince || '',
-    serviceName: pinSummary.serviceName || '',
-    status: pinSummary.eventDescription || '',
-    eventDateTime: pinSummary.eventDateTime || '',
-    eventLocation: pinSummary.eventLocation || '',
-    expectedDeliveryDate: pinSummary.expectedDeliveryDate || '',
+    serviceName: pinSummary.serviceName || pinSummary.serviceDescription || '',
+    status: pinSummary.eventDescription || pinSummary.statusDescription || pinSummary.status || '',
+    eventDateTime: pinSummary.eventDateTime || pinSummary.dateTime || '',
+    eventLocation: pinSummary.eventLocation || pinSummary.location || '',
+    expectedDeliveryDate: pinSummary.expectedDeliveryDate || pinSummary.deliveryDate || '',
     actualDeliveryDate: pinSummary.actualDeliveryDate || '',
     attemptedDate: pinSummary.attemptedDate || ''
   };
@@ -1689,7 +1695,7 @@ export async function verifyCanadaPostTrackingPin({
     throw new Error('Add your Canada Post API key and secret in Tax Centre → Canada Post Direct API before checking a tracking PIN.');
   }
   const env = resolveCanadaPostEnvironment({ isTest });
-  const targetEndpoint = `${env.baseUrl}/vis/tracking/pin/${encodeURIComponent(cleanPin)}/summary`;
+  const targetEndpoint = `${env.baseUrl}/prod/devportal-portaildesdeveloppeurs/tracking/v1/pins/${encodeURIComponent(cleanPin)}/summaries`;
 
   // 1. Local dev / backend proxy
   if (typeof window !== 'undefined') {

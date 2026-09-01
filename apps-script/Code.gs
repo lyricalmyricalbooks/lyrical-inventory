@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v35)
+/* Lyricalmyrical Inventory — Unified Backend (v36)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -131,6 +131,8 @@
  *      to Canada Post Developer Portal instead of legacy vnd.cpc custom types.
  *  33. v35: Migrate Tracking and Label Artifact proxy to Canada Post's new
  *      JSON/OAuth architecture. Bump flags v34-and-older as outdated.
+ *  34. v36: Fixes Canada Post OAuth 2.0 token acquisition by omitting unsupported scope parameter
+ *      and updates tracking endpoint to /tracking/v1/pins/... Bump flags v35-and-older as outdated.
  */
 
 const HEADERS = [
@@ -179,8 +181,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v35',
-    scriptVersion: 'v35',
+    service: 'lyrical-sheets-webhook-v36',
+    scriptVersion: 'v36',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -676,14 +678,14 @@ function doPost(e) {
               authHeader = 'Bearer ' + cachedToken;
             } else {
               const basicAuth = Utilities.base64Encode(keyTrim + ':' + secretTrim);
-              const scope = encodeURIComponent((d.scope || 'merchant').trim());
+              const payloadStr = 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim) + (d.scope ? '&scope=' + encodeURIComponent(String(d.scope).trim()) : '');
               const tokenResp = UrlFetchApp.fetch(tokenUrl, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/x-www-form-urlencoded',
                   'Authorization': 'Basic ' + basicAuth
                 },
-                payload: 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim) + '&scope=' + scope,
+                payload: payloadStr,
                 muteHttpExceptions: true
               });
               const tokenJson = JSON.parse(tokenResp.getContentText() || '{}');
