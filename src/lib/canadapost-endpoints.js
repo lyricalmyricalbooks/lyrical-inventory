@@ -9,143 +9,229 @@
  * call site, and it is what stopped a sandbox run from ever reaching a real
  * Canada Post label.
  *
- * Standing rules for this file — see docs/canada-post-rating-api.md:
+ * Standing rules for this file — see docs/canada-post-shipping-api.md:
  * NEVER invent a path, media type or scope here. Every value must come from the
- * portal's Authentication guide or the downloaded OpenAPI spec for the API in
- * question. An unconfigured endpoint is reported as unconfigured; it is never
- * guessed at, because a guessed path fails at the counter, not in the console.
+ * portal's guides or the downloaded OpenAPI spec for the API in question. An
+ * unconfigured value is reported as unconfigured; it is never guessed at,
+ * because a guessed path fails at the counter, not in the console.
  */
 
 /**
  * Shared namespace for every REST API served by the Developer Portal gateway.
  * The retired Web Services API used bare `/rs/...` paths on `soa-gw` hosts;
  * nothing on this host does.
+ *
+ * The portal generates this segment per app, so if a call 404s with correct
+ * credentials, check the casing of this string against the base URL shown on
+ * your own app's page before assuming the path below is wrong.
  */
 export const CANADAPOST_API_ROOT = '/prod/devportal-portaildesdeveloppeurs';
 
 /** Rating API 4.0.0 — in production use, confirmed working. */
 export const CANADAPOST_RATING_API = {
   pricesPath: `${CANADAPOST_API_ROOT}/rating/v1/prices`,
-  scope: 'merchant'
+  servicesPath: `${CANADAPOST_API_ROOT}/rating/v1/services`,
+  optionPath: `${CANADAPOST_API_ROOT}/rating/v1/options/{optionCode}`,
+  scope: 'merchant',
+  product: 'rating'
 };
 
 /** Tracking — in production use, confirmed working. */
 export const CANADAPOST_TRACKING_API = {
   summaryPath: `${CANADAPOST_API_ROOT}/tracking/v1/pins/{pin}/summaries`,
-  scope: 'merchant'
+  scope: 'merchant',
+  product: 'tracking'
 };
 
 /**
- * Shipping API — Create Shipment, then Get Artifact for the label document.
+ * Shipping API 8.0.0 — creates real shipments and money-bearing labels.
  *
- * This is a SEPARATE API subscription from Rating; a Rating-only app cannot
- * create labels no matter how the call is shaped. These three values are the
- * only things standing between this app and a genuine Canada Post label PDF,
- * and all three must be read off the Shipping API's OpenAPI spec (Developer
- * Portal → APIs → Shipping → download the OpenAPI definition):
+ * Paths are documented and fixed. What is NOT settled is the request BODY for
+ * Create Shipment: the portal publishes the field names only inside the app's
+ * OpenAPI spec. So the paths live here as constants, and the body shape is a
+ * separate, explicitly-flagged concern (see `buildShipmentPayload` callers and
+ * docs/canada-post-shipping-api.md §"The one thing still unverified").
  *
- *   createShipmentPath — the POST path for Create Shipment. If it embeds the
- *                        customer number, write it as `{customerNumber}` and it
- *                        will be substituted (URL-encoded) at call time.
- *   scope              — the OAuth scope the Shipping API's tokens are minted
- *                        with. Sent to the proxies, which pass it to the token
- *                        exchange. If Shipping shares Rating's scope, use
- *                        'merchant'.
- *   mediaType          — the versioned JSON media type, if the spec requires one
- *                        (something of the `application/vnd.cpc.*+json` family)
- *                        rather than plain `application/json`. Documented here
- *                        for whoever fills this in: honouring it also needs a
- *                        matching change in the two proxies, which currently
- *                        send plain `application/json` to this host. Leave it
- *                        empty when the spec says plain JSON, as Rating does.
- *
- * Until createShipmentPath is set, label creation reports itself as
- * unconfigured rather than calling a path that does not exist.
+ * `{mailedBy}` is the billing customer number. `{mobo}` is "mailed on behalf
+ * of" — for a single-merchant shop it is the same number again, which is why
+ * `resolveMobo()` below defaults it rather than demanding it be configured.
  */
-const SHIPPING_API_DEFAULTS = Object.freeze({
-  createShipmentPath: '',
-  scope: '',
-  mediaType: ''
-});
-
-let shippingApiConfig = { ...SHIPPING_API_DEFAULTS };
+export const CANADAPOST_SHIPPING_API = {
+  createShipmentPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments`,
+  getShipmentPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}`,
+  shipmentPricePath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/price`,
+  shipmentDetailsPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/details`,
+  voidShipmentPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}`,
+  refundShipmentPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/refund`,
+  artifactPath: `${CANADAPOST_API_ROOT}/artifacts/{consumerId}/shipping/{artifactId}/{index}`,
+  scope: 'merchant',
+  product: 'shipping'
+};
 
 /**
- * The Shipping API settings currently in force.
- * Read through this rather than capturing the object once, so that configuring
- * the API takes effect for callers that were loaded earlier.
+ * Manifest service — the proof-of-payment document for a batch of shipments.
+ *
+ * This is not optional bookkeeping. A label that says "manifest required" and
+ * is never transmitted earns a surcharge for an unmanifested shipment, and the
+ * charge lands quietly on the account weeks later. See `manifestRequired` in
+ * canadapost-shipment.js for where that is detected.
  */
-export function getCanadaPostShippingApi() {
-  return { ...shippingApiConfig };
-}
+export const CANADAPOST_MANIFEST_API = {
+  transmitPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/manifests`,
+  getManifestPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/manifests/{manifestId}`,
+  manifestDetailsPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/manifests/{manifestId}/details`,
+  scope: 'merchant',
+  product: 'shipping'
+};
 
 /**
- * Switch on Canada Post label creation by supplying the values from the spec.
- *
- * Pass `null` to return to the unconfigured state. Only the keys given are
- * changed, so the scope can be corrected without restating the path.
+ * The label document. Format is content-negotiated, and the portal does not
+ * publish which formats a given app returns, so this is the requested type and
+ * the response's own Content-Type is what the app actually trusts.
  */
-export function configureCanadaPostShippingApi(config) {
-  if (config === null) {
-    shippingApiConfig = { ...SHIPPING_API_DEFAULTS };
-    return getCanadaPostShippingApi();
-  }
-  shippingApiConfig = {
-    ...shippingApiConfig,
-    ...Object.fromEntries(
-      Object.entries(config || {}).filter(([key]) => key in SHIPPING_API_DEFAULTS)
-    )
-  };
-  return getCanadaPostShippingApi();
-}
-
-/** The label artifact itself is fetched from the href Canada Post returns. */
 export const CANADAPOST_ARTIFACT_MEDIA_TYPE = 'application/pdf';
 
+/** OAuth token exchange. Tokens last 3600s; refresh before that, never per call. */
+export const CANADAPOST_TOKEN_PATH = '/oauth2/token';
+export const CANADAPOST_TOKEN_TTL_SECONDS = 3600;
+
 /**
- * True when the Shipping API has been given a real path to call.
- * Everything downstream keys off this rather than off a try/catch, so an
- * unconfigured integration is a stated condition and not a network error.
+ * Substitute `{placeholders}` in a path, URL-encoding each value.
+ *
+ * Any placeholder left unfilled is a programming error rather than something to
+ * paper over: a path containing a literal `{shipmentId}` would be sent to
+ * Canada Post as-is and answered with a confusing 404, so this throws instead.
  */
-export function isShippingApiConfigured(config = getCanadaPostShippingApi()) {
-  return !!String(config?.createShipmentPath || '').trim();
+export function fillCanadaPostPath(path, values = {}) {
+  const template = String(path || '').trim();
+  if (!template) return '';
+
+  const filled = template.replace(/\{(\w+)\}/g, (match, key) => {
+    const value = values[key];
+    if (value === undefined || value === null || String(value).trim() === '') return match;
+    return encodeURIComponent(String(value).trim());
+  });
+
+  const unfilled = filled.match(/\{(\w+)\}/g);
+  if (unfilled) {
+    throw new Error(
+      `Canada Post endpoint is missing ${unfilled.join(', ')} — the call was not sent. `
+      + 'This is a configuration problem, not a Canada Post outage.'
+    );
+  }
+  return filled;
+}
+
+/** Join a gateway base URL and a path without doubling or dropping the slash. */
+export function joinCanadaPostUrl(baseUrl, path) {
+  const root = String(baseUrl || '').replace(/\/+$/, '');
+  const tail = String(path || '');
+  if (!tail) return root;
+  return `${root}${tail.startsWith('/') ? '' : '/'}${tail}`;
 }
 
 /**
- * Plain-language explanation of what is missing, shown to the shop owner rather
- * than logged. It names the one action that fixes it.
+ * "Mailed on behalf of" defaults to the billing customer.
+ *
+ * The advanced hierarchy (groups, a distinct mobo) exists for platforms mailing
+ * for many merchants. This is one publisher mailing their own books, so mobo is
+ * opt-in: configure it only if Canada Post has told you to.
  */
-export const SHIPPING_API_UNCONFIGURED_MESSAGE =
-  'Canada Post label creation is not switched on yet. Buying a real label needs the Shipping API '
-  + 'from your Canada Post developer account, which is separate from the rates service this app already uses. '
-  + 'Rates, tracking and test runs all keep working in the meantime.';
+export function resolveMobo({ mailedBy = '', mobo = '' } = {}) {
+  const explicit = String(mobo || '').trim();
+  return explicit || String(mailedBy || '').trim();
+}
 
 /**
- * Build the Create Shipment endpoint for a customer.
- * Returns '' when the Shipping API has not been configured, so callers must
- * decide what to do about that explicitly instead of posting to a bad path.
+ * Build any Shipping or Manifest endpoint.
+ *
+ * One builder for every call rather than a helper per path, so a new call
+ * cannot quietly reintroduce an inline string.
+ */
+export function buildCanadaPostEndpoint({
+  baseUrl = '',
+  path = '',
+  mailedBy = '',
+  mobo = '',
+  ...rest
+} = {}) {
+  const values = {
+    ...rest,
+    mailedBy: String(mailedBy || '').trim(),
+    mobo: resolveMobo({ mailedBy, mobo })
+  };
+  return joinCanadaPostUrl(baseUrl, fillCanadaPostPath(path, values));
+}
+
+/**
+ * Create Shipment, the call that actually spends money.
  */
 export function resolveShipmentEndpoint({
   baseUrl = '',
   customerNumber = '',
-  config = getCanadaPostShippingApi()
+  mobo = '',
+  config = CANADAPOST_SHIPPING_API
 } = {}) {
-  if (!isShippingApiConfigured(config)) return '';
-
-  const path = String(config.createShipmentPath || '').trim();
-  const withCustomer = path.replace(
-    /\{customerNumber\}/g,
-    encodeURIComponent(String(customerNumber || '').trim())
-  );
-  const root = String(baseUrl || '').replace(/\/+$/, '');
-  return `${root}${withCustomer.startsWith('/') ? '' : '/'}${withCustomer}`;
+  if (!String(customerNumber || '').trim()) return '';
+  return buildCanadaPostEndpoint({
+    baseUrl,
+    path: config.createShipmentPath,
+    mailedBy: customerNumber,
+    mobo
+  });
 }
 
 /**
- * The OAuth scope to request for a given call. Falls back to the Rating scope,
- * which is what the proxies default to, so an unset Shipping scope behaves
- * exactly as today rather than minting a token against an empty scope.
+ * The label document for a created shipment.
+ *
+ * Canada Post returns the artifact as a full href on the shipment response, so
+ * that href is preferred whenever present — building the path by hand is the
+ * fallback for a reprint days later when only the identifiers were kept.
+ */
+export function resolveArtifactEndpoint({
+  baseUrl = '',
+  consumerId = '',
+  artifactId = '',
+  index = 0,
+  config = CANADAPOST_SHIPPING_API
+} = {}) {
+  if (!String(consumerId || '').trim() || !String(artifactId || '').trim()) return '';
+  return buildCanadaPostEndpoint({
+    baseUrl,
+    path: config.artifactPath,
+    consumerId,
+    artifactId,
+    index: String(index ?? 0)
+  });
+}
+
+/** Transmit Shipments — turns a batch into a manifest. */
+export function resolveManifestEndpoint({
+  baseUrl = '',
+  customerNumber = '',
+  mobo = '',
+  config = CANADAPOST_MANIFEST_API
+} = {}) {
+  if (!String(customerNumber || '').trim()) return '';
+  return buildCanadaPostEndpoint({
+    baseUrl,
+    path: config.transmitPath,
+    mailedBy: customerNumber,
+    mobo
+  });
+}
+
+/**
+ * The OAuth scope to request for a call. Every API on this app currently mints
+ * against the same scope; the per-API field exists so that a future
+ * subscription needing its own scope is a one-line change here rather than a
+ * hunt through call sites.
  */
 export function resolveCanadaPostScope(api) {
   return String(api?.scope || '').trim() || CANADAPOST_RATING_API.scope;
+}
+
+/** Which rolling rate-limit bucket a call belongs to. Limits differ per product. */
+export function resolveCanadaPostProduct(api) {
+  return String(api?.product || '').trim() || 'rating';
 }

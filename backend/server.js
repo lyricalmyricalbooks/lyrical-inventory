@@ -75,6 +75,14 @@ async function canadaPostAuthHeader(key, secret, endpoint, scope = 'merchant') {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        // The Authentication guide puts the client credentials in these two
+        // headers. The Basic header is kept alongside them because it is what
+        // has actually been minting working Rating tokens against this gateway,
+        // and dropping a working mechanism to follow a document exactly is how
+        // a live integration goes dark. Whichever the gateway reads, both agree.
+        'X-IBM-Client-Id': key.trim(),
+        'X-IBM-Client-Secret': secret.trim(),
         'Authorization': basic
       },
       body: new URLSearchParams({

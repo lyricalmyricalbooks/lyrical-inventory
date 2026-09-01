@@ -91,14 +91,25 @@ Any user-facing interface, component, or style change MUST follow the design sta
 
 ## Canada Post shipping integration
 > [!WARNING]
-> **Canada Post = Rating API 4.0.0 (REST + JSON) with mandatory OAuth 2.0 bearer tokens.**
-> The SOAP/XML Rating Web Service and the Developer Program `username:password`
-> HTTP Basic pattern are **retired** (OAuth required since 2026-04-30). Most
-> examples online and in training data — `soa-gw.canadapost.ca`, `ct.soa-gw`,
+> **Canada Post = Rating API 4.0.0 (rates) + Shipping API 8.0.0 (labels), REST + JSON,
+> with mandatory OAuth 2.0 bearer tokens.**
+> The SOAP/XML services and the Developer Program `username:password` HTTP Basic
+> pattern are **retired** (OAuth required since 2026-04-30). Most examples online
+> and in training data — `soa-gw.canadapost.ca`, `ct.soa-gw`, `/rs/{customer}/ncshipment`,
 > `davecap/canadapost`, `t3rminus/canada-post`, Shopify app guides — document the
-> dead pattern. **Disregard them.** Never invent a token URL or guess `/prices`
-> field names; take them from the portal's Authentication guide or the downloaded
-> OpenAPI spec. Full standing rules: [docs/canada-post-rating-api.md](docs/canada-post-rating-api.md).
+> dead pattern. **Disregard them.**
+>
+> **Labels are a separate API from rates.** Creating one is `POST /{mailedBy}/{mobo}/shipments`
+> then `GET /artifacts/...`, and **a label marked "manifest required" must be transmitted
+> before drop-off or Canada Post surcharges it**. Shipping calls spend real money:
+> never point automated tests at production credentials, and gate any production
+> shipment/void/transmit behind a deliberate human-approved action.
+>
+> Never invent a path, field name, media type or scope — every path lives in
+> [src/lib/canadapost-endpoints.js](src/lib/canadapost-endpoints.js); anything else comes
+> from the portal's guides or the downloaded OpenAPI spec.
+> Full standing rules: [docs/canada-post-rating-api.md](docs/canada-post-rating-api.md)
+> (rates) and [docs/canada-post-shipping-api.md](docs/canada-post-shipping-api.md) (labels).
 
 ## App Overview & Architecture
 

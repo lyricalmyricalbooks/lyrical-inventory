@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v37)
+/* Lyricalmyrical Inventory — Unified Backend (v38)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -133,6 +133,11 @@
  *      JSON/OAuth architecture. Bump flags v34-and-older as outdated.
  *  34. v36: Fixes Canada Post OAuth 2.0 token acquisition and updates tracking endpoint.
  *  35. v37: Restores mandatory scope=merchant for Canada Post Developer Portal OAuth 2.0 token acquisition. Bump flags v36-and-older as outdated.
+ *  36. v38: Sends the Canada Post client credentials as the documented
+ *      X-IBM-Client-Id / X-IBM-Client-Secret headers on the OAuth token
+ *      exchange, alongside the Basic header that was already working, so the
+ *      Shipping API's token request matches the published contract. Bump
+ *      flags v37-and-older as outdated.
  */
 
 const HEADERS = [
@@ -181,8 +186,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v37',
-    scriptVersion: 'v37',
+    service: 'lyrical-sheets-webhook-v38',
+    scriptVersion: 'v38',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -684,6 +689,13 @@ function doPost(e) {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/x-www-form-urlencoded',
+                  'Accept': 'application/json',
+                  // The Authentication guide puts the client credentials in
+                  // these two headers. Basic is kept alongside because it is
+                  // what has actually been minting working tokens against this
+                  // gateway; whichever the gateway reads, both agree.
+                  'X-IBM-Client-Id': keyTrim,
+                  'X-IBM-Client-Secret': secretTrim,
                   'Authorization': 'Basic ' + basicAuth
                 },
                 payload: payloadStr,

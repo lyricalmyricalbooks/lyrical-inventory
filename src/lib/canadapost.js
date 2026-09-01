@@ -23,11 +23,12 @@ import {
 import {
   CANADAPOST_RATING_API,
   CANADAPOST_TRACKING_API,
-  getCanadaPostShippingApi,
+  CANADAPOST_SHIPPING_API,
   resolveShipmentEndpoint,
   resolveCanadaPostScope,
-  SHIPPING_API_UNCONFIGURED_MESSAGE,
+  resolveCanadaPostProduct,
 } from './canadapost-endpoints.js';
+import { parseShipmentResponse, describeNextStep } from './canadapost-shipment.js';
 import {
   missingSenderFields,
   senderAddressIsPlaceholder,
@@ -2172,7 +2173,11 @@ export async function buyCanadaPostLabel({
   apiSecret = DEFAULT_CP_API_SECRET,
   customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
   zonosAccountKey = '',
-  isTest = false
+  isTest = false,
+  // "Mailed on behalf of" — only set when Canada Post has given you a separate
+  // number for it. One publisher mailing their own books leaves it blank and it
+  // defaults to the billing customer number.
+  mobo = ''
 }) {
   const jsonPayload = buildNonContractShipmentJson({
     serviceCode,
@@ -2229,36 +2234,49 @@ export async function buyCanadaPostLabel({
   // purchase 404'd and a sandbox run silently fell through to a fake shipment.
   const targetEndpoint = resolveShipmentEndpoint({
     baseUrl: audit.environment.baseUrl,
-    customerNumber: customerId
+    customerNumber: customerId,
+    mobo
   });
 
-  let result;
   if (!targetEndpoint) {
-    // Label creation is not configured. Say so rather than calling a path that
-    // does not exist and reporting the 404 as though it were the account's fault.
-    if (!isTest) throw new Error(SHIPPING_API_UNCONFIGURED_MESSAGE);
-    result = simulateCanadaPostShipment(
-      'Canada Post label creation is not switched on yet, so this test run produced a practice label instead of a real one.'
+    // Only reachable with no customer number, which the audit above already
+    // reports; saying it again here beats posting to a half-built path.
+    throw new Error(
+      'Canada Post needs your customer number before it can create a shipment. No label was bought.'
     );
-  } else {
-    result = await executeCanadaPostProxy({
-      targetEndpoint,
-      jsonPayload,
-      apiKey,
-      apiSecret,
-      customerNumber,
-      zonosAccountKey,
-      isTest,
-      scope: resolveCanadaPostScope(getCanadaPostShippingApi()),
-      isShipment: true
-    });
   }
+
+  const result = await executeCanadaPostProxy({
+    targetEndpoint,
+    jsonPayload,
+    apiKey,
+    apiSecret,
+    customerNumber,
+    zonosAccountKey,
+    isTest,
+    scope: resolveCanadaPostScope(CANADAPOST_SHIPPING_API),
+    product: resolveCanadaPostProduct(CANADAPOST_SHIPPING_API),
+    isShipment: true
+  });
 
   let responseData;
   if (result.trackingPin && result.labelUrl) {
     responseData = result;
   } else if (result.json) {
-    responseData = parseCanadaPostShipmentResponse(result.json);
+    // Read through the v8-tolerant parser first: it accepts the several
+    // envelope and link shapes Canada Post has used, and reports a Canada Post
+    // error as data rather than throwing, so the code can be classified.
+    const shipment = parseShipmentResponse(result.json);
+    if (!shipment.created) {
+      // Fall back to the older parser purely for its error wording, which
+      // surfaces Canada Post's own code and description.
+      responseData = parseCanadaPostShipmentResponse(result.json);
+    } else {
+      responseData = {
+        ...parseCanadaPostShipmentResponse(result.json),
+        ...shipment
+      };
+    }
   } else {
     throw new Error('Empty response from Canada Post Shipment API');
   }
@@ -2289,6 +2307,10 @@ export async function buyCanadaPostLabel({
     customs,
     declarationId: finalDeclarationId,
     customerNumber: customerId,
+    // Kept on the archived shipment so a reprint days later still shows whether
+    // this parcel was ever transmitted — the surcharge for an unmanifested
+    // shipment lands long after the label is printed.
+    manifestRequired: !!responseData.manifestRequired,
     isSimulated,
     mode: audit.environment.mode,
     purchasedAt: new Date().toISOString()
@@ -2298,6 +2320,14 @@ export async function buyCanadaPostLabel({
     ...responseData,
     declarationId: finalDeclarationId,
     declarationIssuedByCarrier: !!issuedDeclarationId,
+    manifestRequired: !!responseData.manifestRequired,
+    // The single sentence the screen shows about what to do next. Built here so
+    // the manifest step cannot be dropped by a caller that forgets to check a
+    // boolean — the surcharge for skipping it is real money.
+    nextStep: describeNextStep({
+      created: !!(responseData.trackingPin || responseData.shipmentId),
+      manifestRequired: !!responseData.manifestRequired
+    }),
     isSimulated,
     simulationReason: result.simulationReason || '',
     mode: audit.environment.mode,
