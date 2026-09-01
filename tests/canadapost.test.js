@@ -462,23 +462,10 @@ describe('Canada Post Account & Environment Validation', () => {
   });
 });
 
-// Buying a label needs the Shipping API configured; without it, label creation
-// correctly reports itself as unconfigured rather than calling a path that does
-// not exist. These suites are about what happens once it IS configured, so they
-// install a stand-in path and clear it again afterwards. The value is a test
-// fixture — the real one comes from the Shipping API's OpenAPI spec.
-const TEST_SHIPMENT_PATH = '/prod/devportal-portaildesdeveloppeurs/shipping/v1/customers/{customerNumber}/shipments';
-const TEST_SHIPMENT_ENDPOINT = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/customers/0042998877/shipments';
-
-async function configureShippingApiForTest() {
-  const { configureCanadaPostShippingApi } = await import('../src/lib/canadapost-endpoints.js');
-  configureCanadaPostShippingApi({ createShipmentPath: TEST_SHIPMENT_PATH, scope: 'merchant' });
-}
-
-async function resetShippingApiConfig() {
-  const { configureCanadaPostShippingApi } = await import('../src/lib/canadapost-endpoints.js');
-  configureCanadaPostShippingApi(null);
-}
+// Create Shipment is `POST /{mailedBy}/{mobo}/shipments` on the Developer
+// Portal gateway. For a single merchant, mobo is the billing customer number
+// again — so both segments are the same number in these tests.
+const SHIPMENT_ENDPOINT = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/0042998877/0042998877/shipments';
 
 describe('Canada Post Shipment Simulation Guardrail', () => {
   const realCreds = {
@@ -545,9 +532,8 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
     })).rejects.toThrow(/no label was purchased/i);
   });
 
-  it('routes a purchase through the configured Shipping API endpoint', async () => {
+  it('routes a purchase through the documented Shipping API endpoint', async () => {
     const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
-    await configureShippingApiForTest();
     const successJson = JSON.stringify({
       "nonContractShipmentInfo": {
         "shipmentId": "406951321983787352",
@@ -584,9 +570,8 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
 
     const proxyCall = global.fetch.mock.calls[0];
     const proxyBody = JSON.parse(proxyCall[1].body);
-    expect(proxyBody.targetEndpoint).toBe(TEST_SHIPMENT_ENDPOINT);
+    expect(proxyBody.targetEndpoint).toBe(SHIPMENT_ENDPOINT);
     expect(proxyBody.jsonPayload).toContain('"declarationId":"0rd4dpkrvc1y9"');
-    await resetShippingApiConfig();
   });
 });
 
@@ -611,7 +596,6 @@ describe('Purchased labels stay reprintable offline', () => {
 
   const buy = async (pin, orderNum) => {
     const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
-    await configureShippingApiForTest();
     const jsonStr = shipmentJson(pin);
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -699,15 +683,10 @@ describe('Purchased labels stay reprintable offline', () => {
 });
 
 describe('Zonos Verified Account key reaches Canada Post', () => {
-  beforeEach(async () => {
-    await configureShippingApiForTest();
-  });
-
-  afterEach(async () => {
+  afterEach(() => {
     vi.restoreAllMocks();
     delete global.fetch;
     localStorage.clear();
-    await resetShippingApiConfig();
   });
 
   it('sends the account key on the shipment request so Canada Post can issue the Declaration ID', async () => {

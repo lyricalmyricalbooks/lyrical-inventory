@@ -4323,6 +4323,16 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                 </button>
               </div>
             </div>
+            ${result.manifestRequired && !isSim ? `
+              <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:1px solid var(--amber,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
+                <span style="font-size:18px;line-height:1.1;" aria-hidden="true">📋</span>
+                <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+                  <strong style="font-size:12px;color:var(--text);">This parcel needs a manifest before you drop it off.</strong><br>
+                  A manifest is one summary sheet Canada Post wants alongside parcels like this one.
+                  If the parcel is handed over without it, Canada Post adds an extra charge to it later.
+                </div>
+              </div>
+            ` : ''}
             ${declarationId ? `
               <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                 <div style="display:flex;align-items:center;gap:8px;">

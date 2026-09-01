@@ -452,14 +452,25 @@ describe('label creation refuses to guess a Canada Post endpoint', () => {
     expect(libSrc).not.toMatch(/\$\{[^}]*baseUrl\}\/rs\//);
   });
 
-  it('completes a sandbox purchase without a network call when nothing is configured', async () => {
+  it('addresses Create Shipment at the documented Shipping API path', async () => {
     const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
-    const { configureCanadaPostShippingApi } = await import('../src/lib/canadapost-endpoints.js');
-    configureCanadaPostShippingApi(null);
 
-    global.fetch = vi.fn().mockRejectedValue(new Error('should never be called'));
+    const shipmentJson = JSON.stringify({
+      shipmentInfo: {
+        shipmentId: 'S-1',
+        trackingPin: '70123456789012345',
+        links: { link: [{ '@rel': 'label', '@href': 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/artifacts/CG1/shipping/A1/0' }] },
+      },
+    });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, json: shipmentJson }),
+      text: async () => shipmentJson,
+      headers: { get: () => 'application/json' },
+    });
 
-    const result = await buyCanadaPostLabel({
+    await buyCanadaPostLabel({
       serviceCode: 'DOM.EP',
       destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
       parcel: { weightKg: 0.5 },
@@ -467,8 +478,35 @@ describe('label creation refuses to guess a Canada Post endpoint', () => {
       isTest: true,
     });
 
-    expect(result.isSimulated).toBe(true);
-    expect(result.trackingPin).toBeTruthy();
-    expect(global.fetch).not.toHaveBeenCalled();
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.targetEndpoint).toBe(
+      'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/0001298882/0001298882/shipments'
+    );
+    expect(body.targetEndpoint).not.toMatch(/ncshipment/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// The manifest step is the one Canada Post charges you for missing.
+//
+// A label marked "manifest required" that is handed over untransmitted earns a
+// surcharge that arrives weeks later, by which time nobody connects it to a
+// missed step. Detecting it in the library is only half the job — if the screen
+// does not say so, the shop owner never knows to act.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the manifest requirement reaches the screen', () => {
+  const purchasedPanel = shippingSrc.slice(
+    shippingSrc.indexOf('const labelPanel = $(\'cp-purchased-label-panel\');'),
+    shippingSrc.indexOf('// Open the label straight away')
+  );
+
+  it('shows a manifest notice on a real purchase that needs one', () => {
+    expect(purchasedPanel).toMatch(/result\.manifestRequired && !isSim/);
+    expect(purchasedPanel).toMatch(/needs a manifest before you drop it off/i);
+  });
+
+  it('explains the consequence in money, not in API terms', () => {
+    expect(purchasedPanel).toMatch(/adds an extra charge/i);
+    expect(purchasedPanel).not.toMatch(/transmitShipments|POST |\/manifests/);
   });
 });

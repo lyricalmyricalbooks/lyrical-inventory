@@ -1,15 +1,21 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   CANADAPOST_API_ROOT,
   CANADAPOST_RATING_API,
   CANADAPOST_TRACKING_API,
+  CANADAPOST_SHIPPING_API,
+  CANADAPOST_MANIFEST_API,
   CANADAPOST_ARTIFACT_MEDIA_TYPE,
-  getCanadaPostShippingApi,
-  configureCanadaPostShippingApi,
-  isShippingApiConfigured,
+  CANADAPOST_TOKEN_TTL_SECONDS,
+  fillCanadaPostPath,
+  joinCanadaPostUrl,
+  resolveMobo,
+  buildCanadaPostEndpoint,
   resolveShipmentEndpoint,
+  resolveArtifactEndpoint,
+  resolveManifestEndpoint,
   resolveCanadaPostScope,
-  SHIPPING_API_UNCONFIGURED_MESSAGE,
+  resolveCanadaPostProduct,
 } from '../src/lib/canadapost-endpoints.js';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -17,126 +23,145 @@ import {
 //
 // The shipment call spent months posting to `/rs/{customer}/ncshipment` — the
 // retired Web Services path — against the Developer Portal host, which has no
-// such path. Rating had been migrated; shipping had not. Nothing failed loudly:
-// the 404 was swallowed and a sandbox run quietly produced a fake shipment, so
-// the screen looked like it worked while no label was ever created.
+// such path. Rating had been migrated; shipping had not. Nothing failed loudly.
 //
-// These tests hold the two properties that stop that recurring: every path is
-// declared in one registry under the gateway's namespace, and an unconfigured
-// API resolves to nothing at all rather than to a plausible-looking guess.
+// Every Canada Post path now lives in one registry, and these tests hold the
+// properties that stop that recurring: nothing is built inline, no retired
+// shape survives, and a path with an unfilled placeholder is refused rather
+// than sent to Canada Post to be answered with a confusing 404.
 // ─────────────────────────────────────────────────────────────────────────
 
-afterEach(() => {
-  configureCanadaPostShippingApi(null);
-});
+const BASE = 'https://api.canadapost-postescanada.ca';
 
-describe('every declared path lives under the Developer Portal namespace', () => {
-  it('namespaces rating and tracking, and never uses a retired path shape', () => {
-    expect(CANADAPOST_RATING_API.pricesPath.startsWith(CANADAPOST_API_ROOT)).toBe(true);
-    expect(CANADAPOST_TRACKING_API.summaryPath.startsWith(CANADAPOST_API_ROOT)).toBe(true);
+describe('no retired path shape survives anywhere in the registry', () => {
+  const everyPath = [
+    ...Object.values(CANADAPOST_RATING_API),
+    ...Object.values(CANADAPOST_TRACKING_API),
+    ...Object.values(CANADAPOST_SHIPPING_API),
+    ...Object.values(CANADAPOST_MANIFEST_API),
+  ].filter(v => typeof v === 'string' && v.startsWith('/'));
 
-    for (const path of [CANADAPOST_RATING_API.pricesPath, CANADAPOST_TRACKING_API.summaryPath]) {
-      expect(path).not.toMatch(/^\/rs\//);
-      expect(path).not.toMatch(/ncshipment/);
-      expect(path).not.toMatch(/soa-gw/);
+  it('namespaces every path under the Developer Portal root', () => {
+    expect(everyPath.length).toBeGreaterThan(8);
+    for (const path of everyPath) {
+      expect(path.startsWith(CANADAPOST_API_ROOT)).toBe(true);
     }
   });
 
-  it('keeps the tracking PIN as a substitutable placeholder rather than a fixed pin', () => {
-    expect(CANADAPOST_TRACKING_API.summaryPath).toContain('{pin}');
+  it('never reintroduces the retired Web Services shapes', () => {
+    for (const path of everyPath) {
+      expect(path).not.toMatch(/ncshipment/);
+      expect(path).not.toMatch(/soa-gw/);
+      expect(path).not.toMatch(/^\/rs\//);
+      expect(path).not.toMatch(/\/vis\/tracking/);
+    }
   });
 
-  it('asks for the label document as a PDF', () => {
+  it('records the documented Shipping API paths, including the artifact', () => {
+    expect(CANADAPOST_SHIPPING_API.createShipmentPath).toContain('/{mailedBy}/{mobo}/shipments');
+    expect(CANADAPOST_SHIPPING_API.artifactPath)
+      .toContain('/artifacts/{consumerId}/shipping/{artifactId}/{index}');
+    expect(CANADAPOST_MANIFEST_API.transmitPath).toContain('/{mailedBy}/{mobo}/manifests');
+  });
+
+  it('asks for the label as a PDF and refreshes tokens inside their hour', () => {
     expect(CANADAPOST_ARTIFACT_MEDIA_TYPE).toBe('application/pdf');
+    expect(CANADAPOST_TOKEN_TTL_SECONDS).toBe(3600);
   });
 });
 
-describe('an unconfigured Shipping API resolves to nothing, not to a guess', () => {
-  it('ships unconfigured, so no path is invented for anyone who never sets it', () => {
-    expect(isShippingApiConfigured()).toBe(false);
-    expect(getCanadaPostShippingApi().createShipmentPath).toBe('');
+describe('filling a path refuses to send a half-built URL', () => {
+  it('substitutes and URL-encodes every placeholder', () => {
+    expect(fillCanadaPostPath('/a/{mailedBy}/b/{mobo}', { mailedBy: '0001298882', mobo: '12 34' }))
+      .toBe('/a/0001298882/b/12%2034');
   });
 
-  it('returns an empty endpoint rather than a URL built from an empty path', () => {
-    const endpoint = resolveShipmentEndpoint({
-      baseUrl: 'https://api.canadapost-postescanada.ca',
-      customerNumber: '0001298882',
-    });
-    expect(endpoint).toBe('');
+  it('throws rather than sending a literal placeholder to Canada Post', () => {
+    // A path containing `{shipmentId}` would be answered with a 404 that reads
+    // like a Canada Post problem, when it is really a missing argument here.
+    expect(() => fillCanadaPostPath('/a/{mailedBy}/shipments/{shipmentId}', { mailedBy: '1' }))
+      .toThrow(/missing \{shipmentId\}/i);
   });
 
-  it('explains the gap in words the shop owner can act on, naming the Shipping API', () => {
-    expect(SHIPPING_API_UNCONFIGURED_MESSAGE).toMatch(/Shipping API/);
-    expect(SHIPPING_API_UNCONFIGURED_MESSAGE).toMatch(/not switched on yet/i);
-    // No jargon that would send a non-technical reader looking things up.
-    expect(SHIPPING_API_UNCONFIGURED_MESSAGE).not.toMatch(/OpenAPI|OAuth|endpoint|404/i);
-  });
-});
-
-describe('configuring the Shipping API from the spec', () => {
-  it('builds the endpoint, substituting and URL-encoding the customer number', () => {
-    configureCanadaPostShippingApi({
-      createShipmentPath: '/prod/devportal-portaildesdeveloppeurs/shipping/v1/customers/{customerNumber}/shipments',
-    });
-
-    expect(isShippingApiConfigured()).toBe(true);
-    expect(resolveShipmentEndpoint({
-      baseUrl: 'https://api.canadapost-postescanada.ca',
-      customerNumber: '0001298882',
-    })).toBe('https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/customers/0001298882/shipments');
-  });
-
-  it('handles a path with no customer number in it', () => {
-    configureCanadaPostShippingApi({ createShipmentPath: '/some/v1/shipments' });
-    expect(resolveShipmentEndpoint({
-      baseUrl: 'https://api.canadapost-postescanada.ca',
-      customerNumber: '0001298882',
-    })).toBe('https://api.canadapost-postescanada.ca/some/v1/shipments');
+  it('treats a blank value as missing rather than filling in an empty segment', () => {
+    expect(() => fillCanadaPostPath('/a/{mailedBy}', { mailedBy: '   ' })).toThrow(/missing/i);
   });
 
   it('joins base and path exactly once, whatever the punctuation', () => {
-    configureCanadaPostShippingApi({ createShipmentPath: 'shipping/v1/shipments' });
-    expect(resolveShipmentEndpoint({
-      baseUrl: 'https://api.canadapost-postescanada.ca/',
-      customerNumber: '1',
-    })).toBe('https://api.canadapost-postescanada.ca/shipping/v1/shipments');
-  });
-
-  it('lets the scope be corrected without restating the path', () => {
-    configureCanadaPostShippingApi({ createShipmentPath: '/a/b', scope: 'merchant' });
-    configureCanadaPostShippingApi({ scope: 'shipping' });
-
-    const config = getCanadaPostShippingApi();
-    expect(config.createShipmentPath).toBe('/a/b');
-    expect(config.scope).toBe('shipping');
-  });
-
-  it('ignores keys that are not part of the contract', () => {
-    configureCanadaPostShippingApi({ createShipmentPath: '/a/b', somethingElse: 'x' });
-    expect(getCanadaPostShippingApi()).not.toHaveProperty('somethingElse');
-  });
-
-  it('can be switched back off', () => {
-    configureCanadaPostShippingApi({ createShipmentPath: '/a/b' });
-    configureCanadaPostShippingApi(null);
-    expect(isShippingApiConfigured()).toBe(false);
-  });
-
-  it('hands back a copy, so a caller cannot mutate the live configuration', () => {
-    configureCanadaPostShippingApi({ createShipmentPath: '/a/b' });
-    const snapshot = getCanadaPostShippingApi();
-    snapshot.createShipmentPath = '/tampered';
-    expect(getCanadaPostShippingApi().createShipmentPath).toBe('/a/b');
+    expect(joinCanadaPostUrl(`${BASE}/`, '/x/y')).toBe(`${BASE}/x/y`);
+    expect(joinCanadaPostUrl(BASE, 'x/y')).toBe(`${BASE}/x/y`);
   });
 });
 
-describe('the OAuth scope a call is minted against', () => {
-  it('falls back to the rating scope when an API declares none', () => {
+describe('mailed on behalf of', () => {
+  it('defaults to the billing customer, since one shop mails its own parcels', () => {
+    expect(resolveMobo({ mailedBy: '0001298882' })).toBe('0001298882');
+    expect(resolveMobo({ mailedBy: '0001298882', mobo: '   ' })).toBe('0001298882');
+  });
+
+  it('uses an explicit value when Canada Post has issued a separate one', () => {
+    expect(resolveMobo({ mailedBy: '0001298882', mobo: '0009999999' })).toBe('0009999999');
+  });
+});
+
+describe('building the calls that spend money', () => {
+  it('builds Create Shipment with mailedBy and mobo', () => {
+    expect(resolveShipmentEndpoint({ baseUrl: BASE, customerNumber: '0001298882' }))
+      .toBe(`${BASE}${CANADAPOST_API_ROOT}/0001298882/0001298882/shipments`);
+  });
+
+  it('honours a distinct mobo for a platform mailing on behalf of someone else', () => {
+    expect(resolveShipmentEndpoint({ baseUrl: BASE, customerNumber: '1111111', mobo: '2222222' }))
+      .toBe(`${BASE}${CANADAPOST_API_ROOT}/1111111/2222222/shipments`);
+  });
+
+  it('returns nothing at all without a customer number, rather than a half path', () => {
+    expect(resolveShipmentEndpoint({ baseUrl: BASE, customerNumber: '' })).toBe('');
+    expect(resolveManifestEndpoint({ baseUrl: BASE, customerNumber: '' })).toBe('');
+  });
+
+  it('builds Transmit Shipments, the call that avoids the unmanifested surcharge', () => {
+    expect(resolveManifestEndpoint({ baseUrl: BASE, customerNumber: '0001298882' }))
+      .toBe(`${BASE}${CANADAPOST_API_ROOT}/0001298882/0001298882/manifests`);
+  });
+
+  it('builds the artifact URL from stored identifiers, for a reprint months later', () => {
+    expect(resolveArtifactEndpoint({
+      baseUrl: BASE, consumerId: 'CG123', artifactId: 'abc-def', index: 0,
+    })).toBe(`${BASE}${CANADAPOST_API_ROOT}/artifacts/CG123/shipping/abc-def/0`);
+  });
+
+  it('returns nothing for an artifact it cannot address', () => {
+    expect(resolveArtifactEndpoint({ baseUrl: BASE, consumerId: '', artifactId: 'x' })).toBe('');
+    expect(resolveArtifactEndpoint({ baseUrl: BASE, consumerId: 'x', artifactId: '' })).toBe('');
+  });
+
+  it('builds any other documented call through the one builder', () => {
+    expect(buildCanadaPostEndpoint({
+      baseUrl: BASE,
+      path: CANADAPOST_SHIPPING_API.voidShipmentPath,
+      mailedBy: '0001298882',
+      shipmentId: 'S-1',
+    })).toBe(`${BASE}${CANADAPOST_API_ROOT}/0001298882/0001298882/shipments/S-1`);
+  });
+});
+
+describe('scope and rate-limit bucket per API', () => {
+  it('mints every current subscription against the merchant scope', () => {
+    expect(resolveCanadaPostScope(CANADAPOST_SHIPPING_API)).toBe('merchant');
+    expect(resolveCanadaPostScope(CANADAPOST_RATING_API)).toBe('merchant');
+  });
+
+  it('falls back to the rating scope rather than minting against an empty one', () => {
     expect(resolveCanadaPostScope({ scope: '' })).toBe(CANADAPOST_RATING_API.scope);
     expect(resolveCanadaPostScope(undefined)).toBe(CANADAPOST_RATING_API.scope);
   });
 
-  it('uses the API own scope when it has one, since Shipping is a separate subscription', () => {
-    expect(resolveCanadaPostScope({ scope: 'shipping' })).toBe('shipping');
+  it('separates the rate-limit buckets, since limits differ per product', () => {
+    expect(resolveCanadaPostProduct(CANADAPOST_RATING_API)).toBe('rating');
+    expect(resolveCanadaPostProduct(CANADAPOST_TRACKING_API)).toBe('tracking');
+    expect(resolveCanadaPostProduct(CANADAPOST_SHIPPING_API)).toBe('shipping');
+    // A manifest is billed and throttled as part of shipping, not on its own.
+    expect(resolveCanadaPostProduct(CANADAPOST_MANIFEST_API)).toBe('shipping');
   });
 });
