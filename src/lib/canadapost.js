@@ -115,7 +115,8 @@ export function buildRateScenarioJson({
 }) {
   const origin = cleanPostalCode(originPostalCode) || 'M4B1B3';
   const dest = String(destCountry || 'CA').toUpperCase().trim();
-  const weight = Math.max(0.01, parseFloat(weightKg || 0.5));
+  // Canada Post parcel services require a minimum parcel weight floor (0.1 kg / 100g)
+  const weight = Math.max(0.1, parseFloat(weightKg || 0.5));
   const length = Math.max(0.1, parseFloat(lengthCm || 20));
   const width = Math.max(0.1, parseFloat(widthCm || 15));
   const height = Math.max(0.1, parseFloat(heightCm || 2));
@@ -146,15 +147,13 @@ export function buildRateScenarioJson({
   //
   //   commercial — the account's negotiated rates. Requires a customer number,
   //                and the account must actually be set up for the route being
-  //                quoted. An account with no US agreement gets an EMPTY list
+  //                quoted. An account with no commercial agreement gets an EMPTY list
   //                back, not an error.
   //   counter    — published retail rates. Requires that NO customer number or
   //                contract id be sent at all.
   //
-  // 'auto' means commercial when a customer number exists, which is the right
-  // first choice; getCanadaPostRates falls back to counter when that comes back
-  // empty. Payload keys are strictly camelCase: the gateway validates with
-  // additionalProperties:false and rejects hyphenated variants with a 400.
+  // 'auto' means commercial when a customer number exists; getCanadaPostRates falls
+  // back to counter when that comes back empty. Payload keys are strictly camelCase.
   const resolvedType = quoteType === 'auto'
     ? (customerNumber ? 'commercial' : 'counter')
     : quoteType;
@@ -202,34 +201,36 @@ export function parseCanadaPostPriceQuotes(jsonText) {
   }
 
   const quotes = [];
-  const rootQuotes = data.priceQuotes || data['price-quotes'] || {};
-  const priceQuotes = rootQuotes.priceQuote || rootQuotes['price-quote'] || [];
-  const quoteArray = Array.isArray(priceQuotes) ? priceQuotes : [priceQuotes];
+  const rootQuotes = data.priceQuotes || data['price-quotes'] || data.prices || data.rates || data.services || (Array.isArray(data) ? data : {});
+  const priceQuotes = Array.isArray(rootQuotes)
+    ? rootQuotes
+    : (rootQuotes.priceQuote || rootQuotes['price-quote'] || rootQuotes.quote || rootQuotes.service || (Array.isArray(data.priceQuote) ? data.priceQuote : []));
+  const quoteArray = Array.isArray(priceQuotes) ? priceQuotes : (priceQuotes ? [priceQuotes] : []);
 
   for (const quote of quoteArray) {
     if (!quote) continue;
-    const serviceCode = quote.serviceCode || quote['service-code'] || '';
-    const serviceName = quote.serviceName || quote['service-name'] || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
+    const serviceCode = quote.serviceCode || quote['service-code'] || quote.code || quote.serviceId || '';
+    const serviceName = quote.serviceName || quote['service-name'] || quote.name || quote.serviceDescription || CANADAPOST_SERVICES[serviceCode]?.name || serviceCode;
 
-    const priceDetails = quote.priceDetails || quote['price-details'] || {};
-    const basePrice = parseFloat(priceDetails.base || 0);
-    const duePrice = parseFloat(priceDetails.due || basePrice);
+    const priceDetails = quote.priceDetails || quote['price-details'] || quote.pricing || quote.price || {};
+    const basePrice = parseFloat(priceDetails.base || priceDetails.basePrice || quote.basePrice || quote.base || 0);
+    const duePrice = parseFloat(priceDetails.due || priceDetails.duePrice || priceDetails.total || quote.totalPrice || quote.total || quote.due || basePrice);
     
     let gstPrice = 0, pstPrice = 0, hstPrice = 0;
-    const taxesObj = priceDetails.taxes || {};
+    const taxesObj = priceDetails.taxes || priceDetails.taxBreakdown || {};
     gstPrice = parseFloat(taxesObj.gst || 0);
     pstPrice = parseFloat(taxesObj.pst || 0);
     hstPrice = parseFloat(taxesObj.hst || 0);
-    const totalTaxes = Math.round((gstPrice + pstPrice + hstPrice) * 100) / 100;
+    const totalTaxes = Math.round((gstPrice + pstPrice + hstPrice) * 100) / 100 || parseFloat(priceDetails.taxes?.total || priceDetails.tax || quote.tax || 0);
 
-    const serviceStandard = quote.serviceStandard || quote['service-standard'] || {};
-    const transitDays = serviceStandard.expectedTransitTime || serviceStandard['expected-transit-time'];
-    const deliveryDate = serviceStandard.expectedDeliveryDate || serviceStandard['expected-delivery-date'] || null;
+    const serviceStandard = quote.serviceStandard || quote['service-standard'] || quote.standard || {};
+    const transitDays = serviceStandard.expectedTransitTime || serviceStandard['expected-transit-time'] || serviceStandard.transitDays || quote.transitDays;
+    const deliveryDate = serviceStandard.expectedDeliveryDate || serviceStandard['expected-delivery-date'] || serviceStandard.deliveryDate || quote.deliveryDate || null;
 
     quotes.push({
       serviceCode,
       serviceName,
-      currency: 'CAD',
+      currency: quote.currency || priceDetails.currency || 'CAD',
       basePrice,
       totalPrice: duePrice,
       taxes: totalTaxes,
@@ -1228,13 +1229,13 @@ export async function getCanadaPostRates({
   apiSecret = DEFAULT_CP_API_SECRET,
   customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
   contractId = '',
+  quoteType = 'auto',
   isTest = false
 }) {
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
-  // Based on the new Developer Portal, the rating API URL has changed
   const targetEndpoint = `${baseUrl}/prod/devportal-portaildesdeveloppeurs/rating/v1/prices`;
 
-  const quoteOnce = async (quoteType) => {
+  const quoteOnce = async (type) => {
     const jsonPayload = buildRateScenarioJson({
       originPostalCode,
       destCountry,
@@ -1245,7 +1246,7 @@ export async function getCanadaPostRates({
       heightCm,
       customerNumber,
       contractId,
-      quoteType
+      quoteType: type
     });
 
     const result = await executeCanadaPostProxy({
@@ -1262,16 +1263,20 @@ export async function getCanadaPostRates({
     throw new Error('Empty response from Canada Post Rating API');
   };
 
+  // If quoteType is explicitly requested as 'counter' or 'retail', or if no customer number is provided:
+  if (quoteType === 'counter' || quoteType === 'retail' || !String(customerNumber || '').trim()) {
+    const retailQuotes = await quoteOnce('counter');
+    return retailQuotes.map(q => ({ ...q, quoteType: 'counter', isRetail: true }));
+  }
+
   // A commercial quote is the right first ask when there is a customer number:
   // it returns the account's negotiated prices. But Canada Post answers a
-  // commercial request for a route the account has no agreement on with an
-  // EMPTY list and HTTP 200 — no error, no explanation. Read literally that
-  // says "no services exist to the United States", which is not true; it says
-  // this account has no US contract.
+  // commercial request for an account with no contracted rates on that route with an
+  // EMPTY list and HTTP 200 — no error, no explanation.
   //
-  // So when commercial comes back empty, ask again for the published retail
+  // When commercial comes back empty, ask again for the published retail
   // rates. Those require the customer number and contract id to be absent
-  // entirely, which is why this is a second request rather than a flag.
+  // entirely in the scenario payload.
   const wantsCommercial = !!String(customerNumber || '').trim();
   const first = await quoteOnce(wantsCommercial ? 'commercial' : 'counter');
 
@@ -1280,7 +1285,7 @@ export async function getCanadaPostRates({
   }
 
   const retail = await quoteOnce('counter');
-  return retail.map(q => ({ ...q, quoteType: 'counter', commercialUnavailable: true }));
+  return retail.map(q => ({ ...q, quoteType: 'counter', isRetail: true, commercialUnavailable: true }));
 }
 
 /**
