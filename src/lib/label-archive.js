@@ -69,13 +69,18 @@ export function findArchivedLabel(archive, pin) {
 /**
  * Drop anything that could not be redrawn, then apply the cap.
  *
- * An entry without a tracking PIN cannot be found again, and a simulated
- * shipment was never bought — keeping either would only offer the publisher a
- * label that means nothing.
+ * An entry without a tracking PIN cannot be found again, so it goes.
+ *
+ * Test-mode shipments ARE kept. They used to be dropped on the grounds that
+ * nothing was bought, which left a sandbox run with nothing to reprint and so
+ * no way to rehearse the reprint path at all — the one thing a test run is for.
+ * They stay marked `isSimulated` at every layer that shows them, and the label
+ * they redraw carries NOT VALID FOR MAILING on its face, so a test parcel can
+ * be found and reviewed without ever passing for a real one.
  */
 export function pruneLabelArchive(archive, limit = LABEL_ARCHIVE_LIMIT) {
   return (Array.isArray(archive) ? archive : [])
-    .filter(e => e && archiveKeyForPin(e.trackingPin) && !e.isSimulated)
+    .filter(e => e && archiveKeyForPin(e.trackingPin))
     .slice(0, limit);
 }
 
@@ -93,5 +98,8 @@ export function listArchivedLabels(archive) {
     destinationCountry: e.destination?.countryCode || '',
     declarationId: e.declarationId || '',
     purchasedAt: e.archivedAt || e.purchasedAt || '',
+    // Carried through so a picker can badge a test parcel rather than listing
+    // it indistinguishably beside labels that were really bought.
+    isSimulated: !!e.isSimulated,
   }));
 }

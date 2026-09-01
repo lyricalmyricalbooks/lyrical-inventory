@@ -8,7 +8,7 @@
  *
  * Implements official Canada Post Web Services REST API:
  * - Rating & Pricing: /prod/devportal-portaildesdeveloppeurs/rating/v1/prices
- * - Tracking: /vis/tracking/pin/{pin}/summary
+ * - Tracking: /prod/devportal-portaildesdeveloppeurs/tracking/v1/pins/{pin}/summaries
  * - Service Discovery & Connection Test
  * - Offline-first fallback estimation for Canadian domestic and cross-border shipments
  */
@@ -20,6 +20,14 @@ import {
   listArchivedLabels,
   archiveKeyForPin,
 } from './label-archive.js';
+import {
+  CANADAPOST_RATING_API,
+  CANADAPOST_TRACKING_API,
+  getCanadaPostShippingApi,
+  resolveShipmentEndpoint,
+  resolveCanadaPostScope,
+  SHIPPING_API_UNCONFIGURED_MESSAGE,
+} from './canadapost-endpoints.js';
 import {
   missingSenderFields,
   senderAddressIsPlaceholder,
@@ -443,6 +451,29 @@ function isSimulationAllowed({ isTest }) {
 }
 
 /**
+ * Build a test-mode shipment.
+ *
+ * One factory for both reasons a sandbox run cannot reach Canada Post — the
+ * gateway was unreachable, or label creation is not configured yet — so the two
+ * paths cannot drift into producing differently-shaped results. Everything it
+ * returns is marked `isSimulated`, and `simulationReason` says in plain words
+ * why, because that sentence is shown to the shop owner rather than logged.
+ */
+export function simulateCanadaPostShipment(reason) {
+  const stamp = Date.now().toString();
+  const mockTrackingPin = `7012${stamp.slice(-12)}`;
+  return {
+    ok: true,
+    shipmentId: `CP-SHIP-${stamp.slice(-8)}`,
+    trackingPin: mockTrackingPin,
+    labelUrl: `local://canadapost/label/${mockTrackingPin}`,
+    receiptUrl: `local://canadapost/label/${mockTrackingPin}`,
+    isSimulated: true,
+    simulationReason: reason || 'Canada Post gateway unreachable'
+  };
+}
+
+/**
  * Audit a Canada Post configuration before any money is spent.
  * Returns the resolved environment plus blocking errors and non-blocking warnings,
  * so the publisher can see exactly which account a label will be billed to.
@@ -636,11 +667,12 @@ export function setLastPurchasedShipmentContext(ctx) {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('lm_last_cp_shipment', JSON.stringify(ctx));
       // Also keep it alongside every earlier purchase, so a label bought last
-      // week can still be reprinted when Canada Post is unreachable.
-      if (!ctx?.isSimulated) {
-        const archive = addLabelToArchive(readLabelArchive(), ctx);
-        localStorage.setItem(LABEL_ARCHIVE_KEY, JSON.stringify(archive));
-      }
+      // week can still be reprinted when Canada Post is unreachable. Test-mode
+      // shipments are kept too — they stay flagged `isSimulated` wherever they
+      // are listed, and a sandbox run that cannot be reprinted cannot rehearse
+      // the reprint path, which is most of what a sandbox run is for.
+      const archive = addLabelToArchive(readLabelArchive(), ctx);
+      localStorage.setItem(LABEL_ARCHIVE_KEY, JSON.stringify(archive));
     }
   } catch (_) {}
 }
@@ -1052,11 +1084,19 @@ export async function executeCanadaPostProxy({
   customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
   zonosAccountKey = '',
   isTest = false,
-  allowSimulation = null
+  allowSimulation = null,
+  scope = '',
+  isShipment: isShipmentCall = null
 }) {
   const key = sanitizeCanadaPostCredential(apiKey || DEFAULT_CP_API_KEY).value;
   const secret = sanitizeCanadaPostCredential(apiSecret || DEFAULT_CP_API_SECRET).value;
-  const isShipment = targetEndpoint.indexOf('ncshipment') !== -1;
+  // Which kind of call this is decides the backend route, the media type and
+  // whether a failure may fall back to a test shipment — so the caller states
+  // it. It used to be sniffed out of the URL with indexOf('ncshipment'), which
+  // silently stops being true the moment the shipment path is corrected.
+  const isShipment = isShipmentCall === null
+    ? targetEndpoint.indexOf('ncshipment') !== -1
+    : !!isShipmentCall;
   const localProxyUrl = isShipment ? '/api/canadapost/shipment' : '/api/canadapost/rates';
 
   // 1. Try local dev / backend proxy first if running in browser.
@@ -1077,7 +1117,8 @@ export async function executeCanadaPostProxy({
           apiSecret: secret,
           targetEndpoint,
           customerNumber,
-          zonosAccountKey
+          zonosAccountKey,
+          scope
         }),
         signal: probe.signal
       });
@@ -1119,7 +1160,8 @@ export async function executeCanadaPostProxy({
             apiSecret: secret,
             customerNumber,
             zonosAccountKey,
-            isTest
+            isTest,
+            scope
           }
         })
       });
@@ -1182,18 +1224,7 @@ export async function executeCanadaPostProxy({
     // Handing that to a customer, billing it to the ledger, or marking an order shipped
     // would all be wrong, so simulation is confined to sandbox/demo-credential runs.
     if (isShipment && (allowSimulation === null ? isSimulationAllowed({ isTest }) : !!allowSimulation)) {
-      const mockShipmentId = `CP-SHIP-${Date.now().toString().slice(-8)}`;
-      const mockTrackingPin = `7012${Date.now().toString().slice(-12)}`;
-      const mockLabelUrl = `local://canadapost/label/${mockTrackingPin}`;
-      return {
-        ok: true,
-        shipmentId: mockShipmentId,
-        trackingPin: mockTrackingPin,
-        labelUrl: mockLabelUrl,
-        receiptUrl: mockLabelUrl,
-        isSimulated: true,
-        simulationReason: directErr.message || 'Canada Post gateway unreachable'
-      };
+      return simulateCanadaPostShipment(directErr.message || 'Canada Post gateway unreachable');
     }
     if (isShipment) {
       throw new Error(
@@ -1238,7 +1269,7 @@ export async function getCanadaPostRates({
   isTest = false
 }) {
   const baseUrl = isTest ? CANADAPOST_SANDBOX_URL : CANADAPOST_PRODUCTION_URL;
-  const targetEndpoint = `${baseUrl}/prod/devportal-portaildesdeveloppeurs/rating/v1/prices`;
+  const targetEndpoint = `${baseUrl}${CANADAPOST_RATING_API.pricesPath}`;
 
   const quoteOnce = async (type) => {
     const jsonPayload = buildRateScenarioJson({
@@ -1705,7 +1736,7 @@ export async function verifyCanadaPostTrackingPin({
     throw new Error('Add your Canada Post API key and secret in Tax Centre → Canada Post Direct API before checking a tracking PIN.');
   }
   const env = resolveCanadaPostEnvironment({ isTest });
-  const targetEndpoint = `${env.baseUrl}/prod/devportal-portaildesdeveloppeurs/tracking/v1/pins/${encodeURIComponent(cleanPin)}/summaries`;
+  const targetEndpoint = `${env.baseUrl}${CANADAPOST_TRACKING_API.summaryPath.replace('{pin}', encodeURIComponent(cleanPin))}`;
 
   // 1. Local dev / backend proxy
   if (typeof window !== 'undefined') {
@@ -2191,17 +2222,37 @@ export async function buyCanadaPostLabel({
   }
 
   const customerId = audit.customerNumber || normalizeCustomerNumber(DEFAULT_CP_CUSTOMER_NUMBER);
-  const targetEndpoint = `${audit.environment.baseUrl}/rs/${encodeURIComponent(customerId)}/ncshipment`;
 
-  const result = await executeCanadaPostProxy({
-    targetEndpoint,
-    jsonPayload,
-    apiKey,
-    apiSecret,
-    customerNumber,
-    zonosAccountKey,
-    isTest
+  // The endpoint comes from the registry rather than being built here. This
+  // call used to post to `/rs/{customer}/ncshipment` — the retired Web Services
+  // path — against the Developer Portal host, which has no such path, so every
+  // purchase 404'd and a sandbox run silently fell through to a fake shipment.
+  const targetEndpoint = resolveShipmentEndpoint({
+    baseUrl: audit.environment.baseUrl,
+    customerNumber: customerId
   });
+
+  let result;
+  if (!targetEndpoint) {
+    // Label creation is not configured. Say so rather than calling a path that
+    // does not exist and reporting the 404 as though it were the account's fault.
+    if (!isTest) throw new Error(SHIPPING_API_UNCONFIGURED_MESSAGE);
+    result = simulateCanadaPostShipment(
+      'Canada Post label creation is not switched on yet, so this test run produced a practice label instead of a real one.'
+    );
+  } else {
+    result = await executeCanadaPostProxy({
+      targetEndpoint,
+      jsonPayload,
+      apiKey,
+      apiSecret,
+      customerNumber,
+      zonosAccountKey,
+      isTest,
+      scope: resolveCanadaPostScope(getCanadaPostShippingApi()),
+      isShipment: true
+    });
+  }
 
   let responseData;
   if (result.trackingPin && result.labelUrl) {

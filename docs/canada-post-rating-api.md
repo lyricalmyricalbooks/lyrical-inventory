@@ -109,13 +109,61 @@ fundamentals page. Build generic resilience regardless: exponential backoff on
 6. **Tests against the Test app only** — never point automated tests at production credentials, which can bill.
 7. **Thin domain wrapper** (e.g. `getShippingRates(origin, destination, package)`) hiding the OAuth/header plumbing from the rest of the app.
 
-## 9. Where this lives in this repo
+## 9. Label creation is a SEPARATE API — the Shipping API
 
-- `src/lib/canadapost.js` — client, service codes, rate request builder, error text. Rating endpoint: `/prod/devportal-portaildesdeveloppeurs/rating/v1/prices`.
+> [!IMPORTANT]
+> The Rating API cannot create a label. Rating answers "what would this cost";
+> creating the label is the **Shipping API**, a separate subscription on the same
+> Developer Portal app: **Create Shipment**, then **Get Artifact** to download the
+> label document itself. A Rating-only app cannot buy a label no matter how the
+> request is shaped.
+
+This repo used to post label purchases to `/rs/{customerNumber}/ncshipment` — the
+retired Web Services path — against the Developer Portal host, which has no such
+path. Rating had been migrated to the gateway namespace and shipping had not, and
+because a sandbox run silently fell back to a fabricated shipment, nothing ever
+surfaced the 404. Every Canada Post path now lives in one registry:
+[`src/lib/canadapost-endpoints.js`](../src/lib/canadapost-endpoints.js).
+
+**Switching label creation on.** Three values, all read off the Shipping API's
+OpenAPI definition (Developer Portal → APIs → Shipping → download the OpenAPI
+definition) — never guessed:
+
+```js
+import { configureCanadaPostShippingApi } from './src/lib/canadapost-endpoints.js';
+
+configureCanadaPostShippingApi({
+  createShipmentPath: '…',  // POST path for Create Shipment; write the customer
+                            // number as {customerNumber} and it is substituted
+  scope: 'merchant',        // the OAuth scope Shipping tokens are minted with
+  mediaType: ''             // versioned vnd.cpc.*+json type, or '' for plain JSON
+});
+```
+
+Until `createShipmentPath` is set, the app reports label creation as not
+configured. A live purchase refuses outright; a test-mode purchase completes as a
+clearly-flagged practice run. Neither invents a path.
+
+If the spec turns out to require a versioned media type rather than plain
+`application/json`, honouring `mediaType` also needs a matching change in both
+proxies (`backend/server.js` and `apps-script/Code.gs`), which currently send
+plain `application/json` to this host — and an Apps Script change means bumping
+the script version and re-syncing `public/gas-code.txt`.
+
+**Test mode.** Sandbox runs the full flow — order marked shipped, postage entry
+recorded, shipment archived and reprintable, label modal opened — with every
+record it writes stamped `simulated` and shown as a test. Test-mode entries are
+kept in the label archive on purpose: a sandbox run that cannot be reprinted
+cannot rehearse the reprint path.
+
+## 10. Where this lives in this repo
+
+- `src/lib/canadapost-endpoints.js` — the endpoint registry. Every Canada Post path, scope and media type is declared here; nothing builds a path inline.
+- `src/lib/canadapost.js` — client, service codes, rate request builder, error text.
 - `backend/server.js` — Node proxy; token exchange + 55-minute cache.
 - `apps-script/Code.gs` — Apps Script proxy; same token exchange, cached in `CacheService`. Any change here must be copied verbatim into `public/gas-code.txt` and the script version bumped (see `CLAUDE.md`).
 
-## 10. Sources
+## 11. Sources
 
 - Rating overview — Canada Post Developer Portal
 - API fundamentals — Canada Post Developer Portal
