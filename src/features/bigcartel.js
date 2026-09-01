@@ -55,6 +55,7 @@ import {
   describeGapSummary,
   findLedgerGaps,
   findRecoveredOrderConflicts,
+  pendingGaps,
   sameOrderNumber,
 } from '../lib/bigcartel-ledger-gap.js';
 
@@ -1218,6 +1219,7 @@ function isCancelledStatus(order) {
 
 const BC_GAP_CACHE_KEY = 'lm-bc-gap-cache';
 const BC_GAP_DISMISSED_KEY = 'lm-bc-gap-dismissed';
+const BC_GAP_COLLAPSED_KEY = 'lm-bc-gap-collapsed';
 const BC_GAP_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 let _bcGapResult = null;
@@ -1306,6 +1308,17 @@ function bigCartelConfigured(config) {
  * configured or the network is down. The button passes silent:false and gets
  * the full reporting.
  */
+/** Re-save the current result, so a set-aside decision survives a reload. */
+function persistBcGapCache() {
+  if (!_bcGapResult) return;
+  const existing = readBcGapCache();
+  writeBcGapCache({
+    checkedAt: existing?.checkedAt || Date.now(),
+    result: _bcGapResult,
+    conflicts: _bcGapConflicts,
+  });
+}
+
 async function checkBigCartelLedgerGaps({ silent = false } = {}) {
   if (_bcGapChecking) return _bcGapResult;
   const config = await loadBigCartelConfig();
@@ -1344,7 +1357,7 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
     renderBigCartelLedgerGaps();
     renderBigCartelGapBadge();
     if (!silent) {
-      const n = _bcGapResult.missing.length;
+      const n = pendingGaps(_bcGapResult).length;
       showToast(n
         ? `⚠️ ${n} Big Cartel order${n === 1 ? '' : 's'} missing from your ledger`
         : '✓ Every Big Cartel order is in your ledger', n ? 'warn' : 'ok');
@@ -1383,7 +1396,7 @@ async function autoCheckBigCartelLedgerGaps() {
 
 /** The count badge on the Big Cartel tab button and the Website orders strip. */
 function renderBigCartelGapBadge() {
-  const total = (_bcGapResult?.missing?.length || 0)
+  const total = pendingGaps(_bcGapResult).length
     + (_bcGapConflicts?.renumber?.length || 0)
     + (_bcGapConflicts?.duplicate?.length || 0);
   document.querySelectorAll('.bc-gap-badge').forEach(node => {
@@ -1392,7 +1405,7 @@ function renderBigCartelGapBadge() {
   });
   const strip = $('web-bc-gap-strip');
   if (strip) {
-    const missing = _bcGapResult?.missing?.length || 0;
+    const missing = pendingGaps(_bcGapResult).length;
     strip.hidden = !missing;
     if (missing) {
       const label = $('web-bc-gap-strip-text');
@@ -1406,6 +1419,38 @@ function renderBigCartelGapBadge() {
 /** The catalogue as a list. BOOKS is already across the seam; BOOK_LIST would be a second name for the same data. */
 function catalogBooks() {
   return Object.values(BOOKS).filter(book => book && book.id);
+}
+
+/**
+ * Whether the review queue is rolled up.
+ *
+ * Worth remembering across visits rather than resetting each time: a publisher
+ * working through a long backlog will roll it up to get at the products and
+ * orders below it, and having it spring open on every visit to the tab makes
+ * the rest of the screen unreachable again. The header and its count stay
+ * visible either way, so rolling it up hides the work, never the warning.
+ */
+function bcGapCollapsed() {
+  try { return localStorage.getItem(BC_GAP_COLLAPSED_KEY) === '1'; } catch (e) { return false; }
+}
+
+function toggleBigCartelGapPanel() {
+  const next = !bcGapCollapsed();
+  try { localStorage.setItem(BC_GAP_COLLAPSED_KEY, next ? '1' : '0'); } catch (e) { /* storage blocked */ }
+  renderBigCartelLedgerGaps();
+}
+
+function applyBcGapCollapsed() {
+  const panel = $('bc-gap-panel');
+  const btn = $('bc-gap-collapse-btn');
+  if (!panel) return false;
+  const collapsed = bcGapCollapsed();
+  panel.dataset.collapsed = collapsed ? 'true' : 'false';
+  if (btn) {
+    btn.textContent = collapsed ? 'Show list' : 'Hide list';
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+  return collapsed;
 }
 
 function gapBookOptions(selectedId) {
@@ -1422,9 +1467,18 @@ function renderBigCartelLedgerGaps() {
   const repairs = $('bc-gap-repairs');
   if (summary) summary.textContent = _bcGapResult ? describeGapSummary(_bcGapResult) : 'Not checked yet.';
 
+  // Rolled up: the summary above still reports the count, so nothing is hidden
+  // that needs acting on. Building the rows anyway would mean assembling a book
+  // dropdown per order for a list nobody is looking at.
+  if (applyBcGapCollapsed()) {
+    if (list) list.innerHTML = '';
+    if (repairs) repairs.innerHTML = '';
+    return;
+  }
+
   const missing = _bcGapResult?.missing || [];
   if (list) {
-    list.innerHTML = missing.length
+    list.innerHTML = pendingGaps(_bcGapResult).length
       ? missing.map(gapRowHtml).join('')
       : `<div class="empty-state" style="padding:1.5rem;">
            <div class="e-icon">✓</div>
@@ -1446,6 +1500,24 @@ function renderBigCartelLedgerGaps() {
 
 function gapRowHtml(gap) {
   const idSafe = escapeHtml(gap.orderId || gap.num);
+
+  // A row the publisher just set aside collapses in place rather than
+  // vanishing. Most of this list is old pre-app sales being cleared one by one,
+  // and the only other way back from a mis-click is restoring every set-aside
+  // order at once — which would undo eighty deliberate decisions to fix one
+  // accident.
+  if (gap.setAside) {
+    return `<div class="bc-gap-row bc-gap-row-aside" data-order="${idSafe}">
+      <div class="bc-gap-copy">
+        <strong>${escapeHtml(gap.num)}</strong>
+        <span>Set aside · ${escapeHtml(gap.customer || gap.email || 'Customer')}</span>
+      </div>
+      <div class="bc-gap-decision">
+        <button class="btn sm" type="button" data-order="${idSafe}" onclick="undoBigCartelGapDismiss(this.dataset.order)">Undo</button>
+      </div>
+    </div>`;
+  }
+
   const items = gap.lines.length
     ? gap.lines.map(line => `${escapeHtml(line.title)} ×${line.qty}`).join(', ')
     : 'No items listed by the storefront';
@@ -1454,7 +1526,16 @@ function gapRowHtml(gap) {
   const guess = gap.confidence === 'price'
     ? '<span class="pill amber" style="font-size:10px;">Book guessed from price — check it</span>'
     : (gap.confidence === 'none' ? '<span class="pill red" style="font-size:10px;">Pick the book</span>' : '');
+  // The dismiss is a corner ✕ rather than a labelled button, and it does not ask
+  // for confirmation. Clearing a backlog of old sales the publisher already
+  // entered by hand means pressing it dozens of times in a row; a dialog each
+  // time would make the honest answer ("this one is already recorded") the most
+  // expensive one to give. The Undo above is what makes skipping the dialog safe.
   return `<div class="bc-gap-row" data-order="${idSafe}">
+    <button class="bc-gap-dismiss" type="button" data-order="${idSafe}"
+      onclick="dismissBigCartelGap(this.dataset.order)"
+      title="Set aside — already recorded, or not a sale"
+      aria-label="Set aside order ${escapeHtml(gap.num)} — already recorded, or not a sale">&#10005;</button>
     <div class="bc-gap-copy">
       <strong>${escapeHtml(gap.num)}</strong>
       <span>${escapeHtml(gap.date || 'Date unknown')} · ${escapeHtml(gap.customer || gap.email || 'Customer')}</span>
@@ -1467,7 +1548,6 @@ function gapRowHtml(gap) {
       <label for="bc-gap-qty-${idSafe}">Copies</label>
       <input id="bc-gap-qty-${idSafe}" type="number" min="1" step="1" value="${gap.qty || 1}" aria-label="Copies sold on order ${escapeHtml(gap.num)}">
       <div class="bc-gap-actions">
-        <button class="btn sm" type="button" data-order="${idSafe}" onclick="dismissBigCartelGap(this.dataset.order)">Not a sale</button>
         <button class="btn gold sm" type="button" data-order="${idSafe}" onclick="addBigCartelOrderToLedger(this.dataset.order)">Add to ledger</button>
       </div>
     </div>
@@ -1569,23 +1649,38 @@ async function addBigCartelOrderToLedger(orderId) {
     : `✓ ${entry.num} added to ${BOOKS[bookId].title}`);
 }
 
-/** Set an order aside as "not a sale to record" without pretending it is in the ledger. */
-async function dismissBigCartelGap(orderId) {
+/**
+ * Set one order aside — already recorded by hand, a test order, or a copy
+ * handled another way.
+ *
+ * No confirmation dialog. Most of this list is old sales from before the app
+ * existed that the publisher already entered manually, so this button gets
+ * pressed dozens of times in a row; a dialog on each would make clearing the
+ * backlog the slowest possible path. The row collapses to an Undo strip in
+ * place instead, which is a cheaper safety net than a prompt and does not
+ * interrupt the run.
+ */
+function dismissBigCartelGap(orderId) {
   const gap = findGap(orderId);
-  if (!gap) return;
-  const accepted = await confirmDialog(
-    `Leave ${gap.num} out of your ledger?\n\nIt stays on Big Cartel and no stock is deducted. Use this for test orders or copies you handled another way.`,
-    { title: 'Not a sale to record', okLabel: 'Leave it out' },
-  );
-  if (!accepted) return;
+  if (!gap || gap.setAside) return;
+  gap.setAside = true;
   const dismissed = readBcGapDismissed();
   if (!dismissed.includes(gap.num)) dismissed.push(gap.num);
   writeBcGapDismissed(dismissed);
-  _bcGapResult.missing = _bcGapResult.missing.filter(item => item !== gap);
-  _bcGapResult.skipped = (_bcGapResult.skipped || 0) + 1;
+  persistBcGapCache();
   renderBigCartelLedgerGaps();
   renderBigCartelGapBadge();
-  showToast(`${gap.num} left out of the ledger`);
+}
+
+/** Put one set-aside order back in the queue, for the mis-click. */
+function undoBigCartelGapDismiss(orderId) {
+  const gap = findGap(orderId);
+  if (!gap) return;
+  delete gap.setAside;
+  writeBcGapDismissed(readBcGapDismissed().filter(num => !sameOrderNumber(num, gap.num)));
+  persistBcGapCache();
+  renderBigCartelLedgerGaps();
+  renderBigCartelGapBadge();
 }
 
 /** Put every set-aside order back in the review list. */
@@ -1891,6 +1986,8 @@ async function triggerBigCartelShippingSync() {
 }
 export {
   addBigCartelOrderToLedger,
+  toggleBigCartelGapPanel,
+  undoBigCartelGapDismiss,
   autoCheckBigCartelLedgerGaps,
   checkBigCartelLedgerGaps,
   dismissBigCartelGap,

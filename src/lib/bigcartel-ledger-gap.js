@@ -463,6 +463,19 @@ export function findRecoveredOrderConflicts(bcOrders = [], ledgerEntries = [], {
 }
 
 /**
+ * The gaps still awaiting a decision.
+ *
+ * A row the publisher has just set aside stays in `missing` so the decision can
+ * be undone in place — a mis-click in a list of eighty is otherwise only
+ * recoverable by restoring every set-aside order at once. It is no longer
+ * outstanding work, though, so every count and every summary reads through
+ * here rather than off `missing` directly.
+ */
+export function pendingGaps(result) {
+  return (result?.missing || []).filter(gap => gap && !gap.setAside);
+}
+
+/**
  * The sentence shown above the review queue.
  *
  * Missing orders lead, because they are the only part that needs action —
@@ -470,7 +483,8 @@ export function findRecoveredOrderConflicts(bcOrders = [], ledgerEntries = [], {
  */
 export function describeGapSummary(result) {
   const r = result || {};
-  const missing = (r.missing || []).length;
+  const missing = pendingGaps(r).length;
+  const setAside = (r.missing || []).length - missing;
   const checked = Number(r.checked) || 0;
   if (!checked) return 'No storefront orders to check yet. Connect Big Cartel and refresh.';
 
@@ -481,7 +495,8 @@ export function describeGapSummary(result) {
     parts.push('every order is in your ledger');
   }
   if (r.cancelled) parts.push(`${r.cancelled} cancelled`);
-  if (r.skipped) parts.push(`${r.skipped} set aside`);
+  const totalSetAside = (Number(r.skipped) || 0) + setAside;
+  if (totalSetAside) parts.push(`${totalSetAside} set aside`);
   if (r.unidentified) parts.push(`${r.unidentified} with no readable order number`);
   return `Checked ${checked} Big Cartel order${checked === 1 ? '' : 's'}: ${parts.join(', ')}.`;
 }

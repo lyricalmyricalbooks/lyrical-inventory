@@ -345,7 +345,9 @@ import {
   prefillShippingFromBigCartelOrder,
   switchBigCartelSubTab,
   syncBigCartelShippingPaid,
+  toggleBigCartelGapPanel,
   triggerBigCartelShippingSync,
+  undoBigCartelGapDismiss,
   voidPlaceholderDuplicate,
 } from './features/bigcartel.js';
 import {
@@ -21876,6 +21878,8 @@ window.saveBigCartelSettings = saveBigCartelSettings;
 window.checkBigCartelLedgerGaps = checkBigCartelLedgerGaps;
 window.addBigCartelOrderToLedger = addBigCartelOrderToLedger;
 window.dismissBigCartelGap = dismissBigCartelGap;
+window.undoBigCartelGapDismiss = undoBigCartelGapDismiss;
+window.toggleBigCartelGapPanel = toggleBigCartelGapPanel;
 window.restoreBigCartelGaps = restoreBigCartelGaps;
 window.renumberPlaceholderOrder = renumberPlaceholderOrder;
 window.voidPlaceholderDuplicate = voidPlaceholderDuplicate;

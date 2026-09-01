@@ -13,6 +13,7 @@ import {
   buildBigCartelOrderEntry,
   isPlaceholderEntry,
   findRecoveredOrderConflicts,
+  pendingGaps,
   describeGapSummary,
 } from '../src/lib/bigcartel-ledger-gap.js';
 
@@ -362,5 +363,60 @@ describe('the two orders that went missing', () => {
     ];
     expect(findRecoveredOrderConflicts(storefront, ledger).duplicate)
       .toMatchObject([{ placeholderNum: '#RECOV-8F21A0', realNum: '#HAMA-220144' }]);
+  });
+});
+
+// Clearing the backlog. Most of a long queue is old pre-app sales the publisher
+// already entered by hand, so setting one aside has to be cheap and reversible.
+describe('setting an order aside', () => {
+  const result = () => ({
+    checked: 3,
+    missing: [
+      { num: '#AAAA-100001', customer: 'One' },
+      { num: '#BBBB-100002', customer: 'Two' },
+      { num: '#CCCC-100003', customer: 'Three' },
+    ],
+  });
+
+  it('drops a set-aside row out of the outstanding count', () => {
+    const r = result();
+    r.missing[1].setAside = true;
+    expect(pendingGaps(r).map(g => g.num)).toEqual(['#AAAA-100001', '#CCCC-100003']);
+  });
+
+  // It stays in `missing` on purpose: that is what lets the row collapse to an
+  // Undo strip in place instead of vanishing.
+  it('keeps the set-aside row available so the decision can be undone', () => {
+    const r = result();
+    r.missing[1].setAside = true;
+    expect(r.missing).toHaveLength(3);
+    delete r.missing[1].setAside;
+    expect(pendingGaps(r)).toHaveLength(3);
+  });
+
+  it('counts set-aside rows in the summary without calling them missing', () => {
+    const r = result();
+    r.missing[0].setAside = true;
+    r.missing[1].setAside = true;
+    expect(describeGapSummary(r))
+      .toBe('Checked 3 Big Cartel orders: 1 order missing from your ledger, 2 set aside.');
+  });
+
+  it('adds rows set aside now to those already skipped by an earlier pass', () => {
+    const r = { checked: 5, missing: [{ num: '#A-1', setAside: true }], skipped: 2 };
+    expect(describeGapSummary(r)).toMatch(/3 set aside/);
+  });
+
+  it('reports a fully cleared queue as clean', () => {
+    const r = result();
+    r.missing.forEach(gap => { gap.setAside = true; });
+    expect(pendingGaps(r)).toEqual([]);
+    expect(describeGapSummary(r))
+      .toBe('Checked 3 Big Cartel orders: every order is in your ledger, 3 set aside.');
+  });
+
+  it('survives a missing or empty result', () => {
+    expect(pendingGaps(null)).toEqual([]);
+    expect(pendingGaps({})).toEqual([]);
   });
 });
