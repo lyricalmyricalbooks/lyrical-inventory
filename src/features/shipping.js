@@ -5508,13 +5508,15 @@ function renderPostageMatchWorklist() {
     }).join('');
     // Every other order stays reachable below the ranked ones: a surname the
     // matcher could not read must never become an order the owner cannot pick.
-    const rest = orders
-      .filter(order => !matches.some(m => m.orderNumber === normalizeShippingOrderNumber(order.num)))
-      .map(order => {
-        const number = normalizeShippingOrderNumber(order.num);
-        if (!number) return '';
-        return `<option value="${escapeHtml(number)}">${escapeHtml(number)} · ${escapeHtml(order.shipName || order.customer || 'Customer')}</option>`;
-      }).join('');
+    // ⚡ Bolt Optimization: Replace chained .filter().some().map().join() passes with O(1) Set lookups and a single imperative loop
+    const matchedOrderNumbers = new Set(matches.map(m => m.orderNumber));
+    const restParts = [];
+    for (const order of orders) {
+      const number = normalizeShippingOrderNumber(order.num);
+      if (!number || matchedOrderNumbers.has(number)) continue;
+      restParts.push(`<option value="${escapeHtml(number)}">${escapeHtml(number)} · ${escapeHtml(order.shipName || order.customer || 'Customer')}</option>`);
+    }
+    const rest = restParts.join('');
 
     const tierPill = best
       ? `<span class="postage-match-tier ${best.tier}">${best.tier === 'confident' ? 'Strong match' : best.tier === 'likely' ? 'Likely match' : 'Weak match'}</span>`

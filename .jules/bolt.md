@@ -20,3 +20,6 @@
 ## 2025-02-28 - Loop Fusion in POS Cart Evaluation
 **Learning:** In the POS cart evaluation (`posGenerateSaleQR` and `posCheckout`), chaining `.some()` to check for missing FX rates and `.reduce()` to calculate the total sum creates multiple O(N) array traversals. Fusing these checks into a single imperative loop eliminates redundant iterations and improves performance for larger cart sizes.
 **Action:** When evaluating an array for a condition and simultaneously accumulating a sum, combine them into a single imperative loop instead of chaining array methods.
+## 2025-03-01 - Avoid nested O(N*M) lookups in template generation
+**Learning:** Generating dropdown options using `.filter(order => !matches.some(m => m.orderNumber === normalizeShippingOrderNumber(order.num)))` creates an O(N*M) bottleneck, where M is the small set of matches but `normalizeShippingOrderNumber` is unnecessarily called N*M times.
+**Action:** Replace nested array lookups involving expensive normalization calls with O(1) Set lookups initialized beforehand, and use a single imperative loop to build output strings.
