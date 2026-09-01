@@ -454,6 +454,8 @@ import {
   setShipAnalysisMarginFilter,
   onShipAnalysisSearch,
   onInlinePostageChange,
+  onInlineShippingPaidChange,
+  unlinkManualShippingPaid,
   confirmSuggestedShippoLink,
   openManualShippoLinkModal,
   filterManualShippoLinkRows,
@@ -2632,7 +2634,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v35';
+const EXPECTED_SCRIPT_VERSION = 'v36';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -21955,6 +21957,8 @@ window.onShipAnalysisBookFilterChange = onShipAnalysisBookFilterChange;
 window.setShipAnalysisMarginFilter = setShipAnalysisMarginFilter;
 window.onShipAnalysisSearch = onShipAnalysisSearch;
 window.onInlinePostageChange = onInlinePostageChange;
+window.onInlineShippingPaidChange = onInlineShippingPaidChange;
+window.unlinkManualShippingPaid = unlinkManualShippingPaid;
 window.confirmSuggestedShippoLink = confirmSuggestedShippoLink;
 window.openManualShippoLinkModal = openManualShippoLinkModal;
 window.filterManualShippoLinkRows = filterManualShippoLinkRows;

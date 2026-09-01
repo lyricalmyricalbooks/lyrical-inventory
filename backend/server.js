@@ -75,8 +75,7 @@ async function canadaPostAuthHeader(key, secret, endpoint) {
       body: new URLSearchParams({
         grant_type: 'client_credentials',
         client_id: key.trim(),
-        client_secret: secret.trim(),
-        scope: 'merchant'
+        client_secret: secret.trim()
       })
     });
     const tokenJson = await tokenRes.json().catch(() => ({}));
@@ -119,7 +118,7 @@ const server = http.createServer(async (req, res) => {
       const payload = jsonPayload || xmlPayload;
       const key = apiKey || process.env.CANADAPOST_API_KEY;
       const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
-      const endpoint = targetEndpoint || 'https://api.canadapost-postescanada.ca/rs/ship/price';
+      const endpoint = targetEndpoint || 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/rating/v1/prices';
 
       if (!key || !secret) {
         return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
@@ -157,7 +156,7 @@ const server = http.createServer(async (req, res) => {
       if (!apiKey || !apiSecret) return sendJson(res, 400, { error: 'Missing Canada Post API credentials' });
 
       try {
-        const endpoint = `https://api.canadapost-postescanada.ca/vis/tracking/pin/${encodeURIComponent(pin)}/summary`;
+        const endpoint = `https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/tracking/v1/pins/${encodeURIComponent(pin)}/summaries`;
         const auth = await canadaPostAuthHeader(apiKey, apiSecret, endpoint);
         const cpRes = await fetch(endpoint, {
           headers: {
