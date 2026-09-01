@@ -678,7 +678,8 @@ function doPost(e) {
               authHeader = 'Bearer ' + cachedToken;
             } else {
               const basicAuth = Utilities.base64Encode(keyTrim + ':' + secretTrim);
-              const payloadStr = 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim) + (d.scope ? '&scope=' + encodeURIComponent(String(d.scope).trim()) : '');
+              const scope = encodeURIComponent((d.scope || 'merchant').trim());
+              const payloadStr = 'grant_type=client_credentials&client_id=' + encodeURIComponent(keyTrim) + '&client_secret=' + encodeURIComponent(secretTrim) + '&scope=' + scope;
               const tokenResp = UrlFetchApp.fetch(tokenUrl, {
                 method: 'POST',
                 headers: {
