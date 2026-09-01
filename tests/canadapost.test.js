@@ -1014,6 +1014,18 @@ describe('Canada Post credential inspection', () => {
     expect(result.keyKind).toBe('legacy');
     expect(result.customerNumber).toBe('0001298882');
   });
+
+  it('passes a Developer Portal sandbox client ID with zero warnings', async () => {
+    const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
+    const result = inspectCanadaPostCredentials({
+      apiKey: 'd1d36298650efe474806c94f75cfb04a',
+      apiSecret: 'secretFromDeveloperPortalSandboxApp',
+      customerNumber: '0001298882'
+    });
+    expect(result.ok).toBe(true);
+    expect(result.findings).toHaveLength(0);
+    expect(result.keyKind).toBe('portal-client-id');
+  });
 });
 
 describe('Canada Post connection diagnosis', () => {
@@ -1033,6 +1045,23 @@ describe('Canada Post connection diagnosis', () => {
     });
     expect(result.verdict).toBe('wrong-settings');
     expect(result.steps.join(' ')).toMatch(/Sandbox Environment toggle ON/);
+  });
+
+  it('reports working when sandbox toggle matches sandbox key capability', async () => {
+    const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
+    const result = await diagnoseCanadaPostConnection({
+      apiKey: 'd1d36298650efe474806c94f75cfb04a',
+      apiSecret: 'sandboxSecret',
+      customerNumber: '0001298882',
+      isTest: true,
+      probe: async ({ sandbox }) => {
+        if (!sandbox) authError();
+        return [{ serviceCode: 'DOM.EP' }, { serviceCode: 'DOM.RP' }];
+      }
+    });
+    expect(result.ok).toBe(true);
+    expect(result.verdict).toBe('working');
+    expect(result.headline).toMatch(/Connected/);
   });
 
   it('identifies a customer number the key is not entitled to', async () => {
