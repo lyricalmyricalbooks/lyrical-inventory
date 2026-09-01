@@ -14801,6 +14801,83 @@ tr.hist-row:hover {
   min-height: 44px;
 }
 
+/* THE PER-ROW DISMISS
+   A corner ✕ rather than a labelled button, because most of this list is old
+   pre-app sales the publisher already entered by hand: the button gets pressed
+   dozens of times in a row, and a full-width "Not a sale" beside the gold
+   primary made the row read as two equal choices when only one of them moves
+   stock. Hit area is padded well past the glyph so it still clears the 44px
+   target the rest of the app holds to. */
+.bc-gap-row { position: relative; }
+
+.bc-gap-dismiss {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: var(--text-sm);
+  line-height: 1;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r2);
+  color: var(--content-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+
+/* Revealed on hover like the table row actions, but never hidden from keyboard
+   or touch: `:focus-visible` and the coarse-pointer rule below both force it
+   back, so it is not a mouse-only control. */
+.bc-gap-row:hover .bc-gap-dismiss,
+.bc-gap-dismiss:focus-visible { opacity: 1; }
+
+.bc-gap-dismiss:hover {
+  color: var(--status-critical);
+  border-color: var(--status-critical);
+}
+
+.bc-gap-dismiss:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring-color);
+  box-shadow: var(--focus-ring-halo);
+}
+
+@media (hover: none) {
+  .bc-gap-dismiss { opacity: 1; }
+}
+
+/* Keep the row's own content clear of the ✕. */
+.bc-gap-row .bc-gap-decision { padding-right: 44px; }
+
+/* A row that has just been set aside collapses to this strip rather than
+   disappearing, so a mis-click part-way through a long clear-out is undone
+   where it happened instead of by restoring every set-aside order at once. */
+.bc-gap-row-aside {
+  opacity: .6;
+  box-shadow: inset 3px 0 0 var(--status-neutral);
+}
+
+.bc-gap-row-aside:hover { opacity: 1; }
+
+.bc-gap-row-aside .bc-gap-copy strong {
+  color: var(--content-muted);
+  text-decoration: line-through;
+}
+
+.bc-gap-row-aside .bc-gap-decision { padding-right: 0; }
+
+/* Rolled up. The head and its summary line stay put — the count is the warning,
+   and hiding the list must never hide that. */
+.bc-gap-panel[data-collapsed="true"] .bc-gap-head { margin-bottom: 0; }
+.bc-gap-panel[data-collapsed="true"] .bc-gap-list,
+.bc-gap-panel[data-collapsed="true"] #bc-gap-repairs-wrap { display: none; }
+
 /* A repair row is corrective rather than additive — it is fixing a record that
    already exists — so it takes the neutral bar, keeping the critical accent for
    the sales that are genuinely still unrecorded. */
@@ -14857,6 +14934,7 @@ tr.hist-row:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bc-gap-row { transition: none; }
+  .bc-gap-row,
+  .bc-gap-dismiss { transition: none; }
   .bc-gap-row:hover { transform: none; }
 }
