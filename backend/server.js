@@ -75,7 +75,8 @@ async function canadaPostAuthHeader(key, secret, endpoint) {
       body: new URLSearchParams({
         grant_type: 'client_credentials',
         client_id: key.trim(),
-        client_secret: secret.trim()
+        client_secret: secret.trim(),
+        scope: 'merchant'
       })
     });
     const tokenJson = await tokenRes.json().catch(() => ({}));
