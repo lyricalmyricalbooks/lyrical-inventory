@@ -2634,7 +2634,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v36';
+const EXPECTED_SCRIPT_VERSION = 'v37';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
