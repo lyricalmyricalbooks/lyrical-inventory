@@ -1017,7 +1017,7 @@ describe('Canada Post credential inspection', () => {
 });
 
 describe('Canada Post connection diagnosis', () => {
-  const creds = { apiKey: 'devkey1234567890', apiSecret: 'devsecret0987654321' };
+  const creds = { apiKey: '1ed63baea3162824ee820aa20130a893', apiSecret: 'aSecretFromTheDeveloperPortal' };
   const authError = () => { throw new Error('Canada Post [E002]: AAA Authentication Failure'); };
 
   it('identifies a development key being used against the live gateway', async () => {
@@ -1053,14 +1053,15 @@ describe('Canada Post connection diagnosis', () => {
   it('says plainly when the key itself is refused everywhere', async () => {
     const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
-      ...creds,
+      apiKey: '1ed63baea3162824ee820aa20130a893', // Use a portal key to trigger auth failure
+      apiSecret: 'aSecretFromTheDeveloperPortal',
       customerNumber: '0001298882',
       isTest: false,
       probe: async () => authError()
     });
     expect(result.verdict).toBe('bad-credentials');
     expect(result.attempts).toHaveLength(4);
-    expect(result.steps.join(' ')).toMatch(/Developer Program/);
+    expect(result.steps.join(' ')).toMatch(/Developer Portal/);
   });
 
   it('reports success without asking the owner to change anything', async () => {
@@ -1092,14 +1093,14 @@ describe('Canada Post connection diagnosis', () => {
     const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
     const seen = [];
     await diagnoseCanadaPostConnection({
-      apiKey: ' key​with­junk ',
+      apiKey: ' 1ed63baea3162824ee820aa20130a893 ',
       apiSecret: ' secret﻿value ',
       isTest: false,
       probe: async () => { seen.push('called'); return [{ serviceCode: 'DOM.EP' }]; }
     });
     const { inspectCanadaPostCredentials } = await import('../src/lib/canadapost.js');
-    const insp = inspectCanadaPostCredentials({ apiKey: ' key​with­junk ', apiSecret: ' secret﻿value ' });
-    expect(insp.apiKey.value).toBe('keywithjunk');
+    const insp = inspectCanadaPostCredentials({ apiKey: ' 1ed63baea3162824ee820aa20130a893 ', apiSecret: ' secret﻿value ' });
+    expect(insp.apiKey.value).toBe('1ed63baea3162824ee820aa20130a893');
     expect(insp.apiSecret.value).toBe('secretvalue');
     expect(seen).toHaveLength(1);
   });
@@ -1138,34 +1139,33 @@ describe('Canada Post key system detection', () => {
   it('tells the owner they have the wrong kind of key rather than to re-check the password', async () => {
     const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
-      apiKey: '1ed63baea3162824ee820aa20130a893',
-      apiSecret: 'aSecretFromTheDeveloperPortal',
+      apiKey: '6e93d53968881714',
+      apiSecret: '0bfa9fcb9853d1f51ee57a',
       customerNumber: '0001298882',
       isTest: false,
       probe: async () => { throw new Error('Canada Post [E002]: AAA Authentication Failure'); }
     });
     expect(result.verdict).toBe('wrong-key-system');
-    expect(result.steps.join(' ')).toMatch(/Developer Program/);
-    expect(result.steps.join(' ')).toMatch(/username:password|"username:password"/);
+    expect(result.steps.join(' ')).toMatch(/retired its older/);
   });
 
   it('still reports a plain bad password as a bad password', async () => {
     const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
     const result = await diagnoseCanadaPostConnection({
-      apiKey: '6e93d53968881714',
+      apiKey: '1ed63baea3162824ee820aa20130a893',
       apiSecret: 'wrongpassword',
       isTest: false,
       probe: async () => { throw new Error('Canada Post [E002]: AAA Authentication Failure'); }
     });
     expect(result.verdict).toBe('bad-credentials');
-    expect(result.steps.join(' ')).toMatch(/1-866-511-0546/);
+    expect(result.steps.join(' ')).toMatch(/App credentials page/);
   });
 
   it('diagnoses a whole key:password paste by testing its split halves', async () => {
     const { diagnoseCanadaPostConnection } = await import('../src/lib/canadapost.js');
     const seen = [];
     const result = await diagnoseCanadaPostConnection({
-      apiKey: '6e93d53968881714:0bfa9fcb9853d1f51ee57a',
+      apiKey: '1ed63baea3162824ee820aa20130a893:aSecretFromTheDeveloperPortal',
       apiSecret: '',
       isTest: false,
       probe: async () => { seen.push(1); return [{ serviceCode: 'DOM.EP' }]; }
