@@ -59,7 +59,7 @@ async function canadaPostAuthHeader(key, secret, endpoint) {
   const basic = 'Basic ' + Buffer.from(`${key.trim()}:${secret.trim()}`).toString('base64');
   if (!canadaPostUsesOAuth(endpoint)) return { header: basic, mode: 'basic' };
 
-  const cacheKey = `${key.trim()}:${secret.trim()}`;
+  const cacheKey = key.trim();
   const cached = cpTokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return { header: `Bearer ${cached.token}`, mode: 'oauth' };

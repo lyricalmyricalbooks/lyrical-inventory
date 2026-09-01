@@ -1391,8 +1391,11 @@ export function inspectCanadaPostCredentials({ apiKey = '', apiSecret = '', cust
   if (kind === 'legacy-combined') {
     findings.push('Your API key still has the password joined onto it. Canada Post shows the pair as "key:password" — the part before the colon goes in the key box, the part after it in the password box. (The Diagnose button splits it for you automatically.)');
   }
+  if (kind === 'portal-client-id') {
+    findings.push('This looks like a Client ID from the newer Canada Post Developer Portal, not a Developer Program API key. Canada Post runs two separate systems and this app uses the older one, which issues its key as two parts joined by a colon. A Developer Portal Client ID cannot sign in to it, which is why the password is refused no matter what else you change.');
+  }
   if (key.value && secret.value && key.value === secret.value) {
-    findings.push('The Client ID and Client Secret are identical. They must be two distinct values from your Developer Portal App.');
+    findings.push('The API key and the API password are identical. They are two different values from the Canada Post Developer Program.');
   }
 
   const custDigits = normalizeCustomerNumber(customerNumber);

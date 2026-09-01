@@ -670,7 +670,7 @@ function doPost(e) {
         if (useOAuth) {
           try {
             const tokenUrl = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/cpc-api-native-oauth-provider/oauth2/token';
-            const cacheKey = 'cp_oauth_token_' + Utilities.base64Encode(keyTrim + ':' + secretTrim).substring(0, 32);
+            const cacheKey = 'cp_oauth_token_' + Utilities.base64Encode(keyTrim).substring(0, 32);
             const cache = CacheService.getScriptCache();
             const cachedToken = cache.get(cacheKey);
             
