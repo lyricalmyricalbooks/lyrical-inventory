@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v36)
+/* Lyricalmyrical Inventory — Unified Backend (v37)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -131,8 +131,8 @@
  *      to Canada Post Developer Portal instead of legacy vnd.cpc custom types.
  *  33. v35: Migrate Tracking and Label Artifact proxy to Canada Post's new
  *      JSON/OAuth architecture. Bump flags v34-and-older as outdated.
- *  34. v36: Fixes Canada Post OAuth 2.0 token acquisition by omitting unsupported scope parameter
- *      and updates tracking endpoint to /tracking/v1/pins/... Bump flags v35-and-older as outdated.
+ *  34. v36: Fixes Canada Post OAuth 2.0 token acquisition and updates tracking endpoint.
+ *  35. v37: Restores mandatory scope=merchant for Canada Post Developer Portal OAuth 2.0 token acquisition. Bump flags v36-and-older as outdated.
  */
 
 const HEADERS = [
@@ -181,8 +181,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v36',
-    scriptVersion: 'v36',
+    service: 'lyrical-sheets-webhook-v37',
+    scriptVersion: 'v37',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
