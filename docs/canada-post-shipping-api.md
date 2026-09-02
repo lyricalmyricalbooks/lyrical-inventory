@@ -85,10 +85,28 @@ Returns labels are a **separate API** (Returns 2.0.0), not covered here.
    the response's own `Content-Type`, do not assume PDF.
 3. **Check for "manifest required".** Canada Post signals this inconsistently —
    a boolean on some responses, wording on the label on others — so
-   `manifestRequired()` in
+   `manifestSignal()` in
    [`canadapost-shipment.js`](../src/lib/canadapost-shipment.js) checks both and
-   **treats an ambiguous answer as required**. A needless manifest costs an extra
-   call; a missed one costs money on every parcel it covered.
+   returns `required` / `not-required` / `unknown`, with **unknown treated as
+   required**. A needless manifest costs an extra call; a missed one costs money
+   on every parcel it covered.
+
+   > [!IMPORTANT]
+   > **A real label prints the ABBREVIATED, bilingual form**, confirmed against
+   > an actual Expedited Parcel label:
+   >
+   > ```
+   > MANIFEST NOT REQ
+   > MANIFESTE NON REQ
+   > ```
+   >
+   > The first version of this check matched only the spelled-out English
+   > "manifest required", so a label reading `MANIFEST REQ` was read as *not*
+   > required — the parcel would have shipped untransmitted and earned the exact
+   > surcharge the check exists to prevent. Any future change here must keep
+   > matching the abbreviation (`REQ`), the French (`REQUIS` / `NON REQ`), and
+   > the negation. A manifest check that is reassuring and wrong is worse than
+   > none at all.
 4. **Transmit Shipments** → manifest.
 5. **Get Manifest + Get Artifact** → the document handed to the driver.
 6. Optionally Get Shipment Price / Details for records; **Void** before transmit

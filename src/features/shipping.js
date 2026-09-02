@@ -4327,9 +4327,15 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
               <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:1px solid var(--amber,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
                 <span style="font-size:18px;line-height:1.1;" aria-hidden="true">📋</span>
                 <div style="font-size:11px;color:var(--text3);line-height:1.5;">
-                  <strong style="font-size:12px;color:var(--text);">This parcel needs a manifest before you drop it off.</strong><br>
-                  A manifest is one summary sheet Canada Post wants alongside parcels like this one.
-                  If the parcel is handed over without it, Canada Post adds an extra charge to it later.
+                  ${result.manifestSignal === 'unknown' ? `
+                    <strong style="font-size:12px;color:var(--text);">Canada Post did not say whether this parcel needs a manifest.</strong><br>
+                    A manifest is one summary sheet that goes with a batch of parcels. Sending one when it
+                    is not needed costs nothing, so send it to be safe.
+                  ` : `
+                    <strong style="font-size:12px;color:var(--text);">This parcel needs a manifest before you drop it off.</strong><br>
+                    A manifest is one summary sheet Canada Post wants alongside parcels like this one.
+                    If the parcel is handed over without it, Canada Post adds an extra charge to it later.
+                  `}
                 </div>
               </div>
             ` : ''}

@@ -80,30 +80,67 @@ export function parseArtifactHref(href) {
 }
 
 /**
- * Does this shipment still need to be transmitted on a manifest?
+ * How Canada Post writes the manifest instruction on the label itself.
  *
- * This is the workflow step most easily skipped, and skipping it is not a
- * cosmetic problem: Canada Post surcharges unmanifested shipments. Canada Post
- * signals it inconsistently — a boolean field on some responses, a phrase on
- * the label or in a message on others — so all of them are checked, and an
- * ambiguous answer is treated as "required".
+ * Taken from a real Expedited Parcel label, which prints the ABBREVIATED,
+ * bilingual form:
  *
- * Erring toward "required" is deliberate. A needless manifest costs nothing but
- * an extra call; a missed one costs money on every parcel it covered.
+ *     MANIFEST NOT REQ
+ *     MANIFESTE NON REQ
+ *
+ * The first version of this matched only the fully spelled-out English
+ * "manifest required", so a label reading "MANIFEST REQ" was read as not
+ * required and the parcel would have gone out untransmitted — the exact
+ * surcharge this check exists to prevent. Match the abbreviation, both
+ * languages, and the negation, or the check is worse than useless: it is
+ * reassuring and wrong.
  */
-export function manifestRequired(data) {
-  if (!data || typeof data !== 'object') return false;
+const MANIFEST_PHRASE = /manifeste?\s*(non|not)?\s*(req(?:uired|uis|d)?)\b/gi;
+
+/** 'required' | 'not-required' | 'unknown' — the signal, before it is judged. */
+export function manifestSignal(data) {
+  if (!data || typeof data !== 'object') return 'unknown';
 
   const explicit = data.manifestRequired
     ?? data.requiresManifest
     ?? data.shipmentInfo?.manifestRequired
     ?? data.nonContractShipmentInfo?.manifestRequired;
-  if (typeof explicit === 'boolean') return explicit;
-  if (typeof explicit === 'string') return /^(true|yes|y|required)$/i.test(explicit.trim());
 
-  // Fall back to the wording Canada Post prints on the label itself.
+  if (typeof explicit === 'boolean') return explicit ? 'required' : 'not-required';
+  if (typeof explicit === 'string') {
+    const value = explicit.trim();
+    if (/^(true|yes|y|required|requis)$/i.test(value)) return 'required';
+    if (/^(false|no|n|not required|non requis)$/i.test(value)) return 'not-required';
+  }
+
+  // Fall back to the wording printed on the label. Polarity decides: an
+  // affirmative anywhere wins, because a shipment that needs a manifest needs
+  // one whatever else the document says.
   const haystack = JSON.stringify(data);
-  return /manifest\s*required/i.test(haystack);
+  let sawNegative = false;
+  for (const match of haystack.matchAll(MANIFEST_PHRASE)) {
+    if (match[1]) sawNegative = true;
+    else return 'required';
+  }
+  if (sawNegative) return 'not-required';
+
+  return 'unknown';
+}
+
+/**
+ * Does this shipment still need to be transmitted on a manifest?
+ *
+ * This is the workflow step most easily skipped, and skipping it is not a
+ * cosmetic problem: Canada Post surcharges unmanifested shipments.
+ *
+ * An unknown signal is treated as REQUIRED. Erring that way is deliberate: a
+ * needless manifest costs one extra call, a missed one costs money on every
+ * parcel it covered. Only an explicit "not required" — a false field, or the
+ * "MANIFEST NOT REQ" the label prints — buys a clean no.
+ */
+export function manifestRequired(data) {
+  if (!data || typeof data !== 'object') return false;
+  return manifestSignal(data) !== 'not-required';
 }
 
 /**
@@ -146,6 +183,9 @@ export function parseShipmentResponse(body) {
     receiptUrl: receiptLink?.href || '',
     artifact: labelLink ? parseArtifactHref(labelLink.href) : null,
     manifestRequired: manifestRequired(data),
+    // The raw three-state signal travels alongside the boolean, so the screen
+    // can tell "Canada Post said yes" apart from "Canada Post did not say".
+    manifestSignal: manifestSignal(data),
     // A shipment with neither identifier is not a shipment, whatever the status
     // code said. Callers check this before booking anything to the ledger.
     created: !!(shipmentId || trackingPin),
@@ -156,17 +196,27 @@ export function parseShipmentResponse(body) {
 /**
  * What the shop owner should do next, in their own words.
  *
- * Returned as a sentence rather than a flag because the manifest step is the
- * one thing they have to act on, and a flag with no explanation reliably gets
- * ignored.
+ * Three states rather than two. A label that genuinely needs a manifest gets a
+ * firm instruction; one where Canada Post's reply did not say either way gets
+ * an honest "we could not tell" — because warning identically on every parcel
+ * teaches the owner to ignore the warning, which costs exactly as much as not
+ * showing it at all on the day it is real.
  */
 export function describeNextStep(result) {
   if (!result?.created) {
     return 'No label was created, so nothing was charged and nothing needs printing.';
   }
-  if (result.manifestRequired) {
+
+  const signal = result.manifestSignal
+    || (result.manifestRequired ? 'required' : 'not-required');
+
+  if (signal === 'required') {
     return 'This label needs a manifest — a single summary sheet Canada Post wants for these parcels. '
       + 'Send it before you drop the parcel off, or Canada Post adds a surcharge to it.';
+  }
+  if (signal === 'unknown') {
+    return 'Canada Post did not say whether this parcel needs a manifest — the summary sheet that goes with '
+      + 'a batch of parcels. Sending one when it is not needed costs nothing, so send it to be safe.';
   }
   return 'Print the label and attach it to the parcel. Nothing else is needed before drop-off.';
 }

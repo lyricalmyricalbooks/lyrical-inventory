@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  manifestSignal,
   parseShipmentResponse,
   parseArtifactHref,
   manifestRequired,
@@ -120,8 +121,31 @@ describe('the manifest trap', () => {
     })).toBe(true);
   });
 
-  it('says no when nothing anywhere mentions a manifest', () => {
-    expect(manifestRequired({ shipmentInfo: { shipmentId: 'S-1' } })).toBe(false);
+  // These strings are taken verbatim from a real Expedited Parcel label.
+  // Canada Post ABBREVIATES and prints both languages, which the first version
+  // of this check did not match — so a label reading "MANIFEST REQ" was read as
+  // not required and the parcel would have shipped untransmitted.
+  it('reads the abbreviated bilingual wording a real label actually carries', () => {
+    expect(manifestSignal({ shipmentInfo: { labelText: 'MANIFEST NOT REQ\nMANIFESTE NON REQ' } }))
+      .toBe('not-required');
+    expect(manifestSignal({ shipmentInfo: { labelText: 'MANIFEST REQ' } })).toBe('required');
+    expect(manifestSignal({ shipmentInfo: { labelText: 'MANIFESTE REQUIS' } })).toBe('required');
+  });
+
+  it('does not read "not required" as a requirement, in either language', () => {
+    expect(manifestRequired({ shipmentInfo: { labelText: 'MANIFEST NOT REQ' } })).toBe(false);
+    expect(manifestRequired({ shipmentInfo: { labelText: 'MANIFESTE NON REQUIS' } })).toBe(false);
+    expect(manifestRequired({ manifestRequired: 'non requis' })).toBe(false);
+  });
+
+  it('treats an unsaid answer as required, since a needless manifest is free', () => {
+    // Only an explicit no buys a clean no. A missed manifest costs money on
+    // every parcel it covered; a needless one costs one extra call.
+    expect(manifestSignal({ shipmentInfo: { shipmentId: 'S-1' } })).toBe('unknown');
+    expect(manifestRequired({ shipmentInfo: { shipmentId: 'S-1' } })).toBe(true);
+  });
+
+  it('has nothing to require when there is no shipment at all', () => {
     expect(manifestRequired(null)).toBe(false);
   });
 
@@ -146,6 +170,15 @@ describe('what the shop owner is told to do next', () => {
     const sentence = describeNextStep({ created: true, manifestRequired: false });
     expect(sentence).toMatch(/print/i);
     expect(sentence).not.toMatch(/manifest/i);
+  });
+
+  it('is honest when Canada Post did not say, rather than crying wolf', () => {
+    // Warning identically on every parcel teaches the owner to ignore the
+    // warning, which costs the same as never showing it on the day it is real.
+    const sentence = describeNextStep({ created: true, manifestRequired: true, manifestSignal: 'unknown' });
+    expect(sentence).toMatch(/did not say/i);
+    expect(sentence).toMatch(/costs nothing/i);
+    expect(sentence).not.toMatch(/surcharge/i);
   });
 
   it('reassures rather than alarms when nothing was created', () => {

@@ -2339,6 +2339,7 @@ export async function buyCanadaPostLabel({
     // this parcel was ever transmitted — the surcharge for an unmanifested
     // shipment lands long after the label is printed.
     manifestRequired: !!responseData.manifestRequired,
+    manifestSignal: responseData.manifestSignal || '',
     isSimulated,
     mode: audit.environment.mode,
     purchasedAt: new Date().toISOString()
@@ -2349,12 +2350,14 @@ export async function buyCanadaPostLabel({
     declarationId: finalDeclarationId,
     declarationIssuedByCarrier: !!issuedDeclarationId,
     manifestRequired: !!responseData.manifestRequired,
+    manifestSignal: responseData.manifestSignal || '',
     // The single sentence the screen shows about what to do next. Built here so
     // the manifest step cannot be dropped by a caller that forgets to check a
     // boolean — the surcharge for skipping it is real money.
     nextStep: describeNextStep({
       created: !!(responseData.trackingPin || responseData.shipmentId),
-      manifestRequired: !!responseData.manifestRequired
+      manifestRequired: !!responseData.manifestRequired,
+      manifestSignal: responseData.manifestSignal
     }),
     isSimulated,
     simulationReason: result.simulationReason || '',
@@ -2387,7 +2390,7 @@ export async function fetchCanadaPostLabelArtifact({
   apiKey = DEFAULT_CP_API_KEY,
   apiSecret = DEFAULT_CP_API_SECRET,
   shipmentContext = null
-}) {
+} = {}) {
   const key = sanitizeCanadaPostCredential(apiKey || DEFAULT_CP_API_KEY).value;
   const secret = sanitizeCanadaPostCredential(apiSecret || DEFAULT_CP_API_SECRET).value;
   const context = shipmentContext || getLastPurchasedShipmentContext();
