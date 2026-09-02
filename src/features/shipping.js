@@ -4220,6 +4220,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
       apiKey,
       apiSecret,
       customerNumber,
+      contractId,
       zonosAccountKey: getZonosAccountKey(),
       isTest
     });
@@ -4406,6 +4407,28 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
     }
   } catch (err) {
     console.error('Canada Post label purchase error:', err);
+    const msg = String(err?.message || '');
+    if (msg.includes('9174') || /payment card|payment method/i.test(msg)) {
+      if (typeof confirmDialog === 'function') {
+        confirmDialog(
+          'Canada Post could not bill this label because no default payment card is saved on your Canada Post online profile (Account #0001298882).\n\n'
+          + 'How to fix:\n'
+          + '1. Log into your Canada Post account at canadapost.ca\n'
+          + '2. Go to Profile / Business Profile → Manage Payment Methods\n'
+          + '3. Add or select your active credit card and check "Make this my default payment card"\n\n'
+          + 'Alternatively, if you hold a commercial contract with Canada Post, enter your Contract ID in Tax Centre → Canada Post to bill by account.',
+          {
+            title: '💳 Default Payment Card Required by Canada Post',
+            okLabel: 'Open Canada Post Profile',
+            cancelLabel: 'Close'
+          }
+        ).then(openProfile => {
+          if (openProfile) {
+            window.open('https://www.canadapost-postescanada.ca/cpc/en/personal/profile.page', '_blank');
+          }
+        }).catch(() => {});
+      }
+    }
     showToast(`⚠ Label purchase failed: ${err.message}`, 'err');
   } finally {
     setCanadaPostPurchaseBusy(false, buttonEl);

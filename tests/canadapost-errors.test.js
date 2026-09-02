@@ -240,12 +240,33 @@ describe('deciding whether a failure is worth calling again', () => {
 });
 
 describe('an account with no payment method saved', () => {
-  it('reads both codes as a billing problem rather than a shipping one', () => {
+  it('reads all payment method codes (9153, 9154, 9174) as a billing problem rather than a shipping one', () => {
     for (const code of CANADAPOST_PAYMENT_METHOD_CODES) {
       const result = classifyCanadaPostFailure({ status: 400, body: body({ code: String(code) }) });
       expect(result.category).toBe('payment');
-      expect(result.summary).toMatch(/payment method/i);
+      expect(result.summary).toMatch(/payment|credit card/i);
     }
+  });
+
+  it('parses Developer Portal errors array with errorCode 9174 and message', () => {
+    const devPortalPayload = JSON.stringify({
+      title: 'Validation failed',
+      detail: 'Errors occurred while processing the request.',
+      errors: [
+        {
+          errorCode: '9174',
+          message: 'To pay by credit card, a default payment card must be indicated on your Canada Post online profile.'
+        }
+      ]
+    });
+    const messages = parseCanadaPostMessages(devPortalPayload);
+    expect(messages).toHaveLength(1);
+    expect(messages[0].code).toBe('9174');
+    expect(messages[0].description).toContain('default payment card');
+
+    const failure = classifyCanadaPostFailure({ status: 400, body: devPortalPayload });
+    expect(failure.category).toBe('payment');
+    expect(failure.retryable).toBe(false);
   });
 
   it('gives the one of them Canada Post also lists as transient a single retry', () => {
@@ -259,15 +280,18 @@ describe('an account with no payment method saved', () => {
     expect(result.retryAfterMs).toBeGreaterThanOrEqual(CANADAPOST_MIN_RETRY_MS);
   });
 
-  it('does not retry the other one at all, because no amount of trying saves a card', () => {
-    const result = classifyCanadaPostFailure({ status: 400, body: body({ code: '9154' }) });
-    expect(result.retryable).toBe(false);
-    expect(result.retryAfterMs).toBe(0);
+  it('does not retry the other ones at all, because no amount of trying saves a card', () => {
+    for (const code of ['9154', '9174']) {
+      const result = classifyCanadaPostFailure({ status: 400, body: body({ code }) });
+      expect(result.retryable).toBe(false);
+      expect(result.retryAfterMs).toBe(0);
+    }
   });
 
-  it('still places both codes in the shipment range they are published in', () => {
+  it('still places payment codes in the shipment range they are published in', () => {
     expect(classifyCanadaPostCode('9153')).toBe('shipment');
     expect(classifyCanadaPostCode('9154')).toBe('shipment');
+    expect(classifyCanadaPostCode('9174')).toBe('shipment');
   });
 });
 
