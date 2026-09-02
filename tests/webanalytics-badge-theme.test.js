@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const main = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
-const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+const main = readFileSync(path.join(__dirname, '../src/main.js'), 'utf8').replace(/\r\n/g, '\n');
+const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8').replace(/\r\n/g, '\n');
 
 function renderWebAnalyticsBody() {
   const m = main.match(/function renderWebAnalytics\(\) \{([\s\S]+?)\n\}\n/);

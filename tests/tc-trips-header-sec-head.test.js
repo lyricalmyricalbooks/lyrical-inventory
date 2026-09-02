@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
+const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8').replace(/\r\n/g, '\n');
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 
 test('Business Trips header shares the .sec-head layout, not a bare inline caption', () => {

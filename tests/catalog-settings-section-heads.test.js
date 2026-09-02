@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
-const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8').replace(/\r\n/g, '\n');
+const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8').replace(/\r\n/g, '\n');
 
 test('Book Catalog settings cards no longer hand-roll a Playfair caption', () => {
   // The old one-off heading treatment (raw inline Playfair 17px div) must be

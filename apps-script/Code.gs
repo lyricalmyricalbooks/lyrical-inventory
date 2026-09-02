@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v37)
+/* Lyricalmyrical Inventory — Unified Backend (v39)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -133,6 +133,8 @@
  *      JSON/OAuth architecture. Bump flags v34-and-older as outdated.
  *  34. v36: Fixes Canada Post OAuth 2.0 token acquisition and updates tracking endpoint.
  *  35. v37: Restores mandatory scope=merchant for Canada Post Developer Portal OAuth 2.0 token acquisition. Bump flags v36-and-older as outdated.
+ *  36. v38: Canada Post Developer Portal Shipping v1 & strict JSON media types. Standardizes on application/json for all Developer Portal POST endpoints (rating, shipping, tracking) and application/pdf for label artifacts with OAuth Bearer token auth, eliminating 415 Unsupported Media Type and schema errors. Bump flags v37-and-older as outdated so the publisher redeploys.
+ *  37. v39: Canada Post label refund/void proxy support. Enables requesting postage refunds and cancellations via the Developer Portal refund endpoint. Bump flags v38-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -181,9 +183,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v37',
-    scriptVersion: 'v37',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
+    service: 'lyrical-sheets-webhook-v39',
+    scriptVersion: 'v39',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -720,11 +722,9 @@ function doPost(e) {
           headers['Accept'] = 'application/pdf';
         } else if (isTracking) {
           headers['Accept'] = 'application/json';
-        } else if (method === 'POST') {
-          headers['Accept'] = useOAuth ? 'application/json' : (endpoint.indexOf('ncshipment') !== -1 
-            ? 'application/vnd.cpc.ncshipment-v4+json' 
-            : 'application/vnd.cpc.ship.rate-v4+json');
-          headers['Content-Type'] = headers['Accept'];
+        } else if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
+          headers['Accept'] = 'application/json';
+          headers['Content-Type'] = 'application/json';
         }
         if (zonosAccountKey && zonosAccountKey.trim()) {
           headers['X-CPC-Zonos-Key'] = zonosAccountKey.trim();
@@ -735,7 +735,7 @@ function doPost(e) {
           headers: headers,
           muteHttpExceptions: true
         };
-        if (jsonPayload && method === 'POST') {
+        if (jsonPayload && method !== 'GET') {
           options.payload = jsonPayload;
         }
 

@@ -435,6 +435,7 @@ import {
   printCanadaPostLabelModal,
   downloadCanadaPostLabelModal,
   copyCanadaPostPin,
+  voidCanadaPostLabelAction,
   checkLiveShippingReadinessHandler,
   renderLiveReadinessChecklist,
   renderZonosAccountKeyHint,
@@ -2634,7 +2635,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v37';
+const EXPECTED_SCRIPT_VERSION = 'v39';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -21940,6 +21941,7 @@ window.closeCanadaPostLabelModal = closeCanadaPostLabelModal;
 window.printCanadaPostLabelModal = printCanadaPostLabelModal;
 window.downloadCanadaPostLabelModal = downloadCanadaPostLabelModal;
 window.copyCanadaPostPin = copyCanadaPostPin;
+window.voidCanadaPostLabelAction = voidCanadaPostLabelAction;
 window.checkLiveShippingReadinessHandler = checkLiveShippingReadinessHandler;
 window.renderLiveReadinessChecklist = renderLiveReadinessChecklist;
 window.renderZonosAccountKeyHint = renderZonosAccountKeyHint;

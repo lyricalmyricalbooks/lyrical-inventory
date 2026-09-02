@@ -182,12 +182,43 @@ describe('Canada Post Label & Shipment Creation', () => {
     });
 
     expect(jsonStr).toContain('"serviceCode":"USA.TP"');
-    expect(jsonStr).toContain('"postalZipCode":"M4B1B3"');
+    expect(jsonStr).toContain('"requestedShippingPoint":"M4B1B3"');
+    expect(jsonStr).toContain('"countryCode":"CA"');
     expect(jsonStr).toContain('"countryCode":"US"');
     expect(jsonStr).toContain('"postalZipCode":"10001"');
     expect(jsonStr).toContain('"customsDescription":"Hardcover poetry books"');
     expect(jsonStr).toContain('"hsTariffCode":"490199"');
     expect(jsonStr).toContain('"customerRef1":"ORD-2026-99"');
+  });
+
+  it('builds valid Developer Portal shipment payload with settlementInfo', async () => {
+    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const contractPayload = JSON.parse(buildNonContractShipmentJson({
+      serviceCode: 'DOM.EP',
+      sender: { postalCode: 'M4B1B3' },
+      destination: { postalCode: 'V6B2W9' },
+      customerNumber: '0001298882',
+      contractId: '4299100'
+    }));
+
+    expect(contractPayload.requestedShippingPoint).toBe('M4B1B3');
+    expect(contractPayload.deliverySpec.settlementInfo).toEqual({
+      paidByCustomer: '0001298882',
+      contractId: '4299100',
+      intendedMethodOfPayment: 'Account'
+    });
+
+    const ccPayload = JSON.parse(buildNonContractShipmentJson({
+      serviceCode: 'DOM.EP',
+      sender: { postalCode: 'M4B1B3' },
+      destination: { postalCode: 'V6B2W9' },
+      customerNumber: '0001298882'
+    }));
+
+    expect(ccPayload.deliverySpec.settlementInfo).toEqual({
+      paidByCustomer: '0001298882',
+      intendedMethodOfPayment: 'CreditCard'
+    });
   });
 
   it('parses successful shipment response with tracking PIN and label artifact link', async () => {
@@ -212,6 +243,107 @@ describe('Canada Post Label & Shipment Creation', () => {
     expect(parsed.trackingPin).toBe('1234567890123456');
     expect(parsed.labelUrl).toBe('https://api.canadapost-postescanada.ca/rs/artifact/6e933e69452/10000/0');
     expect(parsed.receiptUrl).toBe('https://api.canadapost-postescanada.ca/rs/0007123456/ncshipment/123456789012345678/receipt');
+  });
+
+  it('parses modern Developer Portal shipping v1 JSON response', async () => {
+    const { parseCanadaPostShipmentResponse } = await import('../src/lib/canadapost.js');
+    const devPortalJson = JSON.stringify({
+      "shipmentId": "987654321",
+      "trackingPin": "7012787522410271",
+      "links": [
+        { "rel": "label", "href": "https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/artifacts/12345/label" },
+        { "rel": "receipt", "href": "https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/artifacts/12345/receipt" }
+      ],
+      "shipmentPrice": {
+        "dueAmount": 16.45,
+        "baseAmount": 14.50,
+        "gstAmount": 0.95,
+        "pstAmount": 1.00
+      }
+    });
+
+    const parsed = parseCanadaPostShipmentResponse(devPortalJson);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.shipmentId).toBe('987654321');
+    expect(parsed.trackingPin).toBe('7012787522410271');
+    expect(parsed.labelUrl).toBe('https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/artifacts/12345/label');
+    expect(parsed.postageCharged).toBe(16.45);
+    expect(parsed.postageBase).toBe(14.50);
+  });
+
+  it('serves PDF label directly from IndexedDB cache when available', async () => {
+    const { fetchCanadaPostLabelArtifact } = await import('../src/lib/canadapost.js');
+    const { storeCachedLabelPdf } = await import('../src/lib/label-cache.js');
+
+    const fakePdfBlob = new Blob(['%PDF-1.4 test'], { type: 'application/pdf' });
+    const pin = '7012999988887777';
+
+    // Mock indexedDB
+    const store = new Map();
+    global.indexedDB = {
+      open: () => ({
+        result: {
+          objectStoreNames: { contains: () => true },
+          transaction: () => ({
+            objectStore: () => ({
+              put: (rec) => { store.set(rec.pin, rec); const r = {}; setTimeout(() => r.onsuccess?.(), 0); return r; },
+              get: (k) => { const r = { result: store.get(k) || null }; setTimeout(() => r.onsuccess?.(), 0); return r; }
+            }),
+            oncomplete: null
+          }),
+          close: () => {}
+        },
+        onsuccess: null,
+        onerror: null
+      })
+    };
+    // Trigger onsuccess for open
+    const origOpen = global.indexedDB.open;
+    global.indexedDB.open = () => {
+      const req = origOpen();
+      setTimeout(() => req.onsuccess?.(), 0);
+      return req;
+    };
+
+    await storeCachedLabelPdf(pin, fakePdfBlob);
+
+    const artifact = await fetchCanadaPostLabelArtifact({
+      labelUrl: `https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/artifacts/${pin}/label`,
+      shipmentContext: { trackingPin: pin }
+    });
+
+    expect(artifact).not.toBeNull();
+    expect(artifact.kind).toBe('pdf');
+    expect(artifact.source).toBe('cache');
+    expect(artifact.mailable).toBe(true);
+
+    delete global.indexedDB;
+  });
+
+  it('submits refund request for a Canada Post shipment', async () => {
+    const { refundCanadaPostShipment } = await import('../src/lib/canadapost.js');
+
+    const origFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, status: 200 })
+    });
+
+    const result = await refundCanadaPostShipment({
+      shipmentId: '12345678',
+      trackingPin: '7012787522410271',
+      customerNumber: '0001298882',
+      apiKey: 'test_key',
+      apiSecret: 'test_secret'
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.refunded).toBe(true);
+    expect(result.shipmentId).toBe('12345678');
+    expect(result.trackingPin).toBe('7012787522410271');
+
+    global.fetch = origFetch;
   });
 
   it('validates 13-character Zonos Declaration ID format and embeds it in customs XML', async () => {
@@ -565,7 +697,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
 
     const proxyCall = global.fetch.mock.calls[0];
     const proxyBody = JSON.parse(proxyCall[1].body);
-    expect(proxyBody.targetEndpoint).toBe('https://api.canadapost-postescanada.ca/rs/0042998877/ncshipment');
+    expect(proxyBody.targetEndpoint).toBe('https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/0042998877/0042998877/shipments');
     expect(proxyBody.jsonPayload).toContain('"declarationId":"0rd4dpkrvc1y9"');
   });
 });
