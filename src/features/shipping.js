@@ -4168,11 +4168,12 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
 
   showToast('⏳ Creating shipment and generating Canada Post label...', 'ok');
 
+  const customsValRaw = String($('sp-customs-value')?.value || '25').replace(/[^0-9.]/g, '');
   const customs = stCountryCode !== 'CA' ? {
     quantity: Math.max(1, parseInt($('sp-qty')?.value, 10) || 1),
-    declaredValue: parseFloat($('sp-customs-value')?.value || '25'),
+    declaredValue: parseFloat(customsValRaw || '25'),
     description: $('sp-customs-description')?.value || 'Printed books',
-    hsCode: $('sp-customs-hs')?.value || '490199',
+    hsCode: $('sp-customs-hs')?.value || '4901.99',
     declarationId
   } : null;
 

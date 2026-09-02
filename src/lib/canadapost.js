@@ -2172,9 +2172,14 @@ export function buildNonContractShipmentJson({
     }
   }
 
-  if (destCountry !== 'CA' && (customs || cleanDeclId)) {
+  if (destination.company && destination.company.trim()) {
+    deliverySpec.destination.company = destination.company.trim();
+  }
+
+  if (destCountry !== 'CA') {
     const qty = Math.max(1, parseInt(customs?.quantity || 1, 10));
-    const declaredVal = Math.max(0.01, parseFloat(customs?.value || customs?.declaredValue || 20));
+    const rawVal = String(customs?.value ?? customs?.declaredValue ?? 25).replace(/[^0-9.]/g, '');
+    const declaredVal = Math.max(0.01, parseFloat(rawVal || '25'));
     const customsDesc = String(customs?.description || 'Printed books').slice(0, 44);
     const hsCode = formatHsTariffCode(customs?.hsCode || '4901.99');
     const originProv = cleanSenderState || 'ON';
@@ -2195,9 +2200,6 @@ export function buildNonContractShipmentJson({
         }
       ]
     };
-    // The spec calls this usDeclarationId. It was sent as `declarationId`,
-    // which Canada Post does not recognise, so a Zonos-prepaid US parcel was
-    // shipped with the declaration silently dropped.
     if (cleanDeclId) deliverySpec.customs.usDeclarationId = cleanDeclId;
   }
 
