@@ -369,8 +369,46 @@ describe('Canada Post Label & Shipment Creation', () => {
       declarationId: '0rd4dpkrvc1y9'
     });
 
+    // Both spellings the customs schema declares. `usdeclarationid` is the one
+    // the create-shipment request table documents as Conditionally Required;
+    // `usDeclarationId` is declared on the same schema for the Zonos-direct
+    // case. Sending only one risks it being dropped silently, which means an
+    // unpaid duty and a parcel held at the border.
+    expect(jsonStr).toContain('"usdeclarationid":"0rd4dpkrvc1y9"');
     expect(jsonStr).toContain('"usDeclarationId":"0rd4dpkrvc1y9"');
     expect(jsonStr).not.toContain('"declarationId":"0RD4DPKRVC1Y9"');
+
+    // Both must sit inside `customs`, not at the top of the delivery spec.
+    const parsed = JSON.parse(jsonStr);
+    expect(parsed.deliverySpec.customs.usdeclarationid).toBe('0rd4dpkrvc1y9');
+    expect(parsed.deliverySpec.customs.usDeclarationId).toBe('0rd4dpkrvc1y9');
+    expect(parsed.deliverySpec.declarationId).toBeUndefined();
+  });
+
+  it('omits both declaration fields entirely when no Declaration ID is supplied', async () => {
+    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const jsonStr = buildNonContractShipmentJson({
+      serviceCode: 'USA.TP',
+      destination: { countryCode: 'US', postalCode: '90210' },
+      parcel: { weightKg: 0.5 }
+    });
+    // An empty string is not a valid declaration: the spec sets minLength 1, so
+    // sending a blank one would fail the whole shipment rather than ship DDU.
+    expect(jsonStr).not.toContain('usdeclarationid');
+    expect(jsonStr).not.toContain('usDeclarationId');
+  });
+
+  it('does not attach a declaration to a domestic shipment', async () => {
+    const { buildNonContractShipmentJson } = await import('../src/lib/canadapost.js');
+    const jsonStr = buildNonContractShipmentJson({
+      serviceCode: 'DOM.EP',
+      destination: { countryCode: 'CA', postalCode: 'M4B1B3' },
+      parcel: { weightKg: 0.5 },
+      declarationId: '0rd4dpkrvc1y9'
+    });
+    // No customs block at all for a Canadian destination, so nothing to attach.
+    expect(jsonStr).not.toContain('usdeclarationid');
+    expect(jsonStr).not.toContain('usDeclarationId');
   });
 
   it('keeps a Zonos Declaration ID lowercase even when it arrives upper-cased', async () => {
@@ -381,6 +419,7 @@ describe('Canada Post Label & Shipment Creation', () => {
       parcel: { weightKg: 0.5 },
       customs: { declarationId: '0RCVXJ2TKBNWR', declaredValue: 25, quantity: 1 }
     });
+    expect(jsonStr).toContain('"usdeclarationid":"0rcvxj2tkbnwr"');
     expect(jsonStr).toContain('"usDeclarationId":"0rcvxj2tkbnwr"');
   });
 
@@ -703,6 +742,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
     const proxyCall = global.fetch.mock.calls[0];
     const proxyBody = JSON.parse(proxyCall[1].body);
     expect(proxyBody.targetEndpoint).toBe(SHIPMENT_ENDPOINT);
+    expect(proxyBody.jsonPayload).toContain('"usdeclarationid":"0rd4dpkrvc1y9"');
     expect(proxyBody.jsonPayload).toContain('"usDeclarationId":"0rd4dpkrvc1y9"');
   });
 });

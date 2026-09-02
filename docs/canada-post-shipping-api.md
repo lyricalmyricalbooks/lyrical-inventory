@@ -199,8 +199,25 @@ there, never from memory. Points that cost a refused shipment if missed:
   (always `CA`), and `destination.addressDetails.countryCode`.
 - **`printPreferences`** takes `outputFormat` `8.5x11` or `4x6`, and `encoding`
   `PDF` or `ZPL`. The letter-size PDF is what this shop prints.
-- The US customs declaration is **`customs.usDeclarationId`**, not
-  `declarationId`. Sent under the wrong name it is silently dropped.
+- The US customs declaration goes under `customs`, never as a top-level
+  `declarationId` — sent under the wrong name it is silently dropped.
+  **Send it under BOTH spellings the spec declares**, because the spec declares
+  two properties on the same `customs` schema for the one value:
+  - **`usdeclarationid`** (all lowercase) — the name the create-shipment request
+    table documents, in English and French, marked *Conditionally Required*:
+    required for US destinations when no Zonos key is on the header.
+  - **`usDeclarationId`** (camelCase) — declared further down the same schema as
+    the number returned "if you directly submit customs data to Zonos", which is
+    exactly the Prepay-app / Zonos-API case.
+
+  Both are declared properties, so sending both is spec-valid; neither can be
+  rejected as unknown. Picking one is a silent gamble — an unrecognised name is
+  dropped with no error, the label prints, and the duty is simply never prepaid.
+- The response is **not** documented to echo `customs` back, so a created
+  shipment that returns no declaration is the ordinary case, not a failure.
+  Treat it as a three-state signal (`issued` / `sent` / `missing`), the same way
+  the manifest signal is handled — a warning that fires on every US parcel is one
+  nobody reads on the day it is real.
 - Sandbox testing: promo code **`DEVPROTEST`** works in the sandbox
   environment, for Xpresspost (`DOM.XP`) and Xpresspost International
   (`INT.XP`) only.
