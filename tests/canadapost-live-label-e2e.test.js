@@ -339,4 +339,27 @@ describe('the Create Shipment body matches the committed spec', () => {
     // Ensure regex pattern ^\d{4}(\.\d{2}(\.\d{2}(\.\d{2})?)?)?$ passes
     expect(/^\d{4}(\.\d{2}(\.\d{2}(\.\d{2})?)?)?$/.test(item.hsTariffCode)).toBe(true);
   });
+
+  it('includes mandatory Non-Delivery Handling options for US and International shipments (Error 8716)', () => {
+    // Tracked Packet USA defaults to RTS (Return to Sender)
+    const tpSpec = build({
+      serviceCode: 'USA.TP',
+      destination: { ...DESTINATION, countryCode: 'US', postalCode: '14607' }
+    }).deliverySpec;
+    expect(tpSpec.options).toEqual([{ optionCode: 'RTS' }]);
+
+    // Expedited Parcel USA defaults to RASE (Return at Sender Expense)
+    const epSpec = build({
+      serviceCode: 'USA.EP',
+      destination: { ...DESTINATION, countryCode: 'US', postalCode: '14607' }
+    }).deliverySpec;
+    expect(epSpec.options).toEqual([{ optionCode: 'RASE' }]);
+
+    // Domestic Canadian parcels do not inject Non-Delivery Handling options
+    const domSpec = build({
+      serviceCode: 'DOM.EP',
+      destination: { ...DESTINATION, countryCode: 'CA', postalCode: 'V6B 2W9' }
+    }).deliverySpec;
+    expect(domSpec.options).toBeUndefined();
+  });
 });
