@@ -435,6 +435,7 @@ import {
   printCanadaPostLabelModal,
   downloadCanadaPostLabelModal,
   copyCanadaPostPin,
+  voidCanadaPostLabelAction,
   checkLiveShippingReadinessHandler,
   renderLiveReadinessChecklist,
   renderZonosAccountKeyHint,
@@ -21940,6 +21941,7 @@ window.closeCanadaPostLabelModal = closeCanadaPostLabelModal;
 window.printCanadaPostLabelModal = printCanadaPostLabelModal;
 window.downloadCanadaPostLabelModal = downloadCanadaPostLabelModal;
 window.copyCanadaPostPin = copyCanadaPostPin;
+window.voidCanadaPostLabelAction = voidCanadaPostLabelAction;
 window.checkLiveShippingReadinessHandler = checkLiveShippingReadinessHandler;
 window.renderLiveReadinessChecklist = renderLiveReadinessChecklist;
 window.renderZonosAccountKeyHint = renderZonosAccountKeyHint;

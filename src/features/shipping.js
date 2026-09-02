@@ -144,6 +144,7 @@ import {
   listArchivedShipments,
   fetchCanadaPostLabelArtifact,
   resolveCanadaPostCredentials,
+  refundCanadaPostShipment,
 } from '../lib/canadapost.js';
 import {
   assessLiveShippingReadiness,
@@ -3728,6 +3729,9 @@ function showArchivedCanadaPostLabels() {
       <button class="btn sm tag cp-label-action-btn" type="button" style="margin-left:auto;min-height:36px;padding:6px 12px;" onclick="reprintArchivedCanadaPostLabel('${escapeHtml(l.pin)}')" title="Reopen and reprint this label">
         🖨️ Reprint
       </button>
+      <button class="btn sm tag cp-label-action-btn" type="button" style="min-height:36px;padding:6px 12px;color:var(--danger,#e11d48);" onclick="voidCanadaPostLabelAction('${escapeHtml(l.pin)}')" title="Void and refund label">
+        ↩️ Void
+      </button>
     </div>
   `).join('');
 
@@ -3819,6 +3823,10 @@ async function showCanadaPostLabelModal(shipmentContext) {
                 <span aria-hidden="true">🔍</span>
                 <span>Track Parcel</span>
               </a>
+              <button class="btn sm tag cp-label-action-btn" type="button" style="color:var(--danger,#e11d48);" onclick="voidCanadaPostLabelAction('${escapeHtml(cleanPin)}')" title="Cancel and request postage refund">
+                <span aria-hidden="true">↩️</span>
+                <span>Void & Refund</span>
+              </button>
             ` : ''}
           </div>
         </div>
@@ -4367,6 +4375,45 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
     showToast(`⚠ Label purchase failed: ${err.message}`, 'err');
   } finally {
     setCanadaPostPurchaseBusy(false, buttonEl);
+  }
+}
+
+/**
+ * Void and request a refund for a Canada Post label.
+ */
+async function voidCanadaPostLabelAction(pin) {
+  const context = getArchivedShipmentContext(pin) || _cpLabelContext || { trackingPin: pin };
+  const targetPin = context.trackingPin || pin;
+  const shipmentId = context.shipmentId || targetPin;
+
+  const userConfirmed = typeof confirmDialog === 'function'
+    ? await confirmDialog({
+        title: 'Void & Refund Canada Post Label?',
+        message: `Are you sure you want to request a refund for Canada Post label ${escapeHtml(targetPin)}? This will send a cancellation/refund request to Canada Post and remove the cached label from this device.`,
+        confirmText: 'Request Refund',
+        cancelText: 'Keep Label',
+        danger: true
+      })
+    : window.confirm(`Request refund for Canada Post label ${targetPin}?`);
+
+  if (!userConfirmed) return;
+
+  const { apiKey, apiSecret, customerNumber } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
+  try {
+    showToast('Submitting refund request to Canada Post…', 'info');
+    await refundCanadaPostShipment({
+      shipmentId,
+      trackingPin: targetPin,
+      customerNumber: context.customerNumber || customerNumber,
+      apiKey,
+      apiSecret,
+      isTest: false
+    });
+    showToast('✓ Canada Post label refund requested successfully', 'success');
+    closeCanadaPostLabelModal();
+    showArchivedCanadaPostLabels();
+  } catch (err) {
+    showToast(`⚠ Refund request failed: ${err.message}`, 'err');
   }
 }
 
@@ -8305,6 +8352,7 @@ export {
   printCanadaPostLabelModal,
   downloadCanadaPostLabelModal,
   copyCanadaPostPin,
+  voidCanadaPostLabelAction,
   checkLiveShippingReadinessHandler,
   renderLiveReadinessChecklist,
   renderZonosAccountKeyHint,

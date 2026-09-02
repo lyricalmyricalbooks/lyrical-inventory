@@ -194,11 +194,7 @@ const server = http.createServer(async (req, res) => {
       const key = apiKey || process.env.CANADAPOST_API_KEY;
       const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
       const custNum = customerNumber || process.env.CANADAPOST_CUSTOMER_NUMBER || '';
-      // No default endpoint. This used to fall back to the retired
-      // `/rs/{customer}/ncshipment` path, so a caller that forgot to send an
-      // endpoint got a confident 404 from the live host instead of being told
-      // what it had actually left out.
-      const endpoint = targetEndpoint;
+      const endpoint = targetEndpoint || (custNum ? `https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/${encodeURIComponent(custNum)}/${encodeURIComponent(custNum)}/shipments` : '');
 
       if (!key || !secret) {
         return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
@@ -271,6 +267,41 @@ const server = http.createServer(async (req, res) => {
         return;
       } catch (err) {
         return sendJson(res, 502, { error: `Failed to fetch artifact: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/canadapost/refund' && (req.method === 'POST' || req.method === 'DELETE')) {
+      const body = await readJson(req, res);
+      if (!body) return;
+      const { shipmentId, apiKey, apiSecret, targetEndpoint, customerNumber, email } = body;
+      const key = apiKey || process.env.CANADAPOST_API_KEY;
+      const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
+      const custNum = customerNumber || process.env.CANADAPOST_CUSTOMER_NUMBER || '';
+      const endpoint = targetEndpoint || `https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/${encodeURIComponent(custNum)}/${encodeURIComponent(custNum)}/shipments/${encodeURIComponent(shipmentId || '')}/refund`;
+
+      if (!key || !secret) {
+        return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
+      }
+
+      try {
+        const auth = await canadaPostAuthHeader(key, secret, endpoint);
+        const headers = {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': auth.header,
+          'Accept-language': 'en-CA'
+        };
+
+        const cpRes = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ email: email || 'publisher@lyricalmyrical.com' })
+        });
+
+        const text = await cpRes.text();
+        return sendJson(res, cpRes.status, { ok: cpRes.ok, status: cpRes.status, authMode: auth.mode, json: text });
+      } catch (err) {
+        return sendJson(res, 502, { error: `Canada Post refund proxy error: ${err.message}` });
       }
     }
 

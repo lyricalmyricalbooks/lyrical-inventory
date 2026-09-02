@@ -133,11 +133,8 @@
  *      JSON/OAuth architecture. Bump flags v34-and-older as outdated.
  *  34. v36: Fixes Canada Post OAuth 2.0 token acquisition and updates tracking endpoint.
  *  35. v37: Restores mandatory scope=merchant for Canada Post Developer Portal OAuth 2.0 token acquisition. Bump flags v36-and-older as outdated.
- *  36. v38: Sends the Canada Post client credentials as the documented
- *      X-IBM-Client-Id / X-IBM-Client-Secret headers on the OAuth token
- *      exchange, alongside the Basic header that was already working, so the
- *      Shipping API's token request matches the published contract. Bump
- *      flags v37-and-older as outdated.
+ *  36. v38: Sends the Canada Post client credentials as the documented X-IBM-Client-Id / X-IBM-Client-Secret headers on the OAuth token exchange.
+ *  37. v39: Canada Post Developer Portal Shipping v1, strict JSON media types, and label refund/void proxy support. Enables requesting postage refunds and cancellations via the Developer Portal refund endpoint. Bump flags v38-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -188,7 +185,7 @@ function doGet(e) {
   return jsonOut_({
     service: 'lyrical-sheets-webhook-v39',
     scriptVersion: 'v39',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -750,20 +747,19 @@ function doPost(e) {
         if (isArtifact) {
           headers['Accept'] = 'application/pdf';
         } else if (isTracking) {
-          mediaCandidates = ['application/vnd.cpc.track+json', 'application/json'];
-        } else if (method === 'POST') {
-          mediaCandidates = endpoint.indexOf('ncshipment') !== -1
-            ? ['application/vnd.cpc.ncshipment-v4+json', 'application/json']
-            : ['application/vnd.cpc.ship.rate-v4+json', 'application/vnd.cpc.rating-v4+json', 'application/json'];
+          headers['Accept'] = 'application/json';
+          mediaCandidates = ['application/json', 'application/vnd.cpc.track+json'];
+        } else if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
+          headers['Accept'] = 'application/json';
+          headers['Content-Type'] = 'application/json';
+          mediaCandidates = endpoint.indexOf('ncshipment') !== -1 || endpoint.indexOf('shipments') !== -1
+            ? ['application/json', 'application/vnd.cpc.ncshipment-v4+json']
+            : ['application/json', 'application/vnd.cpc.ship.rate-v4+json', 'application/vnd.cpc.rating-v4+json'];
         }
         if (zonosAccountKey && zonosAccountKey.trim()) {
           headers['X-CPC-Zonos-Key'] = zonosAccountKey.trim();
         }
 
-        // Try each candidate media type until Canada Post stops objecting.
-        // 406 and 415 are its documented "wrong media type" answers, so they are
-        // the only statuses worth another attempt; anything else is a real
-        // result and is returned as-is.
         var resp = null;
         var code = 0;
         var usedMediaType = '';
@@ -772,7 +768,7 @@ function doPost(e) {
         for (var mi = 0; mi < attemptList.length; mi++) {
           if (attemptList[mi]) {
             headers['Accept'] = attemptList[mi];
-            if (method === 'POST') headers['Content-Type'] = attemptList[mi];
+            if (method === 'POST' || method === 'PUT' || method === 'DELETE') headers['Content-Type'] = attemptList[mi];
             usedMediaType = attemptList[mi];
           }
 
@@ -781,7 +777,7 @@ function doPost(e) {
             headers: headers,
             muteHttpExceptions: true
           };
-          if (jsonPayload && method === 'POST') {
+          if (jsonPayload && method !== 'GET') {
             options.payload = jsonPayload;
           }
 

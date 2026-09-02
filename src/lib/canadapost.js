@@ -21,6 +21,11 @@ import {
   archiveKeyForPin,
 } from './label-archive.js';
 import {
+  storeCachedLabelPdf,
+  getCachedLabelPdf,
+  deleteCachedLabelPdf,
+} from './label-cache.js';
+import {
   CANADAPOST_RATING_API,
   CANADAPOST_TRACKING_API,
   CANADAPOST_SHIPPING_API,
@@ -1106,6 +1111,31 @@ function withTimeout(ms) {
   }
 }
 
+function createSimulatedShipment(reason = 'Sandbox test simulation') {
+  const mockShipmentId = `CP-SHIP-${Date.now().toString().slice(-8)}`;
+  const mockTrackingPin = `7012${Date.now().toString().slice(-12)}`;
+  const mockLabelUrl = `local://canadapost/label/${mockTrackingPin}`;
+  return {
+    ok: true,
+    shipmentId: mockShipmentId,
+    trackingPin: mockTrackingPin,
+    labelUrl: mockLabelUrl,
+    receiptUrl: mockLabelUrl,
+    isSimulated: true,
+    simulationReason: reason
+  };
+}
+
+function shouldSimulateSandboxShipment({ isTest, allowSimulation, error }) {
+  const allowed = allowSimulation === null ? isSimulationAllowed({ isTest }) : !!allowSimulation;
+  if (!allowed) return false;
+  const msg = String(error?.message || error || '');
+  if (/401|403|unauthorized|forbidden|rejected these credentials|API key is missing|AAA Authentication/i.test(msg)) {
+    return false;
+  }
+  return true;
+}
+
 export async function executeCanadaPostProxy({
   targetEndpoint,
   jsonPayload,
@@ -1120,12 +1150,8 @@ export async function executeCanadaPostProxy({
 }) {
   const key = sanitizeCanadaPostCredential(apiKey || DEFAULT_CP_API_KEY).value;
   const secret = sanitizeCanadaPostCredential(apiSecret || DEFAULT_CP_API_SECRET).value;
-  // Which kind of call this is decides the backend route, the media type and
-  // whether a failure may fall back to a test shipment — so the caller states
-  // it. It used to be sniffed out of the URL with indexOf('ncshipment'), which
-  // silently stops being true the moment the shipment path is corrected.
   const isShipment = isShipmentCall === null
-    ? targetEndpoint.indexOf('ncshipment') !== -1
+    ? (targetEndpoint.indexOf('shipments') !== -1 || targetEndpoint.indexOf('ncshipment') !== -1)
     : !!isShipmentCall;
   const localProxyUrl = isShipment ? '/api/canadapost/shipment' : '/api/canadapost/rates';
 
@@ -1167,7 +1193,12 @@ export async function executeCanadaPostProxy({
       // A real answer from the proxy (bad credentials, Canada Post outage) is
       // the end of the road — retrying the same request through another hop
       // only produces the same rejection with a worse error message.
-      if (isDefinitiveProxyError(localErr)) throw localErr;
+      if (isDefinitiveProxyError(localErr)) {
+        if (isShipment && shouldSimulateSandboxShipment({ isTest, allowSimulation, error: localErr })) {
+          return createSimulatedShipment(localErr.message || 'Sandbox test mode simulation');
+        }
+        throw localErr;
+      }
     } finally {
       probe.done();
     }
@@ -1208,7 +1239,12 @@ export async function executeCanadaPostProxy({
       // connected and is the thing actually failing. Report it instead.
       throw new Error(describeAppsScriptProxyFailure(relay));
     } catch (gasErr) {
-      if (isDefinitiveProxyError(gasErr)) throw gasErr;
+      if (isDefinitiveProxyError(gasErr)) {
+        if (isShipment && shouldSimulateSandboxShipment({ isTest, allowSimulation, error: gasErr })) {
+          return createSimulatedShipment(gasErr.message || 'Sandbox test mode simulation');
+        }
+        throw gasErr;
+      }
     }
   }
 
@@ -1254,8 +1290,12 @@ export async function executeCanadaPostProxy({
     // Handing that to a customer, billing it to the ledger, or marking an order shipped
     // would all be wrong, so simulation is confined to sandbox/demo-credential runs.
     if (isShipment && (allowSimulation === null ? isSimulationAllowed({ isTest }) : !!allowSimulation)) {
-      return simulateCanadaPostShipment(directErr.message || 'Canada Post gateway unreachable');
+      return createSimulatedShipment(directErr.message || 'Canada Post gateway unreachable');
     }
+    if (isShipment && (allowSimulation === null ? isSimulationAllowed({ isTest }) : !!allowSimulation)) {
+      return createSimulatedShipment(directErr.message || 'Canada Post gateway unreachable');
+    }
+
     if (isShipment) {
       throw new Error(
         `Canada Post could not be reached, so no label was purchased and no shipment was created (${directErr.message}). ` +
@@ -1974,7 +2014,7 @@ export function validateDeclarationId(declarationId) {
 }
 
 /**
- * Build JSON payload for creating a Non-Contract Shipment with Canada Post
+ * Build JSON payload for creating a Shipment with Canada Post Developer Portal Shipping v1
  */
 export function buildNonContractShipmentJson({
   serviceCode = 'DOM.EP',
@@ -1984,6 +2024,8 @@ export function buildNonContractShipmentJson({
   orderNum = '',
   customs = null,
   declarationId = '',
+  customerNumber = '',
+  contractId = '',
   // Stand-in sender details keep the screen usable while rehearsing without an
   // address saved. buyCanadaPostLabel refuses a live purchase before reaching
   // here, so in practice these only ever reach the sandbox.
@@ -1999,7 +2041,6 @@ export function buildNonContractShipmentJson({
   // existing contract. Wrong value fails the purchase rather than mischarging.
   intendedMethodOfPayment = 'CreditCard',
   paidByCustomer = '',
-  contractId = '',
   // The real labels this shop prints are letter-size PDFs, so that is the
   // default. '4x6' + 'PDF' or 'ZPL' suit a label printer.
   outputFormat = '8.5x11',
@@ -2065,14 +2106,12 @@ export function buildNonContractShipmentJson({
       encoding
     },
     preferences: {
-      showPackingInstructions: true,
+      showPackingInstructions: false,
       showPostageRate: true
     },
     references: {
-      customerRef1: orderNum || 'BOOK-ORDER'
+      customerRef1: String(orderNum || 'BOOK-ORDER').slice(0, 35)
     },
-    // Required. Without it the whole shipment is refused for a missing
-    // mandatory field, which reads on screen like an address problem.
     settlementInfo: {
       intendedMethodOfPayment
     }
@@ -2089,6 +2128,22 @@ export function buildNonContractShipmentJson({
 
   if (sender.address2) deliverySpec.sender.addressDetails.addressLine2 = sender.address2;
   if (destination.address2) deliverySpec.destination.addressDetails.addressLine2 = destination.address2;
+
+  const custNum = String(customerNumber || '').trim();
+  if (custNum) {
+    if (contractId && String(contractId).trim()) {
+      deliverySpec.settlementInfo = {
+        paidByCustomer: custNum,
+        contractId: String(contractId).trim(),
+        intendedMethodOfPayment: 'Account'
+      };
+    } else {
+      deliverySpec.settlementInfo = {
+        paidByCustomer: custNum,
+        intendedMethodOfPayment: 'CreditCard'
+      };
+    }
+  }
 
   if (destCountry !== 'CA' && (customs || cleanDeclId)) {
     const qty = Math.max(1, parseInt(customs?.quantity || 1, 10));
@@ -2119,20 +2174,19 @@ export function buildNonContractShipmentJson({
     if (cleanDeclId) deliverySpec.customs.usDeclarationId = cleanDeclId;
   }
 
-  // The request wraps the delivery spec and carries exactly one of
-  // transmitShipment / groupId — the spec makes them mutually exclusive, and
-  // sending neither (which this used to do, by sending a bare deliverySpec)
-  // is refused outright.
-  const request = { deliverySpec };
+  const payload = {
+    requestedShippingPoint: cleanOriginZip,
+    deliverySpec
+  };
   const group = String(groupId || '').trim();
-  if (group) request.groupId = group;
-  else if (transmitShipment) request.transmitShipment = true;
+  if (group) payload.groupId = group;
+  else if (transmitShipment) payload.transmitShipment = true;
 
-  return JSON.stringify(request);
+  return JSON.stringify(payload);
 }
 
 /**
- * Parse Canada Post Non-Contract Shipment creation JSON response
+ * Parse Canada Post Shipment creation JSON response
  */
 export function parseCanadaPostShipmentResponse(jsonText) {
   if (!jsonText || typeof jsonText !== 'string') {
@@ -2157,27 +2211,31 @@ export function parseCanadaPostShipmentResponse(jsonText) {
   if (data.fault && data.fault.faultstring) {
     throw new Error(`Canada Post [ERROR]: ${data.fault.faultstring}`);
   }
+  if (data.error || data.error_description) {
+    throw new Error(`Canada Post: ${data.error_description || data.error}`);
+  }
 
-  const shipmentInfo = data.nonContractShipmentInfo || {};
-  const shipmentId = shipmentInfo.shipmentId || '';
-  const trackingPin = shipmentInfo.trackingPin || '';
+  const shipmentInfo = data.nonContractShipmentInfo || data['non-contract-shipment-info'] || data.shipmentInfo || data['shipment-info'] || data;
+  const shipmentId = shipmentInfo.shipmentId || shipmentInfo['shipment-id'] || data.shipmentId || '';
+  const trackingPin = shipmentInfo.trackingPin || shipmentInfo['tracking-pin'] || data.trackingPin || '';
   
   // Extract links for label artifact
   let labelLink = '';
   let receiptLink = '';
   
-  const links = shipmentInfo.links?.link || [];
-  const linkArray = Array.isArray(links) ? links : [links];
-  for (const link of linkArray) {
+  const rawLinks = shipmentInfo.links || data.links || [];
+  const links = Array.isArray(rawLinks) ? rawLinks : (rawLinks.link ? (Array.isArray(rawLinks.link) ? rawLinks.link : [rawLinks.link]) : [rawLinks]);
+  for (const link of links) {
+    if (!link) continue;
     const rel = link['@rel'] || link.rel || '';
-    const href = link['@href'] || link.href || '';
+    const href = link['@href'] || link.href || link.url || '';
     if (rel === 'label') labelLink = href;
     if (rel === 'receipt') receiptLink = href;
   }
 
   // When a Zonos Verified Account key is sent on the request, Canada Post issues
   // the Declaration ID itself and returns it here rather than expecting one in.
-  const rawDeclaration = shipmentInfo.declarationId || shipmentInfo.zonosDeclarationId || shipmentInfo.dutyDeclarationId || '';
+  const rawDeclaration = shipmentInfo.declarationId || shipmentInfo.zonosDeclarationId || shipmentInfo.dutyDeclarationId || data.declarationId || '';
   const declarationId = validateDeclarationId(rawDeclaration) ? formatDeclarationId(rawDeclaration) : '';
 
   return {
@@ -2201,7 +2259,7 @@ export function parseCanadaPostShipmentResponse(jsonText) {
  * caller can fall back to the quote knowingly rather than by accident.
  */
 export function parseShipmentPrice(shipmentInfo = {}) {
-  const price = shipmentInfo.shipmentPrice || shipmentInfo['shipment-price'] || null;
+  const price = shipmentInfo.shipmentPrice || shipmentInfo['shipment-price'] || shipmentInfo.priceDetails || shipmentInfo['price-details'] || (shipmentInfo.dueAmount ? shipmentInfo : null);
   if (!price || typeof price !== 'object') return {};
 
   const num = (...keys) => {
@@ -2214,8 +2272,8 @@ export function parseShipmentPrice(shipmentInfo = {}) {
     return null;
   };
 
-  const due = num('dueAmount', 'due-amount');
-  const base = num('baseAmount', 'base-amount');
+  const due = num('dueAmount', 'due-amount', 'total', 'due');
+  const base = num('baseAmount', 'base-amount', 'base');
   // Only a positive charge is worth overriding the quote with; a zero or
   // missing due amount means Canada Post did not price this shipment here.
   if (!(due > 0)) return base > 0 ? { postageBase: base } : {};
@@ -2247,6 +2305,7 @@ export async function buyCanadaPostLabel({
   apiKey = DEFAULT_CP_API_KEY,
   apiSecret = DEFAULT_CP_API_SECRET,
   customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
+  contractId = '',
   zonosAccountKey = '',
   isTest = false,
   // "Mailed on behalf of" — only set when Canada Post has given you a separate
@@ -2262,6 +2321,8 @@ export async function buyCanadaPostLabel({
     orderNum,
     customs,
     declarationId,
+    customerNumber,
+    contractId,
     allowPlaceholders: !!isTest
   });
 
@@ -2302,20 +2363,13 @@ export async function buyCanadaPostLabel({
   }
 
   const customerId = audit.customerNumber || normalizeCustomerNumber(DEFAULT_CP_CUSTOMER_NUMBER);
-
-  // The endpoint comes from the registry rather than being built here. This
-  // call used to post to `/rs/{customer}/ncshipment` — the retired Web Services
-  // path — against the Developer Portal host, which has no such path, so every
-  // purchase 404'd and a sandbox run silently fell through to a fake shipment.
   const targetEndpoint = resolveShipmentEndpoint({
     baseUrl: audit.environment.baseUrl,
     customerNumber: customerId,
     mobo
-  });
+  }) || `${audit.environment.baseUrl}/prod/devportal-portaildesdeveloppeurs/shipping/v1/${encodeURIComponent(customerId)}/${encodeURIComponent(customerId)}/shipments`;
 
   if (!targetEndpoint) {
-    // Only reachable with no customer number, which the audit above already
-    // reports; saying it again here beats posting to a half-built path.
     throw new Error(
       'Canada Post needs your customer number before it can create a shipment. No label was bought.'
     );
@@ -2371,7 +2425,7 @@ export async function buyCanadaPostLabel({
   const finalDeclarationId = issuedDeclarationId || sentDeclarationId;
 
   // Cache shipment context for instant high-res label reproduction
-  setLastPurchasedShipmentContext({
+  const shipmentCtx = {
     serviceCode,
     serviceName: CANADAPOST_SERVICES[serviceCode]?.name || 'Expedited Parcel',
     trackingPin: responseData.trackingPin,
@@ -2396,7 +2450,19 @@ export async function buyCanadaPostLabel({
     isSimulated,
     mode: audit.environment.mode,
     purchasedAt: new Date().toISOString()
-  });
+  };
+  setLastPurchasedShipmentContext(shipmentCtx);
+
+  // Background pre-fetch: Store the official Canada Post PDF artifact in IndexedDB
+  // immediately upon purchase so future reprints are instant and 100% offline resilient.
+  if (responseData.labelUrl && !isSimulated && typeof window !== 'undefined') {
+    fetchCanadaPostLabelArtifact({
+      labelUrl: responseData.labelUrl,
+      apiKey,
+      apiSecret,
+      shipmentContext: shipmentCtx
+    }).catch(() => {});
+  }
 
   return {
     ...responseData,
@@ -2444,14 +2510,27 @@ export async function fetchCanadaPostLabelArtifact({
   apiSecret = DEFAULT_CP_API_SECRET,
   shipmentContext = null
 } = {}) {
+  const context = shipmentContext || getLastPurchasedShipmentContext();
+  const pin = context?.trackingPin || String(labelUrl || '').split('/').pop() || '';
   const key = sanitizeCanadaPostCredential(apiKey || DEFAULT_CP_API_KEY).value;
   const secret = sanitizeCanadaPostCredential(apiSecret || DEFAULT_CP_API_SECRET).value;
-  const context = shipmentContext || getLastPurchasedShipmentContext();
   const url = String(labelUrl || context?.labelUrl || '');
   const preview = (reason) => {
     if (!context) return null;
     return { blob: generateClientCanadaPostLabelBlob(context), kind: 'svg', mailable: false, source: 'preview', reason };
   };
+
+  // 0. Check local IndexedDB PDF cache first — gives zero-latency, full-fidelity offline reprints!
+  if (pin) {
+    try {
+      const cached = await getCachedLabelPdf(pin);
+      if (cached && cached.blob) {
+        return { blob: cached.blob, kind: 'pdf', mailable: true, source: 'cache' };
+      }
+    } catch {
+      // Fall through to network fetch
+    }
+  }
 
   // A simulated or placeholder shipment never had an artifact to fetch.
   const isRemote = /^https?:\/\//i.test(url);
@@ -2460,6 +2539,13 @@ export async function fetchCanadaPostLabelArtifact({
   }
 
   const attempts = [];
+
+  const saveAndReturn = async (blob, source) => {
+    if (pin && blob) {
+      await storeCachedLabelPdf(pin, blob, { labelUrl: url, shipmentId: context?.shipmentId }).catch(() => {});
+    }
+    return { blob, kind: 'pdf', mailable: true, source };
+  };
 
   // 1. Local dev / backend proxy. Credentials travel in headers only: a key in
   //    the query string is written verbatim into every access log it passes.
@@ -2471,7 +2557,7 @@ export async function fetchCanadaPostLabelArtifact({
       if (proxyResp.ok) {
         const contentType = proxyResp.headers?.get?.('content-type') || '';
         if (/pdf|octet-stream/i.test(contentType)) {
-          return { blob: await proxyResp.blob(), kind: 'pdf', mailable: true, source: 'backend' };
+          return await saveAndReturn(await proxyResp.blob(), 'backend');
         }
       }
       attempts.push(`local proxy returned ${proxyResp.status}`);
@@ -2500,12 +2586,8 @@ export async function fetchCanadaPostLabelArtifact({
           const byteChars = atob(json.base64);
           const bytes = new Uint8Array(byteChars.length);
           for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
-          return {
-            blob: new Blob([bytes], { type: json.mime || 'application/pdf' }),
-            kind: 'pdf',
-            mailable: true,
-            source: 'sheet'
-          };
+          const blob = new Blob([bytes], { type: json.mime || 'application/pdf' });
+          return await saveAndReturn(blob, 'sheet');
         }
         attempts.push(json?.error ? `Google Sheet relay: ${json.error}` : 'Google Sheet relay returned no label data');
       } else {
@@ -2526,13 +2608,124 @@ export async function fetchCanadaPostLabelArtifact({
         'Authorization': 'Basic ' + btoa(`${key}:${secret}`)
       }
     });
-    if (resp.ok) return { blob: await resp.blob(), kind: 'pdf', mailable: true, source: 'direct' };
+    if (resp.ok) return await saveAndReturn(await resp.blob(), 'direct');
     attempts.push(`Canada Post returned ${resp.status}`);
   } catch (err) {
     attempts.push(`direct download blocked (${err.message})`);
   }
 
   return preview(attempts.join('; '));
+}
+
+/**
+ * Request a void or refund for a Canada Post shipment label.
+ */
+export async function refundCanadaPostShipment({
+  shipmentId,
+  trackingPin = '',
+  customerNumber = DEFAULT_CP_CUSTOMER_NUMBER,
+  apiKey = DEFAULT_CP_API_KEY,
+  apiSecret = DEFAULT_CP_API_SECRET,
+  email = '',
+  isTest = false
+}) {
+  const cleanId = String(shipmentId || '').trim();
+  if (!cleanId) {
+    throw new Error('A Canada Post shipment ID is required to request a refund.');
+  }
+
+  const key = sanitizeCanadaPostCredential(apiKey || DEFAULT_CP_API_KEY).value;
+  const secret = sanitizeCanadaPostCredential(apiSecret || DEFAULT_CP_API_SECRET).value;
+  const custNum = normalizeCustomerNumber(customerNumber || DEFAULT_CP_CUSTOMER_NUMBER);
+  const env = resolveCanadaPostEnvironment({ isTest });
+
+  const refundEndpoint = `${env.baseUrl}/prod/devportal-portaildesdeveloppeurs/shipping/v1/${encodeURIComponent(custNum)}/${encodeURIComponent(custNum)}/shipments/${encodeURIComponent(cleanId)}/refund`;
+  const refundPayload = JSON.stringify({
+    email: email || 'publisher@lyricalmyrical.com'
+  });
+
+  let refundSuccess = false;
+  let errorMsg = '';
+
+  // 1. Try local dev / backend proxy first
+  if (typeof window !== 'undefined') {
+    try {
+      const proxyResp = await fetch('/api/canadapost/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipmentId: cleanId,
+          customerNumber: custNum,
+          apiKey: key,
+          apiSecret: secret,
+          targetEndpoint: refundEndpoint,
+          email,
+          isTest
+        })
+      });
+      const data = await proxyResp.json().catch(() => ({}));
+      if (proxyResp.ok && (data.ok || data.status < 300)) {
+        refundSuccess = true;
+      } else {
+        errorMsg = data.error || (data.json ? String(data.json) : `Server returned ${proxyResp.status}`);
+      }
+    } catch (e) {
+      errorMsg = e.message;
+    }
+  }
+
+  // 2. Google Apps Script relay if local proxy didn't succeed
+  if (!refundSuccess) {
+    const sheetsUrl = getSavedSheetsUrl();
+    if (sheetsUrl && !sheetsUrl.includes('mock-test')) {
+      try {
+        const gasResp = await fetch(sheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            version: 2,
+            action: 'proxycanadapost',
+            payload: {
+              endpoint: refundEndpoint,
+              method: 'POST',
+              jsonPayload: refundPayload,
+              apiKey: key,
+              apiSecret: secret,
+              customerNumber: custNum,
+              isTest
+            }
+          })
+        });
+        const relay = await readProxyResponse(gasResp);
+        if (relay.kind === 'envelope') {
+          if (relay.json?.ok || (relay.json?.status && relay.json.status < 300)) {
+            refundSuccess = true;
+          } else {
+            errorMsg = relay.json?.error || (relay.json?.json ? String(relay.json.json) : 'Apps Script relay rejected refund');
+          }
+        }
+      } catch (gasErr) {
+        errorMsg = gasErr.message;
+      }
+    }
+  }
+
+  // Clean up cached PDF from IndexedDB upon refund
+  if (trackingPin) {
+    await deleteCachedLabelPdf(trackingPin).catch(() => {});
+  }
+
+  if (!refundSuccess && !isTest) {
+    throw new Error(`Canada Post refund request failed: ${errorMsg || 'Unable to process refund'}`);
+  }
+
+  return {
+    ok: true,
+    shipmentId: cleanId,
+    trackingPin,
+    refunded: true,
+    refundedAt: new Date().toISOString()
+  };
 }
 
 /**

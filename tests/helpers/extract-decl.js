@@ -32,7 +32,7 @@ export const LIB_PATHS = fs.existsSync(LIB_DIR)
 
 /** main.js and every feature and lib module, concatenated. */
 export const appSource = [MAIN_JS_PATH, ...FEATURE_PATHS, ...LIB_PATHS]
-  .map(p => fs.readFileSync(p, 'utf8'))
+  .map(p => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'))
   .join('\n');
 
 // Kept as the default source for extractDecl and as the export several suites
