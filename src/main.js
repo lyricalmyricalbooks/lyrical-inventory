@@ -1965,7 +1965,7 @@ function renderCatalogList() {
          <div class="catalog-dot" style="background:${b.accent}"></div>
          <div class="catalog-info">
            <h4>${escapeHtml(b.title)}</h4>
-           <p>${escapeHtml(b.id)} · ${b.currency}${b.listPrice}</p>
+           <p><span class="tnum" style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:'DM Mono',monospace;">${b.currency}${b.listPrice}</strong></p>
          </div>
        </div>
        <div class="catalog-actions">
@@ -1977,8 +1977,10 @@ function renderCatalogList() {
   if (testContainer) {
     if (testBooks.length === 0) {
       testContainer.innerHTML = `
-        <div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:var(--r2);">
-          No test books found.
+        <div class="empty-state" style="padding:var(--space-4);text-align:center;">
+          <div class="e-icon" aria-hidden="true">🧪</div>
+          <strong style="color:var(--content-primary);font-size:var(--text-sm);">No Test Books Found</strong>
+          <p style="color:var(--content-secondary);font-size:var(--text-xs);margin-top:2px;">Books created for sandbox and testing environments appear here, isolated from your live production catalogue.</p>
         </div>`;
     } else {
       testContainer.innerHTML = testBooks.map(b => `
@@ -1987,7 +1989,7 @@ function renderCatalogList() {
              <div class="catalog-dot" style="background:${b.accent}"></div>
              <div class="catalog-info">
                <h4>${escapeHtml(b.title)}</h4>
-               <p>${escapeHtml(b.id)} · ${b.currency}${b.listPrice}</p>
+               <p><span class="tnum" style="font-family:'DM Mono',monospace;font-size:12px;">${escapeHtml(b.id)}</span> · <strong class="tnum" style="font-family:'DM Mono',monospace;">${b.currency}${b.listPrice}</strong></p>
              </div>
            </div>
            <div class="catalog-actions">
@@ -12797,7 +12799,23 @@ function renderSheetsLog() {
   const b = $('sheets-log-body');
   if (!b) return;
   if (!sheetsLog.length) {
-    b.innerHTML = '<tr><td colspan="5" class="sheets-empty">No sync events yet.</td></tr>';
+    b.innerHTML = `
+      <tr>
+        <td colspan="5" style="padding:0;border:none;">
+          <div class="empty-state sheets-empty-state" style="padding:var(--space-6) var(--space-4);text-align:center;">
+            <div class="e-icon" aria-hidden="true">📊</div>
+            <strong style="font-size:var(--text-base);font-weight:700;color:var(--content-primary);display:block;margin-bottom:var(--space-1);">No Sync Events Logged Yet</strong>
+            <p style="font-size:var(--text-xs);color:var(--content-secondary);max-width:400px;margin:0 auto var(--space-3);line-height:var(--leading-snug);">Connect your Google Sheet webhook to synchronize catalog stock, sales orders, and financial ledger events live to your spreadsheet.</p>
+            <div style="display:flex;justify-content:center;gap:var(--space-2);flex-wrap:wrap;">
+              <button type="button" class="btn sm gold" onclick="testSheets()" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;" title="Test connection to Google Sheets">
+                <span aria-hidden="true">🔄</span>
+                <span>Test Webhook Connection</span>
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
     return;
   }
   const PAGE_SIZE = 15;
@@ -12810,7 +12828,7 @@ function renderSheetsLog() {
   const iconFor = (st) => st === 'ok' ? '✓' : st === 'unknown' ? '~' : st === 'queued' ? '…' : st === 'retry' ? '↻' : '⚠';
 
   let html = pageItems.map(l => `<tr>
-      <td class="sheets-time">${l.time}</td>
+      <td class="sheets-time tnum">${l.time}</td>
       <td class="sheets-book">${l.book}</td>
       <td><span class="sheets-type">${l.type}</span></td>
       <td class="sheets-summary">${l.summary}</td>
@@ -13183,7 +13201,23 @@ function renderSystemBackups() {
   if (!body) return;
 
   if (!systemBackups.length) {
-    body.innerHTML = '<tr><td colspan="4"><div class="empty-state">No system backups yet.</div></td></tr>';
+    body.innerHTML = `
+      <tr>
+        <td colspan="4" style="padding:0;border:none;">
+          <div class="empty-state sys-backup-empty-state" style="padding:var(--space-6) var(--space-4);text-align:center;">
+            <div class="e-icon" aria-hidden="true">💾</div>
+            <strong style="font-size:var(--text-base);font-weight:700;color:var(--content-primary);display:block;margin-bottom:var(--space-1);">No System Backups Yet</strong>
+            <p style="font-size:var(--text-xs);color:var(--content-secondary);max-width:400px;margin:0 auto var(--space-3);line-height:var(--leading-snug);">Automatic local snapshots run once daily. You can also generate an immediate point-in-time snapshot of all books, inventory, orders, and expenses.</p>
+            <div style="display:flex;justify-content:center;gap:var(--space-2);flex-wrap:wrap;">
+              <button type="button" class="btn sm gold" onclick="createSystemBackup('manual')" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;" title="Create immediate system snapshot">
+                <span aria-hidden="true">💾</span>
+                <span>Create Snapshot Now</span>
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
     if (status) status.textContent = 'No automatic backups yet.';
     return;
   }
@@ -13196,12 +13230,12 @@ function renderSystemBackups() {
 
   let html = pageItems.map(b => `
     <tr>
-      <td>${new Date(b.createdAt).toLocaleString()}</td>
-      <td>${b.type === 'manual' ? 'Manual' : 'Auto daily'}</td>
-      <td class="r">${b.bookCount ?? Object.keys(b.snapshot?.BOOKS || {}).length}</td>
+      <td class="tnum">${new Date(b.createdAt).toLocaleString()}</td>
+      <td><span class="pill ${b.type === 'manual' ? 'gold' : 'gray'}">${b.type === 'manual' ? 'Manual' : 'Auto daily'}</span></td>
+      <td class="r tnum" style="font-family:'DM Mono',monospace;font-weight:600;">${b.bookCount ?? Object.keys(b.snapshot?.BOOKS || {}).length}</td>
       <td class="r" style="white-space:nowrap;">
-        <button class="btn sm" onclick="restoreBookFromBackup('${b.id}')" title="Restore just one book from this snapshot — leaves your other books untouched">Restore 1 book</button>
-        <button class="btn sm" onclick="restoreSystemBackup('${b.id}')" title="Restore the ENTIRE database from this snapshot — overwrites everything">Restore all</button>
+        <button class="btn sm outline" onclick="restoreBookFromBackup('${b.id}')" style="min-height:var(--target-min);margin-right:4px;" title="Restore just one book from this snapshot — leaves your other books untouched">Restore 1 book</button>
+        <button class="btn sm danger-btn" onclick="restoreSystemBackup('${b.id}')" style="min-height:var(--target-min);" title="Restore the ENTIRE database from this snapshot — overwrites everything">Restore all</button>
       </td>
     </tr>
   `).join('');
