@@ -4899,44 +4899,17 @@ tr.hist-row:hover {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Metric Tiers Header Cluster */
-.settings-metric-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
-}
-.settings-metric-card {
-  background: var(--cream2);
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  padding: 14px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s;
-  box-shadow: var(--shadow);
-}
-.settings-metric-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(14, 12, 10, 0.05);
-  border-color: var(--gold-line);
-}
+/* Metric Tiers Header Cluster — the label scale is still shared by the
+   earnings split simulator's own heading below; the card anatomy moved to
+   .ps-stat-card (see its comment) so the context strip stops relying on
+   --cream2, which lands almost indistinguishable from the page background
+   in dark mode. */
 .settings-metric-label {
   font-size: 9px;
   font-weight: 800;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--text3);
-}
-.settings-metric-value {
-  font-family: 'DM Mono', monospace;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
-}
-.settings-metric-value.gold {
-  color: var(--gold);
 }
 
 /* Custom Tier Cards */
@@ -13205,6 +13178,11 @@ tr.hist-row:hover {
 }
 .ps-stat-grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
 .ps-stat-grid.cols-4{grid-template-columns:repeat(4,minmax(0,1fr));}
+/* auto-fit, not a fixed count: the Profit Tiers context strip shows 1 card
+   (no book activity yet) or 3 (production cost + revenue + earned), and a
+   fixed template would leave the 1-card case stranded at a third of the
+   row's width. See UX_PATTERNS.md's "Metric bands" tracks rule. */
+.ps-stat-grid.cols-auto{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
 @container (max-width:520px){
   .ps-stat-grid.cols-3,
   .ps-stat-grid.cols-4{grid-template-columns:repeat(2,minmax(0,1fr));}
