@@ -195,16 +195,20 @@ export function buildRateScenarioJson({
  * Parse Canada Post JSON price quotes response
  */
 export function parseCanadaPostPriceQuotes(jsonText) {
-  if (!jsonText || typeof jsonText !== 'string') {
+  if (!jsonText || (typeof jsonText !== 'string' && typeof jsonText !== 'object')) {
     throw new Error('Empty response from Canada Post Rating API');
   }
 
   let data;
-  try {
-    data = JSON.parse(jsonText);
-  } catch (err) {
-    // If it's HTML or some non-JSON error page
-    throw new Error('Invalid JSON response from Canada Post Rating API');
+  if (typeof jsonText === 'object' && jsonText !== null) {
+    data = jsonText;
+  } else {
+    try {
+      data = JSON.parse(jsonText);
+    } catch (err) {
+      // If it's HTML or some non-JSON error page
+      throw new Error('Invalid JSON response from Canada Post Rating API');
+    }
   }
 
   // Check for error messages
@@ -1739,15 +1743,19 @@ export async function testCanadaPostConnection({
  * Parse a Canada Post tracking summary XML document.
  */
 export function parseCanadaPostTrackingSummary(jsonText) {
-  if (!jsonText || typeof jsonText !== 'string') {
+  if (!jsonText || (typeof jsonText !== 'string' && typeof jsonText !== 'object')) {
     throw new Error('Empty response from Canada Post Tracking API');
   }
 
   let data;
-  try {
-    data = JSON.parse(jsonText);
-  } catch (err) {
-    throw new Error('Invalid JSON response from Canada Post Tracking API');
+  if (typeof jsonText === 'object' && jsonText !== null) {
+    data = jsonText;
+  } else {
+    try {
+      data = JSON.parse(jsonText);
+    } catch (err) {
+      throw new Error('Invalid JSON response from Canada Post Tracking API');
+    }
   }
 
   if (data.messages && data.messages.message) {
@@ -2106,7 +2114,7 @@ export function buildNonContractShipmentJson({
       encoding
     },
     preferences: {
-      showPackingInstructions: false,
+      showPackingInstructions: true,
       showPostageRate: true
     },
     references: {
@@ -2189,15 +2197,19 @@ export function buildNonContractShipmentJson({
  * Parse Canada Post Shipment creation JSON response
  */
 export function parseCanadaPostShipmentResponse(jsonText) {
-  if (!jsonText || typeof jsonText !== 'string') {
+  if (!jsonText || (typeof jsonText !== 'string' && typeof jsonText !== 'object')) {
     throw new Error('Empty response from Canada Post Shipment API');
   }
 
   let data;
-  try {
-    data = JSON.parse(jsonText);
-  } catch (err) {
-    throw new Error('Invalid JSON response from Canada Post Shipment API');
+  if (typeof jsonText === 'object' && jsonText !== null) {
+    data = jsonText;
+  } else {
+    try {
+      data = JSON.parse(jsonText);
+    } catch (err) {
+      throw new Error('Invalid JSON response from Canada Post Shipment API');
+    }
   }
 
   // Error check
@@ -2550,9 +2562,11 @@ export async function fetchCanadaPostLabelArtifact({
   // 1. Local dev / backend proxy. Credentials travel in headers only: a key in
   //    the query string is written verbatim into every access log it passes.
   if (typeof window !== 'undefined') {
+    const probe = withTimeout(6000);
     try {
       const proxyResp = await fetch(`/api/canadapost/artifact?url=${encodeURIComponent(url)}`, {
-        headers: { 'x-cp-api-key': key, 'x-cp-api-secret': secret }
+        headers: { 'x-cp-api-key': key, 'x-cp-api-secret': secret },
+        signal: probe.signal
       });
       if (proxyResp.ok) {
         const contentType = proxyResp.headers?.get?.('content-type') || '';
@@ -2563,6 +2577,8 @@ export async function fetchCanadaPostLabelArtifact({
       attempts.push(`local proxy returned ${proxyResp.status}`);
     } catch (err) {
       attempts.push(`local proxy unavailable (${err.message})`);
+    } finally {
+      probe.done();
     }
   }
 
@@ -2570,6 +2586,7 @@ export async function fetchCanadaPostLabelArtifact({
   //    there is no backend and Canada Post rejects direct browser requests.
   const sheetsUrl = getSavedSheetsUrl();
   if (sheetsUrl && !sheetsUrl.includes('mock-test')) {
+    const probe = withTimeout(15000);
     try {
       const gasResp = await fetch(sheetsUrl, {
         method: 'POST',
@@ -2578,7 +2595,8 @@ export async function fetchCanadaPostLabelArtifact({
           version: 2,
           action: 'proxycanadapost',
           payload: { endpoint: url, apiKey: key, apiSecret: secret, isArtifact: true }
-        })
+        }),
+        signal: probe.signal
       });
       if (gasResp.ok) {
         const json = await gasResp.json();
@@ -2595,6 +2613,8 @@ export async function fetchCanadaPostLabelArtifact({
       }
     } catch (err) {
       attempts.push(`Google Sheet relay failed (${err.message})`);
+    } finally {
+      probe.done();
     }
   } else {
     attempts.push('no Google Sheet connected to relay the download');

@@ -431,6 +431,7 @@ import {
   buyCanadaPostLabelHandler,
   openCanadaPostPurchasedLabel,
   showCanadaPostLabelModal,
+  retryFetchCanadaPostLabelArtifact,
   closeCanadaPostLabelModal,
   printCanadaPostLabelModal,
   downloadCanadaPostLabelModal,
@@ -21859,7 +21860,7 @@ function exposeLegacyInlineHandlers() {
     toggleIntegrationSection,
     testZonosConnectionHandler, calculateZonosDutiesHandler, renderZonosDutyCard,
     testCanadaPostConnectionHandler, diagnoseCanadaPostHandler, renderCanadaPostKeySets, calculateCanadaPostRatesHandler, renderCanadaPostRatesCard, buyCanadaPostLabelHandler,
-    showCanadaPostLabelModal, closeCanadaPostLabelModal, printCanadaPostLabelModal, downloadCanadaPostLabelModal, copyCanadaPostPin,
+    showCanadaPostLabelModal, retryFetchCanadaPostLabelArtifact, closeCanadaPostLabelModal, printCanadaPostLabelModal, downloadCanadaPostLabelModal, copyCanadaPostPin,
     checkLiveShippingReadinessHandler, renderLiveReadinessChecklist, renderZonosAccountKeyHint,
     openSaveBookPresetModal, confirmSaveBookPreset, renderSaveBookPresetPreview,
     setThemePreference, cycleThemePreference, toggleTheme
@@ -21937,6 +21938,7 @@ window.renderCanadaPostRatesCard = renderCanadaPostRatesCard;
 window.buyCanadaPostLabelHandler = buyCanadaPostLabelHandler;
 window.openCanadaPostPurchasedLabel = openCanadaPostPurchasedLabel;
 window.showCanadaPostLabelModal = showCanadaPostLabelModal;
+window.retryFetchCanadaPostLabelArtifact = retryFetchCanadaPostLabelArtifact;
 window.closeCanadaPostLabelModal = closeCanadaPostLabelModal;
 window.printCanadaPostLabelModal = printCanadaPostLabelModal;
 window.downloadCanadaPostLabelModal = downloadCanadaPostLabelModal;

@@ -3897,13 +3897,46 @@ function renderCanadaPostLabelArtifact(artifact, context) {
   status.className = 'cp-label-status is-warn';
   status.innerHTML = `
     <span aria-hidden="true">⚠</span>
-    <span>
+    <span style="flex:1;">
       <strong>This is a reference copy — Canada Post will not accept it at the counter.</strong>
       The official label could not be downloaded${artifact.reason ? ` (${escapeHtml(artifact.reason)})` : ''}.
-      The postage is still paid: sign in to your Canada Post account to print the real label, or reopen this once you are back online.
-    </span>`;
+      The postage is still paid: sign in to your Canada Post account to print the real label, or retry downloading below.
+    </span>
+    ${context.labelUrl ? `
+      <button class="btn sm gold cp-label-action-btn" type="button" onclick="retryFetchCanadaPostLabelArtifact()" style="margin-left:auto;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;">
+        <span aria-hidden="true">🔄</span>
+        <span>Retry PDF Download</span>
+      </button>
+    ` : ''}`;
   if (printBtn) printBtn.disabled = false;
   if (downloadBtn) downloadBtn.disabled = false;
+}
+
+async function retryFetchCanadaPostLabelArtifact() {
+  const context = _cpLabelContext || getLastPurchasedShipmentContext();
+  if (!context || !context.labelUrl) {
+    showToast('No label URL stored to retry download', 'warn');
+    return;
+  }
+  const status = $('cp-label-status');
+  if (status) {
+    status.className = 'cp-label-status';
+    status.innerHTML = `<span class="cp-label-status-spinner" aria-hidden="true"></span><span>Re-fetching official PDF label from Canada Post…</span>`;
+  }
+  const { apiKey, apiSecret } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
+  let artifact = null;
+  try {
+    artifact = await fetchCanadaPostLabelArtifact({
+      labelUrl: context.labelUrl,
+      apiKey,
+      apiSecret,
+      shipmentContext: context
+    });
+  } catch (e) {
+    console.warn('Retry fetch artifact failed:', e);
+  }
+  if (!document.getElementById('cp-label-modal-overlay')) return;
+  renderCanadaPostLabelArtifact(artifact, context);
 }
 
 function closeCanadaPostLabelModal() {
@@ -8348,6 +8381,7 @@ export {
   buyCanadaPostLabelHandler,
   openCanadaPostPurchasedLabel,
   showCanadaPostLabelModal,
+  retryFetchCanadaPostLabelArtifact,
   closeCanadaPostLabelModal,
   printCanadaPostLabelModal,
   downloadCanadaPostLabelModal,

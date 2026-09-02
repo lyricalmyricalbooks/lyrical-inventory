@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildNonContractShipmentJson } from '../src/lib/canadapost.js';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -66,10 +66,27 @@ const shipmentReply = ({ transmitted = true } = {}) => {
 
 const CREDS = { apiKey: 'client-id-abc', apiSecret: 'client-secret-xyz', customerNumber: CUSTOMER };
 
+let mockStore = {};
+const mockStorage = {
+  getItem: (k) => mockStore[k] ?? null,
+  setItem: (k, v) => { mockStore[k] = String(v); },
+  removeItem: (k) => { delete mockStore[k]; },
+  clear: () => { mockStore = {}; },
+};
+
+beforeEach(() => {
+  mockStore = {};
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: mockStorage,
+    writable: true,
+    configurable: true,
+  });
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
   delete global.fetch;
-  localStorage.clear();
+  mockStore = {};
 });
 
 describe('a live purchase, from Buy Label to a printable Canada Post document', () => {
