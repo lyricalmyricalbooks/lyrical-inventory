@@ -13943,11 +13943,11 @@ function renderProfitTierList() {
   let liveStats = null;
   try { liveStats = calculateArtistEarnings(psActiveBookId); } catch (_) { liveStats = null; }
   const ctx = document.createElement('div');
-  ctx.className = 'settings-metric-grid';
+  ctx.className = 'ps-stat-grid cols-auto';
   const ctxItem = (label, val, accent) => `
-    <div class="settings-metric-card">
-      <div class="settings-metric-label">${label}</div>
-      <div class="settings-metric-value ${accent || ''}">${val}</div>
+    <div class="ps-stat-card${accent === 'gold' ? ' tone-gold' : ''}">
+      <div class="ps-stat-label">${label}</div>
+      <div class="ps-stat-val">${val}</div>
     </div>`;
   let ctxHtml = ctxItem('Production cost', productionCost > 0 ? fmt(productionCost, cur) : 'Not set', productionCost > 0 ? '' : 'gold');
   if (liveStats) {
