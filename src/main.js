@@ -15612,6 +15612,31 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
+// ── Tax Centre keyboard shortcuts ──────────────────────────────────────
+// /      → focus Tax Centre ledger search input
+// Escape → clear and blur Tax Centre ledger search
+document.addEventListener('keydown', function (e) {
+  const tcPanel = $('tab-taxcentre');
+  if (!tcPanel || tcPanel.style.display === 'none') return;
+  const tag = (document.activeElement || {}).tagName || '';
+  const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  const inModal = document.activeElement && document.activeElement.closest('.modal, .overlay');
+
+  const ledgerSearch = $('tc-ledger-search');
+  if (e.key === '/' && !inInput && !inModal && ledgerSearch) {
+    e.preventDefault();
+    ledgerSearch.focus();
+    ledgerSearch.select();
+    return;
+  }
+  if (e.key === 'Escape' && !inModal && ledgerSearch && document.activeElement === ledgerSearch) {
+    e.preventDefault();
+    ledgerSearch.value = '';
+    if (typeof window.tcLedgerSearchInput === 'function') window.tcLedgerSearchInput('');
+    ledgerSearch.blur();
+  }
+});
+
 // ── POS cart presentation ─────────────────────────────────────────────
 // Both checkout actions already refuse an empty cart (posCheckout and
 // posGenerateSaleQR toast and bail), but at a fair the wasted tap costs a beat

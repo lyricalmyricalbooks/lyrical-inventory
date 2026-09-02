@@ -2433,9 +2433,13 @@
       <button class="btn gold" onclick="openTaxSeasonPreflightModal()">📦 Tax Season Export</button>
     </div>
   </div>
-  <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-    <input id="tc-ledger-search" type="search" placeholder="Search description, ref, category…" oninput="tcLedgerSearchInput(this.value)" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--gold-line);border-radius:8px;background:var(--cream2);color:var(--text);font-size:13px;">
-    <select id="tc-ledger-type" class="btn tag" onchange="tcLedgerTypeFilter(this.value)" style="background:var(--cream2);border:1px solid var(--gold-line);color:var(--text);cursor:pointer;">
+  <div class="tc-search-bar">
+    <div class="tc-search-wrapper">
+      <span class="tc-search-icon" aria-hidden="true">🔍</span>
+      <input id="tc-ledger-search" class="tc-search-input" type="search" placeholder="Search description, ref, category…" aria-label="Search tax ledger" oninput="tcLedgerSearchInput(this.value)">
+      <kbd class="tc-search-kbd" aria-hidden="true">/</kbd>
+    </div>
+    <select id="tc-ledger-type" class="tc-filter-select" aria-label="Filter ledger by transaction type" onchange="tcLedgerTypeFilter(this.value)">
       <option value="all">All types</option>
       <option value="sales">Sales only</option>
       <option value="expenses">Expenses only</option>
@@ -2515,9 +2519,12 @@
             <div class="section-hed">Visual Receipt Vault</div>
             <div style="font-size:11px;color:var(--text3);">Scan and audit all proof-of-payment receipts, invoices, and cloud documents across your books.</div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <input type="search" id="tc-gallery-search" placeholder="Search description, trip, vendor…" oninput="tcGallerySearchInput(this.value)" style="padding:6px 12px;font-size:12px;border:1px solid var(--border);border-radius:var(--r2);background:var(--cream2);color:var(--text1);min-width:220px;">
-            <select id="tc-gallery-category" class="btn tag" onchange="tcGalleryFilterChange()" style="font-size:12px;background:var(--cream2);border:1px solid var(--border);color:var(--text1);cursor:pointer;">
+          <div class="tc-search-bar" style="margin-bottom:0;">
+            <div class="tc-search-wrapper">
+              <span class="tc-search-icon" aria-hidden="true">🔍</span>
+              <input type="search" id="tc-gallery-search" class="tc-search-input" placeholder="Search description, trip, vendor…" aria-label="Search receipt gallery" oninput="tcGallerySearchInput(this.value)">
+            </div>
+            <select id="tc-gallery-category" class="tc-filter-select" aria-label="Filter receipt gallery by category" onchange="tcGalleryFilterChange()">
               <option value="all">All Categories</option>
             </select>
           </div>
