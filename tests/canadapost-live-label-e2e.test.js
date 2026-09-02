@@ -309,6 +309,7 @@ describe('the Create Shipment body matches the committed spec', () => {
       destination: { ...DESTINATION, countryCode: 'US', postalCode: '90210' },
       declarationId: '0rd4dpkrvc1y9',
     }).deliverySpec;
+    expect(spec.customs.usdeclarationid).toBe('0rd4dpkrvc1y9');
     expect(spec.customs.usDeclarationId).toBe('0rd4dpkrvc1y9');
     expect(spec.customs.declarationId).toBeUndefined();
   });

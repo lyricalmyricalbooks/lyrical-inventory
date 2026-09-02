@@ -33,7 +33,7 @@ import {
   resolveCanadaPostScope,
   resolveCanadaPostProduct,
 } from './canadapost-endpoints.js';
-import { parseShipmentResponse, describeNextStep } from './canadapost-shipment.js';
+import { parseShipmentResponse, describeNextStep, describeDeclarationStep } from './canadapost-shipment.js';
 import { describeShipmentRejection } from './canadapost-shipment-diagnosis.js';
 import {
   missingSenderFields,
@@ -2201,7 +2201,31 @@ export function buildNonContractShipmentJson({
         }
       ]
     };
-    if (cleanDeclId) deliverySpec.customs.usDeclarationId = cleanDeclId;
+    // The Zonos Declaration ID goes on under BOTH spellings, deliberately.
+    //
+    // Canada Post's own OpenAPI spec declares two properties on the same
+    // `customs` schema for this one value:
+    //
+    //   usdeclarationid  (all lowercase) — what the create-shipment request
+    //                    table documents, marked "Conditionally Required":
+    //                    required for US destinations when no Zonos account
+    //                    key rides on the header.
+    //   usDeclarationId  (camelCase) — declared further down the same schema,
+    //                    described as the number returned when customs data is
+    //                    submitted to Zonos directly. That is exactly this
+    //                    case: the ID was minted in the Prepay app or via the
+    //                    Zonos API, not by Canada Post.
+    //
+    // Both are declared properties, so sending both is spec-valid — neither is
+    // an unknown field the gateway could reject. Sending only one is the gamble,
+    // and it is a silent one: an unrecognised name is dropped without an error,
+    // the label prints, the parcel ships, and the duty is never prepaid. The
+    // shop finds out when the parcel is held at the border or billed back.
+    // A duplicated field costs nothing; a dropped one costs a customer.
+    if (cleanDeclId) {
+      deliverySpec.customs.usdeclarationid = cleanDeclId;
+      deliverySpec.customs.usDeclarationId = cleanDeclId;
+    }
   }
 
   if (Array.isArray(options) && options.length > 0) {
@@ -2283,7 +2307,33 @@ export function parseCanadaPostShipmentResponse(jsonText) {
 
   // When a Zonos Verified Account key is sent on the request, Canada Post issues
   // the Declaration ID itself and returns it here rather than expecting one in.
-  const rawDeclaration = shipmentInfo.declarationId || shipmentInfo.zonosDeclarationId || shipmentInfo.dutyDeclarationId || data.declarationId || '';
+  //
+  // Read every shape the ID has been seen under, including the echoed customs
+  // block in both of the spellings the spec declares. The old version looked
+  // only at the top level, so an ID returned inside `customs` was invisible:
+  // the label was genuinely prepaid and the app still showed nothing, which is
+  // indistinguishable on screen from the declaration having been dropped.
+  // Every place a customs block has been seen, checked in order. Collected into
+  // a list rather than chained with `||` on purpose: an empty `customs: {}` is
+  // truthy, so a chain would stop at it and never look at the populated one
+  // further down — the exact silent miss this is meant to close.
+  const customsEchoes = [
+    shipmentInfo.customs,
+    shipmentInfo.deliverySpec?.customs,
+    data.customs,
+    data.deliverySpec?.customs
+  ].filter(block => block && typeof block === 'object');
+
+  const echoedDeclaration = customsEchoes
+    .map(block => block.usdeclarationid || block.usDeclarationId || '')
+    .find(Boolean) || '';
+
+  const rawDeclaration = shipmentInfo.declarationId
+    || shipmentInfo.zonosDeclarationId
+    || shipmentInfo.dutyDeclarationId
+    || data.declarationId
+    || echoedDeclaration
+    || '';
   const declarationId = validateDeclarationId(rawDeclaration) ? formatDeclarationId(rawDeclaration) : '';
 
   return {
@@ -2474,6 +2524,35 @@ export async function buyCanadaPostLabel({
   const issuedDeclarationId = formatDeclarationId(responseData.declarationId || '');
   const finalDeclarationId = issuedDeclarationId || sentDeclarationId;
 
+  // Three states, not a boolean — the same reasoning as the manifest signal.
+  //
+  // The documented Create Shipment response is FLAT: shipmentId, shipmentStatus,
+  // trackingPin, links. It does NOT promise to echo the customs block back. So
+  // "Canada Post did not return a Declaration ID" is the ORDINARY outcome for a
+  // correctly prepaid parcel, and flagging it as a failure would fire a warning
+  // on every US label the shop ever buys — which trains the owner to ignore the
+  // warning by the time it is real.
+  //
+  //   'issued'  — Canada Post minted it and returned it.
+  //   'sent'    — we supplied it and Canada Post accepted the shipment. Normal.
+  //   'account' — a Zonos Verified Account key rode on the header, so Zonos
+  //               bills the duty against the account and no per-parcel ID is
+  //               owed by the shop. Canada Post does not always return one in
+  //               this case, and treating that silence as a failure would put a
+  //               red warning on every label of the shop's normal setup.
+  //   'missing' — a US parcel with no declaration and no account key. This one
+  //               is real: the duty is unpaid and the parcel can be held or
+  //               billed back at the border.
+  //   'n/a'     — not a US destination, so no declaration is owed.
+  const destCountryCode = String(destination?.countryCode || destination?.country || '').toUpperCase().trim();
+  const hasZonosAccount = !!String(zonosAccountKey || '').trim();
+  let declarationSignal;
+  if (destCountryCode !== 'US') declarationSignal = 'n/a';
+  else if (issuedDeclarationId) declarationSignal = 'issued';
+  else if (sentDeclarationId) declarationSignal = 'sent';
+  else if (hasZonosAccount) declarationSignal = 'account';
+  else declarationSignal = 'missing';
+
   // Cache shipment context for instant high-res label reproduction
   const shipmentCtx = {
     serviceCode,
@@ -2491,6 +2570,7 @@ export async function buyCanadaPostLabel({
     parcel,
     customs,
     declarationId: finalDeclarationId,
+    declarationSignal,
     customerNumber: customerId,
     // Kept on the archived shipment so a reprint days later still shows whether
     // this parcel was ever transmitted — the surcharge for an unmanifested
@@ -2518,6 +2598,8 @@ export async function buyCanadaPostLabel({
     ...responseData,
     declarationId: finalDeclarationId,
     declarationIssuedByCarrier: !!issuedDeclarationId,
+    declarationSignal,
+    declarationNextStep: describeDeclarationStep(declarationSignal, finalDeclarationId),
     manifestRequired: !!responseData.manifestRequired,
     manifestSignal: responseData.manifestSignal || '',
     // The single sentence the screen shows about what to do next. Built here so

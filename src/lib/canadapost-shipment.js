@@ -236,3 +236,35 @@ export function describeNextStep(result) {
   }
   return 'Print the label and attach it to the parcel. Nothing else is needed before drop-off.';
 }
+
+/**
+ * What the shop owner should do about the U.S. duty declaration, in their words.
+ *
+ * Mirrors describeNextStep: three real states plus "not applicable", because a
+ * warning that fires on every parcel is a warning nobody reads by the time it
+ * matters. Only 'missing' is a problem — and it is a real one, so it says so
+ * plainly and says what it costs.
+ */
+export function describeDeclarationStep(signal, declarationId = '') {
+  const id = String(declarationId || '').trim();
+
+  if (signal === 'n/a') return '';
+
+  if (signal === 'issued') {
+    return `Canada Post created the U.S. duty declaration for this parcel${id ? ` (${id})` : ''} and billed the duty to your Zonos account. Nothing else to do.`;
+  }
+  if (signal === 'sent') {
+    return `The prepaid U.S. duty declaration${id ? ` (${id})` : ''} was sent with this label, so the duty is already paid. Nothing else to do.`;
+  }
+  if (signal === 'account') {
+    return 'The duty on this U.S. parcel is billed to your Zonos account, so it is covered. '
+      + 'Canada Post did not print a declaration number on the reply, which is normal for an account shipment.';
+  }
+  if (signal === 'missing') {
+    return 'This U.S. parcel went out with NO duty declaration, so the duty has not been paid. '
+      + 'U.S. customs can hold the parcel or bill your customer for it. Buy a declaration in the Zonos '
+      + 'Prepay app and add it before you drop this parcel off, or connect your Zonos account key so '
+      + 'every future label gets one automatically.';
+  }
+  return '';
+}

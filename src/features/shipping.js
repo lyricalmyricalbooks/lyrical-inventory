@@ -4450,6 +4450,11 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
             histItem.trackingNumber = result.trackingPin || '';
             histItem.carrier = 'canadapost';
             histItem.declarationId = declarationId || '';
+            // Whether the U.S. duty was actually prepaid, recorded on the order
+            // itself. Without it, an order with a blank Declaration ID cannot be
+            // told apart from a domestic one months later, when a customer asks
+            // why they were billed duty on delivery.
+            histItem.declarationSignal = result.declarationSignal || '';
             histItem.postagePaid = chargedPrice;
             // A test run's number will not scan at Canada Post. Flagging it on
             // the order is what stops it being read out to a customer as a real
@@ -4573,6 +4578,18 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                 <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declarationId)}');showToast('✓ Copied Zonos Declaration ID');" style="min-height:36px;padding:6px 12px;">
                   📋 Copy Declaration ID
                 </button>
+              </div>
+            ` : ''}
+            ${result.declarationSignal === 'missing' && !isSim ? `
+              <div style="margin-top:12px;padding:12px 14px;background:var(--surface-card);border:1px solid var(--red,var(--border));border-radius:var(--r);display:flex;align-items:flex-start;gap:10px;">
+                <span style="font-size:18px;line-height:1.1;" aria-hidden="true">🇺🇸</span>
+                <div style="font-size:11px;color:var(--text3);line-height:1.5;">
+                  <strong style="font-size:12px;color:var(--text);">This U.S. parcel has no duty declaration, so the duty is not paid.</strong><br>
+                  U.S. customs can hold the parcel or bill your customer for the duty on delivery.
+                  Buy a declaration in the Zonos Prepay app and add its ID before you drop this parcel
+                  off, or save your Zonos account key in Tax Centre so every future U.S. label gets one
+                  automatically.
+                </div>
               </div>
             ` : ''}
           </div>
