@@ -2022,6 +2022,25 @@ export function validateDeclarationId(declarationId) {
 }
 
 /**
+ * Format HS Tariff Code to match Canada Post's strict OpenAPI regex:
+ * ^\d{4}(\.\d{2}(\.\d{2}(\.\d{2})?)?)?$
+ * (e.g. 4901.99, 4901.99.00, 4901.99.00.70)
+ */
+export function formatHsTariffCode(code) {
+  if (!code) return '4901.99';
+  const clean = String(code).trim();
+  if (/^\d{4}(\.\d{2}(\.\d{2}(\.\d{2})?)?)?$/.test(clean)) {
+    return clean;
+  }
+  const digits = clean.replace(/\D/g, '');
+  if (digits.length >= 10) return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}.${digits.slice(8, 10)}`;
+  if (digits.length >= 8) return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}`;
+  if (digits.length >= 6) return `${digits.slice(0, 4)}.${digits.slice(4, 6)}`;
+  if (digits.length >= 4) return digits.slice(0, 4);
+  return '4901.99';
+}
+
+/**
  * Build JSON payload for creating a Shipment with Canada Post Developer Portal Shipping v1
  */
 export function buildNonContractShipmentJson({
@@ -2157,24 +2176,24 @@ export function buildNonContractShipmentJson({
     const qty = Math.max(1, parseInt(customs?.quantity || 1, 10));
     const declaredVal = Math.max(0.01, parseFloat(customs?.value || customs?.declaredValue || 20));
     const customsDesc = String(customs?.description || 'Printed books').slice(0, 44);
-    const hsCode = String(customs?.hsCode || '490199').replace(/[^0-9]/g, '').slice(0, 6) || '490199';
+    const hsCode = formatHsTariffCode(customs?.hsCode || '4901.99');
+    const originProv = cleanSenderState || 'ON';
 
     deliverySpec.customs = {
       currency: 'CAD',
       conversionFromCad: 1.0,
       reasonForExport: 'SOG',
-      skuList: {
-        item: [
-          {
-            customsNumberOfUnits: qty,
-            customsDescription: customsDesc,
-            unitWeight: Number((weightKg / qty).toFixed(3)),
-            customsValuePerUnit: Number((declaredVal / qty).toFixed(2)),
-            hsTariffCode: hsCode,
-            countryOfOrigin: 'CA'
-          }
-        ]
-      }
+      skuList: [
+        {
+          customsNumberOfUnits: qty,
+          customsDescription: customsDesc,
+          unitWeight: Math.max(0.001, Number((weightKg / qty).toFixed(3))),
+          customsValuePerUnit: Math.max(0.01, Number((declaredVal / qty).toFixed(2))),
+          hsTariffCode: hsCode,
+          countryOfOrigin: 'CA',
+          provinceOfOrigin: originProv
+        }
+      ]
     };
     // The spec calls this usDeclarationId. It was sent as `declarationId`,
     // which Canada Post does not recognise, so a Zonos-prepaid US parcel was
