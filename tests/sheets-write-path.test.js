@@ -5,8 +5,8 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const codeGs = fs.readFileSync(path.resolve(__dirname, '../apps-script/Code.gs'), 'utf8');
-const mainJs = fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8');
+const codeGs = fs.readFileSync(path.resolve(__dirname, '../apps-script/Code.gs'), 'utf8').replace(/\r\n/g, '\n');
+const mainJs = fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8').replace(/\r\n/g, '\n');
 
 // The body of doPost, which is where every sheet write happens.
 function doPostSource() {
@@ -140,7 +140,7 @@ describe('the client no longer reports an unwritten row as written', () => {
 });
 
 describe('Test connection actually tests the connection', () => {
-  const fn = mainJs.match(/async function testSheets\(\)[\s\S]+?\n\}\n/)[0];
+  const fn = mainJs.match(/async function testSheets\(\)[\s\S]+?\r?\n\}\r?\n/)[0];
 
   it('does not label its own row with a title isTestBookId() discards', () => {
     // isTestBookId() matches any title containing "test", so `book: 'Test'`
