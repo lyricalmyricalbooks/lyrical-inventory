@@ -187,7 +187,7 @@ describe('Canada Post Label & Shipment Creation', () => {
     expect(jsonStr).toContain('"countryCode":"US"');
     expect(jsonStr).toContain('"postalZipCode":"10001"');
     expect(jsonStr).toContain('"customsDescription":"Hardcover poetry books"');
-    expect(jsonStr).toContain('"hsTariffCode":"490199"');
+    expect(jsonStr).toContain('"hsTariffCode":"4901.99.00"');
     expect(jsonStr).toContain('"customerRef1":"ORD-2026-99"');
   });
 

@@ -312,4 +312,31 @@ describe('the Create Shipment body matches the committed spec', () => {
     expect(spec.customs.usDeclarationId).toBe('0rd4dpkrvc1y9');
     expect(spec.customs.declarationId).toBeUndefined();
   });
+
+  it('builds customs.skuList as a direct array (not an object) matching Canada Post Developer Portal schema', () => {
+    const spec = build({
+      destination: { ...DESTINATION, countryCode: 'US', postalCode: '14607' },
+      customs: {
+        description: 'Collective Photobook - print',
+        value: 85,
+        quantity: 1,
+        hsCode: '4901.99.0070'
+      }
+    }).deliverySpec;
+
+    expect(spec.customs).toBeDefined();
+    expect(Array.isArray(spec.customs.skuList)).toBe(true);
+    expect(spec.customs.skuList.length).toBe(1);
+
+    const item = spec.customs.skuList[0];
+    expect(item.customsNumberOfUnits).toBe(1);
+    expect(item.customsDescription).toBe('Collective Photobook - print');
+    expect(item.customsValuePerUnit).toBe(85);
+    expect(item.unitWeight).toBeGreaterThan(0);
+    expect(item.countryOfOrigin).toBe('CA');
+    expect(item.provinceOfOrigin).toBe('ON');
+    expect(item.hsTariffCode).toBe('4901.99.00.70');
+    // Ensure regex pattern ^\d{4}(\.\d{2}(\.\d{2}(\.\d{2})?)?)?$ passes
+    expect(/^\d{4}(\.\d{2}(\.\d{2}(\.\d{2})?)?)?$/.test(item.hsTariffCode)).toBe(true);
+  });
 });
