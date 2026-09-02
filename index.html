@@ -3180,49 +3180,59 @@
 
         <!-- 🇺🇸 US Duty Prepayment (Zonos & Canada Post Mandate) -->
         <div id="us-zonos-duty-card" class="us-zonos-duty-card" style="display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:18px;">🇺🇸</span>
+          <div class="us-zonos-header">
+            <div class="us-zonos-title-group">
+              <span class="us-zonos-flag-icon" aria-hidden="true">🇺🇸</span>
               <div>
-                <strong style="font-size:13px;color:var(--text);">US Duty Prepayment (Zonos Mandate)</strong>
-                <div style="font-size:10px;color:var(--text3);">Required by Canada Post for all U.S.-bound parcels</div>
+                <strong class="us-zonos-title">US Duty Prepayment (Zonos Mandate)</strong>
+                <div class="us-zonos-subtitle">Required by Canada Post for all U.S.-bound parcels</div>
               </div>
             </div>
-            <span id="us-zonos-status-pill" class="pill amber" style="font-size:10px;">Declaration Required</span>
+            <div class="us-zonos-status-group">
+              <span id="us-zonos-status-pill" class="pill amber">Declaration Required</span>
+            </div>
           </div>
 
-          <div style="font-size:11px;color:var(--text2);line-height:1.5;margin-top:8px;">
-            Canada Post needs a <strong>13-character Declaration ID</strong> proving U.S. duty is prepaid before it will accept the parcel. Printed books (<span class="tnum">HS 4901</span>) carry no duty, but the declaration is still required.
-          </div>
-          <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:6px;">
-            The ID is proof that duty was <em>paid</em>, so it cannot be generated on demand. Either connect a <strong>Zonos Verified Account</strong> once and Canada Post issues it automatically with every label, or buy each declaration in the <strong>Zonos Prepay</strong> app and paste it in.
+          <div class="us-zonos-info-box">
+            <div class="us-zonos-info-lead">
+              Canada Post needs a <strong>13-character Declaration ID</strong> proving U.S. duty is prepaid before it will accept the parcel. Printed books (<span class="tnum">HS 4901</span>) carry no duty, but the declaration is still required.
+            </div>
+            <div class="us-zonos-info-sub">
+              Either connect a <strong>Zonos Verified Account</strong> once for automatic creation, or generate/paste each declaration below.
+            </div>
           </div>
 
-          <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+          <div class="us-zonos-field-section">
             <div class="form-group" style="margin-bottom:0;">
-              <label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
+              <label class="us-zonos-input-label" for="sp-zonos-declaration-id">
                 <span>Zonos Declaration ID (13 characters)</span>
-                <span id="zonos-decl-validation-hint" style="font-size:10px;color:var(--text3);">From Zonos Prepay — or left empty with a Verified Account</span>
+                <span id="zonos-decl-validation-hint" class="us-zonos-hint">13 alphanumeric characters required</span>
               </label>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <input type="text" id="sp-zonos-declaration-id" maxlength="13" placeholder="e.g. 0rd4dpkrvc1y9" style="font-family:'DM Mono',monospace;font-size:13px;letter-spacing:1px;text-transform:lowercase;" oninput="onZonosDeclarationIdInput(this.value)">
-                <button class="btn sm tag" type="button" onclick="pasteZonosDeclarationId()" style="height:36px;padding:0 10px;font-size:11px;white-space:nowrap;" title="Paste Declaration ID from clipboard">📋 Paste</button>
+              <div class="us-zonos-input-row">
+                <div class="us-zonos-input-wrapper">
+                  <input type="text" id="sp-zonos-declaration-id" class="us-zonos-input" maxlength="13" placeholder="e.g. 0rd4dpkrvc1y9" autocomplete="off" spellcheck="false" oninput="onZonosDeclarationIdInput(this.value)">
+                  <span id="us-zonos-char-counter" class="us-zonos-char-counter tnum" aria-live="polite">0/13</span>
+                </div>
+                <button class="btn sm tag us-zonos-paste-btn" type="button" onclick="pasteZonosDeclarationId()" title="Paste Declaration ID from clipboard">
+                  <span aria-hidden="true">📋</span>
+                  <span>Paste</span>
+                </button>
               </div>
             </div>
 
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
-              <button class="btn sm gold" id="sp-auto-gen-zonos-btn" type="button" onclick="autoGenerateZonosDeclarationHandler()" style="flex:1;min-width:170px;height:34px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Generate and attach the 13-character Zonos Declaration ID automatically via Zonos API">
-                <span>⚡</span>
-                <span>Auto-Generate Zonos Declaration</span>
+            <div class="us-zonos-actions">
+              <button class="btn sm gold us-zonos-action-btn" id="sp-auto-gen-zonos-btn" type="button" onclick="autoGenerateZonosDeclarationHandler()" title="Generate and attach the 13-character Zonos Declaration ID automatically via Zonos API">
+                <span aria-hidden="true">⚡</span>
+                <span>Auto-Generate Declaration</span>
               </button>
-              <button class="btn sm outline" id="sp-open-zonos-prepay-btn" type="button" onclick="openZonosPrepayAppHandler()" style="flex:1;min-width:170px;height:34px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;" title="Open the Zonos Prepay app to buy a declaration — parcel details are copied ready to paste">
-                <span>📱</span>
+              <button class="btn sm outline us-zonos-action-btn" id="sp-open-zonos-prepay-btn" type="button" onclick="openZonosPrepayAppHandler()" title="Open the Zonos Prepay app to buy a declaration — parcel details are copied ready to paste">
+                <span aria-hidden="true">📱</span>
                 <span>Buy in Zonos Prepay App</span>
               </button>
             </div>
           </div>
 
-          <div id="zonos-auto-result-hint" style="display:none;font-size:11px;margin-top:8px;padding:8px 10px;border-radius:var(--r);background:rgba(46,125,50,0.08);border:1px solid var(--green);color:var(--text);"></div>
+          <div id="zonos-auto-result-hint" class="us-zonos-result-hint" style="display:none;" role="status"></div>
         </div>
 
         <div class="shipping-predictor-settings">
