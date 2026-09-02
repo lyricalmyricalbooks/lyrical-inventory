@@ -68,7 +68,7 @@ export const CANADAPOST_SHIPMENT_CODES = Object.freeze({ prefix: '', min: 8064, 
  * 9154 is not retried at all. If a retried 9153 fails again, the owner sees the
  * payment-method message, which is the useful outcome either way.
  */
-export const CANADAPOST_PAYMENT_METHOD_CODES = Object.freeze([9153, 9154]);
+export const CANADAPOST_PAYMENT_METHOD_CODES = Object.freeze([9153, 9154, 9174]);
 
 /** The one of that pair Canada Post also lists as worth retrying. */
 export const CANADAPOST_PAYMENT_METHOD_RETRY_CODE = 9153;
@@ -136,7 +136,7 @@ const OWNER_SUMMARIES = Object.freeze({
   validation: 'Canada Post turned these shipment details down, so something in the address, the parcel details or the options chosen needs correcting before trying again.',
   service: 'Canada Post cannot offer this shipping service for this parcel, so the weight, the size or the destination needs another look.',
   shipment: 'Something went wrong at Canada Post while this label was being created, so nothing was bought and it is worth trying once more.',
-  payment: 'Canada Post could not bill this label because the account has no payment method saved, so add one to your Canada Post account and then try again.',
+  payment: 'Canada Post could not bill this label: please ensure an active credit card is saved as the default on your Canada Post online profile, or enter your Contract ID in Tax Centre if billing by commercial account.',
   pending: 'Canada Post is still working on this, so it will be checked again in a moment.',
   throttled: 'Canada Post is asking for a short break because too many requests went out at once, so this will carry on by itself in about a minute.',
   outage: 'Canada Post is having trouble at their end right now, so this is nothing to do with your account and it is worth trying again shortly.',
@@ -248,10 +248,12 @@ function coerceBody(body) {
 /** One message, with both fields as trimmed strings, or null if it holds nothing. */
 function toMessage(entry) {
   if (!entry || typeof entry !== 'object') return null;
-  const code = entry.code === null || entry.code === undefined ? '' : String(entry.code).trim();
-  const description = entry.description === null || entry.description === undefined
+  const rawCode = entry.code ?? entry.errorCode ?? '';
+  const rawDesc = entry.description ?? entry.message ?? entry.detail ?? '';
+  const code = rawCode === null || rawCode === undefined ? '' : String(rawCode).trim();
+  const description = rawDesc === null || rawDesc === undefined
     ? ''
-    : String(entry.description).trim();
+    : String(rawDesc).trim();
   if (!code && !description) return null;
   return { code, description };
 }
@@ -271,9 +273,11 @@ export function parseCanadaPostMessages(body) {
     ? source
     : Array.isArray(source.messages)
       ? source.messages
-      : (source.code !== undefined || source.description !== undefined)
-        ? [source]
-        : [];
+      : Array.isArray(source.errors)
+        ? source.errors
+        : (source.code !== undefined || source.description !== undefined || source.errorCode !== undefined || source.message !== undefined)
+          ? [source]
+          : [];
 
   return list.map(toMessage).filter(Boolean);
 }
