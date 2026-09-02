@@ -2393,6 +2393,7 @@ function _tcRenderStatusHeaders() {
   hydrateCredentialField('tc-zonos-key', TAX_CENTER.settings?.zonosApiKey);
   hydrateCredentialField('tc-zonos-account-key', TAX_CENTER.settings?.zonosAccountKey);
   if ($('tc-zonos-enabled') && TAX_CENTER.settings?.zonosEnabled !== undefined) $('tc-zonos-enabled').checked = TAX_CENTER.settings.zonosEnabled !== false;
+  if ($('tc-zonos-strict-prepay') && TAX_CENTER.settings?.requireZonosUsPrepay !== undefined) $('tc-zonos-strict-prepay').checked = TAX_CENTER.settings.requireZonosUsPrepay !== false;
   const _zonosStatusEl = $('tc-zonos-status');
   if (_zonosStatusEl && TAX_CENTER.settings?.zonosLastTestAt) {
     const last = new Date(TAX_CENTER.settings.zonosLastTestAt);
@@ -3692,6 +3693,7 @@ async function saveTaxCenterSettings() {
   const zonosApiKey = readCredentialField('tc-zonos-key');
   const zonosAccountKey = readCredentialField('tc-zonos-account-key');
   const zonosEnabled = $('tc-zonos-enabled') ? $('tc-zonos-enabled').checked : true;
+  const requireZonosUsPrepay = $('tc-zonos-strict-prepay') ? $('tc-zonos-strict-prepay').checked : true;
 
   const cpSets = {};
   for (const mode of ['live', 'test']) {
@@ -3715,6 +3717,7 @@ async function saveTaxCenterSettings() {
     put('zonosApiKey', zonosApiKey);
     put('zonosAccountKey', zonosAccountKey);
     TAX_CENTER.settings.zonosEnabled = zonosEnabled;
+    TAX_CENTER.settings.requireZonosUsPrepay = requireZonosUsPrepay;
 
     // Migrate first, so a set the publisher just typed into is not overwritten
     // by legacy values that were only ever a stand-in for it.

@@ -509,5 +509,48 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       expect(new Set(results.map(r => r.declarationId)).size).toBe(1);
     });
   });
+
+  describe('Duty Prepayment Route & Guardrail Resolution', () => {
+    it('correctly resolves duty prepayment route for US shipments', async () => {
+      const { resolveDutyPrepaymentRoute } = await import('../src/lib/zonos.js');
+      const unverified = resolveDutyPrepaymentRoute({
+        destCountry: 'US',
+        accountKey: '',
+        declarationId: ''
+      });
+      expect(unverified.needsDeclaration).toBe(true);
+      expect(unverified.route).toBe('prepay');
+      expect(unverified.canAutomate).toBe(false);
+
+      const verified = resolveDutyPrepaymentRoute({
+        destCountry: 'US',
+        accountKey: 'credential_live_abc123',
+        declarationId: ''
+      });
+      expect(verified.needsDeclaration).toBe(true);
+      expect(verified.route).toBe('verified');
+      expect(verified.canAutomate).toBe(true);
+
+      const manual = resolveDutyPrepaymentRoute({
+        destCountry: 'US',
+        accountKey: '',
+        declarationId: '0rd4dpkrvc1y9'
+      });
+      expect(manual.needsDeclaration).toBe(true);
+      expect(manual.route).toBe('manual');
+      expect(manual.declarationId).toBe('0rd4dpkrvc1y9');
+    });
+
+    it('does not require duty prepayment for Canadian domestic shipments', async () => {
+      const { resolveDutyPrepaymentRoute } = await import('../src/lib/zonos.js');
+      const domestic = resolveDutyPrepaymentRoute({
+        destCountry: 'CA',
+        accountKey: '',
+        declarationId: ''
+      });
+      expect(domestic.needsDeclaration).toBe(false);
+      expect(domestic.route).toBe('not-required');
+    });
+  });
 });
 
