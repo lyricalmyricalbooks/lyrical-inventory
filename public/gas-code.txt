@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v40)
+/* Lyricalmyrical Inventory — Unified Backend (v41)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -136,6 +136,21 @@
  *  36. v38: Sends the Canada Post client credentials as the documented X-IBM-Client-Id / X-IBM-Client-Secret headers on the OAuth token exchange.
  *  37. v39: Canada Post Developer Portal Shipping v1, strict JSON media types, and label refund/void proxy support. Enables requesting postage refunds and cancellations via the Developer Portal refund endpoint. Bump flags v38-and-older as outdated so the publisher redeploys.
  *  38. v40: Canada Post Developer Portal Shipping v1 Non-Delivery Handling options (RTS/RASE), customs skuList array payload format, and HS tariff dotted regex formatting. Bump flags v39-and-older as outdated so the publisher redeploys.
+ *  39. v41: Sheet rows are kept in date order. Every write path ended in an
+ *      append, so the sheet was ordered by when a row was delivered rather
+ *      than when the sale happened — a backdated fair sale, a catch-up Gmail
+ *      scan, or a full repair pass all landed at the bottom, putting July
+ *      under September. That also broke the app's restore path, which states
+ *      it is handed rows "in chronological order" and rebuilds each book's
+ *      running stock balance on that basis. sortManagedSheets_ now re-sorts
+ *      every tab a write touched (Overview included) by Date ascending, with a
+ *      stable tiebreak so an order and its postage row stay adjacent, and rows
+ *      with an unusable date sort last instead of to the top. Batch and
+ *      single-row deletes also collapse consecutive rows into deleteRows()
+ *      runs rather than one deleteRow() round-trip each, which is a large part
+ *      of why a bulk sync could run long enough for the client to give up on
+ *      it mid-write. Responses add sorted:true. Bump flags v40-and-older as
+ *      outdated so the publisher redeploys to get ordered rows.
  */
 
 const HEADERS = [
@@ -184,9 +199,9 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v40',
-    scriptVersion: 'v40',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true },
+    service: 'lyrical-sheets-webhook-v41',
+    scriptVersion: 'v41',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
 }
@@ -1384,16 +1399,16 @@ function doPost(e) {
         added++;
       }
 
-      // Execute Deletions
+      // Execute Deletions. Consecutive rows collapse into one deleteRows()
+      // call each, instead of one round-trip per row.
+      const touchedSheets = {};
       const deleteSheets = Object.keys(rowsToDeleteBySheet);
       for (let s = 0; s < deleteSheets.length; s++) {
         const sheetName = deleteSheets[s];
         const sheet = sheetMap[sheetName];
         if (sheet) {
-          const indices = rowsToDeleteBySheet[sheetName].sort((a, b) => b - a);
-          for (let r = 0; r < indices.length; r++) {
-            sheet.deleteRow(indices[r]);
-          }
+          deleteRowsBulk_(sheet, rowsToDeleteBySheet[sheetName]);
+          touchedSheets[sheetName] = true;
         }
       }
 
@@ -1405,10 +1420,15 @@ function doPost(e) {
         const newRows = rowsToAppendBySheet[sheetName];
         const lastRow = sheet.getLastRow();
         sheet.getRange(lastRow + 1, 1, newRows.length, HEADERS.length).setValues(newRows);
+        touchedSheets[sheetName] = true;
       }
 
+      // Appends land at the bottom whatever their date, and a batch can carry
+      // months of backdated history. Re-order every tab this call wrote to.
+      sortManagedSheets_(ss, Object.keys(touchedSheets));
+
       refreshOverviewSummary_(ss);
-      return jsonOut_({ ok: true, count: rows.length, added, deleted, voided, replaced });
+      return jsonOut_({ ok: true, count: rows.length, added, deleted, voided, replaced, sorted: true });
     }
 
     // ── Reset / rebuild: clear every managed sheet so the client can resend a
@@ -1463,7 +1483,9 @@ function processSheetsRow_(ss, data, eventId) {
   if (sheetName !== 'Overview') {
     processSheetEntry_(ss, 'Overview', data);
   }
-  return { added: 1, replaced };
+  // The row was appended at the bottom; put it where its date belongs.
+  sortManagedSheets_(ss, [sheetName]);
+  return { added: 1, replaced, sorted: true };
 }
 
 function processSheetEntry_(ss, sheetName, data) {
@@ -1712,6 +1734,118 @@ function columnLetter_(col) {
   return s;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Chronological order
+//
+// Every write path here ends in an append, so the sheet has always been in
+// the order rows happened to be delivered rather than the order the sales
+// happened in. Anything entered late — a backdated fair sale, a Gmail scan
+// catching up, a repair pass re-adding every record — landed at the bottom
+// regardless of its date, so July sat under September and the sheet could not
+// be read top to bottom.
+//
+// It is not only cosmetic: getBookData_ hands these rows to the app's restore
+// path, which states in its own comment that they arrive in chronological
+// order and rebuilds each book's running stock balance on that assumption. Out
+// of order in, wrong stock-after figures out.
+//
+// So: after any write, re-sort the tabs that were touched by Date ascending.
+// ─────────────────────────────────────────────────────────────
+
+// Sortable 'yyyy-MM-dd' for whatever the Date cell holds. Sheets hands back a
+// real Date when the cell parsed as one and a string when it did not, and a
+// row with no usable date sorts last rather than displacing real history at
+// the top.
+function rowSortKey_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  const text = String(value == null ? '' : value).trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+  if (text) {
+    const parsed = new Date(text);
+    if (!isNaN(parsed.getTime())) {
+      return Utilities.formatDate(parsed, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    }
+  }
+  return '9999-12-31';
+}
+
+// Re-order one managed sheet's data rows oldest-first. The sort is stable, so
+// rows sharing a date keep the order they were written in — a website order
+// and the postage row charged on it stay next to each other.
+function sortSheetByDate_(sheet) {
+  if (!sheet) return false;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 3) return false; // header plus at most one row: nothing to order
+  if (sheet.getLastColumn() < 1) return false;
+  if (sheet.getRange(1, 1).getValue() !== '_eventId') return false; // managed only
+
+  const range = sheet.getRange(2, 1, lastRow - 1, HEADERS.length);
+  const values = range.getValues();
+  const decorated = values.map(function (row, index) {
+    return { row: row, index: index, key: rowSortKey_(row[COL.Date - 1]) };
+  });
+  let alreadySorted = true;
+  for (let i = 1; i < decorated.length; i++) {
+    if (decorated[i].key < decorated[i - 1].key) { alreadySorted = false; break; }
+  }
+  if (alreadySorted) return false; // don't spend a write on a no-op
+
+  decorated.sort(function (a, b) {
+    if (a.key !== b.key) return a.key < b.key ? -1 : 1;
+    return a.index - b.index;
+  });
+  range.setValues(decorated.map(function (entry) { return entry.row; }));
+  return true;
+}
+
+// Sort the named tabs (plus Overview, which every row is mirrored into).
+function sortManagedSheets_(ss, sheetNames) {
+  const seen = {};
+  const names = (sheetNames || []).concat(['Overview']);
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
+    if (!name || seen[name]) continue;
+    seen[name] = true;
+    try {
+      sortSheetByDate_(ss.getSheetByName(name));
+    } catch (e) {
+      // A tab that cannot be re-ordered is a display problem, never a reason to
+      // fail a write that has already landed.
+    }
+  }
+}
+
+// Delete a list of 1-based row indices from one sheet, collapsing runs of
+// consecutive rows into single deleteRows() calls. A 60-row batch used to cost
+// 60 separate deleteRow() round-trips, which is a large part of why a bulk sync
+// ran long enough for the browser to give up on it.
+function deleteRowsBulk_(sheet, rowIndices) {
+  if (!sheet || !rowIndices || !rowIndices.length) return 0;
+  const unique = [];
+  const seen = {};
+  for (let i = 0; i < rowIndices.length; i++) {
+    const idx = rowIndices[i];
+    if (!seen[idx]) { seen[idx] = true; unique.push(idx); }
+  }
+  // Bottom-up, so indices above the one being removed stay valid.
+  unique.sort(function (a, b) { return b - a; });
+  let removed = 0;
+  let i = 0;
+  while (i < unique.length) {
+    let runEnd = i;
+    while (runEnd + 1 < unique.length && unique[runEnd + 1] === unique[runEnd] - 1) runEnd++;
+    const start = unique[runEnd];
+    const count = runEnd - i + 1;
+    sheet.deleteRows(start, count);
+    removed += count;
+    i = runEnd + 1;
+  }
+  return removed;
+}
+
 function removeByEventId_(ss, eventId) {
   let removed = 0;
   // Never match a blank id — that would risk deleting unrelated legacy rows
@@ -1723,13 +1857,11 @@ function removeByEventId_(ss, eventId) {
     const firstRow = sheet.getRange(1, 1).getValue();
     if (firstRow !== '_eventId') continue; // only our managed sheets
     const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-    // Iterate from bottom so row indices stay valid as we delete
-    for (let i = ids.length - 1; i >= 0; i--) {
-      if (String(ids[i][0]) === String(eventId)) {
-        sheet.deleteRow(i + 2);
-        removed++;
-      }
+    const matches = [];
+    for (let i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(eventId)) matches.push(i + 2);
     }
+    removed += deleteRowsBulk_(sheet, matches);
   }
   return removed;
 }
