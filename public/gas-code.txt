@@ -133,8 +133,8 @@
  *      JSON/OAuth architecture. Bump flags v34-and-older as outdated.
  *  34. v36: Fixes Canada Post OAuth 2.0 token acquisition and updates tracking endpoint.
  *  35. v37: Restores mandatory scope=merchant for Canada Post Developer Portal OAuth 2.0 token acquisition. Bump flags v36-and-older as outdated.
- *  36. v38: Canada Post Developer Portal Shipping v1 & strict JSON media types. Standardizes on application/json for all Developer Portal POST endpoints (rating, shipping, tracking) and application/pdf for label artifacts with OAuth Bearer token auth, eliminating 415 Unsupported Media Type and schema errors. Bump flags v37-and-older as outdated so the publisher redeploys.
- *  37. v39: Canada Post label refund/void proxy support. Enables requesting postage refunds and cancellations via the Developer Portal refund endpoint. Bump flags v38-and-older as outdated so the publisher redeploys.
+ *  36. v38: Sends the Canada Post client credentials as the documented X-IBM-Client-Id / X-IBM-Client-Secret headers on the OAuth token exchange.
+ *  37. v39: Canada Post Developer Portal Shipping v1, strict JSON media types, and label refund/void proxy support. Enables requesting postage refunds and cancellations via the Developer Portal refund endpoint. Bump flags v38-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -686,6 +686,13 @@ function doPost(e) {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/x-www-form-urlencoded',
+                  'Accept': 'application/json',
+                  // The Authentication guide puts the client credentials in
+                  // these two headers. Basic is kept alongside because it is
+                  // what has actually been minting working tokens against this
+                  // gateway; whichever the gateway reads, both agree.
+                  'X-IBM-Client-Id': keyTrim,
+                  'X-IBM-Client-Secret': secretTrim,
                   'Authorization': 'Basic ' + basicAuth
                 },
                 payload: payloadStr,
@@ -718,29 +725,67 @@ function doPost(e) {
           'Authorization': authHeader,
           'Accept-language': 'en-CA'
         };
+        // Canada Post versions its APIs through the media type, not the URL, and
+        // its documentation is explicit that a generic value is rejected: 406
+        // means "the interface version expected by the request is invalid —
+        // change the Accept header", and 415 is the same for Content-Type on a
+        // POST.
+        //
+        // This branch used to send a bare 'application/json' whenever OAuth was
+        // in play, bypassing the versioned types the very next line already
+        // knew about. On an Apigee gateway that routes by media type, an
+        // unroutable value does not always come back as a clean 406 or 415 — it
+        // can hang and surface as a 504, which is what the shipping card has
+        // been showing.
+        //
+        // The exact versioned string for the Developer Portal's Rating API is
+        // pinned only in its OpenAPI definition, which sits behind the portal
+        // login and is not reachable from here. Rather than guess one and
+        // hard-code it, try the plausible values in order and let Canada Post's
+        // own 406/415 pick the winner.
+        var mediaCandidates = [];
         if (isArtifact) {
           headers['Accept'] = 'application/pdf';
         } else if (isTracking) {
           headers['Accept'] = 'application/json';
+          mediaCandidates = ['application/json', 'application/vnd.cpc.track+json'];
         } else if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
           headers['Accept'] = 'application/json';
           headers['Content-Type'] = 'application/json';
+          mediaCandidates = endpoint.indexOf('ncshipment') !== -1 || endpoint.indexOf('shipments') !== -1
+            ? ['application/json', 'application/vnd.cpc.ncshipment-v4+json']
+            : ['application/json', 'application/vnd.cpc.ship.rate-v4+json', 'application/vnd.cpc.rating-v4+json'];
         }
         if (zonosAccountKey && zonosAccountKey.trim()) {
           headers['X-CPC-Zonos-Key'] = zonosAccountKey.trim();
         }
 
-        const options = {
-          method: method,
-          headers: headers,
-          muteHttpExceptions: true
-        };
-        if (jsonPayload && method !== 'GET') {
-          options.payload = jsonPayload;
-        }
+        var resp = null;
+        var code = 0;
+        var usedMediaType = '';
+        var attemptList = mediaCandidates.length ? mediaCandidates : [''];
 
-        const resp = UrlFetchApp.fetch(endpoint, options);
-        const code = resp.getResponseCode();
+        for (var mi = 0; mi < attemptList.length; mi++) {
+          if (attemptList[mi]) {
+            headers['Accept'] = attemptList[mi];
+            if (method === 'POST' || method === 'PUT' || method === 'DELETE') headers['Content-Type'] = attemptList[mi];
+            usedMediaType = attemptList[mi];
+          }
+
+          var options = {
+            method: method,
+            headers: headers,
+            muteHttpExceptions: true
+          };
+          if (jsonPayload && method !== 'GET') {
+            options.payload = jsonPayload;
+          }
+
+          resp = UrlFetchApp.fetch(endpoint, options);
+          code = resp.getResponseCode();
+
+          if (code !== 406 && code !== 415) break;
+        }
 
         if (isArtifact) {
           const blob = resp.getBlob();
@@ -759,6 +804,7 @@ function doPost(e) {
           status: code,
           authMode: authHeader.indexOf('Bearer ') === 0 ? 'oauth' : 'basic',
           oauthNote: oauthError || '',
+          mediaType: usedMediaType,
           json: textContent
         });
       } catch (err) {

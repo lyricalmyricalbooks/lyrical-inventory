@@ -369,7 +369,7 @@ describe('Canada Post Label & Shipment Creation', () => {
       declarationId: '0rd4dpkrvc1y9'
     });
 
-    expect(jsonStr).toContain('"declarationId":"0rd4dpkrvc1y9"');
+    expect(jsonStr).toContain('"usDeclarationId":"0rd4dpkrvc1y9"');
     expect(jsonStr).not.toContain('"declarationId":"0RD4DPKRVC1Y9"');
   });
 
@@ -381,7 +381,7 @@ describe('Canada Post Label & Shipment Creation', () => {
       parcel: { weightKg: 0.5 },
       customs: { declarationId: '0RCVXJ2TKBNWR', declaredValue: 25, quantity: 1 }
     });
-    expect(jsonStr).toContain('"declarationId":"0rcvxj2tkbnwr"');
+    expect(jsonStr).toContain('"usDeclarationId":"0rcvxj2tkbnwr"');
   });
 
   it('normalizes full state and province names to 2-letter postal codes', async () => {
@@ -594,6 +594,11 @@ describe('Canada Post Account & Environment Validation', () => {
   });
 });
 
+// Create Shipment is `POST /{mailedBy}/{mobo}/shipments` on the Developer
+// Portal gateway. For a single merchant, mobo is the billing customer number
+// again — so both segments are the same number in these tests.
+const SHIPMENT_ENDPOINT = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/0042998877/0042998877/shipments';
+
 describe('Canada Post Shipment Simulation Guardrail', () => {
   const realCreds = {
     apiKey: 'merchant_key_abc',
@@ -659,7 +664,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
     })).rejects.toThrow(/no label was purchased/i);
   });
 
-  it('routes a purchase through the merchant customer number endpoint', async () => {
+  it('routes a purchase through the documented Shipping API endpoint', async () => {
     const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
     const successJson = JSON.stringify({
       "nonContractShipmentInfo": {
@@ -697,8 +702,8 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
 
     const proxyCall = global.fetch.mock.calls[0];
     const proxyBody = JSON.parse(proxyCall[1].body);
-    expect(proxyBody.targetEndpoint).toBe('https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/0042998877/0042998877/shipments');
-    expect(proxyBody.jsonPayload).toContain('"declarationId":"0rd4dpkrvc1y9"');
+    expect(proxyBody.targetEndpoint).toBe(SHIPMENT_ENDPOINT);
+    expect(proxyBody.jsonPayload).toContain('"usDeclarationId":"0rd4dpkrvc1y9"');
   });
 });
 
@@ -787,7 +792,7 @@ describe('Purchased labels stay reprintable offline', () => {
     expect(getArchivedShipmentContext('70123456789009999')).toBe(null);
   });
 
-  it('does not offer a simulated shipment for reprint', async () => {
+  it('offers a test-mode shipment for reprint, marked as one', async () => {
     const { executeCanadaPostProxy, setLastPurchasedShipmentContext, listArchivedShipments } =
       await import('../src/lib/canadapost.js');
 
@@ -800,8 +805,12 @@ describe('Purchased labels stay reprintable offline', () => {
     });
     setLastPurchasedShipmentContext({ ...sim, orderNum: 'SIM-1' });
 
-    // Nothing was purchased, so there is no label worth reprinting.
-    expect(listArchivedShipments()).toEqual([]);
+    // A test run is kept so the reprint path can be rehearsed, but it is
+    // flagged, so it can never be shown as a label that was really bought.
+    const listed = listArchivedShipments();
+    expect(listed).toHaveLength(1);
+    expect(listed[0].isSimulated).toBe(true);
+    expect(listed[0].trackingPin).toBe(sim.trackingPin);
   });
 });
 
@@ -1584,5 +1593,66 @@ describe('Rate payloads obey the gateway’s strict schema', () => {
       destCountry: 'CA', destPostalOrZip: 'V6B2W9', customerNumber: '', contractId: '4299100'
     }));
     expect('contractId' in parsed).toBe(false);
+  });
+});
+
+describe('Developer Portal error documents are read, not skipped', () => {
+  it('reads the documented flat messages array', async () => {
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    // The Portal shape is {"messages":[{code,description}]}. Only the legacy
+    // nested messages.message was checked, so this fell through every branch
+    // and surfaced as an empty service list instead of the actual reason.
+    const body = JSON.stringify({
+      messages: [{ code: '9113', description: 'Please specify your customer number.' }]
+    });
+    expect(() => parseCanadaPostPriceQuotes(body)).toThrow(/9113/);
+    expect(() => parseCanadaPostPriceQuotes(body)).toThrow(/specify your customer number/i);
+  });
+
+  it('still reads the legacy nested shape', async () => {
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const body = JSON.stringify({
+      messages: { message: { code: 'E002', description: 'AAA Authentication Failure' } }
+    });
+    expect(() => parseCanadaPostPriceQuotes(body)).toThrow(/E002/);
+  });
+
+  it('keeps every message when Canada Post sends more than one', async () => {
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const body = JSON.stringify({
+      messages: [
+        { code: '7007', description: 'The weight value is invalid.' },
+        { code: '1722', description: 'The options are invalid for the selected Service.' }
+      ]
+    });
+    let thrown;
+    try { parseCanadaPostPriceQuotes(body); } catch (e) { thrown = e; }
+    expect(thrown.canadaPostCode).toBe('7007');
+    expect(thrown.additionalMessages).toEqual(['[1722] The options are invalid for the selected Service.']);
+  });
+
+  it('does not mistake a successful quote list for an error', async () => {
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const body = JSON.stringify({
+      priceQuotes: { priceQuote: [{ serviceCode: 'USA.TP', priceDetails: { base: 12, due: 13.5 } }] }
+    });
+    const quotes = parseCanadaPostPriceQuotes(body);
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0].serviceCode).toBe('USA.TP');
+  });
+});
+
+describe('A gateway timeout is not reported as a confirmed outage', () => {
+  it('describes 504 as possibly a refused request', async () => {
+    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    const msg = describeCanadaPostFailure({ status: 504 });
+    expect(msg).toMatch(/504/);
+    expect(msg).toMatch(/refused|retrying/i);
+    expect(msg).not.toMatch(/not a problem with your key/i);
+  });
+
+  it('still calls a 503 what it is', async () => {
+    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    expect(describeCanadaPostFailure({ status: 503 })).toMatch(/outage on their side/i);
   });
 });

@@ -206,14 +206,21 @@ export function assessLiveShippingReadiness({
   }
 
   // ── 3. The return address on every parcel ──────────────────────────────
+  // A missing or example return address stops a live purchase: a parcel that
+  // cannot be delivered would be sent back to an address that does not exist.
+  // In test mode it is only a warning — a practice run is exactly where a
+  // stand-in address is the point, and blocking it there left the sandbox
+  // unable to reach the label step at all, which is what it exists to rehearse.
+  const senderSeverity = isTest ? CHECK_WARN : CHECK_BLOCKED;
+  const senderTestNote = isTest ? ' A test run will go ahead using a stand-in address.' : '';
   const missing = missingSenderFields(sender);
   if (missing.length) {
-    add('sender', 'Return address', CHECK_BLOCKED,
-      `Your own ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} blank, so a stand-in address would be printed instead.`,
+    add('sender', 'Return address', senderSeverity,
+      `Your own ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} blank, so a stand-in address would be printed instead.${senderTestNote}`,
       'Fill in your address in the Sender panel of the shipping form.');
   } else if (senderAddressIsPlaceholder(sender)) {
-    add('sender', 'Return address', CHECK_BLOCKED,
-      'The return address is still the example one (123 Main St, Toronto). A parcel that cannot be delivered would be returned to an address that does not exist.',
+    add('sender', 'Return address', senderSeverity,
+      `The return address is still the example one (123 Main St, Toronto). A parcel that cannot be delivered would be returned to an address that does not exist.${senderTestNote}`,
       'Replace it with your real address in the Sender panel.');
   } else {
     add('sender', 'Return address', CHECK_OK, 'Your own address will be printed on the label.');
@@ -225,8 +232,8 @@ export function assessLiveShippingReadiness({
   // label that nobody answers.
   const senderPhone = digitsOf(sender.phone);
   if (!senderPhone) {
-    add('sender-phone', 'Your phone number', CHECK_BLOCKED,
-      'Blank. Canada Post needs a contact number for the sender on every shipment.',
+    add('sender-phone', 'Your phone number', senderSeverity,
+      `Blank. Canada Post needs a contact number for the sender on every shipment.${senderTestNote}`,
       'Add your phone number in the Sender panel.');
   } else if (senderPhone === SHIPMENT_PLACEHOLDERS.senderPhone) {
     add('sender-phone', 'Your phone number', CHECK_WARN,

@@ -150,61 +150,79 @@ describe('A live purchase refuses stand-in sender details', () => {
     });
     expect(result.trackingPin).toBe('70123456789012345');
   });
+
+  it('falls back to a flagged test shipment when the gateway cannot be reached', async () => {
+    // Sandbox only. A live purchase that cannot reach Canada Post must fail,
+    // never invent a tracking number — that is covered separately.
+    global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+
+    const result = await buyCanadaPostLabel({
+      serviceCode: 'DOM.EP', destination: dest, parcel: { weightKg: 0.5 }, ...creds, isTest: true,
+    });
+
+    expect(result.isSimulated).toBe(true);
+    expect(result.trackingPin).toMatch(/^\d{10,}$/);
+  });
+
+  it('refuses a live purchase that cannot reach Canada Post, inventing nothing', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
+
+    await expect(buyCanadaPostLabel({
+      serviceCode: 'DOM.EP',
+      sender: goodSender,
+      destination: dest, parcel: { weightKg: 0.5 }, ...creds, isTest: false,
+    })).rejects.toThrow(/no label was purchased/i);
+  });
 });
 
 describe('The shipment payload only invents details while rehearsing', () => {
   it('fills the worked example in when placeholders are allowed', () => {
-    const raw = JSON.parse(buildNonContractShipmentJson({
+    const json = JSON.parse(buildNonContractShipmentJson({
       destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
       parcel: { weightKg: 0.5 },
     }));
-    const json = raw.deliverySpec || raw;
-    expect(json.sender.addressDetails.addressLine1).toBe('123 Main St');
-    expect(json.sender.contactPhone).toBe(SHIPMENT_PLACEHOLDERS.senderPhone);
+    expect(json.deliverySpec.sender.addressDetails.addressLine1).toBe('123 Main St');
+    expect(json.deliverySpec.sender.contactPhone).toBe(SHIPMENT_PLACEHOLDERS.senderPhone);
   });
 
   it('leaves them empty rather than inventing them when they are not', () => {
-    const raw = JSON.parse(buildNonContractShipmentJson({
+    const json = JSON.parse(buildNonContractShipmentJson({
       destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
       parcel: { weightKg: 0.5 },
       allowPlaceholders: false,
     }));
-    const json = raw.deliverySpec || raw;
-    expect(json.sender.addressDetails.addressLine1).toBe('');
-    expect(json.sender.addressDetails.city).toBe('');
+    expect(json.deliverySpec.sender.addressDetails.addressLine1).toBe('');
+    expect(json.deliverySpec.sender.addressDetails.city).toBe('');
   });
 
   it('omits the recipient phone key entirely rather than sending it empty', () => {
     // Canada Post reads an empty clientVoiceNumber as malformed, not absent, and
     // answers with a schema error that reads like an address fault.
-    const rawStrict = JSON.parse(buildNonContractShipmentJson({
+    const strict = JSON.parse(buildNonContractShipmentJson({
       destination: { countryCode: 'US', postalCode: '90210', address1: '1 Palm Dr', city: 'Beverly Hills', state: 'CA' },
       parcel: { weightKg: 0.5 },
       allowPlaceholders: false,
     }));
-    const strict = rawStrict.deliverySpec || rawStrict;
-    expect('clientVoiceNumber' in strict.destination).toBe(false);
+    expect('clientVoiceNumber' in strict.deliverySpec.destination).toBe(false);
 
-    const rawWithPhone = JSON.parse(buildNonContractShipmentJson({
+    const withPhone = JSON.parse(buildNonContractShipmentJson({
       destination: { countryCode: 'US', phone: '6045550123', postalCode: '90210', address1: '1 Palm Dr', city: 'Beverly Hills', state: 'CA' },
       parcel: { weightKg: 0.5 },
       allowPlaceholders: false,
     }));
-    const withPhone = rawWithPhone.deliverySpec || rawWithPhone;
-    expect(withPhone.destination.clientVoiceNumber).toBe('6045550123');
+    expect(withPhone.deliverySpec.destination.clientVoiceNumber).toBe('6045550123');
   });
 
   it('carries a real sender through untouched', () => {
-    const raw = JSON.parse(buildNonContractShipmentJson({
+    const json = JSON.parse(buildNonContractShipmentJson({
       sender: goodSender,
       destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
       parcel: { weightKg: 0.5 },
       allowPlaceholders: false,
     }));
-    const json = raw.deliverySpec || raw;
-    expect(json.sender.addressDetails.addressLine1).toBe('88 Bookish Way');
-    expect(json.sender.addressDetails.postalZipCode).toBe('M4B1B3');
-    expect(json.sender.contactPhone).toBe('416 555 0142');
+    expect(json.deliverySpec.sender.addressDetails.addressLine1).toBe('88 Bookish Way');
+    expect(json.deliverySpec.sender.addressDetails.postalZipCode).toBe('M4B1B3');
+    expect(json.deliverySpec.sender.contactPhone).toBe('416 555 0142');
   });
 });
 

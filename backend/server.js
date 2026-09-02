@@ -55,11 +55,16 @@ function canadaPostUsesOAuth(endpoint) {
   }
 }
 
-async function canadaPostAuthHeader(key, secret, endpoint) {
+async function canadaPostAuthHeader(key, secret, endpoint, scope = 'merchant') {
   const basic = 'Basic ' + Buffer.from(`${key.trim()}:${secret.trim()}`).toString('base64');
   if (!canadaPostUsesOAuth(endpoint)) return { header: basic, mode: 'basic' };
 
-  const cacheKey = key.trim();
+  // Scope is per-API: Rating and Shipping are separate subscriptions and a token
+  // minted for one is not necessarily accepted by the other. It is cached under
+  // the scope as well as the key, so asking for a second API cannot hand back
+  // the first one's token.
+  const wantScope = String(scope || '').trim() || 'merchant';
+  const cacheKey = `${key.trim()}::${wantScope}`;
   const cached = cpTokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return { header: `Bearer ${cached.token}`, mode: 'oauth' };
@@ -70,13 +75,21 @@ async function canadaPostAuthHeader(key, secret, endpoint) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        // The Authentication guide puts the client credentials in these two
+        // headers. The Basic header is kept alongside them because it is what
+        // has actually been minting working Rating tokens against this gateway,
+        // and dropping a working mechanism to follow a document exactly is how
+        // a live integration goes dark. Whichever the gateway reads, both agree.
+        'X-IBM-Client-Id': key.trim(),
+        'X-IBM-Client-Secret': secret.trim(),
         'Authorization': basic
       },
       body: new URLSearchParams({
         grant_type: 'client_credentials',
         client_id: key.trim(),
         client_secret: secret.trim(),
-        scope: 'merchant'
+        scope: wantScope
       })
     });
     const tokenJson = await tokenRes.json().catch(() => ({}));
@@ -176,17 +189,20 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/canadapost/shipment' && req.method === 'POST') {
       const body = await readJson(req, res);
       if (!body) return;
-      const { jsonPayload, xmlPayload, apiKey, apiSecret, targetEndpoint, customerNumber, zonosAccountKey } = body;
+      const { jsonPayload, xmlPayload, apiKey, apiSecret, targetEndpoint, customerNumber, zonosAccountKey, scope } = body;
       const payload = jsonPayload || xmlPayload;
       const key = apiKey || process.env.CANADAPOST_API_KEY;
       const secret = apiSecret || process.env.CANADAPOST_API_SECRET;
       const custNum = customerNumber || process.env.CANADAPOST_CUSTOMER_NUMBER || '';
-      const endpoint = targetEndpoint || `https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/${encodeURIComponent(custNum)}/${encodeURIComponent(custNum)}/shipments`;
+      const endpoint = targetEndpoint || (custNum ? `https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/${encodeURIComponent(custNum)}/${encodeURIComponent(custNum)}/shipments` : '');
 
       if (!key || !secret) {
         return sendJson(res, 400, { error: 'Missing Canada Post API key or secret' });
       }
-      if (!custNum && !targetEndpoint) {
+      if (!endpoint) {
+        return sendJson(res, 400, { error: 'Missing Canada Post shipment endpoint — no label was created' });
+      }
+      if (!custNum) {
         return sendJson(res, 400, { error: 'Missing Canada Post customer number — a shipment cannot be attached to an account without it' });
       }
       // A shipment request with no body would be answered by Canada Post with a
@@ -197,7 +213,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       try {
-        const auth = await canadaPostAuthHeader(key, secret, endpoint);
+        const auth = await canadaPostAuthHeader(key, secret, endpoint, scope);
         const headers = {
           'Accept': 'application/json',
           'Content-Type': 'application/json',

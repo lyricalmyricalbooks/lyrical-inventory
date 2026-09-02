@@ -406,3 +406,107 @@ describe('The label inspector never invents a shipment', () => {
     expect(download).toMatch(/canadapost-label-\$\{pin\}\.pdf/);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// A sandbox run has to reach the end.
+//
+// It used to stop at a dead end: the handler saw `isSimulated` and returned
+// before the order, the ledger, the archive or the label modal were touched.
+// So the half of the flow a test run exists to rehearse was never rehearsed,
+// and the screen said "nothing was purchased" without saying what to do next.
+// Now it completes, and every record it writes is stamped as a test.
+// ─────────────────────────────────────────────────────────────────────────
+describe('a sandbox run completes the whole flow, marked as a test', () => {
+  const purchaseHandler = shippingSrc.slice(
+    shippingSrc.indexOf('const isSim = !!result.isSimulated;'),
+    shippingSrc.indexOf('// Open the label straight away')
+  );
+
+  it('has no early return that skips the rest of the purchase flow', () => {
+    expect(purchaseHandler).not.toMatch(/if \(result\.isSimulated\)/);
+    expect(purchaseHandler.slice(0, purchaseHandler.indexOf('if (result.trackingPin'))).not.toMatch(/\breturn;/);
+  });
+
+  it('marks the order so a practice number is never read out as a real one', () => {
+    expect(purchaseHandler).toMatch(/histItem\.simulated = isSim;/);
+    expect(purchaseHandler).toMatch(/histItem\.trackingSimulated = isSim;/);
+  });
+
+  it('marks the postage entry on the row, not only in its wording', () => {
+    expect(purchaseHandler).toMatch(/simulated: isSim,/);
+    expect(purchaseHandler).toMatch(/SANDBOX TEST — not a real charge/);
+  });
+
+  it('says test rather than purchased on screen, and never claims a charge', () => {
+    expect(purchaseHandler).toMatch(/Test label created/);
+    expect(purchaseHandler).toMatch(/nothing was bought and nothing was charged/);
+    expect(purchaseHandler).toMatch(/will not scan/);
+  });
+});
+
+describe('label creation refuses to guess a Canada Post endpoint', () => {
+  it('sends a purchase to the endpoint registry rather than building a path inline', async () => {
+    const libSrc = fs.readFileSync(path.join(root, 'src/lib/canadapost.js'), 'utf8');
+    expect(libSrc).toMatch(/resolveShipmentEndpoint\(\{/);
+    // The retired path shape must not reappear as a live call site.
+    expect(libSrc).not.toMatch(/\$\{[^}]*baseUrl\}\/rs\//);
+  });
+
+  it('addresses Create Shipment at the documented Shipping API path', async () => {
+    const { buyCanadaPostLabel } = await import('../src/lib/canadapost.js');
+
+    const shipmentJson = JSON.stringify({
+      shipmentInfo: {
+        shipmentId: 'S-1',
+        trackingPin: '70123456789012345',
+        links: { link: [{ '@rel': 'label', '@href': 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/artifacts/CG1/shipping/A1/0' }] },
+      },
+    });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, json: shipmentJson }),
+      text: async () => shipmentJson,
+      headers: { get: () => 'application/json' },
+    });
+
+    await buyCanadaPostLabel({
+      serviceCode: 'DOM.EP',
+      destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
+      parcel: { weightKg: 0.5 },
+      apiKey: 'key', apiSecret: 'secret', customerNumber: '0001298882',
+      isTest: true,
+    });
+
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(body.targetEndpoint).toBe(
+      'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/0001298882/0001298882/shipments'
+    );
+    expect(body.targetEndpoint).not.toMatch(/ncshipment/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// The manifest step is the one Canada Post charges you for missing.
+//
+// A label marked "manifest required" that is handed over untransmitted earns a
+// surcharge that arrives weeks later, by which time nobody connects it to a
+// missed step. Detecting it in the library is only half the job — if the screen
+// does not say so, the shop owner never knows to act.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the manifest requirement reaches the screen', () => {
+  const purchasedPanel = shippingSrc.slice(
+    shippingSrc.indexOf('const labelPanel = $(\'cp-purchased-label-panel\');'),
+    shippingSrc.indexOf('// Open the label straight away')
+  );
+
+  it('shows a manifest notice on a real purchase that needs one', () => {
+    expect(purchasedPanel).toMatch(/result\.manifestRequired && !isSim/);
+    expect(purchasedPanel).toMatch(/needs a manifest before you drop it off/i);
+  });
+
+  it('explains the consequence in money, not in API terms', () => {
+    expect(purchasedPanel).toMatch(/adds an extra charge/i);
+    expect(purchasedPanel).not.toMatch(/transmitShipments|POST |\/manifests/);
+  });
+});

@@ -167,6 +167,26 @@ describe('renderHist — order rows', () => {
     expect(rows()).toHaveLength(0);
     expect(document.getElementById('hist-body').textContent).toContain('No orders recorded for this book yet');
   });
+
+  // The Total column is the row's headline figure, so it has to use the
+  // house `.money-cell` weight rather than a hand-picked one — DM Mono is
+  // only loaded at 400/500, so a 600 request gets synthesised and the
+  // faux-bold smears the very digits the column exists to lead with. See
+  // UX_PATTERNS.md "Column roles on a wide table".
+  it('gives the Total column the money-cell weight, not a synthesised bold', () => {
+    const h = makeHarness({
+      state: {
+        stock: 99,
+        hist: [{ num: '1001', chan: 'Direct', qty: 1, price: 20, date: '2026-07-20' }],
+        ledger: [], stores: [],
+      },
+    });
+    h.renderHist();
+
+    const totalCell = rows()[0].querySelectorAll('td')[4];
+    expect(totalCell.classList.contains('money-cell')).toBe(true);
+    expect(totalCell.getAttribute('style') || '').not.toContain('font-weight:600');
+  });
 });
 
 // Order History is a whole tab, so an empty one is a primary destination and
@@ -479,6 +499,18 @@ describe('renderHist — pending author submissions', () => {
     h.renderHist();
     // It hasn't moved stock yet, so showing a number would be a lie.
     expect(cells(rows()[0])[5]).toBe('?');
+  });
+
+  it('gives a pending submission\'s Total column the same money-cell weight as a settled row', () => {
+    const h = makeHarness({
+      state: { stock: 100, hist: [], ledger: [], stores: [] },
+      submissions, isPublisher: true,
+    });
+    h.renderHist();
+
+    const totalCell = rows()[0].querySelectorAll('td')[4];
+    expect(totalCell.classList.contains('money-cell')).toBe(true);
+    expect(totalCell.getAttribute('style') || '').not.toContain('font-weight:600');
   });
 });
 
