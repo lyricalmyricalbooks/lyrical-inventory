@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v41)
+/* Lyricalmyrical Inventory — Unified Backend (v42)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -151,6 +151,20 @@
  *      of why a bulk sync could run long enough for the client to give up on
  *      it mid-write. Responses add sorted:true. Bump flags v40-and-older as
  *      outdated so the publisher redeploys to get ordered rows.
+ *  40. v42: doPost could not write a single row. Its batch branch, its reset
+ *      branch and its closing single-row upsert all read `ss`, but nothing in
+ *      doPost ever declared it — the spreadsheet handle was only ever fetched
+ *      inside doGet and the reporting helpers. Every write therefore threw
+ *      `ReferenceError: ss is not defined`, doPost's own catch turned that into
+ *      a tidy `{ error: ... }` with a 200 status, and the client — which
+ *      treated any thrown error as a transport problem — re-POSTed the payload
+ *      blind with mode:'no-cors' and logged the row as written. Nothing reached
+ *      the sheet and the sync log claimed everything had. doPost now takes the
+ *      handle once, ahead of the three write branches (and after the proxy and
+ *      email branches, which never touch the spreadsheet), and answers with a
+ *      readable message when the script is not bound to a spreadsheet at all.
+ *      Bump flags v41-and-older as outdated: on those deployments no sheet
+ *      write can succeed.
  */
 
 const HEADERS = [
@@ -199,8 +213,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v41',
-    scriptVersion: 'v41',
+    service: 'lyrical-sheets-webhook-v42',
+    scriptVersion: 'v42',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -1265,6 +1279,27 @@ function doPost(e) {
       }
 
       return jsonOut_({ ok: true, submissions: submissions });
+    }
+
+    // ── Spreadsheet handle for every write path below ──
+    //
+    // This was missing. `ss` was read by the batch branch, the reset branch and
+    // the single-row upsert at the end of this function, but nothing ever
+    // declared it — so every one of those threw `ReferenceError: ss is not
+    // defined` the moment it was reached. The catch at the bottom of doPost
+    // turned that into a perfectly well-formed `{ error: ... }` reply with a
+    // 200 status, and the client, seeing a thrown error, quietly re-sent the
+    // payload with `mode: 'no-cors'` and reported the row as written. The
+    // result: not one row reached the sheet, and the sync log said every one of
+    // them had. Fetching it here (after the proxy/email branches, which don't
+    // touch the spreadsheet and shouldn't pay for opening it) fixes all three.
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      return jsonOut_({
+        error: 'This Apps Script is not attached to a spreadsheet. Open your ' +
+          'Google Sheet, choose Extensions → Apps Script, paste the script ' +
+          'there, and deploy it from that project.'
+      });
     }
 
     // ── Batch Sheets sync: process many add/delete rows in one Web App call ──

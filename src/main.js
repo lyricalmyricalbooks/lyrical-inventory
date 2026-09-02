@@ -2638,7 +2638,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v41';
+const EXPECTED_SCRIPT_VERSION = 'v42';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -12138,26 +12138,58 @@ window.clearSimulatedSheet = clearSimulatedSheet;
 window.renderMockSpreadsheet = renderMockSpreadsheet;
 window.updateSheetsTabUI = updateSheetsTabUI;
 
-function testSheets() {
-  if (!sheetsUrl) return;
+// Write one row and say what actually happened to it.
+//
+// This used to hand the row to syncToSheets with `book: 'Test'`. isTestBookId()
+// treats any title containing "test" as the practice book, so syncToSheets
+// dropped the row on the spot — and the button then announced "Test row sent"
+// regardless. The one control the publisher had for checking the connection
+// could not fail, because it never sent anything. It posts directly now, waits
+// for the answer, and reports the sheet's own words when it refuses.
+async function testSheets() {
+  if (!sheetsUrl) { showToast('Connect your Google Sheet first', 'warn'); return; }
   const btn = document.querySelector('[onclick="testSheets()"]');
+  const prev = btn ? btn.textContent : '';
   if (btn) { btn.textContent = 'Testing…'; btn.disabled = true; }
-  // Use POST so verification works even when Apps Script has no doGet().
-  syncToSheets({
+  const num = 'TEST-' + Date.now().toString().slice(-4);
+  const payload = {
+    action: 'add',
     type: 'order',
-    book: 'Test',
+    book: 'Connection check',
     date: today(),
-    num: 'TEST-' + Date.now().toString().slice(-4),
+    num,
     chan: 'Test',
     qty: 0,
     price: 0,
     total: 0,
     stockAfter: 0,
-    notes: 'Connection test — check your sheet for this row'
-  });
-  showToast('✓ Test row sent — check your Google Sheet');
+    currency: 'CAD',
+    notes: 'Connection test — safe to delete this row',
+    sheetsId: 'conn-test-' + Date.now()
+  };
+  try {
+    const res = await postToSheets({
+      version: 2,
+      eventId: payload.sheetsId,
+      action: 'add',
+      sentAt: new Date().toISOString(),
+      payload
+    }, sheetsUrl, { simulate: isTestBookId(activeBook) });
+    if (res === 'unknown') {
+      addSheetsLog('Connection check', 'Order', `${num} · Test · 0×`, 'unknown');
+      showToast('Sent, but your browser could not read the reply — check the sheet for ' + num, 'warn', 6000);
+    } else {
+      addSheetsLog('Connection check', 'Order', `${num} · Test · 0×`, 'ok');
+      showToast('✓ Connection works — row ' + num + ' is in your sheet');
+    }
+  } catch (e) {
+    const why = (e && e.message) || 'the sheet did not answer';
+    addSheetsLog('Connection check', 'Order', `${num} · Test · 0× [${why}]`, 'err');
+    showToast('⚠ Test failed: ' + why, 'err', 8000);
+  } finally {
+    if (btn) { btn.textContent = prev || 'Test connection'; btn.disabled = false; }
+  }
   checkSheetsVersion();
-  setTimeout(() => { if (btn) { btn.textContent = 'Test connection'; btn.disabled = false; } }, 500);
 }
 // Sheets delivery engine (rebuilt): durable queue + retry + deterministic event IDs
 const SHEETS_QUEUE_KEY = 'lm-sheets-write-queue-v2';
@@ -12283,13 +12315,9 @@ export async function postToSheets(body, urlOverride, opts = {}) {
   const payload = JSON.stringify(body);
   const timeoutMs = opts.timeoutMs || SHEETS_WRITE_TIMEOUT_MS;
 
+  let res;
   try {
-    const res = await fetchSheetsWithTimeout(url, payload, 'cors', timeoutMs);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json().catch(() => null);
-    if (data && data.ok) return data;
-    if (data && data.error) throw new Error(data.error);
-    return { ok: true };
+    res = await fetchSheetsWithTimeout(url, payload, 'cors', timeoutMs);
   } catch (e) {
     // An abort is a real failure, not a CORS problem: retrying the same slow
     // request opaquely would only hang again, and the caller's retry/backoff is
@@ -12297,11 +12325,28 @@ export async function postToSheets(body, urlOverride, opts = {}) {
     if (e && e.name === 'AbortError') {
       throw new Error(`Sheet did not respond within ${Math.round(timeoutMs / 1000)}s`);
     }
-    // Fallback to no-cors for strict environments. The response is opaque, so
-    // this reports 'unknown' — sent, but impossible to confirm.
+    // Nothing came back at all — a blocked request, a dropped connection, a
+    // browser that refuses the cross-origin read. Only here is the opaque
+    // no-cors path worth trying, and even then the result is 'unknown': sent,
+    // but impossible to confirm.
     await fetchSheetsWithTimeout(url, payload, 'no-cors', timeoutMs);
     return 'unknown';
   }
+
+  // A response came back, so we know what happened to this write. Whatever it
+  // says is the truth about it, and it must never be re-sent blindly.
+  //
+  // This used to sit inside the try above, so a *successfully read* rejection —
+  // `{ error: 'ReferenceError: ss is not defined' }`, which is what the backend
+  // returned for every single row — threw, landed in the no-cors fallback, was
+  // POSTed a second time, and came back as 'unknown'. The one thing the sheet
+  // had actually told us, the reason it refused the row, was thrown away and
+  // replaced with a shrug. Errors are surfaced now.
+  if (!res.ok) throw new Error(`Sheet rejected the write (HTTP ${res.status})`);
+  const data = await res.json().catch(() => null);
+  if (data && data.error) throw new Error(data.error);
+  if (data && data.ok) return data;
+  return { ok: true };
 }
 
 export async function notifyPublisherSubmission(kind, data, summary) {
@@ -12478,10 +12523,16 @@ async function _processQueue() {
       suffix = ` · replaced ${replaced}`;
     }
     // The no-cors fallback returns an opaque response: the POST left the
-    // browser, but nothing came back to say the sheet accepted it. That was
-    // being logged as "Written", so a row that never landed looked delivered.
-    const verified = resp !== 'unknown';
-    addSheetsLog(item.book, item.type, item.summary + suffix, verified ? 'ok' : 'unknown');
+    // browser, but nothing came back to say the sheet accepted it. Dropping the
+    // row here on that basis is how a write that never landed came to be
+    // reported as delivered. Retrying is safe — the backend replaces a row by
+    // its stable id, so a duplicate send cannot produce a duplicate row — so an
+    // unconfirmable write is a failure to retry, not a success to forget.
+    if (resp === 'unknown') {
+      _recordSheetsFailure(item, new Error('could not confirm the sheet received this row'));
+      return;
+    }
+    addSheetsLog(item.book, item.type, item.summary + suffix, 'ok');
     _sheetsQueue.shift();
     persistSheetsQueue();
     updateBulkProgress(count);
@@ -12500,6 +12551,8 @@ function _recordSheetsFailure(item, e) {
   item.lastError = (e && e.message) || 'network error';
   item.nextTryAt = Date.now() + retryDelayMs(item.attempts);
   if (item.attempts >= MAX_SHEETS_RETRIES) {
+    // Say what went wrong, in the log, once. A row that silently disappears is
+    // the failure mode this whole engine exists to prevent.
     addSheetsLog(item.book, item.type, `${item.summary} [gave up after ${MAX_SHEETS_RETRIES} tries · ${item.lastError}]`, 'err');
     _sheetsQueue.shift();
     persistSheetsQueue();
