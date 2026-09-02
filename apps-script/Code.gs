@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v39)
+/* Lyricalmyrical Inventory — Unified Backend (v40)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -135,6 +135,7 @@
  *  35. v37: Restores mandatory scope=merchant for Canada Post Developer Portal OAuth 2.0 token acquisition. Bump flags v36-and-older as outdated.
  *  36. v38: Sends the Canada Post client credentials as the documented X-IBM-Client-Id / X-IBM-Client-Secret headers on the OAuth token exchange.
  *  37. v39: Canada Post Developer Portal Shipping v1, strict JSON media types, and label refund/void proxy support. Enables requesting postage refunds and cancellations via the Developer Portal refund endpoint. Bump flags v38-and-older as outdated so the publisher redeploys.
+ *  38. v40: Canada Post Developer Portal Shipping v1 Non-Delivery Handling options (RTS/RASE), customs skuList array payload format, and HS tariff dotted regex formatting. Bump flags v39-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -183,8 +184,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v39',
-    scriptVersion: 'v39',
+    service: 'lyrical-sheets-webhook-v40',
+    scriptVersion: 'v40',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
