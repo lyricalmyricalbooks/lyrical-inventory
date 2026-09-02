@@ -209,6 +209,7 @@ import {
 } from './lib/theme.js';
 import { initStickyOffset } from './lib/sticky-header.js';
 import { describeSyncStatus } from './lib/sync-status.js';
+import { sheetLogLabel, sheetLogSummary, sortSheetPayloads } from './lib/sheet-sync.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
   loadQrPresets,
@@ -2636,7 +2637,7 @@ let notifyUrl = localStorage.getItem('lm-notify-url') || '';
 // The Apps Script `scriptVersion` the client expects. Bump this (and the value
 // in apps-script/Code.gs) whenever Code.gs gains behaviour that needs a fresh
 // deploy — the connection card flags any older deployed version as outdated.
-const EXPECTED_SCRIPT_VERSION = 'v40';
+const EXPECTED_SCRIPT_VERSION = 'v41';
 if (sheetsUrl) {
   const normalizedSavedUrl = normalizeAppsScriptUrl(sheetsUrl);
   if (normalizedSavedUrl && normalizedSavedUrl !== sheetsUrl) {
@@ -12101,12 +12102,38 @@ const SHEETS_QUEUE_KEY = 'lm-sheets-write-queue-v2';
 const SHEETS_LOG_KEY = 'lm-sheets-log-v2';
 const MAX_SHEETS_RETRIES = 6;
 const RETRY_BASE_MS = 1200;
+// A write that never answers used to park the queue forever: `fetch` has no
+// default timeout, so one hung Apps Script call left `_sheetsWriting` true and
+// every later row queued silently behind it. Nothing may take longer than this.
+const SHEETS_WRITE_TIMEOUT_MS = 45000;
+const SHEETS_BATCH_TIMEOUT_MS = 120000;
 let _sheetsQueue = JSON.parse(localStorage.getItem(SHEETS_QUEUE_KEY) || '[]');
 let _sheetsWriting = false;
 let sheetsLog = JSON.parse(localStorage.getItem(SHEETS_LOG_KEY) || '[]');
 
-function persistSheetsQueue() { localStorage.setItem(SHEETS_QUEUE_KEY, JSON.stringify(_sheetsQueue)); }
-function persistSheetsLog() { localStorage.setItem(SHEETS_LOG_KEY, JSON.stringify(sheetsLog)); }
+// Both of these are called from inside the delivery loop, including from its
+// error path. A QuotaExceededError thrown here used to escape `_processQueue`
+// before it could release its lock, which stopped Sheets syncing altogether
+// until the tab was reloaded. Losing the on-disk copy of the queue is bad;
+// losing the ability to deliver anything at all is worse.
+function persistSheetsQueue() {
+  try {
+    localStorage.setItem(SHEETS_QUEUE_KEY, JSON.stringify(_sheetsQueue));
+  } catch (e) {
+    console.warn('Could not persist the Sheets queue', e);
+  }
+}
+function persistSheetsLog() {
+  try {
+    localStorage.setItem(SHEETS_LOG_KEY, JSON.stringify(sheetsLog));
+  } catch (e) {
+    // Trim the log and try once more — it is the expendable half of the pair.
+    try {
+      sheetsLog = sheetsLog.slice(0, 40);
+      localStorage.setItem(SHEETS_LOG_KEY, JSON.stringify(sheetsLog));
+    } catch (_) { /* give up on persisting history, keep delivering rows */ }
+  }
+}
 function makeEventId() { return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
 
 // Stamp a stable sheetsId on every existing record that lacks one so future
@@ -12152,38 +12179,65 @@ async function backfillAndResync() {
 window.backfillAndResync = backfillAndResync;
 function retryDelayMs(attempt) { return Math.min(60000, RETRY_BASE_MS * Math.pow(2, Math.max(0, attempt - 1))); }
 
-export async function postToSheets(body, urlOverride) {
-  const isTest = isTestBookId(activeBook);
-  if (isTest) {
+// One POST with a hard deadline. `fetch` waits forever by default, and a
+// forever-pending write is what stops the whole queue: the delivery loop cannot
+// move to the next row until this settles.
+async function fetchSheetsWithTimeout(url, payload, mode, timeoutMs) {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    return await fetch(url, {
+      method: 'POST',
+      mode,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: payload,
+      ...(controller ? { signal: controller.signal } : {})
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Deliver one payload to a Google Sheet.
+ *
+ * `opts.simulate` decides whether this goes to the mock spreadsheet, and the
+ * caller must decide it. It used to be inferred from whichever book happened
+ * to be open (`isTestBookId(activeBook)`), which meant opening the Test Profile
+ * while real rows were still waiting sent those real rows into the simulator —
+ * where the queue treated the mock's `{ ok: true }` as a successful write and
+ * dropped them. Real sales were being silently swallowed and reported as
+ * "Written". A queued row now carries its own destination.
+ */
+export async function postToSheets(body, urlOverride, opts = {}) {
+  const simulate = Object.prototype.hasOwnProperty.call(opts, 'simulate')
+    ? !!opts.simulate
+    : isTestBookId(activeBook);
+  if (simulate) {
     return simulatePostToSheets(body);
   }
   const url = urlOverride || sheetsUrl;
+  if (!url) throw new Error('No Google Sheet connected');
   const payload = JSON.stringify(body);
+  const timeoutMs = opts.timeoutMs || SHEETS_WRITE_TIMEOUT_MS;
 
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      mode: 'cors',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8'
-      },
-      body: payload
-    });
+    const res = await fetchSheetsWithTimeout(url, payload, 'cors', timeoutMs);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json().catch(() => null);
     if (data && data.ok) return data;
     if (data && data.error) throw new Error(data.error);
     return { ok: true };
   } catch (e) {
-    // Fallback to no-cors for strict environments.
-    await fetch(url, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8'
-      },
-      body: payload
-    });
+    // An abort is a real failure, not a CORS problem: retrying the same slow
+    // request opaquely would only hang again, and the caller's retry/backoff is
+    // the right place to deal with it.
+    if (e && e.name === 'AbortError') {
+      throw new Error(`Sheet did not respond within ${Math.round(timeoutMs / 1000)}s`);
+    }
+    // Fallback to no-cors for strict environments. The response is opaque, so
+    // this reports 'unknown' — sent, but impossible to confirm.
+    await fetchSheetsWithTimeout(url, payload, 'no-cors', timeoutMs);
     return 'unknown';
   }
 }
@@ -12305,18 +12359,53 @@ async function emailArtistForPayment() {
 }
 window.emailArtistForPayment = emailArtistForPayment;
 
+// Re-arm the loop for whatever is still at the head of the queue, honouring
+// that row's own backoff. Called from a `finally`, so a delivery that throws in
+// an unexpected place still leaves the queue draining.
+let _sheetsQueueTimer = null;
+function _scheduleQueueDrain() {
+  const next = _sheetsQueue[0];
+  if (!next) return;
+  if (_sheetsQueueTimer) clearTimeout(_sheetsQueueTimer);
+  const wait = Math.max(250, (next.nextTryAt || 0) - Date.now());
+  _sheetsQueueTimer = setTimeout(() => { _sheetsQueueTimer = null; _processQueue(); }, wait);
+}
+
 async function _processQueue() {
-  if (_sheetsWriting || !_sheetsQueue.length || !sheetsUrl || !navigator.onLine) return;
-  _sheetsWriting = true;
+  if (_sheetsWriting || !_sheetsQueue.length || !navigator.onLine) return;
+
   const item = _sheetsQueue[0];
+  // A row remembers the sheet it was destined for at the moment it was queued.
+  // Rows left over from an older build carry no address; they fall back to the
+  // real sheet rather than to whatever `sheetsUrl` currently points at, which
+  // is the simulator whenever the Test Profile is open.
+  const destination = item.url || realSheetsUrl();
+  if (!item.simulated && !destination) return;
+
+  // A row still inside its backoff window waits. Delivery used to start
+  // immediately whenever anything new was enqueued, so a failing endpoint was
+  // hammered at the rate the publisher typed rather than the rate it asked for.
+  if (item.nextTryAt && item.nextTryAt > Date.now()) { _scheduleQueueDrain(); return; }
+
+  _sheetsWriting = true;
   try {
-    const resp = await postToSheets({
-      version: 2,
-      eventId: item.id,
-      action: item.payload && item.payload.action,
-      sentAt: new Date().toISOString(),
-      payload: item.payload
-    });
+    let resp;
+    try {
+      resp = await postToSheets({
+        version: 2,
+        eventId: item.id,
+        action: item.payload && item.payload.action,
+        sentAt: new Date().toISOString(),
+        payload: item.payload
+      }, destination, {
+        simulate: !!item.simulated,
+        timeoutMs: item.count > 1 ? SHEETS_BATCH_TIMEOUT_MS : SHEETS_WRITE_TIMEOUT_MS
+      });
+    } catch (e) {
+      _recordSheetsFailure(item, e);
+      return;
+    }
+
     const replaced = resp && typeof resp.replaced === 'number' ? resp.replaced : 0;
     const removed = resp && typeof resp.removed === 'number' ? resp.removed : 0;
     const count = item.count || 1;
@@ -12326,30 +12415,37 @@ async function _processQueue() {
     } else if (replaced > 0) {
       suffix = ` · replaced ${replaced}`;
     }
-    addSheetsLog(item.book, item.type, item.summary + suffix, 'ok');
+    // The no-cors fallback returns an opaque response: the POST left the
+    // browser, but nothing came back to say the sheet accepted it. That was
+    // being logged as "Written", so a row that never landed looked delivered.
+    const verified = resp !== 'unknown';
+    addSheetsLog(item.book, item.type, item.summary + suffix, verified ? 'ok' : 'unknown');
     _sheetsQueue.shift();
     persistSheetsQueue();
     updateBulkProgress(count);
-  } catch (e) {
-    item.attempts = (item.attempts || 0) + 1;
-    item.lastError = (e && e.message) || 'network error';
-    item.nextTryAt = Date.now() + retryDelayMs(item.attempts);
+  } finally {
+    // Always, on every path. Leaving this set is what silently stopped Sheets
+    // syncing for the rest of the session.
+    _sheetsWriting = false;
+    _scheduleQueueDrain();
+  }
+}
+
+// Book one failed attempt against the head item, retiring it once it has had
+// its full allowance so a single poison row cannot block the queue forever.
+function _recordSheetsFailure(item, e) {
+  item.attempts = (item.attempts || 0) + 1;
+  item.lastError = (e && e.message) || 'network error';
+  item.nextTryAt = Date.now() + retryDelayMs(item.attempts);
+  if (item.attempts >= MAX_SHEETS_RETRIES) {
+    addSheetsLog(item.book, item.type, `${item.summary} [gave up after ${MAX_SHEETS_RETRIES} tries · ${item.lastError}]`, 'err');
+    _sheetsQueue.shift();
     persistSheetsQueue();
-    if (item.attempts >= MAX_SHEETS_RETRIES) {
-      addSheetsLog(item.book, item.type, item.summary + ' [max retries reached]', 'err');
-      _sheetsQueue.shift();
-      persistSheetsQueue();
-      updateBulkProgress(item.count || 1);
-    } else {
-      addSheetsLog(item.book, item.type, item.summary + ` [retry ${item.attempts}/${MAX_SHEETS_RETRIES}]`, 'retry');
-    }
+    updateBulkProgress(item.count || 1);
+    return;
   }
-  _sheetsWriting = false;
-  const next = _sheetsQueue[0];
-  if (next) {
-    const wait = Math.max(250, (next.nextTryAt || 0) - Date.now());
-    setTimeout(_processQueue, wait);
-  }
+  persistSheetsQueue();
+  addSheetsLog(item.book, item.type, item.summary + ` [retry ${item.attempts}/${MAX_SHEETS_RETRIES}]`, 'retry');
 }
 
 function sheetPayloadWithBookAccent(payload) {
@@ -12358,20 +12454,39 @@ function sheetPayloadWithBookAccent(payload) {
   return book && book.accent ? { ...payload, bookColor: book.accent } : payload;
 }
 
+// The publisher's actual Google Sheet, whichever book is open.
+//
+// Opening the Test Profile swaps `sheetsUrl` for a mock endpoint and parks the
+// real one on `window._realSheetsUrl` (see switchBook). Anything that reads the
+// bare global while that profile is open is reading the simulator's address.
+function realSheetsUrl() {
+  return window._realSheetsUrlSaved ? (window._realSheetsUrl || '') : sheetsUrl;
+}
+
+// Where a row queued right now should be delivered, decided once, at enqueue
+// time rather than whenever the queue happens to reach it.
+//
+// Only real records ever get this far — syncToSheets drops test-book rows, and
+// nothing seeds the mock spreadsheet through the queue — so a queued row always
+// belongs to the real sheet. Resolving the address at delivery time is what let
+// a visit to the Test Profile divert real sales into the simulator, where they
+// were counted as written and dropped.
+function sheetsDestination() {
+  return { url: realSheetsUrl(), simulated: false };
+}
+
 export function syncToSheets(payload) {
-  if (!sheetsUrl || !payload) return;
+  if (!realSheetsUrl() || !payload) return;
   const bookIdent = payload.book || payload.bookId || payload.id;
   if ((bookIdent && isTestBookId(bookIdent)) || (payload.bookObj && isTestBook(payload.bookObj))) {
     return;
   }
   payload = sheetPayloadWithBookAccent(payload);
-  const action = payload.action;
-  const typeLabel = action === 'reset' ? 'Rebuild'
-    : payload.type === 'order' ? 'Order' : 'Consignment';
-  const summary = action === 'reset' ? 'Clear sheet for rebuild'
-    : action === 'delete' ? `${payload.type === 'order' ? (payload.num || 'order') : (payload.store || 'consignment')} · remove row`
-      : payload.type === 'order' ? `${payload.num} · ${payload.chan} · ${payload.qty}×`
-        : `${payload.store} · ${payload.event} · ${payload.qty}×`;
+  // A postage row is not a consignment and a consignment is not a sale. The
+  // single order/else ternary this replaced filed every non-order write under a
+  // store partner, and summarised postage as "undefined · undefined · ×".
+  const typeLabel = sheetLogLabel(payload);
+  const summary = sheetLogSummary(payload);
   // Use the record's own sheetsId as the queue id so the backend can match
   // and replace the row; fall back to a fresh id for first-time writes.
   const queueId = payload.sheetsId || makeEventId();
@@ -12382,7 +12497,8 @@ export function syncToSheets(payload) {
     book: payload.book,
     type: typeLabel,
     attempts: 0,
-    nextTryAt: Date.now()
+    nextTryAt: Date.now(),
+    ...sheetsDestination()
   });
   persistSheetsQueue();
   addSheetsLog(payload.book, typeLabel, summary, 'queued');
@@ -12390,7 +12506,7 @@ export function syncToSheets(payload) {
 }
 
 function syncBatchToSheets(rows, label = 'Bulk sync') {
-  if (!sheetsUrl || !Array.isArray(rows) || !rows.length) return;
+  if (!realSheetsUrl() || !Array.isArray(rows) || !rows.length) return;
   const filteredRows = rows.filter(row => {
     if (!row) return false;
     const bId = row.book || row.bookId || row.id;
@@ -12399,26 +12515,34 @@ function syncBatchToSheets(rows, label = 'Bulk sync') {
     return true;
   });
   if (!filteredRows.length) return;
-  const rowsWithAccents = filteredRows.map(row => sheetPayloadWithBookAccent(row));
+  // Deliver each batch oldest-first so the sheet reads chronologically even
+  // before the backend's own sort runs.
+  const rowsWithAccents = sortSheetPayloads(filteredRows.map(row => sheetPayloadWithBookAccent(row)));
+  const summary = `${label} · ${rows.length} record${rows.length === 1 ? '' : 's'}`;
   _sheetsQueue.push({
     id: 'batch-' + makeEventId(),
     payload: { action: 'batch', rows: rowsWithAccents },
-    summary: `${label} · ${rows.length} records`,
+    summary,
     book: 'All books',
     type: 'Batch',
     count: rows.length,
     attempts: 0,
-    nextTryAt: Date.now()
+    nextTryAt: Date.now(),
+    ...sheetsDestination()
   });
   persistSheetsQueue();
-  addSheetsLog('All books', 'Batch', `${label} · ${rows.length} records`, 'queued');
+  addSheetsLog('All books', 'Batch', summary, 'queued');
   _processQueue();
 }
 
 let _isBulkSync = false;
 let _bulkTotal = 0;
 let _bulkDone = 0;
-const SHEETS_BULK_BATCH_SIZE = 200;
+// One batch is one Apps Script execution: it scans every managed tab for
+// existing ids, deletes the rows it is replacing, appends the new ones and
+// re-sorts. At 200 rows that regularly ran past the point where the browser
+// gave up waiting, and the whole queue stalled behind the row that hung.
+const SHEETS_BULK_BATCH_SIZE = 60;
 
 // Cache the backend's advertised capabilities for this session so the rebuild
 // flow can tell whether the deployed Apps Script understands the 'reset'
@@ -12562,12 +12686,15 @@ async function pushAllToSheets(opts = {}) {
   if (stats) stats.textContent = `Queueing ${_bulkTotal} records...`;
   if (canBatch) {
     for (const row of control) syncToSheets(row);
-    const dataRows = deletions.concat(toSync);
+    // Removals first (they clear the rows the additions replace), then the
+    // additions oldest-first, so a rebuilt sheet comes back in date order
+    // instead of in whichever order the books happened to be iterated.
+    const dataRows = deletions.concat(sortSheetPayloads(toSync));
     for (let i = 0; i < dataRows.length; i += SHEETS_BULK_BATCH_SIZE) {
       syncBatchToSheets(dataRows.slice(i, i + SHEETS_BULK_BATCH_SIZE), rebuild ? 'Rebuild batch' : 'Sync batch');
     }
   } else {
-    for (const row of queue) syncToSheets(row);
+    for (const row of control.concat(deletions, sortSheetPayloads(toSync))) syncToSheets(row);
   }
   if (btn) btn.textContent = canBatch ? 'Syncing batches...' : 'Syncing...';
 }
@@ -12730,7 +12857,26 @@ async function verifyUrl() {
   setTimeout(() => { if (btn) { btn.textContent = '↗ Verify URL'; btn.disabled = false; } }, 1000);
 }
 window.addEventListener('online', () => _processQueue());
-setTimeout(() => _processQueue(), 300);
+// A tab that comes back to a queue left over from last session has to drain it.
+// A single attempt 300ms after load was not enough: the sheet URL can still be
+// arriving from cloud settings at that point, and `_processQueue` quietly does
+// nothing when it has nowhere to write, so the backlog sat there until the next
+// sale was recorded. Keep looking for a minute, then leave it to the next write.
+(function resumeSheetsQueueOnLoad() {
+  let tries = 0;
+  const tick = () => {
+    tries++;
+    if (!_sheetsQueue.length) return;
+    _processQueue();
+    if (tries < 12) setTimeout(tick, 5000);
+  };
+  setTimeout(tick, 300);
+})();
+// A tab restored from the background may have slept through its own retry
+// timer. Re-check whenever it becomes visible again.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) _processQueue();
+});
 
 // ── DATA BACKUPS & PORTABILITY
 function backupFileName() {
