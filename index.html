@@ -2659,16 +2659,23 @@
                 <div class="tc-form-hint" id="tc-zonos-account-key-hint">Saving a Verified Account key lets Canada Post add the U.S. Declaration ID to every label automatically and bill the duty to Zonos — no per-parcel prepayment.</div>
               </div>
             </div>
-            <div class="tc-form-actions-row">
-              <label class="tc-toggle-wrap">
-                <input type="checkbox" id="tc-zonos-enabled" checked>
-                <span>Enable Duties API</span>
-              </label>
-              <div class="tc-form-actions-buttons">
+            <div class="tc-form-actions-row" style="flex-wrap:wrap;gap:12px;align-items:center;">
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <label class="tc-toggle-wrap">
+                  <input type="checkbox" id="tc-zonos-enabled" checked>
+                  <span>Enable Duties API</span>
+                </label>
+                <label class="tc-toggle-wrap">
+                  <input type="checkbox" id="tc-zonos-strict-prepay" checked>
+                  <span>Require Zonos Declaration ID for all US shipments</span>
+                </label>
+              </div>
+              <div class="tc-form-actions-buttons" style="margin-left:auto;">
                 <button id="tc-zonos-test-btn" class="btn gold outline" onclick="testZonosConnectionHandler()">Test Connection</button>
                 <button id="tc-save-zonos-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
               </div>
             </div>
+            <div class="tc-form-hint" style="margin-top:4px;">When checked, US label purchases are strictly blocked if no 13-character Declaration ID or Verified Key is present, preventing accidental unpaid duty (DDU) shipments.</div>
             <div id="tc-zonos-status" class="tc-status-msg"></div>
           </div>
         </div>

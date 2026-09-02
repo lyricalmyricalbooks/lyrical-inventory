@@ -4239,7 +4239,31 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
   }
 
   const dutyRoute = currentDutyPrepaymentRoute();
+  const strictPrepay = TAX_CENTER.settings?.requireZonosUsPrepay !== false;
+
   if (stCountryCode === 'US' && !declarationId && dutyRoute.route !== 'verified') {
+    if (strictPrepay) {
+      showToast('🚫 US label purchase blocked: Strict Zonos Duty Prepayment is enabled.', 'err');
+      if (typeof confirmDialog === 'function') {
+        const openTc = await confirmDialog(
+          'Strict Zonos Prepayment is enabled in Tax Centre to prevent unpaid customs duties from being charged to your US customers.\n\n'
+          + 'To purchase this Canada Post label:\n'
+          + '1. Click "⚡ Auto-Generate Zonos Declaration" or "Buy in Zonos Prepay App" on the Shipping screen to attach a 13-character Declaration ID.\n'
+          + '2. Or connect your Zonos Verified Account Key in Tax Centre → Zonos.\n\n'
+          + '(If you intentionally want to allow DDU shipments without prepaid duty, uncheck "Require Zonos Declaration ID for all US shipments" in Tax Centre → Zonos).',
+          {
+            title: '🚫 Zonos Declaration ID Required for U.S. Shipment',
+            okLabel: 'Open Tax Centre',
+            cancelLabel: 'Close'
+          }
+        );
+        if (openTc && typeof window !== 'undefined' && typeof window.switchTab === 'function') {
+          window.switchTab('taxcentre');
+        }
+      }
+      return;
+    }
+
     const proceed = await confirmDialog(
       'Canada Post needs a 13-character Declaration ID proving the U.S. duty is prepaid, '
       + 'and one has to be paid for before it exists.\n\n'
