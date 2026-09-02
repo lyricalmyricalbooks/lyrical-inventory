@@ -144,6 +144,8 @@
   .invoice-card .inv-c-cell.amt strong{font-size:var(--text-lg);color:var(--gold-text);letter-spacing:var(--tracking-tight);white-space:nowrap;}
   .invoice-card .inv-c-actions{display:flex;flex-direction:column;align-items:stretch;gap:var(--space-1);}
   .invoice-card .inv-c-btns{display:flex;gap:var(--space-1);justify-content:flex-end;}
+  .invoice-card .inv-c-btns .btn{min-height:var(--target-min);padding:8px 14px;font-size:var(--text-xs);transition:transform var(--dur-fast) var(--ease-spring);}
+  .invoice-card .inv-c-btns .btn:active{transform:scale(0.96);}
   /* Status pill — a themed sibling of .invoice-paper's print-only version above,
      so the printed invoice stays fixed-light while this list row follows dark mode. */
   .invoice-card .inv-status{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:4px 10px;border-radius:99px;text-align:center;}
@@ -164,8 +166,14 @@
   .inv-item-row input[type=number]{font-family:'DM Mono',monospace;text-align:right;}
   .inv-item-row .inv-item-book{width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);height:auto;margin:0;}
   .inv-item-row .inv-item-amt{display:block;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--text);padding:7px 6px;}
-  .inv-item-row .inv-item-remove{background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;}
-  .inv-item-row .inv-item-remove:hover{color:#a13a1b;}
+  .inv-item-row .inv-item-remove{
+    background:transparent;border:none;color:var(--content-muted);cursor:pointer;font-size:16px;line-height:1;
+    min-width:36px;min-height:36px;border-radius:var(--r);display:inline-flex;align-items:center;justify-content:center;
+    transition:color var(--dur-fast) var(--ease-standard),background-color var(--dur-fast) var(--ease-standard),transform var(--dur-fast) var(--ease-spring);
+  }
+  .inv-item-row .inv-item-remove:hover{color:var(--status-critical);background:var(--status-critical-bg);transform:scale(1.08);}
+  .inv-item-row .inv-item-remove:active{transform:scale(0.95);}
+  .inv-item-row .inv-item-remove:focus-visible{outline:2px solid var(--status-critical);outline-offset:2px;}
 
   /* ─── PRINT ─────────────────────────────────────────────────────────── */
   @media print {
@@ -1081,7 +1089,7 @@
           <input type="email" id="ml-add-email" placeholder="reader@example.com" onkeydown="if(event.key==='Enter')addManualSubscriber()" oninput="checkMailingEmailTypo(this.value)">
           <div id="ml-add-email-correction" style="display:none;" onclick="applyMailingEmailCorrection()"></div>
         </div>
-        <button class="btn gold" style="height:40px;" onclick="addManualSubscriber()">＋ Add</button>
+        <button class="btn gold" style="min-height:var(--target-min);padding:8px 18px;" onclick="addManualSubscriber()">＋ Add</button>
       </div>
 
       <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding-top:10px;border-top:1px dashed var(--border);">
