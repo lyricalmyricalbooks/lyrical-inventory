@@ -23,3 +23,6 @@
 ## 2025-03-01 - Avoid nested O(N*M) lookups in template generation
 **Learning:** Generating dropdown options using `.filter(order => !matches.some(m => m.orderNumber === normalizeShippingOrderNumber(order.num)))` creates an O(N*M) bottleneck, where M is the small set of matches but `normalizeShippingOrderNumber` is unnecessarily called N*M times.
 **Action:** Replace nested array lookups involving expensive normalization calls with O(1) Set lookups initialized beforehand, and use a single imperative loop to build output strings.
+## 2025-03-02 - O(N) max finding instead of O(N log N) sorting
+**Learning:** Using chained array methods like \`slice().sort((a,b) => ...)[0]\` to find a minimum or maximum element introduces an unnecessary $O(N \log N)$ time complexity and an extra array allocation.
+**Action:** Replace these operations with a single imperative $O(N)$ loop to find the minimum or maximum element. It avoids allocations and is substantially faster.
