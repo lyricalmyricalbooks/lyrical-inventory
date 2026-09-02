@@ -2066,6 +2066,15 @@ tr.hist-row:hover {
    it always wins here and these two statuses never actually got this color. */
 .stock-block .stock-alert.warn{color:var(--orange);}
 .stock-block .stock-alert.danger{color:var(--red-light);}
+.stock-block .stock-alert{color:var(--on-inverse-2);}
+.stock-block .stock-alert strong,
+.stock-block .stock-alert b{color:var(--on-inverse);font-weight:700;}
+.stock-block .stock-alert-details{font-size:var(--text-xs);line-height:1.5;color:var(--on-inverse-2);border-top:1px solid rgba(255,255,255,.08);padding-top:6px;}
+.stock-block .stock-alert-details strong,
+.stock-block .stock-alert-details b{color:var(--on-inverse);font-weight:700;}
+.stock-block .stock-alert-note{font-size:var(--text-xs);line-height:1.45;margin-top:4px;display:flex;align-items:center;gap:6px;color:var(--on-inverse-2);}
+.stock-block .stock-alert-note.pace{color:var(--orange);}
+.stock-block .stock-alert-note strong{color:var(--on-inverse);font-weight:700;}
 
 /* PILLS — status vocabulary. Colours come from the --status-* semantic roles
    so the amber=active / green=settled / red=error convention is enforceable. */
