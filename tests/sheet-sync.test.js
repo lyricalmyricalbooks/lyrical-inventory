@@ -174,10 +174,14 @@ describe('Sheets delivery queue (main.js)', () => {
     expect((persist[0].match(/try \{/g) || []).length).toBeGreaterThanOrEqual(2);
   });
 
-  it('reports an unconfirmable no-cors send as unverified, not as Written', () => {
-    expect(mainJs).toContain("const verified = resp !== 'unknown';");
-    expect(mainJs).toContain("verified ? 'ok' : 'unknown'");
-    // The log already knows how to render that status.
+  it('never reports an unconfirmable no-cors send as Written', () => {
+    // An opaque response proves only that the POST left the browser. Retrying
+    // is idempotent (the backend replaces a row by its stable id), so an
+    // unconfirmable write is retried rather than counted as delivered.
+    expect(mainJs).toContain("if (resp === 'unknown') {");
+    expect(mainJs).toContain('could not confirm the sheet received this row');
+    // The log still knows how to render an unverified status for the paths
+    // that legitimately cannot confirm, such as the connection test.
     expect(mainJs).toContain("'Sent (unverified)'");
   });
 
