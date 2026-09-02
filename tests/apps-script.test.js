@@ -183,3 +183,27 @@ CA$74.95`;
   });
 
 });
+
+describe('Canada Post media-type negotiation in the relay', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../apps-script/Code.gs'), 'utf8');
+
+  it('no longer forces a bare application/json on the OAuth rating path', () => {
+    // Canada Post versions its APIs through the media type. Sending a generic
+    // value is documented as a 406/415, and on the Apigee gateway an unroutable
+    // one can hang into a 504 instead.
+    expect(src).not.toMatch(/headers\['Accept'\]\s*=\s*useOAuth\s*\?\s*'application\/json'/);
+  });
+
+  it('offers the versioned rating media types as candidates', () => {
+    expect(src).toContain('application/vnd.cpc.ship.rate-v4+json');
+    expect(src).toContain('application/vnd.cpc.rating-v4+json');
+  });
+
+  it('retries only on the documented wrong-media-type statuses', () => {
+    expect(src).toMatch(/code !== 406 && code !== 415/);
+  });
+
+  it('reports which media type Canada Post accepted', () => {
+    expect(src).toMatch(/mediaType:\s*usedMediaType/);
+  });
+});

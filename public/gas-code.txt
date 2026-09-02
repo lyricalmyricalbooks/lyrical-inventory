@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v38)
+/* Lyricalmyrical Inventory — Unified Backend (v39)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -186,8 +186,8 @@ function doGet(e) {
   }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v38',
-    scriptVersion: 'v38',
+    service: 'lyrical-sheets-webhook-v39',
+    scriptVersion: 'v39',
     capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, graphicalEmails: true, authorPaymentEmails: true },
     sheetName: ss ? ss.getName() : 'Standalone Script'
   });
@@ -728,31 +728,68 @@ function doPost(e) {
           'Authorization': authHeader,
           'Accept-language': 'en-CA'
         };
+        // Canada Post versions its APIs through the media type, not the URL, and
+        // its documentation is explicit that a generic value is rejected: 406
+        // means "the interface version expected by the request is invalid —
+        // change the Accept header", and 415 is the same for Content-Type on a
+        // POST.
+        //
+        // This branch used to send a bare 'application/json' whenever OAuth was
+        // in play, bypassing the versioned types the very next line already
+        // knew about. On an Apigee gateway that routes by media type, an
+        // unroutable value does not always come back as a clean 406 or 415 — it
+        // can hang and surface as a 504, which is what the shipping card has
+        // been showing.
+        //
+        // The exact versioned string for the Developer Portal's Rating API is
+        // pinned only in its OpenAPI definition, which sits behind the portal
+        // login and is not reachable from here. Rather than guess one and
+        // hard-code it, try the plausible values in order and let Canada Post's
+        // own 406/415 pick the winner.
+        var mediaCandidates = [];
         if (isArtifact) {
           headers['Accept'] = 'application/pdf';
         } else if (isTracking) {
-          headers['Accept'] = 'application/json';
+          mediaCandidates = ['application/vnd.cpc.track+json', 'application/json'];
         } else if (method === 'POST') {
-          headers['Accept'] = useOAuth ? 'application/json' : (endpoint.indexOf('ncshipment') !== -1 
-            ? 'application/vnd.cpc.ncshipment-v4+json' 
-            : 'application/vnd.cpc.ship.rate-v4+json');
-          headers['Content-Type'] = headers['Accept'];
+          mediaCandidates = endpoint.indexOf('ncshipment') !== -1
+            ? ['application/vnd.cpc.ncshipment-v4+json', 'application/json']
+            : ['application/vnd.cpc.ship.rate-v4+json', 'application/vnd.cpc.rating-v4+json', 'application/json'];
         }
         if (zonosAccountKey && zonosAccountKey.trim()) {
           headers['X-CPC-Zonos-Key'] = zonosAccountKey.trim();
         }
 
-        const options = {
-          method: method,
-          headers: headers,
-          muteHttpExceptions: true
-        };
-        if (jsonPayload && method === 'POST') {
-          options.payload = jsonPayload;
-        }
+        // Try each candidate media type until Canada Post stops objecting.
+        // 406 and 415 are its documented "wrong media type" answers, so they are
+        // the only statuses worth another attempt; anything else is a real
+        // result and is returned as-is.
+        var resp = null;
+        var code = 0;
+        var usedMediaType = '';
+        var attemptList = mediaCandidates.length ? mediaCandidates : [''];
 
-        const resp = UrlFetchApp.fetch(endpoint, options);
-        const code = resp.getResponseCode();
+        for (var mi = 0; mi < attemptList.length; mi++) {
+          if (attemptList[mi]) {
+            headers['Accept'] = attemptList[mi];
+            if (method === 'POST') headers['Content-Type'] = attemptList[mi];
+            usedMediaType = attemptList[mi];
+          }
+
+          var options = {
+            method: method,
+            headers: headers,
+            muteHttpExceptions: true
+          };
+          if (jsonPayload && method === 'POST') {
+            options.payload = jsonPayload;
+          }
+
+          resp = UrlFetchApp.fetch(endpoint, options);
+          code = resp.getResponseCode();
+
+          if (code !== 406 && code !== 415) break;
+        }
 
         if (isArtifact) {
           const blob = resp.getBlob();
@@ -771,6 +808,7 @@ function doPost(e) {
           status: code,
           authMode: authHeader.indexOf('Bearer ') === 0 ? 'oauth' : 'basic',
           oauthNote: oauthError || '',
+          mediaType: usedMediaType,
           json: textContent
         });
       } catch (err) {

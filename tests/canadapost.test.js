@@ -1463,3 +1463,64 @@ describe('Rate payloads obey the gateway’s strict schema', () => {
     expect('contractId' in parsed).toBe(false);
   });
 });
+
+describe('Developer Portal error documents are read, not skipped', () => {
+  it('reads the documented flat messages array', async () => {
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    // The Portal shape is {"messages":[{code,description}]}. Only the legacy
+    // nested messages.message was checked, so this fell through every branch
+    // and surfaced as an empty service list instead of the actual reason.
+    const body = JSON.stringify({
+      messages: [{ code: '9113', description: 'Please specify your customer number.' }]
+    });
+    expect(() => parseCanadaPostPriceQuotes(body)).toThrow(/9113/);
+    expect(() => parseCanadaPostPriceQuotes(body)).toThrow(/specify your customer number/i);
+  });
+
+  it('still reads the legacy nested shape', async () => {
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const body = JSON.stringify({
+      messages: { message: { code: 'E002', description: 'AAA Authentication Failure' } }
+    });
+    expect(() => parseCanadaPostPriceQuotes(body)).toThrow(/E002/);
+  });
+
+  it('keeps every message when Canada Post sends more than one', async () => {
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const body = JSON.stringify({
+      messages: [
+        { code: '7007', description: 'The weight value is invalid.' },
+        { code: '1722', description: 'The options are invalid for the selected Service.' }
+      ]
+    });
+    let thrown;
+    try { parseCanadaPostPriceQuotes(body); } catch (e) { thrown = e; }
+    expect(thrown.canadaPostCode).toBe('7007');
+    expect(thrown.additionalMessages).toEqual(['[1722] The options are invalid for the selected Service.']);
+  });
+
+  it('does not mistake a successful quote list for an error', async () => {
+    const { parseCanadaPostPriceQuotes } = await import('../src/lib/canadapost.js');
+    const body = JSON.stringify({
+      priceQuotes: { priceQuote: [{ serviceCode: 'USA.TP', priceDetails: { base: 12, due: 13.5 } }] }
+    });
+    const quotes = parseCanadaPostPriceQuotes(body);
+    expect(quotes).toHaveLength(1);
+    expect(quotes[0].serviceCode).toBe('USA.TP');
+  });
+});
+
+describe('A gateway timeout is not reported as a confirmed outage', () => {
+  it('describes 504 as possibly a refused request', async () => {
+    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    const msg = describeCanadaPostFailure({ status: 504 });
+    expect(msg).toMatch(/504/);
+    expect(msg).toMatch(/refused|retrying/i);
+    expect(msg).not.toMatch(/not a problem with your key/i);
+  });
+
+  it('still calls a 503 what it is', async () => {
+    const { describeCanadaPostFailure } = await import('../src/lib/canadapost.js');
+    expect(describeCanadaPostFailure({ status: 503 })).toMatch(/outage on their side/i);
+  });
+});
