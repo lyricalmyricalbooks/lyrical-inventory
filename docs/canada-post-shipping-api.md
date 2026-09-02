@@ -169,7 +169,9 @@ Until that spec is committed to this repo:
 - A rejection in the `1128`–`1743` validation range most likely means a field
   name needs remapping, not that the shop owner typed something wrong — say so
   in the message rather than blaming their address.
-- **Action:** download the Shipping API OpenAPI definition, commit it as
+- **Action:** follow [`getting-the-shipping-api-spec.md`](getting-the-shipping-api-spec.md)
+  — a plain-language walkthrough written for the shop owner — to download the
+  Shipping API OpenAPI definition, commit it as
   `docs/shipping-api-openapi.yaml`, and regenerate the request/response shapes
   from it. Verify service and option codes with the Rating API's
   `GET /services` and `GET /options/{optionCode}`, which return the live list,
@@ -181,6 +183,7 @@ Until that spec is committed to this repo:
 - [`src/lib/canadapost-shipment.js`](../src/lib/canadapost-shipment.js) — reading a Create Shipment response; manifest-required detection.
 - [`src/lib/canadapost-throttle.js`](../src/lib/canadapost-throttle.js) — per-product spacing and the 60s cooldown.
 - [`src/lib/canadapost-errors.js`](../src/lib/canadapost-errors.js) — the `messages[]` classifier.
+- [`src/lib/canadapost-shipment-diagnosis.js`](../src/lib/canadapost-shipment-diagnosis.js) — tells a field the owner can fix apart from a field name this app got wrong, which is the difference between a five-minute fix and a wasted afternoon.
 - [`src/lib/canadapost.js`](../src/lib/canadapost.js) — the client that ties them together.
 - `backend/server.js`, `apps-script/Code.gs` — the two proxies and the token exchange. An Apps Script change means bumping the script version and re-syncing `public/gas-code.txt`.
 

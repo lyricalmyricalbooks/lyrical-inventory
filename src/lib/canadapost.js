@@ -29,6 +29,7 @@ import {
   resolveCanadaPostProduct,
 } from './canadapost-endpoints.js';
 import { parseShipmentResponse, describeNextStep } from './canadapost-shipment.js';
+import { describeShipmentRejection } from './canadapost-shipment-diagnosis.js';
 import {
   missingSenderFields,
   senderAddressIsPlaceholder,
@@ -2296,9 +2297,15 @@ export async function buyCanadaPostLabel({
     // error as data rather than throwing, so the code can be classified.
     const shipment = parseShipmentResponse(result.json);
     if (!shipment.created) {
-      // Fall back to the older parser purely for its error wording, which
-      // surfaces Canada Post's own code and description.
-      responseData = parseCanadaPostShipmentResponse(result.json);
+      // Canada Post refused it. Say which of the two failures this is — a field
+      // the owner can fix, or the app wording the parcel in a way Canada Post
+      // does not recognise — because the raw description reads like the former
+      // even when it is the latter, and sends them hunting through an address
+      // book for a mistake that is not there.
+      throw new Error(describeShipmentRejection({
+        status: Number(result.status) || 0,
+        body: result.json
+      }));
     } else {
       responseData = {
         ...parseCanadaPostShipmentResponse(result.json),
