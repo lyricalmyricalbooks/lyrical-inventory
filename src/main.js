@@ -5608,7 +5608,13 @@ function getArtistHeldHtml(stats, cur) {
 function pendingPayoutRequest(state, stats) {
   const reqs = (state && state.payoutRequests) || [];
   if (!reqs.length) return null;
-  const latest = reqs.slice().sort((a, b) => (b.requestedAt || '') > (a.requestedAt || '') ? 1 : -1)[0];
+  // ⚡ Bolt Optimization: Use O(N) imperative loop instead of O(N log N) slice().sort()[0] to find the latest request
+  let latest = reqs[0];
+  for (let i = 1; i < reqs.length; i++) {
+    if ((reqs[i].requestedAt || '') > (latest.requestedAt || '')) {
+      latest = reqs[i];
+    }
+  }
   if (!latest) return null;
   const settledSince = (stats.payouts || []).some(p => {
     const paidAt = p.date || '';
