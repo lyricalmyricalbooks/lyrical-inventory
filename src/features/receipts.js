@@ -5199,7 +5199,23 @@ function renderExpenses() {
   updateExpenseMissingReceiptButton(missingReceipt.length);
 
   if (!combined.length) {
-    body.innerHTML = `<tr><td colspan="${window.IS_PUBLISHER ? 9 : (showSelectCol ? 9 : 8)}"><div class="empty-state" style="padding:1.5rem;">No expenses logged yet.</div></td></tr>`;
+    body.innerHTML = `
+      <tr>
+        <td colspan="${window.IS_PUBLISHER ? 9 : (showSelectCol ? 9 : 8)}" style="padding:0;border:none;">
+          <div class="empty-state exp-empty-state" style="padding:var(--space-6) var(--space-4);text-align:center;">
+            <div class="e-icon" aria-hidden="true">🧾</div>
+            <strong style="font-size:var(--text-base);font-weight:700;color:var(--content-primary);display:block;margin-bottom:var(--space-1);">No Expenses Logged Yet</strong>
+            <p style="font-size:var(--text-xs);color:var(--content-secondary);max-width:400px;margin:0 auto var(--space-3);line-height:var(--leading-snug);">Track production runs, freight, ISBN, marketing, or convention expenses for this book to calculate true net revenue and artist royalty pools.</p>
+            <div style="display:flex;justify-content:center;gap:var(--space-2);flex-wrap:wrap;">
+              <button type="button" class="btn sm gold" onclick="openBatchExpenseModal('book')" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;" title="Batch log receipts and expenses">
+                <span aria-hidden="true">📄</span>
+                <span>Batch Log Expenses</span>
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
     updateBulkReimburseButton();
     return;
   }
