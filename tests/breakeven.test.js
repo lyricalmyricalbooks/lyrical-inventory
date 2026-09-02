@@ -110,4 +110,25 @@ describe('calculateBreakEven — explicit units needed at list price and realize
     expect(result.stockDeficit).toBe(0);
     expect(result.stockNote).toBe('');
   });
+
+  it('enforces that break-even alert markup never uses light-surface text tokens (--text2, --text3) on dark ink panels', async () => {
+    const fs = await import('fs');
+    const mainJs = fs.readFileSync('src/main.js', 'utf8');
+    const styleCss = fs.readFileSync('src/style.css', 'utf8');
+
+    // Extract the d-be-alert assignment in main.js
+    const alertMatch = mainJs.match(/al\.innerHTML\s*=\s*`([\s\S]*?)`;/);
+    expect(alertMatch).toBeTruthy();
+    const alertHtml = alertMatch[1];
+
+    // Must never contain var(--text2) or var(--text3) which causes catastrophic contrast on ink panels
+    expect(alertHtml).not.toContain('var(--text2');
+    expect(alertHtml).not.toContain('var(--text3');
+    expect(alertHtml).toContain('stock-alert-details');
+    expect(alertHtml).toContain('var(--on-inverse-2)');
+
+    // Verify style.css defines scoped high-contrast rules for .stock-block .stock-alert
+    expect(styleCss).toContain('.stock-block .stock-alert-details');
+    expect(styleCss).toContain('.stock-block .stock-alert{color:var(--on-inverse-2);}');
+  });
 });

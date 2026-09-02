@@ -5481,22 +5481,22 @@ export function updateDash() {
               </span>
             </div>
           </div>
-          <div style="font-size:11px; line-height:1.45; border-top:1px solid ${themeBorder}; padding-top:6px; opacity:0.92; color:var(--text2, rgba(255,255,255,0.85));">
-            <div>
+          <div class="stock-alert-details" style="border-top-color:${themeBorder};">
+            <div style="color:var(--on-inverse-2);">
               ${be.hasListPrice
-                ? `Requires selling <strong>~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="font-family:'DM Mono', monospace;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="font-family:'DM Mono', monospace;">${fmt(be.remaining, cur)}</strong>.`
+                ? `Requires selling <strong style="color:var(--on-inverse);font-weight:700;">~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="color:var(--on-inverse);font-family:'DM Mono', monospace;font-weight:700;">${fmt(be.remaining, cur)}</strong>.`
                 : `Set a list price in book settings to calculate the units needed to break even.`}
             </div>
             ${be.paceNote ? `
-              <div style="margin-top:3px; opacity:0.9; display:flex; align-items:center; gap:5px;">
-                <span>💡</span>
-                <span>${escapeHtml(be.paceNote)}</span>
+              <div class="stock-alert-note pace" style="color:${be.isClose ? '#fdba74' : 'var(--gold2)'};">
+                <span aria-hidden="true">💡</span>
+                <span style="color:inherit;">${escapeHtml(be.paceNote)}</span>
               </div>
             ` : ''}
             ${be.stockNote ? `
-              <div style="margin-top:3px; opacity:0.9; display:flex; align-items:center; gap:5px;">
-                <span>📦</span>
-                <span>${escapeHtml(be.stockNote)}</span>
+              <div class="stock-alert-note" style="color:var(--on-inverse-2);">
+                <span aria-hidden="true">📦</span>
+                <span style="color:inherit;">${escapeHtml(be.stockNote)}</span>
               </div>
             ` : ''}
           </div>
