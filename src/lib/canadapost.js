@@ -2071,7 +2071,8 @@ export function buildNonContractShipmentJson({
   // The real labels this shop prints are letter-size PDFs, so that is the
   // default. '4x6' + 'PDF' or 'ZPL' suit a label printer.
   outputFormat = '8.5x11',
-  encoding = 'PDF'
+  encoding = 'PDF',
+  options = null
 }) {
   const weightKg = Number(Math.max(0.001, parseFloat(parcel.weightKg || 0.5)).toFixed(3));
   const lengthCm = Number(Math.max(0.1, parseFloat(parcel.lengthCm || 20)).toFixed(1));
@@ -2201,6 +2202,20 @@ export function buildNonContractShipmentJson({
       ]
     };
     if (cleanDeclId) deliverySpec.customs.usDeclarationId = cleanDeclId;
+  }
+
+  if (Array.isArray(options) && options.length > 0) {
+    deliverySpec.options = options;
+  } else if (destCountry !== 'CA') {
+    // Canada Post requires a valid Non-Delivery Handling option (Error 8716) for all U.S. and International parcels.
+    // 'RASE' (Return at Sender's Expense) for Expedited/Parcel Air, 'RTS' (Return to Sender) for Tracked/Small Packet/Xpresspost.
+    const isParcelService = serviceCode === 'USA.EP' || serviceCode === 'INT.IP.AIR' || serviceCode === 'INT.IP.SURF';
+    const ndhCode = isParcelService ? 'RASE' : 'RTS';
+    deliverySpec.options = [
+      {
+        optionCode: ndhCode
+      }
+    ];
   }
 
   const payload = {
@@ -2341,6 +2356,7 @@ export async function buyCanadaPostLabel({
   contractId = '',
   zonosAccountKey = '',
   isTest = false,
+  options = null,
   // "Mailed on behalf of" — only set when Canada Post has given you a separate
   // number for it. One publisher mailing their own books leaves it blank and it
   // defaults to the billing customer number.
@@ -2356,6 +2372,7 @@ export async function buyCanadaPostLabel({
     declarationId,
     customerNumber,
     contractId,
+    options,
     allowPlaceholders: !!isTest
   });
 
