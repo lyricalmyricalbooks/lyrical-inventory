@@ -107,12 +107,12 @@ describe('mailed on behalf of', () => {
 describe('building the calls that spend money', () => {
   it('builds Create Shipment with mailedBy and mobo', () => {
     expect(resolveShipmentEndpoint({ baseUrl: BASE, customerNumber: '0001298882' }))
-      .toBe(`${BASE}${CANADAPOST_API_ROOT}/0001298882/0001298882/shipments`);
+      .toBe(`${BASE}${CANADAPOST_API_ROOT}/shipping/v1/0001298882/0001298882/shipments`);
   });
 
   it('honours a distinct mobo for a platform mailing on behalf of someone else', () => {
     expect(resolveShipmentEndpoint({ baseUrl: BASE, customerNumber: '1111111', mobo: '2222222' }))
-      .toBe(`${BASE}${CANADAPOST_API_ROOT}/1111111/2222222/shipments`);
+      .toBe(`${BASE}${CANADAPOST_API_ROOT}/shipping/v1/1111111/2222222/shipments`);
   });
 
   it('returns nothing at all without a customer number, rather than a half path', () => {
@@ -122,13 +122,13 @@ describe('building the calls that spend money', () => {
 
   it('builds Transmit Shipments, the call that avoids the unmanifested surcharge', () => {
     expect(resolveManifestEndpoint({ baseUrl: BASE, customerNumber: '0001298882' }))
-      .toBe(`${BASE}${CANADAPOST_API_ROOT}/0001298882/0001298882/manifests`);
+      .toBe(`${BASE}${CANADAPOST_API_ROOT}/shipping/v1/0001298882/0001298882/manifests`);
   });
 
   it('builds the artifact URL from stored identifiers, for a reprint months later', () => {
     expect(resolveArtifactEndpoint({
       baseUrl: BASE, consumerId: 'CG123', artifactId: 'abc-def', index: 0,
-    })).toBe(`${BASE}${CANADAPOST_API_ROOT}/artifacts/CG123/shipping/abc-def/0`);
+    })).toBe(`${BASE}${CANADAPOST_API_ROOT}/shipping/v1/artifacts/CG123/shipping/abc-def/0`);
   });
 
   it('returns nothing for an artifact it cannot address', () => {
@@ -142,7 +142,7 @@ describe('building the calls that spend money', () => {
       path: CANADAPOST_SHIPPING_API.voidShipmentPath,
       mailedBy: '0001298882',
       shipmentId: 'S-1',
-    })).toBe(`${BASE}${CANADAPOST_API_ROOT}/0001298882/0001298882/shipments/S-1`);
+    })).toBe(`${BASE}${CANADAPOST_API_ROOT}/shipping/v1/0001298882/0001298882/shipments/S-1`);
   });
 });
 

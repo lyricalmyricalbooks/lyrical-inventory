@@ -181,8 +181,8 @@ describe('The shipment payload only invents details while rehearsing', () => {
       destination: { countryCode: 'CA', postalCode: 'V6B2W9', address1: '1 Main St', city: 'Vancouver' },
       parcel: { weightKg: 0.5 },
     }));
-    expect(json.sender.addressDetails.addressLine1).toBe('123 Main St');
-    expect(json.sender.contactPhone).toBe(SHIPMENT_PLACEHOLDERS.senderPhone);
+    expect(json.deliverySpec.sender.addressDetails.addressLine1).toBe('123 Main St');
+    expect(json.deliverySpec.sender.contactPhone).toBe(SHIPMENT_PLACEHOLDERS.senderPhone);
   });
 
   it('leaves them empty rather than inventing them when they are not', () => {
@@ -191,8 +191,8 @@ describe('The shipment payload only invents details while rehearsing', () => {
       parcel: { weightKg: 0.5 },
       allowPlaceholders: false,
     }));
-    expect(json.sender.addressDetails.addressLine1).toBe('');
-    expect(json.sender.addressDetails.city).toBe('');
+    expect(json.deliverySpec.sender.addressDetails.addressLine1).toBe('');
+    expect(json.deliverySpec.sender.addressDetails.city).toBe('');
   });
 
   it('omits the recipient phone key entirely rather than sending it empty', () => {
@@ -203,14 +203,14 @@ describe('The shipment payload only invents details while rehearsing', () => {
       parcel: { weightKg: 0.5 },
       allowPlaceholders: false,
     }));
-    expect('clientVoiceNumber' in strict.destination).toBe(false);
+    expect('clientVoiceNumber' in strict.deliverySpec.destination).toBe(false);
 
     const withPhone = JSON.parse(buildNonContractShipmentJson({
       destination: { countryCode: 'US', phone: '6045550123', postalCode: '90210', address1: '1 Palm Dr', city: 'Beverly Hills', state: 'CA' },
       parcel: { weightKg: 0.5 },
       allowPlaceholders: false,
     }));
-    expect(withPhone.destination.clientVoiceNumber).toBe('6045550123');
+    expect(withPhone.deliverySpec.destination.clientVoiceNumber).toBe('6045550123');
   });
 
   it('carries a real sender through untouched', () => {
@@ -220,9 +220,9 @@ describe('The shipment payload only invents details while rehearsing', () => {
       parcel: { weightKg: 0.5 },
       allowPlaceholders: false,
     }));
-    expect(json.sender.addressDetails.addressLine1).toBe('88 Bookish Way');
-    expect(json.sender.addressDetails.postalZipCode).toBe('M4B1B3');
-    expect(json.sender.contactPhone).toBe('416 555 0142');
+    expect(json.deliverySpec.sender.addressDetails.addressLine1).toBe('88 Bookish Way');
+    expect(json.deliverySpec.sender.addressDetails.postalZipCode).toBe('M4B1B3');
+    expect(json.deliverySpec.sender.contactPhone).toBe('416 555 0142');
   });
 });
 

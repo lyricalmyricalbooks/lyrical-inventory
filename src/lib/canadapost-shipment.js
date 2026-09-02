@@ -17,10 +17,11 @@
 /**
  * Envelope names seen for a created shipment.
  *
- * The legacy API wrapped it in `nonContractShipmentInfo`; v8's own naming is not
- * published outside the spec. Reading several is not sloppiness — it is the
- * difference between a working integration and a 'label purchased' screen that
- * shows an empty tracking number because one key was renamed.
+ * The committed spec (docs/shipping-api-openapi.yaml) returns the shipment
+ * FLAT — `shipmentId`, `shipmentStatus`, `trackingPin`, `links` at the top
+ * level, no wrapper at all. The wrapper names below are kept for the legacy
+ * shapes, because a shipment created before this change and reprinted after it
+ * still has to be readable.
  */
 const SHIPMENT_ENVELOPES = [
   'shipmentInfo',
@@ -113,6 +114,19 @@ export function manifestSignal(data) {
     if (/^(false|no|n|not required|non requis)$/i.test(value)) return 'not-required';
   }
 
+  // The spec gives two signals better than any wording on the label.
+  //
+  // `shipmentStatus` is one of created / transmitted / suspended. A transmitted
+  // shipment is already on a manifest, so nothing is owed.
+  const status = String(data.shipmentStatus ?? data.shipmentInfo?.shipmentStatus ?? '').toLowerCase();
+  if (status === 'transmitted') return 'not-required';
+
+  // A `receipt` link exists only for a shipment where no manifest is required
+  // and payment was taken by credit card or supplier account — the spec says so
+  // in as many words. Its presence is therefore a positive "nothing is owed".
+  const links = readLinks(data.links ? data : (data.shipmentInfo || data.nonContractShipmentInfo || {}));
+  if (links.some(link => link.rel === 'receipt')) return 'not-required';
+
   // Fall back to the wording printed on the label. Polarity decides: an
   // affirmative anywhere wins, because a shipment that needs a manifest needs
   // one whatever else the document says.
@@ -174,10 +188,12 @@ export function parseShipmentResponse(body) {
   const receiptLink = findLink(links, RECEIPT_RELS);
 
   const shipmentId = String(info.shipmentId ?? info.id ?? '');
+  const shipmentStatus = String(info.shipmentStatus ?? data.shipmentStatus ?? '');
   const trackingPin = String(info.trackingPin ?? info.trackingNumber ?? info.pin ?? '');
 
   return {
     shipmentId,
+    shipmentStatus,
     trackingPin,
     labelUrl: labelLink?.href || '',
     receiptUrl: receiptLink?.href || '',

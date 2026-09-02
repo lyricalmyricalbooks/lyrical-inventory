@@ -237,7 +237,7 @@ describe('Canada Post Label & Shipment Creation', () => {
       declarationId: '0rd4dpkrvc1y9'
     });
 
-    expect(jsonStr).toContain('"declarationId":"0rd4dpkrvc1y9"');
+    expect(jsonStr).toContain('"usDeclarationId":"0rd4dpkrvc1y9"');
     expect(jsonStr).not.toContain('"declarationId":"0RD4DPKRVC1Y9"');
   });
 
@@ -249,7 +249,7 @@ describe('Canada Post Label & Shipment Creation', () => {
       parcel: { weightKg: 0.5 },
       customs: { declarationId: '0RCVXJ2TKBNWR', declaredValue: 25, quantity: 1 }
     });
-    expect(jsonStr).toContain('"declarationId":"0rcvxj2tkbnwr"');
+    expect(jsonStr).toContain('"usDeclarationId":"0rcvxj2tkbnwr"');
   });
 
   it('normalizes full state and province names to 2-letter postal codes', async () => {
@@ -465,7 +465,7 @@ describe('Canada Post Account & Environment Validation', () => {
 // Create Shipment is `POST /{mailedBy}/{mobo}/shipments` on the Developer
 // Portal gateway. For a single merchant, mobo is the billing customer number
 // again — so both segments are the same number in these tests.
-const SHIPMENT_ENDPOINT = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/0042998877/0042998877/shipments';
+const SHIPMENT_ENDPOINT = 'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/0042998877/0042998877/shipments';
 
 describe('Canada Post Shipment Simulation Guardrail', () => {
   const realCreds = {
@@ -571,7 +571,7 @@ describe('Canada Post Shipment Simulation Guardrail', () => {
     const proxyCall = global.fetch.mock.calls[0];
     const proxyBody = JSON.parse(proxyCall[1].body);
     expect(proxyBody.targetEndpoint).toBe(SHIPMENT_ENDPOINT);
-    expect(proxyBody.jsonPayload).toContain('"declarationId":"0rd4dpkrvc1y9"');
+    expect(proxyBody.jsonPayload).toContain('"usDeclarationId":"0rd4dpkrvc1y9"');
   });
 });
 

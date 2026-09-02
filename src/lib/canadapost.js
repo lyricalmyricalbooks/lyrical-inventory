@@ -1987,9 +1987,25 @@ export function buildNonContractShipmentJson({
   // Stand-in sender details keep the screen usable while rehearsing without an
   // address saved. buyCanadaPostLabel refuses a live purchase before reaching
   // here, so in practice these only ever reach the sandbox.
-  allowPlaceholders = true
+  allowPlaceholders = true,
+  // The spec requires EXACTLY ONE of these two. `transmitShipment: true` sends
+  // the shipment for manifesting immediately, which is what produces a label
+  // marked MANIFEST NOT REQ and takes the unmanifested surcharge off the table
+  // entirely. A groupId instead holds it back for a manifest run later.
+  transmitShipment = true,
+  groupId = '',
+  // settlementInfo.intendedMethodOfPayment is required. 'CreditCard' expects a
+  // card saved and defaulted on the Canada Post profile; 'Account' bills an
+  // existing contract. Wrong value fails the purchase rather than mischarging.
+  intendedMethodOfPayment = 'CreditCard',
+  paidByCustomer = '',
+  contractId = '',
+  // The real labels this shop prints are letter-size PDFs, so that is the
+  // default. '4x6' + 'PDF' or 'ZPL' suit a label printer.
+  outputFormat = '8.5x11',
+  encoding = 'PDF'
 }) {
-  const weightKg = Number(Math.max(0.01, parseFloat(parcel.weightKg || 0.5)).toFixed(3));
+  const weightKg = Number(Math.max(0.001, parseFloat(parcel.weightKg || 0.5)).toFixed(3));
   const lengthCm = Number(Math.max(0.1, parseFloat(parcel.lengthCm || 20)).toFixed(1));
   const widthCm = Number(Math.max(0.1, parseFloat(parcel.widthCm || 15)).toFixed(1));
   const heightCm = Number(Math.max(0.1, parseFloat(parcel.heightCm || 2)).toFixed(1));
@@ -2004,16 +2020,24 @@ export function buildNonContractShipmentJson({
   const cleanSenderState = normalizeStateOrProvince(sender.province || sender.state || 'ON', 'CA') || 'ON';
   const cleanDestState = normalizeStateOrProvince(destination.province || destination.state || '', destCountry);
 
+  // Canada Post requires a company on the sender. A sole publisher has no
+  // separate company name, so their own name stands in rather than the field
+  // being dropped and the whole shipment refused for a missing mandatory field.
+  const senderName = ph(sender.name, 'Lyricalmyrical Books');
+
   const deliverySpec = {
     serviceCode: serviceCode,
     sender: {
-      name: ph(sender.name, 'Lyricalmyrical Books'),
-      company: sender.company || ph(sender.name, 'Lyricalmyrical Books'),
+      name: senderName,
+      company: sender.company || senderName,
       contactPhone: ph(sender.phone, '4165550199'),
       addressDetails: {
         addressLine1: ph(sender.address1, '123 Main St'),
         city: ph(sender.city, 'Toronto'),
         provState: cleanSenderState,
+        // Required by the spec, and only ever CA: a shipment is mailed from
+        // within Canada whatever its destination.
+        countryCode: 'CA',
         postalZipCode: cleanOriginZip
       }
     },
@@ -2036,14 +2060,26 @@ export function buildNonContractShipmentJson({
         height: heightCm
       }
     },
+    printPreferences: {
+      outputFormat,
+      encoding
+    },
     preferences: {
       showPackingInstructions: true,
       showPostageRate: true
     },
     references: {
       customerRef1: orderNum || 'BOOK-ORDER'
+    },
+    // Required. Without it the whole shipment is refused for a missing
+    // mandatory field, which reads on screen like an address problem.
+    settlementInfo: {
+      intendedMethodOfPayment
     }
   };
+
+  if (paidByCustomer) deliverySpec.settlementInfo.paidByCustomer = String(paidByCustomer).trim();
+  if (contractId) deliverySpec.settlementInfo.contractId = String(contractId).trim();
 
   // Canada Post treats an empty clientVoiceNumber as a malformed value rather
   // than an absent one, so the key is only added when there is a number to put
@@ -2055,15 +2091,15 @@ export function buildNonContractShipmentJson({
   if (destination.address2) deliverySpec.destination.addressDetails.addressLine2 = destination.address2;
 
   if (destCountry !== 'CA' && (customs || cleanDeclId)) {
-    const qty = Math.max(1, parseInt(customs?.quantity, 10) || 1);
-    const declaredVal = Number(Math.max(1, parseFloat(customs?.declaredValue || 25)).toFixed(2));
+    const qty = Math.max(1, parseInt(customs?.quantity || 1, 10));
+    const declaredVal = Math.max(0.01, parseFloat(customs?.value || customs?.declaredValue || 20));
     const customsDesc = String(customs?.description || 'Printed books').slice(0, 44);
     const hsCode = String(customs?.hsCode || '490199').replace(/[^0-9]/g, '').slice(0, 6) || '490199';
-    
+
     deliverySpec.customs = {
-      currency: "CAD",
+      currency: 'CAD',
       conversionFromCad: 1.0,
-      reasonForExport: "SOG",
+      reasonForExport: 'SOG',
       skuList: {
         item: [
           {
@@ -2072,17 +2108,27 @@ export function buildNonContractShipmentJson({
             unitWeight: Number((weightKg / qty).toFixed(3)),
             customsValuePerUnit: Number((declaredVal / qty).toFixed(2)),
             hsTariffCode: hsCode,
-            countryOfOrigin: "CA"
+            countryOfOrigin: 'CA'
           }
         ]
       }
     };
-    if (cleanDeclId) {
-      deliverySpec.customs.declarationId = cleanDeclId;
-    }
+    // The spec calls this usDeclarationId. It was sent as `declarationId`,
+    // which Canada Post does not recognise, so a Zonos-prepaid US parcel was
+    // shipped with the declaration silently dropped.
+    if (cleanDeclId) deliverySpec.customs.usDeclarationId = cleanDeclId;
   }
 
-  return JSON.stringify(deliverySpec);
+  // The request wraps the delivery spec and carries exactly one of
+  // transmitShipment / groupId — the spec makes them mutually exclusive, and
+  // sending neither (which this used to do, by sending a bare deliverySpec)
+  // is refused outright.
+  const request = { deliverySpec };
+  const group = String(groupId || '').trim();
+  if (group) request.groupId = group;
+  else if (transmitShipment) request.transmitShipment = true;
+
+  return JSON.stringify(request);
 }
 
 /**

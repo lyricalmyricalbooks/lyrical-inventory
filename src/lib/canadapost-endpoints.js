@@ -44,26 +44,31 @@ export const CANADAPOST_TRACKING_API = {
 };
 
 /**
- * Shipping API 8.0.0 — creates real shipments and money-bearing labels.
+ * Shipping API — creates real shipments and money-bearing labels.
  *
- * Paths are documented and fixed. What is NOT settled is the request BODY for
- * Create Shipment: the portal publishes the field names only inside the app's
- * OpenAPI spec. So the paths live here as constants, and the body shape is a
- * separate, explicitly-flagged concern (see `buildShipmentPayload` callers and
- * docs/canada-post-shipping-api.md §"The one thing still unverified").
+ * Paths and field names below are taken from the Shipping OpenAPI definition
+ * committed at docs/shipping-api-openapi.yaml. Note the version: the spec
+ * declares `1.0.0` / `shipping-service-v1`, not the 8.0.0 of the older Web
+ * Services product. The gateway path carries `/shipping/v1`, and leaving that
+ * segment out — as this registry did before the spec arrived — produces a 404
+ * that reads like a credentials problem.
  *
  * `{mailedBy}` is the billing customer number. `{mobo}` is "mailed on behalf
- * of" — for a single-merchant shop it is the same number again, which is why
- * `resolveMobo()` below defaults it rather than demanding it be configured.
+ * of"; for a single-merchant shop it is the same number again.
  */
+export const CANADAPOST_SHIPPING_ROOT = `${CANADAPOST_API_ROOT}/shipping/v1`;
+
 export const CANADAPOST_SHIPPING_API = {
-  createShipmentPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments`,
-  getShipmentPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}`,
-  shipmentPricePath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/price`,
-  shipmentDetailsPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/details`,
-  voidShipmentPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}`,
-  refundShipmentPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/refund`,
-  artifactPath: `${CANADAPOST_API_ROOT}/artifacts/{consumerId}/shipping/{artifactId}/{index}`,
+  createShipmentPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments`,
+  getShipmentPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}`,
+  shipmentPricePath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/price`,
+  shipmentDetailsPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/details`,
+  shipmentReceiptPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/receipt`,
+  qrCodePath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/qr-code`,
+  voidShipmentPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}`,
+  refundShipmentPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/shipments/{shipmentId}/refund`,
+  groupsPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/groups`,
+  artifactPath: `${CANADAPOST_SHIPPING_ROOT}/artifacts/{consumerId}/shipping/{artifactId}/{index}`,
   scope: 'merchant',
   product: 'shipping'
 };
@@ -77,9 +82,9 @@ export const CANADAPOST_SHIPPING_API = {
  * canadapost-shipment.js for where that is detected.
  */
 export const CANADAPOST_MANIFEST_API = {
-  transmitPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/manifests`,
-  getManifestPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/manifests/{manifestId}`,
-  manifestDetailsPath: `${CANADAPOST_API_ROOT}/{mailedBy}/{mobo}/manifests/{manifestId}/details`,
+  transmitPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/manifests`,
+  getManifestPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/manifests/{manifestId}`,
+  manifestDetailsPath: `${CANADAPOST_SHIPPING_ROOT}/{mailedBy}/{mobo}/manifests/{manifestId}/details`,
   scope: 'merchant',
   product: 'shipping'
 };

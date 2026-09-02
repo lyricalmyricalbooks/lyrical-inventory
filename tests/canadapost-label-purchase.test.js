@@ -480,7 +480,7 @@ describe('label creation refuses to guess a Canada Post endpoint', () => {
 
     const body = JSON.parse(global.fetch.mock.calls[0][1].body);
     expect(body.targetEndpoint).toBe(
-      'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/0001298882/0001298882/shipments'
+      'https://api.canadapost-postescanada.ca/prod/devportal-portaildesdeveloppeurs/shipping/v1/0001298882/0001298882/shipments'
     );
     expect(body.targetEndpoint).not.toMatch(/ncshipment/);
   });

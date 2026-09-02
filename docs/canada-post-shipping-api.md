@@ -172,32 +172,58 @@ Shape is `{"messages":[{"code","description"}]}`, same as Rating.
 payment method on the account** — which no amount of retrying fixes. Retry it a
 bounded number of times, then surface it as an account problem.
 
-## 8. The one thing still unverified
+## 8. The request body — settled by the committed spec
 
-The **exact JSON schema for the Create Shipment request body** — sender,
-receiver and parcel field names, required vs optional, service and option code
-format — is published only inside the app's OpenAPI spec, which needs a
-logged-in portal account.
+The OpenAPI definition is committed at
+[`shipping-api-openapi.yaml`](shipping-api-openapi.yaml). Read field names from
+there, never from memory. Points that cost a refused shipment if missed:
 
-Until that spec is committed to this repo:
+- **The spec declares version `1.0.0` / `shipping-service-v1`**, not the 8.0.0
+  of the older Web Services product, and the gateway path carries
+  **`/shipping/v1`**. Leaving that segment out produces a 404 that reads like a
+  credentials problem.
+- **The body wraps everything in `deliverySpec`.** Sending a bare delivery spec
+  — which this app did — is refused.
+- **Exactly one of `transmitShipment: true` or `groupId` is required**, never
+  both, never neither. `transmitShipment` sends the shipment for manifesting
+  immediately, which is what produces a label marked `MANIFEST NOT REQ` and
+  removes the unmanifested surcharge risk entirely. A `groupId` holds it for a
+  later manifest run.
+- **`deliverySpec.settlementInfo` is required**, and inside it
+  `intendedMethodOfPayment` — `CreditCard` (a card saved and defaulted on the
+  Canada Post profile), `Account` (an existing contract), or `SupplierAccount`.
+- Other required fields: `serviceCode`, `sender`, `destination`,
+  `parcelCharacteristics` (`weight`; `dimensions` needs all three of length,
+  width, height together), `preferences.showPackingInstructions`;
+  `sender.company`, `sender.contactPhone`, `sender.addressDetails.countryCode`
+  (always `CA`), and `destination.addressDetails.countryCode`.
+- **`printPreferences`** takes `outputFormat` `8.5x11` or `4x6`, and `encoding`
+  `PDF` or `ZPL`. The letter-size PDF is what this shop prints.
+- The US customs declaration is **`customs.usDeclarationId`**, not
+  `declarationId`. Sent under the wrong name it is silently dropped.
+- Sandbox testing: promo code **`DEVPROTEST`** works in the sandbox
+  environment, for Xpresspost (`DOM.XP`) and Xpresspost International
+  (`INT.XP`) only.
 
-- The payload is built by `buildNonContractShipmentJson()`, whose shape derives
-  from the previous API. It is the best available reading, **not a verified
-  contract**.
-- A rejection in the `1128`–`1743` validation range most likely means a field
-  name needs remapping, not that the shop owner typed something wrong — say so
-  in the message rather than blaming their address.
-- **Action:** follow [`getting-the-shipping-api-spec.md`](getting-the-shipping-api-spec.md)
-  — a plain-language walkthrough written for the shop owner — to download the
-  Shipping API OpenAPI definition, commit it as
-  `docs/shipping-api-openapi.yaml`, and regenerate the request/response shapes
-  from it. Verify service and option codes with the Rating API's
-  `GET /services` and `GET /options/{optionCode}`, which return the live list,
-  rather than trusting hardcoded legacy codes like `DOM.RP`.
+**Reading the response.** It is FLAT — `shipmentId`, `shipmentStatus`,
+`trackingPin`, `links` at the top level, no wrapper. `shipmentStatus` is
+`created` / `transmitted` / `suspended`. `links` is an array of
+`{rel, href, index, mediaType}`; `rel: "label"` is the printable document and
+carries an `index` for multi-page labels.
+
+**Two manifest signals better than any label wording**, both from the spec:
+`shipmentStatus: "transmitted"` means it is already on a manifest, and a
+`rel: "receipt"` link exists *only* for a shipment where no manifest is
+required. Both are checked before falling back to the printed wording.
+
+Service and option codes should still be confirmed against the Rating API's
+`GET /services` and `GET /options/{optionCode}`, which return the live list,
+rather than trusting hardcoded legacy codes.
 
 ## 9. Where this lives in this repo
 
 - [`src/lib/canadapost-endpoints.js`](../src/lib/canadapost-endpoints.js) — every path, scope and product bucket.
+- [`docs/shipping-api-openapi.yaml`](shipping-api-openapi.yaml) — the authoritative contract. Every field name comes from here.
 - [`src/lib/canadapost-shipment.js`](../src/lib/canadapost-shipment.js) — reading a Create Shipment response; manifest-required detection.
 - [`src/lib/canadapost-throttle.js`](../src/lib/canadapost-throttle.js) — per-product spacing and the 60s cooldown.
 - [`src/lib/canadapost-errors.js`](../src/lib/canadapost-errors.js) — the `messages[]` classifier.
