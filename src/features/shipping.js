@@ -124,6 +124,7 @@ import {
 } from '../lib/address-verification.js';
 import {
   calculateZonosLandedCost,
+  createZonosDeclaration,
   estimateOfflineLandedCost,
   resolveDutyPrepaymentRoute,
   buildZonosPrepayDeepLink,
@@ -2986,7 +2987,76 @@ async function autoGenerateZonosDeclarationHandler({ silent = false } = {}) {
     return route;
   }
 
-  if (route.route === 'verified') {
+  if (route.route === 'verified' || getZonosAccountKey()) {
+    const zKey = getZonosAccountKey();
+    if (!silent) showToast('⏳ Contacting Zonos API to generate Declaration ID...', 'ok');
+    try {
+      const declResult = await createZonosDeclaration({
+        apiKey: zKey,
+        origin: {
+          postalCode: $('sf-zip')?.value || 'M6G 3H1',
+          province: $('sf-state')?.value || 'ON',
+          countryCode: 'CA'
+        },
+        destination: {
+          street: ($('st-street1')?.value || $('st-street')?.value || '').trim(),
+          city: $('st-city')?.value?.trim() || '',
+          state: $('st-state')?.value?.trim() || '',
+          postalCode: $('st-zip')?.value?.trim() || '',
+          countryCode: 'US'
+        },
+        items: [
+          {
+            description: $('sp-customs-description')?.value || 'Printed books',
+            hsCode: $('sp-customs-hs')?.value || '4901.99',
+            amount: parseFloat(String($('sp-customs-value')?.value || '25').replace(/[^0-9.]/g, '') || '25'),
+            quantity: Math.max(1, parseInt($('sp-qty')?.value, 10) || 1),
+            countryOfOrigin: 'CA'
+          }
+        ],
+        parcel: {
+          length: parseFloat($('sp-length')?.value) || 20,
+          width: parseFloat($('sp-width')?.value) || 15,
+          height: parseFloat($('sp-height')?.value) || 2,
+          weight: parseFloat($('sp-weight')?.value) || 0.5,
+          dimUnit: $('sp-dim-unit')?.value || 'cm',
+          weightUnit: $('sp-weight-unit')?.value || 'kg'
+        },
+        shippingRate: {
+          amount: parseFloat($('sp-customs-value')?.value || '15'),
+          currency: 'CAD',
+          serviceLevel: 'Tracked Packet USA'
+        },
+        currency: 'CAD'
+      });
+
+      if (declResult && declResult.ok && declResult.declarationId) {
+        const declInput = $('sp-zonos-declaration-id');
+        if (declInput) {
+          declInput.value = declResult.declarationId;
+          onZonosDeclarationIdInput(declResult.declarationId);
+        }
+        if (hint) {
+          hint.style.display = 'block';
+          hint.innerHTML = `
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong style="color:var(--green);">✓ Zonos Declaration ID generated:</strong>
+              <span class="tnum" style="font-weight:700;letter-spacing:0.5px;font-family:'DM Mono',monospace;font-size:13px;">${escapeHtml(declResult.declarationId)}</span>
+            </div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px;">Prepaid via Zonos · It will be stamped onto your Canada Post customs declaration.</div>
+          `;
+        }
+        if (!silent) showToast(`✓ Zonos Declaration ID created: ${declResult.declarationId}`, 'ok');
+        return {
+          ...route,
+          route: 'manual',
+          declarationId: declResult.declarationId
+        };
+      }
+    } catch (zErr) {
+      console.warn('Zonos automated declaration generation note:', zErr);
+    }
+
     if (hint) {
       hint.style.display = 'block';
       hint.innerHTML = `
@@ -2995,7 +3065,7 @@ async function autoGenerateZonosDeclarationHandler({ silent = false } = {}) {
           <strong style="color:var(--green);">Zonos Verified Account connected</strong>
         </div>
         <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">
-          Leave this field empty. Canada Post issues the Declaration ID when you buy the label and bills the duty
+          Canada Post will issue the Declaration ID when you buy the label and bill the duty
           to your Zonos account — it will appear on the label and against the order automatically.
         </div>
       `;
@@ -4106,13 +4176,70 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
     return;
   }
 
-  // U.S. duty prepayment. Either a Verified Account key rides along on the request
-  // and Canada Post issues the Declaration ID itself, or one bought in the Prepay
-  // app is supplied here. Nothing can invent one, so there is no third option.
-  const dutyRoute = currentDutyPrepaymentRoute();
-  let declarationId = dutyRoute.route === 'manual' ? dutyRoute.declarationId : '';
+  // U.S. duty prepayment. If a Zonos account key is available, automatically mint
+  // the Declaration ID via Zonos API; otherwise use what is entered or carrier-verified.
+  let declarationId = ($('sp-zonos-declaration-id')?.value || '').trim();
 
-  if (dutyRoute.needsDeclaration && !declarationId && dutyRoute.route !== 'verified') {
+  if (stCountryCode === 'US' && !declarationId) {
+    const zKey = getZonosAccountKey();
+    if (zKey) {
+      try {
+        const declResult = await createZonosDeclaration({
+          apiKey: zKey,
+          origin: {
+            postalCode: sfZip,
+            province: sfProv,
+            countryCode: 'CA'
+          },
+          destination: {
+            street: stAddr,
+            city: stCity,
+            state: stState,
+            postalCode: stZip,
+            countryCode: 'US'
+          },
+          items: [
+            {
+              description: $('sp-customs-description')?.value || 'Printed books',
+              hsCode: $('sp-customs-hs')?.value || '4901.99',
+              amount: parseFloat(String($('sp-customs-value')?.value || '25').replace(/[^0-9.]/g, '') || '25'),
+              quantity: Math.max(1, parseInt($('sp-qty')?.value, 10) || 1),
+              countryOfOrigin: 'CA'
+            }
+          ],
+          parcel: {
+            length: lengthCm,
+            width: widthCm,
+            height: heightCm,
+            weight: weightKg,
+            dimUnit: 'cm',
+            weightUnit: 'kg'
+          },
+          shippingRate: {
+            amount: quotedPrice,
+            currency: 'CAD',
+            serviceLevel: serviceName
+          },
+          currency: 'CAD'
+        });
+
+        if (declResult && declResult.ok && declResult.declarationId) {
+          declarationId = declResult.declarationId;
+          const declInput = $('sp-zonos-declaration-id');
+          if (declInput) {
+            declInput.value = declarationId;
+            onZonosDeclarationIdInput(declarationId);
+          }
+          showToast(`✓ Zonos Declaration ID created: ${declarationId}`, 'ok');
+        }
+      } catch (zErr) {
+        console.warn('Auto Zonos declaration note:', zErr);
+      }
+    }
+  }
+
+  const dutyRoute = currentDutyPrepaymentRoute();
+  if (stCountryCode === 'US' && !declarationId && dutyRoute.route !== 'verified') {
     const proceed = await confirmDialog(
       'Canada Post needs a 13-character Declaration ID proving the U.S. duty is prepaid, '
       + 'and one has to be paid for before it exists.\n\n'
