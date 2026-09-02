@@ -475,7 +475,19 @@ async function loadBigCartelData() {
       bigCartelData.included = cached.included || [];
       renderBigCartelOrders(bigCartelData.orders, bigCartelData.included);
     } else {
-      list.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text3);">Loading orders from Big Cartel...</td></tr>';
+      list.innerHTML = [1, 2, 3, 4].map(() => `
+        <tr class="bc-skeleton-row">
+          <td><div class="skeleton-line" style="height:14px;width:70px;"></div></td>
+          <td><div class="skeleton-line" style="height:14px;width:80px;"></div></td>
+          <td><div class="skeleton-line" style="height:14px;width:120px;"></div></td>
+          <td><div class="skeleton-line" style="height:14px;width:140px;"></div></td>
+          <td><div class="skeleton-line" style="height:14px;width:50px;"></div></td>
+          <td><div class="skeleton-line" style="height:14px;width:60px;"></div></td>
+          <td><div class="skeleton-line" style="height:14px;width:60px;"></div></td>
+          <td><div class="skeleton-line" style="height:20px;width:75px;border-radius:100px;"></div></td>
+          <td><div class="skeleton-line" style="height:32px;width:90px;border-radius:var(--r);"></div></td>
+        </tr>
+      `).join('');
     }
   } else {
     container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--text3);">Loading products from Big Cartel...</div>';
@@ -513,7 +525,23 @@ async function loadBigCartelData() {
       container.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--red);">Failed to load products: ${escapeHtml(msg)}</div>`;
     } else {
       if (!bigCartelData.orders || bigCartelData.orders.length === 0) {
-        list.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--red);">Failed to load orders: ${escapeHtml(msg)}</td></tr>`;
+        list.innerHTML = `
+          <tr>
+            <td colspan="9" style="padding:0;border:none;">
+              <div class="empty-state bc-empty-state is-error">
+                <div class="e-icon" aria-hidden="true">⚠️</div>
+                <strong class="bc-empty-title">Failed to Load Orders</strong>
+                <p class="bc-empty-msg">${escapeHtml(msg)}</p>
+                <div class="bc-empty-actions">
+                  <button type="button" class="btn sm outline" onclick="loadBigCartelData()" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;">
+                    <span aria-hidden="true">🔄</span>
+                    <span>Retry Connection</span>
+                  </button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        `;
       }
     }
   }
@@ -926,7 +954,23 @@ function renderBigCartelOrders(orders, included = []) {
   list.innerHTML = '';
 
   if (!orders || orders.length === 0) {
-    list.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text3);">No orders found.</td></tr>';
+    list.innerHTML = `
+      <tr>
+        <td colspan="9" style="padding:0;border:none;">
+          <div class="empty-state bc-empty-state">
+            <div class="e-icon" aria-hidden="true">📦</div>
+            <strong class="bc-empty-title">No Big Cartel Orders Found</strong>
+            <p class="bc-empty-msg">No customer transactions found for this account. Make sure your Big Cartel account is connected, then fetch your latest store orders.</p>
+            <div class="bc-empty-actions">
+              <button type="button" class="btn sm gold" onclick="loadBigCartelData()" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;" title="Fetch latest orders from Big Cartel">
+                <span aria-hidden="true">🔄</span>
+                <span>Fetch Orders</span>
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
     return;
   }
 

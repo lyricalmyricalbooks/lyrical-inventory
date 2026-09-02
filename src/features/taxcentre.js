@@ -2043,11 +2043,14 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
   if (cardsGrid) {
     if (tripList.length === 0) {
       cardsGrid.innerHTML = `
-        <div style="grid-column:1/-1;text-align:center;padding:40px 20px;background:rgba(28,25,23,0.82);border:1px dashed rgba(255,255,255,0.1);border-radius:12px;">
-          <div style="font-size:28px;margin-bottom:8px;color:var(--on-inverse);">✈</div>
-          <div style="font-size:14px;font-weight:600;color:var(--on-inverse);margin-bottom:4px;">No business trips logged yet</div>
-          <div style="font-size:12px;color:var(--on-inverse-2);max-width:380px;margin:0 auto 14px;">Create a trip (e.g. "Toronto Book Fair") and every travel, lodging and booth expense you assign to it totals here, ready for your tax return.</div>
-          <button class="btn gold" onclick="openNewTrip()">✈ Create your first trip</button>
+        <div class="empty-state tc-trip-empty-state" style="grid-column:1/-1;">
+          <div class="e-icon" aria-hidden="true">✈</div>
+          <strong style="font-size:var(--text-base);font-weight:700;color:var(--content-primary);margin-bottom:var(--space-1);display:block;">No Business Trips Logged Yet</strong>
+          <p style="font-size:var(--text-xs);color:var(--content-secondary);max-width:380px;margin:0 auto var(--space-3);line-height:var(--leading-snug);">Create a trip (e.g. "Toronto Book Fair") and every travel, lodging and booth expense you assign to it totals here, ready for your tax return.</p>
+          <button class="btn gold sm" type="button" onclick="openNewTrip()" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;">
+            <span aria-hidden="true">✈</span>
+            <span>Create your first trip</span>
+          </button>
         </div>
       `;
     } else {
@@ -2115,14 +2118,14 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
   }
 
   // Render Table View
-  if (tripBody) {
+    if (tripBody) {
     tripBody.innerHTML = tripList.map(t => `
         <tr onclick="showTripDetail(this.dataset.trip)" data-trip="${escapeHtml(t.name)}" style="cursor:pointer;" title="Click to view ${t.count} expense${t.count === 1 ? '' : 's'}">
           <td style="color:var(--gold);text-decoration:underline;">✈ ${escapeHtml(t.name)}</td>
-          <td class="r">${t.count}</td>
-          <td class="r" style="font-weight:bold;color:var(--red);">${t.count === 0 ? '<span style="color:var(--text3);font-weight:600;">Planned</span>' : `- ${fmt(t.total, baseCurrency)}`}</td>
+          <td class="r tnum">${t.count}</td>
+          <td class="r tnum" style="font-weight:bold;color:var(--red);">${t.count === 0 ? '<span style="color:var(--text3);font-weight:600;">Planned</span>' : `- ${fmt(t.total, baseCurrency)}`}</td>
         </tr>
-    `).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text3);">No trips yet — press <b>✈ New trip</b> above to create one.</td></tr>`;
+    `).join('') || `<tr><td colspan="3"><div class="empty-state" style="padding:var(--space-4);"><span aria-hidden="true" style="font-size:20px;display:block;margin-bottom:4px;">✈</span><strong>No trips logged yet</strong><div style="font-size:var(--text-xs);color:var(--content-muted);margin-top:2px;">Press <b>✈ New trip</b> above to create one.</div></div></td></tr>`;
   }
 
   // Sync current view mode toggle button states
@@ -4503,6 +4506,7 @@ function tcExpFileDrop(ev) {
     tcExpFileChosen();
   }
 }
+
 export {
   _tcAllReceiptItems,
   isReceiptNoticeDismissed,
