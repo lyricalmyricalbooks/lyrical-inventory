@@ -8,6 +8,7 @@ import './styles/theme-dark.css';
 import './firebase.js';
 import { registerSW } from 'virtual:pwa-register';
 import { calcArtistEarnings, tierEffectiveCap, describePayout } from './lib/earnings.js';
+import { calculateBreakEven } from './lib/breakeven.js';
 import { escapeHtml } from './lib/html.js';
 import { describeCustomerFilters, joinFilterLabels } from './lib/customer-segment.js';
 import {
@@ -4185,11 +4186,23 @@ function updateAllOverview() {
     const stockClass = s.stock <= book.threshold ? 'danger' : s.stock <= book.threshold * 2 ? 'warn' : 'gold';
     const cost = book.productionCost || 0;
     const recognizedRev = recognizedRevenueOf(s);
-    const broken = cost > 0 && recognizedRev >= cost;
-    const bePct = cost > 0 ? Math.min(100, recognizedRev / cost * 100) : null;
+    const beInfo = cost > 0 ? calculateBreakEven({
+      cost,
+      recognizedRev,
+      listPrice: book.listPrice,
+      sold: s.sold,
+      stock: s.stock,
+      currency: book.currency
+    }) : null;
+    const broken = beInfo ? beInfo.broken : false;
+    const bePct = beInfo ? beInfo.pctBe : null;
+
+    const beTooltip = beInfo ? (broken
+      ? 'Production costs fully recovered!'
+      : `${fmt(recognizedRev, book.currency)} of ${fmt(cost, book.currency)} recovered (${bePct.toFixed(0)}%) · ${fmt(beInfo.remaining, book.currency)} remaining${beInfo.hasListPrice ? ` (~${beInfo.unitsNeededAtList} units at ${fmt(beInfo.listPrice, book.currency)} list)` : ''}`) : '';
 
     const beBar = (!isAuthor() && bePct !== null) ? `
-      <div class="book-progress-wrapper" title="${broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, book.currency)} of ${fmt(cost, book.currency)} recovered (${bePct.toFixed(0)}%)`}">
+      <div class="book-progress-wrapper" title="${escapeHtml(beTooltip)}">
         <div class="book-progress-header">
           <span>Break-even</span>
           <span class="progress-pct" style="color:${broken ? 'var(--green)' : 'var(--text3)'}; font-weight:700;">
@@ -5383,33 +5396,61 @@ export function updateDash() {
   if (!isAuthor() && cost > 0) {
     $('d-breakeven-kpi').style.display = '';
     $('d-breakeven-block').style.display = '';
-    const pctBe = Math.min(100, recognizedRev / cost * 100);
-    const remaining = Math.max(0, cost - recognizedRev);
-    const broken = recognizedRev >= cost;
-    $('d-breakeven-val').textContent = broken ? '✓ Done' : fmtWhole(remaining, cur) + ' to go';
-    $('d-breakeven-val').className = 'kpi-value' + (broken ? ' gold' : '');
+    const be = calculateBreakEven({
+      cost,
+      recognizedRev,
+      listPrice: book.listPrice,
+      sold: s.sold,
+      stock: s.stock,
+      currency: cur
+    });
+
+    $('d-breakeven-val').textContent = be.broken ? '✓ Done' : fmtWhole(be.remaining, cur) + ' to go';
+    $('d-breakeven-val').className = 'kpi-value' + (be.broken ? ' gold' : '');
     $('d-breakeven-sub').textContent = `of ${fmtWhole(cost, cur)} production cost`;
-    $('d-be-title').textContent = broken ? 'Project has broken even' : 'Not yet broken even';
+    if ($('d-breakeven-kpi')) {
+      $('d-breakeven-kpi').title = be.broken
+        ? 'Production costs fully recovered!'
+        : `${fmt(be.remaining, cur)} remaining (${be.hasListPrice ? `~${be.unitsNeededAtList} units at ${fmt(be.listPrice, cur)} list` : 'list price not set'})`;
+    }
+
+    $('d-be-title').textContent = be.broken ? 'Project has broken even' : 'Not yet broken even';
     $('d-be-sub').textContent = `Production cost: ${fmt(cost, cur)} · Revenue to date: ${fmt(recognizedRev, cur)}`;
-    $('d-be-bar').style.width = pctBe + '%';
-    $('d-be-bar').style.background = broken ? '#4ade80' : pctBe >= 70 ? '#fb923c' : (book.accent || 'var(--gold2)');
-    $('d-be-bar-label').textContent = `${fmt(recognizedRev, cur)} recovered (${pctBe.toFixed(1)}%)`;
-    $('d-be-bar-right').textContent = broken ? 'Break-even reached ✓' : `${fmt(remaining, cur)} remaining`;
+
+    const bePill = $('d-be-pill');
+    if (bePill) {
+      if (be.broken) {
+        bePill.className = 'pill green';
+        bePill.textContent = '✓ 100% recovered';
+        bePill.style.background = '';
+        bePill.style.color = '';
+      } else {
+        bePill.className = be.isClose ? 'pill amber' : 'pill gold';
+        bePill.textContent = `${be.pctBe.toFixed(1)}% recovered`;
+        bePill.style.background = '';
+        bePill.style.color = '';
+      }
+    }
+
+    $('d-be-bar').style.width = be.pctBe + '%';
+    $('d-be-bar').style.background = be.broken ? '#4ade80' : be.pctBe >= 70 ? '#fb923c' : (book.accent || 'var(--gold2)');
+    $('d-be-bar-label').textContent = `${fmt(recognizedRev, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
+    $('d-be-bar-right').textContent = be.broken ? 'Break-even reached ✓' : `${fmt(be.remaining, cur)} remaining`;
     const trackEl = $('d-be-bar-track');
     if (trackEl) {
-      trackEl.title = broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, cur)} of ${fmt(cost, cur)} recovered (${pctBe.toFixed(1)}%)`;
+      trackEl.title = be.broken ? 'Production costs fully recovered!' : `${fmt(recognizedRev, cur)} of ${fmt(cost, cur)} recovered (${be.pctBe.toFixed(1)}%)`;
     }
     const al = $('d-be-alert');
-    if (broken) {
+    if (be.broken) {
       al.className = 'stock-alert ok';
-      al.textContent = '✓ Production costs fully recovered — everything earned from here is profit.';
+      al.textContent = '✓ ' + be.primaryExplanation;
+      al.style.borderLeftColor = '';
+      al.style.background = '';
+      al.style.color = '';
     } else {
-      const unitsNeeded = remaining > 0 ? Math.ceil(remaining / (book.listPrice || 1)) : 0;
-      const isClose = pctBe >= 70;
-
       al.className = 'stock-alert warn';
 
-      if (isClose) {
+      if (be.isClose) {
         al.style.borderLeftColor = '#fb923c';
         al.style.background = 'rgba(251, 146, 60, 0.08)';
         al.style.color = '#fb923c';
@@ -5419,23 +5460,44 @@ export function updateDash() {
         al.style.color = 'var(--gold2)';
       }
 
-      const themeColor = isClose ? '#fb923c' : 'var(--gold3)';
-      const themeBg = isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
-      const themeBorder = isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
+      const themeColor = be.isClose ? '#fb923c' : 'var(--gold3)';
+      const themeBg = be.isClose ? 'rgba(251, 146, 60, 0.12)' : 'rgba(200, 145, 58, 0.12)';
+      const themeBorder = be.isClose ? 'rgba(251, 146, 60, 0.25)' : 'rgba(200, 145, 58, 0.25)';
 
       al.innerHTML = `
-        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span style="font-size:13px; opacity:0.85;">⚠️</span>
-            <span style="font-weight:600; font-family:'Syne', sans-serif;">${isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
+        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; width:100%;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:13px; opacity:0.85;">⚠️</span>
+              <span style="font-weight:600; font-family:'Syne', sans-serif;">${be.isClose ? 'Almost broken even:' : 'Not yet broken even:'}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${fmt(be.remaining, cur)} remaining of ${fmt(cost, cur)} production cost">
+                🎯 ${fmt(be.remaining, cur)} remaining
+              </span>
+              <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;" title="${escapeHtml(be.unitsBadgeTitle)}">
+                ${escapeHtml(be.unitsBadgeText)}
+              </span>
+            </div>
           </div>
-          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;">
-              🎯 ${fmt(remaining, cur)} remaining
-            </span>
-            <span style="display:inline-flex; align-items:center; gap:6px; background:${themeBg}; border:1px solid ${themeBorder}; color:${themeColor}; font-family:'DM Mono', monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:100px; line-height:1;">
-              📚 ~${unitsNeeded} unit${unitsNeeded !== 1 ? 's' : ''} needed
-            </span>
+          <div style="font-size:11px; line-height:1.45; border-top:1px solid ${themeBorder}; padding-top:6px; opacity:0.92; color:var(--text2, rgba(255,255,255,0.85));">
+            <div>
+              ${be.hasListPrice
+                ? `Requires selling <strong>~${be.unitsNeededAtList}</strong> more unit${be.unitsNeededAtList !== 1 ? 's' : ''} at full list price of <strong style="font-family:'DM Mono', monospace;">${fmt(be.listPrice, cur)}</strong> to recover the remaining <strong style="font-family:'DM Mono', monospace;">${fmt(be.remaining, cur)}</strong>.`
+                : `Set a list price in book settings to calculate the units needed to break even.`}
+            </div>
+            ${be.paceNote ? `
+              <div style="margin-top:3px; opacity:0.9; display:flex; align-items:center; gap:5px;">
+                <span>💡</span>
+                <span>${escapeHtml(be.paceNote)}</span>
+              </div>
+            ` : ''}
+            ${be.stockNote ? `
+              <div style="margin-top:3px; opacity:0.9; display:flex; align-items:center; gap:5px;">
+                <span>📦</span>
+                <span>${escapeHtml(be.stockNote)}</span>
+              </div>
+            ` : ''}
           </div>
         </div>
       `;
