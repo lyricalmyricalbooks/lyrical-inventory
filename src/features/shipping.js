@@ -2684,7 +2684,13 @@ function onZonosDeclarationIdInput(val) {
 
   const pill = $('us-zonos-status-pill');
   const hint = $('zonos-decl-validation-hint');
+  const counter = $('us-zonos-char-counter');
   const isValid = validateDeclarationId(formatted);
+
+  if (counter) {
+    counter.textContent = `${formatted.length}/13`;
+    counter.classList.toggle('is-valid', isValid);
+  }
 
   if (pill) {
     if (isValid) {
@@ -2701,6 +2707,7 @@ function onZonosDeclarationIdInput(val) {
 
   if (hint) {
     hint.textContent = isValid ? 'Valid 13-character code' : '13 alphanumeric characters required';
+    hint.classList.toggle('is-valid', isValid);
     hint.style.color = isValid ? 'var(--green)' : 'var(--text3)';
   }
 }
@@ -2985,6 +2992,27 @@ async function autoGenerateZonosDeclarationHandler({ silent = false } = {}) {
     }
     if (!silent) showToast('✓ Declaration ID already entered', 'ok');
     return route;
+  }
+
+  // Offline-first check: inform user clearly rather than failing on an unhandled network error
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    if (hint) {
+      hint.className = 'us-zonos-result-hint is-warn';
+      hint.style.display = 'block';
+      hint.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span style="font-size:16px;" aria-hidden="true">📡</span>
+          <div>
+            <strong>Offline Mode — Auto-generation unavailable</strong>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+              Generating a new Declaration ID requires an active internet connection. You can paste an existing 13-character ID from your Zonos Prepay app or history while offline.
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    if (!silent) showToast('⚠ Offline: Auto-generation requires internet connection', 'warn');
+    return { route: 'offline', summary: 'Offline mode — manual entry required' };
   }
 
   if (route.route === 'verified' || getZonosAccountKey()) {
