@@ -16,6 +16,10 @@
 <link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="dns-prefetch" href="https://lyricalmyrical-37c46-default-rtdb.firebaseio.com">
 <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+<!-- The receipt reader is the one screen where a cold connection is felt: the
+     owner taps "AI Scan" and waits. Opening the socket while the app boots
+     takes the handshake off the front of every scan. -->
+<link rel="preconnect" href="https://generativelanguage.googleapis.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&family=Anton&family=Archivo:wght@500;600;700;800;900&family=Permanent+Marker&display=swap" rel="stylesheet">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">

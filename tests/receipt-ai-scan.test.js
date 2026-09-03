@@ -315,7 +315,8 @@ describe('AI receipt scan — upload preparation', () => {
     return buildHarness({
       names: [
         '_prepareReceiptUpload', '_receiptMimeFor', '_fileToBase64', 'RECEIPT_MIME_BY_EXT',
-        'RECEIPT_SCAN_MAX_EDGE', 'RECEIPT_SCAN_JPEG_QUALITY', 'RECEIPT_SCAN_SKIP_DOWNSCALE_BYTES'
+        'RECEIPT_SCAN_MAX_EDGE', 'RECEIPT_SCAN_JPEG_QUALITY', 'RECEIPT_SCAN_SKIP_DOWNSCALE_BYTES',
+        'RECEIPT_SCAN_MIN_SHORT_EDGE', 'RECEIPT_SCAN_MAX_PIXELS'
       ],
       deps: {
         FileReader,
@@ -412,7 +413,11 @@ describe('AI receipt scan — upload preparation', () => {
 describe('Gemini transport — retry and error classification', () => {
   function callHarness(fetchImpl, waits = []) {
     return buildHarness({
-      names: ['_callGeminiForReceipts', 'GEMINI_RECEIPT_MODELS', 'GEMINI_SINGLE_ATTEMPT_BYTES'],
+      names: [
+        '_callGeminiForReceipts', 'GEMINI_RECEIPT_MODELS', 'GEMINI_SINGLE_ATTEMPT_BYTES',
+        'GEMINI_THINKING_READ', '_geminiNoThinking', '_geminiCooldownUntil',
+        '_geminiCooldownWait', '_geminiNoteThrottle', '_geminiAwaitCooldown'
+      ],
       deps: {
         fetch: fetchImpl,
         setTimeout: (fn, ms) => { waits.push(ms); fn(); return 0; },
