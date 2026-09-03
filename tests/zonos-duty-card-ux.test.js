@@ -40,8 +40,11 @@ describe('US Zonos Duty Prepayment Card UX/UI Compliance', () => {
     expect(indexHtml).toContain('class="us-zonos-duty-card"');
     expect(indexHtml).toContain('id="sp-zonos-declaration-id"');
     expect(indexHtml).toContain('id="us-zonos-char-counter"');
-    expect(indexHtml).toContain('id="sp-auto-gen-zonos-btn"');
     expect(indexHtml).toContain('id="sp-open-zonos-prepay-btn"');
-    expect(indexHtml).toContain('id="zonos-auto-result-hint"');
+    // The auto-generate button and its result hint are deliberately gone: a
+    // Declaration ID is bought in the Prepay app and pasted in by hand, so
+    // nothing in the app offers to conjure one.
+    expect(indexHtml).not.toContain('sp-auto-gen-zonos-btn');
+    expect(indexHtml).not.toContain('zonos-auto-result-hint');
   });
 });

@@ -2659,10 +2659,6 @@ function onShippoDestCountryChange() {
   if (usCard) {
     if (stCountryCode === 'US') {
       usCard.style.display = 'block';
-      const declIdInput = $('sp-zonos-declaration-id');
-      if (declIdInput && !declIdInput.value && TAX_CENTER.settings?.cpZonosAutoGenerate !== false) {
-        autoGenerateZonosDeclarationHandler({ silent: true }).catch(() => {});
-      }
     } else {
       usCard.style.display = 'none';
     }
@@ -2702,10 +2698,10 @@ function onZonosDeclarationIdInput(val) {
       pill.textContent = '✓ Format OK';
     } else if (formatted.length > 0) {
       pill.className = 'pill amber';
-      pill.textContent = `${formatted.length}/13 Characters`;
+      pill.textContent = `● ${formatted.length}/13 Characters`;
     } else {
       pill.className = 'pill amber';
-      pill.textContent = 'Declaration Required';
+      pill.textContent = '● Declaration Required';
     }
   }
 
@@ -2931,130 +2927,6 @@ async function checkCanadaPostAccountAndPinHandler() {
       btn.innerHTML = oldText;
     }
   }
-}
-
-/**
- * Render an explicit failure state when Zonos does not issue a Declaration ID.
- * A Declaration ID is the customs identifier Canada Post forwards to U.S. CBP, so an
- * unissued one is left blank rather than filled with a locally invented code.
- */
-function renderZonosDeclarationFailure(hint, reason, silent) {
-  const input = $('sp-zonos-declaration-id');
-  if (input) {
-    input.value = '';
-    onZonosDeclarationIdInput('');
-  }
-  if (hint) {
-    hint.style.display = 'block';
-    hint.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-        <span style="font-size:15px;line-height:1.2;">📋</span>
-        <div style="flex:1;min-width:200px;">
-          <strong>A Declaration ID has to be paid for</strong>
-          <div style="font-size:10px;color:var(--text3);margin-top:3px;">${escapeHtml(reason)}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5;">
-            <strong>To do it by hand:</strong> open the Zonos Prepay app, pay the duty for this parcel, and paste the
-            13-character ID it gives you into the box above.<br>
-            <strong>To have it happen automatically:</strong> set up a Zonos Verified Account, then save its Account Key
-            in Tax Centre → Zonos. After that Canada Post issues the ID itself every time you buy a label.
-          </div>
-        </div>
-      </div>
-    `;
-  }
-  if (!silent) showToast('⚠ Zonos did not issue a Declaration ID — see the note under the button', 'warn');
-}
-
-/**
- * Explain — and where possible arrange — how this parcel's U.S. duty gets prepaid.
- *
- * This replaces a button that promised to "auto-generate" a Declaration ID by
- * calling Zonos' declarationCreateWorkflow. That mutation belongs to the Landed
- * Cost / Checkout product and has no authority to issue a Canada Post
- * prepayment declaration, so the call never produced one. A Declaration ID is
- * proof that duty has been paid, so it cannot be conjured before payment: either
- * a Verified Account pays it automatically at label time, or it is bought by
- * hand in the Prepay app.
- */
-async function autoGenerateZonosDeclarationHandler({ silent = false } = {}) {
-  const hint = $('zonos-auto-result-hint');
-  const route = currentDutyPrepaymentRoute();
-
-  if (route.route === 'not-required') {
-    if (!silent) showToast('U.S. duty prepayment only applies to parcels going to the United States', 'ok');
-    return route;
-  }
-
-  if (route.route === 'manual') {
-    if (hint) {
-      hint.style.display = 'block';
-      hint.innerHTML = `
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <strong style="color:var(--green);">✓ Declaration ID entered:</strong>
-          <span class="tnum" style="font-weight:700;letter-spacing:0.5px;font-family:'DM Mono',monospace;font-size:13px;">${escapeHtml(route.declarationId)}</span>
-        </div>
-        <div style="font-size:10px;color:var(--text3);margin-top:4px;">It will be sent with the label and printed in the customs header. This is the code you entered — the app has not checked it against Zonos, so make sure it was copied from the Prepay order for this parcel.</div>
-      `;
-    }
-    if (!silent) showToast('✓ Declaration ID already entered (not checked against Zonos)', 'ok');
-    return route;
-  }
-
-  // Offline-first check: inform user clearly rather than failing on an unhandled network error
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    if (hint) {
-      hint.className = 'us-zonos-result-hint is-warn';
-      hint.style.display = 'block';
-      hint.innerHTML = `
-        <div style="display:flex;align-items:flex-start;gap:8px;">
-          <span style="font-size:16px;" aria-hidden="true">📡</span>
-          <div>
-            <strong>Offline Mode — Auto-generation unavailable</strong>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px;">
-              Generating a new Declaration ID requires an active internet connection. You can paste an existing 13-character ID from your Zonos Prepay app or history while offline.
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    if (!silent) showToast('⚠ Offline: Auto-generation requires internet connection', 'warn');
-    return { route: 'offline', summary: 'Offline mode — manual entry required' };
-  }
-
-  // A Verified Account has nothing to generate ahead of time.
-  //
-  // Canada Post's integration guide puts the minting at step 2 of buying the
-  // label — "Canada Post generates a Declaration ID", then links it to the
-  // tracking number. There is no pre-purchase call to make: the account key on
-  // the request header is the entire integration. So this branch reports the
-  // state instead of trying to manufacture an id in advance.
-  //
-  // It used to call Zonos' declarationCreateWorkflow here first and only fall
-  // through to this message when that failed. Every US label therefore opened
-  // with a spinner saying "Contacting Zonos API to generate Declaration ID" for
-  // a call that had no business being made, and whose success would have been
-  // worse than its failure — a self-minted id sent to Canada Post overrides the
-  // one it links to the tracking number.
-  if (route.route === 'verified' || getZonosAccountKey()) {
-    if (hint) {
-      hint.style.display = 'block';
-      hint.innerHTML = `
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="font-size:14px;">⚡</span>
-          <strong style="color:var(--green);">Zonos Verified Account connected</strong>
-        </div>
-        <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">
-          Canada Post will issue the Declaration ID when you buy the label and bill the duty
-          to your Zonos account — it will appear on the label and against the order automatically.
-        </div>
-      `;
-    }
-    if (!silent) showToast('✓ Verified Account will supply the Declaration ID at purchase', 'ok');
-    return route;
-  }
-
-  renderZonosDeclarationFailure(hint, route.summary, silent);
-  return route;
 }
 
 /**
@@ -4183,45 +4055,59 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
   let declarationId = ($('sp-zonos-declaration-id')?.value || '').trim();
 
   const dutyRoute = currentDutyPrepaymentRoute();
-  const strictPrepay = TAX_CENTER.settings?.requireZonosUsPrepay !== false;
+  // A U.S. label cannot be bought without a Declaration ID entered by hand.
+  //
+  // Absolute, by the shop owner's instruction: no Verified Account bypass, no
+  // settings toggle, no "carry on anyway". All three escape hatches that used
+  // to sit here are gone, and that is the point — each one ended with a parcel
+  // crossing the border with the duty unpaid, which the shop only finds out
+  // about weeks later when the customer is billed at their door.
+  //
+  // The check is on the FORMAT, not merely on the field being non-empty. A
+  // half-typed code is not a declaration: letting eight characters through
+  // would buy a label carrying an id Canada Post can match to nothing, which
+  // is the same outcome as sending none, minus the warning.
+  declarationId = formatDeclarationId(declarationId);
 
-  if (stCountryCode === 'US' && !declarationId && dutyRoute.route !== 'verified') {
-    if (strictPrepay) {
-      showToast('🚫 US label purchase blocked: Strict Zonos Duty Prepayment is enabled.', 'err');
-      if (typeof confirmDialog === 'function') {
-        const openTc = await confirmDialog(
-          'Strict Zonos Prepayment is enabled in Tax Centre to prevent unpaid customs duties from being charged to your US customers.\n\n'
-          + 'To purchase this Canada Post label:\n'
-          + '1. Click "⚡ Auto-Generate Zonos Declaration" or "Buy in Zonos Prepay App" on the Shipping screen to attach a 13-character Declaration ID.\n'
-          + '2. Or connect your Zonos Verified Account Key in Tax Centre → Zonos.\n\n'
-          + '(If you intentionally want to allow DDU shipments without prepaid duty, uncheck "Require Zonos Declaration ID for all US shipments" in Tax Centre → Zonos).',
-          {
-            title: '🚫 Zonos Declaration ID Required for U.S. Shipment',
-            okLabel: 'Open Tax Centre',
-            cancelLabel: 'Close'
-          }
-        );
-        if (openTc && typeof window !== 'undefined' && typeof window.switchTab === 'function') {
-          window.switchTab('taxcentre');
-        }
-      }
-      return;
-    }
+  if (stCountryCode === 'US' && !validateDeclarationId(declarationId)) {
+    const partial = declarationId.length > 0;
+    showToast(partial
+      ? `🚫 That Declaration ID is only ${declarationId.length} of 13 characters`
+      : '🚫 A U.S. parcel needs a Zonos Declaration ID before you can buy the label', 'err');
 
-    const proceed = await confirmDialog(
-      'Canada Post needs a 13-character Declaration ID proving the U.S. duty is prepaid, '
-      + 'and one has to be paid for before it exists.\n\n'
-      + 'Buy it now: open the Zonos Prepay app, pay the duty, and paste the ID in before buying the label.\n\n'
-      + 'Or set it up once: save a Zonos Verified Account Key in Tax Centre → Zonos and Canada Post will issue '
-      + 'the ID automatically from then on.\n\n'
-      + 'You can also carry on without one — the parcel ships with duty unpaid and the recipient settles it on delivery.',
+    const openPrepay = typeof confirmDialog === 'function' && await confirmDialog(
+      (partial
+        ? `The Declaration ID box has ${declarationId.length} of the 13 characters it needs, so it is not a complete ID yet.\n\n`
+        : 'This parcel is going to the United States, and U.S. customs requires the duty to be paid before it crosses the border.\n\n')
+      + 'What to do:\n'
+      + '1. Open the Zonos Prepay app and buy the declaration for this parcel.\n'
+      + '2. Copy the 13-character Declaration ID it gives you.\n'
+      + '3. Paste it into the Declaration ID box on this screen.\n'
+      + '4. Then buy the label.\n\n'
+      + 'The order matters: the ID has to be on the form BEFORE you buy, because it is sent to '
+      + 'Canada Post as part of the label request. Pasting it afterwards links nothing.\n\n'
+      + 'Each declaration covers one parcel only — do not reuse one from an earlier order.',
       {
-        title: 'No prepaid U.S. duty for this parcel',
-        okLabel: 'Carry on without prepaid duty',
-        cancelLabel: 'Go back'
+        title: 'Declaration ID required before buying this label',
+        okLabel: 'Open Zonos Prepay',
+        cancelLabel: 'Close'
       }
     );
-    if (!proceed) return;
+
+    if (openPrepay && typeof window !== 'undefined' && typeof window.open === 'function') {
+      try { window.open(buildZonosPrepayDeepLink(), '_blank', 'noopener'); } catch (_) {}
+    }
+
+    // Put the cursor where the work is, rather than leaving them to hunt for
+    // the box the dialog just described.
+    const declInput = $('sp-zonos-declaration-id');
+    if (declInput && typeof declInput.focus === 'function') {
+      try {
+        declInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        declInput.focus();
+      } catch (_) {}
+    }
+    return;
   }
 
   // Everything that decides whether this is the right thing to spend money on:
@@ -4482,18 +4368,64 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                 </div>
               </div>
             ` : ''}
-            ${declarationId ? `
-              <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span style="font-size:16px;">🇺🇸</span>
-                  <div>
-                    <div style="font-size:10px;text-transform:uppercase;color:var(--text3);font-weight:700;">Zonos US Duty Declaration ID</div>
-                    <div class="tnum" style="font-size:13px;font-weight:700;color:var(--green);letter-spacing:1px;">${escapeHtml(declarationId)}</div>
-                  </div>
+            ${declarationId && isSim ? `
+              <div style="margin-top:12px;padding:10px 14px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);line-height:1.5;">
+                <strong style="font-size:12px;color:var(--text);">Practice run — nothing was linked.</strong><br>
+                Declaration <span class="tnum" style="font-weight:700;">${escapeHtml(declarationId)}</span> was not
+                spent and no real parcel exists. Do not take this to the counter.
+              </div>
+            ` : ''}
+            ${declarationId && !isSim ? `
+              <div style="margin-top:12px;padding:14px;background:var(--surface-card);border:1px solid var(--green);border-radius:var(--r);">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                  <span style="font-size:18px;" aria-hidden="true">🇺🇸</span>
+                  <strong style="font-size:13px;color:var(--green);">U.S. duty is prepaid and attached to this parcel</strong>
                 </div>
-                <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declarationId)}');showToast('✓ Copied Zonos Declaration ID');" style="min-height:36px;padding:6px 12px;">
-                  📋 Copy Declaration ID
-                </button>
+
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px;margin-bottom:10px;">
+                  <span style="color:var(--text3);">Declaration ID</span>
+                  <span class="tnum" style="font-weight:700;color:var(--text);letter-spacing:1px;">${escapeHtml(declarationId)}</span>
+                  <span style="color:var(--text3);">Tracking number</span>
+                  <span class="tnum" style="font-weight:700;color:var(--text);letter-spacing:1px;">${escapeHtml(result.trackingPin || '—')}</span>
+                </div>
+
+                <div style="font-size:11px;color:var(--text3);line-height:1.6;">
+                  ${result.declarationSignal === 'issued' ? `
+                    Canada Post returned this Declaration ID with the label, which means it has recorded
+                    the duty against this parcel.
+                  ` : `
+                    This Declaration ID was sent with the label request and Canada Post accepted the
+                    shipment and issued the tracking number above. Canada Post requires a valid
+                    declaration on U.S. parcels, so an accepted shipment is one it could match.
+                  `}
+                </div>
+
+                <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
+                  <strong style="color:var(--text);font-size:12px;">Before the counter:</strong>
+                  <div style="margin-top:4px;">1. Print this label and tape it to the parcel.</div>
+                  ${result.manifestRequired ? `
+                    <div style="margin-top:2px;">2. Send the manifest — see the note above. Handing the parcel over without it earns a surcharge.</div>
+                    <div style="margin-top:2px;">3. Hand it in. The duty is already paid, so nothing is owed at the counter.</div>
+                  ` : `
+                    <div style="margin-top:2px;">2. Hand it in. No manifest is needed, and the duty is already paid, so nothing is owed at the counter.</div>
+                  `}
+                </div>
+
+                <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);line-height:1.6;">
+                  <strong style="color:var(--text);font-size:12px;">Want it confirmed by Zonos?</strong>
+                  Open your Prepay order history — <span class="tnum" style="font-weight:700;">${escapeHtml(result.trackingPin || 'the tracking number')}</span>
+                  should now be showing beside declaration <span class="tnum" style="font-weight:700;">${escapeHtml(declarationId)}</span>.
+                  That pairing is Zonos confirming it too, and it is the only check that does not rely on this app.
+                </div>
+
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                  <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declarationId)}');showToast('✓ Copied Declaration ID');" style="min-height:36px;padding:6px 12px;">
+                    📋 Copy Declaration ID
+                  </button>
+                  <button class="btn sm tag cp-label-action-btn" type="button" onclick="openZonosPrepayAppHandler()" style="min-height:36px;padding:6px 12px;">
+                    🔎 Check it in Zonos Prepay
+                  </button>
+                </div>
               </div>
             ` : ''}
             ${result.declarationSignal === 'missing' && !isSim ? `
@@ -8510,7 +8442,6 @@ export {
   renderZonosDutyCard,
   onZonosDeclarationIdInput,
   pasteZonosDeclarationId,
-  autoGenerateZonosDeclarationHandler,
   checkCanadaPostAccountAndPinHandler,
   verifyShippedTrackingPinsHandler,
   showArchivedCanadaPostLabels,

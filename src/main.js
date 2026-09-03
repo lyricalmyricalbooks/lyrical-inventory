@@ -422,7 +422,6 @@ import {
   renderZonosDutyCard,
   onZonosDeclarationIdInput,
   pasteZonosDeclarationId,
-  autoGenerateZonosDeclarationHandler,
   checkCanadaPostAccountAndPinHandler,
   verifyShippedTrackingPinsHandler,
   showArchivedCanadaPostLabels,
@@ -22356,7 +22355,6 @@ window.calculateZonosDutiesHandler = calculateZonosDutiesHandler;
 window.testZonosConnectionHandler = testZonosConnectionHandler;
 window.onZonosDeclarationIdInput = onZonosDeclarationIdInput;
 window.pasteZonosDeclarationId = pasteZonosDeclarationId;
-window.autoGenerateZonosDeclarationHandler = autoGenerateZonosDeclarationHandler;
 window.checkCanadaPostAccountAndPinHandler = checkCanadaPostAccountAndPinHandler;
 window.verifyShippedTrackingPinsHandler = verifyShippedTrackingPinsHandler;
 window.showArchivedCanadaPostLabels = showArchivedCanadaPostLabels;
