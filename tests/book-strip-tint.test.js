@@ -9,6 +9,6 @@ const styles = readFileSync(path.join(__dirname, '../src/style.css'), 'utf8');
 
 test('book overview cards use each book accent as a subtle surface tint', () => {
   expect(styles).toMatch(
-    /\.book-strip\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--accent-color\) 7%, var\(--surface-card\)\);/s,
+    /\.book-strip\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--accent-color\) 7%, var\(--surface-raised\)\);/s,
   );
 });
